@@ -9,11 +9,12 @@ use serde_json::Value;
 use strata::api::codes::{
     CreateRule, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE, ValidateRoute,
 };
-use strata::api::{MemoryApi, Palette, RawProfile};
+use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
-use strata::diff::VerifyStatus;
+use strata::diff::{ChangeFlag, Side, VerifyStatus};
 use strata::error::{Error, FailureClass};
 use strata::ops;
+use strata::profile_type::ProfileType;
 use strata::progress::Progress;
 use strata::reference::Ref;
 
@@ -525,6 +526,32 @@ fn a_retry_after_above_the_ceiling_fails_at_once_without_waiting() {
     );
     assert_eq!(api.calls(&profile_path()), 1, "no second call");
     assert!(slept.borrow().is_empty(), "nothing slept");
+}
+
+#[test]
+fn a_retry_after_above_the_ceiling_names_the_method_of_the_request() {
+    let key = "POST /v1/x";
+    let api = MemoryApi::new()
+        .failing_n_times(key, 1, 429, "slow down")
+        .with_retry_after(key, 900);
+    let (retry, _) = retrying(&api, 3);
+    let err = retry.post_json("/v1/x", &Value::Null).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            Error::RetryAfterTooLong {
+                method: Method::Post,
+                ..
+            }
+        ),
+        "{err}"
+    );
+    assert!(
+        err.to_string()
+            .starts_with("POST /v1/x failed with HTTP 429 and Retry-After 900s"),
+        "{err}"
+    );
+    assert_eq!(err.to_json()["method"], "POST");
 }
 
 #[test]
@@ -9638,10 +9665,10 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     let mut d = ops::compare(&cluster, &target, "t1");
     let same = d.same;
     let v = ops::palette_validation(&palette, &cluster, &target).unwrap();
-    assert!(!v.answer.accepts);
+    assert!(!v.answer.accepts());
     assert_eq!(v.cluster_uid, CLUSTER_UID);
-    assert_eq!(v.answer.errors.len(), 1, "{v:?}");
-    assert_eq!(v.answer.errors[0].pack, "strata-live-pack");
+    assert_eq!(v.answer.errors().len(), 1, "{v:?}");
+    assert_eq!(v.answer.errors()[0].pack, "strata-live-pack");
     // one POST, with the body of --repave, in either order of the sides
     let posted = api.posted();
     assert_eq!(posted.len(), 1);
@@ -9689,7 +9716,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     let mut d = ops::compare(&cluster, &target, "t1");
     d.palette_validation =
         Some(ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap());
-    assert!(d.palette_validation.as_ref().unwrap().answer.accepts);
+    assert!(d.palette_validation.as_ref().unwrap().answer.accepts());
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render(&d, &cluster, &target, false)
         .unwrap();
@@ -9705,15 +9732,15 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     );
     let (retry, slept) = retrying(&api, 3);
     let v = ops::palette_validation(&Palette::new(retry), &cluster, &target).unwrap();
-    assert!(!v.answer.accepts);
-    assert_eq!(v.answer.errors.len(), 1);
-    assert_eq!(v.answer.errors[0].pack, "");
+    assert!(!v.answer.accepts());
+    assert_eq!(v.answer.errors().len(), 1);
+    assert_eq!(v.answer.errors()[0].pack, "");
     assert_eq!(
-        v.answer.errors[0].code,
+        v.answer.errors()[0].code,
         "PackSpectroIntegrationNotSupported"
     );
     assert_eq!(
-        v.answer.errors[0].message,
+        v.answer.errors()[0].message,
         "Pack 'spectro-k8s-dashboard' is not supported for imported cluster"
     );
     assert_eq!(api.calls(&path), 1, "one attempt and no retry");
@@ -9740,8 +9767,8 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
         let v = ops::palette_validation(&Palette::new(retry), &cluster, &target).unwrap();
         assert_eq!(
             (
-                v.answer.errors[0].code.as_str(),
-                v.answer.errors[0].message.as_str()
+                v.answer.errors()[0].code.as_str(),
+                v.answer.errors()[0].message.as_str()
             ),
             (code, message)
         );
@@ -10335,8 +10362,8 @@ fn compare_names_the_tier_and_the_field_that_differ_and_a_pack_behind_its_profil
     assert_eq!(d.running_behind.len(), 1);
     let behind = &d.running_behind[0];
     assert_eq!(
-        (behind.side.as_str(), behind.pack.as_str()),
-        ("b", first.as_str())
+        (behind.side, behind.pack.as_str()),
+        (Side::B, first.as_str())
     );
     assert_eq!(
         (behind.declared.as_str(), behind.running.as_str()),
@@ -12171,12 +12198,13 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
     let r = consumers(&api, &Ref::parse("appprofile:shop@1.0.0"));
     assert_eq!(r.exit_code(), 1, "a deployment uses the version");
     assert_eq!(
-        (r.profile.uid.as_str(), r.profile.kind.as_str()),
-        ("ap1", "app")
+        (r.profile.uid.as_str(), r.profile.kind),
+        ("ap1", Some(ProfileType::App))
     );
     assert_eq!(r.count, 1);
     assert_eq!(r.overwritten, 0);
     let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(json["profile"]["type"], "app");
     assert_eq!(
         json["consumers"][0],
         serde_json::json!({"kind": "app", "uid": "d1", "name": "shop-dev", "projectUid": "p1",
@@ -12827,7 +12855,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     let bump = pin.bump.as_ref().unwrap();
     assert_eq!(bump.to, "1.65.0");
     assert!(
-        bump.flags.contains(&"IDENTITY".to_string()),
+        bump.flags.contains(&ChangeFlag::Identity),
         "{:?}",
         bump.flags
     );
@@ -12882,6 +12910,30 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     assert_eq!(next.since.as_deref(), Some("2026-09-26T00:00:00Z"));
     let json = serde_json::to_value(&next).unwrap();
     assert_eq!(json["pins"][0]["arrived"], serde_json::json!(["1.64.0"]));
+}
+
+#[test]
+fn a_bump_gives_a_renamed_tag_as_the_flag_identity_and_not_as_the_words_of_the_rename() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let retagged = with_os_pack(dir.path(), "LTS__22.04", |p| {
+        p["tag"] = Value::from("LTS__22.04")
+    });
+    let d = ops::compare(&a, &retagged, "t1");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &retagged, false)
+        .unwrap();
+    assert!(text.contains("tag 22.04 -> LTS__22.04"), "{text}");
+
+    // the text of the diff names the two tags in place of IDENTITY; the bump keeps the flag
+    let bump = ops::Bump::of("22.04", &d, "ubuntu-aws").unwrap();
+    assert_eq!(bump.flags, [ChangeFlag::Identity]);
+    assert_eq!(
+        serde_json::to_value(&bump).unwrap()["flags"],
+        serde_json::json!(["IDENTITY"])
+    );
+    assert!(ops::Bump::of("22.04", &d, "no-such-pack").is_none());
 }
 
 #[test]
@@ -13933,10 +13985,10 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     )
     .unwrap();
     let v = snap.source.palette_validation.clone().unwrap();
-    assert!(!v.accepts);
-    assert_eq!(v.errors.len(), 1, "{v:?}");
+    assert!(!v.accepts());
+    assert_eq!(v.errors().len(), 1, "{v:?}");
     assert_eq!(
-        v.errors[0].line(),
+        v.errors()[0].line(),
         format!("DependencyPackWithMinVersionRequired kubernetes: {message}")
     );
     // one GET of the name and the version
@@ -13997,7 +14049,7 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     // the command line makes a refusal an error: exit 2, kind palette-refuses, and no record
     let err = Error::PaletteRefuses {
         reference: snap.source.reference.clone(),
-        errors: v.errors.clone(),
+        errors: v.errors().to_vec(),
     };
     assert_eq!(err.kind(), "palette-refuses");
     assert_eq!(err.exit_code(), 2);
@@ -14054,7 +14106,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
         let body = format!(r#"{{"code":"{code}","message":"refused"}}"#);
         // the retry does not send it again: Palette gives the same refusal
         let error = Error::Api {
-            method: "POST".into(),
+            method: Method::Post,
             path: path.into(),
             status: 500,
             body: body.clone(),
@@ -14063,17 +14115,17 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
         assert_eq!(error.class(), FailureClass::Terminal, "{code}");
         let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, 500, body);
         let v = ops::profile_validation(&Palette::new(&api), &candidate).unwrap();
-        assert!(!v.accepts, "{code}");
-        assert_eq!(v.errors.len(), 1);
-        assert_eq!(v.errors[0].pack, "");
-        assert_eq!(v.errors[0].line(), format!("{code}: refused"));
+        assert!(!v.accepts(), "{code}");
+        assert_eq!(v.errors().len(), 1);
+        assert_eq!(v.errors()[0].pack, "");
+        assert_eq!(v.errors()[0].line(), format!("{code}: refused"));
     }
     // the API schema refuses a list with two equal packs with HTTP 422, before the route
     let body = r#"{"code":610,"message":"packs in body shouldn't contain duplicates"}"#;
     let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, 422, body);
     let v = ops::profile_validation(&Palette::new(&api), &candidate).unwrap();
     assert_eq!(
-        v.errors[0].line(),
+        v.errors()[0].line(),
         "610: packs in body shouldn't contain duplicates"
     );
     // a 500 with another code is a fault of Palette, a 403 is the key, and a 400 is a body with
@@ -14102,7 +14154,7 @@ fn snapshot_validate_of_a_version_asks_the_route_of_an_update_of_that_version() 
     let route = update_validate_packs_route(&b.source.uid);
     let api = MemoryApi::new().with(post(&route), serde_json::json!({}));
     let v = ops::profile_validation(&Palette::new(&api), &b).unwrap();
-    assert!(v.accepts);
+    assert!(v.accepts());
     let posted = api.posted();
     assert_eq!(posted.len(), 1);
     assert_eq!(posted[0].0, route);
@@ -14135,7 +14187,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     let body_of = |code: &str| format!(r#"{{"code":"{code}","message":"refused"}}"#);
     let class_of = |status: u16, code: &str| {
         Error::Api {
-            method: "GET".into(),
+            method: Method::Post,
             path: "/".into(),
             status,
             body: body_of(code),
@@ -14143,7 +14195,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
         }
         .class()
     };
-    assert!(refusal(accepting()).unwrap().accepts);
+    assert!(refusal(accepting()).unwrap().accepts());
 
     // the name route: a version that Palette does not parse, an empty name, and a version that
     // the project holds. The retry does not send them again
@@ -14155,9 +14207,9 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
         assert_eq!(class_of(status, code), FailureClass::Terminal, "{code}");
         let v =
             refusal(accepting().failing(name_route(&candidate), status, body_of(code))).unwrap();
-        assert!(!v.accepts, "{code}");
-        assert_eq!(v.errors.len(), 1, "{code}");
-        assert_eq!(v.errors[0].line(), format!("{code}: refused"));
+        assert!(!v.accepts(), "{code}");
+        assert_eq!(v.errors().len(), 1, "{code}");
+        assert_eq!(v.errors()[0].line(), format!("{code}: refused"));
     }
 
     // the import route: each code of a check, a version that the project holds, and a macro
@@ -14169,14 +14221,14 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     for (status, code) in refusals {
         assert_eq!(class_of(status, code), FailureClass::Terminal, "{code}");
         let v = refusal(accepting().failing(&import, status, body_of(code))).unwrap();
-        assert!(!v.accepts, "{code}");
-        assert_eq!(v.errors[0].line(), format!("{code}: refused"));
+        assert!(!v.accepts(), "{code}");
+        assert_eq!(v.errors()[0].line(), format!("{code}: refused"));
     }
     // the API schema refuses a list with two equal items, with a number as the code
     let body = r#"{"code":610,"message":"packs in body shouldn't contain duplicates"}"#;
     let v = refusal(accepting().failing(&import, 422, body)).unwrap();
     assert_eq!(
-        v.errors[0].line(),
+        v.errors()[0].line(),
         "610: packs in body shouldn't contain duplicates"
     );
 
@@ -14186,7 +14238,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     let api = accepting()
         .failing(name_route(&candidate), 500, body)
         .failing(&import, 500, body);
-    assert_eq!(refusal(api).unwrap().errors.len(), 1);
+    assert_eq!(refusal(api).unwrap().errors().len(), 1);
 
     // the import route did not match a pack to a registry, so it checked nothing: an error of
     // strata, which the retry does not send again. A 403 and a 500 with another code are errors
@@ -14215,7 +14267,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     assert!(
         ops::profile_validation(&Palette::new(&api), &b)
             .unwrap()
-            .accepts
+            .accepts()
     );
     assert_eq!(api.posted().len(), 1);
     assert_eq!(api.calls(&name_route(&b)), 0);
@@ -14276,7 +14328,7 @@ fn a_candidate_with_a_fault_that_only_a_route_answers_gives_a_record_with_the_sa
     assert_eq!(refused.root, recorded_b.root);
     let v = refused.source.palette_validation.clone().unwrap();
     assert_eq!(
-        strata::validation::answer_lines(&v.errors),
+        strata::validation::answer_lines(v.errors()),
         ["refuses: VersionParseFailure: Unable to parse the version '2.2.2.develop'"]
     );
     assert!(matches!(

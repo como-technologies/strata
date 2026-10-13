@@ -1,10 +1,12 @@
 //! The answers of Palette to the validate routes: `compare --validate` records a
 //! [`PaletteValidation`] in the diff, and `snapshot --validate` records a [`ProfileValidation`] in
-//! the snapshot. Each answer is a [`ProfileValidation`]: whether Palette accepts, and the
-//! [`PaletteRefusal`] errors that it gives.
+//! the snapshot. Each answer is a [`ProfileValidation`]: the [`PaletteRefusal`] errors that
+//! Palette gives, and it accepts when there is none.
+
+use std::borrow::Cow;
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::json::{arr, text};
@@ -23,18 +25,74 @@ pub struct PaletteValidation {
     pub answer: ProfileValidation,
 }
 
+/// Palette's answer to a validate route: each error that it gives, and it accepts when there is
+/// none. So no answer says `accepts` with an error, or refuses with no error. A document holds
+/// the answer as `accepts` and `errors`: see [`PaletteValidation`] for the answer for a cluster.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProfileValidation {
+    /// Each error that Palette gives, sorted by pack, code, and message, with no copy.
+    errors: Vec<PaletteRefusal>,
+}
+
 /// Palette's answer to a validate route. `POST /v1/clusterprofiles/validate/packs` answers for
 /// a candidate, and `POST /v1/clusterprofiles/{uid}/validate/packs` for a version that Palette
 /// holds. A [`PaletteValidation`] holds the answer for a cluster.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+// the fields of a `ProfileValidation` in a document, and the text of its schema: the answer
+// borrows its errors to write them, and owns them when it reads them
+#[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct ProfileValidation {
+#[schemars(rename = "ProfileValidation")]
+struct ValidationDocument<'a> {
     /// True when Palette gives no error.
-    pub accepts: bool,
+    accepts: bool,
     /// Each error that Palette gives, sorted by pack, code, and message. Palette gives them in
     /// no fixed order.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub errors: Vec<PaletteRefusal>,
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
+    errors: Cow<'a, [PaletteRefusal]>,
+}
+
+impl Serialize for ProfileValidation {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        ValidationDocument {
+            accepts: self.accepts(),
+            errors: Cow::Borrowed(&self.errors),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ProfileValidation {
+    /// Read the fields of a document. A document that says `accepts` and gives an error, or that
+    /// refuses with no error, is an error: Palette accepts when it gives no error.
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let document = ValidationDocument::deserialize(deserializer)?;
+        let errors = document.errors.into_owned();
+        if document.accepts != errors.is_empty() {
+            let fault = if errors.is_empty() {
+                "accepts false with no error"
+            } else {
+                "accepts true with an error"
+            };
+            return Err(serde::de::Error::custom(format!(
+                "the answer says {fault}; Palette accepts when it gives no error"
+            )));
+        }
+        Ok(ProfileValidation::refused(errors))
+    }
+}
+
+impl JsonSchema for ProfileValidation {
+    fn schema_name() -> Cow<'static, str> {
+        ValidationDocument::schema_name()
+    }
+
+    fn schema_id() -> Cow<'static, str> {
+        ValidationDocument::schema_id()
+    }
+
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        ValidationDocument::json_schema(generator)
+    }
 }
 
 /// One error that Palette gives for a pack.
@@ -135,33 +193,43 @@ impl ProfileValidation {
     pub fn refused(mut errors: Vec<PaletteRefusal>) -> ProfileValidation {
         errors.sort();
         errors.dedup();
-        ProfileValidation {
-            accepts: errors.is_empty(),
-            errors,
-        }
+        ProfileValidation { errors }
+    }
+
+    /// True when Palette gives no error.
+    pub fn accepts(&self) -> bool {
+        self.errors.is_empty()
+    }
+
+    /// Each error that Palette gives, sorted by pack, code, and message, with no copy.
+    pub fn errors(&self) -> &[PaletteRefusal] {
+        &self.errors
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
-    #[test]
-    fn the_answer_for_a_cluster_holds_the_fields_of_the_answer_beside_the_cluster_uid() {
-        let refusal = PaletteRefusal {
+    fn refusal() -> PaletteRefusal {
+        PaletteRefusal {
             pack: "kubernetes".to_string(),
             code: "PackDependencyNotFound".to_string(),
             message: "cni is required".to_string(),
-        };
+        }
+    }
+
+    #[test]
+    fn the_answer_for_a_cluster_holds_the_fields_of_the_answer_beside_the_cluster_uid() {
+        let refusal = refusal();
         let v = PaletteValidation::refused("c1", vec![refusal.clone(), refusal.clone()]);
         assert_eq!(
             v.answer,
-            ProfileValidation {
-                accepts: false,
-                errors: vec![refusal]
-            },
+            ProfileValidation::refused(vec![refusal]),
             "the two copies of the error are one"
         );
+        assert!(!v.answer.accepts());
         let json = serde_json::to_value(&v).unwrap();
         assert_eq!(
             json.as_object().unwrap().keys().collect::<Vec<_>>(),
@@ -175,9 +243,37 @@ mod tests {
         );
 
         let accepted = serde_json::to_value(PaletteValidation::refused("c1", Vec::new())).unwrap();
+        assert_eq!(accepted, json!({"clusterUid": "c1", "accepts": true}));
+    }
+
+    #[test]
+    fn an_answer_that_refuses_with_no_error_cannot_be_built_or_read() {
+        // the answer has no field for `accepts`: `refused` calculates it from the errors
+        assert!(ProfileValidation::refused(Vec::new()).accepts());
+        let v = ProfileValidation::refused(vec![refusal()]);
+        assert!(!v.accepts());
+        assert_eq!(v.errors(), [refusal()]);
         assert_eq!(
-            accepted,
-            serde_json::json!({"clusterUid": "c1", "accepts": true})
+            serde_json::from_value::<ProfileValidation>(serde_json::to_value(&v).unwrap()).unwrap(),
+            v
         );
+
+        // a document that says one and gives the other does not read
+        let err = serde_json::from_value::<ProfileValidation>(json!({"accepts": false}))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("accepts false with no error"), "{err}");
+        let err = serde_json::from_value::<ProfileValidation>(
+            json!({"accepts": true, "errors": [refusal()]}),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("accepts true with an error"), "{err}");
+        let err = serde_json::from_value::<PaletteValidation>(
+            json!({"clusterUid": "c1", "accepts": false}),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("accepts false with no error"), "{err}");
     }
 }

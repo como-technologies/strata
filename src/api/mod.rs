@@ -16,6 +16,8 @@ mod palette;
 mod raw;
 mod retry;
 
+use std::fmt;
+
 use serde_json::Value;
 
 use crate::error::{Error, Result};
@@ -30,6 +32,31 @@ pub(crate) use palette::{
 pub use palette::{Palette, SearchedClusters};
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft};
 pub use retry::{Retry, RetryPolicy};
+
+/// The method of a request that strata sends to Palette.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Method {
+    /// A read of a document: [`PaletteApi::get_json`].
+    Get,
+    /// A question that changes nothing: [`PaletteApi::post_json`].
+    Post,
+}
+
+impl Method {
+    /// The name of the method in HTTP: `GET` or `POST`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+        }
+    }
+}
+
+impl fmt::Display for Method {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
 
 /// One GET of a JSON document from Palette. Implementations add authentication and scoping.
 pub trait PaletteApi {

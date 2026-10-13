@@ -8,12 +8,11 @@
 
 use std::path::Path;
 
-use super::{Candidate, CandidateLayer, MINTED_LAYER, loose_semver};
+use super::{Candidate, CandidateLayer, LayerKind, MINTED_LAYER, loose_semver};
 use crate::api::codes::CreateRule;
 use crate::cloud::{Cloud, supports};
 use crate::error::Error;
 use crate::layer::Layer;
-use crate::pack_type::PackType;
 use crate::profile_type::ProfileType;
 use crate::text::and_list;
 
@@ -79,9 +78,9 @@ pub(super) fn check_file(c: &Candidate) -> Result<(), RuleViolation> {
     let known: Vec<Option<&str>> = c
         .layers
         .iter()
-        .map(|l| match l.kind.as_deref().and_then(PackType::parse) {
-            Some(PackType::Manifest) => Some(MINTED_LAYER.as_str()),
-            _ => l.layer.as_deref(),
+        .map(|l| match l.kind {
+            Some(LayerKind::Manifest) => Some(MINTED_LAYER.as_str()),
+            None => l.layer.as_deref(),
         })
         .collect();
     check_layers(c, &known)

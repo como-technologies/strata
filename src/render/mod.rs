@@ -10,8 +10,8 @@ use serde_json::Value;
 
 use crate::color::Paint;
 use crate::diff::{
-    ClusterValueChange, Diff, ImageIdChange, InvalidPack, InvalidSides, Leaf, Op, PackDiff, Status,
-    ValuesDiff, VariableSummary, VariablesByName, Verify, VerifyStatus,
+    ChangeFlag, ClusterValueChange, Diff, ImageIdChange, InvalidPack, InvalidSides, Leaf, Op,
+    PackDiff, Side, Status, ValuesDiff, VariableSummary, VariablesByName, Verify, VerifyStatus,
 };
 use crate::error::Result;
 use crate::impact::ImpactLevel;
@@ -213,8 +213,8 @@ fn newer_version(n: &crate::ops::Newer) -> String {
 pub(crate) fn bump_line(pin: &crate::ops::Pin) -> Option<String> {
     let b = pin.bump.as_ref()?;
     let mut line = format!("bump to {}: {}", b.to, b.impact.as_str());
-    if !b.flags.is_empty() {
-        line.push_str(&format!(" {}", b.flags.join(" ")));
+    for f in &b.flags {
+        line.push_str(&format!(" {}", f.as_str()));
     }
     if let Some(n) = pin
         .newer
@@ -1018,7 +1018,7 @@ fn repave_reason_text(x: &PaletteRepaveReason) -> String {
 fn palette_validation_lines(d: &Diff) -> Vec<String> {
     d.palette_validation
         .as_ref()
-        .map(|v| crate::validation::answer_lines(&v.answer.errors))
+        .map(|v| crate::validation::answer_lines(v.answer.errors()))
         .unwrap_or_default()
 }
 
@@ -1169,7 +1169,10 @@ fn running_behind_notes(d: &Diff) -> Vec<String> {
     d.running_behind
         .iter()
         .map(|r| {
-            let side = if r.side == "a" { &d.a } else { &d.b };
+            let side = match r.side {
+                Side::A => &d.a,
+                Side::B => &d.b,
+            };
             let name = side.cluster.as_ref().map_or("", |c| c.name.as_str());
             format!(
                 "cluster {name} runs {} {}, and its profile declares {}",
@@ -1284,8 +1287,8 @@ fn verdict_case(v: &Verify, same: bool) -> VerdictCase {
 /// The terminal and the markdown put the subject before the sentence. A row of the summary names
 /// the record in its own column.
 pub(crate) struct VerdictParts {
-    /// `OK`, `UNVERIFIED`, or `DRIFT`.
-    pub(crate) word: &'static str,
+    /// The status of the record: see [`VerdictParts::word`].
+    status: RecordStatus,
     /// What the verdict states.
     case: VerdictCase,
     /// The sentence after the subject: `is unchanged since <at>`.
@@ -1303,6 +1306,11 @@ pub(crate) struct VerdictParts {
 }
 
 impl VerdictParts {
+    /// The status word of the record: `OK`, `UNVERIFIED`, or `DRIFT`.
+    pub(crate) fn word(&self) -> &'static str {
+        record_word(self.status)
+    }
+
     /// The line of one record after its status word: `published version x@1.0 is unchanged
     /// since <at>`, with the values and the tail.
     pub(crate) fn line(&self, recorded: &Source) -> String {
@@ -1359,7 +1367,7 @@ pub(crate) fn verdict_parts(
         _ => values_changed_suffix(v.cluster_values_changed),
     };
     VerdictParts {
-        word: record_word(RecordStatus::from(v.status)),
+        status: RecordStatus::from(v.status),
         case,
         sentence,
         values,
@@ -1632,26 +1640,15 @@ pub(crate) fn show(v: &Value) -> String {
 /// `IDENTITY UPSTREAM AUTHORED`, only the flags that are set, uncolored; a renamed tag in place of
 /// `IDENTITY`.
 pub(crate) fn plain_flags(pd: &PackDiff) -> String {
-    let mut f = Vec::new();
     let rename = tag_rename(pd);
-    if let Some(t) = &rename {
-        f.push(t.as_str());
-    } else if pd.identity {
-        f.push("IDENTITY");
-    }
-    if pd.upstream {
-        f.push("UPSTREAM");
-    }
-    if pd.authored {
-        f.push("AUTHORED");
-    }
-    if pd.images {
-        f.push("IMAGES");
-    }
-    if pd.charts {
-        f.push("CHARTS");
-    }
-    f.join(" ")
+    pd.flags()
+        .into_iter()
+        .map(|f| match (f, &rename) {
+            (ChangeFlag::Identity, Some(t)) => t.as_str(),
+            _ => f.as_str(),
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// One line for each image, chart, or param that moved: `~ image <repo>: <old> -> <new>`, `+

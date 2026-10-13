@@ -253,7 +253,7 @@ impl Renderer for MarkdownRenderer {
     fn verdict(&self, d: &Diff) -> Option<String> {
         let v = d.verify.as_ref()?;
         let parts = verdict_parts(v, d.same, &d.a, code);
-        let mut line = format!("\n**{}**: {}", parts.word, parts.line(&d.a));
+        let mut line = format!("\n**{}**: {}", parts.word(), parts.line(&d.a));
         for sentence in invalid_pack_sentences(&v.invalid_packs) {
             line.push_str(&format!("\n\n**INVALID**: {}", escape(&sentence)));
         }
@@ -386,7 +386,7 @@ impl Renderer for MarkdownRenderer {
             o.push('\n');
             return Ok(o);
         }
-        let subject = if r.profile.kind == ProfileType::App.as_str() {
+        let subject = if r.profile.kind == Some(ProfileType::App) {
             ConsumerKind::App.noun()
         } else {
             ConsumerKind::Cluster.noun()

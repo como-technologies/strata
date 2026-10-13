@@ -871,6 +871,57 @@ fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
 }
 
 #[test]
+fn the_schema_names_each_value_of_each_closed_set_that_became_an_enum() {
+    let schema = |kind: &str| -> serde_json::Value {
+        let r = run(&["schema", kind]);
+        assert_eq!(r.code, 0, "{}", r.err);
+        serde_json::from_str(&r.out).unwrap()
+    };
+    let v = schema("snapshot");
+    assert_eq!(schema_values(&v, "Implementation"), ["rust", "bash"]);
+    assert_eq!(
+        v["$defs"]["Tool"]["properties"]["impl"]["anyOf"][0]["$ref"],
+        "#/$defs/Implementation"
+    );
+    let v = schema("diff");
+    assert_eq!(schema_values(&v, "Side"), ["a", "b"]);
+    assert_eq!(
+        v["$defs"]["RunningBehind"]["properties"]["side"]["$ref"],
+        "#/$defs/Side"
+    );
+    let v = schema("candidate");
+    assert_eq!(schema_values(&v, "LayerKind"), ["manifest"]);
+    assert_eq!(
+        v["$defs"]["CandidateLayer"]["properties"]["type"]["anyOf"][0]["$ref"],
+        "#/$defs/LayerKind"
+    );
+    let v = schema("list");
+    assert_eq!(schema_values(&v, "Conjunction"), ["and", "or"]);
+    assert_eq!(
+        v["$defs"]["SavedFilter"]["properties"]["conjunction"]["$ref"],
+        "#/$defs/Conjunction"
+    );
+    let v = schema("behind");
+    assert_eq!(
+        schema_values(&v, "ChangeFlag"),
+        ["IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"]
+    );
+    assert_eq!(
+        v["$defs"]["Bump"]["properties"]["flags"]["items"]["$ref"],
+        "#/$defs/ChangeFlag"
+    );
+    let v = schema("consumers");
+    assert_eq!(
+        schema_values(&v, "ProfileType"),
+        ["cluster", "infra", "add-on", "system", "app", "pack"]
+    );
+    assert_eq!(
+        v["$defs"]["ConsumedProfile"]["properties"]["type"]["anyOf"][0]["$ref"],
+        "#/$defs/ProfileType"
+    );
+}
+
+#[test]
 fn schema_subcommand_prints_json_schema() {
     for (kind, id) in [
         ("snapshot", "strata-snapshot/1"),

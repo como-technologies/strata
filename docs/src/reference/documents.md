@@ -1,7 +1,8 @@
 # JSON documents
 
 Each document has a `schema` id and a `tool` block with `name`, `version`, and
-`impl`. A record of the first bash release has no `impl`. `strata-diff/1`,
+`impl`: `rust`, or `bash` for a record of the bash reference implementation.
+A record of the first bash release has no `impl`. `strata-diff/1`,
 `strata-verify-summary/1`, and `strata-chain/1` also have a `legend` that
 explains their values in words, so a program or a language model can read them
 without this book. `strata schema <kind>` prints the JSON Schema of each
@@ -57,10 +58,11 @@ profile, or pack version.
   - `fetchedAt`: the time of the read.
   - `paletteValidation`, only with `snapshot --validate`: `accepts`, and
     `errors[]` of `pack`, `code`, and `message`, only when it is not empty.
-    Strata writes a record only when Palette takes the candidate or the packs,
-    so a record holds
-    `{"accepts": true}`. A library caller gets the errors too. The field is not
-    part of the root. See
+    `accepts` is `true` when Palette gives no error. Strata writes a record
+    only when Palette takes the candidate or the packs, so a record holds
+    `{"accepts": true}`. A library caller gets the errors too. Strata does not
+    read a record that says `accepts` is `false` and gives no error, or that
+    says `true` and gives an error. The field is not part of the root. See
     [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks).
   - `macroValues`, only with `snapshot --macros` on a profile version: each
     user macro the content uses, and `sha256:` of the value Palette gives it at
@@ -277,7 +279,9 @@ A comparison of two sides, `a` and `b`.
 - `paletteValidation`, only with `compare --validate`: `clusterUid`, `accepts`
   (`true` when Palette gives no error), and `errors[]`, only when it is not
   empty, with `pack`, `code`, and `message`. An error of the whole request has
-  no `pack`. Strata sorts the errors and keeps one copy of each.
+  no `pack`. Strata sorts the errors and keeps one copy of each. Strata does
+  not read a document that says `accepts` is `false` and gives no error, or
+  that says `true` and gives an error.
 - `verify`, only after `verify`: `status` (`unchanged`, `drifted`, or
   `unverified`), `uid`, `recordedAt`, and `checkedAt`.
   - `upstreamUnknown`: for an `unverified` record, the packs that make it so.
@@ -396,7 +400,8 @@ is the path as a list: strings for keys, numbers for indexes, and
 ## strata-consumers/1
 
 - `profile`: `uid`, `name`, and `version`. `type`, only for an app profile:
-  `app`.
+  `app`. The schema gives `type` the six profile types: `cluster`, `infra`,
+  `add-on`, `system`, `app`, and `pack`.
 - `count`: the number of consumers. Exit `1` when it is not `0`. Exit `0` when
   it is `0` and each reading succeeded. Exit `2` when it is `0` and a reading
   failed: `error`, `groupsError`, or an `unread` that is not `0` in
@@ -537,7 +542,8 @@ is the path as a list: strings for keys, numbers for indexes, and
       support.
   - `behind`: `true` when `newer` is not empty.
   - `bump`, for a pin that is behind, unless `--no-impact`: `to`, the newest
-    version, `impact`, the impact level, and `flags[]`.
+    version, `impact`, the impact level, and `flags[]`, each one of
+    `IDENTITY`, `UPSTREAM`, `AUTHORED`, `IMAGES`, and `CHARTS`.
   - `arrived[]`, with `--since`: the newer versions that the previous report
     did not know. Absent when the previous report had no pin of the pack in
     that registry.

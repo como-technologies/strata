@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use super::PaletteApi;
+use super::{Method, PaletteApi};
 use crate::config::Config;
 use crate::error::{Error, Result};
 
@@ -39,7 +39,7 @@ impl HttpApi {
     /// The JSON of a response, or the error it stands for: a status out of 2xx, a body that could
     /// not be read, or a body that is not JSON.
     fn read(
-        method: &str,
+        method: Method,
         path: &str,
         answer: std::result::Result<ureq::http::Response<ureq::Body>, ureq::Error>,
     ) -> Result<Value> {
@@ -66,7 +66,7 @@ impl HttpApi {
             // the whole body, on one line: a caller that reads the answer of a validate route
             // needs the JSON of the refusal, and the message of the error shows the first part
             return Err(Error::Api {
-                method: method.to_string(),
+                method,
                 path: path.to_string(),
                 status,
                 body: body.replace(['\n', '\r'], " "),
@@ -90,7 +90,7 @@ impl PaletteApi for HttpApi {
     fn get_json(&self, path: &str) -> Result<Value> {
         let url = format!("{}{}", self.config.base_url, path);
         Self::read(
-            "GET",
+            Method::Get,
             path,
             self.headers(self.agent.get(url.as_str())).call(),
         )
@@ -101,7 +101,7 @@ impl PaletteApi for HttpApi {
         let req = self
             .headers(self.agent.post(url.as_str()))
             .header("Content-Type", "application/json");
-        Self::read("POST", path, req.send(body.to_string()))
+        Self::read(Method::Post, path, req.send(body.to_string()))
     }
 
     fn project_uid(&self) -> Option<&str> {

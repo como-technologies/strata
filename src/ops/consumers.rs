@@ -11,6 +11,7 @@ use crate::api::{
     Palette, PaletteApi, SEARCH_CLUSTER_PROFILES, search_condition, search_filter, search_group,
 };
 use crate::cluster_template::ClusterTemplateRef;
+use crate::conjunction::Conjunction;
 use crate::error::{Error, Result, found};
 use crate::profile_type::ProfileType;
 use crate::progress::Progress;
@@ -89,8 +90,8 @@ pub struct ConsumedProfile {
     /// Profile version.
     pub version: String,
     /// `app` for an app profile; absent for a cluster profile.
-    #[serde(rename = "type", default, skip_serializing_if = "String::is_empty")]
-    pub kind: String,
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ProfileType>,
 }
 
 /// One cluster, edge host, cluster template, or app deployment that uses the profile version.
@@ -518,7 +519,7 @@ fn report(
             uid: text(doc, "/metadata/uid"),
             name: text(doc, "/metadata/name"),
             version,
-            kind: kind.map(|k| k.as_str().to_string()).unwrap_or_default(),
+            kind,
         },
         count: consumers.len(),
         overwritten,
@@ -672,7 +673,7 @@ fn searched_consumers<A: PaletteApi>(
         return Ok(None);
     }
     let body = search_filter(vec![search_group(
-        "and",
+        Conjunction::And,
         vec![search_condition(
             SEARCH_CLUSTER_PROFILES,
             &[name.to_string()],

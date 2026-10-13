@@ -82,6 +82,11 @@ the draft changed. A version with no draft exits `2` with `no-draft`:
 `compare <ref> <ref>@draft` shows what the publish changes. See
 [Review a draft before its publish](../../use-cases/draft.md).
 
+A version that nobody published has only its draft. `<name>@<version>` and
+`<uid>` record that draft with no `@draft`, and the record says
+`source.template` `draft` too. `list` marks the version `draft`: see
+[strata list](../list.md).
+
 ## Record a pack version
 
 `pack:<name>@<version>` records one pack version from a registry, with the

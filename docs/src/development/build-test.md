@@ -24,7 +24,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/snapshot.rs` | A record, and how it is built from the responses. |
 | `src/shape.rs` | The fields of the `shape` tier of a cluster record, for each cloud type. |
 | `src/cloud.rs` | The cloud types of Palette, and the rule for a pack that supports a cloud. |
-| `src/pack_type.rs`, `src/profile_type.rs`, `src/scope.rs` | The closed sets of a document: the type of a pack, the type of a profile, and the scope of a profile version. Each is one enum, with its `parse` and its `as_str`. |
+| `src/pack_type.rs`, `src/profile_type.rs`, `src/scope.rs`, `src/conjunction.rs` | The closed sets of a document: the type of a pack, the type of a profile, the scope of a profile version, and how the conditions of a search join. Each is one enum, with its `parse` and its `as_str`. |
 | `src/legend.rs` | The legend of a document: the meaning of each value of a closed set, by its name in the documents. |
 | `src/diff.rs` | The comparison of two snapshots. |
 | `src/validation.rs` | The answer of Palette to a validate route, which a record and a comparison share. |
