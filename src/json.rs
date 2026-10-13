@@ -45,8 +45,10 @@ pub(crate) fn strings(v: &Value, ptr: &str) -> Vec<String> {
 }
 
 /// The texts of the object at the pointer `ptr` of `v`, by key, such as the labels of a
-/// document. An entry whose value is not text is left out, as [`strings`] leaves out an entry of
-/// an array. No entry when `v` has no object there.
+/// document.
+///
+/// The map skips an entry whose value is not text, as [`strings`] skips an entry of an array. No
+/// entry when `v` has no object there.
 ///
 /// Palette gives a label as text. So a value of another type is no label, and a tag filter must
 /// not match it as a label with an empty value.

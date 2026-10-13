@@ -108,8 +108,8 @@ search takes a name, and not a uid, so it names the
 clusters that run any version of the profile.
 
 The search goes to the scope of the profile: its project, or the tenant for a
-profile of the tenant. The search leaves out each virtual cluster unless a
-condition asks for it. Strata then reads each cluster that the search names and
+profile of the tenant. The search names no virtual cluster unless a condition
+asks for it. Strata then reads each cluster that the search names and
 the list does not. It keeps the clusters whose copy is the version, with the
 state and the version of each. The cluster listing names no virtual cluster, so
 a reading of the listing cannot find `tenant-b`.

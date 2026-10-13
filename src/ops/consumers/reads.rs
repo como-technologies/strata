@@ -61,7 +61,7 @@ pub(super) fn edge_hosts_bound<A: PaletteApi>(
 /// The clusters that run a version of the profile `name`, from the cluster search of `palette`.
 ///
 /// Strata sends one search with `clusterProfiles eq <name>`, and one with `environment eq nested`
-/// too. The search leaves out each virtual cluster unless a condition asks for it.
+/// too. The search names no virtual cluster unless a condition asks for it.
 ///
 /// Palette takes the name of a profile there, and not its uid. It changes each name into the uids
 /// of every profile with that name, with no scope, and a uid matches no name (#181). The search of
