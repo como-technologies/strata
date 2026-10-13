@@ -15,9 +15,9 @@ use crate::diff::{
 use crate::error::{Error, Result, found};
 use crate::json::{is_zero, opt_text, str_at, text};
 use crate::legend::{Described, legend};
-use crate::progress::Progress;
 use crate::registry::Registries;
 use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
+use crate::term::progress::Progress;
 
 use super::consumers::{ACTIVE_STATE, INACTIVE_STATE};
 use super::{connected, scope_of};

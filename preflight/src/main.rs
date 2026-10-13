@@ -7,9 +7,9 @@ use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
 use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
-use strata::color::ColorMode;
 use strata::config::Config;
-use strata::progress::Progress;
+use strata::term::color::ColorMode;
+use strata::term::progress::Progress;
 use strata_preflight::confidence::{self, Ledger};
 use strata_preflight::error::{Error, Result};
 use strata_preflight::probe::LiveBackend;

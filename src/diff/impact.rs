@@ -4,7 +4,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::layer::Layer;
+use crate::content::layer::Layer;
 use crate::legend::Described;
 
 /// Ordered by severity, so `max` picks the worst.

@@ -13,9 +13,9 @@ use std::process::Command;
 use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
 use strata::ops;
-use strata::progress::Progress;
 use strata::reference::Ref;
 use strata::snapshot::Snapshot;
+use strata::term::progress::Progress;
 
 use common::{
     CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, UID_B,
@@ -418,8 +418,9 @@ fn a_diff_of_two_junk_records_answers() {
                 strata::render::Format::Markdown,
                 strata::render::Format::Json,
             ] {
-                let out = strata::render::renderer(format, strata::color::Paint::off(), false)
-                    .render(&d, a, b, true);
+                let out =
+                    strata::render::renderer(format, strata::term::color::Paint::off(), false)
+                        .render(&d, a, b, true);
                 assert!(out.is_ok(), "seed {} pair {i}: {format:?} render", seed());
             }
         }

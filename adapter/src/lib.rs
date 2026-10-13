@@ -53,7 +53,7 @@ use serde_json::Value;
 use strata::api::{Palette, PaletteApi};
 use strata::candidate::{self, Candidate, CandidateLayer};
 use strata::ops;
-use strata::progress::Progress;
+use strata::term::progress::Progress;
 use strata::reference::Ref;
 use strata::snapshot::{AppliedProfile, PendingUpdate, Snapshot, SubjectKind};
 

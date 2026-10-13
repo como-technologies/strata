@@ -11,8 +11,8 @@ use std::path::Path;
 use super::{Candidate, CandidateLayer, LayerKind, MINTED_LAYER, loose_semver};
 use crate::api::codes::CreateRule;
 use crate::cloud::{Cloud, supports};
+use crate::content::layer::Layer;
 use crate::error::Error;
-use crate::layer::Layer;
 use crate::profile_type::ProfileType;
 use crate::text::and_list;
 

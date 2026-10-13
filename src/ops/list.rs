@@ -10,11 +10,11 @@ use serde_json::Value;
 use crate::api::{Palette, PaletteApi, named_entries, profile_versions};
 use crate::cloud::Cloud;
 use crate::error::{Result, found};
-use crate::progress::Progress;
 use crate::reference::Ref;
+use crate::reference::version;
 use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
-use crate::version;
+use crate::term::progress::Progress;
 
 use crate::json::{arr, first_nonempty, items, opt_text, str_at, text};
 

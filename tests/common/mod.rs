@@ -725,7 +725,7 @@ pub fn snapshot_of_at(
         &strata::ops::SnapshotOptions::default(),
         || Ok(strata::api::Palette::new(api)),
         at,
-        &strata::progress::Progress::silent(),
+        &strata::term::progress::Progress::silent(),
     )
 }
 
@@ -740,7 +740,7 @@ pub fn candidate_snapshot(
         false,
         || Ok(strata::api::Palette::new(api)),
         "t0",
-        &strata::progress::Progress::silent(),
+        &strata::term::progress::Progress::silent(),
     )
 }
 
@@ -956,7 +956,7 @@ pub fn listing(
         options,
         |_| Ok(strata::api::Palette::new(api)),
         "t1",
-        &strata::progress::Progress::silent(),
+        &strata::term::progress::Progress::silent(),
     )
 }
 

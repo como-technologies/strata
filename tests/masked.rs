@@ -5,12 +5,12 @@
 use serde_json::{Value, json};
 
 use strata::api::{MemoryApi, Palette};
-use strata::color::Paint;
 use strata::diff::{self, MaskedPack, VerifyStatus};
 use strata::ops::{self, PairStatus, Policy};
-use strata::progress::Progress;
 use strata::render::{self, Format};
 use strata::snapshot::Snapshot;
+use strata::term::color::Paint;
+use strata::term::progress::Progress;
 
 use crate::common;
 use common::{no_manifests, no_variables, profile_document, serve_profile, snapshot_of, template};

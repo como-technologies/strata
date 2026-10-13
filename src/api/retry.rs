@@ -7,7 +7,7 @@ use serde_json::Value;
 use super::PaletteApi;
 use crate::config::Config;
 use crate::error::{Error, FailureClass, Result};
-use crate::progress::Progress;
+use crate::term::progress::Progress;
 
 /// How many times to retry a failed GET and how long to wait between attempts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

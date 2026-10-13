@@ -13,7 +13,7 @@ where each module goes.
   and it takes the connection as `connect: impl FnOnce() -> Result<Palette<A>>`,
   so that a ref to a file never connects.
 - `api/` is the only code that talks to Palette. A new request is a method of
-  `Palette<A>` in `api/palette.rs`. Escape each path segment with
+  `Palette<A>` in `api/palette/`. Escape each path segment with
   `query_value`. A pure change of a document, such as a mask, goes in its own
   module of `api/` and has unit tests. The methods of `Palette` fetch, and do
   not rewrite.
@@ -23,6 +23,17 @@ where each module goes.
 - A type that two modules share goes in a module of its own. It does not go in
   the module of one of its users. Re-export it where the public path must not
   change.
+
+## The size of a module
+
+- A module does one thing. When its file has more than about 800 lines, make
+  the module a directory: `mod.rs`, and one file for each part. A file that
+  holds only tests can be longer.
+- Move a file with `git mv`, so that `git log --follow` keeps its history. Move
+  the file whole in one pull request, and divide it in the next. The squash of
+  one pull request that does both loses the history.
+- When a public module moves under a new parent, keep a `pub use` at the old
+  path for one minor release.
 
 ## Visibility
 
@@ -58,7 +69,7 @@ where each module goes.
 
 - Use one error type, `crate::error::Error`, with `Result<T>`. A new variant
   has a `kind()`, a `to_json()`, a `class()`, and a sample in the tests of
-  `error.rs`.
+  `error/`.
 - Do not use `unwrap`, `expect`, or a slice index that can panic on input from
   a user or from Palette. Slice text at a `char` boundary only.
 - Do not discard an error. `unwrap_or_default()`, `.ok()`, and `let _ =` are

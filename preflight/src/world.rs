@@ -23,9 +23,9 @@ use std::path::Path;
 
 use serde_json::{Map, Value, json};
 use strata::api::{Palette, PaletteApi};
-use strata::progress::Progress;
 use strata::reference::Ref;
 use strata::snapshot::{Snapshot, SubjectKind};
+use strata::term::progress::Progress;
 
 use crate::error::{Error, Result};
 

@@ -9,17 +9,19 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::canon::canonical_json;
 use crate::cluster_template::ClusterTemplateRef;
-pub use crate::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
+use crate::content::canon::canonical_json;
+use crate::content::layer::Layer;
+pub use crate::diff::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
 use crate::json::{is_zero, str_at, text};
-use crate::layer::Layer;
 use crate::legend::{Described, legend};
 pub use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{
     ClusterTier, ClusterVariable, Pack, Snapshot, Source, Tier, Tool, UpstreamSource,
 };
 pub use crate::validation::{PaletteRefusal, PaletteValidation};
+
+pub mod impact;
 
 /// Schema id written into every diff document.
 pub const DIFF_SCHEMA: &str = "strata-diff/1";
@@ -279,9 +281,9 @@ fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
                     (infra(&t.fields), infra(&u.fields))
                 }
                 // a record from before strata read the shape by cloud type holds fewer fields
-                Tier::Shape => crate::shape::comparable(&t.fields, &u.fields),
+                Tier::Shape => crate::snapshot::shape::comparable(&t.fields, &u.fields),
                 // and one from before strata read the role bindings holds their references
-                Tier::Policy => crate::policy::comparable(&t.fields, &u.fields),
+                Tier::Policy => crate::snapshot::policy::comparable(&t.fields, &u.fields),
                 _ => (t.fields.clone(), u.fields.clone()),
             };
             let (f, g) = (read_fields(f, t, u), read_fields(g, t, u));

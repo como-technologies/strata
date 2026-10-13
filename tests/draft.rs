@@ -4,14 +4,14 @@
 use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
 use strata::candidate::Candidate;
-use strata::color::Paint;
 use strata::diff::Status;
 use strata::diff::VerifyStatus;
 use strata::error::Error;
 use strata::ops;
-use strata::progress::Progress;
 use strata::render::{self, Format};
 use strata::snapshot::{Snapshot, Template, UpstreamSource};
+use strata::term::color::Paint;
+use strata::term::progress::Progress;
 
 use crate::common;
 use common::{

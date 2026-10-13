@@ -17,7 +17,7 @@ use crate::diff::{RegistrySync, SyncRecovery};
 use crate::error::{Error, Result, unread_reason};
 use crate::json::{opt_text, str_at, take_items, text};
 use crate::pack_type::PackType;
-use crate::progress::Progress;
+use crate::term::progress::Progress;
 
 /// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
 const SYNC_RECOVERED: &str = "Recovered";
