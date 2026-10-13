@@ -9433,6 +9433,15 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
     // two profile versions, and no cluster: a usage error
     let err = ops::palette_repave(&palette, &target, &target, d.summary.max_impact).unwrap_err();
     assert!(matches!(err, Error::Usage { .. }), "{err}");
+
+    // a record of an app profile is no profile version that a cluster can run: a usage error
+    let mut app = target.clone();
+    app.source.kind = ProfileType::App.as_str().to_string();
+    let err = ops::palette_repave(&palette, &cluster, &app, d.summary.max_impact).unwrap_err();
+    assert!(
+        matches!(&err, Error::Usage { message } if message.contains("profile side")),
+        "{err}"
+    );
 }
 
 #[test]

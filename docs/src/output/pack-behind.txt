@@ -16,7 +16,7 @@ images     8 images, 0 charts changed in 1 pack
       values: 9 changed, 2 added, 0 removed
         ~ kubeadmconfig.dns.imageTag: "v1.13.1" -> "v1.14.2"
         ~ kubeadmconfig.etcd.local.imageTag: "3.6.6-0" -> "3.6.8-0"
-        ~ kubeadmconfig.files[2].content: "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity... (649 chars, see --full) -> "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity... (649 chars, see --full)
+        ~ kubeadmconfig.files[2].content: "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity… (649 chars, see --full) -> "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity… (649 chars, see --full)
         ~ pack.content.images[0].image: "us-docker.pkg.dev/palette-images/k8s/coredns/coredns:v1.13.1" -> "us-docker.pkg.dev/palette-images/k8s/coredns/coredns:v1.14.2"
         + pack.content.images[10].image: "registry.k8s.io/pause:3.10.2"
         ~ pack.content.images[1].image: "us-docker.pkg.dev/palette-images/k8s/etcd:3.6.6-0" -> "us-docker.pkg.dev/palette-images/k8s/etcd:3.6.8-0"

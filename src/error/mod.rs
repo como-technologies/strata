@@ -562,7 +562,7 @@ impl Error {
 
     /// True for an answer of Palette that says it has no such route: HTTP 404 or 405. An older
     /// Palette answers so for a route that a later one added.
-    pub(crate) fn is_missing_route(&self) -> bool {
+    pub fn is_missing_route(&self) -> bool {
         matches!(
             self,
             Error::Api {

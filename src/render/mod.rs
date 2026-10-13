@@ -20,6 +20,7 @@ use crate::error::Result;
 use crate::ops::{Chain, ConsumersReport, Listing, PackListing, SetReport, VerifySummary};
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
+use crate::text::cut;
 
 pub use json::JsonRenderer;
 pub use list::{invalid_pack_warnings, set_counts_line};
@@ -135,10 +136,7 @@ pub(crate) fn show(v: &Value) -> String {
     let t = serde_json::to_string(v).unwrap_or_default();
     let n = t.chars().count();
     if n > 120 {
-        format!(
-            "{}... ({n} chars, see --full)",
-            t.chars().take(100).collect::<String>()
-        )
+        format!("{} ({n} chars, see --full)", cut(&t, 101))
     } else {
         t
     }
@@ -189,4 +187,21 @@ fn registry_sync_suffix(sync: Option<&crate::diff::RegistrySync>) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_long_value_shows_its_start_with_a_mark_and_its_length() {
+        let long = Value::from("x".repeat(130));
+        let shown = show(&long);
+        assert!(
+            shown.starts_with(&format!("\"{}…", "x".repeat(99))),
+            "{shown}"
+        );
+        assert!(shown.ends_with(" (132 chars, see --full)"), "{shown}");
+        assert_eq!(show(&Value::from("short")), "\"short\"");
+    }
 }
