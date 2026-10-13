@@ -636,8 +636,8 @@ impl Renderer for MarkdownRenderer {
             }
             for f in filters {
                 o.push_str(&format!(
-                    "| `filter:{}` | `{}` | {} |\n",
-                    escape(&f.name),
+                    "| `{}` | `{}` | {} |\n",
+                    escape(&f.reference()),
                     escape(&f.uid),
                     escape(&f.expression())
                 ));

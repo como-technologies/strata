@@ -134,6 +134,7 @@ fn snapshot_for_resolves_names_and_never_connects_for_files() {
     fs::write(&file, by_uid.to_json(true).unwrap()).unwrap();
     let from_file = ops::snapshot_for(
         &Ref::Snapshot(file),
+        &ops::SnapshotOptions::default(),
         || -> strata::Result<Palette<MemoryApi>> { panic!("must not connect for a snapshot file") },
         "t9",
         &Progress::silent(),
@@ -227,6 +228,7 @@ fn a_503_twice_then_success_yields_a_snapshot() {
     let (retry, slept) = retrying(&api, 3);
     let snap = ops::snapshot_for(
         &Ref::Uid(UID_A.into()),
+        &ops::SnapshotOptions::default(),
         || Ok(Palette::new(retry)),
         "t0",
         &Progress::silent(),
@@ -1384,6 +1386,7 @@ fn serve_cluster(api: MemoryApi, raw_root: &Path, dir: &str) -> MemoryApi {
 fn snapshot_cluster(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
     ops::snapshot_for(
         &cluster_ref(CLUSTER_UID, profile, false),
+        &ops::SnapshotOptions::default(),
         || Ok(Palette::new(api)),
         "t0",
         &Progress::silent(),
@@ -1395,6 +1398,7 @@ fn snapshot_cluster(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Sn
 fn snapshot_pending(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
     ops::snapshot_for(
         &cluster_ref(CLUSTER_UID, profile, true),
+        &ops::SnapshotOptions::default(),
         || Ok(Palette::new(api)),
         "t0",
         &Progress::silent(),

@@ -5,13 +5,13 @@
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::api::{Palette, PaletteApi, RawCluster, RawProfile};
 use crate::candidate::LoadedCandidate;
 use crate::diff::{self, Diff};
 use crate::error::{Error, Result};
-use crate::json::text;
+use crate::json::{first_nonempty, str_at, text};
 use crate::progress::Progress;
 use crate::reference::Ref;
 use crate::snapshot::{GroupMember, Snapshot, SubjectKind};
@@ -38,10 +38,96 @@ pub use same_release::*;
 pub use validate::*;
 pub use verify::*;
 
+/// What `snapshot` records beyond the content of a ref, and what it asks Palette about it.
+///
+/// Each option fits some kinds of ref. [`snapshot_for`] refuses the others with `Usage`, before
+/// any request. The default records the content alone.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SnapshotOptions {
+    /// `--macros`: record the digest of the value that Palette gives each macro that the content
+    /// uses. It takes a profile version, a cluster, or a cluster group.
+    pub macros: bool,
+    /// `--shape`: for a cluster, record the shape tier, the machine pools, and the cloud part,
+    /// with one more request.
+    pub shape: bool,
+    /// `--raw-dir`: also save the raw answers of Palette in this directory. It takes a profile
+    /// version or a cluster: a record read back from the directory does not say pending, draft,
+    /// edge host, cluster group, app profile, or pack.
+    pub raw_dir: Option<PathBuf>,
+    /// `--validate`: ask Palette whether it takes the profile version, as [`profile_validation`]
+    /// does. `source.paletteValidation` of the record holds the answer, and the caller decides
+    /// what a refusal does.
+    pub validate: bool,
+}
+
+impl SnapshotOptions {
+    /// `Usage` for the first option that does not fit `reference`. Each message names what the
+    /// option takes.
+    fn check(&self, reference: &Ref) -> Result<()> {
+        let usage = |message: String| Err(Error::Usage { message });
+        if self.macros
+            && !matches!(
+                reference,
+                Ref::Cluster { .. }
+                    | Ref::ClusterGroup { .. }
+                    | Ref::Uid(_)
+                    | Ref::NameVersion { .. }
+            )
+        {
+            return usage(
+                "--macros takes <name>@<version>, a profile uid, cluster:<cluster>, or \
+                 clustergroup:<group>"
+                    .to_string(),
+            );
+        }
+        if self.validate && matches!(reference, Ref::Draft { .. }) {
+            return usage(format!(
+                "--validate takes a profile version or --from-candidate, not a draft \
+                 ({reference}): give the candidate of the draft, from `strata candidate \
+                 {reference}`, to --from-candidate"
+            ));
+        }
+        if self.validate && !reference.is_profile_version() {
+            return usage(
+                "--validate takes a profile version or --from-candidate: Palette checks the \
+                 packs of a profile, and not of a cluster, a cluster group, an app profile, or \
+                 one pack"
+                    .to_string(),
+            );
+        }
+        if self.shape && !matches!(reference, Ref::Cluster { .. }) {
+            return usage(
+                "--shape needs a cluster ref: a profile has no machine pools".to_string(),
+            );
+        }
+        if self.raw_dir.is_some()
+            && !matches!(
+                reference,
+                Ref::Uid(_) | Ref::NameVersion { .. } | Ref::Cluster { pending: false, .. }
+            )
+        {
+            return usage(
+                "--raw-dir takes a profile or a cluster: a record read back from the directory \
+                 does not say pending, draft, edge host, cluster group, or app profile"
+                    .to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
 /// Turn a ref into a snapshot. A snapshot file is loaded; anything else is fetched through the
-/// [`Palette`] that `connect` returns, so comparing two files never needs credentials.
+/// [`Palette`] that `connect` returns, with `options`, so comparing two files never needs
+/// credentials. The record names the ref as it displays: the text as typed, without an empty
+/// part after a separator.
+///
+/// # Errors
+///
+/// `Usage` for an option that does not fit the ref, and for a set of clusters, before any
+/// request. Then the error of a request, such as a 404 for a uid that Palette does not have.
 pub fn snapshot_for<A, F>(
     reference: &Ref,
+    options: &SnapshotOptions,
     connect: F,
     fetched_at: &str,
     progress: &Progress,
@@ -50,70 +136,9 @@ where
     A: PaletteApi,
     F: FnOnce() -> Result<Palette<A>>,
 {
+    options.check(reference)?;
     match reference {
         Ref::Snapshot(path) => Snapshot::load(path),
-        Ref::NameVersion { name, version } => {
-            let palette = connect()?;
-            let uid = palette.resolve(name, version)?;
-            let raw = palette.fetch_profile(&uid, progress)?;
-            Ok(
-                Snapshot::from_raw(&raw, &reference.to_string(), fetched_at)?
-                    .with_project(palette.project_uid()),
-            )
-        }
-        Ref::Uid(uid) => {
-            let palette = connect()?;
-            let raw = palette.fetch_profile(uid, progress)?;
-            Ok(Snapshot::from_raw(&raw, uid, fetched_at)?.with_project(palette.project_uid()))
-        }
-        Ref::Draft { id, version } => {
-            let palette = connect()?;
-            Ok(draft_snapshot(
-                &palette,
-                id,
-                version.as_deref(),
-                &reference.to_string(),
-                fetched_at,
-                progress,
-            )?
-            .with_project(palette.project_uid()))
-        }
-        Ref::Pack {
-            registry,
-            name,
-            version,
-        } => {
-            let palette = connect()?;
-            Ok(crate::candidate::pack_snapshot(
-                &palette,
-                registry.as_deref(),
-                name,
-                version,
-                &reference.to_string(),
-                fetched_at,
-                progress,
-            )?
-            .with_project(palette.project_uid()))
-        }
-        Ref::Cluster {
-            uid,
-            profile,
-            pending,
-        } => {
-            let palette = connect()?;
-            let mut raw = palette.fetch_subject(SubjectKind::Cluster, uid, progress)?;
-            if *pending {
-                raw = palette.with_pending(raw)?;
-            }
-            let snap = Snapshot::from_cluster(
-                &raw,
-                profile.as_deref(),
-                &reference.to_string(),
-                fetched_at,
-            )?;
-            let snap = if *pending { snap.mark_pending() } else { snap };
-            Ok(snap.with_project(palette.project_uid()))
-        }
         Ref::ClusterSet { .. } => Err(Error::Usage {
             message: format!(
                 "{reference} names a set of clusters, and this command reads one: \
@@ -121,43 +146,132 @@ where
                  `strata list clusters` lists them"
             ),
         }),
-        Ref::AppProfile { id, version } => {
+        _ => {
             let palette = connect()?;
-            Ok(app_profile_snapshot(
-                &palette,
-                id,
-                version.as_deref(),
-                &reference.to_string(),
-                fetched_at,
-                progress,
-            )?
-            .with_project(palette.project_uid()))
-        }
-        Ref::ClusterGroup { uid } => {
-            let palette = connect()?;
-            Ok(cluster_group_snapshot(
-                &palette,
-                uid,
-                false,
-                &reference.to_string(),
-                fetched_at,
-                progress,
-            )?
-            .with_project(palette.project_uid()))
-        }
-        Ref::EdgeHost { uid, profile } => {
-            let palette = connect()?;
-            let raw = palette.fetch_subject(SubjectKind::EdgeHost, uid, progress)?;
-            Ok(Snapshot::from_cluster(
-                &raw,
-                profile.as_deref(),
-                &reference.to_string(),
-                fetched_at,
-            )?
-            .with_kind(SubjectKind::EdgeHost)
-            .with_project(palette.project_uid()))
+            Ok(fetched(reference, options, &palette, fetched_at, progress)?
+                .with_project(palette.project_uid()))
         }
     }
+}
+
+/// The snapshot of `reference` through `palette`, for each kind of ref that a request answers.
+fn fetched<A: PaletteApi>(
+    reference: &Ref,
+    options: &SnapshotOptions,
+    palette: &Palette<A>,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let text = reference.to_string();
+    match reference {
+        Ref::NameVersion { name, version } => {
+            let uid = palette.resolve(name, version)?;
+            profile_snapshot(palette, &uid, options, &text, fetched_at, progress)
+        }
+        Ref::Uid(uid) => profile_snapshot(palette, uid, options, &text, fetched_at, progress),
+        Ref::Draft { id, version } => {
+            draft_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress)
+        }
+        Ref::Pack {
+            registry,
+            name,
+            version,
+        } => crate::candidate::pack_snapshot(
+            palette,
+            registry.as_deref(),
+            name,
+            version,
+            &text,
+            fetched_at,
+            progress,
+        ),
+        Ref::Cluster {
+            uid,
+            profile,
+            pending,
+        } => {
+            let mut raw = palette.fetch_subject(SubjectKind::Cluster, uid, progress)?;
+            if *pending {
+                raw = palette.with_pending(raw)?;
+            }
+            let snap = cluster_snapshot(
+                raw,
+                palette,
+                uid,
+                profile.as_deref(),
+                options,
+                &text,
+                fetched_at,
+            )?;
+            Ok(if *pending { snap.mark_pending() } else { snap })
+        }
+        Ref::AppProfile { id, version } => {
+            app_profile_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress)
+        }
+        Ref::ClusterGroup { uid } => {
+            cluster_group_snapshot(palette, uid, options.macros, &text, fetched_at, progress)
+        }
+        Ref::EdgeHost { uid, profile } => {
+            let raw = palette.fetch_subject(SubjectKind::EdgeHost, uid, progress)?;
+            Ok(
+                Snapshot::from_cluster(&raw, profile.as_deref(), &text, fetched_at)?
+                    .with_kind(SubjectKind::EdgeHost),
+            )
+        }
+        Ref::Snapshot(_) | Ref::ClusterSet { .. } => {
+            unreachable!("snapshot_for answers a file and a set before it connects")
+        }
+    }
+}
+
+/// A record of the published template of the profile `uid`, with what `options` add: the macro
+/// digests, the raw answers saved, and the answer of Palette to `--validate`.
+fn profile_snapshot<A: PaletteApi>(
+    palette: &Palette<A>,
+    uid: &str,
+    options: &SnapshotOptions,
+    reference: &str,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let mut raw = palette.fetch_profile(uid, progress)?;
+    if options.macros {
+        raw.resolved_values = Some(palette.profile_resolved_values(uid)?);
+    }
+    if let Some(dir) = &options.raw_dir {
+        raw.save_dir(dir, fetched_at)?;
+    }
+    let mut snap = Snapshot::from_raw(&raw, reference, fetched_at)?;
+    if options.validate {
+        snap.source.palette_validation = Some(profile_validation(palette, &snap)?);
+    }
+    Ok(snap)
+}
+
+/// A record of what the cluster of `raw` runs, or of its profile `profile`, with what `options`
+/// add: the macro digests, the shape, and the raw answers saved. `uid` is the cluster as the ref
+/// names it.
+fn cluster_snapshot<A: PaletteApi>(
+    mut raw: RawCluster,
+    palette: &Palette<A>,
+    uid: &str,
+    profile: Option<&str>,
+    options: &SnapshotOptions,
+    reference: &str,
+    fetched_at: &str,
+) -> Result<Snapshot> {
+    if options.macros {
+        // the ref can name the cluster by name, and the document gives its uid
+        let uid = first_nonempty(&[str_at(&raw.cluster, "/metadata/uid"), uid]);
+        raw.resolved_values = Some(palette.resolved_values(SubjectKind::Cluster, &uid)?);
+    }
+    if options.shape {
+        raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
+    }
+    if let Some(dir) = &options.raw_dir {
+        raw.save_dir(dir, fetched_at)?;
+    }
+    Snapshot::from_cluster(&raw, profile, reference, fetched_at)
 }
 
 /// A record of an app profile, by uid, or by name at `version`. Its consumers are app
@@ -233,13 +347,26 @@ where
     F: FnMut() -> Result<Palette<A>>,
 {
     let open = |r: &Ref| matches!(r, Ref::Cluster { profile: None, .. });
+    let content = SnapshotOptions::default();
     if open(a) && !open(b) {
-        let sb = snapshot_for(b, &mut connect, fetched_at, progress)?;
-        let sa = snapshot_for(&narrowed(a, &sb), &mut connect, fetched_at, progress)?;
+        let sb = snapshot_for(b, &content, &mut connect, fetched_at, progress)?;
+        let sa = snapshot_for(
+            &narrowed(a, &sb),
+            &content,
+            &mut connect,
+            fetched_at,
+            progress,
+        )?;
         Ok((sa, sb))
     } else {
-        let sa = snapshot_for(a, &mut connect, fetched_at, progress)?;
-        let sb = snapshot_for(&narrowed(b, &sa), &mut connect, fetched_at, progress)?;
+        let sa = snapshot_for(a, &content, &mut connect, fetched_at, progress)?;
+        let sb = snapshot_for(
+            &narrowed(b, &sa),
+            &content,
+            &mut connect,
+            fetched_at,
+            progress,
+        )?;
         Ok((sa, sb))
     }
 }

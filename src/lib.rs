@@ -57,8 +57,9 @@
 //!
 //! let reference = Ref::Uid(uid.to_string());
 //! let quiet = Progress::silent();
-//! let record = ops::snapshot_for(&reference, || Ok(Palette::new(api.clone())), "2026-09-16T00:00:00Z", &quiet)?;
-//! let later = ops::snapshot_for(&reference, || Ok(Palette::new(api.clone())), "2026-09-17T00:00:00Z", &quiet)?;
+//! let content = ops::SnapshotOptions::default();
+//! let record = ops::snapshot_for(&reference, &content, || Ok(Palette::new(api.clone())), "2026-09-16T00:00:00Z", &quiet)?;
+//! let later = ops::snapshot_for(&reference, &content, || Ok(Palette::new(api.clone())), "2026-09-17T00:00:00Z", &quiet)?;
 //!
 //! let diff = ops::compare(&record, &later, "2026-09-17T00:00:00Z");
 //! assert!(diff.same, "nothing changed, so the roots are equal");

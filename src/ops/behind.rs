@@ -15,6 +15,7 @@ use crate::diff::RegistrySync;
 use crate::error::{Error, Result};
 use crate::impact::ImpactLevel;
 use crate::progress::Progress;
+use crate::reference::Ref;
 use crate::registry::{Registries, RegistrySyncNote};
 use crate::snapshot::{Snapshot, Tool, load_document};
 use crate::version;
@@ -477,7 +478,12 @@ fn bump_of<A: PaletteApi>(
             Some(registry_uid),
             name,
             version,
-            &format!("pack:{name}@{version}"),
+            &Ref::Pack {
+                registry: None,
+                name: name.to_string(),
+                version: version.to_string(),
+            }
+            .to_string(),
             at,
             progress,
         )

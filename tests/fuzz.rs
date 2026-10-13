@@ -301,6 +301,7 @@ fn a_profile_of_junk_gives_a_record_that_round_trips() {
         let api = api_of_junk(&mut rng, uid);
         let snap = ops::snapshot_for(
             &Ref::Uid(uid.to_string()),
+            &ops::SnapshotOptions::default(),
             || Ok(Palette::new(&api)),
             "t0",
             &Progress::silent(),
@@ -347,6 +348,7 @@ fn a_cluster_of_junk_snapshots_or_errors() {
         let api = api_of_junk(&mut rng, uid);
         let r = ops::snapshot_for(
             &cluster_ref(uid, None, false),
+            &ops::SnapshotOptions::default(),
             || Ok(Palette::new(&api)),
             "t0",
             &Progress::silent(),
@@ -393,6 +395,7 @@ fn a_diff_of_two_junk_records_answers() {
         let api = api_of_junk(&mut rng, uid);
         if let Ok(s) = ops::snapshot_for(
             &Ref::Uid(uid.to_string()),
+            &ops::SnapshotOptions::default(),
             || Ok(Palette::new(&api)),
             "t0",
             &Progress::silent(),

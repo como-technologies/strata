@@ -131,13 +131,13 @@ impl Ref {
             return Ref::Snapshot(PathBuf::from(text));
         }
         if let Some(rest) = text.strip_prefix(PACK_PREFIX)
-            && let Some((left, version)) = rest.rsplit_once('@')
+            && let Some((left, version)) = name_at_version(rest)
         {
             let (registry, name) = match left.split_once('/') {
                 Some((registry, name)) => (Some(registry), name),
                 None => (None, left),
             };
-            if !name.is_empty() && !version.is_empty() {
+            if !name.is_empty() {
                 return Ref::Pack {
                     registry: registry.filter(|r| !r.is_empty()).map(str::to_string),
                     name: name.to_string(),
@@ -150,10 +150,7 @@ impl Ref {
                 Some(r) => (r, true),
                 None => (rest, false),
             };
-            let (uid, profile) = match rest.split_once('/') {
-                Some((uid, profile)) => (uid, Some(profile).filter(|p| !p.is_empty())),
-                None => (rest, None),
-            };
+            let (uid, profile) = uid_and_profile(rest);
             if !uid.is_empty() {
                 return Ref::Cluster {
                     uid: uid.to_string(),
@@ -163,10 +160,7 @@ impl Ref {
             }
         }
         if let Some(rest) = text.strip_prefix(EDGE_HOST_PREFIX) {
-            let (uid, profile) = match rest.split_once('/') {
-                Some((uid, profile)) => (uid, Some(profile).filter(|p| !p.is_empty())),
-                None => (rest, None),
-            };
+            let (uid, profile) = uid_and_profile(rest);
             if !uid.is_empty() {
                 return Ref::EdgeHost {
                     uid: uid.to_string(),
@@ -198,14 +192,12 @@ impl Ref {
             && !rest.is_empty()
             && !rest.contains('/')
         {
-            return match rest.rsplit_once('@') {
-                Some((name, version)) if !name.is_empty() && !version.is_empty() => {
-                    Ref::AppProfile {
-                        id: name.to_string(),
-                        version: Some(version.to_string()),
-                    }
-                }
-                _ => Ref::AppProfile {
+            return match name_at_version(rest) {
+                Some((name, version)) => Ref::AppProfile {
+                    id: name.to_string(),
+                    version: Some(version.to_string()),
+                },
+                None => Ref::AppProfile {
                     id: rest.to_string(),
                     version: None,
                 },
@@ -227,21 +219,18 @@ impl Ref {
         if let Some(rest) = text.strip_suffix(DRAFT_SUFFIX)
             && !rest.is_empty()
         {
-            return match rest.rsplit_once('@') {
-                Some((name, version)) if !name.is_empty() && !version.is_empty() => Ref::Draft {
+            return match name_at_version(rest) {
+                Some((name, version)) => Ref::Draft {
                     id: name.to_string(),
                     version: Some(version.to_string()),
                 },
-                _ => Ref::Draft {
+                None => Ref::Draft {
                     id: rest.to_string(),
                     version: None,
                 },
             };
         }
-        if let Some((name, version)) = text.rsplit_once('@')
-            && !name.is_empty()
-            && !version.is_empty()
-        {
+        if let Some((name, version)) = name_at_version(text) {
             return Ref::NameVersion {
                 name: name.to_string(),
                 version: version.to_string(),
@@ -249,6 +238,30 @@ impl Ref {
         }
         Ref::Uid(text.to_string())
     }
+
+    /// True when the ref names a profile version: `<name>@<version>`, a uid, or either with
+    /// `@draft`. A record file can hold one too, and the record says.
+    pub fn is_profile_version(&self) -> bool {
+        matches!(
+            self,
+            Ref::NameVersion { .. } | Ref::Uid(_) | Ref::Draft { .. }
+        )
+    }
+}
+
+/// `<uid>/<profile>` or `<uid>`: the uid, and the profile when the text names one after the
+/// `/`. An empty profile is none.
+fn uid_and_profile(text: &str) -> (&str, Option<&str>) {
+    match text.split_once('/') {
+        Some((uid, profile)) => (uid, Some(profile).filter(|p| !p.is_empty())),
+        None => (text, None),
+    }
+}
+
+/// `<name>@<version>`, split at the last `@`, when both parts are there.
+fn name_at_version(text: &str) -> Option<(&str, &str)> {
+    text.rsplit_once('@')
+        .filter(|(name, version)| !name.is_empty() && !version.is_empty())
 }
 
 impl fmt::Display for Ref {
@@ -646,6 +659,38 @@ mod tests {
         let several = vec!["u2".to_string(), "u1".to_string()];
         let err = one_named(several, String::as_str, not_found, ambiguous).unwrap_err();
         assert_eq!(err.to_string(), "u1,u2", "the uids are sorted");
+    }
+
+    #[test]
+    fn a_profile_version_is_a_name_at_a_version_a_uid_or_the_draft_of_one() {
+        let no_files = |_: &Path| false;
+        for text in [
+            "aws-stack@1.2.0",
+            "64f0a1",
+            "aws-stack@1.2.0@draft",
+            "64f0a1@draft",
+        ] {
+            assert!(
+                Ref::parse_with(text, no_files).is_profile_version(),
+                "{text} names a profile version"
+            );
+        }
+        for text in [
+            "releases/dev.json",
+            "pack:csi-aws-ebs@1.65.0",
+            "cluster:c1",
+            "cluster:c1/aws-stack@pending",
+            "edgehost:e1",
+            "appprofile:shop@1.0.0",
+            "tag:env=prod",
+            "filter:prod",
+            "clustergroup:g1",
+        ] {
+            assert!(
+                !Ref::parse_with(text, no_files).is_profile_version(),
+                "{text} does not name a profile version"
+            );
+        }
     }
 
     #[test]

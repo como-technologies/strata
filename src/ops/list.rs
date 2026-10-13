@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use clap::ValueEnum;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -10,6 +11,7 @@ use crate::api::{Palette, PaletteApi, named_entries, profile_versions};
 use crate::cloud::Cloud;
 use crate::error::{Result, found};
 use crate::progress::Progress;
+use crate::reference::Ref;
 use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::version;
@@ -24,8 +26,8 @@ pub const LIST_SCHEMA: &str = "strata-list/1";
 /// sets.
 pub const TENANT_SCOPE: &str = "";
 
-/// A kind of thing `list` reads.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A kind of thing `list` reads. On the command line, each is its name in lower case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum ListKind {
     /// Profile versions, each a `<name>@<version>` ref.
     Profiles,
@@ -604,7 +606,12 @@ pub(super) fn list_clusters<'a>(rows: impl IntoIterator<Item = &'a Value>) -> Ve
             let cloud_type =
                 listing_or_search(it, "/spec/cloudType", "/specSummary/cloudConfig/cloudType");
             ListedCluster {
-                reference: format!("{}{uid}", crate::reference::CLUSTER_PREFIX),
+                reference: Ref::Cluster {
+                    uid: uid.clone(),
+                    profile: None,
+                    pending: false,
+                }
+                .to_string(),
                 name: text(it, "/metadata/name"),
                 state: text(it, "/status/state"),
                 virtual_cluster: VirtualCluster::of_item(it, &cloud_type),

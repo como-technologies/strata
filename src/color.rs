@@ -2,8 +2,10 @@
 
 use std::io::IsTerminal;
 
-/// When to color the terminal report.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use clap::ValueEnum;
+
+/// When to color the terminal report. On the command line, each is its name in lower case.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum ColorMode {
     /// Color when stdout is a terminal; honor `NO_COLOR` and `CLICOLOR_FORCE`.
     Auto,

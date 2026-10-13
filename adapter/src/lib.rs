@@ -267,8 +267,14 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
                 )));
             }
         };
-        ops::snapshot_for(&reference, || (self.connect)(None), at, &Progress::silent())
-            .map_err(port_error)
+        ops::snapshot_for(
+            &reference,
+            &ops::SnapshotOptions::default(),
+            || (self.connect)(None),
+            at,
+            &Progress::silent(),
+        )
+        .map_err(port_error)
     }
 
     /// The two digests of a leaf. An address has no registry, and a real tenant has a pack in
@@ -280,7 +286,13 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
         let of = label(unit);
         let read = |registry: Option<String>| {
             let reference = pack_ref(unit, registry);
-            ops::snapshot_for(&reference, || (self.connect)(None), at, &Progress::silent())
+            ops::snapshot_for(
+                &reference,
+                &ops::SnapshotOptions::default(),
+                || (self.connect)(None),
+                at,
+                &Progress::silent(),
+            )
         };
         // A registry that Palette does not sync lists no digest for a pack. Then there is no
         // content to pin by, and the leaf is refused (knurl D52).
@@ -480,7 +492,12 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
         let raw = palette
             .fetch_subject(SubjectKind::Cluster, instance.as_str(), &Progress::silent())
             .map_err(port_error)?;
-        let reference = format!("cluster:{instance}");
+        let reference = Ref::Cluster {
+            uid: instance.to_string(),
+            profile: None,
+            pending: false,
+        }
+        .to_string();
         // Each one is the copy that the cluster holds, and not the published profile. Palette
         // lists the profiles of a cluster in an order that differs between two clusters built
         // from one definition, so the order says nothing. The copies are by name (knurl D49).
