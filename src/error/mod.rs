@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::api::Method;
 use crate::api::codes::CreateRule;
 use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR};
-use crate::text::and_list;
+use crate::text::{and_list, cut};
 
 mod class;
 mod json;
@@ -28,7 +28,7 @@ pub enum Error {
     },
     /// Palette answered with a non-2xx status. A 401 or a 403 is almost always the key, so the
     /// message names where a key comes from; the body alone names nothing the reader can set.
-    #[error("{method} {path} failed with HTTP {status}: {}{}", first_part(body), key_hint(*status))]
+    #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body, BODY_IN_MESSAGE), key_hint(*status))]
     Api {
         /// The request method.
         method: Method,
@@ -78,16 +78,20 @@ pub enum Error {
         expected: &'static str,
     },
     /// The request did not complete.
-    #[error("GET {path}: {message}")]
+    #[error("{method} {path}: {message}")]
     Transport {
+        /// The request method.
+        method: Method,
         /// Request path.
         path: String,
         /// What the transport said.
         message: String,
     },
     /// Palette answered 2xx with a body that is not JSON.
-    #[error("GET {path}: response is not JSON: {source}")]
+    #[error("{method} {path}: response is not JSON: {source}")]
     NotJson {
+        /// The request method.
+        method: Method,
         /// Request path.
         path: String,
         /// The parse error.
@@ -122,7 +126,10 @@ pub enum Error {
         profiles: Vec<crate::scope::ScopedUid>,
     },
     /// `cluster:<uid>/<profile>` named a profile the cluster does not run.
-    #[error("cluster '{cluster}' has no applied profile named '{profile}'; applied: {}", applied.join(", "))]
+    #[error(
+        "cluster '{cluster}' has no applied profile named '{profile}'; applied: {}",
+        list_or_none(applied)
+    )]
     ClusterProfileNotFound {
         /// Cluster uid.
         cluster: String,
@@ -231,6 +238,20 @@ pub enum Error {
         version: String,
         /// Each app profile of the scope, as `name@version`, in order.
         available: Vec<String>,
+    },
+    /// `appprofile:<name>@<version>` matched two or more app profiles in the scope. Palette
+    /// refuses a second app profile with one name and one version only in one scope.
+    #[error(
+        "several app profiles in this scope are named '{name}' with version '{version}': {}; use appprofile:<uid>",
+        uids.join(", ")
+    )]
+    AppProfileNameAmbiguous {
+        /// The name as given.
+        name: String,
+        /// The version that matched: the version as given, or the highest version for `latest`.
+        version: String,
+        /// The uids of the app profiles with that name and version, in order.
+        uids: Vec<String>,
     },
     /// A command that works on a profile was given a cluster, an edge host, a cluster group, an
     /// app profile, a pack, or a record of one.
@@ -346,12 +367,24 @@ pub enum Error {
         registries: Vec<String>,
     },
     /// A candidate names a registry that is not visible with this key.
-    #[error("no registry named '{registry}' is visible; registries: {}", available.join(", "))]
+    #[error(
+        "no registry named '{registry}' is visible; registries: {}",
+        list_or_none(available)
+    )]
     RegistryNotFound {
         /// The registry name asked for.
         registry: String,
         /// The registry names that are visible.
         available: Vec<String>,
+    },
+    /// A name that two or more visible registries have. A registry of the system can have the
+    /// name of a registry of the tenant.
+    #[error("several registries are named '{name}': {}; give the uid of one in place of the name", uids.join(", "))]
+    RegistryNameAmbiguous {
+        /// The name as given.
+        name: String,
+        /// The uids of the registries with that name, in order.
+        uids: Vec<String>,
     },
     /// The file exists but is not a strata snapshot.
     #[error("'{0}' is not a strata snapshot")]
@@ -416,14 +449,9 @@ fn key_hint(status: u16) -> String {
     }
 }
 
-/// The first 300 characters of a body, for a message. The field keeps the whole body.
-fn first_part(body: &str) -> String {
-    if body.chars().count() <= 300 {
-        body.to_string()
-    } else {
-        format!("{}…", body.chars().take(300).collect::<String>())
-    }
-}
+/// The most characters of a body that the message of [`Error::Api`] shows. The field keeps the
+/// whole body.
+const BODY_IN_MESSAGE: usize = 300;
 
 /// What strata says after a rule that only the create of Palette checks: why strata checks it.
 const CREATE_GAP: &str = "Palette checks this only at the create, and no route that takes a \
@@ -450,6 +478,16 @@ pub(crate) fn found<T>(answer: Result<T>) -> Result<Option<T>> {
     match answer {
         Ok(v) => Ok(Some(v)),
         Err(Error::Api { status: 404, .. }) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// `answer`, or `None` when Palette has no such route: see [`Error::is_missing_route`]. Each
+/// other error returns, also a 401, a 403, or a 429: the key or the rate, and not the route.
+pub(crate) fn served<T>(answer: Result<T>) -> Result<Option<T>> {
+    match answer {
+        Ok(v) => Ok(Some(v)),
+        Err(e) if e.is_missing_route() => Ok(None),
         Err(e) => Err(e),
     }
 }
@@ -524,7 +562,7 @@ impl Error {
 
     /// True for an answer of Palette that says it has no such route: HTTP 404 or 405. An older
     /// Palette answers so for a route that a later one added.
-    pub(crate) fn is_missing_route(&self) -> bool {
+    pub fn is_missing_route(&self) -> bool {
         matches!(
             self,
             Error::Api {
@@ -559,6 +597,7 @@ impl Error {
             Error::PackUnavailable { .. } => "pack-unavailable",
             Error::PackInSeveralRegistries { .. } => "pack-in-several-registries",
             Error::RegistryNotFound { .. } => "registry-not-found",
+            Error::RegistryNameAmbiguous { .. } => "registry-name-ambiguous",
             Error::ProjectNotFound { .. } => "project-not-found",
             Error::ClusterNotFound { .. } => "cluster-not-found",
             Error::ClusterNameAmbiguous { .. } => "cluster-name-ambiguous",
@@ -566,6 +605,7 @@ impl Error {
             Error::EdgeHostNameAmbiguous { .. } => "edge-host-name-ambiguous",
             Error::ClusterGroupNotFound { .. } => "cluster-group-not-found",
             Error::AppProfileNotFound { .. } => "app-profile-not-found",
+            Error::AppProfileNameAmbiguous { .. } => "app-profile-name-ambiguous",
             Error::FilterNotFound { .. } => "filter-not-found",
             Error::FilterNameAmbiguous { .. } => "filter-name-ambiguous",
             Error::ClusterGroupNameAmbiguous { .. } => "cluster-group-name-ambiguous",

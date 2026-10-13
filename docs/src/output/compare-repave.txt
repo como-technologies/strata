@@ -22,7 +22,7 @@ consumers  0 -> 0 clusters
       values: 9 changed, 2 added, 0 removed
         ~ kubeadmconfig.dns.imageTag: "v1.13.1" -> "v1.14.2"
         ~ kubeadmconfig.etcd.local.imageTag: "3.6.6-0" -> "3.6.8-0"
-        ~ kubeadmconfig.files[2].content: "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity... (649 chars, see --full) -> "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity... (649 chars, see --full)
+        ~ kubeadmconfig.files[2].content: "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity… (649 chars, see --full) -> "apiVersion: apiserver.config.k8s.io/v1\nkind: AdmissionConfiguration\nplugins:\n- name: PodSecurity… (649 chars, see --full)
         ~ pack.content.images[0].image: "us-docker.pkg.dev/palette-images/k8s/coredns/coredns:v1.13.1" -> "us-docker.pkg.dev/palette-images/k8s/coredns/coredns:v1.14.2"
         + pack.content.images[10].image: "registry.k8s.io/pause:3.10.2"
         ~ pack.content.images[1].image: "us-docker.pkg.dev/palette-images/k8s/etcd:3.6.6-0" -> "us-docker.pkg.dev/palette-images/k8s/etcd:3.6.8-0"
@@ -156,7 +156,7 @@ consumers  0 -> 0 clusters
         ~ pack.content.images[2].image: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/hubble-relay:v1.19.6" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/hubble-relay:v1.20.1"
         ~ pack.content.images[3].image: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/hubble-ui-backend:v0.13.5" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/hubble-ui-backend:v0.13.5"
         ~ pack.content.images[4].image: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/hubble-ui:v0.13.5" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/hubble-ui:v0.13.5"
-        ~ pack.content.images[5].image: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/cilium-envoy:v1.36.9-1782267392-edeb3f2af56c37... (127 chars, see --full) -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/cilium-envoy:v1.37.5-1786810558-766ccfb37260a4... (127 chars, see --full)
+        ~ pack.content.images[5].image: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/cilium-envoy:v1.36.9-1782267392-edeb3f2af56c37… (127 chars, see --full) -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/cilium-envoy:v1.37.5-1786810558-766ccfb37260a4… (127 chars, see --full)
         ~ pack.content.images[6].image: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/operator:v1.19.6" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/operator:v1.20.1"
         ~ pack.content.images[7].image: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/operator-generic:v1.19.6" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/operator-generic:v1.20.1"
         ~ pack.content.images[8].image: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/operator-aws:v1.19.6" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/operator-aws:v1.20.1"

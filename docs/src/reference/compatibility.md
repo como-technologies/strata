@@ -36,6 +36,12 @@ reads a record of its own id that a later release wrote. `source.projectUid` and
 `consumers` of `strata-list/1` counts the cluster templates with the clusters,
 and `consumersByKind` joined it with the count of each kind.
 
+Two values changed after 0.21.0 with no new id. In `strata-packs/1`, a version
+that the listing gives no type has the `type` `spectro`, where 0.21.0 wrote
+empty text. The schema now gives the field the pack types. A record of a
+cluster leaves out a label whose value is not text, where 0.21.0 kept it with
+empty text. The labels are outside the root, so no root changes.
+
 A field can also become absent, and that keeps the id as well. For most fields
 absent is a value: a field that is false, empty, or zero is left out, and each
 such field says so at its own definition in
@@ -115,6 +121,10 @@ These do not change in a release, so a script can use them:
 - the exit codes `0`, `1`, and `2`
 - the JSON documents
 - the error `kind` names: see [Errors](./errors.md)
+
+After 0.21.0, the kinds `transport` and `not-json` give the field `method`, and
+their message names the method of the request. In 0.21.0, the message said
+`GET` also for a `POST`.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later

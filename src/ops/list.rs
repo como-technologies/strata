@@ -7,15 +7,15 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi, named_entries, profile_versions};
+use crate::api::{Palette, PaletteApi, named_entries, profile_versions, recorded_template};
 use crate::cloud::Cloud;
-use crate::error::{Result, found};
+use crate::error::{Result, served};
 use crate::reference::{Ref, version};
 use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
 
-use crate::json::{arr, first_nonempty, items, opt_text, str_at, text};
+use crate::json::{arr, first_nonempty, items, opt_text, str_at, text, text_map};
 
 use super::{ConsumerCounts, client_for};
 
@@ -498,12 +498,8 @@ fn list_profiles<A: PaletteApi>(
             }
         };
         p.scope = ProfileScope::of_document(&doc);
-        // A profile that was never published has only a draft, as a snapshot reads it.
-        let template = ["/spec/published", "/spec/draft"]
-            .into_iter()
-            .filter_map(|ptr| doc.pointer(ptr))
-            .find(|t| !arr(t, "/packs").is_empty())
-            .or_else(|| doc.pointer("/spec/published"));
+        // the template that a record of the version reads
+        let template = doc.pointer(&format!("/spec/{}", recorded_template(&doc)));
         let packs = template
             .into_iter()
             .flat_map(|t| arr(t, "/packs"))
@@ -541,8 +537,8 @@ fn list_profiles<A: PaletteApi>(
 /// tenant scope, it is the system. Each other version is of the scope of the listing. An empty
 /// listing needs no search.
 ///
-/// A Palette with no profile search answers HTTP 404. The scopes then stay unknown, because the
-/// listing is still the answer. Each other error returns.
+/// A Palette with no profile search answers HTTP 404 or 405. The scopes then stay unknown,
+/// because the listing is still the answer. Each other error returns.
 fn scopes_from_search<A: PaletteApi>(
     profiles: &mut [ListedProfile],
     palette: &Palette<A>,
@@ -555,7 +551,7 @@ fn scopes_from_search<A: PaletteApi>(
     let mut scopes: BTreeMap<String, ProfileScope> = BTreeMap::new();
     for &scope in own.others_listed() {
         progress.note(&format!("searching the {scope} profiles"));
-        let Some(uids) = found(palette.profile_uids_in_scope(scope))? else {
+        let Some(uids) = served(palette.profile_uids_in_scope(scope))? else {
             return Ok(());
         };
         scopes.extend(uids.into_iter().map(|uid| (uid, scope)));
@@ -595,6 +591,17 @@ fn listing_or_search(it: &Value, listing: &str, search: &str) -> String {
     first_nonempty(&[str_at(it, listing), str_at(it, search)])
 }
 
+/// The project uid of `it`, an entry of the cluster listing or an item of a search.
+///
+/// The listing gives it in an annotation, and the search in its summary.
+pub(super) fn project_uid_of(it: &Value) -> String {
+    listing_or_search(
+        it,
+        "/metadata/annotations/projectUid",
+        "/specSummary/projectMeta/uid",
+    )
+}
+
 /// The clusters of `rows`, the entries of the listing or the items of a search, by name. A
 /// cluster that `rows` holds two times, as from two searches, is one row.
 pub(super) fn list_clusters<'a>(rows: impl IntoIterator<Item = &'a Value>) -> Vec<ListedCluster> {
@@ -620,22 +627,10 @@ pub(super) fn list_clusters<'a>(rows: impl IntoIterator<Item = &'a Value>) -> Ve
                     "/spec/clusterType",
                     "/specSummary/clusterType",
                 ),
-                project_uid: listing_or_search(
-                    it,
-                    "/metadata/annotations/projectUid",
-                    "/specSummary/projectMeta/uid",
-                ),
+                project_uid: project_uid_of(it),
                 // the search names the project; the listing gives its uid alone
                 project_name: text(it, "/specSummary/projectMeta/name"),
-                labels: it
-                    .pointer("/metadata/labels")
-                    .and_then(Value::as_object)
-                    .map(|o| {
-                        o.iter()
-                            .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
+                labels: text_map(it, "/metadata/labels"),
                 uid,
                 profiles: None,
                 error: None,

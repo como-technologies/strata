@@ -15,7 +15,7 @@ use crate::api::{RawCluster, RawProfile};
 use crate::content::canon::{canonical_json, sha256_hex};
 use crate::content::hash::{content_of, root_of};
 use crate::error::{Error, Result};
-use crate::json::{arr, first_nonempty, str_at, strings, text};
+use crate::json::{arr, first_nonempty, str_at, strings, text, text_map};
 use crate::repave::{PendingRepave, is_pending};
 
 /// The text of `key` in `v`, or `default` when `v` has no text there. An empty text stays empty,
@@ -61,43 +61,48 @@ fn normalize_variable(v: &Value) -> Value {
     })
 }
 
-/// The manifests of pack `pk` of one template, each as `name`, `uid`, `digest`, and `content`,
-/// from the answers of the manifests by uid (see [`RawProfile::manifest_entities`]). A manifest
-/// of the published template has its published content. A manifest of the draft has its draft
-/// content, and its published content when the draft did not change it: Palette writes the draft
-/// content of a manifest at an edit, and empties it at the publish.
+/// The manifests of pack `pk` of one template, each as [`manifest_of`] gives it, from the
+/// answers of the manifests by uid (see [`RawProfile::manifest_entities`]).
 fn manifests_of_template(pk: &Value, entities: &Value, template: Template) -> Vec<Value> {
     arr(pk, "/manifests")
         .iter()
         .map(|m| {
-            let uid = text(m, "/uid");
-            let entity = entities.get(&uid).unwrap_or(&Value::Null);
-            let edited = !text(entity, &format!("/spec/{template}/content")).is_empty();
-            let from = if edited {
-                template
-            } else {
-                Template::Published
-            };
-            let content = text(entity, &format!("/spec/{from}/content"));
-            json!({
-                "name": first_nonempty(&[str_at(m, "/name"), str_at(entity, "/metadata/name")]),
-                "uid": uid,
-                "digest": text(entity, &format!("/spec/{from}/digest")),
-                "content": content,
-            })
+            let entity = entities.get(str_at(m, "/uid")).unwrap_or(&Value::Null);
+            manifest_of(entity, m, template)
         })
         .collect()
+}
+
+/// One manifest as a record reads it: its `name`, `uid`, `digest`, and `content`. `entity` is
+/// the answer of the route of the manifest, and `reference` is the entry of the manifest in the
+/// pack of a template.
+///
+/// The name and the uid come from `reference`, else from `entity`. A manifest of the published
+/// template has its published content. A manifest of the draft has its draft content, else its
+/// published content when the draft did not change it. Palette writes the draft content of a
+/// manifest at an edit, and empties it at the publish. A field that `entity` does not give is
+/// empty text.
+pub(crate) fn manifest_of(entity: &Value, reference: &Value, template: Template) -> Value {
+    let edited = !str_at(entity, &format!("/spec/{template}/content")).is_empty();
+    let from = if edited {
+        template
+    } else {
+        Template::Published
+    };
+    json!({
+        "name": first_nonempty(&[str_at(reference, "/name"), str_at(entity, "/metadata/name")]),
+        "uid": first_nonempty(&[str_at(reference, "/uid"), str_at(entity, "/metadata/uid")]),
+        "digest": text(entity, &format!("/spec/{from}/digest")),
+        "content": text(entity, &format!("/spec/{from}/content")),
+    })
 }
 
 impl Snapshot {
     /// Build a snapshot from the raw API responses of one profile: of its published template, or
     /// of its draft when it has no published template.
     pub fn from_raw(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
-        if arr(&raw.profile, "/spec/published/packs").is_empty() {
-            Self::from_raw_template(raw, reference, fetched_at, Template::Draft)
-        } else {
-            Self::from_raw_template(raw, reference, fetched_at, Template::Published)
-        }
+        let template = crate::api::recorded_template(&raw.profile);
+        Self::from_raw_template(raw, reference, fetched_at, template)
     }
 
     /// Build a snapshot of the draft template of one profile: what the next publish makes the
@@ -133,15 +138,7 @@ impl Snapshot {
             mpacks.retain(|m| uids.contains(str_at(m, "/metadata/uid")));
         }
 
-        let tags: BTreeMap<String, String> = prof
-            .pointer("/metadata/labels")
-            .and_then(Value::as_object)
-            .map(|o| {
-                o.iter()
-                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let tags = text_map(prof, "/metadata/labels");
         let clusters = strings(prof, "/status/inUseClusterUids");
         let variables: Vec<Value> = arr(&raw.variables, "/variables")
             .iter()
@@ -299,7 +296,7 @@ impl Snapshot {
                 .first()
                 .map(|p| p.source.cloud_type.clone())
                 .filter(|c| !c.is_empty())
-                .unwrap_or_else(|| text(&raw.cluster, "/spec/cloudType")),
+                .unwrap_or_else(|| RawCluster::cloud_type(&raw.cluster).to_string()),
             kind: joined(|s| &s.kind),
             template: Template::Applied.into(),
             variables_unavailable: raw.variables_unavailable,
@@ -334,18 +331,7 @@ impl Snapshot {
                         .resolved_values
                         .as_ref()
                         .map(|r| macro_digests(r, &covered, &macros_of(&packs))),
-                    labels: raw
-                        .cluster
-                        .pointer("/metadata/labels")
-                        .and_then(Value::as_object)
-                        .map(|m| {
-                            m.iter()
-                                .map(|(k, v)| {
-                                    (k.clone(), v.as_str().unwrap_or_default().to_string())
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default(),
+                    labels: text_map(&raw.cluster, "/metadata/labels"),
                     tiers: cluster_tiers(raw, &covered),
                     pending: false,
                     kind: SubjectKind::Cluster.into(),

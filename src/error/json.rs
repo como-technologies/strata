@@ -64,7 +64,13 @@ impl Error {
                 m.insert("variable".into(), Value::from(*variable));
                 m.insert("value".into(), Value::from(value.as_str()));
             }
-            Error::Transport { path: p, .. } | Error::NotJson { path: p, .. } => {
+            Error::Transport {
+                method, path: p, ..
+            }
+            | Error::NotJson {
+                method, path: p, ..
+            } => {
+                m.insert("method".into(), Value::from(method.as_str()));
                 m.insert("path".into(), Value::from(p.as_str()));
             }
             Error::ClusterProfileNotFound {
@@ -186,8 +192,18 @@ impl Error {
             Error::ClusterNameAmbiguous { name, uids }
             | Error::EdgeHostNameAmbiguous { name, uids }
             | Error::ClusterGroupNameAmbiguous { name, uids }
-            | Error::FilterNameAmbiguous { name, uids } => {
+            | Error::FilterNameAmbiguous { name, uids }
+            | Error::RegistryNameAmbiguous { name, uids } => {
                 m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("uids".into(), Value::from(uids.clone()));
+            }
+            Error::AppProfileNameAmbiguous {
+                name,
+                version,
+                uids,
+            } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("version".into(), Value::from(version.as_str()));
                 m.insert("uids".into(), Value::from(uids.clone()));
             }
             Error::EdgeHostNotFound {

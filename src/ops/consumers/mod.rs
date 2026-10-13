@@ -376,9 +376,9 @@ where
         }
         Ref::Snapshot(path) => {
             let recorded = Snapshot::load(path)?;
-            // a pack record is not a profile version either, and NoUid below would name `verify`,
-            // a command that is not running
-            if recorded.source.cluster.is_some() || recorded.source.pack.is_some() {
+            // a record of a cluster or of a pack has no consumers. Refuse it here: the NoUid below
+            // names `verify`, a command that does not run. An app profile has its app deployments
+            if !(recorded.source.is_profile_version() || recorded.source.is_app()) {
                 return Err(refused());
             }
             if recorded.source.uid.is_empty() {
@@ -442,9 +442,10 @@ where
     // gives an empty list on an error too. So the cluster search names the clusters that run a
     // version of the profile (#149, #181), or each cluster the key can list is read for the
     // profiles it applies, and a cluster that applies the version joins the list (#66).
-    // the second reading and the edge hosts are read at tenant scope, so a cluster or a host in
-    // any project the key can read is in them; a key that cannot read the tenant reads its own
-    // scope
+    // the second reading and the edge hosts read at tenant scope. So they find a cluster or a
+    // host in each project that the key can read. A key that cannot read the tenant reads
+    // `home`, the scope of the profile, and not the configured scope as `tenant_of` does. A
+    // cluster that runs a profile of a project is in that project
     let tenant = connect(Some(TENANT_SCOPE)).ok();
     let wide = tenant.as_ref().unwrap_or(&home);
     let clusters_read = if options.list_only {

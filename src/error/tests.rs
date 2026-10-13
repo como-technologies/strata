@@ -38,10 +38,12 @@ fn one_of_each() -> Vec<Error> {
             message: "matched no files".into(),
         },
         Error::Transport {
+            method: Method::Get,
             path: "/v1/x".into(),
             message: "refused".into(),
         },
         Error::NotJson {
+            method: Method::Post,
             path: "/v1/x".into(),
             source: bad_json(),
         },
@@ -120,6 +122,10 @@ fn one_of_each() -> Vec<Error> {
             registry: "Nope".into(),
             available: vec!["Public Repo".into()],
         },
+        Error::RegistryNameAmbiguous {
+            name: "Public Repo".into(),
+            uids: vec!["reg-public".into(), "reg-system".into()],
+        },
         Error::ProjectNotFound {
             name: "staging".into(),
             available: vec!["lab".into(), "prod".into()],
@@ -156,6 +162,11 @@ fn one_of_each() -> Vec<Error> {
             name: "shop".into(),
             version: "9.9.9".into(),
             available: vec!["shop@1.0.0".into()],
+        },
+        Error::AppProfileNameAmbiguous {
+            name: "shop".into(),
+            version: "1.0.0".into(),
+            uids: vec!["a1".into(), "a2".into()],
         },
         Error::ClusterGroupNameAmbiguous {
             name: "twin".into(),
@@ -308,6 +319,55 @@ fn a_candidate_error_for_a_rule_of_the_create_names_the_code_and_a_format_proble
 }
 
 #[test]
+fn a_transport_error_and_a_body_that_is_not_json_name_the_method_of_the_request() {
+    struct NoPost;
+    impl crate::api::PaletteApi for NoPost {
+        fn get_json(&self, _path: &str) -> Result<serde_json::Value> {
+            Ok(serde_json::Value::Null)
+        }
+    }
+    // the default POST of an API gives a transport error of a POST
+    let post =
+        crate::api::PaletteApi::post_json(&NoPost, "/v1/x", &serde_json::Value::Null).unwrap_err();
+    assert_eq!(post.to_string(), "POST /v1/x: this API sends no POST");
+    assert_eq!(post.to_json()["method"], "POST");
+    let not_json = Error::NotJson {
+        method: Method::Post,
+        path: "/v1/x".into(),
+        source: bad_json(),
+    };
+    assert!(
+        not_json
+            .to_string()
+            .starts_with("POST /v1/x: response is not JSON: "),
+        "{not_json}"
+    );
+    assert_eq!(not_json.to_json()["method"], "POST");
+    assert_eq!(not_json.to_json()["path"], "/v1/x");
+}
+
+#[test]
+fn an_empty_list_of_profiles_or_of_registries_reads_none_in_the_message() {
+    let profile = Error::ClusterProfileNotFound {
+        cluster: "c1".into(),
+        profile: "nope".into(),
+        applied: Vec::new(),
+    };
+    assert!(
+        profile.to_string().ends_with("; applied: none"),
+        "{profile}"
+    );
+    let registry = Error::RegistryNotFound {
+        registry: "Mirror".into(),
+        available: Vec::new(),
+    };
+    assert!(
+        registry.to_string().ends_with("; registries: none"),
+        "{registry}"
+    );
+}
+
+#[test]
 fn every_variant_has_a_distinct_kind() {
     let all = one_of_each();
     let mut kinds: Vec<&str> = all.iter().map(Error::kind).collect();
@@ -405,4 +465,14 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
         by_kind("pack-in-several-registries")["registries"],
         serde_json::json!(["Public Repo", "Mirror"])
     );
+    assert_eq!(
+        by_kind("registry-name-ambiguous")["uids"],
+        serde_json::json!(["reg-public", "reg-system"])
+    );
+    let app = by_kind("app-profile-name-ambiguous");
+    assert_eq!(
+        (app["name"].clone(), app["version"].clone()),
+        ("shop".into(), "1.0.0".into())
+    );
+    assert_eq!(app["uids"], serde_json::json!(["a1", "a2"]));
 }

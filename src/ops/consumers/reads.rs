@@ -8,7 +8,7 @@ use crate::api::{
     Palette, PaletteApi, SEARCH_CLUSTER_PROFILES, search_condition, search_filter, search_group,
 };
 use crate::conjunction::Conjunction;
-use crate::error::{Result, found};
+use crate::error::{Result, served};
 use crate::json::{items, text};
 use crate::ops::client_for;
 use crate::ops::fleet::Resolved;
@@ -26,7 +26,7 @@ pub(super) fn edge_hosts_bound<A: PaletteApi>(
     progress: &Progress,
 ) -> EdgeHostsRead {
     progress.note("reading each edge host for the profiles bound to it");
-    let hosts = match found(wide.edge_hosts().or_else(|_| home.edge_hosts())) {
+    let hosts = match served(wide.edge_hosts().or_else(|_| home.edge_hosts())) {
         Ok(hosts) => hosts.unwrap_or_default(),
         Err(e) => {
             return EdgeHostsRead {

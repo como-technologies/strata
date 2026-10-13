@@ -44,6 +44,7 @@ impl HttpApi {
         answer: std::result::Result<ureq::http::Response<ureq::Body>, ureq::Error>,
     ) -> Result<Value> {
         let mut resp = answer.map_err(|e| Error::Transport {
+            method,
             path: path.to_string(),
             message: e.to_string(),
         })?;
@@ -59,6 +60,7 @@ impl HttpApi {
             .limit(256 * 1024 * 1024)
             .read_to_string()
             .map_err(|e| Error::Transport {
+                method,
                 path: path.to_string(),
                 message: format!("reading the response body: {e}"),
             })?;
@@ -80,6 +82,7 @@ impl HttpApi {
             return Ok(Value::Null);
         }
         serde_json::from_str(&body).map_err(|source| Error::NotJson {
+            method,
             path: path.to_string(),
             source,
         })

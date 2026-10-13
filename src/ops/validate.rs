@@ -14,6 +14,13 @@ use crate::registry::{Registries, registry_entry};
 use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
 
+/// The refusal of `--validate` for a ref or a record that is not one version of a cluster
+/// profile.
+pub(crate) const VALIDATE_TAKES: &str = "--validate takes a profile version or \
+                                         --from-candidate: Palette checks the packs of a profile, \
+                                         and not of a cluster, an edge host, a cluster group, an \
+                                         app profile, or one pack";
+
 /// The refusal of the whole request in an error of strata: an HTTP error of Palette whose status
 /// and code are a refusal of `route`. Palette gives such a refusal before it checks each pack, so
 /// it is an answer, and not an error of strata.
@@ -139,11 +146,9 @@ pub fn profile_validation<A: PaletteApi>(
     palette: &Palette<A>,
     snap: &Snapshot,
 ) -> Result<ProfileValidation> {
-    if snap.source.cluster.is_some() || snap.source.pack.is_some() {
+    if !snap.source.is_profile_version() {
         return Err(Error::Usage {
-            message: "--validate takes a profile version or a candidate: Palette checks the \
-                      packs of a profile, and not of a cluster or of one pack"
-                .to_string(),
+            message: VALIDATE_TAKES.to_string(),
         });
     }
     let uid = Some(snap.source.uid.as_str()).filter(|u| !u.is_empty());

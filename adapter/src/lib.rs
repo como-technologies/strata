@@ -53,9 +53,9 @@ use serde_json::Value;
 use strata::api::{Palette, PaletteApi};
 use strata::candidate::{self, Candidate, CandidateLayer};
 use strata::ops;
-use strata::term::progress::Progress;
 use strata::reference::Ref;
 use strata::snapshot::{AppliedProfile, PendingUpdate, Snapshot, SubjectKind};
+use strata::term::progress::Progress;
 
 /// The parameter of a [`UnitDefinition`] that holds the strata candidate document.
 pub const CANDIDATE: &str = "candidate";
@@ -516,7 +516,8 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
             .and_then(Value::as_str)
             .unwrap_or("");
         // The health is on the cluster summary, and not on the cluster document. A Palette that
-        // does not serve the summary gives no health, and the port says Unknown for that.
+        // does not serve the summary, with HTTP 404 or 405, gives no health, and the port says
+        // Unknown for that.
         let uid = raw
             .cluster
             .pointer("/metadata/uid")
@@ -524,7 +525,7 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
             .unwrap_or("");
         let health = match palette.fetch_cluster_summary(uid) {
             Ok(summary) => health_of(&summary),
-            Err(strata::Error::Api { status: 404, .. }) => Health::Unknown,
+            Err(error) if error.is_missing_route() => Health::Unknown,
             Err(error) => return Err(port_error(error)),
         };
         Ok(InstanceObservation::new(

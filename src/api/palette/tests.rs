@@ -14,6 +14,46 @@ fn listing() -> Value {
 }
 
 #[test]
+fn the_copy_of_a_manifest_that_a_holder_keeps_reads_as_a_manifest_of_a_profile_does() {
+    // the template of the holder names the copy, and the copy gives no content
+    let templates = vec![json!({"uid": "p1", "packs": [
+        {"name": "cfg", "manifests": [{"name": "app-config", "uid": "m9"}]}]})];
+    let mut manifests = json!({"profiles": [{"spec": {"packs": [{"spec": {"name": "cfg"}}]}}]});
+    let copy = json!({"metadata": {"name": "app-config-copy", "uid": "m9"},
+        "spec": {"published": {"digest": "d9"}}});
+    own_manifests(&templates, |_, _, _| Ok(copy.clone()), &mut manifests).unwrap();
+    assert_eq!(
+        manifests["profiles"][0]["spec"]["packs"][0]["spec"]["manifests"][0],
+        json!({"name": "app-config", "uid": "m9", "digest": "d9", "content": ""}),
+        "the name of the template and empty text, as a profile record has them"
+    );
+}
+
+#[test]
+fn a_name_and_a_version_that_two_app_profiles_have_are_ambiguous() {
+    let api = MemoryApi::new().with(
+        APP_PROFILE_LISTING,
+        json!({"appProfiles": [
+            {"metadata": {"name": "shop", "uid": "ap2"}, "spec": {"version": "1.0.0"}},
+            {"metadata": {"name": "shop", "uid": "ap1"}, "spec": {"version": "1.0.0"}},
+            {"metadata": {"name": "shop", "uid": "ap0"}, "spec": {"version": "0.9.0"}},
+        ]}),
+    );
+    let palette = Palette::new(api);
+    for asked in ["1.0.0", crate::reference::LATEST] {
+        let err = palette.resolve_app_profile("shop", asked).unwrap_err();
+        assert!(
+            matches!(&err, Error::AppProfileNameAmbiguous { version, uids, .. }
+                if version == "1.0.0" && uids == &["ap1", "ap2"]),
+            "{asked}: {err}"
+        );
+    }
+    assert_eq!(palette.resolve_app_profile("shop", "0.9.0").unwrap(), "ap0");
+    let err = palette.resolve_app_profile("shop", "2.0.0").unwrap_err();
+    assert!(matches!(err, Error::AppProfileNotFound { .. }), "{err}");
+}
+
+#[test]
 fn a_pack_name_and_a_registry_uid_go_into_the_path_of_the_tags_escaped() {
     // with no escape, a `/` in the name ends the segment, and a `?` starts the query
     let p = Palette::new(

@@ -12,9 +12,9 @@ use super::{
 };
 use crate::api::{Palette, PaletteApi, RawProfile};
 use crate::error::{Error, Result};
-use crate::json::{arr, first_nonempty, opt_text, str_at, strings, text};
+use crate::json::{arr, opt_text, str_at, strings, text};
 use crate::pack_type::PackType;
-use crate::registry::{Registries, retired_state};
+use crate::registry::{Registries, pack_type_of, registry_layer, retired_state};
 use crate::snapshot::PresetOption;
 use crate::term::progress::Progress;
 
@@ -257,9 +257,8 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         // Palette gives the pack the layer of the registry and drops the layer of the request with
         // no error. So another layer in the file gives a root that the published version does not
         // have.
-        let registry_layer =
-            opt_text(summary, "/spec/layer").or_else(|| opt_text(&entity, "/layer"));
-        if let (Some(given), Some(theirs)) = (l.layer.as_deref(), registry_layer.as_deref())
+        let theirs = registry_layer(summary, std::slice::from_ref(&entity));
+        if let (Some(given), Some(theirs)) = (l.layer.as_deref(), theirs.as_deref())
             && given != theirs
         {
             return Err(self.invalid(format!(
@@ -269,14 +268,12 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
                 l.name
             )));
         }
-        let layer = registry_layer
-            .or_else(|| l.layer.clone())
-            .unwrap_or_default();
-        let kind = first_nonempty(&[str_at(summary, "/spec/type"), PackType::Spectro.as_str()]);
+        let layer = theirs.or_else(|| l.layer.clone()).unwrap_or_default();
+        let kind = pack_type_of(summary);
         let digest = text(summary, "/spec/digest");
         let fields = PackFields {
             layer: &layer,
-            kind: &kind,
+            kind: kind.as_str(),
             tag: &tag,
             version: &l.version,
             pack_uid: &pack_uid,
@@ -287,7 +284,7 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         let (mut pack_ref, entry) = pack_documents(l, &fields, manifests);
         // the provider type of an OCI registry, as a published profile carries it on the pack
         // reference
-        if PackType::parse(&kind) == Some(PackType::Oci)
+        if kind == PackType::Oci
             && let Some(t) = self.registries.oci_provider_type(registry)?
         {
             pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });

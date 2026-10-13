@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde_json::{Map, Value, json};
-use strata::api::{Palette, PaletteApi};
+use strata::api::{Palette, PaletteApi, RawCluster};
 use strata::reference::Ref;
 use strata::snapshot::{Snapshot, SubjectKind};
 use strata::term::progress::Progress;
@@ -167,12 +167,15 @@ impl World {
     ) -> Result<World> {
         progress.note(&format!("reading cluster {uid}"));
         let cluster = palette.subject_document(SubjectKind::Cluster, uid)?;
-        let cloud_type = cluster
-            .pointer("/spec/cloudType")
-            .and_then(Value::as_str)
-            .ok_or_else(|| Error::Input {
-                message: format!("cluster {uid}: the document names no spec.cloudType"),
-            })?;
+        let cloud_type = RawCluster::cloud_type(&cluster);
+        if cloud_type.is_empty() {
+            return Err(Error::Input {
+                message: format!(
+                    "cluster {uid}: the document names no cloud type, in \
+                     spec.cloudConfigRef.kind or in spec.cloudType"
+                ),
+            });
+        }
         let cloud = normalize_cloud(cloud_type);
         let config = palette.cloud_config(&cluster)?;
         let account_uid = config
@@ -317,7 +320,7 @@ impl World {
 /// A 4xx on a read of the world that means the object is not there for this key: a 404, or a
 /// 403 of a project key on an object of the tenant. The world holds `null`, and a rule says so.
 /// A 401 is the key itself, and a 429 the rate: the run stops with the error that names it.
-fn unreadable(status: u16) -> bool {
+pub(crate) fn unreadable(status: u16) -> bool {
     (400..500).contains(&status) && !matches!(status, 401 | 429)
 }
 
@@ -610,6 +613,26 @@ fn redact_fields(doc: &mut Value, fields: &[&str]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_world_of_a_cluster_reads_its_cloud_type_as_the_route_of_its_cloud_config_does() {
+        // the document names its cloud config, and no spec.cloudType
+        let api = strata::api::MemoryApi::new()
+            .with(
+                "/v1/spectroclusters/c1",
+                json!({"metadata": {"uid": "c1", "name": "barney"},
+                    "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"}}}),
+            )
+            .with("/v1/cloudconfigs/aws/cc1", json!({"spec": {}}));
+        let world = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap();
+        assert_eq!(world.cloud, "aws");
+        let none = strata::api::MemoryApi::new().with(
+            "/v1/spectroclusters/c1",
+            json!({"metadata": {"uid": "c1"}, "spec": {}}),
+        );
+        let err = World::from_cluster(&Palette::new(none), "c1", &Progress::silent()).unwrap_err();
+        assert!(err.to_string().contains("names no cloud type"), "{err}");
+    }
 
     #[test]
     fn a_cloud_config_pool_splits_into_the_two_parts_of_the_entity() {

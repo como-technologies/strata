@@ -88,12 +88,7 @@ impl SnapshotOptions {
             ));
         }
         if self.validate && !reference.is_profile_version() {
-            return usage(
-                "--validate takes a profile version or --from-candidate: Palette checks the \
-                 packs of a profile, and not of a cluster, a cluster group, an app profile, or \
-                 one pack"
-                    .to_string(),
-            );
+            return usage(validate::VALIDATE_TAKES.to_string());
         }
         if self.shape && !matches!(reference, Ref::Cluster { .. }) {
             return usage(
@@ -320,7 +315,7 @@ pub fn cluster_group_snapshot<A: PaletteApi>(
         .map(|m| GroupMember {
             uid: text(m, "/metadata/uid"),
             name: text(m, "/metadata/name"),
-            project_uid: text(m, "/metadata/annotations/projectUid"),
+            project_uid: list::project_uid_of(m),
         })
         .collect();
     let mut snap = Snapshot::from_cluster(&raw, None, reference, fetched_at)?

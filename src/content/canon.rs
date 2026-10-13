@@ -6,6 +6,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
+use crate::text::cut;
+
 /// Lowercase hex SHA-256 of `s`.
 pub fn sha256_hex(s: &str) -> String {
     hex::encode(Sha256::digest(s.as_bytes()))
@@ -101,8 +103,9 @@ pub fn canon_yaml_hashed(text: &str) -> (Value, String, Option<String>) {
     }
 }
 
+/// The first line of the message `s`, cut to 200 characters.
 fn first_line(s: &str) -> String {
-    s.lines().next().unwrap_or("").chars().take(200).collect()
+    cut(s.lines().next().unwrap_or(""), 200)
 }
 
 /// Mapping keys must be scalars, as in PyYAML: an unquoted Go template such as
@@ -201,6 +204,15 @@ mod tests {
             canon_yaml("# just a comment\n"),
             Canon::Parsed(Value::Null)
         ));
+    }
+
+    #[test]
+    fn the_message_of_yaml_that_does_not_parse_is_its_first_line_cut_to_200_characters() {
+        let long = format!("{}\nthe second line", "a".repeat(250));
+        let cut = first_line(&long);
+        assert_eq!(cut.chars().count(), 200);
+        assert!(cut.ends_with('…'), "{cut}");
+        assert_eq!(first_line("short\nnext"), "short");
     }
 
     #[test]

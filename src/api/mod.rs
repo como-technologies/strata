@@ -30,6 +30,7 @@ pub(crate) use palette::{
     profile_versions, search_condition, search_filter, search_group,
 };
 pub use palette::{Palette, SearchedClusters};
+pub(crate) use raw::recorded_template;
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft};
 pub use retry::{Retry, RetryPolicy};
 
@@ -68,6 +69,7 @@ pub trait PaletteApi {
     /// POST says so.
     fn post_json(&self, path: &str, _body: &Value) -> Result<Value> {
         Err(Error::Transport {
+            method: Method::Post,
             path: path.to_string(),
             message: "this API sends no POST".to_string(),
         })

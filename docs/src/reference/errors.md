@@ -19,8 +19,8 @@ the kind.
 | `retry-after-too-long` | Palette asked for a longer wait than `STRATA_MAX_RETRY_AFTER`. | `method`, `path`, `status`, `retryAfter`, `limit` |
 | `invalid-setting` | A variable has a value that strata cannot read. | `variable`, `value` |
 | `pattern` | A record pattern is not valid, or matches no file. | `pattern` |
-| `transport` | The request did not reach Palette, or the answer did not arrive whole. | `path` |
-| `not-json` | Palette answered with a body that is not JSON. | `path` |
+| `transport` | The request did not reach Palette, or the answer did not arrive whole. | `method`, `path` |
+| `not-json` | Palette answered with a body that is not JSON. | `method`, `path` |
 | `profile-not-found` | No profile version with this name and version in the scope. | `name`, `version`, `tenantScope` |
 | `profile-name-ambiguous` | Two or more profile versions in the scope have this name and version: a profile of the tenant and a profile of the project. Give the uid in place of the name. | `name`, `version`, `profiles[]` of `uid` and `scope` |
 | `no-draft` | A `<ref>@draft` named a profile version with no draft: Palette holds only its published template. | `name`, `version`, `uid` |
@@ -34,6 +34,7 @@ the kind.
 | `pack-name-not-found` | No visible registry offers a pack of that name. `unsynced` names the visible registries that Palette does not sync. | `name`, `unsynced` when it is not empty |
 | `pack-unavailable` | Spectro Cloud retired the version: its `system_state` in the listing is `disabled` or `deleted`. Palette does not serve it, and refuses a profile that pins it. A version with the mark `disabled` is not this error: Palette serves it, and `--validate` asks Palette. | `name`, `version`, `registry`, `state` |
 | `registry-not-found` | No visible registry has this name. | `registry`, `available` |
+| `registry-name-ambiguous` | Two or more visible registries have this name: a registry of the system and a registry of the tenant. Give the uid in place of the name. | `name`, `uids` |
 | `pack-in-several-registries` | A `pack:` ref named no registry, and more than one has the version. | `name`, `version`, `registries` |
 | `project-not-found` | No visible project has this name. | `name`, `available` |
 | `cluster-not-found` | No cluster in the scope has this name. | `cluster`, `available` |
@@ -45,6 +46,7 @@ the kind.
 | `filter-not-found` | No saved tag filter of the tenant has this name or uid. | `filter`, `available` |
 | `filter-name-ambiguous` | Two or more saved tag filters have this name. | `name`, `uids` |
 | `app-profile-not-found` | No app profile in the scope has this name and version. | `name`, `version`, `available` |
+| `app-profile-name-ambiguous` | Two or more app profiles in the scope have this name and version. Palette refuses a second one only in one scope. Give the uid in place of the name. | `name`, `version`, `uids` |
 | `not-snapshot` | The file is not a strata snapshot. | `path` |
 | `unsupported-schema` | The file is a record, or a report for `behind --since`, of a schema id that this strata does not read. | `path`, `found`, `supported` |
 | `snapshot-schema` | The record, or the report for `behind --since`, does not match its schema. | `path`, `schema` |

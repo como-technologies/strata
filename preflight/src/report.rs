@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use strata::text::cut;
 
 use crate::confidence::Confidence;
 use crate::jq::Jq;
@@ -620,9 +621,9 @@ fn summarize(checks: &[CheckResult], sections: &[SectionScore], options: &Option
         (
             1,
             format!(
-                "NOT READY: readiness {} is under {:.0}%",
-                readiness.map_or("none".to_string(), |r| format!("{:.0}%", r * 100.0)),
-                options.ready.unwrap_or(0.0) * 100.0
+                "NOT READY: readiness {} is under {}",
+                readiness.map_or_else(|| "none".to_string(), percent),
+                percent(options.ready.unwrap_or(0.0))
             ),
         )
     } else if errors > 0 {
@@ -696,8 +697,14 @@ pub fn render(report: &Report, format: Format, compact: bool, color: bool) -> St
     }
 }
 
-fn pct(v: Option<f64>) -> String {
-    v.map_or("-".to_string(), |x| format!("{:.0}%", x * 100.0))
+/// `share`, from 0 to 1, as a whole percent, such as `75%`.
+pub(crate) fn percent(share: f64) -> String {
+    format!("{:.0}%", share * 100.0)
+}
+
+/// A share as a whole percent, or `-` when there is none, for a cell of a table.
+pub(crate) fn pct(v: Option<f64>) -> String {
+    v.map_or_else(|| "-".to_string(), percent)
 }
 
 /// `text` in the ANSI color `code` when `color` is on, else as it is.
@@ -789,7 +796,7 @@ pub fn terminal(r: &Report, color: bool) -> String {
                 "  {}  {:<28} {:<60} {:>5} ms{conf}\n",
                 paint(color, label_color(c), &label),
                 c.id,
-                truncate(&c.title, 60),
+                cut(&c.title, 60),
                 c.elapsed_ms
             ));
             if c.verdict != Verdict::Passed {
@@ -854,14 +861,14 @@ pub fn terminal(r: &Report, color: bool) -> String {
     for s in &r.sections {
         out.push_str(&format!(
             "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>4} {:>7} {:>4} {:>4} {:>4} {:>7} {:>11} {:>5}\n",
-            truncate(&s.title, 28),
+            cut(&s.title, 28),
             s.rows,
             s.seen,
             s.with_check,
             s.preflight,
             s.with_runs,
             s.weakest_bound
-                .map_or("no runs".to_string(), |b| format!("{:.0}%", b * 100.0)),
+                .map_or_else(|| "no runs".to_string(), percent),
             s.ran,
             s.passed,
             s.failed,
@@ -892,15 +899,6 @@ pub fn terminal(r: &Report, color: bool) -> String {
     let code = if s.exit_code == 0 { "32" } else { "31" };
     out.push_str(&format!("{}\n", paint(color, code, &s.verdict)));
     out
-}
-
-fn truncate(s: &str, n: usize) -> String {
-    if s.chars().count() <= n {
-        s.to_string()
-    } else {
-        let cut: String = s.chars().take(n - 1).collect();
-        format!("{cut}…")
-    }
 }
 
 /// The markdown form: a pull request comment.
@@ -1010,7 +1008,7 @@ pub fn markdown(r: &Report) -> String {
             sc.preflight,
             sc.with_runs,
             sc.weakest_bound
-                .map_or("no runs".to_string(), |b| format!("{:.0}%", b * 100.0)),
+                .map_or_else(|| "no runs".to_string(), percent),
             sc.ran,
             sc.passed,
             sc.failed,

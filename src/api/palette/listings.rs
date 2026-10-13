@@ -13,7 +13,7 @@ use super::{
     sorted_names, uids_named, with_limit, with_nested,
 };
 use crate::api::{AuditKind, PaletteApi};
-use crate::error::{Error, Result};
+use crate::error::{Error, Result, served};
 use crate::json::{arr, items, opt_text, str_at, text};
 use crate::reference::one_named;
 
@@ -33,6 +33,14 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The uid of the project named `name`, from [`Palette::project_listing`]. Call it at tenant
     /// scope: in a project, Palette lists only that project.
+    ///
+    /// The first project with the name is the one project with the name. Palette refuses a
+    /// second project with the name of a project of the tenant, with the code
+    /// `ResourceNameAlreadyExists`. It compares the names with no regard to case.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ProjectNotFound`] when no project has the name. Each error of the request.
     pub fn project_uid_named(&self, name: &str) -> Result<String> {
         let listing = self.project_listing()?;
         let projects = named_entries(&listing);
@@ -192,15 +200,14 @@ impl<A: PaletteApi> Palette<A> {
     ///
     /// Each other error of the request.
     pub fn cluster_search_properties(&self) -> Result<BTreeSet<String>> {
-        match self.cluster_search_schema() {
-            Ok(schema) => Ok(arr(&schema, "/schema/properties")
-                .iter()
-                .filter(|p| str_at(p, "/type") == "string")
-                .filter_map(|p| opt_text(p, "/name"))
-                .collect()),
-            Err(e) if e.is_missing_route() => Ok(BTreeSet::new()),
-            Err(e) => Err(e),
-        }
+        let Some(schema) = served(self.cluster_search_schema())? else {
+            return Ok(BTreeSet::new());
+        };
+        Ok(arr(&schema, "/schema/properties")
+            .iter()
+            .filter(|p| str_at(p, "/type") == "string")
+            .filter_map(|p| opt_text(p, "/name"))
+            .collect())
     }
 
     /// The saved tag filters, `GET /v1/filters/metadata?filterType=tag`: the uid and the name of

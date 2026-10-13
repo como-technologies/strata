@@ -93,7 +93,8 @@ profile, or pack version.
       content uses, with a digest. The digest is the `sha256:` of the value
       that Palette gives the macro for this cluster or cluster group. It is
       `unresolved` when Palette gives no value.
-    - `labels`: the labels of the cluster.
+    - `labels`: the labels of the cluster, as a map. A label whose value is
+      not text is not in the map: Palette gives a label as text.
     - `tiers`: each tier that the record carries, by name, each with `hash`
       and `fields`. `errors`, only when strata could not read a field: the
       field and the error. `fields` then does not hold the field, so the hash
@@ -466,7 +467,9 @@ is the path as a list: strings for keys, numbers for indexes, and
     `clusters` and `templates`. In strata 0.20 and before, `consumers` counted
     the clusters alone. `published` is the `status.isPublished` of the version:
     when it is `false`, nobody published it, and `packs[]` holds the packs of
-    its draft.
+    its draft. `type` and `packs[]` come from the template that a record of
+    the version reads: the published template when it has packs, else the
+    draft.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, `clusterType`, and
     `projectUid`. `clusterType` is the type as Palette lists it. `PureManage`
     is a cluster that Palette built. `AlloyMonitor`, `AlloyAssist`, and
@@ -491,14 +494,18 @@ is the path as a list: strings for keys, numbers for indexes, and
 
 - `name`: the pack that was asked for, and `cloud` when `--cloud` was given.
 - `registries[]`: one entry per registry that has the pack, with `registry`,
-  `registryUid`, `layer`, and `versions[]`. Palette does not serve a version
-  that has no tag in the answer of the registry. That version is not in
-  `versions[]`, unless Spectro Cloud retired it as `disabled` or `deleted`.
-  See [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
+  `registryUid`, `layer`, and `versions[]`. `layer` is the layer that the
+  listing gives a version, else the layer that the registry route gives the
+  pack. A record of a version reads it in the same order. Palette does not
+  serve a version that has no tag in the answer of the registry. That version
+  is not in `versions[]`, unless Spectro Cloud retired it as `disabled` or
+  `deleted`. See [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
   - A version: `version`, `packUid`, `digest`, `type`, `cloudTypes[]`, `tags[]`
     with the exact tag first, and `latest`, which is true for the newest version
-    the command listed. With `--cloud`, that is the newest version for that
-    cloud, and not the newest the registry holds. `state` is `deprecated`,
+    the command listed. `type` is `spectro`, `helm`, or `oci`. A version that
+    the listing gives no type is `spectro`, as its record says. With `--cloud`,
+    `latest` is true for the newest version for that cloud, and not the newest
+    the registry holds. `state` is `deprecated`,
     `disabled`, or `deleted` from `system_state` of the listing, or `disabled`
     for a version with the mark of Spectro Cloud. See
     [Pack states](../internals/palette/packs.md#pack-states). Strata leaves out

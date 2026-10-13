@@ -98,7 +98,7 @@ pub(super) fn cluster_and_target<'a>(
             ),
         });
     }
-    if target.source.pack.is_some() || target.source.uid.is_empty() {
+    if !target.source.is_profile_version() || target.source.uid.is_empty() {
         return Err(Error::Usage {
             message: format!(
                 "{option} needs the profile side to be a profile version that Palette holds, \

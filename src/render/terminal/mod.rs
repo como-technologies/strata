@@ -406,7 +406,7 @@ impl Renderer for TerminalRenderer {
                     let mut row = vec![
                         v.version.clone(),
                         v.pack_uid.clone(),
-                        dash(&v.kind).to_string(),
+                        v.kind.as_str().to_string(),
                         if v.cloud_types.is_empty() {
                             "-".to_string()
                         } else {

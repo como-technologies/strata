@@ -105,6 +105,9 @@ struct Setup {
     /// The cluster summary gives this health state. `None` serves no summary, as a Palette
     /// without the dashboard endpoint.
     health: Option<&'static str>,
+    /// The cluster summary answers this HTTP error. A Palette without the route answers 404 or
+    /// 405.
+    summary_error: Option<u16>,
     /// The profile the cluster runs does not list the cluster among its consumers, as Palette
     /// answers on an error, or from a project the key cannot read.
     unlisted_consumer: bool,
@@ -215,6 +218,13 @@ fn tenant(setup: Setup) -> MemoryApi {
         api = api.with(
             format!("/v1/dashboard/spectroclusters/{cluster_uid}"),
             json!({"status": {"health": {"state": state, "conditions": conditions}}}),
+        );
+    }
+    if let Some(status) = setup.summary_error {
+        api = api.failing(
+            format!("/v1/dashboard/spectroclusters/{cluster_uid}"),
+            status,
+            "{}",
         );
     }
     if let Some(open) = setup.waiting {
@@ -560,6 +570,18 @@ fn an_instance_gives_its_health_from_the_cluster_summary() {
         seen.health,
         Health::Unhealthy("no heartbeat for 10m".into())
     );
+}
+
+#[test]
+fn an_instance_has_no_health_when_palette_answers_405_for_the_cluster_summary() {
+    let platform: StrataPlatform<MemoryApi, Connect> = StrataPlatform::new(|_project| {
+        Ok(Palette::new(tenant(Setup {
+            summary_error: Some(405),
+            ..Setup::default()
+        })))
+    });
+    let seen = block_on(platform.observe_instance(&world().instance)).unwrap();
+    assert_eq!(seen.health, Health::Unknown);
 }
 
 #[test]
