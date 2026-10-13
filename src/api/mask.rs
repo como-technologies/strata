@@ -6,6 +6,7 @@
 //! also writes the mask over each password in the values of a cluster group that a record or a
 //! saved answer keeps.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use serde_json::Value;
@@ -117,7 +118,7 @@ pub(super) fn mask_values(values: &str, fields: &[String]) -> Result<String> {
         let Some(slot) = lookup_mut(&mut doc, &path) else {
             continue;
         };
-        if !holds_secret(slot) {
+        if !holds_secret(&*slot) {
             continue;
         }
         *slot = Yaml::String(MASKED.to_string());
@@ -148,19 +149,39 @@ fn lookup_mut<'a>(doc: &'a mut Yaml, path: &[&str]) -> Option<&'a mut Yaml> {
         .try_fold(doc, |node, key| node.as_mapping_mut()?.get_mut(*key))
 }
 
-/// True when Palette masks this value: a scalar with text, and no variable in it.
-fn holds_secret(v: &Yaml) -> bool {
-    match v {
-        Yaml::String(s) => is_secret_text(s),
-        Yaml::Number(n) => is_secret_text(&n.to_string()),
-        Yaml::Bool(b) => is_secret_text(&b.to_string()),
-        _ => false,
+/// The text of a scalar of a document: a string, a number, or a boolean. A map, a list, and a
+/// null have none, so a mask never covers them.
+trait ScalarText {
+    fn scalar_text(&self) -> Option<Cow<'_, str>>;
+}
+
+impl ScalarText for Yaml {
+    fn scalar_text(&self) -> Option<Cow<'_, str>> {
+        match self {
+            Yaml::String(s) => Some(Cow::Borrowed(s)),
+            Yaml::Number(n) => Some(Cow::Owned(n.to_string())),
+            Yaml::Bool(b) => Some(Cow::Owned(b.to_string())),
+            _ => None,
+        }
     }
 }
 
-/// True when a scalar with the text `text` gets the mask: it has text, and no variable in it.
-fn is_secret_text(text: &str) -> bool {
-    !text.is_empty() && !holds_variable(text)
+impl ScalarText for Value {
+    fn scalar_text(&self) -> Option<Cow<'_, str>> {
+        match self {
+            Value::String(s) => Some(Cow::Borrowed(s)),
+            Value::Number(n) => Some(Cow::Owned(n.to_string())),
+            Value::Bool(b) => Some(Cow::Owned(b.to_string())),
+            _ => None,
+        }
+    }
+}
+
+/// True when Palette masks this value of a pack, and strata this value of a cluster group: a
+/// scalar with text, and no variable in it.
+fn holds_secret(v: &impl ScalarText) -> bool {
+    v.scalar_text()
+        .is_some_and(|text| !text.is_empty() && !holds_variable(&text))
 }
 
 /// True when the key of a value of a cluster group names a secret. Such a key ends with
@@ -177,13 +198,7 @@ pub(crate) fn mask_password_keys(values: &mut Value) {
     match values {
         Value::Object(map) => {
             for (key, v) in map.iter_mut() {
-                let secret = match &*v {
-                    Value::String(s) => is_secret_text(s),
-                    Value::Number(n) => is_secret_text(&n.to_string()),
-                    Value::Bool(b) => is_secret_text(&b.to_string()),
-                    _ => false,
-                };
-                if secret && is_password_key(key) {
+                if is_password_key(key) && holds_secret(&*v) {
                     *v = Value::String(MASKED.to_string());
                 } else {
                     mask_password_keys(v);

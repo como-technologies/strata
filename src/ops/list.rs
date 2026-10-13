@@ -662,7 +662,7 @@ fn read_applied<A, F>(
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    let mut clients: HashMap<String, Palette<A>> = HashMap::new();
+    let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
     for c in clusters.iter_mut() {
         progress.note(&format!("reading cluster {}", c.uid));
         let palette = match client_for(&mut clients, home, &c.project_uid, connect) {

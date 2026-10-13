@@ -718,6 +718,20 @@ impl AppliedProfile {
             kind: text(t, "/type"),
         }
     }
+
+    /// The template of the profile `uid` in `spec.clusterProfileTemplates` of a document: a
+    /// cluster, a cluster group, or an edge host. `None` when the document does not apply it.
+    pub(crate) fn template_of<'a>(doc: &'a Value, uid: &str) -> Option<&'a Value> {
+        arr(doc, "/spec/clusterProfileTemplates")
+            .iter()
+            .find(|t| str_at(t, "/uid") == uid)
+    }
+
+    /// The profile `uid` as the document of a cluster or a cluster group applies it, with the
+    /// version that its template names: see [`AppliedProfile::template_of`].
+    pub(crate) fn applied(doc: &Value, uid: &str) -> Option<AppliedProfile> {
+        Self::template_of(doc, uid).map(Self::from_template)
+    }
 }
 
 /// Clusters using a profile version.

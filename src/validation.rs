@@ -1,6 +1,7 @@
 //! The answers of Palette to the validate routes: `compare --validate` records a
 //! [`PaletteValidation`] in the diff, and `snapshot --validate` records a [`ProfileValidation`] in
-//! the snapshot. Each holds the [`PaletteRefusal`] errors that Palette gives.
+//! the snapshot. Each answer is a [`ProfileValidation`]: whether Palette accepts, and the
+//! [`PaletteRefusal`] errors that it gives.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -9,28 +10,29 @@ use serde_json::Value;
 use crate::json::{arr, text};
 
 /// Palette's answer to `POST /v1/spectroclusters/{uid}/validate/packs`, for a change from what a
-/// cluster runs to a profile version.
+/// cluster runs to a profile version: the cluster, and the answer. The document holds the fields
+/// of the answer beside `clusterUid`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaletteValidation {
     /// The cluster that strata asked Palette about.
     pub cluster_uid: String,
-    /// True when Palette gives no error.
-    pub accepts: bool,
-    /// Each error that Palette gives, sorted by pack, code, and message: Palette sorts the
-    /// profiles in no fixed order.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub errors: Vec<PaletteRefusal>,
+    /// Whether Palette accepts, and each error that it gives. Palette gives the error of a pack
+    /// under each profile that holds a pack of that name, so strata keeps one copy.
+    #[serde(flatten)]
+    pub answer: ProfileValidation,
 }
 
-/// Palette's answer to `POST /v1/clusterprofiles/validate/packs` for a candidate, or to `POST
-/// /v1/clusterprofiles/{uid}/validate/packs` for a version that Palette holds.
+/// Palette's answer to a validate route: `POST /v1/clusterprofiles/validate/packs` for a
+/// candidate, `POST /v1/clusterprofiles/{uid}/validate/packs` for a version that Palette holds,
+/// and the answer of a [`PaletteValidation`] for a cluster.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileValidation {
     /// True when Palette gives no error.
     pub accepts: bool,
-    /// Each error that Palette gives, sorted by pack, code, and message.
+    /// Each error that Palette gives, sorted by pack, code, and message: Palette sorts the
+    /// profiles in no fixed order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<PaletteRefusal>,
 }
@@ -92,13 +94,6 @@ impl PaletteRefusal {
     }
 }
 
-/// The errors sorted and with no copy, and true when there is none.
-fn sorted(mut errors: Vec<PaletteRefusal>) -> (bool, Vec<PaletteRefusal>) {
-    errors.sort();
-    errors.dedup();
-    (errors.is_empty(), errors)
-}
-
 /// The lines of an answer of Palette to `--validate`: `accepts` when there is no error, or else
 /// one line for each error, such as `refuses: PackDependencyNotFound strata-live-pack:
 /// <message>`.
@@ -113,9 +108,8 @@ pub fn answer_lines(errors: &[PaletteRefusal]) -> Vec<String> {
 }
 
 impl PaletteValidation {
-    /// Read Palette's answer: the errors under `profiles[].packs` and under `machinePools`.
-    /// Palette gives the error of a pack under each profile that holds a pack of that name, so
-    /// strata keeps one copy.
+    /// Read Palette's answer for the cluster `cluster_uid`: the errors under `profiles[].packs`
+    /// and under `machinePools`.
     pub fn from_palette(cluster_uid: &str, answer: &Value) -> PaletteValidation {
         let errors = arr(answer, "/profiles")
             .iter()
@@ -126,21 +120,64 @@ impl PaletteValidation {
         PaletteValidation::refused(cluster_uid, errors)
     }
 
-    /// The answer with these errors, sorted and with no copy. It accepts when there is none.
+    /// The answer for the cluster `cluster_uid` with these errors: see
+    /// [`ProfileValidation::refused`].
     pub fn refused(cluster_uid: &str, errors: Vec<PaletteRefusal>) -> PaletteValidation {
-        let (accepts, errors) = sorted(errors);
         PaletteValidation {
             cluster_uid: cluster_uid.to_string(),
-            accepts,
-            errors,
+            answer: ProfileValidation::refused(errors),
         }
     }
 }
 
 impl ProfileValidation {
     /// The answer with these errors, sorted and with no copy. It accepts when there is none.
-    pub fn refused(errors: Vec<PaletteRefusal>) -> ProfileValidation {
-        let (accepts, errors) = sorted(errors);
-        ProfileValidation { accepts, errors }
+    pub fn refused(mut errors: Vec<PaletteRefusal>) -> ProfileValidation {
+        errors.sort();
+        errors.dedup();
+        ProfileValidation {
+            accepts: errors.is_empty(),
+            errors,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_answer_for_a_cluster_holds_the_fields_of_the_answer_beside_the_cluster_uid() {
+        let refusal = PaletteRefusal {
+            pack: "kubernetes".to_string(),
+            code: "PackDependencyNotFound".to_string(),
+            message: "cni is required".to_string(),
+        };
+        let v = PaletteValidation::refused("c1", vec![refusal.clone(), refusal.clone()]);
+        assert_eq!(
+            v.answer,
+            ProfileValidation {
+                accepts: false,
+                errors: vec![refusal]
+            },
+            "the two copies of the error are one"
+        );
+        let json = serde_json::to_value(&v).unwrap();
+        assert_eq!(
+            json.as_object().unwrap().keys().collect::<Vec<_>>(),
+            ["accepts", "clusterUid", "errors"]
+        );
+        assert_eq!(json["clusterUid"], "c1");
+        assert_eq!(json["accepts"], false);
+        assert_eq!(
+            serde_json::from_value::<PaletteValidation>(json).unwrap(),
+            v
+        );
+
+        let accepted = serde_json::to_value(PaletteValidation::refused("c1", Vec::new())).unwrap();
+        assert_eq!(
+            accepted,
+            serde_json::json!({"clusterUid": "c1", "accepts": true})
+        );
     }
 }

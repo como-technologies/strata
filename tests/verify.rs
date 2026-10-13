@@ -9638,10 +9638,10 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     let mut d = ops::compare(&cluster, &target, "t1");
     let same = d.same;
     let v = ops::palette_validation(&palette, &cluster, &target).unwrap();
-    assert!(!v.accepts);
+    assert!(!v.answer.accepts);
     assert_eq!(v.cluster_uid, CLUSTER_UID);
-    assert_eq!(v.errors.len(), 1, "{v:?}");
-    assert_eq!(v.errors[0].pack, "strata-live-pack");
+    assert_eq!(v.answer.errors.len(), 1, "{v:?}");
+    assert_eq!(v.answer.errors[0].pack, "strata-live-pack");
     // one POST, with the body of --repave, in either order of the sides
     let posted = api.posted();
     assert_eq!(posted.len(), 1);
@@ -9689,7 +9689,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     let mut d = ops::compare(&cluster, &target, "t1");
     d.palette_validation =
         Some(ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap());
-    assert!(d.palette_validation.as_ref().unwrap().accepts);
+    assert!(d.palette_validation.as_ref().unwrap().answer.accepts);
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render(&d, &cluster, &target, false)
         .unwrap();
@@ -9705,12 +9705,15 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     );
     let (retry, slept) = retrying(&api, 3);
     let v = ops::palette_validation(&Palette::new(retry), &cluster, &target).unwrap();
-    assert!(!v.accepts);
-    assert_eq!(v.errors.len(), 1);
-    assert_eq!(v.errors[0].pack, "");
-    assert_eq!(v.errors[0].code, "PackSpectroIntegrationNotSupported");
+    assert!(!v.answer.accepts);
+    assert_eq!(v.answer.errors.len(), 1);
+    assert_eq!(v.answer.errors[0].pack, "");
     assert_eq!(
-        v.errors[0].message,
+        v.answer.errors[0].code,
+        "PackSpectroIntegrationNotSupported"
+    );
+    assert_eq!(
+        v.answer.errors[0].message,
         "Pack 'spectro-k8s-dashboard' is not supported for imported cluster"
     );
     assert_eq!(api.calls(&path), 1, "one attempt and no retry");
@@ -9736,7 +9739,10 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
         let (retry, _) = retrying(&api, 3);
         let v = ops::palette_validation(&Palette::new(retry), &cluster, &target).unwrap();
         assert_eq!(
-            (v.errors[0].code.as_str(), v.errors[0].message.as_str()),
+            (
+                v.answer.errors[0].code.as_str(),
+                v.answer.errors[0].message.as_str()
+            ),
             (code, message)
         );
         assert_eq!(api.calls(&path), 1, "{code}: one attempt and no retry");
