@@ -709,8 +709,9 @@ pub(crate) enum InvalidSides<'a> {
 }
 
 impl PackDiff {
-    /// The flags that moved, in the order of the legend. A renamed tag is `IDENTITY`, as the
-    /// field `identity` says.
+    /// The flags that moved, in the order of the legend.
+    ///
+    /// A renamed tag is `IDENTITY`, as the field `identity` says.
     pub fn flags(&self) -> Vec<ChangeFlag> {
         [
             (self.identity, ChangeFlag::Identity),

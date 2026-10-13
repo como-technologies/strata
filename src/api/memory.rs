@@ -104,8 +104,9 @@ impl MemoryApi {
         self
     }
 
-    /// The answer to a request with `method` to `path`, from the canned responses of `key`: a GET
-    /// has its path as its key, and a POST has a key of its own.
+    /// The answer to a request with `method` to `path`, from the canned responses of `key`.
+    ///
+    /// A GET has its path as its key, and a POST has a key of its own: see [`MemoryApi`].
     fn answer(&self, method: Method, path: &str, key: &str) -> Result<Value> {
         *self.calls.borrow_mut().entry(key.to_string()).or_insert(0) += 1;
         let error = |status: u16, body: String, retry_after: Option<u64>| Error::Api {

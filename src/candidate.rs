@@ -240,7 +240,9 @@ pub enum LayerKind {
 }
 
 impl<'de> Deserialize<'de> for LayerKind {
-    /// Read `manifest`. Another text is an error that says what a layer can give: the registry
+    /// Read `manifest`.
+    ///
+    /// Another text is an error that says what a layer can give: the registry
     /// gives the type of each other pack.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
         let text = String::deserialize(deserializer)?;

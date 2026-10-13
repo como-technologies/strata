@@ -202,8 +202,9 @@ pub struct Bump {
 }
 
 impl Bump {
-    /// What a move to the version `to` does to the pack `name`, from `d`: the comparison of the
-    /// pinned version with `to`. None when `d` holds no pack of that name.
+    /// What a move to the version `to` does to the pack `name`, from the comparison `d`.
+    ///
+    /// `d` compares the pinned version with `to`. None when `d` holds no pack of that name.
     pub fn of(to: &str, d: &Diff, name: &str) -> Option<Bump> {
         let pd = d.packs.iter().find(|p| p.name == name)?;
         Some(Bump {
