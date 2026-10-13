@@ -10247,7 +10247,7 @@ fn cloud_config(size: u64) -> Value {
 fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
     let dir = tempfile::tempdir().unwrap();
     let (api, snap) = cluster_record_with_tiers(dir.path());
-    let c =snap.source.cluster.as_ref().unwrap();
+    let c = snap.source.cluster.as_ref().unwrap();
     // shape costs a request, so a record without --shape does not carry it
     assert_eq!(
         c.tiers.keys().collect::<Vec<_>>(),
