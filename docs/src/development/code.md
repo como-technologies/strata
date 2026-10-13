@@ -6,9 +6,9 @@ where each module goes.
 
 ## The layers
 
-- `main.rs` parses the arguments, prints, and gives the exit code. It holds no
-  rule and builds no error kind for a decision of a command. Put that decision in
-  `ops/`.
+- `main.rs` and `cli/` parse the arguments, print, and give the exit code. They
+  hold no rule and build no error kind for a decision of a command. Put that
+  decision in `ops/`.
 - `ops/` holds the work of each command. It is generic over `A: PaletteApi`,
   and it takes the connection as `connect: impl FnOnce() -> Result<Palette<A>>`,
   so that a ref to a file never connects.
@@ -18,8 +18,9 @@ where each module goes.
   module of `api/` and has unit tests. The methods of `Palette` fetch, and do
   not rewrite.
 - `render/` prints through the `Renderer` trait. A line that two renderers show
-  is one function in `render/mod.rs`. Do not write that line again in
-  `main.rs`.
+  is one function in a shared module of `render/`: the module of its command,
+  such as `render/verify.rs`, or `render/mod.rs`. Do not write that line again in
+  `cli/`.
 - A type that two modules share goes in a module of its own. It does not go in
   the module of one of its users. Re-export it where the public path must not
   change.

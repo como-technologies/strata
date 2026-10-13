@@ -110,11 +110,11 @@ pub struct PackBuild {
 impl PackBuild {
     /// True when the state of this version is `disabled` or `deleted`: Spectro Cloud retired it,
     /// or marked it `disabled`, and a profile cannot hold it. The rule is
-    /// [`is_retired`](crate::candidate::is_retired).
+    /// [`is_retired`](crate::registry::is_retired).
     pub(crate) fn retired(&self) -> bool {
         self.state
             .as_deref()
-            .is_some_and(crate::candidate::is_retired)
+            .is_some_and(crate::registry::is_retired)
     }
 }
 
@@ -204,7 +204,7 @@ where
         None => listings.names()?,
     };
     progress.note(&format!("reading the versions of {name}"));
-    let entries = crate::candidate::versions_of(&palette, name)?;
+    let entries = crate::candidate::pack::versions_of(&palette, name)?;
 
     let mut registries = Vec::new();
     let mut had_the_pack = false;
@@ -227,7 +227,7 @@ where
         let mut answers = vec![found(palette.pack_tags(name, uid, None))?];
         if mine
             .iter()
-            .any(|e| crate::candidate::retired_state(e).is_some())
+            .any(|e| crate::registry::retired_state(e).is_some())
         {
             answers.push(found(palette.pack_tags(name, uid, Some(RETIRED_STATES)))?);
         }
@@ -246,7 +246,7 @@ where
         // is FIPS compliant
         let mine: Vec<&Value> = mine
             .into_iter()
-            .filter(|e| has_tag(&tags, e) || crate::candidate::retired_state(e).is_some())
+            .filter(|e| has_tag(&tags, e) || crate::registry::retired_state(e).is_some())
             .collect();
         // every version of this pack that the registry offers, counted before --cloud and
         // --latest cut the list: the heading states the inventory, not the rows that survived a
@@ -259,7 +259,7 @@ where
         // one state for the registry, when every version of the pack in it has the same one
         let states: std::collections::BTreeSet<Option<String>> = mine
             .iter()
-            .map(|e| crate::candidate::pack_state(e))
+            .map(|e| crate::registry::pack_state(e))
             .collect();
         let state = match states.into_iter().collect::<Vec<_>>().as_slice() {
             [Some(one)] => Some(one.clone()),
@@ -298,7 +298,7 @@ where
                 tags: for_version,
                 latest: false,
                 palette_latest: text(e, PALETTE_LATEST) == "true",
-                state: crate::candidate::pack_state(e),
+                state: crate::registry::pack_state(e),
                 listed: text(e, "/metadata/creationTimestamp"),
             });
         }

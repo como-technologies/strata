@@ -73,7 +73,7 @@ fn core_layers(kind: &str, cloud: &str) -> Option<&'static [Layer]> {
 }
 
 /// Check the layers of the type with the layers that the file gives. The layer of a pack that the
-/// file does not give comes from the registry, so [`super::resolve`] checks the layers again.
+/// file does not give comes from the registry, so [`super::resolve()`] checks the layers again.
 pub(super) fn check_file(c: &Candidate) -> Result<(), RuleViolation> {
     let known: Vec<Option<&str>> = c
         .layers

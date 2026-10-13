@@ -1,17 +1,28 @@
 //! The pull request comment.
 
-use super::{
-    DiffNote, OpLine, Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary,
-    capitalized, chain_verdict, cluster_count, consumer_count, consumer_counts, consumers_heading,
-    consumers_sentence, count_of, counts_line, dash, diff_notes, diff_word, edge_hosts_line,
-    entry_error, invalid_mark, invalid_pack_sentences, list_count, list_scope, no_version_sentence,
-    pack_order_note, pack_version, pair_detail, pair_notes, pair_word, pending_profile_names,
-    plain_flags, profile_marks, project_label, record_detail, record_label, record_word,
-    registry_note, second_reading_line, short, tier_path, tier_states, traits_suffix,
-    values_changed, values_summary, values_unparsed_sentence, variable_lines, variables_comparable,
-    verdict_parts, version_display, version_note, virtual_group, virtual_line, who_entry,
-    who_heading,
+use super::changes::{
+    OpLine, VarLine, artifact_lines, artifacts_summary, plain_flags, traits_suffix, values_changed,
+    values_summary, values_unparsed_sentence, variable_lines, version_display,
 };
+use super::consumers::{
+    consumer_count, consumer_counts, consumers_heading, consumers_sentence, edge_hosts_line,
+    second_reading_line,
+};
+use super::list::{
+    applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_version,
+    profile_marks, project_label, registry_note, version_note, virtual_group, virtual_line,
+};
+use super::notes::{
+    DiffNote, diff_notes, invalid_mark, invalid_pack_sentences, pack_order_note,
+    pending_profile_names, tier_path, tier_states, variables_comparable,
+};
+use super::same_release::{
+    chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word,
+};
+use super::verify::{
+    counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
+};
+use super::{Renderer, capitalized, count_of, dash, entry_error, short};
 use crate::diff::{Diff, Leaf, Op, Status};
 use crate::error::Result;
 use crate::legend::document_name;
@@ -47,7 +58,7 @@ fn op_line(l: &OpLine) -> String {
     }
 }
 
-fn variable_line(v: &VarLine<'_>) -> String {
+pub(super) fn variable_line(v: &VarLine<'_>) -> String {
     match v {
         VarLine::Added(s) => format!("+ variable {}{}\n", s.name, traits_suffix(s)),
         VarLine::Removed(s) => format!("- variable {}{}\n", s.name, traits_suffix(s)),
@@ -317,7 +328,7 @@ impl Renderer for MarkdownRenderer {
         for rec in &r.records {
             let root = match &rec.root {
                 Some(root) => format!("`{}`", short(root)),
-                None => format!("error: {}", escape(super::set_error(rec))),
+                None => format!("error: {}", escape(super::list::set_error(rec))),
             };
             o.push_str(&format!(
                 "| {} | `{}` | `{}` | {root} |\n",
@@ -337,7 +348,10 @@ impl Renderer for MarkdownRenderer {
     }
 
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
-        let mut o = format!("### behind: {}\n\n", escape(&super::behind_heading(r)));
+        let mut o = format!(
+            "### behind: {}\n\n",
+            escape(&super::behind::behind_heading(r))
+        );
         if r.pins.is_empty() {
             return Ok(o);
         }
@@ -345,7 +359,7 @@ impl Renderer for MarkdownRenderer {
             "| pack | pinned | registry | status | bump | pinned by |\n|---|---|---|---|---|---|\n",
         );
         for pin in &r.pins {
-            let mut status = super::pin_status(pin);
+            let mut status = super::behind::pin_status(pin);
             if let Some(arrived) = pin.arrived.as_ref().filter(|a| !a.is_empty()) {
                 status.push_str(&format!("; arrived: {}", arrived.join(", ")));
             }
@@ -363,7 +377,7 @@ impl Renderer for MarkdownRenderer {
                 escape(&pin.version),
                 escape(dash(&pin.registry)),
                 escape(&status),
-                super::bump_line(pin)
+                super::behind::bump_line(pin)
                     .map(|l| escape(&l))
                     .unwrap_or_else(|| "-".to_string()),
                 by.join("<br>")
@@ -529,7 +543,10 @@ impl Renderer for MarkdownRenderer {
                 "**{}**\n\n",
                 escape(&cluster_count(clusters.len(), l.cluster.as_deref()))
             ));
-            for line in super::query_line(l).into_iter().chain(virtual_line(l)) {
+            for line in super::list::query_line(l)
+                .into_iter()
+                .chain(virtual_line(l))
+            {
                 o.push_str(&format!("{}.\n\n", escape(&super::capitalized(&line))));
             }
             let labels = if l.query.is_some() { " labels |" } else { "" };
@@ -569,7 +586,7 @@ impl Renderer for MarkdownRenderer {
                 if l.query.is_some() {
                     o.push_str(&format!(
                         " {} |",
-                        escape(dash(&super::labels_text(&c.labels)))
+                        escape(dash(&super::list::labels_text(&c.labels)))
                     ));
                 }
                 if with_virtual {
@@ -586,7 +603,7 @@ impl Renderer for MarkdownRenderer {
                 if with_applied {
                     let profiles = if let Some(msg) = entry_error(c.error.as_ref()) {
                         format!("error: {msg}")
-                    } else if let Some(note) = super::imported_note(c) {
+                    } else if let Some(note) = super::list::imported_note(c) {
                         note.to_string()
                     } else {
                         c.profiles
