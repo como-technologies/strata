@@ -9,9 +9,10 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::diff::impact::ImpactLevel;
+use crate::diff::pack::InvalidSides;
 use crate::diff::{
-    ChangeFlag, ClusterValueChange, Diff, ImageIdChange, InvalidPack, InvalidSides, Leaf, Op,
-    PackDiff, Side, Status, ValuesDiff, VariableSummary, VariablesByName, Verify, VerifyStatus,
+    ChangeFlag, ClusterValueChange, Diff, ImageIdChange, InvalidPack, Leaf, Op, PackDiff, Side,
+    Status, ValuesDiff, VariableSummary, VariablesByName, Verify, VerifyStatus,
 };
 use crate::error::Result;
 use crate::ops::{

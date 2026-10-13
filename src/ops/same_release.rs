@@ -271,7 +271,7 @@ fn pair_reasons(
             Status::Changed => {
                 let (x, y) = (pa[pd.key.as_str()], pb[pd.key.as_str()]);
                 // a packUid that Palette mints is not part of the release
-                let minted = diff::minted_uid_pair(x, y);
+                let minted = diff::pack::minted_uid_pair(x, y);
                 // The type follows the registry (spectro, helm, oci), so a move may change it; a
                 // pack from no registry, a manifest, did not move.
                 let moved = !x.registry_uid.is_empty()

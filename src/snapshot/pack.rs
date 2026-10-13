@@ -157,7 +157,7 @@ pub fn pack_content(values: &Value) -> (Vec<String>, Vec<PackChart>) {
 /// The path of each value of parsed `values` that Palette masks, sorted, in the form of
 /// [`crate::diff::leaf_diff`]: each value that is the text `********`.
 pub(super) fn masked_paths(values: &Value) -> Vec<String> {
-    crate::diff::paths_of_text(values, MASKED)
+    crate::diff::leaf::paths_of_text(values, MASKED)
 }
 
 /// A manifest attached to a pack on the profile.
