@@ -3,5 +3,5 @@ pack ubuntu-aws@20.04 (uid 626808ffd9c586788e0be610)  ->  pack ubuntu-aws@24.04 
 root       a5bd379fcf68 -> 433151944a0c   CHANGED
 
 ~ [os   ] ubuntu-aws                 20.04 -> 24.04     IDENTITY UPSTREAM
-      upstream digest  sha256:d7aee -> sha256:2df05   (packRef.digest)
+      upstream digest: sha256:d7aee32a7be4 -> sha256:2df05daa4eb4 (packRef.digest)
       impact: node repave (OS image change)

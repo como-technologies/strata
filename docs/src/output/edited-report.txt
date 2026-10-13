@@ -15,7 +15,7 @@ $ scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run
 
 **Note:** both sides are aws-stack@1.1.1 (uid 64e0000000000000000000c3): the version was edited in place
 
-**Verify:** `Drifted` for uid `64e0000000000000000000c3`, recorded 2026-09-17T09:30:00Z, checked 2026-09-17T09:30:00Z
+**Verify:** `DRIFT` for uid `64e0000000000000000000c3`, recorded 2026-09-17T09:30:00Z, checked 2026-09-17T09:30:00Z
 
 | | layer | pack | version | change | impact |
 |---|---|---|---|---|---|

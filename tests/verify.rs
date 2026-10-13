@@ -8915,6 +8915,36 @@ fn each_report_says_in_the_same_words_that_the_values_did_not_parse() {
 }
 
 #[test]
+fn each_report_states_the_upstream_digest_of_a_pack_in_the_same_line() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let d = strata::diff::compute(&a, &b, "t1", None);
+    let line = |text: &str| -> Vec<String> {
+        text.lines()
+            .filter(|l| l.contains("upstream digest:"))
+            .map(|l| l.trim().replace('`', ""))
+            .collect()
+    };
+    let terminal = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    let markdown = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert_eq!(
+        line(&terminal),
+        [
+            "upstream digest: sha256:k8s1294 -> sha256:k8s1302 (packRef.digest)",
+            "upstream digest: sha256:cni-aaaa -> sha256:cni-bbbb (packRef.digest)"
+        ],
+        "{terminal}"
+    );
+    assert_eq!(line(&markdown), line(&terminal), "{markdown}");
+}
+
+#[test]
 fn same_release_names_a_manifest_as_the_pack_names_it_and_the_change_as_the_documents_do() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());

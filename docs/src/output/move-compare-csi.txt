@@ -3,6 +3,6 @@ aws-stack@1.1.1 (uid 64e0000000000000000000c3)  ->  aws-stack@1.1.1 (uid 64e1000
 root       088136c929bd -> 30a4e5a6cd42   CHANGED
 ...
 ~ [csi  ] csi-aws-ebs                1.65.0             IDENTITY UPSTREAM
-      upstream digest  sha256:bd09e -> sha256:a746e   (packRef.digest)
+      upstream digest: sha256:bd09e8b4187b -> sha256:a746e1468908 (packRef.digest)
       impact: cluster-wide infra addon update
 ...

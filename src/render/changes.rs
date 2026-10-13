@@ -3,7 +3,7 @@
 use serde_json::Value;
 
 use super::notes::tag_rename;
-use super::{short, show, shown};
+use super::{short_digest, show, shown};
 use crate::diff::{
     ChangeFlag, ClusterValueChange, Diff, Leaf, ManifestChange, Op, PackDiff, Status, ValuesDiff,
     VariableSummary, VariablesByName,
@@ -60,12 +60,13 @@ pub(crate) fn plain_flags(pd: &PackDiff) -> String {
         .join(" ")
 }
 
-/// `upstream digest: sha256:ff3df -> sha256:c4f7f (packRef.digest)`: the digest of the archive of
-/// a pack on each side, and the field that gives it. None when the digest did not move.
+/// `upstream digest: sha256:ff3df77ebc9c -> sha256:c4f7f20f40c7 (packRef.digest)`: the digest of
+/// the archive of a pack on each side, and the field that gives it. None when the digest did not
+/// move.
 ///
-/// Each report cuts a digest to its first twelve characters, as it cuts the root. The JSON
-/// document holds the full digest. `p` paints side A red and side B green, and `code` puts each
-/// digest in the form of the report.
+/// Each report cuts the hash of a digest to twelve characters, as it cuts the root, and keeps the
+/// name of the algorithm: see [`short_digest`]. The JSON document holds the full digest. `p`
+/// paints side A red and side B green, and `code` puts each digest in the form of the report.
 pub(crate) fn upstream_line(pd: &PackDiff, p: &Paint, code: fn(&str) -> String) -> Option<String> {
     let (Some(a), Some(b)) = (&pd.a, &pd.b) else {
         return None;
@@ -73,8 +74,8 @@ pub(crate) fn upstream_line(pd: &PackDiff, p: &Paint, code: fn(&str) -> String) 
     pd.upstream.then(|| {
         format!(
             "upstream digest: {} -> {} {}",
-            p.red(&code(short(&a.upstream))),
-            p.green(&code(short(&b.upstream))),
+            p.red(&code(&short_digest(&a.upstream))),
+            p.green(&code(&short_digest(&b.upstream))),
             p.dim(&format!("({})", b.upstream_source))
         )
     })

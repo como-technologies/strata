@@ -93,6 +93,11 @@ ref, a file, a directory, or an answer from Palette. The cases are:
 - the binary itself with random arguments, against an address that refuses the
   connection
 
+The run of the binary gives junk to each command that the help of strata lists,
+except `preflight`, which runs another binary. Each case has a home of its own,
+and no setting of the machine that names a project or a tenant. So a case
+never reads the `~/.palette.env` of the person who runs the tests.
+
 One property holds everywhere: strata answers, or it errors with a kind and
 exit `2`. It never panics.
 
