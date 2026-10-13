@@ -1,6 +1,5 @@
 //! `verify`: a record against what Palette holds now, one record or many.
 
-use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
@@ -21,7 +20,7 @@ use crate::registry::Registries;
 use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
 
 use super::consumers::{ACTIVE_STATE, INACTIVE_STATE};
-use super::scope_of;
+use super::{connected, scope_of};
 
 /// The outcome of a verification.
 #[derive(Debug)]
@@ -245,31 +244,13 @@ pub fn verify_with<A: PaletteApi>(
         let sync = Registries::new(palette).sync_note(&p.registry_uid, pack_type, progress)?;
         let image_ids_changed = images_moved_alone(recorded, &live);
         let unchanged = recorded.root == live.root && image_ids_changed.is_empty();
+        // no last_modified: the time of a pack in the listing is its create time, so it is not
+        // a change
         let verify = Verify {
-            status: if unchanged {
-                VerifyStatus::Unchanged
-            } else {
-                VerifyStatus::Drifted
-            },
-            uid: p.pack_uid.clone(),
-            recorded_at: recorded.source.fetched_at.clone(),
-            checked_at: checked_at.to_string(),
-            overwritten_by: None,
-            renamed_to: None,
-            gone: false,
-            deleted_at: None,
-            state: None,
-            profiles_overwritten: Vec::new(),
-            cluster_values_changed: 0,
-            who: None,
-            // the time of a pack in the listing is its create time, so it is not a change
-            last_modified: None,
-            upstream_unknown: Vec::new(),
-            macros_changed: Vec::new(),
             image_ids_changed,
-            invalid_packs: diff::invalid_packs(&live),
             registry_sync: sync.sync,
             registry_sync_error: sync.error,
+            ..Verify::new(unchanged, &p.pack_uid, recorded, &live, checked_at)
         };
         let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
         let status = settle(unchanged, &mut diff, options);
@@ -367,30 +348,17 @@ pub fn verify_with<A: PaletteApi>(
         && macros_changed.is_empty()
         && image_ids_changed.is_empty();
     let verify = Verify {
-        status: if unchanged {
-            VerifyStatus::Unchanged
-        } else {
-            VerifyStatus::Drifted
-        },
-        uid: uid.to_string(),
-        recorded_at: recorded.source.fetched_at.clone(),
-        checked_at: checked_at.to_string(),
         overwritten_by,
         renamed_to,
         gone,
         deleted_at,
         state,
         profiles_overwritten,
-        cluster_values_changed: 0,
-        who: None,
         // a gone object has no time of its own: the verdict names the deletion
         last_modified: last_modified.filter(|_| !gone),
-        upstream_unknown: Vec::new(),
         macros_changed: macros_changed.clone(),
         image_ids_changed,
-        invalid_packs: diff::invalid_packs(&live),
-        registry_sync: None,
-        registry_sync_error: None,
+        ..Verify::new(unchanged, uid, recorded, &live, checked_at)
     };
     let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
     let values_changed = diff
@@ -670,18 +638,13 @@ where
                 continue;
             }
         };
-        let scope: Option<String> = project
-            .or_else(|| scope_of(&recorded.source.project_uid))
-            .map(str::to_string);
-        let palette = match clients.entry(scope.clone()) {
-            Entry::Occupied(e) => e.into_mut(),
-            Entry::Vacant(v) => match connect(scope.as_deref()) {
-                Ok(p) => v.insert(p),
-                Err(e) => {
-                    records.push(VerifiedRecord::failed(path, Some(&recorded), e));
-                    continue;
-                }
-            },
+        let scope = project.or_else(|| scope_of(&recorded.source.project_uid));
+        let palette = match connected(&mut clients, scope, &mut connect) {
+            Ok(p) => p,
+            Err(e) => {
+                records.push(VerifiedRecord::failed(path, Some(&recorded), e));
+                continue;
+            }
         };
         records.push(
             match verify_with(&recorded, palette, checked_at, options, progress) {
@@ -691,7 +654,7 @@ where
                     name: recorded.source.name.clone(),
                     version: recorded.source.version.clone(),
                     uid: recorded.source.uid.clone(),
-                    project_uid: scope.clone().unwrap_or_default(),
+                    project_uid: scope.unwrap_or_default().to_string(),
                     recorded_at: recorded.source.fetched_at.clone(),
                     root_recorded: recorded.root.clone(),
                     root_live: Some(v.live.root.clone()),

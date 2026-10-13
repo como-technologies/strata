@@ -538,7 +538,7 @@ pub fn scope_of(project: &str) -> Option<&str> {
 /// project is in the scope the operation already works in, so `home` reads it; `consumers` and
 /// `list --applied` answered that differently until they shared this.
 fn client_for<'a, A, F>(
-    clients: &'a mut HashMap<String, Palette<A>>,
+    clients: &'a mut HashMap<Option<String>, Palette<A>>,
     home: &'a Palette<A>,
     project: &str,
     connect: &mut F,
@@ -550,8 +550,24 @@ where
     if project.is_empty() || Some(project) == home.project_uid() {
         return Ok(home);
     }
-    match clients.entry(project.to_string()) {
+    connected(clients, Some(project), connect)
+}
+
+/// The client of the scope `scope`: the one that `clients` holds for it, or a new one from
+/// `connect`, which `clients` then holds. `None` is the scope of the command, and `Some` with
+/// the empty text is the tenant. `verify` reads each record in its own scope with it. An
+/// operation that has a home client reads a cluster through [`client_for`].
+fn connected<'a, A, F>(
+    clients: &'a mut HashMap<Option<String>, Palette<A>>,
+    scope: Option<&str>,
+    connect: &mut F,
+) -> Result<&'a Palette<A>>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    match clients.entry(scope.map(str::to_string)) {
         Entry::Occupied(e) => Ok(e.into_mut()),
-        Entry::Vacant(v) => connect(Some(project)).map(|p| &*v.insert(p)),
+        Entry::Vacant(v) => connect(scope).map(|p| &*v.insert(p)),
     }
 }

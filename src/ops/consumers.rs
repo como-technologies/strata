@@ -16,7 +16,7 @@ use crate::profile_type::ProfileType;
 use crate::progress::Progress;
 use crate::reference::Ref;
 use crate::scope::ProfileScope;
-use crate::snapshot::{Snapshot, SubjectKind, Tool};
+use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind, Tool};
 
 use super::consumer_list::consumer_uids;
 use super::fleet::Resolved;
@@ -127,6 +127,35 @@ pub struct Consumer {
     /// document did: the second reading found it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub unlisted: bool,
+}
+
+impl Consumer {
+    /// A consumer whose document is not read yet: its state is `unknown`, and it names no
+    /// version.
+    fn unread(kind: ConsumerKind, uid: String, name: String, project_uid: String) -> Consumer {
+        Consumer {
+            kind,
+            uid,
+            name,
+            project_uid,
+            project_name: String::new(),
+            state: UNKNOWN_STATE.to_string(),
+            version: String::new(),
+            error: None,
+            unlisted: false,
+        }
+    }
+
+    /// Take the name, the project, and the state from the document of the consumer. A field
+    /// that the document does not give keeps its value.
+    fn fill_from_document(&mut self, doc: &Value) {
+        self.name = first_nonempty(&[str_at(doc, "/metadata/name"), &self.name]);
+        self.project_uid = first_nonempty(&[
+            str_at(doc, "/metadata/annotations/projectUid"),
+            &self.project_uid,
+        ]);
+        self.state = first_nonempty(&[str_at(doc, "/status/state"), &self.state]);
+    }
 }
 
 /// The second reading of `consumers`: the clusters that run the version, from the cluster search
@@ -371,7 +400,7 @@ where
         Ref::NameVersion { .. } | Ref::Draft { .. } => (None, None),
     };
 
-    let mut clients: HashMap<String, Palette<A>> = HashMap::new();
+    let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
     let home = connect(profile_scope.as_deref())?;
     let uid = match (uid_hint, reference) {
         (Some(uid), _) => uid,
@@ -388,31 +417,19 @@ where
     let mut list = Vec::with_capacity(uids.len());
     for cluster in uids {
         let known = named.iter().find(|n| text(n, "/uid") == cluster);
-        let mut c = Consumer {
-            kind: ConsumerKind::Cluster,
-            name: known.map(|n| text(n, "/name")).unwrap_or_default(),
-            project_uid: known.map(|n| text(n, "/projectUid")).unwrap_or_default(),
-            project_name: String::new(),
-            state: UNKNOWN_STATE.to_string(),
-            version: String::new(),
-            error: None,
-            unlisted: false,
-            uid: cluster,
-        };
+        let mut c = Consumer::unread(
+            ConsumerKind::Cluster,
+            cluster,
+            known.map(|n| text(n, "/name")).unwrap_or_default(),
+            known.map(|n| text(n, "/projectUid")).unwrap_or_default(),
+        );
         let doc = client_for(&mut clients, &home, &c.project_uid, &mut connect)
             .and_then(|p| p.subject_document(SubjectKind::Cluster, &c.uid));
         match doc {
             Ok(d) => {
-                c.name = first_nonempty(&[str_at(&d, "/metadata/name"), &c.name]);
-                c.project_uid = first_nonempty(&[
-                    str_at(&d, "/metadata/annotations/projectUid"),
-                    &c.project_uid,
-                ]);
-                c.state = first_nonempty(&[str_at(&d, "/status/state"), &c.state]);
-                c.version = arr(&d, "/spec/clusterProfileTemplates")
-                    .iter()
-                    .find(|t| str_at(t, "/uid") == uid)
-                    .map(|t| text(t, "/profileVersion"))
+                c.fill_from_document(&d);
+                c.version = AppliedProfile::applied(&d, &uid)
+                    .map(|p| p.version)
                     .unwrap_or_default();
             }
             Err(e) => c.error = Some(e.to_json()),
@@ -467,27 +484,48 @@ where
         &home,
     );
 
-    let version = text(&doc, "/spec/version");
-    let overwritten = list
+    Ok(report(
+        &doc,
+        None,
+        list,
+        clusters_read,
+        edge_hosts_read,
+        generated_at,
+    ))
+}
+
+/// The document of `consumers` for the profile `doc`, with the consumers `consumers`. `kind` is
+/// the type of an app profile. The document holds the count, how many copies name another
+/// version than the profile, and the two readings.
+fn report(
+    doc: &Value,
+    kind: Option<ProfileType>,
+    consumers: Vec<Consumer>,
+    clusters_read: ClustersRead,
+    edge_hosts_read: EdgeHostsRead,
+    generated_at: &str,
+) -> ConsumersReport {
+    let version = text(doc, "/spec/version");
+    let overwritten = consumers
         .iter()
         .filter(|c| !c.version.is_empty() && c.version != version)
         .count();
-    Ok(ConsumersReport {
+    ConsumersReport {
         schema: CONSUMERS_SCHEMA.to_string(),
         tool: Tool::current(),
         generated_at: generated_at.to_string(),
         profile: ConsumedProfile {
-            uid: text(&doc, "/metadata/uid"),
-            name: text(&doc, "/metadata/name"),
+            uid: text(doc, "/metadata/uid"),
+            name: text(doc, "/metadata/name"),
             version,
-            kind: String::new(),
+            kind: kind.map(|k| k.as_str().to_string()).unwrap_or_default(),
         },
-        count: list.len(),
+        count: consumers.len(),
         overwritten,
-        consumers: list,
+        consumers,
         clusters_read,
         edge_hosts_read,
-    })
+    }
 }
 
 /// Add each cluster template that `status.inUseClusterTemplates` of the profile document names. A
@@ -495,15 +533,8 @@ where
 fn linked_templates(list: &mut Vec<Consumer>, doc: &Value) {
     for t in ClusterTemplateRef::linked(doc) {
         list.push(Consumer {
-            kind: ConsumerKind::Template,
-            name: t.name,
-            project_uid: t.project_uid,
-            project_name: String::new(),
             state: String::new(),
-            version: String::new(),
-            error: None,
-            unlisted: false,
-            uid: t.uid,
+            ..Consumer::unread(ConsumerKind::Template, t.uid, t.name, t.project_uid)
         });
     }
 }
@@ -526,12 +557,11 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    let mut clients: HashMap<String, Palette<A>> = HashMap::new();
+    let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
     let home = connect(scope)?;
     let uid = home.app_profile_uid(id, version)?;
     progress.note(&format!("listing the app deployments of app profile {uid}"));
     let doc = home.app_profile_document(&uid)?;
-    let version = text(&doc, "/spec/version");
 
     let mut list: Vec<Consumer> = Vec::new();
     for app in arr(&doc, "/status/inUseApps") {
@@ -539,27 +569,17 @@ where
         if app_uid.is_empty() || list.iter().any(|c| c.uid == app_uid) {
             continue;
         }
-        let mut c = Consumer {
-            kind: ConsumerKind::App,
-            name: text(app, "/name"),
-            project_uid: text(app, "/projectUid"),
-            project_name: String::new(),
-            state: UNKNOWN_STATE.to_string(),
-            version: String::new(),
-            error: None,
-            unlisted: false,
-            uid: app_uid,
-        };
+        let mut c = Consumer::unread(
+            ConsumerKind::App,
+            app_uid,
+            text(app, "/name"),
+            text(app, "/projectUid"),
+        );
         let doc = client_for(&mut clients, &home, &c.project_uid, &mut connect)
             .and_then(|p| p.app_deployment_document(&c.uid));
         match doc {
             Ok(d) => {
-                c.name = first_nonempty(&[str_at(&d, "/metadata/name"), &c.name]);
-                c.project_uid = first_nonempty(&[
-                    str_at(&d, "/metadata/annotations/projectUid"),
-                    &c.project_uid,
-                ]);
-                c.state = first_nonempty(&[str_at(&d, "/status/state"), &c.state]);
+                c.fill_from_document(&d);
                 c.version = text(&d, "/spec/profile/metadata/version");
             }
             Err(e) => c.error = Some(e.to_json()),
@@ -572,35 +592,22 @@ where
         |c| &mut c.project_name,
         &home,
     );
-
-    let overwritten = list
-        .iter()
-        .filter(|c| !c.version.is_empty() && c.version != version)
-        .count();
-    Ok(ConsumersReport {
-        schema: CONSUMERS_SCHEMA.to_string(),
-        tool: Tool::current(),
-        generated_at: generated_at.to_string(),
-        profile: ConsumedProfile {
-            uid: text(&doc, "/metadata/uid"),
-            name: text(&doc, "/metadata/name"),
-            version,
-            kind: ProfileType::App.as_str().to_string(),
-        },
-        count: list.len(),
-        overwritten,
-        consumers: list,
-        clusters_read: ClustersRead {
+    Ok(report(
+        &doc,
+        Some(ProfileType::App),
+        list,
+        ClustersRead {
             skipped: true,
             reason: APP_NO_SECOND_READING.to_string(),
             ..ClustersRead::default()
         },
-        edge_hosts_read: EdgeHostsRead {
+        EdgeHostsRead {
             skipped: true,
             reason: APP_NO_EDGE_HOSTS.to_string(),
             ..EdgeHostsRead::default()
         },
-    })
+        generated_at,
+    ))
 }
 
 /// Add each edge host that the profile `uid` is bound to. The search is read through `wide`, and
@@ -623,21 +630,18 @@ fn edge_hosts_bound<A: PaletteApi>(
         }
     };
     for host in &hosts {
-        let bound = arr(host, "/spec/clusterProfileTemplates")
-            .iter()
-            .find(|t| str_at(t, "/uid") == uid);
-        if let Some(bound) = bound {
-            list.push(Consumer {
-                kind: ConsumerKind::EdgeHost,
-                uid: text(host, "/metadata/uid"),
-                name: text(host, "/metadata/name"),
-                project_uid: text(host, "/metadata/annotations/projectUid"),
-                project_name: String::new(),
-                state: first_nonempty(&[str_at(host, "/status/state"), UNKNOWN_STATE]),
-                version: text(bound, "/version"),
-                error: None,
-                unlisted: false,
-            });
+        if let Some(bound) = AppliedProfile::template_of(host, uid) {
+            let mut c = Consumer::unread(
+                ConsumerKind::EdgeHost,
+                text(host, "/metadata/uid"),
+                String::new(),
+                String::new(),
+            );
+            c.fill_from_document(host);
+            // the search gives a summary of each template. The summary names the profile
+            // version `version`, where the document of a cluster names it `profileVersion`
+            c.version = text(bound, "/version");
+            list.push(c);
         }
     }
     EdgeHostsRead {
@@ -694,7 +698,7 @@ fn second_reading<A, F>(
     project: &str,
     wide: &Palette<A>,
     home: &Palette<A>,
-    clients: &mut HashMap<String, Palette<A>>,
+    clients: &mut HashMap<Option<String>, Palette<A>>,
     connect: &mut F,
     progress: &Progress,
 ) -> ClustersRead
@@ -766,24 +770,20 @@ where
             }
         };
         clusters_read.read += 1;
-        let copy = arr(&doc, "/spec/clusterProfileTemplates")
-            .iter()
-            .find(|t| str_at(t, "/uid") == uid);
-        if let Some(copy) = copy {
-            list.push(Consumer {
-                kind: ConsumerKind::Cluster,
-                uid: listed.uid.clone(),
-                name: first_nonempty(&[str_at(&doc, "/metadata/name"), &listed.name]),
-                project_uid: first_nonempty(&[
-                    str_at(&doc, "/metadata/annotations/projectUid"),
-                    &listed.project_uid,
-                ]),
-                project_name: String::new(),
-                state: first_nonempty(&[str_at(&doc, "/status/state"), &listed.state]),
-                version: text(copy, "/profileVersion"),
-                error: None,
+        if let Some(copy) = AppliedProfile::applied(&doc, uid) {
+            let mut c = Consumer {
+                state: listed.state,
                 unlisted: true,
-            });
+                ..Consumer::unread(
+                    ConsumerKind::Cluster,
+                    listed.uid,
+                    listed.name,
+                    listed.project_uid,
+                )
+            };
+            c.fill_from_document(&doc);
+            c.version = copy.version;
+            list.push(c);
         }
     }
     clusters_read
@@ -839,10 +839,7 @@ fn group_members<A: PaletteApi>(
                 continue;
             }
         };
-        let pins = arr(&doc, "/spec/clusterProfileTemplates")
-            .iter()
-            .any(|t| str_at(t, "/uid") == uid);
-        if !pins {
+        if AppliedProfile::template_of(&doc, uid).is_none() {
             continue;
         }
         read.groups += 1;

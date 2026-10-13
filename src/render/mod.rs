@@ -1018,7 +1018,7 @@ fn repave_reason_text(x: &PaletteRepaveReason) -> String {
 fn palette_validation_lines(d: &Diff) -> Vec<String> {
     d.palette_validation
         .as_ref()
-        .map(|v| crate::validation::answer_lines(&v.errors))
+        .map(|v| crate::validation::answer_lines(&v.answer.errors))
         .unwrap_or_default()
 }
 

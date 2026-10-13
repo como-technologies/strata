@@ -741,16 +741,30 @@ pub struct ParamChange {
     pub new: Option<Value>,
 }
 
+/// Each key of either side, in key order, one time, with its value on side A and on side B. A
+/// side that does not hold the key has `None` there. At least one side holds it. A side that
+/// gives a key twice keeps its last value, as a map does.
+fn zip_by_key<K: Ord, V>(
+    a: impl IntoIterator<Item = (K, V)>,
+    b: impl IntoIterator<Item = (K, V)>,
+) -> impl ExactSizeIterator<Item = (K, Option<V>, Option<V>)> {
+    let mut sides: BTreeMap<K, (Option<V>, Option<V>)> = BTreeMap::new();
+    for (k, v) in a {
+        sides.entry(k).or_default().0 = Some(v);
+    }
+    for (k, v) in b {
+        sides.entry(k).or_default().1 = Some(v);
+    }
+    sides.into_iter().map(|(k, (x, y))| (k, x, y))
+}
+
 /// The params that differ between two packs, by name.
 fn param_changes(a: &Value, b: &Value) -> Vec<ParamChange> {
     let empty = serde_json::Map::new();
     let x = a.as_object().unwrap_or(&empty);
     let y = b.as_object().unwrap_or(&empty);
-    let names: std::collections::BTreeSet<&String> = x.keys().chain(y.keys()).collect();
-    names
-        .into_iter()
-        .filter_map(|name| {
-            let (old, new) = (x.get(name), y.get(name));
+    zip_by_key(x, y)
+        .filter_map(|(name, old, new)| {
             let op = match (old, new) {
                 (Some(o), Some(n)) if canonical_json(o) == canonical_json(n) => return None,
                 (Some(_), Some(_)) => Op::Changed,
@@ -950,11 +964,9 @@ pub fn macros_changed(a: &Snapshot, b: &Snapshot) -> Vec<String> {
     let none = BTreeMap::new();
     let x = a.source.macro_values().unwrap_or(&none);
     let y = b.source.macro_values().unwrap_or(&none);
-    let names: std::collections::BTreeSet<&String> = x.keys().chain(y.keys()).collect();
-    names
-        .into_iter()
-        .filter(|n| x.get(*n) != y.get(*n))
-        .cloned()
+    zip_by_key(x, y)
+        .filter(|(_, p, q)| p != q)
+        .map(|(n, _, _)| n.clone())
         .collect()
 }
 
@@ -1102,6 +1114,46 @@ pub struct Verify {
     /// not change `status`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub registry_sync_error: Option<String>,
+}
+
+impl Verify {
+    /// The verdict of the record `recorded` against `live`, with no drift named yet. The status
+    /// is `unchanged` or `drifted`, as `unchanged` says. The verdict holds the two times, and
+    /// each pack that Palette marks invalid now. Each other field is empty: `verify` sets what
+    /// it found.
+    pub(crate) fn new(
+        unchanged: bool,
+        uid: &str,
+        recorded: &Snapshot,
+        live: &Snapshot,
+        checked_at: &str,
+    ) -> Verify {
+        Verify {
+            status: if unchanged {
+                VerifyStatus::Unchanged
+            } else {
+                VerifyStatus::Drifted
+            },
+            uid: uid.to_string(),
+            recorded_at: recorded.source.fetched_at.clone(),
+            checked_at: checked_at.to_string(),
+            overwritten_by: None,
+            renamed_to: None,
+            gone: false,
+            deleted_at: None,
+            state: None,
+            profiles_overwritten: Vec::new(),
+            cluster_values_changed: 0,
+            who: None,
+            last_modified: None,
+            upstream_unknown: Vec::new(),
+            macros_changed: Vec::new(),
+            image_ids_changed: Vec::new(),
+            invalid_packs: invalid_packs(live),
+            registry_sync: None,
+            registry_sync_error: None,
+        }
+    }
 }
 
 /// The status that Palette gives to a sync of a registry that completed.
@@ -1383,36 +1435,33 @@ pub fn leaf_diff(a: &Value, b: &Value) -> Vec<Leaf> {
         la.remove("");
         lb.remove("");
     }
-    let mut keys: Vec<&String> = la.keys().chain(lb.keys()).collect();
-    keys.sort();
-    keys.dedup();
     let mut out = Vec::new();
-    for k in keys {
-        match (la.get(k), lb.get(k)) {
-            (Some((segs, x)), Some((_, y))) => {
+    for (path, x, y) in zip_by_key(la, lb) {
+        match (x, y) {
+            (Some((segments, x)), Some((_, y))) => {
                 if x != y {
                     out.push(Leaf {
                         op: Op::Changed,
-                        path: k.clone(),
-                        segments: segs.clone(),
-                        old: Some(x.clone()),
-                        new: Some(y.clone()),
+                        path,
+                        segments,
+                        old: Some(x),
+                        new: Some(y),
                     });
                 }
             }
-            (Some((segs, x)), None) => out.push(Leaf {
+            (Some((segments, x)), None) => out.push(Leaf {
                 op: Op::Removed,
-                path: k.clone(),
-                segments: segs.clone(),
-                old: Some(x.clone()),
+                path,
+                segments,
+                old: Some(x),
                 new: None,
             }),
-            (None, Some((segs, y))) => out.push(Leaf {
+            (None, Some((segments, y))) => out.push(Leaf {
                 op: Op::Added,
-                path: k.clone(),
-                segments: segs.clone(),
+                path,
+                segments,
                 old: None,
-                new: Some(y.clone()),
+                new: Some(y),
             }),
             (None, None) => {}
         }
@@ -1480,22 +1529,14 @@ fn values_diff(x: &Pack, y: &Pack) -> ValuesDiff {
 }
 
 fn manifests_diff(x: &Pack, y: &Pack) -> Vec<ManifestChange> {
-    let mx: BTreeMap<&str, &str> = x
-        .manifests
-        .iter()
-        .map(|m| (m.name.as_str(), m.content_hash.as_str()))
-        .collect();
-    let my: BTreeMap<&str, &str> = y
-        .manifests
-        .iter()
-        .map(|m| (m.name.as_str(), m.content_hash.as_str()))
-        .collect();
-    let mut names: Vec<&str> = mx.keys().chain(my.keys()).copied().collect();
-    names.sort();
-    names.dedup();
+    fn hashes(p: &Pack) -> impl Iterator<Item = (&str, &str)> {
+        p.manifests
+            .iter()
+            .map(|m| (m.name.as_str(), m.content_hash.as_str()))
+    }
     let mut out = Vec::new();
-    for n in names {
-        match (mx.get(n), my.get(n)) {
+    for (n, a, b) in zip_by_key(hashes(x), hashes(y)) {
+        match (a, b) {
             (Some(a), Some(b)) => {
                 if a != b {
                     out.push(ManifestChange {
@@ -1524,37 +1565,29 @@ fn manifests_diff(x: &Pack, y: &Pack) -> Vec<ManifestChange> {
     out
 }
 
+/// Each variable of a normalized list, with its name. Two variables of one name are one, the
+/// last.
+fn named(vars: &[Value]) -> impl Iterator<Item = (String, &Value)> {
+    vars.iter().map(|v| (text(v, "/name"), v))
+}
+
+/// The variables of a normalized list as one document, by name: see [`named`].
 fn by_name(vars: &[Value]) -> Value {
-    let mut m = serde_json::Map::new();
-    for v in vars {
-        m.insert(text(v, "/name"), v.clone());
-    }
-    Value::Object(m)
+    Value::Object(named(vars).map(|(n, v)| (n, v.clone())).collect())
 }
 
 /// Group two normalized variable lists by name: added, removed, and changed with the fields that
 /// differ. Names are sorted.
 pub fn group_variables(a: &[Value], b: &[Value]) -> VariablesByName {
-    let (ma, mb) = (by_name(a), by_name(b));
-    let (ma, mb) = (
-        ma.as_object().cloned().unwrap_or_default(),
-        mb.as_object().cloned().unwrap_or_default(),
-    );
-    let mut names: Vec<&String> = ma.keys().chain(mb.keys()).collect();
-    names.sort();
-    names.dedup();
     let mut g = VariablesByName::default();
-    for n in names {
-        match (ma.get(n), mb.get(n)) {
+    for (name, x, y) in zip_by_key(named(a), named(b)) {
+        match (x, y) {
             (None, Some(y)) => g.added.push(VariableSummary::from_value(y)),
             (Some(x), None) => g.removed.push(VariableSummary::from_value(x)),
             (Some(x), Some(y)) => {
                 let fields = leaf_diff(x, y);
                 if !fields.is_empty() {
-                    g.changed.push(VariableChange {
-                        name: n.clone(),
-                        fields,
-                    });
+                    g.changed.push(VariableChange { name, fields });
                 }
             }
             (None, None) => {}
@@ -1565,19 +1598,12 @@ pub fn group_variables(a: &[Value], b: &[Value]) -> VariablesByName {
 
 /// The values two clusters give their variables, matched by profile name and variable name.
 fn cluster_values_diff(a: &[ClusterVariable], b: &[ClusterVariable]) -> ClusterVariablesDiff {
-    let keyed = |vs: &[ClusterVariable]| -> BTreeMap<(String, String), ClusterVariable> {
+    fn keyed(vs: &[ClusterVariable]) -> impl Iterator<Item = ((&str, &str), &ClusterVariable)> {
         vs.iter()
-            .map(|v| ((v.profile.clone(), v.name.clone()), v.clone()))
-            .collect()
-    };
-    let (ka, kb) = (keyed(a), keyed(b));
-    let mut keys: Vec<&(String, String)> = ka.keys().chain(kb.keys()).collect();
-    keys.sort();
-    keys.dedup();
-    let values: Vec<ClusterValueChange> = keys
-        .into_iter()
-        .filter_map(|k| {
-            let (x, y) = (ka.get(k), kb.get(k));
+            .map(|v| ((v.profile.as_str(), v.name.as_str()), v))
+    }
+    let values: Vec<ClusterValueChange> = zip_by_key(keyed(a), keyed(b))
+        .filter_map(|((profile, name), x, y)| {
             let op = match (x, y) {
                 (Some(x), Some(y)) if x.value == y.value && x.sensitive == y.sensitive => {
                     return None;
@@ -1588,8 +1614,8 @@ fn cluster_values_diff(a: &[ClusterVariable], b: &[ClusterVariable]) -> ClusterV
             };
             Some(ClusterValueChange {
                 op,
-                profile: k.0.clone(),
-                name: k.1.clone(),
+                profile: profile.to_string(),
+                name: name.to_string(),
                 old: x.and_then(|v| v.value.clone()),
                 new: y.and_then(|v| v.value.clone()),
                 sensitive: x.is_some_and(|v| v.sensitive) || y.is_some_and(|v| v.sensitive),
@@ -1602,79 +1628,73 @@ fn cluster_values_diff(a: &[ClusterVariable], b: &[ClusterVariable]) -> ClusterV
     }
 }
 
+/// The diff of a pack that one side holds: `added`, with the pack on side B, or removed, with the
+/// pack on side A. No hash moved, and the values and the manifests have no change to show.
+fn presence_pack_diff(key: &str, pack: &Pack, added: bool) -> PackDiff {
+    let (a, b) = if added {
+        (None, Some(side(pack)))
+    } else {
+        (Some(side(pack)), None)
+    };
+    PackDiff {
+        key: key.to_string(),
+        layer: pack.layer.clone(),
+        name: pack.name.clone(),
+        status: if added {
+            Status::Added
+        } else {
+            Status::Removed
+        },
+        a,
+        b,
+        identity: false,
+        upstream: false,
+        authored: false,
+        params_changed: false,
+        minted_uid_only: false,
+        tag_renamed: false,
+        impact: presence_impact(&pack.layer, added),
+        values: ValuesDiff::default(),
+        manifests: Vec::new(),
+        upstream_unknown: pack.upstream_unknown(),
+        masked: pack.masked.clone(),
+        images: false,
+        charts: false,
+        image_changes: Vec::new(),
+        chart_changes: Vec::new(),
+        param_changes: Vec::new(),
+    }
+}
+
 /// Compare two snapshots. `verify` is attached when this is the second half of a verification.
 pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Verify>) -> Diff {
     let pa: BTreeMap<&str, &Pack> = a.packs.iter().map(|p| (p.key.as_str(), p)).collect();
     let pb: BTreeMap<&str, &Pack> = b.packs.iter().map(|p| (p.key.as_str(), p)).collect();
-    let mut keys: Vec<&str> = pa.keys().chain(pb.keys()).copied().collect();
-    keys.sort();
-    keys.dedup();
+    let order_a: Vec<&str> = a
+        .packs
+        .iter()
+        .map(|p| p.key.as_str())
+        .filter(|k| pb.contains_key(k))
+        .collect();
+    let order_b: Vec<&str> = b
+        .packs
+        .iter()
+        .map(|p| p.key.as_str())
+        .filter(|k| pa.contains_key(k))
+        .collect();
 
     let mut summary = Summary::default();
-    let mut packs = Vec::with_capacity(keys.len());
-    for k in keys {
-        let pd = match (pa.get(k), pb.get(k)) {
+    let sides = zip_by_key(pa, pb);
+    let mut packs = Vec::with_capacity(sides.len());
+    for (k, x, y) in sides {
+        let pd = match (x, y) {
             (None, Some(y)) => {
                 summary.packs_added += 1;
-                let imp = presence_impact(&y.layer, true);
-                if imp.level > summary.max_impact {
-                    summary.max_impact = imp.level;
-                }
-                PackDiff {
-                    key: k.to_string(),
-                    layer: y.layer.clone(),
-                    name: y.name.clone(),
-                    status: Status::Added,
-                    a: None,
-                    b: Some(side(y)),
-                    identity: false,
-                    upstream: false,
-                    authored: false,
-                    params_changed: false,
-                    minted_uid_only: false,
-                    tag_renamed: false,
-                    impact: imp,
-                    values: ValuesDiff::default(),
-                    manifests: Vec::new(),
-                    upstream_unknown: y.upstream_unknown(),
-                    masked: y.masked.clone(),
-                    images: false,
-                    charts: false,
-                    image_changes: Vec::new(),
-                    chart_changes: Vec::new(),
-                    param_changes: Vec::new(),
-                }
+                presence_pack_diff(k, y, true)
             }
             (Some(x), None) => {
                 summary.packs_removed += 1;
-                let imp = presence_impact(&x.layer, false);
-                if imp.level > summary.max_impact {
-                    summary.max_impact = imp.level;
-                }
-                PackDiff {
-                    key: k.to_string(),
-                    layer: x.layer.clone(),
-                    name: x.name.clone(),
-                    status: Status::Removed,
-                    a: Some(side(x)),
-                    b: None,
-                    identity: false,
-                    upstream: false,
-                    authored: false,
-                    params_changed: false,
-                    minted_uid_only: false,
-                    tag_renamed: false,
-                    impact: imp,
-                    values: ValuesDiff::default(),
-                    manifests: Vec::new(),
-                    upstream_unknown: x.upstream_unknown(),
-                    masked: x.masked.clone(),
-                    images: false,
-                    charts: false,
-                    image_changes: Vec::new(),
-                    chart_changes: Vec::new(),
-                    param_changes: Vec::new(),
-                }
+                presence_pack_diff(k, x, false)
             }
             (Some(x), Some(y)) => {
                 let identity = x.hash.identity != y.hash.identity;
@@ -1721,9 +1741,6 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                 if tag_renamed && imp.level == ImpactLevel::None {
                     imp.text = "none (tag renamed, same pack build)".to_string();
                 }
-                if imp.level > summary.max_impact {
-                    summary.max_impact = imp.level;
-                }
                 let image_changes = artifact_changes(
                     &image_pairs(&x.images, &x.version),
                     &image_pairs(&y.images, &y.version),
@@ -1757,27 +1774,17 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
                     param_changes: param_changes(&x.params, &y.params),
                 }
             }
-            (None, None) => unreachable!("key came from one of the maps"),
+            (None, None) => unreachable!("a key comes from one of the sides"),
         };
+        if pd.impact.level > summary.max_impact {
+            summary.max_impact = pd.impact.level;
+        }
         summary.packs_invalid += usize::from(pd.invalid_sides().is_some());
         packs.push(pd);
     }
     packs.sort_by(|p, q| {
         (Layer::parse(&p.layer).rank(), &p.name).cmp(&(Layer::parse(&q.layer).rank(), &q.name))
     });
-
-    let order_a: Vec<&str> = a
-        .packs
-        .iter()
-        .map(|p| p.key.as_str())
-        .filter(|k| pb.contains_key(k))
-        .collect();
-    let order_b: Vec<&str> = b
-        .packs
-        .iter()
-        .map(|p| p.key.as_str())
-        .filter(|k| pa.contains_key(k))
-        .collect();
 
     let variables_changed = a.variables_hash != b.variables_hash;
     summary.variables_changed = variables_changed;
@@ -1863,6 +1870,28 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zip_by_key_gives_each_key_one_time_in_order_with_the_value_of_each_side() {
+        let a = [("b", 1), ("a", 2), ("b", 3)];
+        let b = [("c", 4), ("a", 5)];
+        let zipped: Vec<_> = zip_by_key(a, b).collect();
+        assert_eq!(
+            zipped,
+            [
+                ("a", Some(2), Some(5)),
+                ("b", Some(3), None),
+                ("c", None, Some(4))
+            ],
+            "the keys are in order, and a key twice on one side keeps its last value"
+        );
+        assert_eq!(zip_by_key(a, b).len(), 3);
+        assert!(
+            zip_by_key(Vec::<(&str, u8)>::new(), Vec::new())
+                .next()
+                .is_none()
+        );
+    }
 
     #[test]
     fn paths_of_text_gives_each_leaf_that_is_the_text_in_the_form_of_leaf_diff() {

@@ -191,10 +191,8 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
     let profiles: Vec<Value> = running
         .iter()
         .map(|r| {
-            let current = templates
-                .iter()
-                .find(|t| t["uid"] == r.uid.as_str())
-                .map_or(&[][..], |t| arr(t, "/packs"));
+            let current =
+                AppliedProfile::template_of(doc, &r.uid).map_or(&[][..], |t| arr(t, "/packs"));
             let covered = source.profiles.iter().any(|p| p.uid == r.uid);
             match pending_packs(current, &pending.packs, &new_packs) {
                 Some(packs) if covered => json!({"uid": r.uid, "packValues": packs}),

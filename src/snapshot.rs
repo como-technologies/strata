@@ -718,6 +718,20 @@ impl AppliedProfile {
             kind: text(t, "/type"),
         }
     }
+
+    /// The template of the profile `uid` in `spec.clusterProfileTemplates` of a document: a
+    /// cluster, a cluster group, or an edge host. `None` when the document does not apply it.
+    pub(crate) fn template_of<'a>(doc: &'a Value, uid: &str) -> Option<&'a Value> {
+        arr(doc, "/spec/clusterProfileTemplates")
+            .iter()
+            .find(|t| str_at(t, "/uid") == uid)
+    }
+
+    /// The profile `uid` as the document of a cluster or a cluster group applies it, with the
+    /// version that its template names: see [`AppliedProfile::template_of`].
+    pub(crate) fn applied(doc: &Value, uid: &str) -> Option<AppliedProfile> {
+        Self::template_of(doc, uid).map(Self::from_template)
+    }
 }
 
 /// Clusters using a profile version.
@@ -1667,6 +1681,33 @@ fn document_name(id: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_document_applies_the_profile_of_a_uid_with_the_version_that_its_template_names() {
+        let doc = json!({"spec": {"clusterProfileTemplates": [
+            {"uid": "p1", "name": "lab", "profileVersion": "1.2.0", "type": "cluster",
+             "version": 3},
+            {"uid": "p2", "name": "addons", "profileVersion": "2.0.0", "type": "add-on",
+             "version": 1},
+        ]}});
+        let applied = AppliedProfile::applied(&doc, "p2").expect("the document applies p2");
+        assert_eq!(
+            (
+                applied.uid.as_str(),
+                applied.name.as_str(),
+                applied.version.as_str(),
+                applied.kind.as_str()
+            ),
+            ("p2", "addons", "2.0.0", "add-on"),
+            "the version is the profile version, not the version of the template"
+        );
+        assert_eq!(
+            AppliedProfile::template_of(&doc, "p1").map(|t| t["version"].clone()),
+            Some(json!(3))
+        );
+        assert!(AppliedProfile::applied(&doc, "p3").is_none());
+        assert!(AppliedProfile::applied(&json!({}), "p1").is_none());
+    }
 
     #[test]
     fn a_tier_leaves_a_field_that_strata_could_not_read_out_of_its_fields_and_its_hash() {
