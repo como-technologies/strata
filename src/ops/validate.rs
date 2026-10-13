@@ -196,9 +196,9 @@ pub fn palette_validation<A: PaletteApi>(
 /// when Palette accepts it.
 pub fn require_acceptance(snap: &Snapshot) -> Result<()> {
     match &snap.source.palette_validation {
-        Some(v) if !v.accepts => Err(Error::PaletteRefuses {
+        Some(v) if !v.accepts() => Err(Error::PaletteRefuses {
             reference: snap.source.reference.clone(),
-            errors: v.errors.clone(),
+            errors: v.errors().to_vec(),
         }),
         _ => Ok(()),
     }

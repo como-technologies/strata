@@ -7,6 +7,7 @@ use serde_json::Value;
 
 use super::{AuditKind, PaletteApi, RawCluster, RawProfile, ReadErrors, mask};
 use crate::cloud::{CLOUD_ALL, CLOUD_NESTED};
+use crate::conjunction::Conjunction;
 use crate::error::{Error, Result, found, unread_reason};
 use crate::json::{arr, items, opt_text, str_at, take_items, text};
 use crate::pack_type::PackType;
@@ -199,19 +200,19 @@ pub(crate) fn search_condition(property: &str, values: &[String], negation: bool
     serde_json::json!({
         "property": property, "type": "string",
         "condition": {"string": {"operator": "eq", "negation": negation, "ignoreCase": false,
-            "match": {"conjunction": "or", "values": values}}},
+            "match": {"conjunction": Conjunction::Or, "values": values}}},
     })
 }
 
 /// A group of the filter of the cluster search: `filters`, its conditions, joined by
-/// `conjunction`, `and` or `or`.
-pub(crate) fn search_group(conjunction: &str, filters: Vec<Value>) -> Value {
+/// `conjunction`.
+pub(crate) fn search_group(conjunction: Conjunction, filters: Vec<Value>) -> Value {
     serde_json::json!({"conjunction": conjunction, "filters": filters})
 }
 
 /// The filter of the cluster search: `groups`, each a [`search_group`], joined with `and`.
 pub(crate) fn search_filter(groups: Vec<Value>) -> Value {
-    serde_json::json!({"conjunction": "and", "filterGroups": groups})
+    serde_json::json!({"conjunction": Conjunction::And, "filterGroups": groups})
 }
 
 /// `filter` with one more group, the condition that asks the search for the virtual clusters:
@@ -220,7 +221,7 @@ pub(crate) fn search_filter(groups: Vec<Value>) -> Value {
 fn with_nested(filter: &Value) -> Value {
     let mut groups = arr(filter, "/filterGroups").to_vec();
     groups.push(search_group(
-        "and",
+        Conjunction::And,
         vec![search_condition(
             SEARCH_ENVIRONMENT,
             &[CLOUD_NESTED.to_string()],

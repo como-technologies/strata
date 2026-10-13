@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, SEARCH_TAGS, search_condition, search_filter, search_group};
+use crate::conjunction::Conjunction;
 use crate::error::{Error, Result};
 use crate::progress::Progress;
 use crate::reference::{Ref, one_named};
@@ -109,8 +110,8 @@ pub struct SavedFilter {
     pub name: String,
     /// Its uid.
     pub uid: String,
-    /// `and` or `or`: how the conditions join.
-    pub conjunction: String,
+    /// How the conditions join: see [`Conjunction`].
+    pub conjunction: Conjunction,
     /// Its conditions.
     pub conditions: Vec<TagCondition>,
 }
@@ -214,7 +215,9 @@ fn filter_of(doc: &Value, name: &str, uid: &str) -> SavedFilter {
     SavedFilter {
         name: first_nonempty(&[str_at(doc, "/metadata/name"), name]),
         uid: uid.to_string(),
-        conjunction: first_nonempty(&[str_at(doc, "/spec/filterGroup/conjunction"), "and"]),
+        // a filter that names no conjunction joins with `and`, as Palette does
+        conjunction: Conjunction::parse(str_at(doc, "/spec/filterGroup/conjunction"))
+            .unwrap_or_default(),
         conditions,
     }
 }
@@ -243,29 +246,31 @@ fn find_filter<A: PaletteApi>(tenant: &Palette<A>, wanted: &str) -> Result<Saved
 
 /// The groups of the query: the labels of `--tag`, which must all hold, and the conditions of
 /// the saved filter, joined as the filter joins them.
-fn groups(query: &ClusterQuery, filter: Option<&SavedFilter>) -> Vec<(String, Vec<TagCondition>)> {
+fn groups(
+    query: &ClusterQuery,
+    filter: Option<&SavedFilter>,
+) -> Vec<(Conjunction, Vec<TagCondition>)> {
     let mut out = Vec::new();
     if !query.tags.is_empty() {
         out.push((
-            "and".to_string(),
+            Conjunction::And,
             query.tags.iter().map(|t| TagCondition::parse(t)).collect(),
         ));
     }
     if let Some(f) = filter {
-        out.push((f.conjunction.clone(), f.conditions.clone()));
+        out.push((f.conjunction, f.conditions.clone()));
     }
     out
 }
 
 /// True when the labels meet each group.
-fn meets(groups: &[(String, Vec<TagCondition>)], labels: &BTreeMap<String, String>) -> bool {
-    groups.iter().all(|(conjunction, conditions)| {
-        if conjunction == "or" {
-            conditions.iter().any(|c| c.matches(labels))
-        } else {
-            conditions.iter().all(|c| c.matches(labels))
-        }
-    })
+fn meets(groups: &[(Conjunction, Vec<TagCondition>)], labels: &BTreeMap<String, String>) -> bool {
+    groups
+        .iter()
+        .all(|(conjunction, conditions)| match conjunction {
+            Conjunction::Or => conditions.iter().any(|c| c.matches(labels)),
+            Conjunction::And => conditions.iter().all(|c| c.matches(labels)),
+        })
 }
 
 /// The clusters that `query` selects. Strata reads the search schema of the tenant: when the
@@ -292,7 +297,7 @@ pub fn select<A: PaletteApi>(
                 .iter()
                 .map(|(conjunction, conditions)| {
                     search_group(
-                        conjunction,
+                        *conjunction,
                         conditions.iter().map(TagCondition::search_item).collect(),
                     )
                 })

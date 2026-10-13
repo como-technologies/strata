@@ -10,8 +10,8 @@ use serde_json::Value;
 
 use crate::color::Paint;
 use crate::diff::{
-    ClusterValueChange, Diff, ImageIdChange, InvalidPack, InvalidSides, Leaf, Op, PackDiff, Status,
-    ValuesDiff, VariableSummary, VariablesByName, Verify, VerifyStatus,
+    ClusterValueChange, Diff, ImageIdChange, InvalidPack, InvalidSides, Leaf, Op, PackDiff, Side,
+    Status, ValuesDiff, VariableSummary, VariablesByName, Verify, VerifyStatus,
 };
 use crate::error::Result;
 use crate::impact::ImpactLevel;
@@ -1018,7 +1018,7 @@ fn repave_reason_text(x: &PaletteRepaveReason) -> String {
 fn palette_validation_lines(d: &Diff) -> Vec<String> {
     d.palette_validation
         .as_ref()
-        .map(|v| crate::validation::answer_lines(&v.answer.errors))
+        .map(|v| crate::validation::answer_lines(v.answer.errors()))
         .unwrap_or_default()
 }
 
@@ -1169,7 +1169,10 @@ fn running_behind_notes(d: &Diff) -> Vec<String> {
     d.running_behind
         .iter()
         .map(|r| {
-            let side = if r.side == "a" { &d.a } else { &d.b };
+            let side = match r.side {
+                Side::A => &d.a,
+                Side::B => &d.b,
+            };
             let name = side.cluster.as_ref().map_or("", |c| c.name.as_str());
             format!(
                 "cluster {name} runs {} {}, and its profile declares {}",

@@ -11,6 +11,7 @@ use crate::api::{
     Palette, PaletteApi, SEARCH_CLUSTER_PROFILES, search_condition, search_filter, search_group,
 };
 use crate::cluster_template::ClusterTemplateRef;
+use crate::conjunction::Conjunction;
 use crate::error::{Error, Result, found};
 use crate::profile_type::ProfileType;
 use crate::progress::Progress;
@@ -672,7 +673,7 @@ fn searched_consumers<A: PaletteApi>(
         return Ok(None);
     }
     let body = search_filter(vec![search_group(
-        "and",
+        Conjunction::And,
         vec![search_condition(
             SEARCH_CLUSTER_PROFILES,
             &[name.to_string()],

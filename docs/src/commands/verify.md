@@ -35,6 +35,9 @@ verifies: `published version <name>@<version> holds the draft recorded
 <time>`. See
 [Review a draft before its publish](../use-cases/draft.md#4-after-the-publish-the-version-holds-the-draft).
 
+A version that nobody published has only its draft. Its record is a record of
+the draft, with no `@draft` in the ref, and `verify` gives it the same verdicts.
+
 ## Who changed it
 
 `DRIFT` says that the object changed. It does not say who changed it.

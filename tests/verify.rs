@@ -11,7 +11,7 @@ use strata::api::codes::{
 };
 use strata::api::{MemoryApi, Palette, RawProfile};
 use strata::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
-use strata::diff::VerifyStatus;
+use strata::diff::{Side, VerifyStatus};
 use strata::error::{Error, FailureClass};
 use strata::ops;
 use strata::progress::Progress;
@@ -9638,10 +9638,10 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     let mut d = ops::compare(&cluster, &target, "t1");
     let same = d.same;
     let v = ops::palette_validation(&palette, &cluster, &target).unwrap();
-    assert!(!v.answer.accepts);
+    assert!(!v.answer.accepts());
     assert_eq!(v.cluster_uid, CLUSTER_UID);
-    assert_eq!(v.answer.errors.len(), 1, "{v:?}");
-    assert_eq!(v.answer.errors[0].pack, "strata-live-pack");
+    assert_eq!(v.answer.errors().len(), 1, "{v:?}");
+    assert_eq!(v.answer.errors()[0].pack, "strata-live-pack");
     // one POST, with the body of --repave, in either order of the sides
     let posted = api.posted();
     assert_eq!(posted.len(), 1);
@@ -9689,7 +9689,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     let mut d = ops::compare(&cluster, &target, "t1");
     d.palette_validation =
         Some(ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap());
-    assert!(d.palette_validation.as_ref().unwrap().answer.accepts);
+    assert!(d.palette_validation.as_ref().unwrap().answer.accepts());
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render(&d, &cluster, &target, false)
         .unwrap();
@@ -9705,15 +9705,15 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     );
     let (retry, slept) = retrying(&api, 3);
     let v = ops::palette_validation(&Palette::new(retry), &cluster, &target).unwrap();
-    assert!(!v.answer.accepts);
-    assert_eq!(v.answer.errors.len(), 1);
-    assert_eq!(v.answer.errors[0].pack, "");
+    assert!(!v.answer.accepts());
+    assert_eq!(v.answer.errors().len(), 1);
+    assert_eq!(v.answer.errors()[0].pack, "");
     assert_eq!(
-        v.answer.errors[0].code,
+        v.answer.errors()[0].code,
         "PackSpectroIntegrationNotSupported"
     );
     assert_eq!(
-        v.answer.errors[0].message,
+        v.answer.errors()[0].message,
         "Pack 'spectro-k8s-dashboard' is not supported for imported cluster"
     );
     assert_eq!(api.calls(&path), 1, "one attempt and no retry");
@@ -9740,8 +9740,8 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
         let v = ops::palette_validation(&Palette::new(retry), &cluster, &target).unwrap();
         assert_eq!(
             (
-                v.answer.errors[0].code.as_str(),
-                v.answer.errors[0].message.as_str()
+                v.answer.errors()[0].code.as_str(),
+                v.answer.errors()[0].message.as_str()
             ),
             (code, message)
         );
@@ -10335,8 +10335,8 @@ fn compare_names_the_tier_and_the_field_that_differ_and_a_pack_behind_its_profil
     assert_eq!(d.running_behind.len(), 1);
     let behind = &d.running_behind[0];
     assert_eq!(
-        (behind.side.as_str(), behind.pack.as_str()),
-        ("b", first.as_str())
+        (behind.side, behind.pack.as_str()),
+        (Side::B, first.as_str())
     );
     assert_eq!(
         (behind.declared.as_str(), behind.running.as_str()),
@@ -13933,7 +13933,7 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     )
     .unwrap();
     let v = snap.source.palette_validation.clone().unwrap();
-    assert!(!v.accepts);
+    assert!(!v.accepts());
     assert_eq!(v.errors.len(), 1, "{v:?}");
     assert_eq!(
         v.errors[0].line(),
@@ -14063,7 +14063,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
         assert_eq!(error.class(), FailureClass::Terminal, "{code}");
         let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, 500, body);
         let v = ops::profile_validation(&Palette::new(&api), &candidate).unwrap();
-        assert!(!v.accepts, "{code}");
+        assert!(!v.accepts(), "{code}");
         assert_eq!(v.errors.len(), 1);
         assert_eq!(v.errors[0].pack, "");
         assert_eq!(v.errors[0].line(), format!("{code}: refused"));
@@ -14102,7 +14102,7 @@ fn snapshot_validate_of_a_version_asks_the_route_of_an_update_of_that_version() 
     let route = update_validate_packs_route(&b.source.uid);
     let api = MemoryApi::new().with(post(&route), serde_json::json!({}));
     let v = ops::profile_validation(&Palette::new(&api), &b).unwrap();
-    assert!(v.accepts);
+    assert!(v.accepts());
     let posted = api.posted();
     assert_eq!(posted.len(), 1);
     assert_eq!(posted[0].0, route);
@@ -14143,7 +14143,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
         }
         .class()
     };
-    assert!(refusal(accepting()).unwrap().accepts);
+    assert!(refusal(accepting()).unwrap().accepts());
 
     // the name route: a version that Palette does not parse, an empty name, and a version that
     // the project holds. The retry does not send them again
@@ -14155,7 +14155,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
         assert_eq!(class_of(status, code), FailureClass::Terminal, "{code}");
         let v =
             refusal(accepting().failing(name_route(&candidate), status, body_of(code))).unwrap();
-        assert!(!v.accepts, "{code}");
+        assert!(!v.accepts(), "{code}");
         assert_eq!(v.errors.len(), 1, "{code}");
         assert_eq!(v.errors[0].line(), format!("{code}: refused"));
     }
@@ -14169,7 +14169,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     for (status, code) in refusals {
         assert_eq!(class_of(status, code), FailureClass::Terminal, "{code}");
         let v = refusal(accepting().failing(&import, status, body_of(code))).unwrap();
-        assert!(!v.accepts, "{code}");
+        assert!(!v.accepts(), "{code}");
         assert_eq!(v.errors[0].line(), format!("{code}: refused"));
     }
     // the API schema refuses a list with two equal items, with a number as the code
@@ -14215,7 +14215,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     assert!(
         ops::profile_validation(&Palette::new(&api), &b)
             .unwrap()
-            .accepts
+            .accepts()
     );
     assert_eq!(api.posted().len(), 1);
     assert_eq!(api.calls(&name_route(&b)), 0);

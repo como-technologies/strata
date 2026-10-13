@@ -219,12 +219,22 @@ pub struct TierDiff {
     pub diff: Vec<Leaf>,
 }
 
+/// A side of a comparison: `a` or `b`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Side {
+    /// Side A: the base of a comparison, and the record of a verify.
+    A,
+    /// Side B: the candidate of a comparison, and what Palette holds now in a verify.
+    B,
+}
+
 /// A pack that a cluster runs at another version than its profile declares.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RunningBehind {
-    /// `a` or `b`: the side whose cluster it is.
-    pub side: String,
+    /// The side whose cluster it is.
+    pub side: Side,
     /// The pack name.
     pub pack: String,
     /// The version that the profile declares.
@@ -295,7 +305,7 @@ fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
 }
 
 /// The packs of a cluster record whose reconciled version differs from the declared one.
-fn running_behind(side: &str, s: &Snapshot) -> Vec<RunningBehind> {
+fn running_behind(side: Side, s: &Snapshot) -> Vec<RunningBehind> {
     let Some(tier) = s
         .source
         .cluster
@@ -312,7 +322,7 @@ fn running_behind(side: &str, s: &Snapshot) -> Vec<RunningBehind> {
             let version = str_at(r, "/version");
             (!version.is_empty() && !p.version.is_empty() && version != p.version).then(|| {
                 RunningBehind {
-                    side: side.to_string(),
+                    side,
                     pack: p.name.clone(),
                     declared: p.version.clone(),
                     running: version.to_string(),
@@ -1857,8 +1867,8 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
         },
         cluster_tiers: tiers_diff(a, b),
         running_behind: {
-            let mut v = running_behind("a", a);
-            v.extend(running_behind("b", b));
+            let mut v = running_behind(Side::A, a);
+            v.extend(running_behind(Side::B, b));
             v
         },
         order_changed,

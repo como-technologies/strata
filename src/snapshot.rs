@@ -117,9 +117,30 @@ pub struct Tool {
     pub name: String,
     /// Crate version.
     pub version: String,
-    /// "rust" or "bash"; absent in snapshots from the first bash release
+    /// The implementation that wrote the document: see [`Implementation`]. Absent in a snapshot
+    /// of the first bash release.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "impl")]
-    pub implementation: Option<String>,
+    pub implementation: Option<Implementation>,
+}
+
+/// The implementation of strata that wrote a document, as `tool.impl` names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum Implementation {
+    /// This implementation.
+    Rust,
+    /// The bash reference implementation, which wrote the first records.
+    Bash,
+}
+
+impl Implementation {
+    /// The implementation as the documents name it: `rust` or `bash`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Rust => "rust",
+            Self::Bash => "bash",
+        }
+    }
 }
 
 impl Tool {
@@ -128,7 +149,7 @@ impl Tool {
         Tool {
             name: crate::TOOL_NAME.to_string(),
             version: crate::TOOL_VERSION.to_string(),
-            implementation: Some(crate::TOOL_IMPL.to_string()),
+            implementation: Some(Implementation::Rust),
         }
     }
 }
@@ -209,11 +230,11 @@ pub struct PackSource {
 }
 
 impl Source {
-    /// True for a record of `<ref>@draft`: the draft of a version, which its publish makes the
-    /// published template. A record of a version that was never published reads its draft too,
-    /// with no `@draft` in its ref, and is not one.
+    /// True for a record of a draft: the draft template of a version, which its publish makes
+    /// the published template. The record is of `<ref>@draft`, or of a version that nobody
+    /// published, which has only its draft.
     pub fn is_draft(&self) -> bool {
-        self.template == Template::Draft && self.reference.ends_with(crate::reference::DRAFT_SUFFIX)
+        self.template == Template::Draft
     }
 
     /// True for a record of an app profile: its tiers are its packs.
@@ -1763,6 +1784,10 @@ mod tests {
                 Tier::Shape,
             ],
             Tier::as_str,
+        );
+        names_its_values(
+            &[Implementation::Rust, Implementation::Bash],
+            Implementation::as_str,
         );
         // the map of the tiers keeps the order of the names, as a map keyed by text did
         let tiers: BTreeMap<Tier, u8> = [

@@ -7,7 +7,7 @@
 
 use serde_json::{Map, Value};
 
-use super::{Candidate, CandidateLayer, CandidateManifest, default_type};
+use super::{Candidate, CandidateLayer, CandidateManifest, LayerKind, default_type};
 use crate::json::arr;
 use crate::pack_type::PackType;
 
@@ -87,7 +87,7 @@ fn layer(p: &Value, at: &str) -> Result<CandidateLayer, String> {
         name: text(p, "/name", at)?,
         version: text(p, "/version", at)?,
         layer: nonempty(text(p, "/layer", at)?),
-        kind: manifest.then(|| PackType::Manifest.as_str().to_string()),
+        kind: manifest.then_some(LayerKind::Manifest),
         tag: nonempty(text(p, "/tag", at)?),
         registry,
         registry_uid,

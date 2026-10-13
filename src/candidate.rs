@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::api::{Palette, PaletteApi, RawProfile};
@@ -87,7 +87,7 @@ impl Candidate {
                     layer: nonempty(&p.layer),
                     // a pack from a registry takes its type from the registry; a manifest pack has
                     // no registry, so the file says what it is
-                    kind: p.is_manifest().then(|| p.kind.clone()),
+                    kind: p.is_manifest().then_some(LayerKind::Manifest),
                     tag: nonempty(&p.tag),
                     registry: None,
                     registry_uid: nonempty(&p.registry_uid),
@@ -204,7 +204,7 @@ pub struct CandidateLayer {
     /// `manifest` for a layer of manifests from no registry: it names no registry, and it needs
     /// one manifest or more. Leave it out for a pack from a registry: the registry gives the type.
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
-    pub kind: Option<String>,
+    pub kind: Option<LayerKind>,
     /// The tag to pin: one of the registry's tags for the version, or the version itself. Defaults
     /// to the tag equal to the version, else the first tag of that version. A `manifest` layer
     /// takes any tag, and defaults to the version.
@@ -228,6 +228,32 @@ pub struct CandidateLayer {
     /// Manifests attached to the pack.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub manifests: Vec<CandidateManifest>,
+}
+
+/// The type that a layer of a candidate gives: `manifest`. A pack from a registry gives none:
+/// the registry gives its type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum LayerKind {
+    /// A layer of manifests from no registry. Palette makes its pack from its own manifest pack.
+    Manifest,
+}
+
+impl<'de> Deserialize<'de> for LayerKind {
+    /// Read `manifest`. Another text is an error that says what a layer can give: the registry
+    /// gives the type of each other pack.
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        if text == PackType::Manifest.as_str() {
+            Ok(LayerKind::Manifest)
+        } else {
+            Err(serde::de::Error::custom(format!(
+                "{text} is not a type that a layer gives; a layer can give only the type {}, \
+                 and the registry gives the type of each other pack",
+                PackType::Manifest.as_str()
+            )))
+        }
+    }
 }
 
 /// A manifest attached to a layer: `content` inline or `contentFile`, not both.
@@ -403,7 +429,7 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
     let mut layers = Vec::with_capacity(candidate.layers.len());
     for (i, l) in candidate.layers.iter().enumerate() {
         let whom = format!("layer {} ({})", i + 1, l.name);
-        let registry = match l.kind.as_deref() {
+        let registry = match l.kind {
             None => Some(
                 pick_registry(&l.registry_uid, &l.registry, invalid, &whom)?
                     .or_else(|| top.clone())
@@ -416,7 +442,7 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
             ),
             // Palette makes the pack of a manifest layer from its own manifest pack: no registry
             // holds it, and the top-level registry does not apply to it
-            Some(kind) if PackType::parse(kind) == Some(PackType::Manifest) => {
+            Some(LayerKind::Manifest) => {
                 if l.registry.is_some() || l.registry_uid.is_some() {
                     return Err(invalid(format!(
                         "{whom} is a manifest layer and names a registry; remove registry and \
@@ -438,12 +464,6 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
                     )));
                 }
                 None
-            }
-            Some(other) => {
-                return Err(invalid(format!(
-                    "{whom} has type {other}; a layer can give only the type manifest, and the \
-                     registry gives the type of each other pack"
-                )));
             }
         };
         let values = match (&l.values, &l.values_file) {
@@ -1408,11 +1428,16 @@ variables:
             message.contains("layer 1 (namespace-policy)") && message.contains("no manifest"),
             "{message}"
         );
-        let mut helm = manifest_candidate();
-        helm.layers[0].kind = Some("helm".into());
-        let message = refusal(helm);
+        // a type that is not manifest stops at the read of the file
+        let yaml = to_yaml(&manifest_candidate())
+            .unwrap()
+            .replace("type: manifest", "type: helm");
+        let message = serde_yaml::from_str::<Candidate>(&yaml)
+            .unwrap_err()
+            .to_string();
         assert!(
-            message.contains("layer 1 (namespace-policy) has type helm"),
+            message.contains("helm is not a type that a layer gives")
+                && message.contains("only the type manifest"),
             "{message}"
         );
     }

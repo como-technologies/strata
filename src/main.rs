@@ -733,7 +733,7 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
     // the answer of Palette is what --validate asks for, so -q does not hide it; it goes to
     // standard error, beside the record on standard output
     if let Some(v) = &snap.source.palette_validation {
-        for line in strata::validation::answer_lines(&v.errors) {
+        for line in strata::validation::answer_lines(v.errors()) {
             eprintln!("palette    {line}");
         }
     }

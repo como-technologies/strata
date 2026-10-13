@@ -128,6 +128,8 @@ fn a_draft_records_apart_from_its_version_and_compare_names_the_layer_that_the_p
 
     assert_eq!(version.source.template, Template::Published);
     assert_eq!(draft.source.template, Template::Draft);
+    assert!(!version.source.is_draft());
+    assert!(draft.source.is_draft());
     assert_eq!(draft.source.reference, format!("{UID}@draft"));
     assert_eq!(draft.source.uid, UID);
     assert_ne!(version.root, draft.root, "the draft is another content");
@@ -204,6 +206,16 @@ fn a_version_that_was_never_published_records_the_manifest_content_of_its_draft(
     assert_eq!(manifest_content(&snap, "rules"), Some(DRAFT_RULES));
     let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
     assert_eq!(draft.root, snap.root, "the draft is the only template");
+
+    // the record is of a draft, with or without @draft in its ref: the template says so
+    assert!(snap.source.is_draft());
+    assert!(draft.source.is_draft());
+    let v = ops::verify(&snap, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(&v.diff)
+        .unwrap();
+    assert!(verdict.contains("holds the draft recorded t0"), "{verdict}");
 }
 
 #[test]

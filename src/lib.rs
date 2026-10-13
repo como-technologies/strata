@@ -74,6 +74,7 @@ pub mod cloud;
 pub mod cluster_template;
 pub mod color;
 pub mod config;
+pub mod conjunction;
 pub mod diff;
 pub mod error;
 pub mod impact;
@@ -102,5 +103,3 @@ pub use error::{Error, Result};
 pub const TOOL_NAME: &str = "strata";
 /// The crate version, recorded in every document.
 pub const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
-/// Which implementation wrote a document.
-pub const TOOL_IMPL: &str = "rust";
