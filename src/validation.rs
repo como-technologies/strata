@@ -23,16 +23,16 @@ pub struct PaletteValidation {
     pub answer: ProfileValidation,
 }
 
-/// Palette's answer to a validate route: `POST /v1/clusterprofiles/validate/packs` for a
-/// candidate, `POST /v1/clusterprofiles/{uid}/validate/packs` for a version that Palette holds,
-/// and the answer of a [`PaletteValidation`] for a cluster.
+/// Palette's answer to a validate route. `POST /v1/clusterprofiles/validate/packs` answers for
+/// a candidate, and `POST /v1/clusterprofiles/{uid}/validate/packs` for a version that Palette
+/// holds. A [`PaletteValidation`] holds the answer for a cluster.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileValidation {
     /// True when Palette gives no error.
     pub accepts: bool,
-    /// Each error that Palette gives, sorted by pack, code, and message: Palette sorts the
-    /// profiles in no fixed order.
+    /// Each error that Palette gives, sorted by pack, code, and message. Palette gives them in
+    /// no fixed order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<PaletteRefusal>,
 }

@@ -177,8 +177,8 @@ impl ScalarText for Value {
     }
 }
 
-/// True when Palette masks this value of a pack, and strata this value of a cluster group: a
-/// scalar with text, and no variable in it.
+/// True when the mask covers this value: a scalar with text, and no variable in it. Palette
+/// masks such a value of a pack, and strata such a value of a cluster group.
 fn holds_secret(v: &impl ScalarText) -> bool {
     v.scalar_text()
         .is_some_and(|text| !text.is_empty() && !holds_variable(&text))
@@ -440,6 +440,31 @@ mod tests {
         let doc: Yaml = serde_yaml::from_str(&got).unwrap();
         assert_eq!(doc["key"], Yaml::String(MASKED.into()));
         assert_eq!(doc["other"], Yaml::String("x".into()));
+    }
+
+    #[test]
+    fn the_mask_covers_the_same_scalars_of_a_yaml_and_of_a_json_document() {
+        let yaml: Yaml = serde_yaml::from_str(
+            "s: text\nn: 1234\nb: true\ne: ''\nv: '{{ .spectro.var.x }}'\nm:\n  k: v\nl: [a]\nz: null\n",
+        )
+        .unwrap();
+        let json = json!({
+            "s": "text", "n": 1234, "b": true, "e": "", "v": "{{ .spectro.var.x }}",
+            "m": {"k": "v"}, "l": ["a"], "z": null
+        });
+        for (key, secret) in [
+            ("s", true),
+            ("n", true),
+            ("b", true),
+            ("e", false),
+            ("v", false),
+            ("m", false),
+            ("l", false),
+            ("z", false),
+        ] {
+            assert_eq!(holds_secret(&yaml[key]), secret, "yaml {key}");
+            assert_eq!(holds_secret(&json[key]), secret, "json {key}");
+        }
     }
 
     #[test]

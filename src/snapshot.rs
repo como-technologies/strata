@@ -1683,6 +1683,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_document_applies_the_profile_of_a_uid_with_the_version_that_its_template_names() {
+        let doc = json!({"spec": {"clusterProfileTemplates": [
+            {"uid": "p1", "name": "lab", "profileVersion": "1.2.0", "type": "cluster",
+             "version": 3},
+            {"uid": "p2", "name": "addons", "profileVersion": "2.0.0", "type": "add-on",
+             "version": 1},
+        ]}});
+        let applied = AppliedProfile::applied(&doc, "p2").expect("the document applies p2");
+        assert_eq!(
+            (
+                applied.uid.as_str(),
+                applied.name.as_str(),
+                applied.version.as_str(),
+                applied.kind.as_str()
+            ),
+            ("p2", "addons", "2.0.0", "add-on"),
+            "the version is the profile version, not the version of the template"
+        );
+        assert_eq!(
+            AppliedProfile::template_of(&doc, "p1").map(|t| t["version"].clone()),
+            Some(json!(3))
+        );
+        assert!(AppliedProfile::applied(&doc, "p3").is_none());
+        assert!(AppliedProfile::applied(&json!({}), "p1").is_none());
+    }
+
+    #[test]
     fn a_tier_leaves_a_field_that_strata_could_not_read_out_of_its_fields_and_its_hash() {
         let errors = BTreeMap::from([("rbacs".to_string(), "HTTP 403: forbidden".to_string())]);
         let unread = ClusterTier::with_errors(

@@ -742,7 +742,7 @@ pub struct ParamChange {
 }
 
 /// Each key of either side, in key order, one time, with its value on side A and on side B. A
-/// side that does not hold the key has `None` there; at least one side holds it. A side that
+/// side that does not hold the key has `None` there. At least one side holds it. A side that
 /// gives a key twice keeps its last value, as a map does.
 fn zip_by_key<K: Ord, V>(
     a: impl IntoIterator<Item = (K, V)>,
@@ -1117,9 +1117,10 @@ pub struct Verify {
 }
 
 impl Verify {
-    /// The verdict of the record `recorded` against `live`, with no drift named yet: `unchanged`
-    /// or `drifted` as `unchanged` says, the two times, and each pack that Palette marks invalid
-    /// now. Each other field is empty: `verify` sets what it found.
+    /// The verdict of the record `recorded` against `live`, with no drift named yet. The status
+    /// is `unchanged` or `drifted`, as `unchanged` says. The verdict holds the two times, and
+    /// each pack that Palette marks invalid now. Each other field is empty: `verify` sets what
+    /// it found.
     pub(crate) fn new(
         unchanged: bool,
         uid: &str,
@@ -1869,6 +1870,28 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zip_by_key_gives_each_key_one_time_in_order_with_the_value_of_each_side() {
+        let a = [("b", 1), ("a", 2), ("b", 3)];
+        let b = [("c", 4), ("a", 5)];
+        let zipped: Vec<_> = zip_by_key(a, b).collect();
+        assert_eq!(
+            zipped,
+            [
+                ("a", Some(2), Some(5)),
+                ("b", Some(3), None),
+                ("c", None, Some(4))
+            ],
+            "the keys are in order, and a key twice on one side keeps its last value"
+        );
+        assert_eq!(zip_by_key(a, b).len(), 3);
+        assert!(
+            zip_by_key(Vec::<(&str, u8)>::new(), Vec::new())
+                .next()
+                .is_none()
+        );
+    }
 
     #[test]
     fn paths_of_text_gives_each_leaf_that_is_the_text_in_the_form_of_leaf_diff() {

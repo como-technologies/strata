@@ -554,9 +554,9 @@ where
 }
 
 /// The client of the scope `scope`: the one that `clients` holds for it, or a new one from
-/// `connect`, which `clients` then holds. `None` is the scope of the command, and the empty
-/// scope is the tenant: see [`scope_of`]. `verify` reads each record in its own scope with it.
-/// An operation that has a home client reads a cluster through [`client_for`].
+/// `connect`, which `clients` then holds. `None` is the scope of the command, and `Some` with
+/// the empty text is the tenant. `verify` reads each record in its own scope with it. An
+/// operation that has a home client reads a cluster through [`client_for`].
 fn connected<'a, A, F>(
     clients: &'a mut HashMap<Option<String>, Palette<A>>,
     scope: Option<&str>,

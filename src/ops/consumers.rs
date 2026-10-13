@@ -494,9 +494,9 @@ where
     ))
 }
 
-/// The document of the consumers `consumers` of the profile `doc`: the profile, of the type
-/// `kind` for an app profile, the count, how many copies name another version than the
-/// profile, and the two readings.
+/// The document of `consumers` for the profile `doc`, with the consumers `consumers`. `kind` is
+/// the type of an app profile. The document holds the count, how many copies name another
+/// version than the profile, and the two readings.
 fn report(
     doc: &Value,
     kind: Option<ProfileType>,
@@ -638,8 +638,8 @@ fn edge_hosts_bound<A: PaletteApi>(
                 String::new(),
             );
             c.fill_from_document(host);
-            // the search gives a summary of each template, and the summary names the profile
-            // version `version`; the document of a cluster names it `profileVersion`
+            // the search gives a summary of each template. The summary names the profile
+            // version `version`, where the document of a cluster names it `profileVersion`
             c.version = text(bound, "/version");
             list.push(c);
         }
