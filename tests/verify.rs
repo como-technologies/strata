@@ -14865,8 +14865,8 @@ fn a_tier_of_a_later_release_compares_by_its_fields_and_verify_names_it_and_does
     let dir = tempfile::tempdir().unwrap();
     let (api, snap) = cluster_record_with_tiers(dir.path());
     let mut doc = serde_json::to_value(&snap).unwrap();
-    doc["source"]["cluster"]["tiers"]["zones"] =
-        serde_json::json!({"hash": "h-zones", "fields": {"zone": "us-east-2a"}});
+    doc["source"]["cluster"]["tiers"]["network"] =
+        serde_json::json!({"hash": "h-network", "fields": {"zone": "us-east-2a"}});
     let path = write_record(dir.path(), "later-tier.json", &doc);
 
     let read = Snapshot::load(&path).unwrap();
@@ -14874,22 +14874,22 @@ fn a_tier_of_a_later_release_compares_by_its_fields_and_verify_names_it_and_does
     // the map keeps the order of the names, with the tier of the later release among them
     assert_eq!(
         c.tiers.keys().map(|t| t.as_str()).collect::<Vec<_>>(),
-        ["applied", "policy", "running", "zones"]
+        ["applied", "network", "policy", "running"]
     );
     assert_eq!(serde_json::to_value(&read).unwrap(), doc);
 
     // between two records that carry it, the tier compares by its fields
     let mut moved = doc.clone();
-    moved["source"]["cluster"]["tiers"]["zones"]["fields"]["zone"] = Value::from("us-east-2b");
+    moved["source"]["cluster"]["tiers"]["network"]["fields"]["zone"] = Value::from("us-east-2b");
     let moved = Snapshot::load(&write_record(dir.path(), "moved.json", &moved)).unwrap();
     let d = ops::compare(&read, &moved, "t1");
-    let zones = d
+    let network = d
         .cluster_tiers
         .iter()
-        .find(|t| t.tier.as_str() == "zones")
+        .find(|t| t.tier.as_str() == "network")
         .unwrap();
-    assert!(!zones.same);
-    assert_eq!(zones.diff[0].path, "zone");
+    assert!(!network.same);
+    assert_eq!(network.diff[0].path, "zone");
 
     // Palette gives no such tier, so verify does not compare it, and the report says so
     let v = ops::verify(&read, &Palette::new(api), "t1", &Progress::silent()).unwrap();
@@ -14898,14 +14898,14 @@ fn a_tier_of_a_later_release_compares_by_its_fields_and_verify_names_it_and_does
         v.diff
             .cluster_tiers
             .iter()
-            .all(|t| t.tier.as_str() != "zones")
+            .all(|t| t.tier.as_str() != "network")
     );
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render(&v.diff, &read, &v.live, false)
         .unwrap();
     assert!(
         text.contains(&format!(
-            "a later release of strata wrote the tier zones of cluster {}, so strata does not \
+            "a later release of strata wrote the tier network of cluster {}, so strata does not \
              compare it",
             c.name
         )),
