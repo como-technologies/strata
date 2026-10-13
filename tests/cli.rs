@@ -6,16 +6,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use common::{
-    PROFILE_LISTING, PROJECT_LISTING, read_json, snapshot_from_raw, strata_bin, text, write_record,
+    PROFILE_LISTING, PROJECT_LISTING, Run, against_closed_port, read_json, snapshot_from_raw,
+    strata_bin, write_record,
 };
 
 const ESC: char = '\x1b';
-
-struct Run {
-    code: i32,
-    out: String,
-    err: String,
-}
 
 fn run_in(args: &[&str], envs: &[(&str, &str)], clear: &[&str]) -> Run {
     let mut c = Command::new(strata_bin());
@@ -26,12 +21,7 @@ fn run_in(args: &[&str], envs: &[(&str, &str)], clear: &[&str]) -> Run {
     for (k, v) in envs {
         c.env(k, v);
     }
-    let o = c.output().expect("binary runs");
-    Run {
-        code: o.status.code().unwrap_or(-1),
-        out: text(&o.stdout),
-        err: text(&o.stderr),
-    }
+    Run::of(&mut c)
 }
 
 fn run(args: &[&str]) -> Run {
@@ -225,7 +215,7 @@ fn changed_profiles_report_every_kind_of_change() {
         t,
         "^~ [cni  ] cni-cilium-oss             1.15.3             UPSTREAM"
     ));
-    assert!(t.contains("upstream digest  sha256:cni-a -> sha256:cni-b   (packRef.digest)"));
+    assert!(t.contains("upstream digest: sha256:cni-a -> sha256:cni-b (packRef.digest)"));
     assert!(t.contains("pack content changed under the same tag"));
     assert!(has_line(
         t,
@@ -1074,32 +1064,6 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
     let r = run(&["compare", not_snapshot.to_str().unwrap(), &fx.b]);
     assert!(r.err.starts_with("strata: "), "{}", r.err);
     assert!(!r.err.contains("\"kind\""));
-}
-
-/// Run against an address that refuses connections, with no retries and a clean environment, so
-/// the path in a transport error is the first request strata made.
-///
-/// A `HOME` in `envs` replaces the empty home. With `quiet` false, the warnings that a person
-/// sees are on.
-fn against_closed_port(args: &[&str], envs: &[(&str, &str)], quiet: bool) -> Run {
-    let home = tempfile::tempdir().unwrap();
-    let mut all = vec![
-        ("HOME", home.path().to_str().unwrap()),
-        ("PALETTE_API_KEY", "k"),
-        ("PALETTE_API", "http://127.0.0.1:9"),
-        ("STRATA_RETRIES", "0"),
-    ];
-    all.extend_from_slice(envs);
-    let mut clear = vec![
-        "PALETTE_PROJECT_UID",
-        "PALETTE_PROJECT",
-        "SPECTROCLOUD_APIKEY",
-        "SPECTROCLOUD_HOST",
-    ];
-    if !quiet {
-        clear.push("STRATA_QUIET");
-    }
-    run_in(args, &all, &clear)
 }
 
 /// [`against_closed_port`] with `STRATA_QUIET` set, as [`run`] sets it.

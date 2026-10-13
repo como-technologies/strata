@@ -18,9 +18,10 @@ use strata::snapshot::Snapshot;
 use strata::term::progress::Progress;
 
 use common::{
-    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, UID_B,
-    cluster_manifests_route, cluster_ref, cluster_route, cluster_variables_route, listing,
-    manifests_route, profile_route, strata_bin, text, variables_route,
+    CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, Run, UID_B,
+    against_closed_port, cluster_manifests_route, cluster_ref, cluster_route,
+    cluster_variables_route, isolate_palette, listing, manifests_route, profile_route, strata_bin,
+    variables_route,
 };
 
 /// xorshift64*: a deterministic source of cases, so a failure has a seed that reproduces it.
@@ -427,6 +428,28 @@ fn a_diff_of_two_junk_records_answers() {
     }
 }
 
+/// The commands that the fuzz run of the binary gives junk: each command that clap names, but
+/// `preflight`.
+///
+/// `preflight` runs another binary, `strata-preflight`, which has its own tests. Junk arguments
+/// must not start the checks of a cloud with the credentials of the machine.
+fn fuzz_commands() -> Vec<String> {
+    common::command_names()
+        .into_iter()
+        .filter(|name| name != "preflight")
+        .collect()
+}
+
+/// One case of the fuzz run of the binary: `args` against an address that refuses connections,
+/// with a home of its own and no setting of the machine that names a project or a tenant.
+///
+/// A request must fail as an error, not a panic. The backoff has its own tests, with the wait
+/// injected; here it would only make each case that reaches the network sleep.
+fn fuzz_case(args: &[String]) -> Run {
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    against_closed_port(&args, &[("NO_COLOR", "1")], true)
+}
+
 /// The binary itself, so the argument parsing, the file handling and the exit codes are fuzzed too.
 /// A Rust panic exits 101 and prints `panicked at`; neither may ever happen.
 #[test]
@@ -434,17 +457,7 @@ fn the_binary_never_panics_on_junk_arguments() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("junk.json");
     let mut rng = Rng::new(seed().wrapping_add(6));
-    let commands = [
-        "compare",
-        "snapshot",
-        "verify",
-        "same-release",
-        "consumers",
-        "list",
-        "packs",
-        "candidate",
-        "schema",
-    ];
+    let commands = fuzz_commands();
     let flags = [
         "--json",
         "--compact",
@@ -477,29 +490,72 @@ fn the_binary_never_panics_on_junk_arguments() {
                 _ => args.push(dir.path().display().to_string()),
             }
         }
-        let out = Command::new(strata_bin())
-            .args(&args)
-            // an address nothing listens on: a request must fail as an error, not a panic
-            .env("PALETTE_API", "http://127.0.0.1:1")
-            .env("PALETTE_API_KEY", "fuzz")
-            // the backoff has its own tests, with the wait injected; here it would only make
-            // every case that reaches the network sleep
-            .env("STRATA_RETRIES", "0")
-            .env("STRATA_QUIET", "1")
-            .env("NO_COLOR", "1")
-            .output()
-            .expect("the binary runs");
-        let err = text(&out.stderr);
+        let Run { code, err, .. } = fuzz_case(&args);
         assert!(
             !err.contains("panicked at"),
             "seed {} case {case}: {args:?} panicked:\n{err}",
             seed()
         );
-        let code = out.status.code().unwrap_or(-1);
         assert!(
             (0..=2).contains(&code),
             "seed {} case {case}: {args:?} exited {code}\n{err}",
             seed()
         );
     }
+}
+
+#[test]
+fn the_fuzz_run_gives_junk_to_each_command_that_clap_names() {
+    let names = common::command_names();
+    // the help lists the commands, so a list that the parse lost is not an empty fuzz list
+    assert!(names.iter().any(|name| name == "compare"), "{names:?}");
+    let commands = fuzz_commands();
+    for name in names.iter().filter(|name| *name != "preflight") {
+        assert!(commands.contains(name), "the fuzz run leaves out {name}");
+    }
+    assert!(!commands.iter().any(|name| name == "preflight"));
+}
+
+#[test]
+fn a_case_of_the_fuzz_run_reads_no_palette_env_of_the_home_of_the_machine() {
+    // the home of the person who runs the tests names a project in its .palette.env, and so does
+    // the environment
+    let machine = tempfile::tempdir().unwrap();
+    std::fs::write(machine.path().join(".palette.env"), "PALETTE_PROJECT=lab\n").unwrap();
+    let own = tempfile::tempdir().unwrap();
+    let mut command = Command::new(strata_bin());
+    command
+        .env("HOME", machine.path())
+        .env("PALETTE_PROJECT_UID", "p-machine");
+    // the case of the fuzz run starts from that environment
+    isolate_palette(&mut command, own.path())
+        .args(["list", "profiles", "--json"])
+        .env("STRATA_QUIET", "1");
+    let r = Run::of(&mut command);
+    let e: Value = serde_json::from_str(r.err.trim()).unwrap();
+    // a project of the machine makes the project listing the first request
+    assert_eq!(
+        (
+            r.code,
+            e["error"]["kind"].as_str(),
+            e["error"]["path"].as_str()
+        ),
+        (2, Some("transport"), Some(PROFILE_LISTING)),
+        "{}",
+        r.err
+    );
+
+    // the same run with the home of the machine reads the project there
+    let mut command = Command::new(strata_bin());
+    isolate_palette(&mut command, machine.path())
+        .args(["list", "profiles", "--json"])
+        .env("STRATA_QUIET", "1");
+    let r = Run::of(&mut command);
+    let e: Value = serde_json::from_str(r.err.trim()).unwrap();
+    assert_eq!(
+        e["error"]["path"].as_str(),
+        Some(PROJECT_LISTING),
+        "{}",
+        r.err
+    );
 }
