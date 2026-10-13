@@ -14,10 +14,10 @@ use crate::cluster_template::ClusterTemplateRef;
 use crate::conjunction::Conjunction;
 use crate::error::{Error, Result, found};
 use crate::profile_type::ProfileType;
-use crate::progress::Progress;
 use crate::reference::Ref;
 use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind, Tool};
+use crate::term::progress::Progress;
 
 use super::consumer_list::consumer_uids;
 use super::fleet::Resolved;

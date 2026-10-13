@@ -12,11 +12,11 @@ use crate::error::{Error, Result, found, unread_reason};
 use crate::json::{arr, items, opt_text, str_at, take_items, text};
 use crate::pack_type::PackType;
 use crate::profile_type::ProfileType;
-use crate::progress::Progress;
+use crate::reference::version;
 use crate::reference::{LATEST, one_named};
 use crate::scope::{ProfileScope, ScopedUid};
 use crate::snapshot::SubjectKind;
-use crate::version;
+use crate::term::progress::Progress;
 
 const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
 /// The profile search. It pages by `offset`.

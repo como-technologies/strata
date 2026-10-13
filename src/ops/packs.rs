@@ -8,10 +8,10 @@ use crate::api::{Palette, PaletteApi};
 use crate::cloud::supports;
 use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, strings, text};
-use crate::progress::Progress;
+use crate::reference::version;
 use crate::registry::Registries;
 use crate::snapshot::Tool;
-use crate::version;
+use crate::term::progress::Progress;
 
 /// The schema id of the document `packs` writes.
 pub const PACKS_SCHEMA: &str = "strata-packs/1";
@@ -521,7 +521,7 @@ mod tests {
         // the terminal names both: the newest first, and the mark on the version of Palette
         let text = crate::render::renderer(
             crate::render::Format::Terminal,
-            crate::color::Paint::off(),
+            crate::term::color::Paint::off(),
             false,
         )
         .render_packs(&listing)
@@ -558,7 +558,7 @@ mod tests {
         assert!(v[0].latest && v[0].palette_latest);
         let text = crate::render::renderer(
             crate::render::Format::Terminal,
-            crate::color::Paint::off(),
+            crate::term::color::Paint::off(),
             false,
         )
         .render_packs(&listing)
@@ -576,7 +576,7 @@ mod tests {
     /// `packs` of `listing` in the terminal and in markdown, with no color.
     fn rendered(listing: &PackListing) -> (String, String) {
         let render = |format| {
-            crate::render::renderer(format, crate::color::Paint::off(), false)
+            crate::render::renderer(format, crate::term::color::Paint::off(), false)
                 .render_packs(listing)
                 .unwrap()
         };

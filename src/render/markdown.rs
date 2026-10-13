@@ -12,13 +12,13 @@ use super::{
     verdict_parts, version_display, version_note, virtual_group, virtual_line, who_entry,
     who_heading,
 };
-use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status};
 use crate::error::Result;
 use crate::legend::document_name;
 use crate::ops::{Chain, ConsumerKind, ConsumersReport, Listing, PackListing, VerifySummary};
 use crate::profile_type::ProfileType;
 use crate::snapshot::Snapshot;
+use crate::term::color::Paint;
 
 /// Renders markdown for a pull request comment.
 pub struct MarkdownRenderer;

@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use strata::api::PaletteApi;
-use strata::progress::Progress;
+use strata::term::progress::Progress;
 
 use crate::confidence::{Confidence, Ledger};
 use crate::error::{Error, Result};

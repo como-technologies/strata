@@ -11,15 +11,15 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
 use crate::cloud::supports;
+use crate::diff::impact::ImpactLevel;
 use crate::diff::{ChangeFlag, Diff, RegistrySync};
 use crate::error::{Error, Result};
-use crate::impact::ImpactLevel;
 use crate::pack_type::PackType;
-use crate::progress::Progress;
 use crate::reference::Ref;
+use crate::reference::version;
 use crate::registry::{Registries, RegistrySyncNote};
 use crate::snapshot::{Snapshot, Tool, load_document};
-use crate::version;
+use crate::term::progress::Progress;
 
 use super::packs::{PackBuild, PackOptions, registry_packs};
 use super::scope_of;

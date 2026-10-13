@@ -10,7 +10,7 @@ use serde_json::{Map, Value, json};
 
 use crate::api::RawCluster;
 use crate::api::mask::mask_password_keys;
-use crate::canon::{canon_yaml_hashed, canonical_json, sha256_hex};
+use crate::content::canon::{canon_yaml_hashed, canonical_json, sha256_hex};
 use crate::json::{arr, items, str_at};
 
 /// The key of the policy fields that holds the role bindings.

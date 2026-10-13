@@ -12,9 +12,9 @@ use serde_json::Value;
 use crate::api::{Palette, PaletteApi, SEARCH_TAGS, search_condition, search_filter, search_group};
 use crate::conjunction::Conjunction;
 use crate::error::{Error, Result};
-use crate::progress::Progress;
 use crate::reference::{Ref, one_named};
 use crate::snapshot::{Snapshot, Tool};
+use crate::term::progress::Progress;
 
 use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
 use crate::json::{arr, first_nonempty, items, str_at, strings, text};

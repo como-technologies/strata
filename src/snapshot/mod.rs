@@ -13,15 +13,18 @@ use serde_json::{Map, Value, json};
 
 use crate::api::mask::MASKED;
 use crate::api::{RawCluster, RawProfile};
-use crate::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
+use crate::content::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
+use crate::content::layer::Layer;
 use crate::error::{Error, Result};
 use crate::json::{arr, first_nonempty, opt_text, str_at, strings, text};
-use crate::layer::Layer;
 use crate::pack_type::PackType;
 use crate::profile_type::ProfileType;
 pub use crate::repave::PendingRepave;
 use crate::repave::is_pending;
 pub use crate::validation::ProfileValidation;
+
+pub(crate) mod policy;
+pub(crate) mod shape;
 
 /// Schema id written into every snapshot.
 pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
@@ -514,8 +517,8 @@ pub fn cluster_tiers(raw: &RawCluster, covered: &[AppliedProfile]) -> BTreeMap<T
         tiers.insert(
             Tier::Policy,
             ClusterTier::with_errors(
-                crate::policy::fields(raw, config),
-                crate::policy::errors(raw),
+                crate::snapshot::policy::fields(raw, config),
+                crate::snapshot::policy::errors(raw),
             ),
         );
     }
@@ -523,13 +526,13 @@ pub fn cluster_tiers(raw: &RawCluster, covered: &[AppliedProfile]) -> BTreeMap<T
     if let Some(config) = cluster.pointer("/spec/clustersConfig") {
         tiers.insert(
             Tier::Policy,
-            ClusterTier::of(crate::policy::group_fields(config)),
+            ClusterTier::of(crate::snapshot::policy::group_fields(config)),
         );
     }
     if let Some(cc) = &raw.cloud_config {
         tiers.insert(
             Tier::Shape,
-            ClusterTier::of(crate::shape::fields(cluster, cc)),
+            ClusterTier::of(crate::snapshot::shape::fields(cluster, cc)),
         );
     }
     tiers

@@ -13,7 +13,7 @@
 //!   talks HTTP and [`api::MemoryApi`] serves canned responses for tests.
 //! - [`reference`](mod@reference): what a user-supplied ref means: a snapshot file,
 //!   `name@version`, a uid, or `cluster:<uid>`.
-//! - [`version`]: natural ordering of version strings, behind `name@latest`.
+//! - [`reference::version`]: natural ordering of version strings, behind `name@latest`.
 //! - [`candidate`]: a profile version described by a file, before it exists in Palette.
 //! - [`snapshot`]: the `strata-snapshot/1` document and how it is built from raw API responses.
 //! - [`diff`]: the `strata-diff/1` document, the leaf diff, and the impact rules.
@@ -21,9 +21,9 @@
 //! - [`repave`]: the reasons of Palette for a repave, and a repave that waits for approval.
 //! - [`render`]: the terminal, markdown, and JSON renderers behind one trait.
 //! - [`ops`]: the operations the CLI exposes, free of argument parsing and exit codes.
-//! - [`error`], [`progress`], [`color`], [`layer`], and [`scope`]: the error type with its exit
-//!   codes and machine-readable form, progress notes on stderr, the color policy, Palette's
-//!   layers, and the scope of a profile version.
+//! - [`error`], [`term::progress`], [`term::color`], [`content::layer`], and [`scope`]: the error
+//!   type with its exit codes and machine-readable form, progress notes on stderr, the color
+//!   policy, Palette's layers, and the scope of a profile version.
 //!
 //! # Example
 //!
@@ -34,7 +34,7 @@
 //! ```
 //! use serde_json::json;
 //! use strata::api::{MemoryApi, Palette};
-//! use strata::progress::Progress;
+//! use strata::term::progress::Progress;
 //! use strata::reference::Ref;
 //! use strata::ops;
 //!
@@ -69,33 +69,38 @@
 
 pub mod api;
 pub mod candidate;
-pub(crate) mod canon;
 pub mod cloud;
 pub mod cluster_template;
-pub mod color;
 pub mod config;
 pub mod conjunction;
+pub mod content;
 pub mod diff;
 pub mod error;
-pub mod impact;
 pub(crate) mod json;
-pub mod layer;
 pub(crate) mod legend;
 pub mod ops;
 pub(crate) mod pack_type;
-pub(crate) mod policy;
 pub mod profile_type;
-pub mod progress;
 pub mod reference;
 pub(crate) mod registry;
 pub mod render;
 pub mod repave;
 pub mod scope;
-pub(crate) mod shape;
 pub mod snapshot;
+pub mod term;
 pub(crate) mod text;
 pub mod validation;
-pub mod version;
+
+/// The old path of [`content::layer`]. It goes in release 0.23.
+pub use content::layer;
+/// The old path of [`diff::impact`](mod@diff::impact). It goes in release 0.23.
+pub use diff::impact;
+/// The old path of [`reference::version`]. It goes in release 0.23.
+pub use reference::version;
+/// The old path of [`term::color`]. It goes in release 0.23.
+pub use term::color;
+/// The old path of [`term::progress`]. It goes in release 0.23.
+pub use term::progress;
 
 pub use error::{Error, Result};
 

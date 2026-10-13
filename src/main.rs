@@ -8,14 +8,14 @@ use std::sync::OnceLock;
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand, ValueEnum};
 
 use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
-use strata::color::{ColorMode, Paint};
 use strata::config::Config;
 use strata::error::{Error, Result};
 use strata::ops::{ListKind, ListOptions, Policy};
-use strata::progress::Progress;
 use strata::reference::Ref;
 use strata::render::{self, Format};
 use strata::snapshot::Snapshot;
+use strata::term::color::{ColorMode, Paint};
+use strata::term::progress::Progress;
 use strata::{TOOL_NAME, candidate, diff, ops};
 
 /// The binary that `strata preflight` runs. It is a package of its own, `strata-preflight`, so the

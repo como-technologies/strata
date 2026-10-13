@@ -12,9 +12,9 @@ use crate::candidate::LoadedCandidate;
 use crate::diff::{self, Diff};
 use crate::error::{Error, Result};
 use crate::json::{first_nonempty, str_at, text};
-use crate::progress::Progress;
 use crate::reference::Ref;
 use crate::snapshot::{GroupMember, Snapshot, SubjectKind};
+use crate::term::progress::Progress;
 
 mod behind;
 mod consumer_list;

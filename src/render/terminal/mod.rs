@@ -12,7 +12,6 @@ use super::{
     version_note, virtual_line, virtual_note, who_entry, who_heading,
 };
 use crate::api::mask::MASKED;
-use crate::color::Paint;
 use crate::diff::{ChangeFlag, Diff, ImpactLevel, Leaf, Op, PackDiff, Status, VerifyStatus};
 use crate::error::Result;
 use crate::ops::{
@@ -20,6 +19,7 @@ use crate::ops::{
     RecordStatus, VerifySummary,
 };
 use crate::snapshot::Snapshot;
+use crate::term::color::Paint;
 
 /// The width of each column: its widest cell, leaving out the last cell of each row, which is
 /// never padded.
@@ -805,7 +805,7 @@ mod tests {
 
     #[test]
     fn the_part_of_a_pack_name_that_matched_is_marked() {
-        let on = Paint::resolve(crate::color::ColorMode::Always);
+        let on = Paint::resolve(crate::term::color::ColorMode::Always);
         assert_eq!(
             matched(&on, "cni-cilium-oss", Some("cilium")),
             format!("cni-{}-oss", on.byellow("cilium")),

@@ -1,8 +1,8 @@
 //! Unified diffs of raw values and changed manifests, for `--full`.
 
-use crate::color::Paint;
 use crate::diff::{Diff, Op, Status};
 use crate::snapshot::Snapshot;
+use crate::term::color::Paint;
 
 fn colorize(text: &str, p: &Paint) -> String {
     if !p.is_on() {

@@ -6,8 +6,8 @@ use serde_json::{Value, json};
 
 use strata::api::{MemoryApi, Palette};
 use strata::error::Error;
-use strata::progress::Progress;
 use strata::snapshot::Template;
+use strata::term::progress::Progress;
 
 use crate::common;
 use common::{

@@ -324,7 +324,7 @@ rules:
       text: Record the digest of each image at the sync, and give it to the nodes.
     evidence:
       - kind: source
-        ref: strata src/snapshot.rs Pack.images
+        ref: strata src/snapshot/mod.rs Pack.images
         note: the images a pack declares are a reference with a tag, and no digest
       - kind: report
         ref: palette-pack-digest-findings-2026-09-25 F3

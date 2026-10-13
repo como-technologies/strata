@@ -7,8 +7,8 @@ use std::path::Path;
 use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
 use strata::candidate::{ResolvedCandidate, load, resolve};
-use strata::progress::Progress;
 use strata::snapshot::{PresetOption, Snapshot};
+use strata::term::progress::Progress;
 
 use crate::common;
 use common::{candidate_snapshot, pack_listing_route};

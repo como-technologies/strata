@@ -15,16 +15,16 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::api::{Palette, PaletteApi, RawProfile};
-use crate::canon::{Canon, canon_yaml};
+use crate::content::canon::{Canon, canon_yaml};
+use crate::content::layer::Layer;
 use crate::error::{Error, Result};
 use crate::json::{arr, first_nonempty, opt_text, str_at, strings, text};
-use crate::layer::Layer;
 use crate::pack_type::PackType;
 use crate::profile_type::ProfileType;
-use crate::progress::Progress;
 use crate::reference::LATEST;
 use crate::registry::Registries;
 use crate::snapshot::{PackSource, PresetOption, Snapshot, Template};
+use crate::term::progress::Progress;
 
 mod export;
 mod gaps;
@@ -610,7 +610,7 @@ pub fn pack_snapshot<A: PaletteApi>(
         .filter(|e| str_at(e, "/spec/registryUid") == registry_uid)
         .map(|e| text(e, "/spec/version"))
         .collect();
-    let resolved = crate::version::pick(here.iter(), |v| v.as_str(), version).cloned();
+    let resolved = crate::reference::version::pick(here.iter(), |v| v.as_str(), version).cloned();
     let Some(resolved) = resolved else {
         let asked = visible.iter().filter(|(_, u)| *u == registry_uid);
         return Err(not_found(

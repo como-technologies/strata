@@ -26,7 +26,7 @@ use knurl_core::{ContentDigest, InstanceName, Level, UnitName, UnitRef, Verifica
 use knurl_ports::{PlatformRead, PlatformReadExt, PortError};
 use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
 use strata::config::Config;
-use strata::progress::Progress;
+use strata::term::progress::Progress;
 use strata_knurl::{StrataPlatform, definition_of};
 
 /// A client as the `strata` command makes one. `project` is the project of a cluster that

@@ -8,13 +8,12 @@ mod unified;
 use clap::ValueEnum;
 use serde_json::Value;
 
-use crate::color::Paint;
+use crate::diff::impact::ImpactLevel;
 use crate::diff::{
     ChangeFlag, ClusterValueChange, Diff, ImageIdChange, InvalidPack, InvalidSides, Leaf, Op,
     PackDiff, Side, Status, ValuesDiff, VariableSummary, VariablesByName, Verify, VerifyStatus,
 };
 use crate::error::Result;
-use crate::impact::ImpactLevel;
 use crate::ops::{
     ACTIVE_STATE, Chain, ClustersRead, ConsumersReport, IN_USE_STATE, Listing, PackListing, Pair,
     PairStatus, RUNNING_STATE, RecordStatus, Resolved, SetRecord, SetReport, VerifiedRecord,
@@ -22,6 +21,7 @@ use crate::ops::{
 };
 use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{PendingUpdate, Snapshot, Source, SubjectKind, Tier};
+use crate::term::color::Paint;
 use crate::text::and_list;
 
 pub use json::JsonRenderer;

@@ -7,12 +7,12 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
-use strata::color::Paint;
 use strata::error::Error;
 use strata::ops::{self, PairStatus, Policy};
-use strata::progress::Progress;
 use strata::render::{self, Format};
 use strata::snapshot::UpstreamSource;
+use strata::term::color::Paint;
+use strata::term::progress::Progress;
 
 use crate::common;
 use common::{

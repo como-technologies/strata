@@ -15,8 +15,8 @@ use strata::diff::{ChangeFlag, Side, VerifyStatus};
 use strata::error::{Error, FailureClass};
 use strata::ops;
 use strata::profile_type::ProfileType;
-use strata::progress::Progress;
 use strata::reference::Ref;
+use strata::term::progress::Progress;
 
 use common::{
     CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
@@ -2299,8 +2299,8 @@ fn a_raw_directory_keeps_the_bindings_and_the_namespaces_so_the_record_is_the_sa
 
 // ---- consumers -------------------------------------------------------------------------------
 
-use strata::color::Paint;
 use strata::render::{self, Format};
+use strata::term::color::Paint;
 
 /// Profile b's API, with `inUseClusters` naming one of its two consumers the way Palette does.
 fn serve_b_with_named_consumer(dir: &Path) -> MemoryApi {
@@ -12859,7 +12859,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
         "{:?}",
         bump.flags
     );
-    assert_eq!(bump.impact, strata::impact::ImpactLevel::ClusterWide);
+    assert_eq!(bump.impact, strata::diff::impact::ImpactLevel::ClusterWide);
     let current = &r.pins[1];
     assert_eq!(current.version, "1.65.0");
     assert!(!current.behind && current.bump.is_none());
