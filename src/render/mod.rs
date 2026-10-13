@@ -1,7 +1,7 @@
 //! Renderers for the diff document, one per output format, behind one trait.
 
 mod behind;
-mod changes;
+pub(super) mod changes;
 mod consumers;
 mod json;
 mod list;

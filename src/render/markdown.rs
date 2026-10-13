@@ -58,7 +58,7 @@ fn op_line(l: &OpLine) -> String {
     }
 }
 
-fn variable_line(v: &VarLine<'_>) -> String {
+pub(super) fn variable_line(v: &VarLine<'_>) -> String {
     match v {
         VarLine::Added(s) => format!("+ variable {}{}\n", s.name, traits_suffix(s)),
         VarLine::Removed(s) => format!("- variable {}{}\n", s.name, traits_suffix(s)),

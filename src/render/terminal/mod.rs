@@ -1,9 +1,6 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
-use super::changes::{
-    OpLine, VarLine, artifact_lines, artifacts_summary, traits_suffix, values_summary,
-    values_unparsed_sentence, variable_lines, version_display,
-};
+use super::changes::{OpLine, artifacts_summary, variable_lines};
 use super::consumers::{
     consumer_count, consumer_counts, consumers_heading, consumers_sentence, edge_hosts_line,
     second_reading_line,
@@ -13,8 +10,8 @@ use super::list::{
     profile_marks, project_label, registry_note, version_note, virtual_line, virtual_note,
 };
 use super::notes::{
-    DiffNote, diff_notes, invalid_mark, invalid_pack_sentences, pack_order_note, tag_rename,
-    tier_path, tier_states, variables_comparable,
+    DiffNote, diff_notes, invalid_pack_sentences, pack_order_note, tier_path, tier_states,
+    variables_comparable,
 };
 use super::same_release::{
     chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word,
@@ -23,8 +20,7 @@ use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
 };
 use super::{Renderer, count_of, dash, entry_error, short};
-use crate::api::mask::MASKED;
-use crate::diff::{ChangeFlag, Diff, ImpactLevel, Leaf, Op, PackDiff, Status, VerifyStatus};
+use crate::diff::{Diff, VerifyStatus};
 use crate::error::Result;
 use crate::ops::{
     Chain, ConsumerKind, ConsumersReport, Listing, PackListing, PairStatus, RUNNING_STATE,
@@ -32,216 +28,16 @@ use crate::ops::{
 };
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
+use changes::{op_line, packdetail, packline, variable_line};
+use table::{column_widths, matched, table_line};
 
-/// The width of each column: its widest cell, leaving out the last cell of each row, which is
-/// never padded.
-fn column_widths(rows: &[Vec<String>]) -> Vec<usize> {
-    let mut widths = Vec::new();
-    for row in rows {
-        for (i, cell) in row.iter().enumerate().take(row.len().saturating_sub(1)) {
-            if widths.len() <= i {
-                widths.resize(i + 1, 0);
-            }
-            widths[i] = widths[i].max(cell.chars().count());
-        }
-    }
-    widths
-}
-
-/// The pack name with the part that `--pack` matched in bold yellow, the way a search tool marks
-/// a match. The cell is already padded, so the escape codes do not move the column. Text that is
-/// not ASCII is left alone: lowercasing can change its length, and the match would slice wrongly.
-fn matched(p: &Paint, cell: &str, text: Option<&str>) -> String {
-    let Some(text) = text.filter(|t| !t.is_empty()) else {
-        return cell.to_string();
-    };
-    if !cell.is_ascii() || !text.is_ascii() {
-        return cell.to_string();
-    }
-    match cell.to_lowercase().find(&text.to_lowercase()) {
-        Some(at) => format!(
-            "{}{}{}",
-            &cell[..at],
-            p.byellow(&cell[at..at + text.len()]),
-            &cell[at + text.len()..]
-        ),
-        None => cell.to_string(),
-    }
-}
-
-/// One table line: cells padded to their column and two spaces apart, the last cell unpadded so
-/// no line ends in spaces. `style` colors a padded cell by its column.
-fn table_line(
-    indent: &str,
-    row: &[String],
-    widths: &[usize],
-    style: impl Fn(usize, &str) -> String,
-) -> String {
-    let last = row.len().saturating_sub(1);
-    let cells: Vec<String> = row
-        .iter()
-        .enumerate()
-        .map(|(i, cell)| {
-            if i < last {
-                let width = widths.get(i).copied().unwrap_or(0);
-                style(i, &format!("{cell:<width$}"))
-            } else {
-                style(i, cell)
-            }
-        })
-        .collect();
-    format!("{indent}{}\n", cells.join("  "))
-}
+mod changes;
+mod table;
 
 /// Renders the text report.
 pub struct TerminalRenderer {
     /// Color policy, already resolved.
     pub paint: Paint,
-}
-
-fn opmark(op: Op, p: &Paint) -> String {
-    match op {
-        Op::Changed => p.yellow("~"),
-        Op::Added => p.green("+"),
-        Op::Removed => p.red("-"),
-    }
-}
-
-fn vline(l: &Leaf, p: &Paint) -> String {
-    op_line(&OpLine::leaf(&l.path, l), p)
-}
-
-/// `~ path: old -> new`, `+ path: new`, or `- path: old`, with the mark and each side colored.
-fn op_line(l: &OpLine, p: &Paint) -> String {
-    let mark = opmark(l.op, p);
-    match l.op {
-        Op::Changed => format!(
-            "{mark} {}: {} -> {}",
-            l.path,
-            p.red(&l.old),
-            p.green(&l.new)
-        ),
-        Op::Added => format!("{mark} {}: {}", l.path, p.green(&l.new)),
-        Op::Removed => format!("{mark} {}: {}", l.path, p.red(&l.old)),
-    }
-}
-
-/// One line per added or removed variable, one per changed field of a changed variable.
-fn variable_line(v: &VarLine<'_>, p: &Paint) -> String {
-    match v {
-        VarLine::Added(s) => format!(
-            "{} variable {}{}",
-            p.green("+"),
-            p.bold(&s.name),
-            traits_suffix(s)
-        ),
-        VarLine::Removed(s) => format!(
-            "{} variable {}{}",
-            p.red("-"),
-            p.bold(&s.name),
-            traits_suffix(s)
-        ),
-        VarLine::Field(name, l) => op_line(&OpLine::leaf(&format!("{name}.{}", l.path), l), p),
-    }
-}
-
-fn flags(pd: &PackDiff, p: &Paint) -> String {
-    let rename = tag_rename(pd);
-    pd.flags()
-        .into_iter()
-        .map(|f| match f {
-            ChangeFlag::Identity => p.blue(rename.as_deref().unwrap_or(f.as_str())),
-            ChangeFlag::Upstream => p.magenta(f.as_str()),
-            ChangeFlag::Authored => p.yellow(f.as_str()),
-            // details of AUTHORED: its color, dimmed, so AUTHORED reads as the flag
-            ChangeFlag::Images | ChangeFlag::Charts => p.dyellow(f.as_str()),
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn paint_impact(level: ImpactLevel, text: &str, p: &Paint) -> String {
-    match level {
-        ImpactLevel::Repave | ImpactLevel::MayRepave => p.bred(text),
-        ImpactLevel::ClusterWide => p.yellow(text),
-        ImpactLevel::InPlace => p.cyan(text),
-        ImpactLevel::Sync | ImpactLevel::None => p.dim(text),
-    }
-}
-
-fn packline(pd: &PackDiff, p: &Paint) -> String {
-    let ver = version_display(pd);
-    let invalid = invalid_mark(pd).map_or_else(String::new, |m| format!("  {}", p.bred(&m)));
-    if pd.status == Status::Unchanged {
-        let line = p.dim(&format!(
-            "  [{:<5}] {:<26} {:<18} unchanged",
-            pd.layer, pd.name, ver
-        ));
-        return format!("{line}{invalid}");
-    }
-    let (mark, st) = match pd.status {
-        Status::Added => (p.green("+"), p.bgreen("ADDED")),
-        Status::Removed => (p.red("-"), p.bred("REMOVED")),
-        _ => (p.yellow("~"), flags(pd, p)),
-    };
-    format!(
-        "{mark} [{:<5}] {} {:<18} {st}{invalid}",
-        pd.layer,
-        p.bold(&format!("{:<26}", pd.name)),
-        ver
-    )
-}
-
-fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
-    if pd.upstream_unknown {
-        out.push(format!(
-            "      {}",
-            p.yellow("upstream unknown: no digest, so a change of the archive does not show")
-        ));
-    }
-    if !pd.masked.is_empty() {
-        out.push(format!(
-            "      {}",
-            p.yellow(&format!(
-                "masked: {}: Palette serves {MASKED} in place of the secret",
-                pd.masked.join(", ")
-            ))
-        ));
-    }
-    if pd.upstream
-        && let (Some(a), Some(b)) = (&pd.a, &pd.b)
-    {
-        out.push(format!(
-            "      upstream digest  {} -> {}   {}",
-            p.red(short(&a.upstream)),
-            p.green(short(&b.upstream)),
-            p.dim(&format!("({})", b.upstream_source))
-        ));
-    }
-    for line in artifact_lines(pd) {
-        out.push(format!("      {line}"));
-    }
-    if pd.values.changed && pd.values.parseable && !pd.values.diff.is_empty() {
-        out.push(format!("      {}", values_summary(&pd.values)));
-        for l in &pd.values.diff {
-            out.push(format!("        {}", vline(l, p)));
-        }
-    }
-    if pd.values.changed && !pd.values.parseable {
-        out.push(p.yellow(&format!(
-            "      {}",
-            values_unparsed_sentence(str::to_string)
-        )));
-    }
-    for m in &pd.manifests {
-        out.push(format!("      {} manifest {}", opmark(m.op, p), m.name));
-    }
-    if pd.impact.level != ImpactLevel::None || !pd.impact.text.is_empty() {
-        out.push(format!(
-            "      impact: {}",
-            paint_impact(pd.impact.level, &pd.impact.text, p)
-        ));
-    }
 }
 
 impl Renderer for TerminalRenderer {
