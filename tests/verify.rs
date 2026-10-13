@@ -25,7 +25,7 @@ use common::{
     cluster_ref, cluster_route, cluster_variables_route, listing, manifest_route, manifests_route,
     no_manifests, no_template, no_variables, pack_listing_route, post, profile_document,
     profile_route, read_json, resolved_values_route, serve_fixture, serve_profile, snapshot_of,
-    snapshot_of_at, strata_bin, template, variables_route,
+    snapshot_of_at, strata_bin, template, variables_route, write_record,
 };
 
 #[test]
@@ -8475,7 +8475,7 @@ fn a_profile_record_keeps_no_cluster_template_and_an_older_record_with_one_still
         {"uid": "tmpl-2", "name": "fred-template", "projectUid": "p1"}
     ]);
     let saved = dir.path().join("older.json");
-    fs::write(&saved, serde_json::to_string_pretty(&older).unwrap()).unwrap();
+    write_record(&saved, &older);
     let older = Snapshot::load(&saved).unwrap();
     assert_eq!(older.root, linked.root);
     let v = ops::verify(&older, &Palette::new(api), "t1", &Progress::silent()).unwrap();
@@ -10223,6 +10223,16 @@ fn with_cluster_status(raw_root: &Path) {
     fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
 }
 
+/// A cluster record of cluster-a with the tiers that Palette gives, and the stand-in that serves
+/// the cluster.
+fn cluster_record_with_tiers(root: &Path) -> (MemoryApi, Snapshot) {
+    common::make_fixtures(root);
+    with_cluster_status(root);
+    let api = serve_cluster(MemoryApi::new(), root, "cluster-a");
+    let snap = snapshot_cluster(&api, None).unwrap();
+    (api, snap)
+}
+
 fn cloud_config(size: u64) -> Value {
     serde_json::json!({"spec": {
     "clusterConfig": {"region": "us-east-2", "vpcId": "vpc-mine"},
@@ -10236,11 +10246,8 @@ fn cloud_config(size: u64) -> Value {
 #[test]
 fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
     let dir = tempfile::tempdir().unwrap();
-    common::make_fixtures(dir.path());
-    with_cluster_status(dir.path());
-    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
-    let snap = snapshot_cluster(&api, None).unwrap();
-    let c = snap.source.cluster.as_ref().unwrap();
+    let (api, snap) = cluster_record_with_tiers(dir.path());
+    let c =snap.source.cluster.as_ref().unwrap();
     // shape costs a request, so a record without --shape does not carry it
     assert_eq!(
         c.tiers.keys().collect::<Vec<_>>(),
@@ -10343,10 +10350,8 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
 #[test]
 fn a_cluster_record_without_tiers_still_verifies() {
     let dir = tempfile::tempdir().unwrap();
-    common::make_fixtures(dir.path());
-    with_cluster_status(dir.path());
-    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
-    let mut doc = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    let (api, snap) = cluster_record_with_tiers(dir.path());
+    let mut doc = serde_json::to_value(snap).unwrap();
     // a record written before the tiers: no tiers, no labels
     let cluster = doc["source"]["cluster"].as_object_mut().unwrap();
     cluster.remove("tiers");
@@ -11012,7 +11017,7 @@ fn a_record_written_before_the_image_lists_gets_them_from_its_values_and_still_v
     pack.remove("charts");
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("old.json");
-    fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+    write_record(&path, &doc);
     let old = Snapshot::load(&path).unwrap();
     assert_eq!(old.packs[0].images, fresh.packs[0].images);
     assert_eq!(old.root, fresh.root);
@@ -14761,13 +14766,6 @@ fn one_function_builds_the_root_of_each_kind_of_record_and_no_root_moved() {
 
 // ---- a value that a later release adds to a closed set of a record (#348) ----------------------
 
-/// Write `doc` to `name` in `dir`, as a record file.
-fn write_record(dir: &Path, name: &str, doc: &Value) -> std::path::PathBuf {
-    let path = dir.join(name);
-    fs::write(&path, serde_json::to_string_pretty(doc).unwrap()).unwrap();
-    path
-}
-
 #[test]
 fn a_record_with_values_of_a_later_release_reads_with_no_error_and_writes_the_same_text() {
     let dir = tempfile::tempdir().unwrap();
@@ -14777,7 +14775,8 @@ fn a_record_with_values_of_a_later_release_reads_with_no_error_and_writes_the_sa
     doc["source"]["template"] = Value::from("future");
     doc["tool"]["impl"] = Value::from("go");
     doc["packs"][0]["hash"]["upstreamSource"] = Value::from("packArchive.digest");
-    let path = write_record(dir.path(), "later.json", &doc);
+    let path = dir.path().join("later.json");
+    write_record(&path, &doc);
 
     let read = Snapshot::load(&path).unwrap();
     assert_eq!(read.source.template.known(), None);
@@ -14809,23 +14808,14 @@ fn a_record_with_values_of_a_later_release_reads_with_no_error_and_writes_the_sa
     assert_eq!(d["packs"][0]["a"]["upstreamSource"], "packArchive.digest");
 }
 
-/// A cluster record of cluster-a with the tiers that Palette gives, and the stand-in that serves
-/// the cluster.
-fn cluster_record_with_tiers(root: &Path) -> (MemoryApi, Snapshot) {
-    common::make_fixtures(root);
-    with_cluster_status(root);
-    let api = serve_cluster(MemoryApi::new(), root, "cluster-a");
-    let snap = snapshot_cluster(&api, None).unwrap();
-    (api, snap)
-}
-
 #[test]
 fn a_cluster_record_of_a_later_kind_compares_by_its_text_and_verify_refuses_it_with_no_request() {
     let dir = tempfile::tempdir().unwrap();
     let (api, snap) = cluster_record_with_tiers(dir.path());
     let mut doc = serde_json::to_value(&snap).unwrap();
     doc["source"]["cluster"]["kind"] = Value::from("virtualMachine");
-    let path = write_record(dir.path(), "later-kind.json", &doc);
+    let path = dir.path().join("later-kind.json");
+    write_record(&path, &doc);
 
     let read = Snapshot::load(&path).unwrap();
     let c = read.source.cluster.as_ref().unwrap();
@@ -14867,7 +14857,8 @@ fn a_tier_of_a_later_release_compares_by_its_fields_and_verify_names_it_and_does
     let mut doc = serde_json::to_value(&snap).unwrap();
     doc["source"]["cluster"]["tiers"]["network"] =
         serde_json::json!({"hash": "h-network", "fields": {"zone": "us-east-2a"}});
-    let path = write_record(dir.path(), "later-tier.json", &doc);
+    let path = dir.path().join("later-tier.json");
+    write_record(&path, &doc);
 
     let read = Snapshot::load(&path).unwrap();
     let c = read.source.cluster.as_ref().unwrap();
@@ -14881,7 +14872,9 @@ fn a_tier_of_a_later_release_compares_by_its_fields_and_verify_names_it_and_does
     // between two records that carry it, the tier compares by its fields
     let mut moved = doc.clone();
     moved["source"]["cluster"]["tiers"]["network"]["fields"]["zone"] = Value::from("us-east-2b");
-    let moved = Snapshot::load(&write_record(dir.path(), "moved.json", &moved)).unwrap();
+    let moved_path = dir.path().join("moved.json");
+    write_record(&moved_path, &moved);
+    let moved = Snapshot::load(&moved_path).unwrap();
     let d = ops::compare(&read, &moved, "t1");
     let network = d
         .cluster_tiers
@@ -14931,7 +14924,8 @@ fn a_behind_report_with_values_of_a_later_release_reads_with_no_error_and_writes
         }],
         "summary": {"pins": 1, "behind": 1, "floating": 0, "errors": 0, "arrived": 0},
     });
-    let path = write_record(dir.path(), "report.json", &doc);
+    let path = dir.path().join("report.json");
+    write_record(&path, &doc);
 
     let report = ops::BehindReport::load(&path).unwrap();
     assert_eq!(

@@ -179,6 +179,11 @@ pub fn read_json(path: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 }
 
+/// Write `doc`, a record or a report that strata reads again, to the file at `path`.
+pub fn write_record(path: &Path, doc: &Value) {
+    fs::write(path, serde_json::to_string_pretty(doc).unwrap()).unwrap();
+}
+
 /// Assemble a cluster that runs the profile fixtures `profiles`, in order, the way Palette returns
 /// it: applied templates on the cluster, per-profile pack manifests, and per-profile variables
 /// with values: `values` by name, else the default, and SECRET_VALUE for a sensitive variable.

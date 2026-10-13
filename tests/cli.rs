@@ -5,7 +5,9 @@ use crate::common;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use common::{PROFILE_LISTING, PROJECT_LISTING, read_json, snapshot_from_raw, strata_bin, text};
+use common::{
+    PROFILE_LISTING, PROJECT_LISTING, read_json, snapshot_from_raw, strata_bin, text, write_record,
+};
 
 const ESC: char = '\x1b';
 
@@ -180,7 +182,7 @@ fn two_records_whose_os_pack_names_two_images_exit_one_with_identical_roots() {
             }
         }
         let path = format!("{}.{image}.json", fx.a);
-        std::fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+        write_record(Path::new(&path), &doc);
         path
     };
     let (x, y) = (with_image("ami-0aaa"), with_image("ami-0bbb"));
@@ -634,7 +636,7 @@ fn same_release_names_a_macro_with_another_value_on_each_side_and_keeps_the_stat
             doc["source"]["macroValues"] = serde_json::json!({ "region": d });
         }
         let path = format!("{}.{name}.json", fx.a);
-        std::fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+        write_record(Path::new(&path), &doc);
         path
     };
     let dev = record("dev", Some("sha256:1111"));
