@@ -788,7 +788,7 @@ fn snapshot_for_records_the_project_scope_of_the_client() {
         .remove("projectUid")
         .expect("the field is written");
     let old = dir.path().join("old.json");
-    fs::write(&old, v.to_string()).unwrap();
+    write_record(&old, &v);
     assert_eq!(Snapshot::load(&old).unwrap().source.project_uid, "");
 }
 
@@ -5653,13 +5653,13 @@ fn a_record_from_another_snapshot_schema_is_refused_by_name_and_extra_fields_are
     // a field this strata does not know: additive changes keep the schema id and still load
     doc["source"]["addedLater"] = serde_json::json!("x");
     let extra = dir.path().join("extra.json");
-    fs::write(&extra, doc.to_string()).unwrap();
+    write_record(&extra, &doc);
     assert_eq!(Snapshot::load(&extra).unwrap().root, recorded.root);
 
     // a newer schema id is refused, naming both ids
     doc["schema"] = serde_json::json!("strata-snapshot/2");
     let newer = dir.path().join("newer.json");
-    fs::write(&newer, doc.to_string()).unwrap();
+    write_record(&newer, &doc);
     let err = Snapshot::load(&newer).unwrap_err();
     match &err {
         Error::UnsupportedSchema {

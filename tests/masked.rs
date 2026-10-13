@@ -13,7 +13,10 @@ use strata::term::color::Paint;
 use strata::term::progress::Progress;
 
 use crate::common;
-use common::{no_manifests, no_variables, profile_document, serve_profile, snapshot_of, template};
+use common::{
+    no_manifests, no_variables, profile_document, serve_profile, snapshot_of, template,
+    write_record,
+};
 
 const PROFILE: &str = "64f0000000000000000000d2";
 const GRAFANA: &str = "64f0000000000000000000e2";
@@ -80,7 +83,7 @@ fn the_root_does_not_cover_the_masked_paths() {
     }
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("older.json");
-    std::fs::write(&path, doc.to_string()).unwrap();
+    write_record(&path, &doc);
     // a record written before the field gets it from its values when it is read
     let older = Snapshot::load(&path).unwrap();
     assert_eq!(pack(&older, "grafana").masked, [PATH]);
