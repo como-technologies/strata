@@ -371,7 +371,7 @@ pub fn same_release_with(
                 reasons.push(format!(
                     "{}, so an equal root does not show an equal archive; --allow no-digest \
                      accepts it",
-                    crate::render::no_upstream_digest(&d.upstream_unknown)
+                    crate::render::notes::no_upstream_digest(&d.upstream_unknown)
                 ));
                 if status.passed() {
                     status = PairStatus::UnknownUpstream;

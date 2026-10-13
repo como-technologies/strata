@@ -1,16 +1,28 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
-use super::{
-    DiffNote, OpLine, Renderer, VarLine, applied_ref, artifact_lines, artifacts_summary,
-    chain_verdict, cluster_count, consumer_count, consumer_counts, consumers_heading,
-    consumers_sentence, count_of, counts_line, dash, diff_notes, diff_word, edge_hosts_line,
-    entry_error, invalid_mark, invalid_pack_sentences, list_count, list_scope, no_version_sentence,
-    pack_order_note, pack_version, pair_detail, pair_notes, pair_word, profile_marks,
-    project_label, record_detail, record_label, record_word, registry_note, second_reading_line,
-    short, tag_rename, tier_path, tier_states, traits_suffix, values_summary,
-    values_unparsed_sentence, variable_lines, variables_comparable, verdict_parts, version_display,
-    version_note, virtual_line, virtual_note, who_entry, who_heading,
+use super::changes::{
+    OpLine, VarLine, artifact_lines, artifacts_summary, traits_suffix, values_summary,
+    values_unparsed_sentence, variable_lines, version_display,
 };
+use super::consumers::{
+    consumer_count, consumer_counts, consumers_heading, consumers_sentence, edge_hosts_line,
+    second_reading_line,
+};
+use super::list::{
+    applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_version,
+    profile_marks, project_label, registry_note, version_note, virtual_line, virtual_note,
+};
+use super::notes::{
+    DiffNote, diff_notes, invalid_mark, invalid_pack_sentences, pack_order_note, tag_rename,
+    tier_path, tier_states, variables_comparable,
+};
+use super::same_release::{
+    chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word,
+};
+use super::verify::{
+    counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
+};
+use super::{Renderer, count_of, dash, entry_error, short};
 use crate::api::mask::MASKED;
 use crate::diff::{ChangeFlag, Diff, ImpactLevel, Leaf, Op, PackDiff, Status, VerifyStatus};
 use crate::error::Result;
@@ -488,7 +500,7 @@ impl Renderer for TerminalRenderer {
                     "could not record cluster {} (uid {}): {}\n",
                     rec.cluster.name,
                     rec.cluster.uid,
-                    super::set_error(rec)
+                    super::list::set_error(rec)
                 ),
             });
         }
@@ -500,7 +512,7 @@ impl Renderer for TerminalRenderer {
 
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
         let p = &self.paint;
-        let mut out = format!("{}\n", super::behind_heading(r));
+        let mut out = format!("{}\n", super::behind::behind_heading(r));
         let name_w = r.pins.iter().map(|x| x.name.len()).max().unwrap_or(0);
         let ver_w = r.pins.iter().map(|x| x.version.len()).max().unwrap_or(0);
         let reg_w = r
@@ -510,7 +522,7 @@ impl Renderer for TerminalRenderer {
             .max()
             .unwrap_or(0);
         for pin in &r.pins {
-            let status = super::pin_status(pin);
+            let status = super::behind::pin_status(pin);
             let status = if pin.error.is_some() {
                 p.byellow(&status)
             } else if pin.behind {
@@ -539,7 +551,7 @@ impl Renderer for TerminalRenderer {
                     ))
                 ));
             }
-            if let Some(line) = super::bump_line(pin) {
+            if let Some(line) = super::behind::bump_line(pin) {
                 out.push_str(&format!("      {line}\n"));
             }
             if let Some(arrived) = pin.arrived.as_ref().filter(|a| !a.is_empty()) {
@@ -692,7 +704,10 @@ impl Renderer for TerminalRenderer {
                 "\n{}\n",
                 cluster_count(clusters.len(), l.cluster.as_deref())
             ));
-            for line in super::query_line(l).into_iter().chain(virtual_line(l)) {
+            for line in super::list::query_line(l)
+                .into_iter()
+                .chain(virtual_line(l))
+            {
                 out.push_str(&format!("{}\n", p.dim(&line)));
             }
             let rows: Vec<Vec<String>> = clusters
@@ -712,13 +727,13 @@ impl Renderer for TerminalRenderer {
                     }
                     // a query is a question about labels, so its rows show them
                     if l.query.is_some() {
-                        row.push(super::labels_text(&c.labels));
+                        row.push(super::list::labels_text(&c.labels));
                     }
                     row.extend(virtual_note(c));
                     if let Some(msg) = entry_error(c.error.as_ref()) {
                         row.push(format!("({msg})"));
                     }
-                    if let Some(note) = super::imported_note(c) {
+                    if let Some(note) = super::list::imported_note(c) {
                         row.push(note.to_string());
                     }
                     row
