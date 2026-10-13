@@ -215,7 +215,7 @@ fn changed_profiles_report_every_kind_of_change() {
         t,
         "^~ [cni  ] cni-cilium-oss             1.15.3             UPSTREAM"
     ));
-    assert!(t.contains("upstream digest: sha256:cni-a -> sha256:cni-b (packRef.digest)"));
+    assert!(t.contains("upstream digest: sha256:cni-aaaa -> sha256:cni-bbbb (packRef.digest)"));
     assert!(t.contains("pack content changed under the same tag"));
     assert!(has_line(
         t,
