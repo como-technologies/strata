@@ -4,7 +4,7 @@ root       f466249ad0ae -> 9e8881b1e813   CHANGED
 images     8 images, 0 charts changed in 1 pack
 
 ~ [k8s  ] kubernetes                 1.35.3 -> 1.36.2   IDENTITY UPSTREAM AUTHORED IMAGES
-      upstream digest  sha256:ff3df -> sha256:c4f7f   (packRef.digest)
+      upstream digest: sha256:ff3df77ebc9c -> sha256:c4f7f20f40c7 (packRef.digest)
       + image registry.k8s.io/pause:3.10.1
       + image registry.k8s.io/pause:3.10.2
       ~ image us-docker.pkg.dev/palette-images/k8s/coredns/coredns: v1.13.1 -> v1.14.2

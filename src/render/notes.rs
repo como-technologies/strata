@@ -8,6 +8,7 @@ use crate::diff::pack::InvalidSides;
 use crate::diff::{Diff, ImageIdChange, InvalidPack, PackDiff, Side};
 use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{PendingUpdate, Source, Tier};
+use crate::text::and_list;
 
 /// True when the two sides are releases of each other: two profile-shaped sides, or two versions
 /// of one pack. A pack against a profile, or one pack against another pack, is a comparison a
@@ -192,7 +193,7 @@ pub(super) fn outside_root_sentence(macros: &[String], images: &[ImageIdChange])
             .iter()
             .map(|c| format!("pack {} names image {} now, not {}", c.key, c.b, c.a)),
     );
-    (!parts.is_empty()).then(|| parts.join(", and "))
+    (!parts.is_empty()).then(|| and_list(&parts))
 }
 
 /// The note for two records whose macro values differ: `macros` names each macro, as
@@ -529,4 +530,36 @@ fn draft_note(d: &Diff) -> Option<String> {
             draft.reference, draft.name, draft.version, draft.uid
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_causes_of_a_drift_outside_the_root_join_as_one_list_of_strata() {
+        let image = |key: &str| ImageIdChange {
+            key: key.to_string(),
+            a: "ami-1".to_string(),
+            b: "ami-2".to_string(),
+        };
+        let macros = ["region".to_string()];
+        // two causes have no comma before `and`
+        assert_eq!(
+            outside_root_sentence(&macros, &[image("os/ubuntu-aws")]).as_deref(),
+            Some(
+                "macro region has another value now and pack os/ubuntu-aws names image ami-2 \
+                 now, not ami-1"
+            )
+        );
+        // three causes have one before the last
+        assert_eq!(
+            outside_root_sentence(&macros, &[image("os/a"), image("os/b")]).as_deref(),
+            Some(
+                "macro region has another value now, pack os/a names image ami-2 now, not \
+                 ami-1, and pack os/b names image ami-2 now, not ami-1"
+            )
+        );
+        assert_eq!(outside_root_sentence(&[], &[]), None);
+    }
 }

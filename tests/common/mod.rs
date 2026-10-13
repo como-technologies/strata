@@ -999,6 +999,89 @@ pub fn isolate_git(command: &mut Command) -> &mut Command {
         .env("GIT_COMMITTER_EMAIL", "t@example.com")
 }
 
+/// The settings of the machine that name a project or a tenant: the variables of strata, and those
+/// of the Terraform provider, which strata reads too.
+const MACHINE_SETTINGS: [&str; 4] = [
+    "PALETTE_PROJECT_UID",
+    "PALETTE_PROJECT",
+    "SPECTROCLOUD_APIKEY",
+    "SPECTROCLOUD_HOST",
+];
+
+/// Give `command` an address that refuses connections, the home `home`, and no setting of the
+/// machine that names a project.
+///
+/// The run makes no retry, and it gets no setting that names a tenant either. So a request fails
+/// at once, and the run reads only the `.palette.env` of `home`, not the one of the person who
+/// runs the tests.
+fn isolate_palette<'a>(command: &'a mut Command, home: &Path) -> &'a mut Command {
+    for key in MACHINE_SETTINGS {
+        command.env_remove(key);
+    }
+    command
+        .env("HOME", home)
+        .env("PALETTE_API_KEY", "k")
+        .env("PALETTE_API", "http://127.0.0.1:9")
+        .env("STRATA_RETRIES", "0")
+}
+
+/// What one run of the binary gave: the exit status, standard output, and standard error.
+pub struct Run {
+    pub code: i32,
+    pub out: String,
+    pub err: String,
+}
+
+impl Run {
+    /// Run `command`, and keep what it gave.
+    pub fn of(command: &mut Command) -> Run {
+        let o = command.output().expect("binary runs");
+        Run {
+            code: o.status.code().unwrap_or(-1),
+            out: text(&o.stdout),
+            err: text(&o.stderr),
+        }
+    }
+}
+
+/// Run `command` on `args` against an address that refuses connections, with a home of its own,
+/// as [`isolate_palette`] gives it. So the path in a transport error is the first request strata
+/// made.
+///
+/// `command` is the binary in the environment that the run starts from: the environment of the
+/// tests, or a home and a project of a machine that a test gives. `envs` comes last: a `HOME` in
+/// it replaces the empty home. With `quiet` false, the warnings that a person sees are on.
+pub fn against_closed_port(
+    mut command: Command,
+    args: &[&str],
+    envs: &[(&str, &str)],
+    quiet: bool,
+) -> Run {
+    let home = tempfile::tempdir().unwrap();
+    isolate_palette(&mut command, home.path())
+        .args(args)
+        .env("STRATA_QUIET", "1");
+    if !quiet {
+        command.env_remove("STRATA_QUIET");
+    }
+    command.envs(envs.iter().copied());
+    Run::of(&mut command)
+}
+
+/// The names of the commands of the binary, as the help of clap lists them under `Commands:`.
+pub fn command_names() -> Vec<String> {
+    let help = Run::of(Command::new(strata_bin()).arg("--help"));
+    assert_eq!(help.code, 0, "{}", help.err);
+    help.out
+        .lines()
+        .skip_while(|line| *line != "Commands:")
+        .skip(1)
+        .take_while(|line| !line.is_empty())
+        .filter_map(|line| line.split_whitespace().next())
+        .map(str::to_string)
+        .collect()
+}
+
 /// Write the record of the raw profile fixture `name` under `raw` to `out` with the strata
 /// binary, as `snapshot --from-raw` writes one.
 pub fn snapshot_from_raw(raw: &Path, name: &str, out: &Path) {

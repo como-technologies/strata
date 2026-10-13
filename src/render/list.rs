@@ -4,7 +4,7 @@ use super::verify::record_label;
 use super::{count_of, dash, entry_error, joined_note};
 use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
 use crate::snapshot::Snapshot;
-use crate::text::and_list;
+use crate::text::{and_list, name_or_uid};
 
 /// `env=prod, team`: the labels of a cluster, with a tag that has no value by its key alone.
 pub(crate) fn labels_text(labels: &std::collections::BTreeMap<String, String>) -> String {
@@ -36,11 +36,6 @@ pub(crate) fn virtual_line(l: &Listing) -> Option<String> {
 pub(crate) fn virtual_group(v: &crate::ops::VirtualCluster) -> Option<String> {
     let group = v.cluster_group.as_ref()?;
     Some(format!("group {}", name_or_uid(&group.name, &group.uid)))
-}
-
-/// The name of an object, or its uid when Palette gives no name.
-pub(super) fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
-    if name.is_empty() { uid } else { name }
 }
 
 /// `virtual (group dev-group)`, or `virtual` when Palette names no group: what the row of a
@@ -96,7 +91,7 @@ pub(crate) fn project_label(uid: &str, name: &str) -> String {
 /// What a packs heading adds for a registry. It names the state that all its versions share.
 /// It says `no tags` when Palette answered 404 for the tags, and `no digests` when no version
 /// has a digest.
-pub(crate) fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
+fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
     let tags = match (&r.state, r.tags_unavailable) {
         (_, false) => None,
         (Some(_), true) => Some("no tags"),
@@ -107,6 +102,33 @@ pub(crate) fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
         tags,
         r.no_digests.then_some("no digests"),
     ])
+}
+
+/// `csi-aws-ebs in Public Repo (2 of 12 versions, deprecated)`: the heading of the versions that
+/// one registry offers.
+///
+/// The heading states what the registry holds. A flag that cuts the list says so, so that a
+/// reader never takes the count for the inventory of the registry. `strong` puts the name of the
+/// pack and of the registry in the form of the report.
+pub(crate) fn registry_heading(
+    l: &PackListing,
+    r: &crate::ops::PackRegistry,
+    strong: impl Fn(&str) -> String,
+) -> String {
+    let offered = count_of(r.versions_offered, "version");
+    let count = if r.versions.len() == r.versions_offered {
+        offered
+    } else {
+        format!("{} of {offered}", r.versions.len())
+    };
+    let note = registry_note(r)
+        .map(|n| format!(", {n}"))
+        .unwrap_or_default();
+    format!(
+        "{} in {} ({count}{note})",
+        strong(&l.name),
+        strong(&r.registry)
+    )
 }
 
 /// What a packs row adds for a version. It names the state, and says `no digest` when the

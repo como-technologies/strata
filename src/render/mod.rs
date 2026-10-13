@@ -126,6 +126,15 @@ pub(crate) fn short(s: &str) -> &str {
     }
 }
 
+/// A digest as the reports show it: the name of its algorithm, and the first twelve characters of
+/// the hash, as [`short`] cuts a root. `-` for an empty digest.
+pub(crate) fn short_digest(digest: &str) -> String {
+    match digest.split_once(':') {
+        Some((algorithm, hash)) => format!("{algorithm}:{}", short(hash)),
+        None => short(digest).to_string(),
+    }
+}
+
 /// `-` for an empty string.
 pub(crate) fn dash(s: &str) -> &str {
     if s.is_empty() { "-" } else { s }
@@ -203,5 +212,18 @@ mod tests {
         );
         assert!(shown.ends_with(" (132 chars, see --full)"), "{shown}");
         assert_eq!(show(&Value::from("short")), "\"short\"");
+    }
+
+    #[test]
+    fn a_digest_keeps_the_name_of_its_algorithm_and_twelve_characters_of_its_hash() {
+        let hash = "d7aee32a7be434bba2a2d1ca8b6c559053844cc2da2d7cde82c306baba4394d0";
+        assert_eq!(
+            short_digest(&format!("sha256:{hash}")),
+            "sha256:d7aee32a7be4"
+        );
+        // the root has no algorithm, and a digest with none is cut as the root is
+        assert_eq!(short_digest(hash), short(hash));
+        assert_eq!(short_digest("sha256:cni-a"), "sha256:cni-a");
+        assert_eq!(short_digest(""), "-");
     }
 }

@@ -14,6 +14,7 @@ use crate::reference::LATEST;
 use crate::registry::Registries;
 use crate::snapshot::{PackSource, Snapshot, Template};
 use crate::term::progress::Progress;
+use crate::text::name_or_uid;
 
 /// Read `/v1/packs?filters=spec.name=<name>` and give each entry to `each`. Palette serves this
 /// listing 100 entries at a time, so one pack name can take several requests. `each` returns false
@@ -108,13 +109,7 @@ pub fn pack_snapshot<A: PaletteApi>(
         }
     };
     let registry_name = registries.name_of(&registry_uid)?.unwrap_or_default();
-    let named = |uid: &str| -> String {
-        if registry_name.is_empty() {
-            uid.to_string()
-        } else {
-            registry_name.clone()
-        }
-    };
+    let named = |uid: &str| name_or_uid(&registry_name, uid).to_string();
 
     let here: Vec<String> = entries
         .iter()

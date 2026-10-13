@@ -22,7 +22,9 @@ order, for example `dev.json test.json prod.json`.
 ```
 
 Exit `1`. Each reason names the pack. For an `AUTHORED` change, the reason also
-names the first changed value. See
+names the first changed value, or the first changed manifest, in the words of
+`compare`: `manifest extra-rules changed`, or `values changed (not parseable as
+YAML on one side)`. See
 [Promote a release to another project](../use-cases/promote.md).
 
 ## Which pairs pass

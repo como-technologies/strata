@@ -35,6 +35,10 @@ does change it.
 
 - Strata cuts a value longer than 120 characters, and gives its length. `--full`
   and the JSON document keep the full value.
+- Strata cuts a root to its first twelve characters. It cuts the hash of an
+  upstream digest the same way, and keeps the name of the algorithm:
+  `sha256:ff3df77ebc9c`. The markdown comment cuts them the same way, and the
+  JSON document keeps them full.
 - Strata compares a value that is not valid YAML, such as an unquoted Go
   template, as trimmed text. The report says so.
 - `--full` adds a unified diff of the raw values and of each changed manifest.
@@ -87,7 +91,8 @@ The comment has:
   the upstream digest, and the manifest changes
 - with `--full`, the unified diffs in `diff` code blocks
 
-`verify` adds a `Verify` line and the verdict.
+`verify` adds a `Verify` line and the verdict. The `Verify` line states the
+status in the word of the verdict: `OK`, `UNVERIFIED`, or `DRIFT`.
 
 ## The JSON document
 

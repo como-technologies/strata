@@ -2,12 +2,12 @@
 
 use super::changes::{OpLine, artifacts_summary, variable_lines};
 use super::consumers::{
-    consumer_count, consumer_counts, consumers_heading, consumers_sentence, edge_hosts_line,
-    second_reading_line,
+    NOT_LISTED, consumer_count, consumer_counts, consumer_runs, consumers_heading,
+    consumers_sentence, edge_hosts_line, second_reading_line,
 };
 use super::list::{
     applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_version,
-    profile_marks, project_label, registry_note, version_note, virtual_line, virtual_note,
+    profile_marks, project_label, registry_heading, version_note, virtual_line, virtual_note,
 };
 use super::notes::{
     DiffNote, diff_notes, invalid_pack_sentences, pack_order_note, tier_path, tier_states,
@@ -253,23 +253,14 @@ impl Renderer for TerminalRenderer {
             if c.kind != ConsumerKind::Cluster {
                 out.push_str(&format!("  {}", p.cyan(c.kind.noun())));
             }
-            if !c.version.is_empty() && c.version != r.profile.version {
-                out.push_str(&format!(
-                    "  {}",
-                    p.byellow(&format!(
-                        "runs {}@{}, which uid {} no longer names",
-                        r.profile.name, c.version, r.profile.uid
-                    ))
-                ));
+            if let Some(runs) = consumer_runs(c, r, str::to_string) {
+                out.push_str(&format!("  {}", p.byellow(&runs)));
             }
             if let Some(msg) = entry_error(c.error.as_ref()) {
                 out.push_str(&format!("  {}", p.dim(&format!("({msg})"))));
             }
             if c.unlisted {
-                out.push_str(&format!(
-                    "  {}",
-                    p.byellow("not in the consumer list of the profile")
-                ));
+                out.push_str(&format!("  {}", p.byellow(NOT_LISTED)));
             }
             out.push('\n');
         }
@@ -334,27 +325,14 @@ impl Renderer for TerminalRenderer {
                 format_args!("{:<ver_w$}", pin.version),
                 format_args!("{:<reg_w$}", dash(&pin.registry)),
             ));
-            if let Some(newest) = pin
-                .newer
-                .first()
-                .filter(|n| pin.behind && !n.listed.is_empty())
-            {
-                out.push_str(&format!(
-                    "      {}\n",
-                    p.dim(&format!(
-                        "{} listed since {}",
-                        newest.version, newest.listed
-                    ))
-                ));
+            if let Some(listed) = super::behind::listed_since(pin) {
+                out.push_str(&format!("      {}\n", p.dim(&listed)));
             }
             if let Some(line) = super::behind::bump_line(pin) {
                 out.push_str(&format!("      {line}\n"));
             }
-            if let Some(arrived) = pin.arrived.as_ref().filter(|a| !a.is_empty()) {
-                out.push_str(&format!(
-                    "      {}\n",
-                    p.cyan(&format!("arrived: {}", arrived.join(", ")))
-                ));
+            if let Some(arrived) = super::behind::arrived_line(pin) {
+                out.push_str(&format!("      {}\n", p.cyan(&arrived)));
             }
             if let Some(msg) = entry_error(pin.error.as_ref()) {
                 out.push_str(&format!("      {}\n", p.dim(&format!("({msg})"))));
@@ -376,25 +354,7 @@ impl Renderer for TerminalRenderer {
             return Ok(format!("{sentence}\n"));
         }
         for r in &l.registries {
-            // the heading states what the registry holds. A flag that cuts the list says so, so
-            // that the count is never read as the registry's inventory.
-            let count = if r.versions.len() == r.versions_offered {
-                count_of(r.versions_offered, "version")
-            } else {
-                format!(
-                    "{} of {}",
-                    r.versions.len(),
-                    count_of(r.versions_offered, "version")
-                )
-            };
-            out.push_str(&format!(
-                "{} in {} ({count}{})\n",
-                p.bold(&l.name),
-                p.bold(&r.registry),
-                registry_note(r)
-                    .map(|n| format!(", {n}"))
-                    .unwrap_or_default()
-            ));
+            out.push_str(&format!("{}\n", registry_heading(l, r, |t| p.bold(t))));
             // the note column only where a version has a note, so a registry in use reads as before
             let notes: Vec<Option<String>> = r.versions.iter().map(version_note).collect();
             let any_note = notes.iter().any(Option::is_some);

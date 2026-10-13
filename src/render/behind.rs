@@ -56,6 +56,23 @@ pub(crate) fn pin_status(pin: &crate::ops::Pin) -> String {
     text
 }
 
+/// `1.65.0 listed since 2026-09-17T09:30:00Z`: when Palette first listed the newest version of a
+/// pin that is behind. None when the pin is current, or the listing gives no time.
+pub(crate) fn listed_since(pin: &crate::ops::Pin) -> Option<String> {
+    let newest = pin
+        .newer
+        .first()
+        .filter(|n| pin.behind && !n.listed.is_empty())?;
+    Some(format!("{} listed since {}", newest.version, newest.listed))
+}
+
+/// `arrived: 1.65.0, 1.66.0`: the newer versions of a pin that arrived since the time of
+/// `--since`. None when none arrived, or the report has no such time.
+pub(crate) fn arrived_line(pin: &crate::ops::Pin) -> Option<String> {
+    let arrived = pin.arrived.as_ref().filter(|a| !a.is_empty())?;
+    Some(format!("arrived: {}", arrived.join(", ")))
+}
+
 /// One newer version of a pin, with its notes in parentheses: `1.65.0`, `1.64.0 (deprecated)`,
 /// `1.66.0 (drops arm64)`, or `1.64.0 (deprecated, drops arm64)`.
 fn newer_version(n: &crate::ops::Newer) -> String {

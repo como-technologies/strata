@@ -607,8 +607,9 @@ mod tests {
             lines[2].starts_with("  1.0.1 ") && lines[2].ends_with("no digest"),
             "{terminal}"
         );
+        // the markdown states the count of the heading too
         assert!(
-            markdown.starts_with("### strata-live-dep in strata-live-registry\n"),
+            markdown.starts_with(&format!("### {}\n", lines[0])),
             "{markdown}"
         );
         assert!(markdown.contains("| `1.0.1` no digest |"), "{markdown}");
@@ -637,8 +638,9 @@ mod tests {
             lines[1].starts_with("  1.0.2 ") && lines[1].ends_with("no digest"),
             "{terminal}"
         );
+        // the markdown says too that a flag cut the list
         assert!(
-            markdown.starts_with("### strata-live-dep in strata-live-registry (no digests)\n"),
+            markdown.starts_with(&format!("### {}\n", lines[0])),
             "{markdown}"
         );
     }

@@ -7,10 +7,10 @@ consumers  0 -> 0 clusters
   variables unchanged
 
 ~ [os   ] ubuntu-aws                 20.04 -> 24.04     IDENTITY UPSTREAM
-      upstream digest  sha256:d7aee -> sha256:2df05   (packRef.digest)
+      upstream digest: sha256:d7aee32a7be4 -> sha256:2df05daa4eb4 (packRef.digest)
       impact: node repave (OS image change)
 ~ [k8s  ] kubernetes                 1.35.3 -> 1.36.2   IDENTITY UPSTREAM AUTHORED IMAGES
-      upstream digest  sha256:ff3df -> sha256:c4f7f   (packRef.digest)
+      upstream digest: sha256:ff3df77ebc9c -> sha256:c4f7f20f40c7 (packRef.digest)
       + image registry.k8s.io/pause:3.10.1
       + image registry.k8s.io/pause:3.10.2
       ~ image us-docker.pkg.dev/palette-images/k8s/coredns/coredns: v1.13.1 -> v1.14.2
@@ -33,7 +33,7 @@ consumers  0 -> 0 clusters
         + pack.content.images[9].image: "registry.k8s.io/pause:3.10.1"
       impact: node repave (Kubernetes version change)
 ~ [cni  ] cni-cilium-oss             1.19.6 -> 1.20.1   IDENTITY UPSTREAM AUTHORED IMAGES
-      upstream digest  sha256:3d866 -> sha256:917d9   (packRef.digest)
+      upstream digest: sha256:3d8661bc3a7e -> sha256:917d9de9a696 (packRef.digest)
       ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/busybox: v1.37.0 -> v1.38.0
       ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/certgen: v0.4.6 -> v0.4.9
       ~ image us-docker.pkg.dev/palette-images/packs/cilium/<version>/cilium: v1.19.6 -> v1.20.1
@@ -163,7 +163,7 @@ consumers  0 -> 0 clusters
         ~ pack.content.images[9].image: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/operator-azure:v1.19.6" -> "us-docker.pkg.dev/palette-images/packs/cilium/1.20.1/operator-azure:v1.20.1"
       impact: cluster-wide infra addon update
 ~ [csi  ] csi-aws-ebs                1.63.1 -> 1.65.0   IDENTITY UPSTREAM AUTHORED IMAGES CHARTS
-      upstream digest  sha256:4a1cb -> sha256:bd09e   (packRef.digest)
+      upstream digest: sha256:4a1cb27d13a6 -> sha256:bd09e8b4187b (packRef.digest)
       ~ image us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/aws-ebs-csi-driver: v1.63.1 -> v1.65.0
       ~ image us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/external-attacher: v4.12.0-eksbuild.4 -> v4.12.0-eksbuild.6
       ~ image us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/<version>/external-provisioner: v6.3.0-eksbuild.3 -> v6.3.0-eksbuild.5

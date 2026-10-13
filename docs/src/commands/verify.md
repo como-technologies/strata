@@ -155,7 +155,9 @@ document shape.
 
 A verdict of a cluster record names `cluster <c> running <v>`. A verdict of an
 edge host record names `<v> on edge host <h>`. A verdict of a cluster group
-record names `<v> pinned by cluster group <g>`.
+record names `<v> pinned by cluster group <g>`. A verdict of a pending record
+names `<v> pending for cluster <c>`, as the heading of `compare` does. A verdict
+of a cluster that applies no profile names `cluster <c>`.
 
 `--allow-no-digest` accepts a pack with no upstream digest: the verdict is `OK`,
 the exit is `0`, and the report still names the pack in a `note`. A manifest

@@ -2579,8 +2579,31 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
     let md = render::renderer(Format::Markdown, Paint::off(), false)
         .render_consumers(&r)
         .unwrap();
+    // the markdown names the version and the uid as the terminal does
     assert!(
-        md.contains("`1.2.9`, which the uid no longer names"),
+        md.contains(
+            "runs `lab-profile@1.2.9`, which uid `64f0000000000000000000b2` no longer names"
+        ),
+        "{md}"
+    );
+    // a row with an error states the version that the copy names, too, in each report
+    let mut doc = serde_json::to_value(&r).unwrap();
+    doc["consumers"][1]["error"] = serde_json::json!({"kind": "transport", "message": "boom"});
+    let failed: ops::ConsumersReport = serde_json::from_value(doc).unwrap();
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_consumers(&failed)
+        .unwrap();
+    let beta = text.lines().find(|l| l.contains("beta")).unwrap();
+    assert!(
+        beta.contains("runs lab-profile@1.2.9, which uid") && beta.contains("(boom)"),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_consumers(&failed)
+        .unwrap();
+    let beta = md.lines().find(|l| l.contains("beta")).unwrap();
+    assert!(
+        beta.contains("runs `lab-profile@1.2.9`, which uid") && beta.contains("(not read: boom)"),
         "{md}"
     );
     let json: Value = serde_json::from_str(
@@ -6794,7 +6817,7 @@ fn packs_lists_a_disabled_registry_from_the_listing_and_marks_each_retired_versi
         .render_packs(&l)
         .unwrap();
     assert!(
-        md.contains("### csi-aws-ebs in Mirror (disabled, no tags)"),
+        md.contains("### csi-aws-ebs in Mirror (1 version, disabled, no tags)"),
         "{md}"
     );
     assert!(md.contains("`1.65.0` deprecated"), "{md}");
@@ -8868,7 +8891,7 @@ fn each_report_says_in_the_same_words_that_the_values_did_not_parse() {
     let metrics = d.packs.iter().find(|p| p.name == "metrics-server").unwrap();
     assert!(metrics.values.changed && !metrics.values.parseable);
     let sentence =
-        "values changed (not parseable as YAML on one side; use --full for a unified diff)";
+        "values changed (not parseable as YAML on one side); use --full for a unified diff";
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render(&d, &a, &b, false)
         .unwrap();
@@ -8877,6 +8900,149 @@ fn each_report_says_in_the_same_words_that_the_values_did_not_parse() {
         .render(&d, &a, &b, false)
         .unwrap();
     assert!(md.contains(&sentence.replace("--full", "`--full`")), "{md}");
+    // same-release says it in the same words, with no flag
+    let c = ops::same_release(&chain_input(dir.path(), &["a", "b"]), Policy::Exact, "t1");
+    let reason = c.pairs[0]
+        .reasons
+        .iter()
+        .find(|r| r.starts_with("pack addon/metrics-server AUTHORED: "))
+        .unwrap();
+    let detail = reason.trim_start_matches("pack addon/metrics-server AUTHORED: ");
+    assert!(
+        sentence.starts_with(&format!("{detail}; ")),
+        "{detail:?} is not the start of {sentence:?}"
+    );
+}
+
+#[test]
+fn each_report_states_the_upstream_digest_of_a_pack_in_the_same_line() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let d = strata::diff::compute(&a, &b, "t1", None);
+    let line = |text: &str| -> Vec<String> {
+        text.lines()
+            .filter(|l| l.contains("upstream digest:"))
+            .map(|l| l.trim().replace('`', ""))
+            .collect()
+    };
+    let terminal = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    let markdown = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, &a, &b, false)
+        .unwrap();
+    assert_eq!(
+        line(&terminal),
+        [
+            "upstream digest: sha256:k8s1294 -> sha256:k8s1302 (packRef.digest)",
+            "upstream digest: sha256:cni-aaaa -> sha256:cni-bbbb (packRef.digest)"
+        ],
+        "{terminal}"
+    );
+    assert_eq!(line(&markdown), line(&terminal), "{markdown}");
+}
+
+#[test]
+fn same_release_names_a_manifest_as_the_pack_names_it_and_the_change_as_the_documents_do() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut records = chain_input(dir.path(), &["a", "b"]);
+    for (_, snap) in &mut records {
+        for m in snap.packs.iter_mut().flat_map(|p| p.manifests.iter_mut()) {
+            if m.name == "extra-rules" {
+                m.name = "ExtraRules".to_string();
+            }
+        }
+    }
+    let c = ops::same_release(&records, Policy::Exact, "t1");
+    let reason = c.pairs[0]
+        .reasons
+        .iter()
+        .find(|r| r.starts_with("pack addon/prometheus-operator AUTHORED: "))
+        .unwrap();
+    assert_eq!(
+        reason,
+        "pack addon/prometheus-operator AUTHORED: manifest ExtraRules changed"
+    );
+    // the markdown of the diff names the manifest and the change in the same words
+    let (a, b) = (&records[0].1, &records[1].1);
+    let d = strata::diff::compute(a, b, "t1", None);
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&d, a, b, false)
+        .unwrap();
+    assert!(md.contains("- manifest `ExtraRules` changed\n"), "{md}");
+}
+
+#[test]
+fn a_verdict_names_the_object_of_a_record_as_the_heading_of_a_diff_does() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // the update that waits for the cluster, which the cluster does not run yet
+    let waiting = serve_pending(
+        serve_cluster(MemoryApi::new(), dir.path(), "cluster-b"),
+        dir.path(),
+        "cluster-a",
+        |_| {},
+    )
+    .with(
+        profile_route(UID_A),
+        read_json(&dir.path().join("a/profile.json")),
+    );
+    let pending = snapshot_pending(&waiting, None).unwrap();
+    // a cluster that applies no profile
+    let mut doc = read_json(&dir.path().join("cluster-a/cluster.json"));
+    doc["spec"]["clusterProfileTemplates"] = serde_json::json!([]);
+    let bare_api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a")
+        .with(cluster_route(CLUSTER_UID), doc);
+    let bare = snapshot_cluster(&bare_api, None).unwrap();
+    assert!(
+        pending
+            .source
+            .title()
+            .ends_with("pending for cluster lab-cluster"),
+        "{}",
+        pending.source.title()
+    );
+    assert_eq!(bare.source.title(), "cluster lab-cluster");
+
+    let terminal = render::renderer(Format::Terminal, Paint::off(), false);
+    let markdown = render::renderer(Format::Markdown, Paint::off(), false);
+    for (record, api) in [(&pending, &waiting), (&bare, &bare_api)] {
+        let v = ops::verify(record, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+        let unchanged = format!("{} is unchanged since t0", record.source.title());
+        for r in [&terminal, &markdown] {
+            let verdict = r.verdict(&v.diff).unwrap();
+            assert!(verdict.contains(&unchanged), "{verdict}");
+            assert!(!verdict.contains("running"), "{verdict}");
+        }
+    }
+}
+
+#[test]
+fn the_markdown_of_a_verify_states_the_status_in_the_word_of_the_verdict() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let live = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A);
+    let v = ops::verify(&recorded, &Palette::new(live), "t1", &Progress::silent()).unwrap();
+    assert_eq!(
+        v.diff.verify.as_ref().unwrap().status,
+        VerifyStatus::Drifted
+    );
+    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
+        .verdict(&v.diff)
+        .unwrap();
+    let word = verdict.split(':').next().unwrap();
+    assert_eq!(word, "DRIFT", "{verdict}");
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render(&v.diff, &recorded, &v.live, false)
+        .unwrap();
+    assert!(
+        md.contains(&format!("**Verify:** `{word}` for uid")),
+        "{md}"
+    );
 }
 
 #[test]
@@ -13223,6 +13389,45 @@ fn a_bump_gives_a_renamed_tag_as_the_flag_identity_and_not_as_the_words_of_the_r
         serde_json::json!(["IDENTITY"])
     );
     assert!(ops::Bump::of("22.04", &d, "no-such-pack").is_none());
+}
+
+#[test]
+fn each_report_of_behind_says_since_when_the_newest_version_is_listed_and_what_arrived() {
+    let dir = tempfile::tempdir().unwrap();
+    let api = serve_behind();
+    let path = dir.path().join("dev.json");
+    let old = snapshot_of(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    fs::write(&path, old.to_json(false).unwrap()).unwrap();
+    let r = behind_of(
+        &api,
+        &[path],
+        &ops::BehindOptions {
+            impact: false,
+            since: None,
+        },
+    );
+    // the newest version with the time of its listing, and the versions since a report
+    let mut doc = serde_json::to_value(&r).unwrap();
+    doc["pins"][0]["newer"][0]["listed"] = Value::from("2026-09-21T08:00:00.000Z");
+    doc["pins"][0]["arrived"] = serde_json::json!(["1.65.0"]);
+    let r: ops::BehindReport = serde_json::from_value(doc).unwrap();
+    let listed = "1.65.0 listed since 2026-09-21T08:00:00.000Z";
+    let arrived = "arrived: 1.65.0";
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    assert!(
+        text.contains(&format!("      {listed}\n")) && text.contains(&format!("      {arrived}\n")),
+        "{text}"
+    );
+    let md = render::renderer(Format::Markdown, Paint::off(), false)
+        .render_behind(&r)
+        .unwrap();
+    let row = md.lines().find(|l| l.contains("csi-aws-ebs")).unwrap();
+    assert!(
+        row.contains(&format!("; {listed}")) && row.contains(&format!("; {arrived}")),
+        "{md}"
+    );
 }
 
 #[test]

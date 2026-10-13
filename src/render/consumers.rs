@@ -2,8 +2,31 @@
 
 use super::{count_of, dash, entry_error};
 use crate::diff::Diff;
-use crate::ops::{ClustersRead, ConsumersReport};
+use crate::ops::{ClustersRead, Consumer, ConsumersReport};
 use crate::snapshot::Source;
+
+/// What a row says about a consumer that the second reading found, and that the consumer list of
+/// the profile does not name.
+pub(crate) const NOT_LISTED: &str = "not in the consumer list of the profile";
+
+/// `runs aws-stack@1.1.1, which uid <uid> no longer names`: the version that the copy of a
+/// consumer names, when the uid of the profile names another version now.
+///
+/// None when the copy names the version of the report, or names none. `code` puts the version
+/// and the uid in the form of the report.
+pub(crate) fn consumer_runs(
+    c: &Consumer,
+    r: &ConsumersReport,
+    code: fn(&str) -> String,
+) -> Option<String> {
+    (!c.version.is_empty() && c.version != r.profile.version).then(|| {
+        format!(
+            "runs {}, which uid {} no longer names",
+            code(&format!("{}@{}", r.profile.name, c.version)),
+            code(&r.profile.uid)
+        )
+    })
+}
 
 /// `1 consumer`, `2 consumers`, or `no consumers`.
 pub(crate) fn consumer_count(n: usize) -> String {

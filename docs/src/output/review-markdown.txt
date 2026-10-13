@@ -23,14 +23,14 @@ $ strata compare releases/1.0.0/dev.json candidate.json --format markdown
 
 <details><summary><code>ubuntu-aws</code> IDENTITY UPSTREAM</summary>
 
-upstream digest: `sha256:d7aee32a7be434bba2a2d1ca8b6c559053844cc2da2d7cde82c306baba4394d0` → `sha256:2df05daa4eb4bf3298a7c1dbda7b36dc57e51d292308bcc441d4a3655f746a02` (packRef.digest)
+upstream digest: `sha256:d7aee32a7be4` -> `sha256:2df05daa4eb4` (packRef.digest)
 
 
 </details>
 
 <details><summary><code>kubernetes</code> values: 9 changed, 2 added, 0 removed</summary>
 
-upstream digest: `sha256:ff3df77ebc9c6f81cb1059efc49918c11665042388027e2c75fc6ce6dfd627d6` → `sha256:c4f7f20f40c7f0fea9bb709d83174172df0184e84f3075de3d6a04dfb8867332` (packRef.digest)
+upstream digest: `sha256:ff3df77ebc9c` -> `sha256:c4f7f20f40c7` (packRef.digest)
 
 ```diff
 - kubeadmconfig.dns.imageTag: "v1.13.1"
@@ -69,7 +69,7 @@ upstream digest: `sha256:ff3df77ebc9c6f81cb1059efc49918c11665042388027e2c75fc6ce
 
 <details><summary><code>cni-cilium-oss</code> values: 46 changed, 48 added, 18 removed</summary>
 
-upstream digest: `sha256:3d8661bc3a7ee274b5e472d1dbaa52f1d9676d5a3afd838f1e4f583a6409e55b` → `sha256:917d9de9a696a86de1faf2899bc702636b2b1976896c6a3c22f709b3d81b215b` (packRef.digest)
+upstream digest: `sha256:3d8661bc3a7e` -> `sha256:917d9de9a696` (packRef.digest)
 
 ```diff
 - charts.cilium.authentication.mutual.spire.install.agent.image.repository: "us-docker.pkg.dev/palette-images/packs/cilium/1.19.6/spire-agent"
@@ -252,7 +252,7 @@ upstream digest: `sha256:3d8661bc3a7ee274b5e472d1dbaa52f1d9676d5a3afd838f1e4f583
 
 <details><summary><code>csi-aws-ebs</code> values: 25 changed, 0 added, 0 removed</summary>
 
-upstream digest: `sha256:4a1cb27d13a6b02e29b481b283485d7677033880b0593df0959fdd66a2507f48` → `sha256:bd09e8b4187bdef2e5f1fca88203ecd0504224087a0cd97e41a42f0a3930601c` (packRef.digest)
+upstream digest: `sha256:4a1cb27d13a6` -> `sha256:bd09e8b4187b` (packRef.digest)
 
 ```diff
 - charts.aws-ebs-csi-driver.image.repository: "us-docker.pkg.dev/palette-images/packs/csi-aws-ebs/1.63.1/aws-ebs-csi-driver"

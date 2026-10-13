@@ -1,7 +1,6 @@
 //! The lines of `verify`: the verdict, the subject, who changed the object, and each record.
 
 use super::changes::values_changed;
-use super::list::name_or_uid;
 use super::notes::{
     ARCHIVE_CHANGE_HIDDEN, invalid_pack_sentences, no_upstream_digest, outside_root_sentence,
 };
@@ -12,32 +11,8 @@ use crate::diff::{Diff, Verify, VerifyStatus};
 use crate::ops::{
     ACTIVE_STATE, IN_USE_STATE, RUNNING_STATE, RecordStatus, VerifiedRecord, VerifySummary,
 };
-use crate::snapshot::{Source, SubjectKind};
-
-/// What a verdict line is about: a published version, what a cluster runs, or what an edge host
-/// or a cluster group holds, as [`Source::title`] names it.
-fn subject(recorded: &Source) -> String {
-    if let Some(p) = &recorded.pack {
-        return format!(
-            "pack {}@{} in registry {}",
-            p.name,
-            p.version,
-            name_or_uid(&p.registry_name, &p.registry_uid)
-        );
-    }
-    let profile = format!("{}@{}", recorded.name, recorded.version);
-    match &recorded.cluster {
-        Some(c) => match c.kind.known() {
-            Some(SubjectKind::Cluster) => format!("cluster {} running {profile}", c.name),
-            Some(SubjectKind::EdgeHost) => format!("{profile} on edge host {}", c.name),
-            Some(SubjectKind::ClusterGroup) => {
-                format!("{profile} pinned by cluster group {}", c.name)
-            }
-            None => format!("{profile} on {} {}", c.kind.noun(), c.name),
-        },
-        None => format!("published version {profile}"),
-    }
-}
+use crate::snapshot::{Naming, Source};
+use crate::text::name_or_uid;
 
 /// `name@version`, or `-` when the record could not be read.
 pub(crate) fn record_label(name: &str, version: &str) -> String {
@@ -189,7 +164,7 @@ impl VerdictParts {
     pub(crate) fn line(&self, recorded: &Source) -> String {
         let subject = match self.case {
             VerdictCase::ProfilesOverwritten | VerdictCase::Gone => String::new(),
-            _ => format!("{} ", subject(recorded)),
+            _ => format!("{} ", recorded.named(Naming::Verdict)),
         };
         format!("{subject}{}{}{}", self.sentence, self.values, self.tail)
     }
@@ -453,7 +428,7 @@ fn state_suffix(v: &Verify, recorded: &Source) -> String {
 fn gone_subject(recorded: &Source) -> String {
     match &recorded.cluster {
         Some(c) => format!("{} {}", c.kind.noun(), c.name),
-        None => subject(recorded),
+        None => recorded.named(Naming::Verdict),
     }
 }
 

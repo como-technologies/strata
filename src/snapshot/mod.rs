@@ -17,6 +17,7 @@ use crate::error::{Error, Result};
 use crate::json::str_at;
 use crate::profile_type::ProfileType;
 pub use crate::repave::PendingRepave;
+use crate::text::name_or_uid;
 pub use crate::validation::ProfileValidation;
 use pack::masked_paths;
 
@@ -251,6 +252,16 @@ pub struct PackSource {
     pub pack_uid: String,
 }
 
+/// Where a line names the object of a record: see [`Source::named`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Naming {
+    /// A side of a diff: `aws-stack@1.1.1 on cluster payments`, as [`Source::title`] gives it.
+    Side,
+    /// The subject of a verdict: `cluster payments running aws-stack@1.1.1`, or `published
+    /// version aws-stack@1.1.1`.
+    Verdict,
+}
+
 impl Source {
     /// True for a record of a draft: the draft template of a version, which its publish makes
     /// the published template. The record is of `<ref>@draft`, or of a version that nobody
@@ -276,29 +287,54 @@ impl Source {
     /// `name@version`, and `on cluster <name>` for a snapshot of a cluster, or `pending for cluster
     /// <name>` for the update that waits for it.
     pub fn title(&self) -> String {
+        self.named(Naming::Side)
+    }
+
+    /// The object of the record in the words of `naming`: the side of a diff, or the subject of a
+    /// verdict.
+    ///
+    /// One rule picks the words for each kind of record. So the heading and the verdict name the
+    /// same object, also for a cluster with no applied profile and for the update that waits for
+    /// a cluster. Only the side of a published version, of a pack, or of a cluster that runs a
+    /// profile has other words in a verdict.
+    pub(crate) fn named(&self, naming: Naming) -> String {
         let profile = format!("{}@{}", self.name, self.version);
-        if self.pack.is_some() {
-            return format!("pack {profile}");
+        if let Some(p) = &self.pack {
+            return match naming {
+                Naming::Side => format!("pack {profile}"),
+                Naming::Verdict => format!(
+                    "pack {profile} in registry {}",
+                    name_or_uid(&p.registry_name, &p.registry_uid)
+                ),
+            };
         }
-        match &self.cluster {
-            None => profile,
-            Some(c) if self.name.is_empty() && !c.kind.is_cluster() => {
+        let Some(c) = &self.cluster else {
+            return match naming {
+                Naming::Side => profile,
+                Naming::Verdict => format!("published version {profile}"),
+            };
+        };
+        match c.kind.known() {
+            _ if self.name.is_empty() && !c.kind.is_cluster() => {
                 format!("{} {}", c.kind.noun(), c.name)
             }
             // a kind that a later release wrote: the name of the kind in the documents
-            Some(c) if c.kind.known().is_none() => {
-                format!("{profile} on {} {}", c.kind.noun(), c.name)
-            }
-            Some(c) if c.kind == SubjectKind::EdgeHost => {
-                format!("{profile} on edge host {}", c.name)
-            }
-            Some(c) if c.kind == SubjectKind::ClusterGroup => {
+            None => format!("{profile} on {} {}", c.kind.noun(), c.name),
+            Some(SubjectKind::EdgeHost) => format!("{profile} on edge host {}", c.name),
+            Some(SubjectKind::ClusterGroup) => {
                 format!("{profile} pinned by cluster group {}", c.name)
             }
-            Some(c) if self.name.is_empty() && c.pending => format!("cluster {} pending", c.name),
-            Some(c) if self.name.is_empty() => format!("cluster {}", c.name),
-            Some(c) if c.pending => format!("{profile} pending for cluster {}", c.name),
-            Some(c) => format!("{profile} on cluster {}", c.name),
+            Some(SubjectKind::Cluster) if self.name.is_empty() && c.pending => {
+                format!("cluster {} pending", c.name)
+            }
+            Some(SubjectKind::Cluster) if self.name.is_empty() => format!("cluster {}", c.name),
+            Some(SubjectKind::Cluster) if c.pending => {
+                format!("{profile} pending for cluster {}", c.name)
+            }
+            Some(SubjectKind::Cluster) => match naming {
+                Naming::Side => format!("{profile} on cluster {}", c.name),
+                Naming::Verdict => format!("cluster {} running {profile}", c.name),
+            },
         }
     }
 

@@ -1,5 +1,10 @@
-//! The texts that a message builds: a phrase from a list of names, and a long text cut to a
-//! length.
+//! The texts that a message builds: a phrase from a list of names, the name of an object, and a
+//! long text cut to a length.
+
+/// The name of an object, or its uid when Palette gives no name.
+pub(crate) fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
+    if name.is_empty() { uid } else { name }
+}
 
 /// `items` as one phrase: `a`, `a and b`, or `a, b, and c`. Empty text for no item.
 ///
