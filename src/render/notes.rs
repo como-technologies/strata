@@ -8,6 +8,7 @@ use crate::diff::pack::InvalidSides;
 use crate::diff::{Diff, ImageIdChange, InvalidPack, PackDiff, Side};
 use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{PendingUpdate, Source, Tier};
+use crate::text::and_list;
 
 /// True when the two sides are releases of each other: two profile-shaped sides, or two versions
 /// of one pack. A pack against a profile, or one pack against another pack, is a comparison a
@@ -192,7 +193,7 @@ pub(super) fn outside_root_sentence(macros: &[String], images: &[ImageIdChange])
             .iter()
             .map(|c| format!("pack {} names image {} now, not {}", c.key, c.b, c.a)),
     );
-    (!parts.is_empty()).then(|| parts.join(", and "))
+    (!parts.is_empty()).then(|| and_list(&parts))
 }
 
 /// The note for two records whose macro values differ: `macros` names each macro, as

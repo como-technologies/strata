@@ -4,11 +4,10 @@
 use crate::api::mask::MASKED;
 use crate::diff::{ChangeFlag, ImpactLevel, Leaf, Op, PackDiff, Status};
 use crate::render::changes::{
-    OpLine, VarLine, artifact_lines, traits_suffix, values_summary, values_unparsed_sentence,
-    version_display,
+    OpLine, VarLine, artifact_lines, traits_suffix, upstream_line, values_summary,
+    values_unparsed_sentence, version_display,
 };
 use crate::render::notes::{invalid_mark, tag_rename};
-use crate::render::short;
 use crate::term::color::Paint;
 
 fn opmark(op: Op, p: &Paint) -> String {
@@ -120,15 +119,8 @@ pub(super) fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
             ))
         ));
     }
-    if pd.upstream
-        && let (Some(a), Some(b)) = (&pd.a, &pd.b)
-    {
-        out.push(format!(
-            "      upstream digest  {} -> {}   {}",
-            p.red(short(&a.upstream)),
-            p.green(short(&b.upstream)),
-            p.dim(&format!("({})", b.upstream_source))
-        ));
+    if let Some(line) = upstream_line(pd, p, str::to_string) {
+        out.push(format!("      {line}"));
     }
     for line in artifact_lines(pd) {
         out.push(format!("      {line}"));

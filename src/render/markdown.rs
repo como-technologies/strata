@@ -1,16 +1,17 @@
 //! The pull request comment.
 
 use super::changes::{
-    OpLine, VarLine, artifact_lines, artifacts_summary, plain_flags, traits_suffix, values_changed,
-    values_summary, values_unparsed_sentence, variable_lines, version_display,
+    OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, plain_flags,
+    traits_suffix, upstream_line, values_changed, values_summary, values_unparsed_sentence,
+    variable_lines, version_display,
 };
 use super::consumers::{
-    consumer_count, consumer_counts, consumers_heading, consumers_sentence, edge_hosts_line,
-    second_reading_line,
+    NOT_LISTED, consumer_count, consumer_counts, consumer_runs, consumers_heading,
+    consumers_sentence, edge_hosts_line, second_reading_line,
 };
 use super::list::{
     applied_ref, cluster_count, list_count, list_scope, no_version_sentence, pack_version,
-    profile_marks, project_label, registry_note, version_note, virtual_group, virtual_line,
+    profile_marks, project_label, registry_heading, version_note, virtual_group, virtual_line,
 };
 use super::notes::{
     DiffNote, diff_notes, invalid_mark, invalid_pack_sentences, pack_order_note,
@@ -25,8 +26,9 @@ use super::verify::{
 use super::{Renderer, capitalized, count_of, dash, entry_error, short};
 use crate::diff::{Diff, Leaf, Op, Status};
 use crate::error::Result;
-use crate::legend::document_name;
-use crate::ops::{Chain, ConsumerKind, ConsumersReport, Listing, PackListing, VerifySummary};
+use crate::ops::{
+    Chain, ConsumerKind, ConsumersReport, Listing, PackListing, RecordStatus, VerifySummary,
+};
 use crate::profile_type::ProfileType;
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
@@ -130,8 +132,11 @@ impl Renderer for MarkdownRenderer {
         }
         if let Some(v) = &d.verify {
             o.push_str(&format!(
-                "**Verify:** `{:?}` for uid `{}`, recorded {}, checked {}\n\n",
-                v.status, v.uid, v.recorded_at, v.checked_at
+                "**Verify:** `{}` for uid `{}`, recorded {}, checked {}\n\n",
+                record_word(RecordStatus::from(v.status)),
+                v.uid,
+                v.recorded_at,
+                v.checked_at
             ));
         }
         o.push_str("| | layer | pack | version | change | impact |\n|---|---|---|---|---|---|\n");
@@ -204,15 +209,8 @@ impl Renderer for MarkdownRenderer {
         }
         for pd in d.packs.iter().filter(|p| p.status == Status::Changed) {
             let mut body = String::new();
-            if pd.upstream
-                && let (Some(x), Some(y)) = (&pd.a, &pd.b)
-            {
-                body.push_str(&format!(
-                    "upstream digest: `{}` → `{}` ({})\n\n",
-                    dash(&x.upstream),
-                    dash(&y.upstream),
-                    y.upstream_source
-                ));
+            if let Some(line) = upstream_line(pd, &Paint::off(), code) {
+                body.push_str(&format!("{line}\n\n"));
             }
             if pd.values.changed && pd.values.parseable && !pd.values.diff.is_empty() {
                 body.push_str("```diff\n");
@@ -234,8 +232,7 @@ impl Renderer for MarkdownRenderer {
                 body.push_str("```\n");
             }
             for m in &pd.manifests {
-                let word = document_name(&m.op);
-                body.push_str(&format!("- manifest `{}` {word}\n", m.name));
+                body.push_str(&format!("- {}\n", manifest_change(m, code)));
             }
             if body.is_empty() {
                 continue;
@@ -360,8 +357,14 @@ impl Renderer for MarkdownRenderer {
         );
         for pin in &r.pins {
             let mut status = super::behind::pin_status(pin);
-            if let Some(arrived) = pin.arrived.as_ref().filter(|a| !a.is_empty()) {
-                status.push_str(&format!("; arrived: {}", arrived.join(", ")));
+            for line in [
+                super::behind::listed_since(pin),
+                super::behind::arrived_line(pin),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                status.push_str(&format!("; {line}"));
             }
             if let Some(msg) = entry_error(pin.error.as_ref()) {
                 status.push_str(&format!(" ({msg})"));
@@ -409,22 +412,28 @@ impl Renderer for MarkdownRenderer {
             "| {subject} | uid | project | state | runs |\n|---|---|---|---|---|\n"
         ));
         for c in &r.consumers {
-            // an empty version means two things: the cluster named none, or strata could not read
-            // the cluster at all. `-` states the first for both, so the error decides the cell.
             // a cluster template keeps no copy of the version, so its cell names the kind alone
-            let mut runs = if c.kind == ConsumerKind::Template {
+            let version = if c.kind == ConsumerKind::Template {
                 format!("({})", c.kind.noun())
-            } else if let Some(msg) = entry_error(c.error.as_ref()) {
-                format!("not read: {}", escape(msg))
+            } else if let Some(runs) = consumer_runs(c, r, |t| code(&escape(t))) {
+                runs
             } else if c.version.is_empty() {
-                "-".to_string()
-            } else if c.version != r.profile.version {
-                format!("`{}`, which the uid no longer names", escape(&c.version))
+                String::new()
             } else {
-                format!("`{}`", escape(&c.version))
+                code(&escape(&c.version))
+            };
+            // an empty version means two things: the cluster named none, or strata could not read
+            // the cluster at all. `-` states the first, so the error takes the place of the dash
+            let error =
+                entry_error(c.error.as_ref()).map(|msg| format!("not read: {}", escape(msg)));
+            let mut runs = match (version.is_empty(), error) {
+                (true, None) => "-".to_string(),
+                (true, Some(error)) => error,
+                (false, None) => version,
+                (false, Some(error)) => format!("{version} ({error})"),
             };
             if c.unlisted {
-                runs.push_str(" (not in the consumer list of the profile)");
+                runs.push_str(&format!(" ({NOT_LISTED})"));
             }
             if matches!(c.kind, ConsumerKind::EdgeHost | ConsumerKind::App) {
                 runs.push_str(&format!(" ({})", c.kind.noun()));
@@ -452,12 +461,8 @@ impl Renderer for MarkdownRenderer {
         }
         for r in &l.registries {
             out.push_str(&format!(
-                "### {} in {}{}\n\n",
-                l.name,
-                r.registry,
-                registry_note(r)
-                    .map(|n| format!(" ({n})"))
-                    .unwrap_or_default()
+                "### {}\n\n",
+                registry_heading(l, r, str::to_string)
             ));
             out.push_str("| version | tags | type | clouds | pack uid |\n");
             out.push_str("| --- | --- | --- | --- | --- |\n");

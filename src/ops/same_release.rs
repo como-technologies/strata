@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::diff::{self, ChangeFlag, Diff, ImageIdChange, MaskedPack, PackDiff, Status};
 use crate::legend::{Described, legend};
+use crate::render::changes::{VALUES_UNPARSED, manifest_change};
+use crate::render::notes::no_upstream_digest;
 use crate::snapshot::{Pack, Snapshot, Tool};
 
 /// Schema id of the document `same-release` writes.
@@ -220,10 +222,10 @@ fn authored_detail(pd: &PackDiff) -> String {
         };
     }
     if pd.values.changed && !pd.values.parseable {
-        return "values changed (not parseable as YAML)".to_string();
+        return VALUES_UNPARSED.to_string();
     }
     if let Some(m) = pd.manifests.first() {
-        return format!("manifest {} {:?}", m.name, m.op).to_lowercase();
+        return manifest_change(m, str::to_string);
     }
     if pd.params_changed {
         return "params changed".to_string();
@@ -371,7 +373,7 @@ pub fn same_release_with(
                 reasons.push(format!(
                     "{}, so an equal root does not show an equal archive; --allow no-digest \
                      accepts it",
-                    crate::render::notes::no_upstream_digest(&d.upstream_unknown)
+                    no_upstream_digest(&d.upstream_unknown)
                 ));
                 if status.passed() {
                     status = PairStatus::UnknownUpstream;

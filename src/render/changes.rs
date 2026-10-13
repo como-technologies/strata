@@ -3,11 +3,13 @@
 use serde_json::Value;
 
 use super::notes::tag_rename;
-use super::{show, shown};
+use super::{short, show, shown};
 use crate::diff::{
-    ChangeFlag, ClusterValueChange, Diff, Leaf, Op, PackDiff, Status, ValuesDiff, VariableSummary,
-    VariablesByName,
+    ChangeFlag, ClusterValueChange, Diff, Leaf, ManifestChange, Op, PackDiff, Status, ValuesDiff,
+    VariableSummary, VariablesByName,
 };
+use crate::legend::document_name;
+use crate::term::color::Paint;
 
 /// One line of a diff of values: a leaf, or a value that a cluster gives a variable.
 ///
@@ -56,6 +58,26 @@ pub(crate) fn plain_flags(pd: &PackDiff) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// `upstream digest: sha256:ff3df -> sha256:c4f7f (packRef.digest)`: the digest of the archive of
+/// a pack on each side, and the field that gives it. None when the digest did not move.
+///
+/// Each report cuts a digest to its first twelve characters, as it cuts the root. The JSON
+/// document holds the full digest. `p` paints side A red and side B green, and `code` puts each
+/// digest in the form of the report.
+pub(crate) fn upstream_line(pd: &PackDiff, p: &Paint, code: fn(&str) -> String) -> Option<String> {
+    let (Some(a), Some(b)) = (&pd.a, &pd.b) else {
+        return None;
+    };
+    pd.upstream.then(|| {
+        format!(
+            "upstream digest: {} -> {} {}",
+            p.red(&code(short(&a.upstream))),
+            p.green(&code(short(&b.upstream))),
+            p.dim(&format!("({})", b.upstream_source))
+        )
+    })
 }
 
 /// One line for each image, chart, or param that moved: `~ image <repo>: <old> -> <new>`, `+
@@ -169,15 +191,26 @@ pub(crate) fn values_summary(v: &ValuesDiff) -> String {
     )
 }
 
-/// `values changed (not parseable as YAML on one side; use --full for a unified diff)`.
+/// What a report says when the values of a pack changed and one side does not parse as YAML.
+pub(crate) const VALUES_UNPARSED: &str = "values changed (not parseable as YAML on one side)";
+
+/// [`VALUES_UNPARSED`], with the flag that shows the change: `...; use --full for a unified
+/// diff`.
 ///
-/// The values of the pack changed, and one side did not parse. `code` puts the flag in the form
-/// of the report.
+/// `code` puts the flag in the form of the report.
 pub(crate) fn values_unparsed_sentence(code: fn(&str) -> String) -> String {
     format!(
-        "values changed (not parseable as YAML on one side; use {} for a unified diff)",
+        "{VALUES_UNPARSED}; use {} for a unified diff",
         code("--full")
     )
+}
+
+/// `manifest MyRules changed`: a manifest of a pack that changed, with its name as the pack
+/// names it.
+///
+/// `code` puts the name in the form of the report.
+pub(crate) fn manifest_change(m: &ManifestChange, code: fn(&str) -> String) -> String {
+    format!("manifest {} {}", code(&m.name), document_name(&m.op))
 }
 
 /// `1 variable value changed`, `2 variable values changed`.
