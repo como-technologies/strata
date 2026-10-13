@@ -26,19 +26,23 @@ pub struct PaletteValidation {
 }
 
 /// Palette's answer to a validate route: each error that it gives, and it accepts when there is
-/// none. So no answer says `accepts` with an error, or refuses with no error. A document holds
-/// the answer as `accepts` and `errors`: see [`PaletteValidation`] for the answer for a cluster.
+/// none.
+///
+/// So no answer says `accepts` with an error, or refuses with no error. A document holds the answer
+/// as `accepts` and `errors`: see [`PaletteValidation`] for the answer for a cluster.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProfileValidation {
     /// Each error that Palette gives, sorted by pack, code, and message, with no copy.
     errors: Vec<PaletteRefusal>,
 }
 
-/// Palette's answer to a validate route. `POST /v1/clusterprofiles/validate/packs` answers for
-/// a candidate, and `POST /v1/clusterprofiles/{uid}/validate/packs` for a version that Palette
-/// holds. A [`PaletteValidation`] holds the answer for a cluster.
-// the fields of a `ProfileValidation` in a document, and the text of its schema: the answer
-// borrows its errors to write them, and owns them when it reads them
+/// Palette's answer to a validate route.
+///
+/// `POST /v1/clusterprofiles/validate/packs` answers for a candidate, and
+/// `POST /v1/clusterprofiles/{uid}/validate/packs` for a version that Palette holds. A
+/// [`PaletteValidation`] holds the answer for a cluster.
+// the fields of a `ProfileValidation` in a document, and the text of its schema. The answer
+// borrows its errors to write them, and owns them when it reads them.
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 #[schemars(rename = "ProfileValidation")]
@@ -178,8 +182,9 @@ impl PaletteValidation {
         PaletteValidation::refused(cluster_uid, errors)
     }
 
-    /// The answer for the cluster `cluster_uid` with these errors: see
-    /// [`ProfileValidation::refused`].
+    /// The answer for the cluster `cluster_uid` with these errors, sorted and with no copy.
+    ///
+    /// It accepts when there is no error.
     pub fn refused(cluster_uid: &str, errors: Vec<PaletteRefusal>) -> PaletteValidation {
         PaletteValidation {
             cluster_uid: cluster_uid.to_string(),
@@ -190,7 +195,7 @@ impl PaletteValidation {
 
 impl ProfileValidation {
     /// The answer with these errors, sorted and with no copy. It accepts when there is none.
-    pub fn refused(mut errors: Vec<PaletteRefusal>) -> ProfileValidation {
+    pub(crate) fn refused(mut errors: Vec<PaletteRefusal>) -> ProfileValidation {
         errors.sort();
         errors.dedup();
         ProfileValidation { errors }

@@ -332,8 +332,9 @@ pub fn image_ids_changed(a: &Snapshot, b: &Snapshot) -> Vec<ImageIdChange> {
         .collect()
 }
 
-/// Each key of either side, in key order, one time, with its value on side A and on side B. A
-/// side that does not hold the key has `None` there. At least one side holds it. A side that
+/// Each key of either side, in key order, one time, with its value on side A and on side B.
+///
+/// A side that does not hold the key has `None` there. At least one side holds it. A side that
 /// gives a key twice keeps its last value, as a map does.
 fn zip_by_key<K: Ord, V>(
     a: impl IntoIterator<Item = (K, V)>,

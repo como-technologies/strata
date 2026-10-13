@@ -117,7 +117,9 @@ fn shown(v: Option<&Value>) -> String {
 }
 
 /// The first twelve characters of a hash, or `-` for an empty one.
-pub(crate) fn short(s: &str) -> &str {
+///
+/// It cuts at a `char` boundary, so a short root in a record file does not stop strata.
+pub fn short(s: &str) -> &str {
     if s.is_empty() {
         "-"
     } else {

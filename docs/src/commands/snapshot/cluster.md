@@ -76,8 +76,8 @@ cluster has no annotation `spectroComponentsUpgradeForbidden`, the tier has no
 field for it. The bindings
 and the namespaces have no uid and no time. A binding is a set of subjects, so strata
 sorts the subjects of each binding, and the bindings. When Palette answers
-HTTP 404 for the bindings or the namespaces, the field is `null`, and not an
-empty list.
+HTTP 404 or 405 for the bindings or the namespaces, the field is `null`, and
+not an empty list.
 
 When Palette answers another HTTP error for the bindings or the namespaces,
 strata still writes the record, and the exit is 0. The tier does not hold the

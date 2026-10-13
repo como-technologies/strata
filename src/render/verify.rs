@@ -6,8 +6,7 @@ use super::notes::{
 };
 use super::same_release::record_word;
 use super::{count_of, entry_error, registry_sync_suffix};
-use crate::diff::impact::ImpactLevel;
-use crate::diff::{Diff, Verify, VerifyStatus};
+use crate::diff::{Diff, ImpactLevel, Verify, VerifyStatus};
 use crate::ops::{
     ACTIVE_STATE, IN_USE_STATE, RUNNING_STATE, RecordStatus, VerifiedRecord, VerifySummary,
 };
@@ -85,7 +84,7 @@ fn unchanged_sentence(draft: bool, at: &str) -> String {
 
 /// What a verdict states.
 ///
-/// The cases are in the order that each report tests them: the first case that holds wins.
+/// The cases are in the order that each report tests them: the first case that holds applies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum VerdictCase {
     /// The root did not move.
@@ -98,7 +97,7 @@ enum VerdictCase {
     Gone,
     /// The uid names the same version under another name.
     Renamed,
-    /// The uid names another version: the recorded one was overwritten in place.
+    /// The uid names another version: Palette overwrote the recorded one in place.
     OverwrittenBy,
     /// The root did not move, and a macro value or a machine image moved.
     OutsideRoot,
@@ -108,7 +107,7 @@ enum VerdictCase {
 
 /// The case of a verdict.
 ///
-/// `same` is whether the root did not move, from `Diff::same`.
+/// `same` is whether the root did not move, from [`Diff::same`](crate::diff::Diff::same).
 fn verdict_case(v: &Verify, same: bool) -> VerdictCase {
     match v.status {
         VerifyStatus::Unchanged => VerdictCase::Unchanged,
@@ -172,7 +171,8 @@ impl VerdictParts {
 
 /// The parts of the verdict of a record.
 ///
-/// `same` is whether the root did not move, from `Diff::same`: a macro value that moved is drift
+/// `same` is whether the root did not move, from [`Diff::same`](crate::diff::Diff::same): a macro
+/// value that moved is drift
 /// outside the root only then. `recorded` is the source of the record, side A of the diff.
 /// `code` puts a uid in the form of the report.
 pub(crate) fn verdict_parts(
@@ -183,6 +183,8 @@ pub(crate) fn verdict_parts(
 ) -> VerdictParts {
     let at = recorded.fetched_at.as_str();
     let case = verdict_case(v, same);
+    // verdict_case picks a case only when the value of that case is there, so no default of
+    // this match shows
     let sentence = match case {
         VerdictCase::Unchanged => unchanged_sentence(recorded.is_draft(), at),
         VerdictCase::Unverified => format!(
@@ -228,6 +230,8 @@ pub(crate) fn verdict_parts(
     }
 }
 
+/// `both sides are name@version (uid u): the version was edited in place`, for a diff whose sides
+/// name one profile version with different content.
 pub(super) fn edited_in_place_note(d: &Diff) -> Option<String> {
     // a version that Palette no longer has was deleted, and not edited
     let gone = d.verify.as_ref().is_some_and(|v| v.gone);
@@ -351,6 +355,7 @@ fn record_sentence(r: &VerifiedRecord) -> String {
             let impact = match parts.case {
                 VerdictCase::RootMoved => format!(
                     "; max impact {}, {} changed{}",
+                    // verify_many gives each record that changed its max impact
                     r.max_impact.map(ImpactLevel::as_str).unwrap_or_default(),
                     count_of(r.packs_changed.unwrap_or(0), "pack"),
                     // Palette keeps the order of the packs, so two orders are two roots: a

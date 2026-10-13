@@ -63,8 +63,9 @@ no cloud type. `--cloud all` keeps each version. The JSON keeps `cloudTypes` as
 Palette gives it.
 
 A cloud that no version supports is an answer, and an empty one: exit `0` and
-one line, `no version of <name> supports <cloud>`. A pack with no version that
-Palette serves is an empty answer too: `Palette serves no version of <name>`.
+one line, `no version of <name> supports <cloud>`. Without `--cloud`, a pack
+with no version that Palette serves is an empty answer too: `Palette serves no
+version of <name>`.
 One example is a pack with no FIPS compliant version.
 
 A registry the key cannot see is an error that lists the visible registries. A

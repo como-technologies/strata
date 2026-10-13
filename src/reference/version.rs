@@ -24,8 +24,10 @@ pub fn compare(a: &str, b: &str) -> Ordering {
 }
 
 /// The item of `items` whose version is `wanted`, or the item with the highest version by
-/// [`compare`] when `wanted` is [`LATEST`]. `version_of` gives the version of an item. None when
-/// no item has the version, and when `items` is empty.
+/// [`compare`] when `wanted` is [`LATEST`].
+///
+/// `version_of` gives the version of an item. None when no item has the version, and when `items`
+/// is empty.
 pub(crate) fn pick<T>(
     items: impl IntoIterator<Item = T>,
     version_of: impl Fn(&T) -> &str,

@@ -4,8 +4,8 @@
 use crate::api::mask::MASKED;
 use crate::diff::{ChangeFlag, ImpactLevel, Leaf, Op, PackDiff, Status};
 use crate::render::changes::{
-    OpLine, VarLine, artifact_lines, traits_suffix, upstream_line, values_summary,
-    values_unparsed_sentence, version_display,
+    OpLine, VarLine, artifact_lines, status_mark, status_word, traits_suffix, upstream_line,
+    values_summary, values_unparsed_sentence, version_display,
 };
 use crate::render::notes::{invalid_mark, tag_rename};
 use crate::term::color::Paint;
@@ -83,17 +83,18 @@ fn paint_impact(level: ImpactLevel, text: &str, p: &Paint) -> String {
 pub(super) fn packline(pd: &PackDiff, p: &Paint) -> String {
     let ver = version_display(pd);
     let invalid = invalid_mark(pd).map_or_else(String::new, |m| format!("  {}", p.bred(&m)));
+    let (mark, word) = (status_mark(pd.status), status_word(pd.status));
     if pd.status == Status::Unchanged {
         let line = p.dim(&format!(
-            "  [{:<5}] {:<26} {:<18} unchanged",
+            "{mark} [{:<5}] {:<26} {:<18} {word}",
             pd.layer, pd.name, ver
         ));
         return format!("{line}{invalid}");
     }
     let (mark, st) = match pd.status {
-        Status::Added => (p.green("+"), p.bgreen("ADDED")),
-        Status::Removed => (p.red("-"), p.bred("REMOVED")),
-        _ => (p.yellow("~"), flags(pd, p)),
+        Status::Added => (p.green(mark), p.bgreen(word)),
+        Status::Removed => (p.red(mark), p.bred(word)),
+        _ => (p.yellow(mark), flags(pd, p)),
     };
     format!(
         "{mark} [{:<5}] {} {:<18} {st}{invalid}",

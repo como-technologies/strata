@@ -136,7 +136,7 @@ pub fn write(candidate: &Candidate, path: &Path, files_dir: Option<&Path>) -> Re
             let pack = file_name(&layer.name);
             if let Some(values) = layer.values.take() {
                 let file = dir.join("values").join(format!("{pack}.yaml"));
-                crate::ops::write_file(&file, &values)?;
+                crate::file::write_file(&file, &values)?;
                 layer.values_file = Some(reference(&base, &file)?);
             }
             for m in &mut layer.manifests {
@@ -145,13 +145,13 @@ pub fn write(candidate: &Candidate, path: &Path, files_dir: Option<&Path>) -> Re
                         .join("manifests")
                         .join(&pack)
                         .join(format!("{}.yaml", file_name(&m.name)));
-                    crate::ops::write_file(&file, &content)?;
+                    crate::file::write_file(&file, &content)?;
                     m.content_file = Some(reference(&base, &file)?);
                 }
             }
         }
     }
-    crate::ops::write_file(path, &to_yaml(&c)?)
+    crate::file::write_file(path, &to_yaml(&c)?)
 }
 
 /// A name made safe as one path segment.
@@ -290,9 +290,10 @@ impl RegistryRef {
     }
 }
 
-/// The layer that Palette gives each pack that it makes itself. The packs are a manifest pack,
-/// and the pack of a layer from a registry that it does not sync. It drops the layer of the
-/// request.
+/// The layer that Palette gives each pack that it makes itself.
+///
+/// The packs are a manifest pack, and the pack of a layer from a registry that it does not sync. It
+/// drops the layer of the request.
 const MINTED_LAYER: Layer = Layer::Addon;
 
 /// Whether `v` is a semantic version in the loose form that Palette parses: an optional `v`,
@@ -342,9 +343,11 @@ pub struct ResolvedCandidate {
     /// The documents that a published profile with the content of the candidate gives. They hold
     /// only what Palette gives, and no field of strata.
     pub raw: RawProfile,
-    /// The options of the pack template that the values of each pack select: one list for each
-    /// pack reference of the profile, in its order. The list is empty for a manifest layer, and
-    /// for a layer of a registry that Palette does not sync. No listing gives their template.
+    /// The options of the pack template that the values of each pack select: one list for each pack
+    /// reference of the profile, in its order.
+    ///
+    /// The list is empty for a manifest layer, and for a layer of a registry that Palette does not
+    /// sync. No listing gives their template.
     pub preset_options: Vec<Vec<PresetOption>>,
 }
 

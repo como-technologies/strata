@@ -108,6 +108,7 @@ pub fn pack_snapshot<A: PaletteApi>(
             }
         }
     };
+    // a registry that the listing does not name has no name: each message gives its uid
     let registry_name = registries.name_of(&registry_uid)?.unwrap_or_default();
     let named = |uid: &str| name_or_uid(&registry_name, uid).to_string();
 

@@ -58,7 +58,7 @@ pub enum Template {
 impl Template {
     /// The template as the documents name it: `published`, `draft`, `applied`, `candidate`, or
     /// `registry`.
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Published => "published",
             Self::Draft => "draft",
@@ -152,7 +152,7 @@ pub enum Implementation {
 
 impl Implementation {
     /// The implementation as the documents name it: `rust` or `bash`.
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Rust => "rust",
             Self::Bash => "bash",
@@ -199,7 +199,7 @@ pub struct Source {
     /// Profile type: cluster, infra, add-on, system
     #[serde(rename = "type")]
     pub kind: String,
-    /// The template that the packs were read from: see [`Template`].
+    /// The template that strata read the packs from: see [`Template`].
     pub template: Open<Template>,
     /// Profile labels.
     #[serde(default)]
@@ -294,8 +294,9 @@ impl Source {
     /// verdict.
     ///
     /// One rule picks the words for each kind of record. So the heading and the verdict name the
-    /// same object, also for a cluster with no applied profile and for the update that waits for
-    /// a cluster. Only the side of a published version, of a pack, or of a cluster that runs a
+    /// same object. This is also true for a cluster with no applied profile, and for the update
+    /// that waits for a cluster. Only the side of a published version, of a pack, or of a cluster
+    /// that runs a
     /// profile has other words in a verdict.
     pub(crate) fn named(&self, naming: Naming) -> String {
         let profile = format!("{}@{}", self.name, self.version);
@@ -436,8 +437,9 @@ fn macros_of(packs: &[Pack]) -> Vec<String> {
     names.into_iter().collect()
 }
 
-/// The prefix of a user macro in a value or a manifest: `{{.spectro.macro.NAME}}`. A system
-/// macro, `{{.spectro.system.NAME}}`, has another prefix.
+/// The prefix of a user macro in a value or a manifest: `{{.spectro.macro.NAME}}`.
+///
+/// A system macro, `{{.spectro.system.NAME}}`, has another prefix.
 const MACRO_PREFIX: &str = ".spectro.macro.";
 
 /// The placeholder of the user macro `name`, as the resolved values of Palette key it:
@@ -554,13 +556,14 @@ impl Snapshot {
         self
     }
 
-    /// Read a snapshot file, checking its schema id.
+    /// Read a snapshot file, and check its schema id.
     ///
     /// # Errors
     ///
-    /// [`Error::UnsupportedSchema`] for a snapshot of another schema id, [`Error::SnapshotSchema`]
-    /// when the fields do not match, [`Error::NotSnapshot`] for a file that is not a snapshot,
-    /// and [`Error::Io`] when strata cannot read the file.
+    /// - [`Error::UnsupportedSchema`] for a snapshot of another schema id.
+    /// - [`Error::SnapshotSchema`] when the fields do not match.
+    /// - [`Error::NotSnapshot`] for a file that is not a snapshot.
+    /// - [`Error::Io`] when strata cannot read the file.
     pub fn load(path: &Path) -> Result<Snapshot> {
         let mut snap: Snapshot = load_document(path, SNAPSHOT_SCHEMA, || {
             Error::NotSnapshot(path.to_path_buf())
@@ -601,7 +604,7 @@ pub(crate) fn load_document<T: DeserializeOwned>(
     schema: &'static str,
     not_one: impl FnOnce() -> Error,
 ) -> Result<T> {
-    let text = crate::ops::read_file(path)?;
+    let text = crate::file::read_file(path)?;
     let Ok(v) = serde_json::from_str::<Value>(&text) else {
         return Err(not_one());
     };

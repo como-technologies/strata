@@ -105,13 +105,14 @@ clusters that run the profile. It sends one search with `clusterProfiles` equal
 to the name of the profile. When the search takes `environment`, it sends a
 second one that also has the environment `nested`, as `list clusters` does. The
 search takes a name, and not a uid, so it names the
-clusters that run any version of the profile. It goes to the scope of the
-profile: its project, or the tenant for a profile of the tenant. The search
-leaves out each virtual cluster unless a condition asks for it. Strata then
-reads each cluster that the search names and the list does not, and keeps the
-clusters whose copy is the version, with the state and the version of each. The
-cluster listing names no virtual cluster, so a reading of the listing cannot
-find `tenant-b`.
+clusters that run any version of the profile.
+
+The search goes to the scope of the profile: its project, or the tenant for a
+profile of the tenant. The search names no virtual cluster unless a condition
+asks for it. Strata then reads each cluster that the search names and
+the list does not. It keeps the clusters whose copy is the version, with the
+state and the version of each. The cluster listing names no virtual cluster, so
+a reading of the listing cannot find `tenant-b`.
 
 The search does not name a virtual cluster that runs the version through its
 cluster group either: here `tenant-b` runs `platform-addons` because `dev-group`

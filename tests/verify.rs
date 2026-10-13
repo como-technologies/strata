@@ -166,8 +166,8 @@ fn name_at_latest_records_the_resolved_version_and_keeps_latest_in_the_ref() {
     assert_eq!(snap.source.uid, UID_B);
 }
 
-/// The record of each kind of ref names the ref as typed. An empty part after a separator is
-/// left out: `cluster:<uid>/` records `cluster:<uid>`.
+/// The record of each kind of ref names the ref as typed. The record drops an empty part after
+/// a separator: `cluster:<uid>/` records `cluster:<uid>`.
 #[test]
 fn a_record_of_each_kind_of_ref_holds_the_ref_as_typed() {
     let dir = tempfile::tempdir().unwrap();
@@ -283,7 +283,8 @@ fn an_option_of_snapshot_that_does_not_fit_the_ref_is_a_usage_error_before_any_r
         (
             "pack:csi-aws-ebs@1.65.0",
             &raw_dir,
-            "--raw-dir takes a profile or a cluster",
+            "--raw-dir takes a profile or a cluster. A record that strata reads from the directory \
+             does not say pending, draft, edge host, cluster group, app profile, or pack",
         ),
         (
             "tag:env=dev",
@@ -2146,7 +2147,7 @@ fn a_policy_tier_of_strata_0_18_with_agent_upgrades_still_verifies() {
 }
 
 #[test]
-fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_the_field() {
+fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     // the route of the role bindings answers 404, and the cluster has no namespace
@@ -2189,24 +2190,28 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_
         json["source"]["cluster"]["tiers"]["policy"]["errors"]["rbacs"],
         "HTTP 403: forbidden"
     );
-    // a 404 records null and no error, and the hash of a 403 does not cover that null
-    let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), 404, "not found");
-    let m = snapshot_cluster(&missing, None).unwrap();
-    let missing_tier = &m
-        .source
-        .cluster
-        .as_ref()
-        .unwrap()
-        .tier(Tier::Policy)
-        .unwrap();
-    assert_eq!(missing_tier.fields["rbacs"], Value::Null);
-    assert_ne!(missing_tier.hash, tier.hash);
-    assert!(missing_tier.errors.is_empty());
-    assert!(
-        serde_json::to_value(&m).unwrap()["source"]["cluster"]["tiers"]["policy"]
-            .get("errors")
-            .is_none()
-    );
+    // a route that Palette does not have (HTTP 404 or 405) records null and no error. The hash
+    // of a 403 does not cover that null.
+    for status in [404, 405] {
+        let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), status, "no route");
+        let m = snapshot_cluster(&missing, None).unwrap();
+        let missing_tier = &m
+            .source
+            .cluster
+            .as_ref()
+            .unwrap()
+            .tier(Tier::Policy)
+            .unwrap();
+        assert_eq!(missing_tier.fields["rbacs"], Value::Null, "HTTP {status}");
+        assert_ne!(missing_tier.hash, tier.hash, "HTTP {status}");
+        assert!(missing_tier.errors.is_empty(), "HTTP {status}");
+        assert!(
+            serde_json::to_value(&m).unwrap()["source"]["cluster"]["tiers"]["policy"]
+                .get("errors")
+                .is_none(),
+            "HTTP {status}"
+        );
+    }
 
     // the same for the route of the namespaces
     let forbidden =
@@ -5587,8 +5592,8 @@ fn candidate_errors_name_what_is_wrong() {
     assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
 
     // registry problems need the registry. A version that the listing does not have asks whether
-    // Palette syncs the registry, and the registry listing is the first read of that check: an
-    // answer of Palette that is an error is an error of the record (#327)
+    // Palette syncs the registry, and the registry listing is the first read of that check. An
+    // answer of Palette that is an error is an error of the record (#327).
     let f = write(
         "unknown-version.yaml",
         k8s(serde_json::json!({"version": "9.9.9"})),
@@ -12774,7 +12779,7 @@ fn a_pack_supports_the_cloud(pinned: &[&str], newer: &[&str], cloud: &str) -> [b
 #[test]
 fn packs_behind_and_the_candidate_check_agree_on_the_clouds_that_a_pack_supports() {
     // each row: the cloud types of the version 1.65.0, then whether it supports the cloud aws, a
-    // custom cloud, and the cloud all. The pinned version is of the cloud that is asked
+    // custom cloud, and the cloud all. The pinned version is of the cloud that the row asks
     let table: &[(&[&str], [bool; 3])] = &[
         (&[], [true, true, true]),
         (&[CLOUD_ALL], [true, true, true]),
@@ -13433,7 +13438,7 @@ fn each_report_of_behind_says_since_when_the_newest_version_is_listed_and_what_a
 #[test]
 fn behind_since_takes_a_report_of_its_id_and_refuses_another_version_or_another_document() {
     // the rule of the records (#321): a strata-behind id of another version is unsupported-schema,
-    // which names both ids; a file of another document, or of none, is not a report
+    // which names both ids. A file of another document, or of none, is not a report.
     let dir = tempfile::tempdir().unwrap();
     let report = dir.path().join("report.json");
     fs::write(
@@ -15046,9 +15051,10 @@ fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_
     assert!(!verdict.contains("INVALID"), "{verdict}");
 }
 
-/// The root and the content digest that strata 0.21.0 gives each kind of record, from the
-/// fixtures of these tests, before one function built each root. A change of a root is a change
-/// of the schema id, so no release moves one.
+/// The root and the content digest that strata 0.21.0 gives each kind of record from the
+/// fixtures of these tests.
+///
+/// A change of a root is a change of the schema id, so no release moves one.
 const ROOT_OF_EACH_KIND: [(&str, &str, &str); 8] = [
     (
         "published",
@@ -15093,7 +15099,7 @@ const ROOT_OF_EACH_KIND: [(&str, &str, &str); 8] = [
 ];
 
 #[test]
-fn one_function_builds_the_root_of_each_kind_of_record_and_no_root_moved() {
+fn the_root_of_each_kind_of_record_does_not_change_between_releases() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let a = dir.path().join("a");
@@ -15259,6 +15265,9 @@ fn a_cluster_record_of_a_later_kind_compares_by_its_text_and_verify_refuses_it_w
     assert!(d.same);
     assert!(!d.cluster_tiers.is_empty());
     assert!(d.cluster_tiers.iter().all(|t| t.same));
+    // only two cluster records compare the values of their variables
+    assert!(ops::compare(&snap, &snap, "t1").cluster_variables.is_some());
+    assert!(d.cluster_variables.is_none());
 
     // verify cannot read an object of a kind that it does not know, so it asks Palette nothing
     let before = api.calls(&cluster_route(CLUSTER_UID));

@@ -64,7 +64,7 @@ fn command() -> clap::Command {
 }
 
 /// True when `arg` names a command of `cmd`, so `strata <A> <B>` does not become
-/// `strata compare`. `cmd` is built, so `help` is one of them.
+/// `strata compare`. The caller builds `cmd`, so `help` is one of them.
 fn is_command(cmd: &clap::Command, arg: &str) -> bool {
     cmd.find_subcommand(arg).is_some()
 }

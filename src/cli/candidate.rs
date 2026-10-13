@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use strata::error::{Error, Result};
 use strata::reference::Ref;
-use strata::{candidate, ops};
+use strata::{candidate, ops, render};
 
 use super::args::CandidateArgs;
 use super::{connect, now_utc, progress};
@@ -36,7 +36,7 @@ pub(crate) fn cmd_candidate(a: &CandidateArgs) -> Result<ExitCode> {
                 "wrote {} from {} (root {})",
                 path.display(),
                 snap.source.reference,
-                &snap.root[..12]
+                render::short(&snap.root)
             ));
         }
         None => print!("{}", candidate::to_yaml(&c)?),

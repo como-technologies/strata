@@ -5,9 +5,9 @@ use serde_json::{Map, Value};
 use super::Error;
 
 impl Error {
-    /// The machine-readable form: `kind`, `message`, and the variant's own fields (`path`,
-    /// `status`, `retryAfter`, `limit`, `name`, `version`, `schema`, `variable`, `alternate`, `value`, `cluster`,
-    /// `profile`, `applied`, `reference`, `tag`, `registry`, `state`, `available`, `errors`) when it has them.
+    /// The machine-readable form: `kind`, `message`, and the fields of the variant.
+    ///
+    /// The page "Errors" of the book gives the fields of each kind.
     pub fn to_json(&self) -> Value {
         let mut m = Map::new();
         m.insert("kind".into(), Value::from(self.kind()));

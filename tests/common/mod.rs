@@ -751,7 +751,7 @@ pub fn candidate_snapshot(
 
 // ---- the routes of Palette ---------------------------------------------------------------------
 //
-// The crate names each route in a const of its own that is not public, so the tests name the
+// The crate names each route in a const of its own that is not public. So the tests name the
 // route again here, in one place.
 
 /// The profile listing, `GET /v1/dashboard/clusterprofiles/metadata`.
@@ -1048,9 +1048,10 @@ impl Run {
 /// as [`isolate_palette`] gives it. So the path in a transport error is the first request strata
 /// made.
 ///
-/// `command` is the binary in the environment that the run starts from: the environment of the
-/// tests, or a home and a project of a machine that a test gives. `envs` comes last: a `HOME` in
-/// it replaces the empty home. With `quiet` false, the warnings that a person sees are on.
+/// `command` is the binary in the environment that the run starts from. That is the environment
+/// of the tests, or a home and a project of a machine that a test gives. `envs` comes last: a
+/// `HOME` in it replaces the empty home. With `quiet` false, the warnings that a person sees are
+/// on.
 pub fn against_closed_port(
     mut command: Command,
     args: &[&str],

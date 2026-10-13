@@ -132,10 +132,10 @@ pub fn profile_validate_body(snap: &Snapshot) -> Value {
 /// answer holds the refusals of each route. No request changes anything.
 ///
 /// Palette answers `200` with an error for each pack that it refuses. It refuses the whole request
-/// with the HTTP 422 of the API schema, or with an HTTP error and a code of the route:
-/// [`ValidateRoute::ProfileName`], [`ValidateRoute::ProfileImport`], or
-/// [`ValidateRoute::ProfilePacks`]. Such a refusal is an answer too, and the retry does not send it
-/// again.
+/// with the HTTP 422 of the API schema, or with an HTTP error and a code of the route. The routes
+/// are [`ValidateRoute::ProfileName`], [`ValidateRoute::ProfileImport`], and
+/// [`ValidateRoute::ProfilePacks`]. Such a refusal is an answer too, and the retry does not send
+/// it again.
 ///
 /// # Errors
 ///
@@ -178,8 +178,8 @@ pub fn profile_validation<A: PaletteApi>(
 /// validate/packs` with the body of `--repave`, which changes nothing. The sides follow the rules
 /// of [`palette_repave`](super::palette_repave). Palette answers `200` with an error for each pack
 /// it refuses. It refuses the whole request with an HTTP error and a code of
-/// [`ValidateRoute::ClusterPacks`]: that is an answer too, and the retry does not send it again.
-/// Each other error is an error of strata.
+/// [`ValidateRoute::ClusterPacks`]. That refusal is an answer too, and the retry does not send it
+/// again. Each other error is an error of strata.
 pub fn palette_validation<A: PaletteApi>(
     palette: &Palette<A>,
     a: &Snapshot,

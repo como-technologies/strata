@@ -117,7 +117,7 @@ pub(crate) struct OutputArgs {
     pub(crate) quiet: bool,
 }
 
-/// The format that `--json` and `--format` select: `--json` wins, and the terminal is the
+/// The format that `--json` and `--format` select: `--json` has priority, and the terminal is the
 /// default.
 fn format_of(json: bool, format: Option<Format>) -> Format {
     if json {
@@ -208,10 +208,22 @@ pub(crate) struct SnapshotArgs {
     #[arg(long, requires = "dir")]
     pub(crate) prune: bool,
     /// With --dir: the report format: terminal, markdown, or json
-    #[arg(long, value_enum, requires = "dir", hide_possible_values = true)]
+    // `requires` does not refuse a flag when an argument that conflicts with `dir` is present, so
+    // the conflicts of `dir` are here too
+    #[arg(
+        long,
+        value_enum,
+        requires = "dir",
+        conflicts_with_all = ["output", "raw_dir", "from_raw", "from_candidate"],
+        hide_possible_values = true
+    )]
     pub(crate) format: Option<Format>,
     /// With --dir: the same as --format json
-    #[arg(long, conflicts_with = "format", requires = "dir")]
+    #[arg(
+        long,
+        requires = "dir",
+        conflicts_with_all = ["format", "output", "raw_dir", "from_raw", "from_candidate"]
+    )]
     pub(crate) json: bool,
     /// No progress messages
     #[arg(short, long)]
@@ -224,7 +236,7 @@ impl SnapshotArgs {
         format_of(self.json, self.format)
     }
 
-    /// What the record holds beyond the content, and what Palette is asked.
+    /// What the record holds beyond the content, and what strata asks Palette.
     pub(crate) fn options(&self) -> ops::SnapshotOptions {
         ops::SnapshotOptions {
             macros: self.macros,

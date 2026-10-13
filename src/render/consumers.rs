@@ -1,5 +1,7 @@
 //! The lines of `consumers`: the heading, the counts, the second reading, and the edge hosts.
 
+use serde_json::Value;
+
 use super::{count_of, dash, entry_error};
 use crate::diff::Diff;
 use crate::ops::{ClustersRead, Consumer, ConsumersReport};
@@ -76,6 +78,14 @@ pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
     }
 }
 
+/// The message of `e`, an error of a read.
+///
+/// Each error that strata writes has a message. The fallback is for an error value that a
+/// program builds with no message.
+fn error_message(e: &Value) -> &str {
+    entry_error(Some(e)).unwrap_or("an error")
+}
+
 /// What the second reading read, after `second reading: `: `3 of 3 clusters read` from the
 /// listing, or, from the cluster search, `the cluster search names 2 other clusters with the
 /// profile, 2 read`. The search takes the name of the profile, so it names each cluster that runs
@@ -86,10 +96,7 @@ fn second_reading_counts(read: &crate::ops::ClustersRead) -> String {
     // the virtual clusters of the cluster groups that pin the version (#184)
     match (read.groups, &read.groups_error) {
         (0, None) => counts,
-        (0, Some(e)) => format!(
-            "{counts}; cluster groups not read ({})",
-            entry_error(Some(e)).unwrap_or("an error")
-        ),
+        (0, Some(e)) => format!("{counts}; cluster groups not read ({})", error_message(e)),
         (g, _) => format!(
             "{counts}; {g} cluster {} the version, {} other virtual {}, {} read",
             if g == 1 { "group pins" } else { "groups pin" },
@@ -136,7 +143,7 @@ pub(crate) fn edge_hosts_line(r: &ConsumersReport) -> String {
     }
 }
 
-/// `second reading: 3 of 3 clusters read`, or why the second reading was not done.
+/// `second reading: 3 of 3 clusters read`, or why strata did not do the second reading.
 ///
 /// `--list-only` asked for none, an app profile has none, or the search or the listing failed.
 /// `code` puts the flag in the form of the report.
@@ -148,7 +155,7 @@ pub(crate) fn second_reading_line(read: &ClustersRead, code: fn(&str) -> String)
     } else if read.skipped {
         format!("not done ({})", code("--list-only"))
     } else if let Some(e) = &read.error {
-        format!("not done ({})", entry_error(Some(e)).unwrap_or("an error"))
+        format!("not done ({})", error_message(e))
     } else {
         second_reading_counts(read)
     };

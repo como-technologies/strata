@@ -12,8 +12,7 @@ use serde_json::Value;
 use crate::api::{Palette, PaletteApi};
 use crate::closed_set::Open;
 use crate::cloud::supports;
-use crate::diff::impact::ImpactLevel;
-use crate::diff::{ChangeFlag, Diff, RegistrySync};
+use crate::diff::{ChangeFlag, Diff, ImpactLevel, RegistrySync};
 use crate::error::{Error, Result};
 use crate::reference::{Ref, version};
 use crate::registry::{Registries, RegistrySyncNote};
@@ -63,11 +62,11 @@ impl BehindReport {
     ///
     /// # Errors
     ///
-    /// [`Error::Usage`] when the file is not a `strata-behind/1` document: it is not JSON, it has
-    /// no schema id, or its id names another document, such as a record.
-    /// [`Error::UnsupportedSchema`] when its id names another version of the report, and
-    /// [`Error::SnapshotSchema`] when its fields do not match `strata-behind/1`. [`Error::Io`]
-    /// when strata cannot read the file.
+    /// - [`Error::Usage`] when the file is not a `strata-behind/1` document. It is not JSON, it
+    ///   has no schema id, or its id names another document, such as a record.
+    /// - [`Error::UnsupportedSchema`] when its id names another version of the report.
+    /// - [`Error::SnapshotSchema`] when its fields do not match `strata-behind/1`.
+    /// - [`Error::Io`] when strata cannot read the file.
     pub fn load(path: &Path) -> Result<BehindReport> {
         load_document(path, BEHIND_SCHEMA, || Error::Usage {
             message: format!(

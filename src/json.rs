@@ -2,7 +2,8 @@
 //!
 //! A document of Palette stays a [`serde_json::Value`]. Each module reads it through these
 //! helpers, so one rule says what a field that is not there gives: empty text, no entry, or
-//! `None`. No module keeps a pointer read of its own.
+//! `None`. No module keeps a pointer read of text or of an array of its own. The read of a
+//! profile export is not a read of this kind: it refuses a value of another type.
 
 use std::collections::BTreeMap;
 
@@ -32,7 +33,9 @@ pub(crate) fn arr<'a>(v: &'a Value, ptr: &str) -> &'a [Value] {
         .map_or(&[], Vec::as_slice)
 }
 
-/// The texts of the array at the pointer `ptr` of `v`. An entry that is not text is left out.
+/// The texts of the array at the pointer `ptr` of `v`.
+///
+/// The list skips an entry that is not text.
 pub(crate) fn strings(v: &Value, ptr: &str) -> Vec<String> {
     arr(v, ptr)
         .iter()
@@ -42,8 +45,10 @@ pub(crate) fn strings(v: &Value, ptr: &str) -> Vec<String> {
 }
 
 /// The texts of the object at the pointer `ptr` of `v`, by key, such as the labels of a
-/// document. An entry whose value is not text is left out, as [`strings`] leaves out an entry of
-/// an array. No entry when `v` has no object there.
+/// document.
+///
+/// The map skips an entry whose value is not text, as [`strings`] skips an entry of an array. No
+/// entry when `v` has no object there.
 ///
 /// Palette gives a label as text. So a value of another type is no label, and a tag filter must
 /// not match it as a label with an empty value.

@@ -91,7 +91,8 @@ The commands do this with such a value:
 
 - `compare` compares the text. Two records of the same new `kind` compare their
   tiers, as two cluster records do. Two records that carry the same new tier
-  compare its `fields`.
+  compare its `fields`. Only two cluster records compare the values of their
+  variables, so two records of a new `kind` do not.
 - `verify` refuses a record whose `source.cluster.kind` it does not know, with
   `usage` and exit `2`. Strata cannot read such an object from Palette, so it
   sends no request.
@@ -111,8 +112,10 @@ strata reads each value of them:
 - `pinnedState`, and the `state` of a newer version
 - the `status` of a sync
 
-Strata does not read its other documents again, so their closed sets stay
-closed.
+Strata does not read its other documents again, such as `strata-packs/1` and
+`strata-diff/1`, so their closed sets stay closed. A program can read such a
+document with the types of the library, such as `ops::PackBuild`. Then a value
+of a later release gives an error.
 
 ## The command line
 

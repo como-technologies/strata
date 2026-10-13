@@ -28,7 +28,7 @@ the kind.
 | `profile-ref-required` | The command needs a profile, and got a cluster, an edge host, a cluster group, an app profile, a pack, or a record of one. | `reference` |
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
 | `palette-refuses` | `snapshot --validate` asked Palette whether it takes the version, and Palette refused its name, its version, or its packs. Strata prints each error as a `palette    refuses:` line first, and writes no record. | `reference`, `errors[]` of `pack`, `code`, and `message` |
-| `usage` | The command line cannot work as given, so strata sent no request, or only read the cluster document for `compare --repave`. Examples: `snapshot` with no ref and no `--from-raw`, `snapshot --raw-dir` of a ref that is not a profile or a cluster, `compare --repave` or `compare --validate` with an edge host or a cluster group, `compare --repave` with two clusters other than `cluster:<c>` and `cluster:<c>@pending`, `snapshot --validate` with `--from-raw`, a cluster ref, or an `@draft` ref, and `behind --since` with a file that is not a `strata-behind/1` document. `compare --repave` also gives this kind after it reads the cluster document. The causes are a stale `@pending` record, and pack values to a cluster in a cluster template. `snapshot` takes `--json` only with `--dir`. Without `--dir`, this kind prints as a `strata:` line. | |
+| `usage` | The command line cannot work as given. See [The usage errors](#the-usage-errors). | |
 | `candidate-invalid` | The candidate file has a problem, or it gives a value that Palette changes at the create. A rule that only the create of Palette checks also gives this kind. Then the message names the code of Palette, and `code` holds it. For the rules of the validate route, `snapshot --validate` asks Palette. See [Checks before any request](candidate-file.md#checks-before-any-request). | `path`, `code` for a rule of the create |
 | `pack-not-found` | The registry has no such pack version or tag. `unsynced` names the registries that Palette does not sync, among the ones that strata asked. Palette lists a pack of such a registry only while a profile pins the pack. | `name`, `version`, `registry`, `tag` when given, `unsynced` when it is not empty |
 | `pack-name-not-found` | No visible registry offers a pack of that name. `unsynced` names the visible registries that Palette does not sync. | `name`, `unsynced` when it is not empty |
@@ -57,6 +57,27 @@ the kind.
 | `serialize` | Strata could not write a document. | |
 
 A record that is empty or is not JSON is `not-snapshot`.
+
+## The usage errors
+
+A `usage` error comes before any request in these cases:
+
+- `snapshot` with no ref and no `--from-raw`.
+- `snapshot --raw-dir` of a ref that is not a profile or a cluster.
+- `snapshot --validate` with `--from-raw`, a cluster ref, or an `@draft` ref.
+- `behind --since` with a file that is not a `strata-behind/1` document.
+
+`compare --repave` and `compare --validate` read both sides first. Then they
+give `usage` in these cases:
+
+- One side is an edge host or a cluster group.
+- The pair is not a cluster and a profile version. `compare --repave` also
+  takes `cluster:<c>` and `cluster:<c>@pending`.
+- `compare --repave` has a stale `@pending` record, or pack values to a cluster
+  in a cluster template.
+
+`snapshot` takes `--json` only with `--dir`. Without `--dir`, a `usage` error
+of `snapshot` prints as a `strata:` line.
 
 ## Refusals that strata does not send again
 

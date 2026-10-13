@@ -38,6 +38,9 @@ pub use same_release::*;
 pub use validate::*;
 pub use verify::*;
 
+// the command line writes each record through this public path
+pub use crate::file::write_file;
+
 /// What `snapshot` records beyond the content of a ref, and what it asks Palette about it.
 ///
 /// Each option fits some kinds of ref. [`snapshot_for`] refuses the others with `Usage`, before
@@ -50,9 +53,10 @@ pub struct SnapshotOptions {
     /// `--shape`: for a cluster, record the shape tier, the machine pools, and the cloud part,
     /// with one more request.
     pub shape: bool,
-    /// `--raw-dir`: also save the raw answers of Palette in this directory. It takes a profile
-    /// version or a cluster: a record read back from the directory does not say pending, draft,
-    /// edge host, cluster group, app profile, or pack.
+    /// `--raw-dir`: also save the raw answers of Palette in this directory.
+    ///
+    /// It takes a profile version or a cluster. A record that strata reads from the directory
+    /// does not say pending, draft, edge host, cluster group, app profile, or pack.
     pub raw_dir: Option<PathBuf>,
     /// `--validate`: ask Palette whether it takes the profile version, as [`profile_validation`]
     /// does. `source.paletteValidation` of the record holds the answer, and the caller decides
@@ -102,8 +106,9 @@ impl SnapshotOptions {
             )
         {
             return usage(
-                "--raw-dir takes a profile or a cluster: a record read back from the directory \
-                 does not say pending, draft, edge host, cluster group, or app profile"
+                "--raw-dir takes a profile or a cluster. A record that strata reads from the \
+                 directory does not say pending, draft, edge host, cluster group, app profile, \
+                 or pack"
                     .to_string(),
             );
         }
@@ -111,10 +116,11 @@ impl SnapshotOptions {
     }
 }
 
-/// Turn a ref into a snapshot. A snapshot file is loaded; anything else is fetched through the
-/// [`Palette`] that `connect` returns, with `options`, so a comparison of two files needs no
-/// credentials. The record names the ref as it displays: the text as typed, without an empty
-/// part after a separator.
+/// Turn a ref into a snapshot.
+///
+/// Strata loads a snapshot file, and reads each other ref through the [`Palette`] that `connect`
+/// returns, with `options`. So a comparison of two files needs no credentials. The record names
+/// the ref as it displays: the text as typed, with no empty part after a separator.
 ///
 /// # Errors
 ///
@@ -219,8 +225,10 @@ fn fetched<A: PaletteApi>(
     }
 }
 
-/// A record of the published template of the profile `uid`, with what `options` add: the macro
-/// digests, the raw answers saved, and the answer of Palette to `--validate`.
+/// A record of the published template of the profile `uid`, with what `options` add.
+///
+/// The options add the macro digests, the raw answers saved, and the answer of Palette to
+/// `--validate`.
 fn profile_snapshot<A: PaletteApi>(
     palette: &Palette<A>,
     uid: &str,
@@ -243,9 +251,10 @@ fn profile_snapshot<A: PaletteApi>(
     Ok(snap)
 }
 
-/// A record of what the cluster of `raw` runs, or of its profile `profile`, with what `options`
-/// add: the macro digests, the shape, and the raw answers saved. `uid` is the cluster as the ref
-/// names it.
+/// A record of what the cluster of `raw` runs, or of its profile `profile`.
+///
+/// `options` add the macro digests, the shape, and the raw answers saved. `uid` is the cluster
+/// as the ref names it.
 fn cluster_snapshot<A: PaletteApi>(
     mut raw: RawCluster,
     palette: &Palette<A>,
@@ -492,31 +501,6 @@ pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Resul
     Ok(Snapshot::from_raw(&raw, reference, fetched_at)?.with_project(raw.project_uid.as_deref()))
 }
 
-/// Write `text` to `path`, creating the directory it names when that directory does not exist.
-/// Every file strata writes goes through here, so `-o releases/1.2.0/dev.json` needs no `mkdir`.
-pub fn write_file(path: &Path, text: &str) -> Result<()> {
-    let io = |source| Error::Io {
-        path: path.to_path_buf(),
-        source,
-    };
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(io)?;
-    }
-    std::fs::write(path, text).map_err(io)
-}
-
-/// Read the text of the file at `path`. Every text file strata reads goes through here.
-///
-/// # Errors
-///
-/// `Io`, with `path`, when the file cannot be read.
-pub fn read_file(path: &Path) -> Result<String> {
-    std::fs::read_to_string(path).map_err(|source| Error::Io {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
 /// Compare two snapshots.
 pub fn compare(a: &Snapshot, b: &Snapshot, generated_at: &str) -> Diff {
     diff::compute(a, b, generated_at, None)
@@ -549,9 +533,11 @@ where
 }
 
 /// The client of the scope `scope`: the one that `clients` holds for it, or a new one from
-/// `connect`, which `clients` then holds. `None` is the scope of the command, and `Some` with
-/// the empty text is the tenant. `verify` reads each record in its own scope with it. An
-/// operation that has a home client reads a cluster through [`client_for`].
+/// `connect`, which `clients` then holds.
+///
+/// `None` is the scope of the command, and `Some` with the empty text is the tenant. `verify` reads
+/// each record in its own scope with it. An operation that has a home client reads a cluster
+/// through [`client_for`].
 fn connected<'a, A, F>(
     clients: &'a mut HashMap<Option<String>, Palette<A>>,
     scope: Option<&str>,

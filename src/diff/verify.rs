@@ -95,10 +95,11 @@ pub struct Verify {
 }
 
 impl Verify {
-    /// The verdict of the record `recorded` against `live`, with no drift named yet. The status
-    /// is `unchanged` or `drifted`, as `unchanged` says. The verdict holds the two times, and
-    /// each pack that Palette marks invalid now. Each other field is empty: `verify` sets what
-    /// it found.
+    /// The verdict of the record `recorded` against `live`, with no drift named yet.
+    ///
+    /// The status is `unchanged` or `drifted`, as `unchanged` says. The verdict holds the two
+    /// times, and each pack that Palette marks invalid now. Each other field is empty: `verify`
+    /// sets what it found.
     pub(crate) fn new(
         unchanged: bool,
         uid: &str,

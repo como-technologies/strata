@@ -285,8 +285,8 @@ fn latest_resolves_to_the_highest_version_by_natural_order() {
 
 #[test]
 fn an_item_with_no_version_or_no_uid_is_not_a_version_of_the_name() {
-    // the one parse keeps each item of the listing; a resolve skips an item with no version
-    // or no uid, so a name with no other item is profile-not-found, not an empty uid
+    // the one parse keeps each item of the listing. A resolve skips an item with no version or
+    // no uid, so a name with no other item is profile-not-found, not an empty uid.
     let listing = json!({"items": [
         {"metadata": {"name": "x"}},
         {"metadata": {"name": "y", "uid": "u1"}},
@@ -446,7 +446,7 @@ fn fetch_subject_reads_each_kind_by_uid_and_then_by_name_after_a_404() {
         };
         assert_eq!(err.kind(), expected, "{err}");
     }
-    // another error of the document by uid returns, and no name is tried
+    // another error of the document by uid returns, and strata tries no name
     let lookups = api.calls(CLUSTER_LISTING);
     let broken = api.clone().failing("/v1/spectroclusters/c9", 500, "{}");
     let err = Palette::new(&broken)

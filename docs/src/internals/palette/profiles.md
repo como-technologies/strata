@@ -398,8 +398,9 @@ gets the pack that Palette makes.
 
 Palette checks these rules only at the create of a profile version. No route
 that takes a candidate checks them, so a team learns of a fault only at the
-create. Strata checks each rule before any request. The refusal is
-`candidate-invalid`. Its message and its field `code` give the code that
+create. Strata checks the type and layer rules before any request. The cloud
+and tag rules need the registry, so strata checks them after the registry
+reads. The refusal is `candidate-invalid`. Its message and its field `code` give the code that
 Palette gives at the create:
 
 | Rule | Code |

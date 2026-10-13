@@ -1,6 +1,7 @@
-//! The reads of a cluster, of a cluster group, and of an edge host: the summary, the raw
-//! responses of a record, the cloud config, the resolved values, and the repave and validate
-//! routes of a cluster.
+//! The reads of a cluster, of a cluster group, and of an edge host.
+//!
+//! They give the summary, the raw responses of a record, the cloud config, the resolved values,
+//! and the repave and validate routes of a cluster.
 
 use serde_json::Value;
 
@@ -25,8 +26,10 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// The raw documents of the cluster, edge host, or cluster group `id`, in the shape of a
-    /// cluster. `id` is a uid, or, when no object of `kind` has that uid, the name of one object
-    /// of the kind in the scope. The documents are read by uid in each case.
+    /// cluster.
+    ///
+    /// `id` is a uid, or, when no object of `kind` has that uid, the name of one object of the kind
+    /// in the scope. Strata reads the documents by uid in each case.
     ///
     /// A cluster: its document with its applied profile templates, the pack manifests of each
     /// applied profile, and the variables of each. An edge host: `GET /v1/edgehosts/{uid}` gives
@@ -56,16 +59,24 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// The document of the cluster, edge host, or cluster group with the uid `uid`, and no
-    /// other: `GET /v1/spectroclusters/{uid}`, `GET /v1/edgehosts/{uid}`, or `GET
-    /// /v1/clustergroups/{uid}`. A 404 is an error, and no name is tried. Palette keeps the
-    /// document of a deleted cluster, with the state `Deleted`.
+    /// other.
+    ///
+    /// The routes are `GET /v1/spectroclusters/{uid}`, `GET /v1/edgehosts/{uid}`, and `GET
+    /// /v1/clustergroups/{uid}`. Strata tries no name after a 404. Palette keeps the document of
+    /// a deleted cluster, with the state `Deleted`.
+    ///
+    /// # Errors
+    ///
+    /// Each error of the request, also [`Error::Api`] with HTTP 404 when Palette has no object
+    /// with the uid `uid`.
     pub fn subject_document(&self, kind: SubjectKind, uid: &str) -> Result<Value> {
         self.api.get_json(&route(collection(kind), &[uid]))
     }
 
     /// The document of the object `id` of `kind`: [`Palette::subject_document`] of the uid `id`.
-    /// When no object has that uid, it is the document of the one object named `id` in the
-    /// scope. A note names the uid of a name.
+    ///
+    /// When no object has that uid, it is the document of the one object named `id` in the scope. A
+    /// note names the uid of a name.
     fn subject_by_id(&self, kind: SubjectKind, id: &str, progress: &Progress) -> Result<Value> {
         progress.note(&format!("fetching {} {id}", kind.noun()));
         match found(self.subject_document(kind, id))? {
@@ -214,12 +225,14 @@ impl<A: PaletteApi> Palette<A> {
         )
     }
 
-    /// The raw documents of an object that holds profiles in `spec.clusterProfileTemplates` and
-    /// is not a cluster: the manifests and the variables of each profile come from the profile.
-    /// Such an object gives no values to the variables, so a record holds the definitions of each
-    /// profile, as a profile record does. It has no notifications. `read_copy` reads the copy
-    /// that the holder keeps of one manifest. Its arguments are the uid of the profile, the name
-    /// of the pack, and the uid of the copy.
+    /// The raw documents of an object that holds profiles in `spec.clusterProfileTemplates` and is
+    /// not a cluster.
+    ///
+    /// The manifests and the variables of each profile come from the profile. Such an object
+    /// gives no values to the variables, so a record holds the definitions of each profile, as a
+    /// profile record does. It has no notifications. `read_copy` reads the copy that the holder
+    /// keeps of one manifest. Its arguments are the uid of the profile, the name of the pack, and
+    /// the uid of the copy.
     fn holder_raw(
         &self,
         doc: Value,
@@ -347,9 +360,10 @@ impl<A: PaletteApi> Palette<A> {
     /// /v1/spectroclusters/{uid}/config/{part}`: its role bindings or its namespaces, and why
     /// Palette did not give them.
     ///
-    /// Palette gives `items`, one entry for each. A 404 gives no part and no error, so the record
-    /// holds null for the part, and not an empty list. Another answer of Palette that is an error
-    /// gives no part, and its error: see [`or_unread`].
+    /// Palette gives `items`, one entry for each. When Palette has no such route (see
+    /// [`Error::is_missing_route`]), the record holds null for the part and no error, and not an
+    /// empty list. Another answer of Palette that is an error gives no part, and its error: see
+    /// [`or_unread`].
     ///
     /// # Errors
     ///
@@ -363,8 +377,8 @@ impl<A: PaletteApi> Palette<A> {
         let path = route(CLUSTERS, &[uid, "config", part.route()]);
         let what = format!("{} of cluster {uid}", part.noun());
         match self.api.get_json(&path) {
-            Err(Error::Api { status: 404, .. }) => {
-                unavailable_note(progress, &what, 404);
+            Err(e @ Error::Api { status, .. }) if e.is_missing_route() => {
+                unavailable_note(progress, &what, status);
                 Ok((None, None))
             }
             answer => or_unread(answer, &what, progress),

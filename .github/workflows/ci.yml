@@ -14,8 +14,8 @@ jobs:
     name: checks
     uses: ./.github/workflows/checks.yml
 
-  # The one check that a verify reads: `riff verify pass` needs a run named `Gate` with a success
-  # on the head commit of the pull request. The job needs `checks`, so GitHub runs it only when
+  # The one check that a verify reads. `riff verify pass` needs a successful run named `Gate` on
+  # the head commit. The job needs `checks`, so GitHub runs it only when
   # each check passed, and skips it when one failed. A skipped run is not a success. It does no
   # other work.
   gate:

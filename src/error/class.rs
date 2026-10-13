@@ -10,9 +10,12 @@ pub enum FailureClass {
     /// Time can remove it: a transport error, HTTP 5xx, HTTP 429, or a `Retry-After` that is
     /// longer than strata waits.
     Transient,
-    /// It stays while the inputs stay: another HTTP 4xx, a 5xx with a code of [`REFUSAL_CODES`]
-    /// or of a check of a [`ValidateRoute`], a thing that is not there, a file or a setting that
-    /// is not valid.
+    /// It stays while the inputs stay.
+    ///
+    /// - Another HTTP 4xx.
+    /// - A 5xx with a code of [`REFUSAL_CODES`] or of a check of a [`ValidateRoute`].
+    /// - A 5xx of the import validate route when it matches no pack of the body to a registry.
+    /// - A thing that is not there, or a file or a setting that is not valid.
     Terminal,
     /// Strata cannot tell.
     Unknown,
@@ -43,8 +46,9 @@ impl Error {
     }
 }
 
-/// True when the body of a Palette error is JSON with a `code` of a refusal by design. Such a
-/// code is in [`REFUSAL_CODES`], in `PROFILE_IMPORT_MATCH_CODES`, or in a check of a
+/// True when the body of a Palette error is JSON with a `code` of a refusal by design.
+///
+/// Such a code is in [`REFUSAL_CODES`], in `PROFILE_IMPORT_MATCH_CODES`, or in a check of a
 /// [`ValidateRoute`]. The code comes from [`PaletteRefusal::from_error_body`], the one read of the
 /// code of a Palette error.
 fn is_refusal(body: &str) -> bool {

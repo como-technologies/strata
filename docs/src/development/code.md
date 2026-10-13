@@ -27,8 +27,8 @@ where each module goes.
 
 ## The size of a module
 
-- A module does one thing. When its file has more than about 800 lines, make
-  the module a directory: `mod.rs`, and one file for each part. A file that
+- A module does one thing. When a module file has more than about 800 lines,
+  divide it: `mod.rs` and one file for each part. A file that
   holds only tests can be longer.
 - Move a file with `git mv`, so that `git log --follow` keeps its history. Move
   the file whole in one pull request, and divide it in the next. The squash of
@@ -54,8 +54,8 @@ where each module goes.
   method.
 - Palette documents stay `serde_json::Value`, read with the helpers of
   `src/json.rs`: `text`, `str_at`, `opt_text`, `arr`, `strings`, `items`,
-  `take_items`, and `first_nonempty`. Do not write a pointer read of your own
-  in a module.
+  `take_items`, and `first_nonempty`. Do not write a pointer read of text or
+  of an array of your own in a module.
   The records of strata are typed structs with
   `#[serde(rename_all = "camelCase")]`, `skip_serializing_if` for an empty
   field, `#[serde(default)]` for a field that an older record does not have,

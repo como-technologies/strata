@@ -2,11 +2,12 @@
 //!
 //! Palette knows a fixed set of cloud types. Each other cloud type is a custom cloud, which a
 //! tenant registers. A pack names the clouds that it supports in `spec.cloudTypes`, and a
-//! profile names its cloud in `spec.published.cloudType`. The create of a profile version
-//! refuses a pack that does not support the cloud of the profile, with the code
-//! `PackNotSupported`. The function `supports` is that rule. `packs --cloud`, `behind`, and the
-//! check of a candidate use it. The book states it in "A pack that supports a cloud". Each
-//! name of a cloud type that the code compares or sends is in this module.
+//! profile names its cloud in `spec.published.cloudType`.
+//!
+//! The create of a profile version refuses a pack that does not support the cloud of the
+//! profile, with the code `PackNotSupported`. The function `supports` is that rule. `packs
+//! --cloud`, `behind`, and the check of a candidate use it. The book states it in "A pack that
+//! supports a cloud". Each name of a cloud type that the code compares or sends is in this module.
 
 /// The cloud type `all`: each cloud. A pack with it supports each cloud, and a profile of it
 /// takes each pack.

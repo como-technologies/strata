@@ -68,9 +68,9 @@ pub(crate) fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             let reference = reference.ok_or_else(|| Error::Usage {
                 message: "snapshot needs a profile ref or --from-raw DIR".to_string(),
             })?;
-            // `snapshot` writes a record, and reads none: a file-shaped ref reaches Palette
-            // nowhere else, and a path sent as a uid asks for /v1/clusterprofiles/<path>, which
-            // 404s after the retries
+            // `snapshot` writes a record, and reads none. A ref to a file reaches Palette nowhere
+            // else, and a path as a uid asks for /v1/clusterprofiles/<path>, which gets a 404
+            // after the retries.
             if let Ref::Snapshot(path) = &reference {
                 return Err(Error::RecordNotASource {
                     path: path.display().to_string(),
@@ -103,7 +103,7 @@ pub(crate) fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             progress.note(&format!(
                 "wrote {} (root {})",
                 path.display(),
-                &snap.root[..12]
+                render::short(&snap.root)
             ));
         }
         None => print!("{text}"),

@@ -33,7 +33,7 @@ fn pick_registry(
 /// candidate that it holds. The page "The candidate file" of the book gives the field of the
 /// export that gives each field of the candidate.
 pub fn load(path: &Path) -> Result<LoadedCandidate> {
-    let yaml = crate::ops::read_file(path)?;
+    let yaml = crate::file::read_file(path)?;
     let invalid = invalid_at(path);
     let doc: Value = serde_yaml::from_str(&yaml).map_err(|e| invalid(e.to_string()))?;
     let candidate: Candidate = if export::is_export(&doc) {
@@ -67,7 +67,7 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
         return Err(invalid("a candidate needs at least one layer".to_string()));
     }
     let base = path.parent().unwrap_or(Path::new("."));
-    let read = |rel: &str| crate::ops::read_file(&base.join(rel));
+    let read = |rel: &str| crate::file::read_file(&base.join(rel));
     let top = pick_registry(
         &candidate.registry_uid,
         &candidate.registry,

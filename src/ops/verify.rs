@@ -19,7 +19,7 @@ use crate::registry::Registries;
 use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
 use crate::term::progress::Progress;
 
-use super::consumers::{ACTIVE_STATE, INACTIVE_STATE};
+use super::consumers::{ACTIVE_STATE, DELETED_STATE, INACTIVE_STATE};
 use super::{connected, scope_of};
 
 /// The outcome of a verification.
@@ -115,7 +115,7 @@ fn subject_state(kind: SubjectKind, doc: &Value) -> Option<String> {
 /// True when Palette keeps the document of a deleted object: the state `Deleted`, or
 /// `metadata.isDeleted`. Palette deletes a cluster so, and keeps its spec.
 fn is_deleted(doc: &Value) -> bool {
-    str_at(doc, "/status/state") == "Deleted"
+    str_at(doc, "/status/state") == DELETED_STATE
         || doc
             .pointer("/metadata/isDeleted")
             .and_then(Value::as_bool)
@@ -450,7 +450,7 @@ pub enum RecordStatus {
     /// Same content, and a pack has no upstream digest: a change of its archive does not show.
     /// Over a run: no record drifted or failed, and at least one is unverified, exit 1.
     Unverified,
-    /// The record could not be checked. Over a run: at least one record could not be checked,
+    /// Strata could not check the record. Over a run: strata could not check one record or more,
     /// exit 2.
     Error,
 }
@@ -673,6 +673,7 @@ where
                     name: recorded.source.name.clone(),
                     version: recorded.source.version.clone(),
                     uid: recorded.source.uid.clone(),
+                    // no scope is the scope of the key, and the row names no project
                     project_uid: scope.unwrap_or_default().to_string(),
                     recorded_at: recorded.source.fetched_at.clone(),
                     root_recorded: recorded.root.clone(),
@@ -682,6 +683,7 @@ where
                     cluster_variables: v.diff.cluster_variables.clone().filter(|c| c.changed),
                     state: v.diff.verify.as_ref().and_then(|x| x.state.clone()),
                     last_modified: v.diff.verify.as_ref().and_then(|x| x.last_modified.clone()),
+                    // verify_with gives each diff its verify part, so the default does not show
                     invalid_packs: v
                         .diff
                         .verify

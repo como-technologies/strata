@@ -29,8 +29,8 @@ pub(crate) fn legend<T: Described>() -> BTreeMap<String, String> {
 pub(crate) fn document_name<T: Serialize>(value: &T) -> String {
     match serde_json::to_value(value) {
         Ok(Value::String(name)) => name,
-        // a value of a closed set is a unit variant of an enum, and serde writes it as text with
-        // no error, so no other answer comes
+        // a value of a closed set is a unit variant of an enum. Serde writes it as text with no
+        // error, so no other answer comes.
         _ => String::new(),
     }
 }
@@ -38,13 +38,14 @@ pub(crate) fn document_name<T: Serialize>(value: &T) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diff::impact::ImpactLevel;
-    use crate::diff::{Op, Status};
+    use crate::diff::{ImpactLevel, Op, Status};
     use crate::ops::{PairStatus, Policy, RecordStatus};
     use schemars::JsonSchema;
 
-    /// The names of the set `T`, as its JSON schema lists them, sorted. A set whose values have
-    /// a doc comment is a `oneOf` of one `const` for each value. Another set is an `enum` list.
+    /// The names of the set `T`, as its JSON schema lists them, sorted.
+    ///
+    /// A set whose values have a doc comment is a `oneOf` of one `const` for each value. Another
+    /// set is an `enum` list.
     fn schema_names<T: JsonSchema>() -> Vec<String> {
         let schema = schemars::schema_for!(T);
         let value = schema.as_value();

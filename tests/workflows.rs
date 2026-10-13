@@ -75,3 +75,25 @@ fn the_gate_job_of_ci_needs_the_checks_and_has_no_condition() {
         "the Gate has a condition: GitHub must skip it when a check fails"
     );
 }
+
+/// The tests of `xtask` hold the routes of the stand-in of Palette, and `cargo test` of the root
+/// package does not run them. So the job `lint and test` runs them by name.
+#[test]
+fn the_lint_and_test_job_runs_the_tests_of_xtask() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/checks.yml");
+    let text = std::fs::read_to_string(&path).unwrap();
+    let doc: serde_yaml::Value = serde_yaml::from_str(&text).unwrap();
+    let job = doc["jobs"]
+        .as_mapping()
+        .expect("checks.yml has jobs")
+        .values()
+        .find(|job| job["name"].as_str() == Some("lint and test"))
+        .expect("checks.yml has a job named lint and test");
+    let runs: Vec<&str> = job["steps"]
+        .as_sequence()
+        .expect("the job has steps")
+        .iter()
+        .filter_map(|step| step["run"].as_str())
+        .collect();
+    assert!(runs.contains(&"cargo test -p xtask"), "{runs:?}");
+}

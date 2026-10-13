@@ -21,11 +21,17 @@
 //! - [`diff`]: the `strata-diff/1` document, the leaf diff, and the impact rules.
 //! - [`validation`]: the answers of Palette when strata asks whether it takes the packs.
 //! - [`repave`]: the reasons of Palette for a repave, and a repave that waits for approval.
+//! - [`cloud`]: the cloud types of Palette, and the rule for a pack that supports a cloud.
+//! - [`cluster_template`]: the cluster templates of Palette.
+//! - [`conjunction`]: how the conditions of a search of Palette join.
+//! - [`pack_type`] and [`profile_type`]: the type of a pack, and the type of a profile.
+//! - [`text`]: the texts that a message builds.
 //! - [`render`]: the terminal, markdown, and JSON renderers behind one trait.
 //! - [`ops`]: the operations the CLI exposes, free of argument parsing and exit codes.
-//! - [`error`], [`term::progress`], [`term::color`], [`content::layer`], and [`scope`]: the error
-//!   type with its exit codes and machine-readable form, progress notes on stderr, the color
-//!   policy, Palette's layers, and the scope of a profile version.
+//! - [`error`]: the error type, with its exit codes and its machine-readable form.
+//! - [`term::progress`] and [`term::color`]: the progress notes on stderr, and the color policy.
+//! - [`content::layer`]: the layers of Palette.
+//! - [`scope`]: the scope of a profile version.
 //!
 //! # Example
 //!
@@ -79,6 +85,7 @@ pub mod conjunction;
 pub mod content;
 pub mod diff;
 pub mod error;
+pub(crate) mod file;
 pub(crate) mod json;
 pub(crate) mod legend;
 pub mod ops;
@@ -94,15 +101,15 @@ pub mod term;
 pub mod text;
 pub mod validation;
 
-/// The old path of [`content::layer`]. It goes in release 0.23.
+/// The old path of [`content::layer`], until release 0.23.
 pub use content::layer;
-/// The old path of [`diff::impact`](mod@diff::impact). It goes in release 0.23.
+/// The old path of [`diff::impact`](mod@diff::impact), until release 0.23.
 pub use diff::impact;
-/// The old path of [`reference::version`]. It goes in release 0.23.
+/// The old path of [`reference::version`], until release 0.23.
 pub use reference::version;
-/// The old path of [`term::color`]. It goes in release 0.23.
+/// The old path of [`term::color`], until release 0.23.
 pub use term::color;
-/// The old path of [`term::progress`]. It goes in release 0.23.
+/// The old path of [`term::progress`], until release 0.23.
 pub use term::progress;
 
 pub use error::{Error, Result};

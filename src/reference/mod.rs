@@ -315,10 +315,11 @@ impl fmt::Display for Ref {
     }
 }
 
-/// The one object that a name selects, from `hits`, the objects with the name. `uid_of` gives
-/// the uid of an object. The hits are sorted by uid, so that a message reads the same on each
-/// run: Palette lists its objects in the order it likes. One hit is the answer. None is
-/// `not_found()`. Two or more are `ambiguous(uids)`, with the sorted uids.
+/// The one object that a name selects, from `hits`, the objects with the name.
+///
+/// `uid_of` gives the uid of an object. The hits are sorted by uid, so that a message reads the
+/// same on each run: Palette lists its objects in the order it likes. One hit is the answer. None
+/// is `not_found()`. Two or more are `ambiguous(uids)`, with the sorted uids.
 pub(crate) fn one_named<T>(
     mut hits: Vec<T>,
     uid_of: impl Fn(&T) -> &str,

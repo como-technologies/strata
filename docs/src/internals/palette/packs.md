@@ -490,7 +490,7 @@ support the cloud of the profile, with the code `PackNotSupported`. The rule:
   `all`, it supports each cloud. When one of them is `custom`, it supports each
   custom cloud: a cloud type that Palette does not know.
 
-Strata asks this rule in each place that needs it: `strata packs --cloud`,
+Strata uses this rule in each place that needs it: `strata packs --cloud`,
 `strata behind`, and the check of a candidate. That check runs before the
 create: see [The gaps that strata fills](profiles.md#the-gaps-that-strata-fills).
 So `packs --cloud aws` keeps a version whose cloud types hold `aws` or `all`,

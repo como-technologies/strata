@@ -1,5 +1,7 @@
-//! The reads beside the consumer list: the edge hosts that bind the version, the search for the
-//! clusters that run it, and the members of each cluster group.
+//! The reads beside the consumer list.
+//!
+//! They give the edge hosts that bind the version, the search for the clusters that run it, and
+//! the members of each cluster group.
 
 use std::collections::{HashMap, HashSet};
 
@@ -56,13 +58,16 @@ pub(super) fn edge_hosts_bound<A: PaletteApi>(
     }
 }
 
-/// The clusters that run a version of the profile `name`, from the cluster search of `palette`:
-/// one search with `clusterProfiles eq <name>`, and one with `environment eq nested` too, since the
-/// search leaves out each virtual cluster unless a condition asks for it. Palette takes the name of
-/// a profile there, and not its uid: it changes each name into the uids of every profile with that
-/// name, with no scope, and a uid matches no name (#181). The search of the clusters then holds to
-/// the scope of the request. So the answer holds each cluster in that scope that runs a version of
-/// the name, and the caller keeps the clusters that run the uid.
+/// The clusters that run a version of the profile `name`, from the cluster search of `palette`.
+///
+/// Strata sends one search with `clusterProfiles eq <name>`, and one with `environment eq nested`
+/// too. The search names no virtual cluster unless a condition asks for it.
+///
+/// Palette takes the name of a profile there, and not its uid. It changes each name into the uids
+/// of every profile with that name, with no scope, and a uid matches no name (#181). The search of
+/// the clusters then holds to the scope of the request. So the answer holds each cluster in that
+/// scope that runs a version of the name. The caller keeps the clusters that run the uid.
+///
 /// None when the search of Palette takes no `clusterProfiles`, or when the profile has no name.
 /// The second search goes out only when the search takes `environment`: see
 /// [`Palette::cluster_search_with_virtual`].
@@ -215,16 +220,15 @@ fn group_members<A: PaletteApi>(
     let mut failed = None;
     let mut answered = false;
     for scope in [wide, home] {
-        match scope.cluster_groups() {
+        match served(scope.cluster_groups()) {
             Ok(listed) => {
                 answered = true;
-                for (_, group) in listed {
+                for (_, group) in listed.into_iter().flatten() {
                     if seen.insert(group.clone()) {
                         groups.push((scope, group));
                     }
                 }
             }
-            Err(e) if e.is_missing_route() => answered = true,
             Err(e) => failed = Some(e.to_json()),
         }
     }
