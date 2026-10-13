@@ -634,6 +634,14 @@ mod tests {
             &[Implementation::Rust, Implementation::Bash],
             Implementation::as_str,
         );
+        names_its_values(
+            &[
+                SubjectKind::Cluster,
+                SubjectKind::EdgeHost,
+                SubjectKind::ClusterGroup,
+            ],
+            SubjectKind::as_str,
+        );
         // the map of the tiers keeps the order of the names, as a map keyed by text did
         let tiers: BTreeMap<Tier, u8> = [
             (Tier::Shape, 0),

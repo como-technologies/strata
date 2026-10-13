@@ -826,6 +826,14 @@ fn schema_values(schema: &serde_json::Value, def: &str) -> Vec<String> {
         .collect()
 }
 
+/// The definition of the closed set that `field` names, for a field of a document that strata
+/// reads again: the field takes each value of the set, or any other text, which a later release
+/// adds.
+fn open_set_ref(field: &serde_json::Value) -> &serde_json::Value {
+    assert_eq!(field["anyOf"][1]["type"], "string", "{field}");
+    &field["anyOf"][0]["$ref"]
+}
+
 #[test]
 fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
     let r = run(&["schema", "snapshot"]);
@@ -841,14 +849,23 @@ fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
     );
     let defs = &v["$defs"];
     assert_eq!(
-        defs["Source"]["properties"]["template"]["$ref"],
+        open_set_ref(&defs["Source"]["properties"]["template"]),
         "#/$defs/Template"
     );
     assert_eq!(
-        defs["PackHash"]["properties"]["upstreamSource"]["$ref"],
+        open_set_ref(&defs["PackHash"]["properties"]["upstreamSource"]),
         "#/$defs/UpstreamSource"
     );
-    // the tiers of a cluster record stay a map from the name of the tier to the tier
+    assert_eq!(
+        schema_values(&v, "SubjectKind"),
+        ["cluster", "edgeHost", "clusterGroup"]
+    );
+    assert_eq!(
+        open_set_ref(&defs["ClusterSource"]["properties"]["kind"]),
+        "#/$defs/SubjectKind"
+    );
+    // the tiers of a cluster record stay a map from the name of the tier to the tier, and a name
+    // can be any text
     let tiers = &defs["ClusterSource"]["properties"]["tiers"];
     assert_eq!(tiers["type"], "object");
     assert_eq!(tiers["additionalProperties"]["$ref"], "#/$defs/ClusterTier");
@@ -861,11 +878,11 @@ fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
         ["applied", "labels", "policy", "running", "shape"]
     );
     assert_eq!(
-        v["$defs"]["TierDiff"]["properties"]["tier"]["$ref"],
+        open_set_ref(&v["$defs"]["TierDiff"]["properties"]["tier"]),
         "#/$defs/Tier"
     );
     assert_eq!(
-        v["$defs"]["PackSide"]["properties"]["upstreamSource"]["$ref"],
+        open_set_ref(&v["$defs"]["PackSide"]["properties"]["upstreamSource"]),
         "#/$defs/UpstreamSource"
     );
 }
@@ -880,7 +897,7 @@ fn the_schema_names_each_value_of_each_closed_set_that_became_an_enum() {
     let v = schema("snapshot");
     assert_eq!(schema_values(&v, "Implementation"), ["rust", "bash"]);
     assert_eq!(
-        v["$defs"]["Tool"]["properties"]["impl"]["anyOf"][0]["$ref"],
+        open_set_ref(&v["$defs"]["Tool"]["properties"]["impl"]["anyOf"][0]),
         "#/$defs/Implementation"
     );
     let v = schema("diff");
@@ -907,8 +924,12 @@ fn the_schema_names_each_value_of_each_closed_set_that_became_an_enum() {
         ["IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"]
     );
     assert_eq!(
-        v["$defs"]["Bump"]["properties"]["flags"]["items"]["$ref"],
+        open_set_ref(&v["$defs"]["Bump"]["properties"]["flags"]["items"]),
         "#/$defs/ChangeFlag"
+    );
+    assert_eq!(
+        open_set_ref(&v["$defs"]["Bump"]["properties"]["impact"]),
+        "#/$defs/ImpactLevel"
     );
     let v = schema("consumers");
     assert_eq!(

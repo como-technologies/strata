@@ -104,6 +104,13 @@ pub struct ClusterSource {
     pub tiers: BTreeMap<Open<Tier>, ClusterTier>,
 }
 
+impl ClusterSource {
+    /// The tier `tier` of the record, when the record carries it.
+    pub fn tier(&self, tier: Tier) -> Option<&ClusterTier> {
+        self.tiers.get(&Open::Known(tier))
+    }
+}
+
 /// A tier of a cluster record: a part of the cluster beside its release, with a hash of its own.
 /// The variants are in the order of their names. So the map of the tiers of a record, and its
 /// JSON, keep the order of a record of strata 0.21.

@@ -12,7 +12,6 @@ use crate::diff::{
     self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImageIdChange, ImpactLevel,
     InvalidPack, Verify, VerifyStatus,
 };
-use crate::closed_set::Open;
 use crate::error::{Error, Result, found};
 use crate::json::{is_zero, opt_text, str_at, text};
 use crate::legend::{Described, legend};
@@ -145,15 +144,8 @@ fn live_holder<A: PaletteApi>(
         raw.resolved_values = Some(palette.resolved_values(kind, &c.uid)?);
     }
     // and one that holds the shape tier on its shape
-    if c.tiers.contains_key(&Open::Known(Tier::Shape)) {
+    if c.tier(Tier::Shape).is_some() {
         raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
-    }
-    // the live side carries no tier that this release does not know, so the diff skips it
-    for tier in c.tiers.keys().filter(|t| t.known().is_none()) {
-        progress.note(&format!(
-            "note: a later release of strata wrote the tier {tier}; this strata cannot read it \
-             from Palette, so it does not compare it"
-        ));
     }
     let live = Snapshot::from_cluster(
         &raw,

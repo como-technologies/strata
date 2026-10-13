@@ -3,9 +3,9 @@
 
 use super::dash;
 use super::verify::edited_in_place_note;
+use crate::closed_set::Open;
 use crate::diff::pack::InvalidSides;
 use crate::diff::{Diff, ImageIdChange, InvalidPack, PackDiff, Side};
-use crate::closed_set::Open;
 use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{PendingUpdate, Source, Tier};
 
@@ -56,6 +56,7 @@ pub(crate) fn diff_notes(d: &Diff) -> Vec<DiffNote> {
     notes.extend(updates_pending_notes(d).into_iter().map(DiffNote::Warn));
     notes.extend(repave_pending_notes(d).into_iter().map(DiffNote::Warn));
     notes.extend(unread_notes(d).into_iter().map(DiffNote::Warn));
+    notes.extend(later_tier_notes(d).into_iter().map(DiffNote::Warn));
     notes.extend(running_behind_notes(d).into_iter().map(DiffNote::Warn));
     notes.extend(upstream_unknown_note(d).map(DiffNote::Warn));
     notes.extend(masked_notes(d).into_iter().map(DiffNote::Warn));
@@ -450,6 +451,31 @@ fn unread_notes(d: &Diff) -> Vec<String> {
         })
         .collect();
     notes.into_iter().collect()
+}
+
+/// One note for each tier of a side that a later release wrote, when the other side does not
+/// carry it: `a later release of strata wrote the tier zones of cluster fred, so strata does not
+/// compare it`. Strata reads no such tier from Palette, so `verify` never compares one.
+fn later_tier_notes(d: &Diff) -> Vec<String> {
+    let (Some(a), Some(b)) = (&d.a.cluster, &d.b.cluster) else {
+        return Vec::new();
+    };
+    [(a, b), (b, a)]
+        .into_iter()
+        .flat_map(|(c, other)| {
+            c.tiers
+                .keys()
+                .filter(|t| t.known().is_none() && !other.tiers.contains_key(*t))
+                .map(move |t| {
+                    format!(
+                        "a later release of strata wrote the tier {t} of {} {}, so strata does \
+                         not compare it",
+                        c.kind.noun(),
+                        c.name
+                    )
+                })
+        })
+        .collect()
 }
 
 /// One note for each pack that a cluster side runs at another version than its profile

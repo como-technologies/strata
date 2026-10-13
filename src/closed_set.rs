@@ -3,8 +3,8 @@
 //!
 //! Strata reads again a record and the report of `behind --since`. A later release can add a
 //! value to a closed set of these documents and keep the schema id. So each such field is an
-//! [`Open`] value. Strata reads a value that it does not know with no error, and writes the same
-//! text back.
+//! [`Open`] value. Strata reads a value that it does not know with no error. Each document that
+//! strata writes from it holds the same text.
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -23,9 +23,9 @@ pub trait ClosedSet: Copy + Serialize + DeserializeOwned + JsonSchema {
 /// A value of the closed set `T` in a document that strata reads again.
 ///
 /// A later release can add a value to `T` and keep the schema id of the document. This release
-/// reads such a value as [`Open::Unknown`], with its text, and writes the same text back. Two
-/// values are equal, and sort, by their text: a map keyed by them keeps the order of a map keyed
-/// by text.
+/// reads such a value as [`Open::Unknown`], with its text, and writes the same text. Two values
+/// are equal, and sort, by their text: a map keyed by them keeps the order of a map keyed by
+/// text.
 #[derive(Debug, Clone)]
 pub enum Open<T> {
     /// A value that this release knows.
@@ -115,7 +115,7 @@ impl<'de, T: ClosedSet> Deserialize<'de> for Open<T> {
 
 /// What the schema of an [`Open`] value says about a text that names no value of the set.
 const LATER_VALUE: &str =
-    "A value that a later release of strata adds. This release keeps its text, and writes it back.";
+    "A value that a later release of strata adds. This release reads it, and keeps its text.";
 
 impl<T: ClosedSet> JsonSchema for Open<T> {
     fn inline_schema() -> bool {
@@ -197,7 +197,10 @@ mod tests {
         let schema = schemars::schema_for!(Open<Color>);
         let any_of = schema.as_value()["anyOf"].as_array().unwrap().clone();
         assert_eq!(any_of[0]["$ref"], "#/$defs/Color");
-        assert_eq!(any_of[1], json!({"type": "string", "description": LATER_VALUE}));
+        assert_eq!(
+            any_of[1],
+            json!({"type": "string", "description": LATER_VALUE})
+        );
         let names: Vec<Value> = schema.as_value()["$defs"]["Color"]["oneOf"]
             .as_array()
             .unwrap()

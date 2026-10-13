@@ -127,7 +127,7 @@ pub(super) fn running_behind(side: Side, s: &Snapshot) -> Vec<RunningBehind> {
         .source
         .cluster
         .as_ref()
-        .and_then(|c| c.tiers.get(&Open::Known(Tier::Running)))
+        .and_then(|c| c.tier(Tier::Running))
     else {
         return Vec::new();
     };
