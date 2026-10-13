@@ -1,9 +1,10 @@
 //! The tests of the reads of Palette: the routes, the paging, and the documents they give.
 
+use serde_json::json;
+
 use super::*;
 use crate::api::MemoryApi;
 use crate::scope::ProfileScope;
-use serde_json::json;
 
 fn listing() -> Value {
     json!({"items": [

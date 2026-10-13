@@ -2,13 +2,12 @@
 
 use serde_json::Value;
 
+use super::notes::tag_rename;
+use super::{show, shown};
 use crate::diff::{
     ChangeFlag, ClusterValueChange, Diff, Leaf, Op, PackDiff, Status, ValuesDiff, VariableSummary,
     VariablesByName,
 };
-
-use super::notes::tag_rename;
-use super::{show, shown};
 
 /// One line of a diff of values: a leaf, or a value that a cluster gives a variable.
 ///

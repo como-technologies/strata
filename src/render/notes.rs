@@ -1,13 +1,12 @@
 //! The notes of a comparison: what the root does not cover, what Palette did not give, and what
 //! waits.
 
+use super::dash;
+use super::verify::edited_in_place_note;
 use crate::diff::pack::InvalidSides;
 use crate::diff::{Diff, ImageIdChange, InvalidPack, PackDiff, Side};
 use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{PendingUpdate, Source, Tier};
-
-use super::dash;
-use super::verify::edited_in_place_note;
 
 /// True when the two sides are releases of each other: two profile-shaped sides, or two versions
 /// of one pack. A pack against a profile, or one pack against another pack, is a comparison a

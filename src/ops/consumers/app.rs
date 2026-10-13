@@ -1,0 +1,86 @@
+//! The consumers of an app profile: its app deployments.
+
+use std::collections::HashMap;
+
+use super::{
+    APP_NO_EDGE_HOSTS, APP_NO_SECOND_READING, ClustersRead, Consumer, ConsumerKind,
+    ConsumersReport, EdgeHostsRead, report,
+};
+use crate::api::{Palette, PaletteApi};
+use crate::error::Result;
+use crate::json::{arr, text};
+use crate::ops::client_for;
+use crate::ops::list::name_projects_of;
+use crate::profile_type::ProfileType;
+use crate::term::progress::Progress;
+
+/// The app deployments that use an app profile version: `status.inUseApps` of
+/// `GET /v1/appProfiles/{uid}`, each read with `GET /v1/appDeployments/{uid}` in its own project
+/// for its state and the version its copy names. Palette refuses the delete of an app profile
+/// while a deployment uses it, as it does for a cluster profile. `id` is a uid, or a name when
+/// `version` is given. The dashboard route of the app deployments filters no profile, and an app
+/// profile binds to no edge host, so the report has no second reading and no edge hosts.
+pub fn app_consumers<A, F>(
+    scope: Option<&str>,
+    id: &str,
+    version: Option<&str>,
+    mut connect: F,
+    generated_at: &str,
+    progress: &Progress,
+) -> Result<ConsumersReport>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
+    let home = connect(scope)?;
+    let uid = home.app_profile_uid(id, version)?;
+    progress.note(&format!("listing the app deployments of app profile {uid}"));
+    let doc = home.app_profile_document(&uid)?;
+
+    let mut list: Vec<Consumer> = Vec::new();
+    for app in arr(&doc, "/status/inUseApps") {
+        let app_uid = text(app, "/uid");
+        if app_uid.is_empty() || list.iter().any(|c| c.uid == app_uid) {
+            continue;
+        }
+        let mut c = Consumer::unread(
+            ConsumerKind::App,
+            app_uid,
+            text(app, "/name"),
+            text(app, "/projectUid"),
+        );
+        let doc = client_for(&mut clients, &home, &c.project_uid, &mut connect)
+            .and_then(|p| p.app_deployment_document(&c.uid));
+        match doc {
+            Ok(d) => {
+                c.fill_from_document(&d);
+                c.version = text(&d, "/spec/profile/metadata/version");
+            }
+            Err(e) => c.error = Some(e.to_json()),
+        }
+        list.push(c);
+    }
+    name_projects_of(
+        &mut list,
+        |c| &c.project_uid,
+        |c| &mut c.project_name,
+        &home,
+    );
+    Ok(report(
+        &doc,
+        Some(ProfileType::App),
+        list,
+        ClustersRead {
+            skipped: true,
+            reason: APP_NO_SECOND_READING.to_string(),
+            ..ClustersRead::default()
+        },
+        EdgeHostsRead {
+            skipped: true,
+            reason: APP_NO_EDGE_HOSTS.to_string(),
+            ..EdgeHostsRead::default()
+        },
+        generated_at,
+    ))
+}

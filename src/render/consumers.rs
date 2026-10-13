@@ -1,10 +1,9 @@
 //! The lines of `consumers`: the heading, the counts, the second reading, and the edge hosts.
 
+use super::{count_of, dash, entry_error};
 use crate::diff::Diff;
 use crate::ops::{ClustersRead, ConsumersReport};
 use crate::snapshot::Source;
-
-use super::{count_of, dash, entry_error};
 
 /// `1 consumer`, `2 consumers`, or `no consumers`.
 pub(crate) fn consumer_count(n: usize) -> String {

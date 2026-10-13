@@ -1,12 +1,5 @@
 //! The lines of `verify`: the verdict, the subject, who changed the object, and each record.
 
-use crate::diff::impact::ImpactLevel;
-use crate::diff::{Diff, Verify, VerifyStatus};
-use crate::ops::{
-    ACTIVE_STATE, IN_USE_STATE, RUNNING_STATE, RecordStatus, VerifiedRecord, VerifySummary,
-};
-use crate::snapshot::{Source, SubjectKind};
-
 use super::changes::values_changed;
 use super::list::name_or_uid;
 use super::notes::{
@@ -14,6 +7,12 @@ use super::notes::{
 };
 use super::same_release::record_word;
 use super::{count_of, entry_error, registry_sync_suffix};
+use crate::diff::impact::ImpactLevel;
+use crate::diff::{Diff, Verify, VerifyStatus};
+use crate::ops::{
+    ACTIVE_STATE, IN_USE_STATE, RUNNING_STATE, RecordStatus, VerifiedRecord, VerifySummary,
+};
+use crate::snapshot::{Source, SubjectKind};
 
 /// What a verdict line is about: a published version, what a cluster runs, or what an edge host
 /// or a cluster group holds, as [`Source::title`] names it.

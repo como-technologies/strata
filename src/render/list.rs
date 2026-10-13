@@ -1,11 +1,10 @@
 //! The lines of `list` and `packs`, and of a set of records.
 
+use super::verify::record_label;
+use super::{count_of, dash, entry_error, joined_note};
 use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
 use crate::snapshot::Snapshot;
 use crate::text::and_list;
-
-use super::verify::record_label;
-use super::{count_of, dash, entry_error, joined_note};
 
 /// `env=prod, team`: the labels of a cluster, with a tag that has no value by its key alone.
 pub(crate) fn labels_text(labels: &std::collections::BTreeMap<String, String>) -> String {
