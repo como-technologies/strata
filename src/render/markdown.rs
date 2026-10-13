@@ -15,7 +15,9 @@ use super::{
 use crate::color::Paint;
 use crate::diff::{Diff, Leaf, Op, Status};
 use crate::error::Result;
-use crate::ops::{Chain, ConsumersReport, Listing, PackListing, VerifySummary};
+use crate::legend::document_name;
+use crate::ops::{Chain, ConsumerKind, ConsumersReport, Listing, PackListing, VerifySummary};
+use crate::profile_type::ProfileType;
 use crate::snapshot::Snapshot;
 
 /// Renders markdown for a pull request comment.
@@ -221,11 +223,7 @@ impl Renderer for MarkdownRenderer {
                 body.push_str("```\n");
             }
             for m in &pd.manifests {
-                let word = match m.op {
-                    Op::Changed => "changed",
-                    Op::Added => "added",
-                    Op::Removed => "removed",
-                };
+                let word = document_name(&m.op);
                 body.push_str(&format!("- manifest `{}` {word}\n", m.name));
             }
             if body.is_empty() {
@@ -388,10 +386,10 @@ impl Renderer for MarkdownRenderer {
             o.push('\n');
             return Ok(o);
         }
-        let subject = if r.profile.kind == crate::snapshot::APP_KIND {
-            "app deployment"
+        let subject = if r.profile.kind == ProfileType::App.as_str() {
+            ConsumerKind::App.noun()
         } else {
-            "cluster"
+            ConsumerKind::Cluster.noun()
         };
         o.push_str(&format!(
             "| {subject} | uid | project | state | runs |\n|---|---|---|---|---|\n"
@@ -400,8 +398,8 @@ impl Renderer for MarkdownRenderer {
             // an empty version means two things: the cluster named none, or strata could not read
             // the cluster at all. `-` states the first for both, so the error decides the cell.
             // a cluster template keeps no copy of the version, so its cell names the kind alone
-            let mut runs = if c.kind == crate::ops::TEMPLATE_KIND {
-                "(cluster template)".to_string()
+            let mut runs = if c.kind == ConsumerKind::Template {
+                format!("({})", c.kind.noun())
             } else if let Some(msg) = entry_error(c.error.as_ref()) {
                 format!("not read: {}", escape(msg))
             } else if c.version.is_empty() {
@@ -414,10 +412,8 @@ impl Renderer for MarkdownRenderer {
             if c.unlisted {
                 runs.push_str(" (not in the consumer list of the profile)");
             }
-            if c.kind == crate::ops::EDGE_HOST_KIND {
-                runs.push_str(" (edge host)");
-            } else if c.kind == crate::ops::APP_DEPLOYMENT_KIND {
-                runs.push_str(" (app deployment)");
+            if matches!(c.kind, ConsumerKind::EdgeHost | ConsumerKind::App) {
+                runs.push_str(&format!(" ({})", c.kind.noun()));
             }
             o.push_str(&format!(
                 "| `{}` | `{}` | `{}` | {} | {runs} |\n",

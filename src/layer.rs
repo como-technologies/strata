@@ -35,6 +35,20 @@ impl Layer {
         }
     }
 
+    /// The layer as Palette names it: `kernel`, `os`, `k8s`, `cni`, `csi`, or `addon`. `other`
+    /// for a name strata does not know.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Layer::Kernel => "kernel",
+            Layer::Os => "os",
+            Layer::K8s => "k8s",
+            Layer::Cni => "cni",
+            Layer::Csi => "csi",
+            Layer::Addon => "addon",
+            Layer::Other => "other",
+        }
+    }
+
     /// Sort key: infrastructure layers first, add-ons after, unknown last.
     pub fn rank(self) -> u8 {
         match self {
@@ -51,16 +65,13 @@ impl Layer {
 
 impl fmt::Display for Layer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            Layer::Kernel => "kernel",
-            Layer::Os => "os",
-            Layer::K8s => "k8s",
-            Layer::Cni => "cni",
-            Layer::Csi => "csi",
-            Layer::Addon => "addon",
-            Layer::Other => "other",
-        };
-        f.write_str(s)
+        f.write_str(self.as_str())
+    }
+}
+
+impl AsRef<str> for Layer {
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
 
@@ -92,5 +103,22 @@ mod tests {
         );
         assert_eq!(Layer::parse("k8s"), Layer::K8s);
         assert_eq!(Layer::parse("weird"), Layer::Other);
+    }
+
+    #[test]
+    fn a_layer_parses_and_prints_as_palette_names_it() {
+        for layer in [
+            Layer::Kernel,
+            Layer::Os,
+            Layer::K8s,
+            Layer::Cni,
+            Layer::Csi,
+            Layer::Addon,
+        ] {
+            assert_eq!(Layer::parse(layer.as_str()), layer);
+            assert_eq!(layer.to_string(), layer.as_str());
+        }
+        assert_eq!(Layer::Other.as_str(), "other");
+        assert_eq!(Layer::parse("other"), Layer::Other);
     }
 }

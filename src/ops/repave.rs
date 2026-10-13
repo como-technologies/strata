@@ -13,12 +13,8 @@ use crate::cluster_template::ClusterTemplateRef;
 use crate::diff::{ImpactLevel, PaletteRepave};
 use crate::error::{Error, Result};
 use crate::json::arr;
+use crate::profile_type::ProfileType;
 use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind};
-
-/// A profile type that builds a cluster: its OS and Kubernetes layers.
-fn is_infra(kind: &str) -> bool {
-    matches!(kind, "cluster" | "infra")
-}
 
 /// One entry of `packValues` in the body of `validate/repave`: the pack by name, with its tag,
 /// its type, and its values.
@@ -50,8 +46,12 @@ pub fn validate_body(running: &[AppliedProfile], target: &Snapshot) -> Value {
             .iter()
             .find(|p| p.name == target.source.name)
             .or_else(|| {
-                is_infra(&target.source.kind)
-                    .then(|| running.iter().find(|p| is_infra(&p.kind)))
+                ProfileType::text_builds_cluster(&target.source.kind)
+                    .then(|| {
+                        running
+                            .iter()
+                            .find(|p| ProfileType::text_builds_cluster(&p.kind))
+                    })
                     .flatten()
             });
         std::iter::once(json!({"uid": uid}))

@@ -5,6 +5,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::layer::Layer;
+use crate::legend::Described;
 
 /// Ordered by severity, so `max` picks the worst.
 #[derive(
@@ -27,6 +28,36 @@ pub enum ImpactLevel {
     MayRepave,
     /// Nodes are replaced.
     Repave,
+}
+
+impl Described for ImpactLevel {
+    const ALL: &'static [Self] = &[
+        Self::None,
+        Self::Sync,
+        Self::InPlace,
+        Self::ClusterWide,
+        Self::MayRepave,
+        Self::Repave,
+    ];
+
+    fn describe(self) -> &'static str {
+        match self {
+            Self::None => {
+                "No change, only the tag name of a pack changed for the same build, or an OS, Kubernetes, or kernel pack moved to another pack reference at the same version."
+            }
+            Self::Sync => {
+                "Only the upstream digest changed, or an OS, Kubernetes, or kernel pack moved to another pack reference at the same version and its digest changed. Applied on the next profile sync."
+            }
+            Self::InPlace => "Add-on pack upgraded or reconfigured in place.",
+            Self::ClusterWide => "CNI or CSI layer changed; affects every node and may repave.",
+            Self::MayRepave => {
+                "Node or control plane configuration changed on the OS or Kubernetes layer; Palette may repave."
+            }
+            Self::Repave => {
+                "Nodes are replaced on a cluster of the kubeadm engine: OS image or Kubernetes version change. compare --repave asks Palette."
+            }
+        }
+    }
 }
 
 impl ImpactLevel {

@@ -12,8 +12,10 @@ use crate::api::{
 };
 use crate::cluster_template::ClusterTemplateRef;
 use crate::error::{Error, Result, found};
+use crate::profile_type::ProfileType;
 use crate::progress::Progress;
 use crate::reference::Ref;
+use crate::scope::ProfileScope;
 use crate::snapshot::{Snapshot, SubjectKind, Tool};
 
 use super::consumer_list::consumer_uids;
@@ -41,17 +43,32 @@ pub(crate) const ACTIVE_STATE: &str = "active";
 /// The state of a cluster group that Palette does not mark active, as strata names it.
 pub(crate) const INACTIVE_STATE: &str = "inactive";
 
-/// The kind of a consumer that is a cluster.
-pub const CLUSTER_KIND: &str = "cluster";
+/// The kind of a consumer of a profile version.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ConsumerKind {
+    /// `cluster`: a cluster that runs the version.
+    #[default]
+    Cluster,
+    /// `edgehost`: an edge host that the profile is bound to.
+    EdgeHost,
+    /// `template`: a cluster template that links the version.
+    Template,
+    /// `app`: an app deployment of an app profile.
+    App,
+}
 
-/// The kind of a consumer that is an edge host.
-pub const EDGE_HOST_KIND: &str = "edgehost";
-
-/// The kind of a consumer that is a cluster template.
-pub const TEMPLATE_KIND: &str = "template";
-
-/// The kind of a consumer that is an app deployment of an app profile.
-pub const APP_DEPLOYMENT_KIND: &str = "app";
+impl ConsumerKind {
+    /// The noun that names the kind in a report.
+    pub fn noun(self) -> &'static str {
+        match self {
+            Self::Cluster => "cluster",
+            Self::EdgeHost => "edge host",
+            Self::Template => "cluster template",
+            Self::App => "app deployment",
+        }
+    }
+}
 
 /// Why an app profile has no second reading: Palette lists app deployments by name, cluster, and
 /// tag, and not by profile.
@@ -61,10 +78,6 @@ pub const APP_NO_SECOND_READING: &str =
 /// Why an app profile has no edge hosts: Palette binds a cluster profile to an edge host, and
 /// never an app profile.
 pub const APP_NO_EDGE_HOSTS: &str = "an app profile: no edge host binds one";
-
-fn cluster_kind() -> String {
-    CLUSTER_KIND.to_string()
-}
 
 /// The profile version whose consumers are listed.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -86,8 +99,8 @@ pub struct ConsumedProfile {
 pub struct Consumer {
     /// `cluster`, `edgehost` for an edge host that the profile is bound to, `template` for a
     /// cluster template that links the version, or `app` for an app deployment of an app profile.
-    #[serde(default = "cluster_kind")]
-    pub kind: String,
+    #[serde(default)]
+    pub kind: ConsumerKind,
     /// Cluster uid, edge host uid, cluster template uid, or app deployment uid.
     pub uid: String,
     /// Cluster name; empty when neither the profile nor the cluster could name it.
@@ -341,7 +354,7 @@ where
                 return Err(Error::NoUid);
             }
             let scope = scope_of(&recorded.source.project_uid).map(str::to_string);
-            if recorded.source.kind == crate::snapshot::APP_KIND {
+            if recorded.source.is_app() {
                 return app_consumers(
                     scope.as_deref(),
                     &recorded.source.uid,
@@ -376,7 +389,7 @@ where
     for cluster in uids {
         let known = named.iter().find(|n| text(n, "/uid") == cluster);
         let mut c = Consumer {
-            kind: cluster_kind(),
+            kind: ConsumerKind::Cluster,
             name: known.map(|n| text(n, "/name")).unwrap_or_default(),
             project_uid: known.map(|n| text(n, "/projectUid")).unwrap_or_default(),
             project_name: String::new(),
@@ -423,7 +436,7 @@ where
     } else {
         // the search takes the name of the profile, in the scope of the profile (#181)
         let name = text(&doc, "/metadata/name");
-        let project = if text(&doc, "/metadata/annotations/scope") == "tenant" {
+        let project = if ProfileScope::of_document(&doc) == Some(ProfileScope::Tenant) {
             String::new()
         } else {
             text(&doc, "/metadata/annotations/projectUid")
@@ -482,7 +495,7 @@ where
 fn linked_templates(list: &mut Vec<Consumer>, doc: &Value) {
     for t in ClusterTemplateRef::linked(doc) {
         list.push(Consumer {
-            kind: TEMPLATE_KIND.to_string(),
+            kind: ConsumerKind::Template,
             name: t.name,
             project_uid: t.project_uid,
             project_name: String::new(),
@@ -527,7 +540,7 @@ where
             continue;
         }
         let mut c = Consumer {
-            kind: APP_DEPLOYMENT_KIND.to_string(),
+            kind: ConsumerKind::App,
             name: text(app, "/name"),
             project_uid: text(app, "/projectUid"),
             project_name: String::new(),
@@ -572,7 +585,7 @@ where
             uid: text(&doc, "/metadata/uid"),
             name: text(&doc, "/metadata/name"),
             version,
-            kind: crate::snapshot::APP_KIND.to_string(),
+            kind: ProfileType::App.as_str().to_string(),
         },
         count: list.len(),
         overwritten,
@@ -615,7 +628,7 @@ fn edge_hosts_bound<A: PaletteApi>(
             .find(|t| str_at(t, "/uid") == uid);
         if let Some(bound) = bound {
             list.push(Consumer {
-                kind: EDGE_HOST_KIND.to_string(),
+                kind: ConsumerKind::EdgeHost,
                 uid: text(host, "/metadata/uid"),
                 name: text(host, "/metadata/name"),
                 project_uid: text(host, "/metadata/annotations/projectUid"),
@@ -758,7 +771,7 @@ where
             .find(|t| str_at(t, "/uid") == uid);
         if let Some(copy) = copy {
             list.push(Consumer {
-                kind: cluster_kind(),
+                kind: ConsumerKind::Cluster,
                 uid: listed.uid.clone(),
                 name: first_nonempty(&[str_at(&doc, "/metadata/name"), &listed.name]),
                 project_uid: first_nonempty(&[
@@ -844,4 +857,28 @@ fn group_members<A: PaletteApi>(
         }
     }
     list_clusters(&members)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_consumer_kind_is_named_in_the_documents_and_in_the_reports() {
+        for (kind, name, noun) in [
+            (ConsumerKind::Cluster, "cluster", "cluster"),
+            (ConsumerKind::EdgeHost, "edgehost", "edge host"),
+            (ConsumerKind::Template, "template", "cluster template"),
+            (ConsumerKind::App, "app", "app deployment"),
+        ] {
+            assert_eq!(serde_json::to_value(kind).unwrap(), Value::from(name));
+            assert_eq!(kind.noun(), noun);
+        }
+        // a consumer with no kind is a cluster, as each older document names one
+        let c: Consumer = serde_json::from_value(serde_json::json!({
+            "uid": "c1", "name": "lab", "projectUid": "p1", "state": "Running"
+        }))
+        .unwrap();
+        assert_eq!(c.kind, ConsumerKind::Cluster);
+    }
 }

@@ -14,10 +14,13 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use crate::api::{Palette, PaletteApi, RawProfile, RegistryKind};
+use crate::api::{Palette, PaletteApi, RawProfile};
 use crate::canon::{Canon, canon_yaml};
 use crate::error::{Error, Result};
 use crate::json::{arr, first_nonempty, opt_text, str_at, strings, text};
+use crate::layer::Layer;
+use crate::pack_type::PackType;
+use crate::profile_type::ProfileType;
 use crate::progress::Progress;
 use crate::reference::LATEST;
 use crate::registry::Registries;
@@ -25,9 +28,6 @@ use crate::snapshot::{PackSource, PresetOption, Snapshot, Template};
 
 mod export;
 mod gaps;
-
-/// The `source.type` of a snapshot of one pack version from a registry.
-pub const PACK_TYPE: &str = "pack";
 
 /// A candidate profile version. YAML or JSON. Quote versions that YAML would read as numbers,
 /// such as `"22.04"`.
@@ -65,10 +65,7 @@ impl Candidate {
     pub fn from_snapshot(snap: &Snapshot) -> Result<Candidate> {
         // a candidate describes a profile version to publish: a cluster holds a copy of one, a
         // pack is one layer of one, and an app profile has tiers, so none makes a candidate
-        if snap.source.cluster.is_some()
-            || snap.source.pack.is_some()
-            || snap.source.kind == crate::snapshot::APP_KIND
-        {
+        if snap.source.cluster.is_some() || snap.source.pack.is_some() || snap.source.is_app() {
             return Err(Error::ProfileRefRequired {
                 reference: snap.source.reference.clone(),
             });
@@ -90,7 +87,7 @@ impl Candidate {
                     layer: nonempty(&p.layer),
                     // a pack from a registry takes its type from the registry; a manifest pack has
                     // no registry, so the file says what it is
-                    kind: Some(p.kind.clone()).filter(|k| k == MANIFEST),
+                    kind: p.is_manifest().then(|| p.kind.clone()),
                     tag: nonempty(&p.tag),
                     registry: None,
                     registry_uid: nonempty(&p.registry_uid),
@@ -186,7 +183,7 @@ fn reference(from: &Path, to: &Path) -> Result<String> {
 }
 
 fn default_type() -> String {
-    "cluster".to_string()
+    ProfileType::Cluster.as_str().to_string()
 }
 
 /// One layer of the candidate: a pack version and the configuration the profile gives it.
@@ -261,15 +258,10 @@ impl RegistryRef {
     }
 }
 
-/// The `type` of a layer of manifests that comes from no registry.
-pub const MANIFEST: &str = "manifest";
-
-/// The layer that Palette gives each manifest pack: the layer of its own manifest pack. It drops
-/// the layer of the request.
-const MANIFEST_LAYER: &str = "addon";
-
-/// The layer of the pack that Palette makes for a layer from a registry that it does not sync.
-const UNSYNCED_LAYER: &str = "addon";
+/// The layer that Palette gives each pack that it makes itself. The packs are a manifest pack,
+/// and the pack of a layer from a registry that it does not sync. It drops the layer of the
+/// request.
+const MINTED_LAYER: Layer = Layer::Addon;
 
 /// Whether `v` is a semantic version in the loose form that Palette parses: an optional `v`,
 /// one to three numbers with dots between them, an optional pre-release after `-`, and optional
@@ -391,7 +383,7 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
             ),
             // Palette makes the pack of a manifest layer from its own manifest pack: no registry
             // holds it, and the top-level registry does not apply to it
-            Some(MANIFEST) => {
+            Some(kind) if PackType::parse(kind) == Some(PackType::Manifest) => {
                 if l.registry.is_some() || l.registry_uid.is_some() {
                     return Err(invalid(format!(
                         "{whom} is a manifest layer and names a registry; remove registry and \
@@ -405,11 +397,11 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
                 }
                 // Palette takes the layer from its own manifest pack, and drops the layer of the
                 // request, so another layer gives a record that the published version never has
-                if let Some(layer) = l.layer.as_deref().filter(|&x| x != MANIFEST_LAYER) {
+                if let Some(layer) = l.layer.as_deref().filter(|&x| x != MINTED_LAYER.as_str()) {
                     return Err(invalid(format!(
                         "{whom} is a manifest layer with layer {layer}; Palette gives each manifest \
-                         pack the layer {MANIFEST_LAYER}, so remove layer or set it to \
-                         {MANIFEST_LAYER}"
+                         pack the layer {MINTED_LAYER}, so remove layer or set it to \
+                         {MINTED_LAYER}"
                     )));
                 }
                 None
@@ -579,7 +571,7 @@ pub fn pack_snapshot<A: PaletteApi>(
     let candidate = Candidate {
         name: name.to_string(),
         version: resolved.clone(),
-        kind: PACK_TYPE.to_string(),
+        kind: ProfileType::Pack.as_str().to_string(),
         cloud_type: String::new(),
         registry: None,
         registry_uid: Some(registry_uid.clone()),
@@ -609,7 +601,7 @@ pub fn pack_snapshot<A: PaletteApi>(
     };
     let raw = resolve_with(&loaded, &mut registries, progress)?;
     let mut snap = Snapshot::from_raw(&raw, reference, fetched_at)?;
-    snap.source.kind = PACK_TYPE.to_string();
+    snap.source.kind = ProfileType::Pack.as_str().to_string();
     snap.source.template = Template::Registry;
     // a pack version is not a profile version, so no cluster uses it and nothing asked
     snap.source.consumers = None;
@@ -909,10 +901,10 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         };
         // the pack that Palette makes has the layer addon and the tag as its version, and a
         // profile takes both from it
-        if let Some(layer) = l.layer.as_deref().filter(|&x| x != UNSYNCED_LAYER) {
+        if let Some(layer) = l.layer.as_deref().filter(|&x| x != MINTED_LAYER.as_str()) {
             return Err(not_synced(format!(
-                "Palette gives the pack that it makes the layer {UNSYNCED_LAYER}, not \
-                 {layer}, so remove layer or set it to {UNSYNCED_LAYER}"
+                "Palette gives the pack that it makes the layer {MINTED_LAYER}, not \
+                 {layer}, so remove layer or set it to {MINTED_LAYER}"
             )));
         }
         let tag = l.tag.as_deref().unwrap_or(&l.version);
@@ -932,8 +924,8 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         ));
         let values = loaded_layer.values.clone().unwrap_or_default();
         let fields = PackFields {
-            layer: UNSYNCED_LAYER,
-            kind: how.kind.pack_type(),
+            layer: MINTED_LAYER.as_str(),
+            kind: how.kind.pack_type().as_str(),
             tag,
             version: tag,
             pack_uid: "",
@@ -1038,7 +1030,7 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         let layer = registry_layer
             .or_else(|| l.layer.clone())
             .unwrap_or_default();
-        let kind = first_nonempty(&[str_at(summary, "/spec/type"), "spectro"]);
+        let kind = first_nonempty(&[str_at(summary, "/spec/type"), PackType::Spectro.as_str()]);
         let digest = text(summary, "/spec/digest");
         let fields = PackFields {
             layer: &layer,
@@ -1057,7 +1049,7 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         }
         // the provider type of an OCI registry, as a published profile carries it on the pack
         // reference
-        if RegistryKind::of_pack_type(&kind) == Some(RegistryKind::Oci)
+        if PackType::parse(&kind) == Some(PackType::Oci)
             && let Some(t) = self.registries.oci_provider_type(registry)?
         {
             pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
@@ -1075,8 +1067,8 @@ fn manifest_layer(
 ) -> ResolvedLayer {
     let values = loaded_layer.values.clone().unwrap_or_default();
     let fields = PackFields {
-        layer: l.layer.as_deref().unwrap_or(MANIFEST_LAYER),
-        kind: MANIFEST,
+        layer: l.layer.as_deref().unwrap_or(MINTED_LAYER.as_str()),
+        kind: PackType::Manifest.as_str(),
         tag: l.tag.as_deref().unwrap_or(&l.version),
         version: &l.version,
         pack_uid: "",

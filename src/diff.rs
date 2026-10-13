@@ -13,6 +13,7 @@ use crate::cluster_template::ClusterTemplateRef;
 pub use crate::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
 use crate::json::{is_zero, str_at, text};
 use crate::layer::Layer;
+use crate::legend::{Described, legend};
 pub use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{
     ClusterTier, ClusterVariable, Pack, Snapshot, Source, Tier, Tool, UpstreamSource,
@@ -145,37 +146,15 @@ pub struct Legend {
 impl Legend {
     /// The legend every document carries.
     pub fn standard() -> Legend {
-        let m = |pairs: &[(&str, &str)]| -> BTreeMap<String, String> {
-            pairs
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect()
-        };
         Legend {
             identity: "The pack reference changed: name, layer, type, tag, version, packUid or registryUid. The release points at a different pack build.".into(),
             upstream: "The digest on the pack reference changed: pack content moved under the hood, possibly under the same version. Which field fed it is hash.upstreamSource in the snapshot.".into(),
             authored: "Profile-level configuration changed: the pack's values YAML (compared canonically, so formatting does not count), its attached manifests, or its params.".into(),
             images: "The image list that the values declare changed, pack.content.images: an image added, removed, or at another tag. A detail of AUTHORED. The list holds a tag and not a digest, so an image rebuilt under one tag does not show.".into(),
             charts: "The chart list that the values declare changed, pack.content.charts: a chart added, removed, or at another version. A detail of AUTHORED.".into(),
-            impact: m(&[
-                ("repave", "Nodes are replaced on a cluster of the kubeadm engine: OS image or Kubernetes version change. compare --repave asks Palette."),
-                ("may-repave", "Node or control plane configuration changed on the OS or Kubernetes layer; Palette may repave."),
-                ("cluster-wide", "CNI or CSI layer changed; affects every node and may repave."),
-                ("in-place", "Add-on pack upgraded or reconfigured in place."),
-                ("sync", "Only the upstream digest changed, or an OS, Kubernetes, or kernel pack moved to another pack reference at the same version and its digest changed. Applied on the next profile sync."),
-                ("none", "No change, only the tag name of a pack changed for the same build, or an OS, Kubernetes, or kernel pack moved to another pack reference at the same version."),
-            ]),
-            status: m(&[
-                ("unchanged", "Same node hash on both sides."),
-                ("changed", "Node hash differs; see identity, upstream and authored."),
-                ("added", "Present only in B."),
-                ("removed", "Present only in A."),
-            ]),
-            op: m(&[
-                ("changed", "The leaf exists on both sides with different values."),
-                ("added", "The leaf exists only in B."),
-                ("removed", "The leaf exists only in A."),
-            ]),
+            impact: legend::<ImpactLevel>(),
+            status: legend::<Status>(),
+            op: legend::<Op>(),
         }
     }
 }
@@ -512,6 +491,18 @@ pub enum Op {
     Removed,
 }
 
+impl Described for Op {
+    const ALL: &'static [Self] = &[Self::Changed, Self::Added, Self::Removed];
+
+    fn describe(self) -> &'static str {
+        match self {
+            Self::Changed => "The leaf exists on both sides with different values.",
+            Self::Added => "The leaf exists only in B.",
+            Self::Removed => "The leaf exists only in A.",
+        }
+    }
+}
+
 /// One scalar (or empty container) that differs.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -542,6 +533,19 @@ pub enum Status {
     Added,
     /// Only in A.
     Removed,
+}
+
+impl Described for Status {
+    const ALL: &'static [Self] = &[Self::Unchanged, Self::Changed, Self::Added, Self::Removed];
+
+    fn describe(self) -> &'static str {
+        match self {
+            Self::Unchanged => "Same node hash on both sides.",
+            Self::Changed => "Node hash differs; see identity, upstream and authored.",
+            Self::Added => "Present only in B.",
+            Self::Removed => "Present only in A.",
+        }
+    }
 }
 
 /// One side of a pack comparison.

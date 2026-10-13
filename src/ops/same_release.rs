@@ -6,6 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::diff::{self, Diff, ImageIdChange, MaskedPack, PackDiff, Status};
+use crate::legend::{Described, legend};
 use crate::snapshot::{Pack, Snapshot, Tool};
 
 /// Schema id of the document `same-release` writes.
@@ -21,6 +22,19 @@ pub enum Policy {
     /// Equal roots, or packs re-pinned from another registry with the same tag, version, type,
     /// values, manifests, and params, and variables unchanged.
     RegistryMove,
+}
+
+impl Described for Policy {
+    const ALL: &'static [Self] = &[Self::Exact, Self::RegistryMove];
+
+    fn describe(self) -> &'static str {
+        match self {
+            Self::Exact => "Only equal roots pass.",
+            Self::RegistryMove => {
+                "Equal roots pass, and so does a pair whose only difference is packs re-pinned from another registry."
+            }
+        }
+    }
 }
 
 /// The outcome for one consecutive pair.
@@ -45,6 +59,34 @@ impl PairStatus {
     /// True for the statuses that count as the same release.
     pub fn passed(self) -> bool {
         !matches!(self, PairStatus::Different | PairStatus::UnknownUpstream)
+    }
+}
+
+impl Described for PairStatus {
+    const ALL: &'static [Self] = &[
+        Self::Identical,
+        Self::SameContent,
+        Self::RegistryMove,
+        Self::Different,
+        Self::UnknownUpstream,
+    ];
+
+    fn describe(self) -> &'static str {
+        match self {
+            Self::Identical => {
+                "The two records have the same root, and no pack names another machine image in imageId: the same release."
+            }
+            Self::SameContent => {
+                "The roots differ only by the packUid that Palette mints, or by the tag name of a pack for the same build. Palette mints the packUid of a manifest pack and of a pack from a registry that it does not sync. The content is the same, so the release is the same under either policy."
+            }
+            Self::RegistryMove => {
+                "The roots differ only because packs were re-pinned from another registry with the same tag, version, values, and manifests; accepted by the registry-move policy."
+            }
+            Self::Different => "Not the same release; reasons lists each difference.",
+            Self::UnknownUpstream => {
+                "The roots pass, and a pack on either side has no upstream digest, so an equal root does not show an equal archive. --allow no-digest accepts it."
+            }
+        }
     }
 }
 
@@ -353,46 +395,13 @@ pub fn same_release_with(
         })
         .collect();
     let passed = pairs.iter().filter(|p| p.status.passed()).count();
-    let m = |pairs: &[(&str, &str)]| -> BTreeMap<String, String> {
-        pairs
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect()
-    };
     Chain {
         schema: CHAIN_SCHEMA.to_string(),
         tool: Tool::current(),
         generated_at: generated_at.to_string(),
         legend: ChainLegend {
-            status: m(&[
-                (
-                    "identical",
-                    "The two records have the same root, and no pack names another machine image in imageId: the same release.",
-                ),
-                (
-                    "same-content",
-                    "The roots differ only by the packUid that Palette mints, or by the tag name of a pack for the same build. Palette mints the packUid of a manifest pack and of a pack from a registry that it does not sync. The content is the same, so the release is the same under either policy.",
-                ),
-                (
-                    "registry-move",
-                    "The roots differ only because packs were re-pinned from another registry with the same tag, version, values, and manifests; accepted by the registry-move policy.",
-                ),
-                (
-                    "different",
-                    "Not the same release; reasons lists each difference.",
-                ),
-                (
-                    "unknown-upstream",
-                    "The roots pass, and a pack on either side has no upstream digest, so an equal root does not show an equal archive. --allow no-digest accepts it.",
-                ),
-            ]),
-            policy: m(&[
-                ("exact", "Only equal roots pass."),
-                (
-                    "registry-move",
-                    "Equal roots pass, and so does a pair whose only difference is packs re-pinned from another registry.",
-                ),
-            ]),
+            status: legend::<PairStatus>(),
+            policy: legend::<Policy>(),
         },
         policy,
         allow_no_digest,

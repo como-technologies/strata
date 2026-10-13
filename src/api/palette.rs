@@ -9,10 +9,12 @@ use super::{AuditKind, PaletteApi, RawCluster, RawProfile, ReadErrors, mask};
 use crate::cloud::{CLOUD_ALL, CLOUD_NESTED};
 use crate::error::{Error, Result, found, unread_reason};
 use crate::json::{arr, items, opt_text, str_at, take_items, text};
+use crate::pack_type::PackType;
+use crate::profile_type::ProfileType;
 use crate::progress::Progress;
 use crate::reference::{LATEST, one_named};
 use crate::scope::{ProfileScope, ScopedUid};
-use crate::snapshot::{APP_KIND, SubjectKind};
+use crate::snapshot::SubjectKind;
 use crate::version;
 
 const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
@@ -241,13 +243,13 @@ pub(crate) enum RegistryKind {
 
 impl RegistryKind {
     /// The kind of the registry that holds a pack of the type `pack_type`: a pack registry holds
-    /// the type `spectro`. None for a type with no registry of its own, such as `manifest`.
-    pub(crate) fn of_pack_type(pack_type: &str) -> Option<Self> {
+    /// the type `spectro`. None for a manifest pack, which no registry holds.
+    pub(crate) fn of_pack_type(pack_type: PackType) -> Option<Self> {
         match pack_type {
-            "spectro" => Some(Self::Pack),
-            "helm" => Some(Self::Helm),
-            "oci" => Some(Self::Oci),
-            _ => None,
+            PackType::Spectro => Some(Self::Pack),
+            PackType::Helm => Some(Self::Helm),
+            PackType::Oci => Some(Self::Oci),
+            PackType::Manifest => None,
         }
     }
 
@@ -261,11 +263,11 @@ impl RegistryKind {
 
     /// The type of a pack of a registry of the kind: `spectro` for a pack registry, else the
     /// word of the kind.
-    pub(crate) fn pack_type(self) -> &'static str {
+    pub(crate) fn pack_type(self) -> PackType {
         match self {
-            Self::Pack => "spectro",
-            Self::Helm => "helm",
-            Self::Oci => "oci",
+            Self::Pack => PackType::Spectro,
+            Self::Helm => PackType::Helm,
+            Self::Oci => PackType::Oci,
         }
     }
 
@@ -571,7 +573,8 @@ impl<A: PaletteApi> Palette<A> {
             profile: serde_json::json!({
                 "metadata": doc["metadata"],
                 "spec": {"version": doc["spec"]["version"],
-                    "published": {"type": APP_KIND, "cloudType": CLOUD_ALL, "packs": packs}},
+                    "published": {"type": ProfileType::App.as_str(), "cloudType": CLOUD_ALL,
+                        "packs": packs}},
             }),
             manifests: serde_json::json!({"spec": {"packs": mpacks}}),
             variables: serde_json::json!({ "variables": [] }),
@@ -915,13 +918,17 @@ impl<A: PaletteApi> Palette<A> {
         doc: Value,
         progress: &Progress,
     ) -> Result<RawCluster> {
+        let uid = text(&doc, "/metadata/uid");
         match kind {
-            SubjectKind::Cluster => {
-                let uid = text(&doc, "/metadata/uid");
-                self.cluster_raw(&uid, doc, progress)
-            }
-            SubjectKind::EdgeHost => self.holder_raw(doc, Holder::EdgeHost, progress),
-            SubjectKind::ClusterGroup => self.holder_raw(doc, Holder::ClusterGroup, progress),
+            SubjectKind::Cluster => self.cluster_raw(&uid, doc, progress),
+            // an edge host keeps each copy of a manifest under its own uid, and a cluster group
+            // keeps it with the profile
+            SubjectKind::EdgeHost => self.holder_raw(doc, progress, |_, _, muid| {
+                self.edge_host_manifest(&uid, muid)
+            }),
+            SubjectKind::ClusterGroup => self.holder_raw(doc, progress, |puid, name, muid| {
+                self.profile_manifest(puid, name, muid)
+            }),
         }
     }
 
@@ -1187,8 +1194,15 @@ impl<A: PaletteApi> Palette<A> {
     /// The raw documents of an object that holds profiles in `spec.clusterProfileTemplates` and
     /// is not a cluster: the manifests and the variables of each profile come from the profile.
     /// Such an object gives no values to the variables, so a record holds the definitions of each
-    /// profile, as a profile record does. It has no notifications.
-    fn holder_raw(&self, doc: Value, holder: Holder, progress: &Progress) -> Result<RawCluster> {
+    /// profile, as a profile record does. It has no notifications. `read_copy` reads the copy
+    /// that the holder keeps of one manifest. Its arguments are the uid of the profile, the name
+    /// of the pack, and the uid of the copy.
+    fn holder_raw(
+        &self,
+        doc: Value,
+        progress: &Progress,
+        read_copy: impl Fn(&str, &str, &str) -> Result<Value>,
+    ) -> Result<RawCluster> {
         let templates = arr(&doc, "/spec/clusterProfileTemplates").to_vec();
         let mut variables = Vec::with_capacity(templates.len());
         let mut variables_unavailable = false;
@@ -1203,7 +1217,7 @@ impl<A: PaletteApi> Palette<A> {
             variables.push(serde_json::json!({"profileUid": puid, "variables": v["variables"]}));
         }
         let mut manifests = self.profile_manifests(&templates)?;
-        self.own_manifests(&doc, &templates, holder, &mut manifests)?;
+        own_manifests(&templates, read_copy, &mut manifests)?;
         Ok(RawCluster {
             manifests,
             cluster: doc,
@@ -1219,58 +1233,6 @@ impl<A: PaletteApi> Palette<A> {
             namespaces: None,
             errors: ReadErrors::default(),
         })
-    }
-
-    /// Put the copies that a holder keeps of its manifests in place of the manifests of its
-    /// profiles. Palette gives an edge host and a cluster group a copy of each manifest under a
-    /// uid of its own, and the template of the holder names each copy by that uid, with no
-    /// content. An edit of the profile does not reach the copy.
-    fn own_manifests(
-        &self,
-        doc: &Value,
-        templates: &[Value],
-        holder: Holder,
-        manifests: &mut Value,
-    ) -> Result<()> {
-        let holder_uid = str_at(doc, "/metadata/uid");
-        for (i, t) in templates.iter().enumerate() {
-            let puid = str_at(t, "/uid");
-            for pack in arr(t, "/packs") {
-                let name = str_at(pack, "/name");
-                let refs = arr(pack, "/manifests");
-                // a copy with no uid cannot be read: the manifests of the profile stay
-                if refs.is_empty() || refs.iter().any(|m| str_at(m, "/uid").is_empty()) {
-                    continue;
-                }
-                let mut own = Vec::with_capacity(refs.len());
-                for m in refs {
-                    let muid = str_at(m, "/uid");
-                    let got = match holder {
-                        Holder::EdgeHost => self.edge_host_manifest(holder_uid, muid)?,
-                        Holder::ClusterGroup => self.profile_manifest(puid, name, muid)?,
-                    };
-                    own.push(serde_json::json!({
-                        "name": got.pointer("/metadata/name").cloned()
-                            .or_else(|| m.get("name").cloned()).unwrap_or(Value::Null),
-                        "uid": muid,
-                        "content": got.pointer("/spec/published/content").cloned().unwrap_or(Value::Null),
-                        "digest": got.pointer("/spec/published/digest").cloned().unwrap_or(Value::Null),
-                    }));
-                }
-                let Some(packs) = manifests
-                    .pointer_mut(&format!("/profiles/{i}/spec/packs"))
-                    .and_then(Value::as_array_mut)
-                else {
-                    continue;
-                };
-                if let Some(p) = packs.iter_mut().find(|p| {
-                    str_at(p, "/spec/name") == name || str_at(p, "/metadata/name") == name
-                }) {
-                    p["spec"]["manifests"] = Value::Array(own);
-                }
-            }
-        }
-        Ok(())
     }
 
     /// The uid of the one edge host in the scope that has the name `name`.
@@ -1571,12 +1533,52 @@ impl ConfigPart {
     }
 }
 
-/// The object that holds its own copy of each manifest of its profiles, and the route that reads
-/// a copy by its uid.
-#[derive(Clone, Copy)]
-enum Holder {
-    EdgeHost,
-    ClusterGroup,
+/// Put the copies that a holder keeps of its manifests in place of the manifests of its
+/// profiles. Palette gives an edge host and a cluster group a copy of each manifest under a
+/// uid of its own, and the template of the holder names each copy by that uid, with no
+/// content. An edit of the profile does not reach the copy. `read_copy` reads one copy. Its
+/// arguments are the uid of the profile, the name of the pack, and the uid of the copy.
+fn own_manifests(
+    templates: &[Value],
+    read_copy: impl Fn(&str, &str, &str) -> Result<Value>,
+    manifests: &mut Value,
+) -> Result<()> {
+    for (i, t) in templates.iter().enumerate() {
+        let puid = str_at(t, "/uid");
+        for pack in arr(t, "/packs") {
+            let name = str_at(pack, "/name");
+            let refs = arr(pack, "/manifests");
+            // a copy with no uid cannot be read: the manifests of the profile stay
+            if refs.is_empty() || refs.iter().any(|m| str_at(m, "/uid").is_empty()) {
+                continue;
+            }
+            let mut own = Vec::with_capacity(refs.len());
+            for m in refs {
+                let muid = str_at(m, "/uid");
+                let got = read_copy(puid, name, muid)?;
+                own.push(serde_json::json!({
+                    "name": got.pointer("/metadata/name").cloned()
+                        .or_else(|| m.get("name").cloned()).unwrap_or(Value::Null),
+                    "uid": muid,
+                    "content": got.pointer("/spec/published/content").cloned().unwrap_or(Value::Null),
+                    "digest": got.pointer("/spec/published/digest").cloned().unwrap_or(Value::Null),
+                }));
+            }
+            let Some(packs) = manifests
+                .pointer_mut(&format!("/profiles/{i}/spec/packs"))
+                .and_then(Value::as_array_mut)
+            else {
+                continue;
+            };
+            if let Some(p) = packs
+                .iter_mut()
+                .find(|p| str_at(p, "/spec/name") == name || str_at(p, "/metadata/name") == name)
+            {
+                p["spec"]["manifests"] = Value::Array(own);
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1644,11 +1646,14 @@ mod tests {
             json!([3])
         );
         assert_eq!(
-            RegistryKind::of_pack_type("spectro"),
+            RegistryKind::of_pack_type(PackType::Spectro),
             Some(RegistryKind::Pack)
         );
-        assert_eq!(RegistryKind::of_pack_type("helm"), Some(RegistryKind::Helm));
-        assert_eq!(RegistryKind::of_pack_type("manifest"), None);
+        assert_eq!(
+            RegistryKind::of_pack_type(PackType::Helm),
+            Some(RegistryKind::Helm)
+        );
+        assert_eq!(RegistryKind::of_pack_type(PackType::Manifest), None);
         for kind in [RegistryKind::Pack, RegistryKind::Helm, RegistryKind::Oci] {
             assert_eq!(RegistryKind::of_kind(kind.route()), Some(kind));
             assert_eq!(RegistryKind::of_pack_type(kind.pack_type()), Some(kind));
