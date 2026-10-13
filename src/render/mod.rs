@@ -1287,8 +1287,8 @@ fn verdict_case(v: &Verify, same: bool) -> VerdictCase {
 /// The terminal and the markdown put the subject before the sentence. A row of the summary names
 /// the record in its own column.
 pub(crate) struct VerdictParts {
-    /// `OK`, `UNVERIFIED`, or `DRIFT`.
-    pub(crate) word: &'static str,
+    /// The status of the record: see [`VerdictParts::word`].
+    status: RecordStatus,
     /// What the verdict states.
     case: VerdictCase,
     /// The sentence after the subject: `is unchanged since <at>`.
@@ -1306,6 +1306,11 @@ pub(crate) struct VerdictParts {
 }
 
 impl VerdictParts {
+    /// The status word of the record: `OK`, `UNVERIFIED`, or `DRIFT`.
+    pub(crate) fn word(&self) -> &'static str {
+        record_word(self.status)
+    }
+
     /// The line of one record after its status word: `published version x@1.0 is unchanged
     /// since <at>`, with the values and the tail.
     pub(crate) fn line(&self, recorded: &Source) -> String {
@@ -1362,7 +1367,7 @@ pub(crate) fn verdict_parts(
         _ => values_changed_suffix(v.cluster_values_changed),
     };
     VerdictParts {
-        word: record_word(RecordStatus::from(v.status)),
+        status: RecordStatus::from(v.status),
         case,
         sentence,
         values,

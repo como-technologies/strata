@@ -341,9 +341,9 @@ impl Renderer for TerminalRenderer {
         let p = &self.paint;
         let parts = verdict_parts(v, d.same, &d.a, str::to_string);
         let word = match v.status {
-            VerifyStatus::Unchanged => p.bgreen(parts.word),
-            VerifyStatus::Unverified => p.byellow(parts.word),
-            VerifyStatus::Drifted => p.bred(parts.word),
+            VerifyStatus::Unchanged => p.bgreen(parts.word()),
+            VerifyStatus::Unverified => p.byellow(parts.word()),
+            VerifyStatus::Drifted => p.bred(parts.word()),
         };
         let mut line = format!("{word}: {}", parts.line(&d.a));
         for sentence in invalid_pack_sentences(&v.invalid_packs) {

@@ -400,7 +400,8 @@ is the path as a list: strings for keys, numbers for indexes, and
 ## strata-consumers/1
 
 - `profile`: `uid`, `name`, and `version`. `type`, only for an app profile:
-  `app`.
+  `app`. The schema gives `type` the six profile types: `cluster`, `infra`,
+  `add-on`, `system`, `app`, and `pack`.
 - `count`: the number of consumers. Exit `1` when it is not `0`. Exit `0` when
   it is `0` and each reading succeeded. Exit `2` when it is `0` and a reading
   failed: `error`, `groupsError`, or an `unread` that is not `0` in

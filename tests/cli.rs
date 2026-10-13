@@ -910,6 +910,15 @@ fn the_schema_names_each_value_of_each_closed_set_that_became_an_enum() {
         v["$defs"]["Bump"]["properties"]["flags"]["items"]["$ref"],
         "#/$defs/ChangeFlag"
     );
+    let v = schema("consumers");
+    assert_eq!(
+        schema_values(&v, "ProfileType"),
+        ["cluster", "infra", "add-on", "system", "app", "pack"]
+    );
+    assert_eq!(
+        v["$defs"]["ConsumedProfile"]["properties"]["type"]["anyOf"][0]["$ref"],
+        "#/$defs/ProfileType"
+    );
 }
 
 #[test]

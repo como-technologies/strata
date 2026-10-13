@@ -90,8 +90,8 @@ pub struct ConsumedProfile {
     /// Profile version.
     pub version: String,
     /// `app` for an app profile; absent for a cluster profile.
-    #[serde(rename = "type", default, skip_serializing_if = "String::is_empty")]
-    pub kind: String,
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<ProfileType>,
 }
 
 /// One cluster, edge host, cluster template, or app deployment that uses the profile version.
@@ -519,7 +519,7 @@ fn report(
             uid: text(doc, "/metadata/uid"),
             name: text(doc, "/metadata/name"),
             version,
-            kind: kind.map(|k| k.as_str().to_string()).unwrap_or_default(),
+            kind,
         },
         count: consumers.len(),
         overwritten,

@@ -84,7 +84,7 @@ pub(crate) mod legend;
 pub mod ops;
 pub(crate) mod pack_type;
 pub(crate) mod policy;
-pub(crate) mod profile_type;
+pub mod profile_type;
 pub mod progress;
 pub mod reference;
 pub(crate) mod registry;

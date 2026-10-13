@@ -14,6 +14,7 @@ use strata::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use strata::diff::{ChangeFlag, Side, VerifyStatus};
 use strata::error::{Error, FailureClass};
 use strata::ops;
+use strata::profile_type::ProfileType;
 use strata::progress::Progress;
 use strata::reference::Ref;
 
@@ -12197,12 +12198,13 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
     let r = consumers(&api, &Ref::parse("appprofile:shop@1.0.0"));
     assert_eq!(r.exit_code(), 1, "a deployment uses the version");
     assert_eq!(
-        (r.profile.uid.as_str(), r.profile.kind.as_str()),
-        ("ap1", "app")
+        (r.profile.uid.as_str(), r.profile.kind),
+        ("ap1", Some(ProfileType::App))
     );
     assert_eq!(r.count, 1);
     assert_eq!(r.overwritten, 0);
     let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(json["profile"]["type"], "app");
     assert_eq!(
         json["consumers"][0],
         serde_json::json!({"kind": "app", "uid": "d1", "name": "shop-dev", "projectUid": "p1",
