@@ -17,6 +17,7 @@ use crate::json::{arr, opt_text, text};
 use crate::profile_type::ProfileType;
 use crate::reference::{LATEST, one_named, version};
 use crate::scope::{ProfileScope, ScopedUid};
+use crate::snapshot::{Template, manifest_of};
 use crate::term::progress::Progress;
 
 impl<A: PaletteApi> Palette<A> {
@@ -256,11 +257,7 @@ impl<A: PaletteApi> Palette<A> {
                     APP_PROFILES,
                     &[uid, "tiers", &tier_uid, "manifests", &text(m, "/uid")],
                 ))?;
-                manifests.push(serde_json::json!({
-                    "name": text(&d, "/metadata/name"), "uid": text(&d, "/metadata/uid"),
-                    "content": text(&d, "/spec/published/content"),
-                    "digest": text(&d, "/spec/published/digest"),
-                }));
+                manifests.push(manifest_of(&d, m, Template::Published));
             }
             mpacks.push(serde_json::json!({"spec": {"name": name, "manifests": manifests}}));
         }

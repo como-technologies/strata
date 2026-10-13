@@ -61,32 +61,40 @@ fn normalize_variable(v: &Value) -> Value {
     })
 }
 
-/// The manifests of pack `pk` of one template, each as `name`, `uid`, `digest`, and `content`,
-/// from the answers of the manifests by uid (see [`RawProfile::manifest_entities`]). A manifest
-/// of the published template has its published content. A manifest of the draft has its draft
-/// content, and its published content when the draft did not change it: Palette writes the draft
-/// content of a manifest at an edit, and empties it at the publish.
+/// The manifests of pack `pk` of one template, each as [`manifest_of`] gives it, from the
+/// answers of the manifests by uid (see [`RawProfile::manifest_entities`]).
 fn manifests_of_template(pk: &Value, entities: &Value, template: Template) -> Vec<Value> {
     arr(pk, "/manifests")
         .iter()
         .map(|m| {
-            let uid = text(m, "/uid");
-            let entity = entities.get(&uid).unwrap_or(&Value::Null);
-            let edited = !text(entity, &format!("/spec/{template}/content")).is_empty();
-            let from = if edited {
-                template
-            } else {
-                Template::Published
-            };
-            let content = text(entity, &format!("/spec/{from}/content"));
-            json!({
-                "name": first_nonempty(&[str_at(m, "/name"), str_at(entity, "/metadata/name")]),
-                "uid": uid,
-                "digest": text(entity, &format!("/spec/{from}/digest")),
-                "content": content,
-            })
+            let entity = entities.get(str_at(m, "/uid")).unwrap_or(&Value::Null);
+            manifest_of(entity, m, template)
         })
         .collect()
+}
+
+/// One manifest as a record reads it: its `name`, `uid`, `digest`, and `content`. `entity` is
+/// the answer of the route of the manifest, and `reference` is the entry of the manifest in the
+/// pack of a template.
+///
+/// The name and the uid come from `reference`, else from `entity`. A manifest of the published
+/// template has its published content. A manifest of the draft has its draft content, and its
+/// published content when the draft did not change it: Palette writes the draft content of a
+/// manifest at an edit, and empties it at the publish. A field that `entity` does not give is
+/// empty text.
+pub(crate) fn manifest_of(entity: &Value, reference: &Value, template: Template) -> Value {
+    let edited = !str_at(entity, &format!("/spec/{template}/content")).is_empty();
+    let from = if edited {
+        template
+    } else {
+        Template::Published
+    };
+    json!({
+        "name": first_nonempty(&[str_at(reference, "/name"), str_at(entity, "/metadata/name")]),
+        "uid": first_nonempty(&[str_at(reference, "/uid"), str_at(entity, "/metadata/uid")]),
+        "digest": text(entity, &format!("/spec/{from}/digest")),
+        "content": text(entity, &format!("/spec/{from}/content")),
+    })
 }
 
 impl Snapshot {

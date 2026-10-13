@@ -20,6 +20,7 @@ pub use crate::validation::ProfileValidation;
 use pack::masked_paths;
 
 mod build;
+pub(crate) use build::manifest_of;
 mod cluster;
 mod pack;
 pub(crate) mod policy;

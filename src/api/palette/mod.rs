@@ -9,7 +9,7 @@ use crate::conjunction::Conjunction;
 use crate::error::{Error, Result, unread_reason};
 use crate::json::{arr, items, str_at, take_items, text};
 use crate::pack_type::PackType;
-use crate::snapshot::SubjectKind;
+use crate::snapshot::{SubjectKind, Template, manifest_of};
 use crate::term::progress::Progress;
 
 mod clusters;
@@ -455,15 +455,8 @@ fn own_manifests(
             }
             let mut own = Vec::with_capacity(refs.len());
             for m in refs {
-                let muid = str_at(m, "/uid");
-                let got = read_copy(puid, name, muid)?;
-                own.push(serde_json::json!({
-                    "name": got.pointer("/metadata/name").cloned()
-                        .or_else(|| m.get("name").cloned()).unwrap_or(Value::Null),
-                    "uid": muid,
-                    "content": got.pointer("/spec/published/content").cloned().unwrap_or(Value::Null),
-                    "digest": got.pointer("/spec/published/digest").cloned().unwrap_or(Value::Null),
-                }));
+                let got = read_copy(puid, name, str_at(m, "/uid"))?;
+                own.push(manifest_of(&got, m, Template::Published));
             }
             let Some(packs) = manifests
                 .pointer_mut(&format!("/profiles/{i}/spec/packs"))
