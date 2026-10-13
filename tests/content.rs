@@ -5,7 +5,7 @@ use crate::common;
 
 use std::path::Path;
 
-use strata::api::{RawCluster, RawProfile};
+use strata::api::{Method, RawCluster, RawProfile};
 use strata::error::{Error, FailureClass};
 use strata::snapshot::Snapshot;
 
@@ -192,7 +192,7 @@ fn a_merged_record_has_one_root_whatever_order_palette_lists_the_profiles() {
 #[test]
 fn an_error_has_a_failure_class() {
     let api = |status| Error::Api {
-        method: "GET".into(),
+        method: Method::Get,
         status,
         path: "/v1/x".into(),
         body: String::new(),

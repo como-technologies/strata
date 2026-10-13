@@ -10,8 +10,8 @@ use serde_json::Value;
 
 use crate::color::Paint;
 use crate::diff::{
-    ClusterValueChange, Diff, ImageIdChange, InvalidPack, InvalidSides, Leaf, Op, PackDiff, Side,
-    Status, ValuesDiff, VariableSummary, VariablesByName, Verify, VerifyStatus,
+    ChangeFlag, ClusterValueChange, Diff, ImageIdChange, InvalidPack, InvalidSides, Leaf, Op,
+    PackDiff, Side, Status, ValuesDiff, VariableSummary, VariablesByName, Verify, VerifyStatus,
 };
 use crate::error::Result;
 use crate::impact::ImpactLevel;
@@ -213,8 +213,8 @@ fn newer_version(n: &crate::ops::Newer) -> String {
 pub(crate) fn bump_line(pin: &crate::ops::Pin) -> Option<String> {
     let b = pin.bump.as_ref()?;
     let mut line = format!("bump to {}: {}", b.to, b.impact.as_str());
-    if !b.flags.is_empty() {
-        line.push_str(&format!(" {}", b.flags.join(" ")));
+    for f in &b.flags {
+        line.push_str(&format!(" {}", f.as_str()));
     }
     if let Some(n) = pin
         .newer
@@ -1635,26 +1635,15 @@ pub(crate) fn show(v: &Value) -> String {
 /// `IDENTITY UPSTREAM AUTHORED`, only the flags that are set, uncolored; a renamed tag in place of
 /// `IDENTITY`.
 pub(crate) fn plain_flags(pd: &PackDiff) -> String {
-    let mut f = Vec::new();
     let rename = tag_rename(pd);
-    if let Some(t) = &rename {
-        f.push(t.as_str());
-    } else if pd.identity {
-        f.push("IDENTITY");
-    }
-    if pd.upstream {
-        f.push("UPSTREAM");
-    }
-    if pd.authored {
-        f.push("AUTHORED");
-    }
-    if pd.images {
-        f.push("IMAGES");
-    }
-    if pd.charts {
-        f.push("CHARTS");
-    }
-    f.join(" ")
+    pd.flags()
+        .into_iter()
+        .map(|f| match (f, &rename) {
+            (ChangeFlag::Identity, Some(t)) => t.as_str(),
+            _ => f.as_str(),
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// One line for each image, chart, or param that moved: `~ image <repo>: <old> -> <new>`, `+

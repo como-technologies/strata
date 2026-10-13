@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use serde_json::{Map, Value};
 
+use crate::api::Method;
 use crate::api::codes::{CreateRule, PROFILE_IMPORT_MATCH_CODES, REFUSAL_CODES, ValidateRoute};
 use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR};
 use crate::text::and_list;
@@ -27,8 +28,8 @@ pub enum Error {
     /// message names where a key comes from; the body alone names nothing the reader can set.
     #[error("{method} {path} failed with HTTP {status}: {}{}", first_part(body), key_hint(*status))]
     Api {
-        /// The request method: `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`.
-        method: String,
+        /// The request method.
+        method: Method,
         /// Request path.
         path: String,
         /// HTTP status code.
@@ -41,10 +42,12 @@ pub enum Error {
     },
     /// Palette asked strata to wait longer than it will before retrying.
     #[error(
-        "GET {path} failed with HTTP {status} and Retry-After {retry_after}s, longer than the {limit}s strata waits ({}); try again later",
+        "{method} {path} failed with HTTP {status} and Retry-After {retry_after}s, longer than the {limit}s strata waits ({}); try again later",
         MAX_RETRY_AFTER_VAR
     )]
     RetryAfterTooLong {
+        /// The request method.
+        method: Method,
         /// Request path.
         path: String,
         /// HTTP status code.
@@ -659,11 +662,13 @@ impl Error {
                 m.insert("status".into(), Value::from(*status));
             }
             Error::RetryAfterTooLong {
+                method,
                 path: p,
                 status,
                 retry_after,
                 limit,
             } => {
+                m.insert("method".into(), Value::from(method.as_str()));
                 m.insert("path".into(), Value::from(p.as_str()));
                 m.insert("status".into(), Value::from(*status));
                 m.insert("retryAfter".into(), Value::from(*retry_after));
@@ -857,7 +862,7 @@ mod tests {
                 alternate: "SPECTROCLOUD_APIKEY",
             },
             Error::Api {
-                method: "GET".into(),
+                method: Method::Get,
                 path: "/v1/x".into(),
                 status: 503,
                 body: "busy".into(),
@@ -869,6 +874,7 @@ mod tests {
                 expected: "a whole number",
             },
             Error::RetryAfterTooLong {
+                method: Method::Post,
                 path: "/v1/y".into(),
                 status: 429,
                 retry_after: 900,
@@ -1090,7 +1096,7 @@ mod tests {
     #[test]
     fn the_class_of_a_5xx_reads_the_code_of_the_body_as_a_text_or_as_a_number() {
         let api = |status: u16, body: &str| Error::Api {
-            method: "POST".into(),
+            method: Method::Post,
             path: "/v1/x".into(),
             status,
             body: body.into(),

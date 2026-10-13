@@ -9,9 +9,9 @@ use serde_json::Value;
 use strata::api::codes::{
     CreateRule, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE, ValidateRoute,
 };
-use strata::api::{MemoryApi, Palette, RawProfile};
+use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
-use strata::diff::{Side, VerifyStatus};
+use strata::diff::{ChangeFlag, Side, VerifyStatus};
 use strata::error::{Error, FailureClass};
 use strata::ops;
 use strata::progress::Progress;
@@ -525,6 +525,32 @@ fn a_retry_after_above_the_ceiling_fails_at_once_without_waiting() {
     );
     assert_eq!(api.calls(&profile_path()), 1, "no second call");
     assert!(slept.borrow().is_empty(), "nothing slept");
+}
+
+#[test]
+fn a_retry_after_above_the_ceiling_names_the_method_of_the_request() {
+    let key = "POST /v1/x";
+    let api = MemoryApi::new()
+        .failing_n_times(key, 1, 429, "slow down")
+        .with_retry_after(key, 900);
+    let (retry, _) = retrying(&api, 3);
+    let err = retry.post_json("/v1/x", &Value::Null).unwrap_err();
+    assert!(
+        matches!(
+            err,
+            Error::RetryAfterTooLong {
+                method: Method::Post,
+                ..
+            }
+        ),
+        "{err}"
+    );
+    assert!(
+        err.to_string()
+            .starts_with("POST /v1/x failed with HTTP 429 and Retry-After 900s"),
+        "{err}"
+    );
+    assert_eq!(err.to_json()["method"], "POST");
 }
 
 #[test]
@@ -12827,7 +12853,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     let bump = pin.bump.as_ref().unwrap();
     assert_eq!(bump.to, "1.65.0");
     assert!(
-        bump.flags.contains(&"IDENTITY".to_string()),
+        bump.flags.contains(&ChangeFlag::Identity),
         "{:?}",
         bump.flags
     );
@@ -12882,6 +12908,30 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     assert_eq!(next.since.as_deref(), Some("2026-09-26T00:00:00Z"));
     let json = serde_json::to_value(&next).unwrap();
     assert_eq!(json["pins"][0]["arrived"], serde_json::json!(["1.64.0"]));
+}
+
+#[test]
+fn a_bump_gives_a_renamed_tag_as_the_flag_identity_and_not_as_the_words_of_the_rename() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let retagged = with_os_pack(dir.path(), "LTS__22.04", |p| {
+        p["tag"] = Value::from("LTS__22.04")
+    });
+    let d = ops::compare(&a, &retagged, "t1");
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&d, &a, &retagged, false)
+        .unwrap();
+    assert!(text.contains("tag 22.04 -> LTS__22.04"), "{text}");
+
+    // the text of the diff names the two tags in place of IDENTITY; the bump keeps the flag
+    let bump = ops::Bump::of("22.04", &d, "ubuntu-aws").unwrap();
+    assert_eq!(bump.flags, [ChangeFlag::Identity]);
+    assert_eq!(
+        serde_json::to_value(&bump).unwrap()["flags"],
+        serde_json::json!(["IDENTITY"])
+    );
+    assert!(ops::Bump::of("22.04", &d, "no-such-pack").is_none());
 }
 
 #[test]
@@ -14054,7 +14104,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
         let body = format!(r#"{{"code":"{code}","message":"refused"}}"#);
         // the retry does not send it again: Palette gives the same refusal
         let error = Error::Api {
-            method: "POST".into(),
+            method: Method::Post,
             path: path.into(),
             status: 500,
             body: body.clone(),
@@ -14135,7 +14185,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     let body_of = |code: &str| format!(r#"{{"code":"{code}","message":"refused"}}"#);
     let class_of = |status: u16, code: &str| {
         Error::Api {
-            method: "GET".into(),
+            method: Method::Post,
             path: "/".into(),
             status,
             body: body_of(code),

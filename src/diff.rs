@@ -558,6 +558,36 @@ impl Described for Status {
     }
 }
 
+/// A change flag of a pack: a hash of the pack that moved, or a detail of `AUTHORED`. The text
+/// and the JSON give its name in capitals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum ChangeFlag {
+    /// The identity hash moved: the release points at another pack build.
+    Identity,
+    /// The upstream hash moved: the content digest of the pack.
+    Upstream,
+    /// The authored hash moved: the values, the attached manifests, or the params.
+    Authored,
+    /// The image list that the values declare moved: a detail of `AUTHORED`.
+    Images,
+    /// The chart list that the values declare moved: a detail of `AUTHORED`.
+    Charts,
+}
+
+impl ChangeFlag {
+    /// The name of the flag: `IDENTITY`, `UPSTREAM`, `AUTHORED`, `IMAGES`, or `CHARTS`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Identity => "IDENTITY",
+            Self::Upstream => "UPSTREAM",
+            Self::Authored => "AUTHORED",
+            Self::Images => "IMAGES",
+            Self::Charts => "CHARTS",
+        }
+    }
+}
+
 /// One side of a pack comparison.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -671,6 +701,21 @@ pub(crate) enum InvalidSides<'a> {
 }
 
 impl PackDiff {
+    /// The flags that moved, in the order of the legend. A renamed tag is `IDENTITY`, as the
+    /// field `identity` says.
+    pub fn flags(&self) -> Vec<ChangeFlag> {
+        [
+            (self.identity, ChangeFlag::Identity),
+            (self.upstream, ChangeFlag::Upstream),
+            (self.authored, ChangeFlag::Authored),
+            (self.images, ChangeFlag::Images),
+            (self.charts, ChangeFlag::Charts),
+        ]
+        .into_iter()
+        .filter_map(|(moved, flag)| moved.then_some(flag))
+        .collect()
+    }
+
     /// The sides that Palette marks invalid, each with the reason that Palette gives. None when
     /// neither side is invalid.
     pub(crate) fn invalid_sides(&self) -> Option<InvalidSides<'_>> {
@@ -1880,6 +1925,23 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_text_of_a_change_flag_is_its_name_in_the_documents() {
+        for flag in [
+            ChangeFlag::Identity,
+            ChangeFlag::Upstream,
+            ChangeFlag::Authored,
+            ChangeFlag::Images,
+            ChangeFlag::Charts,
+        ] {
+            assert_eq!(
+                serde_json::to_value(flag).unwrap(),
+                Value::from(flag.as_str()),
+                "{flag:?}"
+            );
+        }
+    }
 
     #[test]
     fn zip_by_key_gives_each_key_one_time_in_order_with_the_value_of_each_side() {

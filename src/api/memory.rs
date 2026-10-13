@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use super::PaletteApi;
+use super::{Method, PaletteApi};
 use crate::error::{Error, Result};
 
 /// Canned responses keyed by path. Paths not registered answer 404. A POST answers from the key
@@ -103,39 +103,37 @@ impl MemoryApi {
         self.project_uid = Some(uid.into());
         self
     }
+
+    /// The answer to a request with `method` to `path`, from the canned responses of `key`: a GET
+    /// has its path as its key, and a POST has a key of its own.
+    fn answer(&self, method: Method, path: &str, key: &str) -> Result<Value> {
+        *self.calls.borrow_mut().entry(key.to_string()).or_insert(0) += 1;
+        let error = |status: u16, body: String, retry_after: Option<u64>| Error::Api {
+            method,
+            path: path.to_string(),
+            status,
+            body,
+            retry_after,
+        };
+        if let Some(t) = self.transient.borrow_mut().get_mut(key)
+            && t.remaining > 0
+        {
+            t.remaining -= 1;
+            return Err(error(t.status, t.body.clone(), t.retry_after));
+        }
+        if let Some((status, body)) = self.fail.get(key) {
+            return Err(error(*status, body.clone(), None));
+        }
+        self.ok
+            .get(key)
+            .cloned()
+            .ok_or_else(|| error(404, r#"{"code":"ResourceNotFound"}"#.to_string(), None))
+    }
 }
 
 impl PaletteApi for MemoryApi {
     fn get_json(&self, path: &str) -> Result<Value> {
-        *self.calls.borrow_mut().entry(path.to_string()).or_insert(0) += 1;
-        if let Some(t) = self.transient.borrow_mut().get_mut(path)
-            && t.remaining > 0
-        {
-            t.remaining -= 1;
-            return Err(Error::Api {
-                method: "GET".into(),
-                path: path.to_string(),
-                status: t.status,
-                body: t.body.clone(),
-                retry_after: t.retry_after,
-            });
-        }
-        if let Some((status, body)) = self.fail.get(path) {
-            return Err(Error::Api {
-                method: "GET".into(),
-                path: path.to_string(),
-                status: *status,
-                body: body.clone(),
-                retry_after: None,
-            });
-        }
-        self.ok.get(path).cloned().ok_or_else(|| Error::Api {
-            method: "GET".into(),
-            path: path.to_string(),
-            status: 404,
-            body: r#"{"code":"ResourceNotFound"}"#.to_string(),
-            retry_after: None,
-        })
+        self.answer(Method::Get, path, path)
     }
 
     fn post_json(&self, path: &str, body: &Value) -> Result<Value> {
@@ -144,9 +142,9 @@ impl PaletteApi for MemoryApi {
             .push((path.to_string(), body.clone()));
         let keyed = format!("POST {path} {body}");
         if self.ok.contains_key(&keyed) {
-            return self.get_json(&keyed);
+            return self.answer(Method::Post, path, &keyed);
         }
-        self.get_json(&format!("POST {path}"))
+        self.answer(Method::Post, path, &format!("POST {path}"))
     }
 
     fn project_uid(&self) -> Option<&str> {
@@ -159,8 +157,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn api_errors_carry_path_status_and_body() {
-        let api = MemoryApi::new().failing("/v1/x", 401, r#"{"code":"MissingAuthHeader"}"#);
+    fn api_errors_carry_the_method_path_status_and_body() {
+        let api = MemoryApi::new()
+            .failing("/v1/x", 401, r#"{"code":"MissingAuthHeader"}"#)
+            .failing("POST /v1/y", 403, "forbidden");
         let err = api.get_json("/v1/x").unwrap_err();
         let text = err.to_string();
         assert!(
@@ -170,5 +170,14 @@ mod tests {
         // a 401 is almost always the key, and the body names nothing the reader can set
         assert!(text.contains("check PALETTE_API_KEY"), "{text}");
         assert_eq!(err.exit_code(), 2);
+        // a POST names its method and its path, as the HTTP client does, and not its key
+        let err = api.post_json("/v1/y", &Value::Null).unwrap_err();
+        assert!(
+            err.to_string()
+                .starts_with("POST /v1/y failed with HTTP 403: forbidden"),
+            "{err}"
+        );
+        assert_eq!(err.to_json()["method"], "POST");
+        assert_eq!(api.calls("POST /v1/y"), 1);
     }
 }

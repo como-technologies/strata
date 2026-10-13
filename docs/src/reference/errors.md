@@ -15,8 +15,8 @@ the kind.
 | Kind | Cause | Fields |
 | --- | --- | --- |
 | `missing-credential` | No API key. | `variable`, `alternate` |
-| `api` | Palette answered with an error status. | `path`, `status` |
-| `retry-after-too-long` | Palette asked for a longer wait than `STRATA_MAX_RETRY_AFTER`. | `path`, `status`, `retryAfter`, `limit` |
+| `api` | Palette answered with an error status. | `method`, `path`, `status` |
+| `retry-after-too-long` | Palette asked for a longer wait than `STRATA_MAX_RETRY_AFTER`. | `method`, `path`, `status`, `retryAfter`, `limit` |
 | `invalid-setting` | A variable has a value that strata cannot read. | `variable`, `value` |
 | `pattern` | A record pattern is not valid, or matches no file. | `pattern` |
 | `transport` | The request did not reach Palette, or the answer did not arrive whole. | `path` |

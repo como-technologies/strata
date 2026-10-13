@@ -11,7 +11,7 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
 use crate::cloud::supports;
-use crate::diff::RegistrySync;
+use crate::diff::{ChangeFlag, Diff, RegistrySync};
 use crate::error::{Error, Result};
 use crate::impact::ImpactLevel;
 use crate::pack_type::PackType;
@@ -197,8 +197,21 @@ pub struct Bump {
     pub to: String,
     /// The impact level of the change.
     pub impact: ImpactLevel,
-    /// The change flags: `IDENTITY`, `UPSTREAM`, `AUTHORED`, `IMAGES`, `CHARTS`.
-    pub flags: Vec<String>,
+    /// The change flags of the pack, in the order of the legend.
+    pub flags: Vec<ChangeFlag>,
+}
+
+impl Bump {
+    /// What a move to the version `to` does to the pack `name`, from `d`: the comparison of the
+    /// pinned version with `to`. None when `d` holds no pack of that name.
+    pub fn of(to: &str, d: &Diff, name: &str) -> Option<Bump> {
+        let pd = d.packs.iter().find(|p| p.name == name)?;
+        Some(Bump {
+            to: to.to_string(),
+            impact: d.summary.max_impact,
+            flags: pd.flags(),
+        })
+    }
 }
 
 /// What `behind` reads.
@@ -491,19 +504,7 @@ fn bump_of<A: PaletteApi>(
     };
     let (a, b) = (take(from)?, take(to)?);
     let d = super::compare(&a, &b, at);
-    let pd = d
-        .packs
-        .iter()
-        .find(|p| p.name == name)
-        .ok_or_else(|| Error::Usage {
-            message: format!("the comparison of {name} {from} and {to} holds no such pack"),
-        })?;
-    Ok(Bump {
-        to: to.to_string(),
-        impact: d.summary.max_impact,
-        flags: crate::render::plain_flags(pd)
-            .split_whitespace()
-            .map(str::to_string)
-            .collect(),
+    Bump::of(to, &d, name).ok_or_else(|| Error::Usage {
+        message: format!("the comparison of {name} {from} and {to} holds no such pack"),
     })
 }

@@ -114,10 +114,11 @@ impl<A: PaletteApi> Retry<A> {
                         _ => None,
                     };
                     let limit = self.policy.max_retry_after.as_secs();
-                    if let (Some(secs), Error::Api { status, .. }) = (retry_after, &e)
+                    if let (Some(secs), Error::Api { method, status, .. }) = (retry_after, &e)
                         && secs > limit
                     {
                         return Err(Error::RetryAfterTooLong {
+                            method: *method,
                             path: path.to_string(),
                             status: *status,
                             retry_after: secs,

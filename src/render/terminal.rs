@@ -13,7 +13,7 @@ use super::{
 };
 use crate::api::mask::MASKED;
 use crate::color::Paint;
-use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, VerifyStatus};
+use crate::diff::{ChangeFlag, Diff, ImpactLevel, Leaf, Op, PackDiff, Status, VerifyStatus};
 use crate::error::Result;
 use crate::ops::{
     Chain, ConsumerKind, ConsumersReport, Listing, PackListing, PairStatus, RUNNING_STATE,
@@ -134,26 +134,18 @@ fn variable_line(v: &VarLine<'_>, p: &Paint) -> String {
 }
 
 fn flags(pd: &PackDiff, p: &Paint) -> String {
-    let mut f = Vec::new();
-    if let Some(t) = tag_rename(pd) {
-        f.push(p.blue(&t));
-    } else if pd.identity {
-        f.push(p.blue("IDENTITY"));
-    }
-    if pd.upstream {
-        f.push(p.magenta("UPSTREAM"));
-    }
-    if pd.authored {
-        f.push(p.yellow("AUTHORED"));
-    }
-    // details of AUTHORED: its color, dimmed, so AUTHORED reads as the flag
-    if pd.images {
-        f.push(p.dyellow("IMAGES"));
-    }
-    if pd.charts {
-        f.push(p.dyellow("CHARTS"));
-    }
-    f.join(" ")
+    let rename = tag_rename(pd);
+    pd.flags()
+        .into_iter()
+        .map(|f| match f {
+            ChangeFlag::Identity => p.blue(rename.as_deref().unwrap_or(f.as_str())),
+            ChangeFlag::Upstream => p.magenta(f.as_str()),
+            ChangeFlag::Authored => p.yellow(f.as_str()),
+            // details of AUTHORED: its color, dimmed, so AUTHORED reads as the flag
+            ChangeFlag::Images | ChangeFlag::Charts => p.dyellow(f.as_str()),
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn paint_impact(level: ImpactLevel, text: &str, p: &Paint) -> String {
