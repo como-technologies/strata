@@ -20,8 +20,7 @@ use strata::term::progress::Progress;
 use common::{
     CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, Run, UID_B,
     against_closed_port, cluster_manifests_route, cluster_ref, cluster_route,
-    cluster_variables_route, isolate_palette, listing, manifests_route, profile_route, strata_bin,
-    variables_route,
+    cluster_variables_route, listing, manifests_route, profile_route, strata_bin, variables_route,
 };
 
 /// xorshift64*: a deterministic source of cases, so a failure has a seed that reproduces it.
@@ -440,14 +439,16 @@ fn fuzz_commands() -> Vec<String> {
         .collect()
 }
 
-/// One case of the fuzz run of the binary: `args` against an address that refuses connections,
-/// with a home of its own and no setting of the machine that names a project or a tenant.
+/// One case of the fuzz run of the binary: `command` on `args` against an address that refuses
+/// connections, with a home of its own and no setting of the machine that names a project or a
+/// tenant.
 ///
-/// A request must fail as an error, not a panic. The backoff has its own tests, with the wait
-/// injected; here it would only make each case that reaches the network sleep.
-fn fuzz_case(args: &[String]) -> Run {
+/// A request must fail as an error, not a panic. The case makes no retry: the backoff has its own
+/// tests, with an injected wait, and a retry here only makes each case that gets to the network
+/// sleep.
+fn fuzz_case(command: Command, args: &[String]) -> Run {
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    against_closed_port(&args, &[("NO_COLOR", "1")], true)
+    against_closed_port(command, &args, &[("NO_COLOR", "1")], true)
 }
 
 /// The binary itself, so the argument parsing, the file handling and the exit codes are fuzzed too.
@@ -490,7 +491,7 @@ fn the_binary_never_panics_on_junk_arguments() {
                 _ => args.push(dir.path().display().to_string()),
             }
         }
-        let Run { code, err, .. } = fuzz_case(&args);
+        let Run { code, err, .. } = fuzz_case(Command::new(strata_bin()), &args);
         assert!(
             !err.contains("panicked at"),
             "seed {} case {case}: {args:?} panicked:\n{err}",
@@ -519,19 +520,17 @@ fn the_fuzz_run_gives_junk_to_each_command_that_clap_names() {
 #[test]
 fn a_case_of_the_fuzz_run_reads_no_palette_env_of_the_home_of_the_machine() {
     // the home of the person who runs the tests names a project in its .palette.env, and so does
-    // the environment. A name, and not a uid: strata looks a name up first
+    // the environment. A name, and not a uid: strata first finds the uid of a name in the project
+    // listing
     let machine = tempfile::tempdir().unwrap();
     std::fs::write(machine.path().join(".palette.env"), "PALETTE_PROJECT=lab\n").unwrap();
-    let own = tempfile::tempdir().unwrap();
     let mut command = Command::new(strata_bin());
     command
         .env("HOME", machine.path())
         .env("PALETTE_PROJECT", "barney");
+    let args = ["list", "profiles", "--json"].map(String::from);
     // the case of the fuzz run starts from that environment
-    isolate_palette(&mut command, own.path())
-        .args(["list", "profiles", "--json"])
-        .env("STRATA_QUIET", "1");
-    let r = Run::of(&mut command);
+    let r = fuzz_case(command, &args);
     let e: Value = serde_json::from_str(r.err.trim()).unwrap();
     // a project of the machine makes the project listing the first request
     assert_eq!(
@@ -546,11 +545,13 @@ fn a_case_of_the_fuzz_run_reads_no_palette_env_of_the_home_of_the_machine() {
     );
 
     // the same run with the home of the machine reads the project there
-    let mut command = Command::new(strata_bin());
-    isolate_palette(&mut command, machine.path())
-        .args(["list", "profiles", "--json"])
-        .env("STRATA_QUIET", "1");
-    let r = Run::of(&mut command);
+    let home = machine.path().to_str().unwrap();
+    let r = against_closed_port(
+        Command::new(strata_bin()),
+        &["list", "profiles", "--json"],
+        &[("HOME", home)],
+        true,
+    );
     let e: Value = serde_json::from_str(r.err.trim()).unwrap();
     assert_eq!(
         e["error"]["path"].as_str(),

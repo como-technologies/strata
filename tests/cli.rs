@@ -1068,7 +1068,7 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
 
 /// [`against_closed_port`] with `STRATA_QUIET` set, as [`run`] sets it.
 fn closed_port(args: &[&str], envs: &[(&str, &str)]) -> Run {
-    against_closed_port(args, envs, true)
+    against_closed_port(Command::new(strata_bin()), args, envs, true)
 }
 
 /// [`closed_port`] in JSON mode: the exit status and the error object.
@@ -1172,7 +1172,7 @@ fn candidate_writes_a_record_as_a_candidate_file_with_values_and_manifests_in_fi
 
 /// [`closed_port`] without `STRATA_QUIET`, so the warnings a person sees are on.
 fn first_request_loud(args: &[&str], envs: &[(&str, &str)]) -> Run {
-    against_closed_port(args, envs, false)
+    against_closed_port(Command::new(strata_bin()), args, envs, false)
 }
 
 /// A uid and a name both reach strata and the uid decides, so the name decided nothing. Strata

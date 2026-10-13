@@ -1014,7 +1014,7 @@ const MACHINE_SETTINGS: [&str; 4] = [
 /// The run makes no retry, and it gets no setting that names a tenant either. So a request fails
 /// at once, and the run reads only the `.palette.env` of `home`, not the one of the person who
 /// runs the tests.
-pub fn isolate_palette<'a>(command: &'a mut Command, home: &Path) -> &'a mut Command {
+fn isolate_palette<'a>(command: &'a mut Command, home: &Path) -> &'a mut Command {
     for key in MACHINE_SETTINGS {
         command.env_remove(key);
     }
@@ -1044,15 +1044,20 @@ impl Run {
     }
 }
 
-/// Run the binary on `args` against an address that refuses connections, with a home of its own,
+/// Run `command` on `args` against an address that refuses connections, with a home of its own,
 /// as [`isolate_palette`] gives it. So the path in a transport error is the first request strata
 /// made.
 ///
-/// `envs` comes last: a `HOME` in it replaces the empty home. With `quiet` false, the warnings
-/// that a person sees are on.
-pub fn against_closed_port(args: &[&str], envs: &[(&str, &str)], quiet: bool) -> Run {
+/// `command` is the binary in the environment that the run starts from: the environment of the
+/// tests, or a home and a project of a machine that a test gives. `envs` comes last: a `HOME` in
+/// it replaces the empty home. With `quiet` false, the warnings that a person sees are on.
+pub fn against_closed_port(
+    mut command: Command,
+    args: &[&str],
+    envs: &[(&str, &str)],
+    quiet: bool,
+) -> Run {
     let home = tempfile::tempdir().unwrap();
-    let mut command = Command::new(strata_bin());
     isolate_palette(&mut command, home.path())
         .args(args)
         .env("STRATA_QUIET", "1");

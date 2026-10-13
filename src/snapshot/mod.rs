@@ -293,10 +293,10 @@ impl Source {
     /// The object of the record in the words of `naming`: the side of a diff, or the subject of a
     /// verdict.
     ///
-    /// One rule picks the words for each kind of record, so the heading and the verdict name the
-    /// same object: a cluster with no applied profile, and the update that waits for a cluster,
-    /// too. Only the side of a published version, a pack, or a cluster that runs a profile has
-    /// other words in a verdict.
+    /// One rule picks the words for each kind of record. So the heading and the verdict name the
+    /// same object, also for a cluster with no applied profile and for the update that waits for
+    /// a cluster. Only the side of a published version, of a pack, or of a cluster that runs a
+    /// profile has other words in a verdict.
     pub(crate) fn named(&self, naming: Naming) -> String {
         let profile = format!("{}@{}", self.name, self.version);
         if let Some(p) = &self.pack {
