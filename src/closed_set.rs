@@ -2,9 +2,9 @@
 //! release adds.
 //!
 //! Strata reads two documents again: a record, and the report of `behind --since`. A later
-//! release can add a value to a closed set of these documents and keep the schema id. So each such field is an
-//! [`Open`] value. Strata reads a value that it does not know with no error. Each document that
-//! strata writes from it holds the same text.
+//! release can add a value to a closed set of these documents and keep the schema id. So each
+//! such field is an [`Open`] value. Strata reads a value that it does not know with no error.
+//! Each document that strata writes from it holds the same text.
 
 use std::borrow::Cow;
 use std::cmp::Ordering;

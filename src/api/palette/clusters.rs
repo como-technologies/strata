@@ -347,9 +347,10 @@ impl<A: PaletteApi> Palette<A> {
     /// /v1/spectroclusters/{uid}/config/{part}`: its role bindings or its namespaces, and why
     /// Palette did not give them.
     ///
-    /// Palette gives `items`, one entry for each. A 404 gives no part and no error, so the record
-    /// holds null for the part, and not an empty list. Another answer of Palette that is an error
-    /// gives no part, and its error: see [`or_unread`].
+    /// Palette gives `items`, one entry for each. When Palette has no such route (see
+    /// [`Error::is_missing_route`]), the record holds null for the part and no error, and not an
+    /// empty list. Another answer of Palette that is an error gives no part, and its error: see
+    /// [`or_unread`].
     ///
     /// # Errors
     ///
@@ -363,8 +364,8 @@ impl<A: PaletteApi> Palette<A> {
         let path = route(CLUSTERS, &[uid, "config", part.route()]);
         let what = format!("{} of cluster {uid}", part.noun());
         match self.api.get_json(&path) {
-            Err(Error::Api { status: 404, .. }) => {
-                unavailable_note(progress, &what, 404);
+            Err(e @ Error::Api { status, .. }) if e.is_missing_route() => {
+                unavailable_note(progress, &what, status);
                 Ok((None, None))
             }
             answer => or_unread(answer, &what, progress),

@@ -2146,7 +2146,7 @@ fn a_policy_tier_of_strata_0_18_with_agent_upgrades_still_verifies() {
 }
 
 #[test]
-fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_the_field() {
+fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     // the route of the role bindings answers 404, and the cluster has no namespace
@@ -2189,24 +2189,28 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_
         json["source"]["cluster"]["tiers"]["policy"]["errors"]["rbacs"],
         "HTTP 403: forbidden"
     );
-    // a 404 records null and no error, and the hash of a 403 does not cover that null
-    let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), 404, "not found");
-    let m = snapshot_cluster(&missing, None).unwrap();
-    let missing_tier = &m
-        .source
-        .cluster
-        .as_ref()
-        .unwrap()
-        .tier(Tier::Policy)
-        .unwrap();
-    assert_eq!(missing_tier.fields["rbacs"], Value::Null);
-    assert_ne!(missing_tier.hash, tier.hash);
-    assert!(missing_tier.errors.is_empty());
-    assert!(
-        serde_json::to_value(&m).unwrap()["source"]["cluster"]["tiers"]["policy"]
-            .get("errors")
-            .is_none()
-    );
+    // a route that Palette does not have (HTTP 404 or 405) records null and no error, and the
+    // hash of a 403 does not cover that null
+    for status in [404, 405] {
+        let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), status, "no route");
+        let m = snapshot_cluster(&missing, None).unwrap();
+        let missing_tier = &m
+            .source
+            .cluster
+            .as_ref()
+            .unwrap()
+            .tier(Tier::Policy)
+            .unwrap();
+        assert_eq!(missing_tier.fields["rbacs"], Value::Null, "HTTP {status}");
+        assert_ne!(missing_tier.hash, tier.hash, "HTTP {status}");
+        assert!(missing_tier.errors.is_empty(), "HTTP {status}");
+        assert!(
+            serde_json::to_value(&m).unwrap()["source"]["cluster"]["tiers"]["policy"]
+                .get("errors")
+                .is_none(),
+            "HTTP {status}"
+        );
+    }
 
     // the same for the route of the namespaces
     let forbidden =
@@ -15259,6 +15263,9 @@ fn a_cluster_record_of_a_later_kind_compares_by_its_text_and_verify_refuses_it_w
     assert!(d.same);
     assert!(!d.cluster_tiers.is_empty());
     assert!(d.cluster_tiers.iter().all(|t| t.same));
+    // only two cluster records compare the values of their variables
+    assert!(ops::compare(&snap, &snap, "t1").cluster_variables.is_some());
+    assert!(d.cluster_variables.is_none());
 
     // verify cannot read an object of a kind that it does not know, so it asks Palette nothing
     let before = api.calls(&cluster_route(CLUSTER_UID));

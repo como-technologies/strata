@@ -122,10 +122,14 @@ fails when 50 or fewer of its 2000 cases build a record.
 
 | Job | Runs |
 | --- | --- |
-| lint and test | `just lint`, `just test`, `just library-example`, and `just examples` |
+| lint and test | `just lint`, `just test`, `just library-example`, `just examples`, and `cargo test -p xtask` |
 | docs | `just docs-check`, and `just docs` with `mdbook-lint` |
 | build | the Linux musl binary, with the step that a release uses |
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of `Cargo.toml`, so the number a reader trusts is the number CI builds with |
+
+CI does not run `just adapter-test`. The adapter needs knurl, a private
+repository, and CI has no key for it: see
+[The knurl adapter](../automation/knurl.md#test-it).
 
 `ci` adds two jobs of its own. `Gate` needs the checks and does no other work:
 it is the one check run that the verify reads (see

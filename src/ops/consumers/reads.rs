@@ -215,16 +215,15 @@ fn group_members<A: PaletteApi>(
     let mut failed = None;
     let mut answered = false;
     for scope in [wide, home] {
-        match scope.cluster_groups() {
+        match served(scope.cluster_groups()) {
             Ok(listed) => {
                 answered = true;
-                for (_, group) in listed {
+                for (_, group) in listed.into_iter().flatten() {
                     if seen.insert(group.clone()) {
                         groups.push((scope, group));
                     }
                 }
             }
-            Err(e) if e.is_missing_route() => answered = true,
             Err(e) => failed = Some(e.to_json()),
         }
     }
