@@ -519,14 +519,14 @@ fn the_fuzz_run_gives_junk_to_each_command_that_clap_names() {
 #[test]
 fn a_case_of_the_fuzz_run_reads_no_palette_env_of_the_home_of_the_machine() {
     // the home of the person who runs the tests names a project in its .palette.env, and so does
-    // the environment
+    // the environment. A name, and not a uid: strata looks a name up first
     let machine = tempfile::tempdir().unwrap();
     std::fs::write(machine.path().join(".palette.env"), "PALETTE_PROJECT=lab\n").unwrap();
     let own = tempfile::tempdir().unwrap();
     let mut command = Command::new(strata_bin());
     command
         .env("HOME", machine.path())
-        .env("PALETTE_PROJECT_UID", "p-machine");
+        .env("PALETTE_PROJECT", "barney");
     // the case of the fuzz run starts from that environment
     isolate_palette(&mut command, own.path())
         .args(["list", "profiles", "--json"])
