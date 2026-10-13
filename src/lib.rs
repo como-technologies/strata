@@ -93,7 +93,7 @@ pub mod validation;
 
 /// The old path of [`content::layer`]. It goes in release 0.23.
 pub use content::layer;
-/// The old path of [`diff::impact`]. It goes in release 0.23.
+/// The old path of [`diff::impact`](mod@diff::impact). It goes in release 0.23.
 pub use diff::impact;
 /// The old path of [`reference::version`]. It goes in release 0.23.
 pub use reference::version;
