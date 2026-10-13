@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, named_entries, profile_versions};
 use crate::cloud::Cloud;
-use crate::error::{Result, found};
+use crate::error::{Result, served};
 use crate::reference::{Ref, version};
 use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
@@ -541,8 +541,8 @@ fn list_profiles<A: PaletteApi>(
 /// tenant scope, it is the system. Each other version is of the scope of the listing. An empty
 /// listing needs no search.
 ///
-/// A Palette with no profile search answers HTTP 404. The scopes then stay unknown, because the
-/// listing is still the answer. Each other error returns.
+/// A Palette with no profile search answers HTTP 404 or 405. The scopes then stay unknown,
+/// because the listing is still the answer. Each other error returns.
 fn scopes_from_search<A: PaletteApi>(
     profiles: &mut [ListedProfile],
     palette: &Palette<A>,
@@ -555,7 +555,7 @@ fn scopes_from_search<A: PaletteApi>(
     let mut scopes: BTreeMap<String, ProfileScope> = BTreeMap::new();
     for &scope in own.others_listed() {
         progress.note(&format!("searching the {scope} profiles"));
-        let Some(uids) = found(palette.profile_uids_in_scope(scope))? else {
+        let Some(uids) = served(palette.profile_uids_in_scope(scope))? else {
             return Ok(());
         };
         scopes.extend(uids.into_iter().map(|uid| (uid, scope)));

@@ -2692,6 +2692,27 @@ fn consumers_exits_2_when_the_list_is_empty_and_a_cluster_cannot_be_read() {
     );
 }
 
+/// A Palette with no edge host search answers 404 or 405. Each is no edge host, and not a reading
+/// that failed.
+#[test]
+fn consumers_reads_no_edge_host_when_palette_has_no_edge_host_search() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A)
+        .with(CLUSTER_LISTING, serde_json::json!([]))
+        .failing(post(EDGE_HOST_SEARCH), 405, "{}");
+    let r = ops::consumers(
+        &Ref::Uid(UID_A.into()),
+        |_| Ok(Palette::new(api.clone())),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(r.consumers.is_empty());
+    assert!(!r.edge_hosts_read.incomplete(), "{:?}", r.edge_hosts_read);
+    assert_eq!((r.count, r.exit_code()), (0, 0));
+}
+
 /// An edge host that the version is bound to is a consumer, so a failed search of the edge hosts
 /// leaves the answer incomplete too (#194).
 #[test]
@@ -4028,6 +4049,20 @@ fn list_keeps_the_listing_alone_when_palette_has_no_profile_search() {
             ]}),
         )
         .with(PROJECT_LISTING, projects(&[("lab", "p1")]));
+    // Palette answers 404 or 405 for a route that it does not have
+    let not_allowed = api.clone().failing(post(PROFILE_SEARCH), 405, "{}");
+    let l = listing(
+        &not_allowed,
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            ..ListOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        l.profiles.as_ref().unwrap().iter().all(|p| p.scope.is_none()),
+        "a 405 is no search, as a 404 is"
+    );
     let l = listing(
         &api,
         &ListOptions {
@@ -6536,7 +6571,7 @@ fn packs_lists_what_a_registry_offers_newest_first_with_the_tags_of_each_version
     );
     assert_eq!(r.versions[0].pack_uid, "pk-65");
     assert_eq!(r.versions[0].digest, "sha256:bbb");
-    assert_eq!(r.versions[0].kind, "spectro");
+    assert_eq!(r.versions[0].kind.as_str(), "spectro");
     assert_eq!(r.versions[0].cloud_types, vec!["aws"]);
 
     // --latest keeps one line per registry
@@ -12439,6 +12474,70 @@ fn packs_behind_and_the_candidate_check_agree_on_the_clouds_that_a_pack_supports
             );
         }
     }
+}
+
+/// A listing entry with no `spec.type` is a pack of a pack registry. So `packs`, a record, and
+/// `behind` all give it the type `spectro`, and `behind` names the last sync of its registry.
+#[test]
+fn packs_a_record_and_behind_agree_on_the_type_of_a_listing_entry_with_no_type() {
+    let untyped = |mut summary: Value| {
+        summary["spec"].as_object_mut().unwrap().remove("type");
+        summary
+    };
+    let api = serve_summaries(
+        vec![
+            untyped(pack_summary(
+                "pk-63",
+                "1.63.1",
+                "reg-public",
+                "sha256:aaa",
+                CSI_63,
+            )),
+            untyped(pack_summary(
+                "pk-65",
+                "1.65.0",
+                "reg-public",
+                "sha256:bbb",
+                CSI_65,
+            )),
+        ],
+        &[("reg-public", public_entity())],
+    )
+    .with(
+        PACK_REGISTRY_SUMMARY,
+        public_repo_summary(serde_json::json!({
+            "isSyncSupported": true, "status": "Failed", "message": "registry gone",
+        })),
+    );
+    let listing = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    let kinds: Vec<&str> = listing.registries[0]
+        .versions
+        .iter()
+        .map(|v| v.kind.as_str())
+        .collect();
+    assert_eq!(kinds, vec!["spectro", "spectro"]);
+    let record = snapshot_of(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    assert_eq!(record.packs[0].kind, "spectro");
+    let (r, _) = behind_current_on(&api);
+    assert_eq!(
+        r.pins[0].registry_sync.as_ref().map(|s| s.status.as_str()),
+        Some("Failed"),
+        "{:?}",
+        r.pins[0]
+    );
+}
+
+/// The listing gives the layer of each version, and the registry route gives one layer for the
+/// whole pack. `packs` and a record both take the layer of the version first.
+#[test]
+fn packs_and_a_record_take_the_layer_of_the_version_before_the_layer_of_the_registry_route() {
+    let mut entity = public_entity();
+    entity["layer"] = serde_json::json!("addon");
+    let api = serve_registry(vec![], &[("reg-public", entity)]);
+    let listing = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    assert_eq!(listing.registries[0].layer, "csi");
+    let record = snapshot_of(&api, "pack:csi-aws-ebs@1.65.0").unwrap();
+    assert_eq!(record.packs[0].layer, "csi");
 }
 
 /// Behind on a record of csi-aws-ebs@1.65.0, which is current, against `api`: the report, and

@@ -475,7 +475,7 @@ impl Renderer for MarkdownRenderer {
                             .collect::<Vec<_>>()
                             .join(" ")
                     },
-                    v.kind,
+                    v.kind.as_str(),
                     if v.cloud_types.is_empty() {
                         "-".to_string()
                     } else {

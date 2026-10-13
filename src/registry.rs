@@ -16,7 +16,7 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, RegistryKind};
 use crate::diff::{RegistrySync, SyncRecovery};
-use crate::error::{Error, Result, unread_reason};
+use crate::error::{Error, Result, served, unread_reason};
 use crate::json::{opt_text, str_at, take_items, text};
 use crate::pack_type::PackType;
 use crate::term::progress::Progress;
@@ -30,7 +30,7 @@ pub(crate) struct Registries<'a, A: PaletteApi> {
     /// The entries of `GET /v1/registries/metadata`, after the first read.
     metadata: Option<Vec<Value>>,
     /// The entries of the summary listing of each kind, after the first read. `None` for a kind
-    /// whose listing Palette answered with a 4xx.
+    /// whose listing Palette does not have.
     summaries: BTreeMap<RegistryKind, Option<Vec<Value>>>,
 }
 
@@ -66,20 +66,18 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
 
     /// The entries of the summary listing of the registries of `kind`,
     /// `GET /v1/registries/{kind}/summary`. Each has its last sync in `status.sync`, and an OCI
-    /// registry has its provider type in `spec.providerType`. `None` when Palette answers the
-    /// listing with a 4xx: it has no such listing.
+    /// registry has its provider type in `spec.providerType`. `None` when Palette has no such
+    /// listing: it answers HTTP 404 or 405.
     ///
     /// # Errors
     ///
-    /// Each other error of the request.
+    /// Each other error of the request. A 401, a 403, or a 429 is an error too, and not a
+    /// listing with no entry: a record of a pack from an OCI registry holds the provider type,
+    /// so a key that cannot read the listing must not change the root with no error.
     pub(crate) fn summary(&mut self, kind: RegistryKind) -> Result<Option<&[Value]>> {
         let entries = match self.summaries.entry(kind) {
             Entry::Occupied(e) => e.into_mut(),
-            Entry::Vacant(v) => v.insert(match self.palette.registry_summary(kind) {
-                Ok(listing) => Some(take_items(listing)),
-                Err(Error::Api { status, .. }) if (400..500).contains(&status) => None,
-                Err(e) => return Err(e),
-            }),
+            Entry::Vacant(v) => v.insert(served(self.palette.registry_summary(kind))?.map(take_items)),
         };
         Ok(entries.as_deref())
     }
@@ -119,7 +117,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
 
     /// The provider type of the OCI registry `uid`, `pack`, `helm`, or `zarf`, from
     /// `spec.providerType` of the OCI summary listing. The pack listing does not carry it. `None`
-    /// when Palette answers the listing with a 4xx, when the listing does not have the registry,
+    /// when Palette has no such listing, when the listing does not have the registry,
     /// and when the entry names no type.
     pub(crate) fn oci_provider_type(&mut self, uid: &str) -> Result<Option<String>> {
         Ok(self
@@ -134,7 +132,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     /// Palette makes the pack of such a layer when it creates the profile. The metadata gives the
     /// kind and `isPrivate`, and the OCI summary gives the provider type and
     /// `status.sync.isSyncSupported`. `None` for a registry that syncs, for a registry that the
-    /// key cannot see, and when Palette answers the OCI summary with a 4xx.
+    /// key cannot see, and when Palette has no OCI summary.
     pub(crate) fn unsynced(&mut self, uid: &str) -> Result<Option<Unsynced>> {
         let Some(meta) = registry_entry(self.metadata()?, "/uid", uid) else {
             return Ok(None);
@@ -195,7 +193,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     /// own kind. A summary listing gives the sync as Palette stores it. `None` for a registry
     /// that does not sync, for a manifest pack, and for a type that is no pack type: `pack_type`
     /// is then `None`. Also `None` for a registry that the listing does not have, and when
-    /// Palette answers the listing with a 4xx.
+    /// Palette has no such listing.
     pub(crate) fn sync(
         &mut self,
         uid: &str,
@@ -238,9 +236,9 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
 
     /// The last sync of the registry `uid`, which holds a pack of type `pack_type`, as a note
     /// beside an answer that stands on its own. The answer is the verdict of a pack record, or a
-    /// pin of `behind`. A 5xx of Palette and a request that does not complete do not stop the
-    /// answer. The note then names the reason, and `progress` gets a line. Each other error is
-    /// an error of the run.
+    /// pin of `behind`. An error of Palette, such as a 403 or a 5xx, and a request that does
+    /// not complete do not stop the answer. The note then names the reason, and `progress` gets
+    /// a line. Each other error is an error of the run.
     pub(crate) fn sync_note(
         &mut self,
         uid: &str,
@@ -287,8 +285,8 @@ pub(crate) struct Unsynced {
 pub(crate) struct RegistrySyncNote {
     /// The sync, when Palette gives one: see [`Registries::sync`].
     pub sync: Option<RegistrySync>,
-    /// Why strata has no sync: Palette answered with a 5xx, or the request did not complete.
-    /// `sync` is then `None`.
+    /// Why strata has no sync: Palette answered with an error, such as a 403 or a 5xx, or the
+    /// request did not complete. `sync` is then `None`.
     pub error: Option<String>,
 }
 
@@ -325,6 +323,25 @@ pub(crate) fn is_retired(state: &str) -> bool {
 /// route refuses a profile that holds it. So strata does not refuse that version itself.
 pub(crate) fn retired_state(summary: &Value) -> Option<String> {
     system_state(summary).filter(|s| is_retired(s))
+}
+
+/// The type of the pack of `summary`, an entry of the pack listing, from its `spec.type`.
+///
+/// A registry gives each pack the type of its kind: `spectro`, `helm`, or `oci`. The API of
+/// Palette names one more type, `manifest`, for a pack from no registry. An entry with no type,
+/// or with a text that is none of the four, is a pack of a pack registry: `spectro`. A record, a
+/// listing of `packs`, and a sync note of `behind` all read the type here, so they agree.
+pub(crate) fn pack_type_of(summary: &Value) -> PackType {
+    PackType::parse(str_at(summary, "/spec/type")).unwrap_or(PackType::Spectro)
+}
+
+/// The layer of the pack of `summary`, an entry of the pack listing, else of `tags`, the answers
+/// of the registry route of the pack. `None` when neither gives a layer.
+///
+/// The listing gives the layer of each version. The registry route gives one layer for all the
+/// versions of the pack: the layer of one of them. So the layer of the version comes first.
+pub(crate) fn registry_layer(summary: &Value, tags: &[Value]) -> Option<String> {
+    opt_text(summary, "/spec/layer").or_else(|| tags.iter().find_map(|t| opt_text(t, "/layer")))
 }
 
 #[cfg(test)]
@@ -408,18 +425,29 @@ mod tests {
     }
 
     #[test]
-    fn a_summary_that_palette_answers_with_a_4xx_has_no_entry_and_a_5xx_is_an_error() {
+    fn a_summary_that_palette_does_not_serve_has_no_entry_and_each_other_error_is_an_error() {
         let api = MemoryApi::new()
             .with(METADATA, json!({"items": []}))
-            .failing("/v1/registries/pack/summary", 500, "{}");
+            .failing("/v1/registries/pack/summary", 500, "{}")
+            .failing("/v1/registries/helm/summary", 405, "{}");
         let palette = Palette::new(&api);
         let mut registries = Registries::new(&palette);
         // the OCI summary is not registered: a 404
         assert!(registries.summary(RegistryKind::Oci).unwrap().is_none());
         assert!(registries.summary(RegistryKind::Oci).unwrap().is_none());
-        assert_eq!(api.calls(OCI_SUMMARY), 1, "a 4xx is read one time too");
+        assert_eq!(api.calls(OCI_SUMMARY), 1, "a 404 is read one time too");
+        assert!(registries.summary(RegistryKind::Helm).unwrap().is_none());
         let err = registries.summary(RegistryKind::Pack).unwrap_err();
         assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+        // the key or the rate is no listing with no entry: the provider type of an OCI pack is
+        // in its record
+        for status in [401, 403, 429] {
+            let refused = Palette::new(MemoryApi::new().failing(OCI_SUMMARY, status, "{}"));
+            let err = Registries::new(&refused)
+                .oci_provider_type("reg-zarf")
+                .unwrap_err();
+            assert!(matches!(err, Error::Api { status: s, .. } if s == status), "{err}");
+        }
         // a 404 of the metadata is an error: each Palette has the listing
         let none = Palette::new(MemoryApi::new());
         let err = Registries::new(&none).metadata().unwrap_err();

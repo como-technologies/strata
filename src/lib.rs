@@ -79,7 +79,7 @@ pub mod error;
 pub(crate) mod json;
 pub(crate) mod legend;
 pub mod ops;
-pub(crate) mod pack_type;
+pub mod pack_type;
 pub mod profile_type;
 pub mod reference;
 pub(crate) mod registry;

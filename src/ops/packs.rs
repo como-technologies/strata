@@ -9,7 +9,8 @@ use crate::cloud::supports;
 use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, strings, text};
 use crate::reference::version;
-use crate::registry::Registries;
+use crate::pack_type::PackType;
+use crate::registry::{Registries, pack_type_of, registry_layer};
 use crate::snapshot::Tool;
 use crate::term::progress::Progress;
 
@@ -77,9 +78,9 @@ pub struct PackBuild {
     pub pack_uid: String,
     /// The digest the registry reports, empty when it reports none.
     pub digest: String,
-    /// The pack type: spectro, helm, oci, or manifest.
+    /// The pack type: spectro, helm, or oci. A listing entry with no type is spectro.
     #[serde(rename = "type")]
-    pub kind: String,
+    pub kind: PackType,
     /// The clouds this version supports.
     pub cloud_types: Vec<String>,
     /// The processor architectures this version supports, sorted: `amd64`, `arm64`. From the
@@ -233,11 +234,7 @@ where
         }
         let answers: Vec<Value> = answers.into_iter().flatten().collect();
         let tags_unavailable = answers.is_empty();
-        let layer = answers
-            .iter()
-            .map(|a| text(a, "/layer"))
-            .find(|l| !l.is_empty())
-            .unwrap_or_else(|| text(mine[0], "/spec/layer"));
+        let layer = registry_layer(mine[0], &answers).unwrap_or_default();
         let tags = merged_tags(&answers);
         // Palette applies the FIPS rule of the tenant to its registry route, and not to the
         // listing. So a version with no tag in the answer is a version that Palette does not
@@ -292,7 +289,7 @@ where
                 version,
                 pack_uid,
                 digest: text(e, "/spec/digest"),
-                kind: text(e, "/spec/type"),
+                kind: pack_type_of(e),
                 cloud_types,
                 architectures: architectures(e),
                 tags: for_version,

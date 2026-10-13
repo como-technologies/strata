@@ -1,5 +1,8 @@
 //! The type of a pack: `spectro`, `helm`, `oci`, or `manifest`.
 
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
 /// The `type` of a pack, as a pack reference of Palette names it and as a record keeps it.
 ///
 /// A pack from a registry has the type of its registry: `spectro` from a pack registry, `helm`
@@ -7,8 +10,9 @@
 /// registry: Palette makes it from the manifests of the layer. A tier of an app profile has a
 /// type of its own, such as `container`. It is not a pack type: a record keeps the text, and
 /// [`PackType::parse`] gives none for it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PackType {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum PackType {
     /// `spectro`: a pack of a pack registry.
     Spectro,
     /// `helm`: a chart of a Helm registry.
@@ -21,7 +25,7 @@ pub(crate) enum PackType {
 
 impl PackType {
     /// The type as the documents name it: `spectro`, `helm`, `oci`, or `manifest`.
-    pub(crate) fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Spectro => "spectro",
             Self::Helm => "helm",

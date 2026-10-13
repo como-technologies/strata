@@ -14,7 +14,6 @@ use crate::cloud::supports;
 use crate::diff::impact::ImpactLevel;
 use crate::diff::{ChangeFlag, Diff, RegistrySync};
 use crate::error::{Error, Result};
-use crate::pack_type::PackType;
 use crate::reference::{Ref, version};
 use crate::registry::{Registries, RegistrySyncNote};
 use crate::snapshot::{Snapshot, Tool, load_document};
@@ -378,7 +377,7 @@ where
                     let palette = connect(scope)?;
                     v.insert(Registries::new(&palette).sync_note(
                         &registry_uid,
-                        PackType::parse(&first.kind),
+                        Some(first.kind),
                         progress,
                     )?)
                 }

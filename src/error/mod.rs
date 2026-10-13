@@ -453,6 +453,16 @@ pub(crate) fn found<T>(answer: Result<T>) -> Result<Option<T>> {
     }
 }
 
+/// `answer`, or `None` when Palette has no such route: see [`Error::is_missing_route`]. Each
+/// other error returns, also a 401, a 403, or a 429: the key or the rate, and not the route.
+pub(crate) fn served<T>(answer: Result<T>) -> Result<Option<T>> {
+    match answer {
+        Ok(v) => Ok(Some(v)),
+        Err(e) if e.is_missing_route() => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 /// `a, b, c`, or `none` for an empty list.
 fn list_or_none(items: &[String]) -> String {
     if items.is_empty() {
