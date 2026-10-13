@@ -1,0 +1,416 @@
+//! The tests of the reads of Palette: the routes, the paging, and the documents they give.
+
+use super::*;
+use crate::api::MemoryApi;
+use crate::scope::ProfileScope;
+use serde_json::json;
+
+fn listing() -> Value {
+    json!({"items": [
+        {"metadata": {"name": "aws-stack", "uid": "u1"}, "spec": {"version": "1.0.0"}},
+        {"metadata": {"name": "aws-stack", "uid": "u2"}, "spec": {"version": "1.1.0"}},
+    ]})
+}
+
+#[test]
+fn a_pack_name_and_a_registry_uid_go_into_the_path_of_the_tags_escaped() {
+    // with no escape, a `/` in the name ends the segment, and a `?` starts the query
+    let p = Palette::new(
+        MemoryApi::new()
+            .with(
+                "/v1/packs/a%2Fb%3Fc/registries/r%201",
+                json!({"tags": [{"tag": "1.x"}]}),
+            )
+            .with(
+                "/v1/packs/a%2Fb%3Fc/registries/r%201?states=disabled",
+                json!({"tags": []}),
+            )
+            .with(
+                "/v1/packs?filters=spec.name=a%2Fb%3Fc&limit=100&offset=100",
+                json!({"items": [1]}),
+            ),
+    );
+    assert_eq!(
+        p.pack_tags("a/b?c", "r 1", None).unwrap()["tags"][0]["tag"],
+        "1.x"
+    );
+    assert_eq!(
+        p.pack_tags("a/b?c", "r 1", Some("disabled")).unwrap()["tags"],
+        json!([])
+    );
+    assert_eq!(
+        p.pack_listing_page("a/b?c", 100).unwrap()["items"],
+        json!([1])
+    );
+    let err = p.pack_tags("a/b?c", "r 2", None).unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+}
+
+#[test]
+fn the_registry_listings_read_the_metadata_and_the_summary_of_a_kind() {
+    let p = Palette::new(
+        MemoryApi::new()
+            .with("/v1/registries/metadata", json!({"items": [1]}))
+            .with("/v1/registries/pack/summary", json!({"items": [2]}))
+            .with("/v1/registries/oci/summary", json!({"items": [3]})),
+    );
+    assert_eq!(p.registry_metadata().unwrap()["items"], json!([1]));
+    assert_eq!(
+        p.registry_summary(RegistryKind::Pack).unwrap()["items"],
+        json!([2])
+    );
+    assert_eq!(
+        p.registry_summary(RegistryKind::Oci).unwrap()["items"],
+        json!([3])
+    );
+    assert_eq!(
+        RegistryKind::of_pack_type(PackType::Spectro),
+        Some(RegistryKind::Pack)
+    );
+    assert_eq!(
+        RegistryKind::of_pack_type(PackType::Helm),
+        Some(RegistryKind::Helm)
+    );
+    assert_eq!(RegistryKind::of_pack_type(PackType::Manifest), None);
+    for kind in [RegistryKind::Pack, RegistryKind::Helm, RegistryKind::Oci] {
+        assert_eq!(RegistryKind::of_kind(kind.route()), Some(kind));
+        assert_eq!(RegistryKind::of_pack_type(kind.pack_type()), Some(kind));
+    }
+    assert_eq!(RegistryKind::of_kind("spectro"), None);
+}
+
+#[test]
+fn resolve_finds_the_exact_name_and_version() {
+    let p =
+        Palette::new(MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing()));
+    assert_eq!(p.resolve("aws-stack", "1.1.0").unwrap(), "u2");
+    let err = p.resolve("aws-stack", "9.9.9").unwrap_err();
+    assert!(matches!(err, Error::ProfileNotFound { .. }));
+    assert!(err.to_string().contains("'aws-stack' with version '9.9.9'"));
+    // at tenant scope the listing advice is a dead end: the scope holds only tenant profiles
+    assert!(
+        err.to_string().contains("this is tenant scope"),
+        "a miss at tenant scope asks for a project first: {err}"
+    );
+
+    // in a project, the listing is the right next command, and the name may be a pack's
+    let in_project = Palette::new(
+        MemoryApi::new()
+            .with("/v1/dashboard/clusterprofiles/metadata", listing())
+            .in_project("p1"),
+    );
+    let err = in_project.resolve("aws-stack", "9.9.9").unwrap_err();
+    assert!(
+        err.to_string().contains("`strata list --pack aws-stack`"),
+        "a miss in a project points at the listing: {err}"
+    );
+}
+
+/// A listing in a project with a profile of the tenant and a profile of the project named
+/// `aws-stack`, both at 1.1.1, and the document of each with its scope.
+fn two_scopes() -> MemoryApi {
+    MemoryApi::new()
+            .in_project("p1")
+            .with(
+                "/v1/dashboard/clusterprofiles/metadata",
+                json!({"items": [
+                    {"metadata": {"name": "aws-stack", "uid": "u-tenant"}, "spec": {"version": "1.1.1"}},
+                    {"metadata": {"name": "aws-stack", "uid": "u-project"}, "spec": {"version": "1.1.1"}},
+                    {"metadata": {"name": "aws-stack", "uid": "u-old"}, "spec": {"version": "1.0.0"}},
+                ]}),
+            )
+            .with(
+                "/v1/clusterprofiles/u-tenant",
+                json!({"metadata": {"uid": "u-tenant", "annotations": {"scope": "tenant"}}}),
+            )
+            .with(
+                "/v1/clusterprofiles/u-project",
+                json!({"metadata": {"uid": "u-project", "annotations": {"scope": "project"}}}),
+            )
+}
+
+#[test]
+fn a_name_and_version_that_two_scopes_answer_is_an_error_that_names_each_uid_with_its_scope() {
+    let p = Palette::new(two_scopes());
+    let err = p.resolve("aws-stack", "1.1.1").unwrap_err();
+    assert_eq!(err.kind(), "profile-name-ambiguous");
+    let Error::ProfileNameAmbiguous {
+        name,
+        version,
+        profiles,
+    } = &err
+    else {
+        panic!("{err}");
+    };
+    assert_eq!((name.as_str(), version.as_str()), ("aws-stack", "1.1.1"));
+    assert_eq!(
+        profiles
+            .iter()
+            .map(|p| (p.uid.as_str(), p.scope))
+            .collect::<Vec<_>>(),
+        [
+            ("u-project", Some(ProfileScope::Project)),
+            ("u-tenant", Some(ProfileScope::Tenant)),
+        ],
+        "by uid, each with the scope of its document"
+    );
+    assert!(
+        err.to_string()
+            .contains("u-project (project), u-tenant (tenant); give the uid"),
+        "{err}"
+    );
+    // the version that one scope holds still resolves
+    assert_eq!(p.resolve("aws-stack", "1.0.0").unwrap(), "u-old");
+}
+
+#[test]
+fn latest_is_ambiguous_only_when_two_scopes_hold_the_highest_version() {
+    let p = Palette::new(two_scopes());
+    let err = p.resolve_latest("aws-stack").unwrap_err();
+    assert!(matches!(err, Error::ProfileNameAmbiguous { .. }), "{err}");
+    assert!(
+        err.to_string().contains("with version '1.1.1'"),
+        "the message names the highest version, not 'latest': {err}"
+    );
+
+    // two scopes hold an older version, and one holds the highest: no error
+    let listing = json!({"items": [
+        {"metadata": {"name": "aws-stack", "uid": "u-tenant"}, "spec": {"version": "1.0.0"}},
+        {"metadata": {"name": "aws-stack", "uid": "u-project"}, "spec": {"version": "1.0.0"}},
+        {"metadata": {"name": "aws-stack", "uid": "u-new"}, "spec": {"version": "1.1.0"}},
+    ]});
+    let p = Palette::new(MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing));
+    assert_eq!(p.resolve_latest("aws-stack").unwrap(), "u-new");
+}
+
+#[test]
+fn the_profile_search_gives_the_uid_of_each_version_of_a_scope_over_each_page() {
+    let body = json!({
+        "filter": {"scope": "tenant"},
+        "sort": [{"field": "profileName", "order": "asc"}],
+    });
+    // a first page of 50 names, each with one version, and a second page of one name
+    let names = |from: usize, n: usize| -> Vec<Value> {
+        (from..from + n)
+                .map(|i| {
+                    json!({"metadata": {"name": format!("p{i}")},
+                           "specSummary": {"versions": [{"version": "1.0.0", "uid": format!("u{i}")}]}})
+                })
+                .collect()
+    };
+    let api = MemoryApi::new()
+        .with_post(
+            &with_limit(PROFILE_SEARCH),
+            &body,
+            json!({"items": names(0, 50), "listmeta": {"count": 51, "limit": 50, "offset": 0}}),
+        )
+        .with_post(
+            &format!("{}&offset=50", with_limit(PROFILE_SEARCH)),
+            &body,
+            json!({"items": [{"metadata": {"name": "p50"}, "specSummary": {"versions": [
+                    {"version": "1.0.0", "uid": "u50"}, {"version": "2.0.0", "uid": "u50b"}]}}],
+                       "listmeta": {"count": 51, "limit": 50, "offset": 50}}),
+        );
+    let uids = Palette::new(&api)
+        .profile_uids_in_scope(ProfileScope::Tenant)
+        .unwrap();
+    assert_eq!(uids.len(), 52, "{uids:?}");
+    assert!(uids.contains("u0") && uids.contains("u50") && uids.contains("u50b"));
+    assert_eq!(api.posted().len(), 2, "two pages, two requests");
+
+    // a Palette with no profile search answers 404, and the caller decides
+    let err = Palette::new(MemoryApi::new())
+        .profile_uids_in_scope(ProfileScope::System)
+        .unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+}
+
+#[test]
+fn latest_resolves_to_the_highest_version_by_natural_order() {
+    let listing = json!({"items": [
+        {"metadata": {"name": "aws-stack", "uid": "u1"}, "spec": {"version": "1.9.0"}},
+        {"metadata": {"name": "aws-stack", "uid": "u2"}, "spec": {"version": "1.10.0"}},
+        {"metadata": {"name": "aws-stack", "uid": "u0"}, "spec": {"version": "1.2.0"}},
+        {"metadata": {"name": "other", "uid": "u3"}, "spec": {"version": "9.0.0"}},
+    ]});
+    let p = Palette::new(MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing));
+    assert_eq!(p.resolve_latest("aws-stack").unwrap(), "u2");
+    assert_eq!(p.resolve("aws-stack", "latest").unwrap(), "u2");
+    let err = p.resolve_latest("nope").unwrap_err();
+    assert!(matches!(err, Error::ProfileNotFound { .. }), "{err}");
+    assert!(err.to_string().contains("'nope'"));
+    assert!(err.to_string().contains("'latest'"));
+}
+
+#[test]
+fn an_item_with_no_version_or_no_uid_is_not_a_version_of_the_name() {
+    // the one parse keeps each item of the listing; a resolve skips an item with no version
+    // or no uid, so a name with no other item is profile-not-found, not an empty uid
+    let listing = json!({"items": [
+        {"metadata": {"name": "x"}},
+        {"metadata": {"name": "y", "uid": "u1"}},
+        {"metadata": {"name": "y"}, "spec": {"version": "2.0.0"}},
+        {"metadata": {"name": "y", "uid": "u2"}, "spec": {"version": "1.0.0"}},
+    ]});
+    let p = Palette::new(MemoryApi::new().with("/v1/dashboard/clusterprofiles/metadata", listing));
+    let err = p.resolve_latest("x").unwrap_err();
+    assert!(matches!(err, Error::ProfileNotFound { .. }), "{err}");
+    assert_eq!(p.resolve_latest("y").unwrap(), "u2");
+    assert_eq!(p.resolve("y", "1.0.0").unwrap(), "u2");
+    let err = p.resolve("y", "2.0.0").unwrap_err();
+    assert!(matches!(err, Error::ProfileNotFound { .. }), "{err}");
+}
+
+#[test]
+fn fetch_profile_tolerates_a_missing_variables_endpoint_only() {
+    let base = MemoryApi::new()
+        .with("/v1/clusterprofiles/u1", json!({"metadata": {"uid": "u1"}}))
+        .with(
+            "/v1/clusterprofiles/u1/packs/manifests",
+            json!({"spec": {"packs": []}}),
+        );
+    let raw = Palette::new(base.clone())
+        .fetch_profile("u1", &Progress::silent())
+        .unwrap();
+    assert_eq!(raw.variables, json!({"variables": []}));
+
+    let err = Palette::new(base.failing("/v1/clusterprofiles/u1/variables", 500, "boom"))
+        .fetch_profile("u1", &Progress::silent())
+        .unwrap_err();
+    assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+}
+
+#[test]
+fn a_uid_with_a_slash_goes_into_each_route_escaped() {
+    // with no escape, a `/` in a uid ends the segment, and a `?` starts the query
+    assert_eq!(
+        route(PROFILES, &["a/b", "packs", "x?y"]),
+        "/v1/clusterprofiles/a%2Fb/packs/x%3Fy"
+    );
+    let uid = "a/b";
+    let cluster = "/v1/spectroclusters/a%2Fb";
+    let profile = "/v1/clusterprofiles/a%2Fb";
+    let p = Palette::new(
+        MemoryApi::new()
+            .with(cluster, json!({"metadata": {"uid": uid}}))
+            .with(
+                format!("{cluster}/packs/resolvedValues"),
+                json!({"profiles": []}),
+            )
+            .with(
+                "/v1/notifications/spectrocluster/a%2Fb",
+                json!({"items": [1], "listmeta": {"continue": ""}}),
+            )
+            .with(profile, json!({"metadata": {"uid": uid}}))
+            .with(
+                format!("{profile}/packs/manifests"),
+                json!({"spec": {"packs": []}}),
+            )
+            .with(format!("{profile}/variables"), json!({"variables": []})),
+    );
+    let doc = p.subject_document(SubjectKind::Cluster, uid).unwrap();
+    assert_eq!(text(&doc, "/metadata/uid"), uid);
+    let values = p.resolved_values(SubjectKind::Cluster, uid).unwrap();
+    assert_eq!(values["profiles"], json!([]));
+    assert_eq!(p.cluster_notifications(uid).unwrap(), vec![json!(1)]);
+    assert_eq!(
+        text(&p.profile_document(uid).unwrap(), "/metadata/uid"),
+        uid
+    );
+    let raw = p.fetch_profile(uid, &Progress::silent()).unwrap();
+    assert_eq!(raw.variables, json!({"variables": []}));
+}
+
+#[test]
+fn one_pager_walks_a_get_listing_and_a_post_search_by_continue() {
+    let notifications = "/v1/notifications/spectrocluster/c1";
+    let search = with_limit(EDGE_HOST_SEARCH);
+    let api = MemoryApi::new()
+        .with(
+            notifications,
+            json!({"items": [1, 2], "listmeta": {"continue": "t1"}}),
+        )
+        .with(
+            format!("{notifications}?continue=t1"),
+            json!({"items": [3], "listmeta": {"continue": ""}}),
+        )
+        .with(
+            format!("POST {search}"),
+            json!({"items": [4], "listmeta": {"continue": "t 2"}}),
+        )
+        .with(
+            format!("POST {search}&continue=t%202"),
+            json!({"items": null, "listmeta": {"continue": "t3"}}),
+        );
+    let p = Palette::new(&api);
+    assert_eq!(
+        p.cluster_notifications("c1").unwrap(),
+        vec![json!(1), json!(2), json!(3)]
+    );
+    // a page with no items ends the search, also with a token
+    assert_eq!(p.edge_hosts().unwrap(), vec![json!(4)]);
+    assert_eq!(api.posted().len(), 2);
+    assert_eq!(page_after("/v1/x", ""), "/v1/x");
+    assert_eq!(page_after("/v1/x", "a b"), "/v1/x?continue=a%20b");
+    assert_eq!(
+        page_after("/v1/x?limit=50", "t"),
+        "/v1/x?limit=50&continue=t"
+    );
+}
+
+#[test]
+fn fetch_subject_reads_each_kind_by_uid_and_then_by_name_after_a_404() {
+    // the three kinds share one lookup: the uid first, then the one object of the name
+    let templates =
+        |uid: &str| json!({"metadata": {"uid": uid}, "spec": {"clusterProfileTemplates": []}});
+    let api = MemoryApi::new()
+        .with(
+            CLUSTER_LISTING,
+            json!([{"metadata": {"name": "lab", "uid": "c1"}}]),
+        )
+        .with(CLUSTER_SEARCH_SCHEMA, json!({"schema": {"properties": []}}))
+        .with("/v1/spectroclusters/c1", templates("c1"))
+        .with(
+            "/v1/spectroclusters/c1/profiles/packs/manifests",
+            json!({"profiles": []}),
+        )
+        .with("/v1/spectroclusters/c1/variables", json!([]))
+        .with(
+            CLUSTER_GROUP_LISTING,
+            json!({"items": [{"name": "dev", "uid": "g1"}]}),
+        )
+        .with("/v1/clustergroups/g1", templates("g1"))
+        .with(
+            format!("POST {}", with_limit(EDGE_HOST_SEARCH)),
+            json!({"items": [{"metadata": {"name": "store", "uid": "e1"}}],
+                    "listmeta": {"continue": ""}}),
+        )
+        .with("/v1/edgehosts/e1", templates("e1"));
+    let p = Palette::new(&api);
+    let quiet = Progress::silent();
+    for (kind, name, uid) in [
+        (SubjectKind::Cluster, "lab", "c1"),
+        (SubjectKind::ClusterGroup, "dev", "g1"),
+        (SubjectKind::EdgeHost, "store", "e1"),
+    ] {
+        let by_uid = p.fetch_subject(kind, uid, &quiet).unwrap();
+        assert_eq!(text(&by_uid.cluster, "/metadata/uid"), uid);
+        let by_name = p.fetch_subject(kind, name, &quiet).unwrap();
+        assert_eq!(text(&by_name.cluster, "/metadata/uid"), uid);
+        let err = p.fetch_subject(kind, "nope", &quiet).unwrap_err();
+        let expected = match kind {
+            SubjectKind::Cluster => "cluster-not-found",
+            SubjectKind::ClusterGroup => "cluster-group-not-found",
+            SubjectKind::EdgeHost => "edge-host-not-found",
+        };
+        assert_eq!(err.kind(), expected, "{err}");
+    }
+    // another error of the document by uid returns, and no name is tried
+    let lookups = api.calls(CLUSTER_LISTING);
+    let broken = api.clone().failing("/v1/spectroclusters/c9", 500, "{}");
+    let err = Palette::new(&broken)
+        .fetch_subject(SubjectKind::Cluster, "c9", &quiet)
+        .unwrap_err();
+    assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+    assert_eq!(broken.calls(CLUSTER_LISTING), lookups);
+}
