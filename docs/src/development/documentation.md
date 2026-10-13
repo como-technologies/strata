@@ -105,8 +105,8 @@ changes it.
 1. Find the chapter of the page in `xtask/src/chapters.rs`, or add one with
    `r.chapter("name", env)`.
 2. Build the tenant with `projects`, `profile`, `profile_own_copy`, `addons`,
-   `cluster`, `cluster_with`, and `registries`. Change it with `edit`,
-   `on_cluster_reclaim`, and `set_value`.
+   `cluster`, and `registries`. Change it with `edit`, `on_cluster_reclaim`,
+   and `set_value`.
 3. Add a step with its name, the expected exit code, whether to keep standard
    error, and the command:
 

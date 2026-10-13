@@ -1170,6 +1170,26 @@ fn candidate_writes_a_record_as_a_candidate_file_with_values_and_manifests_in_fi
     assert_eq!(r.code, 2, "--files-dir needs -o");
 }
 
+#[test]
+fn candidate_names_the_whole_root_of_a_record_whose_root_has_fewer_than_twelve_characters() {
+    let fx = fixtures();
+    let out = tempfile::tempdir().unwrap();
+    let mut doc = read_json(Path::new(&fx.b));
+    doc["root"] = "abc".into();
+    let record = out.path().join("short-root.json");
+    write_record(&record, &doc);
+    let file = out.path().join("profile.yaml");
+    let r = Run::of(
+        Command::new(strata_bin())
+            .args(["candidate", record.to_str().unwrap(), "-o"])
+            .arg(&file)
+            .env_remove("STRATA_QUIET"),
+    );
+    assert_eq!(r.code, 0, "{}", r.err);
+    assert!(r.err.contains("(root abc)"), "{}", r.err);
+    assert!(file.exists());
+}
+
 /// [`closed_port`] without `STRATA_QUIET`, so the warnings a person sees are on.
 fn first_request_loud(args: &[&str], envs: &[(&str, &str)]) -> Run {
     against_closed_port(Command::new(strata_bin()), args, envs, false)
@@ -1286,6 +1306,27 @@ fn snapshot_of_a_set_with_json_prints_an_error_of_the_query_as_one_json_line() {
     let r = run(&["snapshot", "aws-stack@1.1.1", "--json"]);
     assert_eq!(r.code, 2);
     assert!(r.err.contains("--dir"), "{}", r.err);
+}
+
+#[test]
+fn snapshot_refuses_the_format_flags_with_each_argument_that_refuses_dir() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = |name: &str| dir.path().join(name).to_str().unwrap().to_string();
+    let (candidate, raw, out) = (path("nothere.yaml"), path("raw"), path("out.json"));
+    for format in [&["--json"][..], &["--format", "json"][..]] {
+        for args in [
+            vec!["--from-candidate", candidate.as_str()],
+            vec!["--from-raw", raw.as_str()],
+            vec!["aws-stack@1.1.1", "-o", out.as_str()],
+            vec!["aws-stack@1.1.1", "--raw-dir", raw.as_str()],
+        ] {
+            let args = [&["snapshot"][..], &args, format].concat();
+            let r = run(&args);
+            assert_eq!(r.code, 2, "{args:?}: {}", r.err);
+            assert!(r.err.contains("cannot be used with"), "{args:?}: {}", r.err);
+            assert_eq!(r.out, "", "{args:?}");
+        }
+    }
 }
 
 #[test]

@@ -54,8 +54,8 @@ where each module goes.
   method.
 - Palette documents stay `serde_json::Value`, read with the helpers of
   `src/json.rs`: `text`, `str_at`, `opt_text`, `arr`, `strings`, `items`,
-  `take_items`, and `first_nonempty`. Do not write a pointer read of your own
-  in a module.
+  `take_items`, and `first_nonempty`. Do not write a pointer read of text or
+  of an array of your own in a module.
   The records of strata are typed structs with
   `#[serde(rename_all = "camelCase")]`, `skip_serializing_if` for an empty
   field, `#[serde(default)]` for a field that an older record does not have,

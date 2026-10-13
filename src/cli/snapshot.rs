@@ -103,7 +103,7 @@ pub(crate) fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             progress.note(&format!(
                 "wrote {} (root {})",
                 path.display(),
-                &snap.root[..12]
+                render::short(&snap.root)
             ));
         }
         None => print!("{text}"),

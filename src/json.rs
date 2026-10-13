@@ -2,7 +2,8 @@
 //!
 //! A document of Palette stays a [`serde_json::Value`]. Each module reads it through these
 //! helpers, so one rule says what a field that is not there gives: empty text, no entry, or
-//! `None`. No module keeps a pointer read of its own.
+//! `None`. No module keeps a pointer read of text or of an array of its own. The read of a
+//! profile export is not a read of this kind: it refuses a value of another type.
 
 use std::collections::BTreeMap;
 

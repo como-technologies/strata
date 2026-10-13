@@ -390,7 +390,7 @@ pub enum Error {
     #[error("'{0}' is not a strata snapshot")]
     NotSnapshot(PathBuf),
     /// The file is a strata snapshot of a schema version this strata does not read.
-    #[error("'{}' is a {found} record; this strata reads {supported}", path.display())]
+    #[error("'{}' is a {found} document; this strata reads {supported}", path.display())]
     UnsupportedSchema {
         /// File path.
         path: PathBuf,

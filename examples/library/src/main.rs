@@ -6,11 +6,11 @@
 
 use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
-use strata::color::Paint;
+use strata::term::color::Paint;
 use strata::diff::ImpactLevel;
 use strata::error::FailureClass;
 use strata::ops;
-use strata::progress::Progress;
+use strata::term::progress::Progress;
 use strata::reference::Ref;
 use strata::render::{self, Format};
 
