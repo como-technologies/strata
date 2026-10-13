@@ -56,8 +56,8 @@ pub(crate) fn pin_status(pin: &crate::ops::Pin) -> String {
     text
 }
 
-/// `1.65.0 listed since 2026-09-17T09:30:00Z`: since when the registry lists the newest version
-/// of a pin that is behind. None when the pin is current, or the registry gives no time.
+/// `1.65.0 listed since 2026-09-17T09:30:00Z`: when Palette first listed the newest version of a
+/// pin that is behind. None when the pin is current, or the listing gives no time.
 pub(crate) fn listed_since(pin: &crate::ops::Pin) -> Option<String> {
     let newest = pin
         .newer

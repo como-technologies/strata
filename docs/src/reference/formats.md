@@ -35,8 +35,8 @@ does change it.
 
 - Strata cuts a value longer than 120 characters, and gives its length. `--full`
   and the JSON document keep the full value.
-- Strata cuts a root to its first twelve characters. An upstream digest keeps
-  the name of its algorithm, and its hash is cut to twelve characters:
+- Strata cuts a root to its first twelve characters. It cuts the hash of an
+  upstream digest the same way, and keeps the name of the algorithm:
   `sha256:ff3df77ebc9c`. The markdown comment cuts them the same way, and the
   JSON document keeps them full.
 - Strata compares a value that is not valid YAML, such as an unquoted Go

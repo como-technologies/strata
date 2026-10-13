@@ -1008,11 +1008,12 @@ const MACHINE_SETTINGS: [&str; 4] = [
     "SPECTROCLOUD_HOST",
 ];
 
-/// Give `command` an address that refuses connections, no retries, and the home `home`, and
-/// remove each setting of the machine that names a project or a tenant.
+/// Give `command` an address that refuses connections, the home `home`, and no setting of the
+/// machine that names a project.
 ///
-/// So a request fails at once, and the run reads only the `.palette.env` of `home`, not the one
-/// of the person that runs the tests.
+/// The run makes no retry, and it gets no setting that names a tenant either. So a request fails
+/// at once, and the run reads only the `.palette.env` of `home`, not the one of the person who
+/// runs the tests.
 pub fn isolate_palette<'a>(command: &'a mut Command, home: &Path) -> &'a mut Command {
     for key in MACHINE_SETTINGS {
         command.env_remove(key);

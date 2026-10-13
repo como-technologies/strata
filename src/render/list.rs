@@ -107,9 +107,9 @@ fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
 /// `csi-aws-ebs in Public Repo (2 of 12 versions, deprecated)`: the heading of the versions that
 /// one registry offers.
 ///
-/// The heading states what the registry holds. A flag that cuts the list says so, so that the
-/// count is never read as the inventory of the registry. `strong` puts the name of the pack and
-/// of the registry in the form of the report.
+/// The heading states what the registry holds. A flag that cuts the list says so, so that a
+/// reader never takes the count for the inventory of the registry. `strong` puts the name of the
+/// pack and of the registry in the form of the report.
 pub(crate) fn registry_heading(
     l: &PackListing,
     r: &crate::ops::PackRegistry,

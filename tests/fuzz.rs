@@ -507,7 +507,7 @@ fn the_binary_never_panics_on_junk_arguments() {
 #[test]
 fn the_fuzz_run_gives_junk_to_each_command_that_clap_names() {
     let names = common::command_names();
-    // the help lists the commands, so a list that the parse lost is not an empty fuzz list
+    // a parse that finds no command fails here, and not as a fuzz run with no command
     assert!(names.iter().any(|name| name == "compare"), "{names:?}");
     let commands = fuzz_commands();
     for name in names.iter().filter(|name| *name != "preflight") {
