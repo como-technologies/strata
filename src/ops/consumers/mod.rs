@@ -376,9 +376,9 @@ where
         }
         Ref::Snapshot(path) => {
             let recorded = Snapshot::load(path)?;
-            // a pack record is not a profile version either, and NoUid below would name `verify`,
-            // a command that is not running
-            if recorded.source.cluster.is_some() || recorded.source.pack.is_some() {
+            // a record of a cluster or of a pack has no consumers, and NoUid below would name
+            // `verify`, a command that is not running. An app profile has its app deployments
+            if !(recorded.source.is_profile_version() || recorded.source.is_app()) {
                 return Err(refused());
             }
             if recorded.source.uid.is_empty() {

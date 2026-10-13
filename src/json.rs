@@ -4,6 +4,8 @@
 //! helpers, so one rule says what a field that is not there gives: empty text, no entry, or
 //! `None`. No module keeps a pointer read of its own.
 
+use std::collections::BTreeMap;
+
 use serde_json::Value;
 
 /// The text at the pointer `ptr` of `v`, or empty text when `v` has no text there.
@@ -36,6 +38,21 @@ pub(crate) fn strings(v: &Value, ptr: &str) -> Vec<String> {
         .iter()
         .filter_map(Value::as_str)
         .map(str::to_string)
+        .collect()
+}
+
+/// The texts of the object at the pointer `ptr` of `v`, by key, such as the labels of a
+/// document. An entry whose value is not text is left out, as [`strings`] leaves out an entry of
+/// an array. No entry when `v` has no object there.
+///
+/// Palette gives a label as text. So a value of another type is no label, and a tag filter must
+/// not match it as a label with an empty value.
+pub(crate) fn text_map(v: &Value, ptr: &str) -> BTreeMap<String, String> {
+    v.pointer(ptr)
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
         .collect()
 }
 
@@ -112,6 +129,22 @@ mod tests {
         let v = json!({"spec": {"cloudTypes": ["aws", 1, null, "gcp"]}});
         assert_eq!(strings(&v, "/spec/cloudTypes"), vec!["aws", "gcp"]);
         assert!(strings(&v, "/spec/gone").is_empty());
+    }
+
+    #[test]
+    fn text_map_keeps_the_texts_of_an_object_and_leaves_out_each_other_value() {
+        let v = json!({"metadata": {"labels": {"env": "dev", "n": 1, "none": null, "": "x"},
+            "name": "demo"}});
+        let labels = text_map(&v, "/metadata/labels");
+        assert_eq!(
+            labels.into_iter().collect::<Vec<_>>(),
+            vec![
+                (String::new(), "x".to_string()),
+                ("env".to_string(), "dev".to_string())
+            ]
+        );
+        assert!(text_map(&v, "/metadata/name").is_empty());
+        assert!(text_map(&v, "/metadata/gone").is_empty());
     }
 
     #[test]

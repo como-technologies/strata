@@ -250,6 +250,15 @@ impl Source {
         ProfileType::parse(&self.kind) == Some(ProfileType::App)
     }
 
+    /// True for a record of one version of a cluster profile. A record of a cluster, of an edge
+    /// host, of a cluster group, of one pack, or of an app profile is not one.
+    ///
+    /// [`Ref::is_profile_version`](crate::reference::Ref::is_profile_version) keeps the rule for
+    /// a ref.
+    pub(crate) fn is_profile_version(&self) -> bool {
+        self.cluster.is_none() && self.pack.is_none() && !self.is_app()
+    }
+
     /// `name@version`, and `on cluster <name>` for a snapshot of a cluster, or `pending for cluster
     /// <name>` for the update that waits for it.
     pub fn title(&self) -> String {

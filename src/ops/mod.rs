@@ -88,12 +88,7 @@ impl SnapshotOptions {
             ));
         }
         if self.validate && !reference.is_profile_version() {
-            return usage(
-                "--validate takes a profile version or --from-candidate: Palette checks the \
-                 packs of a profile, and not of a cluster, a cluster group, an app profile, or \
-                 one pack"
-                    .to_string(),
-            );
+            return usage(validate::VALIDATE_TAKES.to_string());
         }
         if self.shape && !matches!(reference, Ref::Cluster { .. }) {
             return usage(

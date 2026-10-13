@@ -15,7 +15,7 @@ use crate::api::{RawCluster, RawProfile};
 use crate::content::canon::{canonical_json, sha256_hex};
 use crate::content::hash::{content_of, root_of};
 use crate::error::{Error, Result};
-use crate::json::{arr, first_nonempty, str_at, strings, text};
+use crate::json::{arr, first_nonempty, str_at, strings, text, text_map};
 use crate::repave::{PendingRepave, is_pending};
 
 /// The text of `key` in `v`, or `default` when `v` has no text there. An empty text stays empty,
@@ -133,15 +133,7 @@ impl Snapshot {
             mpacks.retain(|m| uids.contains(str_at(m, "/metadata/uid")));
         }
 
-        let tags: BTreeMap<String, String> = prof
-            .pointer("/metadata/labels")
-            .and_then(Value::as_object)
-            .map(|o| {
-                o.iter()
-                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
-                    .collect()
-            })
-            .unwrap_or_default();
+        let tags = text_map(prof, "/metadata/labels");
         let clusters = strings(prof, "/status/inUseClusterUids");
         let variables: Vec<Value> = arr(&raw.variables, "/variables")
             .iter()
@@ -299,7 +291,7 @@ impl Snapshot {
                 .first()
                 .map(|p| p.source.cloud_type.clone())
                 .filter(|c| !c.is_empty())
-                .unwrap_or_else(|| text(&raw.cluster, "/spec/cloudType")),
+                .unwrap_or_else(|| RawCluster::cloud_type(&raw.cluster).to_string()),
             kind: joined(|s| &s.kind),
             template: Template::Applied,
             variables_unavailable: raw.variables_unavailable,
@@ -334,18 +326,7 @@ impl Snapshot {
                         .resolved_values
                         .as_ref()
                         .map(|r| macro_digests(r, &covered, &macros_of(&packs))),
-                    labels: raw
-                        .cluster
-                        .pointer("/metadata/labels")
-                        .and_then(Value::as_object)
-                        .map(|m| {
-                            m.iter()
-                                .map(|(k, v)| {
-                                    (k.clone(), v.as_str().unwrap_or_default().to_string())
-                                })
-                                .collect()
-                        })
-                        .unwrap_or_default(),
+                    labels: text_map(&raw.cluster, "/metadata/labels"),
                     tiers: cluster_tiers(raw, &covered),
                     pending: false,
                     kind: SubjectKind::Cluster,

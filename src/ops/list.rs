@@ -15,7 +15,7 @@ use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
 
-use crate::json::{arr, first_nonempty, items, opt_text, str_at, text};
+use crate::json::{arr, first_nonempty, items, opt_text, str_at, text, text_map};
 
 use super::{ConsumerCounts, client_for};
 
@@ -627,15 +627,7 @@ pub(super) fn list_clusters<'a>(rows: impl IntoIterator<Item = &'a Value>) -> Ve
                 ),
                 // the search names the project; the listing gives its uid alone
                 project_name: text(it, "/specSummary/projectMeta/name"),
-                labels: it
-                    .pointer("/metadata/labels")
-                    .and_then(Value::as_object)
-                    .map(|o| {
-                        o.iter()
-                            .filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string())))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
+                labels: text_map(it, "/metadata/labels"),
                 uid,
                 profiles: None,
                 error: None,

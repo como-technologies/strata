@@ -425,7 +425,10 @@ impl RawCluster {
 
     /// The cloud type of the cluster document `cluster`: the kind of its `spec.cloudConfigRef`,
     /// else its `spec.cloudType`, or empty when it names neither.
-    pub(crate) fn cloud_type(cluster: &Value) -> &str {
+    ///
+    /// Each read of the cloud type of a cluster document uses this rule: the record of a cluster,
+    /// the route of its cloud config, and its shape.
+    pub fn cloud_type(cluster: &Value) -> &str {
         match str_at(cluster, "/spec/cloudConfigRef/kind") {
             "" => str_at(cluster, "/spec/cloudType"),
             k => k,

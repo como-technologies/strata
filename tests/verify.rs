@@ -12476,6 +12476,43 @@ fn packs_behind_and_the_candidate_check_agree_on_the_clouds_that_a_pack_supports
     }
 }
 
+/// The record of the cluster document `cluster`, which runs no profile, from a raw directory.
+fn record_of_cluster_document(cluster: &Value) -> strata::snapshot::Snapshot {
+    let dir = tempfile::tempdir().unwrap();
+    let raw = dir.path().join("c");
+    fs::create_dir(&raw).unwrap();
+    fs::write(raw.join("cluster.json"), cluster.to_string()).unwrap();
+    fs::write(raw.join("manifests.json"), "{}").unwrap();
+    fs::write(raw.join("variables.json"), "[]").unwrap();
+    ops::snapshot_from_dir(&raw, "c", "t0").unwrap()
+}
+
+/// A cluster that runs no profile gets the cloud type of its document: the kind of its cloud
+/// config, as the route of the cloud config reads it.
+#[test]
+fn a_cluster_record_reads_the_cloud_type_of_the_document_from_its_cloud_config() {
+    let snap = record_of_cluster_document(&serde_json::json!({
+        "metadata": {"uid": "c1", "name": "barney"},
+        "spec": {"cloudConfigRef": {"kind": "eks", "uid": "cc1"}, "clusterProfileTemplates": []},
+    }));
+    assert_eq!(snap.source.cloud_type, "eks");
+}
+
+/// A label of Palette is text. So the record of a cluster leaves out a label of another type,
+/// as `list clusters` does, and `--tag` matches the same labels in both.
+#[test]
+fn a_cluster_record_leaves_out_a_label_whose_value_is_not_text() {
+    let snap = record_of_cluster_document(&serde_json::json!({
+        "metadata": {"uid": "c1", "name": "barney", "labels": {"env": "dev", "tier": 1}},
+        "spec": {"cloudType": "aws", "clusterProfileTemplates": []},
+    }));
+    let labels = &snap.source.cluster.as_ref().unwrap().labels;
+    assert_eq!(
+        labels.iter().collect::<Vec<_>>(),
+        vec![(&"env".to_string(), &"dev".to_string())]
+    );
+}
+
 /// A listing entry with no `spec.type` is a pack of a pack registry. So `packs`, a record, and
 /// `behind` all give it the type `spectro`, and `behind` names the last sync of its registry.
 #[test]
@@ -14267,6 +14304,16 @@ fn snapshot_validate_of_a_version_asks_the_route_of_an_update_of_that_version() 
     let api = MemoryApi::new();
     let err = ops::profile_validation(&Palette::new(&api), &cluster).unwrap_err();
     assert!(matches!(err, Error::Usage { .. }), "{err}");
+    assert!(api.posted().is_empty());
+
+    // a record of an app profile is not one either: its tiers are no packs of a profile
+    let mut app = b.clone();
+    app.source.kind = ProfileType::App.as_str().to_string();
+    let err = ops::profile_validation(&Palette::new(&api), &app).unwrap_err();
+    assert!(
+        matches!(&err, Error::Usage { message } if message.contains("an app profile")),
+        "{err}"
+    );
     assert!(api.posted().is_empty());
 }
 
