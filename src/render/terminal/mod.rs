@@ -28,10 +28,10 @@ use crate::ops::{
 };
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
-use changes::{op_line, packdetail, packline, variable_line};
+use lines::{op_line, packdetail, packline, variable_line};
 use table::{column_widths, matched, table_line};
 
-mod changes;
+mod lines;
 mod table;
 
 /// Renders the text report.
