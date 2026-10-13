@@ -4,6 +4,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::closed_set::ClosedSet;
 use crate::content::layer::Layer;
 use crate::legend::Described;
 
@@ -71,6 +72,12 @@ impl ImpactLevel {
             Self::MayRepave => "may-repave",
             Self::Repave => "repave",
         }
+    }
+}
+
+impl ClosedSet for ImpactLevel {
+    fn as_str(self) -> &'static str {
+        ImpactLevel::as_str(self)
     }
 }
 

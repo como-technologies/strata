@@ -11,6 +11,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::closed_set::{ClosedSet, Open};
 use crate::content::hash::content_of;
 use crate::error::{Error, Result};
 use crate::json::str_at;
@@ -63,6 +64,12 @@ impl Template {
             Self::Candidate => "candidate",
             Self::Registry => "registry",
         }
+    }
+}
+
+impl ClosedSet for Template {
+    fn as_str(self) -> &'static str {
+        Template::as_str(self)
     }
 }
 
@@ -128,7 +135,7 @@ pub struct Tool {
     /// The implementation that wrote the document: see [`Implementation`]. Absent in a snapshot
     /// of the first bash release.
     #[serde(default, skip_serializing_if = "Option::is_none", rename = "impl")]
-    pub implementation: Option<Implementation>,
+    pub implementation: Option<Open<Implementation>>,
 }
 
 /// The implementation of strata that wrote a document, as `tool.impl` names it.
@@ -151,13 +158,19 @@ impl Implementation {
     }
 }
 
+impl ClosedSet for Implementation {
+    fn as_str(self) -> &'static str {
+        Implementation::as_str(self)
+    }
+}
+
 impl Tool {
     /// This build of strata, as every document it writes records it.
     pub fn current() -> Tool {
         Tool {
             name: crate::TOOL_NAME.to_string(),
             version: crate::TOOL_VERSION.to_string(),
-            implementation: Some(Implementation::Rust),
+            implementation: Some(Implementation::Rust.into()),
         }
     }
 }
@@ -185,7 +198,7 @@ pub struct Source {
     #[serde(rename = "type")]
     pub kind: String,
     /// The template that the packs were read from: see [`Template`].
-    pub template: Template,
+    pub template: Open<Template>,
     /// Profile labels.
     #[serde(default)]
     pub tags: BTreeMap<String, String>,
@@ -262,6 +275,10 @@ impl Source {
             Some(c) if self.name.is_empty() && !c.kind.is_cluster() => {
                 format!("{} {}", c.kind.noun(), c.name)
             }
+            // a kind that a later release wrote: the name of the kind in the documents
+            Some(c) if c.kind.known().is_none() => {
+                format!("{profile} on {} {}", c.kind.noun(), c.name)
+            }
             Some(c) if c.kind == SubjectKind::EdgeHost => {
                 format!("{profile} on edge host {}", c.name)
             }
@@ -321,6 +338,34 @@ impl SubjectKind {
             SubjectKind::EdgeHost => "edge host",
             SubjectKind::ClusterGroup => "cluster group",
         }
+    }
+
+    /// The kind as the documents name it: `cluster`, `edgeHost`, or `clusterGroup`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SubjectKind::Cluster => "cluster",
+            SubjectKind::EdgeHost => "edgeHost",
+            SubjectKind::ClusterGroup => "clusterGroup",
+        }
+    }
+}
+
+impl ClosedSet for SubjectKind {
+    fn as_str(self) -> &'static str {
+        SubjectKind::as_str(self)
+    }
+}
+
+impl Open<SubjectKind> {
+    /// True for a cluster. A kind that a later release wrote is not a cluster.
+    pub fn is_cluster(&self) -> bool {
+        self.known().is_some_and(|k| k.is_cluster())
+    }
+
+    /// The noun that names the kind in a report: the name in the documents, for a kind that a
+    /// later release wrote.
+    pub fn noun(&self) -> &str {
+        self.known().map_or(self.as_str(), |k| k.noun())
     }
 }
 
@@ -452,7 +497,7 @@ impl Snapshot {
     /// record holds no repave either.
     pub fn with_kind(mut self, kind: SubjectKind) -> Snapshot {
         if let Some(c) = self.source.cluster.as_mut() {
-            c.kind = kind;
+            c.kind = kind.into();
             if !kind.is_cluster() {
                 c.variables.clear();
                 c.repave_pending = None;

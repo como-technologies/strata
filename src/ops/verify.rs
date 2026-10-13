@@ -12,6 +12,7 @@ use crate::diff::{
     self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImageIdChange, ImpactLevel,
     InvalidPack, Verify, VerifyStatus,
 };
+use crate::closed_set::Open;
 use crate::error::{Error, Result, found};
 use crate::json::{is_zero, opt_text, str_at, text};
 use crate::legend::{Described, legend};
@@ -123,28 +124,36 @@ fn is_deleted(doc: &Value) -> bool {
 }
 
 /// The live snapshot of the holder of a cluster record, from its document `doc`: with the update
-/// that waits, the macro values, and the shape, as the record holds them.
+/// that waits, the macro values, and the shape, as the record holds them. `kind` is the kind of
+/// the holder that the record names.
 fn live_holder<A: PaletteApi>(
     recorded: &Snapshot,
     c: &crate::snapshot::ClusterSource,
-    uid: &str,
+    kind: SubjectKind,
     doc: Value,
     palette: &Palette<A>,
     checked_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    let mut raw = palette.subject_raw(c.kind, doc, progress)?;
+    let mut raw = palette.subject_raw(kind, doc, progress)?;
     // a record of the update that waits is checked on what waits now
     if c.pending {
         raw = palette.with_pending(raw)?;
     }
     // strata also checks the macro values of a record that holds their digests
     if c.macro_values.is_some() {
-        raw.resolved_values = Some(palette.resolved_values(c.kind, uid)?);
+        raw.resolved_values = Some(palette.resolved_values(kind, &c.uid)?);
     }
     // and one that holds the shape tier on its shape
-    if c.tiers.contains_key(&Tier::Shape) {
+    if c.tiers.contains_key(&Open::Known(Tier::Shape)) {
         raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
+    }
+    // the live side carries no tier that this release does not know, so the diff skips it
+    for tier in c.tiers.keys().filter(|t| t.known().is_none()) {
+        progress.note(&format!(
+            "note: a later release of strata wrote the tier {tier}; this strata cannot read it \
+             from Palette, so it does not compare it"
+        ));
     }
     let live = Snapshot::from_cluster(
         &raw,
@@ -153,7 +162,23 @@ fn live_holder<A: PaletteApi>(
         checked_at,
     )?;
     let live = if c.pending { live.mark_pending() } else { live };
-    Ok(live.with_kind(c.kind))
+    Ok(live.with_kind(kind))
+}
+
+/// The kind of the object of the cluster record `c`, which tells strata how to read the object.
+///
+/// # Errors
+///
+/// [`Error::Usage`] for a kind that a later release wrote: this release cannot read such an
+/// object from Palette. Strata sends no request.
+fn known_kind(c: &crate::snapshot::ClusterSource) -> Result<SubjectKind> {
+    c.kind.known().ok_or_else(|| Error::Usage {
+        message: format!(
+            "a later release of strata wrote this record of the {} {}; this strata cannot read \
+             a {} from Palette, so verify the record with that release",
+            c.kind, c.name, c.kind
+        ),
+    })
 }
 
 /// The kind of the object of a record in the audit log of Palette, or `None` for a cluster.
@@ -161,10 +186,11 @@ fn live_holder<A: PaletteApi>(
 /// a virtual cluster under `virtualCluster`, not under `spectrocluster`.
 fn audit_kind(recorded: &Snapshot) -> Option<AuditKind> {
     match &recorded.source.cluster {
-        Some(c) => match c.kind {
-            SubjectKind::Cluster => None,
-            SubjectKind::EdgeHost => Some(AuditKind::EdgeHost),
-            SubjectKind::ClusterGroup => Some(AuditKind::ClusterGroup),
+        Some(c) => match c.kind.known() {
+            Some(SubjectKind::EdgeHost) => Some(AuditKind::EdgeHost),
+            Some(SubjectKind::ClusterGroup) => Some(AuditKind::ClusterGroup),
+            // a cluster, and a kind that a later release wrote: the entries of the uid alone
+            Some(SubjectKind::Cluster) | None => None,
         },
         None if recorded.source.is_app() => Some(AuditKind::AppProfile),
         None => Some(AuditKind::ClusterProfile),
@@ -278,17 +304,18 @@ pub fn verify_with<A: PaletteApi>(
     let mut last_modified = None;
     let live = match &recorded.source.cluster {
         Some(c) => {
+            let kind = known_kind(c)?;
             // the document by uid alone: a 404 is a gone object, and not a name to look up
-            progress.note(&format!("fetching {} {uid}", c.kind.noun()));
-            let doc = found(palette.subject_document(c.kind, uid))?.unwrap_or(Value::Null);
-            state = subject_state(c.kind, &doc);
+            progress.note(&format!("fetching {} {uid}", kind.noun()));
+            let doc = found(palette.subject_document(kind, uid))?.unwrap_or(Value::Null);
+            state = subject_state(kind, &doc);
             last_modified = opt_text(&doc, "/metadata/lastModifiedTimestamp");
             if doc.is_null() || is_deleted(&doc) {
                 gone = true;
                 deleted_at = opt_text(&doc, "/metadata/deletionTimestamp");
                 recorded.gone(checked_at)
             } else {
-                live_holder(recorded, c, uid, doc, palette, checked_at, progress)?
+                live_holder(recorded, c, kind, doc, palette, checked_at, progress)?
             }
         }
         None if recorded.source.is_app() => {

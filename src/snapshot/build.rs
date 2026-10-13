@@ -167,7 +167,7 @@ impl Snapshot {
             version: text(prof, "/spec/version"),
             cloud_type: text(prof, &format!("{tpl_ptr}/cloudType")),
             kind: text(prof, &format!("{tpl_ptr}/type")),
-            template,
+            template: template.into(),
             variables_unavailable: raw.variables_unavailable,
             tags,
             consumers: Some(Consumers {
@@ -301,7 +301,7 @@ impl Snapshot {
                 .filter(|c| !c.is_empty())
                 .unwrap_or_else(|| text(&raw.cluster, "/spec/cloudType")),
             kind: joined(|s| &s.kind),
-            template: Template::Applied,
+            template: Template::Applied.into(),
             variables_unavailable: raw.variables_unavailable,
             tags: BTreeMap::new(),
             consumers: None,
@@ -348,7 +348,7 @@ impl Snapshot {
                         .unwrap_or_default(),
                     tiers: cluster_tiers(raw, &covered),
                     pending: false,
-                    kind: SubjectKind::Cluster,
+                    kind: SubjectKind::Cluster.into(),
                     members: Vec::new(),
                     profiles: covered,
                 }

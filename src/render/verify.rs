@@ -27,10 +27,13 @@ fn subject(recorded: &Source) -> String {
     }
     let profile = format!("{}@{}", recorded.name, recorded.version);
     match &recorded.cluster {
-        Some(c) => match c.kind {
-            SubjectKind::Cluster => format!("cluster {} running {profile}", c.name),
-            SubjectKind::EdgeHost => format!("{profile} on edge host {}", c.name),
-            SubjectKind::ClusterGroup => format!("{profile} pinned by cluster group {}", c.name),
+        Some(c) => match c.kind.known() {
+            Some(SubjectKind::Cluster) => format!("cluster {} running {profile}", c.name),
+            Some(SubjectKind::EdgeHost) => format!("{profile} on edge host {}", c.name),
+            Some(SubjectKind::ClusterGroup) => {
+                format!("{profile} pinned by cluster group {}", c.name)
+            }
+            None => format!("{profile} on {} {}", c.kind.noun(), c.name),
         },
         None => format!("published version {profile}"),
     }

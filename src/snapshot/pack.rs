@@ -10,6 +10,7 @@ use serde_json::{Map, Value, json};
 
 use super::IMAGE_ID_ANNOTATION;
 use crate::api::mask::MASKED;
+use crate::closed_set::{ClosedSet, Open};
 use crate::content::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
 use crate::content::layer::Layer;
 use crate::json::{arr, first_nonempty, opt_text, str_at, text};
@@ -206,6 +207,12 @@ impl UpstreamSource {
     }
 }
 
+impl ClosedSet for UpstreamSource {
+    fn as_str(self) -> &'static str {
+        UpstreamSource::as_str(self)
+    }
+}
+
 impl fmt::Display for UpstreamSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
@@ -223,7 +230,7 @@ pub struct PackHash {
     /// The digest that fed `upstream`
     pub upstream_raw: String,
     /// The field of Palette that gave `upstream`.
-    pub upstream_source: UpstreamSource,
+    pub upstream_source: Open<UpstreamSource>,
     /// sha256 over valuesHash, [manifest name, contentHash]..., params
     pub authored: String,
     /// sha256(identity + upstream + authored)
@@ -382,7 +389,7 @@ impl Pack {
                 identity,
                 upstream,
                 upstream_raw,
-                upstream_source,
+                upstream_source: upstream_source.into(),
                 authored,
                 node,
             },

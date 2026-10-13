@@ -122,7 +122,7 @@ impl Renderer for TerminalRenderer {
                 for l in &t.diff {
                     out.push(format!(
                         "        {}",
-                        op_line(&OpLine::leaf(&tier_path(t.tier, &l.path), l), p)
+                        op_line(&OpLine::leaf(&tier_path(&t.tier, &l.path), l), p)
                     ));
                 }
             }

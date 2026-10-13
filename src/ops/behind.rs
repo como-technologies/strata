@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
+use crate::closed_set::Open;
 use crate::cloud::supports;
 use crate::diff::impact::ImpactLevel;
 use crate::diff::{ChangeFlag, Diff, RegistrySync};
@@ -195,9 +196,9 @@ pub struct Bump {
     /// The version compared: the newest one.
     pub to: String,
     /// The impact level of the change.
-    pub impact: ImpactLevel,
+    pub impact: Open<ImpactLevel>,
     /// The change flags of the pack, in the order of the legend.
-    pub flags: Vec<ChangeFlag>,
+    pub flags: Vec<Open<ChangeFlag>>,
 }
 
 impl Bump {
@@ -208,8 +209,8 @@ impl Bump {
         let pd = d.packs.iter().find(|p| p.name == name)?;
         Some(Bump {
             to: to.to_string(),
-            impact: d.summary.max_impact,
-            flags: pd.flags(),
+            impact: d.summary.max_impact.into(),
+            flags: pd.flags().into_iter().map(Open::from).collect(),
         })
     }
 }
