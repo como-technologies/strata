@@ -36,9 +36,11 @@ pub struct ProfileValidation {
     errors: Vec<PaletteRefusal>,
 }
 
-/// Palette's answer to a validate route. `POST /v1/clusterprofiles/validate/packs` answers for
-/// a candidate, and `POST /v1/clusterprofiles/{uid}/validate/packs` for a version that Palette
-/// holds. A [`PaletteValidation`] holds the answer for a cluster.
+/// Palette's answer to a validate route.
+///
+/// `POST /v1/clusterprofiles/validate/packs` answers for a candidate, and
+/// `POST /v1/clusterprofiles/{uid}/validate/packs` for a version that Palette holds. A
+/// [`PaletteValidation`] holds the answer for a cluster.
 // the fields of a `ProfileValidation` in a document, and the text of its schema. The answer
 // borrows its errors to write them, and owns them when it reads them.
 #[derive(Serialize, Deserialize, JsonSchema)]
