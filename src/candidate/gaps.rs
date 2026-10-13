@@ -1,50 +1,40 @@
 //! The rules of Palette that only the create of a profile version checks.
 //!
 //! No route that takes a candidate checks these rules, so a team learns of a fault only when the
-//! create refuses it. Strata fills each gap with a check before any request.
-//! Each message names the code that Palette gives at the create. When a route of Palette answers a
-//! rule before the create, strata removes its check. The book lists each rule in "The gaps that
-//! strata fills".
+//! create refuses it. Strata fills each gap with a check before any request. A check gives a
+//! [`RuleViolation`]: the [`CreateRule`] with the code that Palette gives at the create, and the
+//! problem in the words of the file. When a route of Palette answers a rule before the create,
+//! strata removes its check. The book lists each rule in "The gaps that strata fills".
+
+use std::path::Path;
 
 use super::{Candidate, CandidateLayer, MINTED_LAYER, loose_semver};
+use crate::api::codes::CreateRule;
 use crate::cloud::{Cloud, supports};
+use crate::error::Error;
 use crate::layer::Layer;
 use crate::pack_type::PackType;
 use crate::profile_type::ProfileType;
 use crate::text::and_list;
 
-/// What strata says after each refusal of this module.
-pub(super) const GAP: &str = "Palette checks this only at the create, and no route that takes a \
-                   candidate answers it before the create. Strata removes this check when a route \
-                   answers it";
-
-/// A rule that Palette checks only at the create of a profile version.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum CreateRule {
-    /// The type of the profile takes the layer of each pack.
-    TypeLayer,
-    /// A `cluster` or `infra` profile has its core layers.
-    CoreLayers,
-    /// Each pack supports the cloud of the profile.
-    Cloud,
-    /// The tag of a pack that Palette makes for a registry that it does not sync is a version.
-    PackTag,
+/// A rule of the create that a candidate breaks: the rule, and the problem in the words of the
+/// file.
+#[derive(Debug)]
+pub(super) struct RuleViolation {
+    /// The rule that the candidate breaks.
+    pub(super) rule: CreateRule,
+    /// The problem, with the layer or the tag that it is about.
+    pub(super) message: String,
 }
 
-impl CreateRule {
-    /// The code of the error that Palette gives at the create.
-    fn code(self) -> &'static str {
-        match self {
-            CreateRule::TypeLayer => "ClusterProfilePackNotAllowed",
-            CreateRule::CoreLayers => "ErrPackCoreLayersMissing",
-            CreateRule::Cloud => "PackNotSupported",
-            CreateRule::PackTag => "InvalidPackVersion",
+impl RuleViolation {
+    /// The [`Error::CandidateInvalid`] of the candidate file `path` for the violation.
+    pub(super) fn at(self, path: &Path) -> Error {
+        Error::CandidateInvalid {
+            path: path.to_path_buf(),
+            rule: Some(self.rule),
+            message: self.message,
         }
-    }
-
-    /// The message of a refusal: `problem`, the code of Palette, and why strata checks it.
-    fn refuse(self, problem: &str) -> String {
-        format!("{problem} ({}). {GAP}", self.code())
     }
 }
 
@@ -85,7 +75,7 @@ fn core_layers(kind: &str, cloud: &str) -> Option<&'static [Layer]> {
 
 /// Check the layers of the type with the layers that the file gives. The layer of a pack that the
 /// file does not give comes from the registry, so [`super::resolve`] checks the layers again.
-pub(super) fn check_file(c: &Candidate) -> Result<(), String> {
+pub(super) fn check_file(c: &Candidate) -> Result<(), RuleViolation> {
     let known: Vec<Option<&str>> = c
         .layers
         .iter()
@@ -101,18 +91,21 @@ pub(super) fn check_file(c: &Candidate) -> Result<(), String> {
 /// at the publish. `layers` gives, in candidate order, the layer of each pack, and None when it is
 /// not known yet: the core layers are then not checked. A layer name that strata does not know is
 /// in no list, so the type refuses it. The message names the text of the file.
-pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(), String> {
+pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(), RuleViolation> {
     if let Some(allowed) = layers_of_type(&c.kind) {
         for (i, (l, layer)) in c.layers.iter().zip(layers).enumerate() {
             if let Some(layer) = layer.filter(|x| !allowed.contains(&Layer::parse(x))) {
-                return Err(CreateRule::TypeLayer.refuse(&format!(
-                    "layer {} ({}) has the layer {layer}; a profile of type {} takes only the \
-                     layers {}",
-                    i + 1,
-                    l.name,
-                    c.kind,
-                    and_list(allowed)
-                )));
+                return Err(RuleViolation {
+                    rule: CreateRule::TypeLayer,
+                    message: format!(
+                        "layer {} ({}) has the layer {layer}; a profile of type {} takes only the \
+                         layers {}",
+                        i + 1,
+                        l.name,
+                        c.kind,
+                        and_list(allowed)
+                    ),
+                });
             }
         }
     }
@@ -126,12 +119,15 @@ pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(),
             .filter(|x| !present.contains(x))
             .collect();
         if !missing.is_empty() {
-            return Err(CreateRule::CoreLayers.refuse(&format!(
-                "a profile of type {} needs the layers {}; this one has no layer {}",
-                c.kind,
-                and_list(core),
-                and_list(&missing)
-            )));
+            return Err(RuleViolation {
+                rule: CreateRule::CoreLayers,
+                message: format!(
+                    "a profile of type {} needs the layers {}; this one has no layer {}",
+                    c.kind,
+                    and_list(core),
+                    and_list(&missing)
+                ),
+            });
         }
     }
     Ok(())
@@ -145,18 +141,21 @@ pub(super) fn check_cloud(
     i: usize,
     l: &CandidateLayer,
     clouds: &[String],
-) -> Result<(), String> {
+) -> Result<(), RuleViolation> {
     if cloud.is_empty() || supports(clouds, cloud) {
         return Ok(());
     }
-    Err(CreateRule::Cloud.refuse(&format!(
-        "layer {} ({}) is the version {} of a pack for the clouds {}; Palette refuses it in a \
-         profile of the cloud {cloud}",
-        i + 1,
-        l.name,
-        l.version,
-        and_list(&clouds.iter().map(String::as_str).collect::<Vec<_>>()),
-    )))
+    Err(RuleViolation {
+        rule: CreateRule::Cloud,
+        message: format!(
+            "layer {} ({}) is the version {} of a pack for the clouds {}; Palette refuses it in a \
+             profile of the cloud {cloud}",
+            i + 1,
+            l.name,
+            l.version,
+            and_list(&clouds.iter().map(String::as_str).collect::<Vec<_>>()),
+        ),
+    })
 }
 
 /// True when Palette takes `tag` as the version of a pack that it makes. Palette takes a semantic
@@ -191,15 +190,19 @@ fn has_three_numbers(text: &str) -> bool {
 }
 
 /// Check `tag`, the tag of a pack from a registry that Palette does not sync. Palette makes the
-/// pack at the create, with the tag as its version.
-pub(super) fn check_pack_tag(tag: &str) -> Result<(), String> {
+/// pack at the create, with the tag as its version. `whom` names the layer and its registry, as
+/// the start of the message.
+pub(super) fn check_pack_tag(whom: &str, tag: &str) -> Result<(), RuleViolation> {
     if palette_pack_tag(tag) {
         return Ok(());
     }
-    Err(CreateRule::PackTag.refuse(&format!(
-        "the tag {tag} is not a semantic version, and it holds no three numbers with dots \
-         between them"
-    )))
+    Err(RuleViolation {
+        rule: CreateRule::PackTag,
+        message: format!(
+            "{whom}; the tag {tag} is not a semantic version, and it holds no three numbers with \
+             dots between them"
+        ),
+    })
 }
 
 #[cfg(test)]

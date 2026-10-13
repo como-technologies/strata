@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use serde_json::{Map, Value};
 
+use crate::api::codes::{CreateRule, PROFILE_IMPORT_MATCH_CODES, REFUSAL_CODES, ValidateRoute};
 use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR};
 use crate::text::and_list;
 use crate::validation::PaletteRefusal;
@@ -272,11 +273,16 @@ pub enum Error {
         /// Each error that Palette gave, sorted.
         errors: Vec<crate::validation::PaletteRefusal>,
     },
-    /// A candidate file does not parse or breaks a rule of the format.
-    #[error("'{}': {message}", path.display())]
+    /// A candidate file does not parse, breaks a rule of the format, or breaks a rule that only
+    /// the create of Palette checks. For such a rule, the message ends with the code of Palette
+    /// and with why strata checks it.
+    #[error("'{}': {message}{}", path.display(), rule_sentence(*rule))]
     CandidateInvalid {
         /// The candidate file.
         path: PathBuf,
+        /// The rule of the create that the candidate breaks, when the problem is one.
+        /// [`to_json`](Error::to_json) gives its code as `code`.
+        rule: Option<CreateRule>,
         /// What is wrong.
         message: String,
     },
@@ -414,115 +420,31 @@ fn first_part(body: &str) -> String {
     }
 }
 
-/// The codes of the refusals that Palette answers with HTTP 500. Palette gives these errors the
-/// response type of a server fault, so a refusal by design arrives as a 5xx. A retry gets the
-/// same refusal.
-pub const REFUSAL_CODES: [&str; 7] = [
-    "DeletionResourceInUseError",
-    "ResOperationForbidden",
-    "OperationForbidden",
-    "ClusterProfileCreationValidationFailure",
-    "ClusterProfileUpdateValidationFailure",
-    "ClusterProfileInvalidPackState",
-    "InvalidLimit",
-];
-
-/// The codes of the refusals of the whole request that `POST
-/// /v1/spectroclusters/{uid}/validate/packs` answers with HTTP 500: the checks of the YAML, of
-/// the metadata of the packs, of the integration packs, and of their OIDC identity provider.
-/// `compare --validate` reads them as the answer of Palette. A retry gets the same refusal.
-pub const PACK_REFUSAL_CODES: [&str; 11] = [
-    "PackValuesYamlInvalid",
-    "PackManifestYamlInvalid",
-    "ClusterDashboardPacksMutuallyExclusive",
-    "InvalidName",
-    "DuplicatePacksForbidden",
-    "DuplicatePackManifestsForbidden",
-    "DuplicateClusterPacksForbidden",
-    "MultiPackVersionsForbidden",
-    "PackSpectroIntegrationNotSupported",
-    "ClusterProfileOidcNotConfigured",
-    "DisabledPacksForbidden",
-];
-
-/// The codes of the refusals of the whole request that `POST /v1/clusterprofiles/validate/packs`
-/// and `POST /v1/clusterprofiles/{uid}/validate/packs` answer with HTTP 500: the six checks that
-/// Palette does before it checks each pack. `snapshot --validate` reads them as the answer of
-/// Palette. A retry gets the same refusal.
-pub const PROFILE_PACK_REFUSAL_CODES: [&str; 6] = [
-    "ClusterDashboardPacksMutuallyExclusive",
-    "PackValuesYamlInvalid",
-    "PackManifestYamlInvalid",
-    "DisabledPacksForbidden",
-    "SubResourceLimitValidationFailure",
-    "ClusterProfilePacksInConflict",
-];
-
-/// The codes of the refusals that `GET /v1/clusterprofiles/validate/name` answers with HTTP 500:
-/// an empty name, and a version that Palette does not parse. `snapshot --validate` reads them as
-/// the answer of Palette. A retry gets the same refusal.
-pub(crate) const PROFILE_NAME_REFUSAL_CODES: [&str; 2] =
-    ["ResourceNameEmpty", "VersionParseFailure"];
-
-/// The code of the refusal of a profile name and version that the project already holds. The
-/// name route and the import validate route answer it with HTTP 409.
-pub(crate) const PROFILE_EXISTS_CODE: &str = "ClusterProfileAlreadyExists";
-
-/// The codes of the refusals of the whole request that `POST /v1/clusterprofiles/import/validate`
-/// answers with HTTP 500. The route checks the limits, the cloud type, the metadata of the packs,
-/// and the YAML. It also checks the integration packs, the name, the version, and each pack.
-/// `snapshot --validate` reads them as the answer of Palette. A retry gets the same refusal.
-pub const PROFILE_IMPORT_REFUSAL_CODES: [&str; 15] = [
-    "ResourceLimitValidationFailure",
-    "SubResourceLimitValidationFailure",
-    "UnSupportedCloudType",
-    "ClusterDashboardPacksMutuallyExclusive",
-    "InvalidName",
-    "DuplicatePacksForbidden",
-    "DuplicatePackManifestsForbidden",
-    "MultiPackVersionsForbidden",
-    "PackValuesYamlInvalid",
-    "PackManifestYamlInvalid",
-    "PackSpectroIntegrationNotSupported",
-    "ClusterProfileOidcNotConfigured",
-    "ResourceNameEmpty",
-    "VersionParseFailure",
-    "ClusterProfileCreationValidationFailure",
-];
-
-/// The code of the refusal of a macro that a pack uses and that Palette does not define. The
-/// import validate route answers it with HTTP 404.
-pub(crate) const PACK_MACRO_UNDEFINED_CODE: &str = "PackMacroUndefined";
-
-/// The codes of the errors that the import validate route gives with HTTP 500 when it cannot
-/// match a pack of the body to a registry. The route then checks nothing, so strata reads them as
-/// errors and not as an answer. A retry gets the same error.
-pub(crate) const PROFILE_IMPORT_MATCH_CODES: [&str; 4] = [
-    "ClusterProfileImportRegistriesNotFound",
-    "ClusterProfileImportOciRegistriesNotFound",
-    "ClusterProfileImportPrivateHelmRegistriesNotFound",
-    "ClusterProfileImportPackNotFound",
-];
-
-/// The code of the one refusal of `validate/packs` that Palette answers with HTTP 403 and the
-/// response type `Forbidden`, and not with 500. Palette gives it when a pack that an integration
-/// pack needs read-only has values other than its defaults. `compare --validate` reads it as the
-/// answer of Palette.
-pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
-
-/// True when the body of a Palette error is JSON with a `code` in [`REFUSAL_CODES`],
-/// [`PACK_REFUSAL_CODES`], [`PROFILE_PACK_REFUSAL_CODES`], [`PROFILE_NAME_REFUSAL_CODES`],
-/// [`PROFILE_IMPORT_REFUSAL_CODES`], or [`PROFILE_IMPORT_MATCH_CODES`]. The code comes from
-/// [`PaletteRefusal::from_error_body`], the one read of the code of a Palette error.
+/// True when the body of a Palette error is JSON with a `code` of a refusal by design. Such a
+/// code is in [`REFUSAL_CODES`], in `PROFILE_IMPORT_MATCH_CODES`, or in a check of a
+/// [`ValidateRoute`]. The code comes from [`PaletteRefusal::from_error_body`], the one read of the
+/// code of a Palette error.
 fn is_refusal(body: &str) -> bool {
     PaletteRefusal::from_error_body(body).is_some_and(|r| {
         let code = r.code.as_str();
         REFUSAL_CODES.contains(&code)
-            || PACK_REFUSAL_CODES.contains(&code)
-            || PROFILE_PACK_REFUSAL_CODES.contains(&code)
-            || PROFILE_NAME_REFUSAL_CODES.contains(&code)
-            || PROFILE_IMPORT_REFUSAL_CODES.contains(&code)
             || PROFILE_IMPORT_MATCH_CODES.contains(&code)
+            || ValidateRoute::ALL
+                .iter()
+                .any(|route| route.refuses(500, code))
+    })
+}
+
+/// What strata says after a rule that only the create of Palette checks: why strata checks it.
+const CREATE_GAP: &str = "Palette checks this only at the create, and no route that takes a \
+                          candidate answers it before the create. Strata removes this check when \
+                          a route answers it";
+
+/// The end of the message of a `CandidateInvalid` error for a rule of the create: the code of
+/// Palette, and why strata checks it. Empty for a problem of the format.
+fn rule_sentence(rule: Option<CreateRule>) -> String {
+    rule.map_or_else(String::new, |rule| {
+        format!(" ({}). {CREATE_GAP}", rule.code())
     })
 }
 
@@ -768,7 +690,12 @@ impl Error {
                 m.insert("profile".into(), Value::from(profile.as_str()));
                 m.insert("applied".into(), Value::from(applied.clone()));
             }
-            Error::CandidateInvalid { path: p, .. } => path(&mut m, p),
+            Error::CandidateInvalid { path: p, rule, .. } => {
+                path(&mut m, p);
+                if let Some(rule) = rule {
+                    m.insert("code".into(), Value::from(rule.code()));
+                }
+            }
             Error::PackNotFound {
                 name,
                 version,
@@ -1007,7 +934,10 @@ mod tests {
             },
             Error::CandidateInvalid {
                 path: "profile.yaml".into(),
-                message: "a candidate needs at least one layer".into(),
+                rule: Some(CreateRule::TypeLayer),
+                message: "layer 1 (ubuntu-aws) has the layer os; a profile of type add-on takes \
+                          only the layers addon, cni, and csi"
+                    .into(),
             },
             Error::PackNotFound {
                 name: "kubernetes".into(),
@@ -1190,6 +1120,35 @@ mod tests {
     }
 
     #[test]
+    fn a_candidate_error_for_a_rule_of_the_create_names_the_code_and_a_format_problem_does_not() {
+        let rule = Error::CandidateInvalid {
+            path: "c.yaml".into(),
+            rule: Some(CreateRule::PackTag),
+            message: "the tag stable is not a semantic version".into(),
+        };
+        let text = rule.to_string();
+        assert!(
+            text.starts_with(&format!(
+                "'c.yaml': the tag stable is not a semantic version ({}). ",
+                CreateRule::PackTag.code()
+            )),
+            "{text}"
+        );
+        assert!(text.ends_with(CREATE_GAP), "{text}");
+        assert_eq!(rule.to_json()["code"], CreateRule::PackTag.code());
+        let format = Error::CandidateInvalid {
+            path: "c.yaml".into(),
+            rule: None,
+            message: "a candidate needs at least one layer".into(),
+        };
+        assert_eq!(
+            format.to_string(),
+            "'c.yaml': a candidate needs at least one layer"
+        );
+        assert!(format.to_json().get("code").is_none());
+    }
+
+    #[test]
     fn every_variant_has_a_distinct_kind() {
         let all = one_of_each();
         let mut kinds: Vec<&str> = all.iter().map(Error::kind).collect();
@@ -1269,6 +1228,10 @@ mod tests {
         assert_eq!(cp["applied"], serde_json::json!(["infra", "addons"]));
         assert_eq!(by_kind("profile-ref-required")["reference"], "cluster:c1");
         assert_eq!(by_kind("candidate-invalid")["path"], "profile.yaml");
+        assert_eq!(
+            by_kind("candidate-invalid")["code"],
+            CreateRule::TypeLayer.code()
+        );
         assert_eq!(by_kind("unsupported-schema")["found"], "strata-snapshot/2");
         let pnf = by_kind("pack-not-found");
         assert_eq!(
@@ -1292,9 +1255,9 @@ pub enum FailureClass {
     /// Time can remove it: a transport error, HTTP 5xx, HTTP 429, or a `Retry-After` that is
     /// longer than strata waits.
     Transient,
-    /// It stays while the inputs stay: another HTTP 4xx, a 5xx with a code in
-    /// [`REFUSAL_CODES`], [`PACK_REFUSAL_CODES`], or [`PROFILE_PACK_REFUSAL_CODES`], a thing
-    /// that is not there, a file or a setting that is not valid.
+    /// It stays while the inputs stay: another HTTP 4xx, a 5xx with a code of [`REFUSAL_CODES`]
+    /// or of a check of a [`ValidateRoute`], a thing that is not there, a file or a setting that
+    /// is not valid.
     Terminal,
     /// Strata cannot tell.
     Unknown,
