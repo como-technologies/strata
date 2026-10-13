@@ -3723,6 +3723,44 @@ fn draft_or_published(uid: &str, version: &str, cni: &str, published: bool) -> V
     profile_document(uid, "lab-profile", version, published_template, Some(draft))
 }
 
+/// A version with no pack in either template: `list` and a record read its type from one
+/// template, the draft, as for a version that nobody published.
+#[test]
+fn list_and_a_record_read_the_type_of_a_version_with_no_pack_from_one_template() {
+    let doc = profile_document(
+        "u-e1",
+        "lab-profile",
+        "1.2.0",
+        template("aws", "cluster", serde_json::json!([])),
+        Some(template("aws", "add-on", serde_json::json!([]))),
+    );
+    let api = serve_profile(
+        MemoryApi::new().with(
+            PROFILE_LISTING,
+            serde_json::json!({"items": [listed_profile("lab-profile", "1.2.0", "u-e1")]}),
+        ),
+        "u-e1",
+        doc,
+        no_manifests(),
+        no_variables(),
+    );
+    let l = listing(
+        &api,
+        &ListOptions {
+            kinds: vec![ListKind::Profiles],
+            packs: true,
+            ..ListOptions::default()
+        },
+    )
+    .unwrap();
+    let record = snapshot_of(&api, "u-e1").unwrap();
+    assert_eq!(record.source.kind, "add-on");
+    assert_eq!(
+        l.profiles.unwrap()[0].profile_type.as_deref(),
+        Some(record.source.kind.as_str())
+    );
+}
+
 /// A project with `lab-profile@1.0.0`, which is published, and `lab-profile@1.1.0`, which
 /// nobody published.
 fn a_published_and_a_draft_version() -> MemoryApi {
@@ -11625,6 +11663,25 @@ fn serve_cluster_group(api: MemoryApi, raw_root: &Path) -> MemoryApi {
             variables_route(&addon),
             read_json(&raw_root.join("addons").join("variables.json")),
         )
+}
+
+/// The search of the members of a group can name the project of a member only in its summary.
+/// The record reads it there, as `list clusters` and `consumers` do for the same items.
+#[test]
+fn a_member_of_a_cluster_group_takes_its_project_from_the_search_when_it_has_no_annotation() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_cluster_group(MemoryApi::new(), dir.path()).with(
+        post(GROUP_MEMBERS),
+        serde_json::json!({"items": [{"metadata": {"uid": CLUSTER_UID, "name": "lab-cluster"},
+            "specSummary": {"projectMeta": {"uid": "p2", "name": "lab"}}}],
+            "listmeta": {"continue": ""}}),
+    );
+    let group = snapshot_of(&api, "clustergroup:g1").unwrap();
+    assert_eq!(
+        group.source.cluster.as_ref().unwrap().members[0].project_uid,
+        "p2"
+    );
 }
 
 #[test]

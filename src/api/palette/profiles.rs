@@ -155,6 +155,14 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The uid of the app profile `name` at `version`, or at its highest version for
     /// [`LATEST`], from `GET /v1/dashboard/appProfiles/metadata`.
+    ///
+    /// Palette refuses a second app profile with one name and one version with the code
+    /// `AppProfileAlreadyExists`, but only in one scope. So two scopes can each hold one.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::AppProfileNotFound`] when no app profile has the name and the version.
+    /// [`Error::AppProfileNameAmbiguous`] when two or more have them. Each error of the request.
     pub fn resolve_app_profile(&self, name: &str, version: &str) -> Result<String> {
         let listing = self.api.get_json(APP_PROFILE_LISTING)?;
         let all: Vec<(String, String, String)> = arr(&listing, "/appProfiles")
@@ -167,20 +175,32 @@ impl<A: PaletteApi> Palette<A> {
                 )
             })
             .collect();
-        let named = all.iter().filter(|(n, _, _)| n == name);
-        match version::pick(named, |(_, v, _)| v.as_str(), version) {
-            Some((_, _, uid)) => Ok(uid.clone()),
-            None => {
-                let mut available: Vec<String> =
-                    all.iter().map(|(n, v, _)| format!("{n}@{v}")).collect();
-                available.sort();
-                Err(Error::AppProfileNotFound {
-                    name: name.to_string(),
-                    version: version.to_string(),
-                    available,
-                })
+        let not_found = || {
+            let mut available: Vec<String> =
+                all.iter().map(|(n, v, _)| format!("{n}@{v}")).collect();
+            available.sort();
+            Error::AppProfileNotFound {
+                name: name.to_string(),
+                version: version.to_string(),
+                available,
             }
-        }
+        };
+        let named = all.iter().filter(|(n, _, _)| n == name);
+        let Some((_, picked, _)) = version::pick(named, |(_, v, _)| v.as_str(), version) else {
+            return Err(not_found());
+        };
+        let uids = all
+            .iter()
+            .filter(|(n, v, _)| n == name && v == picked)
+            .map(|(_, _, uid)| uid.clone())
+            .collect();
+        one_named(uids, String::as_str, not_found, |uids| {
+            Error::AppProfileNameAmbiguous {
+                name: name.to_string(),
+                version: picked.clone(),
+                uids,
+            }
+        })
     }
 
     /// Reads an app profile in the shape of a profile, so that a record of it has packs and a root.

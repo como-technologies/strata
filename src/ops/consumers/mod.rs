@@ -443,8 +443,9 @@ where
     // version of the profile (#149, #181), or each cluster the key can list is read for the
     // profiles it applies, and a cluster that applies the version joins the list (#66).
     // the second reading and the edge hosts are read at tenant scope, so a cluster or a host in
-    // any project the key can read is in them; a key that cannot read the tenant reads its own
-    // scope
+    // any project the key can read is in them. A key that cannot read the tenant reads `home`,
+    // the scope of the profile, and not the configured scope as `tenant_of` does: a cluster
+    // that runs a profile of a project is in that project
     let tenant = connect(Some(TENANT_SCOPE)).ok();
     let wide = tenant.as_ref().unwrap_or(&home);
     let clusters_read = if options.list_only {

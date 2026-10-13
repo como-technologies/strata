@@ -19,6 +19,7 @@ use crate::diff::{RegistrySync, SyncRecovery};
 use crate::error::{Error, Result, served, unread_reason};
 use crate::json::{opt_text, str_at, take_items, text};
 use crate::pack_type::PackType;
+use crate::reference::one_named;
 use crate::term::progress::Progress;
 
 /// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
@@ -94,20 +95,34 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
 
     /// The registry that `reference` names, by name or by uid: its name and its uid.
     ///
+    /// Palette refuses a second registry with the name of a registry of the tenant, of each
+    /// kind, with the code `ResourceNameAlreadyExists`. It checks one scope, so a registry of the
+    /// system and a registry of the tenant can have one name.
+    ///
     /// # Errors
     ///
     /// [`Error::RegistryNotFound`], with the names of the registries that the key can see, when
-    /// none has the name or the uid. Each error of the request.
+    /// none has the name or the uid. [`Error::RegistryNameAmbiguous`] when two or more have the
+    /// name. Each error of the request.
     pub(crate) fn by_ref(&mut self, reference: &str) -> Result<(String, String)> {
         let names = self.names()?;
-        names
+        let hits = names
             .iter()
-            .find(|(n, u)| n == reference || u == reference)
+            .filter(|(n, u)| n == reference || u == reference)
             .cloned()
-            .ok_or_else(|| Error::RegistryNotFound {
+            .collect();
+        one_named(
+            hits,
+            |(_, uid)| uid.as_str(),
+            || Error::RegistryNotFound {
                 registry: reference.to_string(),
                 available: names.iter().map(|(n, _)| n.clone()).collect(),
-            })
+            },
+            |uids| Error::RegistryNameAmbiguous {
+                name: reference.to_string(),
+                uids,
+            },
+        )
     }
 
     /// The name of the registry `uid`, or `None` when the key cannot see the registry.
@@ -422,6 +437,30 @@ mod tests {
         );
         assert_eq!(api.calls(METADATA), 1, "one read of the metadata");
         assert_eq!(api.calls(OCI_SUMMARY), 1, "one read of the OCI summary");
+    }
+
+    #[test]
+    fn a_name_that_two_registries_have_is_ambiguous_and_the_uid_names_one() {
+        // a registry of the system and a registry of the tenant
+        let api = MemoryApi::new().with(
+            METADATA,
+            json!({"items": [
+                {"name": "Public Repo", "uid": "reg-system", "kind": "pack"},
+                {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
+            ]}),
+        );
+        let palette = Palette::new(&api);
+        let mut registries = Registries::new(&palette);
+        let err = registries.by_ref("Public Repo").unwrap_err();
+        assert!(
+            matches!(&err, Error::RegistryNameAmbiguous { uids, .. }
+                if uids == &["reg-public", "reg-system"]),
+            "{err}"
+        );
+        assert_eq!(
+            registries.by_ref("reg-system").unwrap(),
+            ("Public Repo".to_string(), "reg-system".to_string())
+        );
     }
 
     #[test]

@@ -33,6 +33,14 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The uid of the project named `name`, from [`Palette::project_listing`]. Call it at tenant
     /// scope: in a project, Palette lists only that project.
+    ///
+    /// The first project with the name is the one project with the name. Palette refuses a
+    /// second project with the name of a project of the tenant, with the code
+    /// `ResourceNameAlreadyExists`, and it compares the names with no regard to case.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ProjectNotFound`] when no project has the name. Each error of the request.
     pub fn project_uid_named(&self, name: &str) -> Result<String> {
         let listing = self.project_listing()?;
         let projects = named_entries(&listing);

@@ -10,6 +10,7 @@ use serde_json::Value;
 use super::mask::{MASKED, mask_group_values};
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, str_at};
+use crate::snapshot::Template;
 
 /// The three raw API responses a snapshot is built from, and the project they were fetched in.
 /// Saved as `profile.json`, `manifests.json`, `variables.json` and `scope.json` by `--raw-dir` and
@@ -48,6 +49,19 @@ const MANIFEST_ENTITIES_FILE: &str = "manifest-entities.json";
 /// `status.hasDraft`, and the publish empties the draft.
 pub fn has_draft(profile: &Value) -> bool {
     !arr(profile, "/spec/draft/packs").is_empty()
+}
+
+/// The template of the profile document `profile` that a record of the version reads, and that
+/// `list` shows: the published template when it has packs, else the draft.
+///
+/// A version that nobody published has its packs in the draft. A version with no pack in either
+/// template also reads the draft, so a record and `list` give it one type.
+pub(crate) fn recorded_template(profile: &Value) -> Template {
+    if arr(profile, "/spec/published/packs").is_empty() {
+        Template::Draft
+    } else {
+        Template::Published
+    }
 }
 
 /// The file of a raw directory that holds the profile document.

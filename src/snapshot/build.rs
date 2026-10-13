@@ -93,11 +93,8 @@ impl Snapshot {
     /// Build a snapshot from the raw API responses of one profile: of its published template, or
     /// of its draft when it has no published template.
     pub fn from_raw(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
-        if arr(&raw.profile, "/spec/published/packs").is_empty() {
-            Self::from_raw_template(raw, reference, fetched_at, Template::Draft)
-        } else {
-            Self::from_raw_template(raw, reference, fetched_at, Template::Published)
-        }
+        let template = crate::api::recorded_template(&raw.profile);
+        Self::from_raw_template(raw, reference, fetched_at, template)
     }
 
     /// Build a snapshot of the draft template of one profile: what the next publish makes the

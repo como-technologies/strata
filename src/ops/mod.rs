@@ -315,7 +315,7 @@ pub fn cluster_group_snapshot<A: PaletteApi>(
         .map(|m| GroupMember {
             uid: text(m, "/metadata/uid"),
             name: text(m, "/metadata/name"),
-            project_uid: text(m, "/metadata/annotations/projectUid"),
+            project_uid: list::project_uid_of(m),
         })
         .collect();
     let mut snap = Snapshot::from_cluster(&raw, None, reference, fetched_at)?

@@ -192,8 +192,18 @@ impl Error {
             Error::ClusterNameAmbiguous { name, uids }
             | Error::EdgeHostNameAmbiguous { name, uids }
             | Error::ClusterGroupNameAmbiguous { name, uids }
-            | Error::FilterNameAmbiguous { name, uids } => {
+            | Error::FilterNameAmbiguous { name, uids }
+            | Error::RegistryNameAmbiguous { name, uids } => {
                 m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("uids".into(), Value::from(uids.clone()));
+            }
+            Error::AppProfileNameAmbiguous {
+                name,
+                version,
+                uids,
+            } => {
+                m.insert("name".into(), Value::from(name.as_str()));
+                m.insert("version".into(), Value::from(version.as_str()));
                 m.insert("uids".into(), Value::from(uids.clone()));
             }
             Error::EdgeHostNotFound {

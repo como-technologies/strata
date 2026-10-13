@@ -122,6 +122,10 @@ fn one_of_each() -> Vec<Error> {
             registry: "Nope".into(),
             available: vec!["Public Repo".into()],
         },
+        Error::RegistryNameAmbiguous {
+            name: "Public Repo".into(),
+            uids: vec!["reg-public".into(), "reg-system".into()],
+        },
         Error::ProjectNotFound {
             name: "staging".into(),
             available: vec!["lab".into(), "prod".into()],
@@ -158,6 +162,11 @@ fn one_of_each() -> Vec<Error> {
             name: "shop".into(),
             version: "9.9.9".into(),
             available: vec!["shop@1.0.0".into()],
+        },
+        Error::AppProfileNameAmbiguous {
+            name: "shop".into(),
+            version: "1.0.0".into(),
+            uids: vec!["a1".into(), "a2".into()],
         },
         Error::ClusterGroupNameAmbiguous {
             name: "twin".into(),
@@ -453,4 +462,11 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
         by_kind("pack-in-several-registries")["registries"],
         serde_json::json!(["Public Repo", "Mirror"])
     );
+    assert_eq!(
+        by_kind("registry-name-ambiguous")["uids"],
+        serde_json::json!(["reg-public", "reg-system"])
+    );
+    let app = by_kind("app-profile-name-ambiguous");
+    assert_eq!((app["name"].clone(), app["version"].clone()), ("shop".into(), "1.0.0".into()));
+    assert_eq!(app["uids"], serde_json::json!(["a1", "a2"]));
 }

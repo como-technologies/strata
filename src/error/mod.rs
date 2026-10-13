@@ -236,6 +236,20 @@ pub enum Error {
         /// Each app profile of the scope, as `name@version`, in order.
         available: Vec<String>,
     },
+    /// `appprofile:<name>@<version>` matched two or more app profiles in the scope. Palette
+    /// refuses a second app profile with one name and one version only in one scope.
+    #[error(
+        "several app profiles in this scope are named '{name}' with version '{version}': {}; use appprofile:<uid>",
+        uids.join(", ")
+    )]
+    AppProfileNameAmbiguous {
+        /// The name as given.
+        name: String,
+        /// The version that matched: the version as given, or the highest version for `latest`.
+        version: String,
+        /// The uids of the app profiles with that name and version, in order.
+        uids: Vec<String>,
+    },
     /// A command that works on a profile was given a cluster, an edge host, a cluster group, an
     /// app profile, a pack, or a record of one.
     #[error(
@@ -356,6 +370,15 @@ pub enum Error {
         registry: String,
         /// The registry names that are visible.
         available: Vec<String>,
+    },
+    /// A name that two or more visible registries have. A registry of the system can have the
+    /// name of a registry of the tenant.
+    #[error("several registries are named '{name}': {}; give the uid of one in place of the name", uids.join(", "))]
+    RegistryNameAmbiguous {
+        /// The name as given.
+        name: String,
+        /// The uids of the registries with that name, in order.
+        uids: Vec<String>,
     },
     /// The file exists but is not a strata snapshot.
     #[error("'{0}' is not a strata snapshot")]
@@ -568,6 +591,7 @@ impl Error {
             Error::PackUnavailable { .. } => "pack-unavailable",
             Error::PackInSeveralRegistries { .. } => "pack-in-several-registries",
             Error::RegistryNotFound { .. } => "registry-not-found",
+            Error::RegistryNameAmbiguous { .. } => "registry-name-ambiguous",
             Error::ProjectNotFound { .. } => "project-not-found",
             Error::ClusterNotFound { .. } => "cluster-not-found",
             Error::ClusterNameAmbiguous { .. } => "cluster-name-ambiguous",
@@ -575,6 +599,7 @@ impl Error {
             Error::EdgeHostNameAmbiguous { .. } => "edge-host-name-ambiguous",
             Error::ClusterGroupNotFound { .. } => "cluster-group-not-found",
             Error::AppProfileNotFound { .. } => "app-profile-not-found",
+            Error::AppProfileNameAmbiguous { .. } => "app-profile-name-ambiguous",
             Error::FilterNotFound { .. } => "filter-not-found",
             Error::FilterNameAmbiguous { .. } => "filter-name-ambiguous",
             Error::ClusterGroupNameAmbiguous { .. } => "cluster-group-name-ambiguous",

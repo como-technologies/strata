@@ -30,6 +30,7 @@ pub(crate) use palette::{
     profile_versions, search_condition, search_filter, search_group,
 };
 pub use palette::{Palette, SearchedClusters};
+pub(crate) use raw::recorded_template;
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft};
 pub use retry::{Retry, RetryPolicy};
 
