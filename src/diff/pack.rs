@@ -12,7 +12,7 @@ use super::{Diff, zip_by_key};
 use crate::content::canon::canonical_json;
 use crate::diff::impact::{Impact, presence_impact};
 use crate::legend::Described;
-use crate::snapshot::{Pack, Snapshot, UpstreamSource};
+use crate::snapshot::{Pack, UpstreamSource};
 
 /// What happened to one pack.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -222,30 +222,6 @@ impl PackDiff {
             (None, None) => None,
         }
     }
-}
-
-/// One pack that Palette marks invalid: see
-/// [`Verify::invalid_packs`](super::Verify::invalid_packs).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct InvalidPack {
-    /// `<layer>/<name>` of the pack.
-    pub key: String,
-    /// Why Palette marks it invalid, as Palette gives it. Empty when Palette gives no reason.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub reason: String,
-}
-
-/// Each pack of `s` that Palette marks invalid, in pack order.
-pub(crate) fn invalid_packs(s: &Snapshot) -> Vec<InvalidPack> {
-    s.packs
-        .iter()
-        .filter(|p| p.invalid)
-        .map(|p| InvalidPack {
-            key: p.key.clone(),
-            reason: p.invalid_reason.clone(),
-        })
-        .collect()
 }
 
 /// One pack with a value that Palette masks: see [`Pack::masked`].

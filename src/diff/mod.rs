@@ -35,15 +35,15 @@ pub use cluster::{
 };
 pub use leaf::{Leaf, Op, leaf_diff};
 pub use pack::{
-    ArtifactChange, ChangeFlag, InvalidPack, ManifestChange, MaskedPack, PackDiff, PackSide,
-    ParamChange, Status, ValuesDiff,
+    ArtifactChange, ChangeFlag, ManifestChange, MaskedPack, PackDiff, PackSide, ParamChange,
+    Status, ValuesDiff,
 };
 pub use variables::{
     VariableChange, VariableSummary, VariablesByName, VariablesDiff, group_variables,
 };
 pub use verify::{
-    AuditEntry, AuditResource, ClusterProfileOverwritten, RegistrySync, SyncRecovery, Verify,
-    VerifyStatus,
+    AuditEntry, AuditResource, ClusterProfileOverwritten, InvalidPack, RegistrySync, SyncRecovery,
+    Verify, VerifyStatus,
 };
 
 /// Schema id written into every diff document.

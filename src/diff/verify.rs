@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::ImageIdChange;
-use super::pack::{InvalidPack, invalid_packs};
 use crate::json::{is_zero, str_at};
 use crate::snapshot::Snapshot;
 
@@ -310,4 +309,27 @@ pub enum VerifyStatus {
     /// Same content, and a pack has no upstream digest, so a change of its archive would not
     /// show. `--allow-no-digest` makes it `unchanged`.
     Unverified,
+}
+
+/// One pack that Palette marks invalid: see [`Verify::invalid_packs`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InvalidPack {
+    /// `<layer>/<name>` of the pack.
+    pub key: String,
+    /// Why Palette marks it invalid, as Palette gives it. Empty when Palette gives no reason.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub reason: String,
+}
+
+/// Each pack of `s` that Palette marks invalid, in pack order.
+pub(crate) fn invalid_packs(s: &Snapshot) -> Vec<InvalidPack> {
+    s.packs
+        .iter()
+        .filter(|p| p.invalid)
+        .map(|p| InvalidPack {
+            key: p.key.clone(),
+            reason: p.invalid_reason.clone(),
+        })
+        .collect()
 }
