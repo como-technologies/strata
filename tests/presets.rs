@@ -5,7 +5,9 @@ use std::fs;
 use std::path::Path;
 
 use serde_json::{Value, json};
-use strata::api::MemoryApi;
+use strata::api::{MemoryApi, Palette};
+use strata::candidate::{ResolvedCandidate, load, resolve};
+use strata::progress::Progress;
 use strata::snapshot::{PresetOption, Snapshot};
 
 use crate::common;
@@ -13,26 +15,32 @@ use common::{candidate_snapshot, pack_listing_route};
 
 const REGISTRY: &str = "reg-public";
 
-/// The registry routes for the pack `barney` 1.0.0, with `template` in its listing entry.
-fn registry(template: Option<Value>) -> MemoryApi {
+/// `api` with the registry routes for the pack `name` 1.0.0, with `template` in its listing
+/// entry.
+fn with_pack(api: MemoryApi, name: &str, template: Option<Value>) -> MemoryApi {
+    let uid = format!("pack-{name}-1");
     let mut summary = json!({
-        "metadata": {"uid": "pack-barney-1"},
-        "spec": {"name": "barney", "version": "1.0.0", "registryUid": REGISTRY,
+        "metadata": {"uid": uid},
+        "spec": {"name": name, "version": "1.0.0", "registryUid": REGISTRY,
                  "digest": "sha256:b1", "layer": "addon", "type": "spectro",
                  "values": "a:\n  b: x\n"},
     });
     if let Some(t) = template {
         summary["spec"]["template"] = t;
     }
-    MemoryApi::new()
-        .with(
-            pack_listing_route("barney"),
-            json!({"items": [summary], "listmeta": {"count": 1}}),
-        )
-        .with(
-            format!("/v1/packs/barney/registries/{REGISTRY}"),
-            json!({"tags": [{"tag": "1.0.0", "packUid": "pack-barney-1"}]}),
-        )
+    api.with(
+        pack_listing_route(name),
+        json!({"items": [summary], "listmeta": {"count": 1}}),
+    )
+    .with(
+        format!("/v1/packs/{name}/registries/{REGISTRY}"),
+        json!({"tags": [{"tag": "1.0.0", "packUid": uid}]}),
+    )
+}
+
+/// The registry routes for the pack `barney` 1.0.0, with `template` in its listing entry.
+fn registry(template: Option<Value>) -> MemoryApi {
+    with_pack(MemoryApi::new(), "barney", template)
 }
 
 /// One input parameter `access` at `a.b`, with the options `x` and `y`, in the shape of
@@ -47,14 +55,39 @@ fn template() -> Value {
     }]}})
 }
 
-fn snapshot_with(dir: &Path, values: &str, api: &MemoryApi) -> Snapshot {
+/// Write the candidate `fred` 1.0.0 with `layers` to `dir`, and give its file.
+fn write_candidate(dir: &Path, layers: Value) -> std::path::PathBuf {
     let file = dir.join("fred.yaml");
     let candidate = json!({
         "name": "fred", "version": "1.0.0", "type": "add-on", "registryUid": REGISTRY,
-        "layers": [{"name": "barney", "version": "1.0.0", "values": values}],
+        "layers": layers,
     });
     fs::write(&file, serde_yaml::to_string(&candidate).unwrap()).unwrap();
-    candidate_snapshot(&file, api).unwrap()
+    file
+}
+
+/// The one layer `barney` 1.0.0 with `values`.
+fn barney(values: &str) -> Value {
+    json!([{"name": "barney", "version": "1.0.0", "values": values}])
+}
+
+fn snapshot_with(dir: &Path, values: &str, api: &MemoryApi) -> Snapshot {
+    candidate_snapshot(&write_candidate(dir, barney(values)), api).unwrap()
+}
+
+/// The resolve of the candidate `fred` with `layers` against `api`.
+fn resolved(dir: &Path, layers: Value, api: &MemoryApi) -> ResolvedCandidate {
+    let loaded = load(&write_candidate(dir, layers)).unwrap();
+    resolve(&loaded, &Palette::new(api), &Progress::silent()).unwrap()
+}
+
+/// The selection of the option `x` of the parameter `access`.
+fn access_x() -> PresetOption {
+    PresetOption {
+        parameter: "access".into(),
+        target_key: "a.b".into(),
+        option: "x".into(),
+    }
 }
 
 #[test]
@@ -123,4 +156,107 @@ fn a_number_or_a_list_item_at_the_target_key_is_read_as_text() {
         got,
         vec![("first", "open"), ("flag", "true"), ("replicas", "3")]
     );
+}
+
+/// The keys of a pack reference that strata builds, as a published profile of Palette gives
+/// them, sorted.
+const PACK_REF_KEYS: [&str; 12] = [
+    "digest",
+    "layer",
+    "manifests",
+    "name",
+    "packUid",
+    "params",
+    "presets",
+    "registryUid",
+    "tag",
+    "type",
+    "values",
+    "version",
+];
+
+#[test]
+fn the_documents_of_a_resolve_hold_no_key_of_strata_and_the_result_holds_the_selection() {
+    let dir = tempfile::tempdir().unwrap();
+    let resolved = resolved(
+        dir.path(),
+        barney("a:\n  b: x\n"),
+        &registry(Some(template())),
+    );
+    assert_eq!(resolved.preset_options, vec![vec![access_x()]]);
+
+    let pack_ref = &resolved.raw.profile["spec"]["published"]["packs"][0];
+    let mut keys: Vec<&str> = pack_ref
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(keys, PACK_REF_KEYS);
+    for doc in [
+        &resolved.raw.profile,
+        &resolved.raw.manifests,
+        &resolved.raw.variables,
+    ] {
+        assert!(!doc.to_string().contains("presetOptions"), "{doc}");
+    }
+
+    // the record of the resolve has the selection, outside the documents
+    let snap = resolved.into_snapshot("fred", "t0").unwrap();
+    assert_eq!(snap.packs[0].preset_options, vec![access_x()]);
+}
+
+#[test]
+fn a_raw_directory_saved_from_a_candidate_holds_no_preset_options_key() {
+    let dir = tempfile::tempdir().unwrap();
+    let resolved = resolved(
+        dir.path(),
+        barney("a:\n  b: x\n"),
+        &registry(Some(template())),
+    );
+    let saved = dir.path().join("raw");
+    resolved.raw.save_dir(&saved, "t0").unwrap();
+    let mut files = 0;
+    for entry in fs::read_dir(&saved).unwrap() {
+        let path = entry.unwrap().path();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(
+            !text.contains("presetOptions"),
+            "{}: {text}",
+            path.display()
+        );
+        files += 1;
+    }
+    assert!(
+        files >= 3,
+        "{files} files: the profile, the manifests, the variables"
+    );
+    // the directory holds only the documents of Palette, so a record built from it has no
+    // selection. The record of the resolve has it.
+    let from_dir = strata::ops::snapshot_from_dir(&saved, "fred", "t0").unwrap();
+    assert!(from_dir.packs[0].preset_options.is_empty());
+    assert_eq!(
+        from_dir.root,
+        resolved.into_snapshot("fred", "t0").unwrap().root,
+        "the selection is outside the root"
+    );
+}
+
+#[test]
+fn the_selection_of_each_layer_is_on_its_own_pack_of_the_record() {
+    let dir = tempfile::tempdir().unwrap();
+    // barney has no template; wilma has one, and its values select the option x
+    let api = with_pack(registry(None), "wilma", Some(template()));
+    let layers = json!([
+        {"name": "barney", "version": "1.0.0", "values": "a:\n  b: x\n"},
+        {"name": "wilma", "version": "1.0.0", "values": "a:\n  b: x\n"},
+    ]);
+    let resolved = resolved(dir.path(), layers.clone(), &api);
+    assert_eq!(resolved.preset_options, vec![vec![], vec![access_x()]]);
+    let snap = candidate_snapshot(&write_candidate(dir.path(), layers), &api).unwrap();
+    let names: Vec<&str> = snap.packs.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["barney", "wilma"]);
+    assert!(snap.packs[0].preset_options.is_empty());
+    assert_eq!(snap.packs[1].preset_options, vec![access_x()]);
 }

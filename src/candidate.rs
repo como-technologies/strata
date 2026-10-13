@@ -303,6 +303,37 @@ pub struct LoadedCandidate {
     layers: Vec<LoadedLayer>,
 }
 
+/// A candidate resolved against the registry: the documents of the profile that it describes,
+/// and what strata reads from the registry beside them.
+#[derive(Debug, Clone)]
+pub struct ResolvedCandidate {
+    /// The documents that a published profile with the content of the candidate gives. They hold
+    /// only what Palette gives, and no field of strata.
+    pub raw: RawProfile,
+    /// The options of the pack template that the values of each pack select: one list for each
+    /// pack reference of the profile, in its order. The list is empty for a manifest layer, and
+    /// for a layer of a registry that Palette does not sync. No listing gives their template.
+    pub preset_options: Vec<Vec<PresetOption>>,
+}
+
+impl ResolvedCandidate {
+    /// The record of the candidate: [`Snapshot::from_raw`] of its documents, with the preset
+    /// options of each pack. `reference` and `fetched_at` are as for [`Snapshot::from_raw`].
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Snapshot::from_raw`].
+    pub fn into_snapshot(self, reference: &str, fetched_at: &str) -> Result<Snapshot> {
+        let mut snap = Snapshot::from_raw(&self.raw, reference, fetched_at)?;
+        // the record keeps the packs in the order of the profile document, so each list is the
+        // list of its pack
+        for (pack, options) in snap.packs.iter_mut().zip(self.preset_options) {
+            pack.preset_options = options;
+        }
+        Ok(snap)
+    }
+}
+
 fn pick_registry(
     uid: &Option<String>,
     name: &Option<String>,
@@ -599,8 +630,8 @@ pub fn pack_snapshot<A: PaletteApi>(
             manifests: Vec::new(),
         }],
     };
-    let raw = resolve_with(&loaded, &mut registries, progress)?;
-    let mut snap = Snapshot::from_raw(&raw, reference, fetched_at)?;
+    let mut snap =
+        resolve_with(&loaded, &mut registries, progress)?.into_snapshot(reference, fetched_at)?;
     snap.source.kind = ProfileType::Pack.as_str().to_string();
     snap.source.template = Template::Registry;
     // a pack version is not a profile version, so no cluster uses it and nothing asked
@@ -796,12 +827,15 @@ struct PackFields<'a> {
     values: &'a str,
 }
 
-/// One layer as a published profile gives it.
+/// One layer as a published profile gives it, and what strata reads from the registry beside it.
 struct ResolvedLayer {
     /// The pack reference of the profile.
     pack_ref: Value,
     /// The entry of the manifests document.
     entry: Value,
+    /// The options of the pack template that the values select. Empty when no listing gives a
+    /// template for the layer.
+    preset_options: Vec<PresetOption>,
 }
 
 /// The pack reference and the manifests entry of the layer `l` with the fields `f`. The pack
@@ -938,7 +972,11 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
             pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
         }
         // the pack that Palette makes has no cloud type, so each cloud takes it
-        Ok(ResolvedLayer { pack_ref, entry })
+        Ok(ResolvedLayer {
+            pack_ref,
+            entry,
+            preset_options: Vec::new(),
+        })
     }
 
     /// Resolve the layer `i` from `summary`, the entry of its version in the listing of the
@@ -1043,10 +1081,6 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
             values: &values,
         };
         let (mut pack_ref, entry) = pack_documents(l, &fields, manifests);
-        let selected = preset_options(summary, &values);
-        if !selected.is_empty() {
-            pack_ref["presetOptions"] = json!(selected);
-        }
         // the provider type of an OCI registry, as a published profile carries it on the pack
         // reference
         if PackType::parse(&kind) == Some(PackType::Oci)
@@ -1054,7 +1088,11 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         {
             pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
         }
-        Ok(ResolvedLayer { pack_ref, entry })
+        Ok(ResolvedLayer {
+            pack_ref,
+            entry,
+            preset_options: preset_options(summary, &values),
+        })
     }
 }
 
@@ -1077,7 +1115,11 @@ fn manifest_layer(
         values: &values,
     };
     let (pack_ref, entry) = pack_documents(l, &fields, manifests);
-    ResolvedLayer { pack_ref, entry }
+    ResolvedLayer {
+        pack_ref,
+        entry,
+        preset_options: Vec::new(),
+    }
 }
 
 /// Look each layer's pack up in its registry and build the three documents a published profile
@@ -1087,11 +1129,19 @@ fn manifest_layer(
 /// none of these. When the listing does not have the version, and the registry is one that
 /// Palette does not sync, the pack is the one that Palette makes at the create: no pack uid, no
 /// digest, the layer `addon`, and the tag as the version.
+///
+/// The documents hold only what Palette gives. What strata reads beside them, the options of the
+/// pack template that the values of each pack select, is a field of the result.
+///
+/// # Errors
+///
+/// `CandidateInvalid` for a layer that breaks a rule of Palette at the create. `PackNotFound` and
+/// `PackUnavailable` for a version that the registry does not give. Each error of a request.
 pub fn resolve<A: PaletteApi>(
     loaded: &LoadedCandidate,
     palette: &Palette<A>,
     progress: &Progress,
-) -> Result<RawProfile> {
+) -> Result<ResolvedCandidate> {
     resolve_with(loaded, &mut Registries::new(palette), progress)
 }
 
@@ -1101,7 +1151,7 @@ pub(crate) fn resolve_with<A: PaletteApi>(
     loaded: &LoadedCandidate,
     registries: &mut Registries<'_, A>,
     progress: &Progress,
-) -> Result<RawProfile> {
+) -> Result<ResolvedCandidate> {
     let c = &loaded.candidate;
     progress.note(&format!(
         "resolving {}@{} against the registry",
@@ -1115,10 +1165,12 @@ pub(crate) fn resolve_with<A: PaletteApi>(
     };
     let mut refs = Vec::with_capacity(c.layers.len());
     let mut entries = Vec::with_capacity(c.layers.len());
+    let mut preset_options = Vec::with_capacity(c.layers.len());
     for i in 0..c.layers.len().min(loaded.layers.len()) {
         let resolved = resolver.layer(i)?;
         refs.push(resolved.pack_ref);
         entries.push(resolved.entry);
+        preset_options.push(resolved.preset_options);
     }
     // each pack reference has the layer that Palette gives the pack, so check the layers again
     let known: Vec<Option<&str>> = refs
@@ -1126,7 +1178,7 @@ pub(crate) fn resolve_with<A: PaletteApi>(
         .map(|r| r.get("layer").and_then(Value::as_str))
         .collect();
     gaps::check_layers(c, &known).map_err(|message| resolver.invalid(message))?;
-    Ok(RawProfile {
+    let raw = RawProfile {
         profile: json!({
             "metadata": {"name": c.name, "uid": ""},
             "spec": {
@@ -1142,6 +1194,10 @@ pub(crate) fn resolve_with<A: PaletteApi>(
         project_uid: None,
         manifest_entities: None,
         resolved_values: None,
+    };
+    Ok(ResolvedCandidate {
+        raw,
+        preset_options,
     })
 }
 
@@ -1304,7 +1360,8 @@ variables:
             &Palette::new(MemoryApi::new()),
             &Progress::silent(),
         )
-        .unwrap();
+        .unwrap()
+        .raw;
         let pack = &raw.profile["spec"]["published"]["packs"][0];
         assert_eq!(pack["type"], "manifest");
         assert_eq!(
@@ -1548,12 +1605,14 @@ variables:
 
     const STACK_LAYERS: [&str; 5] = ["os", "k8s", "cni", "csi", "addon"];
 
+    /// The documents of the resolve of `c`.
     fn resolved(c: Candidate, palette: &Palette<MemoryApi>) -> Result<RawProfile> {
         resolve(
             &check(c, Path::new("c.yaml")).unwrap(),
             palette,
             &Progress::silent(),
         )
+        .map(|r| r.raw)
     }
 
     #[test]

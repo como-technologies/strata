@@ -1110,11 +1110,6 @@ impl Pack {
         } else {
             String::new()
         };
-        // a key of strata on the pack ref of a candidate: a pack ref of Palette has none
-        let preset_options: Vec<PresetOption> = pk
-            .get("presetOptions")
-            .and_then(|o| serde_json::from_value(o.clone()).ok())
-            .unwrap_or_default();
         let params = pk
             .get("params")
             .cloned()
@@ -1185,7 +1180,8 @@ impl Pack {
             manifests,
             images,
             charts,
-            preset_options,
+            // no document of Palette gives a selection: the resolve of a candidate sets it
+            preset_options: Vec::new(),
             masked,
             hash: PackHash {
                 identity,
