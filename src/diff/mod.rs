@@ -11,12 +11,12 @@ use serde_json::Value;
 use crate::cluster_template::ClusterTemplateRef;
 use crate::content::canon::canonical_json;
 use crate::content::layer::Layer;
-pub use crate::diff::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
 use crate::legend::legend;
 pub use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{Pack, Snapshot, Source, Tool};
 pub use crate::validation::{PaletteRefusal, PaletteValidation};
 use cluster::{cluster_values_diff, overwritten_in_place, running_behind, tiers_diff};
+pub use impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
 use pack::{
     artifact_changes, chart_pairs, image_pairs, manifests_diff, masked_union, minted_uid_pair,
     param_changes, presence_pack_diff, side, values_diff,

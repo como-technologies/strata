@@ -13,6 +13,15 @@ release has the tag `v<version>`. The crate builds with Rust 1.88 or later. The
 crate is not on crates.io, so a dependency names the tag: see
 [The library](../automation/library.md#add-the-dependency).
 
+Release 0.22 moves five public modules under new parents. Each old path stays as
+a `pub use` until release 0.23:
+
+- `strata::color` is now `strata::term::color`.
+- `strata::progress` is now `strata::term::progress`.
+- `strata::layer` is now `strata::content::layer`.
+- `strata::impact` is now `strata::diff::impact`.
+- `strata::version` is now `strata::reference::version`.
+
 ## The documents
 
 Each JSON document has a schema id, such as `strata-snapshot/1`. The id changes

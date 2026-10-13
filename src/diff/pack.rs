@@ -224,7 +224,8 @@ impl PackDiff {
     }
 }
 
-/// One pack that Palette marks invalid: see [`Verify::invalid_packs`].
+/// One pack that Palette marks invalid: see
+/// [`Verify::invalid_packs`](super::Verify::invalid_packs).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct InvalidPack {

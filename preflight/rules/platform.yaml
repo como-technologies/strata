@@ -329,7 +329,7 @@ rules:
       - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/dashboard/spectroclusters/meta\" | jq -r 'type'   # array"
     evidence:
       - kind: source
-        ref: strata src/api/palette/mod.rs CLUSTER_SEARCH, audits, cluster_notifications
+        ref: strata src/api/palette/ CLUSTER_SEARCH, audits, cluster_notifications
         note: Palette gives at most 50 clusters and 100 audit entries on a page
       - kind: run
         ref: teardown lab
