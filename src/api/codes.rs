@@ -11,9 +11,9 @@
 //! Each comment states what Palette does, and not where its code does it.
 
 /// The codes of the refusals that Palette answers with HTTP 500 on a route that is not a validate
-/// route: the delete of an object, an operation on an object, the update of a profile, and a
-/// listing. Palette gives these errors the response type of a server fault, so a refusal by
-/// design arrives as a 5xx. A retry gets the same refusal.
+/// route. The routes are the delete of an object, an operation on an object, the update of a
+/// profile, and a listing. Palette gives these errors the response type of a server fault, so a
+/// refusal by design arrives as a 5xx. A retry gets the same refusal.
 pub const REFUSAL_CODES: [&str; 6] = [
     "DeletionResourceInUseError",
     "ResOperationForbidden",
@@ -56,10 +56,10 @@ const PACK_YAML: Check = &["PackValuesYamlInvalid", "PackManifestYamlInvalid"];
 /// The body holds no more than one dashboard pack. The three routes that take packs run it.
 const DASHBOARD_PACKS: Check = &["ClusterDashboardPacksMutuallyExclusive"];
 
-/// The metadata of the packs: the name of each manifest and of each manifest pack is a DNS-1123
-/// label of 32 characters at most, no pack name is two times in a profile, no manifest name is
-/// two times in a pack, and no pack has two versions. The cluster packs route and the import
-/// validate route run it.
+/// The metadata of the packs. The name of each manifest and of each manifest pack is a DNS-1123
+/// label of 32 characters at most. No pack name is two times in a profile. No manifest name is
+/// two times in a pack. No pack has two versions. The cluster packs route and the import validate
+/// route run it.
 const PACK_METADATA: Check = &[
     "InvalidName",
     "DuplicatePacksForbidden",
@@ -71,8 +71,8 @@ const PACK_METADATA: Check = &[
 /// route runs it.
 const CLUSTER_PACKS: Check = &["DuplicateClusterPacksForbidden"];
 
-/// The integration packs: the cloud supports each of them, and the OIDC identity provider that
-/// one names is in the Kubernetes pack or in the organization. The cluster packs route and the
+/// The integration packs. The cloud supports each of them. The OIDC identity provider that one
+/// names is in the Kubernetes pack or in the organization. The cluster packs route and the
 /// import validate route run it.
 const INTEGRATION_PACKS: Check = &[
     "PackSpectroIntegrationNotSupported",
@@ -175,11 +175,11 @@ impl ValidateRoute {
     }
 
     /// Whether the route refuses the whole request with `status` and `code`. A code of a check
-    /// of the route comes with HTTP 500. The refusals that set another type: the cluster packs
-    /// route gives [`PACK_FORBIDDEN_CODE`] with HTTP 403; the name route and the import validate
-    /// route give [`PROFILE_EXISTS_CODE`] with HTTP 409; the import validate route gives
+    /// of the route comes with HTTP 500. Three refusals set another type. The cluster packs route
+    /// gives [`PACK_FORBIDDEN_CODE`] with HTTP 403. The name route and the import validate route
+    /// give [`PROFILE_EXISTS_CODE`] with HTTP 409. The import validate route gives
     /// [`PACK_MACRO_UNDEFINED_CODE`] with HTTP 404. The API schema checks the body of the profile
-    /// routes first: it refuses a list with two equal items with HTTP 422 and a number as the
+    /// routes first. It refuses a list with two equal items with HTTP 422 and a number as the
     /// code.
     pub fn refuses(self, status: u16, code: &str) -> bool {
         match (self, status) {

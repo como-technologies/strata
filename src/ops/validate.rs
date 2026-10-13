@@ -14,9 +14,9 @@ use crate::registry::{Registries, registry_entry};
 use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
 
-/// The refusal of the whole request in an error of strata, when it is an HTTP error of Palette
-/// with a status and a code that `route` refuses with. Palette gives such a refusal before it
-/// checks each pack, so it is an answer, and not an error of strata.
+/// The refusal of the whole request in an error of strata: an HTTP error of Palette whose status
+/// and code are a refusal of `route`. Palette gives such a refusal before it checks each pack, so
+/// it is an answer, and not an error of strata.
 fn whole_request_refusal(e: &Error, route: ValidateRoute) -> Option<PaletteRefusal> {
     let Error::Api { status, body, .. } = e else {
         return None;
@@ -24,8 +24,8 @@ fn whole_request_refusal(e: &Error, route: ValidateRoute) -> Option<PaletteRefus
     PaletteRefusal::from_error_body(body).filter(|r| route.refuses(*status, &r.code))
 }
 
-/// The refusal in `answer`, or None when Palette takes the request. An error that `route` does
-/// not refuse with is an error of strata.
+/// The refusal in `answer`, or None when Palette takes the request. An error that is not a
+/// refusal of `route` is an error of strata.
 fn refusal_in<T>(answer: Result<T>, route: ValidateRoute) -> Result<Option<PaletteRefusal>> {
     match answer {
         Ok(_) => Ok(None),
