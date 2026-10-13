@@ -13934,9 +13934,9 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     .unwrap();
     let v = snap.source.palette_validation.clone().unwrap();
     assert!(!v.accepts());
-    assert_eq!(v.errors.len(), 1, "{v:?}");
+    assert_eq!(v.errors().len(), 1, "{v:?}");
     assert_eq!(
-        v.errors[0].line(),
+        v.errors()[0].line(),
         format!("DependencyPackWithMinVersionRequired kubernetes: {message}")
     );
     // one GET of the name and the version
@@ -13997,7 +13997,7 @@ fn snapshot_validate_asks_palette_whether_it_takes_the_packs_of_a_candidate() {
     // the command line makes a refusal an error: exit 2, kind palette-refuses, and no record
     let err = Error::PaletteRefuses {
         reference: snap.source.reference.clone(),
-        errors: v.errors.clone(),
+        errors: v.errors().to_vec(),
     };
     assert_eq!(err.kind(), "palette-refuses");
     assert_eq!(err.exit_code(), 2);
@@ -14064,16 +14064,16 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
         let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, 500, body);
         let v = ops::profile_validation(&Palette::new(&api), &candidate).unwrap();
         assert!(!v.accepts(), "{code}");
-        assert_eq!(v.errors.len(), 1);
-        assert_eq!(v.errors[0].pack, "");
-        assert_eq!(v.errors[0].line(), format!("{code}: refused"));
+        assert_eq!(v.errors().len(), 1);
+        assert_eq!(v.errors()[0].pack, "");
+        assert_eq!(v.errors()[0].line(), format!("{code}: refused"));
     }
     // the API schema refuses a list with two equal packs with HTTP 422, before the route
     let body = r#"{"code":610,"message":"packs in body shouldn't contain duplicates"}"#;
     let api = serve_candidate_checks(MemoryApi::new(), &candidate).failing(path, 422, body);
     let v = ops::profile_validation(&Palette::new(&api), &candidate).unwrap();
     assert_eq!(
-        v.errors[0].line(),
+        v.errors()[0].line(),
         "610: packs in body shouldn't contain duplicates"
     );
     // a 500 with another code is a fault of Palette, a 403 is the key, and a 400 is a body with
@@ -14156,8 +14156,8 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
         let v =
             refusal(accepting().failing(name_route(&candidate), status, body_of(code))).unwrap();
         assert!(!v.accepts(), "{code}");
-        assert_eq!(v.errors.len(), 1, "{code}");
-        assert_eq!(v.errors[0].line(), format!("{code}: refused"));
+        assert_eq!(v.errors().len(), 1, "{code}");
+        assert_eq!(v.errors()[0].line(), format!("{code}: refused"));
     }
 
     // the import route: each code of a check, a version that the project holds, and a macro
@@ -14170,13 +14170,13 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
         assert_eq!(class_of(status, code), FailureClass::Terminal, "{code}");
         let v = refusal(accepting().failing(&import, status, body_of(code))).unwrap();
         assert!(!v.accepts(), "{code}");
-        assert_eq!(v.errors[0].line(), format!("{code}: refused"));
+        assert_eq!(v.errors()[0].line(), format!("{code}: refused"));
     }
     // the API schema refuses a list with two equal items, with a number as the code
     let body = r#"{"code":610,"message":"packs in body shouldn't contain duplicates"}"#;
     let v = refusal(accepting().failing(&import, 422, body)).unwrap();
     assert_eq!(
-        v.errors[0].line(),
+        v.errors()[0].line(),
         "610: packs in body shouldn't contain duplicates"
     );
 
@@ -14186,7 +14186,7 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
     let api = accepting()
         .failing(name_route(&candidate), 500, body)
         .failing(&import, 500, body);
-    assert_eq!(refusal(api).unwrap().errors.len(), 1);
+    assert_eq!(refusal(api).unwrap().errors().len(), 1);
 
     // the import route did not match a pack to a registry, so it checked nothing: an error of
     // strata, which the retry does not send again. A 403 and a 500 with another code are errors
@@ -14276,7 +14276,7 @@ fn a_candidate_with_a_fault_that_only_a_route_answers_gives_a_record_with_the_sa
     assert_eq!(refused.root, recorded_b.root);
     let v = refused.source.palette_validation.clone().unwrap();
     assert_eq!(
-        strata::validation::answer_lines(&v.errors),
+        strata::validation::answer_lines(v.errors()),
         ["refuses: VersionParseFailure: Unable to parse the version '2.2.2.develop'"]
     );
     assert!(matches!(

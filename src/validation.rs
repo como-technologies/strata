@@ -47,13 +47,8 @@ struct ValidationDocument<'a> {
     accepts: bool,
     /// Each error that Palette gives, sorted by pack, code, and message. Palette gives them in
     /// no fixed order.
-    #[serde(default, skip_serializing_if = "no_error")]
+    #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
     errors: Cow<'a, [PaletteRefusal]>,
-}
-
-/// True when the document has no error to write.
-fn no_error(errors: &Cow<'_, [PaletteRefusal]>) -> bool {
-    errors.is_empty()
 }
 
 impl Serialize for ProfileValidation {
