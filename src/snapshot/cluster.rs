@@ -1,0 +1,505 @@
+//! The record of a cluster: its source, its tiers, the profiles that it applies, its variables,
+//! and its pending updates.
+
+use std::collections::BTreeMap;
+use std::fmt;
+
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+
+use super::{SubjectKind, macro_placeholder};
+use crate::api::RawCluster;
+use crate::content::canon::{canonical_json, sha256_hex};
+use crate::json::{arr, str_at, text};
+use crate::profile_type::ProfileType;
+use crate::repave::PendingRepave;
+
+/// A virtual cluster of a cluster group.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupMember {
+    /// Cluster uid.
+    pub uid: String,
+    /// Cluster name.
+    pub name: String,
+    /// The project of the cluster; empty when Palette does not name it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub project_uid: String,
+}
+
+/// The cluster a snapshot was taken from.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterSource {
+    /// Cluster uid.
+    pub uid: String,
+    /// Cluster name.
+    pub name: String,
+    /// The applied profile selected with `cluster:<uid>/<profile>`; absent when the snapshot
+    /// covers every applied profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
+    /// The applied profiles this snapshot covers, in the canonical order of
+    /// [`AppliedProfile::of_cluster`]: the cluster or infra profile first, then the others by
+    /// name.
+    pub profiles: Vec<AppliedProfile>,
+    /// The values the cluster gives the variables of those profiles, in profile order and then by
+    /// name. Outside the root: two clusters on one release can differ here. A sensitive variable
+    /// is listed without its value.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub variables: Vec<ClusterVariable>,
+    /// Whether Palette says that an update waits for the cluster: an open notification of an
+    /// update of a profile that this record covers. Absent when the notifications were not read.
+    /// Outside the root: it is Palette's statement about the copy, not the copy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updates_pending: Option<bool>,
+    /// Why the notifications could not be read, when `updatesPending` is absent for that reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updates_pending_error: Option<String>,
+    /// Each change that waits, as the open notifications name it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pending_updates: Vec<PendingUpdate>,
+    /// Whether Palette says that a repave of the cluster waits for approval: `status.repave.state`
+    /// is `Pending`. Absent for an edge host and a cluster group, and in an older record. Outside
+    /// the root: it is a statement of Palette about the cluster, not the copy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repave_pending: Option<bool>,
+    /// The repave that waits, with the reasons that Palette gives for it. Absent when no repave
+    /// waits, and when strata could not read it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_repave: Option<PendingRepave>,
+    /// Why strata could not read the repave that waits, when `pendingRepave` is absent for that
+    /// reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_repave_error: Option<String>,
+    /// With `snapshot --macros`: each user macro the recorded content uses, and the `sha256:` of
+    /// the value Palette gives it for this cluster, or `unresolved`. A value can be a secret, so
+    /// the record holds its digest and not the value. Outside the root; `verify` reads the values
+    /// again and compares.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub macro_values: Option<BTreeMap<String, String>>,
+    /// True for a record of `cluster:<uid>@pending`: the profiles that the cluster would run after
+    /// it accepts the update that waits, and not the copies that it runs now.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pending: bool,
+    /// What the record was taken from: absent for a cluster, `edgeHost` for the profiles bound to
+    /// an edge host, and `clusterGroup` for the profiles that a cluster group pins for its
+    /// virtual clusters. `uid` and `name` are those of that object.
+    #[serde(default, skip_serializing_if = "SubjectKind::is_cluster")]
+    pub kind: SubjectKind,
+    /// For a cluster group: its virtual clusters, which run the profiles that it pins. Outside
+    /// the root.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub members: Vec<GroupMember>,
+    /// The labels of the cluster, as Palette gives them in `metadata.labels`. Outside the root.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub labels: BTreeMap<String, String>,
+    /// More of the cluster than its release, by tier: `applied`, `running`, `policy`, and, with
+    /// `snapshot --shape`, `shape`. A cluster group carries `policy` alone: the config that it
+    /// gives each virtual cluster. Each tier has its own hash. A record names the tiers that it
+    /// carries by carrying them, so a record without one still verifies. Outside the root.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tiers: BTreeMap<Tier, ClusterTier>,
+}
+
+/// A tier of a cluster record: a part of the cluster beside its release, with a hash of its own.
+/// The variants are in the order of their names. So the map of the tiers of a record, and its
+/// JSON, keep the order of a record of strata 0.21.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Tier {
+    /// The hashes of the spec that Palette applied to the cluster.
+    Applied,
+    /// The labels of the cluster. Only `compare` gives this tier: a record holds the labels in
+    /// `labels`, and carries no tier of this name.
+    Labels,
+    /// The config of the cluster, or the config that a cluster group gives each virtual cluster.
+    Policy,
+    /// The pack version that the cluster reconciled, for each pack of a covered profile.
+    Running,
+    /// The machine pools and the cloud part of the cluster, with `snapshot --shape`.
+    Shape,
+}
+
+impl Tier {
+    /// The tier as the documents name it: `applied`, `labels`, `policy`, `running`, or `shape`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Applied => "applied",
+            Self::Labels => "labels",
+            Self::Policy => "policy",
+            Self::Running => "running",
+            Self::Shape => "shape",
+        }
+    }
+}
+
+impl fmt::Display for Tier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// One tier of a cluster record: the fields that Palette gives for it, and their hash.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterTier {
+    /// sha256 of the canonical JSON of `fields`.
+    pub hash: String,
+    /// What the tier covers, as Palette gives it.
+    pub fields: Value,
+    /// Each field that strata could not read, with why: `rbacs` and `HTTP 403: <body>`. `fields`
+    /// does not hold such a field, and `compare` and `verify` do not compare it. The errors are
+    /// not part of the hash either. A record of strata 0.19 holds the field as null.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub errors: BTreeMap<String, String>,
+}
+
+impl ClusterTier {
+    /// A tier of `fields` that strata read in full.
+    fn of(fields: Value) -> ClusterTier {
+        ClusterTier::with_errors(fields, BTreeMap::new())
+    }
+
+    /// A tier of `fields` less each field that `errors` names: a field that strata could not
+    /// read, with why.
+    ///
+    /// An error is not a value of the cluster, so the record does not hold the field, and the
+    /// hash does not cover it.
+    fn with_errors(mut fields: Value, errors: BTreeMap<String, String>) -> ClusterTier {
+        if let Some(m) = fields.as_object_mut() {
+            for key in errors.keys() {
+                m.remove(key);
+            }
+        }
+        ClusterTier {
+            hash: sha256_hex(&canonical_json(&fields)),
+            fields,
+            errors,
+        }
+    }
+}
+
+/// The tiers of a cluster record, from the raw documents in `raw`.
+///
+/// `raw` holds the document of the cluster or the cluster group. For a cluster, it also holds the
+/// role bindings, the namespaces, and the cloud config when strata read them. `covered` limits
+/// `running` to the profiles that the record covers. The record carries a tier only when Palette
+/// gives the part of the document that the tier reads.
+pub fn cluster_tiers(raw: &RawCluster, covered: &[AppliedProfile]) -> BTreeMap<Tier, ClusterTier> {
+    let cluster = &raw.cluster;
+    let mut tiers = BTreeMap::new();
+    // Palette's own hashes of the spec that it applied to the cluster
+    if let Some(apply) = cluster.pointer("/status/spcApply") {
+        tiers.insert(
+            Tier::Applied,
+            ClusterTier::of(json!({
+                "spcHash": text(apply, "/spcHash"),
+                "spcInfraHash": text(apply, "/spcInfraHash"),
+            })),
+        );
+    }
+    // the pack version that the cluster reconciled, for each pack of a covered profile
+    if cluster
+        .pointer("/status/packs")
+        .is_some_and(Value::is_array)
+    {
+        tiers.insert(Tier::Running, running_tier(cluster, covered));
+    }
+    if let Some(config) = cluster.pointer("/spec/clusterConfig") {
+        tiers.insert(
+            Tier::Policy,
+            ClusterTier::with_errors(
+                crate::snapshot::policy::fields(raw, config),
+                crate::snapshot::policy::errors(raw),
+            ),
+        );
+    }
+    // the document of a cluster group has spec.clustersConfig, and no spec.clusterConfig
+    if let Some(config) = cluster.pointer("/spec/clustersConfig") {
+        tiers.insert(
+            Tier::Policy,
+            ClusterTier::of(crate::snapshot::policy::group_fields(config)),
+        );
+    }
+    if let Some(cc) = &raw.cloud_config {
+        tiers.insert(
+            Tier::Shape,
+            ClusterTier::of(crate::snapshot::shape::fields(cluster, cc)),
+        );
+    }
+    tiers
+}
+
+fn running_tier(cluster: &Value, covered: &[AppliedProfile]) -> ClusterTier {
+    let mut running: Vec<Value> = arr(cluster, "/status/packs")
+        .iter()
+        .filter(|p| covered.iter().any(|c| c.uid == text(p, "/profileUid")))
+        .map(|p| {
+            json!({"name": text(p, "/name"), "version": text(p, "/version"), "profileUid": text(p, "/profileUid")})
+        })
+        .collect();
+    running.sort_by_key(|p| (text(p, "/profileUid"), text(p, "/name")));
+    ClusterTier::of(Value::Array(running))
+}
+
+/// The digest of each macro in `names` that `resolved` gives for one of `profiles`:
+/// `sha256:<hex>` of the value, or `unresolved` when no profile has it. `resolved` is the answer
+/// for a cluster or a cluster group, with one map for each profile.
+pub fn macro_digests(
+    resolved: &Value,
+    profiles: &[AppliedProfile],
+    names: &[String],
+) -> BTreeMap<String, String> {
+    let maps: Vec<&Value> = arr(resolved, "/profiles")
+        .iter()
+        .filter(|p| profiles.iter().any(|a| str_at(p, "/uid") == a.uid))
+        .map(|p| &p["resolved"])
+        .collect();
+    digests_in(&maps, names)
+}
+
+/// The digest of each macro in `names` that the answer for one profile version gives: its one
+/// `resolved` map, as in [`macro_digests`].
+pub(super) fn profile_macro_digests(
+    resolved: &Value,
+    names: &[String],
+) -> BTreeMap<String, String> {
+    digests_in(&[&resolved["resolved"]], names)
+}
+
+/// The digest of each macro in `names`, from the first of `maps` that gives it a text value.
+fn digests_in(maps: &[&Value], names: &[String]) -> BTreeMap<String, String> {
+    names
+        .iter()
+        .map(|name| {
+            let key = macro_placeholder(name);
+            let digest = maps
+                .iter()
+                .find_map(|m| m.get(&key).and_then(Value::as_str))
+                .map(|v| format!("sha256:{}", sha256_hex(v)))
+                .unwrap_or_else(|| "unresolved".to_string());
+            (name.clone(), digest)
+        })
+        .collect()
+}
+
+/// One change that waits for a cluster, from an open notification of Palette.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingUpdate {
+    /// The uid of the profile whose change waits.
+    pub profile_uid: String,
+    /// The name of that profile, as the cluster's copy names it.
+    pub profile: String,
+    /// What Palette says changed, such as `Manifest 'x' is updated in the pack 'x(x)'`.
+    pub message: String,
+    /// When Palette made the notification.
+    pub since: String,
+}
+
+/// The notification type of an update of a profile that waits for a cluster.
+const PROFILE_UPDATE_ACTION: &str = "NotifyActionClusterProfileUpdate";
+
+impl PendingUpdate {
+    /// The open updates in `notifications` that concern one of `covered`, oldest first, and one
+    /// line for each change a notification names. Palette marks a notification done when the
+    /// cluster's copy takes the change, whether or not the request that pushed it resolved it.
+    pub fn read(notifications: &Value, covered: &[AppliedProfile]) -> Vec<PendingUpdate> {
+        let mut out = Vec::new();
+        for n in notifications.as_array().into_iter().flatten().rev() {
+            let open = str_at(n, "/action/actionType") == PROFILE_UPDATE_ACTION
+                && n.pointer("/action/isDone").and_then(Value::as_bool) != Some(true);
+            if !open {
+                continue;
+            }
+            let events = n.pointer("/action/events").and_then(Value::as_object);
+            for e in events.into_iter().flat_map(|m| m.values()) {
+                let uid = text(e, "/profileUid");
+                let Some(p) = covered.iter().find(|p| p.uid == uid) else {
+                    continue;
+                };
+                out.push(PendingUpdate {
+                    profile_uid: uid,
+                    profile: p.name.clone(),
+                    message: text(e, "/message"),
+                    since: text(n, "/metadata/creationTimestamp"),
+                });
+            }
+        }
+        out
+    }
+}
+
+/// The value a cluster gives one profile variable.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterVariable {
+    /// Name of the profile the variable belongs to.
+    pub profile: String,
+    /// Uid of that profile.
+    pub profile_uid: String,
+    /// Variable name.
+    pub name: String,
+    /// The value; absent for a sensitive variable, which no document records, not even hashed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
+    /// True for a sensitive variable.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sensitive: bool,
+}
+
+impl ClusterVariable {
+    /// The values the cluster in `raw` gives the variables of `profiles`, in that order and then
+    /// by name.
+    pub(super) fn read(raw: &RawCluster, profiles: &[AppliedProfile]) -> Vec<ClusterVariable> {
+        let entries = raw.variables.as_array().cloned().unwrap_or_default();
+        let mut out = Vec::new();
+        for p in profiles {
+            let mut of_profile: Vec<ClusterVariable> = entries
+                .iter()
+                .filter(|e| text(e, "/profileUid") == p.uid)
+                .flat_map(|e| arr(e, "/variables"))
+                .map(|v| {
+                    let sensitive = v.get("isSensitive").and_then(Value::as_bool) == Some(true);
+                    ClusterVariable {
+                        profile: p.name.clone(),
+                        profile_uid: p.uid.clone(),
+                        name: text(v, "/name"),
+                        value: (!sensitive).then(|| text(v, "/value")),
+                        sensitive,
+                    }
+                })
+                .collect();
+            of_profile.sort_by(|a, b| a.name.cmp(&b.name));
+            out.extend(of_profile);
+        }
+        out
+    }
+}
+
+/// One cluster profile version as applied to a cluster.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct AppliedProfile {
+    /// Profile uid.
+    pub uid: String,
+    /// Profile name.
+    pub name: String,
+    /// Profile version.
+    pub version: String,
+    /// Profile type: cluster, infra, add-on, system.
+    #[serde(rename = "type")]
+    pub kind: String,
+}
+
+impl AppliedProfile {
+    /// The profiles a cluster document applies, in canonical order: the cluster or infra
+    /// profile first, then the others by name. Palette lists them in
+    /// `spec.clusterProfileTemplates` of `GET /v1/spectroclusters/{uid}` in an order that
+    /// differs between two clusters built from one definition, so that order says nothing.
+    pub fn of_cluster(doc: &Value) -> Vec<AppliedProfile> {
+        AppliedProfile::templates_of(doc)
+            .into_iter()
+            .map(|(_, applied)| applied)
+            .collect()
+    }
+
+    /// Each template of `spec.clusterProfileTemplates` with the profile it applies, in
+    /// canonical order. Two profiles of one type are by name, then by version, then by uid.
+    pub(super) fn templates_of(doc: &Value) -> Vec<(Value, AppliedProfile)> {
+        let mut pairs: Vec<(Value, AppliedProfile)> = arr(doc, "/spec/clusterProfileTemplates")
+            .iter()
+            .map(|t| (t.clone(), AppliedProfile::from_template(t)))
+            .collect();
+        pairs.sort_by(|(_, a), (_, b)| {
+            a.rank()
+                .cmp(&b.rank())
+                .then_with(|| a.name.cmp(&b.name))
+                .then_with(|| a.version.cmp(&b.version))
+                .then_with(|| a.uid.cmp(&b.uid))
+        });
+        pairs
+    }
+
+    /// The cluster or infra profile comes first: a cluster runs it before any add-on.
+    fn rank(&self) -> u8 {
+        if ProfileType::text_builds_cluster(&self.kind) {
+            0
+        } else {
+            1
+        }
+    }
+
+    fn from_template(t: &Value) -> AppliedProfile {
+        AppliedProfile {
+            uid: text(t, "/uid"),
+            name: text(t, "/name"),
+            version: text(t, "/profileVersion"),
+            kind: text(t, "/type"),
+        }
+    }
+
+    /// The template of the profile `uid` in `spec.clusterProfileTemplates` of a document: a
+    /// cluster, a cluster group, or an edge host. `None` when the document does not apply it.
+    pub(crate) fn template_of<'a>(doc: &'a Value, uid: &str) -> Option<&'a Value> {
+        arr(doc, "/spec/clusterProfileTemplates")
+            .iter()
+            .find(|t| str_at(t, "/uid") == uid)
+    }
+
+    /// The profile `uid` as the document of a cluster or a cluster group applies it, with the
+    /// version that its template names: see [`AppliedProfile::template_of`].
+    pub(crate) fn applied(doc: &Value, uid: &str) -> Option<AppliedProfile> {
+        Self::template_of(doc, uid).map(Self::from_template)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn a_document_applies_the_profile_of_a_uid_with_the_version_that_its_template_names() {
+        let doc = json!({"spec": {"clusterProfileTemplates": [
+            {"uid": "p1", "name": "lab", "profileVersion": "1.2.0", "type": "cluster",
+             "version": 3},
+            {"uid": "p2", "name": "addons", "profileVersion": "2.0.0", "type": "add-on",
+             "version": 1},
+        ]}});
+        let applied = AppliedProfile::applied(&doc, "p2").expect("the document applies p2");
+        assert_eq!(
+            (
+                applied.uid.as_str(),
+                applied.name.as_str(),
+                applied.version.as_str(),
+                applied.kind.as_str()
+            ),
+            ("p2", "addons", "2.0.0", "add-on"),
+            "the version is the profile version, not the version of the template"
+        );
+        assert_eq!(
+            AppliedProfile::template_of(&doc, "p1").map(|t| t["version"].clone()),
+            Some(json!(3))
+        );
+        assert!(AppliedProfile::applied(&doc, "p3").is_none());
+        assert!(AppliedProfile::applied(&json!({}), "p1").is_none());
+    }
+
+    #[test]
+    fn a_tier_leaves_a_field_that_strata_could_not_read_out_of_its_fields_and_its_hash() {
+        let errors = BTreeMap::from([("rbacs".to_string(), "HTTP 403: forbidden".to_string())]);
+        let unread = ClusterTier::with_errors(
+            json!({"timezone": "Etc/UTC", "rbacs": null}),
+            errors.clone(),
+        );
+        let read = ClusterTier::of(json!({"timezone": "Etc/UTC"}));
+        assert_eq!(unread.fields, read.fields);
+        assert_eq!(unread.hash, read.hash);
+        assert_eq!(unread.errors, errors);
+    }
+}

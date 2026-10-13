@@ -6,6 +6,8 @@
 //! it. From it come the registry that a name or a uid names, the name of a uid, and the provider
 //! type of an OCI registry. Also the registries that Palette does not sync, and the last sync of
 //! a registry.
+//!
+//! The state that the listing gives a pack version, such as `deleted` or `disabled`, is here too.
 
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
@@ -290,6 +292,41 @@ pub(crate) struct RegistrySyncNote {
     pub error: Option<String>,
 }
 
+/// The annotation of a pack version that a profile must not hold, with the value `true`.
+/// Spectro Cloud sets it on a version in its registries, and the version keeps no `system_state`.
+/// Palette refuses a profile that holds such a version with `DisabledPacksForbidden`, also on
+/// its validate route.
+const DISABLED_MARK: &str = "/spec/annotations/disabled";
+
+/// The state that the listing gives a pack version, and nothing for a pack in use.
+///
+/// The state is the `system_state`: `deprecated`, `disabled`, or `deleted`. It is `disabled` for
+/// a version with the [`DISABLED_MARK`] and no `system_state`.
+pub(crate) fn pack_state(summary: &Value) -> Option<String> {
+    system_state(summary)
+        .or_else(|| (str_at(summary, DISABLED_MARK) == "true").then(|| "disabled".to_string()))
+}
+
+/// The state that Spectro Cloud gives a version that it retired: `deprecated`, `disabled`, or
+/// `deleted`.
+fn system_state(summary: &Value) -> Option<String> {
+    opt_text(summary, "/spec/annotations/system_state")
+}
+
+/// True when `state` is a state of a version that Palette no longer serves: `disabled` or
+/// `deleted`. [`retired_state`] and [`PackBuild::retired`](crate::ops::PackBuild::retired) keep
+/// this one rule.
+pub(crate) fn is_retired(state: &str) -> bool {
+    matches!(state, "disabled" | "deleted")
+}
+
+/// The state of a pack version that Palette no longer serves: `disabled` or `deleted` in
+/// `system_state`. Palette serves a version with the [`DISABLED_MARK`] alone, and its validate
+/// route refuses a profile that holds it. So strata does not refuse that version itself.
+pub(crate) fn retired_state(summary: &Value) -> Option<String> {
+    system_state(summary).filter(|s| is_retired(s))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -466,5 +503,29 @@ mod tests {
                 message: "sync interrupted".into(),
             })
         );
+    }
+
+    #[test]
+    fn a_version_with_the_disabled_mark_and_no_system_state_is_disabled_and_not_retired() {
+        let marked = json!({"spec": {"annotations": {"disabled": "true"}}});
+        assert_eq!(pack_state(&marked).as_deref(), Some("disabled"));
+        assert_eq!(
+            retired_state(&marked),
+            None,
+            "Palette serves the version, and its validate route refuses the profile"
+        );
+        let deleted =
+            json!({"spec": {"annotations": {"disabled": "true", "system_state": "deleted"}}});
+        assert_eq!(pack_state(&deleted).as_deref(), Some("deleted"));
+        assert_eq!(retired_state(&deleted).as_deref(), Some("deleted"));
+        for summary in [
+            json!({"spec": {"annotations": {"disabled": "false"}}}),
+            json!({"spec": {"annotations": {"disabled": true}}}),
+            json!({"spec": {"annotations": {"system_state": ""}}}),
+            json!({"spec": {}}),
+        ] {
+            assert_eq!(pack_state(&summary), None, "{summary}");
+            assert_eq!(retired_state(&summary), None, "{summary}");
+        }
     }
 }
