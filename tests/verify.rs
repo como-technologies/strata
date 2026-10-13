@@ -283,7 +283,8 @@ fn an_option_of_snapshot_that_does_not_fit_the_ref_is_a_usage_error_before_any_r
         (
             "pack:csi-aws-ebs@1.65.0",
             &raw_dir,
-            "--raw-dir takes a profile or a cluster",
+            "--raw-dir takes a profile or a cluster: a record that strata reads from the directory \
+             does not say pending, draft, edge host, cluster group, app profile, or pack",
         ),
         (
             "tag:env=dev",
@@ -15050,9 +15051,10 @@ fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_
     assert!(!verdict.contains("INVALID"), "{verdict}");
 }
 
-/// The root and the content digest that strata 0.21.0 gives each kind of record, from the
-/// fixtures of these tests, before one function built each root. A change of a root is a change
-/// of the schema id, so no release moves one.
+/// The root and the content digest that strata 0.21.0 gives each kind of record from the
+/// fixtures of these tests.
+///
+/// A change of a root is a change of the schema id, so no release moves one.
 const ROOT_OF_EACH_KIND: [(&str, &str, &str); 8] = [
     (
         "published",
@@ -15097,7 +15099,7 @@ const ROOT_OF_EACH_KIND: [(&str, &str, &str); 8] = [
 ];
 
 #[test]
-fn one_function_builds_the_root_of_each_kind_of_record_and_no_root_moved() {
+fn the_root_of_each_kind_of_record_does_not_change_between_releases() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let a = dir.path().join("a");

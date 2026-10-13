@@ -879,7 +879,7 @@ fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
 }
 
 #[test]
-fn the_schema_names_each_value_of_each_closed_set_that_became_an_enum() {
+fn the_schema_names_each_value_of_each_closed_set_of_the_other_documents() {
     let schema = |kind: &str| -> serde_json::Value {
         let r = run(&["schema", kind]);
         assert_eq!(r.code, 0, "{}", r.err);

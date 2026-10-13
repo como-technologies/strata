@@ -45,7 +45,7 @@ pub enum Method {
 
 impl Method {
     /// The name of the method in HTTP: `GET` or `POST`.
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Get => "GET",
             Self::Post => "POST",

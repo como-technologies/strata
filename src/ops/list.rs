@@ -333,7 +333,7 @@ impl Listing {
 /// key can see. Profiles and clusters are read through `connect(options.project)`, where `None`
 /// is the configured scope. Projects are read through `connect(Some(TENANT_SCOPE))`, because in a
 /// project Palette lists only that project. The cluster listing leaves out each virtual cluster,
-/// so the clusters also come from [`Palette::virtual_cluster_search`], when the search takes
+/// so the clusters also come from [`Palette::virtual_clusters`], when the search takes
 /// `environment`. With `packs` or `pack`, each profile document is read as well; a profile that
 /// cannot be read stays in the list with its error, and a listing that cannot be read is an
 /// error.

@@ -9,8 +9,8 @@ use super::{
     AUDIT_PAGE, AUDITS, CLUSTER_GROUP_LISTING, CLUSTER_LISTING, CLUSTER_SEARCH,
     CLUSTER_SEARCH_SCHEMA, EDGE_HOST_SEARCH, PACK_LISTING_PAGE, PACKS, PROFILE_LISTING,
     PROJECT_LISTING, Palette, REGISTRIES, REGISTRY_METADATA, RegistryKind, SEARCH_ENVIRONMENT,
-    SearchedClusters, TAG_FILTER_LISTING, TAG_FILTERS, named_entries, query_value, route,
-    sorted_names, uids_named, with_limit, with_nested,
+    SEARCH_STRING, SearchedClusters, TAG_FILTER_LISTING, TAG_FILTERS, named_entries, query_value,
+    route, sorted_names, uids_named, with_limit, with_nested,
 };
 use crate::api::{AuditKind, PaletteApi};
 use crate::error::{Error, Result, served};
@@ -151,6 +151,10 @@ impl<A: PaletteApi> Palette<A> {
     /// search does not take `environment`: no condition can then ask for a virtual cluster, and
     /// the search leaves each one out. `on_search` runs before the search, when there is one, so
     /// that a caller can note it.
+    ///
+    /// # Errors
+    ///
+    /// Each error of the search.
     pub fn virtual_clusters(
         &self,
         properties: &BTreeSet<String>,
@@ -170,6 +174,10 @@ impl<A: PaletteApi> Palette<A> {
     /// [`Palette::virtual_clusters`], when the search takes `environment`. `properties` is the
     /// answer of [`Palette::cluster_search_properties`], and `on_virtual` runs before the search
     /// of the virtual clusters, when there is one.
+    ///
+    /// # Errors
+    ///
+    /// Each error of the search of the clusters, or of the search of the virtual clusters.
     pub fn cluster_search_with_virtual(
         &self,
         properties: &BTreeSet<String>,
@@ -205,7 +213,7 @@ impl<A: PaletteApi> Palette<A> {
         };
         Ok(arr(&schema, "/schema/properties")
             .iter()
-            .filter(|p| str_at(p, "/type") == "string")
+            .filter(|p| str_at(p, "/type") == SEARCH_STRING)
             .filter_map(|p| opt_text(p, "/name"))
             .collect())
     }

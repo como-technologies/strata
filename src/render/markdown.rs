@@ -1,9 +1,9 @@
 //! The pull request comment.
 
 use super::changes::{
-    OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, plain_flags,
-    traits_suffix, upstream_line, values_changed, values_summary, values_unparsed_sentence,
-    variable_lines, version_display,
+    OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, plain_flags, status_mark,
+    status_word, traits_suffix, upstream_line, values_changed, values_summary,
+    values_unparsed_sentence, variable_lines, version_display,
 };
 use super::consumers::{
     NOT_LISTED, consumer_count, consumer_counts, consumer_runs, consumers_heading,
@@ -141,11 +141,10 @@ impl Renderer for MarkdownRenderer {
         }
         o.push_str("| | layer | pack | version | change | impact |\n|---|---|---|---|---|---|\n");
         for pd in &d.packs {
-            let (mark, change) = match pd.status {
-                Status::Unchanged => (" ", "unchanged".to_string()),
-                Status::Added => ("+", "ADDED".to_string()),
-                Status::Removed => ("-", "REMOVED".to_string()),
-                Status::Changed => ("~", plain_flags(pd).replace("->", "→")),
+            let mark = status_mark(pd.status);
+            let change = match pd.status {
+                Status::Changed => plain_flags(pd).replace("->", "→"),
+                status => status_word(status).to_string(),
             };
             let change = match invalid_mark(pd) {
                 Some(m) => format!("{change} **{}**", escape(&m)),

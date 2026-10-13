@@ -25,6 +25,10 @@ use crate::term::progress::Progress;
 /// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
 const SYNC_RECOVERED: &str = "Recovered";
 
+/// The provider type of an OCI registry of packs, in `spec.providerType`. Palette syncs each
+/// such registry.
+const PACK_PROVIDER: &str = "pack";
+
 /// The registry listings of one command, each read one time, when a check first needs it.
 pub(crate) struct Registries<'a, A: PaletteApi> {
     palette: &'a Palette<A>,
@@ -173,7 +177,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
                 };
                 // Palette syncs each OCI registry of the provider type pack
                 let provider = opt_text(reg, "/spec/providerType");
-                let syncs = provider.as_deref() == Some("pack")
+                let syncs = provider.as_deref() == Some(PACK_PROVIDER)
                     || reg
                         .pointer("/status/sync/isSyncSupported")
                         .and_then(Value::as_bool)

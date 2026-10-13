@@ -190,7 +190,7 @@ impl PaletteValidation {
 
 impl ProfileValidation {
     /// The answer with these errors, sorted and with no copy. It accepts when there is none.
-    pub fn refused(mut errors: Vec<PaletteRefusal>) -> ProfileValidation {
+    pub(crate) fn refused(mut errors: Vec<PaletteRefusal>) -> ProfileValidation {
         errors.sort();
         errors.dedup();
         ProfileValidation { errors }

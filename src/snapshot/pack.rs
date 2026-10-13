@@ -198,7 +198,7 @@ pub enum UpstreamSource {
 
 impl UpstreamSource {
     /// The source as the documents name it: `packRef.digest`, `packSummary.digest`, or `none`.
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::PackRef => "packRef.digest",
             Self::PackSummary => "packSummary.digest",

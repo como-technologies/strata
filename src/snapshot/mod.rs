@@ -58,7 +58,7 @@ pub enum Template {
 impl Template {
     /// The template as the documents name it: `published`, `draft`, `applied`, `candidate`, or
     /// `registry`.
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Published => "published",
             Self::Draft => "draft",
@@ -152,7 +152,7 @@ pub enum Implementation {
 
 impl Implementation {
     /// The implementation as the documents name it: `rust` or `bash`.
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Rust => "rust",
             Self::Bash => "bash",
@@ -601,7 +601,7 @@ pub(crate) fn load_document<T: DeserializeOwned>(
     schema: &'static str,
     not_one: impl FnOnce() -> Error,
 ) -> Result<T> {
-    let text = crate::ops::read_file(path)?;
+    let text = crate::file::read_file(path)?;
     let Ok(v) = serde_json::from_str::<Value>(&text) else {
         return Err(not_one());
     };

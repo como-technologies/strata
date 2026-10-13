@@ -38,8 +38,7 @@ pub(crate) fn document_name<T: Serialize>(value: &T) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diff::impact::ImpactLevel;
-    use crate::diff::{Op, Status};
+    use crate::diff::{ImpactLevel, Op, Status};
     use crate::ops::{PairStatus, Policy, RecordStatus};
     use schemars::JsonSchema;
 

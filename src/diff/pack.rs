@@ -62,7 +62,7 @@ pub enum ChangeFlag {
 
 impl ChangeFlag {
     /// The name of the flag: `IDENTITY`, `UPSTREAM`, `AUTHORED`, `IMAGES`, or `CHARTS`.
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Identity => "IDENTITY",
             Self::Upstream => "UPSTREAM",

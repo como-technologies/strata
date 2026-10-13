@@ -37,7 +37,7 @@ impl Layer {
 
     /// The layer as Palette names it: `kernel`, `os`, `k8s`, `cni`, `csi`, or `addon`. `other`
     /// for a name strata does not know.
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Layer::Kernel => "kernel",
             Layer::Os => "os",

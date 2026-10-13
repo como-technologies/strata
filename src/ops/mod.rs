@@ -38,6 +38,9 @@ pub use same_release::*;
 pub use validate::*;
 pub use verify::*;
 
+// the command line writes each record through this public path
+pub use crate::file::write_file;
+
 /// What `snapshot` records beyond the content of a ref, and what it asks Palette about it.
 ///
 /// Each option fits some kinds of ref. [`snapshot_for`] refuses the others with `Usage`, before
@@ -50,9 +53,10 @@ pub struct SnapshotOptions {
     /// `--shape`: for a cluster, record the shape tier, the machine pools, and the cloud part,
     /// with one more request.
     pub shape: bool,
-    /// `--raw-dir`: also save the raw answers of Palette in this directory. It takes a profile
-    /// version or a cluster: a record read back from the directory does not say pending, draft,
-    /// edge host, cluster group, app profile, or pack.
+    /// `--raw-dir`: also save the raw answers of Palette in this directory.
+    ///
+    /// It takes a profile version or a cluster. A record that strata reads from the directory
+    /// does not say pending, draft, edge host, cluster group, app profile, or pack.
     pub raw_dir: Option<PathBuf>,
     /// `--validate`: ask Palette whether it takes the profile version, as [`profile_validation`]
     /// does. `source.paletteValidation` of the record holds the answer, and the caller decides
@@ -102,8 +106,9 @@ impl SnapshotOptions {
             )
         {
             return usage(
-                "--raw-dir takes a profile or a cluster: a record read back from the directory \
-                 does not say pending, draft, edge host, cluster group, or app profile"
+                "--raw-dir takes a profile or a cluster: a record that strata reads from the \
+                 directory does not say pending, draft, edge host, cluster group, app profile, \
+                 or pack"
                     .to_string(),
             );
         }
@@ -490,31 +495,6 @@ pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Resul
         .clone()
         .unwrap_or_else(|| fetched_at.to_string());
     Ok(Snapshot::from_raw(&raw, reference, fetched_at)?.with_project(raw.project_uid.as_deref()))
-}
-
-/// Write `text` to `path`, creating the directory it names when that directory does not exist.
-/// Every file strata writes goes through here, so `-o releases/1.2.0/dev.json` needs no `mkdir`.
-pub fn write_file(path: &Path, text: &str) -> Result<()> {
-    let io = |source| Error::Io {
-        path: path.to_path_buf(),
-        source,
-    };
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(io)?;
-    }
-    std::fs::write(path, text).map_err(io)
-}
-
-/// Read the text of the file at `path`. Every text file strata reads goes through here.
-///
-/// # Errors
-///
-/// `Io`, with `path`, when the file cannot be read.
-pub fn read_file(path: &Path) -> Result<String> {
-    std::fs::read_to_string(path).map_err(|source| Error::Io {
-        path: path.to_path_buf(),
-        source,
-    })
 }
 
 /// Compare two snapshots.

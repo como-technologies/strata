@@ -134,7 +134,7 @@ pub enum Tier {
 
 impl Tier {
     /// The tier as the documents name it: `applied`, `labels`, `policy`, `running`, or `shape`.
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Applied => "applied",
             Self::Labels => "labels",

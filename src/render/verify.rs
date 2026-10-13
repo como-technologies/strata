@@ -6,8 +6,7 @@ use super::notes::{
 };
 use super::same_release::record_word;
 use super::{count_of, entry_error, registry_sync_suffix};
-use crate::diff::impact::ImpactLevel;
-use crate::diff::{Diff, Verify, VerifyStatus};
+use crate::diff::{Diff, ImpactLevel, Verify, VerifyStatus};
 use crate::ops::{
     ACTIVE_STATE, IN_USE_STATE, RUNNING_STATE, RecordStatus, VerifiedRecord, VerifySummary,
 };
@@ -183,6 +182,8 @@ pub(crate) fn verdict_parts(
 ) -> VerdictParts {
     let at = recorded.fetched_at.as_str();
     let case = verdict_case(v, same);
+    // verdict_case picks a case only when the value of that case is there, so no default of
+    // this match shows
     let sentence = match case {
         VerdictCase::Unchanged => unchanged_sentence(recorded.is_draft(), at),
         VerdictCase::Unverified => format!(
@@ -351,6 +352,7 @@ fn record_sentence(r: &VerifiedRecord) -> String {
             let impact = match parts.case {
                 VerdictCase::RootMoved => format!(
                     "; max impact {}, {} changed{}",
+                    // verify_many gives each record that changed its max impact
                     r.max_impact.map(ImpactLevel::as_str).unwrap_or_default(),
                     count_of(r.packs_changed.unwrap_or(0), "pack"),
                     // Palette keeps the order of the packs, so two orders are two roots: a

@@ -36,6 +36,10 @@ pub const UNKNOWN_STATE: &str = "unknown";
 /// The state of a cluster that runs, as Palette gives it in `status.state`.
 pub(crate) const RUNNING_STATE: &str = "Running";
 
+/// The state of a deleted cluster, as Palette gives it in `status.state`. Palette keeps the
+/// document of such a cluster.
+pub(crate) const DELETED_STATE: &str = "Deleted";
+
 /// The state of an edge host that a cluster uses, as Palette gives it in `status.state`.
 pub(crate) const IN_USE_STATE: &str = "in-use";
 
@@ -62,7 +66,7 @@ pub enum ConsumerKind {
 
 impl ConsumerKind {
     /// The noun that names the kind in a report.
-    pub fn noun(self) -> &'static str {
+    pub(crate) fn noun(self) -> &'static str {
         match self {
             Self::Cluster => "cluster",
             Self::EdgeHost => "edge host",
@@ -419,6 +423,8 @@ where
     let mut list = Vec::with_capacity(uids.len());
     for cluster in uids {
         let known = named.iter().find(|n| text(n, "/uid") == cluster);
+        // a uid that `inUseClusters` does not name has no name and no project here: the read of
+        // its document gives them
         let mut c = Consumer::unread(
             ConsumerKind::Cluster,
             cluster,
@@ -430,6 +436,7 @@ where
         match doc {
             Ok(d) => {
                 c.fill_from_document(&d);
+                // a cluster that does not run the profile now has no version of it
                 c.version = AppliedProfile::applied(&d, &uid)
                     .map(|p| p.version)
                     .unwrap_or_default();

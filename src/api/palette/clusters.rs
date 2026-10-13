@@ -56,9 +56,16 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// The document of the cluster, edge host, or cluster group with the uid `uid`, and no
-    /// other: `GET /v1/spectroclusters/{uid}`, `GET /v1/edgehosts/{uid}`, or `GET
-    /// /v1/clustergroups/{uid}`. A 404 is an error, and no name is tried. Palette keeps the
-    /// document of a deleted cluster, with the state `Deleted`.
+    /// other.
+    ///
+    /// The routes are `GET /v1/spectroclusters/{uid}`, `GET /v1/edgehosts/{uid}`, and `GET
+    /// /v1/clustergroups/{uid}`. Strata tries no name after a 404. Palette keeps the document of
+    /// a deleted cluster, with the state `Deleted`.
+    ///
+    /// # Errors
+    ///
+    /// Each error of the request, also [`Error::Api`] with HTTP 404 when Palette has no object
+    /// with the uid `uid`.
     pub fn subject_document(&self, kind: SubjectKind, uid: &str) -> Result<Value> {
         self.api.get_json(&route(collection(kind), &[uid]))
     }

@@ -136,7 +136,7 @@ pub fn write(candidate: &Candidate, path: &Path, files_dir: Option<&Path>) -> Re
             let pack = file_name(&layer.name);
             if let Some(values) = layer.values.take() {
                 let file = dir.join("values").join(format!("{pack}.yaml"));
-                crate::ops::write_file(&file, &values)?;
+                crate::file::write_file(&file, &values)?;
                 layer.values_file = Some(reference(&base, &file)?);
             }
             for m in &mut layer.manifests {
@@ -145,13 +145,13 @@ pub fn write(candidate: &Candidate, path: &Path, files_dir: Option<&Path>) -> Re
                         .join("manifests")
                         .join(&pack)
                         .join(format!("{}.yaml", file_name(&m.name)));
-                    crate::ops::write_file(&file, &content)?;
+                    crate::file::write_file(&file, &content)?;
                     m.content_file = Some(reference(&base, &file)?);
                 }
             }
         }
     }
-    crate::ops::write_file(path, &to_yaml(&c)?)
+    crate::file::write_file(path, &to_yaml(&c)?)
 }
 
 /// A name made safe as one path segment.

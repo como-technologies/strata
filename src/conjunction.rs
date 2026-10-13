@@ -19,7 +19,7 @@ pub enum Conjunction {
 
 impl Conjunction {
     /// The conjunction as Palette names it: `and` or `or`.
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::And => "and",
             Self::Or => "or",

@@ -40,6 +40,9 @@ pub(crate) const SEARCH_TAGS: &str = "tags";
 pub(crate) const SEARCH_ENVIRONMENT: &str = "environment";
 /// The property of the cluster search that takes the name of a profile that a cluster runs.
 pub(crate) const SEARCH_CLUSTER_PROFILES: &str = "clusterProfiles";
+/// The type of a property of the cluster search that takes text, in the schema of the search and
+/// in a condition.
+const SEARCH_STRING: &str = "string";
 const TAG_FILTER_LISTING: &str = "/v1/filters/metadata?filterType=tag";
 /// The most entries that Palette serves on one page of the audit log. A larger `limit` answers
 /// `500` with the code `InvalidLimit`. The API reference gives 50, but Palette serves 100.
@@ -196,8 +199,8 @@ fn sorted_names(entries: &[(String, String)]) -> Vec<String> {
 /// With `negation`, it equals none of them.
 pub(crate) fn search_condition(property: &str, values: &[String], negation: bool) -> Value {
     serde_json::json!({
-        "property": property, "type": "string",
-        "condition": {"string": {"operator": "eq", "negation": negation, "ignoreCase": false,
+        "property": property, "type": SEARCH_STRING,
+        "condition": {SEARCH_STRING: {"operator": "eq", "negation": negation, "ignoreCase": false,
             "match": {"conjunction": Conjunction::Or, "values": values}}},
     })
 }
@@ -435,10 +438,12 @@ impl ConfigPart {
 }
 
 /// Put the copies that a holder keeps of its manifests in place of the manifests of its
-/// profiles. Palette gives an edge host and a cluster group a copy of each manifest under a
-/// uid of its own, and the template of the holder names each copy by that uid, with no
-/// content. An edit of the profile does not reach the copy. `read_copy` reads one copy. Its
-/// arguments are the uid of the profile, the name of the pack, and the uid of the copy.
+/// profiles.
+///
+/// Palette gives an edge host and a cluster group a copy of each manifest, with a uid of its
+/// own. The template of the holder names each copy by that uid, with no content. An edit of the
+/// profile does not reach the copy. `read_copy` reads one copy. Its arguments are the uid of the
+/// profile, the name of the pack, and the uid of the copy.
 fn own_manifests(
     templates: &[Value],
     read_copy: impl Fn(&str, &str, &str) -> Result<Value>,
@@ -455,6 +460,10 @@ fn own_manifests(
             }
             let mut own = Vec::with_capacity(refs.len());
             for m in refs {
+                // Palette makes the entry of the template from the copy: the name and the uid of
+                // the entry are the name and the uid of the copy. No route renames a copy, and a
+                // rename in the profile reaches neither. So the name of the entry is the name of
+                // the copy, which release 0.21 recorded.
                 let got = read_copy(puid, name, str_at(m, "/uid"))?;
                 own.push(manifest_of(&got, m, Template::Published));
             }

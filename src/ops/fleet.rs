@@ -118,7 +118,7 @@ pub struct SavedFilter {
 
 impl SavedFilter {
     /// The `filter:<name>` ref that selects the clusters of the filter.
-    pub fn reference(&self) -> String {
+    pub(crate) fn reference(&self) -> String {
         Ref::ClusterSet {
             tags: Vec::new(),
             filter: Some(self.name.clone()),
@@ -465,7 +465,7 @@ where
             progress,
         )
         .and_then(|snap| {
-            super::write_file(&path, &snap.to_json(false)?)?;
+            crate::file::write_file(&path, &snap.to_json(false)?)?;
             Ok(snap)
         });
         match snap {

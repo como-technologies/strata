@@ -11,6 +11,29 @@ use crate::diff::{
 use crate::legend::document_name;
 use crate::term::color::Paint;
 
+/// The mark of a pack in a comparison, as the text reports print it: `+` for a pack only in B,
+/// `-` for a pack only in A, `~` for a change, and a space for no change.
+pub(crate) fn status_mark(status: Status) -> &'static str {
+    match status {
+        Status::Unchanged => " ",
+        Status::Changed => "~",
+        Status::Added => "+",
+        Status::Removed => "-",
+    }
+}
+
+/// The word of a pack in a comparison, as the text reports print it.
+///
+/// The line of a changed pack names its change flags, and not this word.
+pub(crate) fn status_word(status: Status) -> &'static str {
+    match status {
+        Status::Unchanged => "unchanged",
+        Status::Changed => "CHANGED",
+        Status::Added => "ADDED",
+        Status::Removed => "REMOVED",
+    }
+}
+
 /// One line of a diff of values: a leaf, or a value that a cluster gives a variable.
 ///
 /// It holds the path and the two sides as the reports show them.

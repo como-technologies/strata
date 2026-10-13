@@ -181,7 +181,7 @@ impl ValidateRoute {
     /// [`PACK_MACRO_UNDEFINED_CODE`] with HTTP 404. The API schema checks the body of the profile
     /// routes first. It refuses a list with two equal items with HTTP 422 and a number as the
     /// code.
-    pub fn refuses(self, status: u16, code: &str) -> bool {
+    pub(crate) fn refuses(self, status: u16, code: &str) -> bool {
         match (self, status) {
             (_, 500) => self.refusal_codes().any(|c| c == code),
             (ValidateRoute::ClusterPacks, 403) => code == PACK_FORBIDDEN_CODE,

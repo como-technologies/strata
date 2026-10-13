@@ -144,7 +144,7 @@ fn read_optional<T: DeserializeOwned>(dir: &Path, name: &str) -> Result<Option<T
 /// Read one JSON file from `dir`; an empty file is an error of its own.
 fn read_json_file<T: DeserializeOwned>(dir: &Path, name: &str) -> Result<T> {
     let path = dir.join(name);
-    let text = crate::ops::read_file(&path)?;
+    let text = crate::file::read_file(&path)?;
     if text.trim().is_empty() {
         return Err(Error::EmptyFile(path));
     }
