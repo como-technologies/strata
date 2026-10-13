@@ -26,23 +26,26 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/cloud.rs` | The cloud types of Palette, and the rule for a pack that supports a cloud. |
 | `src/pack_type.rs`, `src/profile_type.rs`, `src/scope.rs`, `src/conjunction.rs` | The closed sets of a document: the type of a pack, the type of a profile, the scope of a profile version, and how the conditions of a search join. Each is one enum, with its `parse` and its `as_str`. |
 | `src/legend.rs` | The legend of a document: the meaning of each value of a closed set, by its name in the documents. |
-| `src/diff/` | The comparison of two snapshots: the document and `compute` in `mod.rs`, the leaf comparison in `leaf.rs`, the packs in `pack.rs`, the variables in `variables.rs`, the cluster records in `cluster.rs`, and the verify report in `verify.rs`. `impact.rs` holds the impact of a change to a pack: the rules table and its levels. |
+| `src/diff/` | The comparison of two snapshots. `mod.rs` holds the document and `compute`, and `leaf.rs` the comparison of a leaf. `pack.rs` compares the packs, `variables.rs` the variables, and `cluster.rs` the cluster records. `verify.rs` holds the verify report. `impact.rs` holds the impact of a change to a pack: the rules table and its levels. |
 | `src/validation.rs` | The answer of Palette to a validate route, which a record and a comparison share. |
 | `src/repave.rs` | The reasons of Palette for a repave, and a repave that waits for approval. |
 | `src/cluster_template.rs` | The cluster templates of Palette, which link profile versions to clusters. |
-| `src/render/` | The output: `terminal/`, `markdown.rs`, and `json.rs`. A line that two renderers show is in the module of its command (`list.rs`, `behind.rs`, `consumers.rs`, `same_release.rs`, and `verify.rs`), in `notes.rs` for the notes of a comparison, in `changes.rs` for the lines of a change, or in `mod.rs`. `unified.rs` holds the unified diffs of `--full`. |
-| `src/candidate/` | The candidate file: the format in `mod.rs`, the check of the file in `rules.rs`, the resolve of each layer in `resolve.rs`, the versions of a pack in the registries in `pack.rs`, and the options of a pack template in `presets.rs`. `export.rs` reads the profile export of Palette as a candidate, and `gaps.rs` holds the rules that only the create of a profile version checks. |
+| `src/render/` | The output: `terminal/`, `markdown.rs`, and `json.rs`. `terminal/lines.rs` paints the lines of a change for the terminal. `terminal/table.rs` holds the tables of the terminal: the width of each column, and the cells that match a query. A line that two renderers show is in the module of its command: `list.rs`, `behind.rs`, `consumers.rs`, `same_release.rs`, or `verify.rs`. Other shared lines are in `notes.rs` for the notes of a comparison, in `changes.rs` for the lines of a change, or in `mod.rs`. `unified.rs` holds the unified diffs of `--full`. |
+| `src/candidate/` | The candidate file. `mod.rs` holds the format, `rules.rs` the check of the file, and `resolve.rs` the resolve of each layer. `pack.rs` finds the versions of a pack in the registries, and `presets.rs` holds the options of a pack template. `export.rs` reads the profile export of Palette as a candidate, and `gaps.rs` holds the rules that only the create of a profile version checks. |
 | `src/registry.rs` | The registries of Palette: the listings, read one time for each command. The registry that a name or a uid names, the last sync of a registry, and the state that the listing gives a pack version. |
 | `src/json.rs` | The reads of a document of Palette: text, arrays, the items of a listing, and the first text that is not empty. Each module reads a document with them. |
 | `src/text.rs` | The texts that a message builds from a list of names, such as `a, b, and c`. |
 | `src/config.rs`, `src/error/` | The settings, and the error kinds with their exit codes. `error/class.rs` holds the class of a failure for a retry, and `error/json.rs` the JSON of an error. |
 | `src/term/` | The terminal: the color decision in `color.rs`, and the progress notes on standard error in `progress.rs`. |
-| `src/content/` | The content that the hashes read: the canonical form in `canon.rs`, the layers of Palette in `layer.rs`, and the content digest and the root of a record in `hash.rs`. |
+| `src/content/` | The content that the hashes read. `canon.rs` holds the canonical form, and `layer.rs` the layers of Palette. `hash.rs` holds the content digest and the root of a record. |
 | `src/reference/` | What a ref means. `version.rs` holds the version order. |
 | `xtask/` | The development tools: the stand-in for the Palette API (`palette.rs`), the tenant of each chapter of the book (`tenant.rs`, `chapters.rs`), and the runner that writes `docs/src/output/` (`book.rs`). |
 | `tests/` | The tests of the crate, in one crate: `main.rs` names each file as a module, and `common/mod.rs` holds each helper that two files use. `cargo test verify::` runs the tests of `verify.rs`. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
 | `preflight/` | `strata-preflight`, a package of its own in the workspace: the rule format (`rule.rs`), the catalog (`catalog.rs`, `rules/*.yaml`), the jq engine (`jq.rs`), the world (`world.rs`), the checks (`probe.rs`), the run and the watch (`run.rs`), the confidence and the ledger (`confidence.rs`, `evidence/runs.yaml`), the report (`report.rs`, `html.rs`), and the fixtures of its tests (`fixture.rs`, `rules/fixtures/`). See [How preflight works](../internals/preflight.md). |
+
+`api/palette/tests.rs`, `candidate/tests.rs`, and `error/tests.rs` hold the unit
+tests of their directory.
 
 A new read of Palette goes in `api/palette/`. A new command gets a module in
 `ops/`. A new field of a record goes in `snapshot/`, outside the root unless it
