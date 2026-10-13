@@ -15,9 +15,10 @@ use crate::diff::{
 };
 use crate::error::{Error, Result, found};
 use crate::json::{is_zero, opt_text, str_at, text};
+use crate::legend::{Described, legend};
 use crate::progress::Progress;
 use crate::registry::Registries;
-use crate::snapshot::{APP_KIND, Snapshot, SubjectKind, Tier, Tool};
+use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
 
 use super::consumers::{ACTIVE_STATE, INACTIVE_STATE};
 use super::scope_of;
@@ -166,7 +167,7 @@ fn audit_kind(recorded: &Snapshot) -> Option<AuditKind> {
             SubjectKind::EdgeHost => Some(AuditKind::EdgeHost),
             SubjectKind::ClusterGroup => Some(AuditKind::ClusterGroup),
         },
-        None if recorded.source.kind == APP_KIND => Some(AuditKind::AppProfile),
+        None if recorded.source.is_app() => Some(AuditKind::AppProfile),
         None => Some(AuditKind::ClusterProfile),
     }
 }
@@ -238,11 +239,7 @@ pub fn verify_with<A: PaletteApi>(
         )?;
         let live = live.with_project(palette.project_uid());
         // the verdict states the copy of the registry in Palette, so it says how old that copy is
-        let pack_type = live
-            .packs
-            .first()
-            .map(|k| k.kind.as_str())
-            .unwrap_or_default();
+        let pack_type = live.packs.first().and_then(Pack::pack_type);
         // the sync is a note beside the verdict: a failed read of it is named, and the verdict
         // stands
         let sync = Registries::new(palette).sync_note(&p.registry_uid, pack_type, progress)?;
@@ -313,7 +310,7 @@ pub fn verify_with<A: PaletteApi>(
                 live_holder(recorded, c, uid, doc, palette, checked_at, progress)?
             }
         }
-        None if recorded.source.kind == APP_KIND => {
+        None if recorded.source.is_app() => {
             match found(palette.fetch_app_profile(uid, progress))? {
                 Some(raw) => {
                     last_modified = opt_text(&raw.profile, "/metadata/lastModifiedTimestamp");
@@ -452,18 +449,47 @@ pub fn verify_with<A: PaletteApi>(
 /// Schema id of the document `verify` writes for several records.
 pub const VERIFY_SUMMARY_SCHEMA: &str = "strata-verify-summary/1";
 
-/// The outcome for one record.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// The outcome for one record, and the outcome over every record of a run: the worst of them,
+/// which is also the exit status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum RecordStatus {
-    /// Same root as the live profile.
+    /// Same root as the live profile. Over a run: every record is unchanged, exit 0.
+    #[default]
     Unchanged,
-    /// The live profile differs from the record.
+    /// The live profile differs from the record. Over a run: at least one record drifted and
+    /// none failed, exit 1.
     Drifted,
     /// Same content, and a pack has no upstream digest: a change of its archive does not show.
+    /// Over a run: no record drifted or failed, and at least one is unverified, exit 1.
     Unverified,
-    /// The record could not be checked.
+    /// The record could not be checked. Over a run: at least one record could not be checked,
+    /// exit 2.
     Error,
+}
+
+impl Described for RecordStatus {
+    const ALL: &'static [Self] = &[
+        Self::Unchanged,
+        Self::Drifted,
+        Self::Unverified,
+        Self::Error,
+    ];
+
+    fn describe(self) -> &'static str {
+        match self {
+            Self::Unchanged => "The live profile has the same root as the record.",
+            Self::Drifted => {
+                "The live profile differs from the record: the published version was edited in place, or the record is stale. The diff is attached."
+            }
+            Self::Unverified => {
+                "The live profile has the same content as the record, and a pack has no upstream digest, so a change of its archive does not show. The diff names the packs. --allow-no-digest accepts them."
+            }
+            Self::Error => {
+                "The record could not be checked: the file is not a record, or Palette could not be reached. The error is attached."
+            }
+        }
+    }
 }
 
 impl From<VerifyStatus> for RecordStatus {
@@ -477,21 +503,6 @@ impl From<VerifyStatus> for RecordStatus {
             VerifyStatus::Unverified => Self::Unverified,
         }
     }
-}
-
-/// The outcome over every record; also the exit status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum SummaryStatus {
-    /// Every record is unchanged: exit 0.
-    #[default]
-    Unchanged,
-    /// At least one record drifted and none failed: exit 1.
-    Drifted,
-    /// No record drifted or failed, and at least one is unverified: exit 1.
-    Unverified,
-    /// At least one record could not be checked: exit 2.
-    Error,
 }
 
 /// Plain-language meaning of each record status.
@@ -519,7 +530,7 @@ pub struct VerifyCounts {
     pub unverified: usize,
     /// `error` if any record failed, else `drifted` if any drifted, else `unverified` if any is,
     /// else `unchanged`.
-    pub status: SummaryStatus,
+    pub status: RecordStatus,
 }
 
 /// One record checked against its live profile.
@@ -626,9 +637,9 @@ impl VerifySummary {
     /// The exit status: 0 all unchanged, 1 any drift or any unverified record, 2 any error.
     pub fn exit_code(&self) -> u8 {
         match self.summary.status {
-            SummaryStatus::Unchanged => 0,
-            SummaryStatus::Drifted | SummaryStatus::Unverified => 1,
-            SummaryStatus::Error => 2,
+            RecordStatus::Unchanged => 0,
+            RecordStatus::Drifted | RecordStatus::Unverified => 1,
+            RecordStatus::Error => 2,
         }
     }
 }
@@ -711,28 +722,20 @@ where
         count(RecordStatus::Error),
     );
     let status = if errors > 0 {
-        SummaryStatus::Error
+        RecordStatus::Error
     } else if drifted > 0 {
-        SummaryStatus::Drifted
+        RecordStatus::Drifted
     } else if unverified > 0 {
-        SummaryStatus::Unverified
+        RecordStatus::Unverified
     } else {
-        SummaryStatus::Unchanged
+        RecordStatus::Unchanged
     };
     VerifySummary {
         schema: VERIFY_SUMMARY_SCHEMA.to_string(),
         tool: Tool::current(),
         generated_at: checked_at.to_string(),
         legend: VerifyLegend {
-            status: [
-                ("unchanged", "The live profile has the same root as the record."),
-                ("drifted", "The live profile differs from the record: the published version was edited in place, or the record is stale. The diff is attached."),
-                ("unverified", "The live profile has the same content as the record, and a pack has no upstream digest, so a change of its archive does not show. The diff names the packs. --allow-no-digest accepts them."),
-                ("error", "The record could not be checked: the file is not a record, or Palette could not be reached. The error is attached."),
-            ]
-            .into_iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect(),
+            status: legend::<RecordStatus>(),
         },
         summary: VerifyCounts {
             records: records.len(),

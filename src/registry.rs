@@ -16,6 +16,7 @@ use crate::api::{Palette, PaletteApi, RegistryKind};
 use crate::diff::{RegistrySync, SyncRecovery};
 use crate::error::{Error, Result, unread_reason};
 use crate::json::{opt_text, str_at, take_items, text};
+use crate::pack_type::PackType;
 use crate::progress::Progress;
 
 /// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
@@ -190,10 +191,15 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     /// `status.sync` of the registry in the summary listing of its kind. The type `spectro` reads
     /// `GET /v1/registries/pack/summary`, and `helm` and `oci` read the same route under their
     /// own kind. A summary listing gives the sync as Palette stores it. `None` for a registry
-    /// that does not sync, and for another pack type. Also `None` for a registry that the listing
-    /// does not have, and when Palette answers the listing with a 4xx.
-    pub(crate) fn sync(&mut self, uid: &str, pack_type: &str) -> Result<Option<RegistrySync>> {
-        let Some(kind) = RegistryKind::of_pack_type(pack_type) else {
+    /// that does not sync, for a manifest pack, and for a type that is no pack type: `pack_type`
+    /// is then `None`. Also `None` for a registry that the listing does not have, and when
+    /// Palette answers the listing with a 4xx.
+    pub(crate) fn sync(
+        &mut self,
+        uid: &str,
+        pack_type: Option<PackType>,
+    ) -> Result<Option<RegistrySync>> {
+        let Some(kind) = pack_type.and_then(RegistryKind::of_pack_type) else {
             return Ok(None);
         };
         let Some(entries) = self.summary(kind)? else {
@@ -236,7 +242,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     pub(crate) fn sync_note(
         &mut self,
         uid: &str,
-        pack_type: &str,
+        pack_type: Option<PackType>,
         progress: &Progress,
     ) -> Result<RegistrySyncNote> {
         match self.sync(uid, pack_type) {
@@ -403,23 +409,31 @@ mod tests {
         let palette = Palette::new(api);
         let mut registries = Registries::new(&palette);
         for (uid, pack_type) in [
-            ("reg-pack", "spectro"),
-            ("reg-helm", "helm"),
-            ("reg-oci", "oci"),
+            ("reg-pack", PackType::Spectro),
+            ("reg-helm", PackType::Helm),
+            ("reg-oci", PackType::Oci),
         ] {
-            let sync = registries.sync(uid, pack_type).unwrap().unwrap();
+            let sync = registries.sync(uid, Some(pack_type)).unwrap().unwrap();
             assert_eq!(sync.last_synced_time, "2026-09-30T00:00:11.000Z");
             // a recovery that is Recovered is no recovery that waits
             assert_eq!(sync.sync_recovery, None);
         }
-        // a manifest pack has no registry; the listing of the kind does not have the registry
-        assert!(registries.sync("reg-oci", "manifest").unwrap().is_none());
-        assert!(registries.sync("reg-pack", "oci").unwrap().is_none());
+        // a manifest pack has no registry, and a tier type is no pack type; the listing of the
+        // kind does not have the registry
+        for pack_type in [Some(PackType::Manifest), None] {
+            assert!(registries.sync("reg-oci", pack_type).unwrap().is_none());
+        }
+        assert!(
+            registries
+                .sync("reg-pack", Some(PackType::Oci))
+                .unwrap()
+                .is_none()
+        );
         // Palette answers no listing
         let none = Palette::new(MemoryApi::new());
         assert!(
             Registries::new(&none)
-                .sync("reg-oci", "oci")
+                .sync("reg-oci", Some(PackType::Oci))
                 .unwrap()
                 .is_none()
         );
@@ -439,7 +453,7 @@ mod tests {
             ),
         ));
         let sync = Registries::new(&never)
-            .sync("reg-helm", "helm")
+            .sync("reg-helm", Some(PackType::Helm))
             .unwrap()
             .unwrap();
         assert_eq!(sync.last_synced_time, "");

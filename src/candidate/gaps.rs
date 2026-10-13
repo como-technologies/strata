@@ -6,8 +6,11 @@
 //! rule before the create, strata removes its check. The book lists each rule in "The gaps that
 //! strata fills".
 
-use super::{Candidate, CandidateLayer, MANIFEST, MANIFEST_LAYER, PACK_TYPE, loose_semver};
+use super::{Candidate, CandidateLayer, MINTED_LAYER, loose_semver};
 use crate::cloud::{Cloud, supports};
+use crate::layer::Layer;
+use crate::pack_type::PackType;
+use crate::profile_type::ProfileType;
 use crate::text::and_list;
 
 /// What strata says after each refusal of this module.
@@ -45,25 +48,38 @@ impl CreateRule {
     }
 }
 
+/// The layers of an `infra` profile.
+const INFRA_LAYERS: [Layer; 4] = [Layer::Os, Layer::K8s, Layer::Cni, Layer::Csi];
+
+/// The layers of an `add-on` profile, and of each type that is not `cluster` or `infra`.
+const ADDON_LAYERS: [Layer; 3] = [Layer::Addon, Layer::Cni, Layer::Csi];
+
+/// The core layers of a profile on the cloud `edge-native`.
+const EDGE_CORE_LAYERS: [Layer; 3] = [Layer::Os, Layer::K8s, Layer::Cni];
+
 /// The layers that a profile of type `kind` takes, or None for each layer.
 ///
 /// `cluster` takes each layer. `infra` takes `os`, `k8s`, `cni`, and `csi`. Each other type takes
-/// `addon`, `cni`, and `csi`.
-fn layers_of_type(kind: &str) -> Option<&'static [&'static str]> {
-    match kind {
-        "" | "cluster" | PACK_TYPE => None,
-        "infra" => Some(&["os", "k8s", "cni", "csi"]),
-        _ => Some(&["addon", "cni", "csi"]),
+/// `addon`, `cni`, and `csi`. A candidate with no type takes each layer too: the create of
+/// Palette refuses it before the layers count.
+fn layers_of_type(kind: &str) -> Option<&'static [Layer]> {
+    match ProfileType::parse(kind) {
+        Some(ProfileType::Cluster | ProfileType::Pack) => None,
+        None if kind.is_empty() => None,
+        Some(ProfileType::Infra) => Some(&INFRA_LAYERS),
+        _ => Some(&ADDON_LAYERS),
     }
 }
 
 /// The layers that a `cluster` or `infra` profile must have: `os`, `k8s`, and `cni` on the cloud
 /// `edge-native`, and `csi` too on each other cloud. None for each other type.
-fn core_layers(kind: &str, cloud: &str) -> Option<&'static [&'static str]> {
-    match (kind, Cloud::of(cloud)) {
-        ("cluster" | "infra", Cloud::EdgeNative) => Some(&["os", "k8s", "cni"]),
-        ("cluster" | "infra", _) => Some(&["os", "k8s", "cni", "csi"]),
-        _ => None,
+fn core_layers(kind: &str, cloud: &str) -> Option<&'static [Layer]> {
+    if !ProfileType::text_builds_cluster(kind) {
+        return None;
+    }
+    match Cloud::of(cloud) {
+        Cloud::EdgeNative => Some(&EDGE_CORE_LAYERS),
+        _ => Some(&INFRA_LAYERS),
     }
 }
 
@@ -73,8 +89,8 @@ pub(super) fn check_file(c: &Candidate) -> Result<(), String> {
     let known: Vec<Option<&str>> = c
         .layers
         .iter()
-        .map(|l| match l.kind.as_deref() {
-            Some(MANIFEST) => Some(MANIFEST_LAYER),
+        .map(|l| match l.kind.as_deref().and_then(PackType::parse) {
+            Some(PackType::Manifest) => Some(MINTED_LAYER.as_str()),
             _ => l.layer.as_deref(),
         })
         .collect();
@@ -83,11 +99,12 @@ pub(super) fn check_file(c: &Candidate) -> Result<(), String> {
 
 /// Check the layer of each pack against the type of the profile, as Palette does at the create and
 /// at the publish. `layers` gives, in candidate order, the layer of each pack, and None when it is
-/// not known yet: the core layers are then not checked.
+/// not known yet: the core layers are then not checked. A layer name that strata does not know is
+/// in no list, so the type refuses it, and the message names the text of the file.
 pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(), String> {
     if let Some(allowed) = layers_of_type(&c.kind) {
         for (i, (l, layer)) in c.layers.iter().zip(layers).enumerate() {
-            if let Some(layer) = layer.filter(|x| !allowed.contains(x)) {
+            if let Some(layer) = layer.filter(|x| !allowed.contains(&Layer::parse(x))) {
                 return Err(CreateRule::TypeLayer.refuse(&format!(
                     "layer {} ({}) has the layer {layer}; a profile of type {} takes only the \
                      layers {}",
@@ -102,10 +119,11 @@ pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(),
     if let Some(core) = core_layers(&c.kind, &c.cloud_type)
         && layers.iter().all(Option::is_some)
     {
-        let missing: Vec<&str> = core
+        let present: Vec<Layer> = layers.iter().flatten().map(|x| Layer::parse(x)).collect();
+        let missing: Vec<Layer> = core
             .iter()
             .copied()
-            .filter(|x| !layers.contains(&Some(*x)))
+            .filter(|x| !present.contains(x))
             .collect();
         if !missing.is_empty() {
             return Err(CreateRule::CoreLayers.refuse(&format!(

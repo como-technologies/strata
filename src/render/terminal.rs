@@ -16,8 +16,8 @@ use crate::color::Paint;
 use crate::diff::{Diff, ImpactLevel, Leaf, Op, PackDiff, Status, VerifyStatus};
 use crate::error::Result;
 use crate::ops::{
-    Chain, ConsumersReport, Listing, PackListing, PairStatus, RUNNING_STATE, RecordStatus,
-    VerifySummary,
+    Chain, ConsumerKind, ConsumersReport, Listing, PackListing, PairStatus, RUNNING_STATE,
+    RecordStatus, VerifySummary,
 };
 use crate::snapshot::Snapshot;
 
@@ -449,12 +449,9 @@ impl Renderer for TerminalRenderer {
             if !state.is_empty() {
                 out.push_str(&format!("  {state}"));
             }
-            if c.kind == crate::ops::EDGE_HOST_KIND {
-                out.push_str(&format!("  {}", p.cyan("edge host")));
-            } else if c.kind == crate::ops::TEMPLATE_KIND {
-                out.push_str(&format!("  {}", p.cyan("cluster template")));
-            } else if c.kind == crate::ops::APP_DEPLOYMENT_KIND {
-                out.push_str(&format!("  {}", p.cyan("app deployment")));
+            // the heading names the clusters, so a row names each other kind
+            if c.kind != ConsumerKind::Cluster {
+                out.push_str(&format!("  {}", p.cyan(c.kind.noun())));
             }
             if !c.version.is_empty() && c.version != r.profile.version {
                 out.push_str(&format!(

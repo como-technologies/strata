@@ -568,7 +568,7 @@ fn zero_retries_means_one_attempt() {
 
 use std::path::PathBuf;
 
-use strata::ops::{RecordStatus, SummaryStatus};
+use strata::ops::RecordStatus;
 
 #[test]
 fn snapshot_for_records_the_project_scope_of_the_client() {
@@ -650,7 +650,7 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
         ),
         (3, 1, 1, 1)
     );
-    assert_eq!(s.summary.status, SummaryStatus::Error);
+    assert_eq!(s.summary.status, RecordStatus::Error);
     assert_eq!(s.exit_code(), 2, "an error outranks a drift");
     assert_eq!(
         *scopes.borrow(),
@@ -687,7 +687,7 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
         &ops::VerifyOptions::default(),
         &Progress::silent(),
     );
-    assert_eq!(s.summary.status, SummaryStatus::Unchanged);
+    assert_eq!(s.summary.status, RecordStatus::Unchanged);
     assert_eq!(s.exit_code(), 0);
 
     // an explicit project overrides every recorded scope, so one client serves every record
@@ -701,7 +701,7 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
         &Progress::silent(),
     );
     assert_eq!(*scopes.borrow(), vec![Some("p9".to_string())]);
-    assert_eq!(s.summary.status, SummaryStatus::Drifted);
+    assert_eq!(s.summary.status, RecordStatus::Drifted);
     assert_eq!(s.exit_code(), 1);
 }
 
@@ -4152,9 +4152,13 @@ fn list_with_packs_gives_the_count_of_consumers_with_the_list_of_palette_alone()
             "{}: list --packs and consumers --list-only differ",
             p.reference
         );
-        let of_kind = |kind: &str| r.consumers.iter().filter(|c| c.kind == kind).count();
+        let of_kind =
+            |kind: ops::ConsumerKind| r.consumers.iter().filter(|c| c.kind == kind).count();
         assert_eq!(
-            (of_kind(ops::CLUSTER_KIND), of_kind(ops::TEMPLATE_KIND)),
+            (
+                of_kind(ops::ConsumerKind::Cluster),
+                of_kind(ops::ConsumerKind::Template)
+            ),
             (counts.clusters, counts.templates),
             "{}: the kinds differ",
             p.reference
@@ -11189,14 +11193,21 @@ fn consumers_counts_an_edge_host_bound_to_the_profile() {
     let host = &r.consumers[0];
     assert_eq!(
         (
-            host.kind.as_str(),
+            host.kind,
             host.uid.as_str(),
             host.name.as_str(),
             host.project_uid.as_str(),
             host.state.as_str(),
             host.version.as_str()
         ),
-        ("edgehost", "e1", "edge-1", "p1", "ready", "1.2.0")
+        (
+            ops::ConsumerKind::EdgeHost,
+            "e1",
+            "edge-1",
+            "p1",
+            "ready",
+            "1.2.0"
+        )
     );
     assert_eq!(r.edge_hosts_read.read, 1);
     // --list-only reads the edge hosts too: the consumer list of Palette names no edge host
@@ -11269,14 +11280,21 @@ fn consumers_counts_a_cluster_template_that_links_the_version() {
         let t = &r.consumers[0];
         assert_eq!(
             (
-                t.kind.as_str(),
+                t.kind,
                 t.uid.as_str(),
                 t.name.as_str(),
                 t.project_uid.as_str(),
                 t.state.as_str(),
                 t.version.as_str()
             ),
-            ("template", "tmpl-1", "barney-template", "p1", "", "")
+            (
+                ops::ConsumerKind::Template,
+                "tmpl-1",
+                "barney-template",
+                "p1",
+                "",
+                ""
+            )
         );
         assert!(t.error.is_none() && !t.unlisted);
         assert_eq!(r.overwritten, 0, "a template keeps no copy of the version");

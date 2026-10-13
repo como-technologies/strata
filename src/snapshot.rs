@@ -16,6 +16,9 @@ use crate::api::{RawCluster, RawProfile};
 use crate::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
 use crate::error::{Error, Result};
 use crate::json::{arr, first_nonempty, opt_text, str_at, strings, text};
+use crate::layer::Layer;
+use crate::pack_type::PackType;
+use crate::profile_type::ProfileType;
 pub use crate::repave::PendingRepave;
 use crate::repave::is_pending;
 pub use crate::validation::ProfileValidation;
@@ -213,6 +216,11 @@ impl Source {
         self.template == Template::Draft && self.reference.ends_with(crate::reference::DRAFT_SUFFIX)
     }
 
+    /// True for a record of an app profile: its tiers are its packs.
+    pub(crate) fn is_app(&self) -> bool {
+        ProfileType::parse(&self.kind) == Some(ProfileType::App)
+    }
+
     /// `name@version`, and `on cluster <name>` for a snapshot of a cluster, or `pending for cluster
     /// <name>` for the update that waits for it.
     pub fn title(&self) -> String {
@@ -256,9 +264,6 @@ impl Source {
         }
     }
 }
-
-/// The `source.kind` of a record of an app profile: its tiers are its packs.
-pub const APP_KIND: &str = "app";
 
 /// The kind of object that a cluster record was taken from. Each holds profiles in
 /// `spec.clusterProfileTemplates`.
@@ -698,9 +703,10 @@ impl AppliedProfile {
 
     /// The cluster or infra profile comes first: a cluster runs it before any add-on.
     fn rank(&self) -> u8 {
-        match self.kind.as_str() {
-            "cluster" | "infra" => 0,
-            _ => 1,
+        if ProfileType::text_builds_cluster(&self.kind) {
+            0
+        } else {
+            1
         }
     }
 
@@ -1038,7 +1044,18 @@ impl Pack {
     /// `upstream` hash is the hash of nothing and a change of its archive cannot show. A manifest
     /// pack has no archive: its content is the manifests of the profile, which `authored` covers.
     pub fn upstream_unknown(&self) -> bool {
-        self.hash.upstream_source == UpstreamSource::NoDigest && self.kind != "manifest"
+        self.hash.upstream_source == UpstreamSource::NoDigest && !self.is_manifest()
+    }
+
+    /// The type of the pack, or none for a type that is not a pack type: the type of a tier of
+    /// an app profile, such as `container`.
+    pub(crate) fn pack_type(&self) -> Option<PackType> {
+        PackType::parse(&self.kind)
+    }
+
+    /// True for a manifest pack: the manifests of a layer, from no registry.
+    pub(crate) fn is_manifest(&self) -> bool {
+        self.pack_type() == Some(PackType::Manifest)
     }
 
     /// The machine image that the pack names in its annotation `imageId`, when it names one.
@@ -1070,8 +1087,8 @@ impl Pack {
             }
             mm["spec"]["manifests"] = Value::Array(given);
         }
-        let layer = first_nonempty(&[str_at(pk, "/layer"), "addon"]);
-        let kind = first_nonempty(&[str_at(pk, "/type"), "spectro"]);
+        let layer = first_nonempty(&[str_at(pk, "/layer"), Layer::Addon.as_str()]);
+        let kind = first_nonempty(&[str_at(pk, "/type"), PackType::Spectro.as_str()]);
         let tag = text(pk, "/tag");
         let version = first_nonempty(&[str_at(pk, "/version"), str_at(&mm, "/spec/version")]);
         let pack_uid = text(pk, "/packUid");
@@ -1376,7 +1393,7 @@ impl Snapshot {
     pub fn pins(&self) -> Vec<PinRef> {
         self.packs
             .iter()
-            .filter(|p| p.kind != "manifest")
+            .filter(|p| !p.is_manifest())
             .map(|p| PinRef {
                 name: p.name.clone(),
                 version: p.version.clone(),

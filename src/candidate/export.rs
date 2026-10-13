@@ -7,8 +7,9 @@
 
 use serde_json::{Map, Value};
 
-use super::{Candidate, CandidateLayer, CandidateManifest, MANIFEST, default_type};
+use super::{Candidate, CandidateLayer, CandidateManifest, default_type};
 use crate::json::arr;
+use crate::pack_type::PackType;
 
 /// The packs of an export. A file that has an array here is an export.
 const PACKS: &str = "/spec/template/packs";
@@ -59,7 +60,7 @@ pub(super) fn to_candidate(doc: &Value) -> Result<Candidate, String> {
 /// The layer of the pack `p` of an export. `at` names the pack in a message.
 fn layer(p: &Value, at: &str) -> Result<CandidateLayer, String> {
     let nonempty = |s: String| Some(s).filter(|s| !s.is_empty());
-    let manifest = text(p, "/type", at)? == MANIFEST;
+    let manifest = PackType::parse(&text(p, "/type", at)?) == Some(PackType::Manifest);
     // Palette makes the pack of a manifest layer from its own manifest pack, so the export gives
     // it an empty registry
     let (registry_uid, registry) = if manifest {
@@ -86,7 +87,7 @@ fn layer(p: &Value, at: &str) -> Result<CandidateLayer, String> {
         name: text(p, "/name", at)?,
         version: text(p, "/version", at)?,
         layer: nonempty(text(p, "/layer", at)?),
-        kind: manifest.then(|| MANIFEST.to_string()),
+        kind: manifest.then(|| PackType::Manifest.as_str().to_string()),
         tag: nonempty(text(p, "/tag", at)?),
         registry,
         registry_uid,

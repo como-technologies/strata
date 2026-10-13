@@ -14,6 +14,7 @@ use serde_yaml::Value as Yaml;
 use crate::canon::{Canon, canon_yaml};
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, str_at};
+use crate::pack_type::PackType;
 
 /// The text that Palette writes over a secret.
 pub(crate) const MASKED: &str = "********";
@@ -45,7 +46,7 @@ pub(super) fn password_fields(pack: &Value, uid: &str) -> Vec<String> {
 pub(super) fn draft_pack_uids(profile: &Value) -> Vec<String> {
     let mut uids: Vec<String> = arr(profile, "/spec/draft/packs")
         .iter()
-        .filter(|pk| str_at(pk, "/type") != "manifest")
+        .filter(|pk| PackType::parse(str_at(pk, "/type")) != Some(PackType::Manifest))
         .filter_map(|pk| opt_text(pk, "/packUid"))
         .collect();
     uids.sort();
