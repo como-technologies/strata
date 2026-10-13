@@ -168,7 +168,7 @@ pub fn pack_snapshot<A: PaletteApi>(
     let mut snap =
         resolve_with(&loaded, &mut registries, progress)?.into_snapshot(reference, fetched_at)?;
     snap.source.kind = ProfileType::Pack.as_str().to_string();
-    snap.source.template = Template::Registry;
+    snap.source.template = Template::Registry.into();
     // a pack version is not a profile version, so no cluster uses it and nothing asked
     snap.source.consumers = None;
     snap.source.pack = Some(PackSource {

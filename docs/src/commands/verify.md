@@ -287,6 +287,10 @@ The verdict follows the release alone, so a changed tier does not make a record
 `DRIFT`. A record written before the tiers carries none, and verifies as before.
 A record of a cluster group carries the `policy` tier of the group: see
 [The config that a cluster group gives](snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
+A record of a later release can carry a tier that this release does not know.
+Palette gives strata no such tier, so `verify` does not compare it, and a note
+names it. See
+[A value that strata does not know](../reference/compatibility.md#a-value-that-strata-does-not-know).
 
 ## Each kind of record
 
@@ -305,6 +309,10 @@ A record of a cluster group carries the `policy` tier of the group: see
 A tier of an app profile has no digest, so `verify` of an app profile with a
 helm tier is `UNVERIFIED` unless `--allow-no-digest` accepts it. See
 [An app profile is updated in place](../use-cases/app-profiles.md).
+
+A later release can record an object of a new kind. `verify` cannot read such
+an object from Palette, so it refuses the record with `usage`, and sends no
+request.
 
 ## Run it on a schedule
 

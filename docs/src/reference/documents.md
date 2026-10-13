@@ -6,7 +6,9 @@ A record of the first bash release has no `impl`. `strata-diff/1`,
 `strata-verify-summary/1`, and `strata-chain/1` also have a `legend` that
 explains their values in words, so a program or a language model can read them
 without this book. `strata schema <kind>` prints the JSON Schema of each
-document.
+document. A field of a closed set in a record or in `strata-behind/1` also
+takes a value of a later release. See
+[A value that strata does not know](compatibility.md#a-value-that-strata-does-not-know).
 
 | Schema id | Written by | `strata schema` |
 | --- | --- | --- |

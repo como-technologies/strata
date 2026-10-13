@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 
 use super::leaf::{Leaf, Op, leaf_diff};
 use super::zip_by_key;
+use crate::closed_set::Open;
 use crate::json::str_at;
 use crate::snapshot::{ClusterTier, ClusterVariable, Snapshot, Tier};
 
@@ -26,7 +27,7 @@ pub struct ClusterVariablesDiff {
 pub struct TierDiff {
     /// The tier compared. Between two clusters, `applied` compares `spcInfraHash` alone:
     /// Palette's `spcHash` is its own for each cluster.
-    pub tier: Tier,
+    pub tier: Open<Tier>,
     /// True when the hashes are equal.
     pub same: bool,
     /// The fields that differ, when the tier differs.
@@ -87,21 +88,22 @@ pub(super) fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
             let u = y.tiers.get(name)?;
             // Palette's spcHash is its own for each cluster, and equal for no two: between two
             // clusters, applied compares spcInfraHash alone
-            let (f, g) = match name {
-                Tier::Applied if x.uid != y.uid => {
+            let (f, g) = match name.known() {
+                Some(Tier::Applied) if x.uid != y.uid => {
                     let infra = |v: &Value| json!({"spcInfraHash": v.get("spcInfraHash")});
                     (infra(&t.fields), infra(&u.fields))
                 }
                 // a record from before strata read the shape by cloud type holds fewer fields
-                Tier::Shape => crate::snapshot::shape::comparable(&t.fields, &u.fields),
+                Some(Tier::Shape) => crate::snapshot::shape::comparable(&t.fields, &u.fields),
                 // and one from before strata read the role bindings holds their references
-                Tier::Policy => crate::snapshot::policy::comparable(&t.fields, &u.fields),
+                Some(Tier::Policy) => crate::snapshot::policy::comparable(&t.fields, &u.fields),
+                // a tier that a later release wrote compares its fields, as each other tier does
                 _ => (t.fields.clone(), u.fields.clone()),
             };
             let (f, g) = (read_fields(f, t, u), read_fields(g, t, u));
             let same = f == g;
             Some(TierDiff {
-                tier: *name,
+                tier: name.clone(),
                 same,
                 diff: if same { Vec::new() } else { leaf_diff(&f, &g) },
             })
@@ -112,7 +114,7 @@ pub(super) fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
     };
     let (la, lb) = (labels(&x.labels), labels(&y.labels));
     out.push(TierDiff {
-        tier: Tier::Labels,
+        tier: Tier::Labels.into(),
         same: la == lb,
         diff: leaf_diff(&la, &lb),
     });
@@ -125,7 +127,7 @@ pub(super) fn running_behind(side: Side, s: &Snapshot) -> Vec<RunningBehind> {
         .source
         .cluster
         .as_ref()
-        .and_then(|c| c.tiers.get(&Tier::Running))
+        .and_then(|c| c.tier(Tier::Running))
     else {
         return Vec::new();
     };

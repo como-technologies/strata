@@ -25,7 +25,7 @@ use common::{
     cluster_ref, cluster_route, cluster_variables_route, listing, manifest_route, manifests_route,
     no_manifests, no_template, no_variables, pack_listing_route, post, profile_document,
     profile_route, read_json, resolved_values_route, serve_fixture, serve_profile, snapshot_of,
-    snapshot_of_at, strata_bin, template, variables_route,
+    snapshot_of_at, strata_bin, template, variables_route, write_record,
 };
 
 #[test]
@@ -788,7 +788,7 @@ fn snapshot_for_records_the_project_scope_of_the_client() {
         .remove("projectUid")
         .expect("the field is written");
     let old = dir.path().join("old.json");
-    fs::write(&old, v.to_string()).unwrap();
+    write_record(&old, &v);
     assert_eq!(Snapshot::load(&old).unwrap().source.project_uid, "");
 }
 
@@ -1981,7 +1981,12 @@ fn barney() -> Value {
 }
 
 fn policy_of(s: &Snapshot) -> Value {
-    s.source.cluster.as_ref().unwrap().tiers[&Tier::Policy]
+    s.source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .tier(Tier::Policy)
+        .unwrap()
         .fields
         .clone()
 }
@@ -2084,7 +2089,7 @@ fn a_policy_tier_from_before_the_bindings_were_read_still_verifies() {
         .as_mut()
         .unwrap()
         .tiers
-        .insert(Tier::Policy, serde_json::from_value(tier).unwrap());
+        .insert(Tier::Policy.into(), serde_json::from_value(tier).unwrap());
     let saved = dir.path().join("older.json");
     fs::write(&saved, older.to_json(true).unwrap()).unwrap();
     let older = Snapshot::load(&saved).unwrap();
@@ -2156,7 +2161,13 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_
     // a 403 of the route of the role bindings does not stop the record
     let forbidden = serve_policy(dir.path(), barney()).failing(rbacs_route(), 403, "forbidden\n");
     let s = snapshot_cluster(&forbidden, None).unwrap();
-    let tier = &s.source.cluster.as_ref().unwrap().tiers[&Tier::Policy];
+    let tier = &s
+        .source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .tier(Tier::Policy)
+        .unwrap();
     assert!(
         tier.fields.get("rbacs").is_none(),
         "an error is not a value"
@@ -2180,7 +2191,13 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_
     // a 404 records null and no error, and the hash of a 403 does not cover that null
     let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), 404, "not found");
     let m = snapshot_cluster(&missing, None).unwrap();
-    let missing_tier = &m.source.cluster.as_ref().unwrap().tiers[&Tier::Policy];
+    let missing_tier = &m
+        .source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .tier(Tier::Policy)
+        .unwrap();
     assert_eq!(missing_tier.fields["rbacs"], Value::Null);
     assert_ne!(missing_tier.hash, tier.hash);
     assert!(missing_tier.errors.is_empty());
@@ -2194,7 +2211,13 @@ fn a_404_of_the_route_of_the_bindings_records_null_and_another_error_leaves_out_
     let forbidden =
         serve_policy(dir.path(), barney()).failing(namespaces_route(), 403, "forbidden");
     let s = snapshot_cluster(&forbidden, None).unwrap();
-    let tier = &s.source.cluster.as_ref().unwrap().tiers[&Tier::Policy];
+    let tier = &s
+        .source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .tier(Tier::Policy)
+        .unwrap();
     assert!(tier.fields.get("namespaces").is_none());
     assert_ne!(tier.fields["rbacs"], Value::Null);
     assert_eq!(
@@ -5630,13 +5653,13 @@ fn a_record_from_another_snapshot_schema_is_refused_by_name_and_extra_fields_are
     // a field this strata does not know: additive changes keep the schema id and still load
     doc["source"]["addedLater"] = serde_json::json!("x");
     let extra = dir.path().join("extra.json");
-    fs::write(&extra, doc.to_string()).unwrap();
+    write_record(&extra, &doc);
     assert_eq!(Snapshot::load(&extra).unwrap().root, recorded.root);
 
     // a newer schema id is refused, naming both ids
     doc["schema"] = serde_json::json!("strata-snapshot/2");
     let newer = dir.path().join("newer.json");
-    fs::write(&newer, doc.to_string()).unwrap();
+    write_record(&newer, &doc);
     let err = Snapshot::load(&newer).unwrap_err();
     match &err {
         Error::UnsupportedSchema {
@@ -8452,7 +8475,7 @@ fn a_profile_record_keeps_no_cluster_template_and_an_older_record_with_one_still
         {"uid": "tmpl-2", "name": "fred-template", "projectUid": "p1"}
     ]);
     let saved = dir.path().join("older.json");
-    fs::write(&saved, serde_json::to_string_pretty(&older).unwrap()).unwrap();
+    write_record(&saved, &older);
     let older = Snapshot::load(&saved).unwrap();
     assert_eq!(older.root, linked.root);
     let v = ops::verify(&older, &Palette::new(api), "t1", &Progress::silent()).unwrap();
@@ -8589,7 +8612,7 @@ fn a_raw_directory_keeps_each_read_error_so_the_record_is_the_record_of_the_fetc
         c.pending_repave_error.as_deref(),
         Some("HTTP 403: forbidden")
     );
-    let policy = &c.tiers[&Tier::Policy];
+    let policy = &c.tier(Tier::Policy).unwrap();
     assert_eq!(
         policy.errors.keys().collect::<Vec<_>>(),
         ["namespaces", "rbacs"]
@@ -8863,7 +8886,7 @@ fn a_manifest_pack_has_no_archive_and_is_never_upstream_unknown() {
     common::make_fixtures(dir.path());
     let mut recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
     let pack = &mut recorded.packs[0];
-    pack.hash.upstream_source = UpstreamSource::NoDigest;
+    pack.hash.upstream_source = UpstreamSource::NoDigest.into();
     pack.kind = "manifest".to_string();
     assert!(!pack.upstream_unknown());
     pack.kind = "helm".to_string();
@@ -9800,7 +9823,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
         "{err}"
     );
     let mut host = cluster.clone();
-    host.source.cluster.as_mut().unwrap().kind = strata::snapshot::SubjectKind::EdgeHost;
+    host.source.cluster.as_mut().unwrap().kind = strata::snapshot::SubjectKind::EdgeHost.into();
     let err = ops::palette_validation(&palette, &host, &target).unwrap_err();
     assert!(matches!(err, Error::Usage { .. }), "{err}");
     assert!(
@@ -10200,6 +10223,16 @@ fn with_cluster_status(raw_root: &Path) {
     fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
 }
 
+/// A cluster record of cluster-a with the tiers that Palette gives, and the stand-in that serves
+/// the cluster.
+fn cluster_record_with_tiers(root: &Path) -> (MemoryApi, Snapshot) {
+    common::make_fixtures(root);
+    with_cluster_status(root);
+    let api = serve_cluster(MemoryApi::new(), root, "cluster-a");
+    let snap = snapshot_cluster(&api, None).unwrap();
+    (api, snap)
+}
+
 fn cloud_config(size: u64) -> Value {
     serde_json::json!({"spec": {
     "clusterConfig": {"region": "us-east-2", "vpcId": "vpc-mine"},
@@ -10213,10 +10246,7 @@ fn cloud_config(size: u64) -> Value {
 #[test]
 fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
     let dir = tempfile::tempdir().unwrap();
-    common::make_fixtures(dir.path());
-    with_cluster_status(dir.path());
-    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
-    let snap = snapshot_cluster(&api, None).unwrap();
+    let (api, snap) = cluster_record_with_tiers(dir.path());
     let c = snap.source.cluster.as_ref().unwrap();
     // shape costs a request, so a record without --shape does not carry it
     assert_eq!(
@@ -10224,16 +10254,16 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
         [&Tier::Applied, &Tier::Policy, &Tier::Running]
     );
     assert_eq!(c.labels.get("env").map(String::as_str), Some("dev"));
-    assert_eq!(c.tiers[&Tier::Applied].fields["spcHash"], "h1");
+    assert_eq!(c.tier(Tier::Applied).unwrap().fields["spcHash"], "h1");
     // running holds the covered profile alone, without the condition
-    let running = c.tiers[&Tier::Running].fields.as_array().unwrap();
+    let running = c.tier(Tier::Running).unwrap().fields.as_array().unwrap();
     assert!(
         running
             .iter()
             .all(|r| r["name"] != "other" && r.get("condition").is_none())
     );
     assert_eq!(running.len(), snap.packs.len());
-    assert_eq!(c.tiers[&Tier::Policy].fields["timezone"], "Etc/UTC");
+    assert_eq!(c.tier(Tier::Policy).unwrap().fields["timezone"], "Etc/UTC");
 
     // --shape: the machine pools and the cloud part, without the ids of the cluster
     let palette = Palette::new(
@@ -10245,7 +10275,14 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
         .unwrap();
     raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
     let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
-    let shape = &shaped.source.cluster.as_ref().unwrap().tiers[&Tier::Shape].fields;
+    let shape = &shaped
+        .source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .tier(Tier::Shape)
+        .unwrap()
+        .fields;
     assert_eq!(shape["cloudType"], "aws");
     assert_eq!(shape["cloud"], serde_json::json!({"region": "us-east-2"}));
     assert_eq!(shape["pools"][0]["name"], "cp-pool", "pools in name order");
@@ -10266,7 +10303,14 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
     let palette = Palette::new(api.clone().with("/v1/cloudconfigs/eks/cc1", eks));
     raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
     let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
-    let shape = &shaped.source.cluster.as_ref().unwrap().tiers[&Tier::Shape].fields;
+    let shape = &shaped
+        .source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .tier(Tier::Shape)
+        .unwrap()
+        .fields;
     assert_eq!(shape["pools"][0]["amiType"], "AL2023_x86_64_STANDARD");
     assert_eq!(shape["pools"][0]["awsLaunchTemplate"]["ami"]["id"], "ami-1");
     assert!(shape["pools"][0].get("instanceConfig").is_none());
@@ -10283,7 +10327,14 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
             "overrideClusterAPIConfig": "gcpManagedControlPlane:\n  spec:\n    releaseChannel: regular\n"},
         "machinePoolConfig": [{"name": "worker-pool", "instanceType": "e2-standard-4", "size": 3}]}}));
     let shaped = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
-    let shape = &shaped.source.cluster.as_ref().unwrap().tiers[&Tier::Shape].fields;
+    let shape = &shaped
+        .source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .tier(Tier::Shape)
+        .unwrap()
+        .fields;
     assert_eq!(
         shape["cloud"]["managedClusterConfig"]["location"],
         "us-east1"
@@ -10299,10 +10350,8 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
 #[test]
 fn a_cluster_record_without_tiers_still_verifies() {
     let dir = tempfile::tempdir().unwrap();
-    common::make_fixtures(dir.path());
-    with_cluster_status(dir.path());
-    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
-    let mut doc = serde_json::to_value(snapshot_cluster(&api, None).unwrap()).unwrap();
+    let (api, snap) = cluster_record_with_tiers(dir.path());
+    let mut doc = serde_json::to_value(snap).unwrap();
     // a record written before the tiers: no tiers, no labels
     let cluster = doc["source"]["cluster"].as_object_mut().unwrap();
     cluster.remove("tiers");
@@ -10581,7 +10630,11 @@ fn shape_on(kind: &str, cloud_config: Value) -> Value {
     raw.cluster["spec"]["cloudConfigRef"]["kind"] = Value::from(kind);
     raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
     let snap = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
-    snap.source.cluster.unwrap().tiers[&Tier::Shape]
+    snap.source
+        .cluster
+        .unwrap()
+        .tier(Tier::Shape)
+        .unwrap()
         .fields
         .clone()
 }
@@ -10789,7 +10842,15 @@ fn an_older_record_verifies(kind: &str, cc: Value) {
     let shape = v.diff.cluster_tiers.iter().find(|t| t.tier == Tier::Shape);
     assert!(shape.unwrap().same, "{kind}: {:?}", shape.unwrap().diff);
     // the live record holds the fields of its cloud, and compares with the old record
-    let live = &v.live.source.cluster.as_ref().unwrap().tiers[&Tier::Shape].fields;
+    let live = &v
+        .live
+        .source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .tier(Tier::Shape)
+        .unwrap()
+        .fields;
     assert_eq!(live["cloudType"], kind);
     let d = strata::diff::compute(&old, &v.live, "t1", None);
     assert!(d.cluster_tiers.iter().all(|t| t.same), "{kind}");
@@ -10956,7 +11017,7 @@ fn a_record_written_before_the_image_lists_gets_them_from_its_values_and_still_v
     pack.remove("charts");
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("old.json");
-    fs::write(&path, serde_json::to_string(&doc).unwrap()).unwrap();
+    write_record(&path, &doc);
     let old = Snapshot::load(&path).unwrap();
     assert_eq!(old.packs[0].images, fresh.packs[0].images);
     assert_eq!(old.root, fresh.root);
@@ -11809,9 +11870,9 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
     let snap = |api: &MemoryApi| common::snapshot_of(api, "clustergroup:g1").unwrap();
     let api = serve(Some(clusters_config(6000, GROUP_VALUES)));
     let group = snap(&api);
-    let tiers = &group.source.cluster.as_ref().unwrap().tiers;
-    assert_eq!(tiers.keys().collect::<Vec<_>>(), [&Tier::Policy]);
-    let f = &tiers[&Tier::Policy].fields;
+    let cluster = group.source.cluster.as_ref().unwrap();
+    assert_eq!(cluster.tiers.keys().collect::<Vec<_>>(), [&Tier::Policy]);
+    let f = &cluster.tier(Tier::Policy).unwrap().fields;
     assert_eq!(f["endpointType"], "LoadBalancer");
     assert_eq!(f["kubernetesDistroType"], "k3s");
     assert_eq!(f["limitConfig"]["cpuMilliCore"], 6000);
@@ -11847,13 +11908,27 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
         &format!("# another comment\n{GROUP_VALUES}"),
     ))));
     assert_eq!(
-        commented.source.cluster.as_ref().unwrap().tiers[&Tier::Policy].hash,
-        tiers[&Tier::Policy].hash
+        commented
+            .source
+            .cluster
+            .as_ref()
+            .unwrap()
+            .tier(Tier::Policy)
+            .unwrap()
+            .hash,
+        cluster.tier(Tier::Policy).unwrap().hash
     );
 
     // values that are not YAML are kept by the hash of their text, with the error
     let broken = snap(&serve(Some(clusters_config(6000, "sync: [\n"))));
-    let f = &broken.source.cluster.as_ref().unwrap().tiers[&Tier::Policy].fields;
+    let f = &broken
+        .source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .tier(Tier::Policy)
+        .unwrap()
+        .fields;
     assert_eq!(f["values"], Value::Null);
     assert_eq!(f["valuesHash"].as_str().map(str::len), Some(64));
     assert!(f["valuesParseError"].is_string(), "{f}");
@@ -11874,8 +11949,8 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
             .cluster
             .as_ref()
             .unwrap()
-            .tiers
-            .contains_key(&Tier::Policy)
+            .tier(Tier::Policy)
+            .is_some()
     );
     let d = ops::compare(&sa, &sb, "t1");
     assert!(
@@ -11959,7 +12034,13 @@ fn a_raw_directory_of_a_cluster_group_masks_each_password_and_gives_the_record_o
         serde_json::to_value(&direct).unwrap()
     );
     assert_eq!(
-        from_raw.source.cluster.unwrap().tiers[&Tier::Policy].fields["values"],
+        from_raw
+            .source
+            .cluster
+            .unwrap()
+            .tier(Tier::Policy)
+            .unwrap()
+            .fields["values"],
         serde_json::json!({"sync": {"adminPassword": "********", "replicas": 1},
             "users": [{"name": "fred", "password": "********"}]})
     );
@@ -12855,7 +12936,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     let bump = pin.bump.as_ref().unwrap();
     assert_eq!(bump.to, "1.65.0");
     assert!(
-        bump.flags.contains(&ChangeFlag::Identity),
+        bump.flags.iter().any(|f| *f == ChangeFlag::Identity),
         "{:?}",
         bump.flags
     );
@@ -14681,4 +14762,180 @@ fn one_function_builds_the_root_of_each_kind_of_record_and_no_root_moved() {
             "the content digest of the {kind} record"
         );
     }
+}
+
+// ---- a value that a later release adds to a closed set of a record (#348) ----------------------
+
+#[test]
+fn a_record_with_values_of_a_later_release_reads_with_no_error_and_writes_the_same_text() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let snap = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let mut doc = serde_json::to_value(&snap).unwrap();
+    doc["source"]["template"] = Value::from("future");
+    doc["tool"]["impl"] = Value::from("go");
+    doc["packs"][0]["hash"]["upstreamSource"] = Value::from("packArchive.digest");
+    let path = dir.path().join("later.json");
+    write_record(&path, &doc);
+
+    let read = Snapshot::load(&path).unwrap();
+    assert_eq!(read.source.template.known(), None);
+    assert_eq!(read.source.template.as_str(), "future");
+    assert_eq!(
+        read.tool.implementation.as_ref().map(|i| i.as_str()),
+        Some("go")
+    );
+    assert_eq!(
+        read.packs[0].hash.upstream_source.as_str(),
+        "packArchive.digest"
+    );
+    // the record that strata writes from it holds the same text, and the same root
+    assert_eq!(serde_json::to_value(&read).unwrap(), doc);
+    assert_eq!(read.root, snap.root);
+    // a template of a later release is not a draft, and a source of a later release gives a digest
+    assert!(!read.source.is_draft());
+    assert!(!read.packs[0].upstream_unknown());
+
+    // compare reads the record, and the diff holds the text of each value
+    let out = std::process::Command::new(strata_bin())
+        .args(["compare", "--json"])
+        .args([&path, &path])
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0), "{}", common::text(&out.stderr));
+    let d: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(d["a"]["template"], "future");
+    assert_eq!(d["packs"][0]["a"]["upstreamSource"], "packArchive.digest");
+}
+
+#[test]
+fn a_cluster_record_of_a_later_kind_compares_by_its_text_and_verify_refuses_it_with_no_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let (api, snap) = cluster_record_with_tiers(dir.path());
+    let mut doc = serde_json::to_value(&snap).unwrap();
+    doc["source"]["cluster"]["kind"] = Value::from("virtualMachine");
+    let path = dir.path().join("later-kind.json");
+    write_record(&path, &doc);
+
+    let read = Snapshot::load(&path).unwrap();
+    let c = read.source.cluster.as_ref().unwrap();
+    assert_eq!(c.kind.as_str(), "virtualMachine");
+    assert!(!c.kind.is_cluster());
+    assert_eq!(c.kind.noun(), "virtualMachine");
+    assert!(
+        read.source
+            .title()
+            .ends_with(&format!("on virtualMachine {}", c.name)),
+        "{}",
+        read.source.title()
+    );
+    assert_eq!(serde_json::to_value(&read).unwrap(), doc);
+
+    // two records of the same kind compare their tiers, as two cluster records do
+    let d = ops::compare(&read, &read, "t1");
+    assert!(d.same);
+    assert!(!d.cluster_tiers.is_empty());
+    assert!(d.cluster_tiers.iter().all(|t| t.same));
+
+    // verify cannot read an object of a kind that it does not know, so it asks Palette nothing
+    let before = api.calls(&cluster_route(CLUSTER_UID));
+    let err =
+        ops::verify(&read, &Palette::new(api.clone()), "t1", &Progress::silent()).unwrap_err();
+    assert_eq!(err.kind(), "usage");
+    assert!(
+        err.to_string()
+            .contains("this strata cannot read a virtualMachine from Palette"),
+        "{err}"
+    );
+    assert_eq!(api.calls(&cluster_route(CLUSTER_UID)), before);
+}
+
+#[test]
+fn a_tier_of_a_later_release_compares_by_its_fields_and_verify_names_it_and_does_not_compare_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (api, snap) = cluster_record_with_tiers(dir.path());
+    let mut doc = serde_json::to_value(&snap).unwrap();
+    doc["source"]["cluster"]["tiers"]["network"] =
+        serde_json::json!({"hash": "h-network", "fields": {"zone": "us-east-2a"}});
+    let path = dir.path().join("later-tier.json");
+    write_record(&path, &doc);
+
+    let read = Snapshot::load(&path).unwrap();
+    let c = read.source.cluster.as_ref().unwrap();
+    // the map keeps the order of the names, with the tier of the later release among them
+    assert_eq!(
+        c.tiers.keys().map(|t| t.as_str()).collect::<Vec<_>>(),
+        ["applied", "network", "policy", "running"]
+    );
+    assert_eq!(serde_json::to_value(&read).unwrap(), doc);
+
+    // between two records that carry it, the tier compares by its fields
+    let mut moved = doc.clone();
+    moved["source"]["cluster"]["tiers"]["network"]["fields"]["zone"] = Value::from("us-east-2b");
+    let moved_path = dir.path().join("moved.json");
+    write_record(&moved_path, &moved);
+    let moved = Snapshot::load(&moved_path).unwrap();
+    let d = ops::compare(&read, &moved, "t1");
+    let network = d
+        .cluster_tiers
+        .iter()
+        .find(|t| t.tier.as_str() == "network")
+        .unwrap();
+    assert!(!network.same);
+    assert_eq!(network.diff[0].path, "zone");
+
+    // Palette gives no such tier, so verify does not compare it, and the report says so
+    let v = ops::verify(&read, &Palette::new(api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    assert!(
+        v.diff
+            .cluster_tiers
+            .iter()
+            .all(|t| t.tier.as_str() != "network")
+    );
+    let text = render::renderer(Format::Terminal, Paint::off(), false)
+        .render(&v.diff, &read, &v.live, false)
+        .unwrap();
+    assert!(
+        text.contains(&format!(
+            "a later release of strata wrote the tier network of cluster {}, so strata does not \
+             compare it",
+            c.name
+        )),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_behind_report_with_values_of_a_later_release_reads_with_no_error_and_writes_the_same_text() {
+    let dir = tempfile::tempdir().unwrap();
+    let doc = serde_json::json!({
+        "schema": "strata-behind/1",
+        "tool": {"name": "strata", "version": "9.0.0", "impl": "go"},
+        "generatedAt": "2026-10-13T00:00:00Z",
+        "records": ["dev.json"],
+        "pins": [{
+            "name": "cert-manager", "layer": "addon", "registry": "Public Repo",
+            "registryUid": "r1", "version": "1.20.0", "tag": "1.20.0",
+            "pinnedBy": [{"path": "dev.json", "subject": "aws-stack@1.0.0"}],
+            "newer": [{"version": "1.21.1"}],
+            "behind": true,
+            "bump": {"to": "1.21.1", "impact": "fleet-wide", "flags": ["IDENTITY", "PROVENANCE"]},
+        }],
+        "summary": {"pins": 1, "behind": 1, "floating": 0, "errors": 0, "arrived": 0},
+    });
+    let path = dir.path().join("report.json");
+    write_record(&path, &doc);
+
+    let report = ops::BehindReport::load(&path).unwrap();
+    assert_eq!(
+        report.tool.implementation.as_ref().map(|i| i.as_str()),
+        Some("go")
+    );
+    let bump = report.pins[0].bump.as_ref().unwrap();
+    assert_eq!(bump.impact.known(), None);
+    assert_eq!(bump.impact.as_str(), "fleet-wide");
+    assert_eq!(bump.flags[0], ChangeFlag::Identity);
+    assert_eq!(bump.flags[1].as_str(), "PROVENANCE");
+    assert_eq!(serde_json::to_value(&report).unwrap(), doc);
 }

@@ -9,6 +9,7 @@ use serde_json::Value;
 
 use super::leaf::{Leaf, Op, leaf_diff};
 use super::{Diff, zip_by_key};
+use crate::closed_set::{ClosedSet, Open};
 use crate::content::canon::canonical_json;
 use crate::diff::impact::{Impact, presence_impact};
 use crate::legend::Described;
@@ -72,6 +73,12 @@ impl ChangeFlag {
     }
 }
 
+impl ClosedSet for ChangeFlag {
+    fn as_str(self) -> &'static str {
+        ChangeFlag::as_str(self)
+    }
+}
+
 impl fmt::Display for ChangeFlag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
@@ -93,7 +100,7 @@ pub struct PackSide {
     /// The raw digest that fed the upstream hash
     pub upstream: String,
     /// Which field of Palette fed it: see [`UpstreamSource`].
-    pub upstream_source: UpstreamSource,
+    pub upstream_source: Open<UpstreamSource>,
     /// Hash of the canonical values.
     pub values_hash: String,
     /// Node hash.
@@ -461,7 +468,7 @@ pub(super) fn side(p: &Pack) -> PackSide {
         pack_uid: p.pack_uid.clone(),
         registry_uid: p.registry_uid.clone(),
         upstream: p.hash.upstream_raw.clone(),
-        upstream_source: p.hash.upstream_source,
+        upstream_source: p.hash.upstream_source.clone(),
         values_hash: p.values_hash.clone(),
         node: p.hash.node.clone(),
         invalid: p.invalid,

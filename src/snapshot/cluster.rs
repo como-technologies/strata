@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 
 use super::{SubjectKind, macro_placeholder};
 use crate::api::RawCluster;
+use crate::closed_set::{ClosedSet, Open};
 use crate::content::canon::{canonical_json, sha256_hex};
 use crate::json::{arr, str_at, text};
 use crate::profile_type::ProfileType;
@@ -86,8 +87,8 @@ pub struct ClusterSource {
     /// What the record was taken from: absent for a cluster, `edgeHost` for the profiles bound to
     /// an edge host, and `clusterGroup` for the profiles that a cluster group pins for its
     /// virtual clusters. `uid` and `name` are those of that object.
-    #[serde(default, skip_serializing_if = "SubjectKind::is_cluster")]
-    pub kind: SubjectKind,
+    #[serde(default, skip_serializing_if = "Open::is_cluster")]
+    pub kind: Open<SubjectKind>,
     /// For a cluster group: its virtual clusters, which run the profiles that it pins. Outside
     /// the root.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -100,7 +101,14 @@ pub struct ClusterSource {
     /// gives each virtual cluster. Each tier has its own hash. A record names the tiers that it
     /// carries by carrying them, so a record without one still verifies. Outside the root.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub tiers: BTreeMap<Tier, ClusterTier>,
+    pub tiers: BTreeMap<Open<Tier>, ClusterTier>,
+}
+
+impl ClusterSource {
+    /// The tier `tier` of the record, when the record carries it.
+    pub fn tier(&self, tier: Tier) -> Option<&ClusterTier> {
+        self.tiers.get(&Open::Known(tier))
+    }
 }
 
 /// A tier of a cluster record: a part of the cluster beside its release, with a hash of its own.
@@ -134,6 +142,12 @@ impl Tier {
             Self::Running => "running",
             Self::Shape => "shape",
         }
+    }
+}
+
+impl ClosedSet for Tier {
+    fn as_str(self) -> &'static str {
+        Tier::as_str(self)
     }
 }
 
@@ -189,13 +203,16 @@ impl ClusterTier {
 /// role bindings, the namespaces, and the cloud config when strata read them. `covered` limits
 /// `running` to the profiles that the record covers. The record carries a tier only when Palette
 /// gives the part of the document that the tier reads.
-pub fn cluster_tiers(raw: &RawCluster, covered: &[AppliedProfile]) -> BTreeMap<Tier, ClusterTier> {
+pub fn cluster_tiers(
+    raw: &RawCluster,
+    covered: &[AppliedProfile],
+) -> BTreeMap<Open<Tier>, ClusterTier> {
     let cluster = &raw.cluster;
     let mut tiers = BTreeMap::new();
     // Palette's own hashes of the spec that it applied to the cluster
     if let Some(apply) = cluster.pointer("/status/spcApply") {
         tiers.insert(
-            Tier::Applied,
+            Tier::Applied.into(),
             ClusterTier::of(json!({
                 "spcHash": text(apply, "/spcHash"),
                 "spcInfraHash": text(apply, "/spcInfraHash"),
@@ -207,11 +224,11 @@ pub fn cluster_tiers(raw: &RawCluster, covered: &[AppliedProfile]) -> BTreeMap<T
         .pointer("/status/packs")
         .is_some_and(Value::is_array)
     {
-        tiers.insert(Tier::Running, running_tier(cluster, covered));
+        tiers.insert(Tier::Running.into(), running_tier(cluster, covered));
     }
     if let Some(config) = cluster.pointer("/spec/clusterConfig") {
         tiers.insert(
-            Tier::Policy,
+            Tier::Policy.into(),
             ClusterTier::with_errors(
                 crate::snapshot::policy::fields(raw, config),
                 crate::snapshot::policy::errors(raw),
@@ -221,13 +238,13 @@ pub fn cluster_tiers(raw: &RawCluster, covered: &[AppliedProfile]) -> BTreeMap<T
     // the document of a cluster group has spec.clustersConfig, and no spec.clusterConfig
     if let Some(config) = cluster.pointer("/spec/clustersConfig") {
         tiers.insert(
-            Tier::Policy,
+            Tier::Policy.into(),
             ClusterTier::of(crate::snapshot::policy::group_fields(config)),
         );
     }
     if let Some(cc) = &raw.cloud_config {
         tiers.insert(
-            Tier::Shape,
+            Tier::Shape.into(),
             ClusterTier::of(crate::snapshot::shape::fields(cluster, cc)),
         );
     }
