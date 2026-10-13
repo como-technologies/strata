@@ -16,6 +16,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
+use crate::report::percent;
 use crate::rule::{Catalog, Level, Tier};
 
 /// The schema id of a ledger file.
@@ -214,7 +215,7 @@ impl Rate {
     /// `14/14 (81%)`, or `no runs`.
     pub fn text(&self) -> String {
         match self.lower_bound {
-            Some(b) => format!("{}/{} ({:.0}%)", self.correct, self.total, b * 100.0),
+            Some(b) => format!("{}/{} ({})", self.correct, self.total, percent(b)),
             None => "no runs".to_string(),
         }
     }

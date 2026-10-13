@@ -88,7 +88,7 @@ pub mod repave;
 pub mod scope;
 pub mod snapshot;
 pub mod term;
-pub(crate) mod text;
+pub mod text;
 pub mod validation;
 
 /// The old path of [`content::layer`]. It goes in release 0.23.

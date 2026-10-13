@@ -64,7 +64,13 @@ impl Error {
                 m.insert("variable".into(), Value::from(*variable));
                 m.insert("value".into(), Value::from(value.as_str()));
             }
-            Error::Transport { path: p, .. } | Error::NotJson { path: p, .. } => {
+            Error::Transport {
+                method, path: p, ..
+            }
+            | Error::NotJson {
+                method, path: p, ..
+            } => {
+                m.insert("method".into(), Value::from(method.as_str()));
                 m.insert("path".into(), Value::from(p.as_str()));
             }
             Error::ClusterProfileNotFound {

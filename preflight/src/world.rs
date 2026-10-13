@@ -317,7 +317,7 @@ impl World {
 /// A 4xx on a read of the world that means the object is not there for this key: a 404, or a
 /// 403 of a project key on an object of the tenant. The world holds `null`, and a rule says so.
 /// A 401 is the key itself, and a 429 the rate: the run stops with the error that names it.
-fn unreadable(status: u16) -> bool {
+pub(crate) fn unreadable(status: u16) -> bool {
     (400..500).contains(&status) && !matches!(status, 401 | 429)
 }
 

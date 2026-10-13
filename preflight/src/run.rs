@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use serde_json::{Value, json};
 use strata::api::PaletteApi;
 use strata::term::progress::Progress;
+use strata::text::cut;
 
 use crate::confidence::{Confidence, Ledger};
 use crate::error::{Error, Result};
@@ -15,7 +16,7 @@ use crate::jq::Jq;
 use crate::probe::{self, Backend, Outcome, Verdict};
 use crate::report::{self, Assembly, Options, Report, Subject, paint};
 use crate::rule::{Catalog, Check, Level, Rule, Tier};
-use crate::world::World;
+use crate::world::{World, unreadable};
 
 /// What a run keeps of the catalog.
 #[derive(Debug, Clone)]
@@ -257,20 +258,22 @@ impl Default for WatchOptions {
 }
 
 /// One reading of a cluster during a build.
+///
+/// The summary is `null`, and the events are empty, when Palette does not give them to this key:
+/// a 404, or a 403 of a project key. A 401 or a 429 stops the watch with the error that names it,
+/// as a read of the world does.
 pub fn reading<A: PaletteApi>(api: &A, uid: &str, elapsed: Duration) -> Result<Value> {
     let cluster = api.get_json(&format!("/v1/spectroclusters/{uid}"))?;
     let summary = match api.get_json(&format!("/v1/dashboard/spectroclusters/{uid}")) {
         Ok(s) => s,
-        Err(strata::Error::Api { status, .. }) if (400..500).contains(&status) => Value::Null,
+        Err(strata::Error::Api { status, .. }) if unreadable(status) => Value::Null,
         Err(e) => return Err(e.into()),
     };
     let events = match api.get_json(&format!(
         "/v1/events/components/spectrocluster/{uid}?limit=50"
     )) {
         Ok(e) => e.get("items").cloned().unwrap_or(Value::Array(vec![])),
-        Err(strata::Error::Api { status, .. }) if (400..500).contains(&status) => {
-            Value::Array(vec![])
-        }
+        Err(strata::Error::Api { status, .. }) if unreadable(status) => Value::Array(vec![]),
         Err(e) => return Err(e.into()),
     };
     Ok(json!({
@@ -413,15 +416,6 @@ fn reading_lines(
     }
     out.extend(fresh.into_iter().map(|(_, line)| line));
     out
-}
-
-/// The first `n` characters, with a mark when there are more.
-fn cut(s: &str, n: usize) -> String {
-    if s.chars().count() <= n {
-        s.to_string()
-    } else {
-        format!("{} ...", s.chars().take(n).collect::<String>())
-    }
 }
 
 /// One line of `--verbose` at a reading of the watch: the rule and its verdict, with the first
@@ -984,6 +978,26 @@ rules:
             report.subject.source
         );
         assert_eq!(report.options.tiers, vec![Tier::Watch]);
+    }
+
+    #[test]
+    fn a_reading_has_no_summary_for_a_404_and_stops_at_a_401_or_a_429() {
+        let cluster = json!({"metadata": {"uid": "c1"}, "status": {"state": "Provisioning"}});
+        let summary = "/v1/dashboard/spectroclusters/c1";
+        let events = "/v1/events/components/spectrocluster/c1?limit=50";
+        let gone = strata::api::MemoryApi::new()
+            .with("/v1/spectroclusters/c1", cluster.clone())
+            .failing(events, 403, "{}");
+        let read = reading(&gone, "c1", Duration::from_secs(1)).unwrap();
+        assert_eq!(read["summary"], Value::Null);
+        assert_eq!(read["events"], json!([]));
+        for status in [401, 429] {
+            let refused = strata::api::MemoryApi::new()
+                .with("/v1/spectroclusters/c1", cluster.clone())
+                .failing(summary, status, "{}");
+            let err = reading(&refused, "c1", Duration::from_secs(1)).unwrap_err();
+            assert!(err.to_string().contains(&format!("HTTP {status}")), "{err}");
+        }
     }
 
     #[test]

@@ -4,7 +4,8 @@
 
 use crate::probe::Verdict;
 use crate::report::{
-    CheckResult, Report, not_run_reasons, not_run_text, scorecard_legend, written_text,
+    CheckResult, Report, not_run_reasons, not_run_text, pct, percent, scorecard_legend,
+    written_text,
 };
 use crate::rule::{Level, Severity};
 
@@ -13,10 +14,6 @@ fn esc(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
-}
-
-fn pct(v: Option<f64>) -> String {
-    v.map_or("–".to_string(), |x| format!("{:.0}%", x * 100.0))
 }
 
 fn class_of(c: &CheckResult) -> &'static str {
@@ -134,11 +131,11 @@ pub fn page(r: &Report) -> String {
             gate * 100.0,
             pct(sc.readiness),
             sc.ran, sc.passed, sc.failed, sc.not_run, sc.not_checked, sc.rows, sc.seen, sc.with_check, sc.preflight, sc.with_runs,
-            sc.weakest_bound.map_or("no runs".to_string(), |b| format!("{:.0}%", b * 100.0))
+            sc.weakest_bound.map_or_else(|| "no runs".to_string(), percent)
         ));
     }
     h.push_str("</tbody></table>");
-    h.push_str(&format!("<p class=\"legend\">The mark on each bar is the gate, {:.0}%. Readiness is the share of the checks that apply here and passed: a check that did not run counts against it, and a row with no check in strata-preflight is outside it, so read the two together.</p>", gate * 100.0));
+    h.push_str(&format!("<p class=\"legend\">The mark on each bar is the gate, {}. Readiness is the share of the checks that apply here and passed: a check that did not run counts against it, and a row with no check in strata-preflight is outside it, so read the two together.</p>", percent(gate)));
     h.push_str(&format!(
         "<p class=\"legend\">{}</p>",
         esc(&scorecard_legend(&r.sections))
@@ -262,7 +259,7 @@ mod tests {
             confidence: None,
             counts_as_failure: false,
         };
-        let report = Report {
+        let mut report = Report {
             schema: REPORT_SCHEMA.into(),
             tool: Tool {
                 name: "strata-preflight".into(),
@@ -332,6 +329,15 @@ mod tests {
         assert!(html.contains("PROBE FAIL"));
         assert!(html.contains("pool worker has size 4"));
         assert!(html.contains("prefers-color-scheme: dark"));
+        // a readiness that no check gives shows as the terminal and the markdown show it
+        report.summary.readiness = None;
+        report.sections[0].readiness = None;
+        let html = page(&report);
+        assert!(
+            html.contains("<b>-</b><span>readiness</span>"),
+            "the tile of no readiness"
+        );
+        assert!(!html.contains('–'), "one mark for no percent");
         let _ = BTreeMap::<String, String>::new();
     }
 }

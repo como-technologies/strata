@@ -715,6 +715,7 @@ impl PaletteApi for Flaky<'_> {
         if *left > 0 {
             *left -= 1;
             return Err(Error::Transport {
+                method: Method::Get,
                 path: path.to_string(),
                 message: "connection reset".into(),
             });
@@ -7238,6 +7239,7 @@ impl PaletteApi for SyncDropped {
     fn get_json(&self, path: &str) -> strata::Result<Value> {
         if path == PACK_REGISTRY_SUMMARY {
             return Err(Error::Transport {
+                method: Method::Get,
                 path: path.to_string(),
                 message: "connection reset".into(),
             });

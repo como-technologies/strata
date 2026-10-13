@@ -68,6 +68,7 @@ pub trait PaletteApi {
     /// POST says so.
     fn post_json(&self, path: &str, _body: &Value) -> Result<Value> {
         Err(Error::Transport {
+            method: Method::Post,
             path: path.to_string(),
             message: "this API sends no POST".to_string(),
         })

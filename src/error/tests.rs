@@ -38,10 +38,12 @@ fn one_of_each() -> Vec<Error> {
             message: "matched no files".into(),
         },
         Error::Transport {
+            method: Method::Get,
             path: "/v1/x".into(),
             message: "refused".into(),
         },
         Error::NotJson {
+            method: Method::Post,
             path: "/v1/x".into(),
             source: bad_json(),
         },
@@ -305,6 +307,52 @@ fn a_candidate_error_for_a_rule_of_the_create_names_the_code_and_a_format_proble
         "'c.yaml': a candidate needs at least one layer"
     );
     assert!(format.to_json().get("code").is_none());
+}
+
+#[test]
+fn a_transport_error_and_a_body_that_is_not_json_name_the_method_of_the_request() {
+    struct NoPost;
+    impl crate::api::PaletteApi for NoPost {
+        fn get_json(&self, _path: &str) -> Result<serde_json::Value> {
+            Ok(serde_json::Value::Null)
+        }
+    }
+    // the default POST of an API gives a transport error of a POST
+    let post = crate::api::PaletteApi::post_json(&NoPost, "/v1/x", &serde_json::Value::Null)
+        .unwrap_err();
+    assert_eq!(post.to_string(), "POST /v1/x: this API sends no POST");
+    assert_eq!(post.to_json()["method"], "POST");
+    let not_json = Error::NotJson {
+        method: Method::Post,
+        path: "/v1/x".into(),
+        source: bad_json(),
+    };
+    assert!(
+        not_json
+            .to_string()
+            .starts_with("POST /v1/x: response is not JSON: "),
+        "{not_json}"
+    );
+    assert_eq!(not_json.to_json()["method"], "POST");
+    assert_eq!(not_json.to_json()["path"], "/v1/x");
+}
+
+#[test]
+fn an_empty_list_of_profiles_or_of_registries_reads_none_in_the_message() {
+    let profile = Error::ClusterProfileNotFound {
+        cluster: "c1".into(),
+        profile: "nope".into(),
+        applied: Vec::new(),
+    };
+    assert!(profile.to_string().ends_with("; applied: none"), "{profile}");
+    let registry = Error::RegistryNotFound {
+        registry: "Mirror".into(),
+        available: Vec::new(),
+    };
+    assert!(
+        registry.to_string().ends_with("; registries: none"),
+        "{registry}"
+    );
 }
 
 #[test]

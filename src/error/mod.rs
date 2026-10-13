@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::api::Method;
 use crate::api::codes::CreateRule;
 use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR};
-use crate::text::and_list;
+use crate::text::{and_list, cut};
 
 mod class;
 mod json;
@@ -28,7 +28,7 @@ pub enum Error {
     },
     /// Palette answered with a non-2xx status. A 401 or a 403 is almost always the key, so the
     /// message names where a key comes from; the body alone names nothing the reader can set.
-    #[error("{method} {path} failed with HTTP {status}: {}{}", first_part(body), key_hint(*status))]
+    #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body, BODY_IN_MESSAGE), key_hint(*status))]
     Api {
         /// The request method.
         method: Method,
@@ -78,16 +78,20 @@ pub enum Error {
         expected: &'static str,
     },
     /// The request did not complete.
-    #[error("GET {path}: {message}")]
+    #[error("{method} {path}: {message}")]
     Transport {
+        /// The request method.
+        method: Method,
         /// Request path.
         path: String,
         /// What the transport said.
         message: String,
     },
     /// Palette answered 2xx with a body that is not JSON.
-    #[error("GET {path}: response is not JSON: {source}")]
+    #[error("{method} {path}: response is not JSON: {source}")]
     NotJson {
+        /// The request method.
+        method: Method,
         /// Request path.
         path: String,
         /// The parse error.
@@ -122,7 +126,7 @@ pub enum Error {
         profiles: Vec<crate::scope::ScopedUid>,
     },
     /// `cluster:<uid>/<profile>` named a profile the cluster does not run.
-    #[error("cluster '{cluster}' has no applied profile named '{profile}'; applied: {}", applied.join(", "))]
+    #[error("cluster '{cluster}' has no applied profile named '{profile}'; applied: {}", list_or_none(applied))]
     ClusterProfileNotFound {
         /// Cluster uid.
         cluster: String,
@@ -346,7 +350,7 @@ pub enum Error {
         registries: Vec<String>,
     },
     /// A candidate names a registry that is not visible with this key.
-    #[error("no registry named '{registry}' is visible; registries: {}", available.join(", "))]
+    #[error("no registry named '{registry}' is visible; registries: {}", list_or_none(available))]
     RegistryNotFound {
         /// The registry name asked for.
         registry: String,
@@ -416,14 +420,9 @@ fn key_hint(status: u16) -> String {
     }
 }
 
-/// The first 300 characters of a body, for a message. The field keeps the whole body.
-fn first_part(body: &str) -> String {
-    if body.chars().count() <= 300 {
-        body.to_string()
-    } else {
-        format!("{}…", body.chars().take(300).collect::<String>())
-    }
-}
+/// The most characters of a body that the message of [`Error::Api`] shows. The field keeps the
+/// whole body.
+const BODY_IN_MESSAGE: usize = 300;
 
 /// What strata says after a rule that only the create of Palette checks: why strata checks it.
 const CREATE_GAP: &str = "Palette checks this only at the create, and no route that takes a \
