@@ -180,8 +180,9 @@ impl PaletteValidation {
         PaletteValidation::refused(cluster_uid, errors)
     }
 
-    /// The answer for the cluster `cluster_uid` with these errors: see
-    /// [`ProfileValidation::refused`].
+    /// The answer for the cluster `cluster_uid` with these errors, sorted and with no copy.
+    ///
+    /// It accepts when there is no error.
     pub fn refused(cluster_uid: &str, errors: Vec<PaletteRefusal>) -> PaletteValidation {
         PaletteValidation {
             cluster_uid: cluster_uid.to_string(),

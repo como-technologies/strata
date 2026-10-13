@@ -135,8 +135,8 @@ const CREATE_VALIDATION: Check = &["ClusterProfileCreationValidationFailure"];
 ///
 /// Each refuses the whole request with an HTTP error and a code before it checks each pack. Strata
 /// reads such a refusal as an answer, and does not send the request again. Palette gives each
-/// refusal the response type of a server fault, HTTP 500, except the ones that set another type:
-/// see [`refuses`](ValidateRoute::refuses).
+/// refusal the response type of a server fault, HTTP 500. A few refusals set another status: 403,
+/// 404, 409, or 422.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValidateRoute {
     /// `POST /v1/spectroclusters/{uid}/validate/packs`: the packs of the profiles on a cluster.
