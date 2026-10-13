@@ -71,6 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let snapshot = |uid: &str| {
         ops::snapshot_for(
             &Ref::Uid(uid.to_string()),
+            &ops::SnapshotOptions::default(),
             || Ok(Palette::new(api.clone())),
             at,
             &quiet,

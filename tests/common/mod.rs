@@ -722,6 +722,7 @@ pub fn snapshot_of_at(
 ) -> strata::Result<strata::snapshot::Snapshot> {
     strata::ops::snapshot_for(
         &strata::reference::Ref::parse(text),
+        &strata::ops::SnapshotOptions::default(),
         || Ok(strata::api::Palette::new(api)),
         at,
         &strata::progress::Progress::silent(),

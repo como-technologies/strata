@@ -134,6 +134,7 @@ fn snapshot_for_resolves_names_and_never_connects_for_files() {
     fs::write(&file, by_uid.to_json(true).unwrap()).unwrap();
     let from_file = ops::snapshot_for(
         &Ref::Snapshot(file),
+        &ops::SnapshotOptions::default(),
         || -> strata::Result<Palette<MemoryApi>> { panic!("must not connect for a snapshot file") },
         "t9",
         &Progress::silent(),
@@ -159,6 +160,170 @@ fn name_at_latest_records_the_resolved_version_and_keeps_latest_in_the_ref() {
     assert_eq!(snap.source.reference, "lab-profile@latest");
     assert_eq!(snap.source.version, "1.3.0");
     assert_eq!(snap.source.uid, UID_B);
+}
+
+/// The record of each kind of ref names the ref as typed. An empty part after a separator is
+/// left out: `cluster:<uid>/` records `cluster:<uid>`.
+#[test]
+fn a_record_of_each_kind_of_ref_holds_the_ref_as_typed() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let a = dir.path().join("a");
+    let profile = read_json(&a.join("profile.json"));
+    let published = profile["spec"]["published"].clone();
+    let document = profile_document(
+        UID_A,
+        "lab-profile",
+        "1.2.0",
+        published.clone(),
+        Some(published),
+    );
+    let profiles = serve_profile(
+        MemoryApi::new(),
+        UID_A,
+        document,
+        read_json(&a.join("manifests.json")),
+        read_json(&a.join("variables.json")),
+    )
+    .with(
+        PROFILE_LISTING,
+        serde_json::json!({"items": [
+            {"metadata": {"name": "lab-profile", "uid": UID_A}, "spec": {"version": "1.2.0"}}
+        ]}),
+    );
+    let cluster = serve_cluster(MemoryApi::new(), dir.path(), "cluster-merged");
+    let pending = serve_pending(
+        serve_cluster(MemoryApi::new(), dir.path(), "cluster-b"),
+        dir.path(),
+        "cluster-a",
+        |_| {},
+    )
+    .with(profile_route(UID_A), profile);
+    let edge = serve_edge_host(MemoryApi::new(), dir.path());
+    let group = serve_cluster_group(MemoryApi::new(), dir.path());
+    let app = serve_app_profile(MemoryApi::new(), "2");
+    let registry = serve_registry(vec![], &[("reg-public", public_entity())]);
+    let cases = [
+        (&profiles, "lab-profile@1.2.0".to_string()),
+        (&profiles, UID_A.to_string()),
+        (&profiles, format!("{UID_A}@draft")),
+        (&profiles, "lab-profile@1.2.0@draft".to_string()),
+        (&registry, "pack:csi-aws-ebs@1.65.0".to_string()),
+        (&registry, "pack:reg-public/csi-aws-ebs@1.65.0".to_string()),
+        (&cluster, format!("cluster:{CLUSTER_UID}")),
+        (&cluster, format!("cluster:{CLUSTER_UID}/lab-profile")),
+        (&pending, format!("cluster:{CLUSTER_UID}@pending")),
+        (&edge, "edgehost:e1".to_string()),
+        (&edge, "edgehost:edge-1".to_string()),
+        (&group, "clustergroup:g1".to_string()),
+        (&app, "appprofile:ap1".to_string()),
+        (&app, "appprofile:shop@1.0.0".to_string()),
+    ];
+    for (api, text) in &cases {
+        let snap = snapshot_of(api, text).unwrap_or_else(|e| panic!("{text}: {e}"));
+        assert_eq!(snap.source.reference, *text, "{text}");
+    }
+    let trimmed = snapshot_of(&cluster, &format!("cluster:{CLUSTER_UID}/")).unwrap();
+    assert_eq!(trimmed.source.reference, format!("cluster:{CLUSTER_UID}"));
+}
+
+/// Each option of `snapshot` fits some kinds of ref. Another kind is a usage error before any
+/// request, and so is a set of clusters.
+#[test]
+fn an_option_of_snapshot_that_does_not_fit_the_ref_is_a_usage_error_before_any_request() {
+    use strata::ops::SnapshotOptions;
+    let no_request = || -> strata::Result<Palette<MemoryApi>> {
+        panic!("a usage error comes before any request")
+    };
+    let macros = SnapshotOptions {
+        macros: true,
+        ..SnapshotOptions::default()
+    };
+    let shape = SnapshotOptions {
+        shape: true,
+        ..SnapshotOptions::default()
+    };
+    let raw_dir = SnapshotOptions {
+        raw_dir: Some(PathBuf::from("raw")),
+        ..SnapshotOptions::default()
+    };
+    let validate = SnapshotOptions {
+        validate: true,
+        ..SnapshotOptions::default()
+    };
+    let content = SnapshotOptions::default();
+    let cases = [
+        ("edgehost:e1", &macros, "--macros takes <name>@<version>"),
+        ("pack:csi-aws-ebs@1.65.0", &macros, "--macros takes"),
+        (
+            "aws-stack@1.1.1@draft",
+            &validate,
+            "--validate takes a profile version or --from-candidate, not a draft",
+        ),
+        (
+            "cluster:c1",
+            &validate,
+            "--validate takes a profile version or --from-candidate: Palette checks",
+        ),
+        ("aws-stack@1.1.1", &shape, "--shape needs a cluster ref"),
+        (
+            "cluster:c1@pending",
+            &raw_dir,
+            "--raw-dir takes a profile or a cluster",
+        ),
+        (
+            "edgehost:e1",
+            &raw_dir,
+            "--raw-dir takes a profile or a cluster",
+        ),
+        (
+            "pack:csi-aws-ebs@1.65.0",
+            &raw_dir,
+            "--raw-dir takes a profile or a cluster",
+        ),
+        (
+            "tag:env=dev",
+            &content,
+            "tag:env=dev names a set of clusters",
+        ),
+        ("filter:prod", &macros, "--macros takes"),
+    ];
+    for (text, options, message) in cases {
+        let err = ops::snapshot_for(
+            &Ref::parse(text),
+            options,
+            no_request,
+            "t0",
+            &Progress::silent(),
+        )
+        .unwrap_err();
+        assert!(matches!(err, Error::Usage { .. }), "{text}: {err}");
+        assert!(err.to_string().starts_with(message), "{text}: {err}");
+    }
+    // an option with a ref that it takes connects
+    let connected = || -> strata::Result<Palette<MemoryApi>> {
+        Err(Error::Usage {
+            message: "connected".to_string(),
+        })
+    };
+    for (text, options) in [
+        ("cluster:c1", &shape),
+        ("cluster:c1", &macros),
+        ("clustergroup:g1", &macros),
+        ("aws-stack@1.1.1", &validate),
+        ("cluster:c1/aws-stack", &raw_dir),
+        ("aws-stack@1.1.1", &raw_dir),
+    ] {
+        let err = ops::snapshot_for(
+            &Ref::parse(text),
+            options,
+            connected,
+            "t0",
+            &Progress::silent(),
+        )
+        .unwrap_err();
+        assert_eq!(err.to_string(), "connected", "{text}");
+    }
 }
 
 #[test]
@@ -227,6 +392,7 @@ fn a_503_twice_then_success_yields_a_snapshot() {
     let (retry, slept) = retrying(&api, 3);
     let snap = ops::snapshot_for(
         &Ref::Uid(UID_A.into()),
+        &ops::SnapshotOptions::default(),
         || Ok(Palette::new(retry)),
         "t0",
         &Progress::silent(),
@@ -1384,6 +1550,7 @@ fn serve_cluster(api: MemoryApi, raw_root: &Path, dir: &str) -> MemoryApi {
 fn snapshot_cluster(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
     ops::snapshot_for(
         &cluster_ref(CLUSTER_UID, profile, false),
+        &ops::SnapshotOptions::default(),
         || Ok(Palette::new(api)),
         "t0",
         &Progress::silent(),
@@ -1395,6 +1562,7 @@ fn snapshot_cluster(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Sn
 fn snapshot_pending(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
     ops::snapshot_for(
         &cluster_ref(CLUSTER_UID, profile, true),
+        &ops::SnapshotOptions::default(),
         || Ok(Palette::new(api)),
         "t0",
         &Progress::silent(),

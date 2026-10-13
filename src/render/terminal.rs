@@ -795,7 +795,7 @@ impl Renderer for TerminalRenderer {
             ));
             let rows: Vec<Vec<String>> = filters
                 .iter()
-                .map(|f| vec![format!("filter:{}", f.name), f.uid.clone(), f.expression()])
+                .map(|f| vec![f.reference(), f.uid.clone(), f.expression()])
                 .collect();
             let widths = column_widths(&rows);
             for row in &rows {

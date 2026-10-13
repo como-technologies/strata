@@ -18,23 +18,6 @@ use strata::render::{self, Format};
 use strata::snapshot::Snapshot;
 use strata::{TOOL_NAME, candidate, diff, ops};
 
-/// Every command, in the order that `strata --help` lists them. A first argument that is not one
-/// of these makes `strata <A> <B>` a compare.
-const COMMANDS: &[&str] = &[
-    "behind",
-    "candidate",
-    "compare",
-    "consumers",
-    "help",
-    "list",
-    "packs",
-    "preflight",
-    "same-release",
-    "schema",
-    "snapshot",
-    "verify",
-];
-
 /// The binary that `strata preflight` runs. It is a package of its own, `strata-preflight`, so the
 /// strata crate stays free of its dependencies; a release ships both binaries side by side.
 const PREFLIGHT_BIN: &str = "strata-preflight";
@@ -55,13 +38,6 @@ impl Cli {
     /// True when the command will write JSON, so an error must be JSON too.
     fn json_selected(&self) -> bool {
         match &self.cmd {
-            Cmd::Compare(a) => a.out.format() == Format::Json,
-            Cmd::Verify(a) => a.out.format() == Format::Json,
-            Cmd::SameRelease(a) => a.out.format() == Format::Json,
-            Cmd::Consumers(a) => a.out.format() == Format::Json,
-            Cmd::List(a) => a.out.format() == Format::Json,
-            Cmd::Packs(a) => a.out.format() == Format::Json,
-            Cmd::Behind(a) => a.out.format() == Format::Json,
             Cmd::Preflight(a) => {
                 a.args.iter().any(|x| x == "--json" || x == "--format=json")
                     || a.args
@@ -69,7 +45,7 @@ impl Cli {
                         .any(|w| w[0] == "--format" && w[1] == "json")
             }
             Cmd::Snapshot(a) => a.format() == Format::Json,
-            Cmd::Candidate(_) | Cmd::Schema { .. } => false,
+            cmd => cmd.out().is_some_and(|out| out.format() == Format::Json),
         }
     }
 }
@@ -108,6 +84,22 @@ enum Cmd {
     Verify(VerifyArgs),
 }
 
+impl Cmd {
+    /// The output flags of the command, for each command that renders a report.
+    fn out(&self) -> Option<&OutputArgs> {
+        match self {
+            Cmd::Behind(a) => Some(&a.out),
+            Cmd::Compare(a) => Some(&a.out),
+            Cmd::Consumers(a) => Some(&a.out),
+            Cmd::List(a) => Some(&a.out),
+            Cmd::Packs(a) => Some(&a.out),
+            Cmd::SameRelease(a) => Some(&a.out),
+            Cmd::Verify(a) => Some(&a.out),
+            Cmd::Candidate(_) | Cmd::Preflight(_) | Cmd::Schema { .. } | Cmd::Snapshot(_) => None,
+        }
+    }
+}
+
 #[derive(Args)]
 struct OutputArgs {
     /// The report format: terminal, markdown, or json
@@ -117,14 +109,14 @@ struct OutputArgs {
         default_value = "terminal",
         hide_possible_values = true
     )]
-    format: FormatArg,
+    format: Format,
     /// The same as --format json
     #[arg(long, conflicts_with = "format")]
     json: bool,
     /// Color the report: auto, always, or never
     #[arg(long, value_enum, default_value = "auto", num_args = 0..=1,
           default_missing_value = "always", hide_possible_values = true)]
-    color: ColorArg,
+    color: ColorMode,
     /// The same as --color=never
     #[arg(long, conflicts_with = "color")]
     no_color: bool,
@@ -136,19 +128,25 @@ struct OutputArgs {
     quiet: bool,
 }
 
+/// The format that `--json` and `--format` select: `--json` wins, and the terminal is the
+/// default.
+fn format_of(json: bool, format: Option<Format>) -> Format {
+    if json {
+        Format::Json
+    } else {
+        format.unwrap_or(Format::Terminal)
+    }
+}
+
 impl OutputArgs {
     fn format(&self) -> Format {
-        if self.json {
-            Format::Json
-        } else {
-            self.format.into()
-        }
+        format_of(self.json, Some(self.format))
     }
     fn paint(&self) -> Paint {
         Paint::resolve(if self.no_color {
             ColorMode::Never
         } else {
-            self.color.into()
+            self.color
         })
     }
     fn renderer(&self) -> Box<dyn render::Renderer> {
@@ -222,7 +220,7 @@ struct SnapshotArgs {
     prune: bool,
     /// With --dir: the report format: terminal, markdown, or json
     #[arg(long, value_enum, requires = "dir", hide_possible_values = true)]
-    format: Option<FormatArg>,
+    format: Option<Format>,
     /// With --dir: the same as --format json
     #[arg(long, conflicts_with = "format", requires = "dir")]
     json: bool,
@@ -234,10 +232,16 @@ struct SnapshotArgs {
 impl SnapshotArgs {
     /// The format of the report of a set. A record is always JSON.
     fn format(&self) -> Format {
-        if self.json {
-            Format::Json
-        } else {
-            self.format.map_or(Format::Terminal, Format::from)
+        format_of(self.json, self.format)
+    }
+
+    /// What the record holds beyond the content, and what Palette is asked.
+    fn options(&self) -> ops::SnapshotOptions {
+        ops::SnapshotOptions {
+            macros: self.macros,
+            shape: self.shape,
+            raw_dir: self.raw_dir.clone(),
+            validate: self.validate,
         }
     }
 }
@@ -350,7 +354,7 @@ struct PacksArgs {
 struct ListArgs {
     /// What to list; with none, profiles and clusters
     #[arg(value_enum)]
-    kinds: Vec<KindArg>,
+    kinds: Vec<ListKind>,
     /// List this project, by uid; '' is tenant scope
     #[arg(long)]
     project: Option<String>,
@@ -380,26 +384,6 @@ struct ListArgs {
     out: OutputArgs,
 }
 
-/// What `list` can list.
-#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum KindArg {
-    Profiles,
-    Clusters,
-    Projects,
-    Filters,
-}
-
-impl From<KindArg> for ListKind {
-    fn from(k: KindArg) -> ListKind {
-        match k {
-            KindArg::Profiles => ListKind::Profiles,
-            KindArg::Clusters => ListKind::Clusters,
-            KindArg::Projects => ListKind::Projects,
-            KindArg::Filters => ListKind::Filters,
-        }
-    }
-}
-
 /// Differences `same-release` can be told to accept.
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum Allow {
@@ -407,40 +391,6 @@ enum Allow {
     RegistryMove,
     /// A pack with no upstream digest, whose archive the root cannot show
     NoDigest,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum FormatArg {
-    Terminal,
-    Markdown,
-    Json,
-}
-
-impl From<FormatArg> for Format {
-    fn from(f: FormatArg) -> Format {
-        match f {
-            FormatArg::Terminal => Format::Terminal,
-            FormatArg::Markdown => Format::Markdown,
-            FormatArg::Json => Format::Json,
-        }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum ColorArg {
-    Auto,
-    Always,
-    Never,
-}
-
-impl From<ColorArg> for ColorMode {
-    fn from(c: ColorArg) -> ColorMode {
-        match c {
-            ColorArg::Auto => ColorMode::Auto,
-            ColorArg::Always => ColorMode::Always,
-            ColorArg::Never => ColorMode::Never,
-        }
-    }
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -486,39 +436,43 @@ fn command() -> clap::Command {
             "Use \"strata <command> --help\" for more information about a command.\n",
             "The book: https://legendary-train-pzq9ojj.pages.github.io/"
         ));
-    for name in COMMANDS {
-        // `strata preflight --help` is the help of strata-preflight, so it goes through
-        if *name == "help" || *name == "preflight" {
-            continue;
-        }
+    // `strata preflight --help` is the help of strata-preflight, so it goes through
+    let names: Vec<String> = cmd
+        .get_subcommands()
+        .map(|s| s.get_name().to_string())
+        .filter(|name| name != "preflight")
+        .collect();
+    for name in names {
         cmd = cmd.mut_subcommand(name, |s| s.arg(help_flag()));
     }
     cmd
 }
 
-/// True when `arg` names a command, so `strata <A> <B>` does not become `strata compare`.
-fn is_command(arg: &str) -> bool {
-    COMMANDS.contains(&arg)
+/// True when `arg` names a command of `cmd`, so `strata <A> <B>` does not become
+/// `strata compare`. `cmd` is built, so `help` is one of them.
+fn is_command(cmd: &clap::Command, arg: &str) -> bool {
+    cmd.find_subcommand(arg).is_some()
 }
 
 fn main() -> ExitCode {
+    let mut cmd = command();
+    cmd.build();
     let mut argv: Vec<String> = std::env::args().collect();
     let first = argv.get(1).map(String::as_str).unwrap_or("");
     let is_global_flag = matches!(first, "-h" | "--help" | "-V" | "--version");
-    if argv.len() > 1 && !is_command(first) && !is_global_flag {
+    if argv.len() > 1 && !is_command(&cmd, first) && !is_global_flag {
         // `strata <A> <B>` is a compare, so a command name that is not first would become a ref
         // and fail as an unexpected argument of `compare`. Say what is wrong instead.
-        if let Some(name) = argv[2..].iter().find(|a| is_command(a)) {
-            command()
-                .error(
-                    clap::error::ErrorKind::InvalidSubcommand,
-                    format!("'{name}' is a command, so it comes first: strata {name} ..."),
-                )
-                .exit();
+        if let Some(name) = argv[2..].iter().find(|a| is_command(&cmd, a)) {
+            cmd.error(
+                clap::error::ErrorKind::InvalidSubcommand,
+                format!("'{name}' is a command, so it comes first: strata {name} ..."),
+            )
+            .exit();
         }
         argv.insert(1, "compare".to_string());
     }
-    let matches = command().get_matches_from(argv);
+    let matches = cmd.get_matches_from(argv);
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
     let json = cli.json_selected();
     match run(cli) {
@@ -714,8 +668,8 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
         });
     }
     // a set of clusters is one record for each, in a directory
-    let set = a.r#ref.as_deref().map(Ref::parse);
-    match (&set, &a.dir) {
+    let reference = a.r#ref.as_deref().map(Ref::parse);
+    match (&reference, &a.dir) {
         (Some(Ref::ClusterSet { tags, filter }), Some(dir)) => {
             let query = ops::ClusterQuery {
                 tags: tags.clone(),
@@ -734,13 +688,6 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             print!("{}", renderer.render_set(&report)?);
             progress.note(&render::set_counts_line(&report));
             return Ok(ExitCode::from(report.exit_code()));
-        }
-        (Some(Ref::ClusterSet { .. }), None) => {
-            return Err(Error::Usage {
-                message: "a tag: or filter: ref names a set of clusters: give --dir DIR, and \
-                          strata writes one record for each"
-                    .to_string(),
-            });
         }
         (_, Some(_)) => {
             return Err(Error::Usage {
@@ -763,165 +710,24 @@ fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
             ops::snapshot_from_dir(dir, &reference, &now)?
         }
         (None, None) => {
-            let text = a.r#ref.as_deref().ok_or_else(|| Error::Usage {
+            let reference = reference.ok_or_else(|| Error::Usage {
                 message: "snapshot needs a profile ref or --from-raw DIR".to_string(),
             })?;
-            let reference = Ref::parse(text);
-            if a.macros
-                && !matches!(
-                    reference,
-                    Ref::Cluster { .. }
-                        | Ref::ClusterGroup { .. }
-                        | Ref::Uid(_)
-                        | Ref::NameVersion { .. }
-                )
-            {
-                return Err(Error::Usage {
-                    message: "--macros takes <name>@<version>, a profile uid, cluster:<cluster>, \
-                              or clustergroup:<group>"
-                        .to_string(),
+            // `snapshot` writes a record, and reads none: a file-shaped ref reaches Palette
+            // nowhere else, and a path sent as a uid asks for /v1/clusterprofiles/<path>, which
+            // 404s after the retries
+            if let Ref::Snapshot(path) = &reference {
+                return Err(Error::RecordNotASource {
+                    path: path.display().to_string(),
                 });
             }
-            if a.validate && matches!(reference, Ref::Draft { .. }) {
-                return Err(Error::Usage {
-                    message: format!(
-                        "--validate takes a profile version or --from-candidate, not a draft \
-                         ({reference}): give the candidate of the draft, from `strata candidate \
-                         {reference}`, to --from-candidate"
-                    ),
-                });
-            }
-            if a.validate && !matches!(reference, Ref::Uid(_) | Ref::NameVersion { .. }) {
-                return Err(Error::Usage {
-                    message: "--validate takes a profile version or --from-candidate: Palette \
-                              checks the packs of a profile, and not of a cluster, a cluster \
-                              group, an app profile, or one pack"
-                        .to_string(),
-                });
-            }
-            if a.shape && !matches!(reference, Ref::Cluster { .. }) {
-                return Err(Error::Usage {
-                    message: "--shape needs a cluster ref: a profile has no machine pools"
-                        .to_string(),
-                });
-            }
-            let flagged = matches!(
-                reference,
-                Ref::Cluster { pending: true, .. }
-                    | Ref::Draft { .. }
-                    | Ref::EdgeHost { .. }
-                    | Ref::ClusterGroup { .. }
-                    | Ref::AppProfile { .. }
-            );
-            if a.raw_dir.is_some() && flagged {
-                return Err(Error::Usage {
-                    message: "--raw-dir takes a profile or a cluster: a record read back from \
-                              the directory does not say pending, draft, edge host, cluster \
-                              group, or app profile"
-                        .to_string(),
-                });
-            }
-            let palette = connect(progress, None)?;
-            let snap = match &reference {
-                Ref::Cluster {
-                    uid,
-                    profile,
-                    pending,
-                } => {
-                    let mut raw = palette.fetch_subject(
-                        strata::snapshot::SubjectKind::Cluster,
-                        uid,
-                        &progress,
-                    )?;
-                    if *pending {
-                        raw = palette.with_pending(raw)?;
-                    }
-                    if a.macros {
-                        let uid = raw
-                            .cluster
-                            .pointer("/metadata/uid")
-                            .and_then(serde_json::Value::as_str)
-                            .unwrap_or(uid)
-                            .to_string();
-                        raw.resolved_values = Some(
-                            palette
-                                .resolved_values(strata::snapshot::SubjectKind::Cluster, &uid)?,
-                        );
-                    }
-                    if a.shape {
-                        raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
-                    }
-                    if let Some(dir) = &a.raw_dir {
-                        raw.save_dir(dir, &now)?;
-                    }
-                    let snap = Snapshot::from_cluster(&raw, profile.as_deref(), text, &now)?;
-                    if *pending { snap.mark_pending() } else { snap }
-                }
-                Ref::ClusterGroup { uid } => {
-                    ops::cluster_group_snapshot(&palette, uid, a.macros, text, &now, &progress)?
-                }
-                Ref::ClusterSet { .. } => unreachable!("a set of clusters returned above"),
-                Ref::AppProfile { id, version } => ops::app_profile_snapshot(
-                    &palette,
-                    id,
-                    version.as_deref(),
-                    text,
-                    &now,
-                    &progress,
-                )?,
-                Ref::EdgeHost { uid, profile } => {
-                    let raw = palette.fetch_subject(
-                        strata::snapshot::SubjectKind::EdgeHost,
-                        uid,
-                        &progress,
-                    )?;
-                    Snapshot::from_cluster(&raw, profile.as_deref(), text, &now)?
-                        .with_kind(strata::snapshot::SubjectKind::EdgeHost)
-                }
-                Ref::Pack {
-                    registry,
-                    name,
-                    version,
-                } => strata::candidate::pack_snapshot(
-                    &palette,
-                    registry.as_deref(),
-                    name,
-                    version,
-                    text,
-                    &now,
-                    &progress,
-                )?,
-                // a file-shaped ref reaches Palette nowhere else, and a path sent as a uid asks
-                // for /v1/clusterprofiles/<path>, which 404s after the retries
-                Ref::Snapshot(path) => {
-                    return Err(Error::RecordNotASource {
-                        path: path.display().to_string(),
-                    });
-                }
-                Ref::Draft { id, version } => {
-                    ops::draft_snapshot(&palette, id, version.as_deref(), text, &now, &progress)?
-                }
-                Ref::Uid(_) | Ref::NameVersion { .. } => {
-                    let uid = match &reference {
-                        Ref::NameVersion { name, version } => palette.resolve(name, version)?,
-                        _ => text.to_string(),
-                    };
-                    let mut raw = palette.fetch_profile(&uid, &progress)?;
-                    if a.macros {
-                        raw.resolved_values = Some(palette.profile_resolved_values(&uid)?);
-                    }
-                    if let Some(dir) = &a.raw_dir {
-                        raw.save_dir(dir, &now)?;
-                    }
-                    let mut snap = Snapshot::from_raw(&raw, text, &now)?;
-                    if a.validate {
-                        snap.source.palette_validation =
-                            Some(ops::profile_validation(&palette, &snap)?);
-                    }
-                    snap
-                }
-            };
-            snap.with_project(palette.project_uid())
+            ops::snapshot_for(
+                &reference,
+                &a.options(),
+                || connect(progress, None),
+                &now,
+                &progress,
+            )?
         }
     };
     // the answer of Palette is what --validate asks for, so -q does not hide it; it goes to
@@ -985,19 +791,15 @@ fn expand_records(args: &[String]) -> Result<Vec<PathBuf>> {
 fn cmd_candidate(a: &CandidateArgs) -> Result<ExitCode> {
     let progress = progress(a.quiet);
     let reference = Ref::parse(&a.r#ref);
-    if let Ref::Cluster { .. }
-    | Ref::EdgeHost { .. }
-    | Ref::ClusterGroup { .. }
-    | Ref::AppProfile { .. }
-    | Ref::ClusterSet { .. }
-    | Ref::Pack { .. } = reference
-    {
+    // a record can hold a profile version too: Candidate::from_snapshot says
+    if !reference.is_profile_version() && !matches!(reference, Ref::Snapshot(_)) {
         return Err(Error::ProfileRefRequired {
             reference: a.r#ref.clone(),
         });
     }
     let snap = ops::snapshot_for(
         &reference,
+        &ops::SnapshotOptions::default(),
         || connect(progress, None),
         &now_utc(),
         &progress,
@@ -1060,8 +862,15 @@ fn cmd_same_release(a: &SameReleaseArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let now = now_utc();
     let mut records = Vec::with_capacity(a.records.len());
+    let content = ops::SnapshotOptions::default();
     for r in &a.records {
-        let snap = ops::snapshot_for(&Ref::parse(r), || connect(progress, None), &now, &progress)?;
+        let snap = ops::snapshot_for(
+            &Ref::parse(r),
+            &content,
+            || connect(progress, None),
+            &now,
+            &progress,
+        )?;
         records.push((r.clone(), snap));
     }
     let policy = if a.allow.contains(&Allow::RegistryMove) {
@@ -1113,7 +922,7 @@ fn cmd_behind(a: &BehindArgs) -> Result<ExitCode> {
 fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let options = ListOptions {
-        kinds: a.kinds.iter().map(|&k| k.into()).collect(),
+        kinds: a.kinds.clone(),
         project: project_arg(progress, &a.project, &a.project_name)?,
         packs: a.packs,
         pack: a.pack.clone(),
@@ -1174,19 +983,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn help_names_every_command_the_binary_has() {
+    fn each_command_and_help_count_as_a_command_and_a_ref_does_not() {
         let mut built = command();
         built.build();
-        let mut commands: Vec<&str> = built.get_subcommands().map(|c| c.get_name()).collect();
-        commands.sort_unstable();
-        let mut listed: Vec<&str> = COMMANDS.to_vec();
-        listed.sort_unstable();
-        assert_eq!(listed, commands, "COMMANDS and the binary disagree");
+        for name in [
+            "behind",
+            "candidate",
+            "compare",
+            "consumers",
+            "help",
+            "list",
+            "packs",
+            "preflight",
+            "same-release",
+            "schema",
+            "snapshot",
+            "verify",
+        ] {
+            assert!(is_command(&built, name), "{name} is a command");
+        }
+        for text in [
+            "aws-stack@1.2.0",
+            "cluster:c1",
+            "releases/dev.json",
+            "64f0a1",
+        ] {
+            assert!(!is_command(&built, text), "{text} is a ref");
+        }
     }
 
     #[test]
     fn the_help_screen_is_the_one_a_terminal_expects() {
-        let help = command().render_help().to_string();
+        let mut built = command();
+        built.build();
+        let help = built.render_help().to_string();
         let at = |text: &str| {
             help.find(text)
                 .unwrap_or_else(|| panic!("no {text:?} in:\n{help}"))
@@ -1197,7 +1027,7 @@ mod tests {
             at("Options:") < at("Use \"strata <command> --help\""),
             "and one line at the end says where to read more"
         );
-        for name in COMMANDS {
+        for name in built.get_subcommands().map(clap::Command::get_name) {
             assert!(help.contains(&format!("  {name} ")), "{name} is not listed");
         }
         // the screen fits a terminal, and every option is one line

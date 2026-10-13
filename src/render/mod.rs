@@ -5,6 +5,7 @@ mod markdown;
 mod terminal;
 mod unified;
 
+use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::color::Paint;
@@ -27,8 +28,8 @@ pub use json::JsonRenderer;
 pub use markdown::MarkdownRenderer;
 pub use terminal::TerminalRenderer;
 
-/// The output formats.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The output formats. On the command line, each is its name in lower case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Format {
     /// Colored text for a terminal, plain for a pipe.
     Terminal,

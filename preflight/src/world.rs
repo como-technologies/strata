@@ -183,7 +183,12 @@ impl World {
         let entity = entity_of(&cluster, &config, account_uid.as_deref());
         Ok(World {
             cloud,
-            source: format!("cluster:{uid}"),
+            source: Ref::Cluster {
+                uid: uid.to_string(),
+                profile: None,
+                pending: false,
+            }
+            .to_string(),
             entity,
             cluster_uid: Some(
                 cluster
@@ -262,6 +267,7 @@ impl World {
             progress.note(&format!("recording profile {uid}"));
             let snap = strata::ops::snapshot_for(
                 &Ref::Uid(uid.clone()),
+                &strata::ops::SnapshotOptions::default(),
                 || Ok(Palette::new(palette.api())),
                 now,
                 progress,
