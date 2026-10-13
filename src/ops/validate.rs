@@ -7,69 +7,30 @@
 use serde_json::{Value, json};
 
 use super::repave::{cluster_and_target, validate_body};
+use crate::api::codes::ValidateRoute;
 use crate::api::{Palette, PaletteApi};
-use crate::error::{
-    Error, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PACK_REFUSAL_CODES, PROFILE_EXISTS_CODE,
-    PROFILE_IMPORT_REFUSAL_CODES, PROFILE_NAME_REFUSAL_CODES, PROFILE_PACK_REFUSAL_CODES, Result,
-};
+use crate::error::{Error, Result};
 use crate::registry::{Registries, registry_entry};
 use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
 
 /// The refusal of the whole request in an error of strata, when it is an HTTP error of Palette
-/// whose status and code `accept` takes. Palette gives such a refusal before it checks each pack,
-/// so it is an answer, and not an error of strata.
-fn whole_request_refusal(e: &Error, accept: impl Fn(u16, &str) -> bool) -> Option<PaletteRefusal> {
+/// with a status and a code that `route` refuses with. Palette gives such a refusal before it
+/// checks each pack, so it is an answer, and not an error of strata.
+fn whole_request_refusal(e: &Error, route: ValidateRoute) -> Option<PaletteRefusal> {
     let Error::Api { status, body, .. } = e else {
         return None;
     };
-    PaletteRefusal::from_error_body(body).filter(|r| accept(*status, &r.code))
+    PaletteRefusal::from_error_body(body).filter(|r| route.refuses(*status, &r.code))
 }
 
-/// The refusal in `answer`, or None when Palette takes the request. An error that `accept` does
-/// not take is an error of strata.
-fn refusal_in<T>(
-    answer: Result<T>,
-    accept: impl Fn(u16, &str) -> bool,
-) -> Result<Option<PaletteRefusal>> {
+/// The refusal in `answer`, or None when Palette takes the request. An error that `route` does
+/// not refuse with is an error of strata.
+fn refusal_in<T>(answer: Result<T>, route: ValidateRoute) -> Result<Option<PaletteRefusal>> {
     match answer {
         Ok(_) => Ok(None),
-        Err(e) => whole_request_refusal(&e, accept).map(Some).ok_or(e),
+        Err(e) => whole_request_refusal(&e, route).map(Some).ok_or(e),
     }
-}
-
-/// Whether the name route refuses the name or the version with `status` and `code`.
-fn name_refusal(status: u16, code: &str) -> bool {
-    match status {
-        500 => PROFILE_NAME_REFUSAL_CODES.contains(&code),
-        409 => code == PROFILE_EXISTS_CODE,
-        _ => false,
-    }
-}
-
-/// Whether the import validate route refuses the profile with `status` and `code`.
-fn import_refusal(status: u16, code: &str) -> bool {
-    match status {
-        500 => PROFILE_IMPORT_REFUSAL_CODES.contains(&code),
-        409 => code == PROFILE_EXISTS_CODE,
-        404 => code == PACK_MACRO_UNDEFINED_CODE,
-        _ => schema_refusal(status),
-    }
-}
-
-/// Whether the packs route refuses the packs with `status` and `code`.
-fn packs_refusal(status: u16, code: &str) -> bool {
-    match status {
-        500 => PROFILE_PACK_REFUSAL_CODES.contains(&code),
-        _ => schema_refusal(status),
-    }
-}
-
-/// Whether the API schema refuses the body of a route with `status`. Palette checks the body of
-/// each route against the schema first. It refuses a list with two equal items with HTTP 422 and
-/// a number as the code.
-fn schema_refusal(status: u16) -> bool {
-    status == 422
 }
 
 /// The body of `POST /v1/clusterprofiles/import/validate`, a `v1ClusterProfileImportEntity`:
@@ -164,10 +125,10 @@ pub fn profile_validate_body(snap: &Snapshot) -> Value {
 /// answer holds the refusals of each route. No request changes anything.
 ///
 /// Palette answers `200` with an error for each pack that it refuses. It refuses the whole request
-/// with the HTTP 422 of the API schema, or with an HTTP error and a code. The codes are
-/// `PROFILE_NAME_REFUSAL_CODES`, [`PROFILE_IMPORT_REFUSAL_CODES`], [`PROFILE_PACK_REFUSAL_CODES`],
-/// `PROFILE_EXISTS_CODE`, and `PACK_MACRO_UNDEFINED_CODE`. Such a refusal is an answer too, and
-/// the retry does not send it again.
+/// with the HTTP 422 of the API schema, or with an HTTP error and a code of the route:
+/// [`ValidateRoute::ProfileName`], [`ValidateRoute::ProfileImport`], or
+/// [`ValidateRoute::ProfilePacks`]. Such a refusal is an answer too, and the retry does not send it
+/// again.
 ///
 /// # Errors
 ///
@@ -189,11 +150,11 @@ pub fn profile_validation<A: PaletteApi>(
     let mut errors = Vec::new();
     if uid.is_none() {
         let name = palette.validate_profile_name(&snap.source.name, &snap.source.version);
-        errors.extend(refusal_in(name, name_refusal)?);
+        errors.extend(refusal_in(name, ValidateRoute::ProfileName)?);
         let body = profile_import_body(snap, Registries::new(palette).metadata()?);
         errors.extend(refusal_in(
             palette.validate_profile_import(&body),
-            import_refusal,
+            ValidateRoute::ProfileImport,
         )?);
     }
     match palette.validate_profile_packs(uid, &profile_validate_body(snap)) {
@@ -203,7 +164,7 @@ pub fn profile_validation<A: PaletteApi>(
                 .map(PaletteRefusal::from_constraints)
                 .unwrap_or_default(),
         ),
-        Err(e) => errors.push(whole_request_refusal(&e, packs_refusal).ok_or(e)?),
+        Err(e) => errors.push(whole_request_refusal(&e, ValidateRoute::ProfilePacks).ok_or(e)?),
     }
     Ok(ProfileValidation::refused(errors))
 }
@@ -211,9 +172,9 @@ pub fn profile_validation<A: PaletteApi>(
 /// Ask Palette whether it accepts the packs of the profile side on the cluster side: `POST
 /// validate/packs` with the body of `--repave`, which changes nothing. The sides follow the rules
 /// of [`palette_repave`](super::palette_repave). Palette answers `200` with an error for each pack
-/// it refuses. It refuses the whole request with HTTP 500 and a code of [`PACK_REFUSAL_CODES`], or
-/// with HTTP 403 and [`PACK_FORBIDDEN_CODE`]: that is an answer too, and the retry does not send
-/// it again. Each other error is an error of strata.
+/// it refuses. It refuses the whole request with an HTTP error and a code of
+/// [`ValidateRoute::ClusterPacks`]: that is an answer too, and the retry does not send it again.
+/// Each other error is an error of strata.
 pub fn palette_validation<A: PaletteApi>(
     palette: &Palette<A>,
     a: &Snapshot,
@@ -224,13 +185,9 @@ pub fn palette_validation<A: PaletteApi>(
         AppliedProfile::of_cluster(&palette.subject_document(SubjectKind::Cluster, &cluster.uid)?);
     match palette.validate_packs(&cluster.uid, &validate_body(&running, target)) {
         Ok(answer) => Ok(PaletteValidation::from_palette(&cluster.uid, &answer)),
-        Err(e) => whole_request_refusal(&e, |status, code| match status {
-            500 => PACK_REFUSAL_CODES.contains(&code),
-            403 => code == PACK_FORBIDDEN_CODE,
-            _ => false,
-        })
-        .map(|refusal| PaletteValidation::refused(&cluster.uid, vec![refusal]))
-        .ok_or(e),
+        Err(e) => whole_request_refusal(&e, ValidateRoute::ClusterPacks)
+            .map(|refusal| PaletteValidation::refused(&cluster.uid, vec![refusal]))
+            .ok_or(e),
     }
 }
 

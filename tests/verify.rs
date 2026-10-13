@@ -6,6 +6,9 @@ use std::fs;
 use std::path::Path;
 
 use serde_json::Value;
+use strata::api::codes::{
+    CreateRule, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE, ValidateRoute,
+};
 use strata::api::{MemoryApi, Palette, RawProfile};
 use strata::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use strata::diff::VerifyStatus;
@@ -6045,7 +6048,7 @@ fn a_candidate_in_memory_reproduces_the_root_with_no_file() {
     empty.layers.clear();
     let err = candidate::check(empty, Path::new("b@1")).unwrap_err();
     assert!(
-        matches!(&err, Error::CandidateInvalid { path, message }
+        matches!(&err, Error::CandidateInvalid { path, message, rule: None }
             if path == Path::new("b@1") && message.contains("at least one layer")),
         "{err}"
     );
@@ -9722,7 +9725,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
         ),
         (
             403,
-            "PackValuesOverrideForbidden",
+            PACK_FORBIDDEN_CODE,
             "Pack 'nginx' values override is forbidden",
         ),
     ] {
@@ -12364,7 +12367,16 @@ fn a_pack_supports_the_cloud(pinned: &[&str], newer: &[&str], cloud: &str) -> [b
     let candidate = match candidate_snapshot(&file, &api) {
         Ok(_) => true,
         Err(e) => {
-            assert!(e.to_string().contains("PackNotSupported"), "{e}");
+            assert!(
+                matches!(
+                    e,
+                    Error::CandidateInvalid {
+                        rule: Some(CreateRule::Cloud),
+                        ..
+                    }
+                ),
+                "{e}"
+            );
             false
         }
     };
@@ -14032,7 +14044,7 @@ fn snapshot_validate_takes_a_refusal_of_the_whole_request_as_an_answer() {
     let key = post(PROFILE_VALIDATE_PACKS);
     let path = key.as_str();
     // Palette sends each refusal of the whole request as HTTP 500
-    for code in strata::error::PROFILE_PACK_REFUSAL_CODES {
+    for code in ValidateRoute::ProfilePacks.refusal_codes() {
         let body = format!(r#"{{"code":"{code}","message":"refused"}}"#);
         // the retry does not send it again: Palette gives the same refusal
         let error = Error::Api {
@@ -14129,11 +14141,11 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
 
     // the name route: a version that Palette does not parse, an empty name, and a version that
     // the project holds. The retry does not send them again
-    for (status, code) in [
-        (500, "VersionParseFailure"),
-        (500, "ResourceNameEmpty"),
-        (409, "ClusterProfileAlreadyExists"),
-    ] {
+    let name_refusals = ValidateRoute::ProfileName
+        .refusal_codes()
+        .map(|code| (500, code))
+        .chain([(409, PROFILE_EXISTS_CODE)]);
+    for (status, code) in name_refusals {
         assert_eq!(class_of(status, code), FailureClass::Terminal, "{code}");
         let v =
             refusal(accepting().failing(name_route(&candidate), status, body_of(code))).unwrap();
@@ -14144,12 +14156,10 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
 
     // the import route: each code of a check, a version that the project holds, and a macro
     // that Palette does not define
-    let mut refusals: Vec<(u16, &str)> = strata::error::PROFILE_IMPORT_REFUSAL_CODES
-        .iter()
-        .map(|c| (500, *c))
-        .collect();
-    refusals.push((409, "ClusterProfileAlreadyExists"));
-    refusals.push((404, "PackMacroUndefined"));
+    let refusals = ValidateRoute::ProfileImport
+        .refusal_codes()
+        .map(|code| (500, code))
+        .chain([(409, PROFILE_EXISTS_CODE), (404, PACK_MACRO_UNDEFINED_CODE)]);
     for (status, code) in refusals {
         assert_eq!(class_of(status, code), FailureClass::Terminal, "{code}");
         let v = refusal(accepting().failing(&import, status, body_of(code))).unwrap();

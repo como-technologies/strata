@@ -114,6 +114,7 @@ impl Candidate {
 pub fn to_yaml(candidate: &Candidate) -> Result<String> {
     serde_yaml::to_string(candidate).map_err(|e| Error::CandidateInvalid {
         path: PathBuf::from(&candidate.name),
+        rule: None,
         message: e.to_string(),
     })
 }
@@ -374,6 +375,7 @@ pub fn load(path: &Path) -> Result<LoadedCandidate> {
 fn invalid_at(path: &Path) -> impl Fn(String) -> Error + Copy + '_ {
     move |message| Error::CandidateInvalid {
         path: path.to_path_buf(),
+        rule: None,
         message,
     }
 }
@@ -472,7 +474,7 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
             manifests,
         });
     }
-    gaps::check_file(&candidate).map_err(invalid)?;
+    gaps::check_file(&candidate).map_err(|broken| broken.at(path))?;
     Ok(LoadedCandidate {
         path: path.to_path_buf(),
         candidate,
@@ -925,14 +927,13 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
                 unsynced: Vec::new(),
             });
         };
-        let not_synced = |message: String| {
-            self.invalid(format!(
-                "layer {} ({}) is from registry {}, which Palette does not sync; {message}",
-                i + 1,
-                l.name,
-                registry_ref.text()
-            ))
-        };
+        let from_unsynced = format!(
+            "layer {} ({}) is from registry {}, which Palette does not sync",
+            i + 1,
+            l.name,
+            registry_ref.text()
+        );
+        let not_synced = |message: String| self.invalid(format!("{from_unsynced}; {message}"));
         // the pack that Palette makes has the layer addon and the tag as its version, and a
         // profile takes both from it
         if let Some(layer) = l.layer.as_deref().filter(|&x| x != MINTED_LAYER.as_str()) {
@@ -948,7 +949,7 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
                  to {tag}, or remove tag"
             )));
         }
-        gaps::check_pack_tag(tag).map_err(not_synced)?;
+        gaps::check_pack_tag(&from_unsynced, tag).map_err(|broken| broken.at(&self.loaded.path))?;
         self.progress.note(&format!(
             "{}@{}: registry {} does not sync, so Palette makes the pack when it creates the \
              profile; the record has no pack uid and no digest",
@@ -1009,7 +1010,8 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         }
         // only the create checks that the pack supports the cloud of the profile
         let clouds = strings(summary, "/spec/cloudTypes");
-        gaps::check_cloud(&c.cloud_type, i, l, &clouds).map_err(|m| self.invalid(m))?;
+        gaps::check_cloud(&c.cloud_type, i, l, &clouds)
+            .map_err(|broken| broken.at(&self.loaded.path))?;
         let pack_uid = text(summary, "/metadata/uid");
         let entity = self.palette.pack_tags(&l.name, registry, None)?;
         let tags: Vec<String> = arr(&entity, "/tags")
@@ -1177,7 +1179,7 @@ pub(crate) fn resolve_with<A: PaletteApi>(
         .iter()
         .map(|r| r.get("layer").and_then(Value::as_str))
         .collect();
-    gaps::check_layers(c, &known).map_err(|message| resolver.invalid(message))?;
+    gaps::check_layers(c, &known).map_err(|broken| broken.at(&loaded.path))?;
     let raw = RawProfile {
         profile: json!({
             "metadata": {"name": c.name, "uid": ""},
@@ -1205,6 +1207,7 @@ pub(crate) fn resolve_with<A: PaletteApi>(
 mod tests {
     use super::*;
     use crate::api::MemoryApi;
+    use crate::api::codes::CreateRule;
     use crate::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 
     /// The profile `platform-addons` as the export of Palette writes it: a pack from the Public
@@ -1343,8 +1346,12 @@ variables:
 
     fn refusal(c: Candidate) -> String {
         match check(c, Path::new("c.yaml")).unwrap_err() {
-            Error::CandidateInvalid { message, .. } => message,
-            other => panic!("not candidate-invalid: {other}"),
+            Error::CandidateInvalid {
+                rule: None,
+                message,
+                ..
+            } => message,
+            other => panic!("not a problem of the format: {other}"),
         }
     }
 
@@ -1440,13 +1447,20 @@ variables:
         .unwrap()
     }
 
-    /// The refusal of `c`, with the rule of Palette that it names, and the reason that strata
-    /// checks it.
-    fn refused(c: Candidate, rule: &str) -> String {
-        let message = refusal(c);
-        assert!(message.contains(&format!("({rule}). ")), "{message}");
-        assert!(message.ends_with(gaps::GAP), "{message}");
-        message
+    /// The refusal of `c` for `rule`, a rule that only the create of Palette checks: its
+    /// message.
+    fn refused(c: Candidate, rule: CreateRule) -> String {
+        match check(c, Path::new("c.yaml")).unwrap_err() {
+            Error::CandidateInvalid {
+                rule: found,
+                message,
+                ..
+            } => {
+                assert_eq!(found, Some(rule), "{message}");
+                message
+            }
+            other => panic!("not candidate-invalid: {other}"),
+        }
     }
 
     #[test]
@@ -1485,7 +1499,7 @@ variables:
     fn a_layer_that_the_type_of_the_profile_does_not_take_is_candidate_invalid() {
         let mut c = stack();
         c.kind = "add-on".into();
-        let message = refused(c, "ClusterProfilePackNotAllowed");
+        let message = refused(c, CreateRule::TypeLayer);
         assert!(
             message.contains("layer 1 (ubuntu-aws) has the layer os")
                 && message.contains("type add-on takes only the layers addon, cni, and csi"),
@@ -1498,7 +1512,7 @@ variables:
         assert!(check(c, Path::new("c.yaml")).is_ok());
         let mut c = stack();
         c.kind = "infra".into();
-        let message = refused(c, "ClusterProfilePackNotAllowed");
+        let message = refused(c, CreateRule::TypeLayer);
         assert!(
             message.contains("layer 5 (cert-manager) has the layer addon"),
             "{message}"
@@ -1506,14 +1520,14 @@ variables:
         // a manifest layer has the layer addon
         let mut c = manifest_candidate();
         c.kind = "infra".into();
-        refused(c, "ClusterProfilePackNotAllowed");
+        refused(c, CreateRule::TypeLayer);
     }
 
     #[test]
     fn a_cluster_or_infra_profile_with_no_core_layer_is_candidate_invalid() {
         let mut c = stack();
         c.layers.remove(0);
-        let message = refused(c, "ErrPackCoreLayersMissing");
+        let message = refused(c, CreateRule::CoreLayers);
         assert!(
             message.contains("type cluster needs the layers os, k8s, cni, and csi")
                 && message.contains("has no layer os"),
@@ -1522,7 +1536,7 @@ variables:
         let mut c = stack();
         c.kind = "infra".into();
         c.layers.truncate(2);
-        let message = refused(c, "ErrPackCoreLayersMissing");
+        let message = refused(c, CreateRule::CoreLayers);
         assert!(message.contains("has no layer cni and csi"), "{message}");
         // edge-native needs no csi
         let mut c = stack();
@@ -1623,13 +1637,14 @@ variables:
         clouds[2] = json!(["vsphere", "edge-native"]);
         let palette = served(&STACK_LAYERS, &clouds);
         let err = resolved(stack(), &palette).unwrap_err();
-        let Error::CandidateInvalid { message, .. } = &err else {
+        let Error::CandidateInvalid { rule, message, .. } = &err else {
             panic!("not candidate-invalid: {err}");
         };
+        assert_eq!(*rule, Some(CreateRule::Cloud), "{message}");
         assert!(
             message.contains("layer 3 (cni-cilium-oss)")
                 && message.contains("the clouds vsphere and edge-native")
-                && message.contains("the cloud aws (PackNotSupported)"),
+                && message.ends_with("a profile of the cloud aws"),
             "{message}"
         );
         // the cloud all, and a candidate with no cloud, take each pack
@@ -1719,6 +1734,7 @@ variables:
 
     #[test]
     fn palette_takes_a_loose_semantic_version_or_a_text_with_three_numbers_as_the_version() {
+        let whom = "layer 1 (podinfo) is from registry charts-auth, which Palette does not sync";
         for tag in [
             "1.0.0",
             "v1.2.3",
@@ -1730,7 +1746,7 @@ variables:
             "1.2.3.4",
             "1.2.3-",
         ] {
-            assert!(gaps::check_pack_tag(tag).is_ok(), "{tag}");
+            assert!(gaps::check_pack_tag(whom, tag).is_ok(), "{tag}");
         }
         for tag in [
             "",
@@ -1741,12 +1757,18 @@ variables:
             "1.2-rc..1",
             "v",
         ] {
-            assert!(gaps::check_pack_tag(tag).is_err(), "{tag}");
+            assert!(gaps::check_pack_tag(whom, tag).is_err(), "{tag}");
         }
-        // only the create checks the tag, so the refusal names the code and the gap
-        let message = gaps::check_pack_tag("stable").unwrap_err();
-        assert!(message.contains("(InvalidPackVersion). "), "{message}");
-        assert!(message.ends_with(gaps::GAP), "{message}");
+        // only the create checks the tag, so the refusal names its rule and the layer
+        let broken = gaps::check_pack_tag(whom, "stable").unwrap_err();
+        assert_eq!(broken.rule, CreateRule::PackTag);
+        assert_eq!(
+            broken.message,
+            format!(
+                "{whom}; the tag stable is not a semantic version, and it holds no three numbers \
+                 with dots between them"
+            )
+        );
     }
 
     #[test]

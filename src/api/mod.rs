@@ -4,9 +4,11 @@
 //! The modules: [`PaletteApi`] is the one GET that everything else is built on; [`HttpApi`] sends
 //! it over HTTP, [`Retry`] tries it again, and [`MemoryApi`] answers it from canned responses in
 //! tests. [`Palette`] holds the operations over any of them, and [`RawProfile`] and [`RawCluster`]
-//! are the responses a snapshot is built from.
+//! are the responses a snapshot is built from. [`codes`] holds the codes of the answers of
+//! Palette: the refusals of each validate route, and the rules of the create.
 
 mod audit;
+pub mod codes;
 mod http;
 pub(crate) mod mask;
 mod memory;

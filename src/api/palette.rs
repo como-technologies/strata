@@ -1353,8 +1353,10 @@ impl<A: PaletteApi> Palette<A> {
     /// # Errors
     ///
     /// [`Error::Api`] for each answer of Palette that is an error. A refusal of the name or the
-    /// version is one: HTTP 500 with a code of `PROFILE_NAME_REFUSAL_CODES`, or HTTP 409 with
-    /// `PROFILE_EXISTS_CODE`. Each other error of the request, such as a refused connection.
+    /// version is one: HTTP 500 with a code of the name route, or HTTP 409 with
+    /// [`PROFILE_EXISTS_CODE`](super::codes::PROFILE_EXISTS_CODE). See
+    /// [`ValidateRoute::ProfileName`](super::codes::ValidateRoute::ProfileName). Each other error
+    /// of the request, such as a refused connection.
     pub fn validate_profile_name(&self, name: &str, version: &str) -> Result<()> {
         self.api
             .get_json(&format!(
@@ -1375,10 +1377,10 @@ impl<A: PaletteApi> Palette<A> {
     /// [`Error::Api`] for each answer of Palette that is an error. A refusal of the profile is
     /// one of these answers:
     ///
-    /// - HTTP 500 with a code of
-    ///   [`PROFILE_IMPORT_REFUSAL_CODES`](crate::error::PROFILE_IMPORT_REFUSAL_CODES).
-    /// - HTTP 409 with `PROFILE_EXISTS_CODE`.
-    /// - HTTP 404 with `PACK_MACRO_UNDEFINED_CODE`.
+    /// - HTTP 500 with a code of the import validate route:
+    ///   [`ValidateRoute::ProfileImport`](super::codes::ValidateRoute::ProfileImport).
+    /// - HTTP 409 with [`PROFILE_EXISTS_CODE`](super::codes::PROFILE_EXISTS_CODE).
+    /// - HTTP 404 with [`PACK_MACRO_UNDEFINED_CODE`](super::codes::PACK_MACRO_UNDEFINED_CODE).
     /// - The HTTP 422 of the API schema.
     ///
     /// Each other error of the request, such as a refused connection.

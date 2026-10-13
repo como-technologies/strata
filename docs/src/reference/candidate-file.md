@@ -89,8 +89,9 @@ Strata reads the whole file before it sends a request:
 - A candidate that breaks a rule that only the create of Palette checks is
   `candidate-invalid`. No route that takes a candidate answers these rules
   before the create, so strata fills the gap. The message names the rule, the
-  code of Palette, and the layer or the manifest. Strata checks the rules in
-  this order:
+  code of Palette, and the layer or the manifest. The JSON of the error gives
+  the code in `code`: see [Errors](errors.md). Strata checks the rules in this
+  order:
   1. The type takes the `layer` of each layer that gives one. `infra` takes
      `os`, `k8s`, `cni`, and `csi`. `add-on` and `system` take `addon`, `cni`,
      and `csi`. `cluster` takes each layer.

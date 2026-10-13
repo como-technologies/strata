@@ -40,7 +40,8 @@ program can use the same parts:
 | `diff::ParamChange` | Each param of a pack that differs between two sides: `PackDiff::param_changes`. For an app tier, a param is a property. |
 | `Snapshot::macros`, `Snapshot::upstream_unknown` | The user macros that the content of a record reads, and the packs with no upstream digest. Neither needs a request, so both work on a record written before either existed. |
 | `candidate::check`, `ops::snapshot_from_loaded` | A candidate that a program builds, with no file: the rules of a [candidate file](../reference/candidate-file.md) hold for it, and it gives the snapshot that `snapshot --from-candidate` gives. |
-| `Error::class`, `error::REFUSAL_CODES`, `error::PACK_REFUSAL_CODES`, `error::PROFILE_PACK_REFUSAL_CODES` | `Transient`, `Terminal`, or `Unknown`: what a caller does before it tries again. `Retry` uses the same rule. A 5xx with a code in one of the three lists is `Terminal`. |
+| `Error::class`, `api::codes::REFUSAL_CODES`, `api::codes::ValidateRoute` | `Transient`, `Terminal`, or `Unknown`: what a caller does before it tries again. `Retry` uses the same rule. A 5xx with a code of `REFUSAL_CODES`, or of a check of a validate route, is `Terminal`. |
+| `Error::CandidateInvalid`, `api::codes::CreateRule` | A candidate that breaks a rule that only the create of Palette checks. `rule` names the rule, and its `code()` is the code of Palette. `Error::to_json` gives it as `code`. |
 
 The command line adds only the arguments, the output, and the exit codes.
 
