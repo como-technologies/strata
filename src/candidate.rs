@@ -311,9 +311,8 @@ pub struct ResolvedCandidate {
     /// only what Palette gives, and no field of strata.
     pub raw: RawProfile,
     /// The options of the pack template that the values of each pack select: one list for each
-    /// pack reference of the profile document, in its order. The list is empty for a manifest
-    /// layer, and for a layer of a registry that Palette does not sync: no listing gives their
-    /// template.
+    /// pack reference of the profile, in its order. The list is empty for a manifest layer, and
+    /// for a layer of a registry that Palette does not sync. No listing gives their template.
     pub preset_options: Vec<Vec<PresetOption>>,
 }
 
@@ -1136,9 +1135,8 @@ fn manifest_layer(
 ///
 /// # Errors
 ///
-/// `CandidateInvalid` for a layer that breaks a rule of Palette at the create, `PackNotFound` and
-/// `PackUnavailable` for a version that the registry does not give, and the errors of the
-/// requests.
+/// `CandidateInvalid` for a layer that breaks a rule of Palette at the create. `PackNotFound` and
+/// `PackUnavailable` for a version that the registry does not give. Each error of a request.
 pub fn resolve<A: PaletteApi>(
     loaded: &LoadedCandidate,
     palette: &Palette<A>,

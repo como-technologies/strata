@@ -160,7 +160,7 @@ fn a_number_or_a_list_item_at_the_target_key_is_read_as_text() {
 
 /// The keys of a pack reference that strata builds, as a published profile of Palette gives
 /// them, sorted.
-const PACK_REF_KEYS: [&str; 11] = [
+const PACK_REF_KEYS: [&str; 12] = [
     "digest",
     "layer",
     "manifests",
@@ -172,12 +172,17 @@ const PACK_REF_KEYS: [&str; 11] = [
     "tag",
     "type",
     "values",
+    "version",
 ];
 
 #[test]
 fn the_documents_of_a_resolve_hold_no_key_of_strata_and_the_result_holds_the_selection() {
     let dir = tempfile::tempdir().unwrap();
-    let resolved = resolved(dir.path(), barney("a:\n  b: x\n"), &registry(Some(template())));
+    let resolved = resolved(
+        dir.path(),
+        barney("a:\n  b: x\n"),
+        &registry(Some(template())),
+    );
     assert_eq!(resolved.preset_options, vec![vec![access_x()]]);
 
     let pack_ref = &resolved.raw.profile["spec"]["published"]["packs"][0];
@@ -205,19 +210,30 @@ fn the_documents_of_a_resolve_hold_no_key_of_strata_and_the_result_holds_the_sel
 #[test]
 fn a_raw_directory_saved_from_a_candidate_holds_no_preset_options_key() {
     let dir = tempfile::tempdir().unwrap();
-    let resolved = resolved(dir.path(), barney("a:\n  b: x\n"), &registry(Some(template())));
+    let resolved = resolved(
+        dir.path(),
+        barney("a:\n  b: x\n"),
+        &registry(Some(template())),
+    );
     let saved = dir.path().join("raw");
     resolved.raw.save_dir(&saved, "t0").unwrap();
     let mut files = 0;
     for entry in fs::read_dir(&saved).unwrap() {
         let path = entry.unwrap().path();
         let text = fs::read_to_string(&path).unwrap();
-        assert!(!text.contains("presetOptions"), "{}: {text}", path.display());
+        assert!(
+            !text.contains("presetOptions"),
+            "{}: {text}",
+            path.display()
+        );
         files += 1;
     }
-    assert!(files >= 3, "{files} files: the profile, the manifests, the variables");
+    assert!(
+        files >= 3,
+        "{files} files: the profile, the manifests, the variables"
+    );
     // the directory holds only the documents of Palette, so a record built from it has no
-    // selection: the selection is a field of the record of the resolve
+    // selection. The record of the resolve has it.
     let from_dir = strata::ops::snapshot_from_dir(&saved, "fred", "t0").unwrap();
     assert!(from_dir.packs[0].preset_options.is_empty());
     assert_eq!(
