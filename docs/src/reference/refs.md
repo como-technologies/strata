@@ -83,7 +83,8 @@ A ref names the thing that a command reads.
   [Find the fleet from Palette](../use-cases/fleet.md).
 - **`appprofile:`.** An app profile. Its tiers are the packs of the record. A
   name and version that no app profile has is `app-profile-not-found`, which
-  lists the app profiles. See
+  lists the app profiles. A name and version that two app profiles have is
+  `app-profile-name-ambiguous`, which lists their uids. See
   [An app profile is updated in place](../use-cases/app-profiles.md).
 - **A file.** Strata checks for a file first: a ref that names a file that
   exists is a file. A file that is not a strata snapshot is `not-snapshot`.
