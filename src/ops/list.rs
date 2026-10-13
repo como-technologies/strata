@@ -591,8 +591,9 @@ fn listing_or_search(it: &Value, listing: &str, search: &str) -> String {
     first_nonempty(&[str_at(it, listing), str_at(it, search)])
 }
 
-/// The project uid of `it`, an entry of the cluster listing or an item of a search: the
-/// annotation of the listing, else the project that the search names.
+/// The project uid of `it`, an entry of the cluster listing or an item of a search.
+///
+/// The listing gives it in an annotation, and the search in its summary.
 pub(super) fn project_uid_of(it: &Value) -> String {
     listing_or_search(
         it,

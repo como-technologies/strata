@@ -51,8 +51,8 @@ pub fn has_draft(profile: &Value) -> bool {
     !arr(profile, "/spec/draft/packs").is_empty()
 }
 
-/// The template of the profile document `profile` that a record of the version reads, and that
-/// `list` shows: the published template when it has packs, else the draft.
+/// The template of the profile document `profile` that a record and `list` read: the published
+/// template when it has packs, else the draft.
 ///
 /// A version that nobody published has its packs in the draft. A version with no pack in either
 /// template also reads the draft, so a record and `list` give it one type.
@@ -440,8 +440,8 @@ impl RawCluster {
     /// The cloud type of the cluster document `cluster`: the kind of its `spec.cloudConfigRef`,
     /// else its `spec.cloudType`, or empty when it names neither.
     ///
-    /// Each read of the cloud type of a cluster document uses this rule: the record of a cluster,
-    /// the route of its cloud config, and its shape.
+    /// The record of a cluster, the route of its cloud config, and its shape all read the cloud
+    /// type with this rule.
     pub fn cloud_type(cluster: &Value) -> &str {
         match str_at(cluster, "/spec/cloudConfigRef/kind") {
             "" => str_at(cluster, "/spec/cloudType"),

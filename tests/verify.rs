@@ -3723,8 +3723,8 @@ fn draft_or_published(uid: &str, version: &str, cni: &str, published: bool) -> V
     profile_document(uid, "lab-profile", version, published_template, Some(draft))
 }
 
-/// A version with no pack in either template: `list` and a record read its type from one
-/// template, the draft, as for a version that nobody published.
+/// A version with no pack in either template: `list` and a record read its type from the draft.
+/// A version that nobody published reads the same template.
 #[test]
 fn list_and_a_record_read_the_type_of_a_version_with_no_pack_from_one_template() {
     let doc = profile_document(
@@ -12558,7 +12558,7 @@ fn record_of_cluster_document(cluster: &Value) -> strata::snapshot::Snapshot {
 }
 
 /// A cluster that runs no profile gets the cloud type of its document: the kind of its cloud
-/// config, as the route of the cloud config reads it.
+/// config. The route of the cloud config reads the same kind.
 #[test]
 fn a_cluster_record_reads_the_cloud_type_of_the_document_from_its_cloud_config() {
     let snap = record_of_cluster_document(&serde_json::json!({

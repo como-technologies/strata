@@ -19,8 +19,8 @@ pub(crate) fn and_list<S: AsRef<str>>(items: &[S]) -> String {
 
 /// `s`, cut to at most `n` characters: its first `n - 1` characters and `…` when it is longer.
 ///
-/// Each message and each column of a report that shows the start of a long text cuts it here, so
-/// each one marks the cut in the same way. An `n` of zero gives empty text.
+/// Each message and each column of a report that shows the start of a long text cuts it here.
+/// So each one marks the cut in the same way. An `n` of zero gives empty text.
 pub fn cut(s: &str, n: usize) -> String {
     if s.chars().count() <= n {
         return s.to_string();

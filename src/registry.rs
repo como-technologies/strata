@@ -72,9 +72,9 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     ///
     /// # Errors
     ///
-    /// Each other error of the request. A 401, a 403, or a 429 is an error too, and not a
-    /// listing with no entry: a record of a pack from an OCI registry holds the provider type,
-    /// so a key that cannot read the listing must not change the root with no error.
+    /// Each other error of the request, also a 401, a 403, or a 429. A record of a pack from an
+    /// OCI registry holds the provider type. So a key that cannot read the listing must not
+    /// change the root with no error.
     pub(crate) fn summary(&mut self, kind: RegistryKind) -> Result<Option<&[Value]>> {
         let entries = match self.summaries.entry(kind) {
             Entry::Occupied(e) => e.into_mut(),

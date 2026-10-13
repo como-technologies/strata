@@ -259,9 +259,8 @@ impl Default for WatchOptions {
 
 /// One reading of a cluster during a build.
 ///
-/// The summary is `null`, and the events are empty, when Palette does not give them to this key:
-/// a 404, or a 403 of a project key. A 401 or a 429 stops the watch with the error that names it,
-/// as a read of the world does.
+/// The summary is `null`, and the events are empty, after a 404 or the 403 of a project key. A
+/// 401 or a 429 stops the watch with the error that names it, as a read of the world does.
 pub fn reading<A: PaletteApi>(api: &A, uid: &str, elapsed: Duration) -> Result<Value> {
     let cluster = api.get_json(&format!("/v1/spectroclusters/{uid}"))?;
     let summary = match api.get_json(&format!("/v1/dashboard/spectroclusters/{uid}")) {

@@ -36,7 +36,7 @@ impl<A: PaletteApi> Palette<A> {
     ///
     /// The first project with the name is the one project with the name. Palette refuses a
     /// second project with the name of a project of the tenant, with the code
-    /// `ResourceNameAlreadyExists`, and it compares the names with no regard to case.
+    /// `ResourceNameAlreadyExists`. It compares the names with no regard to case.
     ///
     /// # Errors
     ///

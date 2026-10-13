@@ -335,7 +335,7 @@ pub fn select<A: PaletteApi>(
 
 /// A tenant client, and the configured scope when the key cannot read the tenant.
 ///
-/// `consumers` falls back to the scope of its profile in place of the configured scope: a
+/// `consumers` falls back to the scope of its profile, and not to the configured scope. A
 /// cluster that runs a profile of a project is in that project. A fleet has no such scope.
 pub fn tenant_of<A, F>(connect: &mut F) -> Result<Palette<A>>
 where

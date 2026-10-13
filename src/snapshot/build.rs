@@ -78,8 +78,8 @@ fn manifests_of_template(pk: &Value, entities: &Value, template: Template) -> Ve
 /// pack of a template.
 ///
 /// The name and the uid come from `reference`, else from `entity`. A manifest of the published
-/// template has its published content. A manifest of the draft has its draft content, and its
-/// published content when the draft did not change it: Palette writes the draft content of a
+/// template has its published content. A manifest of the draft has its draft content, else its
+/// published content when the draft did not change it. Palette writes the draft content of a
 /// manifest at an edit, and empties it at the publish. A field that `entity` does not give is
 /// empty text.
 pub(crate) fn manifest_of(entity: &Value, reference: &Value, template: Template) -> Value {
