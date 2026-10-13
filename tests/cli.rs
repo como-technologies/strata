@@ -871,7 +871,7 @@ fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
 }
 
 #[test]
-fn the_schema_names_each_value_of_the_implementation_the_side_the_layer_type_and_the_conjunction() {
+fn the_schema_names_each_value_of_each_closed_set_that_became_an_enum() {
     let schema = |kind: &str| -> serde_json::Value {
         let r = run(&["schema", kind]);
         assert_eq!(r.code, 0, "{}", r.err);
@@ -900,6 +900,15 @@ fn the_schema_names_each_value_of_the_implementation_the_side_the_layer_type_and
     assert_eq!(
         v["$defs"]["SavedFilter"]["properties"]["conjunction"]["$ref"],
         "#/$defs/Conjunction"
+    );
+    let v = schema("behind");
+    assert_eq!(
+        schema_values(&v, "ChangeFlag"),
+        ["IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"]
+    );
+    assert_eq!(
+        v["$defs"]["Bump"]["properties"]["flags"]["items"]["$ref"],
+        "#/$defs/ChangeFlag"
     );
 }
 

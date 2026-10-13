@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::diff::{self, Diff, ImageIdChange, MaskedPack, PackDiff, Status};
+use crate::diff::{self, ChangeFlag, Diff, ImageIdChange, MaskedPack, PackDiff, Status};
 use crate::legend::{Described, legend};
 use crate::snapshot::{Pack, Snapshot, Tool};
 
@@ -296,19 +296,28 @@ fn pair_reasons(
                         }
                     } else {
                         reasons.push(format!(
-                            "pack {} IDENTITY: {}",
+                            "pack {} {}: {}",
                             pd.key,
+                            ChangeFlag::Identity,
                             identity_detail(x, y)
                         ));
                     }
                 }
                 if pd.authored {
-                    reasons.push(format!("pack {} AUTHORED: {}", pd.key, authored_detail(pd)));
+                    reasons.push(format!(
+                        "pack {} {}: {}",
+                        pd.key,
+                        ChangeFlag::Authored,
+                        authored_detail(pd)
+                    ));
                 }
                 if pd.upstream && (!pd.identity || pd.tag_renamed) {
                     reasons.push(format!(
-                        "pack {} UPSTREAM in the same registry: {} -> {}",
-                        pd.key, x.hash.upstream_raw, y.hash.upstream_raw
+                        "pack {} {} in the same registry: {} -> {}",
+                        pd.key,
+                        ChangeFlag::Upstream,
+                        x.hash.upstream_raw,
+                        y.hash.upstream_raw
                     ));
                 }
             }

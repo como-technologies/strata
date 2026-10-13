@@ -3,6 +3,7 @@
 //! block answers the common questions without walking the packs.
 
 use std::collections::BTreeMap;
+use std::fmt;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -558,8 +559,9 @@ impl Described for Status {
     }
 }
 
-/// A change flag of a pack: a hash of the pack that moved, or a detail of `AUTHORED`. The text
-/// and the JSON give its name in capitals.
+/// A change flag of a pack: a hash of the pack that moved, or a detail of `AUTHORED`.
+///
+/// The text and the JSON give its name in capitals.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum ChangeFlag {
@@ -585,6 +587,12 @@ impl ChangeFlag {
             Self::Images => "IMAGES",
             Self::Charts => "CHARTS",
         }
+    }
+}
+
+impl fmt::Display for ChangeFlag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
     }
 }
 
