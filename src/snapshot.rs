@@ -1047,8 +1047,8 @@ impl Pack {
         self.hash.upstream_source == UpstreamSource::NoDigest && !self.is_manifest()
     }
 
-    /// The type of the pack, or none for a type that is not a pack type: the type of a tier of
-    /// an app profile, such as `container`.
+    /// The type of the pack. None for a type that is not a pack type: the type of a tier of an
+    /// app profile, such as `container`.
     pub(crate) fn pack_type(&self) -> Option<PackType> {
         PackType::parse(&self.kind)
     }

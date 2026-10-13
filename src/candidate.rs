@@ -258,8 +258,9 @@ impl RegistryRef {
     }
 }
 
-/// The layer that Palette gives each pack that it makes itself: a manifest pack, and the pack
-/// of a layer from a registry that it does not sync. It drops the layer of the request.
+/// The layer that Palette gives each pack that it makes itself. The packs are a manifest pack,
+/// and the pack of a layer from a registry that it does not sync. It drops the layer of the
+/// request.
 const MINTED_LAYER: Layer = Layer::Addon;
 
 /// Whether `v` is a semantic version in the loose form that Palette parses: an optional `v`,

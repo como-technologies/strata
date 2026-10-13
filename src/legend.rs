@@ -24,8 +24,8 @@ pub(crate) fn legend<T: Described>() -> BTreeMap<String, String> {
         .collect()
 }
 
-/// The name of `value` in the documents: the text that serde writes for it, so the name is the
-/// one of the JSON and no second table names it.
+/// The name of `value` in the documents: the text that serde writes for it. So the name is the
+/// one of the JSON, and no second table names it.
 pub(crate) fn document_name<T: Serialize>(value: &T) -> String {
     match serde_json::to_value(value) {
         Ok(Value::String(name)) => name,
@@ -43,12 +43,17 @@ mod tests {
     use crate::ops::{PairStatus, Policy, RecordStatus};
     use schemars::JsonSchema;
 
-    /// The names of the set `T`, as its JSON schema lists them, sorted.
+    /// The names of the set `T`, as its JSON schema lists them, sorted. A set whose values have
+    /// a doc comment is a `oneOf` of one `const` for each value. Another set is an `enum` list.
     fn schema_names<T: JsonSchema>() -> Vec<String> {
         let schema = schemars::schema_for!(T);
-        let mut names: Vec<String> = schema.as_value()["enum"]
+        let value = schema.as_value();
+        let names = value["oneOf"]
             .as_array()
-            .expect("a closed set has an enum list in its schema")
+            .map(|each| each.iter().map(|v| v["const"].clone()).collect())
+            .or_else(|| value["enum"].as_array().cloned())
+            .expect("a closed set lists its values in its schema");
+        let mut names: Vec<String> = names
             .iter()
             .map(|v| v.as_str().unwrap_or_default().to_string())
             .collect();

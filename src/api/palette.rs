@@ -1195,8 +1195,8 @@ impl<A: PaletteApi> Palette<A> {
     /// is not a cluster: the manifests and the variables of each profile come from the profile.
     /// Such an object gives no values to the variables, so a record holds the definitions of each
     /// profile, as a profile record does. It has no notifications. `read_copy` reads the copy
-    /// that the holder keeps of one manifest, from the uid of the profile, the name of the pack,
-    /// and the uid of the copy.
+    /// that the holder keeps of one manifest. Its arguments are the uid of the profile, the name
+    /// of the pack, and the uid of the copy.
     fn holder_raw(
         &self,
         doc: Value,
@@ -1536,8 +1536,8 @@ impl ConfigPart {
 /// Put the copies that a holder keeps of its manifests in place of the manifests of its
 /// profiles. Palette gives an edge host and a cluster group a copy of each manifest under a
 /// uid of its own, and the template of the holder names each copy by that uid, with no
-/// content. An edit of the profile does not reach the copy. `read_copy` reads one copy, from
-/// the uid of the profile, the name of the pack, and the uid of the copy.
+/// content. An edit of the profile does not reach the copy. `read_copy` reads one copy. Its
+/// arguments are the uid of the profile, the name of the pack, and the uid of the copy.
 fn own_manifests(
     templates: &[Value],
     read_copy: impl Fn(&str, &str, &str) -> Result<Value>,

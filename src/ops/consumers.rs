@@ -858,3 +858,27 @@ fn group_members<A: PaletteApi>(
     }
     list_clusters(&members)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_consumer_kind_is_named_in_the_documents_and_in_the_reports() {
+        for (kind, name, noun) in [
+            (ConsumerKind::Cluster, "cluster", "cluster"),
+            (ConsumerKind::EdgeHost, "edgehost", "edge host"),
+            (ConsumerKind::Template, "template", "cluster template"),
+            (ConsumerKind::App, "app", "app deployment"),
+        ] {
+            assert_eq!(serde_json::to_value(kind).unwrap(), Value::from(name));
+            assert_eq!(kind.noun(), noun);
+        }
+        // a consumer with no kind is a cluster, as each older document names one
+        let c: Consumer = serde_json::from_value(serde_json::json!({
+            "uid": "c1", "name": "lab", "projectUid": "p1", "state": "Running"
+        }))
+        .unwrap();
+        assert_eq!(c.kind, ConsumerKind::Cluster);
+    }
+}

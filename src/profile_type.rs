@@ -50,7 +50,7 @@ impl ProfileType {
         }
     }
 
-    /// True for a type whose profile builds a cluster: `cluster` and `infra` have the OS and
+    /// True for a type whose profile builds a cluster. `cluster` and `infra` have the OS and
     /// the Kubernetes layers, so a cluster runs one of them before each add-on.
     pub(crate) fn builds_cluster(self) -> bool {
         matches!(self, Self::Cluster | Self::Infra)

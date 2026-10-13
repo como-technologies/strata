@@ -5,8 +5,8 @@
 /// A pack from a registry has the type of its registry: `spectro` from a pack registry, `helm`
 /// from a Helm registry, and `oci` from an OCI registry. A `manifest` pack comes from no
 /// registry: Palette makes it from the manifests of the layer. A tier of an app profile has a
-/// type of its own, such as `container`, which is not a pack type: a record keeps the text of
-/// the type, and [`PackType::parse`] gives none for it.
+/// type of its own, such as `container`. It is not a pack type: a record keeps the text, and
+/// [`PackType::parse`] gives none for it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PackType {
     /// `spectro`: a pack of a pack registry.

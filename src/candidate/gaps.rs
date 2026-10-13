@@ -100,7 +100,7 @@ pub(super) fn check_file(c: &Candidate) -> Result<(), String> {
 /// Check the layer of each pack against the type of the profile, as Palette does at the create and
 /// at the publish. `layers` gives, in candidate order, the layer of each pack, and None when it is
 /// not known yet: the core layers are then not checked. A layer name that strata does not know is
-/// in no list, so the type refuses it, and the message names the text of the file.
+/// in no list, so the type refuses it. The message names the text of the file.
 pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(), String> {
     if let Some(allowed) = layers_of_type(&c.kind) {
         for (i, (l, layer)) in c.layers.iter().zip(layers).enumerate() {
@@ -200,4 +200,35 @@ pub(super) fn check_pack_tag(tag: &str) -> Result<(), String> {
         "the tag {tag} is not a semantic version, and it holds no three numbers with dots \
          between them"
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_type_of_a_profile_gives_the_layers_that_it_takes() {
+        for kind in ["cluster", "pack", ""] {
+            assert_eq!(layers_of_type(kind), None, "{kind}");
+        }
+        assert_eq!(layers_of_type("infra"), Some(&INFRA_LAYERS[..]));
+        for kind in ["add-on", "system", "app", "other"] {
+            assert_eq!(layers_of_type(kind), Some(&ADDON_LAYERS[..]), "{kind}");
+        }
+    }
+
+    #[test]
+    fn the_core_layers_follow_the_type_and_the_cloud() {
+        for kind in ["cluster", "infra"] {
+            assert_eq!(core_layers(kind, "aws"), Some(&INFRA_LAYERS[..]), "{kind}");
+            assert_eq!(
+                core_layers(kind, "edge-native"),
+                Some(&EDGE_CORE_LAYERS[..]),
+                "{kind}"
+            );
+        }
+        for kind in ["add-on", "system", "app", "pack", "", "other"] {
+            assert_eq!(core_layers(kind, "aws"), None, "{kind}");
+        }
+    }
 }
