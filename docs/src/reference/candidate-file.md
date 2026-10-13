@@ -80,7 +80,9 @@ Strata reads the whole file before it sends a request:
     both, and not neither.
   - A `manifest` layer sets no `registry` and no `registryUid`, and it has one
     manifest or more. Its `layer` is `addon`, or it has no `layer`.
-  - `type` is `manifest`, or the layer has no `type`.
+  - `type` is `manifest`, or the layer has no `type`. Another `type` stops the
+    read of the file: the message names the layer as `layers[N]`, with its
+    line.
   - A layer sets `values` or `valuesFile`, or neither. Not both.
   - A manifest sets `content` or `contentFile`. Not both, and not neither.
 

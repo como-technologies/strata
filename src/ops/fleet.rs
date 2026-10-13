@@ -521,3 +521,51 @@ where
         removed,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn labels() -> BTreeMap<String, String> {
+        [("env", "prod"), ("team", "core")]
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn a_group_joins_its_conditions_as_its_conjunction_says() {
+        let one_holds = vec![
+            TagCondition::parse("env=prod"),
+            TagCondition::parse("team=edge"),
+        ];
+        assert!(meets(&[(Conjunction::Or, one_holds.clone())], &labels()));
+        assert!(!meets(&[(Conjunction::And, one_holds.clone())], &labels()));
+        // each group must hold
+        let both_hold = vec![TagCondition::parse("env=prod"), TagCondition::parse("team")];
+        assert!(meets(
+            &[
+                (Conjunction::And, both_hold.clone()),
+                (Conjunction::Or, one_holds.clone())
+            ],
+            &labels()
+        ));
+        assert!(!meets(
+            &[(Conjunction::And, both_hold), (Conjunction::And, one_holds)],
+            &labels()
+        ));
+        assert!(meets(&[], &labels()));
+    }
+
+    #[test]
+    fn a_saved_filter_reads_its_conjunction_and_joins_with_and_when_it_names_none() {
+        let doc = json!({"metadata": {"name": "edge"}, "spec": {"filterGroup": {
+            "conjunction": "or", "filters": [{"key": "env", "values": ["prod"]}]}}});
+        let f = filter_of(&doc, "edge", "f1");
+        assert_eq!(f.conjunction, Conjunction::Or);
+        assert_eq!(f.conditions, [TagCondition::parse("env=prod")]);
+        let doc = json!({"metadata": {"name": "edge"}, "spec": {"filterGroup": {"filters": []}}});
+        assert_eq!(filter_of(&doc, "edge", "f1").conjunction, Conjunction::And);
+    }
+}
