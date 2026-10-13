@@ -1,8 +1,8 @@
-//! A value of a closed set in a document that strata reads again: a value that this release
-//! knows, or the text of a value that a later release adds.
+//! A value of a closed set in a document that strata reads again, also a value that a later
+//! release adds.
 //!
-//! Strata reads again a record and the report of `behind --since`. A later release can add a
-//! value to a closed set of these documents and keep the schema id. So each such field is an
+//! Strata reads two documents again: a record, and the report of `behind --since`. A later
+//! release can add a value to a closed set of these documents and keep the schema id. So each such field is an
 //! [`Open`] value. Strata reads a value that it does not know with no error. Each document that
 //! strata writes from it holds the same text.
 
@@ -24,8 +24,8 @@ pub trait ClosedSet: Copy + Serialize + DeserializeOwned + JsonSchema {
 ///
 /// A later release can add a value to `T` and keep the schema id of the document. This release
 /// reads such a value as [`Open::Unknown`], with its text, and writes the same text. Two values
-/// are equal, and sort, by their text: a map keyed by them keeps the order of a map keyed by
-/// text.
+/// are equal, and sort, by their text. So a map with these keys keeps the order of a map with
+/// text keys.
 #[derive(Debug, Clone)]
 pub enum Open<T> {
     /// A value that this release knows.

@@ -68,6 +68,46 @@ that `behind --since` reads follows the same rule. The JSON Schema of each
 document holds its id as a `const`. So a validator that reads
 `strata schema <kind>` refuses a document of another id too.
 
+### A value that strata does not know
+
+A later release can also add a value to a closed set, such as a new `template`,
+and keep the id. Strata reads such a value with no error, and keeps its text.
+Each document that strata writes from the record holds the same text. These
+fields take a value of a later release:
+
+- `tool.impl` of a record and of `strata-behind/1`.
+- `source.template`, `source.cluster.kind`, the name of each tier in
+  `source.cluster.tiers`, and `upstreamSource` in the `hash` of each pack, in
+  `strata-snapshot/1`.
+- `bump.impact` and each value of `bump.flags[]`, in `strata-behind/1`.
+
+The commands do this with such a value:
+
+- `compare` compares the text. Two records of the same new `kind` compare their
+  tiers, as two cluster records do. Two records that carry the same new tier
+  compare its `fields`.
+- `verify` refuses a record whose `source.cluster.kind` it does not know, with
+  `usage` and exit `2`. Strata cannot read such an object from Palette, so it
+  sends no request.
+- `verify` does not compare a tier that it does not know, because Palette gives
+  strata no such tier. A note in the report names the tier.
+- A record with a new `template` is not a draft. A pack with a new
+  `upstreamSource` has a digest, so strata does not call its upstream unknown.
+- `behind --since` reads the time of the previous report, and the pinned and
+  the newer versions of each pin. It does not read the `bump` of a pin.
+
+`strata schema` agrees: each of these fields takes each value of its set, or
+any other text. The other closed sets of these two documents are text, so
+strata reads each value of them:
+
+- the `type` and the `layer` of a pack
+- the `type` of a profile
+- `pinnedState`, and the `state` of a newer version
+- the `status` of a sync
+
+Strata does not read its other documents again, so their closed sets stay
+closed.
+
 ## The command line
 
 These do not change in a release, so a script can use them:
@@ -78,4 +118,6 @@ These do not change in a release, so a script can use them:
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
-release fails on an older strata with `candidate-invalid`.
+release fails on an older strata with `candidate-invalid`. A new value of a
+closed set, such as a new `type` of a layer, fails in the same way. A person
+writes the file, so strata refuses the value and does not guess.

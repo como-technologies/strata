@@ -167,7 +167,7 @@ fn known_kind(c: &crate::snapshot::ClusterSource) -> Result<SubjectKind> {
     c.kind.known().ok_or_else(|| Error::Usage {
         message: format!(
             "a later release of strata wrote this record of the {} {}; this strata cannot read \
-             a {} from Palette, so verify the record with that release",
+             a {} from Palette, so use that release for the record",
             c.kind, c.name, c.kind
         ),
     })

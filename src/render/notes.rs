@@ -454,8 +454,10 @@ fn unread_notes(d: &Diff) -> Vec<String> {
 }
 
 /// One note for each tier of a side that a later release wrote, when the other side does not
-/// carry it: `a later release of strata wrote the tier zones of cluster fred, so strata does not
-/// compare it`. Strata reads no such tier from Palette, so `verify` never compares one.
+/// carry it.
+///
+/// For example: `a later release of strata wrote the tier zones of cluster fred, so strata does
+/// not compare it`. Strata reads no such tier from Palette, so `verify` never compares one.
 fn later_tier_notes(d: &Diff) -> Vec<String> {
     let (Some(a), Some(b)) = (&d.a.cluster, &d.b.cluster) else {
         return Vec::new();
