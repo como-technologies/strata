@@ -37,7 +37,8 @@ profile, or pack version.
   such field, and the library calculates the digest from the pack hashes. See
   [The content digest](../internals/hashes.md#the-content-digest).
 - `source`: where the record comes from.
-  - `ref`: the ref as typed, a name or a uid.
+  - `ref`: the ref as typed, a name or a uid, without an empty part after a
+    separator: `cluster:<uid>/` records `cluster:<uid>`.
   - `uid`, `projectUid` (empty for tenant scope), `name`, `version`,
     `cloudType`, `type`, and `tags`. `type` is `app` for an app profile.
   - `template`: `published`, `draft`, `applied` for a cluster, `candidate`, or
