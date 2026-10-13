@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
 use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
+use strata::color::ColorMode;
 use strata::config::Config;
 use strata::progress::Progress;
 use strata_preflight::confidence::{self, Ledger};
@@ -105,7 +106,7 @@ struct Cli {
     no_color: bool,
     /// When to color the report and the progress lines: auto (a terminal, and NO_COLOR not set), always, or never
     #[arg(long, value_enum, default_value = "auto", value_name = "WHEN")]
-    color: ColorArg,
+    color: ColorMode,
     /// No progress messages
     #[arg(short, long)]
     quiet: bool,
@@ -171,18 +172,11 @@ fn format_of(cli: &Cli) -> Format {
 
 /// When to color: `--color always` colors a pipe too (a `tee` to a log and a terminal), `never`
 /// and `--no-color` never do, and `auto` colors a terminal unless `NO_COLOR` is set.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
-enum ColorArg {
-    Auto,
-    Always,
-    Never,
-}
-
 fn wants_color(cli: &Cli, stream_is_terminal: bool) -> bool {
     match cli.color {
-        ColorArg::Never => false,
-        ColorArg::Always => !cli.no_color,
-        ColorArg::Auto => {
+        ColorMode::Never => false,
+        ColorMode::Always => !cli.no_color,
+        ColorMode::Auto => {
             !cli.no_color && std::env::var_os("NO_COLOR").is_none() && stream_is_terminal
         }
     }

@@ -117,7 +117,7 @@ impl SnapshotOptions {
 }
 
 /// Turn a ref into a snapshot. A snapshot file is loaded; anything else is fetched through the
-/// [`Palette`] that `connect` returns, with `options`, so comparing two files never needs
+/// [`Palette`] that `connect` returns, with `options`, so a comparison of two files needs no
 /// credentials. The record names the ref as it displays: the text as typed, without an empty
 /// part after a separator.
 ///
