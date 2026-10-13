@@ -85,10 +85,11 @@ const LEGACY_CLOUD_FIELDS: &[&str] = &[
     "overrideClusterAPIConfig",
 ];
 
-/// The machine pool fields of the cloud `cloud`, in addition to [`POOL_FIELDS`]. Palette gives
-/// the cloud config of AKS in the model of Azure, and that of GKE in the model of GCP. A cloud
-/// whose fields strata does not read by name gets the fields of an older record. So the tier
-/// holds no fewer fields than before.
+/// The machine pool fields of the cloud `cloud`, in addition to [`POOL_FIELDS`].
+///
+/// Palette gives the cloud config of AKS in the model of Azure, and that of GKE in the model of
+/// GCP. A cloud whose fields strata does not read by name gets the fields of an older record. So
+/// the tier holds no fewer fields than before.
 fn pool_fields(cloud: Cloud) -> &'static [&'static str] {
     match cloud {
         Cloud::Aws => &["rootDeviceSize", "capacityType", "spotMarketOptions"],

@@ -6,8 +6,13 @@ use serde::{Deserialize, Serialize};
 /// The `type` of a pack, as a pack reference of Palette names it, as a record keeps it, and as
 /// `packs` lists it.
 ///
-/// A pack from a registry has the type of its registry: `spectro` from a pack registry, `helm`
-/// from a Helm registry, and `oci` from an OCI registry. A `manifest` pack comes from no
+/// A pack from a registry has the type of its registry:
+///
+/// - `spectro` from a pack registry.
+/// - `helm` from a Helm registry.
+/// - `oci` from an OCI registry.
+///
+/// A `manifest` pack comes from no
 /// registry: Palette makes it from the manifests of the layer. A tier of an app profile has a
 /// type of its own, such as `container`. It is not a pack type: a record keeps the text, and
 /// strata reads no pack type from it.

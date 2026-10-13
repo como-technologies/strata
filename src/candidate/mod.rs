@@ -290,9 +290,10 @@ impl RegistryRef {
     }
 }
 
-/// The layer that Palette gives each pack that it makes itself. The packs are a manifest pack,
-/// and the pack of a layer from a registry that it does not sync. It drops the layer of the
-/// request.
+/// The layer that Palette gives each pack that it makes itself.
+///
+/// The packs are a manifest pack, and the pack of a layer from a registry that it does not sync. It
+/// drops the layer of the request.
 const MINTED_LAYER: Layer = Layer::Addon;
 
 /// Whether `v` is a semantic version in the loose form that Palette parses: an optional `v`,
@@ -342,9 +343,11 @@ pub struct ResolvedCandidate {
     /// The documents that a published profile with the content of the candidate gives. They hold
     /// only what Palette gives, and no field of strata.
     pub raw: RawProfile,
-    /// The options of the pack template that the values of each pack select: one list for each
-    /// pack reference of the profile, in its order. The list is empty for a manifest layer, and
-    /// for a layer of a registry that Palette does not sync. No listing gives their template.
+    /// The options of the pack template that the values of each pack select: one list for each pack
+    /// reference of the profile, in its order.
+    ///
+    /// The list is empty for a manifest layer, and for a layer of a registry that Palette does not
+    /// sync. No listing gives their template.
     pub preset_options: Vec<Vec<PresetOption>>,
 }
 

@@ -87,9 +87,11 @@ pub(super) fn check_file(c: &Candidate) -> Result<(), RuleViolation> {
 }
 
 /// Check the layer of each pack against the type of the profile, as Palette does at the create and
-/// at the publish. `layers` gives, in candidate order, the layer of each pack, and None when it is
-/// not known yet: the core layers are then not checked. A layer name that strata does not know is
-/// in no list, so the type refuses it. The message names the text of the file.
+/// at the publish.
+///
+/// `layers` gives, in candidate order, the layer of each pack, and None when it is not known yet:
+/// the core layers are then not checked. A layer name that strata does not know is in no list, so
+/// the type refuses it. The message names the text of the file.
 pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(), RuleViolation> {
     if let Some(allowed) = layers_of_type(&c.kind) {
         for (i, (l, layer)) in c.layers.iter().zip(layers).enumerate() {
@@ -132,8 +134,9 @@ pub(super) fn check_layers(c: &Candidate, layers: &[Option<&str>]) -> Result<(),
     Ok(())
 }
 
-/// Check that `l`, the layer `i` of a profile of the cloud `cloud`, supports that cloud. `clouds`
-/// are the cloud types that the listing of the registry gives for its pack. The rule is
+/// Check that `l`, the layer `i` of a profile of the cloud `cloud`, supports that cloud.
+///
+/// `clouds` are the cloud types that the listing of the registry gives for its pack. The rule is
 /// [`supports`]. A candidate with no cloud takes each pack.
 pub(super) fn check_cloud(
     cloud: &str,
@@ -188,9 +191,10 @@ fn has_three_numbers(text: &str) -> bool {
     })
 }
 
-/// Check `tag`, the tag of a pack from a registry that Palette does not sync. Palette makes the
-/// pack at the create, with the tag as its version. `whom` names the layer and its registry, as
-/// the start of the message.
+/// Check `tag`, the tag of a pack from a registry that Palette does not sync.
+///
+/// Palette makes the pack at the create, with the tag as its version. `whom` names the layer and
+/// its registry, as the start of the message.
 pub(super) fn check_pack_tag(whom: &str, tag: &str) -> Result<(), RuleViolation> {
     if palette_pack_tag(tag) {
         return Ok(());

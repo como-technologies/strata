@@ -53,9 +53,10 @@ impl<A: PaletteApi> Palette<A> {
         }
     }
 
-    /// The uid of the one cluster named `name` in the scope, from [`Palette::cluster_listing`]
-    /// and from [`Palette::virtual_clusters`]: the listing leaves out each virtual cluster, so
-    /// the search gives them, when it takes `environment`.
+    /// The uid of the one cluster named `name` in the scope.
+    ///
+    /// It reads [`Palette::cluster_listing`] and [`Palette::virtual_clusters`]. The listing leaves
+    /// out each virtual cluster, so the search gives them, when it takes `environment`.
     ///
     /// # Errors
     ///

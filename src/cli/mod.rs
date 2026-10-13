@@ -1,5 +1,7 @@
-//! The run of each command, and the parts that the commands share: the connection, the progress
-//! notes, the time, the records of a pattern, and the exit code.
+//! The run of each command, and the parts that the commands share.
+//!
+//! The shared parts are the connection, the progress notes, the time, the records of a pattern,
+//! and the exit code.
 
 use std::path::PathBuf;
 use std::process::ExitCode;

@@ -25,7 +25,7 @@ under a pin name each record that pins it.
 
 - **A newer version** is one that a person can move to. A version that Spectro
   Cloud disabled or deleted is not, and a version for none of the clouds of the
-  pinned version is not either: see
+  pinned version is not either. See
   [A pack that supports a cloud](../internals/palette/packs.md#a-pack-that-supports-a-cloud).
   A deprecated version is, and it says so. See
   [Pack states](../internals/palette/packs.md#pack-states).

@@ -126,9 +126,13 @@ A candidate that breaks one of them gives a record. To ask Palette before you pu
 ## The registry lookups
 
 Strata reads `GET /v1/registries/metadata` one time for each resolve, and only
-when it needs it. It needs it in three cases: a layer names its registry by
-name, the listing does not have the version of a layer, or an error names a
-registry. The listing gives each registry name its uid. The `registry` field
+when it needs it. A resolve needs this listing in three cases:
+
+- A layer names its registry by name.
+- The listing of the packs does not have the version of a layer.
+- An error names a registry.
+
+The listing gives each registry name its uid. The `registry` field
 takes a name or a uid of that listing. Then, for each layer that is not a
 `manifest` layer:
 

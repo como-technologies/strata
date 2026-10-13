@@ -33,7 +33,9 @@ pub(crate) fn arr<'a>(v: &'a Value, ptr: &str) -> &'a [Value] {
         .map_or(&[], Vec::as_slice)
 }
 
-/// The texts of the array at the pointer `ptr` of `v`. An entry that is not text is left out.
+/// The texts of the array at the pointer `ptr` of `v`.
+///
+/// The list skips an entry that is not text.
 pub(crate) fn strings(v: &Value, ptr: &str) -> Vec<String> {
     arr(v, ptr)
         .iter()

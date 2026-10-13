@@ -113,9 +113,9 @@ strata reads each value of them:
 - the `status` of a sync
 
 Strata does not read its other documents again, such as `strata-packs/1` and
-`strata-diff/1`, so their closed sets stay closed. A program that reads such a
-document of a later release with the types of the library, such as
-`ops::PackBuild`, gets an error for a value that it does not know.
+`strata-diff/1`, so their closed sets stay closed. A program can read such a
+document with the types of the library, such as `ops::PackBuild`. Then a value
+of a later release gives an error.
 
 ## The command line
 

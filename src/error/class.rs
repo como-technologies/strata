@@ -46,8 +46,9 @@ impl Error {
     }
 }
 
-/// True when the body of a Palette error is JSON with a `code` of a refusal by design. Such a
-/// code is in [`REFUSAL_CODES`], in `PROFILE_IMPORT_MATCH_CODES`, or in a check of a
+/// True when the body of a Palette error is JSON with a `code` of a refusal by design.
+///
+/// Such a code is in [`REFUSAL_CODES`], in `PROFILE_IMPORT_MATCH_CODES`, or in a check of a
 /// [`ValidateRoute`]. The code comes from [`PaletteRefusal::from_error_body`], the one read of the
 /// code of a Palette error.
 fn is_refusal(body: &str) -> bool {

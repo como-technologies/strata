@@ -162,11 +162,10 @@ pub(crate) fn tag_rename(pd: &PackDiff) -> Option<String> {
     }
 }
 
-/// `both sides are name@version (uid u): the version was edited in place`, for a diff whose sides
-/// name one profile version with different content.
-/// The note for the user macros the content uses: `the content uses macro region: the root
-/// covers its name and not its value, so an edit of the macro does not show`. None when it uses
-/// none.
+/// The note for the user macros the content uses.
+///
+/// The note is `the content uses macro region: the root covers its name and not its value, so an
+/// edit of the macro does not show`. None when the content uses no macro.
 fn macros_note(d: &Diff) -> Option<String> {
     let (noun, pron) = match d.macros.len() {
         0 => return None,

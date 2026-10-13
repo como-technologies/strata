@@ -11,8 +11,9 @@ use crate::diff::{
 use crate::legend::document_name;
 use crate::term::color::Paint;
 
-/// The mark of a pack in a comparison, as the text reports print it: `+` for a pack only in B,
-/// `-` for a pack only in A, `~` for a change, and a space for no change.
+/// The mark of a pack in a comparison, as the text reports print it.
+///
+/// `+` is a pack only in B, `-` a pack only in A, `~` a change, and a space no change.
 pub(crate) fn status_mark(status: Status) -> &'static str {
     match status {
         Status::Unchanged => " ",

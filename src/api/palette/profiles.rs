@@ -1,5 +1,7 @@
-//! The reads of a profile and of an app profile: the uid of a name, the documents, the
-//! variables, the manifests, and the validate routes of a profile.
+//! The reads of a profile and of an app profile.
+//!
+//! They give the uid of a name, the documents, the variables, the manifests, and the validate
+//! routes of a profile.
 
 use std::collections::BTreeSet;
 

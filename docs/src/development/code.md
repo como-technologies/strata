@@ -27,8 +27,8 @@ where each module goes.
 
 ## The size of a module
 
-- A module does one thing. When its file has more than about 800 lines, make
-  the module a directory: `mod.rs`, and one file for each part. A file that
+- A module does one thing. When a module file has more than about 800 lines,
+  divide it: `mod.rs` and one file for each part. A file that
   holds only tests can be longer.
 - Move a file with `git mv`, so that `git log --follow` keeps its history. Move
   the file whole in one pull request, and divide it in the next. The squash of

@@ -69,10 +69,11 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
         }
     }
 
-    /// The entries of the summary listing of the registries of `kind`,
-    /// `GET /v1/registries/{kind}/summary`. Each has its last sync in `status.sync`, and an OCI
-    /// registry has its provider type in `spec.providerType`. `None` when Palette has no such
-    /// listing: it answers HTTP 404 or 405.
+    /// The entries of the summary listing of the registries of `kind`, `GET
+    /// /v1/registries/{kind}/summary`.
+    ///
+    /// Each has its last sync in `status.sync`, and an OCI registry has its provider type in
+    /// `spec.providerType`. `None` when Palette has no such listing: it answers HTTP 404 or 405.
     ///
     /// # Errors
     ///
@@ -137,9 +138,10 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     }
 
     /// The provider type of the OCI registry `uid`, `pack`, `helm`, or `zarf`, from
-    /// `spec.providerType` of the OCI summary listing. The pack listing does not carry it. `None`
-    /// when Palette has no such listing, when the listing does not have the registry,
-    /// and when the entry names no type.
+    /// `spec.providerType` of the OCI summary listing.
+    ///
+    /// The pack listing does not carry it. `None` when Palette has no such listing, when the
+    /// listing does not have the registry, and when the entry names no type.
     pub(crate) fn oci_provider_type(&mut self, uid: &str) -> Result<Option<String>> {
         Ok(self
             .summary(RegistryKind::Oci)?
@@ -148,12 +150,14 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     }
 
     /// How Palette makes the pack of a layer from the registry `uid`, when it does not sync the
-    /// registry. It does not sync a Helm registry that is private, or an OCI registry of the
-    /// provider type `helm` or `zarf` with sync off. So the pack listing has no pack of it, and
-    /// Palette makes the pack of such a layer when it creates the profile. The metadata gives the
-    /// kind and `isPrivate`, and the OCI summary gives the provider type and
-    /// `status.sync.isSyncSupported`. `None` for a registry that syncs, for a registry that the
-    /// key cannot see, and when Palette has no OCI summary.
+    /// registry.
+    ///
+    /// It does not sync a Helm registry that is private, or an OCI registry of the provider type
+    /// `helm` or `zarf` with sync off. So the pack listing has no pack of it, and Palette makes the
+    /// pack of such a layer when it creates the profile. The metadata gives the kind and
+    /// `isPrivate`, and the OCI summary gives the provider type and `status.sync.isSyncSupported`.
+    /// `None` for a registry that syncs, for a registry that the key cannot see, and when Palette
+    /// has no OCI summary.
     pub(crate) fn unsynced(&mut self, uid: &str) -> Result<Option<Unsynced>> {
         let Some(meta) = registry_entry(self.metadata()?, "/uid", uid) else {
             return Ok(None);
@@ -208,13 +212,14 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
         Ok(names)
     }
 
-    /// The last sync of the registry `uid`, which holds a pack of type `pack_type`. It comes from
-    /// `status.sync` of the registry in the summary listing of its kind. The type `spectro` reads
-    /// `GET /v1/registries/pack/summary`, and `helm` and `oci` read the same route under their
-    /// own kind. A summary listing gives the sync as Palette stores it. `None` for a registry
-    /// that does not sync, for a manifest pack, and for a type that is no pack type: `pack_type`
-    /// is then `None`. Also `None` for a registry that the listing does not have, and when
-    /// Palette has no such listing.
+    /// The last sync of the registry `uid`, which holds a pack of type `pack_type`.
+    ///
+    /// It comes from `status.sync` of the registry in the summary listing of its kind. The type
+    /// `spectro` reads `GET /v1/registries/pack/summary`, and `helm` and `oci` read the same route
+    /// under their own kind. A summary listing gives the sync as Palette stores it. `None` for a
+    /// registry that does not sync, for a manifest pack, and for a type that is no pack type:
+    /// `pack_type` is then `None`. Also `None` for a registry that the listing does not have, and
+    /// when Palette has no such listing.
     pub(crate) fn sync(
         &mut self,
         uid: &str,
@@ -256,10 +261,11 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     }
 
     /// The last sync of the registry `uid`, which holds a pack of type `pack_type`, as a note
-    /// beside an answer that stands on its own. The answer is the verdict of a pack record, or a
-    /// pin of `behind`. An error of Palette, such as a 403 or a 5xx, and a request that does
-    /// not complete do not stop the answer. The note then names the reason, and `progress` gets
-    /// a line. Each other error is an error of the run.
+    /// beside an answer that stands on its own.
+    ///
+    /// The answer is the verdict of a pack record, or a pin of `behind`. An error of Palette, such
+    /// as a 403 or a 5xx, and a request that does not complete do not stop the answer. The note
+    /// then names the reason, and `progress` gets a line. Each other error is an error of the run.
     pub(crate) fn sync_note(
         &mut self,
         uid: &str,
@@ -286,8 +292,10 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     }
 }
 
-/// The entry of the registry `uid` in `entries`, the items of a registry listing, where `ptr`
-/// points to the uid of each entry: `/uid` in the metadata listing, `/metadata/uid` in a summary.
+/// The entry of the registry `uid` in `entries`, the items of a registry listing.
+///
+/// `ptr` points to the uid of each entry: `/uid` in the metadata listing, `/metadata/uid` in a
+/// summary.
 pub(crate) fn registry_entry<'e>(entries: &'e [Value], ptr: &str, uid: &str) -> Option<&'e Value> {
     entries.iter().find(|it| str_at(it, ptr) == uid)
 }

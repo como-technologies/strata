@@ -117,7 +117,7 @@ pub(crate) struct OutputArgs {
     pub(crate) quiet: bool,
 }
 
-/// The format that `--json` and `--format` select: `--json` wins, and the terminal is the
+/// The format that `--json` and `--format` select: `--json` has priority, and the terminal is the
 /// default.
 fn format_of(json: bool, format: Option<Format>) -> Format {
     if json {
@@ -236,7 +236,7 @@ impl SnapshotArgs {
         format_of(self.json, self.format)
     }
 
-    /// What the record holds beyond the content, and what Palette is asked.
+    /// What the record holds beyond the content, and what strata asks Palette.
     pub(crate) fn options(&self) -> ops::SnapshotOptions {
         ops::SnapshotOptions {
             macros: self.macros,

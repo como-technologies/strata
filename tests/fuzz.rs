@@ -439,9 +439,10 @@ fn fuzz_commands() -> Vec<String> {
         .collect()
 }
 
-/// One case of the fuzz run of the binary: `command` on `args` against an address that refuses
-/// connections, with a home of its own and no setting of the machine that names a project or a
-/// tenant.
+/// One case of the fuzz run of the binary: `command` on `args`.
+///
+/// The case runs against an address that refuses connections. It has a home of its own, and no
+/// setting of the machine that names a project or a tenant.
 ///
 /// A request must fail as an error, not a panic. The case makes no retry: the backoff has its own
 /// tests, with an injected wait, and a retry here only makes each case that gets to the network

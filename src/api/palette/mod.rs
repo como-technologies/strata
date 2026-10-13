@@ -83,9 +83,10 @@ const CLUSTER_NOTIFICATIONS: &str = "/v1/notifications/spectrocluster";
 /// The audit log.
 const AUDITS: &str = "/v1/audits";
 
-/// A route of Palette: `prefix`, then each segment of `segments`, each escaped by
-/// [`query_value`]. So a `/` or a `?` in a uid or a name stays in its segment. A fixed word of a
-/// route, such as `packs`, is a segment too, and the escape leaves it as it is.
+/// A route of Palette: `prefix`, then each segment of `segments`, each escaped by [`query_value`].
+///
+/// So a `/` or a `?` in a uid or a name stays in its segment. A fixed word of a route, such as
+/// `packs`, is a segment too, and the escape leaves it as it is.
 fn route(prefix: &str, segments: &[&str]) -> String {
     let mut path = String::from(prefix);
     for segment in segments {
@@ -176,9 +177,10 @@ fn query_value(text: &str) -> String {
     out
 }
 
-/// `(version, uid)` of each item of the profile listing named `name`. An item with no version
-/// or no uid is not a version that a resolve can give: the resolve skips it, so a name with no
-/// other item is [`Error::ProfileNotFound`].
+/// `(version, uid)` of each item of the profile listing named `name`.
+///
+/// An item with no version or no uid is not a version that a resolve can give, so the resolve
+/// skips it. A name with no other item is then [`Error::ProfileNotFound`].
 fn listed_versions<'a>(
     listing: &'a Value,
     name: &'a str,
@@ -347,9 +349,10 @@ impl<A: PaletteApi> Palette<A> {
         }
     }
 
-    /// Every item of a listing that Palette pages by `continue`, every page. `path` is the first
-    /// page, with its query when it has one, and `fetch` reads one page at a path.
-    /// `listmeta.continue` names the next page, and is empty on the last one. A page with no
+    /// Every item of a listing that Palette pages by `continue`, every page.
+    ///
+    /// `path` is the first page, with its query when it has one, and `fetch` reads one page at a
+    /// path. `listmeta.continue` names the next page, and is empty on the last one. A page with no
     /// items ends the listing too, and `items: null` is such a page.
     fn each_continue_page(
         &self,
@@ -460,10 +463,10 @@ fn own_manifests(
             }
             let mut own = Vec::with_capacity(refs.len());
             for m in refs {
-                // Palette makes the entry of the template from the copy: the name and the uid of
-                // the entry are the name and the uid of the copy. No route renames a copy, and a
-                // rename in the profile reaches neither. So the name of the entry is the name of
-                // the copy, which release 0.21 recorded.
+                // Palette makes the entry of the template from the copy, so the entry has the
+                // name and the uid of the copy. No route renames a copy, and a rename in the
+                // profile reaches neither. So the name of the entry is the name of the copy,
+                // which release 0.21 recorded.
                 let got = read_copy(puid, name, str_at(m, "/uid"))?;
                 own.push(manifest_of(&got, m, Template::Published));
             }

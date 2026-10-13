@@ -807,7 +807,9 @@ fn snapshot_from_candidate_reports_local_problems_without_credentials() {
     );
 }
 
-/// The values of a closed set of a record, as `strata schema` names them under `$defs`: a `oneOf`
+/// The values of a closed set of a record, as `strata schema` names them under `$defs`.
+///
+/// The schema gives a `oneOf`
 /// of one constant for each value, in the order of the enum.
 fn schema_values(schema: &serde_json::Value, def: &str) -> Vec<String> {
     schema["$defs"][def]["oneOf"]

@@ -450,7 +450,7 @@ pub enum RecordStatus {
     /// Same content, and a pack has no upstream digest: a change of its archive does not show.
     /// Over a run: no record drifted or failed, and at least one is unverified, exit 1.
     Unverified,
-    /// The record could not be checked. Over a run: at least one record could not be checked,
+    /// Strata could not check the record. Over a run: strata could not check one record or more,
     /// exit 2.
     Error,
 }

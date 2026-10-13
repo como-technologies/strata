@@ -1,12 +1,13 @@
 # JSON documents
 
 Each document has a `schema` id and a `tool` block with `name`, `version`, and
-`impl`: `rust`, or `bash` for a record of the bash reference implementation.
-A record of the first bash release has no `impl`. `strata-diff/1`,
-`strata-verify-summary/1`, and `strata-chain/1` also have a `legend` that
-explains their values in words, so a program or a language model can read them
-without this book. `strata schema <kind>` prints the JSON Schema of each
-document. A field of a closed set in a record or in `strata-behind/1` also
+`impl`. `impl` is `rust`, or `bash` for a record of the bash reference
+implementation. A record of the first bash release has no `impl`.
+
+`strata-diff/1`, `strata-verify-summary/1`, and `strata-chain/1` also have a
+`legend`. It explains their values in words, so a program or a language model
+can read them without this book. `strata schema <kind>` prints the JSON Schema
+of each document. A field of a closed set in a record or in `strata-behind/1` also
 takes a value of a later release. See
 [A value that strata does not know](compatibility.md#a-value-that-strata-does-not-know).
 
@@ -64,7 +65,7 @@ profile, or pack version.
     only when Palette takes the candidate or the packs, so a record holds
     `{"accepts": true}`. A library caller gets the errors too. Strata does not
     read a record that says `accepts` is `false` and gives no error, or that
-    says `true` and gives an error. The field is not part of the root. See
+    says `true` and gives an error. The field is not part of the root: see
     [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks).
   - `macroValues`, only with `snapshot --macros` on a profile version: each
     user macro the content uses, and `sha256:` of the value Palette gives it at
@@ -551,8 +552,8 @@ is the path as a list: strings for keys, numbers for indexes, and
       support.
   - `behind`: `true` when `newer` is not empty.
   - `bump`, for a pin that is behind, unless `--no-impact`: `to`, the newest
-    version, `impact`, the impact level, and `flags[]`, each one of
-    `IDENTITY`, `UPSTREAM`, `AUTHORED`, `IMAGES`, and `CHARTS`.
+    version, `impact`, the impact level, and `flags[]`. `flags[]` holds
+    `IDENTITY`, `UPSTREAM`, `AUTHORED`, `IMAGES`, or `CHARTS` for each change.
   - `arrived[]`, with `--since`: the newer versions that the previous report
     did not know. Absent when the previous report had no pin of the pack in
     that registry.

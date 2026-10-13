@@ -1,5 +1,7 @@
-//! The comparison of two cluster records: the tiers, the profiles that run behind, the profiles
-//! that Palette overwrites in place, and the values of the cluster variables.
+//! The comparison of two cluster records.
+//!
+//! It compares the tiers, the profiles that run behind, the profiles that Palette overwrites in
+//! place, and the values of the cluster variables.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

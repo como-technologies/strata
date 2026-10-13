@@ -143,7 +143,7 @@ pub(crate) fn edge_hosts_line(r: &ConsumersReport) -> String {
     }
 }
 
-/// `second reading: 3 of 3 clusters read`, or why the second reading was not done.
+/// `second reading: 3 of 3 clusters read`, or why strata did not do the second reading.
 ///
 /// `--list-only` asked for none, an app profile has none, or the search or the listing failed.
 /// `code` puts the flag in the form of the report.

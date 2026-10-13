@@ -136,7 +136,7 @@ pub struct Consumer {
 }
 
 impl Consumer {
-    /// A consumer whose document is not read yet: its state is `unknown`, and it names no
+    /// A consumer whose document strata did not read yet: its state is `unknown`, and it names no
     /// version.
     fn unread(kind: ConsumerKind, uid: String, name: String, project_uid: String) -> Consumer {
         Consumer {
@@ -504,8 +504,9 @@ where
     ))
 }
 
-/// The document of `consumers` for the profile `doc`, with the consumers `consumers`. `kind` is
-/// the type of an app profile. The document holds the count, how many copies name another
+/// The document of `consumers` for the profile `doc`, with the consumers `consumers`.
+///
+/// `kind` is the type of an app profile. The document holds the count, how many copies name another
 /// version than the profile, and the two readings.
 fn report(
     doc: &Value,

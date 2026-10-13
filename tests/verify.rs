@@ -166,8 +166,8 @@ fn name_at_latest_records_the_resolved_version_and_keeps_latest_in_the_ref() {
     assert_eq!(snap.source.uid, UID_B);
 }
 
-/// The record of each kind of ref names the ref as typed. An empty part after a separator is
-/// left out: `cluster:<uid>/` records `cluster:<uid>`.
+/// The record of each kind of ref names the ref as typed. The record drops an empty part after
+/// a separator: `cluster:<uid>/` records `cluster:<uid>`.
 #[test]
 fn a_record_of_each_kind_of_ref_holds_the_ref_as_typed() {
     let dir = tempfile::tempdir().unwrap();
@@ -283,7 +283,7 @@ fn an_option_of_snapshot_that_does_not_fit_the_ref_is_a_usage_error_before_any_r
         (
             "pack:csi-aws-ebs@1.65.0",
             &raw_dir,
-            "--raw-dir takes a profile or a cluster: a record that strata reads from the directory \
+            "--raw-dir takes a profile or a cluster. A record that strata reads from the directory \
              does not say pending, draft, edge host, cluster group, app profile, or pack",
         ),
         (
@@ -2190,8 +2190,8 @@ fn a_missing_route_of_the_bindings_records_null_and_another_error_gives_no_field
         json["source"]["cluster"]["tiers"]["policy"]["errors"]["rbacs"],
         "HTTP 403: forbidden"
     );
-    // a route that Palette does not have (HTTP 404 or 405) records null and no error, and the
-    // hash of a 403 does not cover that null
+    // a route that Palette does not have (HTTP 404 or 405) records null and no error. The hash
+    // of a 403 does not cover that null.
     for status in [404, 405] {
         let missing = serve_policy(dir.path(), barney()).failing(rbacs_route(), status, "no route");
         let m = snapshot_cluster(&missing, None).unwrap();
@@ -5592,8 +5592,8 @@ fn candidate_errors_name_what_is_wrong() {
     assert!(matches!(err, Error::CandidateInvalid { .. }), "{err}");
 
     // registry problems need the registry. A version that the listing does not have asks whether
-    // Palette syncs the registry, and the registry listing is the first read of that check: an
-    // answer of Palette that is an error is an error of the record (#327)
+    // Palette syncs the registry, and the registry listing is the first read of that check. An
+    // answer of Palette that is an error is an error of the record (#327).
     let f = write(
         "unknown-version.yaml",
         k8s(serde_json::json!({"version": "9.9.9"})),
@@ -12779,7 +12779,7 @@ fn a_pack_supports_the_cloud(pinned: &[&str], newer: &[&str], cloud: &str) -> [b
 #[test]
 fn packs_behind_and_the_candidate_check_agree_on_the_clouds_that_a_pack_supports() {
     // each row: the cloud types of the version 1.65.0, then whether it supports the cloud aws, a
-    // custom cloud, and the cloud all. The pinned version is of the cloud that is asked
+    // custom cloud, and the cloud all. The pinned version is of the cloud that the row asks
     let table: &[(&[&str], [bool; 3])] = &[
         (&[], [true, true, true]),
         (&[CLOUD_ALL], [true, true, true]),
@@ -13438,7 +13438,7 @@ fn each_report_of_behind_says_since_when_the_newest_version_is_listed_and_what_a
 #[test]
 fn behind_since_takes_a_report_of_its_id_and_refuses_another_version_or_another_document() {
     // the rule of the records (#321): a strata-behind id of another version is unsupported-schema,
-    // which names both ids; a file of another document, or of none, is not a report
+    // which names both ids. A file of another document, or of none, is not a report.
     let dir = tempfile::tempdir().unwrap();
     let report = dir.path().join("report.json");
     fs::write(
