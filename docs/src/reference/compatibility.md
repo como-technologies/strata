@@ -87,6 +87,8 @@ fields take a value of a later release:
   `strata-snapshot/1`.
 - `bump.impact` and each value of `bump.flags[]`, in `strata-behind/1`.
 
+A release does not rename or remove a value of these sets and keep the id.
+
 The commands do this with such a value:
 
 - `compare` compares the text. Two records of the same new `kind` compare their

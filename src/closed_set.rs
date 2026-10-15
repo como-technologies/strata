@@ -1,10 +1,85 @@
 //! A value of a closed set in a document that strata reads again, also a value that a later
 //! release adds.
 //!
-//! Strata reads two documents again: a record, and the report of `behind --since`. A later
-//! release can add a value to a closed set of these documents and keep the schema id. So each
-//! such field is an [`Open`] value. Strata reads a value that it does not know with no error.
-//! Each document that strata writes from it holds the same text.
+//! Strata reads two documents again: a record, and the report of `behind --since`. Some fields
+//! of these documents hold one value of a closed set. For example, the name of a tier is
+//! `applied`, `labels`, `policy`, `running`, or `shape`.
+//!
+//! A later release can add a value to such a set, such as a tier `network`, and keep the schema
+//! id. If the field is a plain enum, this release refuses the full document with the serde error
+//! `unknown variant`. So each such field is an [`Open`] value. Strata reads a value that it does
+//! not know with no error, and writes the same text again. The page "Versions and compatibility"
+//! of the book lists these fields, and what each command does with such a value.
+//!
+//! # The two parts
+//!
+//! [`ClosedSet`] is the trait of the enum. The enum has only unit variants, and serde writes
+//! each variant as text. [`ClosedSet::as_str`] gives the same text. [`Open`] uses `as_str` to
+//! compare, sort, and show a value, with no call to serde.
+//!
+//! > **Make sure that `as_str` gives the text that serde writes.** If the two texts are different,
+//! > strata writes a known value with one text, and reads it again as [`Open::Unknown`]. The
+//! > compiler does not make this check. The tests in `tests/closed_set.rs` make it for each set.
+//!
+//! [`Open`] holds one of two values:
+//!
+//! - [`Open::Known`] holds a value that this release knows, such as `Tier::Running`.
+//! - [`Open::Unknown`] holds the text of a value that a later release wrote, such as `"network"`.
+//!
+//! # Read and write
+//!
+//! [`Open`] reads a value in three steps:
+//!
+//! 1. Read the value as text. A value that is not text, such as `1`, gives an error.
+//! 2. Read the text as `T`, with the serde rules of `T`.
+//! 3. If `T` reads the text, the value is [`Open::Known`]. If not, the value is
+//!    [`Open::Unknown`] with the text, and there is no error.
+//!
+//! [`Open`] always writes the text of [`Open::as_str`]. A known value writes the text of its
+//! variant. An unknown value writes the text that strata read. So when strata reads a document
+//! and writes it again, each value keeps its text.
+//!
+//! # Equality and order
+//!
+//! Two [`Open`] values are equal, and sort, by their text. So a `BTreeMap` with [`Open`] keys
+//! writes its keys in the order of a map with text keys. The keys of a document have the same
+//! order when this release or a later release writes it. A derived `Ord` sorts by the order of
+//! the variants, and has no position for an unknown value.
+//!
+//! The order of [`Open`] is not the order of `T`. To compare two values by the order of `T`,
+//! such as two impact levels by their severity, compare the values of [`Open::known`].
+//!
+//! # Use a value
+//!
+//! [`Open::known`] gives `Some` for a known value, and `None` for an unknown value. Code that
+//! acts on the value matches on it, and decides what to do with an unknown value.
+//! [`Open::as_str`] and `Display` give the text of each value. `tier == Tier::Running` compares
+//! with a value of `T`, and `Tier::Running.into()` makes an [`Open`] value.
+//!
+//! # The schema
+//!
+//! The JSON Schema of an [`Open`] field is `anyOf` the schema of `T` and any text. So a validator
+//! accepts each value of the set, and also a value of a later release.
+//!
+//! # Examples
+//!
+//! A later release adds the tier `network`, and writes this map of tiers. This release reads the
+//! map, knows two of the tiers, and writes the same text in the same order:
+//!
+//! ```
+//! use std::collections::BTreeMap;
+//! use strata::closed_set::Open;
+//! use strata::snapshot::Tier;
+//!
+//! let text = r#"{"applied":1,"network":2,"running":3}"#;
+//! let tiers: BTreeMap<Open<Tier>, u8> = serde_json::from_str(text).unwrap();
+//!
+//! let known: Vec<Option<Tier>> = tiers.keys().map(Open::known).collect();
+//! assert_eq!(known, [Some(Tier::Applied), None, Some(Tier::Running)]);
+//! assert!(tiers.contains_key(&Open::Unknown("network".to_string())));
+//!
+//! assert_eq!(serde_json::to_string(&tiers).unwrap(), text);
+//! ```
 
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -22,10 +97,9 @@ pub trait ClosedSet: Copy + Serialize + DeserializeOwned + JsonSchema {
 
 /// A value of the closed set `T` in a document that strata reads again.
 ///
-/// A later release can add a value to `T` and keep the schema id of the document. This release
-/// reads such a value as [`Open::Unknown`], with its text, and writes the same text. Two values
-/// are equal, and sort, by their text. So a map with these keys keeps the order of a map with
-/// text keys.
+/// This release reads a value that a later release adds to `T` as [`Open::Unknown`], with its
+/// text, and writes the same text. The [module](crate::closed_set) shows how it reads, writes,
+/// and sorts.
 #[derive(Debug, Clone)]
 pub enum Open<T> {
     /// A value that this release knows.

@@ -8,6 +8,7 @@ mod common;
 
 mod ci_scripts;
 mod cli;
+mod closed_set;
 mod content;
 mod dev_scripts;
 mod docs;

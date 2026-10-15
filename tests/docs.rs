@@ -5,6 +5,8 @@
 //! other is invisible to a reader who came the other way. That happened to "What changed between
 //! two pack versions", which reached the navigation and never reached the list.
 
+use crate::common;
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -154,7 +156,7 @@ fn every_page_the_navigation_names_exists() {
 #[test]
 fn no_page_cites_a_run_id() {
     let mut cited = Vec::new();
-    for entry in walk(&docs()) {
+    for entry in common::walk(&docs()) {
         if entry.extension().is_none_or(|e| e != "md") {
             continue;
         }
@@ -212,23 +214,6 @@ fn run_ids(text: &str) -> Vec<String> {
         let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
         if w.starts_with("2026") && b[8] == b'T' && b[15] == b'Z' && digits(4..8) && digits(9..15) {
             out.push(w.to_string());
-        }
-    }
-    out
-}
-
-/// Each file under a directory, at any depth.
-fn walk(dir: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return out;
-    };
-    for e in entries.flatten() {
-        let p = e.path();
-        if p.is_dir() {
-            out.extend(walk(&p));
-        } else {
-            out.push(p);
         }
     }
     out
