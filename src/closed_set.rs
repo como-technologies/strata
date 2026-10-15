@@ -1,15 +1,15 @@
-//! A value of a closed set in a document that strata reads again, also a value that a later
-//! release adds.
+//! A value of a closed set in a document that strata writes and reads, also when a later release
+//! adds the value.
 //!
-//! Strata reads two documents again: a record, and the report of `behind --since`. Some fields
-//! of these documents hold one value of a closed set. For example, the name of a tier is
-//! `applied`, `labels`, `policy`, `running`, or `shape`.
+//! Strata writes two documents that it also reads: a record, and the report of `behind --since`.
+//! Some fields of these documents hold one value of a closed set. For example, the name of a tier
+//! is `applied`, `labels`, `policy`, `running`, or `shape`.
 //!
 //! A later release can add a value to such a set, such as a tier `network`, and keep the schema
 //! id. If the field is a plain enum, this release refuses the full document with the serde error
 //! `unknown variant`. So each such field is an [`Open`] value. Strata reads a value that it does
-//! not know with no error, and writes the same text again. The page "Versions and compatibility"
-//! of the book lists these fields, and what each command does with such a value.
+//! not know with no error, and writes its text with no change. The page "Versions and
+//! compatibility" of the book lists these fields, and what each command does with such a value.
 //!
 //! # The two parts
 //!
@@ -18,13 +18,18 @@
 //! compare, sort, and show a value, with no call to serde.
 //!
 //! > **Make sure that `as_str` gives the text that serde writes.** If the two texts are different,
-//! > strata writes a known value with one text, and reads it again as [`Open::Unknown`]. The
+//! > strata writes a known value with one text, and the next read gives [`Open::Unknown`]. The
 //! > compiler does not make this check. The tests in `tests/closed_set.rs` make it for each set.
 //!
 //! [`Open`] holds one of two values:
 //!
 //! - [`Open::Known`] holds a value that this release knows, such as `Tier::Running`.
 //! - [`Open::Unknown`] holds the text of a value that a later release wrote, such as `"network"`.
+//!
+//! The name comes from the two kinds of set. A [`ClosedSet`] takes only its own values. An
+//! [`Open`] value takes them, and also any other text. Serde has `#[serde(other)]` for a variant
+//! that takes any other text, but that variant does not keep the text. So a document that strata
+//! writes from it loses the value.
 //!
 //! # Read and write
 //!
@@ -36,8 +41,8 @@
 //!    [`Open::Unknown`] with the text, and there is no error.
 //!
 //! [`Open`] always writes the text of [`Open::as_str`]. A known value writes the text of its
-//! variant. An unknown value writes the text that strata read. So when strata reads a document
-//! and writes it again, each value keeps its text.
+//! variant. An unknown value writes the text that strata read. So each value keeps its text when
+//! strata reads a document and then writes it.
 //!
 //! # Equality and order
 //!
@@ -95,7 +100,7 @@ pub trait ClosedSet: Copy + Serialize + DeserializeOwned + JsonSchema {
     fn as_str(self) -> &'static str;
 }
 
-/// A value of the closed set `T` in a document that strata reads again.
+/// A value of the closed set `T` in a document that strata writes and reads.
 ///
 /// This release reads a value that a later release adds to `T` as [`Open::Unknown`], with its
 /// text, and writes the same text. The [module](crate::closed_set) shows how it reads, writes,

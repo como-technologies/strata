@@ -1,4 +1,4 @@
-//! The text of each value of each closed set that strata reads again.
+//! The text of each value of each closed set in a document that strata writes and reads.
 //!
 //! Strata reads a value that it does not know as `Open::Unknown`, with no error. So when a
 //! release renames or removes a value, a record of an earlier release gives no error. These tests
@@ -36,7 +36,8 @@ fn set<T: ClosedSet>(released: &'static [&'static str]) -> Set {
     }
 }
 
-/// Each closed set that strata reads again, with the text of each value that a release wrote.
+/// Each closed set in a document that strata writes and reads, with the text of each value that
+/// a release wrote.
 ///
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value and keep the schema id, because a record of

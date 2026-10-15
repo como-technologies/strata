@@ -821,7 +821,8 @@ fn schema_values(schema: &serde_json::Value, def: &str) -> Vec<String> {
 }
 
 /// The definition of the closed set that `field` names, for a field of a document that strata
-/// reads again. Such a field takes each value of the set, or any other text of a later release.
+/// writes and reads. Such a field takes each value of the set, or any other text of a later
+/// release.
 fn open_set_ref(field: &serde_json::Value) -> &serde_json::Value {
     assert_eq!(field["anyOf"][1]["type"], "string", "{field}");
     &field["anyOf"][0]["$ref"]

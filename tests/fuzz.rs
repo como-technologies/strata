@@ -290,8 +290,8 @@ fn api_of_junk(rng: &mut Rng, uid: &str) -> MemoryApi {
 
 /// Reading a profile is total: whatever Palette answers, strata points at the fields it knows and
 /// defaults the rest, so a junk answer still gives a record. That is the tolerance the tool is
-/// built on, so what this fuzzes is the rest of the promise: the record serializes, loads again,
-/// and keeps its root.
+/// built on, so what this fuzzes is the rest of the promise: the record serializes, strata loads
+/// the file, and the root does not change.
 #[test]
 fn a_profile_of_junk_gives_a_record_that_round_trips() {
     let uid = UID_B;
@@ -310,7 +310,7 @@ fn a_profile_of_junk_gives_a_record_that_round_trips() {
         if snap.is_ok() {
             reached += 1;
         }
-        // a snapshot strata built must be one it can read again, and compare with itself
+        // strata must load a snapshot that it built, and the snapshot compares equal to itself
         if let Ok(s) = snap {
             let same = ops::compare(&s, &s, "t1");
             assert!(
@@ -322,7 +322,7 @@ fn a_profile_of_junk_gives_a_record_that_round_trips() {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("record.json");
             std::fs::write(&path, &text).unwrap();
-            let back = Snapshot::load(&path).expect("a snapshot strata wrote loads again");
+            let back = Snapshot::load(&path).expect("strata loads a snapshot that it wrote");
             assert_eq!(
                 back.root,
                 s.root,

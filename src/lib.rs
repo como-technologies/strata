@@ -16,8 +16,8 @@
 //! - [`reference::version`]: natural ordering of version strings, behind `name@latest`.
 //! - [`candidate`]: a profile version described by a file, before it exists in Palette.
 //! - [`snapshot`]: the `strata-snapshot/1` document and how it is built from raw API responses.
-//! - [`closed_set`]: a value of a closed set in a document that strata reads again, also a value
-//!   of a later release.
+//! - [`closed_set`]: a value of a closed set in a document that strata writes and reads, also
+//!   when a later release adds the value.
 //! - [`diff`]: the `strata-diff/1` document, the leaf diff, and the impact rules.
 //! - [`validation`]: the answers of Palette when strata asks whether it takes the packs.
 //! - [`repave`]: the reasons of Palette for a repave, and a repave that waits for approval.

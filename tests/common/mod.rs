@@ -179,7 +179,7 @@ pub fn read_json(path: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
 }
 
-/// Write `doc`, a record or a report that strata reads again, to the file at `path`.
+/// Write `doc`, a record or a `behind --since` report, to the file at `path`.
 pub fn write_record(path: &Path, doc: &Value) {
     fs::write(path, serde_json::to_string_pretty(doc).unwrap()).unwrap();
 }
