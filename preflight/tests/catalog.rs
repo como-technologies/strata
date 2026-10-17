@@ -103,6 +103,24 @@ fn the_rules_of_the_capa_stack_name_what_aws_refuses() {
         m[0].contains("is UPDATE_ROLLBACK_FAILED in us-east-2: AWS refuses each update"),
         "{m:?}"
     );
+    // With the stack managed by hand, Palette makes no stack, so neither new rule applies.
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("rules/fixtures/eks");
+    let world = |file: &str| FixtureBackend::split(fixture::load(&dir.join(file)).unwrap()).1;
+    let (manual, managed) = (
+        world("manual-stack.json"),
+        world("capa-release-behind.json"),
+    );
+    for id in ["capa-stack-update-denied", "capa-stack-release-behind"] {
+        let when = catalog
+            .rules()
+            .find(|r| r.id == id)
+            .unwrap()
+            .when
+            .as_ref()
+            .unwrap();
+        assert_eq!(jq.first(id, when, &manual).unwrap(), false, "{id}");
+        assert_eq!(jq.first(id, when, &managed).unwrap(), true, "{id}");
+    }
 }
 
 #[test]
