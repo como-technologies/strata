@@ -1,0 +1,23 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "the CAPA stack is in UPDATE_ROLLBACK_FAILED: an update of Palette failed, and so did its rollback",
+  "_patch": {
+    "_exec": {
+      "aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Stacks": [
+            {
+              "StackName": "cluster-api-provider-aws-sigs-k8s-io",
+              "StackStatus": "UPDATE_ROLLBACK_FAILED",
+              "DriftInformation": {
+                "StackDriftStatus": "NOT_CHECKED"
+              }
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

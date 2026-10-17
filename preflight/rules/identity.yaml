@@ -292,15 +292,20 @@ rules:
     engines: [aws, eks]
     tier: cloud
     severity: fail
-    status: source
+    status: seen
     what: |
       Before a build, Palette looks for the CloudFormation stack `cluster-api-provider-aws-sigs-k8s-io`
       in each region. It updates a stack in `CREATE_COMPLETE` or `UPDATE_COMPLETE`, and makes a new
       one when no region has it. An `AccessDenied` on `DescribeStacks` counts as no stack, and the
-      create then fails. A stack in another state, such as `ROLLBACK_COMPLETE`, is not updated, and
-      the create of a new one fails on the name. The check reads the region of the entity. No stack
-      in that region is not a fault: the stack can be in another region. Palette also probes the
-      roles of the stack: see `capa-manual-stack`.
+      create then fails. A stack in `ROLLBACK_COMPLETE` is not updated, and the create of a new one
+      fails on the name. A live create met a stack in `UPDATE_ROLLBACK_FAILED`: Palette sent
+      `UpdateStack` again and again, AWS refused each one with `ValidationError`, and the cluster
+      stayed `Provisioning` with no condition `False`. Only the events of the cluster said why. A
+      stack in a `_FAILED` state does not recover by itself: an administrator of the account must
+      continue the rollback, or delete the stack so that Palette makes it again. The check reads the
+      region of the entity. No stack in that region is not a fault: the stack can be in another
+      region. Palette also probes the roles of the stack: see `capa-manual-stack`. A create can also
+      break a stack that is complete before it: see `capa-stack-update-denied`.
     check:
       kind: exec
       needs: [aws]
@@ -323,7 +328,11 @@ rules:
               else ["aws cloudformation describe-stacks failed: \($e | .[:200])"] end
           else [ (.exec.stdout.Stacks // [])[]
                  | select((.StackStatus // "") | test("^(CREATE|UPDATE)_COMPLETE$") | not)
-                 | "stack \(.StackName) is \(.StackStatus) in \($r): Palette updates a stack in CREATE_COMPLETE or UPDATE_COMPLETE alone, and the create of a new one fails on the name" ]
+                 | if (.StackStatus | test("_FAILED$")) then
+                     "stack \(.StackName) is \(.StackStatus) in \($r): AWS refuses each update of Palette, and each create in the account stops; an administrator of the account must continue the rollback, or delete the stack so that Palette makes it again"
+                   else
+                     "stack \(.StackName) is \(.StackStatus) in \($r): Palette updates a stack in CREATE_COMPLETE or UPDATE_COMPLETE alone, and the create of a new one fails on the name"
+                   end ]
           end
     reproduce:
       - "aws cloudformation describe-stacks --stack-name cluster-api-provider-aws-sigs-k8s-io --region {{ .entity.spec.cloudConfig.region }} --query 'Stacks[].[StackStatus,DriftInformation.StackDriftStatus]' --output table"
@@ -335,12 +344,16 @@ rules:
       - kind: source
         ref: palette pkg/provider/aws/aws_presetup.go SetUpCloud
         note: DescribeStacks in each region; AccessDenied and "does not exist" both continue to the next region; a stack that is not COMPLETE is skipped
+      - kind: run
+        ref: "#365"
+        note: a live create met the stack in UPDATE_ROLLBACK_FAILED; Palette sent UpdateStack again and again, and AWS refused each one with ValidationError
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/minimum-permissions-policies/
     tests:
       - fault: fixtures/eks/stack-rollback.json
         clean: fixtures/eks/identity-clean.json
       - fault: fixtures/eks/stack-access-denied.json
+      - fault: fixtures/eks/stack-update-rollback-failed.json
 
   - id: capa-manual-stack
     title: The CAPA instance profiles exist when the stack is managed by hand
@@ -393,6 +406,157 @@ rules:
     tests:
       - fault: fixtures/eks/manual-stack-no-nodes.json
         clean: fixtures/eks/manual-stack.json
+
+  - id: capa-stack-update-denied
+    title: The role of the cloud account can apply each change that Palette makes to the CAPA stack
+    engines: [aws, eks]
+    tier: cloud
+    severity: warn
+    status: seen
+    when: |
+      .account.spec.credentialType == "sts"
+      and ([ .profiles[] | .packs[] | select(.layer == "k8s") | (.valuesCanon.manageCloudFormationStackManually.enabled // false) ] | any | not)
+    what: |
+      At the first create after an upgrade, Palette updates the CAPA CloudFormation stack
+      `cluster-api-provider-aws-sigs-k8s-io` with the role of the cloud account. The stack holds six
+      roles, four managed policies, and three instance profiles. An update can change the trust
+      policy of a role, the policies attached to a role, its tags, the document of a managed policy,
+      and the role of an instance profile. The documented core policies of Palette do not grant
+      `iam:UpdateAssumeRolePolicy` or `iam:DetachRolePolicy`. A live update of 4.10.12 changed the
+      trust policy of the roles: AWS refused it with `AccessDenied`, refused the rollback for the same
+      reason, and left the stack in `UPDATE_ROLLBACK_FAILED`. Then each create in the account stops
+      (see `capa-bootstrap-stack`). The role cannot continue the rollback or delete the stack, so
+      Palette cannot recover by itself. The stack is complete before the create, so
+      `capa-bootstrap-stack` passes. The check simulates each action of such a change on each
+      resource of the stack that it changes. An action fails when one resource of its kind does
+      not allow it. The simulator has no request context, so a refusal is a warning to read, not a
+      proof. A role that cannot do each action does not fail each update: an update that changes
+      only tags passes. `capa-stack-release-behind` tells if the next create updates the stack.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - iam
+        - simulate-principal-policy
+        - --policy-source-arn
+        - '{{ .account.spec.sts.arn }}'
+        - --action-names
+        - iam:UpdateAssumeRolePolicy
+        - iam:AttachRolePolicy
+        - iam:DetachRolePolicy
+        - iam:TagRole
+        - iam:UntagRole
+        - iam:CreatePolicyVersion
+        - iam:DeletePolicyVersion
+        - iam:ListPolicyVersions
+        - iam:AddRoleToInstanceProfile
+        - iam:RemoveRoleFromInstanceProfile
+        - --resource-arns
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}control-plane.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}controllers.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}nodes.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}eks-controlplane.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:role/{{ .account.spec.namePrefix // "" }}eks-fargate.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:policy/{{ .account.spec.namePrefix // "" }}control-plane.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:policy/{{ .account.spec.namePrefix // "" }}nodes.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:policy/{{ .account.spec.namePrefix // "" }}controllers.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:policy/{{ .account.spec.namePrefix // "" }}controllers-eks.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:instance-profile/{{ .account.spec.namePrefix // "" }}control-plane.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:instance-profile/{{ .account.spec.namePrefix // "" }}controllers.cluster-api-provider-aws.sigs.k8s.io'
+        - 'arn:{{ .account.spec.sts.arn | split(":") | .[1] }}:iam::{{ .account.spec.sts.arn | split(":") | .[4] }}:instance-profile/{{ .account.spec.namePrefix // "" }}nodes.cluster-api-provider-aws.sigs.k8s.io'
+        - --output
+        - json
+      expr: |
+        def kind: if test("InstanceProfile") then "instance-profile" elif test("PolicyVersion") then "policy" else "role" end;
+        def kinds: {"role": "roles", "policy": "managed policies", "instance-profile": "instance profiles"}[.];
+        def name: split("/") | .[-1];
+        if .exec.exit != 0 then ["aws iam simulate-principal-policy failed: \(.exec.stderr | tostring | .[:200])"]
+        else [ (.exec.stdout.EvaluationResults // [])[]
+               | (.EvalActionName | kind) as $k
+               | [ (.ResourceSpecificResults // [])[] | select(.EvalResourceName | contains(":" + $k + "/")) ] as $mine
+               | [ $mine[] | select(.EvalResourceDecision != "allowed") | (.EvalResourceName | name) ] as $refused
+               | if ($mine | length) == 0 then
+                   (if .EvalDecision == "allowed" then empty else "\(.EvalActionName) is \(.EvalDecision) for the role" end)
+                 elif ($refused | length) == 0 then empty
+                 elif ($refused | length) == ($mine | length) then
+                   "\(.EvalActionName) is not allowed on each of the \($mine | length) CAPA \($k | kinds): an update of the CAPA stack that needs it fails, AWS then refuses the rollback, and the stack stays in UPDATE_ROLLBACK_FAILED (the simulator has no request context: read this as a warning)"
+                 else
+                   "\(.EvalActionName) is not allowed on \($refused | join(", ")): an update of the CAPA stack that needs it fails, AWS then refuses the rollback, and the stack stays in UPDATE_ROLLBACK_FAILED (the simulator has no request context: read this as a warning)"
+                 end ]
+        end
+    reproduce:
+      - "aws iam simulate-principal-policy --policy-source-arn {{ .account.spec.sts.arn }} --action-names iam:UpdateAssumeRolePolicy iam:DetachRolePolicy iam:AttachRolePolicy iam:TagRole --resource-arns arn:{{ .account.spec.sts.arn | split(\":\") | .[1] }}:iam::{{ .account.spec.sts.arn | split(\":\") | .[4] }}:role/{{ .account.spec.namePrefix // \"\" }}controllers.cluster-api-provider-aws.sigs.k8s.io --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output text"
+      - "aws cloudformation describe-stack-events --stack-name cluster-api-provider-aws-sigs-k8s-io --region {{ .entity.spec.cloudConfig.region }} --query 'StackEvents[?contains(ResourceStatus, `FAILED`)].[Timestamp,LogicalResourceId,ResourceStatusReason]' --output text   # after a failed update: the action that AWS refused"
+    fix:
+      owner: palette
+      text: Name each IAM action that an update of the CAPA stack needs in the documented policies, and simulate them in the validate route before an update. Until then, grant the actions, or manage the stack by hand (`manageCloudFormationStackManually`) so that a create does not change it.
+    evidence:
+      - kind: run
+        ref: "#365"
+        note: the update of 4.10.12 changed the trust policy of the CAPA roles; AWS refused iam:UpdateAssumeRolePolicy with AccessDenied, then the rollback; the role held the documented core policies, and the simulation gives implicitDeny for iam:UpdateAssumeRolePolicy and iam:DetachRolePolicy
+      - kind: doc
+        ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/core-iam-policies/
+        note: the core policies grant iam:CreateRole, iam:AttachRolePolicy (in the CloudFormation policy), and the policy and instance profile actions, and not iam:UpdateAssumeRolePolicy or iam:DetachRolePolicy
+    tests:
+      - fault: fixtures/eks/capa-update-denied.json
+        clean: fixtures/eks/capa-update-allowed.json
+
+  - id: capa-stack-release-behind
+    title: The CAPA stack was last applied by the release of Palette that the tenant runs
+    engines: [aws, eks]
+    tier: cloud
+    severity: note
+    status: seen
+    when: |
+      .release != null
+      and ([ .profiles[] | .packs[] | select(.layer == "k8s") | (.valuesCanon.manageCloudFormationStackManually.enabled // false) ] | any | not)
+    what: |
+      Palette writes the tag `palette-version` on each role of the CAPA stack when it creates or
+      updates the stack. A live account showed 4.9.24, then 4.10.4, then 4.10.12, each written by
+      the first create after an upgrade. A tag older than the release of the tenant means that the
+      next create in the account updates the stack. An update can need IAM actions that an earlier
+      one did not: see `capa-stack-update-denied`. The check reads the tag of the controllers role
+      and compares it with `--release`, to the parts that `--release` gives: `4.10` compares the
+      minor release, and `4.10.12` the patch. No role, or no tag, passes.
+    check:
+      kind: exec
+      needs: [aws]
+      argv:
+        - aws
+        - iam
+        - list-role-tags
+        - --role-name
+        - '{{ .account.spec.namePrefix // "" }}controllers.cluster-api-provider-aws.sigs.k8s.io'
+        - --output
+        - json
+      expr: |
+        def parts: split(".") | map(tonumber);
+        if .exec.exit != 0 then
+          (if ((.exec.stderr // "") | test("NoSuchEntity")) then [] else ["aws iam list-role-tags failed: \(.exec.stderr | tostring | .[:200])"] end)
+        else
+          ([ (.exec.stdout.Tags // [])[] | select(.Key == "palette-version") | .Value ] | .[0]) as $tag
+          | if $tag == null then []
+            else (.release | tostring) as $rel
+              | ($rel | parts) as $want
+              | if (($tag | parts | .[:($want | length)]) < $want) then
+                  ["Palette \($tag) applied the CAPA stack last, and the tenant runs \($rel): the next create in the account updates the stack (capa-stack-update-denied tells if the role can apply the update)"]
+                else [] end
+            end
+        end
+    reproduce:
+      - "aws iam list-role-tags --role-name {{ .account.spec.namePrefix // \"\" }}controllers.cluster-api-provider-aws.sigs.k8s.io --query \"Tags[?Key=='palette-version'].Value\" --output text"
+    fix:
+      owner: none
+      text: A fact. The next create updates the stack; check `capa-stack-update-denied` first.
+    evidence:
+      - kind: run
+        ref: "#365"
+        note: CloudTrail showed TagRole on the six CAPA roles with palette-version 4.9.24, 4.10.4, and 4.10.12, each at the first create after an upgrade
+    tests:
+      - fault: fixtures/eks/capa-release-behind.json
+        clean: fixtures/eks/capa-release-same.json
 
   - id: global-policy-attach-silent
     title: Each additional policy of the cloud account is on the nodes role

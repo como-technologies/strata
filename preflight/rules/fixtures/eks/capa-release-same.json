@@ -1,0 +1,25 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "Palette 4.10.12 applied the CAPA stack last, and the tenant runs 4.10.12",
+  "_patch": {
+    "release": "4.10.12",
+    "_exec": {
+      "aws iam list-role-tags --role-name controllers.cluster-api-provider-aws.sigs.k8s.io --output json": {
+        "exit": 0,
+        "stdout": {
+          "Tags": [
+            {
+              "Key": "palette-version",
+              "Value": "4.10.12"
+            },
+            {
+              "Key": "build-id",
+              "Value": "20260902.1509"
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

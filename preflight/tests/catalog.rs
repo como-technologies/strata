@@ -71,6 +71,40 @@ fn every_rule_with_tests_fails_its_fault_and_passes_its_clean_fixture() {
     assert!(tested > 0);
 }
 
+/// The rules of the CAPA stack (#365) name what AWS refuses, and do not name what it allows.
+#[test]
+fn the_rules_of_the_capa_stack_name_what_aws_refuses() {
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    let fault = |id: &str, i: usize| {
+        let rule = catalog.rules().find(|r| r.id == id).unwrap();
+        verdict(rule, rule.tests[i].fault.as_ref().unwrap(), &jq)
+    };
+    let (v, m) = fault("capa-stack-update-denied", 0);
+    assert_eq!(v, Verdict::Failed);
+    assert_eq!(m.len(), 2, "{m:?}");
+    assert!(
+        m[0].starts_with("iam:UpdateAssumeRolePolicy is not allowed on each of the 6 CAPA roles"),
+        "{m:?}"
+    );
+    assert!(
+        m[1].starts_with("iam:DetachRolePolicy is not allowed on each of the 6 CAPA roles"),
+        "{m:?}"
+    );
+    let (_, m) = fault("capa-stack-release-behind", 0);
+    assert_eq!(
+        m,
+        [
+            "Palette 4.10.4 applied the CAPA stack last, and the tenant runs 4.10.12: the next create in the account updates the stack (capa-stack-update-denied tells if the role can apply the update)"
+        ]
+    );
+    let (_, m) = fault("capa-bootstrap-stack", 2);
+    assert!(
+        m[0].contains("is UPDATE_ROLLBACK_FAILED in us-east-2: AWS refuses each update"),
+        "{m:?}"
+    );
+}
+
 #[test]
 fn every_rule_with_a_check_has_a_test() {
     let catalog = catalog::builtin().unwrap();

@@ -1,0 +1,596 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "the role can do each action that a change of the CAPA stack needs, on each resource of its kind",
+  "_patch": {
+    "_exec": {
+      "aws iam simulate-principal-policy --policy-source-arn arn:aws:iam::123456789012:role/strata-live-eks-cloud --action-names iam:UpdateAssumeRolePolicy iam:AttachRolePolicy iam:DetachRolePolicy iam:TagRole iam:UntagRole iam:CreatePolicyVersion iam:DeletePolicyVersion iam:ListPolicyVersions iam:AddRoleToInstanceProfile iam:RemoveRoleFromInstanceProfile --resource-arns arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:role/eks-controlplane.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:role/eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:role/eks-fargate.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:policy/control-plane.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:policy/controllers.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:policy/controllers-eks.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:instance-profile/control-plane.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:instance-profile/controllers.cluster-api-provider-aws.sigs.k8s.io arn:aws:iam::123456789012:instance-profile/nodes.cluster-api-provider-aws.sigs.k8s.io --output json": {
+        "exit": 0,
+        "stdout": {
+          "EvaluationResults": [
+            {
+              "EvalActionName": "iam:UpdateAssumeRolePolicy",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-controlplane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-fargate.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers-eks.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "iam:AttachRolePolicy",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-controlplane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-fargate.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers-eks.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "iam:DetachRolePolicy",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-controlplane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-fargate.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers-eks.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "iam:TagRole",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-controlplane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-fargate.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers-eks.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "iam:UntagRole",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-controlplane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-fargate.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers-eks.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "iam:CreatePolicyVersion",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-controlplane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-fargate.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers-eks.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "iam:DeletePolicyVersion",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-controlplane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-fargate.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers-eks.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "iam:ListPolicyVersions",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-controlplane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-fargate.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers-eks.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "iam:AddRoleToInstanceProfile",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-controlplane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-fargate.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers-eks.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                }
+              ]
+            },
+            {
+              "EvalActionName": "iam:RemoveRoleFromInstanceProfile",
+              "EvalDecision": "allowed",
+              "ResourceSpecificResults": [
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-controlplane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:role/eks-fargate.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:policy/controllers-eks.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "implicitDeny"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/control-plane.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/controllers.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                },
+                {
+                  "EvalResourceName": "arn:aws:iam::123456789012:instance-profile/nodes.cluster-api-provider-aws.sigs.k8s.io",
+                  "EvalResourceDecision": "allowed"
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}
