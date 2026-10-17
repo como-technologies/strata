@@ -3150,6 +3150,13 @@ fn automation(r: &mut Runner) {
         false,
         "strata preflight --rules --cloud aws --json | jq '.rules[] | select(.id == \"worker-cpu-floor\") | {id, tier, level, severity, status, engines, check: .check.kind}'",
     );
+    // the three rules of the CAPA stack of an AWS account (#365)
+    r.step(
+        "preflight-capa-rules",
+        0,
+        false,
+        "strata preflight --rules --cloud aws | grep -E '^  capa-(bootstrap|stack)'",
+    );
     r.step(
         "preflight-promotion",
         0,

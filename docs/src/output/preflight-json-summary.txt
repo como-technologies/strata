@@ -1,7 +1,7 @@
 $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summary, scorecard: [.sections[] | {title, ran, passed, failed, notChecked, readiness}]}'
 {
   "summary": {
-    "rules": 103,
+    "rules": 105,
     "ran": 22,
     "passed": 19,
     "failed": 0,
@@ -13,7 +13,7 @@ $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summ
       "--no-exec: the command did not run": 10
     },
     "notChecked": 25,
-    "skipped": 39,
+    "skipped": 41,
     "errors": 0,
     "readiness": 0.59375,
     "exitCode": 0,

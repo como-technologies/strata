@@ -1,5 +1,5 @@
 $ strata preflight cluster:64f1000000000000000000e1 --tier static,palette --quiet | tail -n 4
-103 rules apply; 23 ran: 20 passed, 0 failed, 2 probe(s) failed, 1 warning(s), 2 note(s); 13 did not run, 25 not checked, 34 do not apply, 0 error(s); readiness 56%: 20 of 36 checks passed
+105 rules apply; 23 ran: 20 passed, 0 failed, 2 probe(s) failed, 1 warning(s), 2 note(s); 13 did not run, 25 not checked, 36 do not apply, 0 error(s); readiness 56%: 20 of 36 checks passed
 13 checks did not run: tier cloud was not asked for (13)
 No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).
 OK: each counted check passed; 2 probe(s) failed, not counted

@@ -1,0 +1,4 @@
+$ strata preflight --rules --cloud aws | grep -E '^  capa-(bootstrap|stack)'
+  capa-bootstrap-stack             cloud    probe      fail      seen      aws,eks                The CAPA CloudFormation stack is complete, and the credentials can read it
+  capa-stack-update-denied         cloud    probe      warn      seen      aws,eks                The role of the cloud account can apply each change that Palette makes to the CAPA stack
+  capa-stack-release-behind        cloud    probe      note      seen      aws,eks                The CAPA stack was last applied by the release of Palette that the tenant runs

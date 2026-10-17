@@ -341,6 +341,46 @@ and `Pairing`. `verify` ends its verdict with each state that is not
 cluster group has `status.isActive`. A 404 for the uid of an edge host or a
 cluster group means that Palette no longer has it.
 
+## The CAPA stack of an AWS account
+
+Before Palette builds the cloud infrastructure of an AWS cluster, it applies a
+CloudFormation stack to the account: `cluster-api-provider-aws-sigs-k8s-io`.
+The stack holds six CAPA roles, four managed policies, and three instance
+profiles. One stack serves each AWS cluster of the account.
+
+Palette updates the stack at the first create after an upgrade of Palette. It
+writes the tag `palette-version` on each role of the stack. One account shows
+`4.9.24`, then `4.10.4`, then `4.10.12`. So the tag tells which release applied
+the stack last. The updates of `4.9.24` and `4.10.4` changed only tags.
+
+The update of `4.10.12` also changed the trust policy of the roles. That change
+needs `iam:UpdateAssumeRolePolicy`, and the documented core policies of Palette
+do not grant it. AWS refused the update with `AccessDenied`. Then AWS refused
+the rollback for the same reason, and the stack stayed in
+`UPDATE_ROLLBACK_FAILED`.
+
+A stack in that state stops each AWS create of the account. Palette sends
+`UpdateStack` again and again, and AWS refuses each one with `ValidationError`:
+"is in UPDATE_ROLLBACK_FAILED state and can not be updated". The cluster stays
+`Provisioning`, and no condition is `False`: the step
+`CloudInfrastructureReady` does not start. Only the events of the cluster say
+why. The documented policies do not grant `cloudformation:ContinueUpdateRollback`
+or `cloudformation:DeleteStack`, so Palette cannot recover by itself. An
+administrator of the account must continue the rollback, or delete the stack so
+that Palette makes it again.
+
+The rule `capa-manual-stack` describes the other way. With
+`manageCloudFormationStackManually.enabled: true` in the values of the
+Kubernetes pack, Palette makes no stack, and the roles and the instance
+profiles must exist before the create. The landing zone of the account can own
+them, so that a create does not change them. No live run shows this way yet.
+
+`strata preflight` checks the stack before a build. `capa-bootstrap-stack`
+reads its state, `capa-stack-update-denied` simulates the IAM actions of an
+update, and `capa-stack-release-behind` compares the release in the tag with
+`--release`. See
+[After an upgrade of Palette](../../use-cases/stop-a-build.md#after-an-upgrade-of-palette).
+
 ## A cluster on GCP
 
 A GCP cluster takes its node image from the project `spectro-image-build` of

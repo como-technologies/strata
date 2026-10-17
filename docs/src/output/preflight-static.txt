@@ -132,7 +132,7 @@ Teardown and leftovers
 
 Section scorecard
   section                      rows seen check preflight runs weakest  ran pass fail not run not checked ready
-  Identity and permissions       11    3    11         0    7      0%    0    0    0       4           0    0%
+  Identity and permissions       13    6    13         0    7      0%    0    0    0       4           0    0%
   Cloud services and APIs         2    0     1         0    1     61%    0    0    0       1           1    0%
   Quotas and limits               4    2     2         0    2     47%    0    0    0       2           2    0%
   Networking                     12    2    10         0    5     22%    2    2    0       0           1  100%
@@ -145,9 +145,9 @@ Section scorecard
   The Palette platform           11    9     6         0    3     22%    0    0    0       1           5    0%
   Client tools                    9    9     4         0    0 no runs    0    0    0       2           0    0%
   Teardown and leftovers          6    6     3         0    1     47%    1    1    0       2           3   33%
-runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: 0 of 72 checks.
+runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: 0 of 74 checks.
 
-103 rules apply; 4 ran: 4 passed, 0 failed, 0 probe(s) failed, 0 warning(s), 1 note(s); 15 did not run, 25 not checked, 54 do not apply, 0 error(s); readiness 21%: 4 of 19 checks passed
+105 rules apply; 4 ran: 4 passed, 0 failed, 0 probe(s) failed, 0 warning(s), 1 note(s); 15 did not run, 25 not checked, 56 do not apply, 0 error(s); readiness 21%: 4 of 19 checks passed
 15 checks did not run: tier cloud was not asked for (8); tier palette was not asked for (7)
 No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).
 OK: each counted check passed

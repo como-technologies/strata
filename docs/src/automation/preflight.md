@@ -133,6 +133,13 @@ A new release that changes the behavior of a rule sets its counts in the ledger
 to zero for that release: a preflight check is proven per engine and per
 release.
 
+Run the cloud tier again after each upgrade of Palette, before the first
+create. The first AWS create after an upgrade updates the CAPA stack of the
+account, and an update that the role cannot apply stops each AWS create of the
+account. Give the release with its patch (`--release 4.10.12`): a patch release
+can change the stack too. See
+[After an upgrade of Palette](../use-cases/stop-a-build.md#after-an-upgrade-of-palette).
+
 ## The lab
 
 The live example of this repository runs the same three tiers around each

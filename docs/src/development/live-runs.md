@@ -1478,6 +1478,41 @@ What differs is outside strata:
   `node.cloudprovider.kubernetes.io/uninitialized`, and the cluster stays
   `Provisioning`. `roles/compute.admin` on the project lets it continue.
 
+## The CAPA stack after an upgrade
+
+A create of cluster A on AWS by `live-up` stopped at `Provisioning`. The events
+of the cluster said "failed to setup cloud specific prerequisites" again and
+again, and no condition was `False`. Reads of the account by hand, with no
+write, gave the cause:
+
+- CloudTrail holds three updates of the CAPA stack by the role of the cloud
+  account, one at the first create after each upgrade. Each writes the tag
+  `palette-version` on the six CAPA roles: `4.9.24`, `4.10.4`, and `4.10.12`.
+  The first two changed only tags.
+- The update of `4.10.12` also changed the trust policy of the roles. AWS
+  refused `iam:UpdateAssumeRolePolicy` with `AccessDenied`, and then refused the
+  rollback. The stack stayed in `UPDATE_ROLLBACK_FAILED`.
+- The role held the documented core policies of Palette, unchanged since the
+  account was made. `aws iam simulate-principal-policy` gives `implicitDeny` for
+  `iam:UpdateAssumeRolePolicy` and `iam:DetachRolePolicy` on the CAPA roles, and
+  for `cloudformation:ContinueUpdateRollback` and `cloudformation:DeleteStack`
+  on the stack.
+
+`live-down` removed the cluster, and the stack stayed in
+`UPDATE_ROLLBACK_FAILED`. Then `strata preflight` ran the three rules of the
+stack against the account, with `--release 4.10.12`:
+
+| Rule | Result | Message |
+|---|---|---|
+| `capa-bootstrap-stack` | `PROBE FAIL` | the stack is `UPDATE_ROLLBACK_FAILED`: AWS refuses each update, and an administrator must recover it |
+| `capa-stack-update-denied` | `WARN` | `iam:UpdateAssumeRolePolicy` and `iam:DetachRolePolicy` are not allowed on each of the 6 CAPA roles |
+| `capa-stack-release-behind` | `NOTE` | Palette `4.10.4` applied the stack last, and the tenant runs `4.10.12` |
+
+The tag says `4.10.4` because AWS rolled back the update of `4.10.12`. Before
+the create, `capa-bootstrap-stack` passes, because the stack is complete: the
+create itself breaks it. The two new rules find the risk before the create. See
+[The CAPA stack of an AWS account](../internals/palette/clusters.md#the-capa-stack-of-an-aws-account).
+
 ## What has no live run
 
 - `in-place.sh`, `registry-move.sh`, `registry.sh`, `template.sh`,

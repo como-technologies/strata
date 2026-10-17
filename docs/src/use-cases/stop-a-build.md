@@ -72,6 +72,24 @@ yet. The `reproduce:` lines say what to run by hand. The fix of the CPU floor is
 on the person: two workers, or a larger type. Change the file, run the command
 again, until it is clean.
 
+### After an upgrade of Palette
+
+The first AWS create after an upgrade of Palette updates the CAPA stack of the
+account. An update that the role of the cloud account cannot apply stops each
+AWS create of the account, and only the events of the cluster say why: see
+[The CAPA stack of an AWS account](../internals/palette/clusters.md#the-capa-stack-of-an-aws-account).
+Three cloud rules check the stack with the `aws` tool:
+
+```text
+{{#include ../output/preflight-capa-rules.txt}}
+```
+
+Give the release with its patch, such as `--release 4.10.12`. A patch release
+can change the stack too, and `capa-stack-release-behind` compares the parts of
+the release that you give. A warning of `capa-stack-update-denied` names each
+IAM action that the role cannot do, and the resources. Before the next create,
+grant the actions, or let the landing zone own the stack.
+
 ## 2. Build it
 
 The body that passed is the body of the create. Send it, and keep the uid of
