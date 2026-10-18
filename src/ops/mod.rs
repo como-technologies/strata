@@ -459,7 +459,12 @@ where
     A: PaletteApi,
     F: FnOnce() -> Result<Palette<A>>,
 {
-    candidate_snapshot(loaded, &mut Registries::new(&connect()?), fetched_at, progress)
+    candidate_snapshot(
+        loaded,
+        &mut Registries::new(&connect()?),
+        fetched_at,
+        progress,
+    )
 }
 
 fn candidate_snapshot<A: PaletteApi>(

@@ -7241,6 +7241,33 @@ fn verify_rechecks_a_pack_version_against_its_registry() {
     assert!(json["verify"].get("lastModified").is_none(), "{json}");
 }
 
+#[test]
+fn verify_of_an_oci_pack_record_reads_the_oci_listing_one_time() {
+    // the record reads the listing for the provider type, and the sync note for the last sync
+    let mirror_api = || {
+        let mut oci = pack_summary("pk-m", "1.64.0", "reg-mirror", "sha256:mmm", CSI_63);
+        oci["spec"]["type"] = serde_json::json!("oci");
+        let mirror =
+            serde_json::json!({"layer": "csi", "tags": [{"tag": "1.64.0", "packUid": "pk-m"}]});
+        serve_registry(
+            vec![oci],
+            &[("reg-public", public_entity()), ("reg-mirror", mirror)],
+        )
+        .with(
+            OCI_REGISTRY_SUMMARY,
+            serde_json::json!({"items": [{"metadata": {"uid": "reg-mirror", "name": "Mirror"},
+                "spec": {"providerType": "helm"}}]}),
+        )
+    };
+    let recorded = snapshot_of(&mirror_api(), "pack:Mirror/csi-aws-ebs@1.64.0").unwrap();
+    let live = mirror_api();
+    let v = ops::verify(&recorded, &Palette::new(&live), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    // the record and the sync note use one cache of the listings of the command
+    assert_eq!(live.calls(OCI_REGISTRY_SUMMARY), 1);
+    assert_eq!(live.calls(REGISTRY_LISTING), 1);
+}
+
 /// The summary listing of the pack registries, which gives the sync of each registry.
 const PACK_REGISTRY_SUMMARY: &str = "/v1/registries/pack/summary";
 
@@ -14457,6 +14484,37 @@ fn serve_candidate_checks(api: MemoryApi, snap: &strata::snapshot::Snapshot) -> 
     api.with(name_route(snap), Value::Null)
         .with(post(IMPORT_ROUTE), serde_json::json!({}))
         .with(REGISTRY_LISTING, registry_listing())
+}
+
+#[test]
+fn snapshot_validate_of_a_candidate_that_names_its_registry_reads_the_listing_one_time() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let file = dir.path().join("c.yaml");
+    candidate::write(&Candidate::from_snapshot(&recorded_b).unwrap(), &file, None).unwrap();
+    // a registry by name: the resolve reads the listing, and so does the import body
+    let text = fs::read_to_string(&file).unwrap();
+    assert!(text.contains("registryUid: reg-public"), "{text}");
+    fs::write(
+        &file,
+        text.replace("registryUid: reg-public", "registry: Public Repo"),
+    )
+    .unwrap();
+    let key = post(PROFILE_VALIDATE_PACKS);
+    let api = serve_candidate_checks(serve_registry_for_b(dir.path()), &recorded_b)
+        .with(key.as_str(), serde_json::json!({"packs": {"results": []}}));
+    let snap = ops::snapshot_from_candidate(
+        &file,
+        true,
+        || Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(snap.source.palette_validation.unwrap().accepts());
+    // the resolve and the import body use one cache of the listings of the command
+    assert_eq!(api.calls(REGISTRY_LISTING), 1);
 }
 
 #[test]

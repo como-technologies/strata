@@ -62,7 +62,15 @@ pub fn pack_snapshot<A: PaletteApi>(
     progress: &Progress,
 ) -> Result<Snapshot> {
     let mut registries = Registries::new(palette);
-    pack_snapshot_in(&mut registries, registry, name, version, reference, fetched_at, progress)
+    pack_snapshot_in(
+        &mut registries,
+        registry,
+        name,
+        version,
+        reference,
+        fetched_at,
+        progress,
+    )
 }
 
 /// [`pack_snapshot`] with the registry listings of the command, so that a later check of the
