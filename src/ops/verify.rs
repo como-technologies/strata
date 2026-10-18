@@ -245,8 +245,10 @@ pub fn verify_with<A: PaletteApi>(
             recorded.source.title(),
             recorded.source.fetched_at
         ));
-        let live = crate::candidate::pack_snapshot(
-            palette,
+        // one cache for the record and the sync note: each registry listing is read one time
+        let mut registries = Registries::new(palette);
+        let live = crate::candidate::pack::pack_snapshot_in(
+            &mut registries,
             Some(&p.registry_uid),
             &p.name,
             &p.version,
@@ -259,7 +261,7 @@ pub fn verify_with<A: PaletteApi>(
         let pack_type = live.packs.first().and_then(Pack::pack_type);
         // the sync is a note beside the verdict: a failed read of it is named, and the verdict
         // stands
-        let sync = Registries::new(palette).sync_note(&p.registry_uid, pack_type, progress)?;
+        let sync = registries.sync_note(&p.registry_uid, pack_type, progress)?;
         let image_ids_changed = images_moved_alone(recorded, &live);
         let unchanged = recorded.root == live.root && image_ids_changed.is_empty();
         // no last_modified: the time of a pack in the listing is its create time, so it is not

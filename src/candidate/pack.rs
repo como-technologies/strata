@@ -61,8 +61,24 @@ pub fn pack_snapshot<A: PaletteApi>(
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    // the registry listing gives the names, and the reason of an error that finds no pack
     let mut registries = Registries::new(palette);
+    pack_snapshot_in(&mut registries, registry, name, version, reference, fetched_at, progress)
+}
+
+/// [`pack_snapshot`] with the registry listings of the command, so that a later check of the
+/// same command reads them again from memory.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn pack_snapshot_in<A: PaletteApi>(
+    registries: &mut Registries<'_, A>,
+    registry: Option<&str>,
+    name: &str,
+    version: &str,
+    reference: &str,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let palette = registries.palette();
+    // the registry listing gives the names, and the reason of an error that finds no pack
     let visible = registries.names()?;
     let entries = versions_of(palette, name)?;
     let not_found = |registry: String, unsynced: Vec<String>| Error::PackNotFound {
@@ -162,7 +178,7 @@ pub fn pack_snapshot<A: PaletteApi>(
         }],
     };
     let mut snap =
-        resolve_with(&loaded, &mut registries, progress)?.into_snapshot(reference, fetched_at)?;
+        resolve_with(&loaded, registries, progress)?.into_snapshot(reference, fetched_at)?;
     snap.source.kind = ProfileType::Pack.as_str().to_string();
     snap.source.template = Template::Registry.into();
     // a pack version is not a profile version, so no cluster uses it and nothing asked

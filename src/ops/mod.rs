@@ -13,6 +13,7 @@ use crate::diff::{self, Diff};
 use crate::error::{Error, Result};
 use crate::json::{first_nonempty, str_at, text};
 use crate::reference::Ref;
+use crate::registry::Registries;
 use crate::snapshot::{GroupMember, Snapshot, SubjectKind};
 use crate::term::progress::Progress;
 
@@ -434,9 +435,12 @@ where
 {
     let loaded = crate::candidate::load(path)?;
     let palette = connect()?;
-    let mut snap = candidate_snapshot(&loaded, &palette, fetched_at, progress)?;
+    // one cache for the resolve and the validate: each registry listing is read one time
+    let mut registries = Registries::new(&palette);
+    let mut snap = candidate_snapshot(&loaded, &mut registries, fetched_at, progress)?;
     if validate {
-        snap.source.palette_validation = Some(profile_validation(&palette, &snap)?);
+        snap.source.palette_validation =
+            Some(validate::profile_validation_in(&mut registries, &snap)?);
     }
     Ok(snap)
 }
@@ -455,16 +459,17 @@ where
     A: PaletteApi,
     F: FnOnce() -> Result<Palette<A>>,
 {
-    candidate_snapshot(loaded, &connect()?, fetched_at, progress)
+    candidate_snapshot(loaded, &mut Registries::new(&connect()?), fetched_at, progress)
 }
 
 fn candidate_snapshot<A: PaletteApi>(
     loaded: &LoadedCandidate,
-    palette: &Palette<A>,
+    registries: &mut Registries<'_, A>,
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    let mut snap = crate::candidate::resolve(loaded, palette, progress)?
+    let palette = registries.palette();
+    let mut snap = crate::candidate::resolve_with(loaded, registries, progress)?
         .into_snapshot(&loaded.path.display().to_string(), fetched_at)?;
     crate::candidate::warn_preset_options(&snap, progress);
     snap.source.template = crate::snapshot::Template::Candidate.into();
