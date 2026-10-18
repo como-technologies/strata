@@ -10,6 +10,9 @@ use crate::error::{Error, Result};
 /// The default Palette API base URL.
 pub const DEFAULT_BASE_URL: &str = "https://api.spectrocloud.com";
 
+/// The file in the home directory that holds the settings below the environment.
+pub const ENV_FILE: &str = ".palette.env";
+
 /// The variables that hold the API key, the first one preferred.
 pub(crate) const KEY_VARS: [&str; 2] = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
 const URL_VARS: [&str; 2] = ["PALETTE_API", "SPECTROCLOUD_HOST"];
@@ -190,7 +193,7 @@ fn env_nonempty(key: &str) -> Option<String> {
 /// `KEY=VALUE` lines from `~/.palette.env`, with optional `export ` and quotes.
 fn dotenv_lookup(key: &str) -> Option<String> {
     let home = std::env::var_os("HOME")?;
-    let text = fs::read_to_string(Path::new(&home).join(".palette.env")).ok()?;
+    let text = fs::read_to_string(Path::new(&home).join(ENV_FILE)).ok()?;
     parse_dotenv(&text, key)
 }
 
