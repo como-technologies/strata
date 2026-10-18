@@ -6,6 +6,12 @@ pub(crate) fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
     if name.is_empty() { uid } else { name }
 }
 
+/// `one` when `n` is 1, else `many`: the noun that agrees with a count, such as `cluster` or
+/// `clusters`.
+pub(crate) fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {
+    if n == 1 { one } else { many }
+}
+
 /// `items` as one phrase: `a`, `a and b`, or `a, b, and c`. Empty text for no item.
 ///
 /// Each message of strata that names a list of things builds it here, so each one puts the comma

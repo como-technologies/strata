@@ -156,7 +156,7 @@ pub(crate) fn artifacts_summary(d: &Diff) -> Option<String> {
     }
     let packs = d.packs.iter().filter(|p| p.images || p.charts).count();
     let n = |count: usize, one: &str, many: &str| {
-        format!("{count} {}", if count == 1 { one } else { many })
+        format!("{count} {}", crate::text::plural(count, one, many))
     };
     Some(format!(
         "{}, {} changed in {}",
@@ -242,7 +242,7 @@ pub(crate) fn manifest_change(m: &ManifestChange, code: fn(&str) -> String) -> S
 pub(crate) fn values_changed(n: usize) -> String {
     format!(
         "{n} variable {} changed",
-        if n == 1 { "value" } else { "values" }
+        crate::text::plural(n, "value", "values")
     )
 }
 
