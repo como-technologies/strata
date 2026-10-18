@@ -43,7 +43,7 @@ rules:
       - kind: report
         ref: palette-precreate-validation-gaps-findings-2026-09-28 B3
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/base/spectrocluster_validate.go validateProfiles
+        note: the validate route of a cluster checks the profiles of the cluster
     tests:
       - fault: fixtures/gke/validate-refused.json
         clean: fixtures/gke/clean.json
@@ -78,7 +78,7 @@ rules:
         ref: "#90"
         note: 193 GCPManagedControlPlaneReconcile events with the refusal of GCP, and no error in the status; after the pool change, the CAPG stop in the same event
       - kind: source
-        ref: palette pkg/clusterdeployer/controlplane/controlplane_managed.go ReconcileManagedControlPlane
+        note: Palette puts the refusal of the cloud in the status of the cluster
     tests:
       - fault: fixtures/gke/pool-roll-mismatch.json
         clean: fixtures/gke/watch-running.json
@@ -304,6 +304,7 @@ rules:
         note: "the book, clusters.md: when Palette cannot compute the list, it comes back empty and says nothing of the error"
       - kind: source
         ref: strata src/ops/consumers/mod.rs consumers
+        note: strata gives no consumer list when a read fails
     tests:
       - fault: fixtures/eks/consumers-empty.json
         clean: fixtures/eks/consumers-listed.json
@@ -367,7 +368,7 @@ rules:
     severity: fail
     status: source
     what: |
-      Hubble gives a delete to the pilot only while `DeProvisionDone` is absent. After that, the
+      Palette gives a delete to the pilot only while `DeProvisionDone` is absent. After that, the
       agent in the cluster runs the delete. Palette moves a delete to the cleanup cluster only
       when it cannot reach the target cluster for `ForcePivotWaitDuration`, 10 minutes. A
       deleting cluster with a live agent that makes no progress stays where it is; no step of the
@@ -378,10 +379,8 @@ rules:
       text: Move a delete that makes no progress for a limit to the cleanup path.
     evidence:
       - kind: source
-        ref: palette controllers/spectrocluster_reconcile.go ForcePivotWaitDuration
-        note: the cleanup cluster waits 10 minutes for the target cluster, then makes the objects again from hubble
+        note: the cleanup cluster waits 10 minutes for the target cluster, then makes the objects again from Palette
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/spectrocluster_acquire.go
         note: a delete goes to the pilot only while DeProvisionDone is absent
       - kind: report
         ref: palette-pivot-webhook-delete-stuck-findings-2026-09-26 B2
@@ -421,13 +420,10 @@ rules:
       text: Show the PCG state next to the cloud account in the console, and in the validate route of MAAS.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/base/spectrocluster_base.go ValidateOverlordState
         note: "!ol.IsSystem() && ol.Status.State != domain.ClusterRunning"
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/overlord/overlord_service.go validateOverlordState
         note: OverlordClusterNotReady and OverlordClusterUnHealthyState in the vSphere validate route
       - kind: source
-        ref: hubble domain/doc.go AnnotationOverlordUid
         note: the cloud account carries the PCG uid in metadata.annotations.overlordUid; overlordType system marks the system gateway
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/pcg/architecture/
@@ -447,7 +443,7 @@ rules:
     when: .release != null
     what: |
       The compatibility matrix pairs each Palette release with an agent (Stylus) release, such as
-      4.10.16 with 4.10.4. Hubble sets no floor on the agent version at create. A host with an
+      4.10.16 with 4.10.4. Palette sets no floor on the agent version at create. A host with an
       agent from an older minor release misses the features that the profile and the release
       expect. The docs gate some features on the agent version. The check compares the
       major.minor of `status.health.agentVersion` with the release given; it is a reading of the
@@ -476,7 +472,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/edge/edge-compatibility-matrix/
         note: Palette release to agent release, such as 4.10.16 to 4.10.4
       - kind: source
-        ref: palette-sdk-go api/models/v1_edge_host_health.go
         note: status.health.agentVersion
     tests:
       - fault: fixtures/edge/agent-old.json

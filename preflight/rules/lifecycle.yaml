@@ -71,7 +71,6 @@ rules:
       - kind: report
         ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 F4
       - kind: source
-        ref: palette pkg/provider/aws/aws_managed_common.go DeleteAdditionalResources
         note: the delete reads the one machine pool that the MachinePool references
     tests:
       - fault: fixtures/eks/delete-waits.json
@@ -168,7 +167,7 @@ rules:
       - kind: report
         ref: palette-gke-pool-change-delete-stuck-findings-2026-09-28 F2
       - kind: source
-        ref: palette pkg/provider/gcp/gcp_managed.go gcpManagedMachinePoolImmutableFieldsChanged
+        note: Palette replaces a GKE node pool when a fixed field of the pool changes
     tests:
       - fault: fixtures/gke/pool-roll-deleted.json
         clean: fixtures/gke/pool-roll-clean.json
@@ -206,7 +205,6 @@ rules:
       text: Sweep the old machine pools by label, not by one annotation.
     evidence:
       - kind: source
-        ref: palette pkg/clusterdeployer/worker/worker_managed.go ReconcileManagedWorker
         note: the annotation spectrocloud.com/old-managed-machine-pool holds one name; the sweep runs after the readiness checks of each pool
       - kind: report
         ref: palette-eks-orphan-nodegroup-delete-stuck-findings-2026-09-28 F3
@@ -247,12 +245,10 @@ rules:
             | "pool \($n): \($f | join(", ")) changed; on \($cloud) that \($effect)" ]
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_managed.go shouldDoMMPRollingUpgrade
         note: DiskSize, InstanceType, SubnetIDs, RemoteAccess, CapacityType, RoleName, AWSLaunchTemplate
       - kind: source
-        ref: palette pkg/provider/gcp/gcp_managed.go gcpManagedMachinePoolImmutableFieldsChanged
+        note: Palette replaces the machines of a pool when a fixed field of the pool changes
       - kind: source
-        ref: palette pkg/provider/aws/aws_common.go shouldUpgradeMachineTemplate
         note: InstanceType, SSHKeyName, RootVolume.Size, AMI.ID, SpotMarketOptions.MaxPrice, AdditionalSecurityGroups, Tenancy
     tests:
       - fault: fixtures/eks/disk-change.json
@@ -270,7 +266,7 @@ rules:
     what: |
       These fields of `cloudConfig` are fixed at the create. AWS: `region`, `vpcId`,
       `bastionDisabled`. EKS: `region`, `vpcId`, `encryptionConfig`. GKE: `project`, `region`,
-      `network`, `managedClusterConfig`. The source of hubble stores a new `region`, `vpcId`, and
+      `network`, `managedClusterConfig`. Palette stores a new `region`, `vpcId`, and
       `bastionDisabled` in the cloud config (`UpdateClusterConfig`), and copies `encryptionConfig`
       only when `isEnabled` is true: a disable is dropped. No source shows that the controller
       applies a stored change to a built cluster, and a VPC or a region cannot move under running
@@ -290,12 +286,11 @@ rules:
       text: Refuse a change of a fixed field with an error.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/aws/cloudconfig_aws_service.go UpdateClusterConfig
+        note: the update of an AWS cloud config keeps the fields that this rule names
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/eks/cloudconfig_eks_service.go UpdateClusterConfig
         note: encryptionConfig is copied only when the new isEnabled is true
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/gcp/cloudconfig_gcp_service.go UpdateClusterConfig
+        note: the update of a GCP cloud config keeps the fields that this rule names
     tests:
       - fault: fixtures/eks/vpc-change.json
         clean: fixtures/eks/type-same.json
@@ -441,7 +436,7 @@ rules:
       `spectroComponentsUpgradeForbidden=true` on the cluster document. `POST
       /v1/spectroclusters/{uid}/upgrade/settings` with `spectroComponents: lock` sets it, and
       `unlock` removes it. The teardown notes of the lab say a cluster with the setting on can
-      stay in `Deleting`, and a resume with a second delete moves it. The source of hubble stores
+      stay in `Deleting`, and a resume with a second delete moves it. Palette stores
       and reads the annotation, and shows no delete path that tests it, so the status is inferred.
       `spec.clusterConfig.lifecycleConfig.pause` is another setting, the pause of the cluster, not
       this one.
@@ -461,8 +456,7 @@ rules:
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/cluster-management/platform-settings/pause-platform-upgrades/
       - kind: source
-        ref: hubble domain/doc.go AnnotationSpectroComponentsUpgradeForbidden
-        note: spectrocluster_repo.go writes the annotation "true" for lock, and removes it for unlock
+        note: Palette writes the annotation "true" for lock, and removes it for unlock
       - kind: run
         ref: teardown lab
         note: "the book, live-example.md: a cluster with Pause Agent Upgrades on can stay in Deleting; disable that option and delete again"
@@ -499,7 +493,6 @@ rules:
       - "aws eks list-pod-identity-associations --region {{ .entity.spec.cloudConfig.region }} --cluster-name {{ .entity.metadata.name }} --output table"
     evidence:
       - kind: source
-        ref: hapi models/v1_virtual.go V1Virtual
         note: appDeployments, clusterGroup, hostCluster, virtualClusters
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/cluster-management/remove-clusters/

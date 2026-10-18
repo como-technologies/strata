@@ -46,7 +46,6 @@ rules:
         ref: "#89"
         note: csi-attacher in CrashLoopBackOff on one EKS build in three, with the cluster Running and Healthy
       - kind: source
-        ref: palette pkg/provider/common/packstatus.go HealthyReason constants
         note: the pack condition Healthy carries the reason InstallFailed, Degraded, ProbeError, WorkloadsReady, InstallSuccess
     tests:
       - fault: fixtures/eks/csi-crash.json
@@ -154,10 +153,8 @@ rules:
       text: Check the key policy, not only the key, in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/base/spectrocluster_validate.go
         note: the EKS validate calls ValidateAwsKmsKey when encryptionConfig.isEnabled
       - kind: source
-        ref: hapi cloud/spec/v1/cloud_clouds_v1.yaml V1AwsKmsKeyValidate
         note: GET /v1/clouds/aws/regions/{region}/kmskeys/validate?cloudAccountUid=&keyArn= answers 204
     tests:
       - fault: fixtures/eks/kms-key-missing.json
@@ -192,10 +189,8 @@ rules:
       text: Refuse the change in the cloud config update.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/eks/cloudconfig_eks_service.go UpdateClusterConfig
         note: copies encryptionConfig only when the new one is enabled
       - kind: source
-        ref: palette pkg/provider/aws/aws_managed.go shouldUpgradeMCP (EncryptionConfig)
         note: logs and returns false on a removal or a change of the provider
     tests:
       - fault: fixtures/eks/encryption-disable.json
@@ -220,7 +215,6 @@ rules:
           | "pack \(.name)@\(.version) is a CSI on GKE: GKE runs its own Persistent Disk CSI, and Palette does nothing for the CSI layer; use gke-csi-gcp-driver" ]
     evidence:
       - kind: source
-        ref: palette pkg/provider/gcp/gcp_managed.go ReconcileDefaultCSI
         note: returns nil for GCP
       - kind: doc
         ref: https://docs.spectrocloud.com/integrations/gke-csi-gcp-driver/
@@ -350,7 +344,6 @@ rules:
       text: Fail the build when a named storage account is missing, instead of the fallback.
     evidence:
       - kind: source
-        ref: palette pkg/provider/azure/azure_sdk.go AzureCopyImage
         note: checkIfStorageAccountPresent with the custom name, then toHashName, then createStorageAccount; no error for a missing custom account
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/create-azure-cluster/

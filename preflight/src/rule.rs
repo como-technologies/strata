@@ -230,15 +230,18 @@ pub struct Fix {
     pub text: String,
 }
 
-/// One piece of evidence: a live run, a line of the source, a public page, or a findings report.
+/// One piece of evidence: a live run, the source of Palette, a public page, or a findings report.
+///
+/// An entry of the kind `source` names no file of the Palette code (rule 7 of the book). Its
+/// note states what Palette does, and its reference is empty, or a file of this repository.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Evidence {
     /// `run`, `source`, `doc`, or `report`.
     pub kind: String,
-    /// The run id or issue, the file and the function, the page, or the report and its finding.
-    #[serde(rename = "ref")]
+    /// The run id or issue, a file of this repository, the page, or the report and its finding.
+    #[serde(rename = "ref", default, skip_serializing_if = "String::is_empty")]
     pub reference: String,
-    /// What it shows, when the reference alone does not say.
+    /// What it shows, when the reference alone does not say. Each `source` entry has one.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
 }

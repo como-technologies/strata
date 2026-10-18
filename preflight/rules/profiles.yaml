@@ -32,10 +32,9 @@ rules:
         ref: palette-profile-order-findings-2026-09-22 F7
         note: the install order on the cluster does not depend on the profile order
       - kind: source
-        ref: terraform-provider-spectrocloud spectrocloud/schemas/cluster_profile.go
         note: the profiles are a set since v0.28.1
       - kind: source
-        ref: palette controllers/packpriority_reconciler.go
+        note: Palette orders the packs of the add-on profiles by the priority of each pack, not by the order of the profiles
     tests:
       - fault: fixtures/eks/two-addons.json
         clean: fixtures/eks/full-records.json
@@ -71,11 +70,9 @@ rules:
         ref: palette-profile-order-findings-2026-09-22 B1
         note: the FIPS guard of the console passes when position 0 is an add-on; reproduced against FIPS fixtures
       - kind: source
-        ref: hubble domain/spectrocluster.go
         note: the position-0 reads and the first-match pack lookups
       - kind: source
-        ref: optic src/state/cluster/actions/details.jsx
-        note: the FIPS guard
+        note: the console of Palette guards the FIPS choice when it shows the details of a cluster
     tests:
       - fault: fixtures/eks/addon-first.json
         clean: fixtures/eks/full-records.json
@@ -104,7 +101,6 @@ rules:
       - kind: doc
         ref: https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/update-cluster-profile/
       - kind: source
-        ref: terraform-provider-spectrocloud spectrocloud/resource_cluster_profile.go
         note: the immutable-clusterprofiles feature_preview flag is a check of the provider
 
   - id: template-lock-route
@@ -163,7 +159,7 @@ rules:
         ref: "#81"
         note: a cluster outside the template, built with a linked version, is refused
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectroclustertemplate/internal/base/spectrocluster_template_validate.go ValidateProfilesNotLinkedToClusterTemplates
+        note: Palette checks that a cluster template links no profile of the entity
       - kind: doc
         ref: https://docs.spectrocloud.com/cluster-templates/
     tests:
@@ -196,7 +192,6 @@ rules:
       - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}\" | jq '.status.inUseClusters'"
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/clusterprofile/clusterprofile_service.go UpdateClusterProfileVariables
         note: validateInUseClustersForClusterProfileVariables runs before the update
       - kind: doc
         ref: https://docs.spectrocloud.com/profiles/cluster-profiles/create-cluster-profiles/define-profile-variables/modify-cluster-profile-variables/
@@ -251,7 +246,6 @@ rules:
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/cluster-management/macros/
       - kind: source
-        ref: terraform-provider-spectrocloud spectrocloud/resource_cluster_profile.go
         note: the immutable-clusterprofiles feature_preview flag checks the profile resource alone
     tests:
       - fault: fixtures/eks/macro-values.json
