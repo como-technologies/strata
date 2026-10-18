@@ -18,7 +18,8 @@ pub use class::FailureClass;
 pub enum Error {
     /// No API key in the environment or in `~/.palette.env`.
     #[error(
-        "{primary} is required to fetch from Palette (or {alternate}, or a line in ~/.palette.env)"
+        "{primary} is required to fetch from Palette (or {alternate}, or a line in ~/{})",
+        crate::config::ENV_FILE
     )]
     MissingCredential {
         /// The preferred variable name.
@@ -441,8 +442,10 @@ pub enum Error {
 fn key_hint(status: u16) -> String {
     if status == 401 || status == 403 {
         format!(
-            "; check {}, {}, or ~/.palette.env: the key can be wrong, expired, or for another tenant",
-            KEY_VARS[0], KEY_VARS[1]
+            "; check {}, {}, or ~/{}: the key can be wrong, expired, or for another tenant",
+            KEY_VARS[0],
+            KEY_VARS[1],
+            crate::config::ENV_FILE
         )
     } else {
         String::new()

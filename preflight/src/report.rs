@@ -451,7 +451,8 @@ fn auto_reproduce(
                 (crate::rule::Method::Get, _) => String::new(),
             };
             lines.push(format!(
-                "code=$(curl -s -o body.json -w '%{{http_code}}' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\"{data} \"${{PALETTE_API:-https://api.spectrocloud.com}}{path}\")"
+                "code=$(curl -s -o body.json -w '%{{http_code}}' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\"{data} \"${{PALETTE_API:-{base}}}{path}\")",
+                base = strata::config::DEFAULT_BASE_URL
             ));
             lines.push(format!(
                 "jq --arg code \"$code\" --slurpfile body body.json '.response = {{ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)}} | {}' {dir}/world.json",
@@ -470,7 +471,8 @@ fn auto_reproduce(
         Some(Check::Watch { .. }) => {
             if let Some(uid) = &subject.cluster_uid {
                 lines.push(format!(
-                    "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${{PALETTE_API:-https://api.spectrocloud.com}}/v1/events/components/spectrocluster/{uid}?limit=50\""
+                    "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${{PALETTE_API:-{base}}}/v1/events/components/spectrocluster/{uid}?limit=50\"",
+                    base = strata::config::DEFAULT_BASE_URL
                 ));
             }
         }
