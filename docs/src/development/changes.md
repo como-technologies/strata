@@ -98,3 +98,23 @@ When the work shows a fault of Palette, or a possible improvement to Palette,
 the author writes it in a report outside this repository. The report gives the
 source line and the evidence. It is not an issue of this repository. A fault of
 strata gets an issue of its own.
+
+## The session image
+
+The work and the verify can run in a container of the session image.
+`riff.toml` names the image by its digest, and `deploy/session/Dockerfile`
+builds it. The image has the Rust of CI, the Rust of `rust-version`, and each
+tool of the checks above. It has no key of Palette and no AWS profile, so a
+session in the container makes no live request.
+
+To change a tool or a version:
+
+1. Change `deploy/session/Dockerfile` in a pull request. The workflow
+   `Session image` builds the image, and pushes it to
+   `ghcr.io/como-technologies/strata-session`.
+2. Copy the line `image = ...` from the summary of that run into `riff.toml`, in
+   the same pull request.
+
+CI builds with the stable Rust of the day. When a new stable comes out, change
+`RUST_VERSION` in the same way, so that clippy finds the same lints in the
+container and in CI.
