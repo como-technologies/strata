@@ -7,7 +7,7 @@ Arguments:
   <SNAPSHOTS>...  Snapshot files; quote a pattern such as 'releases/**/*.json'
 
 Options:
-      --project <PROJECT>            Check the records in this project, by uid
+      --project <PROJECT>            Use this project, by uid; '' is tenant scope
       --project-name <PROJECT_NAME>  The same, by project name
       --summary                      One line for each record and a summary, also for one file
       --who                          For a record that drifted, read who changed it, and when, from the audit log of Palette

@@ -12,7 +12,7 @@ use super::{connect, exit_for, expand_records, is_pattern, now_utc, project_arg}
 pub(crate) fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let paths = expand_records(&a.snapshots)?;
-    let project = project_arg(progress, &a.project, &a.project_name)?;
+    let project = project_arg(progress, &a.project)?;
     let bulk = a.summary || a.snapshots.len() > 1 || a.snapshots.iter().any(|s| is_pattern(s));
     let options = ops::VerifyOptions {
         who: a.who,

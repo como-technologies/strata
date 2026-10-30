@@ -102,6 +102,13 @@ pub(crate) fn capitalized(text: &str) -> String {
     }
 }
 
+/// One line of the answer of Palette, as a report prints it: `palette    accepts`.
+///
+/// Four spaces follow the word `palette`, as they follow each other key of a report.
+pub fn palette_line(line: &str) -> String {
+    format!("palette    {line}")
+}
+
 /// The renderer for a format.
 pub fn renderer(format: Format, paint: Paint, compact: bool) -> Box<dyn Renderer> {
     match format {
@@ -227,5 +234,10 @@ mod tests {
         assert_eq!(short_digest(hash), short(hash));
         assert_eq!(short_digest("sha256:cni-a"), "sha256:cni-a");
         assert_eq!(short_digest(""), "-");
+    }
+
+    #[test]
+    fn a_line_of_the_answer_of_palette_starts_with_the_word_palette_in_the_key_column() {
+        assert_eq!(palette_line("accepts"), "palette    accepts");
     }
 }

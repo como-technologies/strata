@@ -15,8 +15,9 @@ use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, str_at, strings, text};
 use crate::pack_type::PackType;
 use crate::registry::{Registries, pack_type_of, registry_layer, retired_state};
-use crate::snapshot::PresetOption;
+use crate::snapshot::{PROVIDER_TYPE_ANNOTATION, PresetOption, manifest_entry};
 use crate::term::progress::Progress;
+use crate::text::name_or_uid;
 
 /// The fields of one pack that a published profile gives in two documents: the pack reference
 /// of the profile and the entry of the manifests document.
@@ -64,6 +65,11 @@ fn pack_documents(l: &CandidateLayer, f: &PackFields, manifests: Vec<Value>) -> 
     (pack_ref, entry)
 }
 
+/// Put the provider type of an OCI registry on `pack_ref`, as a published profile carries it.
+fn set_provider_type(pack_ref: &mut Value, provider_type: &str) {
+    pack_ref["annotations"] = json!({ PROVIDER_TYPE_ANNOTATION: provider_type });
+}
+
 /// The state of one resolve: the candidate, the client, and the registry listings, which strata
 /// reads one time and uses again for each layer.
 struct Resolver<'r, 'p, A: PaletteApi> {
@@ -96,7 +102,7 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         let manifests: Vec<Value> = loaded_layer
             .manifests
             .iter()
-            .map(|(name, content)| json!({"name": name, "uid": "", "digest": "", "content": content}))
+            .map(|(name, content)| manifest_entry(name, "", "", content))
             .collect();
         let Some(registry_ref) = &loaded_layer.registry else {
             return Ok(manifest_layer(l, loaded_layer, manifests));
@@ -172,7 +178,7 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         };
         let (mut pack_ref, entry) = pack_documents(l, &fields, manifests);
         if let Some(t) = &how.provider {
-            pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
+            set_provider_type(&mut pack_ref, t);
         }
         // the pack that Palette makes has no cloud type, so each cloud takes it
         Ok(ResolvedLayer {
@@ -201,7 +207,9 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
             // a `pack:` ref comes here with the uid of the registry; the error gives its name
             let registry = match registry_ref {
                 RegistryRef::Name(n) => n.clone(),
-                RegistryRef::Uid(u) => self.registries.name_of(u)?.unwrap_or_else(|| u.clone()),
+                RegistryRef::Uid(u) => {
+                    name_or_uid(&self.registries.name_of(u)?.unwrap_or_default(), u).to_string()
+                }
             };
             return Err(Error::PackUnavailable {
                 name: l.name.clone(),
@@ -287,7 +295,7 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         if kind == PackType::Oci
             && let Some(t) = self.registries.oci_provider_type(registry)?
         {
-            pack_ref["annotations"] = json!({ "ociRegistryProviderType": t });
+            set_provider_type(&mut pack_ref, &t);
         }
         Ok(ResolvedLayer {
             pack_ref,

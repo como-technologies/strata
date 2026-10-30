@@ -9,7 +9,6 @@ use super::{
 use crate::api::{Palette, PaletteApi};
 use crate::error::Result;
 use crate::json::{arr, text};
-use crate::ops::client_for;
 use crate::ops::list::{ProjectListings, name_projects_of};
 use crate::profile_type::ProfileType;
 use crate::term::progress::Progress;
@@ -50,15 +49,13 @@ where
             text(app, "/name"),
             text(app, "/projectUid"),
         );
-        let doc = client_for(&mut clients, &home, &c.project_uid, &mut connect)
-            .and_then(|p| p.app_deployment_document(&c.uid));
-        match doc {
-            Ok(d) => {
-                c.fill_from_document(&d);
-                c.version = text(&d, "/spec/profile/metadata/version");
-            }
-            Err(e) => c.error = Some(e.to_json()),
-        }
+        c.read(
+            &mut clients,
+            &home,
+            &mut connect,
+            |p, deployment| p.app_deployment_document(deployment),
+            |d| text(d, "/spec/profile/metadata/version"),
+        );
         list.push(c);
     }
     name_projects_of(

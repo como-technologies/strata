@@ -18,6 +18,17 @@ use crate::ops::list::{ListedCluster, list_clusters};
 use crate::snapshot::{AppliedProfile, SubjectKind};
 use crate::term::progress::Progress;
 
+/// The answer of `read` from `wide`, or from `home` when `wide` cannot answer.
+///
+/// A key that cannot read the tenant reads `home`, the scope of the profile.
+fn wide_else_home<A: PaletteApi, T>(
+    wide: &Palette<A>,
+    home: &Palette<A>,
+    read: impl Fn(&Palette<A>) -> Result<T>,
+) -> Result<T> {
+    read(wide).or_else(|_| read(home))
+}
+
 /// Add each edge host that the profile `uid` is bound to. The search is read through `wide`, and
 /// through `home` when `wide` cannot read it. A Palette without the search has no edge hosts.
 pub(super) fn edge_hosts_bound<A: PaletteApi>(
@@ -28,7 +39,7 @@ pub(super) fn edge_hosts_bound<A: PaletteApi>(
     progress: &Progress,
 ) -> EdgeHostsRead {
     progress.note("reading each edge host for the profiles bound to it");
-    let hosts = match served(wide.edge_hosts().or_else(|_| home.edge_hosts())) {
+    let hosts = match served(wide_else_home(wide, home, Palette::edge_hosts)) {
         Ok(hosts) => hosts.unwrap_or_default(),
         Err(e) => {
             return EdgeHostsRead {
@@ -125,16 +136,15 @@ where
             client_for(clients, home, project, connect)
         };
         match own {
-            Ok(own) => searched_consumers(own, name),
-            Err(e) => Err(e),
+            Ok(own) => wide_else_home(own, home, |p| searched_consumers(p, name)),
+            Err(_) => searched_consumers(home, name),
         }
-        .or_else(|_| searched_consumers(home, name))
     };
     let (candidates, resolved) = match searched {
         Ok(Some(found)) => (Ok(found), Resolved::Search),
         Ok(None) => {
             progress.note("reading each cluster for the profiles it applies");
-            let listing = wide.cluster_listing().or_else(|_| home.cluster_listing());
+            let listing = wide_else_home(wide, home, Palette::cluster_listing);
             (listing.map(|l| list_clusters(items(&l))), Resolved::Listing)
         }
         Err(e) => (Err(e), Resolved::Search),
@@ -239,10 +249,9 @@ fn group_members<A: PaletteApi>(
     let mut members = Vec::new();
     for (scope, group) in groups {
         // a group that the tenant lists can be one that only the scope of the key can read
-        let doc = match scope
-            .subject_document(SubjectKind::ClusterGroup, &group)
-            .or_else(|_| home.subject_document(SubjectKind::ClusterGroup, &group))
-        {
+        let doc = match wide_else_home(scope, home, |p| {
+            p.subject_document(SubjectKind::ClusterGroup, &group)
+        }) {
             Ok(doc) => doc,
             Err(e) => {
                 read.groups_error.get_or_insert(e.to_json());
@@ -253,10 +262,7 @@ fn group_members<A: PaletteApi>(
             continue;
         }
         read.groups += 1;
-        match scope
-            .cluster_group_members(&group)
-            .or_else(|_| home.cluster_group_members(&group))
-        {
+        match wide_else_home(scope, home, |p| p.cluster_group_members(&group)) {
             Ok(found) => members.extend(found),
             Err(e) => {
                 read.groups_error.get_or_insert(e.to_json());
@@ -264,4 +270,30 @@ fn group_members<A: PaletteApi>(
         }
     }
     list_clusters(&members)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::api::MemoryApi;
+    use serde_json::json;
+
+    #[test]
+    fn a_read_tries_the_wide_scope_and_then_the_home_scope() {
+        let with = |value: Option<&str>| {
+            Palette::new(match value {
+                Some(v) => MemoryApi::new().with("/v1/x", json!(v)),
+                None => MemoryApi::new(),
+            })
+        };
+        let read = |wide: &Palette<MemoryApi>, home: &Palette<MemoryApi>| {
+            wide_else_home(wide, home, |p| p.api().get_json("/v1/x"))
+        };
+        assert_eq!(
+            read(&with(Some("wide")), &with(Some("home"))).unwrap(),
+            "wide"
+        );
+        assert_eq!(read(&with(None), &with(Some("home"))).unwrap(), "home");
+        assert!(read(&with(None), &with(None)).is_err());
+    }
 }

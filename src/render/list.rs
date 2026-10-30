@@ -1,7 +1,9 @@
 //! The lines of `list` and `packs`, and of a set of records.
 
+use super::notes::marks_invalid;
 use super::verify::record_label;
 use super::{count_of, dash, entry_error, joined_note};
+use crate::diff::invalid_packs;
 use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
 use crate::snapshot::Snapshot;
 use crate::text::{and_list, name_or_uid};
@@ -201,15 +203,12 @@ pub fn set_counts_line(r: &SetReport) -> String {
 /// One warning for each pack of `snap` that Palette marks invalid, with the reason when Palette
 /// gives one. The root does not cover the flag, so the record alone does not show it to a person.
 pub fn invalid_pack_warnings(snap: &Snapshot) -> Vec<String> {
-    snap.packs
+    invalid_packs(snap)
         .iter()
-        .filter(|p| p.invalid)
         .map(|p| {
-            let reason = Some(p.invalid_reason.as_str()).filter(|r| !r.is_empty());
             format!(
-                "Palette marks pack {} invalid{}. The record keeps the flag, outside the root",
-                p.key,
-                reason.map_or_else(String::new, |r| format!(" ({r})"))
+                "{}. The record keeps the flag, outside the root",
+                marks_invalid(p, "")
             )
         })
         .collect()

@@ -125,6 +125,16 @@ fn install_order(tier: &Value) -> Option<&Value> {
     tier.pointer(&format!("/spec/{TIER_INSTALL_ORDER}"))
 }
 
+/// The variables document of an object that has no variable: `{"variables": []}`.
+fn no_variables() -> Value {
+    serde_json::json!({"variables": []})
+}
+
+/// The body of a search that selects each item, with no sort: `{"filter": {}, "sort": []}`.
+fn search_all() -> Value {
+    serde_json::json!({"filter": {}, "sort": []})
+}
+
 /// `(name, uid)` of each entry of a listing: an array, or an object with `items`.
 pub(crate) fn named_entries(listing: &Value) -> Vec<(String, String)> {
     items(listing)

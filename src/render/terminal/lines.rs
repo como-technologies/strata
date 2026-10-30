@@ -7,7 +7,7 @@ use crate::render::changes::{
     OpLine, VarLine, artifact_lines, status_mark, status_word, traits_suffix, upstream_line,
     values_summary, values_unparsed_sentence, version_display,
 };
-use crate::render::notes::{invalid_mark, tag_rename};
+use crate::render::notes::{ARCHIVE_CHANGE_HIDDEN, invalid_mark, tag_rename};
 use crate::term::color::Paint;
 
 fn opmark(op: Op, p: &Paint) -> String {
@@ -108,7 +108,9 @@ pub(super) fn packdetail(pd: &PackDiff, p: &Paint, out: &mut Vec<String>) {
     if pd.upstream_unknown {
         out.push(format!(
             "      {}",
-            p.yellow("upstream unknown: no digest, so a change of the archive does not show")
+            p.yellow(&format!(
+                "upstream unknown: no digest, {ARCHIVE_CHANGE_HIDDEN}"
+            ))
         ));
     }
     if !pd.masked.is_empty() {

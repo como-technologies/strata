@@ -162,6 +162,34 @@ impl Consumer {
         ]);
         self.state = first_nonempty(&[str_at(doc, "/status/state"), &self.state]);
     }
+
+    /// Read the document of the consumer in its own project, and take from it the name, the
+    /// project, the state, and the version.
+    ///
+    /// `document` reads the document at the uid of the consumer. `version` takes the version of
+    /// the profile out of that document. An error of the read goes into `error`, and the consumer
+    /// keeps what the consumer list gave it.
+    fn read<A, F>(
+        &mut self,
+        clients: &mut HashMap<Option<String>, Palette<A>>,
+        home: &Palette<A>,
+        connect: &mut F,
+        document: impl FnOnce(&Palette<A>, &str) -> Result<Value>,
+        version: impl FnOnce(&Value) -> String,
+    ) where
+        A: PaletteApi,
+        F: FnMut(Option<&str>) -> Result<Palette<A>>,
+    {
+        let doc = client_for(clients, home, &self.project_uid, connect)
+            .and_then(|palette| document(palette, &self.uid));
+        match doc {
+            Ok(d) => {
+                self.fill_from_document(&d);
+                self.version = version(&d);
+            }
+            Err(e) => self.error = Some(e.to_json()),
+        }
+    }
 }
 
 /// The second reading of `consumers`: the clusters that run the version, from the cluster search
@@ -431,18 +459,18 @@ where
             known.map(|n| text(n, "/name")).unwrap_or_default(),
             known.map(|n| text(n, "/projectUid")).unwrap_or_default(),
         );
-        let doc = client_for(&mut clients, &home, &c.project_uid, &mut connect)
-            .and_then(|p| p.subject_document(SubjectKind::Cluster, &c.uid));
-        match doc {
-            Ok(d) => {
-                c.fill_from_document(&d);
-                // a cluster that does not run the profile now has no version of it
-                c.version = AppliedProfile::applied(&d, &uid)
+        c.read(
+            &mut clients,
+            &home,
+            &mut connect,
+            |p, cluster| p.subject_document(SubjectKind::Cluster, cluster),
+            // a cluster that does not run the profile now has no version of it
+            |d| {
+                AppliedProfile::applied(d, &uid)
                     .map(|p| p.version)
-                    .unwrap_or_default();
-            }
-            Err(e) => c.error = Some(e.to_json()),
-        }
+                    .unwrap_or_default()
+            },
+        );
         list.push(c);
     }
     // Palette computes the list above when it is asked, in the projects the key can read, and
@@ -572,5 +600,54 @@ mod tests {
         }))
         .unwrap();
         assert_eq!(c.kind, ConsumerKind::Cluster);
+    }
+
+    /// Read the consumer `c` in the home scope. `read` gives its document.
+    fn read_with(c: &mut Consumer, read: Result<Value>) {
+        let home = Palette::new(crate::api::MemoryApi::new());
+        let mut clients = HashMap::new();
+        let mut connect = |_: Option<&str>| Ok(Palette::new(crate::api::MemoryApi::new()));
+        c.read(
+            &mut clients,
+            &home,
+            &mut connect,
+            |_, _| read,
+            |d| text(d, "/spec/profile/metadata/version"),
+        );
+    }
+
+    #[test]
+    fn a_consumer_that_is_read_takes_the_fields_of_its_document_and_keeps_those_it_lacks() {
+        let mut c = Consumer::unread(ConsumerKind::App, "a1".into(), "shop".into(), "p1".into());
+        read_with(
+            &mut c,
+            Ok(serde_json::json!({
+                "status": {"state": "Running"},
+                "spec": {"profile": {"metadata": {"version": "1.2.0"}}},
+            })),
+        );
+        assert_eq!(
+            (c.name.as_str(), c.project_uid.as_str(), c.state.as_str()),
+            ("shop", "p1", "Running"),
+            "a field that the document does not give keeps the value of the list"
+        );
+        assert_eq!(c.version, "1.2.0");
+        assert!(c.error.is_none());
+    }
+
+    #[test]
+    fn a_consumer_whose_document_cannot_be_read_keeps_the_list_and_records_the_error() {
+        let mut c = Consumer::unread(ConsumerKind::Cluster, "c1".into(), "lab".into(), "".into());
+        read_with(
+            &mut c,
+            Err(Error::Usage {
+                message: "no such cluster".to_string(),
+            }),
+        );
+        assert_eq!(c.state, UNKNOWN_STATE);
+        assert_eq!(c.version, "");
+        assert_eq!(c.name, "lab");
+        let message = c.error.as_ref().and_then(|e| e.get("message")?.as_str());
+        assert_eq!(message, Some("no such cluster"));
     }
 }
