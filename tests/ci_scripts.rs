@@ -413,7 +413,8 @@ impl Host {
     }
 
     fn run_with(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
-        let _ = std::fs::remove_file(&self.log);
+        // an empty log means no call, and `lines_of` stops the test when the log is gone
+        std::fs::write(&self.log, "").unwrap();
         let _ = std::fs::remove_file(&self.body);
         let mut c = Command::new("bash");
         c.arg(script("ci/pr-comment.sh"))
@@ -452,9 +453,10 @@ impl Host {
 
     /// Run the script the way a GitLab job does: the CI variables, and no --host.
     fn run_gitlab(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
-        for f in ["curl.log", "body-1.md", "body-2.md", "body-3.md"] {
+        for f in ["body-1.md", "body-2.md", "body-3.md"] {
             let _ = std::fs::remove_file(self.gl.join(f));
         }
+        std::fs::write(self.gl.join("curl.log"), "").unwrap();
         let gl = self.gl.display().to_string();
         let mut all = gitlab_job(&gl);
         all.push(("CI_MERGE_REQUEST_IID", "7"));
@@ -1574,9 +1576,9 @@ impl Report {
         std::fs::write(self.dir.path().join(name), body).unwrap();
     }
 
-    /// Run the script with a `jq` that acts as jq 1.6: see [`JQ_BEFORE_1_7_1`].
-    fn use_jq_before_1_7_1(&self) {
-        executable(&self.dir.path().join("bin/jq"), JQ_BEFORE_1_7_1);
+    /// Run the script with a `jq` that acts as jq 1.6: see [`JQ_1_6`].
+    fn use_jq_1_6(&self) {
+        executable(&self.dir.path().join("bin/jq"), JQ_1_6);
     }
 
     /// The summary that strata prints for verify-report.sh, from (path, status, name, version)
@@ -1621,9 +1623,11 @@ impl Report {
 
     /// Run the script with `envs` after the other variables.
     fn run_with(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
-        // a test reads the calls of one run, not of the runs before it
-        for f in ["gh.log", "strata.log", "curl.log", "since-used.json"] {
-            let _ = std::fs::remove_file(self.dir.path().join(f));
+        // a test reads the calls of one run, not of the runs before it. An empty log means no call,
+        // and `lines_of` stops the test when the log is gone.
+        let _ = std::fs::remove_file(self.dir.path().join("since-used.json"));
+        for f in ["gh.log", "strata.log", "curl.log"] {
+            std::fs::write(self.dir.path().join(f), "").unwrap();
         }
         let mut c = Command::new("bash");
         c.arg(&self.script)
@@ -1931,7 +1935,7 @@ fn verify_report_touches_no_issue_when_verify_checks_nothing() {
             for exit in EXITS_OF_NOTHING {
                 let d = Report::verify();
                 if old_jq {
-                    d.use_jq_before_1_7_1();
+                    d.use_jq_1_6();
                 }
                 d.put("summary.json", printed);
                 d.put(
@@ -1940,9 +1944,8 @@ fn verify_report_touches_no_issue_when_verify_checks_nothing() {
                 );
                 d.put("summary.exit", exit);
                 let o = d.run(&["releases/*.json", "--repo", "o/r"]);
-                let case = format!(
-                    "jq before 1.7.1: {old_jq}, strata printed {printed:?} and exited {exit}"
-                );
+                let case =
+                    format!("old jq: {old_jq}, strata printed {printed:?} and exited {exit}");
                 assert_eq!(o.status.code(), Some(2), "{case}");
                 assert!(d.log("gh.log").is_empty(), "{case}: {:?}", d.log("gh.log"));
                 let err = text(&o.stderr);
@@ -2117,11 +2120,7 @@ echo '{}' | jq -r '.a // empty';                  echo "no -e $?"
 fn live_scripts_take_jq_e_on_an_empty_input_as_a_failure_with_each_jq() {
     for old_jq in [false, true] {
         let dir = tempfile::tempdir().unwrap();
-        let commands: &[(&str, &str)] = if old_jq {
-            &[("jq", JQ_BEFORE_1_7_1)]
-        } else {
-            &[]
-        };
+        let commands: &[(&str, &str)] = if old_jq { &[("jq", JQ_1_6)] } else { &[] };
         let bin = fake_bin(dir.path(), commands);
         let o = Command::new("bash")
             .args(["-c", JQ_PROBE, "probe"])
@@ -2134,7 +2133,7 @@ fn live_scripts_take_jq_e_on_an_empty_input_as_a_failure_with_each_jq() {
         assert_eq!(
             text(&o.stdout),
             "empty input 4\nempty file 4\nin bash -c 4\ntrue 0\nfalse 1\nno output 4\nno -e 0\n",
-            "jq before 1.7.1: {old_jq}: {}",
+            "old jq: {old_jq}: {}",
             text(&o.stderr)
         );
     }
@@ -2372,14 +2371,13 @@ fn upstream_report_touches_no_issue_when_behind_checks_nothing() {
             for exit in EXITS_OF_NOTHING {
                 let u = Report::upstream();
                 if old_jq {
-                    u.use_jq_before_1_7_1();
+                    u.use_jq_1_6();
                 }
                 u.put("report.json", printed);
                 u.put("report.exit", exit);
                 let o = u.run(&["releases/*.json", "--repo", "o/r"]);
-                let case = format!(
-                    "jq before 1.7.1: {old_jq}, strata printed {printed:?} and exited {exit}"
-                );
+                let case =
+                    format!("old jq: {old_jq}, strata printed {printed:?} and exited {exit}");
                 assert_eq!(o.status.code(), Some(2), "{case}");
                 assert!(
                     text(&o.stderr).contains(&format!(

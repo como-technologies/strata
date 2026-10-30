@@ -212,7 +212,8 @@ fn masked_group(cluster: &Value) -> Result<Value> {
     Ok(out)
 }
 
-/// Write each named document under `dir`, creating it, through [`crate::file::write_file`].
+/// Write each named document under `dir` through [`crate::file::write_file`], and make `dir` when
+/// it is not there.
 fn write_json_files(dir: &Path, files: &[(&str, &Value)]) -> Result<()> {
     for (name, v) in files {
         crate::file::write_file(&dir.join(name), &serde_json::to_string_pretty(v)?)?;

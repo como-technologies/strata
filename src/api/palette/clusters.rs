@@ -1,7 +1,8 @@
 //! The reads of a cluster, of a cluster group, and of an edge host.
 //!
-//! They give the summary, the events, the raw responses of a record, the cloud config, the cloud
-//! account, the resolved values, and the repave and validate routes of a cluster.
+//! They give the summary, the events, the raw responses of a record, and the cloud config of a
+//! cluster. They also give the cloud account, the resolved values, and the repave and validate
+//! routes.
 
 use serde_json::Value;
 
@@ -350,7 +351,7 @@ impl<A: PaletteApi> Palette<A> {
     /// The cloud account `uid` of the cloud type `kind`, `GET /v1/cloudaccounts/{kind}/{uid}`.
     /// `kind` is the cloud type that the route names, such as `aws`. A managed cluster uses the
     /// account of its cloud: an `eks` cluster uses an `aws` account. The document can hold
-    /// secrets, and the caller must not write them out.
+    /// secrets, and the caller must not write them to a file or to an output.
     ///
     /// # Errors
     ///

@@ -35,8 +35,8 @@ use table::{column_widths, matched, table_line};
 mod lines;
 mod table;
 
-/// `text` in the color of a record status: green for a record that agrees with Palette, red for
-/// drift, and yellow for a record that is unverified or that strata could not check.
+/// `text` in the color of a record status. Green is a record that agrees with Palette, and red is
+/// drift. Yellow is a record that is unverified, or that strata could not check.
 fn paint_status(p: &Paint, status: RecordStatus, text: &str) -> String {
     match status {
         RecordStatus::Unchanged => p.bgreen(text),

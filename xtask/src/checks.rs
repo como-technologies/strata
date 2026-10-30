@@ -352,8 +352,7 @@ fn seed_faults(
 }
 
 /// A live result is a fact, with no run id and no date. A reader cannot find a run id, and a date
-/// tells them nothing about what strata does now. The pages once carried more than twenty of
-/// them, which said only when somebody happened to run the example.
+/// tells them nothing about what strata does now.
 fn cited_run_ids(repo: &Path) -> Vec<String> {
     let mut bad = Vec::new();
     for page in pages(&repo.join("docs/src")) {
@@ -370,20 +369,10 @@ fn cited_run_ids(repo: &Path) -> Vec<String> {
     bad
 }
 
-/// Every `2026MMDDTHHMMSSZ` in a text.
+/// Every run id in a text: eight digits for the date, `T`, six digits for the time, and `Z`.
 fn run_ids(text: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    for i in 0..text.len().saturating_sub(15) {
-        let Some(w) = text.get(i..i + 16) else {
-            continue;
-        };
-        let b = w.as_bytes();
-        let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
-        if w.starts_with("2026") && b[8] == b'T' && b[15] == b'Z' && digits(4..8) && digits(9..15) {
-            out.push(w.to_string());
-        }
-    }
-    out
+    let id = Regex::new(r"\d{8}T\d{6}Z").expect("a pattern");
+    id.find_iter(text).map(|m| m.as_str().to_string()).collect()
 }
 
 #[cfg(test)]
@@ -510,6 +499,30 @@ mod tests {
         assert_eq!(bad.len(), 1, "{bad:?}");
         assert!(
             bad[0].starts_with("docs/src/sub/cited.md cites the run id 20260930T120000Z."),
+            "{bad:?}"
+        );
+    }
+
+    #[test]
+    fn a_run_id_of_any_year_is_found() {
+        assert_eq!(
+            run_ids("Run 20270105T083000Z and run 20301231T235959Z show it."),
+            ["20270105T083000Z", "20301231T235959Z"]
+        );
+        assert!(run_ids("A date is 2027-01-05T08:30:00Z.").is_empty());
+    }
+
+    #[test]
+    fn a_page_that_cites_a_run_id_of_2027_fails() {
+        let repo = std::env::temp_dir().join(format!("strata-run-ids-2027-{}", std::process::id()));
+        let docs = repo.join("docs/src");
+        std::fs::create_dir_all(&docs).unwrap();
+        std::fs::write(docs.join("later.md"), "Run 20270105T083000Z shows it.\n").unwrap();
+        let bad = cited_run_ids(&repo);
+        std::fs::remove_dir_all(&repo).unwrap();
+        assert_eq!(bad.len(), 1, "{bad:?}");
+        assert!(
+            bad[0].starts_with("docs/src/later.md cites the run id 20270105T083000Z."),
             "{bad:?}"
         );
     }

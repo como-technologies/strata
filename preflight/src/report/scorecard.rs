@@ -1,5 +1,5 @@
-//! The scorecard of a report: one line for each section, the counts of the run, and the texts that
-//! the forms of the report share about them.
+//! The scorecard of a report: one line for each section, and the counts of the run. It also holds
+//! the texts about them that the forms of the report share.
 
 use std::collections::BTreeMap;
 

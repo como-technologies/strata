@@ -79,8 +79,8 @@ pub const CONTENT_DIGEST: &str = "content/1";
 /// bring-your-own-image OS pack holds it. The OS pack `ubuntu-aws` of the Public Repo does not.
 pub const IMAGE_ID_ANNOTATION: &str = "imageId";
 
-/// The annotation of a pack ref that names the provider type of the OCI registry of the pack, as a
-/// published profile carries it: `pack`, `helm`, or `zarf`.
+/// The annotation of a pack ref that names the provider type of the OCI registry of the pack:
+/// `pack`, `helm`, or `zarf`. A published profile carries it.
 pub(crate) const PROVIDER_TYPE_ANNOTATION: &str = "ociRegistryProviderType";
 
 /// One published profile version: its root, per-pack hashes, canonical values, and raw contents.

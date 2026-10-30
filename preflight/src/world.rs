@@ -308,9 +308,10 @@ impl World {
     }
 }
 
-/// A 4xx on a read of the world that means the object is not there for this key: a 404, or a
-/// 403 of a project key on an object of the tenant. The world holds `null`, and a rule says so.
-/// A 401 is the key itself, and a 429 the rate: the run stops with the error that names it.
+/// True for each 4xx on a read of the world but 401 and 429: the object is not there for this key.
+/// A 404 is one case, and the 403 of a project key on an object of the tenant is another. The
+/// world holds `null`, and a rule says so. A 401 is the key itself, and a 429 the rate: the run
+/// stops with the error that names it.
 pub(crate) fn unreadable(status: u16) -> bool {
     (400..500).contains(&status) && !matches!(status, 401 | 429)
 }
@@ -630,6 +631,36 @@ mod tests {
         assert_eq!(world.cluster_uid.as_deref(), Some("c1"));
         assert_eq!(world.source, "cluster:c1");
         assert_eq!(str_at(&world.entity, "/metadata/name"), "barney");
+    }
+
+    #[test]
+    fn a_world_of_a_cluster_tries_an_id_of_24_hex_digits_as_a_uid_and_then_as_a_name() {
+        let id = "5f1c0b7a9d3e2a4b6c8d0e1f";
+        let document = |uid: &str| {
+            json!({"metadata": {"uid": uid, "name": "barney"},
+                "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"}}})
+        };
+        let config = json!({"spec": {}});
+        // the id is a uid: one request for the document, and no listing
+        let by_uid = strata::api::MemoryApi::new()
+            .with(format!("/v1/spectroclusters/{id}"), document(id))
+            .with("/v1/cloudconfigs/aws/cc1", config.clone());
+        let world = World::from_cluster(&Palette::new(&by_uid), id, &Progress::silent()).unwrap();
+        assert_eq!(world.cluster_uid.as_deref(), Some(id));
+        assert_eq!(by_uid.calls(&format!("/v1/spectroclusters/{id}")), 1);
+        assert_eq!(by_uid.calls("/v1/dashboard/spectroclusters/meta"), 0);
+        // the id is a name: the uid route answers 404, and the listing gives the uid
+        let by_name = strata::api::MemoryApi::new()
+            .with(
+                "/v1/dashboard/spectroclusters/meta",
+                json!([{"metadata": {"name": id, "uid": "c1"}}]),
+            )
+            .with("/v1/spectroclusters/c1", document("c1"))
+            .with("/v1/cloudconfigs/aws/cc1", config);
+        let world = World::from_cluster(&Palette::new(&by_name), id, &Progress::silent()).unwrap();
+        assert_eq!(world.cluster_uid.as_deref(), Some("c1"));
+        assert_eq!(by_name.calls(&format!("/v1/spectroclusters/{id}")), 1);
+        assert_eq!(by_name.calls("/v1/dashboard/spectroclusters/meta"), 1);
     }
 
     #[test]

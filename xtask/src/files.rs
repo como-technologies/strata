@@ -20,7 +20,7 @@ fn has_extension(path: &Path, ext: &str) -> bool {
 
 /// The files directly in `dir` with the extension `ext`, in name order.
 ///
-/// The order keeps a listing from moving when a file system gives another order.
+/// The sort gives the same listing on each file system.
 pub fn files_with_ext(dir: &Path, ext: &str) -> Vec<PathBuf> {
     entries(dir)
         .into_iter()

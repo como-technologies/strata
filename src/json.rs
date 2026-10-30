@@ -49,7 +49,7 @@ pub fn opt_flag(v: &Value, ptr: &str) -> Option<bool> {
 }
 
 /// True when `v` has the bool `true` at the pointer `ptr`. A field that is `false`, is not a bool,
-/// or is not there gives `false`: Palette leaves out a flag that is `false`.
+/// or is not there gives `false`: Palette does not send a flag that is `false`.
 pub fn flag(v: &Value, ptr: &str) -> bool {
     opt_flag(v, ptr) == Some(true)
 }

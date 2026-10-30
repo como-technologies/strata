@@ -169,9 +169,9 @@ impl Consumer {
     /// Read the document of the consumer in its own project, and take from it the name, the
     /// project, the state, and the version.
     ///
-    /// `document` reads the document at the uid of the consumer. `version` takes the version of
-    /// the profile out of that document. An error of the read goes into `error`, and the consumer
-    /// keeps what the consumer list gave it.
+    /// `document` reads the document at the uid of the consumer. `version` reads the version of
+    /// the profile in that document. `error` holds an error of the read, and the consumer keeps
+    /// what the consumer list gave it.
     fn read<A, F>(
         &mut self,
         clients: &mut HashMap<Option<String>, Palette<A>>,

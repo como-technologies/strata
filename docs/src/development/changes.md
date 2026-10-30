@@ -115,6 +115,6 @@ To change a tool or a version:
 2. Copy the line `image = ...` from the summary of that run into `riff.toml`, in
    the same pull request.
 
-CI builds with the stable Rust of the day. When a new stable comes out, change
-`RUST_VERSION` in the same way, so that clippy finds the same lints in the
-container and in CI.
+CI builds with the latest stable Rust. When Rust releases a new stable version,
+change `RUST_VERSION` in the same way, so that clippy finds the same lints in
+the container and in CI.

@@ -39,7 +39,7 @@ test: stand-in
 lint:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
-    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight -p xtask
 
 # Build and run examples/library, a separate crate that uses strata as a library
 library-example:

@@ -261,11 +261,11 @@ struct Reads {
 }
 
 /// Report the pack versions that `records` pin, and the newer versions that the registries offer.
-/// Each pin is read in the project of the first record that pins it. `connect` is called one time
-/// for each project, and each project has one cache of the registry listings; each pack of a
-/// registry is read one time. A pin in a project that `connect` cannot reach has the error of
-/// `connect`. A record that cannot be read is an error of the whole run: strata cannot say what
-/// it pins.
+/// Strata reads each pin in the project of the first record that pins it. It calls `connect` one
+/// time for each project, and keeps one cache of the registry listings for each project. It reads
+/// each pack of a registry one time. A pin in a project that `connect` cannot reach has the error
+/// of `connect`. When strata cannot read a record, the whole run fails: strata cannot say what the
+/// record pins.
 ///
 /// # Errors
 ///
@@ -329,8 +329,8 @@ where
         }
     }
 
-    // A cache of the registry listings borrows its client. So the pins go by scope: each scope
-    // connects one time, and keeps its cache for all its pins
+    // A cache of the registry listings borrows its client. So strata groups the pins by scope:
+    // each scope connects one time, and keeps its cache for all its pins
     let mut scopes: BTreeMap<Option<String>, Vec<(PinKey, Pin)>> = BTreeMap::new();
     for (key, (pin, project)) in pins {
         scopes
@@ -414,8 +414,8 @@ where
     })
 }
 
-/// Fill in `pin` from what its registry offers: the registry name, the state of the pinned
-/// version, the newer versions, and, for a pin that is current, the last sync of the registry.
+/// Give `pin` the registry name, the state of the pinned version, and the newer versions, from
+/// what its registry offers. For a pin that is current, also give it the last sync of the registry.
 ///
 /// `listings` is the cache of the scope of the pin, and `reads` what the other pins read. A pack
 /// that the registry cannot give is the error of `pin`.

@@ -176,7 +176,7 @@ fi
 code=0
 "$strata" behind --quiet --format json "${impact[@]+"${impact[@]}"}" "${since[@]+"${since[@]}"}" \
   "${patterns[@]}" > "$work/report.json" 2> "$work/report.err" || code=$?
-# -s reads the file as an array: a jq before 1.7.1 exits with 0 for `jq -e` on an empty file
+# -s reads the file as an array: a jq older than 1.7 exits with 0 for `jq -e` on an empty file
 if ! jq -es '.[0].schema == "strata-behind/1"' "$work/report.json" > /dev/null 2>&1; then
   cat "$work/report.err" >&2
   die "strata behind checked nothing (exit $code); no issue was touched"

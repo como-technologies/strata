@@ -51,10 +51,10 @@ uid=$(curl -s -X POST ... /v1/spectroclusters/eks | jq -r .uid)
 strata preflight --watch "cluster:$uid" --every 30 --limit 3600
 ```
 
-The watch reads the cluster, its summary, and its events every 30 seconds. A
-404, or the 403 of a project key, gives a reading with no summary or no events.
-A 401 or a 429 stops the watch with its error, as a read of the world does. It
-ends at the first known stuck state with the event that shows it, or when the
+The watch reads the cluster, its summary, and its events every 30 seconds. Each
+4xx but 401 and 429 gives a reading with no summary or no events. A 401 or a 429
+stops the watch with its error, as a read of the world does. It ends at the first
+known stuck state with the event that shows it, or when the
 cluster is `Running` with each counted rule passed, or at the limit; a warning
 is in the report, and the watch reads on. The provider gives
 exit `0` at its create timeout while the cluster still builds

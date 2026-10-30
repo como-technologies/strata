@@ -12961,7 +12961,7 @@ fn behind_connects_one_time_for_each_project_of_its_pins() {
         ]
     );
 
-    // a project that strata cannot connect to gives its pins the error, and the others stay
+    // a project that strata cannot connect to gives its pins the error. Strata reads the others
     let r = ops::behind(
         &records,
         &options,

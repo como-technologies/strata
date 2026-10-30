@@ -61,8 +61,8 @@ scripts/ci/upstream-report.sh 'releases/**/*.json'
 | `2` | A pin could not be checked, or strata checked nothing. |
 
 The script handles the issues first, so a scheduled job shows the state too.
-When strata checked nothing, the script exits `2` and touches no issue. It does
-so when strata prints nothing, also with a `jq` older than 1.7.1.
+When strata checked nothing, the script exits `2` and touches no issue. The
+script also exits `2` when strata prints nothing, with each `jq` from 1.6.
 
 ## On a host
 
