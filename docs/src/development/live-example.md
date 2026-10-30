@@ -24,6 +24,7 @@ show.
 | `who.sh` | What `verify --who` reads from the audit log, for an edit through the API and for an update that a cluster accepts (#69). Stage 1 needs the profiles; stage 2 needs cluster A. |
 | `draft.sh` | A draft of the add-on version: a `PUT` with no publish, what `<uid>@draft` records, what each route of Palette gives while the draft waits, and the publish (#155). It needs the profiles, and no cluster. |
 | `scope.sh` | A profile of the tenant with the name and the version of the release profile: what the listing, the search, and the document of Palette say, and what `list` and `snapshot` do with the ref that two scopes answer (#113). It needs the profiles, and no cluster. |
+| `release.sh` | The route that gives the release of Palette: it answers a call with no key, and refuses a call with the key (#146). It needs the key and nothing else. |
 | `pending.sh` | When Palette says that an update waits for a cluster, and what a record of `cluster:<uid>@pending` holds (#70, #78). It needs cluster A. |
 | `macros.sh` | What a new value of a project macro does to a version, to the copy of a cluster, and to a record (#72). It needs cluster A. |
 | `macro-repave.sh` | Whether a new macro value in an infrastructure layer replaces the nodes of a cluster (#72). It needs cluster A, and it leaves a repave that waits for approval: run `just live-down` after it. |
@@ -184,6 +185,7 @@ each.
 | `pack-states.sh` | nothing that stays: a probe profile, deleted at once | the baseline |
 | `validate-packs.sh` | nothing that stays: stage 4 makes one profile, and deletes it | the baseline |
 | `export.sh` | nothing; it only reads | the baseline |
+| `release.sh` | nothing; it only reads | the baseline |
 | `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
 | `knurl.sh` | nothing; it only reads | the baseline |
 | `registry.sh` | the images of the example's own registries, a tag that it deletes and pushes again, and the profiles that pin them | the shared registries, the clusters, the release and add-on versions |
@@ -547,6 +549,7 @@ just live-pack-states                                                          #
 just live-knurl                                                                # #66, read-only; the instance checks need just live-up
 just live-who                                                                  # #69, stage 2 needs just live-up
 just live-draft                                                                # #155, needs just live-profiles
+just live-release                                                              # #146, needs only the key
 just live-pending                                                              # #70, needs just live-up
 just live-macros                                                               # #72, needs just live-up
 just live-macro-repave                                                         # #72, needs just live-up; leaves a repave that waits, so live-down follows

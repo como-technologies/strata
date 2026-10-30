@@ -120,8 +120,9 @@ ledger.
 
 A rule can name the Palette releases it applies to (`releases: "<4.11"`). A run
 with `--release 4.10` skips the rules of other releases; a run without it runs
-every rule, because a tenant key cannot read the release from Palette. To see
-what a release changes:
+every rule, because a tenant key cannot read the release from Palette: see
+[The release of Palette](../internals/palette/limits.md#the-release-of-palette).
+To see what a release changes:
 
 ```bash
 strata preflight --rules --cloud gke --release 4.10 --json | jq -r '.rules[].id' | sort > r410.txt

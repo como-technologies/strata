@@ -513,6 +513,18 @@ source for
 | `tenant-list`, `tenant-list-no-mark` | 0 | #113: at tenant scope, `list --json` gives `scope` `tenant` for the version, and its row has no mark |
 | `tenant-delete` | 0 | #113: the delete of the tenant profile, with no `ProjectUid` |
 
+## release.sh
+
+Read-only. It needs the key and nothing else: no profile and no cluster. It
+calls `GET /v1/mgmt/app/version` twice, once with no key and once with the key.
+This is the source for
+[The release of Palette](../internals/palette/limits.md#the-release-of-palette).
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `release-no-key`, `release-no-key-says` | 0 | #146: a call with no key answers 200, and the body holds `version.installedVersion`. No result yet. |
+| `release-with-key`, `release-with-key-says` | 2, 0 | #146: a call with the `ApiKey` header answers HTTP 500, so a tenant key cannot read the release. No result yet. |
+
 ## pending.sh
 
 Read-write. It needs the example at its baseline with cluster A. Each stage

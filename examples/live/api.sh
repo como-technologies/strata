@@ -131,6 +131,10 @@
 #       deletes it. It is a credential: do not save it, and do not print it to a log.
 #   api.sh get PATH
 #       GET one path, `/v1/...`, and print the answer. A read, for a check.
+#   api.sh app-version [--no-key]
+#       GET /v1/mgmt/app/version, the one route that gives the release of Palette, and print the
+#       answer. With --no-key, send no ApiKey header. Neither call sends a ProjectUid header. A
+#       read, for a check. Exit 2 unless the status is 2xx.
 #   api.sh export PROFILE_UID [yaml|json]
 #       Print the export file of a profile version: GET /v1/clusterprofiles/{uid}/export. A read.
 #       Palette sends the file only to a request that accepts a file; to a request that accepts
@@ -154,12 +158,13 @@ case "$API" in http://*|https://*) ;; *) API="https://$API" ;; esac
 API=${API%/}
 PROJECT=${PALETTE_PROJECT_UID:-$(from_env_file PALETTE_PROJECT_UID)}
 
-# call METHOD PATH [BODYFILE] -> the response body on stdout; exit 2 unless the status is 2xx
+# call METHOD PATH [BODYFILE] -> the response body on stdout; exit 2 unless the status is 2xx.
+# An empty KEY sends no ApiKey header, and an empty PROJECT sends no ProjectUid header.
 call() {
   local method=$1 path=$2 body=${3:-} out status
   out=$(mktemp)
   status=$(curl -sS -o "$out" -w '%{http_code}' -X "$method" \
-    -H "ApiKey: $KEY" -H "Accept: ${ACCEPT:-application/json}" -H 'Content-Type: application/json' \
+    ${KEY:+-H "ApiKey: $KEY"} -H "Accept: ${ACCEPT:-application/json}" -H 'Content-Type: application/json' \
     ${PROJECT:+-H "ProjectUid: $PROJECT"} ${body:+--data-binary "@$body"} "$API$path")
   if [ "${status:0:1}" != 2 ]; then
     echo "api.sh: $method $path answered HTTP $status: $(head -c 300 "$out")" >&2
@@ -446,6 +451,17 @@ probe_profile() {
   echo "refused HTTP $status $(jq -r '"\(.code): \(.message)"' "$out" 2>/dev/null || head -c 300 "$out")"
   rm -f "$out"
   return 1
+}
+
+# app_version [--no-key]: the answer of the route that gives the release of Palette
+app_version() {
+  local key=$KEY
+  case "${1:-}" in
+    "") ;;
+    --no-key) key="" ;;
+    *) die "usage: api.sh app-version [--no-key]" ;;
+  esac
+  KEY=$key PROJECT="" call GET /v1/mgmt/app/version
 }
 
 delete_named() {
@@ -787,6 +803,7 @@ case "${1:-}" in
   macro-delete) shift; macro_delete "$@" ;;
   get-kubeconfig) shift; get_kubeconfig "$@" ;;
   get) shift; [ -n "${1:-}" ] || die "usage: api.sh get PATH"; call GET "$1" ;;
+  app-version) shift; app_version "$@" ;;
   export) shift; [ -n "${1:-}" ] || die "usage: api.sh export PROFILE_UID [yaml|json]"
     ACCEPT=application/octet-stream call GET "/v1/clusterprofiles/$1/export?format=${2:-yaml}" ;;
   patch) shift; patch "$@" ;;

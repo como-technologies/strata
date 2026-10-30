@@ -249,6 +249,10 @@ live-draft: build
 live-scope: build
     examples/live/scope.sh
 
+# The release test: the route that gives the release of Palette answers a call with no key, and refuses a call with the key (#146). Needs only the key; writes nothing.
+live-release: build
+    examples/live/release.sh
+
 # The pending update test: when Palette says an update waits for cluster A, what a record, the listing, and compare say, and what cluster:<uid>@pending holds (#70, #78). Needs live-up; undoes each change.
 live-pending: build
     examples/live/pending.sh
