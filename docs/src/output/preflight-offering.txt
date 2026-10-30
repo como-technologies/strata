@@ -1,0 +1,6 @@
+$ strata preflight cluster-zone.json --cloud aws --no-exec --tier palette --rule instance-offering --strict --quiet | sed -n '4,8p'
+  PROBE FAIL    instance-offering            The instance type is offered in each zone of the pool            1 ms
+                pool cp-pool: the type t3.xlarge is not offered in the zone us-east-2c
+                pool worker-pool: the type t3.xlarge is not offered in the zone us-east-2c
+                ran: GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=64f3000000000000000000a1 -> HTTP 200
+                reproduce: aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values=t3.xlarge --region us-east-2 --query 'InstanceTypeOfferings[].Location' --output text   # each zone of the pools must be in the list

@@ -27,7 +27,11 @@ The checks, in order:
    size inside them. For a GKE worker pool, a size that is not a multiple of 3
    is refused here, as a 400 `InvalidParam` "Node pool size should be multiple
    of 3".
-2. The name: valid, and not in use. The credit of the tenant.
+2. The name: valid, and not in use. The cluster limit of the tenant: a trial
+   tenant has a limit on its active clusters, and the route refuses a create
+   over it with `FreemiumActiveClusterLimitExceeded`. The limit holds for a
+   trial tenant alone. `GET /v1/tenants/{tenantUid}/freemiumUsage` gives the
+   usage. `palette-validate` reports the refusal.
 3. The cloud: for AWS, the zones of each worker pool inside the zones of the
    control plane, and with dynamic placement one zone or more for each worker
    pool. For EKS, the KMS key when encryption is on. For edge-native and
@@ -381,11 +385,35 @@ cloud with the credentials of the cloud account.
 | --- | --- | --- | --- |
 | `POST /v1/clouds/aws/properties/validate` | `cloudAccountUid`, `region`, `sshKeyName` | The account is not Pod Identity; the key pair exists. | On an AWS create. |
 | `POST /v1/clouds/eks/properties/validate` | `cloudAccountUid`, `name`, `region`, `sshKeyName`, `vpcId`, `subnets[]` | The key pair; `eks:DescribeCluster` on the name; with a VPC, no public subnet without `MapPublicIpOnLaunch`. | On an EKS create. |
-| `POST /v1/clouds/gcp/properties/validate` | `cloudAccountUid`, `projectId`, `region`, `azs[]` | The project, with Cloud Resource Manager; each zone, with Compute. | On a GCP create. Not on a GKE create. |
+| `POST /v1/clouds/gcp/properties/validate` | `cloudAccountUid`, `projectId`, `region`, `azs[]` | The project, with Cloud Resource Manager; each zone, with Compute. `gcp-properties` calls it. | On a GCP create. Not on a GKE create. |
 | `POST /v1/clouds/gcp/azs/validate` | `uid`, `project`, `region`, `azs[]` | Each zone is a zone of the region. | On demand. |
 | `POST /v1/clouds/aws/s3/validate` | a bucket and credentials | The bucket lists. | On demand. |
 
 No such route exists for Azure, MAAS, or vSphere.
+
+## The list routes
+
+Two routes list what the cloud account holds in a region. They refuse no cluster.
+Strata reads each list and compares it with the entity.
+
+| Route | Gives | Read by |
+| --- | --- | --- |
+| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | Each instance type of the region: `name`, `cpu`, `memory`, `gpu`, `price`, `supportedArchitectures[]`, and `nonSupportedZones[]`. | `instance-offering` |
+| `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `keyNames[]`: the key pairs of the account in the region. | `ssh-key-pair` |
+
+`nonSupportedZones` of a type names the zones that do not offer it. So one
+request answers every pool of the entity: a pool fails when its type names a
+zone of the pool, or when the region does not list the type. Palette fills
+`nonSupportedZones` for most types, and a type that the list does not mark can
+still fail in the cloud.
+
+The property route of EKS checks the key pair with a `vpcId` alone. An EKS
+cluster with a dynamic VPC reaches no check of the key pair, and the key pair
+route answers it. The console calls the property route of AWS on an AWS
+create, and that route checks the key pair.
+
+No run calls these two routes. The stand-in of the book models them: see
+[What no run covers](limits.md#what-no-run-covers).
 
 ## The account routes
 
@@ -399,10 +427,11 @@ of a cloud account calls it. A cluster create does not.
 ## What no route checks
 
 The routes check the entity and the cloud account. A policy, a permission, a
-cloud API that is off, an instance type in a zone, a quota, the count of zones
-of EKS, and the release channel of GKE are checks of the cloud, and no route
-runs them. Palette does not ask the cloud to simulate a policy or to test a
-permission. `strata preflight` runs the tool of the cloud for some of
+cloud API that is off, a quota, the count of zones of EKS, and the release
+channel of GKE are checks of the cloud, and no route runs them. A route lists
+the zones that do not offer an instance type: see
+[The list routes](#the-list-routes). Palette does not ask the cloud to simulate
+a policy or to test a permission. `strata preflight` runs the tool of the cloud for some of
 these, and prints `NOT CHECKED` with the command for the rest: see
 [What strata preflight does not check](limits.md#what-strata-preflight-does-not-check).
 

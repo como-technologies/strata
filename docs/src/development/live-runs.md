@@ -1037,6 +1037,7 @@ the example at its baseline with cluster A.
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
 | `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request, and in the tier of Palette, which calls the validate routes and creates nothing. |
 | `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it (no result yet) |
+| `preflight-offering` | 0 | #143: `instance-offering` asks the instance type route of the region with the account of the body, one request for all its pools, and passes: the type of the release body is offered in its zone (no result yet) |
 | `preflight-fault` | 1 | #385: a body with a cloud account that the project lacks fails the gate `--strict`. |
 | `nightly` | 0 | #81: `verify-report.sh` finds every record unchanged |
 | `fleet`, `fleet-has-a` | 0 | #81: the fleet of a label holds cluster A |
@@ -1179,10 +1180,21 @@ this table names the faults.
 
 | Engine | The faults made on purpose, by rule id |
 |---|---|
-| `gke` | `gke-pool-multiple-3`, `palette-validate` (a pool of 4), `gke-no-release-channel`, `gke-no-gpu`, `gke-autopilot`, `gcp-name-length`, `account-missing` |
-| `eks` | `eks-one-zone`, `eks-worker-needed`, `update-strategy-eks`, `api-endpoint-reach`, `account-missing` |
-| `aws` | `worker-cpu-floor`, `palette-validate` (one worker of four cores), `api-endpoint-reach`, `account-missing` |
-| `gcp` | `worker-cpu-floor`, `palette-validate`, `gcp-name-length`, `account-missing` |
+| `gke` | `gke-pool-multiple-3`, `palette-validate` (a pool of 4), `gke-no-release-channel`, `gke-no-gpu`, `gke-autopilot`, `gcp-name-length`, `account-missing`, `instance-offering` |
+| `eks` | `eks-one-zone`, `eks-worker-needed`, `update-strategy-eks`, `api-endpoint-reach`, `account-missing`, `instance-offering`, `ssh-key-pair` |
+| `aws` | `worker-cpu-floor`, `palette-validate` (one worker of four cores), `api-endpoint-reach`, `account-missing`, `instance-offering`, `ssh-key-pair` |
+| `gcp` | `worker-cpu-floor`, `palette-validate`, `gcp-name-length`, `account-missing`, `instance-offering`, `gcp-properties` |
+
+Three rules of the plan read a list of the cloud account from Palette (#143). For
+`instance-offering`, the plan reads the instance type route. It takes the first
+type with a zone in `nonSupportedZones`, and puts the first pool in that zone.
+The fault of `ssh-key-pair` is a key pair that the account lacks. The fault of
+`gcp-properties` is a project that the account cannot read.
+
+The check `instance-types-shape` expects `instanceTypes[]` with `name` and
+`nonSupportedZones[]`. The check `key-pairs-shape` expects `keyNames[]` with the
+key pair of the entity. A run that makes a fault puts `caught` in the ledger, and
+the clean entity of the same run puts `passed` (no result yet).
 
 Part 3 of each run also runs the custom probes of the lab,
 `examples/live/preflight/lab-probes.yaml` (`lab-region`, `lab-name`), beside

@@ -1,0 +1,13 @@
+{
+  "_base": "properties-accepted.json",
+  "_note": "Palette refuses the project: the account cannot read it",
+  "_patch": {
+    "_responses": {
+      "POST /v1/clouds/gcp/properties/validate": {
+        "ok": false,
+        "status": 400,
+        "body": { "message": "the cloud account cannot read the project strata-lab" }
+      }
+    }
+  }
+}

@@ -168,6 +168,10 @@ the body and create nothing. Here Palette refuses the worker pool: one
 {{#include output/loop-preflight-live.txt}}
 ```
 
+The live tier also reads the instance types of the region and the key pairs of the
+account. The type, its zone, and the key pair of this body are right, so
+`instance-offering` and `ssh-key-pair` pass.
+
 The fix is a second worker. Change the file, and ask again.
 
 **Follow along.** `just playground loop-4` is the tenant where Palette finds no

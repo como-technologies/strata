@@ -413,6 +413,8 @@ rules:
       minutes in #66, about 5 minutes in #81. A build that pins a version pushed seconds before
       does not find it. The watch of a cluster build sees no registry, so strata-preflight has no
       check; `strata packs` shows when the version is listed.
+      `GET /v1/registries/pack/{uid}/sync/status` gives the last sync of one registry. The world of a
+      watch holds no registry, so the row stays a watch row.
     reproduce:
       - "strata packs <pack> --registry <registry> --latest"
       - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/registries/pack/<uid>/sync/status\""

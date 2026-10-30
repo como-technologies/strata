@@ -134,3 +134,18 @@ fetch time and the same flag. For a cluster, it also saves the notifications,
 with the values of each pack masked, and the role bindings and the namespaces:
 see
 [The saved answers of Palette](../commands/snapshot/no-network.md#the-saved-answers-of-palette).
+
+## The checks of `strata preflight`
+
+`strata preflight` with a key asks Palette about the cloud account of the entity.
+Each request below changes nothing, and the counts at the top of this page do not
+include them. `strata preflight --rules --json` lists the request of every rule.
+
+| Request | Read by | Gives |
+| --- | --- | --- |
+| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | `instance-offering` | Each instance type of the region, with `name` and `nonSupportedZones[]`, the zones that do not offer the type. One request answers every pool. |
+| `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `ssh-key-pair` | `keyNames[]`: the key pairs of the account in the region. |
+| `POST /v1/clouds/gcp/properties/validate` | `gcp-properties` | `204` when the account reads the project and each zone of the pools. The body has `cloudAccountUid`, `projectId`, `region`, and `azs[]`. |
+
+See [The list routes](../internals/palette/validate-routes.md#the-list-routes) and
+[The property routes](../internals/palette/validate-routes.md#the-property-routes).

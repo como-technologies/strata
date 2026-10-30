@@ -1,0 +1,17 @@
+{
+  "_base": "instance-zone-offered.json",
+  "_note": "the region lists no t3.xlarge",
+  "_patch": {
+    "_responses": {
+      "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "instanceTypes": [
+            { "name": "t3.large", "cpu": 2, "memory": 8, "nonSupportedZones": [], "supportedArchitectures": ["x86_64"] }
+          ]
+        }
+      }
+    }
+  }
+}

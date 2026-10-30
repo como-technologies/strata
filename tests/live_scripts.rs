@@ -1629,6 +1629,100 @@ fn preflight_plan_keeps_a_result_the_ledger_does_not_know_out_of_the_entry() {
     );
 }
 
+/// Run `offering_edit` of preflight-plan.sh for `engine`, against a `api.sh` that answers every
+/// `get` with the file `answer`. Gives the output, and the path that the function asked for.
+fn offering_edit(engine: &str, region: &str, answer: &str) -> (Output, String) {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    let start = script.find("\noffering_edit() {").unwrap() + 1;
+    let end = start + script[start..].find("\n}\n").unwrap() + 3;
+    let function = &script[start..end];
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("answer.json"), answer).unwrap();
+    executable(
+        &dir.path().join("api.sh"),
+        "#!/usr/bin/env bash\necho \"$*\" > asked.txt\ncat answer.json\n",
+    );
+    let o = Command::new("bash")
+        .arg("-c")
+        .arg(format!(
+            "live={live}; engine={engine}; region={region}; A=acc-1\n{function}\noffering_edit",
+            live = dir.path().display()
+        ))
+        .current_dir(dir.path())
+        .output()
+        .unwrap();
+    let asked = std::fs::read_to_string(dir.path().join("asked.txt")).unwrap_or_default();
+    (o, asked.trim().to_string())
+}
+
+/// The fault of `instance-offering` in the plan of the lab (#143) comes from the instance type
+/// route: the first type that has a zone in `nonSupportedZones`, for the region and the account of
+/// the entity, on the route of the cloud of the engine.
+#[test]
+fn preflight_plan_makes_the_fault_of_instance_offering_from_the_instance_type_route() {
+    let answer = r#"{"instanceTypes":[
+        {"name":"t3.large","nonSupportedZones":[]},
+        {"name":"t3.xlarge","nonSupportedZones":["us-east-2c","us-east-2d"]},
+        {"name":"m5.large","nonSupportedZones":["us-east-2a"]}]}"#;
+    for (engine, region, path) in [
+        (
+            "aws",
+            "us-east-2",
+            "get /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-1",
+        ),
+        (
+            "eks",
+            "us-east-2",
+            "get /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-1",
+        ),
+        (
+            "gke",
+            "us-east1",
+            "get /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-1",
+        ),
+    ] {
+        let (o, asked) = offering_edit(engine, region, answer);
+        assert!(o.status.success(), "{engine}: {}", text(&o.stderr));
+        assert_eq!(asked, path, "{engine}");
+        // the edit puts the first pool of the clean entity in the first zone that the type lacks
+        let edit = text(&o.stdout);
+        let pool = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(
+            pool.path(),
+            r#"{"spec":{"machinepoolconfig":[{"cloudConfig":{"instanceType":"t3.small","azs":["us-east-2a"]}}]}}"#,
+        )
+        .unwrap();
+        let made = Command::new("jq")
+            .args(["-c", edit.trim()])
+            .arg(pool.path())
+            .output()
+            .unwrap();
+        assert_eq!(
+            text(&made.stdout).trim(),
+            r#"{"spec":{"machinepoolconfig":[{"cloudConfig":{"instanceType":"t3.xlarge","azs":["us-east-2c"]}}]}}"#,
+            "{engine}"
+        );
+    }
+}
+
+#[test]
+fn preflight_plan_makes_no_fault_of_instance_offering_when_the_route_lists_no_zone_that_a_type_lacks()
+ {
+    for answer in [
+        r#"{"instanceTypes":[{"name":"t3.large","nonSupportedZones":[]}]}"#,
+        "{}",
+    ] {
+        let (o, _) = offering_edit("aws", "us-east-2", answer);
+        assert_eq!(o.status.code(), Some(1), "{answer}");
+        assert!(
+            text(&o.stderr).contains("the route lists no type with a zone in nonSupportedZones"),
+            "{}",
+            text(&o.stderr)
+        );
+        assert!(text(&o.stdout).is_empty(), "no edit: {}", text(&o.stdout));
+    }
+}
+
 #[test]
 fn aws_cleanup_deletes_nothing_without_yes_and_names_what_it_would() {
     let (o, calls) = aws_cleanup(&["fred", "us-east-2"]);
@@ -3609,6 +3703,11 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
         r#"{"checks":[{"id":"template-outside","verdict":"passed","requests":[{"ran":"GET /v1/clusterprofiles/r-1","answer":"HTTP 200"}]}]}"#,
     );
     stage.strata(
+        "preflight build.json --cloud aws --tier palette --rule instance-offering --json --quiet",
+        0,
+        r#"{"checks":[{"id":"instance-offering","verdict":"passed","ran":"GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-1","answer":"HTTP 200"}]}"#,
+    );
+    stage.strata(
         "preflight build-fault.json --cloud aws --tier static,palette --no-exec --strict --quiet",
         1,
         "FAIL: 1 check(s) failed: account-missing\n",
@@ -3626,6 +3725,7 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
             "preflight-static",
             "preflight-live",
             "preflight-each",
+            "preflight-offering",
             "preflight-fault",
         ],
     );

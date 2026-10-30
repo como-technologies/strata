@@ -59,7 +59,8 @@ rules:
       Engine API (`gke-api-off`) and the Compute API. The GCP property route of Palette calls
       Cloud Resource Manager, and a GCP IaaS create calls that route; a GKE create does not. The
       #90 GKE clusters were built in a project with Cloud Resource Manager off, so a missing API
-      here is a warning to read, not a proof.
+      here is a warning to read, not a proof. `gcp-properties` asks the property route of Palette for
+      the project and the zones, with a key alone.
     check:
       kind: exec
       needs: [gcloud]
@@ -92,6 +93,44 @@ rules:
     tests:
       - fault: fixtures/gke/apis-off.json
         clean: fixtures/gke/clean.json
+
+  - id: gcp-properties
+    title: The properties route accepts the project and the zones of a GCP cluster
+    engines: [gcp]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null and (.entity.spec.cloudConfig.project // "") != ""
+    what: |
+      `POST /v1/clouds/gcp/properties/validate` reads the project with Cloud Resource Manager and
+      each zone with Compute, under the cloud account. Palette refuses a project that the account
+      cannot read, and a zone that the project does not hold. The console calls the route on a GCP
+      create, and not on a GKE create. The check sends the project, the region, and the zones of
+      every pool, and fails when Palette refuses them.
+    check:
+      kind: palette
+      method: POST
+      path: /v1/clouds/gcp/properties/validate
+      body: |
+        { cloudAccountUid: .entity.spec.cloudAccountUid,
+          projectId: .entity.spec.cloudConfig.project,
+          region: .entity.spec.cloudConfig.region,
+          azs: ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.azs // [])[] ] | unique) }
+      expr: |
+        if .response.ok then []
+        else ["Palette refuses the project or a zone of the GCP cluster: \(.response.body.code // .response.status): \(.response.body.message // "")"] end
+    reproduce:
+      - "gcloud projects describe {{ .entity.spec.cloudConfig.project }} --format 'value(projectId,lifecycleState)'"
+      - "gcloud compute zones list --project {{ .entity.spec.cloudConfig.project }} --filter 'region:{{ .entity.spec.cloudConfig.region }}' --format 'value(name,status)'"
+    fix:
+      owner: palette
+      text: Call the properties route of GCP from the cluster validate route.
+    evidence:
+      - kind: source
+        note: the properties route of GCP reads the project with Cloud Resource Manager and each zone with Compute
+    tests:
+      - fault: fixtures/gcp/properties-refused.json
+        clean: fixtures/gcp/properties-accepted.json
 
   - id: aws-region-not-enabled
     title: The region of the cluster is enabled for the AWS account

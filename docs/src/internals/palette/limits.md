@@ -75,6 +75,9 @@ These are open:
   the `packValues` of the version gets a repave. No run applies such a version
   to a cluster. See
   [A variable in a field that repaves](profiles.md#a-variable-in-a-field-that-repaves).
+- The answer of the instance type route and of the key pair route. No run calls
+  them, so the stand-in of the book models them. See
+  [The list routes](validate-routes.md#the-list-routes).
 
 ## What strata preflight does not check
 
@@ -84,9 +87,6 @@ runs the tool of the cloud (`aws`, `gcloud`) when it is on the machine, and is
 every machine, because no check exists yet or the entity does not hold what the
 check needs; the report prints each one with its reproduce lines:
 
-- An instance type that a zone does not offer (`instance-offering`): the zone
-  of a pool is in the entity, and the check needs one call for each pair of
-  type and zone.
 - The quotas of the cloud (`aws-quotas`, `eks-quotas`, `gcp-quotas`,
   `aws-sg-rules`): the usage is not in the entity.
 - The image Palette builds for an OS and Kubernetes version on GCP
@@ -116,9 +116,7 @@ is in the catalog.
 | --- | --- | --- |
 | identity | A `secret` AWS account with rotated keys, or a disabled GCP key | `aws sts get-caller-identity` under the account; `gcloud iam service-accounts keys list` |
 | cloud services | The service-linked roles a first EKS create needs | `aws iam get-role --role-name AWSServiceRoleForAmazonEKS`, and the node group one |
-| quotas | The cluster limit of the tenant or the project that the create path enforces | no route gives it |
 | networking | The public addresses of Palette in the allowlist of a private endpoint; `enableDnsSupport` and `enableDnsHostnames` on a static VPC | `aws ec2 describe-vpc-attribute` |
-| compute | The SSH key pair on EKS with a dynamic VPC | `aws ec2 describe-key-pairs`; the property route runs with a `vpcId` alone |
 | kubernetes | An EKS version in extended support | the `status` of `aws eks describe-cluster-versions` |
 | storage | A `kmsKeyId` in the parameters of a StorageClass | `aws kms describe-key` |
 | images | The sync status of the registry of each pack, before a build | `status.sync` of `GET /v1/registries/pack/summary` |
@@ -204,6 +202,20 @@ makes no claim that depends on them.
   only in its own log. So `--raw-dir` masks the values before it saves the
   notifications: see
   [The saved answers of Palette](../../commands/snapshot/no-network.md#the-saved-answers-of-palette).
+- **The zones that do not offer an instance type.** The instance type route of a
+  region lists each type with `nonSupportedZones`, the zones that do not offer
+  it. Palette fills the list for most types. `instance-offering` reads it, for
+  AWS, EKS, GCP, and GKE. A type that the list
+  does not mark can still fail in the cloud.
+- **The key pairs of an account.** `GET /v1/clouds/aws/regions/{region}/keypairs`
+  lists `keyNames` of the account in the region. The property route of EKS
+  checks the key pair with a `vpcId` alone, so an EKS cluster with a dynamic VPC
+  reaches no check of it. `ssh-key-pair` reads the list.
+- **The cluster limit of the tenant.** The limit holds for a trial tenant alone.
+  The cluster validate route refuses a create over the limit with
+  `FreemiumActiveClusterLimitExceeded`, so `palette-validate` reports it.
+  `GET /v1/tenants/{tenantUid}/freemiumUsage` gives the usage. See
+  [The checks of the route](validate-routes.md#post-v1spectroclusterscloudtypevalidate).
 
 ## Where these answers come from
 

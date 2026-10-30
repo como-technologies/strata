@@ -1,0 +1,4 @@
+$ strata preflight cluster-key.json --cloud aws --no-exec --tier palette --rule ssh-key-pair --strict --quiet | sed -n '4,6p'
+  PROBE FAIL    ssh-key-pair                 The SSH key pair of the cluster is a key pair of the accoun…     1 ms
+                sshKeyName retired is not a key pair of the account in region us-east-2; Palette lists 2 key pair(s)
+                ran: GET /v1/clouds/aws/regions/us-east-2/keypairs?cloudAccountUid=64f3000000000000000000a1 -> HTTP 200

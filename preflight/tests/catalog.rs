@@ -724,3 +724,131 @@ fn a_rule_with_each_asks_for_every_host_of_every_pool() {
         ]
     );
 }
+
+/// The messages of `instance-offering` name the pool, the type, and the zone (#143), also when the
+/// region does not list the type, and the rule asks one request for every pool.
+#[test]
+fn instance_offering_names_the_pool_the_type_and_the_zone_for_aws_and_gcp() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("instance-offering").unwrap();
+    for (fixture, ran, expected) in [
+        (
+            "fixtures/aws/instance-zone-not-offered.json",
+            "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1",
+            vec![
+                "pool cp-pool: the type t3.xlarge is not offered in the zone us-east-2a",
+                "pool worker-pool: the type t3.xlarge is not offered in the zone us-east-2a",
+            ],
+        ),
+        (
+            "fixtures/aws/instance-type-not-listed.json",
+            "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1",
+            vec![
+                "pool cp-pool: the type t3.xlarge is not in the list of region us-east-2",
+                "pool worker-pool: the type t3.xlarge is not in the list of region us-east-2",
+            ],
+        ),
+        (
+            "fixtures/gcp/instance-zone-not-offered.json",
+            "GET /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-gcp-1",
+            vec![
+                "pool cp-pool: the type e2-standard-4 is not offered in the zone us-east1-b",
+                "pool worker-pool: the type e2-standard-4 is not offered in the zone us-east1-b",
+            ],
+        ),
+    ] {
+        let path = catalog::rules_dir().join(fixture);
+        let (backend, world) = FixtureBackend::split(fixture::load(&path).unwrap());
+        let out = probe::run_check(rule, &world, &backend, &Jq::new());
+        assert_eq!(
+            out.verdict,
+            Verdict::Failed,
+            "{fixture}: {:?}",
+            out.messages
+        );
+        assert_eq!(out.messages, expected, "{fixture}");
+        assert_eq!(
+            out.ran.as_deref(),
+            Some(ran),
+            "{fixture}: one request answers every pool"
+        );
+    }
+}
+
+/// A pool with no zone, as a GKE pool of a region, is checked against the list of the region alone.
+#[test]
+fn instance_offering_checks_a_pool_with_no_zone_against_the_list_of_the_region() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("instance-offering").unwrap();
+    let path = catalog::rules_dir().join("fixtures/gcp/instance-zone-not-offered.json");
+    let mut doc = fixture::load(&path).unwrap();
+    for pool in doc["entity"]["spec"]["machinepoolconfig"]
+        .as_array_mut()
+        .unwrap()
+    {
+        pool["cloudConfig"]["azs"] = serde_json::Value::Null;
+    }
+    let (backend, world) = FixtureBackend::split(doc);
+    let out = probe::run_check(rule, &world, &backend, &Jq::new());
+    assert_eq!(out.verdict, Verdict::Passed, "{:?}", out.messages);
+}
+
+/// The check of `instance-offering` fails, and says so, when Palette refuses the request or gives
+/// no list: a wrong answer is never a pass.
+#[test]
+fn instance_offering_fails_when_palette_refuses_or_gives_no_list_of_types() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("instance-offering").unwrap();
+    let path = catalog::rules_dir().join("fixtures/aws/instance-zone-offered.json");
+    let key = "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1";
+    for (answer, expected) in [
+        (
+            serde_json::json!({"ok": false, "status": 403, "body": {"code": "AccessDenied", "message": "no"}}),
+            "Palette cannot list the instance types of region us-east-2: AccessDenied: no",
+        ),
+        (
+            serde_json::json!({"ok": true, "status": 200, "body": {}}),
+            "Palette gave no list of instance types for region us-east-2",
+        ),
+    ] {
+        let mut doc = fixture::load(&path).unwrap();
+        doc["_responses"][key] = answer;
+        let (backend, world) = FixtureBackend::split(doc);
+        let out = probe::run_check(rule, &world, &backend, &Jq::new());
+        assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+        assert_eq!(out.messages, [expected]);
+    }
+}
+
+/// The message of `ssh-key-pair` names the key pair and the region, for AWS and for EKS with a
+/// dynamic VPC (#143).
+#[test]
+fn ssh_key_pair_names_the_key_pair_and_the_region_for_aws_and_eks() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("ssh-key-pair").unwrap();
+    for fixture in [
+        "fixtures/aws/ssh-key-missing.json",
+        "fixtures/eks/ssh-key-missing.json",
+    ] {
+        let path = catalog::rules_dir().join(fixture);
+        let (backend, world) = FixtureBackend::split(fixture::load(&path).unwrap());
+        assert_eq!(
+            world["entity"]["spec"]["cloudConfig"]["vpcId"], "",
+            "{fixture}: a dynamic VPC"
+        );
+        let out = probe::run_check(rule, &world, &backend, &Jq::new());
+        assert_eq!(
+            out.verdict,
+            Verdict::Failed,
+            "{fixture}: {:?}",
+            out.messages
+        );
+        assert_eq!(
+            out.messages,
+            [
+                "sshKeyName iris-on-palette is not a key pair of the account in region us-east-2; Palette lists 1 key pair(s)"
+            ],
+            "{fixture}"
+        );
+    }
+}
