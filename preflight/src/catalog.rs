@@ -83,6 +83,19 @@ mod tests {
     }
 
     #[test]
+    fn each_reproduce_line_names_the_default_url_that_strata_connects_to() {
+        let mut found = 0;
+        for (section, text) in SECTIONS {
+            for part in text.split("${PALETTE_API:-").skip(1) {
+                let url = part.split('}').next().unwrap_or_default();
+                assert_eq!(url, strata::config::DEFAULT_BASE_URL, "{section}");
+                found += 1;
+            }
+        }
+        assert!(found > 0, "no rule names the default URL");
+    }
+
+    #[test]
     fn the_ledger_of_the_binary_parses() {
         crate::confidence::Ledger::parse(LEDGER, Path::new("evidence/runs.yaml")).unwrap();
     }
