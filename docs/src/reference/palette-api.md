@@ -76,7 +76,7 @@ into a condition of the search: the property `tags`, with the values
 | `GET /v1/clustergroups/{uid}` | `spec.clusterProfileTemplates`: the profiles that the group pins for its virtual clusters. `spec.clustersConfig`: the config that the group gives each virtual cluster, for the `policy` tier. `verify` reads `status.isActive`, and takes a 404 as a group that is gone. The second reading of `consumers` reads it for each group, to find the groups that pin the version. |
 | `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}` | `spec.published.content`: the copy of a manifest that a cluster group holds, by the uid that its template names. |
 | `GET /v1/clustergroups/hostCluster/metadata` | The name and the uid of each cluster group: the uid of a group name, and for the second reading of `consumers`, the groups to read, at tenant scope and at the scope of the key. |
-| `POST /v1/dashboard/clustergroups/{uid}/virtualClusters?limit=50` | The virtual clusters of the group, every page: `members[]` of the record, and for the second reading of `consumers`, the virtual clusters of each group that pins the version. The body has no filter. |
+| `POST /v1/dashboard/clustergroups/{uid}/virtualClusters?limit=50` | The virtual clusters of the group, every page: `members[]` of the record, and of the live record that `verify` makes. For the second reading of `consumers`, the virtual clusters of each group that pins the version. The body has no filter. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` and `GET /v1/clusterprofiles/{uid}/variables` | For an edge host and a cluster group: the manifests and the variable definitions of each profile. |
 | `GET /v1/appProfiles/{uid}` | The metadata and the version of an app profile, and `status.inUseApps`: the app deployments that `consumers` lists. |
 | `GET /v1/appDeployments/{uid}` | One app deployment, for `consumers` of an app profile: its state, and the version its copy names. |
@@ -115,6 +115,10 @@ did not name: [consumers](../commands/consumers.md) says why, and
 `consumers` reads `GET /v1/appDeployments/{uid}` for each app deployment that
 the app profile lists, in its own project, and nothing more. `verify` on a
 cluster record reads each profile that the cluster runs.
+
+A command reads the project listing of a scope one time, and each registry
+listing of a scope one time. `behind` connects one time for each project of its
+pins, and keeps the registry listings of that project for all its pins.
 
 Palette serves `/v1/packs` 100 entries at a time. Strata raises `offset` by the
 entries it got, until a page is short or `offset` reaches `listmeta.count`.

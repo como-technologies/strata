@@ -1,5 +1,6 @@
 //! `list`: the profiles, clusters, and projects in a scope.
 
+use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashMap};
 
 use clap::ValueEnum;
@@ -348,6 +349,8 @@ where
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
     let home = connect(options.project.as_deref())?;
+    // each project listing of the command is read one time, whoever needs it
+    let mut listings = ProjectListings::default();
     // a query of labels searches every project the key can read, so the listing is at tenant
     // scope, and each cluster names its project
     let project_uid = if options.query.is_empty() {
@@ -378,7 +381,7 @@ where
             list_clusters(items(&listing).chain(nested.iter().flatten()))
         } else {
             let tenant = super::tenant_of(&mut connect)?;
-            let selection = super::select(&options.query, &tenant, progress)?;
+            let selection = super::select_in(&options.query, &tenant, &mut listings, progress)?;
             resolved = Some(selection.resolved);
             query_filter = selection.filter;
             includes_virtual = Some(selection.includes_virtual);
@@ -393,13 +396,17 @@ where
         if options.reads_clusters() {
             read_applied(&mut clusters, &home, &mut connect, progress);
         }
-        // a uid names no project to a reader, so give each line the project's name as well
-        name_projects_of(
-            &mut clusters,
-            |c| &c.project_uid,
-            |c| &mut c.project_name,
-            &home,
-        );
+        // a uid names no project to a reader, so give each line the project's name as well. The
+        // selection of a query names them already, from the listing of the tenant
+        if options.query.is_empty() {
+            name_projects_of(
+                &mut clusters,
+                |c| &c.project_uid,
+                |c| &mut c.project_name,
+                &home,
+                &mut listings,
+            );
+        }
         Some(clusters)
     } else {
         None
@@ -413,7 +420,7 @@ where
     let projects = if options.wants(ListKind::Projects) {
         progress.note("listing projects");
         let tenant = connect(Some(TENANT_SCOPE))?;
-        Some(list_projects(&tenant.project_listing()?))
+        Some(listings.of(&tenant)?.to_vec())
     } else {
         None
     };
@@ -423,17 +430,14 @@ where
     let project_name = if project_uid.is_empty() {
         String::new()
     } else {
-        let named = match &projects {
-            Some(p) => p.clone(),
-            None => home
-                .project_listing()
-                .map(|doc| list_projects(&doc))
-                .unwrap_or_default(),
+        let named = match projects.as_deref() {
+            Some(p) => p,
+            None => listings.of(&home).unwrap_or_default(),
         };
         named
-            .into_iter()
+            .iter()
             .find(|p| p.uid == project_uid)
-            .map(|p| p.name)
+            .map(|p| p.name.clone())
             .unwrap_or_default()
     };
 
@@ -562,25 +566,53 @@ fn scopes_from_search<A: PaletteApi>(
     Ok(())
 }
 
-/// Fill in each row's project name from the project listing. The name is a convenience, so a
-/// listing that cannot be read leaves every name empty and the reports print the uid alone. No
-/// request is made when no row names a project.
+/// The project listing of each scope that a command reads, each read one time.
+///
+/// At tenant scope the listing holds every project that the key can see, and in a project it
+/// holds that project alone. So a client of the same scope gets the listing that an earlier
+/// client of the command read.
+#[derive(Debug, Default)]
+pub(super) struct ProjectListings {
+    by_scope: BTreeMap<Option<String>, Vec<ListedProject>>,
+}
+
+impl ProjectListings {
+    /// The projects that `palette` lists, by name.
+    ///
+    /// # Errors
+    ///
+    /// Each error of the request. The listing of a failed read is not kept, so the next call
+    /// reads it again.
+    pub(super) fn of<A: PaletteApi>(&mut self, palette: &Palette<A>) -> Result<&[ListedProject]> {
+        let scope = palette.project_uid().map(str::to_string);
+        match self.by_scope.entry(scope) {
+            Entry::Occupied(e) => Ok(e.into_mut().as_slice()),
+            Entry::Vacant(v) => Ok(v
+                .insert(list_projects(&palette.project_listing()?))
+                .as_slice()),
+        }
+    }
+}
+
+/// Fill in each row's project name from the project listing of `home`, which `listings` keeps.
+/// The name is a convenience, so a listing that cannot be read leaves every name empty and the
+/// reports print the uid alone. No request is made when no row names a project.
 pub(super) fn name_projects_of<T, A: PaletteApi>(
     rows: &mut [T],
     uid_of: impl Fn(&T) -> &String,
     name_of: impl Fn(&mut T) -> &mut String,
     home: &Palette<A>,
+    listings: &mut ProjectListings,
 ) {
     if rows.iter().all(|r| uid_of(r).is_empty()) {
         return;
     }
-    let Ok(doc) = home.project_listing() else {
+    let Ok(projects) = listings.of(home) else {
         return;
     };
-    let names = list_projects(&doc);
     for r in rows.iter_mut() {
-        if let Some(p) = names.iter().find(|p| p.uid == *uid_of(r)).cloned() {
-            *name_of(r) = p.name;
+        if let Some(p) = projects.iter().find(|p| p.uid == *uid_of(r)) {
+            *name_of(r) = p.name.clone();
         }
     }
 }

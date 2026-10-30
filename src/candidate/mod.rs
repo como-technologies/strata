@@ -24,13 +24,12 @@ mod export;
 mod gaps;
 pub(crate) mod pack;
 mod presets;
-mod resolve;
+pub(crate) mod resolve;
 mod rules;
 
 pub use pack::pack_snapshot;
 pub use presets::warn_preset_options;
 pub use resolve::resolve;
-pub(crate) use resolve::resolve_with;
 pub use rules::{check, load};
 
 /// A candidate profile version. YAML or JSON. Quote versions that YAML would read as numbers,

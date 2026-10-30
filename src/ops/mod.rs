@@ -192,20 +192,23 @@ fn fetched<A: PaletteApi>(
             profile,
             pending,
         } => {
-            let mut raw = palette.fetch_subject(SubjectKind::Cluster, uid, progress)?;
-            if *pending {
-                raw = palette.with_pending(raw)?;
-            }
-            let snap = cluster_snapshot(
-                raw,
+            let raw = palette.fetch_subject(SubjectKind::Cluster, uid, progress)?;
+            let reads = HolderReads {
+                profile: profile.as_deref(),
+                pending: *pending,
+                macros: options.macros,
+                shape: options.shape,
+                raw_dir: options.raw_dir.as_deref(),
+            };
+            holder_snapshot(
                 palette,
+                SubjectKind::Cluster,
+                raw,
                 uid,
-                profile.as_deref(),
-                options,
+                &reads,
                 &text,
                 fetched_at,
-            )?;
-            Ok(if *pending { snap.mark_pending() } else { snap })
+            )
         }
         Ref::AppProfile { id, version } => {
             app_profile_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress)
@@ -215,9 +218,18 @@ fn fetched<A: PaletteApi>(
         }
         Ref::EdgeHost { uid, profile } => {
             let raw = palette.fetch_subject(SubjectKind::EdgeHost, uid, progress)?;
-            Ok(
-                Snapshot::from_cluster(&raw, profile.as_deref(), &text, fetched_at)?
-                    .with_kind(SubjectKind::EdgeHost),
+            let reads = HolderReads {
+                profile: profile.as_deref(),
+                ..HolderReads::default()
+            };
+            holder_snapshot(
+                palette,
+                SubjectKind::EdgeHost,
+                raw,
+                uid,
+                &reads,
+                &text,
+                fetched_at,
             )
         }
         Ref::Snapshot(_) | Ref::ClusterSet { .. } => {
@@ -252,31 +264,74 @@ fn profile_snapshot<A: PaletteApi>(
     Ok(snap)
 }
 
-/// A record of what the cluster of `raw` runs, or of its profile `profile`.
+/// What the record of a cluster, an edge host, or a cluster group reads beyond its release.
 ///
-/// `options` add the macro digests, the shape, and the raw answers saved. `uid` is the cluster
-/// as the ref names it.
-fn cluster_snapshot<A: PaletteApi>(
-    mut raw: RawCluster,
+/// The default reads nothing more: the profiles that the holder runs, or pins, as they are.
+#[derive(Debug, Clone, Copy, Default)]
+struct HolderReads<'a> {
+    /// The profiles to record, as the `profile` of [`Ref::Cluster`]. `None` records them all.
+    profile: Option<&'a str>,
+    /// Record what the holder runs after it accepts the update that waits.
+    pending: bool,
+    /// Record the digest of the value that Palette gives each macro that the content uses.
+    macros: bool,
+    /// Record the shape tier of a cluster, with one more request.
+    shape: bool,
+    /// Save the raw answers of Palette in this directory.
+    raw_dir: Option<&'a Path>,
+}
+
+/// The record of a holder, from its raw documents `raw`, with what `reads` adds.
+///
+/// A holder is a cluster, an edge host, or a cluster group, and `kind` tells which. `raw` comes
+/// from [`Palette::fetch_subject`], or from [`Palette::subject_raw`] when the caller read the
+/// document already. `uid` is the holder as the caller names it. The document gives the uid when
+/// it has one. The record of a cluster group holds its virtual clusters, outside the root.
+/// `snapshot` and `verify` both make their record here, so the two records have the same parts.
+fn holder_snapshot<A: PaletteApi>(
     palette: &Palette<A>,
+    kind: SubjectKind,
+    mut raw: RawCluster,
     uid: &str,
-    profile: Option<&str>,
-    options: &SnapshotOptions,
+    reads: &HolderReads<'_>,
     reference: &str,
     fetched_at: &str,
 ) -> Result<Snapshot> {
-    if options.macros {
-        // the ref can name the cluster by name, and the document gives its uid
-        let uid = first_nonempty(&[str_at(&raw.cluster, "/metadata/uid"), uid]);
-        raw.resolved_values = Some(palette.resolved_values(SubjectKind::Cluster, &uid)?);
+    if reads.pending {
+        raw = palette.with_pending(raw)?;
     }
-    if options.shape {
+    // the ref can name the holder by name, and the document gives its uid
+    let uid = first_nonempty(&[str_at(&raw.cluster, "/metadata/uid"), uid]);
+    if reads.macros {
+        raw.resolved_values = Some(palette.resolved_values(kind, &uid)?);
+    }
+    if reads.shape {
         raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
     }
-    if let Some(dir) = &options.raw_dir {
+    if let Some(dir) = reads.raw_dir {
         raw.save_dir(dir, fetched_at)?;
     }
-    Snapshot::from_cluster(&raw, profile, reference, fetched_at)
+    let snap = Snapshot::from_cluster(&raw, reads.profile, reference, fetched_at)?;
+    let mut snap = if reads.pending {
+        snap.mark_pending()
+    } else {
+        snap
+    }
+    .with_kind(kind);
+    if kind == SubjectKind::ClusterGroup
+        && let Some(c) = snap.source.cluster.as_mut()
+    {
+        c.members = palette
+            .cluster_group_members(&uid)?
+            .iter()
+            .map(|m| GroupMember {
+                uid: text(m, "/metadata/uid"),
+                name: text(m, "/metadata/name"),
+                project_uid: list::project_uid_of(m),
+            })
+            .collect();
+    }
+    Ok(snap)
 }
 
 /// A record of an app profile, by uid, or by name at `version`. Its consumers are app
@@ -314,26 +369,20 @@ pub fn cluster_group_snapshot<A: PaletteApi>(
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    let mut raw = palette.fetch_subject(SubjectKind::ClusterGroup, group, progress)?;
-    let uid = text(&raw.cluster, "/metadata/uid");
-    if macros {
-        raw.resolved_values = Some(palette.resolved_values(SubjectKind::ClusterGroup, &uid)?);
-    }
-    let members = palette
-        .cluster_group_members(&uid)?
-        .iter()
-        .map(|m| GroupMember {
-            uid: text(m, "/metadata/uid"),
-            name: text(m, "/metadata/name"),
-            project_uid: list::project_uid_of(m),
-        })
-        .collect();
-    let mut snap = Snapshot::from_cluster(&raw, None, reference, fetched_at)?
-        .with_kind(SubjectKind::ClusterGroup);
-    if let Some(c) = snap.source.cluster.as_mut() {
-        c.members = members;
-    }
-    Ok(snap)
+    let raw = palette.fetch_subject(SubjectKind::ClusterGroup, group, progress)?;
+    let reads = HolderReads {
+        macros,
+        ..HolderReads::default()
+    };
+    holder_snapshot(
+        palette,
+        SubjectKind::ClusterGroup,
+        raw,
+        group,
+        &reads,
+        reference,
+        fetched_at,
+    )
 }
 
 /// The two sides of a comparison. When one side is a cluster group, and the other is a cluster ref
@@ -474,7 +523,7 @@ fn candidate_snapshot<A: PaletteApi>(
     progress: &Progress,
 ) -> Result<Snapshot> {
     let palette = registries.palette();
-    let mut snap = crate::candidate::resolve_with(loaded, registries, progress)?
+    let mut snap = crate::candidate::resolve::resolve_with(loaded, registries, progress)?
         .into_snapshot(&loaded.path.display().to_string(), fetched_at)?;
     crate::candidate::warn_preset_options(&snap, progress);
     snap.source.template = crate::snapshot::Template::Candidate.into();

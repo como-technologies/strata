@@ -4553,6 +4553,73 @@ fn list_projects_reads_at_tenant_scope_and_a_project_override_scopes_the_rest() 
 }
 
 #[test]
+fn list_reads_the_project_listing_one_time_for_the_clusters_and_the_projects() {
+    // the project of each cluster has a name, and the projects are a kind of their own
+    let mut other = listed_cluster("edge-1", "c7", "Running");
+    other["metadata"]["annotations"]["projectUid"] = serde_json::json!("p2");
+    let api = MemoryApi::new()
+        .with(
+            CLUSTER_LISTING,
+            serde_json::json!([listed_cluster("workload-a", "c1", "Running"), other]),
+        )
+        .with(PROJECT_LISTING, projects(&[("dev", "p1"), ("prod", "p2")]));
+    let options = ListOptions {
+        kinds: vec![ListKind::Clusters, ListKind::Projects],
+        ..ListOptions::default()
+    };
+    let l = listing(&api, &options).unwrap();
+    let named: Vec<_> = l
+        .clusters
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|c| c.project_name.as_str())
+        .collect();
+    assert_eq!(named, ["prod", "dev"]);
+    assert_eq!(l.projects.as_ref().unwrap().len(), 2);
+    assert_eq!(api.calls(PROJECT_LISTING), 1);
+}
+
+#[test]
+fn list_in_a_project_reads_the_project_listing_one_time_for_the_clusters_and_the_scope() {
+    // the clusters need the name of their project, and the scope needs its own name
+    let api = two_clusters_with_search(&[]);
+    let l = clusters_listing(&api, ops::ClusterQuery::default());
+    assert_eq!(l.project_name, "lab");
+    assert!(
+        l.clusters
+            .as_ref()
+            .unwrap()
+            .iter()
+            .all(|c| c.project_name == "lab")
+    );
+    assert_eq!(api.calls(PROJECT_LISTING), 1);
+}
+
+#[test]
+fn list_with_a_query_reads_the_project_listing_one_time_for_the_clusters_and_the_projects() {
+    let payments = fleet_row(
+        "c-pay",
+        "payments",
+        "p2",
+        serde_json::json!({"env": "prod"}),
+    );
+    let api = serve_fleet(MemoryApi::new(), vec![payments.clone()], vec![payments]);
+    let options = ListOptions {
+        kinds: vec![ListKind::Clusters, ListKind::Projects],
+        query: ops::ClusterQuery {
+            tags: vec!["env=prod".into()],
+            filter: None,
+        },
+        ..ListOptions::default()
+    };
+    let l = listing(&api, &options).unwrap();
+    assert_eq!(l.clusters.as_ref().unwrap()[0].project_name, "prod");
+    assert_eq!(l.projects.as_ref().unwrap().len(), 2);
+    assert_eq!(api.calls(PROJECT_LISTING), 1);
+}
+
+#[test]
 fn list_at_tenant_scope_names_the_project_of_each_cluster() {
     let mut other = listed_cluster("edge-1", "c7", "Running");
     other["metadata"]["annotations"]["projectUid"] = serde_json::json!("p2");
@@ -13073,6 +13140,185 @@ fn a_pin_has_no_sync_note_when_the_last_sync_completed_when_palette_gives_no_syn
     assert!(!text.contains("sync"), "{text}");
 }
 
+/// The Mirror registry with two OCI packs: `other-pack` at 1.0.0 and 2.0.0, and `third-pack` at
+/// 1.0.0. Palette gives the registry in the OCI summary listing.
+fn serve_two_packs_of_the_oci_registry() -> MemoryApi {
+    let build = |name: &str, uid: &str, version: &str| {
+        let mut s = pack_summary(uid, version, "reg-mirror", "sha256:mmm", CSI_63);
+        s["spec"]["name"] = serde_json::json!(name);
+        s["spec"]["type"] = serde_json::json!("oci");
+        s
+    };
+    let serve_pack = |api: MemoryApi, name: &str, builds: Vec<Value>| {
+        let tags: Vec<Value> = builds
+            .iter()
+            .map(|b| serde_json::json!({"tag": b["spec"]["version"], "packUid": b["metadata"]["uid"]}))
+            .collect();
+        api.with(
+            pack_listing_route(name),
+            serde_json::json!({"items": builds, "listmeta": {"count": 9}}),
+        )
+        .with(
+            format!("/v1/packs/{name}/registries/reg-mirror"),
+            serde_json::json!({"layer": "csi", "tags": tags}),
+        )
+    };
+    let api = serve_registry(vec![], &[("reg-public", public_entity())]).with(
+        OCI_REGISTRY_SUMMARY,
+        serde_json::json!({"items": [{"metadata": {"uid": "reg-mirror", "name": "Mirror"},
+            "spec": {"providerType": "helm"}}]}),
+    );
+    let api = serve_pack(
+        api,
+        "other-pack",
+        vec![
+            build("other-pack", "pk-o1", "1.0.0"),
+            build("other-pack", "pk-o2", "2.0.0"),
+        ],
+    );
+    serve_pack(
+        api,
+        "third-pack",
+        vec![build("third-pack", "pk-t1", "1.0.0")],
+    )
+}
+
+/// One record in `dir` for each pack ref in `refs`, taken in the project of the pair.
+fn pack_records(dir: &Path, refs: &[(&str, &str)]) -> Vec<std::path::PathBuf> {
+    let seed = serve_two_packs_of_the_oci_registry();
+    refs.iter()
+        .map(|(pack, project)| {
+            let record = snapshot_of(&seed, pack)
+                .unwrap()
+                .with_project(ops::scope_of(project));
+            let path = dir.join(format!("{}.json", pack.replace([':', '@', '/'], "-")));
+            fs::write(&path, record.to_json(false).unwrap()).unwrap();
+            path
+        })
+        .collect()
+}
+
+#[test]
+fn behind_and_packs_read_each_registry_listing_one_time_for_two_packs_of_one_registry() {
+    let dir = tempfile::tempdir().unwrap();
+    // other-pack is behind, and the compare of its bump reads the two versions. third-pack is
+    // current, and its pin reads the sync of the registry
+    let records = pack_records(
+        dir.path(),
+        &[
+            ("pack:Mirror/other-pack@1.0.0", ""),
+            ("pack:Mirror/third-pack@1.0.0", ""),
+        ],
+    );
+    let api = serve_two_packs_of_the_oci_registry();
+    let connects = RefCell::new(0);
+    let r = ops::behind(
+        &records,
+        &ops::BehindOptions {
+            impact: true,
+            since: None,
+        },
+        |_| {
+            *connects.borrow_mut() += 1;
+            Ok(Palette::new(&api))
+        },
+        "2026-09-26T00:00:00Z",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(
+        (r.summary.pins, r.summary.behind, r.summary.errors),
+        (2, 1, 0)
+    );
+    assert!(r.pins[0].bump.is_some(), "the impact read the two versions");
+    assert_eq!(*connects.borrow(), 1, "one client for the one scope");
+    assert_eq!(api.calls(REGISTRY_LISTING), 1);
+    assert_eq!(api.calls(OCI_REGISTRY_SUMMARY), 1);
+
+    // packs reads the listing of the one pack that it names
+    let api = serve_two_packs_of_the_oci_registry();
+    ops::registry_packs(
+        "other-pack",
+        &ops::PackOptions::default(),
+        |_| Ok(Palette::new(&api)),
+        "2026-09-26T00:00:00Z",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(api.calls(REGISTRY_LISTING), 1);
+}
+
+#[test]
+fn behind_connects_one_time_for_each_project_of_its_pins() {
+    let dir = tempfile::tempdir().unwrap();
+    let records = pack_records(
+        dir.path(),
+        &[
+            ("pack:Mirror/other-pack@1.0.0", "p1"),
+            ("pack:Mirror/other-pack@2.0.0", "p1"),
+            ("pack:Mirror/third-pack@1.0.0", "p2"),
+        ],
+    );
+    let api = serve_two_packs_of_the_oci_registry();
+    let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
+    let connect = |scope: Option<&str>| {
+        scopes.borrow_mut().push(scope.map(str::to_string));
+        Ok(Palette::new(&api))
+    };
+    let options = ops::BehindOptions {
+        impact: true,
+        since: None,
+    };
+    let r = ops::behind(
+        &records,
+        &options,
+        connect,
+        "2026-09-26T00:00:00Z",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(r.summary.pins, 3);
+    assert_eq!(
+        *scopes.borrow(),
+        [Some("p1".to_string()), Some("p2".to_string())],
+        "one client for each project, for the offers, the sync notes, and the bumps"
+    );
+    // the pins keep the order of the pack name and the version, whatever the project
+    let versions: Vec<_> = r
+        .pins
+        .iter()
+        .map(|p| (p.name.as_str(), p.version.as_str()))
+        .collect();
+    assert_eq!(
+        versions,
+        [
+            ("other-pack", "1.0.0"),
+            ("other-pack", "2.0.0"),
+            ("third-pack", "1.0.0")
+        ]
+    );
+
+    // a project that strata cannot connect to gives its pins the error, and the others stay
+    let r = ops::behind(
+        &records,
+        &options,
+        |scope| match scope {
+            Some("p2") => Err(Error::Usage {
+                message: "no key for p2".to_string(),
+            }),
+            _ => Ok(Palette::new(&api)),
+        },
+        "2026-09-26T00:00:00Z",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert_eq!(
+        (r.summary.pins, r.summary.behind, r.summary.errors),
+        (3, 1, 1)
+    );
+    assert!(r.pins[2].error.is_some() && r.pins[0].error.is_none());
+}
+
 #[test]
 fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_the_bump_line() {
     // Palette orders by semantic version, so it calls 1.65.0 the latest, below 1.65.0-rev1
@@ -14406,6 +14652,28 @@ fn verify_reports_a_gone_edge_host_or_cluster_group_as_drift_and_not_as_an_error
         let line = verdict_of(&v);
         assert!(line.ends_with(&format!("since t0{suffix}")), "{line}");
     }
+}
+
+#[test]
+fn the_live_record_of_a_cluster_group_holds_its_virtual_clusters_as_the_record_does() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_cluster_group(MemoryApi::new(), dir.path());
+    let recorded = common::snapshot_of(&api, "clustergroup:g1").unwrap();
+    let members = |s: &strata::snapshot::Snapshot| -> Vec<String> {
+        s.source
+            .cluster
+            .as_ref()
+            .unwrap()
+            .members
+            .iter()
+            .map(|m| m.name.clone())
+            .collect()
+    };
+    assert_eq!(members(&recorded), ["lab-cluster"]);
+    let v = ops::verify(&recorded, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
+    assert!(v.unchanged);
+    assert_eq!(members(&v.live), members(&recorded));
 }
 
 #[test]
