@@ -138,6 +138,12 @@ where
     F: FnOnce() -> Result<Palette<A>>,
 {
     options.check(reference)?;
+    let text = reference.to_string();
+    // a ref that a request answers connects first, and the record names the project of the client
+    let live = |read: &dyn Fn(&Palette<A>) -> Result<Snapshot>| {
+        let palette = connect()?;
+        Ok(read(&palette)?.with_project(palette.project_uid()))
+    };
     match reference {
         Ref::Snapshot(path) => Snapshot::load(path),
         Ref::ClusterSet { .. } => Err(Error::Usage {
@@ -147,82 +153,81 @@ where
                  `strata list clusters` lists them"
             ),
         }),
-        _ => {
-            let palette = connect()?;
-            Ok(fetched(reference, options, &palette, fetched_at, progress)?
-                .with_project(palette.project_uid()))
-        }
-    }
-}
-
-/// The snapshot of `reference` through `palette`, for each kind of ref that a request answers.
-fn fetched<A: PaletteApi>(
-    reference: &Ref,
-    options: &SnapshotOptions,
-    palette: &Palette<A>,
-    fetched_at: &str,
-    progress: &Progress,
-) -> Result<Snapshot> {
-    let text = reference.to_string();
-    match reference {
-        Ref::NameVersion { name, version } => {
+        Ref::NameVersion { name, version } => live(&|palette| {
             let uid = palette.resolve(name, version)?;
             profile_snapshot(palette, &uid, options, &text, fetched_at, progress)
+        }),
+        Ref::Uid(uid) => {
+            live(&|palette| profile_snapshot(palette, uid, options, &text, fetched_at, progress))
         }
-        Ref::Uid(uid) => profile_snapshot(palette, uid, options, &text, fetched_at, progress),
-        Ref::Draft { id, version } => {
+        Ref::Draft { id, version } => live(&|palette| {
             draft_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress)
-        }
+        }),
         Ref::Pack {
             registry,
             name,
             version,
-        } => crate::candidate::pack_snapshot(
-            palette,
-            registry.as_deref(),
-            name,
-            version,
-            &text,
-            fetched_at,
-            progress,
-        ),
+        } => live(&|palette| {
+            crate::candidate::pack_snapshot(
+                palette,
+                registry.as_deref(),
+                name,
+                version,
+                &text,
+                fetched_at,
+                progress,
+            )
+        }),
         Ref::Cluster {
             uid,
             profile,
             pending,
-        } => {
-            let mut raw = palette.fetch_subject(SubjectKind::Cluster, uid, progress)?;
-            if *pending {
-                raw = palette.with_pending(raw)?;
-            }
-            let snap = cluster_snapshot(
-                raw,
+        } => live(&|palette| {
+            cluster_ref_snapshot(
                 palette,
                 uid,
                 profile.as_deref(),
+                *pending,
                 options,
                 &text,
                 fetched_at,
-            )?;
-            Ok(if *pending { snap.mark_pending() } else { snap })
-        }
-        Ref::AppProfile { id, version } => {
+                progress,
+            )
+        }),
+        Ref::AppProfile { id, version } => live(&|palette| {
             app_profile_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress)
-        }
-        Ref::ClusterGroup { uid } => {
+        }),
+        Ref::ClusterGroup { uid } => live(&|palette| {
             cluster_group_snapshot(palette, uid, options.macros, &text, fetched_at, progress)
-        }
-        Ref::EdgeHost { uid, profile } => {
+        }),
+        Ref::EdgeHost { uid, profile } => live(&|palette| {
             let raw = palette.fetch_subject(SubjectKind::EdgeHost, uid, progress)?;
             Ok(
                 Snapshot::from_cluster(&raw, profile.as_deref(), &text, fetched_at)?
                     .with_kind(SubjectKind::EdgeHost),
             )
-        }
-        Ref::Snapshot(_) | Ref::ClusterSet { .. } => {
-            unreachable!("snapshot_for answers a file and a set before it connects")
-        }
+        }),
     }
+}
+
+/// The record of the cluster `uid`, or, with `pending`, of the update that waits for it.
+#[allow(clippy::too_many_arguments)]
+fn cluster_ref_snapshot<A: PaletteApi>(
+    palette: &Palette<A>,
+    uid: &str,
+    profile: Option<&str>,
+    pending: bool,
+    options: &SnapshotOptions,
+    text: &str,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let mut raw = palette.fetch_subject(SubjectKind::Cluster, uid, progress)?;
+    if pending {
+        raw = palette.with_pending(raw)?;
+    }
+    let snap = cluster_snapshot(raw, palette, uid, profile, options, text, fetched_at)?;
+    Ok(if pending { snap.mark_pending() } else { snap })
 }
 
 /// A record of the published template of the profile `uid`, with what `options` add.
