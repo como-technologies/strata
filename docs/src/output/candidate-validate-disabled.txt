@@ -1,0 +1,5 @@
+$ strata snapshot --from-candidate aws-stack.yaml --validate -o validated.json
+strata: looking up project dev
+strata: resolving aws-stack@1.2.0 against the registry
+palette    refuses: DisabledPacksForbidden: Disabled packs 'cert-manager' are forbidden
+strata: Palette refuses 'aws-stack.yaml' with 1 error; strata wrote no record

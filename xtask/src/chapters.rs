@@ -858,6 +858,23 @@ fn commands(r: &mut Runner) {
         false,
         "jq -c .source.paletteValidation validated.json",
     );
+    // Spectro Cloud marks a version that a profile must not hold. Palette serves it, and the import
+    // validate route refuses a candidate that holds it (#405)
+    r.tenant(|t| t.mark_pack_disabled(DEV, "cert-manager", "1.21.1"));
+    let disabled = (
+        500,
+        "DisabledPacksForbidden",
+        "Disabled packs 'cert-manager' are forbidden",
+    );
+    r.tenant(|t| t.profile_create_checks(DEV, ("aws-stack", "1.2.0"), None, Some(disabled)));
+    r.step(
+        "candidate-validate-disabled",
+        2,
+        true,
+        "strata snapshot --from-candidate aws-stack.yaml --validate -o validated.json",
+    );
+    r.tenant(|t| t.registries(DEV));
+    r.tenant(|t| t.profile_create_checks(DEV, ("aws-stack", "1.2.0"), None, None));
     // a version that Palette holds, as an update of itself
     r.tenant(|t| t.profile_packs_answer(DEV, Some(A111), None));
     r.step(

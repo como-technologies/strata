@@ -350,6 +350,7 @@ The checks, in order:
    - The YAML of the values and the manifests: `PackValuesYamlInvalid` and
      `PackManifestYamlInvalid`.
    - The integration packs: `PackSpectroIntegrationNotSupported`.
+   - A pack that Spectro Cloud disabled: `DisabledPacksForbidden`.
    - The name and the version, as the name route checks them.
    - A macro that the values use and that Palette does not define:
      `PackMacroUndefined`, HTTP 404.
@@ -373,6 +374,9 @@ A live run shows that the route refuses each of these faults:
 - A manifest name that is not a DNS label: `InvalidName`.
 - A manifest name two times in a pack: `DuplicatePackManifestsForbidden`.
 - The version `2.2.2.develop`: `VersionParseFailure`.
+- A pack with the mark `disabled`, such as `gloo` 1.2.18: HTTP 500 and
+  `DisabledPacksForbidden`, with the message
+  `Disabled packs 'gloo' are forbidden`.
 
 It takes a candidate of `cert-manager` 1.21.1 from the Public Repo. See
 [validate-packs.sh](../../development/live-runs.md#validate-packssh).

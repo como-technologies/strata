@@ -179,6 +179,7 @@ request with HTTP `500` and one of these codes:
 | `PackManifestYamlInvalid` | A manifest of a pack that is not YAML. |
 | `PackSpectroIntegrationNotSupported` | An integration pack that the cloud does not support. |
 | `ClusterProfileOidcNotConfigured` | An integration pack that needs an OIDC identity provider that no pack or organization gives. |
+| `DisabledPacksForbidden` | A pack that is disabled. |
 | `ResourceNameEmpty` | An empty name. |
 | `VersionParseFailure` | A version that does not parse as semver. |
 | `ClusterProfileCreationValidationFailure` | The variables, or the values and the dependencies of a pack. |

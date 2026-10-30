@@ -572,9 +572,10 @@ the registry route gives its tags and its values with no query, and the
 its tags, and says `disabled` in the heading and in the row: see
 [pack-states.sh](../../development/live-runs.md#pack-statessh). Palette
 refuses a profile that holds it,
-at the create and on the validate routes: HTTP 500, `DisabledPacksForbidden`,
-`Disabled packs 'gloo' are forbidden`. See
-[The validate routes](validate-routes.md#post-v1clusterprofilesvalidatepacks)
+at the create and on the validate routes: HTTP 500,
+`DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`. See
+[the packs route](validate-routes.md#post-v1clusterprofilesvalidatepacks),
+[the import validate route](validate-routes.md#post-v1clusterprofilesimportvalidate),
 and [validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 Strata reads the state from the listing:

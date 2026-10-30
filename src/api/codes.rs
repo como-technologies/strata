@@ -104,7 +104,8 @@ const INTEGRATION_PACKS: Check = &[
 
 /// No pack is disabled.
 ///
-/// The cluster packs route and the profile packs routes run it.
+/// The cluster packs route, the profile packs routes, and the import validate route run it. A live
+/// run shows that the import validate route refuses a candidate with a disabled pack.
 const DISABLED_PACKS: Check = &["DisabledPacksForbidden"];
 
 /// No more than 200 packs, and no more than 200 manifests.
@@ -206,6 +207,7 @@ impl ValidateRoute {
                 PACK_METADATA,
                 PACK_YAML,
                 INTEGRATION_PACKS,
+                DISABLED_PACKS,
                 NAME_AND_VERSION,
                 CREATE_VALIDATION,
             ],
@@ -334,7 +336,7 @@ mod tests {
         assert_eq!(ValidateRoute::ClusterPacks.refusal_codes().count(), 11);
         assert_eq!(ValidateRoute::ProfilePacks.refusal_codes().count(), 6);
         assert_eq!(ValidateRoute::ProfileName.refusal_codes().count(), 2);
-        assert_eq!(ValidateRoute::ProfileImport.refusal_codes().count(), 15);
+        assert_eq!(ValidateRoute::ProfileImport.refusal_codes().count(), 16);
         for route in ValidateRoute::ALL {
             for code in route.refusal_codes() {
                 assert!(route.refuses(500, code), "{route:?} {code}");
@@ -352,6 +354,20 @@ mod tests {
             for route in ValidateRoute::ALL {
                 assert!(!route.refuses(500, rule.code()), "{route:?} {rule:?}");
             }
+        }
+    }
+
+    #[test]
+    fn the_routes_that_check_the_packs_of_a_profile_refuse_a_disabled_pack() {
+        for code in DISABLED_PACKS {
+            for route in [
+                ValidateRoute::ClusterPacks,
+                ValidateRoute::ProfilePacks,
+                ValidateRoute::ProfileImport,
+            ] {
+                assert!(route.refuses(500, code), "{route:?} {code}");
+            }
+            assert!(!ValidateRoute::ProfileName.refuses(500, code), "{code}");
         }
     }
 
