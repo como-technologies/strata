@@ -1,0 +1,24 @@
+# The riff config of strata. riff reads it from main of origin, so a change counts only after its
+# merge.
+
+[session]
+# The session image, pinned by its digest. The workflow "Session image" builds it from
+# deploy/session/.
+image = "ghcr.io/como-technologies/strata-session@sha256:DIGEST"
+
+# The package sources that the auto mode of each session trusts: the hosts of crates.io.
+sources = ["crates.io", "index.crates.io", "static.crates.io"]
+
+# The build cache of each session: the cargo home and sccache, each in a volume that the sessions
+# of a host share. The toolchains are in the image. $HOME is the home of the session.
+[session.env]
+CARGO_HOME = "$HOME/.cargo"
+SCCACHE_DIR = "$HOME/.cache/sccache"
+SCCACHE_CACHE_SIZE = "20G"
+RUSTC_WRAPPER = "sccache"
+SCCACHE_IDLE_TIMEOUT = "0"
+SCCACHE_IGNORE_SERVER_IO_ERROR = "1"
+
+[session.volumes]
+strata-cargo = "$HOME/.cargo"
+strata-sccache = "$HOME/.cache/sccache"
