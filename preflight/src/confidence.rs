@@ -14,6 +14,7 @@ use std::path::Path;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use strata::cloud::CLOUD_ALL;
 
 use crate::error::{Error, Result};
 use crate::report::percent;
@@ -445,7 +446,7 @@ pub fn promotion(catalog: &Catalog, ledger: &Ledger) -> PromotionReport {
             .collect();
         confidence.sort_by(|a, b| (&a.engine, &a.release).cmp(&(&b.engine, &b.release)));
         // the engines the rule names: `all` is each engine the ledger has a run of
-        let engines: Vec<String> = if rule.engines.iter().any(|e| e == "all") {
+        let engines: Vec<String> = if rule.engines.iter().any(|e| e == CLOUD_ALL) {
             confidence
                 .iter()
                 .map(|c| c.engine.clone())

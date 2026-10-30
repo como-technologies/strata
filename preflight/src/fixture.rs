@@ -16,6 +16,7 @@
 use std::path::Path;
 
 use serde_json::Value;
+use strata::json::{opt_text, strings};
 
 use crate::error::{Error, Result};
 
@@ -34,7 +35,7 @@ fn load_depth(path: &Path, depth: u32) -> Result<Value> {
     let mut doc: Value = serde_json::from_str(&text).map_err(|e| Error::Input {
         message: format!("{}: not JSON: {e}", path.display()),
     })?;
-    let Some(base) = doc.get("_base").and_then(Value::as_str).map(str::to_string) else {
+    let Some(base) = opt_text(&doc, "/_base") else {
         return Ok(doc);
     };
     let base_path = path.parent().unwrap_or(Path::new(".")).join(&base);
@@ -42,12 +43,8 @@ fn load_depth(path: &Path, depth: u32) -> Result<Value> {
     if let Some(patch) = doc.get("_patch") {
         crate::world::merge(&mut out, patch);
     }
-    if let Some(deletes) = doc.get("_delete").and_then(Value::as_array) {
-        for p in deletes {
-            if let Some(pointer) = p.as_str() {
-                delete_pointer(&mut out, pointer);
-            }
-        }
+    for pointer in strings(&doc, "/_delete") {
+        delete_pointer(&mut out, &pointer);
     }
     // the fixture's own top-level keys beside the three, such as a `_note`, come along
     if let Some(obj) = doc.as_object_mut() {

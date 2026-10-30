@@ -26,6 +26,8 @@
 //! - [`conjunction`]: how the conditions of a search of Palette join.
 //! - [`pack_type`] and [`profile_type`]: the type of a pack, and the type of a profile.
 //! - [`text`]: the texts that a message builds.
+//! - [`json`]: the reads of a document of Palette, such as the text at a pointer, with the value
+//!   that a field gives when it is not there.
 //! - [`render`]: the terminal, markdown, and JSON renderers behind one trait.
 //! - [`ops`]: the operations the CLI exposes, free of argument parsing and exit codes.
 //! - [`error`]: the error type, with its exit codes and its machine-readable form.
@@ -86,7 +88,7 @@ pub mod content;
 pub mod diff;
 pub mod error;
 pub(crate) mod file;
-pub(crate) mod json;
+pub mod json;
 pub mod oci_provider;
 pub mod ops;
 pub mod pack_state;

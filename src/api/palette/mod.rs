@@ -16,6 +16,8 @@ mod clusters;
 mod listings;
 mod profiles;
 
+pub use clusters::{cluster_events_path, cluster_summary_path, subject_path};
+
 const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
 /// The profile search. It pages by `offset`.
 const PROFILE_SEARCH: &str = "/v1/dashboard/clusterprofiles";
@@ -76,6 +78,12 @@ const REGISTRIES: &str = "/v1/registries";
 const REGISTRY_METADATA: &str = "/v1/registries/metadata";
 /// The dashboard summary of a cluster: `/v1/dashboard/spectroclusters/{uid}`.
 const CLUSTER_SUMMARIES: &str = "/v1/dashboard/spectroclusters";
+/// The events of a cluster: `/v1/events/components/spectrocluster/{uid}`.
+const CLUSTER_EVENTS: &str = "/v1/events/components/spectrocluster";
+/// The most events that strata asks for in one read of the events of a cluster.
+const CLUSTER_EVENTS_LIMIT: usize = 50;
+/// The cloud accounts: `/v1/cloudaccounts/{cloudType}/{uid}`.
+const CLOUD_ACCOUNTS: &str = "/v1/cloudaccounts";
 /// The dashboard of a cluster group: its virtual clusters are under it.
 const CLUSTER_GROUP_DASHBOARD: &str = "/v1/dashboard/clustergroups";
 /// The notifications of a cluster: `/v1/notifications/spectrocluster/{uid}`.

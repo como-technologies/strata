@@ -237,6 +237,17 @@ impl<A: PaletteApi> Palette<A> {
             .collect())
     }
 
+    /// The pack `uid`, `GET /v1/packs/{uid}`: one pack version, with its values and the schema of
+    /// its values. Palette answers 404 when it no longer has the pack.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, also [`Error::Api`] with HTTP 404 when Palette has no pack with
+    /// the uid `uid`.
+    pub fn pack_document(&self, uid: &str) -> Result<Value> {
+        self.api.get_json(&route(PACKS, &[uid]))
+    }
+
     /// One page of the pack listing of `name`,
     /// `GET /v1/packs?filters=spec.name={name}&limit=100&offset={offset}`. It gives each version
     /// of the pack in each registry, [`PACK_LISTING_PAGE`] on a page. `listmeta.count` counts the

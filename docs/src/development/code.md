@@ -59,7 +59,11 @@ where each module goes.
   `src/json.rs`: `text`, `str_at`, `text_or`, `opt_text`, `opt_str`, `arr`,
   `strings`, `text_map`, `items`, `take_items`, `first_nonempty`, `flag`,
   `opt_flag`, `value_at`, and `value_or_null`. Do not write a pointer read of
-  text, of an array, of a flag, or of a value of your own in a module.
+  text, of an array, of a flag, or of a value of your own in a module. The rule
+  holds for `preflight/` and `adapter/` too. `text`, `str_at`, `text_or`,
+  `opt_text`, `opt_str`, `arr`, `strings`, `flag`, `value_at`, and
+  `value_or_null` are public for them. Make another helper public when a
+  package outside this crate needs it, not before.
   The records of strata are typed structs with
   `#[serde(rename_all = "camelCase")]`, `skip_serializing_if` for an empty
   field, `#[serde(default)]` for a field that an older record does not have,

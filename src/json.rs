@@ -5,6 +5,9 @@
 //! `null`, or `None`. No module keeps a pointer read of text, of an array, of a flag, or of a
 //! value of its own. The read of a profile export is not a read of this kind: it refuses a value
 //! of another type.
+//!
+//! The helpers that `strata-preflight` and the knurl adapter use are public, so that those
+//! packages do not write a read of their own. The other helpers are for this crate.
 
 use std::collections::BTreeMap;
 
@@ -14,18 +17,18 @@ use serde_json::Value;
 static NULL: Value = Value::Null;
 
 /// The text at the pointer `ptr` of `v`, or empty text when `v` has no text there.
-pub(crate) fn str_at<'a>(v: &'a Value, ptr: &str) -> &'a str {
+pub fn str_at<'a>(v: &'a Value, ptr: &str) -> &'a str {
     v.pointer(ptr).and_then(Value::as_str).unwrap_or("")
 }
 
 /// A copy of the text at the pointer `ptr` of `v`, or empty text when `v` has no text there.
-pub(crate) fn text(v: &Value, ptr: &str) -> String {
+pub fn text(v: &Value, ptr: &str) -> String {
     str_at(v, ptr).to_string()
 }
 
 /// The text at the pointer `ptr` of `v`, or `default` when `v` has no text there. An empty text
-/// stays empty: this is not [`first_nonempty`].
-pub(crate) fn text_or(v: &Value, ptr: &str, default: &str) -> String {
+/// stays empty: this is not a search for the first text that is not empty.
+pub fn text_or(v: &Value, ptr: &str, default: &str) -> String {
     v.pointer(ptr)
         .and_then(Value::as_str)
         .unwrap_or(default)
@@ -33,12 +36,12 @@ pub(crate) fn text_or(v: &Value, ptr: &str, default: &str) -> String {
 }
 
 /// The text at the pointer `ptr` of `v`, when it is there and not empty.
-pub(crate) fn opt_str<'a>(v: &'a Value, ptr: &str) -> Option<&'a str> {
+pub fn opt_str<'a>(v: &'a Value, ptr: &str) -> Option<&'a str> {
     Some(str_at(v, ptr)).filter(|s| !s.is_empty())
 }
 
 /// A copy of the text at the pointer `ptr` of `v`, when it is there and not empty.
-pub(crate) fn opt_text(v: &Value, ptr: &str) -> Option<String> {
+pub fn opt_text(v: &Value, ptr: &str) -> Option<String> {
     opt_str(v, ptr).map(str::to_string)
 }
 
@@ -50,22 +53,22 @@ pub(crate) fn opt_flag(v: &Value, ptr: &str) -> Option<bool> {
 
 /// True when `v` has the bool `true` at the pointer `ptr`. A field that is `false`, is not a bool,
 /// or is not there gives `false`: Palette leaves out a flag that is `false`.
-pub(crate) fn flag(v: &Value, ptr: &str) -> bool {
+pub fn flag(v: &Value, ptr: &str) -> bool {
     opt_flag(v, ptr) == Some(true)
 }
 
 /// The value at the pointer `ptr` of `v`, or `null` when `v` has none there.
-pub(crate) fn value_at<'a>(v: &'a Value, ptr: &str) -> &'a Value {
+pub fn value_at<'a>(v: &'a Value, ptr: &str) -> &'a Value {
     v.pointer(ptr).unwrap_or(&NULL)
 }
 
 /// A copy of the value at the pointer `ptr` of `v`, or `null` when `v` has none there.
-pub(crate) fn value_or_null(v: &Value, ptr: &str) -> Value {
+pub fn value_or_null(v: &Value, ptr: &str) -> Value {
     value_at(v, ptr).clone()
 }
 
 /// The entries of the array at the pointer `ptr` of `v`, or no entry when `v` has no array there.
-pub(crate) fn arr<'a>(v: &'a Value, ptr: &str) -> &'a [Value] {
+pub fn arr<'a>(v: &'a Value, ptr: &str) -> &'a [Value] {
     v.pointer(ptr)
         .and_then(Value::as_array)
         .map_or(&[], Vec::as_slice)
@@ -74,7 +77,7 @@ pub(crate) fn arr<'a>(v: &'a Value, ptr: &str) -> &'a [Value] {
 /// The texts of the array at the pointer `ptr` of `v`.
 ///
 /// The list skips an entry that is not text.
-pub(crate) fn strings(v: &Value, ptr: &str) -> Vec<String> {
+pub fn strings(v: &Value, ptr: &str) -> Vec<String> {
     arr(v, ptr)
         .iter()
         .filter_map(Value::as_str)

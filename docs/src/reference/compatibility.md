@@ -42,6 +42,10 @@ empty text. The schema now gives the field the pack types. A record of a
 cluster leaves out a label whose value is not text, where 0.21.0 kept it with
 empty text. The labels are outside the root, so no root changes.
 
+After 0.22.1, `preflight --schema rules` describes the method of a Palette check
+with the words of the library. The values `GET` and `POST`, and the default
+`GET`, stay. A rule file reads the same, and the id stays.
+
 A field can also become absent, and that keeps the id as well. For most fields
 absent is a value: a field that is false, empty, or zero is left out, and each
 such field says so at its own definition in
@@ -131,6 +135,15 @@ These do not change in a release, so a script can use them:
 After 0.21.0, the kinds `transport` and `not-json` give the field `method`, and
 their message names the method of the request. In 0.21.0, the message said
 `GET` also for a `POST`.
+
+After 0.22.1, `world.json` of `preflight --watch --out` holds `events: []` when
+Palette gives `items: null` for the events of the cluster. It held `null`
+before. This is the case at the start of a build, when the cluster has no event.
+A jq program that reads `.events[]` now works in that case.
+
+After 0.22.1, `preflight cluster:<c>/<profile>` and `preflight
+cluster:<c>@pending` give a `usage` error and exit `2`. The checks read the
+whole cluster. These two forms failed before with a name lookup.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later

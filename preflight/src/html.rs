@@ -3,10 +3,8 @@
 //! confidence of each rule. A person opens it from the run directory, or a job attaches it.
 
 use crate::probe::Verdict;
-use crate::report::{
-    CheckResult, Report, not_run_reasons, not_run_text, pct, percent, scorecard_legend,
-    written_text,
-};
+use crate::report::scorecard::{not_run_reasons, not_run_text, scorecard_legend, written_text};
+use crate::report::{CheckResult, Report, pct, percent};
 use crate::rule::{Level, Severity};
 
 fn esc(s: &str) -> String {
@@ -78,7 +76,7 @@ pub fn page(r: &Report) -> String {
     h.push_str(&format!(
         "<h1>Can Palette build this cluster? <span style=\"color:var(--muted)\">{} · {}</span></h1>",
         esc(&r.subject.cloud),
-        esc(if r.subject.name.is_empty() { "-" } else { &r.subject.name })
+        esc(r.subject.name_or_dash())
     ));
     h.push_str(&format!(
         "<p class=\"sub\">source <code>{}</code> · Palette {} · tiers {}{} · {} · {} {}</p>",

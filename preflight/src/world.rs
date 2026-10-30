@@ -23,17 +23,25 @@ use std::path::Path;
 
 use serde_json::{Map, Value, json};
 use strata::api::{Palette, PaletteApi, RawCluster};
+use strata::cloud::CLOUD_EDGE_NATIVE;
+use strata::json::{arr, opt_str, opt_text, str_at, value_at, value_or_null};
 use strata::reference::Ref;
 use strata::snapshot::{Snapshot, SubjectKind};
 use strata::term::progress::Progress;
 
 use crate::error::{Error, Result};
 
-/// The engines a cluster can be built on, as Palette names the cloud type of a cluster. OpenStack
-/// is not one: Palette removed it in 2026, and the API has no route for it.
+/// The engines a cluster can be built on. Each is a cloud type of Palette, except `edge`, which
+/// Palette names [`CLOUD_EDGE_NATIVE`]. OpenStack is not one: Palette removed it in 2026, and the
+/// API has no route for it.
+///
+/// A rule names an engine too: see [`crate::rule::engines`].
 pub const CLOUDS: &[&str] = &[
-    "aws", "eks", "gcp", "gke", "azure", "aks", "maas", "edge", "vsphere",
+    "aws", "eks", "gcp", "gke", "azure", "aks", "maas", EDGE, "vsphere",
 ];
+
+/// The engine of an edge cluster. Palette names its cloud type [`CLOUD_EDGE_NATIVE`].
+const EDGE: &str = "edge";
 
 /// The fields of a flat machine pool of a cloud config that belong to `poolConfig` of the
 /// entity. Every other field is the cloud part of the pool.
@@ -159,14 +167,16 @@ impl World {
     }
 
     /// A world from an existing cluster, as Palette holds it now: the cluster document, its cloud
-    /// config, and its profiles become the body of a create.
+    /// config, and its profiles become the body of a create. `id` is the uid of the cluster, or
+    /// its name when no cluster has that uid.
     pub fn from_cluster<A: PaletteApi>(
         palette: &Palette<A>,
-        uid: &str,
+        id: &str,
         progress: &Progress,
     ) -> Result<World> {
+        let cluster = palette.subject_by_id(SubjectKind::Cluster, id, &Progress::silent())?;
+        let uid = opt_str(&cluster, "/metadata/uid").unwrap_or(id);
         progress.note(&format!("reading cluster {uid}"));
-        let cluster = palette.subject_document(SubjectKind::Cluster, uid)?;
         let cloud_type = RawCluster::cloud_type(&cluster);
         if cloud_type.is_empty() {
             return Err(Error::Input {
@@ -178,12 +188,9 @@ impl World {
         }
         let cloud = normalize_cloud(cloud_type);
         let config = palette.cloud_config(&cluster)?;
-        let account_uid = config
-            .pointer("/spec/cloudAccountRef/uid")
-            .or_else(|| cluster.pointer("/spec/cloudAccountRef/uid"))
-            .and_then(Value::as_str)
-            .map(str::to_string);
-        let entity = entity_of(&cluster, &config, account_uid.as_deref());
+        let account_uid = opt_str(&config, "/spec/cloudAccountRef/uid")
+            .or_else(|| opt_str(&cluster, "/spec/cloudAccountRef/uid"));
+        let entity = entity_of(&cluster, &config, account_uid);
         Ok(World {
             cloud,
             source: Ref::Cluster {
@@ -193,13 +200,7 @@ impl World {
             }
             .to_string(),
             entity,
-            cluster_uid: Some(
-                cluster
-                    .pointer("/metadata/uid")
-                    .and_then(Value::as_str)
-                    .unwrap_or(uid)
-                    .to_string(),
-            ),
+            cluster_uid: Some(uid.to_string()),
             ..World::default()
         })
     }
@@ -224,13 +225,9 @@ impl World {
 
     /// The profile uids the entity names, in order.
     pub fn profile_uids(&self) -> Vec<String> {
-        self.entity
-            .pointer("/spec/profiles")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|p| p.get("uid").and_then(Value::as_str))
-            .map(str::to_string)
+        arr(&self.entity, "/spec/profiles")
+            .iter()
+            .filter_map(|p| opt_text(p, "/uid"))
             .collect()
     }
 
@@ -263,7 +260,7 @@ impl World {
             if self
                 .profiles
                 .iter()
-                .any(|p| p.pointer("/source/uid").and_then(Value::as_str) == Some(uid.as_str()))
+                .any(|p| str_at(p, "/source/uid") == uid)
             {
                 continue;
             }
@@ -279,10 +276,7 @@ impl World {
                 if pack.pack_uid.is_empty() || self.packs.contains_key(&pack.pack_uid) {
                     continue;
                 }
-                match palette
-                    .api()
-                    .get_json(&format!("/v1/packs/{}", pack.pack_uid))
-                {
+                match palette.pack_document(&pack.pack_uid) {
                     Ok(doc) => {
                         self.packs.insert(pack.pack_uid.clone(), doc);
                     }
@@ -293,16 +287,8 @@ impl World {
             }
             self.profiles.push(record_value(&snap)?);
         }
-        if let Some(uid) = self
-            .entity
-            .pointer("/spec/cloudAccountUid")
-            .and_then(Value::as_str)
-        {
-            let kind = account_kind(&self.cloud);
-            match palette
-                .api()
-                .get_json(&format!("/v1/cloudaccounts/{kind}/{uid}"))
-            {
+        if let Some(uid) = opt_str(&self.entity, "/spec/cloudAccountUid") {
+            match palette.cloud_account(account_kind(&self.cloud), uid) {
                 Ok(mut doc) => {
                     redact(&mut doc);
                     self.account = Some(doc);
@@ -330,22 +316,24 @@ pub fn account_kind(cloud: &str) -> &str {
         "eks" => "aws",
         "gke" => "gcp",
         "aks" => "azure",
-        "edge" => "edge-native",
-        other => other,
+        other => route_cloud(other),
     }
 }
 
-/// The name Palette gives a cloud in a route: `edge` is `edge-native`.
+/// The name Palette gives a cloud in a route: `edge` is [`CLOUD_EDGE_NATIVE`].
 pub fn route_cloud(cloud: &str) -> &str {
-    match cloud {
-        "edge" => "edge-native",
-        other => other,
+    if cloud == EDGE {
+        CLOUD_EDGE_NATIVE
+    } else {
+        cloud
     }
 }
 
+/// The engine of the cloud type `text`, which Palette or a file names: [`EDGE`] for
+/// [`CLOUD_EDGE_NATIVE`].
 fn normalize_cloud(text: &str) -> String {
     match text.trim().to_ascii_lowercase().as_str() {
-        "edge-native" => "edge".to_string(),
+        CLOUD_EDGE_NATIVE => EDGE.to_string(),
         other => other.to_string(),
     }
 }
@@ -360,10 +348,8 @@ fn parse_json_or_yaml(text: &str) -> std::result::Result<Value, String> {
 
 /// `{cloudType|cloud, entity|spec}` gives its cloud and its entity; a bare entity gives itself.
 fn unwrap_envelope(doc: Value) -> (Option<String>, Value) {
-    let cloud = doc
-        .get("cloudType")
-        .or_else(|| doc.get("cloud"))
-        .and_then(Value::as_str)
+    let cloud = opt_str(&doc, "/cloudType")
+        .or_else(|| opt_str(&doc, "/cloud"))
         .map(normalize_cloud);
     match doc.get("entity") {
         Some(entity) if cloud.is_some() || entity.get("spec").is_some() => (cloud, entity.clone()),
@@ -377,10 +363,8 @@ pub fn infer_cloud(entity: &Value) -> Option<String> {
     let cc = spec.get("cloudConfig");
     let has = |k: &str| cc.and_then(|c| c.get(k)).is_some_and(|v| !v.is_null());
     let pool_has = |k: &str| {
-        spec.pointer("/machinepoolconfig")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
+        arr(spec, "/machinepoolconfig")
+            .iter()
             .any(|p| p.pointer(&format!("/cloudConfig/{k}")).is_some())
     };
     if has("managedClusterConfig") {
@@ -432,29 +416,23 @@ pub fn infer_cloud(entity: &Value) -> Option<String> {
 
 /// The body of a create, from a cluster document and its cloud config.
 fn entity_of(cluster: &Value, config: &Value, account_uid: Option<&str>) -> Value {
-    let pools: Vec<Value> = config
-        .pointer("/spec/machinePoolConfig")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+    let pools: Vec<Value> = arr(config, "/spec/machinePoolConfig")
+        .iter()
         .map(split_pool)
         .collect();
-    let profiles: Vec<Value> = cluster
-        .pointer("/spec/clusterProfileTemplates")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+    let profiles: Vec<Value> = arr(cluster, "/spec/clusterProfileTemplates")
+        .iter()
         .map(|t| {
             json!({
-                "uid": t.get("uid").cloned().unwrap_or(Value::Null),
-                "packValues": t.get("packs").and_then(Value::as_array).into_iter().flatten().map(|p| {
+                "uid": value_or_null(t, "/uid"),
+                "packValues": arr(t, "/packs").iter().map(|p| {
                     json!({
-                        "name": p.get("name"),
-                        "tag": p.get("tag"),
-                        "type": p.get("type"),
-                        "values": p.get("values"),
-                        "manifests": p.get("manifests").and_then(Value::as_array).into_iter().flatten().map(|m| {
-                            json!({"name": m.get("name"), "uid": m.get("uid")})
+                        "name": value_at(p, "/name"),
+                        "tag": value_at(p, "/tag"),
+                        "type": value_at(p, "/type"),
+                        "values": value_at(p, "/values"),
+                        "manifests": arr(p, "/manifests").iter().map(|m| {
+                            json!({"name": value_at(m, "/name"), "uid": value_at(m, "/uid")})
                         }).collect::<Vec<_>>(),
                     })
                 }).collect::<Vec<_>>(),
@@ -483,7 +461,7 @@ fn entity_of(cluster: &Value, config: &Value, account_uid: Option<&str>) -> Valu
     }
     json!({
         "metadata": {
-            "name": cluster.pointer("/metadata/name"),
+            "name": value_at(cluster, "/metadata/name"),
             "labels": cluster.pointer("/metadata/labels").cloned().unwrap_or(json!({})),
             "annotations": cluster.pointer("/metadata/annotations").cloned().unwrap_or(json!({})),
         },
@@ -539,17 +517,13 @@ fn merge_change(into: &mut Value, change: &Value) {
                     (Some(Value::Array(pools)), Value::Array(changes))
                         if k == "machinepoolconfig" =>
                     {
-                        merge_list(pools, changes, |p| {
-                            p.pointer("/poolConfig/name").and_then(Value::as_str)
-                        });
+                        merge_list(pools, changes, |p| opt_str(p, "/poolConfig/name"));
                     }
                     // the profiles of an entity carry `uid`; the records of the world carry it
                     // at `source.uid`
                     (Some(Value::Array(profiles)), Value::Array(changes)) if k == "profiles" => {
                         merge_list(profiles, changes, |p| {
-                            p.get("uid")
-                                .or_else(|| p.pointer("/source/uid"))
-                                .and_then(Value::as_str)
+                            opt_str(p, "/uid").or_else(|| opt_str(p, "/source/uid"))
                         });
                     }
                     (Some(have), v) if have.is_object() && v.is_object() => merge_change(have, v),
@@ -632,6 +606,44 @@ mod tests {
         );
         let err = World::from_cluster(&Palette::new(none), "c1", &Progress::silent()).unwrap_err();
         assert!(err.to_string().contains("names no cloud type"), "{err}");
+    }
+
+    #[test]
+    fn a_world_of_a_cluster_by_name_reads_the_cluster_that_the_name_names() {
+        let api = strata::api::MemoryApi::new()
+            .with(
+                "/v1/dashboard/spectroclusters/meta",
+                json!([{"metadata": {"name": "barney", "uid": "c1"}}]),
+            )
+            .with(
+                "/v1/spectroclusters/c1",
+                json!({"metadata": {"uid": "c1", "name": "barney"},
+                    "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"}}}),
+            )
+            .with("/v1/cloudconfigs/aws/cc1", json!({"spec": {}}));
+        let world = World::from_cluster(&Palette::new(api), "barney", &Progress::silent()).unwrap();
+        assert_eq!(world.cluster_uid.as_deref(), Some("c1"));
+        assert_eq!(world.source, "cluster:c1");
+        assert_eq!(str_at(&world.entity, "/metadata/name"), "barney");
+    }
+
+    #[test]
+    fn the_edge_engine_is_the_cloud_type_edge_native_in_a_route_an_account_and_a_file() {
+        assert_eq!(route_cloud(EDGE), CLOUD_EDGE_NATIVE);
+        assert_eq!(account_kind(EDGE), CLOUD_EDGE_NATIVE);
+        assert_eq!(normalize_cloud(" Edge-Native "), EDGE);
+        assert_eq!(normalize_cloud(EDGE), EDGE);
+        for (engine, account) in [
+            ("eks", "aws"),
+            ("gke", "gcp"),
+            ("aks", "azure"),
+            ("aws", "aws"),
+        ] {
+            assert_eq!(account_kind(engine), account, "{engine}");
+            assert_eq!(route_cloud(engine), engine, "{engine}");
+        }
+        assert!(CLOUDS.contains(&EDGE));
+        assert!(!CLOUDS.contains(&CLOUD_EDGE_NATIVE));
     }
 
     #[test]

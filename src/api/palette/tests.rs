@@ -455,3 +455,72 @@ fn fetch_subject_reads_each_kind_by_uid_and_then_by_name_after_a_404() {
     assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
     assert_eq!(broken.calls(CLUSTER_LISTING), lookups);
 }
+
+#[test]
+fn the_pack_the_cloud_account_and_the_events_of_a_cluster_go_into_the_path_escaped() {
+    // with no escape, a `/` in a uid ends the segment, and a `?` starts the query
+    let p = Palette::new(
+        MemoryApi::new()
+            .with("/v1/packs/a%2Fb%3Fc", json!({"metadata": {"uid": "a/b?c"}}))
+            .with(
+                "/v1/cloudaccounts/aws/a%2Fb%3Fc",
+                json!({"metadata": {"uid": "a/b?c"}}),
+            )
+            .with(
+                "/v1/events/components/spectrocluster/a%2Fb%3Fc?limit=50",
+                json!({"items": [1, 2]}),
+            ),
+    );
+    assert_eq!(
+        text(&p.pack_document("a/b?c").unwrap(), "/metadata/uid"),
+        "a/b?c"
+    );
+    assert_eq!(
+        text(&p.cloud_account("aws", "a/b?c").unwrap(), "/metadata/uid"),
+        "a/b?c"
+    );
+    assert_eq!(p.cluster_events("a/b?c").unwrap(), vec![json!(1), json!(2)]);
+    let err = p.cloud_account("gcp", "a/b?c").unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+}
+
+#[test]
+fn the_events_of_a_cluster_with_items_null_or_with_no_items_are_an_empty_list() {
+    let events = "/v1/events/components/spectrocluster/c1?limit=50";
+    for answer in [json!({"items": null}), json!({}), json!({"items": {}})] {
+        let p = Palette::new(MemoryApi::new().with(events, answer.clone()));
+        assert!(p.cluster_events("c1").unwrap().is_empty(), "{answer}");
+    }
+}
+
+#[test]
+fn the_path_functions_give_the_route_that_the_read_sends() {
+    assert_eq!(
+        subject_path(SubjectKind::Cluster, "a/b"),
+        "/v1/spectroclusters/a%2Fb"
+    );
+    assert_eq!(
+        subject_path(SubjectKind::EdgeHost, "u1"),
+        "/v1/edgehosts/u1"
+    );
+    assert_eq!(
+        cluster_summary_path("u1"),
+        "/v1/dashboard/spectroclusters/u1"
+    );
+    assert_eq!(
+        cluster_events_path("u1"),
+        "/v1/events/components/spectrocluster/u1?limit=50"
+    );
+    // the read sends the path that the function gives
+    let api = MemoryApi::new()
+        .with(cluster_summary_path("u1"), json!({"status": {}}))
+        .with(
+            subject_path(SubjectKind::Cluster, "u1"),
+            json!({"spec": {}}),
+        );
+    let p = Palette::new(&api);
+    p.fetch_cluster_summary("u1").unwrap();
+    p.subject_document(SubjectKind::Cluster, "u1").unwrap();
+    assert_eq!(api.calls(&cluster_summary_path("u1")), 1);
+    assert_eq!(api.calls(&subject_path(SubjectKind::Cluster, "u1")), 1);
+}
