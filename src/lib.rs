@@ -87,6 +87,7 @@ pub mod diff;
 pub mod error;
 pub(crate) mod file;
 pub(crate) mod json;
+pub mod oci_provider;
 pub mod ops;
 pub mod pack_state;
 pub mod pack_type;
