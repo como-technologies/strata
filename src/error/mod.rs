@@ -293,7 +293,7 @@ pub enum Error {
     /// `snapshot --validate` asked Palette whether it takes the version, and Palette refused it:
     /// its name, its version, or its packs. Strata wrote no record. The CLI prints each error
     /// before this message.
-    #[error("Palette refuses '{reference}' with {} {}; strata wrote no record", errors.len(), if errors.len() == 1 { "error" } else { "errors" })]
+    #[error("Palette refuses '{reference}' with {} {}; strata wrote no record", errors.len(), crate::text::plural(errors.len(), "error", "errors"))]
     PaletteRefuses {
         /// The ref or the candidate file, as given.
         reference: String,

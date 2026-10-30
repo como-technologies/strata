@@ -76,7 +76,7 @@ impl Renderer for TerminalRenderer {
         }
         if let Some((a, b)) = consumer_counts(d) {
             // the noun agrees with the count next to it: `1 -> 2 clusters`, `2 -> 1 cluster`
-            let noun = if b == 1 { "cluster" } else { "clusters" };
+            let noun = crate::text::plural(b, "cluster", "clusters");
             out.push(format!("consumers  {a} -> {b} {noun}"));
         } else if let Some(sentence) = consumers_sentence(d) {
             out.push(format!("consumers  {sentence}"));
