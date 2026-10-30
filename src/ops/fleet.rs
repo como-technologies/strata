@@ -1,6 +1,7 @@
 //! The fleet: the clusters that a query of labels selects, from a search of Palette or a saved tag
 //! filter, and a record of each.
 
+use crate::closed_set::ClosedSet;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Path, PathBuf};

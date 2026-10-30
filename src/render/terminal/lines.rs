@@ -2,6 +2,7 @@
 //! flags and its detail.
 
 use crate::api::mask::MASKED;
+use crate::closed_set::ClosedSet;
 use crate::diff::{ChangeFlag, ImpactLevel, Leaf, Op, PackDiff, Status};
 use crate::render::changes::{
     OpLine, VarLine, artifact_lines, status_mark, status_word, traits_suffix, upstream_line,

@@ -10,7 +10,7 @@ use serde_json::{Map, Value, json};
 
 use super::IMAGE_ID_ANNOTATION;
 use crate::api::mask::MASKED;
-use crate::closed_set::{ClosedSet, Open};
+use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
 use crate::content::layer::Layer;
 use crate::json::{arr, first_nonempty, opt_text, str_at, text};
@@ -196,22 +196,11 @@ pub enum UpstreamSource {
     NoDigest,
 }
 
-impl UpstreamSource {
-    /// The source as the documents name it: `packRef.digest`, `packSummary.digest`, or `none`.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::PackRef => "packRef.digest",
-            Self::PackSummary => "packSummary.digest",
-            Self::NoDigest => "none",
-        }
-    }
-}
-
-impl ClosedSet for UpstreamSource {
-    fn as_str(self) -> &'static str {
-        UpstreamSource::as_str(self)
-    }
-}
+impl_closed_set!(UpstreamSource {
+    PackRef => "packRef.digest",
+    PackSummary => "packSummary.digest",
+    NoDigest => "none",
+});
 
 impl fmt::Display for UpstreamSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

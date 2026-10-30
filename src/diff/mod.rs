@@ -8,10 +8,10 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::closed_set::legend::legend;
 use crate::cluster_template::ClusterTemplateRef;
 use crate::content::canon::canonical_json;
 use crate::content::layer::Layer;
-use crate::legend::legend;
 pub use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{Pack, Snapshot, Source, Tool};
 pub use crate::validation::{PaletteRefusal, PaletteValidation};

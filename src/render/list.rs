@@ -2,6 +2,7 @@
 
 use super::verify::record_label;
 use super::{count_of, dash, entry_error, joined_note};
+use crate::closed_set::ClosedSet;
 use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
 use crate::snapshot::Snapshot;
 use crate::text::{and_list, name_or_uid};

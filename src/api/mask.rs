@@ -6,6 +6,7 @@
 //! also writes the mask over each password in the values of a cluster group that a record or a
 //! saved answer keeps.
 
+use crate::closed_set::ClosedSet;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 

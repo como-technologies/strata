@@ -8,13 +8,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{AuditKind, Palette, PaletteApi};
+use crate::closed_set::impl_closed_set;
+use crate::closed_set::legend::{Described, legend};
 use crate::diff::{
     self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImageIdChange, ImpactLevel,
     InvalidPack, Verify, VerifyStatus,
 };
 use crate::error::{Error, Result, found};
 use crate::json::{is_zero, opt_text, str_at, text};
-use crate::legend::{Described, legend};
 use crate::registry::Registries;
 use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
 use crate::term::progress::Progress;
@@ -455,14 +456,14 @@ pub enum RecordStatus {
     Error,
 }
 
-impl Described for RecordStatus {
-    const ALL: &'static [Self] = &[
-        Self::Unchanged,
-        Self::Drifted,
-        Self::Unverified,
-        Self::Error,
-    ];
+impl_closed_set!(RecordStatus {
+    Unchanged => "unchanged",
+    Drifted => "drifted",
+    Unverified => "unverified",
+    Error => "error",
+});
 
+impl Described for RecordStatus {
     fn describe(self) -> &'static str {
         match self {
             Self::Unchanged => "The live profile has the same root as the record.",

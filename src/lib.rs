@@ -87,7 +87,6 @@ pub mod diff;
 pub mod error;
 pub(crate) mod file;
 pub(crate) mod json;
-pub(crate) mod legend;
 pub mod ops;
 pub mod pack_type;
 pub mod profile_type;

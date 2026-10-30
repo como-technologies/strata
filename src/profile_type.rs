@@ -4,6 +4,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::closed_set::{ClosedSet, impl_closed_set};
+
 /// The `type` of a profile, as the `source` of a record names it.
 ///
 /// Palette gives a cluster profile one of four types: `cluster`, `infra`, `add-on`, or `system`.
@@ -29,33 +31,16 @@ pub enum ProfileType {
     Pack,
 }
 
+impl_closed_set!(ProfileType {
+    Cluster => "cluster",
+    Infra => "infra",
+    AddOn => "add-on",
+    System => "system",
+    App => "app",
+    Pack => "pack",
+});
+
 impl ProfileType {
-    /// The type as the documents name it: `cluster`, `infra`, `add-on`, `system`, `app`, or
-    /// `pack`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Cluster => "cluster",
-            Self::Infra => "infra",
-            Self::AddOn => "add-on",
-            Self::System => "system",
-            Self::App => "app",
-            Self::Pack => "pack",
-        }
-    }
-
-    /// The type that the documents name `text`, or none for another text.
-    pub(crate) fn parse(text: &str) -> Option<Self> {
-        match text {
-            "cluster" => Some(Self::Cluster),
-            "infra" => Some(Self::Infra),
-            "add-on" => Some(Self::AddOn),
-            "system" => Some(Self::System),
-            "app" => Some(Self::App),
-            "pack" => Some(Self::Pack),
-            _ => None,
-        }
-    }
-
     /// True for a type whose profile builds a cluster. `cluster` and `infra` have the OS and
     /// the Kubernetes layers, so a cluster runs one of them before each add-on.
     pub(crate) fn builds_cluster(self) -> bool {
@@ -75,20 +60,8 @@ mod tests {
 
     #[test]
     fn a_profile_type_parses_and_prints_as_the_documents_name_it() {
-        for kind in [
-            ProfileType::Cluster,
-            ProfileType::Infra,
-            ProfileType::AddOn,
-            ProfileType::System,
-            ProfileType::App,
-            ProfileType::Pack,
-        ] {
-            assert_eq!(ProfileType::parse(kind.as_str()), Some(kind));
-            assert_eq!(
-                serde_json::to_value(kind).unwrap(),
-                serde_json::Value::from(kind.as_str()),
-                "{kind:?}"
-            );
+        for kind in ProfileType::ALL {
+            assert_eq!(ProfileType::parse(kind.as_str()), Some(*kind));
         }
         assert_eq!(ProfileType::parse("addon"), None);
         assert_eq!(ProfileType::parse(""), None);

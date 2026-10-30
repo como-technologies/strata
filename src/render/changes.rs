@@ -4,11 +4,11 @@ use serde_json::Value;
 
 use super::notes::tag_rename;
 use super::{short_digest, show, shown};
+use crate::closed_set::ClosedSet;
 use crate::diff::{
     ChangeFlag, ClusterValueChange, Diff, Leaf, ManifestChange, Op, PackDiff, Status, ValuesDiff,
     VariableSummary, VariablesByName,
 };
-use crate::legend::document_name;
 use crate::term::color::Paint;
 
 /// The mark of a pack in a comparison, as the text reports print it.
@@ -235,7 +235,7 @@ pub(crate) fn values_unparsed_sentence(code: fn(&str) -> String) -> String {
 ///
 /// `code` puts the name in the form of the report.
 pub(crate) fn manifest_change(m: &ManifestChange, code: fn(&str) -> String) -> String {
-    format!("manifest {} {}", code(&m.name), document_name(&m.op))
+    format!("manifest {} {}", code(&m.name), m.op.as_str())
 }
 
 /// `1 variable value changed`, `2 variable values changed`.
