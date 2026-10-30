@@ -1023,6 +1023,7 @@ the example at its baseline with cluster A.
 | `ask-repave`, `ask-repave-answer` | 1, 0 | #385: `compare --repave` asks Palette if the move of cluster A to the next version repaves. The command exits `1` because the roots differ, and the report holds `paletteRepave.required`. |
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
 | `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request, and in the tier of Palette, which calls the validate routes and creates nothing. |
+| `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it (no result yet) |
 | `preflight-fault` | 1 | #385: a body with a cloud account that the project lacks fails the gate `--strict`. |
 | `nightly` | 0 | #81: `verify-report.sh` finds every record unchanged |
 | `fleet`, `fleet-has-a` | 0 | #81: the fleet of a label holds cluster A |

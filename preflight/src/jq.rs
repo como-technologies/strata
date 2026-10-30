@@ -1,6 +1,9 @@
 //! The jq programs of the rules, run by jaq. A program compiles one time and runs on many
 //! inputs. A template such as `/v1/spectroclusters/{{ .cloud }}/validate` fills each `{{ jq }}`
 //! with the first output of that program, as text.
+//!
+//! A program can read `$item`, the item of a check with `each`: the caller gives the item with
+//! the input. A program that the caller runs with no item does not compile when it reads `$item`.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -15,10 +18,14 @@ use crate::error::{Error, Result};
 
 type Filter = jaq_core::Filter<data::JustLut<Val>>;
 
+/// The variable that holds the item of a check with `each`.
+pub(crate) const ITEM: &str = "$item";
+
 /// Compiles and runs jq programs, and keeps each compiled program for the next input.
 #[derive(Default)]
 pub struct Jq {
-    compiled: RefCell<HashMap<String, Rc<Filter>>>,
+    /// Each program, compiled with `$item` as a variable (`true`) or without it (`false`).
+    compiled: RefCell<HashMap<(bool, String), Rc<Filter>>>,
 }
 
 impl Jq {
@@ -27,8 +34,9 @@ impl Jq {
         Self::default()
     }
 
-    fn compile(&self, rule: &str, program: &str) -> Result<Rc<Filter>> {
-        if let Some(f) = self.compiled.borrow().get(program) {
+    fn compile(&self, rule: &str, program: &str, with_item: bool) -> Result<Rc<Filter>> {
+        let key = (with_item, program.to_string());
+        if let Some(f) = self.compiled.borrow().get(&key) {
             return Ok(f.clone());
         }
         let defs = jaq_core::defs()
@@ -51,28 +59,37 @@ impl Jq {
                 rule: rule.to_string(),
                 message: format!("the program does not parse: {}", load_errors(&errs)),
             })?;
+        let globals: &[&str] = if with_item { &[ITEM] } else { &[] };
         let filter = Compiler::default()
             .with_funs(funs)
+            .with_global_vars(globals.iter().copied())
             .compile(modules)
             .map_err(|errs| Error::Jq {
                 rule: rule.to_string(),
                 message: format!("the program does not compile: {}", compile_errors(&errs)),
             })?;
         let filter = Rc::new(filter);
-        self.compiled
-            .borrow_mut()
-            .insert(program.to_string(), filter.clone());
+        self.compiled.borrow_mut().insert(key, filter.clone());
         Ok(filter)
     }
 
     /// Run `program` on `input` and give every output, in order.
-    pub fn run(&self, rule: &str, program: &str, input: &Value) -> Result<Vec<Value>> {
-        let filter = self.compile(rule, program)?;
-        let ctx = Ctx::<data::JustLut<Val>>::new(&filter.lut, Vars::new([]));
+    ///
+    /// `item` is the value of `$item`, for a check with `each`. With no item, a program that reads
+    /// `$item` does not compile.
+    pub fn run(
+        &self,
+        rule: &str,
+        program: &str,
+        input: &Value,
+        item: Option<&Value>,
+    ) -> Result<Vec<Value>> {
+        let filter = self.compile(rule, program, item.is_some())?;
+        let ctx = Ctx::<data::JustLut<Val>>::new(&filter.lut, Vars::new(item.map(to_val)));
         let input = to_val(input);
         let mut out = Vec::new();
-        for item in filter.id.run((ctx, input)) {
-            match item.map_err(|e| e.get_err()) {
+        for output in filter.id.run((ctx, input)) {
+            match output.map_err(|e| e.get_err()) {
                 Ok(v) => out.push(to_json(&v)),
                 Err(Ok(e)) => {
                     return Err(Error::Jq {
@@ -92,17 +109,30 @@ impl Jq {
     }
 
     /// Run `program` and give its first output, or `null` when it gives none.
-    pub fn first(&self, rule: &str, program: &str, input: &Value) -> Result<Value> {
+    pub fn first(
+        &self,
+        rule: &str,
+        program: &str,
+        input: &Value,
+        item: Option<&Value>,
+    ) -> Result<Value> {
         Ok(self
-            .run(rule, program, input)?
+            .run(rule, program, input, item)?
             .into_iter()
             .next()
             .unwrap_or(Value::Null))
     }
 
     /// Fill each `{{ jq }}` of `template` with the first output of that program on `input`, as
-    /// text: a string stays as it is, and another value is its JSON.
-    pub fn render(&self, rule: &str, template: &str, input: &Value) -> Result<String> {
+    /// text: a string stays as it is, and another value is its JSON. `item` is the value of
+    /// `$item` in each program.
+    pub fn render(
+        &self,
+        rule: &str,
+        template: &str,
+        input: &Value,
+        item: Option<&Value>,
+    ) -> Result<String> {
         let mut out = String::with_capacity(template.len());
         let mut rest = template;
         while let Some(start) = rest.find("{{") {
@@ -115,7 +145,7 @@ impl Jq {
                 });
             };
             let program = after[..end].trim();
-            let value = self.first(rule, program, input)?;
+            let value = self.first(rule, program, input, item)?;
             match value {
                 Value::String(s) => out.push_str(&s),
                 Value::Null => {}
@@ -193,6 +223,7 @@ mod tests {
                 "t",
                 r#"[.entity.spec.machinepoolconfig[] | select(.poolConfig.size % 3 != 0) | "pool \(.poolConfig.name) has size \(.poolConfig.size)"]"#,
                 &world,
+                None,
             )
             .unwrap();
         assert_eq!(out, vec![json!(["pool worker has size 4"])]);
@@ -201,19 +232,47 @@ mod tests {
     #[test]
     fn a_program_is_compiled_one_time() {
         let jq = Jq::new();
-        jq.run("t", ".a", &json!({"a": 1})).unwrap();
-        jq.run("t", ".a", &json!({"a": 2})).unwrap();
+        jq.run("t", ".a", &json!({"a": 1}), None).unwrap();
+        jq.run("t", ".a", &json!({"a": 2}), None).unwrap();
         assert_eq!(jq.compiled.borrow().len(), 1);
     }
 
     #[test]
     fn a_bad_program_names_the_rule() {
         let err = Jq::new()
-            .run("eks-one-zone", ".a |", &json!({}))
+            .run("eks-one-zone", ".a |", &json!({}), None)
             .unwrap_err();
         assert!(err.to_string().starts_with("rule eks-one-zone:"), "{err}");
-        let err = Jq::new().run("r", "nosuchfilter", &json!({})).unwrap_err();
+        let err = Jq::new()
+            .run("r", "nosuchfilter", &json!({}), None)
+            .unwrap_err();
         assert!(err.to_string().contains("undefined filter"), "{err}");
+    }
+
+    #[test]
+    fn a_program_reads_the_item_only_when_a_check_gives_one() {
+        let jq = Jq::new();
+        let world = json!({"hosts": ["h1", "h2"]});
+        let item = json!({"uid": "h2"});
+        let out = jq
+            .run(
+                "t",
+                "[.hosts[] | select(. == $item.uid)]",
+                &world,
+                Some(&item),
+            )
+            .unwrap();
+        assert_eq!(out, vec![json!(["h2"])]);
+        assert_eq!(
+            jq.render("t", "/v1/edgehosts/{{ $item.uid }}", &world, Some(&item))
+                .unwrap(),
+            "/v1/edgehosts/h2"
+        );
+        let err = jq
+            .run("t", "$item.uid", &world, None)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("undefined variable $item"), "{err}");
     }
 
     #[test]
@@ -221,16 +280,21 @@ mod tests {
         let jq = Jq::new();
         let world = json!({"cloud": "gke", "entity": {"spec": {"n": 3}}});
         assert_eq!(
-            jq.render("t", "/v1/spectroclusters/{{ .cloud }}/validate", &world)
-                .unwrap(),
+            jq.render(
+                "t",
+                "/v1/spectroclusters/{{ .cloud }}/validate",
+                &world,
+                None
+            )
+            .unwrap(),
             "/v1/spectroclusters/gke/validate"
         );
         assert_eq!(
-            jq.render("t", "size {{.entity.spec.n}} {{ .missing }}!", &world)
+            jq.render("t", "size {{.entity.spec.n}} {{ .missing }}!", &world, None)
                 .unwrap(),
             "size 3 !"
         );
-        assert!(jq.render("t", "{{ .cloud", &world).is_err());
+        assert!(jq.render("t", "{{ .cloud", &world, None).is_err());
     }
 
     #[test]
@@ -241,11 +305,17 @@ mod tests {
                 "t",
                 r#"[.m | test("AccessDenied")]"#,
                 &json!({"m": "AccessDenied: x"}),
+                None,
             )
             .unwrap();
         assert_eq!(out, vec![json!([true])]);
         let out = jq
-            .run("t", r#".ip | split("/")[0]"#, &json!({"ip": "10.0.0.0/16"}))
+            .run(
+                "t",
+                r#".ip | split("/")[0]"#,
+                &json!({"ip": "10.0.0.0/16"}),
+                None,
+            )
             .unwrap();
         assert_eq!(out, vec![json!("10.0.0.0")]);
     }
@@ -254,7 +324,7 @@ mod tests {
     fn numbers_come_back_as_numbers() {
         let jq = Jq::new();
         let out = jq
-            .run("t", ".n * 2, .f + 0.5", &json!({"n": 21, "f": 1.0}))
+            .run("t", ".n * 2, .f + 0.5", &json!({"n": 21, "f": 1.0}), None)
             .unwrap();
         assert_eq!(out, vec![json!(42), json!(1.5)]);
     }

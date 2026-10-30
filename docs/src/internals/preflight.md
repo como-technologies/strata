@@ -45,7 +45,7 @@ Each rule has a tier: where a check can find the fault.
 | Tier | Runs where | Cost |
 | --- | --- | --- |
 | static | the entity and the records alone | milliseconds, no key |
-| palette | one request to Palette | seconds, a key |
+| palette | one request to Palette, or one for each item of a list | seconds, a key |
 | cloud | one command with the tool of the cloud | seconds, the tool and its credentials |
 | watch | the conditions and the events of the cluster during the build | minutes, until the first stuck state |
 | race | no check before the build finds it; the watch finds its effect | — |

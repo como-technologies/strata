@@ -1,0 +1,35 @@
+{
+  "_base": "clean.json",
+  "_note": "the datastore of the worker pool is not in the compute cluster, and the datastore of the control plane pool is",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "cloudConfig": {
+              "placements": [
+                {
+                  "uid": "pl-1",
+                  "datacenter": "Datacenter",
+                  "cluster": "Cluster01",
+                  "datastore": "vsanDatastore2",
+                  "resourcePool": "Resources",
+                  "folder": "spectro/strata-lab",
+                  "imageTemplateFolder": "spectro-templates",
+                  "network": {
+                    "networkName": "VM Network",
+                    "parentPoolUid": "pool-1",
+                    "staticIp": true
+                  }
+                }
+              ]
+            },
+            "poolConfig": {
+              "name": "worker-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

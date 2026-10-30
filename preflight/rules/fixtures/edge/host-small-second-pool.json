@@ -1,0 +1,29 @@
+{
+  "_base": "clean.json",
+  "_note": "the second host of the worker pool has one core, 4 GB, and a 64 GB disk",
+  "_patch": {
+    "_responses": {
+      "GET /v1/edgehosts/edge-host-w-2": {
+        "body": {
+          "spec": {
+            "device": {
+              "cpu": {
+                "cores": 1
+              },
+              "memory": {
+                "sizeInMB": 4096
+              },
+              "disks": [
+                {
+                  "controller": "",
+                  "size": 64,
+                  "vendor": ""
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

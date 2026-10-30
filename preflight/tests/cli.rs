@@ -309,3 +309,59 @@ fn the_report_schema_does_not_require_the_ref_of_an_evidence_entry() {
     assert!(evidence["properties"]["ref"].is_object(), "{evidence}");
     assert_eq!(evidence["required"], serde_json::json!(["kind"]));
 }
+
+#[test]
+fn the_rules_listing_shows_each_on_the_rules_that_read_every_item() {
+    let dir = tempfile::tempdir().unwrap();
+    let (code, out, err) = run(&["--rules", "--cloud", "edge", "--json"], dir.path());
+    assert_eq!(code, 0, "{err}");
+    let listing: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let each = |id: &str| -> Option<String> {
+        let rule = listing["rules"]
+            .as_array()?
+            .iter()
+            .find(|r| r["id"] == id)?;
+        rule["check"]["each"].as_str().map(str::to_string)
+    };
+    for id in [
+        "template-outside",
+        "edge-host-in-use",
+        "edge-host-health",
+        "edge-host-arch",
+        "edge-host-resources",
+        "edge-host-nic",
+        "edge-agent-version",
+    ] {
+        assert!(
+            each(id).is_some_and(|e| !e.trim().is_empty()),
+            "{id} has no each"
+        );
+    }
+    // the rules that Palette answers in one request keep one request
+    assert_eq!(each("variables-in-use"), None);
+}
+
+#[test]
+fn the_rules_schema_has_each_as_an_optional_program_of_a_check_of_palette() {
+    let dir = tempfile::tempdir().unwrap();
+    let (code, out, err) = run(&["--schema", "rules"], dir.path());
+    assert_eq!(code, 0, "{err}");
+    let schema: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let palette = schema["$defs"]["Check"]["oneOf"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["properties"]["kind"]["const"] == "palette")
+        .unwrap();
+    assert_eq!(
+        palette["properties"]["each"]["type"],
+        serde_json::json!(["string", "null"])
+    );
+    let required: Vec<&str> = palette["required"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|r| r.as_str())
+        .collect();
+    assert!(!required.contains(&"each"), "{required:?}");
+}

@@ -12,7 +12,8 @@ first without a key, then with the answers of Palette.
 
 `--verbose` prints, after each check, what it ran, the answer, the time, and
 the verdict: the request to Palette with its HTTP status, the command with its
-exit code, or `jq over the world` for a static check. It is the live form of
+exit code, or `jq over the world` for a static check. A check with one request
+for each item prints one line for each request first. It is the live form of
 the reproduce lines. It wins over `STRATA_QUIET`; `--quiet` wins over both.
 
 ```text
@@ -66,3 +67,28 @@ Palette masks the value of a sensitive variable in its answer. Strata sends the
 mask as Palette gives it, so the validate route gets a mask and not the secret.
 A change file merges over the variables by name. A variable of the file
 replaces the value of the variable with that name. A new name adds a variable.
+
+## A rule over a list
+
+Some checks read one document of Palette for each item of a list. The create
+refuses a profile that a cluster template links, so `template-outside` reads
+each profile of the entity. The edge host rules read each host of each pool. A
+check of the first item alone passes an entity whose fault is in the second.
+
+Here the entity names a second profile, and a cluster template links it. The
+report names that profile and lists both requests:
+
+```text
+{{#include ../../output/preflight-each.txt}}
+```
+
+`--verbose` prints one line for each request, then the line of the check with
+the count of its requests:
+
+```text
+{{#include ../../output/preflight-each-verbose.txt}}
+```
+
+A request that Palette does not answer makes the check `ERROR`, and the report
+keeps the requests up to that one. [The rule format](../../reference/preflight-rules.md#a-request-for-each-item)
+states `each`.

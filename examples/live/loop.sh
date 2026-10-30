@@ -144,6 +144,10 @@ if stage 4 "before a build"; then
   # the tier of Palette calls the validate routes of Palette, and each of them creates nothing
   check preflight-live 0 '#385: the tier of Palette finds no fault in the body, and --strict is the gate' -- \
     "$strata" preflight build.json --cloud "$engine" --tier static,palette --no-exec --strict --quiet
+  # the check of the cluster templates asks Palette for each profile of the body: the body names
+  # the release profile alone, so one request
+  check preflight-each 0 '#144: the check of the cluster templates asks Palette for each profile of the body' -- \
+    bash -c "\"$strata\" preflight build.json --cloud \"$engine\" --tier palette --rule template-outside --json --quiet | jq -e '.checks[0] | .verdict == \"passed\" and (.requests | length) == 1'"
   jq '.spec.cloudAccountUid = "000000000000000000000000"' build.json > build-fault.json
   check preflight-fault 1 '#385: a body with a cloud account that the project lacks fails the gate' -- \
     "$strata" preflight build-fault.json --cloud "$engine" --tier static,palette --no-exec --strict --quiet

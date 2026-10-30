@@ -30,67 +30,28 @@
           }
         ]
       }
-    }
-  },
-  "_responses": {
-    "GET /v1/edgehosts/edge-host-cp-1": {
-      "ok": true,
-      "status": 200,
-      "body": {
-        "metadata": {
-          "name": "cp-1",
-          "uid": "edge-host-cp-1"
-        },
-        "spec": {
-          "type": "edge-native",
-          "version": "4.10.4",
-          "device": {
-            "archType": "amd64",
-            "cpu": {
-              "cores": 8
-            },
-            "memory": {
-              "sizeInMB": 32768
-            },
-            "disks": [
-              {
-                "controller": "",
-                "size": 240,
-                "vendor": ""
-              }
-            ],
-            "nics": [
-              {
-                "nicName": "eno1",
-                "ip": "10.10.100.11",
-                "isDefault": true,
-                "macAddr": "52:54:00:aa:bb:01"
-              },
-              {
-                "nicName": "eno2",
-                "ip": "192.168.7.11",
-                "isDefault": false,
-                "macAddr": "52:54:00:aa:bb:02"
-              }
-            ],
-            "os": {
-              "family": "ubuntu",
-              "version": "22.04"
+    },
+    "_responses": {
+      "GET /v1/edgehosts/edge-host-cp-1": {
+        "body": {
+          "spec": {
+            "device": {
+              "nics": [
+                {
+                  "nicName": "eno1",
+                  "ip": "10.10.100.11",
+                  "isDefault": true,
+                  "macAddr": "52:54:00:aa:bb:01"
+                },
+                {
+                  "nicName": "eno2",
+                  "ip": "192.168.7.11",
+                  "isDefault": false,
+                  "macAddr": "52:54:00:aa:bb:02"
+                }
+              ]
             }
-          },
-          "host": {
-            "hostAddress": "10.10.100.11",
-            "hostUid": "edge-host-cp-1"
           }
-        },
-        "status": {
-          "state": "ready",
-          "health": {
-            "state": "healthy",
-            "agentVersion": "4.10.4",
-            "message": ""
-          },
-          "inUseClusters": []
         }
       }
     }

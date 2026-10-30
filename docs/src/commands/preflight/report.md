@@ -11,7 +11,7 @@ and the options.
 ```
 
 One entry for each rule that applies: `id`, `tier`, `level`, `severity`,
-`verdict`, `messages`, `elapsedMs`, `ran`, `reproduce`, `fix`, `evidence`, and
+`verdict`, `messages`, `elapsedMs`, `ran`, `requests`, `reproduce`, `fix`, `evidence`, and
 `confidence`, the counts of the runs of the rule on this engine with the 95%
 lower bound of each rate. The summary and the section scorecard:
 

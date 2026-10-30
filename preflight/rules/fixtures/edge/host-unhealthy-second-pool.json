@@ -1,0 +1,17 @@
+{
+  "_base": "clean.json",
+  "_note": "the second host of the worker pool is unhealthy",
+  "_patch": {
+    "_responses": {
+      "GET /v1/edgehosts/edge-host-w-2": {
+        "body": {
+          "status": {
+            "health": {
+              "state": "unhealthy"
+            }
+          }
+        }
+      }
+    }
+  }
+}

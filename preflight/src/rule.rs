@@ -50,6 +50,7 @@ use strata::api::Method;
 use strata::cloud::CLOUD_ALL;
 
 use crate::error::{Error, Result};
+use crate::jq::ITEM;
 use crate::world::CLOUDS;
 
 /// The engine `lab`: it marks a check of the lab. No run of the plan records it, so a promotion
@@ -353,16 +354,27 @@ pub enum Check {
     /// One request to Palette, then a jq program over the world with `.response` added:
     /// `{ok, status, body}`. A 4xx is an answer, with `ok: false` and its `V1Error` body. A 204 is
     /// `ok: true` with a `null` body.
+    ///
+    /// With `each`, the request runs one time for each item of a list, and the program runs one
+    /// time over the world with `.responses` added instead of `.response`.
     Palette {
         /// `GET` or `POST`.
         #[serde(default = "read")]
         method: Method,
         /// The path, with `{{ jq }}` templates over the world: `/v1/spectroclusters/{{ .cloud }}/validate`.
+        /// With `each`, a template reads `$item`.
         path: String,
-        /// For a POST: a jq program over the world that gives the body. Default `.entity`.
+        /// For a POST: a jq program over the world that gives the body. Default `.entity`. With
+        /// `each`, the program reads `$item`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         body: Option<String>,
-        /// The program over the world with `.response`.
+        /// A jq program over the world that gives a list. The check makes its request one time for
+        /// each item, and `$item` is the item in `path` and `body`. With no value, the check makes
+        /// one request.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        each: Option<String>,
+        /// The program over the world with `.response`. With `each`, it runs one time over the
+        /// world with `.responses`: one `{item, response}` for each item, in the order of the list.
         expr: String,
     },
     /// One command on this machine, such as the tool of the cloud, then a jq program over the
@@ -648,6 +660,24 @@ fn check_section(section: &Section, path: &Path) -> Result<()> {
             {
                 return Err(at("an exec check needs an argv".into()));
             }
+            if let Check::Palette {
+                path, body, each, ..
+            } = check
+            {
+                match each {
+                    Some(program) if program.trim().is_empty() => {
+                        return Err(at("`each` is empty; drop it, or give a program".into()));
+                    }
+                    None if path.contains(ITEM)
+                        || body.as_deref().is_some_and(|b| b.contains(ITEM)) =>
+                    {
+                        return Err(at(format!(
+                            "`path` or `body` reads {ITEM}, and the check has no `each`"
+                        )));
+                    }
+                    _ => {}
+                }
+            }
         }
         if rule.level == Level::Preflight {
             if rule.check.is_none() {
@@ -878,6 +908,35 @@ rules:
         bad(
             &GOOD.replace("id: gke-pool-multiple-3", "id: Gke_pool"),
             "not kebab-case",
+        );
+    }
+
+    #[test]
+    fn a_check_of_palette_with_each_reads_item_and_a_check_without_it_refuses_item() {
+        let palette = |extra: &str, path: &str| {
+            GOOD.replace("tier: static", "tier: palette").replace(
+                "check:\n      kind: static\n      expr: '[.entity.spec.machinepoolconfig[] | select(.poolConfig.size % 3 != 0) | .poolConfig.name]'",
+                &format!("check:\n      kind: palette\n      path: {path}\n{extra}      expr: 'true'"),
+            )
+        };
+        let each = "      each: '[.entity.spec.profiles[]]'\n";
+        let section = Catalog::parse_section(
+            &palette(each, "/v1/clusterprofiles/{{ $item.uid }}"),
+            Path::new("x.yaml"),
+        )
+        .unwrap();
+        assert!(matches!(
+            &section.rules[0].check,
+            Some(Check::Palette { each: Some(e), .. }) if e == "[.entity.spec.profiles[]]"
+        ));
+        let bad = |text: String, needle: &str| {
+            let err = Catalog::parse_section(&text, Path::new("x.yaml")).unwrap_err();
+            assert!(err.to_string().contains(needle), "{err}");
+        };
+        bad(palette("      each: ' '\n", "/v1/x"), "`each` is empty");
+        bad(
+            palette("", "/v1/clusterprofiles/{{ $item.uid }}"),
+            "reads $item, and the check has no `each`",
         );
     }
 

@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::confidence::Confidence;
 use crate::jq::Jq;
-use crate::probe::{Outcome, Verdict};
+use crate::probe::{Call, Outcome, Verdict};
 use crate::rule::{Catalog, Evidence, Fix, Level, Rule, Severity, Status, Tier};
 
 mod markdown;
@@ -114,6 +114,9 @@ pub struct CheckResult {
     /// The answer of the call: `HTTP 200`, or `exit 0`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub answer: Option<String>,
+    /// The requests of a check with `each`, one for each item, in the order of the list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requests: Vec<Call>,
     /// What a person runs by hand to see the same thing.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reproduce: Vec<String>,
@@ -380,7 +383,7 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
         let mut reproduce: Vec<String> = Vec::new();
         for line in rule.reproduce.for_engine(&a.subject.cloud) {
             reproduce.push(
-                jq.render(&rule.id, &line, a.world)
+                jq.render(&rule.id, &line, a.world, None)
                     .unwrap_or_else(|_| line.clone()),
             );
         }
@@ -408,6 +411,7 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
             elapsed_ms: outcome.elapsed.as_millis() as u64,
             ran: outcome.ran.clone(),
             answer: outcome.answer.clone(),
+            requests: outcome.calls.clone(),
             reproduce,
             fix: rule.fix.clone(),
             evidence: rule.evidence.clone(),
@@ -526,6 +530,7 @@ mod tests {
             elapsed_ms: 1,
             ran: None,
             answer: None,
+            requests: vec![],
             reproduce: vec![],
             fix: None,
             evidence: vec![],
@@ -694,6 +699,7 @@ rules:
             elapsed: Duration::from_millis(1),
             ran: Some(format!("POST {path}")),
             answer: None,
+            calls: vec![],
         };
         let with_body = c.rule("sts-account-not-assumable").unwrap();
         let lines = auto_reproduce(
@@ -886,6 +892,7 @@ rules:
             elapsed: Duration::from_millis(3),
             ran: None,
             answer: None,
+            calls: vec![],
         };
         let section = r#"
 section: compute
@@ -965,5 +972,86 @@ rules:
             serde_json::from_str(&render(&report, Format::Json, true, false)).unwrap();
         assert_eq!(json["schema"], REPORT_SCHEMA);
         assert_eq!(json["checks"][0]["verdict"], "failed");
+    }
+
+    #[test]
+    fn a_check_with_each_keeps_each_request_and_prints_a_line_and_a_curl_for_each() {
+        let section = r#"
+section: compute
+title: Compute and pools
+rules:
+  - id: edge-host-in-use
+    title: Each edge host is free
+    engines: [edge]
+    tier: palette
+    status: source
+    what: w
+    check:
+      kind: palette
+      each: '[.hosts[]]'
+      path: /v1/edgehosts/{{ $item }}
+      expr: 'true'
+"#;
+        let mut catalog = Catalog::default();
+        catalog
+            .push(
+                Catalog::parse_section(section, std::path::Path::new("c.yaml")).unwrap(),
+                std::path::Path::new("c.yaml"),
+            )
+            .unwrap();
+        let call = |host: &str, answer: &str| crate::probe::Call {
+            ran: format!("GET /v1/edgehosts/{host}"),
+            answer: Some(answer.to_string()),
+        };
+        let outcome = Outcome {
+            verdict: Verdict::Failed,
+            messages: vec!["edge host h2 is in use".into()],
+            elapsed: Duration::from_millis(3),
+            ran: None,
+            answer: None,
+            calls: vec![call("h1", "HTTP 200"), call("h2", "HTTP 404")],
+        };
+        let world = serde_json::json!({"cloud": "edge"});
+        let report = assemble(
+            Assembly {
+                catalog: &catalog,
+                outcomes: vec![(catalog.rule("edge-host-in-use").unwrap(), outcome)],
+                confidence: BTreeMap::new(),
+                world: &world,
+                subject: Subject {
+                    cloud: "edge".into(),
+                    release: None,
+                    source: "c.json".into(),
+                    name: "fred".into(),
+                    cluster_uid: None,
+                },
+                options: options(),
+                generated_at: "2026-09-30T00:00:00Z".into(),
+            },
+            &Jq::new(),
+        );
+        let check = &report.checks[0];
+        assert_eq!(check.ran, None);
+        assert_eq!(check.requests.len(), 2);
+        let curls: Vec<&String> = check
+            .reproduce
+            .iter()
+            .filter(|l| l.starts_with("curl "))
+            .collect();
+        assert_eq!(curls.len(), 2, "{:?}", check.reproduce);
+        assert!(curls[1].ends_with("/v1/edgehosts/h2\""), "{}", curls[1]);
+        let text = render(&report, Format::Terminal, false, false);
+        assert!(
+            text.contains("ran: GET /v1/edgehosts/h1 -> HTTP 200\n")
+                && text.contains("ran: GET /v1/edgehosts/h2 -> HTTP 404\n"),
+            "{text}"
+        );
+        let json: serde_json::Value =
+            serde_json::from_str(&render(&report, Format::Json, true, false)).unwrap();
+        assert_eq!(
+            json["checks"][0]["requests"][1],
+            serde_json::json!({"ran": "GET /v1/edgehosts/h2", "answer": "HTTP 404"})
+        );
+        assert!(json["checks"][0].get("ran").is_none());
     }
 }

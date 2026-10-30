@@ -251,6 +251,7 @@ mod tests {
             elapsed_ms: 2,
             ran: None,
             answer: None,
+            requests: vec![],
             reproduce: vec!["jq '.a' world.json".into()],
             fix: None,
             evidence: vec![],

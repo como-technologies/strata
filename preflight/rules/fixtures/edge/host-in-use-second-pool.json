@@ -1,0 +1,21 @@
+{
+  "_base": "clean.json",
+  "_note": "the second host of the worker pool is part of another cluster",
+  "_patch": {
+    "_responses": {
+      "GET /v1/edgehosts/edge-host-w-2": {
+        "body": {
+          "status": {
+            "state": "in-use",
+            "inUseClusters": [
+              {
+                "name": "other-cluster",
+                "uid": "cl-other"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -229,6 +229,16 @@ impl Verdict {
     }
 }
 
+/// One request that a check made, with the answer to it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct Call {
+    /// The request: the method and the path.
+    pub ran: String,
+    /// The answer: `HTTP 200`. None when Palette gave no answer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
+}
+
 /// The result of one check.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Outcome {
@@ -243,6 +253,9 @@ pub struct Outcome {
     /// The answer of the call: `HTTP 200`, or `exit 0`. None for a static check, or when the
     /// call gave no answer.
     pub answer: Option<String>,
+    /// The requests of a check with `each`, one for each item, in the order of the list. Empty for
+    /// a check that makes one request or none: `ran` and `answer` hold that one.
+    pub calls: Vec<Call>,
 }
 
 impl Outcome {
@@ -253,6 +266,7 @@ impl Outcome {
             elapsed: started.elapsed(),
             ran: None,
             answer: None,
+            calls: vec![],
         }
     }
 
@@ -264,6 +278,7 @@ impl Outcome {
             elapsed: Duration::ZERO,
             ran: None,
             answer: None,
+            calls: vec![],
         }
     }
 }
@@ -283,43 +298,22 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
             method,
             path,
             body,
+            each,
             expr,
-        } => {
-            if !backend.has_palette() {
-                return Outcome::not_run(
-                    Verdict::NotRun,
-                    format!("no key: set {} to run the Palette checks", KEY_VARS[0]),
-                );
-            }
-            let path = match jq.render(&rule.id, path, world) {
-                Ok(p) => p,
-                Err(e) => return Outcome::new(Verdict::Error, vec![e.to_string()], started),
-            };
-            let body = match (method, body) {
-                (Method::Post, Some(program)) => match jq.first(&rule.id, program, world) {
-                    Ok(b) => Some(b),
-                    Err(e) => return Outcome::new(Verdict::Error, vec![e.to_string()], started),
-                },
-                (Method::Post, None) => Some(value_or_null(world, "/entity")),
-                (Method::Get, _) => None,
-            };
-            let ran = format!("{method} {path}");
-            match backend.palette(*method, &path, body.as_ref()) {
-                Ok(response) => {
-                    let mut with = world.clone();
-                    with["response"] = serde_json::to_value(&response).unwrap_or(Value::Null);
-                    let mut out = judge(rule, expr, &with, jq, started);
-                    out.ran = Some(ran);
-                    out.answer = Some(format!("HTTP {}", response.status));
-                    out
-                }
-                Err(e) => {
-                    let mut out = Outcome::new(Verdict::Error, vec![e.to_string()], started);
-                    out.ran = Some(ran);
-                    out
-                }
-            }
-        }
+        } => run_palette(
+            rule,
+            &PaletteCheck {
+                method: *method,
+                path,
+                body: body.as_deref(),
+                each: each.as_deref(),
+                expr,
+            },
+            world,
+            backend,
+            jq,
+            started,
+        ),
         Check::Exec {
             argv,
             needs,
@@ -336,7 +330,7 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
                 .collect();
             let argv: Vec<String> = match argv
                 .iter()
-                .map(|a| jq.render(&rule.id, a, world))
+                .map(|a| jq.render(&rule.id, a, world, None))
                 .collect::<Result<_>>()
             {
                 Ok(a) => a,
@@ -380,6 +374,144 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
     }
 }
 
+/// The fields of a check of Palette, as the rule file gives them.
+struct PaletteCheck<'a> {
+    method: Method,
+    path: &'a str,
+    body: Option<&'a str>,
+    each: Option<&'a str>,
+    expr: &'a str,
+}
+
+/// The answer of Palette to the request for one item of a check with `each`: the item, and the
+/// response, in the shape of `.response` for a check with none.
+#[derive(Serialize)]
+struct ItemResponse<'a> {
+    item: &'a Value,
+    response: Response,
+}
+
+/// A request that went out, and the answer to it.
+struct Asked {
+    call: Call,
+    response: Response,
+}
+
+/// A request that no check can read: the templates did not fill, or Palette did not answer.
+struct Failed {
+    /// The request as it went out, when the templates filled.
+    call: Option<Call>,
+    error: Error,
+}
+
+/// Fill the templates of the request for `item`, and ask Palette. A check with no `each` has no
+/// item.
+fn ask(
+    rule: &Rule,
+    check: &PaletteCheck<'_>,
+    item: Option<&Value>,
+    world: &Value,
+    backend: &dyn Backend,
+    jq: &Jq,
+) -> std::result::Result<Asked, Box<Failed>> {
+    let unfilled = |error| Box::new(Failed { call: None, error });
+    let path = jq
+        .render(&rule.id, check.path, world, item)
+        .map_err(unfilled)?;
+    let body = match (check.method, check.body) {
+        (Method::Post, Some(program)) => {
+            Some(jq.first(&rule.id, program, world, item).map_err(unfilled)?)
+        }
+        (Method::Post, None) => Some(value_or_null(world, "/entity")),
+        (Method::Get, _) => None,
+    };
+    let ran = format!("{} {path}", check.method);
+    match backend.palette(check.method, &path, body.as_ref()) {
+        Ok(response) => Ok(Asked {
+            call: Call {
+                ran,
+                answer: Some(format!("HTTP {}", response.status)),
+            },
+            response,
+        }),
+        Err(error) => Err(Box::new(Failed {
+            call: Some(Call { ran, answer: None }),
+            error,
+        })),
+    }
+}
+
+/// Run a check of Palette: one request, or one request for each item of `each`, then the program
+/// of the rule.
+fn run_palette(
+    rule: &Rule,
+    check: &PaletteCheck<'_>,
+    world: &Value,
+    backend: &dyn Backend,
+    jq: &Jq,
+    started: Instant,
+) -> Outcome {
+    if !backend.has_palette() {
+        return Outcome::not_run(
+            Verdict::NotRun,
+            format!("no key: set {} to run the Palette checks", KEY_VARS[0]),
+        );
+    }
+    let Some(each) = check.each else {
+        return match ask(rule, check, None, world, backend, jq) {
+            Ok(Asked { call, response }) => {
+                let mut with = world.clone();
+                with["response"] = serde_json::to_value(&response).unwrap_or(Value::Null);
+                let mut out = judge(rule, check.expr, &with, jq, started);
+                out.ran = Some(call.ran);
+                out.answer = call.answer;
+                out
+            }
+            Err(failed) => {
+                let mut out = Outcome::new(Verdict::Error, vec![failed.error.to_string()], started);
+                out.ran = failed.call.map(|c| c.ran);
+                out
+            }
+        };
+    };
+    let items = match jq.first(&rule.id, each, world, None) {
+        Ok(Value::Array(items)) => items,
+        Ok(other) => {
+            return Outcome::new(
+                Verdict::Error,
+                vec![format!("`each` gave {other}; give a list")],
+                started,
+            );
+        }
+        Err(e) => return Outcome::new(Verdict::Error, vec![e.to_string()], started),
+    };
+    let mut calls = Vec::with_capacity(items.len());
+    let mut responses = Vec::with_capacity(items.len());
+    for item in &items {
+        match ask(rule, check, Some(item), world, backend, jq) {
+            Ok(asked) => {
+                calls.push(asked.call);
+                responses.push(ItemResponse {
+                    item,
+                    response: asked.response,
+                });
+            }
+            Err(failed) => {
+                calls.extend(failed.call);
+                let mut out = Outcome::new(Verdict::Error, vec![failed.error.to_string()], started);
+                out.calls = calls;
+                return out;
+            }
+        }
+    }
+    let mut with = world.clone();
+    // a derived `Serialize` of plain data does not fail
+    with["responses"] = serde_json::to_value(&responses).unwrap_or(Value::Null);
+    let mut out = judge(rule, check.expr, &with, jq, started);
+    out.calls = calls;
+    out
+}
+
 /// Judge one reading of a watch: `world` holds `cluster`, `summary`, `events`, and `elapsed`.
 pub fn judge_watch(rule: &Rule, world: &Value, jq: &Jq) -> Outcome {
     let started = Instant::now();
@@ -392,7 +524,7 @@ pub fn judge_watch(rule: &Rule, world: &Value, jq: &Jq) -> Outcome {
 /// Run the program and read its output: `true`/`false`, a list of messages, or `{pass,
 /// message}`. Several outputs must all pass.
 fn judge(rule: &Rule, expr: &str, world: &Value, jq: &Jq, started: Instant) -> Outcome {
-    let outputs = match jq.run(&rule.id, expr, world) {
+    let outputs = match jq.run(&rule.id, expr, world, None) {
         Ok(o) => o,
         Err(e) => return Outcome::new(Verdict::Error, vec![e.to_string()], started),
     };
@@ -670,6 +802,7 @@ mod tests {
             method: Method::Post,
             path: "/v1/spectroclusters/{{ .cloud }}/validate".into(),
             body: None,
+            each: None,
             expr: r#"[select(.response.ok | not) | "Palette: \(.response.body.code): \(.response.body.message)"]"#.into(),
         });
         let out = run_check(&r, &w, &b, &jq);
@@ -681,6 +814,164 @@ mod tests {
         assert_eq!(
             out.ran.as_deref(),
             Some("POST /v1/spectroclusters/gke/validate")
+        );
+    }
+
+    fn each_check(each: &str, path: &str, expr: &str) -> Rule {
+        rule(Check::Palette {
+            method: Method::Get,
+            path: path.into(),
+            body: None,
+            each: Some(each.into()),
+            expr: expr.into(),
+        })
+    }
+
+    #[test]
+    fn a_palette_check_with_each_asks_once_for_each_item_and_reads_the_responses_in_order() {
+        let jq = Jq::new();
+        let ok =
+            |name: &str| json!({"ok": true, "status": 200, "body": {"metadata": {"name": name}}});
+        let (b, w) = fixture(
+            json!({"entity": {"spec": {"profiles": [{"uid": "p1"}, {"uid": "p2"}]}},
+            "_responses": {"GET /v1/clusterprofiles/p1": ok("base"),
+                "GET /v1/clusterprofiles/p2": {"ok": false, "status": 404, "body": {"code": "ResourceNotFound"}}}}),
+        );
+        let r = each_check(
+            ".entity.spec.profiles",
+            "/v1/clusterprofiles/{{ $item.uid }}",
+            r#"[.responses[] | "\(.item.uid) \(.response.status) \(.response.body.metadata.name // .response.body.code)"]"#,
+        );
+        let out = run_check(&r, &w, &b, &jq);
+        assert_eq!(out.verdict, Verdict::Failed);
+        assert_eq!(out.messages, vec!["p1 200 base", "p2 404 ResourceNotFound"]);
+        assert_eq!(
+            out.calls,
+            vec![
+                Call {
+                    ran: "GET /v1/clusterprofiles/p1".into(),
+                    answer: Some("HTTP 200".into())
+                },
+                Call {
+                    ran: "GET /v1/clusterprofiles/p2".into(),
+                    answer: Some("HTTP 404".into())
+                },
+            ]
+        );
+        assert_eq!((out.ran, out.answer), (None, None));
+    }
+
+    #[test]
+    fn a_post_with_each_fills_its_body_from_the_item() {
+        struct Echo(std::cell::RefCell<Vec<(String, Value)>>);
+        impl Backend for Echo {
+            fn palette(&self, _m: Method, path: &str, body: Option<&Value>) -> Result<Response> {
+                self.0
+                    .borrow_mut()
+                    .push((path.to_string(), body.cloned().unwrap_or(Value::Null)));
+                Ok(Response {
+                    ok: true,
+                    status: 200,
+                    body: Value::Null,
+                })
+            }
+            fn has_tool(&self, _: &str) -> bool {
+                true
+            }
+            fn exec(&self, _: &[String], _: Duration) -> Result<ExecOutput> {
+                unreachable!("no command in this test")
+            }
+            fn has_palette(&self) -> bool {
+                true
+            }
+        }
+        let echo = Echo(Default::default());
+        let r = rule(Check::Palette {
+            method: Method::Post,
+            path: "/v1/capacity?arn={{ $item.arn }}".into(),
+            body: Some("{arn: $item.arn, size: ($item.size + 1)}".into()),
+            each: Some("[.pools[] | select(.arn != null)]".into()),
+            expr: "[.responses[] | select(.response.ok | not) | .item.arn]".into(),
+        });
+        let world =
+            json!({"pools": [{"arn": "a1", "size": 1}, {"size": 9}, {"arn": "a2", "size": 2}]});
+        let out = run_check(&r, &world, &echo, &Jq::new());
+        assert_eq!(out.verdict, Verdict::Passed);
+        assert_eq!(
+            *echo.0.borrow(),
+            vec![
+                (
+                    "/v1/capacity?arn=a1".to_string(),
+                    json!({"arn": "a1", "size": 2})
+                ),
+                (
+                    "/v1/capacity?arn=a2".to_string(),
+                    json!({"arn": "a2", "size": 3})
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_check_with_each_over_no_item_asks_nothing_and_passes_the_empty_list() {
+        let jq = Jq::new();
+        let (b, w) = fixture(json!({"hosts": []}));
+        let r = each_check(
+            ".hosts",
+            "/v1/edgehosts/{{ $item }}",
+            "[.responses[] | .item]",
+        );
+        let out = run_check(&r, &w, &b, &jq);
+        assert_eq!(out.verdict, Verdict::Passed);
+        assert!(out.calls.is_empty());
+    }
+
+    #[test]
+    fn a_check_with_each_is_an_error_when_each_gives_no_list_or_a_request_fails() {
+        let jq = Jq::new();
+        let (b, w) = fixture(json!({"hosts": "h1", "list": ["h1", "h2"],
+            "_responses": {"GET /v1/edgehosts/h1": {"ok": true, "status": 200, "body": {}}}}));
+        let out = run_check(
+            &each_check(".hosts", "/v1/edgehosts/{{ $item }}", "true"),
+            &w,
+            &b,
+            &jq,
+        );
+        assert_eq!(out.verdict, Verdict::Error);
+        assert_eq!(out.messages, vec![r#"`each` gave "h1"; give a list"#]);
+        let out = run_check(
+            &each_check(".missing", "/v1/edgehosts/{{ $item }}", "true"),
+            &w,
+            &b,
+            &jq,
+        );
+        assert_eq!(out.verdict, Verdict::Error);
+        assert_eq!(out.messages, vec!["`each` gave null; give a list"]);
+        // the second request has no answer: the check is an error, and the report keeps both requests
+        let out = run_check(
+            &each_check(".list", "/v1/edgehosts/{{ $item }}", "true"),
+            &w,
+            &b,
+            &jq,
+        );
+        assert_eq!(out.verdict, Verdict::Error);
+        assert!(
+            out.messages[0].contains("GET /v1/edgehosts/h2"),
+            "{:?}",
+            out.messages
+        );
+        assert_eq!(
+            out.calls,
+            vec![
+                Call {
+                    ran: "GET /v1/edgehosts/h1".into(),
+                    answer: Some("HTTP 200".into())
+                },
+                Call {
+                    ran: "GET /v1/edgehosts/h2".into(),
+                    answer: None
+                },
+            ]
         );
     }
 
@@ -717,6 +1008,7 @@ mod tests {
             method: Method::Get,
             path: "/v1/x".into(),
             body: None,
+            each: None,
             expr: "true".into(),
         });
         assert_eq!(run_check(&r, &w, &b, &jq).verdict, Verdict::NotRun);

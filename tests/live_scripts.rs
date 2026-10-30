@@ -3441,6 +3441,11 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
         "OK: each counted check passed\n",
     );
     stage.strata(
+        "preflight build.json --cloud aws --tier palette --rule template-outside --json --quiet",
+        0,
+        r#"{"checks":[{"id":"template-outside","verdict":"passed","requests":[{"ran":"GET /v1/clusterprofiles/r-1","answer":"HTTP 200"}]}]}"#,
+    );
+    stage.strata(
         "preflight build-fault.json --cloud aws --tier static,palette --no-exec --strict --quiet",
         1,
         "FAIL: 1 check(s) failed: account-missing\n",
@@ -3457,6 +3462,7 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
             "build-body",
             "preflight-static",
             "preflight-live",
+            "preflight-each",
             "preflight-fault",
         ],
     );

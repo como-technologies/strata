@@ -1,0 +1,31 @@
+{
+  "_base": "hrg-clean.json",
+  "_note": "the control plane pool has a group with free slots, and the hosts of the group of the worker pool have none",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "poolConfig": { "name": "cp-pool" },
+            "cloudConfig": {
+              "capacityType": "host-resource-group",
+              "hostResourceGroupArn": "arn:aws:resource-groups:us-east-2:123456789012:group/strata-hosts-cp"
+            }
+          }
+        ]
+      }
+    },
+    "_responses": {
+      "POST /v1/clouds/aws/regions/us-east-2/resourceGroups/validateCapacity?hrgArn=arn:aws:resource-groups:us-east-2:123456789012:group/strata-hosts-cp": {
+        "ok": true,
+        "status": 200,
+        "body": { "isValid": true, "availableCapacity": 2, "requiredCapacity": 1, "message": "Available capacity: 2, Required: 1" }
+      },
+      "POST /v1/clouds/aws/regions/us-east-2/resourceGroups/validateCapacity?hrgArn=arn:aws:resource-groups:us-east-2:123456789012:group/strata-hosts": {
+        "ok": true,
+        "status": 200,
+        "body": { "isValid": false, "availableCapacity": 0, "requiredCapacity": 2, "message": "Insufficient capacity. Available: 0, Required: 2" }
+      }
+    }
+  }
+}

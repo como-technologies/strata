@@ -1,13 +1,15 @@
 {
   "_base": "clean.json",
   "_note": "the first control plane host is not registered",
-  "_responses": {
-    "GET /v1/edgehosts/edge-host-cp-1": {
-      "ok": false,
-      "status": 404,
-      "body": {
-        "code": "ResourceNotFound",
-        "message": "Edge host 'edge-host-cp-1' not found"
+  "_patch": {
+    "_responses": {
+      "GET /v1/edgehosts/edge-host-cp-1": {
+        "ok": false,
+        "status": 404,
+        "body": {
+          "code": "ResourceNotFound",
+          "message": "Edge host 'edge-host-cp-1' not found"
+        }
       }
     }
   }

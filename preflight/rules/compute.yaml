@@ -419,22 +419,23 @@ rules:
       EC2 refuses the instances (`InsufficientHostCapacity`), and the pool never fills. Palette has
       `POST /v1/clouds/aws/regions/{region}/resourceGroups/validateCapacity`, which sums the free
       capacity of the hosts of the group for the type, and the create does not call it. The check
-      asks it for the first pool with a host resource group; a second pool needs its own call.
+      asks it once for each pool with a host resource group.
     check:
       kind: palette
       method: POST
-      path: '/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/resourceGroups/validateCapacity?hrgArn={{ [ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ] | .[0].cloudConfig.hostResourceGroupArn }}'
+      each: |
+        [ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ]
+      path: '/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/resourceGroups/validateCapacity?hrgArn={{ $item.cloudConfig.hostResourceGroupArn }}'
       body: |
-        ([ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ] | .[0]) as $p
-        | { cloudAccountUid: .entity.spec.cloudAccountUid, instanceType: $p.cloudConfig.instanceType, replicaCount: ($p.poolConfig.size // 0) }
+        { cloudAccountUid: .entity.spec.cloudAccountUid, instanceType: $item.cloudConfig.instanceType, replicaCount: ($item.poolConfig.size // 0) }
       expr: |
-        ([ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // "") != "") ] | .[0]) as $p
-        | if (.response.ok | not) then ["Palette cannot check the capacity of \($p.cloudConfig.hostResourceGroupArn): \(.response.body.code // .response.status): \(.response.body.message // "")"]
-          elif ((.response.body.isValid // false) | not)
-          then ["pool \($p.poolConfig.name): the group \($p.cloudConfig.hostResourceGroupArn) has \(.response.body.availableCapacity // 0) free \($p.cloudConfig.instanceType) slot(s), and the pool asks for \($p.poolConfig.size): \(.response.body.message // "")"]
-          else [] end
+        [ .responses[] | .item as $p | .response as $r
+          | if ($r.ok | not) then "Palette cannot check the capacity of \($p.cloudConfig.hostResourceGroupArn): \($r.body.code // $r.status): \($r.body.message // "")"
+            elif (($r.body.isValid // false) | not)
+            then "pool \($p.poolConfig.name): the group \($p.cloudConfig.hostResourceGroupArn) has \($r.body.availableCapacity // 0) free \($p.cloudConfig.instanceType) slot(s), and the pool asks for \($p.poolConfig.size): \($r.body.message // "")"
+            else empty end ]
     reproduce:
-      - "aws resource-groups list-group-resources --region {{ .entity.spec.cloudConfig.region }} --group {{ [ .entity.spec.machinepoolconfig[] | select((.cloudConfig.hostResourceGroupArn // \"\") != \"\") ] | .[0].cloudConfig.hostResourceGroupArn }} --query 'Resources[].Identifier.ResourceArn' --output text"
+      - "for g in {{ [ .entity.spec.machinepoolconfig[] | .cloudConfig.hostResourceGroupArn // empty | select(. != \"\") ] | unique | join(\" \") }}; do aws resource-groups list-group-resources --region {{ .entity.spec.cloudConfig.region }} --group $g --query 'Resources[].Identifier.ResourceArn' --output text; done"
       - "aws ec2 describe-hosts --region {{ .entity.spec.cloudConfig.region }} --host-ids <host ids of the group> --query 'Hosts[].AvailableCapacity.AvailableInstanceCapacity' --output json"
     fix:
       owner: palette
@@ -445,6 +446,7 @@ rules:
     tests:
       - fault: fixtures/aws/hrg-no-capacity.json
         clean: fixtures/aws/hrg-clean.json
+      - fault: fixtures/aws/hrg-second-pool-no-capacity.json
 
   - id: gke-no-gpu
     title: GKE node pools take no GPU machine type
@@ -771,18 +773,19 @@ rules:
       by uid. A uid that is not in the project fails the create. A
       host that is part of another cluster is refused with `EdgeHostDeviceAlreadyInUse`. The
       validate route reads neither. `GET /v1/edgehosts/{uid}` gives `status.state` and
-      `status.inUseClusters`; the check reads the first host of the first pool. A check of every
-      host needs one request for each; the reproduce line loops.
+      `status.inUseClusters`. The check reads each host of each pool, one request for each.
     check:
       kind: palette
       method: GET
-      path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
+      each: |
+        [ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]
+      path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
-        (.entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid) as $u
-        | if (.response.ok | not) then ["edge host \($u) is not registered in this project: \(.response.body.code // .response.status): \(.response.body.message // ""); the create fails"]
-          else (.response.body.status // {}) as $s | ([ ($s.inUseClusters // [])[] | .name // .uid ]) as $used
-            | if ($used | length) > 0 then ["edge host \($u) (\(.response.body.metadata.name // "")) is \($s.state // "?") and part of cluster(s) \($used | join(", ")): Palette refuses it with EdgeHostDeviceAlreadyInUse"] else [] end
-          end
+        [ .responses[] | .item.host.hostUid as $u | .response as $r
+          | if ($r.ok | not) then "edge host \($u) is not registered in this project: \($r.body.code // $r.status): \($r.body.message // ""); the create fails"
+            else ($r.body.status // {}) as $s | ([ ($s.inUseClusters // [])[] | .name // .uid ]) as $used
+              | if ($used | length) > 0 then "edge host \($u) (\($r.body.metadata.name // "")) is \($s.state // "?") and part of cluster(s) \($used | join(", ")): Palette refuses it with EdgeHostDeviceAlreadyInUse" else empty end
+            end ]
     reproduce:
       - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, name: .metadata.name, state: .status.state, health: .status.health.state, inUse: [.status.inUseClusters[]?.name]}'; done"
     fix:
@@ -797,6 +800,7 @@ rules:
     tests:
       - fault: fixtures/edge/host-in-use.json
         clean: fixtures/edge/clean.json
+      - fault: fixtures/edge/host-in-use-second-pool.json
       - fault: fixtures/edge/host-missing.json
 
   - id: edge-host-health
@@ -809,19 +813,21 @@ rules:
       The console offers hosts in the `ready` state with a `healthy` report. Palette accepts an
       `unpaired` host at the create, and does not read the health. The build then waits for an
       agent that does not report. Palette marks the
-      health stale after 5 minutes without a report. The check reads the first host of the first
-      pool; the reproduce line of `edge-host-in-use` loops over every host.
+      health stale after 5 minutes without a report. The check reads each host of each pool, one
+      request for each.
     check:
       kind: palette
       method: GET
-      path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
+      each: |
+        [ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]
+      path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
-        (.entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid) as $u
-        | if (.response.ok | not) then ["Palette cannot read edge host \($u): \(.response.body.code // .response.status): \(.response.body.message // "")"]
-          else (.response.body.status // {}) as $s
-            | [ ( if ($s.state // "") != "ready" then "edge host \($u) is \($s.state // "in no state"), not ready: the console offers ready hosts alone; the API accepts an unpaired host, and the build then waits for its agent" else empty end ),
-                ( if (($s.health.state // "") | ascii_downcase) != "healthy" then "edge host \($u) health is \($s.health.state // "not reported")\(if ($s.health.message // "") != "" then ": \($s.health.message)" else "" end); Palette marks the health stale after 5 minutes without a report, and does not read it at create" else empty end ) ]
-          end
+        [ .responses[] | .item.host.hostUid as $u | .response as $r
+          | if ($r.ok | not) then "Palette cannot read edge host \($u): \($r.body.code // $r.status): \($r.body.message // "")"
+            else ($r.body.status // {}) as $s
+              | ( if ($s.state // "") != "ready" then "edge host \($u) is \($s.state // "in no state"), not ready: the console offers ready hosts alone; the API accepts an unpaired host, and the build then waits for its agent" else empty end ),
+                ( if (($s.health.state // "") | ascii_downcase) != "healthy" then "edge host \($u) health is \($s.health.state // "not reported")\(if ($s.health.message // "") != "" then ": \($s.health.message)" else "" end); Palette marks the health stale after 5 minutes without a report, and does not read it at create" else empty end )
+            end ]
     fix:
       owner: palette
       text: Refuse a host that is not ready, or not healthy, in the validate route.
@@ -834,6 +840,7 @@ rules:
     tests:
       - fault: fixtures/edge/host-unhealthy.json
         clean: fixtures/edge/clean.json
+      - fault: fixtures/edge/host-unhealthy-second-pool.json
       - fault: fixtures/edge/host-unpaired.json
 
   - id: edge-host-arch
@@ -846,18 +853,20 @@ rules:
       The create compares `spec.device.archType` of each host with
       `poolConfig.machinePoolProperties.archType` of its pool and refuses a mismatch with
       `EdgeHostDoesNotBelongToArchType`; an empty value on either side is `amd64`. The validate
-      route does not run it. The check reads the first host of the first pool.
+      route does not run it. The check reads each host of each pool, one request for each.
     check:
       kind: palette
       method: GET
-      path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
+      each: |
+        [ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]
+      path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
-        (.entity.spec.machinepoolconfig[0]) as $pool | ($pool.cloudConfig.edgeHosts[0].hostUid) as $u
-        | (($pool.poolConfig.machinePoolProperties.archType // "amd64") | ascii_downcase) as $want
-        | if (.response.ok | not) then ["Palette cannot read edge host \($u): \(.response.body.code // .response.status): \(.response.body.message // "")"]
-          else ((.response.body.spec.device.archType // "amd64") | ascii_downcase) as $have
-            | if $have != $want then ["edge host \($u) is \($have), and pool \($pool.poolConfig.name) is \($want): Palette refuses the create with EdgeHostDoesNotBelongToArchType; an empty architecture counts as amd64"] else [] end
-          end
+        [ .responses[] | .item.pool as $pool | .item.host.hostUid as $u | .response as $r
+          | (($pool.machinePoolProperties.archType // "amd64") | ascii_downcase) as $want
+          | if ($r.ok | not) then "Palette cannot read edge host \($u): \($r.body.code // $r.status): \($r.body.message // "")"
+            else (($r.body.spec.device.archType // "amd64") | ascii_downcase) as $have
+              | if $have != $want then "edge host \($u) is \($have), and pool \($pool.name) is \($want): Palette refuses the create with EdgeHostDoesNotBelongToArchType; an empty architecture counts as amd64" else empty end
+            end ]
     reproduce:
       - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -r '[.metadata.uid, .spec.device.archType] | @tsv'; done"
     fix:
@@ -869,6 +878,7 @@ rules:
     tests:
       - fault: fixtures/edge/host-arm64.json
         clean: fixtures/edge/clean.json
+      - fault: fixtures/edge/host-arm64-second-pool.json
 
   - id: edge-host-resources
     title: Each edge host has the cores, the memory, and the disk of the docs
@@ -879,21 +889,23 @@ rules:
     what: |
       The hardware page needs two cores, 8 GB of memory, and a 150 GB SSD as the main drive for an
       appliance host. The architecture page says 100 GB. Palette reads none of them at create. The
-      docs give no floor for each Kubernetes distribution. The check reads `spec.device` of the
-      first host of the first pool: `cpu.cores`, `memory.sizeInMB`, and the largest `disks[].size`
-      (GB).
+      docs give no floor for each Kubernetes distribution. The check reads `spec.device` of each
+      host of each pool, one request for each: `cpu.cores`, `memory.sizeInMB`, and the largest
+      `disks[].size` (GB).
     check:
       kind: palette
       method: GET
-      path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
+      each: |
+        [ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]
+      path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
-        (.entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid) as $u
-        | if (.response.ok | not) then ["Palette cannot read edge host \($u): \(.response.body.code // .response.status): \(.response.body.message // "")"]
-          else (.response.body.spec.device // {}) as $d | ($d.cpu.cores // 0) as $cores | ($d.memory.sizeInMB // 0) as $mem | ([ ($d.disks // [])[] | .size // 0 ] | sort | .[-1] // 0) as $disk
-            | [ ( if $cores < 2 then "edge host \($u) has \($cores) core(s); the docs need 2" else empty end ),
+        [ .responses[] | .item.host.hostUid as $u | .response as $r
+          | if ($r.ok | not) then "Palette cannot read edge host \($u): \($r.body.code // $r.status): \($r.body.message // "")"
+            else ($r.body.spec.device // {}) as $d | ($d.cpu.cores // 0) as $cores | ($d.memory.sizeInMB // 0) as $mem | ([ ($d.disks // [])[] | .size // 0 ] | sort | .[-1] // 0) as $disk
+              | ( if $cores < 2 then "edge host \($u) has \($cores) core(s); the docs need 2" else empty end ),
                 ( if $mem < 8192 then "edge host \($u) has \($mem) MB of memory; the docs need 8 GB" else empty end ),
-                ( if $disk < 150 then "edge host \($u) has a \($disk) GB main disk; the hardware page needs 150 GB on an SSD, and the architecture page says 100 GB" else empty end ) ]
-          end
+                ( if $disk < 150 then "edge host \($u) has a \($disk) GB main disk; the hardware page needs 150 GB on an SSD, and the architecture page says 100 GB" else empty end )
+            end ]
     reproduce:
       - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, cores: .spec.device.cpu.cores, memMB: .spec.device.memory.sizeInMB, disksGB: [.spec.device.disks[].size]}'; done"
     fix:
@@ -911,6 +923,7 @@ rules:
     tests:
       - fault: fixtures/edge/host-small.json
         clean: fixtures/edge/clean.json
+      - fault: fixtures/edge/host-small-second-pool.json
 
   - id: edge-host-duplicate
     title: No edge host is in two pools, and no host name is used two times
@@ -1027,24 +1040,31 @@ rules:
     what: |
       `GET /v1/cloudaccounts/vsphere/{uid}/properties/computecluster/resources` lists, through the
       PCG, the datastores, the networks, and the resource pools of one compute cluster. A name
-      that is not there fails the build in vCenter. The check reads the placement of the first
-      pool; a second pool with another compute cluster needs its own call, and the reproduce line
-      shows it.
+      that is not there fails the build in vCenter. The check reads the placement of each pool, with
+      one request for each compute cluster that the pools name.
     check:
       kind: palette
       method: GET
-      path: /v1/cloudaccounts/vsphere/{{ .entity.spec.cloudAccountUid }}/properties/computecluster/resources?datacenter={{ .entity.spec.cloudConfig.placement.datacenter }}&computecluster={{ (.entity.spec.cloudConfig.placement // {}) as $cp | (((.entity.spec.machinepoolconfig[0].cloudConfig.placements // []) | first) // {}) | (.cluster // $cp.cluster) }}
+      each: |
+        (.entity.spec.cloudConfig.placement // {}) as $cp
+        | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $pool
+            | ((.cloudConfig.placements // []) | if length == 0 then [{}] else . end)[]
+            | { pool: $pool, cluster: (.cluster // $cp.cluster // ""), datastore: (.datastore // $cp.datastore // ""), network: (.network.networkName // $cp.network.networkName // ""), resourcePool: (.resourcePool // $cp.resourcePool // "") }
+            | select(.cluster != "") ]
+        | group_by(.cluster)
+        | map({ cluster: .[0].cluster, wants: . })
+      path: /v1/cloudaccounts/vsphere/{{ .entity.spec.cloudAccountUid }}/properties/computecluster/resources?datacenter={{ .entity.spec.cloudConfig.placement.datacenter }}&computecluster={{ $item.cluster }}
       expr: |
-        (.entity.spec.cloudConfig.placement // {}) as $cp | ((((.entity.spec.machinepoolconfig[0].cloudConfig.placements // []) | first) // {})) as $pl
-        | { cluster: ($pl.cluster // $cp.cluster), datastore: ($pl.datastore // $cp.datastore // ""), network: ($pl.network.networkName // $cp.network.networkName // ""), rp: ($pl.resourcePool // $cp.resourcePool // "") } as $w
-        | if (.response.ok | not) then ["Palette cannot list the resources of compute cluster \($w.cluster): \(.response.body.code // .response.status): \(.response.body.message // ""); the route goes through the PCG of the account"]
-          else (.response.body.computecluster // {}) as $cc
-            | [ ( if $w.datastore != "" and (($cc.datastores // []) | index($w.datastore)) == null then "datastore \($w.datastore) is not in compute cluster \($w.cluster) (\(($cc.datastores // []) | join(", ")))" else empty end ),
-                ( if $w.network != "" and (($cc.networks // []) | index($w.network)) == null then "network \($w.network) is not in compute cluster \($w.cluster) (\(($cc.networks // []) | join(", ")))" else empty end ),
-                ( if $w.rp != "" and $w.rp != "Resources" and (($cc.resourcePools // []) | index($w.rp)) == null then "resource pool \($w.rp) is not in compute cluster \($w.cluster) (\(($cc.resourcePools // []) | join(", ")))" else empty end ) ]
-          end
+        [ .responses[] | .item as $i | .response as $r
+          | if ($r.ok | not) then "Palette cannot list the resources of compute cluster \($i.cluster): \($r.body.code // $r.status): \($r.body.message // ""); the route goes through the PCG of the account"
+            else ($r.body.computecluster // {}) as $cc
+              | $i.wants[] | . as $w
+              | ( if $w.datastore != "" and (($cc.datastores // []) | index($w.datastore)) == null then "pool \($w.pool): datastore \($w.datastore) is not in compute cluster \($i.cluster) (\(($cc.datastores // []) | join(", ")))" else empty end ),
+                ( if $w.network != "" and (($cc.networks // []) | index($w.network)) == null then "pool \($w.pool): network \($w.network) is not in compute cluster \($i.cluster) (\(($cc.networks // []) | join(", ")))" else empty end ),
+                ( if $w.resourcePool != "" and $w.resourcePool != "Resources" and (($cc.resourcePools // []) | index($w.resourcePool)) == null then "pool \($w.pool): resource pool \($w.resourcePool) is not in compute cluster \($i.cluster) (\(($cc.resourcePools // []) | join(", ")))" else empty end )
+            end ]
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudaccounts/vsphere/{{ .entity.spec.cloudAccountUid }}/properties/computecluster/resources?datacenter={{ .entity.spec.cloudConfig.placement.datacenter }}&computecluster=<compute cluster of the pool>\" | jq .computecluster"
+      - "for c in {{ [ .entity.spec.cloudConfig.placement.cluster // empty, (.entity.spec.machinepoolconfig[] | (.cloudConfig.placements // [])[] | .cluster // empty) ] | unique | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudaccounts/vsphere/{{ .entity.spec.cloudAccountUid }}/properties/computecluster/resources?datacenter={{ .entity.spec.cloudConfig.placement.datacenter }}&computecluster=$c\" | jq .computecluster; done"
     fix:
       owner: palette
       text: Read the resources of each placement in the validate route.
@@ -1056,6 +1076,8 @@ rules:
     tests:
       - fault: fixtures/vsphere/datastore-missing.json
         clean: fixtures/vsphere/clean.json
+      - fault: fixtures/vsphere/datastore-missing-second-pool.json
+      - fault: fixtures/vsphere/datastore-missing-second-cluster.json
 
   - id: vsphere-instance-floor
     title: Each vSphere pool has one CPU, 1024 MiB, and a 20 GiB disk or more
