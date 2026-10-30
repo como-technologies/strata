@@ -174,6 +174,20 @@ pub const UID_ADDONS: &str = "64f0000000000000000000d4";
 /// A cluster variable value that must never reach a snapshot.
 pub const SECRET_VALUE: &str = "s3cr3t-value";
 
+/// The uid of the profile version that the tests of a draft serve.
+pub const DRAFT_PROFILE_UID: &str = "64f0000000000000000000d1";
+
+/// The uid of the manifest `rules` in the tests of a draft.
+pub const RULES_UID: &str = "64f00000000000000000a0e1";
+
+/// The content of the manifest `rules` in the published template of the tests of a draft.
+pub const PUBLISHED_RULES: &str =
+    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: warn";
+
+/// The content of the manifest `rules` in the draft template of the tests of a draft.
+pub const DRAFT_RULES: &str =
+    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: error";
+
 /// The JSON document in the file at `path`.
 pub fn read_json(path: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
@@ -182,6 +196,11 @@ pub fn read_json(path: &Path) -> Value {
 /// Write `doc`, a record or a `behind --since` report, to the file at `path`.
 pub fn write_record(path: &Path, doc: &Value) {
     fs::write(path, serde_json::to_string_pretty(doc).unwrap()).unwrap();
+}
+
+/// Write `doc`, a candidate, to the file at `path` as YAML.
+pub fn write_yaml(path: &Path, doc: &Value) {
+    fs::write(path, serde_yaml::to_string(doc).unwrap()).unwrap();
 }
 
 /// Assemble a cluster that runs the profile fixtures `profiles`, in order, the way Palette returns
@@ -685,23 +704,6 @@ pub fn live_script(name: &str) -> std::path::PathBuf {
         .join(name)
 }
 
-/// Each file under a directory, at any depth.
-pub fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
-    let mut out = Vec::new();
-    let Ok(entries) = fs::read_dir(dir) else {
-        return out;
-    };
-    for e in entries.flatten() {
-        let p = e.path();
-        if p.is_dir() {
-            out.extend(walk(&p));
-        } else {
-            out.push(p);
-        }
-    }
-    out
-}
-
 pub fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
@@ -742,8 +744,17 @@ pub fn snapshot_of_at(
     text: &str,
     at: &str,
 ) -> strata::Result<strata::snapshot::Snapshot> {
+    snapshot_of_ref(api, &strata::reference::Ref::parse(text), at)
+}
+
+/// [`snapshot_of_at`], for a ref that the test has built and not parsed.
+pub fn snapshot_of_ref(
+    api: &strata::api::MemoryApi,
+    reference: &strata::reference::Ref,
+    at: &str,
+) -> strata::Result<strata::snapshot::Snapshot> {
     strata::ops::snapshot_for(
-        &strata::reference::Ref::parse(text),
+        reference,
         &strata::ops::SnapshotOptions::default(),
         || Ok(strata::api::Palette::new(api)),
         at,
@@ -817,9 +828,34 @@ pub fn resolved_values_route(uid: &str) -> String {
     format!("/v1/clusterprofiles/{uid}/packs/resolvedValues")
 }
 
+/// The value of each macro of the cluster `uid`, as Palette resolves it.
+pub fn cluster_resolved_values_route(uid: &str) -> String {
+    format!("{}/packs/resolvedValues", cluster_route(uid))
+}
+
+/// The value of each macro of the cluster group `uid`, as Palette resolves it.
+pub fn group_resolved_values_route(uid: &str) -> String {
+    format!("{}/packs/resolvedValues", group_route(uid))
+}
+
 /// The document of the cluster `uid`, `GET /v1/spectroclusters/{uid}`.
 pub fn cluster_route(uid: &str) -> String {
     format!("/v1/spectroclusters/{uid}")
+}
+
+/// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`.
+pub fn group_route(uid: &str) -> String {
+    format!("/v1/clustergroups/{uid}")
+}
+
+/// The document of the app profile `uid`, `GET /v1/appProfiles/{uid}`.
+pub fn app_profile_route(uid: &str) -> String {
+    format!("/v1/appProfiles/{uid}")
+}
+
+/// The document of the edge host `uid`, `GET /v1/edgehosts/{uid}`.
+pub fn edge_host_route(uid: &str) -> String {
+    format!("/v1/edgehosts/{uid}")
 }
 
 /// The pack manifests of each profile of the cluster `uid`.
@@ -837,11 +873,42 @@ pub fn pack_listing_route(name: &str) -> String {
     format!("/v1/packs?filters=spec.name={name}&limit=100&offset=0")
 }
 
+/// The pack `name` in the registry `registry`, `GET /v1/packs/{name}/registries/{registry}`: its
+/// tags.
+pub fn pack_entity_route(name: &str, registry: &str) -> String {
+    format!("/v1/packs/{name}/registries/{registry}")
+}
+
 /// The registry listing, `GET /v1/registries/metadata`.
 pub const REGISTRY_LISTING: &str = "/v1/registries/metadata";
 
 /// The summary of the OCI registries, `GET /v1/registries/oci/summary`.
 pub const OCI_REGISTRY_SUMMARY: &str = "/v1/registries/oci/summary";
+
+/// Serve the pack listing of the pack `name`: the pack summaries `items`, an array, and their count.
+pub fn serve_pack_listing(
+    api: strata::api::MemoryApi,
+    name: &str,
+    items: Value,
+) -> strata::api::MemoryApi {
+    let count = items.as_array().map_or(0, Vec::len);
+    api.with(
+        pack_listing_route(name),
+        json!({"items": items, "listmeta": {"count": count}}),
+    )
+}
+
+/// The registry endpoints strata reads for one pack, as the examples cached them from a live
+/// tenant: the version listing filtered by name, and the pack entity with its tags.
+pub fn serve_registry_pack(
+    api: strata::api::MemoryApi,
+    name: &str,
+    summaries: Value,
+    entity: Value,
+    registry: &str,
+) -> strata::api::MemoryApi {
+    serve_pack_listing(api, name, summaries).with(pack_entity_route(name, registry), entity)
+}
 
 /// One manifest `manifest` of the pack `pack` of the profile version `uid`, with the content of
 /// each template.
@@ -982,11 +1049,71 @@ pub fn listing(
     )
 }
 
+// ---- the renderers and the summaries -------------------------------------------------------------
+
+/// The terminal renderer, with no color.
+pub fn terminal() -> Box<dyn strata::render::Renderer> {
+    strata::render::renderer(
+        strata::render::Format::Terminal,
+        strata::term::color::Paint::off(),
+        false,
+    )
+}
+
+/// The markdown renderer.
+pub fn markdown() -> Box<dyn strata::render::Renderer> {
+    strata::render::renderer(
+        strata::render::Format::Markdown,
+        strata::term::color::Paint::off(),
+        false,
+    )
+}
+
+/// Run `strata verify` on `record` against the in-memory Palette `api`, read at `t1`.
+///
+/// The record goes in a file first, as `verify` reads one.
+pub fn verify_summary(
+    record: &strata::snapshot::Snapshot,
+    api: &strata::api::MemoryApi,
+) -> strata::ops::VerifySummary {
+    verify_summary_with(record, api, &strata::ops::VerifyOptions::default())
+}
+
+/// [`verify_summary`], with the options `options`.
+pub fn verify_summary_with(
+    record: &strata::snapshot::Snapshot,
+    api: &strata::api::MemoryApi,
+    options: &strata::ops::VerifyOptions,
+) -> strata::ops::VerifySummary {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("record.json");
+    fs::write(&path, record.to_json(true).unwrap()).unwrap();
+    strata::ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(strata::api::Palette::new(api.clone())),
+        "t1",
+        options,
+        &strata::term::progress::Progress::silent(),
+    )
+}
+
 // ---- the processes -----------------------------------------------------------------------------
 
 /// The strata binary that cargo built for the tests.
 pub fn strata_bin() -> &'static Path {
     Path::new(env!("CARGO_BIN_EXE_strata"))
+}
+
+/// Make the directory `bin` under `dir`, and put the stand-in commands `commands` in it: each is a
+/// name and the body of its script. Gives the directory, for [`path_with`].
+pub fn fake_bin(dir: &Path, commands: &[(&str, &str)]) -> std::path::PathBuf {
+    let bin = dir.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    for (name, body) in commands {
+        executable(&bin.join(name), body);
+    }
+    bin
 }
 
 /// `PATH` with the directory `bin` first, so that a stand-in command in it runs in place of the

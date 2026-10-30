@@ -2,6 +2,8 @@
 //! it, and the answers that `--raw-dir` saves, hold `********` in place of each value whose
 //! schema format is `password`, as Palette masks a published pack.
 
+use std::path::Path;
+
 use serde_json::{Value, json};
 
 use strata::api::{MemoryApi, Palette};
@@ -11,11 +13,11 @@ use strata::term::progress::Progress;
 
 use crate::common;
 use common::{
-    manifest_content, manifest_entity, manifest_route, no_manifests, no_template, no_variables,
-    profile_document, profile_route, serve_profile, snapshot_of, template,
+    DRAFT_PROFILE_UID, DRAFT_RULES, PUBLISHED_RULES, RULES_UID, manifest_content, manifest_entity,
+    manifest_route, no_manifests, no_template, no_variables, profile_document, profile_route,
+    serve_profile, snapshot_of, template,
 };
 
-const PROFILE: &str = "64f0000000000000000000d1";
 const PACK: &str = "64f0000000000000000000e1";
 const SECRET: &str = "s3cret-barney";
 const VALUES: &str = "charts:\n  grafana:\n    adminUser: fred # the login\n    \
@@ -34,7 +36,7 @@ fn grafana_template(values: &str) -> Value {
 
 /// The document of version 1.0.0 of `barney`, with `published` and `draft` as its templates.
 fn profile_doc(published: Value, draft: Option<Value>) -> Value {
-    profile_document(PROFILE, "barney", "1.0.0", published, draft)
+    profile_document(DRAFT_PROFILE_UID, "barney", "1.0.0", published, draft)
 }
 
 /// The answer of `packs/manifests` for the pack `grafana` with the uid `uid`: its values in
@@ -42,6 +44,15 @@ fn profile_doc(published: Value, draft: Option<Value>) -> Value {
 fn grafana_manifests(uid: &str) -> Value {
     json!({"spec": {"packs": [{"metadata": {"name": "grafana", "uid": uid},
         "spec": {"name": "grafana", "version": "1.0.0", "values": VALUES}}]}})
+}
+
+/// Make sure that no file in `dir`, which `save_dir` wrote, holds SECRET.
+fn assert_no_saved_file_holds_secret(dir: &Path) {
+    for file in std::fs::read_dir(dir).unwrap() {
+        let path = file.unwrap().path();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains(SECRET), "{}: {text}", path.display());
+    }
 }
 
 /// The document of the pack `uid`, `GET /v1/packs/{uid}`.
@@ -60,7 +71,7 @@ fn pack_doc() -> Value {
 fn draft_only() -> MemoryApi {
     serve_profile(
         MemoryApi::new(),
-        PROFILE,
+        DRAFT_PROFILE_UID,
         profile_doc(no_template(), Some(grafana_template(VALUES))),
         grafana_manifests(PACK),
         no_variables(),
@@ -70,7 +81,7 @@ fn draft_only() -> MemoryApi {
 #[test]
 fn a_record_of_a_draft_holds_no_clear_secret() {
     let api = draft_only().with(pack_route(PACK), pack_doc());
-    let snap = snapshot_of(&api, PROFILE).unwrap();
+    let snap = snapshot_of(&api, DRAFT_PROFILE_UID).unwrap();
     assert_eq!(snap.source.template, Template::Draft);
     let record = snap.to_json(false).unwrap();
     assert!(!record.contains(SECRET), "{record}");
@@ -91,15 +102,11 @@ fn a_record_of_a_draft_holds_no_clear_secret() {
 fn the_saved_answers_of_a_draft_hold_no_clear_secret() {
     let api = draft_only().with(pack_route(PACK), pack_doc());
     let raw = Palette::new(&api)
-        .fetch_profile(PROFILE, &Progress::silent())
+        .fetch_profile(DRAFT_PROFILE_UID, &Progress::silent())
         .unwrap();
     let dir = tempfile::tempdir().unwrap();
     raw.save_dir(dir.path(), "t0").unwrap();
-    for file in std::fs::read_dir(dir.path()).unwrap() {
-        let path = file.unwrap().path();
-        let text = std::fs::read_to_string(&path).unwrap();
-        assert!(!text.contains(SECRET), "{}: {text}", path.display());
-    }
+    assert_no_saved_file_holds_secret(dir.path());
     assert!(raw.manifests.to_string().contains("'********'"));
 }
 
@@ -111,13 +118,13 @@ fn a_masked_draft_has_the_values_digest_of_the_version_that_palette_masks() {
                   adminPassword: '********'\n        replicas: 2\n";
     let published = serve_profile(
         MemoryApi::new(),
-        PROFILE,
+        DRAFT_PROFILE_UID,
         profile_doc(grafana_template(masked), None),
         no_manifests(),
         no_variables(),
     );
-    let a = snapshot_of(&draft, PROFILE).unwrap();
-    let b = snapshot_of(&published, PROFILE).unwrap();
+    let a = snapshot_of(&draft, DRAFT_PROFILE_UID).unwrap();
+    let b = snapshot_of(&published, DRAFT_PROFILE_UID).unwrap();
     assert_eq!(a.packs[0].values_hash, b.packs[0].values_hash);
     assert_eq!(a.content_digest(), b.content_digest());
     // Palette masks a published profile: strata reads no schema for it
@@ -131,10 +138,10 @@ fn a_published_profile_with_a_draft_saves_no_clear_secret_of_the_draft() {
         Some(grafana_template(VALUES)),
     );
     let api = draft_only()
-        .with(profile_route(PROFILE), doc)
+        .with(profile_route(DRAFT_PROFILE_UID), doc)
         .with(pack_route(PACK), pack_doc());
     let raw = Palette::new(&api)
-        .fetch_profile(PROFILE, &Progress::silent())
+        .fetch_profile(DRAFT_PROFILE_UID, &Progress::silent())
         .unwrap();
     assert!(!raw.profile.to_string().contains(SECRET));
     assert!(!raw.manifests.to_string().contains(SECRET));
@@ -143,14 +150,14 @@ fn a_published_profile_with_a_draft_saves_no_clear_secret_of_the_draft() {
 #[test]
 fn a_pack_that_palette_no_longer_has_is_not_masked_as_in_palette() {
     // with no pack, Palette has no schema and masks nothing; the memory client answers 404
-    let snap = snapshot_of(&draft_only(), PROFILE).unwrap();
+    let snap = snapshot_of(&draft_only(), DRAFT_PROFILE_UID).unwrap();
     assert!(snap.packs[0].values.contains(SECRET));
 }
 
 #[test]
 fn a_failed_read_of_the_schema_stops_the_record() {
     let api = draft_only().failing(pack_route(PACK), 403, "forbidden");
-    let err = snapshot_of(&api, PROFILE).unwrap_err();
+    let err = snapshot_of(&api, DRAFT_PROFILE_UID).unwrap_err();
     assert!(matches!(err, Error::Api { status: 403, .. }), "{err}");
 }
 
@@ -163,7 +170,7 @@ fn a_pack_uid_with_a_character_that_is_not_alphanumeric_is_masked() {
     pack["packValues"][0]["packUid"] = json!(uid);
     let api = serve_profile(
         MemoryApi::new(),
-        PROFILE,
+        DRAFT_PROFILE_UID,
         profile,
         grafana_manifests(uid),
         no_variables(),
@@ -171,7 +178,7 @@ fn a_pack_uid_with_a_character_that_is_not_alphanumeric_is_masked() {
     // strata escapes the uid in the path, as for each other uid
     .with("/v1/packs/64f0-barney%2Be1", pack);
     let raw = Palette::new(&api)
-        .fetch_profile(PROFILE, &Progress::silent())
+        .fetch_profile(DRAFT_PROFILE_UID, &Progress::silent())
         .unwrap();
     assert!(!raw.profile.to_string().contains(SECRET));
     assert!(!raw.manifests.to_string().contains(SECRET));
@@ -182,7 +189,6 @@ fn a_pack_uid_with_a_character_that_is_not_alphanumeric_is_masked() {
 
 const RULES_PACK: &str = "64f0000000000000000000e2";
 const DASH: &str = "64f00000000000000000a0d1";
-const RULES: &str = "64f00000000000000000a0e1";
 const PUBLISHED_VALUES: &str =
     "charts:\n  grafana:\n    adminPassword: '********'\n    replicas: 2\n";
 const DRAFT_VALUES: &str =
@@ -193,10 +199,6 @@ const PUBLISHED_DASH: &str =
     "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: dash\ndata:\n  panels: \"1\"";
 const DRAFT_DASH: &str =
     "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: dash\ndata:\n  panels: \"2\"";
-const PUBLISHED_RULES: &str =
-    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: warn";
-const DRAFT_RULES: &str =
-    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: error";
 
 /// A template with the pack `grafana`, which has `values` and the manifest `dash`, and the
 /// manifest pack `team-rules`, which has the manifest `rules`.
@@ -210,7 +212,7 @@ fn template_with_manifests(values: &str) -> Value {
          "manifests": [{"name": "dash", "uid": DASH, "kind": "manifest"}]},
         {"name": "team-rules", "layer": "addon", "type": "manifest", "tag": "1.0.0",
          "version": "1.0.0", "packUid": RULES_PACK, "values": "",
-         "manifests": [{"name": "rules", "uid": RULES, "kind": "manifest"}]}]),
+         "manifests": [{"name": "rules", "uid": RULES_UID, "kind": "manifest"}]}]),
     )
 }
 
@@ -231,22 +233,22 @@ fn draft_with_manifests() -> MemoryApi {
         served("grafana", PACK, DRAFT_VALUES,
                json!({"name": "dash", "uid": DASH, "content": PUBLISHED_DASH})),
         served("team-rules", RULES_PACK, "",
-               json!({"name": "rules", "uid": RULES, "content": PUBLISHED_RULES}))]}});
+               json!({"name": "rules", "uid": RULES_UID, "content": PUBLISHED_RULES}))]}});
     serve_profile(
         MemoryApi::new(),
-        PROFILE,
+        DRAFT_PROFILE_UID,
         document,
         manifests,
         no_variables(),
     )
     .with(pack_route(PACK), pack_doc())
     .with(
-        manifest_route(PROFILE, "grafana", DASH),
+        manifest_route(DRAFT_PROFILE_UID, "grafana", DASH),
         manifest_entity(DASH, "dash", PUBLISHED_DASH, DRAFT_DASH),
     )
     .with(
-        manifest_route(PROFILE, "team-rules", RULES),
-        manifest_entity(RULES, "rules", PUBLISHED_RULES, DRAFT_RULES),
+        manifest_route(DRAFT_PROFILE_UID, "team-rules", RULES_UID),
+        manifest_entity(RULES_UID, "rules", PUBLISHED_RULES, DRAFT_RULES),
     )
 }
 
@@ -255,24 +257,20 @@ fn a_draft_with_a_secret_and_manifests_records_no_clear_secret_and_the_content_o
     let api = draft_with_manifests();
 
     let raw = Palette::new(&api)
-        .fetch_profile(PROFILE, &Progress::silent())
+        .fetch_profile(DRAFT_PROFILE_UID, &Progress::silent())
         .unwrap();
     assert!(!raw.profile.to_string().contains(SECRET));
     assert!(!raw.manifests.to_string().contains(SECRET));
     let entities = raw.manifest_entities.as_ref().unwrap();
     assert!(
-        entities.get(DASH).is_some() && entities.get(RULES).is_some(),
+        entities.get(DASH).is_some() && entities.get(RULES_UID).is_some(),
         "{entities}"
     );
     let dir = tempfile::tempdir().unwrap();
     raw.save_dir(dir.path(), "t0").unwrap();
-    for file in std::fs::read_dir(dir.path()).unwrap() {
-        let path = file.unwrap().path();
-        let text = std::fs::read_to_string(&path).unwrap();
-        assert!(!text.contains(SECRET), "{}: {text}", path.display());
-    }
+    assert_no_saved_file_holds_secret(dir.path());
 
-    let draft = snapshot_of(&api, &format!("{PROFILE}@draft")).unwrap();
+    let draft = snapshot_of(&api, &format!("{DRAFT_PROFILE_UID}@draft")).unwrap();
     assert_eq!(draft.source.template, Template::Draft);
     let record = draft.to_json(false).unwrap();
     assert!(!record.contains(SECRET), "{record}");
@@ -286,7 +284,7 @@ fn a_draft_with_a_secret_and_manifests_records_no_clear_secret_and_the_content_o
     assert_eq!(manifest_content(&draft, "dash"), Some(DRAFT_DASH));
     assert_eq!(manifest_content(&draft, "rules"), Some(DRAFT_RULES));
 
-    let version = snapshot_of(&api, PROFILE).unwrap();
+    let version = snapshot_of(&api, DRAFT_PROFILE_UID).unwrap();
     assert_eq!(version.source.template, Template::Published);
     let record = version.to_json(false).unwrap();
     assert!(!record.contains(SECRET), "{record}");

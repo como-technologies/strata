@@ -50,6 +50,8 @@ const CHARTS_PROBE: &str = "64ed000000000000000000c1";
 const CHART_PACK: &str = "64ed000000000000000000b1";
 const A112_PROD: &str = "64e1000000000000000000d4";
 const PAYMENTS: &str = "64f1000000000000000000e1";
+// the cloud account platform-aws of the preflight chapter
+const PLATFORM_AWS: &str = "64f3000000000000000000a1";
 const SEARCH: &str = "64f1000000000000000000e2";
 const LEDGER: &str = "64f1000000000000000000e3";
 const LEGACY: &str = "64f1000000000000000000e7";
@@ -105,21 +107,25 @@ const MACRO_REGION: &[Edit] = &[Edit::Macro {
 
 /// The body of an AWS create for the preflight chapter: the profile aws-stack@1.1.1 of dev, the
 /// cloud account platform-aws, and two pools of t3.xlarge in one zone.
-const PREFLIGHT_ENTITY: &str = r#"{
-  "metadata": { "name": "payments", "labels": { "env": "prod" } },
-  "spec": {
-    "cloudAccountUid": "64f3000000000000000000a1",
-    "cloudConfig": { "region": "us-east-2", "sshKeyName": "platform", "vpcId": "" },
-    "machinepoolconfig": [
-      { "cloudConfig": { "instanceType": "t3.xlarge", "azs": ["us-east-2a"], "rootDeviceSize": 60 },
-        "poolConfig": { "name": "cp-pool", "size": 1, "isControlPlane": true, "useControlPlaneAsWorker": false } },
-      { "cloudConfig": { "instanceType": "t3.xlarge", "azs": ["us-east-2a"], "rootDeviceSize": 60 },
-        "poolConfig": { "name": "worker-pool", "size": 1, "isControlPlane": false, "useControlPlaneAsWorker": false } }
-    ],
-    "profiles": [ { "uid": "64e0000000000000000000c3", "packValues": [], "variables": [] } ]
-  }
+fn preflight_entity() -> String {
+    let pool = |name: &str, size: u32, control_plane: bool| {
+        json!({
+            "cloudConfig": {"instanceType": "t3.xlarge", "azs": ["us-east-2a"], "rootDeviceSize": 60},
+            "poolConfig": {"name": name, "size": size, "isControlPlane": control_plane,
+                           "useControlPlaneAsWorker": false},
+        })
+    };
+    let entity = json!({
+        "metadata": {"name": "payments", "labels": {"env": "prod"}},
+        "spec": {
+            "cloudAccountUid": PLATFORM_AWS,
+            "cloudConfig": {"region": "us-east-2", "sshKeyName": "platform", "vpcId": ""},
+            "machinepoolconfig": [pool("cp-pool", 1, true), pool("worker-pool", 1, false)],
+            "profiles": [{"uid": A111, "packValues": [], "variables": []}],
+        },
+    });
+    serde_json::to_string_pretty(&entity).expect("a JSON document")
 }
-"#;
 
 /// The git settings that the merge-gate chapters need, so a commit is the same on every machine.
 const GIT: &[(&str, &str)] = &[
@@ -3045,11 +3051,11 @@ fn automation(r: &mut Runner) {
     r.chapter("preflight", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.write_file("cluster.json", PREFLIGHT_ENTITY);
+    r.write_file("cluster.json", &preflight_entity());
     r.answer(
         DEV,
-        "v1/cloudaccounts/aws/64f3000000000000000000a1",
-        &json!({"kind": "aws", "metadata": {"name": "platform-aws", "uid": "64f3000000000000000000a1"},
+        &format!("v1/cloudaccounts/aws/{PLATFORM_AWS}"),
+        &json!({"kind": "aws", "metadata": {"name": "platform-aws", "uid": PLATFORM_AWS},
             "spec": {"credentialType": "secret", "partition": "aws", "policyARNs": []}, "status": {"state": "Active"}}),
     );
     // the property route of AWS answers 204 with no body; the stand-in serves 200 with an empty
@@ -3058,7 +3064,7 @@ fn automation(r: &mut Runner) {
     r.answer(DEV, "v1/clouds/aws/properties/validate", &json!({}));
     r.answer(
         DEV,
-        "v1/clouds/aws/regions@cloudAccountUid=64f3000000000000000000a1",
+        &format!("v1/clouds/aws/regions@cloudAccountUid={PLATFORM_AWS}"),
         &json!({"regions": [{"name": "us-east-2", "zones": [{"name": "us-east-2a"}, {"name": "us-east-2b"}, {"name": "us-east-2c"}]}]}),
     );
     r.answer(
@@ -3105,19 +3111,21 @@ fn automation(r: &mut Runner) {
         "preflight-cluster",
         0,
         false,
-        "strata preflight cluster:64f1000000000000000000e1 --tier static,palette --quiet | tail -n 4",
+        &format!("strata preflight cluster:{PAYMENTS} --tier static,palette --quiet | tail -n 4"),
     );
     r.step(
         "preflight-change",
         0,
         false,
-        "strata preflight cluster:64f1000000000000000000e1 change.json --tier static --quiet | grep -A 1 WARN",
+        &format!(
+            "strata preflight cluster:{PAYMENTS} change.json --tier static --quiet | grep -A 1 WARN"
+        ),
     );
     r.step(
         "preflight-watch",
         0,
         false,
-        "strata preflight cluster:64f1000000000000000000e1 --watch --limit 1 --verbose --color never 2>&1 > /dev/null | grep -v 'reads the cluster' | sed -n '1,12p'",
+        &format!("strata preflight cluster:{PAYMENTS} --watch --limit 1 --verbose --color never 2>&1 > /dev/null | grep -v 'reads the cluster' | sed -n '1,12p'"),
     );
     r.step(
         "preflight-json",

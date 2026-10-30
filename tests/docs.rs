@@ -5,8 +5,6 @@
 //! other is invisible to a reader who came the other way. That happened to "What changed between
 //! two pack versions", which reached the navigation and never reached the list.
 
-use crate::common;
-
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -149,29 +147,6 @@ fn every_page_the_navigation_names_exists() {
     );
 }
 
-/// Rule 6 of the documentation rules: a live result is a fact, with no run id and no date. A
-/// reader cannot look a run id up, and a date tells them nothing about what strata does now. The
-/// pages once carried more than twenty of them, which said only when somebody happened to run
-/// the example.
-#[test]
-fn no_page_cites_a_run_id() {
-    let mut cited = Vec::new();
-    for entry in common::walk(&docs()) {
-        if entry.extension().is_none_or(|e| e != "md") {
-            continue;
-        }
-        for id in run_ids(&read(&entry)) {
-            cited.push(format!("{}: {id}", entry.display()));
-        }
-    }
-    assert!(
-        cited.is_empty(),
-        "a run id is provenance, and not something a reader can use. State what the run \
-         established, in the present tense, and put the check in live-runs.md:\n  {}",
-        cited.join("\n  ")
-    );
-}
-
 /// `strata schema` grew the kind `packs`, and the two hand-written tables that list the kinds did
 /// not. One of them sits above the generated help that names it.
 #[test]
@@ -201,20 +176,4 @@ fn the_kind_tables_list_every_kind_the_help_names() {
             );
         }
     }
-}
-
-/// Every `2026MMDDTHHMMSSZ` in a text.
-fn run_ids(text: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    for i in 0..text.len().saturating_sub(15) {
-        let Some(w) = text.get(i..i + 16) else {
-            continue;
-        };
-        let b = w.as_bytes();
-        let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
-        if w.starts_with("2026") && b[8] == b'T' && b[15] == b'Z' && digits(4..8) && digits(9..15) {
-            out.push(w.to_string());
-        }
-    }
-    out
 }

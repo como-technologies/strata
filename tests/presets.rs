@@ -11,7 +11,7 @@ use strata::snapshot::{PresetOption, Snapshot};
 use strata::term::progress::Progress;
 
 use crate::common;
-use common::{candidate_snapshot, pack_listing_route};
+use common::{candidate_snapshot, serve_registry_pack, write_yaml};
 
 const REGISTRY: &str = "reg-public";
 
@@ -28,13 +28,12 @@ fn with_pack(api: MemoryApi, name: &str, template: Option<Value>) -> MemoryApi {
     if let Some(t) = template {
         summary["spec"]["template"] = t;
     }
-    api.with(
-        pack_listing_route(name),
-        json!({"items": [summary], "listmeta": {"count": 1}}),
-    )
-    .with(
-        format!("/v1/packs/{name}/registries/{REGISTRY}"),
+    serve_registry_pack(
+        api,
+        name,
+        json!([summary]),
         json!({"tags": [{"tag": "1.0.0", "packUid": uid}]}),
+        REGISTRY,
     )
 }
 
@@ -62,7 +61,7 @@ fn write_candidate(dir: &Path, layers: Value) -> std::path::PathBuf {
         "name": "fred", "version": "1.0.0", "type": "add-on", "registryUid": REGISTRY,
         "layers": layers,
     });
-    fs::write(&file, serde_yaml::to_string(&candidate).unwrap()).unwrap();
+    write_yaml(&file, &candidate);
     file
 }
 
