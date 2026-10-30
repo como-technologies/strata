@@ -12,6 +12,7 @@ use crate::closed_set::legend::legend;
 use crate::cluster_template::ClusterTemplateRef;
 use crate::content::canon::canonical_json;
 use crate::content::layer::Layer;
+use crate::json::flag;
 pub use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{Pack, Snapshot, Source, Tool};
 pub use crate::validation::{PaletteRefusal, PaletteValidation};
@@ -247,10 +248,7 @@ pub struct PaletteRepave {
 impl PaletteRepave {
     /// Read Palette's answer, and set `agrees` from the most severe level of the impact table.
     pub fn from_palette(cluster_uid: &str, answer: &Value, level: ImpactLevel) -> PaletteRepave {
-        let required = answer
-            .get("isRepaveRequired")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
+        let required = flag(answer, "/isRepaveRequired");
         let reasons = PaletteRepaveReason::read_all(answer, "/reasons");
         let agrees = match level {
             ImpactLevel::Repave => required,

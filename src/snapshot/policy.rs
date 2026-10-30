@@ -11,7 +11,7 @@ use serde_json::{Map, Value, json};
 use crate::api::RawCluster;
 use crate::api::mask::mask_password_keys;
 use crate::content::canon::{canon_yaml_hashed, canonical_json, sha256_hex};
-use crate::json::{arr, items, str_at};
+use crate::json::{arr, flag, items, str_at, value_at, value_or_null};
 
 /// The key of the policy fields that holds the role bindings.
 const RBACS: &str = "rbacs";
@@ -46,23 +46,17 @@ const LEGACY_AGENT_UPGRADES: &str = "agentUpgrades";
 /// the cluster has it.
 pub(crate) fn fields(raw: &RawCluster, config: &Value) -> Value {
     let cluster = &raw.cluster;
-    let field = |k: &str| config.get(k).cloned().unwrap_or(Value::Null);
+    let field = |ptr: &str| value_or_null(config, ptr);
     let mut fields = json!({
-        "osPatch": config
-            .pointer("/machineManagementConfig/osPatchConfig")
-            .cloned()
-            .unwrap_or(Value::Null),
-        "lifecycle": field("lifecycleConfig"),
-        "machineHealth": field("machineHealthConfig"),
+        "osPatch": field("/machineManagementConfig/osPatchConfig"),
+        "lifecycle": field("/lifecycleConfig"),
+        "machineHealth": field("/machineHealthConfig"),
         "timezone": str_at(config, "/timezone"),
         "fips": str_at(cluster, "/status/fips/mode"),
         RBACS: raw.rbacs.as_ref().map(bindings),
         NAMESPACES: raw.namespaces.as_ref().map(namespaces),
         // Palette omits the field when it is false
-        "updateWorkerPoolsInParallel": config
-            .get("updateWorkerPoolsInParallel")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
+        "updateWorkerPoolsInParallel": flag(config, "/updateWorkerPoolsInParallel"),
         "controlPlaneHealthCheckTimeout": str_at(config, "/controlPlaneHealthCheckTimeout"),
         "clusterMetaAttribute": str_at(config, "/clusterMetaAttribute"),
         "applySetting": str_at(cluster, "/status/spcApply/actionType"),
@@ -108,7 +102,7 @@ pub(crate) fn group_fields(config: &Value) -> Value {
         .map(|h| {
             json!({
                 "uid": str_at(h, "/clusterUid"),
-                "endpointConfig": h.get("endpointConfig").cloned().unwrap_or(Value::Null),
+                "endpointConfig": value_or_null(h, "/endpointConfig"),
             })
         })
         .collect();
@@ -116,7 +110,7 @@ pub(crate) fn group_fields(config: &Value) -> Value {
     let mut fields = json!({
         "endpointType": str_at(config, "/endpointType"),
         "kubernetesDistroType": str_at(config, "/kubernetesDistroType"),
-        "limitConfig": config.get("limitConfig").cloned().unwrap_or(Value::Null),
+        "limitConfig": value_or_null(config, "/limitConfig"),
         "values": values,
         "valuesHash": values_hash,
         "hostClusters": hosts,
@@ -166,7 +160,7 @@ fn bindings(doc: &Value) -> Value {
 fn namespaces(doc: &Value) -> Value {
     let mut out: Vec<Value> = items(doc)
         .map(|n| {
-            let spec = n.get("spec").unwrap_or(&Value::Null);
+            let spec = value_at(n, "/spec");
             let mut namespace = pick(spec, &["isRegex", "resourceAllocation"]);
             if let Some(name) = n.pointer("/metadata/name") {
                 namespace.insert("name".to_string(), name.clone());
@@ -174,7 +168,7 @@ fn namespaces(doc: &Value) -> Value {
             Value::Object(namespace)
         })
         .collect();
-    out.sort_by_cached_key(|n| canonical_json(n.get("name").unwrap_or(&Value::Null)));
+    out.sort_by_cached_key(|n| canonical_json(value_at(n, "/name")));
     Value::Array(out)
 }
 

@@ -18,7 +18,7 @@ use crate::api::{Palette, PaletteApi, RegistryKind};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::{RegistrySync, SyncRecovery};
 use crate::error::{Error, Result, served, unread_reason};
-use crate::json::{opt_text, str_at, take_items, text};
+use crate::json::{flag, opt_text, str_at, take_items, text};
 use crate::oci_provider::OciProvider;
 use crate::pack_state::PackState;
 use crate::pack_type::PackType;
@@ -163,10 +163,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
             return Ok(None);
         };
         let kind = RegistryKind::of_kind(str_at(meta, "/kind"));
-        let private = meta
-            .get("isPrivate")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
+        let private = flag(meta, "/isPrivate");
         match kind {
             Some(RegistryKind::Helm) => Ok(private.then_some(Unsynced {
                 kind: RegistryKind::Helm,
@@ -183,10 +180,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
                 let provider =
                     opt_text(reg, "/spec/providerType").map(|text| Open::from_text(&text));
                 let syncs = provider.as_ref().is_some_and(|p| *p == OciProvider::Pack)
-                    || reg
-                        .pointer("/status/sync/isSyncSupported")
-                        .and_then(Value::as_bool)
-                        == Some(true);
+                    || flag(reg, "/status/sync/isSyncSupported");
                 Ok((!syncs).then_some(Unsynced {
                     kind: RegistryKind::Oci,
                     provider,
@@ -237,7 +231,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
         else {
             return Ok(None);
         };
-        if status.get("isSyncSupported").and_then(Value::as_bool) != Some(true) {
+        if !flag(status, "/isSyncSupported") {
             return Ok(None);
         }
         // Palette writes the zero time for a registry that never completed a sync

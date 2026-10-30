@@ -16,7 +16,7 @@ use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
 
-use crate::json::{arr, first_nonempty, items, opt_text, str_at, text, text_map};
+use crate::json::{arr, first_nonempty, items, opt_flag, opt_text, str_at, text, text_map};
 
 use super::{ConsumerCounts, client_for};
 
@@ -519,7 +519,7 @@ fn list_profiles<A: PaletteApi>(
         p.consumers = Some(consumers.count());
         p.consumers_by_kind = Some(consumers);
         p.packs = Some(packs);
-        p.published = doc.pointer("/status/isPublished").and_then(Value::as_bool);
+        p.published = opt_flag(&doc, "/status/isPublished");
     }
     if let Some(needle) = &options.pack {
         let needle = needle.to_lowercase();

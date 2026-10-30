@@ -15,22 +15,19 @@ use crate::api::{RawCluster, RawProfile};
 use crate::content::canon::{canonical_json, sha256_hex};
 use crate::content::hash::{content_of, root_of};
 use crate::error::{Error, Result};
-use crate::json::{arr, first_nonempty, str_at, strings, text, text_map};
+use crate::json::{
+    arr, first_nonempty, flag, str_at, strings, text, text_map, text_or, value_or_null,
+};
 use crate::repave::{PendingRepave, is_pending};
 
-/// The text of `key` in `v`, or `default` when `v` has no text there. An empty text stays empty,
+/// The text at `ptr` in `v`, or `default` when `v` has no text there. An empty text stays empty,
 /// so the hash of the variables does not change: this is not [`first_nonempty`].
-fn str_or(v: &Value, key: &str, default: &str) -> Value {
-    Value::String(
-        v.get(key)
-            .and_then(Value::as_str)
-            .unwrap_or(default)
-            .to_string(),
-    )
+fn str_or(v: &Value, ptr: &str, default: &str) -> Value {
+    Value::String(text_or(v, ptr, default))
 }
 
-fn bool_or(v: &Value, key: &str) -> Value {
-    Value::Bool(v.get(key).and_then(Value::as_bool).unwrap_or(false))
+fn bool_or(v: &Value, ptr: &str) -> Value {
+    Value::Bool(flag(v, ptr))
 }
 
 /// Same field set and defaults as the bash extraction, so hashes agree across implementations.
@@ -39,24 +36,24 @@ fn normalize_variable(v: &Value) -> Value {
         .iter()
         .map(|o| {
             json!({
-                "label": str_or(o, "label", ""),
-                "value": str_or(o, "value", ""),
-                "description": str_or(o, "description", ""),
+                "label": str_or(o, "/label", ""),
+                "value": str_or(o, "/value", ""),
+                "description": str_or(o, "/description", ""),
             })
         })
         .collect();
     json!({
-        "name": v.get("name").cloned().unwrap_or(Value::Null),
-        "displayName": str_or(v, "displayName", ""),
-        "description": str_or(v, "description", ""),
-        "format": str_or(v, "format", "string"),
-        "defaultValue": str_or(v, "defaultValue", ""),
-        "regex": str_or(v, "regex", ""),
-        "required": bool_or(v, "required"),
-        "immutable": bool_or(v, "immutable"),
-        "hidden": bool_or(v, "hidden"),
-        "isSensitive": bool_or(v, "isSensitive"),
-        "inputType": str_or(v, "inputType", "text"),
+        "name": value_or_null(v, "/name"),
+        "displayName": str_or(v, "/displayName", ""),
+        "description": str_or(v, "/description", ""),
+        "format": str_or(v, "/format", "string"),
+        "defaultValue": str_or(v, "/defaultValue", ""),
+        "regex": str_or(v, "/regex", ""),
+        "required": bool_or(v, "/required"),
+        "immutable": bool_or(v, "/immutable"),
+        "hidden": bool_or(v, "/hidden"),
+        "isSensitive": bool_or(v, "/isSensitive"),
+        "inputType": str_or(v, "/inputType", "text"),
         "options": options,
     })
 }

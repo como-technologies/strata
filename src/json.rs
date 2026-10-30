@@ -1,13 +1,17 @@
 //! The reads of a document of Palette.
 //!
 //! A document of Palette stays a [`serde_json::Value`]. Each module reads it through these
-//! helpers, so one rule says what a field that is not there gives: empty text, no entry, or
-//! `None`. No module keeps a pointer read of text or of an array of its own. The read of a
-//! profile export is not a read of this kind: it refuses a value of another type.
+//! helpers, so one rule says what a field that is not there gives: empty text, no entry, `false`,
+//! `null`, or `None`. No module keeps a pointer read of text, of an array, of a flag, or of a
+//! value of its own. The read of a profile export is not a read of this kind: it refuses a value
+//! of another type.
 
 use std::collections::BTreeMap;
 
 use serde_json::Value;
+
+/// The null that a read gives for a value that is not there.
+static NULL: Value = Value::Null;
 
 /// The text at the pointer `ptr` of `v`, or empty text when `v` has no text there.
 pub(crate) fn str_at<'a>(v: &'a Value, ptr: &str) -> &'a str {
@@ -19,11 +23,45 @@ pub(crate) fn text(v: &Value, ptr: &str) -> String {
     str_at(v, ptr).to_string()
 }
 
+/// The text at the pointer `ptr` of `v`, or `default` when `v` has no text there. An empty text
+/// stays empty: this is not [`first_nonempty`].
+pub(crate) fn text_or(v: &Value, ptr: &str, default: &str) -> String {
+    v.pointer(ptr)
+        .and_then(Value::as_str)
+        .unwrap_or(default)
+        .to_string()
+}
+
 /// The text at the pointer `ptr` of `v`, when it is there and not empty.
+pub(crate) fn opt_str<'a>(v: &'a Value, ptr: &str) -> Option<&'a str> {
+    Some(str_at(v, ptr)).filter(|s| !s.is_empty())
+}
+
+/// A copy of the text at the pointer `ptr` of `v`, when it is there and not empty.
 pub(crate) fn opt_text(v: &Value, ptr: &str) -> Option<String> {
-    Some(str_at(v, ptr))
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
+    opt_str(v, ptr).map(str::to_string)
+}
+
+/// The bool at the pointer `ptr` of `v`, or `None` when `v` has no bool there. Use it when a field
+/// that is not there differs from `false`.
+pub(crate) fn opt_flag(v: &Value, ptr: &str) -> Option<bool> {
+    v.pointer(ptr).and_then(Value::as_bool)
+}
+
+/// True when `v` has the bool `true` at the pointer `ptr`. A field that is `false`, is not a bool,
+/// or is not there gives `false`: Palette leaves out a flag that is `false`.
+pub(crate) fn flag(v: &Value, ptr: &str) -> bool {
+    opt_flag(v, ptr) == Some(true)
+}
+
+/// The value at the pointer `ptr` of `v`, or `null` when `v` has none there.
+pub(crate) fn value_at<'a>(v: &'a Value, ptr: &str) -> &'a Value {
+    v.pointer(ptr).unwrap_or(&NULL)
+}
+
+/// A copy of the value at the pointer `ptr` of `v`, or `null` when `v` has none there.
+pub(crate) fn value_or_null(v: &Value, ptr: &str) -> Value {
+    value_at(v, ptr).clone()
 }
 
 /// The entries of the array at the pointer `ptr` of `v`, or no entry when `v` has no array there.
@@ -118,6 +156,40 @@ mod tests {
         assert_eq!(opt_text(&v, "/empty"), None);
         assert_eq!(opt_text(&v, "/n"), None);
         assert_eq!(opt_text(&v, "/gone"), None);
+    }
+
+    #[test]
+    fn text_or_gives_the_default_for_a_value_that_is_not_text_and_keeps_an_empty_text() {
+        let v = json!({"a": "x", "empty": "", "n": 1});
+        assert_eq!(text_or(&v, "/a", "d"), "x");
+        assert_eq!(text_or(&v, "/empty", "d"), "");
+        assert_eq!(text_or(&v, "/n", "d"), "d");
+        assert_eq!(text_or(&v, "/gone", "d"), "d");
+        assert_eq!(opt_str(&v, "/a"), Some("x"));
+        assert_eq!(opt_str(&v, "/empty"), None);
+    }
+
+    #[test]
+    fn flag_is_true_for_the_bool_true_alone_and_opt_flag_tells_false_from_absent() {
+        let v = json!({"on": true, "off": false, "text": "true", "n": 1});
+        assert!(flag(&v, "/on"));
+        for ptr in ["/off", "/text", "/n", "/gone"] {
+            assert!(!flag(&v, ptr), "{ptr}");
+        }
+        assert_eq!(opt_flag(&v, "/on"), Some(true));
+        assert_eq!(opt_flag(&v, "/off"), Some(false));
+        assert_eq!(opt_flag(&v, "/text"), None);
+        assert_eq!(opt_flag(&v, "/gone"), None);
+    }
+
+    #[test]
+    fn value_or_null_copies_the_value_at_a_pointer_and_gives_null_for_none() {
+        let v = json!({"spec": {"a": [1], "b": null}});
+        assert_eq!(value_or_null(&v, "/spec/a"), json!([1]));
+        assert_eq!(value_or_null(&v, "/spec/b"), Value::Null);
+        assert_eq!(value_or_null(&v, "/spec/gone"), Value::Null);
+        assert_eq!(value_at(&v, "/spec/a"), &json!([1]));
+        assert_eq!(value_at(&v, "/gone"), &Value::Null);
     }
 
     #[test]

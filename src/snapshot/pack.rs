@@ -13,7 +13,7 @@ use crate::api::mask::MASKED;
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
 use crate::content::layer::Layer;
-use crate::json::{arr, first_nonempty, opt_text, str_at, text};
+use crate::json::{arr, first_nonempty, flag, opt_str, opt_text, str_at, text, value_at};
 use crate::oci_provider::OciProvider;
 use crate::pack_type::PackType;
 
@@ -129,14 +129,10 @@ pub struct PackChart {
 /// The images and the charts that parsed values declare, from `pack.content`: each sorted, and
 /// each image once.
 pub fn pack_content(values: &Value) -> (Vec<String>, Vec<PackChart>) {
-    let content = values.pointer("/pack/content").unwrap_or(&Value::Null);
+    let content = value_at(values, "/pack/content");
     let mut images: Vec<String> = arr(content, "/images")
         .iter()
-        .filter_map(|i| {
-            i.get("image")
-                .and_then(Value::as_str)
-                .or_else(|| i.as_str())
-        })
+        .filter_map(|i| opt_str(i, "/image").or_else(|| i.as_str()))
         .map(str::to_string)
         .filter(|i| !i.is_empty())
         .collect();
@@ -300,7 +296,7 @@ impl Pack {
                 .into_iter()
                 .collect();
         // a reason without the flag is not a reason: Palette clears the flag when the tag is back
-        let invalid = pk.get("isInvalid").and_then(Value::as_bool) == Some(true);
+        let invalid = flag(pk, "/isInvalid");
         let invalid_reason = if invalid {
             text(pk, "/inValidReason")
         } else {

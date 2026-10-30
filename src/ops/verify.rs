@@ -15,7 +15,7 @@ use crate::diff::{
     InvalidPack, Verify, VerifyStatus,
 };
 use crate::error::{Error, Result, found};
-use crate::json::{is_zero, opt_text, str_at, text};
+use crate::json::{flag, is_zero, opt_flag, opt_text, str_at, text};
 use crate::registry::Registries;
 use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
 use crate::term::progress::Progress;
@@ -105,9 +105,7 @@ fn profiles_overwritten<A: PaletteApi>(
 /// or, for a cluster group, `active` or `inactive` from `status.isActive`.
 fn subject_state(kind: SubjectKind, doc: &Value) -> Option<String> {
     match kind {
-        SubjectKind::ClusterGroup => doc
-            .pointer("/status/isActive")
-            .and_then(Value::as_bool)
+        SubjectKind::ClusterGroup => opt_flag(doc, "/status/isActive")
             .map(|a| if a { ACTIVE_STATE } else { INACTIVE_STATE }.to_string()),
         _ => opt_text(doc, "/status/state"),
     }
@@ -116,11 +114,7 @@ fn subject_state(kind: SubjectKind, doc: &Value) -> Option<String> {
 /// True when Palette keeps the document of a deleted object: the state `Deleted`, or
 /// `metadata.isDeleted`. Palette deletes a cluster so, and keeps its spec.
 fn is_deleted(doc: &Value) -> bool {
-    str_at(doc, "/status/state") == DELETED_STATE
-        || doc
-            .pointer("/metadata/isDeleted")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
+    str_at(doc, "/status/state") == DELETED_STATE || flag(doc, "/metadata/isDeleted")
 }
 
 /// The live snapshot of the holder of a cluster record, from its document `doc`: with the update

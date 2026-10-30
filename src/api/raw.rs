@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use super::mask::{MASKED, mask_group_values};
 use crate::error::{Error, Result};
-use crate::json::{arr, opt_text, str_at};
+use crate::json::{arr, flag, opt_text, str_at, value_or_null};
 use crate::snapshot::Template;
 
 /// The three raw API responses a snapshot is built from, and the project they were fetched in.
@@ -101,10 +101,7 @@ impl SavedScope {
         Ok(SavedScope {
             project_uid: opt_text(&scope, "/projectUid"),
             fetched_at: opt_text(&scope, "/fetchedAt"),
-            variables_unavailable: scope
-                .get("variablesUnavailable")
-                .and_then(Value::as_bool)
-                .unwrap_or(false),
+            variables_unavailable: flag(&scope, "/variablesUnavailable"),
         })
     }
 }
@@ -459,17 +456,17 @@ impl RawCluster {
     /// manifests entry for that profile, and that profile's variable definitions. Variable values
     /// are left out; they are run-time input, not part of the release.
     pub fn template_raw(&self, template: &Value) -> RawProfile {
-        let field = |k: &str| template.get(k).cloned().unwrap_or(Value::Null);
+        let field = |ptr: &str| value_or_null(template, ptr);
         let uid = str_at(template, "/uid");
         let name = str_at(template, "/name");
         let profile = serde_json::json!({
             "metadata": {"uid": uid, "name": name},
             "spec": {
-                "version": field("profileVersion"),
+                "version": field("/profileVersion"),
                 "published": {
-                    "cloudType": field("cloudType"),
-                    "type": field("type"),
-                    "packs": field("packs"),
+                    "cloudType": field("/cloudType"),
+                    "type": field("/type"),
+                    "packs": field("/packs"),
                 },
             },
             "status": {},
