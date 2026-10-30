@@ -1240,10 +1240,11 @@ type with a zone in `nonSupportedZones`, and puts the first pool in that zone.
 The fault of `ssh-key-pair` is a key pair that the account lacks. The fault of
 `gcp-properties` is a project that the account cannot read.
 
-The check `instance-types-shape` expects `instanceTypes[]` with `type` and
-`nonSupportedZones[]`. A run showed this shape for AWS. For GCP, no run has
-shown it, and the check shows it (no result yet). The check `key-pairs-shape` expects `keyNames[]` with the
-key pair of the entity. A run that makes a fault puts `caught` in the ledger, and
+The check `instance-types-shape` expects `instanceTypes[]` with `type`, and
+`nonSupportedZones` as an array or `null`. A run showed that AWS gives `null` for most
+types. The check passes on that answer (no result yet). For GCP, no run has
+shown the shape, and the check shows it (no result yet). The check `key-pairs-shape`
+expects `keyNames[]` with the key pair of the entity. A run that makes a fault puts `caught` in the ledger, and
 the clean entity of the same run puts `passed` (no result yet).
 
 Part 3 of each run also runs the custom probes of the lab,
