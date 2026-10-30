@@ -6,13 +6,13 @@
 //! also writes the mask over each password in the values of a cluster group that a record or a
 //! saved answer keeps.
 
-use crate::closed_set::ClosedSet;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use serde_json::Value;
 use serde_yaml::Value as Yaml;
 
+use crate::closed_set::ClosedSet;
 use crate::content::canon::{Canon, canon_yaml};
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, str_at};

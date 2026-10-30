@@ -1,7 +1,6 @@
 //! Library-level tests for the operations, with an in-memory Palette API.
 
 use crate::common;
-use strata::closed_set::ClosedSet;
 
 use std::fs;
 use std::path::Path;
@@ -11,6 +10,7 @@ use strata::api::codes::{
     CreateRule, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE, ValidateRoute,
 };
 use strata::api::{MemoryApi, Method, Palette, RawProfile};
+use strata::closed_set::{ClosedSet, Open};
 use strata::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use strata::diff::{ChangeFlag, Side, VerifyStatus};
 use strata::error::{Error, FailureClass};
@@ -6785,7 +6785,10 @@ fn packs_lists_a_disabled_registry_from_the_listing_and_marks_each_retired_versi
         public.state, None,
         "the versions of Public Repo differ in state"
     );
-    assert_eq!(public.versions[0].state.as_deref(), Some("deprecated"));
+    assert_eq!(
+        public.versions[0].state.as_ref().map(Open::as_str),
+        Some("deprecated")
+    );
     assert_eq!(
         public.versions[0].tags,
         vec!["1.65.0", "1.x"],
@@ -6796,14 +6799,17 @@ fn packs_lists_a_disabled_registry_from_the_listing_and_marks_each_retired_versi
     assert_eq!(mirror.registry, "Mirror");
     assert!(mirror.tags_unavailable);
     assert_eq!(
-        mirror.state.as_deref(),
+        mirror.state.as_ref().map(Open::as_str),
         Some("disabled"),
         "every version of the Mirror is disabled"
     );
     assert_eq!(mirror.layer, "csi", "the layer comes from the listing");
     assert_eq!(mirror.versions[0].version, "1.64.0");
     assert_eq!(mirror.versions[0].digest, "sha256:mmm");
-    assert_eq!(mirror.versions[0].state.as_deref(), Some("disabled"));
+    assert_eq!(
+        mirror.versions[0].state.as_ref().map(Open::as_str),
+        Some("disabled")
+    );
     assert!(mirror.versions[0].tags.is_empty());
 
     // the heading and the row say so, in both text formats
@@ -6875,7 +6881,10 @@ fn packs_gives_the_state_disabled_to_a_version_with_the_mark_and_reads_its_tags_
         "the versions of Public Repo differ in state"
     );
     assert_eq!(public.versions[0].version, "1.65.0");
-    assert_eq!(public.versions[0].state.as_deref(), Some("disabled"));
+    assert_eq!(
+        public.versions[0].state.as_ref().map(Open::as_str),
+        Some("disabled")
+    );
     assert_eq!(
         public.versions[0].tags,
         vec!["1.65.0", "1.x"],
@@ -6884,7 +6893,7 @@ fn packs_gives_the_state_disabled_to_a_version_with_the_mark_and_reads_its_tags_
     assert_eq!(public.versions[1].state, None);
     let mirror = &l.registries[1];
     assert_eq!(
-        mirror.state.as_deref(),
+        mirror.state.as_ref().map(Open::as_str),
         Some("disabled"),
         "every version of the Mirror has the mark"
     );
@@ -13255,7 +13264,7 @@ fn in_a_fips_tenant_packs_and_behind_offer_no_version_of_a_pack_with_no_fips_ver
     );
     let pin = &report.pins[0];
     assert!(pin.newer.is_empty(), "{:?}", pin.newer);
-    assert_eq!(pin.pinned_state.as_deref(), Some("absent"));
+    assert_eq!(pin.pinned_state.as_ref().map(Open::as_str), Some("absent"));
 }
 
 #[test]
@@ -13303,7 +13312,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     assert_eq!(
         pin.newer
             .iter()
-            .map(|n| (n.version.as_str(), n.state.as_deref()))
+            .map(|n| (n.version.as_str(), n.state.as_ref().map(Open::as_str)))
             .collect::<Vec<_>>(),
         [("1.65.0", None), ("1.64.0", Some("deprecated"))]
     );
@@ -13542,7 +13551,10 @@ fn behind_does_not_offer_a_version_with_the_mark_and_says_so_of_a_pinned_one() {
     );
     let marked_pin = &r.pins[1];
     assert_eq!(marked_pin.version, "1.66.0");
-    assert_eq!(marked_pin.pinned_state.as_deref(), Some("disabled"));
+    assert_eq!(
+        marked_pin.pinned_state.as_ref().map(Open::as_str),
+        Some("disabled")
+    );
     assert_eq!(
         marked_pin
             .newer

@@ -2,7 +2,7 @@
 
 use super::verify::record_label;
 use super::{count_of, dash, entry_error, joined_note};
-use crate::closed_set::ClosedSet;
+use crate::closed_set::{ClosedSet, Open};
 use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
 use crate::snapshot::Snapshot;
 use crate::text::{and_list, name_or_uid};
@@ -99,7 +99,7 @@ fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
         (None, true) => Some("no tags: the registry answered 404"),
     };
     joined_note([
-        r.state.as_deref(),
+        r.state.as_ref().map(Open::as_str),
         tags,
         r.no_digests.then_some("no digests"),
     ])
@@ -137,7 +137,7 @@ pub(crate) fn registry_heading(
 /// and strata does not. A version that both call the latest needs no mark.
 pub(crate) fn version_note(v: &crate::ops::PackBuild) -> Option<String> {
     joined_note([
-        v.state.as_deref(),
+        v.state.as_ref().map(Open::as_str),
         v.digest.is_empty().then_some("no digest"),
         (v.palette_latest && !v.latest).then_some("latest in Palette"),
     ])
