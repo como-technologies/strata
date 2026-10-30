@@ -1,4 +1,4 @@
-//! The rules the book .filter(|m| m.starts_with(&format!("{USE_CASES}/broken.md: cannot read the file")))ust keep, which no other check can see.
+//! The rules the book must keep, which no other check can see.
 //!
 //! A rule lands here when a walk of the pages finds the same defect twice.
 //! `docs/examples/checklist.md` is the procedure; this is what stops the drift.
@@ -449,6 +449,7 @@ mod tests {
             ]
         );
     }
+
     /// The outputs of a small runner: `o1` is state 3 of `loop`, and `o2` is state 1 of it.
     fn states() -> BTreeSet<OutputState> {
         let output = |output: &str, state: u32| OutputState {

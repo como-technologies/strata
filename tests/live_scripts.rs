@@ -1462,7 +1462,7 @@ fn aws_cleanup(args: &[&str]) -> (Output, String) {
         .env("FAKE_AWS_LOG", &log)
         .output()
         .unwrap();
-    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    let calls = std::fs::read_to_string(&log).unwrap();
     (o, calls)
 }
 
