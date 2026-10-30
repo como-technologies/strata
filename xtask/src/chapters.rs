@@ -50,7 +50,7 @@ const CHARTS_PROBE: &str = "64ed000000000000000000c1";
 const CHART_PACK: &str = "64ed000000000000000000b1";
 const A112_PROD: &str = "64e1000000000000000000d4";
 const PAYMENTS: &str = "64f1000000000000000000e1";
-// the cloud account platform-aws of the preflight chapter
+// the cloud account platform-aws of the preflight chapter and the loop chapter
 const PLATFORM_AWS: &str = "64f3000000000000000000a1";
 const SEARCH: &str = "64f1000000000000000000e2";
 const LEDGER: &str = "64f1000000000000000000e3";
