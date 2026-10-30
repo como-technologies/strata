@@ -25,7 +25,7 @@ use common::{
     cluster_ref, cluster_route, cluster_variables_route, listing, manifest_route, manifests_route,
     no_manifests, no_template, no_variables, pack_listing_route, post, profile_document,
     profile_route, read_json, resolved_values_route, serve_fixture, serve_profile, snapshot_of,
-    snapshot_of_at, strata_bin, template, variables_route, write_record,
+    snapshot_of_at, snapshot_of_ref, strata_bin, template, variables_route, write_record,
 };
 
 #[test]
@@ -1580,25 +1580,13 @@ fn serve_cluster(api: MemoryApi, raw_root: &Path, dir: &str) -> MemoryApi {
 
 /// The record of the cluster under CLUSTER_UID, or of its profile `profile` when the test names one.
 fn snapshot_cluster(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
-    ops::snapshot_for(
-        &cluster_ref(CLUSTER_UID, profile, false),
-        &ops::SnapshotOptions::default(),
-        || Ok(Palette::new(api)),
-        "t0",
-        &Progress::silent(),
-    )
+    snapshot_of_ref(api, &cluster_ref(CLUSTER_UID, profile, false), "t0")
 }
 
 /// The record of the update that waits for the cluster under CLUSTER_UID, or of its profile
 /// `profile` when the test names one.
 fn snapshot_pending(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
-    ops::snapshot_for(
-        &cluster_ref(CLUSTER_UID, profile, true),
-        &ops::SnapshotOptions::default(),
-        || Ok(Palette::new(api)),
-        "t0",
-        &Progress::silent(),
-    )
+    snapshot_of_ref(api, &cluster_ref(CLUSTER_UID, profile, true), "t0")
 }
 
 #[test]
@@ -1837,7 +1825,9 @@ fn verify_reports_a_cluster_record_whose_profile_version_was_overwritten_or_dele
         .unwrap();
     assert_eq!(
         verdict,
-        "DRIFT: cluster lab-cluster runs lab-profile@1.2.0, but uid 64f0000000000000000000a1 now names 1.3.0: the version was overwritten in place"
+        format!(
+            "DRIFT: cluster lab-cluster runs lab-profile@1.2.0, but uid {UID_A} now names 1.3.0: the version was overwritten in place"
+        )
     );
 
     // the profile was deleted
@@ -1867,7 +1857,7 @@ fn verify_reports_a_cluster_record_whose_profile_version_was_overwritten_or_dele
         .verdict(&v.diff)
         .unwrap();
     assert!(
-        verdict.ends_with("but uid 64f0000000000000000000a1 no longer exists"),
+        verdict.ends_with(&format!("but uid {UID_A} no longer exists")),
         "{verdict}"
     );
 
@@ -2500,7 +2490,7 @@ fn consumers_lists_each_cluster_with_name_project_and_state_from_its_own_project
         .render_consumers(&r)
         .unwrap();
     assert!(
-        text.starts_with("lab-profile@1.3.0 (uid 64f0000000000000000000b2): 2 consumers\n"),
+        text.starts_with(&format!("lab-profile@1.3.0 (uid {UID_B}): 2 consumers\n")),
         "{text}"
     );
     assert!(text.contains("alpha"), "{text}");
@@ -2576,7 +2566,9 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
         .unwrap();
     let beta = text.lines().find(|l| l.contains("beta")).unwrap();
     assert!(
-        beta.contains("runs lab-profile@1.2.9, which uid 64f0000000000000000000b2 no longer names"),
+        beta.contains(&format!(
+            "runs lab-profile@1.2.9, which uid {UID_B} no longer names"
+        )),
         "{text}"
     );
     let alpha = text.lines().find(|l| l.contains("alpha")).unwrap();
@@ -2586,9 +2578,9 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
         .unwrap();
     // the markdown names the version and the uid as the terminal does
     assert!(
-        md.contains(
-            "runs `lab-profile@1.2.9`, which uid `64f0000000000000000000b2` no longer names"
-        ),
+        md.contains(&format!(
+            "runs `lab-profile@1.2.9`, which uid `{UID_B}` no longer names"
+        )),
         "{md}"
     );
     // a row with an error states the version that the copy names, too, in each report
@@ -2653,7 +2645,9 @@ fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
         .unwrap();
     assert_eq!(
         text,
-        "lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumers\n  second reading: 0 of 0 clusters read\n  edge hosts: 0 read\n"
+        format!(
+            "lab-profile@1.2.0 (uid {UID_A}): no consumers\n  second reading: 0 of 0 clusters read\n  edge hosts: 0 read\n"
+        )
     );
 }
 
@@ -2694,7 +2688,7 @@ fn consumers_exits_2_when_the_list_is_empty_and_the_second_reading_fails() {
         .unwrap();
     assert!(
         text.starts_with(
-            "lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumer found, and a reading failed\n  second reading: not done (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: boom"
+            &format!("lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n  second reading: not done (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: boom")
         ),
         "{text}"
     );
@@ -2703,7 +2697,7 @@ fn consumers_exits_2_when_the_list_is_empty_and_the_second_reading_fails() {
         .unwrap();
     assert!(
         md.starts_with(
-            "### consumers: lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumer found, and a reading failed\n"
+            &format!("### consumers: lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n")
         ),
         "{md}"
     );
@@ -2739,7 +2733,9 @@ fn consumers_exits_2_when_the_list_is_empty_and_a_cluster_cannot_be_read() {
         .unwrap();
     assert_eq!(
         text,
-        "lab-profile@1.2.0 (uid 64f0000000000000000000a1): no consumer found, and a reading failed\n  second reading: 0 of 1 clusters read\n  edge hosts: 0 read\n"
+        format!(
+            "lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n  second reading: 0 of 1 clusters read\n  edge hosts: 0 read\n"
+        )
     );
 }
 
@@ -2822,7 +2818,7 @@ fn consumers_exits_1_when_a_consumer_is_found_and_the_second_reading_fails() {
         .render_consumers(&r)
         .unwrap();
     assert!(
-        text.starts_with("lab-profile@1.3.0 (uid 64f0000000000000000000b2): 2 consumers\n"),
+        text.starts_with(&format!("lab-profile@1.3.0 (uid {UID_B}): 2 consumers\n")),
         "{text}"
     );
 }
@@ -4996,14 +4992,14 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
         .render_list(&l)
         .unwrap();
     assert!(
-        text.contains(
+        text.contains(&format!(
             "  cluster:c1  workload-a  Running  aws
-    lab-profile@1.3.0  64f0000000000000000000b2  cluster
-    lab-addons@2.0.0   64f0000000000000000000d4  add-on  behind: an update waits
+    lab-profile@1.3.0  {UID_B}  cluster
+    lab-addons@2.0.0   {UID_ADDONS}  add-on  behind: an update waits
   cluster:c2  workload-b  Running  aws
-    lab-profile@1.2.0  64f0000000000000000000a1  cluster
+    lab-profile@1.2.0  {UID_A}  cluster
 "
-        ),
+        )),
         "{text}"
     );
     let md = render::renderer(Format::Markdown, Paint::off(), false)
@@ -6446,7 +6442,7 @@ fn compare_names_a_profile_uid_that_names_two_versions_whatever_the_roots() {
         .unwrap();
     assert!(text.contains("IDENTICAL"), "{text}");
     assert!(
-        text.contains("uid 64f0000000000000000000a1 is lab-profile@1.2.0 on one side and lab-profile@1.3.0 on the other: the version was overwritten in place"),
+        text.contains(&format!("uid {UID_A} is lab-profile@1.2.0 on one side and lab-profile@1.3.0 on the other: the version was overwritten in place")),
         "{text}"
     );
     let md = render::renderer(Format::Markdown, Paint::off(), false)
@@ -6515,7 +6511,9 @@ fn compare_says_when_both_sides_are_one_profile_version_with_different_content()
         .render(&d, &a, &edited, false)
         .unwrap();
     assert!(
-        text.contains("both sides are lab-profile@1.2.0 (uid 64f0000000000000000000a1): the version was edited in place"),
+        text.contains(&format!(
+            "both sides are lab-profile@1.2.0 (uid {UID_A}): the version was edited in place"
+        )),
         "{text}"
     );
     let md = render::renderer(Format::Markdown, Paint::off(), false)

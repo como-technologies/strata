@@ -742,8 +742,17 @@ pub fn snapshot_of_at(
     text: &str,
     at: &str,
 ) -> strata::Result<strata::snapshot::Snapshot> {
+    snapshot_of_ref(api, &strata::reference::Ref::parse(text), at)
+}
+
+/// [`snapshot_of_at`], for a ref that the test has built and not parsed.
+pub fn snapshot_of_ref(
+    api: &strata::api::MemoryApi,
+    reference: &strata::reference::Ref,
+    at: &str,
+) -> strata::Result<strata::snapshot::Snapshot> {
     strata::ops::snapshot_for(
-        &strata::reference::Ref::parse(text),
+        reference,
         &strata::ops::SnapshotOptions::default(),
         || Ok(strata::api::Palette::new(api)),
         at,
