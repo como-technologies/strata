@@ -781,8 +781,9 @@ No cluster, no profile of its own, and no cost. It asks
 the body of a create for each engine, and the cloud accounts that the bodies
 name. A case makes one fault. The fault is one edit of the body of its engine, or
 a body of its own when the fault is in a profile. [`route-bodies.sh`](#route-bodiessh)
-writes four of those bodies on AWS. A case whose body is not in the directory is
-skipped, and `steps.log` names it.
+writes four of those bodies on AWS, and runs this script on them. A body of a case
+names a profile, so it is valid only while that profile is in the tenant. A case whose
+body is not in the directory is skipped, and `steps.log` names it.
 
 A case that passes shows that the route answers the check. The part of the rule
 that the case names can then leave the catalog. A case that fails shows that the
@@ -814,8 +815,19 @@ the live example on AWS, and the cloud account of `terraform.tfvars`.
 
 A case body is the clean body of a create on AWS with one more profile. The
 script makes that profile through the API, with the name `strata-route-<case>`,
-and publishes it. It deletes each profile at its end, when a step fails, and
-when a signal stops it. It creates no content in a registry.
+and publishes it. It creates no content in a registry.
+
+A body names its profile. A body that names a deleted profile fails with
+`GET /v1/clusterprofiles/<uid> failed with HTTP 404`, and Palette gives
+`ResourceNotFound`. So the profiles must live until `validate-route.sh` has sent
+each body.
+
+The script runs `validate-route.sh` on the bodies itself. The results of that run go
+under `validate-route/` in the results of the script. Then the script deletes each
+profile and the body of each case. It does the same when a step fails, when a check
+of `validate-route.sh` fails, and when a signal stops it. A later run of
+`validate-route.sh` on the directory skips the four cases, because no body of a case
+stays. `aws-clean.json` stays, because it names the release profile.
 
 | Case | The profile |
 |---|---|
@@ -825,18 +837,27 @@ when a signal stops it. It creates no content in a registry.
 | `pack-cloud-support` | An add-on profile with a pack in the layer `addon` whose cloud types lack `aws`. The script reads the pack listing of `Public Repo` for it, or takes `PACK_CLOUD_SUPPORT=<pack>@<version>`. |
 
 Palette can refuse the profile of a case, and the registry can lack the pack.
-Palette refuses a profile that holds a pack in the state `disabled` or
-`deleted`: see [Pack states](../internals/palette/packs.md#pack-states). So the
-two cases of `pack-state` run only when Palette takes such a profile. The script
-skips a case when Palette refuses its profile, and `steps.log` names the case with
-the refusal. No body of that case stays in the directory, and `validate-route.sh`
-skips it.
+The create of a profile refuses the two packs of `pack-state`:
+
+- `POST /v1/clusterprofiles` with `gloo` 1.2.18 answers HTTP 500,
+  `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`.
+- The same request with `generic-vm-libvirt` 1.0.0 answers HTTP 500,
+  `ClusterProfileInvalidPackState`, with a message that ends
+  `pack generic-vm-libvirt:1.0.0 is deleted`.
+
+See [Pack states](../internals/palette/packs.md#pack-states). So no new profile
+can hold a disabled pack or a deleted pack. Only a profile that holds the pack
+before Palette disables or deletes it can carry it. The two cases of `pack-state`
+stay skipped in the live example. The script skips a case when Palette refuses its
+profile, and `steps.log` names the case with the refusal. No body of that case
+stays in the directory, and `validate-route.sh` skips it.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `aws-clean-body` | 0 | #408: `aws-clean.json` names the cloud account of the lab and the release profile. No result yet. |
 | `pack-state-disabled-body`, `pack-state-deleted-body`, `profile-cloud-mismatch-body`, `pack-cloud-support-body` | 0 | #408: Palette takes the profile of the case, and the body holds the release profile and that profile. A case that is skipped has no check. No result yet. |
-| `pack-state-disabled-deleted`, `pack-state-deleted-deleted`, `profile-cloud-mismatch-deleted`, `pack-cloud-support-deleted` | 0 | #408: the script deletes the profile of each case that it made. No result yet. |
+| `validate-route` | 0 | #413: `validate-route.sh` exits 0 on the bodies, while the profiles of the cases are in the tenant. Its checks are those of [`validate-route.sh`](#validate-routesh), in `validate-route/steps.log`. No result yet. |
+| `pack-state-disabled-deleted`, `pack-state-deleted-deleted`, `profile-cloud-mismatch-deleted`, `pack-cloud-support-deleted` | 0 | #408, #413: the script deletes the profile of each case that it made, after `validate-route.sh` has run. No result yet. |
 
 ## export.sh
 
