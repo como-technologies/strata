@@ -136,6 +136,15 @@ After 0.21.0, the kinds `transport` and `not-json` give the field `method`, and
 their message names the method of the request. In 0.21.0, the message said
 `GET` also for a `POST`.
 
+After 0.22.1, `world.json` of `preflight --watch --out` holds `events: []` when
+Palette gives `items: null` for the events of the cluster. It held `null`
+before. This is the case at the start of a build, when the cluster has no event.
+A jq program that reads `.events[]` now works in that case.
+
+After 0.22.1, `preflight cluster:<c>/<profile>` and `preflight
+cluster:<c>@pending` give a `usage` error and exit `2`. The checks read the
+whole cluster. These two forms failed before with a name lookup.
+
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a
