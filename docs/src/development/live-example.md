@@ -19,14 +19,14 @@ show.
 | `validate-route.sh` | Whether the validate route of a cluster refuses the fault that a rule of the preflight catalog copies (#243). It asks the route with one fault of a body for each case. It needs the key and a body of a create for each engine, and no cluster. |
 | `export.sh` | The export of each version of the example, read with `snapshot --from-candidate`, and what the export route answers (#156). It needs the profiles, and no cluster. |
 | `registry.sh` | The example's own OCI pack registry: a push, a push again of one version with other bytes, and a new version, and what Palette does after each (#66); a tag that the registry deletes while a profile pins it (#108). It needs the profiles, and no cluster. |
-| `template.sh` | The lock of a cluster template on the versions it links, and the order in which a cluster installs the packs of two add-on profiles (#66). It needs the profiles and no cluster, and it ends with the removal of the example. |
+| `template.sh` | The lock of a cluster template on the versions it links, the repave answer for a cluster in the template (#276), and the order in which a cluster installs the packs of two add-on profiles (#66). It needs the profiles and no cluster, and it ends with the removal of the example. |
 | `cluster.sh` | A variable value that a cluster changes, and other answers that only a cluster gives (#66). It needs cluster A, and it ends with the cluster gone. |
 | `order.sh` | What a reorder of the packs of a published version is to Palette (#66). It needs cluster A, and it leaves the versions edited: run `just live-down` after it. |
 | `who.sh` | What `verify --who` reads from the audit log, for an edit through the API and for an update that a cluster accepts (#69). Stage 1 needs the profiles; stage 2 needs cluster A. |
 | `draft.sh` | A draft of the add-on version: a `PUT` with no publish, what `<uid>@draft` records, what each route of Palette gives while the draft waits, and the publish (#155). It needs the profiles, and no cluster. |
 | `scope.sh` | A profile of the tenant with the name and the version of the release profile: what the listing, the search, and the document of Palette say, and what `list` and `snapshot` do with the ref that two scopes answer (#113). It needs the profiles, and no cluster. |
 | `release.sh` | The route that gives the release of Palette: it answers a call with no key, and refuses a call with the key (#146). It needs the key and nothing else. |
-| `pending.sh` | When Palette says that an update waits for a cluster, and what a record of `cluster:<uid>@pending` holds (#70, #78). It needs cluster A. |
+| `pending.sh` | When Palette says that an update waits for a cluster, what a record of `cluster:<uid>@pending` holds (#70, #78), and what `compare --repave` with it asks Palette (#276). It needs cluster A. |
 | `macros.sh` | What a new value of a project macro does to a version, to the copy of a cluster, and to a record (#72). It needs cluster A. |
 | `macro-repave.sh` | Whether a new macro value in an infrastructure layer replaces the nodes of a cluster (#72). It needs cluster A, and it leaves a repave that waits for approval: run `just live-down` after it. |
 | `repave.sh` | `compare --repave`: the answer of Palette beside the level of the impact table (#73), and `compare --validate` (#134). Stage 8 asks about a profile variable in a repave key of a version that the cluster does not run (#132). It needs cluster A. |
@@ -34,7 +34,7 @@ show.
 | `merge-gate.sh` | `scripts/ci/merge-gate.sh` over records of the live profiles, in a git repository that the script builds (#57). It needs the profiles, and no cluster. |
 | `knurl.sh` | [The knurl adapter](../automation/knurl.md): each method of the port against the strata answer for the same real object. Read-only. It needs the profiles; the instance checks need the cluster. |
 | `registry-kinds.sh` | The digest of each registry kind, and a push again of one version into each (#75); a Helm registry with synchronization off, the case with no digest (#71). It needs no cluster. |
-| `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. Stage 5 edits a role binding of cluster A, and needs no cluster B (#106). |
+| `tiers.sh` | The tiers of a cluster record, and `compare` of two cluster records beyond the release (#76). It builds cluster B for a while. Stage 5 edits a role binding of cluster A, and needs no cluster B (#106). Stage 6 reads the role bindings with a second key, and runs only as `tiers.sh 6` (#276). |
 | `edge-host.sh` | A record of an edge host, `consumers` of a profile bound to one, and what an edit in place does to an edge host (#78). It registers edge hosts with no device. |
 | `cluster-group.sh` | A record of a cluster group, and `compare` of the group with its virtual cluster (#78); a change of the CPU limit of the group (#110). It builds a virtual cluster in cluster A. |
 | `app-profile.sh` | A record of an app profile, and a plain update of it (#78); two app profiles whose tiers differ in the install order (#112). It needs no cluster. |
@@ -72,7 +72,7 @@ shape. EKS and GKE are managed engines. EKS has its own cloud account: see
 | profile `strata-live-dep` 1.0.0 | An add-on profile with `strata-live-pack` 1.1.0, which requires `strata-live-dep`, and that pack. `registry.sh` makes it after the pushes, and removes it at its end. |
 | registry `strata-live-helm-registry` | The same repository host, read by Palette as an OCI Helm registry, with one chart repository. `registry.sh` pushes into it. |
 | profile `strata-live-owned-helm` 1.0.0 | An add-on profile with the one chart of that registry. `registry.sh` makes it after the first push, and removes it at its end. |
-| policy `strata-live-maintenance`, template `strata-live-template` | A maintenance policy, and a cluster template that links the release version and the add-on version. `template.sh` makes them before it builds a cluster, and removes them at its end. |
+| policy `strata-live-maintenance`, template `strata-live-template` | A maintenance policy, and a cluster template that links the release version and the add-on version. `template.sh` makes them before it builds a cluster, and removes them at its end. The variable `cluster_in_template` builds the clusters in the template, on AWS and GCP. |
 | profile `strata-live-addon2` 1.0.0 | A second add-on profile with one manifest. `template.sh` runs it on the cluster beside the first, for the install order of add-on packs. |
 
 The pack versions are those of `examples/profiles/aws-stack@1.1.0.json`.
@@ -124,7 +124,7 @@ its end.
 | `zarf/` | The Zarf package that `registry-kinds.sh` publishes. |
 | `terraform/registry-kinds.tf`, `terraform/registry-host.sh.tftpl` | The registry host of `registry-kinds.sh`: one EC2 instance that serves a Helm repository, one with credentials, an OCI registry with basic auth, and a Spectro pack registry, behind Caddy with a certificate for each `<service>.<IP>.sslip.io`; and a Palette registry over each. Off unless `registry_kinds` is set. |
 | `terraform-version/` | One version of an add-on profile in a state of its own, with no feature preview flag: `version-states.sh` applies it once for each version, each time in its own workspace. |
-| `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, and the install order of add-on packs. It ends with the removal of the example. |
+| `template.sh` | The cluster template test (#66): the lock on a linked version, a cluster outside the template, a cluster in the template with the two repave routes (#276), and the install order of add-on packs. It ends with the removal of the example. |
 | `cluster.sh` | The cluster test (#66): a change of the value the cluster gives a variable, and a deletion through the API. It ends with the cluster gone. |
 | `order.sh` | The order test (#66): a reorder of the packs of two published versions, and of the profiles of the cluster, through the API. It leaves the versions edited; `live-down` follows it. |
 | `who.sh` | The audit log test (#69): who made an edit through the API, and an update that a cluster accepted, as `verify --who` reads them. |
@@ -193,13 +193,13 @@ each.
 | `knurl.sh` | nothing; it only reads | the baseline |
 | `registry.sh` | the images of the example's own registries, a tag that it deletes and pushes again, and the profiles that pin them | the shared registries, the clusters, the release and add-on versions |
 | `registry-kinds.sh` | the registry host and a Palette registry over each kind, then pushes of `1.0.0` into each, and one profile of stage 2; it removes each at its end | the profiles, the clusters, the baseline |
-| `tiers.sh` | cluster B, then its timezone and its labels through the API; it removes B. Stage 5: a role binding of cluster A, through the API, and back | the profiles, cluster A, the baseline |
-| `template.sh` | a template over the release and add-on versions; then the release version, in place | the pack versions; it ends with the example removed |
+| `tiers.sh` | cluster B, then its timezone and its labels through the API; it removes B. Stage 5: a role binding of cluster A, through the API, and back. Stage 6: nothing; it only reads | the profiles, cluster A, the baseline |
+| `template.sh` | a template over the release and add-on versions; a cluster in the template, then removed; version 1.0.1, in place and put back; then the release version, in place | the pack versions; it ends with the example removed |
 | `cluster.sh` | the value cluster A gives one variable; then the cluster, deleted through the API | the profiles |
 | `order.sh` | the pack order of two published versions, and the profile order of cluster A | the packs, the values, the manifests; it leaves the versions edited |
 | `who.sh` | the add-on version, edited in place and put back; with a cluster, the update that cluster A accepts, and its undo | the profiles, the clusters |
 | `draft.sh` | the manifest of the add-on version, in a draft and then published; it puts the edit back | the profiles, the clusters |
-| `pending.sh` | a manifest of the add-on version, a value of the release version, and the add-on version number, each in place and put back; the updates that cluster A accepts | the clusters, the flag (off), the baseline |
+| `pending.sh` | a manifest of the add-on version, a value and a kubeadm command of the release version, and the add-on version number, each in place and put back; the updates that cluster A accepts | the clusters, the flag (off), the baseline |
 | `macros.sh` | a project macro, and the manifest of the add-on version that reads it; the update that cluster A accepts; all put back | the clusters, the flag (off), the baseline |
 | `macro-repave.sh` | a project macro in the Kubernetes pack of the release version, and then its value alone; it leaves a repave that waits for approval | the flag (off); it ends with the removal of the example |
 | `repave.sh` | the Kubernetes pack of the release version, and a manifest of the add-on version, each in place and put back; a profile variable on version 1.0.1, through OpenTofu, and back; no update is accepted | the clusters, the flag (off), the baseline |
@@ -265,6 +265,7 @@ back to false with the default variables (`apply_baseline`).
   and an `aws_profile` that can create an IAM role and a policy. See
   [An EKS cluster](#an-eks-cluster).
 - A Palette API key in `PALETTE_API_KEY` or `~/.palette.env`.
+- For `tiers.sh 6` only: a second key in `STRATA_LIVE_LIMITED_KEY`, the key of an active user with no role in the project. It cannot read `config/rbacs` of a cluster. The script never prints it.
 - `tofu` 1.6 or later (`just tofu-install` installs 1.12.6), `jq`, `just`,
   `curl`, `helm`, `crane`, and a Rust toolchain.
 - Read access to an OCI pack registry in the tenant, and a login to it that
@@ -545,7 +546,8 @@ just live-merge-gate                                                           #
 just live-registry                                                             # #66, needs just live-profiles, oras, helm, and aws
 just live-registry-kinds                                                       # #75, needs just live-profiles, oras, helm, zarf, and spectro
 just live-tiers                                                                # #76, needs just live-up; builds and removes cluster B
-just live-template                                                             # #66, needs just live-profiles and no cluster; ends with live-down
+just live-tiers-limited                                                        # #276, needs just live-up and STRATA_LIVE_LIMITED_KEY; reads only
+just live-template                                                             # #66, #276, needs just live-profiles and no cluster; builds two clusters; ends with live-down
 just live-cluster                                                              # #66, needs just live-up; ends with the cluster gone
 just live-order                                                                # #66, needs just live-up; leaves the versions edited, so live-down follows
 just live-pack-states                                                          # #68, needs no cluster
@@ -554,7 +556,7 @@ just live-who                                                                  #
 just live-draft                                                                # #155, needs just live-profiles
 just live-release                                                              # #146, needs only the key
 just live-validate-route BODIES                                                   # #243, needs the key and a directory of bodies; no cluster
-just live-pending                                                              # #70, needs just live-up
+just live-pending                                                              # #70, #276, needs just live-up
 just live-macros                                                               # #72, needs just live-up
 just live-macro-repave                                                         # #72, needs just live-up; leaves a repave that waits, so live-down follows
 just live-repave                                                               # #73, needs just live-up

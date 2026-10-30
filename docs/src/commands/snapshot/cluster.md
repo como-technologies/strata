@@ -82,6 +82,7 @@ not an empty list.
 When Palette answers another HTTP error for the bindings or the namespaces,
 strata still writes the record, and the exit is 0. The tier does not hold the
 field, so its hash does not cover it. `errors` of the tier holds the error.
+Strata asks again after an HTTP 5xx, so an HTTP 500 costs the retries first.
 Here the API key cannot read the role bindings of the cluster `payments`:
 
 ```text

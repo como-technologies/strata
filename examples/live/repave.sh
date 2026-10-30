@@ -37,8 +37,6 @@ case "$from" in 1|2|3|4|5|6|7|8) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | 
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
-kubeadm_from=$'    - \'chmod 600 /var/lib/kubelet/config.yaml\'\n'
-kubeadm_to=$'    - \'chmod 600 /var/lib/kubelet/config.yaml\'\n    - \'echo strata-repave-test\'\n'
 addon_from='edited: "no"'
 addon_to='edited: "yes"'
 

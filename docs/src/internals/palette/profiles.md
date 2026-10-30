@@ -340,8 +340,10 @@ keeps no template, and has the root from before the link. Palette shows the
 templates, and `strata consumers` counts them. See
 [The cluster templates of a version](../../commands/snapshot/profile-version.md#the-cluster-templates-of-a-version).
 
-The template also takes the repave question of its clusters. These facts come
-from the code of Palette, not from a live run:
+The template also takes the repave question of its clusters. No live run has
+shown these facts yet. The checks `in-template-names`, `cluster-route`, and
+`template-route` of [template.sh](../../development/live-runs.md#templatesh)
+ask the first three:
 
 - The cluster document names the template in `spec.clusterTemplate`, with
   `uid` and `projectUid`.

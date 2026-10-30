@@ -72,6 +72,15 @@ instances() {
   done | sort | paste -sd ' ' -
 }
 
+# ---- an edit of the Kubernetes pack ------------------------------------------------------------------
+
+# kubeadm_from: the one line of the Kubernetes pack under postKubeadmCommands, with its indentation
+# and its newline; the OS pack has the key too. kubeadm_to: the same line and one command more.
+# An edit of kubeadm_from into kubeadm_to changes a key that Palette says repaves:
+# api.sh edit UID "$kubeadm_from" "$kubeadm_to".
+kubeadm_from=$'    - \'chmod 600 /var/lib/kubelet/config.yaml\'\n'
+kubeadm_to=$'    - \'chmod 600 /var/lib/kubelet/config.yaml\'\n    - \'echo strata-repave-test\'\n'
+
 # ---- the body of a create ----------------------------------------------------------------------------
 
 # var NAME: the value of NAME in terraform/terraform.tfvars, or in the file TFVARS; empty when the

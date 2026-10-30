@@ -34,14 +34,34 @@ resource "spectrocloud_cluster_gcp" "cluster" {
   cloud_account_id = data.spectrocloud_cloudaccount_gcp.this[0].id
   tags             = local.tags
 
-  cluster_profile {
-    id = local.cluster_release_uid
+  dynamic "cluster_profile" {
+    for_each = var.cluster_in_template ? [] : [local.cluster_release_uid]
+    content {
+      id = cluster_profile.value
+    }
   }
 
-  cluster_profile {
-    id = local.cluster_addon_uid
-    # The value the cluster gives the add-on profile's variable, when cluster.sh sets one.
-    variables = var.addon_purpose == "" ? null : { purpose = var.addon_purpose }
+  dynamic "cluster_profile" {
+    for_each = var.cluster_in_template ? [] : [local.cluster_addon_uid]
+    content {
+      id = cluster_profile.value
+      # The value the cluster gives the add-on profile's variable, when cluster.sh sets one.
+      variables = var.addon_purpose == "" ? null : { purpose = var.addon_purpose }
+    }
+  }
+
+  # A cluster in the cluster template takes the profiles of the template (template.sh, #276).
+  dynamic "cluster_template" {
+    for_each = var.cluster_in_template ? [spectrocloud_cluster_config_template.release[0].id] : []
+    content {
+      id = cluster_template.value
+      cluster_profile {
+        id = local.cluster_release_uid
+      }
+      cluster_profile {
+        id = local.cluster_addon_uid
+      }
+    }
   }
 
   # The second add-on profile, for the install order of add-on packs across profiles.

@@ -15,15 +15,20 @@
 #      from before with cluster A names the policy tier and the binding, with exit 0, and verify
 #      of the record reports the tier (#106); then the bindings of cluster A as before. It needs
 #      no cluster B: `tiers.sh 5` runs it alone
+#   6  a second key, from STRATA_LIVE_LIMITED_KEY, of an active user with no role in the project: it
+#      cannot read the role bindings of cluster A. Palette answers HTTP 500 with the code
+#      ResourceAccessDenied, and not HTTP 403. The stage records the status and the code, and what
+#      strata makes of the answer (#276). It writes nothing. `tiers.sh 6` runs it alone, and no
+#      other FROM_STAGE runs it. With no variable set, it says "could not check" and exits 2
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
-# jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stage 5 alone
-# adds no machine. Results go under
+# jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stages 5 and 6
+# add no machine. Results go under
 # runs/<UTC time>/tiers/, or OUT; FROM_STAGE resumes a run in OUT. Exit 0 only when no check fails.
 set -uo pipefail
 script=tiers
 from=${1:-1}
-case "$from" in 1|2|3|4|5) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
+case "$from" in 1|2|3|4|5|6) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
@@ -172,6 +177,30 @@ if stage 5 "the subjects of a role binding of cluster A"; then
   check rbac-after-read 0 "the role bindings of cluster A after the stage" -- rbacs
   check rbac-after 0 "the bindings that Palette gives now are the bindings from before" -- \
     bash -c "diff <(jq -S '[.items[]?.spec.bindings]' rbac-before.out) <(jq -S '[.items[]?.spec.bindings]' rbac-after-read.out)"
+fi
+
+# limited_read: read the role bindings of cluster A with the second key. api.sh exits 2 and prints
+# the status and the body of the refusal; the key never leaves the environment of that one call.
+limited_read() { PALETTE_API_KEY=$STRATA_LIVE_LIMITED_KEY "$live/api.sh" get "/v1/spectroclusters/$C/config/rbacs"; }
+# refusal_code: the error code in the body of the refusal that limited-read.err holds
+refusal_code() { sed -n 's/^api.sh: GET [^ ]* answered HTTP [0-9]*: //p' limited-read.err | jq -r '.code // empty'; }
+# limited_record: a record of cluster A that strata reads with the second key
+limited_record() { PALETTE_API_KEY=$STRATA_LIVE_LIMITED_KEY "$strata" snapshot "cluster:$C" -o limited-record.json; }
+
+# stage 6 runs only when its number is given: it needs a second key
+if [ "$from" = 6 ] && stage 6 "a key that cannot read the role bindings of cluster A"; then
+  [ -n "${STRATA_LIVE_LIMITED_KEY:-}" ] \
+    || die "could not check: set STRATA_LIVE_LIMITED_KEY to a key that cannot read config/rbacs of cluster A"
+  check limited-control 0 "#276: the key of the example reads the role bindings of cluster A" -- rbacs
+  check limited-read 2 "#276: the second key does not read them: api.sh exits 2 for the refusal of Palette" -- limited_read
+  check limited-status 0 "#276: the status of the refusal is HTTP 500, and not 403" -- grep -q 'answered HTTP 500: ' limited-read.err
+  check limited-code ? "#276: the error code of the body that Palette answers" -- refusal_code
+  check limited-code-says 0 "#276: the code is ResourceAccessDenied" -- grep -qx ResourceAccessDenied limited-code.out
+  check limited-message 0 "#276: the message names the project: Project '<uid>' access denied" -- \
+    grep -q "Project '$PALETTE_PROJECT_UID' access denied" limited-read.err
+  check limited-record ? "#276: what strata does with the answer: a record of cluster A with the second key" -- limited_record
+  check limited-record-errors ? "#276: the errors of the policy tier of that record, if strata wrote one" -- \
+    jq '.source.cluster.tiers.policy.errors' limited-record.json
 fi
 
 echo

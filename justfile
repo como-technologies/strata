@@ -232,7 +232,7 @@ live-upstream: build
 live-registry-kinds: build
     examples/live/registry-kinds.sh
 
-# The cluster template test: the lock on a linked version, and a cluster outside the template (#66). Needs live-profiles and no cluster; ends with the removal of the example.
+# The cluster template test: the lock on a linked version, a cluster outside the template (#66), and a cluster in the template with the two repave routes (#276). Needs live-profiles and no cluster; builds two clusters; ends with the removal of the example.
 live-template: build
     examples/live/template.sh
 
@@ -260,7 +260,7 @@ live-scope: build
 live-release: build
     examples/live/release.sh
 
-# The pending update test: when Palette says an update waits for cluster A, what a record, the listing, and compare say, and what cluster:<uid>@pending holds (#70, #78). Needs live-up; undoes each change.
+# The pending update test: when Palette says an update waits for cluster A, what a record, the listing, and compare say, what cluster:<uid>@pending holds (#70, #78), and what compare --repave asks Palette about it (#276). Needs live-up; undoes each change.
 live-pending: build
     examples/live/pending.sh
 
@@ -321,6 +321,10 @@ live-drift-report: build
 # The cluster tiers test: what a cluster record keeps beside the release, and compare of two cluster records (#76). Needs live-up; builds and removes cluster B.
 live-tiers: build
     examples/live/tiers.sh
+
+# The limited key test: the status and the error code that Palette answers to a key that cannot read config/rbacs of cluster A (#276). Needs live-up and STRATA_LIVE_LIMITED_KEY; reads only.
+live-tiers-limited: build
+    examples/live/tiers.sh 6
 
 # What clusters A and B still have in the cloud that terraform.tfvars names; 0 on every line after live-down
 live-inventory:

@@ -369,10 +369,12 @@ made. The pushed versions stay in the registry until `live-down`.
 
 Read-write. It links the release version and the add-on version to a cluster
 template before any cluster runs them. It then tries to change a linked version,
-and tries to build a cluster outside the template. Last, it builds the cluster
-without the template, with a second add-on profile. It needs the profiles and no
-cluster. It ends with the removal of the whole example, because step 4 edits a
-version that the cluster runs.
+and tries to build a cluster outside the template. Then it builds a cluster in
+the template, asks the two repave routes, and removes the cluster. Last, it
+builds the cluster without the template, with a second add-on profile. It needs
+the profiles and no cluster. It ends with the removal of the whole example,
+because step 5 edits a version that the cluster runs. It builds two clusters,
+one after the other, on AWS or GCP.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -389,12 +391,17 @@ version that the cluster runs.
 | `lock-manifest-verify` | 1 | #81: the record of the linked add-on version from before reports `DRIFT` |
 | `lock-manifest-back` | 0 | the manifest is put back, and the record verifies |
 | `cluster-outside-template`, `refusal-says` | 1, 0 | #66: a cluster outside the template with a linked version is refused, `ClusterCreateWithTemplateProfileForbidden` |
+| `in-template-doc`, `in-template-names`, `in-template-runs-release` | 0 | #276: a cluster built in the template has `spec.clusterTemplate.uid` of the template, and runs the release version of the template. No result yet. |
+| `in-template-edit`, `in-template-undo` | 0 | #276: the Kubernetes pack of version 1.0.1, which the template does not link, gets one more kubeadm command, and then loses it. No result yet. |
+| `cluster-route`, `cluster-route-says` | 0 | #276: the route of the cluster answers no repave for the move of the cluster to that version, with no reason. No result yet. |
+| `template-route`, `template-route-names`, `template-route-says`, `template-route-json` | 1, 0 | #276: `compare --repave` of the same move asks the route of the template. The first `palette` line names the template, and Palette says repave: `PackValuesUpdated` for `kubernetes` and `kubeadmconfig.postKubeadmCommands`. No result yet. |
 | `cluster-runs-release`, `cluster-doc`, `cluster-three-profiles` | 0 | with the template gone, the cluster runs the release version and two add-on profiles |
 | `lock-gone`, `lock-gone-verify` | 0, 1 | #66: the edit in place is accepted again, and the record from before reports `DRIFT`: the lock was the template's |
 | `addon-order` | 0 | #66: the packs of the two add-on profiles start within thirty seconds of each other, whatever order the cluster lists the profiles in: the listed order is no install order. |
 
-The script builds no cluster in the template. So no check shows the repave
-answer for such a cluster yet: see
+Step 4 builds the cluster in the template with the OpenTofu variable
+`cluster_in_template`. The cluster then takes the profiles of the template. The
+checks of the repave answer for such a cluster have no result yet: see
 [The lock of a cluster template](../internals/palette/profiles.md#the-lock-of-a-cluster-template).
 
 ## cluster.sh
@@ -544,6 +551,7 @@ makes one change in place and puts it back, so it ends at the baseline.
 | `addon-at-pending`, `addon-pending-root` | 0 | #78: after the edit, the record of `@pending` has another root than the copy that runs |
 | `addon-pending-compare`, `addon-pending-compare-says` | 1, 0 | #78: `compare cluster:<uid> cluster:<uid>@pending` names the pack of the add-on `AUTHORED`, and no pack of the release |
 | `addon-pending-verify` | 0 | #78: `verify` of the pending record, while the update still waits |
+| `addon-repave`, `addon-repave-says`, `addon-repave-json` | 1, 0, 0 | #276: `compare --repave` of the cluster with `cluster:<uid>@pending` exits `1`, and the `palette` line holds the answer of Palette for a manifest of the add-on: no repave. No result yet. |
 | `accept`, `accept-none` | 0 | #70: a push of the content without `resolveNotification` closes the update all the same |
 | `accept-record`, `accept-as-pending` | 0 | #78: the cluster then runs the root that the record of `@pending` held |
 | `accept-undo`, `accept-undo-pending`, `accept-again`, `accept-again-none` | 0 | #70: the undo is an edit too, and opens an update; the accept with `resolveNotification` closes it |
@@ -552,6 +560,9 @@ makes one change in place and puts it back, so it ends at the baseline.
 | `values-undo`, `values-undo-none` | 0 | #70: an edit that gives the profile the content of the copy again closes the update, with no update of the cluster |
 | `values-baseline-none` | 0 | #70: the apply of the baseline, which writes the same content, opens no update |
 | `bump-uid-kept`, `bump-record`, `bump-none` | 0 | #70: a new version number alone, in place with the flag off, keeps the uid and opens no update |
+| `k8s-edit`, `k8s-pending` | 0 | #276: one more kubeadm command in the Kubernetes pack of the release version, in place, opens an update. No result yet. |
+| `k8s-repave`, `k8s-repave-says`, `k8s-repave-json` | 1, 0, 0 | #276: `compare --repave` of the cluster with `cluster:<uid>@pending` exits `1`. The `palette` line and `paletteRepave` hold the answer of Palette: repave, `PackValuesUpdated` for `kubernetes` and `kubeadmconfig.postKubeadmCommands`. No result yet. |
+| `k8s-undo`, `k8s-undo-none`, `k8s-baseline-none` | 0 | #276: the undo closes the update with no update of the cluster, and the apply of the baseline opens none. No result yet. |
 
 ## macros.sh
 
@@ -856,7 +867,10 @@ states what it shows.
 Read-write: it builds cluster B, changes its timezone and its labels through the
 API, and removes it. It needs the example at its baseline with cluster A. Stage
 5 changes the role bindings of cluster A through the API, and puts them back.
-It needs no cluster B: `tiers.sh 5` runs it alone.
+It needs no cluster B: `tiers.sh 5` runs it alone. Stage 6 only reads. It needs
+a second key in `STRATA_LIVE_LIMITED_KEY`, the key of an active user with no
+role in the project. It runs only as `tiers.sh 6`. With no key set, it says
+`could not check` and exits `2`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -876,6 +890,10 @@ It needs no cluster B: `tiers.sh 5` runs it alone.
 | `rbac-compare`, `rbac-compare-policy`, `rbac-compare-says` | 0 | #106: `compare` of the record with cluster A exits `0` with the root `IDENTICAL`, and names `policy.rbacs[0].subjects[name=fred@example.com]` |
 | `rbac-verify`, `rbac-verify-says` | 0 | #106: `verify` of the record exits `0`, and names `policy CHANGED` |
 | `rbac-undo`, `rbac-after-read`, `rbac-after` | 0 | the role bindings of cluster A are as before the stage |
+| `limited-control` | 0 | #276: the key of the example reads the role bindings of cluster A |
+| `limited-read`, `limited-status` | 2, 0 | #276: the second key does not read them: Palette answers HTTP 500, and not 403, and `api.sh` exits `2`. No result yet. |
+| `limited-code`, `limited-code-says`, `limited-message` | ?, 0, 0 | #276: the body holds the code `ResourceAccessDenied` and the message `Project '<project uid>' access denied`. No result yet. |
+| `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer: a record of cluster A that it reads with the second key, and the `errors` of its policy tier. No result yet. |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
