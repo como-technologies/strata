@@ -1,6 +1,6 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
-use super::changes::{OpLine, artifacts_summary, variable_lines};
+use super::changes::{OpLine, artifacts_summary, moved_word, variable_lines};
 use super::consumers::{
     NOT_LISTED, consumer_count, consumer_counts, consumer_runs, consumers_heading,
     consumers_sentence, edge_hosts_line, second_reading_line,
@@ -88,35 +88,25 @@ impl Renderer for TerminalRenderer {
             out.push(String::new());
             out.push(format!(
                 "  variables {}",
-                if d.variables.changed {
-                    p.byellow("CHANGED")
-                } else {
-                    p.dim("unchanged")
-                }
+                moved_word(d.variables.changed, p)
             ));
         }
         for v in variable_lines(&d.variables.by_name) {
             out.push(format!("        {}", variable_line(&v, p)));
         }
         if let Some(cv) = d.cluster_variables.as_ref().filter(|c| c.changed) {
-            out.push(format!("  cluster values {}", p.byellow("CHANGED")));
+            out.push(format!("  cluster values {}", moved_word(true, p)));
             for c in &cv.values {
                 out.push(format!("        {}", op_line(&OpLine::cluster_value(c), p)));
             }
         }
         let states = tier_states(d);
         if !states.is_empty() && states.iter().all(|(_, same)| *same) {
-            out.push(format!("  cluster tiers {}", p.dim("unchanged")));
+            out.push(format!("  cluster tiers {}", moved_word(false, p)));
         } else if !states.is_empty() {
             let words: Vec<String> = states
                 .iter()
-                .map(|(t, same)| {
-                    if *same {
-                        format!("{t} {}", p.dim("unchanged"))
-                    } else {
-                        format!("{t} {}", p.byellow("CHANGED"))
-                    }
-                })
+                .map(|(t, same)| format!("{t} {}", moved_word(!*same, p)))
                 .collect();
             out.push(format!("  cluster tiers {}", words.join(", ")));
             for t in d.cluster_tiers.iter().filter(|t| !t.same) {

@@ -167,6 +167,16 @@ pub enum Resolved {
     Listing,
 }
 
+impl Resolved {
+    /// The noun that names how strata found the clusters, in a report.
+    pub(crate) fn noun(self) -> &'static str {
+        match self {
+            Self::Search => "search of Palette",
+            Self::Listing => "cluster listing",
+        }
+    }
+}
+
 /// The clusters that a query selects, and how strata found them.
 #[derive(Debug, Clone)]
 pub struct Selection {

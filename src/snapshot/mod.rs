@@ -16,6 +16,7 @@ use crate::content::hash::content_of;
 use crate::error::{Error, Result};
 use crate::json::str_at;
 use crate::profile_type::ProfileType;
+use crate::reference::name_version;
 pub use crate::repave::PendingRepave;
 use crate::text::name_or_uid;
 pub use crate::validation::ProfileValidation;
@@ -276,7 +277,7 @@ impl Source {
     /// that runs a
     /// profile has other words in a verdict.
     pub(crate) fn named(&self, naming: Naming) -> String {
-        let profile = format!("{}@{}", self.name, self.version);
+        let profile = name_version(&self.name, &self.version);
         if let Some(p) = &self.pack {
             return match naming {
                 Naming::Side => format!("pack {profile}"),

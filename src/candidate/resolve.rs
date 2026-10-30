@@ -15,6 +15,7 @@ use crate::closed_set::ClosedSet;
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_str, opt_text, str_at, strings, text};
 use crate::pack_type::PackType;
+use crate::reference::name_version;
 use crate::registry::{Registries, pack_type_of, registry_layer, retired_state};
 use crate::snapshot::PresetOption;
 use crate::term::progress::Progress;
@@ -154,10 +155,9 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         }
         gaps::check_pack_tag(&from_unsynced, tag).map_err(|broken| broken.at(&self.loaded.path))?;
         self.progress.note(&format!(
-            "{}@{}: registry {} does not sync, so Palette makes the pack when it creates the \
+            "{}: registry {} does not sync, so Palette makes the pack when it creates the \
              profile; the record has no pack uid and no digest",
-            l.name,
-            l.version,
+            name_version(&l.name, &l.version),
             registry_ref.text()
         ));
         let values = loaded_layer.values.clone().unwrap_or_default();
@@ -356,8 +356,8 @@ pub(crate) fn resolve_with<A: PaletteApi>(
 ) -> Result<ResolvedCandidate> {
     let c = &loaded.candidate;
     progress.note(&format!(
-        "resolving {}@{} against the registry",
-        c.name, c.version
+        "resolving {} against the registry",
+        name_version(&c.name, &c.version)
     ));
     let mut resolver = Resolver {
         loaded,

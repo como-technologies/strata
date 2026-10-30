@@ -63,9 +63,11 @@ pub(crate) fn query_line(l: &Listing) -> Option<String> {
         parts.push(format!("the saved filter {name}{expr}"));
     }
     let how = match l.resolved {
-        Some(crate::ops::Resolved::Search) => "from the search of Palette, at tenant scope",
-        Some(crate::ops::Resolved::Listing) => "from the cluster listing, labels matched by strata",
-        None => "",
+        Some(r @ Resolved::Search) => format!("from the {}, at tenant scope", r.noun()),
+        Some(r @ Resolved::Listing) => {
+            format!("from the {}, labels matched by strata", r.noun())
+        }
+        None => String::new(),
     };
     Some(format!("the clusters with {}, {how}", and_list(&parts)))
 }
@@ -189,13 +191,12 @@ pub(crate) fn pack_version(pk: &crate::ops::ListedPack) -> String {
 /// `2 of 3 clusters recorded, 1 removed; found by the search of Palette`: the counts of a set.
 pub fn set_counts_line(r: &SetReport) -> String {
     let c = &r.summary;
-    let found = match r.resolved {
-        Resolved::Search => "search of Palette",
-        Resolved::Listing => "cluster listing",
-    };
     format!(
-        "{} of {} clusters recorded, {} removed; found by the {found}",
-        c.recorded, c.clusters, c.removed
+        "{} of {} clusters recorded, {} removed; found by the {}",
+        c.recorded,
+        c.clusters,
+        c.removed,
+        r.resolved.noun()
     )
 }
 

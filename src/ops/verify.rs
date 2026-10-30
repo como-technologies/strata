@@ -16,6 +16,7 @@ use crate::diff::{
 };
 use crate::error::{Error, Result, found};
 use crate::json::{flag, is_zero, opt_flag, opt_text, str_at, text};
+use crate::reference::name_version;
 use crate::registry::Registries;
 use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
 use crate::term::progress::Progress;
@@ -342,7 +343,7 @@ pub fn verify_with<A: PaletteApi>(
         && !live.source.version.is_empty()
         && (&live.source.name, &live.source.version)
             != (&recorded.source.name, &recorded.source.version))
-        .then(|| format!("{}@{}", live.source.name, live.source.version));
+        .then(|| name_version(&live.source.name, &live.source.version));
     let (renamed_to, overwritten_by) = if live.source.version == recorded.source.version {
         (now_names, None)
     } else {

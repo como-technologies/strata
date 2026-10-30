@@ -1,8 +1,8 @@
 //! The pull request comment.
 
 use super::changes::{
-    OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, plain_flags, status_mark,
-    status_word, traits_suffix, upstream_line, values_changed, values_summary,
+    OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, moved, plain_flags,
+    status_mark, status_word, traits_suffix, upstream_line, values_changed, values_summary,
     values_unparsed_sentence, variable_lines, version_display,
 };
 use super::consumers::{
@@ -99,14 +99,7 @@ impl Renderer for MarkdownRenderer {
         let s = &d.summary;
         // two packs have no profile variables, and no request asked for any
         let variables = if variables_comparable(d) {
-            format!(
-                " · variables: {}",
-                if s.variables_changed {
-                    "changed"
-                } else {
-                    "unchanged"
-                }
-            )
+            format!(" · variables: {}", moved(s.variables_changed).as_str())
         } else {
             String::new()
         };
@@ -179,11 +172,14 @@ impl Renderer for MarkdownRenderer {
         }
         let states = tier_states(d);
         if !states.is_empty() && states.iter().all(|(_, same)| *same) {
-            o.push_str("**Cluster tiers:** unchanged\n\n");
+            o.push_str(&format!(
+                "**Cluster tiers:** {}\n\n",
+                Status::Unchanged.as_str()
+            ));
         } else if !states.is_empty() {
             let words: Vec<String> = states
                 .iter()
-                .map(|(t, same)| format!("{t} {}", if *same { "unchanged" } else { "changed" }))
+                .map(|(t, same)| format!("{t} {}", moved(!*same).as_str()))
                 .collect();
             o.push_str(&format!("**Cluster tiers:** {}\n\n", words.join(", ")));
             let changed: Vec<_> = d.cluster_tiers.iter().filter(|t| !t.same).collect();

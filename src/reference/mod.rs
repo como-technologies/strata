@@ -260,6 +260,11 @@ fn uid_and_profile(text: &str) -> (&str, Option<&str>) {
     }
 }
 
+/// A profile version as a ref writes it: `<name>@<version>`.
+pub(crate) fn name_version(name: &str, version: &str) -> String {
+    format!("{name}@{version}")
+}
+
 /// `<name>@<version>`, split at the last `@`, when both parts are there.
 fn name_at_version(text: &str) -> Option<(&str, &str)> {
     text.rsplit_once('@')
@@ -270,7 +275,7 @@ impl fmt::Display for Ref {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Ref::Snapshot(p) => write!(f, "{}", p.display()),
-            Ref::NameVersion { name, version } => write!(f, "{name}@{version}"),
+            Ref::NameVersion { name, version } => f.write_str(&name_version(name, version)),
             Ref::Uid(u) => write!(f, "{u}"),
             Ref::Draft { id, version } => match version {
                 Some(v) => write!(f, "{id}@{v}{DRAFT_SUFFIX}"),
@@ -536,6 +541,22 @@ mod tests {
             Ref::Uid("cluster:".into()),
             "no uid, no cluster"
         );
+    }
+
+    #[test]
+    fn a_name_and_a_version_make_the_ref_that_reads_back_as_they_are() {
+        let no_files = |_: &Path| false;
+        let text = name_version("aws-stack", "1.2.0");
+        assert_eq!(text, "aws-stack@1.2.0");
+        let read = Ref::parse_with(&text, no_files);
+        assert_eq!(
+            read,
+            Ref::NameVersion {
+                name: "aws-stack".into(),
+                version: "1.2.0".into(),
+            }
+        );
+        assert_eq!(read.to_string(), text);
     }
 
     #[test]
