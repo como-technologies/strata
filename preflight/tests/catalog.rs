@@ -838,6 +838,55 @@ fn instance_offering_reads_the_type_of_an_entry_from_type() {
     }
 }
 
+/// Palette gives `null` in `nonSupportedZones` of a type that each zone offers, and most types are
+/// so (#411). `instance-offering` reads `null` as no zone: a pool of that type passes in each zone.
+#[test]
+fn instance_offering_passes_a_pool_whose_type_has_null_in_non_supported_zones_in_each_zone() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("instance-offering").unwrap();
+    for (fixture, key, kind, zones) in [
+        (
+            "fixtures/aws/instance-zone-null.json",
+            "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1",
+            "t3.xlarge",
+            ["us-east-2a", "us-east-2b", "us-east-2c"],
+        ),
+        (
+            "fixtures/gcp/instance-zone-null.json",
+            "GET /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-gcp-1",
+            "e2-standard-4",
+            ["us-east1-b", "us-east1-c", "us-east1-d"],
+        ),
+    ] {
+        let path = catalog::rules_dir().join(fixture);
+        for zone in zones {
+            let mut doc = fixture::load(&path).unwrap();
+            let listed = doc["_responses"][key]["body"]["instanceTypes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|entry| entry["type"] == kind)
+                .unwrap();
+            assert!(listed["nonSupportedZones"].is_null(), "{fixture}: {listed}");
+            for pool in doc["entity"]["spec"]["machinepoolconfig"]
+                .as_array_mut()
+                .unwrap()
+            {
+                assert_eq!(pool["cloudConfig"]["instanceType"], kind, "{fixture}");
+                pool["cloudConfig"]["azs"] = serde_json::json!([zone]);
+            }
+            let (backend, world) = FixtureBackend::split(doc);
+            let out = probe::run_check(rule, &world, &backend, &Jq::new());
+            assert_eq!(
+                out.verdict,
+                Verdict::Passed,
+                "{fixture} in {zone}: {:?}",
+                out.messages
+            );
+        }
+    }
+}
+
 /// A pool with no zone, as a GKE pool of a region, is checked against the list of the region alone.
 #[test]
 fn instance_offering_checks_a_pool_with_no_zone_against_the_list_of_the_region() {

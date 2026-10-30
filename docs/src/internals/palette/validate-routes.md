@@ -419,15 +419,15 @@ Strata reads each list and compares it with the entity.
 
 | Route | Gives | Read by |
 | --- | --- | --- |
-| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | Each instance type of the region: `type`, `category`, `cpu`, `memory`, `price`, `cost`, `supportedArchitectures[]`, and `nonSupportedZones[]`. | `instance-offering` |
+| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | Each instance type of the region: `type`, `category`, `cpu`, `memory`, `price`, `cost`, `supportedArchitectures[]`, and `nonSupportedZones` (an array, or `null`). | `instance-offering` |
 | `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `keyNames[]`: the key pairs of the account in the region. | `ssh-key-pair` |
 
 `type` of an entry names the instance type. An entry has no `name`.
-`nonSupportedZones` of a type names the zones that do not offer it. So one
+`nonSupportedZones` of a type is an array of the zones that do not offer it.
+It is `null` for a type that each zone offers. Most types give `null`. So one
 request answers every pool of the entity: a pool fails when its type names a
-zone of the pool, or when the region does not list the type. Palette fills
-`nonSupportedZones` for most types, and a type that the list does not mark can
-still fail in the cloud.
+zone of the pool, or when the region does not list the type. A type that the
+list does not mark can still fail in the cloud.
 
 The property route of EKS checks the key pair with a `vpcId` alone. An EKS
 cluster with a dynamic VPC reaches no check of the key pair, and the key pair
