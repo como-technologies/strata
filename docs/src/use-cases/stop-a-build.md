@@ -129,7 +129,9 @@ and the last reading.
 ## 4. Once it runs
 
 `cluster:UID` reads the cluster as Palette holds it, which is the entity the
-create sent, and runs every tier on it:
+create sent, and runs every tier on it. The entity holds the value that the
+cluster gives each variable of its profiles, so the validate route checks those
+values. See [A cluster as Palette holds it](../commands/preflight/tiers.md#a-cluster-as-palette-holds-it).
 
 ```text
 {{#include ../output/preflight-cluster.txt}}

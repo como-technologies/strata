@@ -64,6 +64,22 @@ impl<A: PaletteApi> Palette<A> {
         Ok(take_items(self.api.get_json(&cluster_events_path(uid))?))
     }
 
+    /// The values that the cluster `uid` gives the variables of its profiles,
+    /// `GET /v1/spectroclusters/{uid}/variables`, and whether the route is missing.
+    ///
+    /// The answer is an array with one entry for each applied profile that declares a variable:
+    /// [`profile_variables`](crate::api::profile_variables) reads it. Palette masks the value of
+    /// a sensitive variable, and the answer holds the mask. An older Palette has no route: the
+    /// answer is then `[]` and the flag is true.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, except a missing route. [`Error::Api`] with HTTP 404 when Palette
+    /// has no cluster with the uid `uid`.
+    pub fn cluster_variables(&self, uid: &str, progress: &Progress) -> Result<(Value, bool)> {
+        self.variables_or(&route(CLUSTERS, &[uid]), serde_json::json!([]), progress)
+    }
+
     /// The raw documents of the cluster, edge host, or cluster group `id`, in the shape of a
     /// cluster.
     ///
@@ -170,8 +186,7 @@ impl<A: PaletteApi> Palette<A> {
         let manifests = self
             .api
             .get_json(&route(CLUSTERS, &[uid, "profiles", "packs", "manifests"]))?;
-        let (variables, variables_unavailable) =
-            self.variables_or(&route(CLUSTERS, &[uid]), serde_json::json!([]), progress)?;
+        let (variables, variables_unavailable) = self.cluster_variables(uid, progress)?;
         // the updates and the repave that wait, the bindings, and the namespaces are beside the
         // copy, not part of it. So strata records the error of a read, and still takes the record
         let (notifications, notifications_error) = or_unread(

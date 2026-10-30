@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use super::mask::{MASKED, mask_group_values};
 use crate::error::{Error, Result};
-use crate::json::{arr, flag, opt_text, str_at, value_at, value_or_null};
+use crate::json::{arr, flag, opt_text, str_at, value_or_null};
 use crate::snapshot::Template;
 
 /// The three raw API responses a snapshot is built from, and the project they were fetched in.
@@ -48,6 +48,21 @@ const MANIFEST_ENTITIES_FILE: &str = "manifest-entities.json";
 /// `status.hasDraft`, and the publish empties the draft.
 pub fn has_draft(profile: &Value) -> bool {
     !arr(profile, "/spec/draft/packs").is_empty()
+}
+
+/// The variables that the answer of `GET /v1/spectroclusters/{uid}/variables` gives the profile
+/// `profile_uid`, each as Palette lists it.
+///
+/// The answer is an array with one entry for each applied profile that declares a variable. A
+/// profile with no entry has no variable.
+pub fn profile_variables<'a>(
+    answer: &'a Value,
+    profile_uid: &'a str,
+) -> impl Iterator<Item = &'a Value> {
+    arr(answer, "")
+        .iter()
+        .filter(move |entry| str_at(entry, "/profileUid") == profile_uid)
+        .flat_map(|entry| arr(entry, "/variables"))
 }
 
 /// The template of the profile document `profile` that a record and `list` read: the published
@@ -480,14 +495,7 @@ impl RawCluster {
             })
             .cloned()
             .unwrap_or_else(|| serde_json::json!({"spec": {"packs": []}}));
-        // the variables route answers an array at the top level
-        let variables = arr(&self.variables, "")
-            .iter()
-            .find(|v| str_at(v, "/profileUid") == uid)
-            .map_or_else(
-                || serde_json::json!([]),
-                |v| value_at(v, "/variables").clone(),
-            );
+        let variables: Vec<Value> = profile_variables(&self.variables, uid).cloned().collect();
         RawProfile {
             profile,
             manifests,
@@ -531,5 +539,27 @@ mod tests {
             RawProfile::load_dir(dir.path()).unwrap_err(),
             Error::EmptyFile(_)
         ));
+    }
+
+    #[test]
+    fn the_variables_of_a_profile_are_the_entries_of_its_uid_and_no_other() {
+        let answer = json!([
+            {"profileUid": "p1", "variables": [{"name": "a", "value": "1"}, {"name": "b", "value": "2"}]},
+            {"profileUid": "p2", "variables": [{"name": "c", "value": "3"}]},
+        ]);
+        let names = |uid: &str| -> Vec<String> {
+            profile_variables(&answer, uid)
+                .map(|v| str_at(v, "/name").to_string())
+                .collect()
+        };
+        assert_eq!(names("p1"), ["a", "b"]);
+        assert_eq!(names("p2"), ["c"]);
+        assert!(names("p3").is_empty(), "a profile with no entry");
+        assert!(
+            profile_variables(&json!({"variables": []}), "p1")
+                .next()
+                .is_none(),
+            "an answer that is not an array"
+        );
     }
 }

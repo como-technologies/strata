@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde_json::{Map, Value, json};
-use strata::api::{Palette, PaletteApi, RawCluster};
+use strata::api::{Palette, PaletteApi, RawCluster, profile_variables};
 use strata::cloud::CLOUD_EDGE_NATIVE;
 use strata::json::{arr, opt_str, opt_text, str_at, text_map, value_at, value_or_null};
 use strata::reference::Ref;
@@ -167,8 +167,11 @@ impl World {
     }
 
     /// A world from an existing cluster, as Palette holds it now: the cluster document, its cloud
-    /// config, and its profiles become the body of a create. `id` is the uid of the cluster, or
-    /// its name when no cluster has that uid.
+    /// config, its profiles, and the values of its variables become the body of a create. `id` is
+    /// the uid of the cluster, or its name when no cluster has that uid.
+    ///
+    /// The value of a sensitive variable is the mask that Palette gives. The world sends it as it
+    /// is, so the validate route reads a mask and not the secret.
     ///
     /// # Errors
     ///
@@ -195,7 +198,9 @@ impl World {
         let config = palette.cloud_config(&cluster)?;
         let account_uid = opt_str(&config, "/spec/cloudAccountRef/uid")
             .or_else(|| opt_str(&cluster, "/spec/cloudAccountRef/uid"));
-        let entity = entity_of(&cluster, &config, account_uid);
+        // the flag is true for a Palette with no variables route, and the profiles then send none
+        let (variables, _) = palette.cluster_variables(uid, progress)?;
+        let entity = entity_of(&cluster, &config, account_uid, &variables);
         Ok(World {
             cloud,
             source: Ref::Cluster {
@@ -212,7 +217,8 @@ impl World {
 
     /// Apply a change file to the entity: the entity as it is becomes `before`, and the change
     /// merges over it. An object merges key by key; `machinepoolconfig` merges pool by pool, on
-    /// the pool name; `profiles` merges profile by profile, on the uid; any other list replaces.
+    /// the pool name; `profiles` merges profile by profile, on the uid; `variables` merges
+    /// variable by variable, on the name; any other list replaces.
     pub fn with_change(mut self, path: &Path) -> Result<World> {
         let text = std::fs::read_to_string(path).map_err(|e| crate::error::io(path, e))?;
         let doc: Value = parse_json_or_yaml(&text).map_err(|m| Error::Input {
@@ -420,8 +426,15 @@ pub fn infer_cloud(entity: &Value) -> Option<String> {
     None
 }
 
-/// The body of a create, from a cluster document and its cloud config.
-fn entity_of(cluster: &Value, config: &Value, account_uid: Option<&str>) -> Value {
+/// The body of a create, from a cluster document, its cloud config, and the answer of its
+/// variables route, `variables`. Each profile sends the name and the value of its variables, as a
+/// create sends them.
+fn entity_of(
+    cluster: &Value,
+    config: &Value,
+    account_uid: Option<&str>,
+    variables: &Value,
+) -> Value {
     let pools: Vec<Value> = arr(config, "/spec/machinePoolConfig")
         .iter()
         .map(split_pool)
@@ -442,7 +455,9 @@ fn entity_of(cluster: &Value, config: &Value, account_uid: Option<&str>) -> Valu
                         }).collect::<Vec<_>>(),
                     })
                 }).collect::<Vec<_>>(),
-                "variables": [],
+                "variables": profile_variables(variables, str_at(t, "/uid")).map(|v| {
+                    json!({"name": value_at(v, "/name"), "value": value_at(v, "/value")})
+                }).collect::<Vec<_>>(),
             })
         })
         .collect();
@@ -531,6 +546,10 @@ fn merge_change(into: &mut Value, change: &Value) {
                         merge_list(profiles, changes, |p| {
                             opt_str(p, "/uid").or_else(|| opt_str(p, "/source/uid"))
                         });
+                    }
+                    // the variables of a profile carry a `name`, as the pools do
+                    (Some(Value::Array(variables)), Value::Array(changes)) if k == "variables" => {
+                        merge_list(variables, changes, |v| opt_str(v, "/name"));
                     }
                     (Some(have), v) if have.is_object() && v.is_object() => merge_change(have, v),
                     (_, v) => {
@@ -644,6 +663,7 @@ mod tests {
         // the id is a uid: one request for the document, and no listing
         let by_uid = strata::api::MemoryApi::new()
             .with(format!("/v1/spectroclusters/{id}"), document(id))
+            .with(format!("/v1/spectroclusters/{id}/variables"), json!([]))
             .with("/v1/cloudconfigs/aws/cc1", config.clone());
         let world = World::from_cluster(&Palette::new(&by_uid), id, &Progress::silent()).unwrap();
         assert_eq!(world.cluster_uid.as_deref(), Some(id));
@@ -656,6 +676,7 @@ mod tests {
                 json!([{"metadata": {"name": id, "uid": "c1"}}]),
             )
             .with("/v1/spectroclusters/c1", document("c1"))
+            .with("/v1/spectroclusters/c1/variables", json!([]))
             .with("/v1/cloudconfigs/aws/cc1", config);
         let world = World::from_cluster(&Palette::new(&by_name), id, &Progress::silent()).unwrap();
         assert_eq!(world.cluster_uid.as_deref(), Some("c1"));
@@ -866,7 +887,7 @@ mod tests {
         let config = json!({"spec": {"cloudAccountRef": {"uid": "acc1"},
             "clusterConfig": {"region": "us-east-2", "vpcId": "", "endpointAccess": {"public": true}},
             "machinePoolConfig": [{"name": "worker-pool", "size": 2, "instanceType": "t3.xlarge", "azs": ["us-east-2a", "us-east-2b"]}]}});
-        let e = entity_of(&cluster, &config, Some("acc1"));
+        let e = entity_of(&cluster, &config, Some("acc1"), &json!([]));
         assert_eq!(e["metadata"]["name"], "fred");
         assert_eq!(e["spec"]["cloudAccountUid"], "acc1");
         assert_eq!(e["spec"]["cloudConfig"]["region"], "us-east-2");
@@ -881,5 +902,87 @@ mod tests {
             "kubernetes-eks"
         );
         assert_eq!(e["spec"]["clusterType"], "AlloyAssist");
+        assert_eq!(e["spec"]["profiles"][0]["variables"], json!([]));
+    }
+
+    /// A cluster of two profiles, and the answer of its variables route: the first profile
+    /// declares two variables, one of them sensitive, and the second declares none.
+    fn cluster_api(variables: serde_json::Value) -> strata::api::MemoryApi {
+        strata::api::MemoryApi::new()
+            .with(
+                "/v1/spectroclusters/c1",
+                json!({"metadata": {"uid": "c1", "name": "barney"},
+                    "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"},
+                        "clusterProfileTemplates": [{"uid": "p1", "packs": []}, {"uid": "p2", "packs": []}]}}),
+            )
+            .with("/v1/cloudconfigs/aws/cc1", json!({"spec": {}}))
+            .with("/v1/spectroclusters/c1/variables", variables)
+    }
+
+    #[test]
+    fn the_entity_of_a_cluster_carries_the_variable_values_of_each_profile() {
+        let api = cluster_api(json!([{"profileUid": "p1", "variables": [
+            {"name": "pod_cidr", "value": "10.244.0.0/16", "format": "string", "required": true},
+            {"name": "db_password", "value": "********", "isSensitive": true}]}]));
+        let world = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap();
+        let profiles = &world.entity["spec"]["profiles"];
+        assert_eq!(
+            profiles[0]["variables"],
+            json!([
+                {"name": "pod_cidr", "value": "10.244.0.0/16"},
+                {"name": "db_password", "value": "********"}
+            ]),
+            "the name and the value, and a sensitive value as Palette masks it"
+        );
+        assert_eq!(
+            profiles[1]["variables"],
+            json!([]),
+            "a profile with no entry has no variable"
+        );
+    }
+
+    #[test]
+    fn a_cluster_on_a_palette_with_no_variables_route_sends_no_variable() {
+        let api = cluster_api(json!([]));
+        let older = strata::api::MemoryApi::new()
+            .with(
+                "/v1/spectroclusters/c1",
+                json!({"metadata": {"uid": "c1", "name": "barney"},
+                    "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"},
+                        "clusterProfileTemplates": [{"uid": "p1", "packs": []}]}}),
+            )
+            .with("/v1/cloudconfigs/aws/cc1", json!({"spec": {}}))
+            .failing("/v1/spectroclusters/c1/variables", 405, "{}");
+        for api in [api, older] {
+            let world = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap();
+            assert_eq!(world.entity["spec"]["profiles"][0]["variables"], json!([]));
+        }
+    }
+
+    #[test]
+    fn a_variables_route_that_fails_stops_the_world_of_a_cluster() {
+        let api = cluster_api(json!([])).failing("/v1/spectroclusters/c1/variables", 500, "boom");
+        let err = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap_err();
+        assert!(err.to_string().contains("HTTP 500"), "{err}");
+    }
+
+    #[test]
+    fn a_change_merges_the_variables_of_a_profile_by_name_and_keeps_the_rest() {
+        let mut entity = json!({"spec": {"profiles": [{"uid": "p1", "variables": [
+            {"name": "pod_cidr", "value": "10.244.0.0/16"},
+            {"name": "owner", "value": "platform"}]}]}});
+        let change = json!({"spec": {"profiles": [{"uid": "p1", "variables": [
+            {"name": "pod_cidr", "value": "10.0.0.0/8"},
+            {"name": "region", "value": "eu-west-3"}]}]}});
+        merge_change(&mut entity, &change);
+        assert_eq!(
+            entity["spec"]["profiles"][0]["variables"],
+            json!([
+                {"name": "pod_cidr", "value": "10.0.0.0/8"},
+                {"name": "owner", "value": "platform"},
+                {"name": "region", "value": "eu-west-3"}
+            ]),
+            "a variable of the change replaces its value, a new name is added, the rest stays"
+        );
     }
 }
