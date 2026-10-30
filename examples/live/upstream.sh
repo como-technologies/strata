@@ -110,7 +110,7 @@ done
 check sync-1 0 "Palette reads $REG_NAME again" -- "$live/api.sh" sync-oci "$REG"
 mkdir -p records
 check record-own 0 "record $PACK 1.0.0" -- "$strata" snapshot "pack:$REG_NAME/$PACK@1.0.0" -o records/own.json
-check record-csi 0 'record csi-aws-ebs 1.63.1 of the Public Repo' -- "$strata" snapshot 'pack:Public Repo/csi-aws-ebs@1.63.1' -o records/csi.json
+check record-csi 0 'record csi-aws-ebs 1.63.1 of the Public Repo' -- "$strata" snapshot "pack:$public_repo/csi-aws-ebs@1.63.1" -o records/csi.json
 check record-release 0 'record the release version' -- "$strata" snapshot "$R" -o release.json
 check behind-1 1 '#79: strata behind names the pins that are behind: exit 1' -- \
   "$strata" behind records/own.json records/csi.json release.json --json
@@ -155,7 +155,7 @@ check report-2-arrived 0 "#79: the issue of $PACK names 1.2.0 as arrived, from t
 echo "== 4. the pins move to the newest versions" | tee -a steps.log
 newest_csi=$(jq -r '.newer[0].version' <<<"$(pin run-1.json csi-aws-ebs)")
 check record-own-new 0 "record $PACK 1.2.0" -- "$strata" snapshot "pack:$REG_NAME/$PACK@1.2.0" -o records/own.json
-check record-csi-new 0 "record csi-aws-ebs $newest_csi" -- "$strata" snapshot "pack:Public Repo/csi-aws-ebs@$newest_csi" -o records/csi.json
+check record-csi-new 0 "record csi-aws-ebs $newest_csi" -- "$strata" snapshot "pack:$public_repo/csi-aws-ebs@$newest_csi" -o records/csi.json
 check report-3 0 '#79: with each pin current, upstream-report.sh closes the issues: exit 0' -- \
   "${report[@]}" records/own.json records/csi.json --repo "$GH_REPO" --label "$LABEL"
 issues 0 > issues-3.json

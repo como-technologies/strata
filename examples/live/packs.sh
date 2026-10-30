@@ -30,7 +30,7 @@ load_outputs
 pack=$(out csi_pack_name)
 old=$(out csi_previous_version)
 new=$(out csi_version)
-reg="Public Repo"
+reg=$public_repo
 [ -n "$pack" ] && [ -n "$old" ] && [ -n "$new" ] || die "no CSI pack in the tofu outputs; run just live-profiles"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/packs}
