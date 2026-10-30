@@ -33,6 +33,10 @@ resource "spectrocloud_cluster_aws" "cluster" {
   name             = each.value
   cloud_account_id = data.spectrocloud_cloudaccount_aws.this[0].id
   tags             = local.tags
+  # A cluster in the cluster template needs a time zone: Palette refuses the create without one
+  # (ShouldNotBeEmpty, parameter timezone). A cluster outside the template keeps the time zone
+  # that Palette gives it.
+  cluster_timezone = var.cluster_in_template ? var.cluster_timezone : null
 
   dynamic "cluster_profile" {
     for_each = var.cluster_in_template ? [] : [local.cluster_release_uid]

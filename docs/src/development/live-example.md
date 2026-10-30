@@ -73,7 +73,7 @@ shape. EKS and GKE are managed engines. EKS has its own cloud account: see
 | profile `strata-live-dep` 1.0.0 | An add-on profile with `strata-live-pack` 1.1.0, which requires `strata-live-dep`, and that pack. `registry.sh` makes it after the pushes, and removes it at its end. |
 | registry `strata-live-helm-registry` | The same repository host, read by Palette as an OCI Helm registry, with one chart repository. `registry.sh` pushes into it. |
 | profile `strata-live-owned-helm` 1.0.0 | An add-on profile with the one chart of that registry. `registry.sh` makes it after the first push, and removes it at its end. |
-| policy `strata-live-maintenance`, template `strata-live-template` | A maintenance policy, and a cluster template that links the release version and the add-on version. `template.sh` makes them before it builds a cluster, and removes them at its end. The variable `cluster_in_template` builds the clusters in the template, on AWS and GCP. |
+| policy `strata-live-maintenance`, template `strata-live-template` | A maintenance policy, and a cluster template that links the release version and the add-on version. `template.sh` makes them before it builds a cluster, and removes them at its end. The variable `cluster_in_template` builds the clusters in the template, on AWS and GCP. A cluster in the template needs a time zone, and the variable `cluster_timezone` gives it. |
 | profile `strata-live-addon2` 1.0.0 | A second add-on profile with one manifest. `template.sh` runs it on the cluster beside the first, for the install order of add-on packs. |
 
 The pack versions are those of `examples/profiles/aws-stack@1.1.0.json`.
@@ -497,6 +497,7 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | `gke_k8s_bump` | optional, for `cloud = "gke"`: a Kubernetes version for the profile version 1.0.9, which `gke.sh` asks Palette about |
 | `palette_core_policies` | optional, for `cloud = "eks"`: the names of the core policies of Palette in the account |
 | `extra_addon_profile_uids` | optional; more add-on profile versions for the clusters to run, by uid, such as the profiles that `api.sh pin-profile` makes. The default is none |
+| `cluster_timezone` | optional; the time zone of a cluster in the cluster template, as a name of the IANA time zone database. The default is `America/Chicago`. `template.sh` builds such a cluster, and Palette refuses a cluster in a template that has none: see [A cluster in a cluster template needs a time zone](../internals/palette/profiles.md#a-cluster-in-a-cluster-template-needs-a-time-zone) |
 
 The file is not tracked. It holds names only. The API key never goes in it.
 

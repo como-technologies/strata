@@ -405,6 +405,12 @@ Step 4 builds the cluster in the template with the OpenTofu variable
 checks of the repave answer for such a cluster have no result yet: see
 [The lock of a cluster template](../internals/palette/profiles.md#the-lock-of-a-cluster-template).
 
+A cluster in a template needs a time zone. The variable `cluster_timezone`
+gives it, and the apply of step 4 makes no cluster without it. Without a time
+zone, Palette refuses the create with `ShouldNotBeEmpty` for the parameter
+`timezone`: see
+[A cluster in a cluster template needs a time zone](../internals/palette/profiles.md#a-cluster-in-a-cluster-template-needs-a-time-zone).
+
 ## cluster.sh
 
 Read-write. It needs the example at its baseline with cluster A, changes the
