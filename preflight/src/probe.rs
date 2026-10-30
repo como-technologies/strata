@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use strata::api::PaletteApi;
+use strata::config::KEY_VARS;
 
 use crate::error::{Error, Result};
 use crate::jq::Jq;
@@ -74,8 +75,10 @@ pub fn is_answer(status: u16) -> bool {
 impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
     fn palette(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Response> {
         let api = self.palette.ok_or_else(|| Error::Usage {
-            message: "a Palette check needs a key: set PALETTE_API_KEY, or run with --tier static"
-                .to_string(),
+            message: format!(
+                "a Palette check needs a key: set {}, or run with --tier static",
+                KEY_VARS[0]
+            ),
         })?;
         let answer = match method {
             Method::Get => api.get_json(path),
@@ -291,7 +294,7 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
             if !backend.has_palette() {
                 return Outcome::not_run(
                     Verdict::NotRun,
-                    "no key: set PALETTE_API_KEY to run the Palette checks",
+                    format!("no key: set {} to run the Palette checks", KEY_VARS[0]),
                 );
             }
             let path = match jq.render(&rule.id, path, world) {

@@ -8,7 +8,7 @@ use std::process::ExitCode;
 use std::sync::OnceLock;
 
 use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
-use strata::config::Config;
+use strata::config::{self, Config, PROJECT_NAME_VAR, PROJECT_VARS};
 use strata::error::{Error, Result};
 use strata::ops;
 use strata::term::progress::Progress;
@@ -31,7 +31,7 @@ fn now_utc() -> String {
 }
 
 fn progress(quiet: bool) -> Progress {
-    Progress::new(quiet || std::env::var_os("STRATA_QUIET").is_some())
+    Progress::new(quiet || config::quiet_from_env())
 }
 
 /// A client from the environment; `project` replaces `PALETTE_PROJECT_UID` or `PALETTE_PROJECT`
@@ -69,16 +69,17 @@ fn warn_on_scope_conflict(config: &Config, progress: Progress) {
     let (Some(uid), Some(name)) = (&config.project_uid, &config.shadowed_project_name) else {
         return;
     };
+    let (uid_var, name_var) = (PROJECT_VARS[0], PROJECT_NAME_VAR);
     match project_uid_named(config, name, progress) {
         Ok(named) if &named == uid => {}
         Ok(named) => progress.warn(&format!(
-            "PALETTE_PROJECT_UID is {uid} and PALETTE_PROJECT is '{name}', which is {named}. \
+            "{uid_var} is {uid} and {name_var} is '{name}', which is {named}. \
              A uid has priority, so this answers for {uid}. Clear one of the two: \
-             `PALETTE_PROJECT_UID= PALETTE_PROJECT={name}` asks for the project you named."
+             `{uid_var}= {name_var}={name}` asks for the project you named."
         )),
         Err(e) => progress.warn(&format!(
-            "PALETTE_PROJECT is '{name}', which no project matches ({e}). \
-             PALETTE_PROJECT_UID is {uid}, and a uid has priority, so this answers for {uid}."
+            "{name_var} is '{name}', which no project matches ({e}). \
+             {uid_var} is {uid}, and a uid has priority, so this answers for {uid}."
         )),
     }
 }
