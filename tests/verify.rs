@@ -71,7 +71,7 @@ fn verify_reports_a_deleted_version_as_gone_and_not_as_an_error() {
             .all(|p| p.status == strata::diff::Status::Removed),
         "each pack of the record is removed"
     );
-    let r = render::renderer(Format::Terminal, Paint::off(), false);
+    let r = common::terminal();
     let text = r.render(&v.diff, &recorded, &v.live, false).unwrap();
     assert!(!text.contains("edited in place"), "{text}");
     let verdict = r.verdict(&v.diff).unwrap();
@@ -632,9 +632,7 @@ fn an_unavailable_variables_endpoint_is_recorded_and_reported() {
     // the roots differ for an infrastructure reason, and the report must say which
     let d = ops::compare(&a, &b, "t1");
     assert!(!d.same, "a missing endpoint changes the root");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &b, false).unwrap();
     assert!(
         text.contains("side B: Palette did not serve the variables endpoint"),
         "{text}"
@@ -1150,9 +1148,7 @@ fn two_profiles_with_the_same_manifest_content_are_one_release_whatever_uid_pale
         .find(|p| p.name == "prometheus-operator")
         .unwrap();
     assert!(prom.identity && prom.minted_uid_only, "{prom:?}");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &one, &two, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &one, &two, false).unwrap();
     assert!(
         text.contains("the roots differ only by the packUid that Palette mints: the same content"),
         "{text}"
@@ -1234,9 +1230,7 @@ fn two_profiles_that_pin_one_pack_build_under_different_tag_names_are_the_same_c
         assert_eq!(os.impact.text, "none (tag renamed, same pack build)");
         assert_eq!(d.summary.max_impact, ImpactLevel::None);
 
-        let text = render::renderer(Format::Terminal, Paint::off(), false)
-            .render(&d, &a, &retagged, false)
-            .unwrap();
+        let text = common::terminal().render(&d, &a, &retagged, false).unwrap();
         assert!(text.contains(&format!("tag 22.04 -> {tag}")), "{text}");
         assert!(
             text.lines()
@@ -1254,9 +1248,7 @@ fn two_profiles_that_pin_one_pack_build_under_different_tag_names_are_the_same_c
             "{text}"
         );
         assert!(!text.contains("repave"), "{text}");
-        let md = render::renderer(Format::Markdown, Paint::off(), false)
-            .render(&d, &a, &retagged, false)
-            .unwrap();
+        let md = common::markdown().render(&d, &a, &retagged, false).unwrap();
         assert!(md.contains(&format!("tag 22.04 → {tag}")), "{md}");
         assert!(md.contains("**Result:** SAME CONTENT"), "{md}");
         let json: Value = serde_json::from_str(
@@ -1286,9 +1278,7 @@ fn two_profiles_that_pin_one_pack_build_under_different_tag_names_are_the_same_c
             assert_eq!(c.pairs[0].status, PairStatus::SameContent);
             assert!(c.pairs[0].reasons.is_empty());
             assert_eq!(c.pairs[0].packs_retagged, 1);
-            let text = render::renderer(Format::Terminal, Paint::off(), false)
-                .render_chain(&c)
-                .unwrap();
+            let text = common::terminal().render_chain(&c).unwrap();
             assert!(
                 text.contains("1 pack pinned under another tag name, the same build"),
                 "{text}"
@@ -1385,9 +1375,7 @@ fn an_os_pack_from_another_registry_at_the_same_version_is_no_node_repave() {
     assert!(os.identity && os.upstream && !os.authored, "{os:?}");
     assert_eq!(os.impact.level, ImpactLevel::Sync);
     assert_eq!(d.summary.max_impact, ImpactLevel::Sync);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &moved, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &moved, false).unwrap();
     assert!(
         text.contains(
             "impact: the same version from another pack reference, applied on next profile sync"
@@ -1419,7 +1407,7 @@ fn verify_reports_a_tag_renamed_in_place_as_drift_with_no_node_impact() {
     assert_eq!(ver.status, VerifyStatus::Drifted);
     assert!(v.diff.same_content);
     assert_eq!(v.diff.summary.max_impact, ImpactLevel::None);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&v.diff, &recorded, &v.live, false)
         .unwrap();
     assert!(text.contains("tag 22.04 -> LTS__22.04"), "{text}");
@@ -1430,9 +1418,7 @@ fn verify_reports_a_tag_renamed_in_place_as_drift_with_no_node_impact() {
         "{text}"
     );
     assert!(!text.contains("repave"), "{text}");
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(verdict.starts_with("DRIFT: "), "{verdict}");
 }
 
@@ -1720,9 +1706,7 @@ fn a_compare_against_a_cluster_gives_the_consumers_of_the_profile_side_alone() {
     );
     let text = |a: &Snapshot, b: &Snapshot| {
         let d = ops::compare(a, b, "t1");
-        render::renderer(Format::Terminal, Paint::off(), false)
-            .render(&d, a, b, false)
-            .unwrap()
+        common::terminal().render(&d, a, b, false).unwrap()
     };
 
     // Palette does not list this cluster for the version: no arrow, and the count of the cluster
@@ -1757,7 +1741,7 @@ fn a_compare_against_a_cluster_gives_the_consumers_of_the_profile_side_alone() {
 
     // The markdown report drops the row of counts for the same reason.
     let d = ops::compare(&recorded, &on_cluster, "t1");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
+    let md = common::markdown()
         .render(&d, &recorded, &on_cluster, false)
         .unwrap();
     assert!(!md.contains("| consumers |"), "{md}");
@@ -1823,9 +1807,7 @@ fn verify_reports_a_cluster_record_whose_profile_version_was_overwritten_or_dele
         })
         .collect();
     assert_eq!(named, [(UID_A, "lab-profile", "1.2.0", "1.3.0")]);
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert_eq!(
         verdict,
         format!(
@@ -1856,9 +1838,7 @@ fn verify_reports_a_cluster_record_whose_profile_version_was_overwritten_or_dele
         ver.profiles_overwritten[0].profile_version, "",
         "no version: the uid is gone"
     );
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(
         verdict.ends_with(&format!("but uid {UID_A} no longer exists")),
         "{verdict}"
@@ -2254,7 +2234,7 @@ fn verify_and_compare_do_not_compare_a_policy_field_that_strata_could_not_read_a
     .unwrap();
     assert_eq!(v.status, VerifyStatus::Unchanged);
     assert!(policy_diff(&v.diff).same, "{:?}", policy_diff(&v.diff).diff);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&v.diff, &recorded, &v.live, false)
         .unwrap();
     assert!(text.contains(&format!("note       {note}\n")), "{text}");
@@ -2264,9 +2244,7 @@ fn verify_and_compare_do_not_compare_a_policy_field_that_strata_could_not_read_a
     let live = snapshot_cluster(&forbidden, None).unwrap();
     let d = ops::compare(&live, &live, "t1");
     assert!(policy_diff(&d).same);
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render(&d, &live, &live, false)
-        .unwrap();
+    let md = common::markdown().render(&d, &live, &live, false).unwrap();
     assert_eq!(
         md.matches(&format!("**Note:** {note}\n")).count(),
         1,
@@ -2361,9 +2339,7 @@ fn a_consumer_row_names_its_project_and_falls_back_to_the_uid() {
     .unwrap();
     assert_eq!(r.consumers[0].project_uid, "p1");
     assert_eq!(r.consumers[0].project_name, "");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(text.contains("project p1"), "{text}");
 
     // with one, it names the project and keeps the uid
@@ -2379,9 +2355,7 @@ fn a_consumer_row_names_its_project_and_falls_back_to_the_uid() {
     )
     .unwrap();
     assert_eq!(r.consumers[0].project_name, "dev");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(text.contains("project dev (uid p1)"), "{text}");
 }
 
@@ -2489,9 +2463,7 @@ fn consumers_lists_each_cluster_with_name_project_and_state_from_its_own_project
          lists at tenant scope"
     );
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.starts_with(&format!("lab-profile@1.3.0 (uid {UID_B}): 2 consumers\n")),
         "{text}"
@@ -2502,9 +2474,7 @@ fn consumers_lists_each_cluster_with_name_project_and_state_from_its_own_project
         text.contains("cluster-bbb") && text.contains("unknown"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
         md.contains("| `alpha` | `cluster-aaa` | `p1` | Running |"),
         "{md}"
@@ -2564,9 +2534,7 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
     assert_eq!(versions, [("alpha", "1.3.0"), ("beta", "1.2.9")]);
     assert_eq!(r.overwritten, 1);
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     let beta = text.lines().find(|l| l.contains("beta")).unwrap();
     assert!(
         beta.contains(&format!(
@@ -2576,9 +2544,7 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
     );
     let alpha = text.lines().find(|l| l.contains("alpha")).unwrap();
     assert!(!alpha.contains("no longer names"), "{text}");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let md = common::markdown().render_consumers(&r).unwrap();
     // the markdown names the version and the uid as the terminal does
     assert!(
         md.contains(&format!(
@@ -2590,17 +2556,13 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
     let mut doc = serde_json::to_value(&r).unwrap();
     doc["consumers"][1]["error"] = serde_json::json!({"kind": "transport", "message": "boom"});
     let failed: ops::ConsumersReport = serde_json::from_value(doc).unwrap();
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&failed)
-        .unwrap();
+    let text = common::terminal().render_consumers(&failed).unwrap();
     let beta = text.lines().find(|l| l.contains("beta")).unwrap();
     assert!(
         beta.contains("runs lab-profile@1.2.9, which uid") && beta.contains("(boom)"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_consumers(&failed)
-        .unwrap();
+    let md = common::markdown().render_consumers(&failed).unwrap();
     let beta = md.lines().find(|l| l.contains("beta")).unwrap();
     assert!(
         beta.contains("runs `lab-profile@1.2.9`, which uid") && beta.contains("(not read: boom)"),
@@ -2643,9 +2605,7 @@ fn a_profile_without_consumers_exits_zero_and_fetches_no_cluster() {
     assert!(r.consumers.is_empty());
     assert_eq!((r.clusters_read.read, r.clusters_read.unread), (0, 0));
     assert!(r.clusters_read.error.is_none());
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert_eq!(
         text,
         format!(
@@ -2686,18 +2646,14 @@ fn consumers_exits_2_when_the_list_is_empty_and_the_second_reading_fails() {
         (0, 2),
         "a reading failed: the answer is not 'nothing uses it'"
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.starts_with(
             &format!("lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n  second reading: not done (GET /v1/dashboard/spectroclusters/meta failed with HTTP 500: boom")
         ),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
         md.starts_with(
             &format!("### consumers: lab-profile@1.2.0 (uid {UID_A}): no consumer found, and a reading failed\n")
@@ -2731,9 +2687,7 @@ fn consumers_exits_2_when_the_list_is_empty_and_a_cluster_cannot_be_read() {
     assert_eq!((r.clusters_read.read, r.clusters_read.unread), (0, 1));
     assert!(r.clusters_read.error.is_none(), "the listing was read");
     assert_eq!((r.count, r.exit_code()), (0, 2), "gamma can be a consumer");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert_eq!(
         text,
         format!(
@@ -2786,9 +2740,7 @@ fn consumers_exits_2_when_the_list_is_empty_and_the_edge_hosts_cannot_be_read() 
     );
     assert!(r.edge_hosts_read.incomplete());
     assert_eq!((r.count, r.exit_code()), (0, 2));
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.contains("  edge hosts: not read (") && text.contains("failed with HTTP 500: boom"),
         "{text}"
@@ -2817,9 +2769,7 @@ fn consumers_exits_1_when_a_consumer_is_found_and_the_second_reading_fails() {
     assert!(r.incomplete());
     // the profile names two clusters: alpha, and one that strata cannot read
     assert_eq!((r.count, r.exit_code()), (2, 1), "alpha uses the version");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.starts_with(&format!("lab-profile@1.3.0 (uid {UID_B}): 2 consumers\n")),
         "{text}"
@@ -2873,9 +2823,7 @@ fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
     );
     assert_eq!((r.clusters_read.read, r.clusters_read.unread), (1, 0));
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.contains("not in the consumer list of the profile"),
         "{text}"
@@ -2884,9 +2832,7 @@ fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
         text.ends_with("  second reading: 1 of 1 clusters read\n  edge hosts: 0 read\n"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
         md.contains("(not in the consumer list of the profile)")
             && md.contains("Second reading: 1 of 1 clusters read."),
@@ -3041,9 +2987,7 @@ fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
     assert_eq!(api.calls(&cluster_route("cluster-vvv")), 1);
     assert_eq!(api.calls(CLUSTER_LISTING), 0);
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert_eq!(
         text.matches("not in the consumer list of the profile")
             .count(),
@@ -3205,9 +3149,7 @@ fn the_second_reading_finds_a_virtual_cluster_through_the_group_that_pins_the_ve
         (1, 1, 1)
     );
     assert_eq!(api.calls(&cluster_route("vc-1")), 1);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.contains("1 cluster group pins the version, 1 other virtual cluster, 1 read"),
         "{text}"
@@ -3281,9 +3223,7 @@ fn the_line_of_the_second_reading_counts_a_virtual_cluster_that_strata_cannot_re
         ),
         (1, 1, 1, 1)
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.contains(
             "the cluster search names 1 other cluster with the profile, 1 read; \
@@ -3423,9 +3363,7 @@ fn the_second_reading_reads_the_listing_when_the_search_takes_no_profile() {
     assert!(api.posted().iter().all(|(path, _)| path != CLUSTER_SEARCH));
     assert!(api.calls(CLUSTER_LISTING) >= 1);
     assert_eq!(api.calls(&cluster_route("cluster-ddd")), 1);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.contains("  second reading: 2 of 2 clusters read\n"),
         "{text}"
@@ -3458,16 +3396,12 @@ fn consumers_list_only_reads_the_list_of_palette_and_says_that_it_did_not_walk()
     assert_eq!((r.clusters_read.read, r.clusters_read.unread), (0, 0));
     // a reading that was not done is not a failed reading: the list alone answers
     assert_eq!(r.exit_code(), 0);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.ends_with("  second reading: not done (--list-only)\n  edge hosts: 0 read\n"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
         md.contains("Second reading: not done (`--list-only`)."),
         "{md}"
@@ -3635,9 +3569,7 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
         "no profile document without --packs"
     );
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(text.starts_with("project lab (uid p1)\n"), "{text}");
     assert!(text.contains("\n3 profiles\n"), "{text}");
     assert!(text.contains("  lab-profile@1.10.0  u3  aws\n"), "{text}");
@@ -3645,9 +3577,7 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
         text.contains("  cluster:c1  workload-a  Running  aws\n"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(md.contains("| `lab-profile@1.9.0` | `u2` | aws |"), "{md}");
     assert!(
         md.contains("| `cluster:c2` | workload-b | Pending | aws |"),
@@ -3723,9 +3653,7 @@ fn list_with_a_pack_reads_each_profile_and_keeps_those_that_carry_it() {
         ("addon", "1.14.0", "1.14.0")
     );
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(text.starts_with("tenant scope\n"), "{text}");
     assert!(
         text.contains("\n2 profiles with a pack matching 'CERT-man'\n"),
@@ -3742,9 +3670,7 @@ fn list_with_a_pack_reads_each_profile_and_keeps_those_that_carry_it() {
         "{text}"
     );
     assert!(text.contains("forbidden"), "the error is shown: {text}");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(md.contains("addon/cert-manager 1.14.0"), "{md}");
 }
 
@@ -3874,9 +3800,7 @@ fn list_with_packs_says_for_each_version_whether_it_is_published_and_marks_a_dra
     assert_eq!(json["profiles"][0]["published"], true, "{json}");
     assert_eq!(json["profiles"][1]["published"], false, "{json}");
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("  lab-profile@1.0.0  u-p1  aws  cluster  no consumers\n"),
         "{text}"
@@ -3885,9 +3809,7 @@ fn list_with_packs_says_for_each_version_whether_it_is_published_and_marks_a_dra
         text.contains("  lab-profile@1.1.0  u-d1  aws  cluster  no consumers  draft\n"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(
         md.contains("| `lab-profile@1.0.0` | `u-p1` | aws |"),
         "{md}"
@@ -4035,9 +3957,7 @@ fn list_gives_each_version_its_scope_from_the_profile_search_and_marks_a_version
     assert_eq!(json["profiles"][1]["scope"], "project", "{json}");
     assert_eq!(json["profiles"][2]["scope"], "tenant", "{json}");
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("  aws-stack@1.1.1  u-project  aws\n"),
         "a version of the scope of the listing has no mark: {text}"
@@ -4046,9 +3966,7 @@ fn list_gives_each_version_its_scope_from_the_profile_search_and_marks_a_version
         text.contains("  aws-stack@1.1.1  u-tenant   aws  tenant\n"),
         "the row of the tenant version ends with its scope: {text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(
         md.contains("| `aws-stack@1.1.1` | `u-project` | aws |"),
         "{md}"
@@ -4088,9 +4006,7 @@ fn list_with_packs_reads_the_scope_in_each_document_and_joins_the_marks_of_a_ten
         api.posted().is_empty(),
         "with --packs, strata sends no search"
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("  aws-stack@1.1.1  u-project  aws  cluster  no consumers\n"),
         "{text}"
@@ -4099,9 +4015,7 @@ fn list_with_packs_reads_the_scope_in_each_document_and_joins_the_marks_of_a_ten
         text.contains("  aws-stack@1.1.1  u-tenant   aws  cluster  no consumers  tenant, draft\n"),
         "the marks end the row, after the consumers: {text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(
         md.contains("| `aws-stack@1.1.1` tenant, draft | `u-tenant` | aws |"),
         "{md}"
@@ -4175,9 +4089,7 @@ fn list_keeps_the_listing_alone_when_palette_has_no_profile_search() {
     )
     .unwrap();
     assert!(json["profiles"][0].get("scope").is_none(), "{json}");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         !text.contains("  tenant\n"),
         "no mark without a scope: {text}"
@@ -4218,9 +4130,7 @@ fn list_at_tenant_scope_asks_for_the_system_versions_and_marks_no_tenant_version
         ["system"],
         "tenant scope lists no profile of a project, so strata searches the system versions alone"
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("  aws-stack@1.1.1  u-tenant  aws\n"),
         "a tenant version has no mark at tenant scope: {text}"
@@ -4304,9 +4214,7 @@ fn list_with_a_pack_keeps_a_draft_version_that_carries_the_pack_with_its_mark() 
         [("lab-profile@1.0.0", false), ("lab-profile@1.1.0", true)],
         "the draft carries the pack, so it stays"
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("\n2 profiles with a pack matching 'cilium'\n"),
         "{text}"
@@ -4394,9 +4302,7 @@ fn list_with_packs_counts_the_cluster_templates_of_a_version_with_its_clusters()
         ]
     );
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("  lab-profile@1.0.0  u-l1  aws  cluster  1 consumer\n"),
         "{text}"
@@ -4405,9 +4311,7 @@ fn list_with_packs_counts_the_cluster_templates_of_a_version_with_its_clusters()
         text.contains("  lab-profile@1.1.0  u-s1  aws  cluster  2 consumers\n"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(
         md.contains("| `u-l1` | aws | cluster | 1 consumer |"),
         "{md}"
@@ -4536,9 +4440,7 @@ fn list_projects_reads_at_tenant_scope_and_a_project_override_scopes_the_rest() 
         0,
         "the tenant listing already names the project"
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("\n2 projects\n  dev   p1\n  prod  p2\n"),
         "{text}"
@@ -4634,16 +4536,12 @@ fn list_at_tenant_scope_names_the_project_of_each_cluster() {
         ["p2", "p1"],
         "a cluster ref works only in its own project, so each carries it"
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("  cluster:c7  edge-1      Running  aws  project p2\n"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(
         md.contains("| `cluster:c1` | workload-a | Running | aws | p1 |"),
         "{md}"
@@ -4659,9 +4557,7 @@ fn list_at_tenant_scope_names_the_project_of_each_cluster() {
         ]}),
     );
     let l = listing(&named, &options).unwrap();
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("project prod (uid p2)"),
         "the line names the project: {text}"
@@ -4744,9 +4640,7 @@ fn list_clusters_names_a_virtual_cluster_with_its_cluster_group_from_the_search(
         posted[0].1
     );
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(text.contains("\n3 clusters\n"), "{text}");
     assert!(
         text.contains("  cluster:c-v  vc-1        Running  nested  virtual (group dev-group)\n"),
@@ -4757,9 +4651,7 @@ fn list_clusters_names_a_virtual_cluster_with_its_cluster_group_from_the_search(
         "{text}"
     );
     assert_eq!(text.matches("virtual").count(), 1, "{text}");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(
         md.contains("| ref | name | state | cloud | virtual |\n"),
         "{md}"
@@ -4799,9 +4691,7 @@ fn list_clusters_says_that_it_holds_no_virtual_cluster_when_the_search_takes_no_
     assert_eq!(l.includes_virtual, Some(false));
     assert!(older.posted().is_empty(), "no search");
     assert_eq!(l.clusters.as_ref().unwrap().len(), 2);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains(
             "\n2 clusters\nthe list holds no virtual cluster: Palette has no search, or its \
@@ -4809,9 +4699,7 @@ fn list_clusters_says_that_it_holds_no_virtual_cluster_when_the_search_takes_no_
         ),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(
         md.contains(
             "The list holds no virtual cluster: Palette has no search, or its search takes no \
@@ -4985,9 +4873,7 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
     );
     assert_eq!(applied[0].uid, UID_B);
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains(&format!(
             "  cluster:c1  workload-a  Running  aws
@@ -4999,9 +4885,7 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
         )),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(
         md.contains(
             "| ref | name | state | cloud | profiles | behind |\n|---|---|---|---|---|---|\n"
@@ -5079,9 +4963,7 @@ fn list_with_applied_keeps_a_cluster_it_cannot_read_and_reads_each_project_once(
     let failed = by_name("gone");
     assert!(failed.profiles.is_none());
     assert_eq!(failed.error.as_ref().unwrap()["kind"], "api");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("gone"),
         "a cluster that cannot be read keeps its row: {text}"
@@ -5168,9 +5050,7 @@ fn list_with_applied_says_why_an_imported_cluster_has_no_profile_and_a_built_clu
     .unwrap();
     let note = "imported: Palette applies no add-on profile in read-only mode";
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     let line = |uid: &str| {
         text.lines()
             .find(|l| l.contains(uid))
@@ -5190,9 +5070,7 @@ fn list_with_applied_says_why_an_imported_cluster_has_no_profile_and_a_built_clu
         "{text}"
     );
 
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(
         md.contains(&format!(
             "| `cluster:c3` | legacy | Running | aws | {note} | - |"
@@ -5296,17 +5174,11 @@ fn list_with_a_cluster_text_keeps_the_clusters_that_match_and_reads_only_those()
     assert_eq!(list("PAY").clusters.unwrap().len(), 2, "ignoring case");
     assert!(list("ledger").clusters.unwrap().is_empty());
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&list("ledger"))
-        .unwrap();
+    let text = common::terminal().render_list(&list("ledger")).unwrap();
     assert!(text.contains("no clusters matching 'ledger'"), "{text}");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(text.contains("2 clusters matching 'payments'"), "{text}");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let md = common::markdown().render_list(&l).unwrap();
     assert!(md.contains("**2 clusters matching 'payments'**"), "{md}");
     let json: Value = serde_json::from_str(
         &render::renderer(Format::Json, Paint::off(), true)
@@ -6015,14 +5887,14 @@ fn two_clusters_on_one_release_with_different_values_compare_identical_and_show_
         (Some("dev"), Some("staging"), false)
     );
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&d, &dev, &staging, false)
         .unwrap();
     assert!(
         text.contains(r#"~ lab-profile.cluster_env: "dev" -> "staging""#),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
+    let md = common::markdown()
         .render(&d, &dev, &staging, false)
         .unwrap();
     assert!(
@@ -6066,23 +5938,14 @@ fn verify_names_a_cluster_value_changed_since_the_record_without_calling_it_drif
     .unwrap();
     assert!(v.unchanged, "a value is not part of the release");
     assert!(v.diff.cluster_variables.as_ref().unwrap().changed);
-    let renderer = render::renderer(Format::Terminal, Paint::off(), false);
+    let renderer = common::terminal();
     let verdict = renderer.verdict(&v.diff).unwrap();
     assert!(
         verdict.starts_with("OK:") && verdict.contains("1 variable value changed"),
         "{verdict}"
     );
 
-    let path = dir.path().join("cluster.json");
-    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
-    let s = ops::verify_many(
-        &[path],
-        None,
-        |_| Ok(Palette::new(live.clone())),
-        "t1",
-        &ops::VerifyOptions::default(),
-        &Progress::silent(),
-    );
+    let s = common::verify_summary(&recorded, &live);
     assert_eq!(
         (s.records[0].status, s.exit_code()),
         (RecordStatus::Unchanged, 0)
@@ -6356,31 +6219,18 @@ fn verify_reports_a_version_overwritten_under_the_same_uid_even_when_the_root_ma
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.status, VerifyStatus::Drifted);
     assert_eq!(ver.overwritten_by.as_deref(), Some("lab-profile@1.2.1"));
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(
         verdict.starts_with("DRIFT:") && verdict.contains("now names lab-profile@1.2.1"),
         "{verdict}"
     );
 
-    let path = dir.path().join("a.json");
-    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
-    let s = ops::verify_many(
-        &[path],
-        None,
-        |_| Ok(Palette::new(live.clone())),
-        "t1",
-        &ops::VerifyOptions::default(),
-        &Progress::silent(),
-    );
+    let s = common::verify_summary(&recorded, &live);
     assert_eq!(
         (s.records[0].status, s.exit_code()),
         (RecordStatus::Drifted, 1)
     );
-    let lines = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_verify_summary(&s)
-        .unwrap();
+    let lines = common::terminal().render_verify_summary(&s).unwrap();
     assert!(lines.contains("now names lab-profile@1.2.1"), "{lines}");
 }
 
@@ -6413,17 +6263,13 @@ fn compare_names_a_profile_uid_that_names_two_versions_whatever_the_roots() {
         })
         .collect();
     assert_eq!(overwritten, [(UID_A, "lab-profile", "1.2.0", "1.3.0")]);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &renamed, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &renamed, false).unwrap();
     assert!(text.contains("IDENTICAL"), "{text}");
     assert!(
         text.contains(&format!("uid {UID_A} is lab-profile@1.2.0 on one side and lab-profile@1.3.0 on the other: the version was overwritten in place")),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render(&d, &a, &renamed, false)
-        .unwrap();
+    let md = common::markdown().render(&d, &a, &renamed, false).unwrap();
     assert!(md.contains("the version was overwritten in place"), "{md}");
     let json: Value = serde_json::to_value(&d).unwrap();
     assert_eq!(json["overwrittenInPlace"][0]["versionB"], "1.3.0", "{json}");
@@ -6483,18 +6329,14 @@ fn compare_says_when_both_sides_are_one_profile_version_with_different_content()
     let d = ops::compare(&a, &edited, "t2");
     assert!(!d.same);
     assert!(d.edited_in_place, "one uid and version, two contents");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &edited, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &edited, false).unwrap();
     assert!(
         text.contains(&format!(
             "both sides are lab-profile@1.2.0 (uid {UID_A}): the version was edited in place"
         )),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render(&d, &a, &edited, false)
-        .unwrap();
+    let md = common::markdown().render(&d, &a, &edited, false).unwrap();
     assert!(md.contains("the version was edited in place"), "{md}");
 
     let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
@@ -6534,9 +6376,7 @@ fn a_pack_that_only_one_side_has_carries_the_impact_of_its_layer() {
     assert_eq!(removed.impact.text, "node repave (os pack removed)");
 
     // the terminal report gives the impact under the pack line
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &swapped, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &swapped, false).unwrap();
     assert!(text.contains("node repave (os pack added)"), "{text}");
 }
 
@@ -6840,9 +6680,7 @@ fn packs_lists_a_disabled_registry_from_the_listing_and_marks_each_retired_versi
     assert!(mirror.versions[0].tags.is_empty());
 
     // the heading and the row say so, in both text formats
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_packs(&l)
-        .unwrap();
+    let text = common::terminal().render_packs(&l).unwrap();
     assert!(
         text.contains("csi-aws-ebs in Mirror (1 version, disabled, no tags)"),
         "{text}"
@@ -6852,9 +6690,7 @@ fn packs_lists_a_disabled_registry_from_the_listing_and_marks_each_retired_versi
             .any(|l| l.contains("1.65.0") && l.trim_end().ends_with("deprecated")),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_packs(&l)
-        .unwrap();
+    let md = common::markdown().render_packs(&l).unwrap();
     assert!(
         md.contains("### csi-aws-ebs in Mirror (1 version, disabled, no tags)"),
         "{md}"
@@ -6934,9 +6770,7 @@ fn packs_gives_the_state_disabled_to_a_version_with_the_mark_and_reads_its_tags_
         );
     }
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_packs(&l)
-        .unwrap();
+    let text = common::terminal().render_packs(&l).unwrap();
     assert!(
         text.contains("csi-aws-ebs in Mirror (1 version, disabled)"),
         "{text}"
@@ -6980,9 +6814,7 @@ fn packs_lists_only_the_retired_versions_of_a_registry_that_answers_404_and_stop
         "the version that Palette does not serve is not in the listing"
     );
     assert_eq!(mirror.versions_offered, 2);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_packs(&l)
-        .unwrap();
+    let text = common::terminal().render_packs(&l).unwrap();
     assert!(
         text.contains("csi-aws-ebs in Mirror (2 versions, no tags: the registry answered 404)"),
         "{text}"
@@ -7071,13 +6903,9 @@ fn packs_says_in_each_format_that_no_version_supports_the_cloud() {
     )
     .unwrap();
     assert!(none.registries.is_empty());
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_packs(&none)
-        .unwrap();
+    let text = common::terminal().render_packs(&none).unwrap();
     assert_eq!(text, "no version of csi-aws-ebs supports edge-native\n");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_packs(&none)
-        .unwrap();
+    let md = common::markdown().render_packs(&none).unwrap();
     assert_eq!(md, "No version of csi-aws-ebs supports edge-native.\n");
 }
 
@@ -7089,13 +6917,9 @@ fn packs_says_in_each_format_that_palette_serves_no_version_of_the_pack() {
     let none = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
     assert!(none.registries.is_empty());
     assert_eq!(none.cloud, None);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_packs(&none)
-        .unwrap();
+    let text = common::terminal().render_packs(&none).unwrap();
     assert_eq!(text, "Palette serves no version of csi-aws-ebs\n");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_packs(&none)
-        .unwrap();
+    let md = common::markdown().render_packs(&none).unwrap();
     assert_eq!(md, "Palette serves no version of csi-aws-ebs.\n");
 }
 
@@ -7321,9 +7145,7 @@ fn verify_pack_with_sync(sync: Option<Value>) -> (String, Value) {
     };
     let v = ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
     assert!(v.unchanged);
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     (verdict, serde_json::to_value(&v.diff).unwrap())
 }
 
@@ -7414,9 +7236,7 @@ fn verify_pack_on<A: PaletteApi>(recorded: &Snapshot, api: A) -> (String, Value)
     let v = ops::verify(recorded, &Palette::new(api), "t1", &Progress::silent()).unwrap();
     assert!(v.unchanged);
     assert_eq!(v.status, VerifyStatus::Unchanged);
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     (verdict, serde_json::to_value(&v.diff).unwrap())
 }
 
@@ -7507,23 +7327,12 @@ fn verify_reports_drift_and_names_the_order_when_only_the_order_of_the_packs_cha
     assert_eq!(v.diff.summary.packs_changed, 0, "every pack is as it was");
     assert!(!v.diff.same_content, "a reorder is not the same content");
 
-    let path = dir.path().join("a.json");
-    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
-    let s = ops::verify_many(
-        &[path],
-        None,
-        |_| Ok(Palette::new(live.clone())),
-        "t1",
-        &ops::VerifyOptions::default(),
-        &Progress::silent(),
-    );
+    let s = common::verify_summary(&recorded, &live);
     assert_eq!(
         (s.records[0].status, s.exit_code()),
         (RecordStatus::Drifted, 1)
     );
-    let lines = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_verify_summary(&s)
-        .unwrap();
+    let lines = common::terminal().render_verify_summary(&s).unwrap();
     assert!(
         lines.contains("no packs changed, the packs in another order"),
         "{lines}"
@@ -7646,9 +7455,7 @@ fn verify_who_reads_every_page_of_the_audit_log_and_lists_the_writes_oldest_firs
             ),
         ]
     );
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(
         verdict.ends_with(
             "\nwho: 2 writes in the audit log since the record\n  \
@@ -7683,9 +7490,7 @@ fn verify_who_says_so_when_the_log_holds_no_write_and_reads_nothing_for_an_uncha
     .unwrap();
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.who.as_deref(), Some(&[][..]));
-    let terminal = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let terminal = common::terminal().verdict(&v.diff).unwrap();
     assert!(
         terminal.ends_with("\nwho: no audit entry since the record"),
         "{terminal}"
@@ -7824,8 +7629,6 @@ fn verify_who_names_the_last_write_on_the_summary_line_of_a_drifted_record() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    let path = dir.path().join("rec.json");
-    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
     let api = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).with(
         profile_audits("t0"),
         audits_page(
@@ -7839,20 +7642,12 @@ fn verify_who_names_the_last_write_on_the_summary_line_of_a_drifted_record() {
             "",
         ),
     );
-    let s = ops::verify_many(
-        &[path],
-        None,
-        |_| Ok(Palette::new(api.clone())),
-        "t1",
-        &ops::VerifyOptions {
-            who: true,
-            ..Default::default()
-        },
-        &Progress::silent(),
-    );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_verify_summary(&s)
-        .unwrap();
+    let options = ops::VerifyOptions {
+        who: true,
+        ..Default::default()
+    };
+    let s = common::verify_summary_with(&recorded, &api, &options);
+    let text = common::terminal().render_verify_summary(&s).unwrap();
     assert!(
         text.contains("; last write: John Doe (user), update at 2026-09-18T14:02:11.482Z\n"),
         "{text}"
@@ -8102,16 +7897,7 @@ fn verify_gives_the_time_palette_last_changed_the_object_and_a_drift_verdict_end
     assert!(verdict_of(&v).ends_with("is unchanged since t0"));
 
     // each record of a summary gives it
-    let path = dir.path().join("rec.json");
-    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
-    let s = ops::verify_many(
-        &[path],
-        None,
-        |_| Ok(Palette::new(api.clone())),
-        "t1",
-        &ops::VerifyOptions::default(),
-        &Progress::silent(),
-    );
+    let s = common::verify_summary(&recorded, &api);
     let json = serde_json::to_value(&s).unwrap();
     assert_eq!(
         json["records"][0]["lastModified"],
@@ -8401,25 +8187,21 @@ fn list_and_compare_name_a_cluster_that_is_behind() {
     .unwrap();
     let now = snapshot_cluster(&api, None).unwrap();
     let d = ops::compare(&before, &now, "t1");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &before, &now, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &before, &now, false).unwrap();
     assert!(
         text.contains(
             "note       cluster lab-cluster is behind: Palette says an update of lab-addons waits for it, since 2026-09-24T23:55:02.083Z\n"
         ),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render(&d, &before, &now, false)
-        .unwrap();
+    let md = common::markdown().render(&d, &before, &now, false).unwrap();
     assert!(
         md.contains("**Note:** cluster lab-cluster is behind"),
         "{md}"
     );
     // a side read when nothing waited gets no note
     let d = ops::compare(&before, &before, "t1");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&d, &before, &before, false)
         .unwrap();
     assert!(!text.contains("is behind"), "{text}");
@@ -8592,7 +8374,7 @@ fn a_cluster_record_holds_the_error_of_the_route_of_the_repave_and_verify_names_
 
     let v = ops::verify(&before, &Palette::new(api), "t1", &Progress::silent()).unwrap();
     assert_eq!(v.status, VerifyStatus::Unchanged);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&v.diff, &before, &v.live, false)
         .unwrap();
     let note = "a repave of cluster lab-cluster waits for approval (strata could not read its \
@@ -8667,13 +8449,9 @@ fn compare_and_verify_name_the_repave_that_waits_for_approval() {
 
     let d = ops::compare(&before, &now, "t1");
     assert!(d.same);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &before, &now, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &before, &now, false).unwrap();
     assert!(text.contains(&format!("note       {note}\n")), "{text}");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render(&d, &before, &now, false)
-        .unwrap();
+    let md = common::markdown().render(&d, &before, &now, false).unwrap();
     assert!(md.contains(&format!("**Note:** {note}\n")), "{md}");
     let json = render::renderer(Format::Json, Paint::off(), false)
         .render(&d, &before, &now, false)
@@ -8689,21 +8467,19 @@ fn compare_and_verify_name_the_repave_that_waits_for_approval() {
     // names the repave
     let v = ops::verify(&before, &Palette::new(api), "t1", &Progress::silent()).unwrap();
     assert_eq!(v.status, VerifyStatus::Unchanged);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&v.diff, &before, &v.live, false)
         .unwrap();
     assert!(text.contains(&format!("note       {note}\n")), "{text}");
 
     // a side with no repave that waits gets no note, and two sides that say the same get one
     let d = ops::compare(&before, &before, "t1");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&d, &before, &before, false)
         .unwrap();
     assert!(!text.contains("a repave of"), "{text}");
     let d = ops::compare(&now, &now, "t1");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &now, &now, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &now, &now, false).unwrap();
     assert_eq!(text.matches("a repave of").count(), 1, "{text}");
 }
 
@@ -8828,9 +8604,7 @@ fn a_pack_with_no_digest_makes_verify_unverified_and_names_the_pack() {
     assert_eq!(v.status, VerifyStatus::Unverified);
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.upstream_unknown, ["os/ubuntu-aws"]);
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(
         verdict.starts_with("UNVERIFIED: published version lab-profile@1.2.0 has the content recorded t0, but pack os/ubuntu-aws has no upstream digest, so a change of the archive does not show; --allow-no-digest accepts it"),
         "{verdict}"
@@ -8853,7 +8627,7 @@ fn a_pack_with_no_digest_makes_verify_unverified_and_names_the_pack() {
     )
     .unwrap();
     assert_eq!(v.status, VerifyStatus::Unchanged);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&v.diff, &recorded, &v.live, false)
         .unwrap();
     assert!(
@@ -8908,8 +8682,8 @@ fn each_report_states_the_verdict_of_a_record_in_the_same_words() {
         vec![RecordStatus::Unchanged, RecordStatus::Drifted]
     );
 
-    let terminal = render::renderer(Format::Terminal, Paint::off(), false);
-    let markdown = render::renderer(Format::Markdown, Paint::off(), false);
+    let terminal = common::terminal();
+    let markdown = common::markdown();
     let lines = terminal.render_verify_summary(&s).unwrap();
     let table = markdown.render_verify_summary(&s).unwrap();
     // a row states the verdict of its record in the words of the report of one record
@@ -8958,13 +8732,9 @@ fn each_report_says_in_the_same_words_that_the_values_did_not_parse() {
     assert!(metrics.values.changed && !metrics.values.parseable);
     let sentence =
         "values changed (not parseable as YAML on one side); use --full for a unified diff";
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &b, false).unwrap();
     assert!(text.contains(sentence), "{text}");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
     assert!(md.contains(&sentence.replace("--full", "`--full`")), "{md}");
     // same-release says it in the same words, with no flag
     let c = ops::same_release(&chain_input(dir.path(), &["a", "b"]), Policy::Exact, "t1");
@@ -8993,12 +8763,8 @@ fn each_report_states_the_upstream_digest_of_a_pack_in_the_same_line() {
             .map(|l| l.trim().replace('`', ""))
             .collect()
     };
-    let terminal = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
-    let markdown = render::renderer(Format::Markdown, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let terminal = common::terminal().render(&d, &a, &b, false).unwrap();
+    let markdown = common::markdown().render(&d, &a, &b, false).unwrap();
     assert_eq!(
         line(&terminal),
         [
@@ -9035,9 +8801,7 @@ fn same_release_names_a_manifest_as_the_pack_names_it_and_the_change_as_the_docu
     // the markdown of the diff names the manifest and the change in the same words
     let (a, b) = (&records[0].1, &records[1].1);
     let d = strata::diff::compute(a, b, "t1", None);
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render(&d, a, b, false)
-        .unwrap();
+    let md = common::markdown().render(&d, a, b, false).unwrap();
     assert!(md.contains("- manifest `ExtraRules` changed\n"), "{md}");
 }
 
@@ -9073,8 +8837,8 @@ fn a_verdict_names_the_object_of_a_record_as_the_heading_of_a_diff_does() {
     );
     assert_eq!(bare.source.title(), "cluster lab-cluster");
 
-    let terminal = render::renderer(Format::Terminal, Paint::off(), false);
-    let markdown = render::renderer(Format::Markdown, Paint::off(), false);
+    let terminal = common::terminal();
+    let markdown = common::markdown();
     for (record, api) in [(&pending, &waiting), (&bare, &bare_api)] {
         let v = ops::verify(record, &Palette::new(api), "t1", &Progress::silent()).unwrap();
         let unchanged = format!("{} is unchanged since t0", record.source.title());
@@ -9097,12 +8861,10 @@ fn the_markdown_of_a_verify_states_the_status_in_the_word_of_the_verdict() {
         v.diff.verify.as_ref().unwrap().status,
         VerifyStatus::Drifted
     );
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     let word = verdict.split(':').next().unwrap();
     assert_eq!(word, "DRIFT", "{verdict}");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
+    let md = common::markdown()
         .render(&v.diff, &recorded, &v.live, false)
         .unwrap();
     assert!(
@@ -9116,24 +8878,13 @@ fn many_records_count_an_unverified_one_and_exit_1() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let recorded = without_digest(dir.path(), "nodigest");
-    let path = dir.path().join("rec.json");
-    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
     let api = serve_fixture(MemoryApi::new(), dir.path(), "nodigest", UID_A);
-    let s = ops::verify_many(
-        std::slice::from_ref(&path),
-        None,
-        |_| Ok(Palette::new(api.clone())),
-        "t1",
-        &ops::VerifyOptions::default(),
-        &Progress::silent(),
-    );
+    let s = common::verify_summary(&recorded, &api);
     assert_eq!(
         (s.records[0].status, s.summary.unverified, s.exit_code()),
         (RecordStatus::Unverified, 1, 1)
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_verify_summary(&s)
-        .unwrap();
+    let text = common::terminal().render_verify_summary(&s).unwrap();
     assert!(text.contains("UNVERIFIED"), "{text}");
     // the row states the verdict of the record in the words of its own report
     assert!(
@@ -9144,17 +8895,11 @@ fn many_records_count_an_unverified_one_and_exit_1() {
         text.contains("1 record: 0 unchanged, 0 drifted, 1 unverified, no errors"),
         "{text}"
     );
-    let allowed = ops::verify_many(
-        &[path],
-        None,
-        |_| Ok(Palette::new(api.clone())),
-        "t1",
-        &ops::VerifyOptions {
-            allow_no_digest: true,
-            ..Default::default()
-        },
-        &Progress::silent(),
-    );
+    let options = ops::VerifyOptions {
+        allow_no_digest: true,
+        ..Default::default()
+    };
+    let allowed = common::verify_summary_with(&recorded, &api, &options);
     assert_eq!(allowed.exit_code(), 0);
 }
 
@@ -9172,16 +8917,12 @@ fn compare_names_a_pack_with_no_digest_beside_its_line() {
     assert_eq!(d.upstream_unknown, ["os/ubuntu-aws"]);
     let os = d.packs.iter().find(|p| p.name == "ubuntu-aws").unwrap();
     assert!(os.upstream_unknown);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &b, false).unwrap();
     assert!(
         text.contains("upstream unknown: no digest, so a change of the archive does not show"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
     assert!(
         md.contains("**Note:** pack os/ubuntu-aws has no upstream digest"),
         "{md}"
@@ -9279,9 +9020,7 @@ fn every_report_names_the_macros_the_content_uses() {
     assert_eq!(a.macros(), ["region"]);
     let d = ops::compare(&a, &a, "t1");
     assert_eq!(d.macros, ["region"]);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &a, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &a, false).unwrap();
     assert!(
         text.contains("note       the content uses macro region: the root covers its name and not its value, so an edit of a macro does not show\n"),
         "{text}"
@@ -9378,9 +9117,7 @@ fn a_cluster_record_with_macro_digests_drifts_when_a_macro_value_moves() {
     assert_eq!(v.status, VerifyStatus::Drifted);
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.macros_changed, ["region"]);
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(
         verdict.contains("but macro region has another value now"),
         "{verdict}"
@@ -9459,9 +9196,7 @@ fn a_profile_record_with_macro_digests_drifts_when_a_macro_value_moves() {
     assert_eq!(v.status, VerifyStatus::Drifted);
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.macros_changed, ["region"]);
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(
         verdict.contains("published version lab-profile@1.2.0 has the content recorded t0, but macro region has another value now"),
         "{verdict}"
@@ -9543,26 +9278,13 @@ fn each_report_says_that_the_root_moved_when_a_macro_value_moved_too() {
     }
 
     // the row of the summary states the same, with the impact of the diff
-    let record = dir.path().join("macro.json");
-    fs::write(&record, recorded.to_json(true).unwrap()).unwrap();
-    let s = ops::verify_many(
-        &[record],
-        None,
-        |_| Ok(Palette::new(live.clone())),
-        "t1",
-        &ops::VerifyOptions::default(),
-        &Progress::silent(),
-    );
+    let s = common::verify_summary(&recorded, &live);
     let row = "differs from the copy recorded t0; max impact ";
-    let lines = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_verify_summary(&s)
-        .unwrap();
+    let lines = common::terminal().render_verify_summary(&s).unwrap();
     assert!(lines.contains(row), "{lines}");
     assert!(lines.contains(", 1 pack changed"), "{lines}");
     assert!(!lines.contains("macro region"), "{lines}");
-    let table = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_verify_summary(&s)
-        .unwrap();
+    let table = common::markdown().render_verify_summary(&s).unwrap();
     assert!(table.contains(row), "{table}");
 }
 
@@ -9669,7 +9391,7 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
     let mut d = ops::compare(&cluster, &target, "t1");
     d.summary.max_impact = ImpactLevel::InPlace;
     d.palette_repave = Some(r);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&d, &cluster, &target, false)
         .unwrap();
     assert!(
@@ -9752,7 +9474,7 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     );
 
     d.palette_repave = Some(r);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&d, &cluster, &target, false)
         .unwrap();
     assert!(!text.contains("palette    no repave"), "{text}");
@@ -10028,7 +9750,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     );
 
     d.palette_validation = Some(v);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&d, &cluster, &target, false)
         .unwrap();
     assert!(
@@ -10060,7 +9782,7 @@ fn compare_validate_prints_each_error_of_palette_and_keeps_the_exit_of_the_compa
     d.palette_validation =
         Some(ops::palette_validation(&Palette::new(&api), &cluster, &target).unwrap());
     assert!(d.palette_validation.as_ref().unwrap().answer.accepts());
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&d, &cluster, &target, false)
         .unwrap();
     assert!(text.contains("palette    accepts\n"), "{text}");
@@ -10339,13 +10061,9 @@ fn compare_names_the_change_of_the_image_id_of_the_os_pack_when_the_roots_are_eq
     assert!(!d.nothing_differs(), "compare exits 1 for it");
     let note = "pack os/ubuntu-aws names image ami-0aaa on one side and ami-0bbb on the other: \
                 the root does not cover the annotations";
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &b, false).unwrap();
     assert!(text.contains(&format!("note       {note}")), "{text}");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
     assert!(md.contains(&format!("**Note:** {note}")), "{md}");
     let json = serde_json::to_value(&d).unwrap();
     assert_eq!(
@@ -10403,9 +10121,7 @@ fn same_release_refuses_two_records_whose_os_pack_names_two_machine_images() {
         }
     }
     let c = pair(&a, &b, Policy::Exact, true);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_chain(&c)
-        .unwrap();
+    let text = common::terminal().render_chain(&c).unwrap();
     assert!(
         text.starts_with("DIFFERENT") && text.contains(reason),
         "{text}"
@@ -10455,23 +10171,12 @@ fn verify_reports_a_new_image_id_of_the_os_pack_as_drift_with_the_recorded_conte
             "{verdict}"
         );
     }
-    let path = dir.path().join("ami.json");
-    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
-    let s = ops::verify_many(
-        &[path],
-        None,
-        |_| Ok(Palette::new(live.clone())),
-        "t1",
-        &ops::VerifyOptions::default(),
-        &Progress::silent(),
-    );
+    let s = common::verify_summary(&recorded, &live);
     assert_eq!(
         (s.records[0].status, s.exit_code()),
         (RecordStatus::Drifted, 1)
     );
-    let lines = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_verify_summary(&s)
-        .unwrap();
+    let lines = common::terminal().render_verify_summary(&s).unwrap();
     assert!(lines.contains(why), "{lines}");
 
     // the same image: unchanged
@@ -10502,9 +10207,7 @@ fn verify_names_a_new_image_id_in_the_diff_and_not_in_the_verdict_when_the_root_
     assert_eq!(v.diff.image_ids_changed.len(), 1);
     let ver = v.diff.verify.as_ref().unwrap();
     assert!(ver.image_ids_changed.is_empty());
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(
         verdict.starts_with("DRIFT: ") && verdict.contains("differs from"),
         "{verdict}"
@@ -10738,9 +10441,7 @@ fn compare_names_the_tier_and_the_field_that_differ_and_a_pack_behind_its_profil
         (behind.declared.as_str(), behind.running.as_str()),
         (declared.as_str(), "0.0.1")
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &b, false).unwrap();
     assert!(text.contains("policy CHANGED"), "{text}");
     assert!(
         text.contains("~ shape.pools[name=worker-pool].size: 2 -> 3"),
@@ -11303,9 +11004,7 @@ fn compare_of_two_pack_versions_names_the_images_and_the_charts_that_moved() {
     );
     assert_eq!(d.summary.images_changed, 3);
     assert_eq!(d.summary.charts_changed, 1);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &b, false).unwrap();
     assert!(text.contains("AUTHORED IMAGES CHARTS"), "{text}");
     assert!(
         text.contains(
@@ -11806,17 +11505,13 @@ fn consumers_counts_an_edge_host_bound_to_the_profile() {
     .unwrap();
     assert_eq!(listed.count, 1);
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.contains("edge-1  e1  project p1  ready  edge host"),
         "{text}"
     );
     assert!(text.ends_with("  edge hosts: 1 read\n"), "{text}");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
         md.contains("(edge host)") && md.contains("Edge hosts: 1 read."),
         "{md}"
@@ -11892,16 +11587,12 @@ fn consumers_counts_a_cluster_template_that_links_the_version() {
         &Progress::silent(),
     )
     .unwrap();
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.contains("barney-template  tmpl-1  project p1  cluster template\n"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
         md.contains("| `barney-template` | `tmpl-1` | `p1` | - | (cluster template) |"),
         "{md}"
@@ -12160,9 +11851,7 @@ fn a_cluster_group_record_with_macro_digests_reads_the_values_of_the_group() {
     assert_eq!(v.status, VerifyStatus::Drifted);
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.macros_changed, ["region"]);
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(
         verdict.contains("pinned by cluster group group-1 has the content recorded t0, but macro region has another value now"),
         "the verdict names the group, and not a cluster: {verdict}"
@@ -12483,9 +12172,7 @@ fn an_app_profile_record_holds_each_tier_as_a_pack() {
         serde_json::to_value(&web.param_changes).unwrap(),
         serde_json::json!([{"op": "changed", "name": "replicas", "old": "2", "new": "3"}])
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &app, &now, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &app, &now, false).unwrap();
     assert!(text.contains("      ~ param replicas: 2 -> 3\n"), "{text}");
 }
 
@@ -12573,9 +12260,7 @@ fn web_lines(a: &Snapshot, b: &Snapshot) -> String {
         web.authored && web.params_changed && !web.identity,
         "{web:?}"
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, a, b, false)
-        .unwrap();
+    let text = common::terminal().render(&d, a, b, false).unwrap();
     let tier = text.find("] web ").unwrap_or_else(|| panic!("{text}"));
     text[tier..].to_string()
 }
@@ -12641,9 +12326,7 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
     assert_eq!(json["clustersRead"]["reason"], ops::APP_NO_SECOND_READING);
     assert_eq!(json["edgeHostsRead"]["reason"], ops::APP_NO_EDGE_HOSTS);
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.starts_with("shop@1.0.0 (uid ap1): 1 consumer\n"),
         "{text}"
@@ -12659,9 +12342,7 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
         )),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let md = common::markdown().render_consumers(&r).unwrap();
     assert!(
         md.contains("| `shop-dev` | `d1` | `p1` | Deployed | `1.0.0` (app deployment) |"),
         "{md}"
@@ -12716,9 +12397,7 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
     let free = api.clone().with(app_profile_route("ap1"), doc);
     let r = consumers(&free, &Ref::parse("appprofile:shop@1.0.0"));
     assert_eq!((r.count, r.exit_code()), (0, 0));
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_consumers(&r)
-        .unwrap();
+    let text = common::terminal().render_consumers(&r).unwrap();
     assert!(
         text.starts_with("shop@1.0.0 (uid ap1): no consumers\n"),
         "{text}"
@@ -12968,9 +12647,7 @@ fn behind_current_on(api: &MemoryApi) -> (ops::BehindReport, String) {
     let path = dir.path().join("current.json");
     fs::write(&path, current.to_json(false).unwrap()).unwrap();
     let r = behind_of(api, &[path], &ops::BehindOptions::default());
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let text = common::terminal().render_behind(&r).unwrap();
     (r, text)
 }
 
@@ -13004,9 +12681,7 @@ fn a_pin_that_is_current_names_the_last_sync_of_its_registry_when_that_sync_did_
         )),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let md = common::markdown().render_behind(&r).unwrap();
     assert!(
         md.contains(&format!(
             "| `csi-aws-ebs` | `1.65.0` | Public Repo | {note} |"
@@ -13101,9 +12776,7 @@ fn a_pin_has_no_sync_note_when_the_last_sync_completed_when_palette_gives_no_syn
         "{:?}",
         r.pins[0]
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let text = common::terminal().render_behind(&r).unwrap();
     assert!(!text.contains("sync"), "{text}");
 }
 
@@ -13325,9 +12998,7 @@ fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_
         pin.bump.as_ref().map(|b| b.to.as_str()),
         Some("1.65.0-rev1")
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let text = common::terminal().render_behind(&r).unwrap();
     assert!(
         text.lines()
             .any(|l| l.starts_with("      bump to 1.65.0-rev1: ")
@@ -13390,16 +13061,12 @@ fn behind_says_what_a_move_to_a_newer_version_drops_when_it_supports_fewer_archi
         serde_json::json!(["arm64"])
     );
     assert!(json["pins"][0]["newer"][1].get("drops").is_none());
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let text = common::terminal().render_behind(&r).unwrap();
     assert!(
         text.contains("behind: 1.65.0 (drops arm64), 1.64.0 (deprecated)"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let md = common::markdown().render_behind(&r).unwrap();
     assert!(
         md.contains("behind: 1.65.0 (drops arm64), 1.64.0 (deprecated)"),
         "{md}"
@@ -13560,9 +13227,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     assert_eq!(current.version, "1.65.0");
     assert!(!current.behind && current.bump.is_none());
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let text = common::terminal().render_behind(&r).unwrap();
     assert!(
         text.starts_with("2 pins from 3 records: 1 behind\n"),
         "{text}"
@@ -13574,9 +13239,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
             && text.contains("current"),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let md = common::markdown().render_behind(&r).unwrap();
     assert!(
         md.contains("| `csi-aws-ebs` | `1.63.1` | Public Repo | behind: 1.65.0"),
         "{md}"
@@ -13617,9 +13280,7 @@ fn a_bump_gives_a_renamed_tag_as_the_flag_identity_and_not_as_the_words_of_the_r
         p["tag"] = Value::from("LTS__22.04")
     });
     let d = ops::compare(&a, &retagged, "t1");
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &retagged, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &retagged, false).unwrap();
     assert!(text.contains("tag 22.04 -> LTS__22.04"), "{text}");
 
     // the text of the diff names the two tags in place of IDENTITY; the bump keeps the flag
@@ -13654,16 +13315,12 @@ fn each_report_of_behind_says_since_when_the_newest_version_is_listed_and_what_a
     let r: ops::BehindReport = serde_json::from_value(doc).unwrap();
     let listed = "1.65.0 listed since 2026-09-21T08:00:00.000Z";
     let arrived = "arrived: 1.65.0";
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let text = common::terminal().render_behind(&r).unwrap();
     assert!(
         text.contains(&format!("      {listed}\n")) && text.contains(&format!("      {arrived}\n")),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let md = common::markdown().render_behind(&r).unwrap();
     let row = md.lines().find(|l| l.contains("csi-aws-ebs")).unwrap();
     assert!(
         row.contains(&format!("; {listed}")) && row.contains(&format!("; {arrived}")),
@@ -13786,9 +13443,7 @@ fn behind_does_not_offer_a_version_with_the_mark_and_says_so_of_a_pinned_one() {
             .collect::<Vec<_>>(),
         ["1.67.0"]
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let text = common::terminal().render_behind(&r).unwrap();
     assert!(
         text.contains("1.66.0") && text.contains("; the pinned version is disabled"),
         "{text}"
@@ -13850,9 +13505,7 @@ fn a_floating_pin_is_behind_the_version_its_tag_names_and_a_pin_that_cannot_be_r
     assert!(gone.error.is_some());
     assert_eq!((r.summary.floating, r.summary.errors), (3, 1));
     // the terminal names the version that the tag names now beside each one
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_behind(&r)
-        .unwrap();
+    let text = common::terminal().render_behind(&r).unwrap();
     assert!(
         text.contains(
             "1.63.1  Public Repo  behind: 1.65.0, 1.64.0 (deprecated) (floating tag 1.x, now 1.65.0)"
@@ -13958,9 +13611,7 @@ fn list_clusters_with_a_tag_searches_palette_and_names_the_project_of_each() {
         serde_json::json!(["env:prod"])
     );
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(text.starts_with("tenant scope\n"), "{text}");
     assert!(
         text.contains("the clusters with env=prod, from the search of Palette, at tenant scope"),
@@ -14040,9 +13691,7 @@ fn list_clusters_with_a_tag_names_a_virtual_cluster_that_carries_the_label() {
         serde_json::json!(["nested"])
     );
 
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("nested  project prod (uid p2)  env=prod  virtual (group prod-group)\n"),
         "{text}"
@@ -14061,9 +13710,7 @@ fn list_clusters_with_a_tag_names_a_virtual_cluster_that_carries_the_label() {
     let l = clusters_listing(&older, query);
     assert_eq!(l.includes_virtual, Some(false));
     assert_eq!(older.posted().len(), 1);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("the list holds no virtual cluster: Palette has no search"),
         "{text}"
@@ -14227,9 +13874,7 @@ fn a_saved_tag_filter_is_translated_into_a_search_and_a_tenant_without_a_search_
         },
     )
     .unwrap();
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_list(&l)
-        .unwrap();
+    let text = common::terminal().render_list(&l).unwrap();
     assert!(
         text.contains("filter:prod  f1  env=prod and not legacy"),
         "{text}"
@@ -14350,9 +13995,7 @@ fn snapshot_of_a_set_is_a_strata_set_document_with_each_cluster_its_root_or_erro
         serde_json::from_str::<Value>(&json).unwrap()["schema"],
         ops::SET_SCHEMA
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_set(&report)
-        .unwrap();
+    let text = common::terminal().render_set(&report).unwrap();
     let lines: Vec<&str> = text.lines().collect();
     assert_eq!(lines.len(), 3, "{text}");
     assert!(
@@ -14375,9 +14018,7 @@ fn snapshot_of_a_set_is_a_strata_set_document_with_each_cluster_its_root_or_erro
         render::set_counts_line(&report),
         "1 of 2 clusters recorded, 1 removed; found by the search of Palette"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_set(&report)
-        .unwrap();
+    let md = common::markdown().render_set(&report).unwrap();
     assert!(
         md.starts_with("### snapshot: 1 of 2 clusters recorded, 1 removed;"),
         "{md}"
@@ -14400,9 +14041,7 @@ fn cluster_in_state(dir: &Path, state: &str, extra: Value) -> MemoryApi {
 
 /// The verdict line of a verify, as the terminal prints it.
 fn verdict_of(v: &ops::Verification) -> String {
-    render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap()
+    common::terminal().verdict(&v.diff).unwrap()
 }
 
 #[test]
@@ -14458,25 +14097,14 @@ fn verify_reports_a_deleted_cluster_as_gone_with_the_time_of_the_delete() {
     assert!(v.diff.verify.as_ref().unwrap().gone);
 
     // over several records, a gone cluster counts as drifted, and its line says so
-    let path = dir.path().join("lab.json");
-    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
     let deleted = cluster_in_state(
         dir.path(),
         "Deleted",
         serde_json::json!({"deletionTimestamp": "2026-09-30T10:00:00Z"}),
     );
-    let s = ops::verify_many(
-        &[path],
-        None,
-        |_| Ok(Palette::new(deleted.clone())),
-        "t1",
-        &ops::VerifyOptions::default(),
-        &Progress::silent(),
-    );
+    let s = common::verify_summary(&recorded, &deleted);
     assert_eq!((s.summary.drifted, s.exit_code()), (1, 1));
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_verify_summary(&s)
-        .unwrap();
+    let text = common::terminal().render_verify_summary(&s).unwrap();
     assert!(
         text.contains("cluster lab-cluster no longer exists: deleted 2026-09-30T10:00:00Z"),
         "{text}"
@@ -14519,9 +14147,7 @@ fn verify_ends_the_verdict_of_a_cluster_record_with_a_state_other_than_running()
         verdict_of(&v),
         "OK: cluster lab-cluster running lab-profile@1.2.0 is unchanged since t0; the cluster is Deleting"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let md = common::markdown().verdict(&v.diff).unwrap();
     assert!(md.ends_with("; the cluster is Deleting"), "{md}");
 
     // the state comes last, after the other parts of a drift
@@ -14536,22 +14162,11 @@ fn verify_ends_the_verdict_of_a_cluster_record_with_a_state_other_than_running()
     assert!(line.ends_with("; the cluster is Error"), "{line}");
 
     // over several records, the line of each record names the state
-    let path = dir.path().join("lab.json");
-    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
     let deleting = cluster_in_state(dir.path(), "Deleting", serde_json::json!({}));
-    let s = ops::verify_many(
-        &[path],
-        None,
-        |_| Ok(Palette::new(deleting.clone())),
-        "t1",
-        &ops::VerifyOptions::default(),
-        &Progress::silent(),
-    );
+    let s = common::verify_summary(&recorded, &deleting);
     assert_eq!(s.records[0].status, RecordStatus::Unchanged);
     assert_eq!(s.records[0].state.as_deref(), Some("Deleting"));
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_verify_summary(&s)
-        .unwrap();
+    let text = common::terminal().render_verify_summary(&s).unwrap();
     assert!(
         text.contains("unchanged since t0; the state is Deleting"),
         "{text}"
@@ -15201,9 +14816,7 @@ fn compare_marks_an_invalid_pack_on_its_line_and_counts_it_in_the_summary() {
     let valid = common::snapshot_of_at(&serve_invalid(dir.path(), false), UID_A, "t0").unwrap();
     let invalid = common::snapshot_of_at(&serve_invalid(dir.path(), true), UID_A, "t1").unwrap();
     let terminal = |d: &strata::diff::Diff, a: &Snapshot, b: &Snapshot| {
-        render::renderer(Format::Terminal, Paint::off(), false)
-            .render(d, a, b, false)
-            .unwrap()
+        common::terminal().render(d, a, b, false).unwrap()
     };
     let d = ops::compare(&valid, &invalid, "t2");
     assert!(
@@ -15221,7 +14834,7 @@ fn compare_marks_an_invalid_pack_on_its_line_and_counts_it_in_the_summary() {
         line.contains("unchanged") && line.ends_with(&mark),
         "{text}"
     );
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
+    let md = common::markdown()
         .render(&d, &valid, &invalid, false)
         .unwrap();
     assert!(md.contains(&format!("unchanged **{mark}**")), "{md}");
@@ -15276,22 +14889,18 @@ fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_
         }]
     );
     let sentence = format!("Palette marks pack os/ubuntu-aws invalid now ({INVALID_REASON})");
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(verdict.starts_with("OK: "), "{verdict}");
     assert!(
         verdict.contains(&format!("\nINVALID: {sentence}")),
         "{verdict}"
     );
-    let verdict = render::renderer(Format::Markdown, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::markdown().verdict(&v.diff).unwrap();
     assert!(
         verdict.contains(&format!("**INVALID**: {sentence}")),
         "{verdict}"
     );
-    let report = render::renderer(Format::Terminal, Paint::off(), false)
+    let report = common::terminal()
         .render(&v.diff, &recorded, &v.live, false)
         .unwrap();
     assert!(
@@ -15305,23 +14914,12 @@ fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_
     );
 
     // the summary of many records names the pack too, and the exit stays 0
-    let path = dir.path().join("invalid.json");
-    fs::write(&path, recorded.to_json(true).unwrap()).unwrap();
-    let s = ops::verify_many(
-        &[path],
-        None,
-        |_| Ok(Palette::new(live.clone())),
-        "t1",
-        &ops::VerifyOptions::default(),
-        &Progress::silent(),
-    );
+    let s = common::verify_summary(&recorded, &live);
     assert_eq!(
         (s.records[0].status, s.exit_code()),
         (RecordStatus::Unchanged, 0)
     );
-    let lines = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_verify_summary(&s)
-        .unwrap();
+    let lines = common::terminal().render_verify_summary(&s).unwrap();
     assert!(lines.contains(&format!("; {sentence}")), "{lines}");
 
     // a pack that is valid again: nothing to report
@@ -15334,9 +14932,7 @@ fn verify_reports_each_pack_that_palette_marks_invalid_now_and_keeps_the_status_
     .unwrap();
     let ver = v.diff.verify.as_ref().unwrap();
     assert!(ver.invalid_packs.is_empty());
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(!verdict.contains("INVALID"), "{verdict}");
 }
 
@@ -15614,7 +15210,7 @@ fn a_tier_of_a_later_release_compares_by_its_fields_and_verify_names_it_and_does
             .iter()
             .all(|t| t.tier.as_str() != "network")
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&v.diff, &read, &v.live, false)
         .unwrap();
     assert!(

@@ -8,9 +8,7 @@ use strata::diff::Status;
 use strata::diff::VerifyStatus;
 use strata::error::Error;
 use strata::ops;
-use strata::render::{self, Format};
 use strata::snapshot::{Snapshot, Template, UpstreamSource};
-use strata::term::color::Paint;
 use strata::term::progress::Progress;
 
 use crate::common;
@@ -212,9 +210,7 @@ fn a_version_that_was_never_published_records_the_manifest_content_of_its_draft(
     assert!(draft.source.is_draft());
     let v = ops::verify(&snap, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
     assert!(v.unchanged);
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(verdict.contains("holds the draft recorded t0"), "{verdict}");
 }
 
@@ -235,7 +231,7 @@ fn a_record_of_the_draft_verifies_against_the_version_once_the_draft_is_publishe
     let api = palette_with_draft();
     let version = snapshot_of(&api, DRAFT_PROFILE_UID).unwrap();
     let draft = snapshot_of(&api, &format!("{DRAFT_PROFILE_UID}@draft")).unwrap();
-    let r = render::renderer(Format::Terminal, Paint::off(), false);
+    let r = common::terminal();
 
     // a version and its draft: not an edit in place
     let d = ops::compare(&version, &draft, "t1");

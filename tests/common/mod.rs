@@ -1066,6 +1066,54 @@ pub fn listing(
     )
 }
 
+// ---- the renderers and the summaries -------------------------------------------------------------
+
+/// The terminal renderer, with no color.
+pub fn terminal() -> Box<dyn strata::render::Renderer> {
+    strata::render::renderer(
+        strata::render::Format::Terminal,
+        strata::term::color::Paint::off(),
+        false,
+    )
+}
+
+/// The markdown renderer.
+pub fn markdown() -> Box<dyn strata::render::Renderer> {
+    strata::render::renderer(
+        strata::render::Format::Markdown,
+        strata::term::color::Paint::off(),
+        false,
+    )
+}
+
+/// The summary of `strata verify` on the file of `record`, against the in-memory Palette `api` for
+/// each scope, read at `t1`.
+pub fn verify_summary(
+    record: &strata::snapshot::Snapshot,
+    api: &strata::api::MemoryApi,
+) -> strata::ops::VerifySummary {
+    verify_summary_with(record, api, &strata::ops::VerifyOptions::default())
+}
+
+/// [`verify_summary`], with the options `options`.
+pub fn verify_summary_with(
+    record: &strata::snapshot::Snapshot,
+    api: &strata::api::MemoryApi,
+    options: &strata::ops::VerifyOptions,
+) -> strata::ops::VerifySummary {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("record.json");
+    fs::write(&path, record.to_json(true).unwrap()).unwrap();
+    strata::ops::verify_many(
+        &[path],
+        None,
+        |_| Ok(strata::api::Palette::new(api.clone())),
+        "t1",
+        options,
+        &strata::term::progress::Progress::silent(),
+    )
+}
+
 // ---- the processes -----------------------------------------------------------------------------
 
 /// The strata binary that cargo built for the tests.
