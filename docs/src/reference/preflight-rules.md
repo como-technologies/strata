@@ -141,10 +141,11 @@ each request. See
 
 ## A check that a validate route answers
 
-A validate route of Palette converts the body of a create with the rules of the
-create. `palette-validate` sends the body to the route of the cloud type, so the
-route already reports each check that it answers. The catalog does not copy such
-a check, because a copy goes stale when Palette changes the rule. See
+A check that a validate route answers is a call of that route. A validate route
+of Palette converts the body of a create with the rules of the create.
+`palette-validate` sends the body to the route of the cloud type, so the route
+reports each check that it answers. The catalog does not copy such a check,
+because a copy goes stale when Palette changes the rule. See
 [the rules of the scope](../boundary.md#the-rules-of-the-scope).
 
 A rule leaves the catalog only when the route answers it. A call of the route
