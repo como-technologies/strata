@@ -48,6 +48,26 @@ pub(crate) fn status_word(status: Status) -> &'static str {
     }
 }
 
+/// The status of a part of a comparison that has no status of its own, such as the variables or a
+/// tier of a cluster: it moved or it did not.
+pub(crate) fn moved(changed: bool) -> Status {
+    if changed {
+        Status::Changed
+    } else {
+        Status::Unchanged
+    }
+}
+
+/// The word of [`moved`] for the terminal: `CHANGED` in yellow, or `unchanged` dimmed.
+pub(crate) fn moved_word(changed: bool, p: &Paint) -> String {
+    let word = status_word(moved(changed));
+    if changed {
+        p.byellow(word)
+    } else {
+        p.dim(word)
+    }
+}
+
 /// One line of a diff of values: a leaf, or a value that a cluster gives a variable.
 ///
 /// It holds the path and the two sides as the reports show them.
@@ -275,5 +295,26 @@ pub(crate) fn traits_suffix(v: &VariableSummary) -> String {
         String::new()
     } else {
         format!(" ({})", t.join(", "))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_part_that_moved_is_changed_and_one_that_did_not_is_unchanged() {
+        assert_eq!(moved(true), Status::Changed);
+        assert_eq!(moved(false), Status::Unchanged);
+        let off = Paint::off();
+        assert_eq!(moved_word(true, &off), "CHANGED");
+        assert_eq!(moved_word(false, &off), "unchanged");
+        for status in Status::ALL {
+            assert_eq!(
+                status_word(*status).to_lowercase(),
+                status.as_str(),
+                "the word of a status is its name in the documents"
+            );
+        }
     }
 }

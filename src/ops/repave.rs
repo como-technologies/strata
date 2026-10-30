@@ -14,6 +14,7 @@ use crate::diff::{ImpactLevel, PaletteRepave};
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_str};
 use crate::profile_type::ProfileType;
+use crate::reference::{Ref, name_version};
 use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind};
 
 /// One entry of `packValues` in the body of `validate/repave`: the pack by name, with its tag,
@@ -169,9 +170,15 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
     {
         return Err(Error::Usage {
             message: format!(
-                "the record of the update that waits holds {}@{}, and the cluster {} does not run \
-                 it now. Record cluster:{}@pending again",
-                old.name, old.version, source.name, source.name
+                "the record of the update that waits holds {}, and the cluster {} does not run \
+                 it now. Record {} again",
+                name_version(&old.name, &old.version),
+                source.name,
+                Ref::Cluster {
+                    uid: source.name.clone(),
+                    profile: None,
+                    pending: true,
+                }
             ),
         });
     }
@@ -262,8 +269,9 @@ pub fn palette_repave<A: PaletteApi>(
             let doc = palette.subject_document(SubjectKind::Cluster, &cluster.uid)?;
             let body = validate_body(&AppliedProfile::of_cluster(&doc), target);
             let asked = format!(
-                "{}@{}: the cluster {} runs it",
-                target.source.name, target.source.version, cluster.name
+                "{}: the cluster {} runs it",
+                name_version(&target.source.name, &target.source.version),
+                cluster.name
             );
             (cluster, doc, body, asked)
         }

@@ -11,7 +11,7 @@ use serde_json::Value;
 use crate::api::{Palette, PaletteApi, named_entries, profile_versions, recorded_template};
 use crate::cloud::Cloud;
 use crate::error::{Result, served};
-use crate::reference::{Ref, version};
+use crate::reference::{Ref, name_version, version};
 use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
@@ -467,7 +467,7 @@ fn list_profiles<A: PaletteApi>(
 ) -> Result<Vec<ListedProfile>> {
     let mut profiles: Vec<ListedProfile> = profile_versions(&palette.profile_listing()?)
         .map(|v| ListedProfile {
-            reference: format!("{}@{}", v.name, v.version),
+            reference: name_version(&v.name, &v.version),
             uid: v.uid,
             cloud_type: v.cloud_type,
             name: v.name,

@@ -1,9 +1,10 @@
 //! The lines of `same-release`: the word and the detail of each pair, and the verdict of the
 //! chain.
 
+use super::changes::status_word;
 use super::notes::{macros_changed_note, macros_not_compared_note, masked_sentence};
 use super::{count_of, short};
-use crate::diff::Diff;
+use crate::diff::{Diff, Status};
 use crate::ops::{Chain, Pair, PairStatus, RecordStatus};
 
 /// The status word of a pair, as the text reports print it.
@@ -34,11 +35,11 @@ pub(crate) fn record_word(status: RecordStatus) -> &'static str {
 /// Palette mints.
 pub(crate) fn diff_word(d: &Diff) -> &'static str {
     if d.same {
-        "IDENTICAL"
+        pair_word(PairStatus::Identical)
     } else if d.same_content {
-        "SAME CONTENT"
+        pair_word(PairStatus::SameContent)
     } else {
-        "CHANGED"
+        status_word(Status::Changed)
     }
 }
 

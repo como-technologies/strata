@@ -19,7 +19,7 @@ use crate::content::layer::Layer;
 use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, text};
 use crate::profile_type::ProfileType;
-use crate::reference::{LATEST, one_named, version};
+use crate::reference::{LATEST, name_version, one_named, version};
 use crate::scope::{ProfileScope, ScopedUid};
 use crate::snapshot::{Template, manifest_of};
 use crate::term::progress::Progress;
@@ -182,7 +182,7 @@ impl<A: PaletteApi> Palette<A> {
             .collect();
         let not_found = || {
             let mut available: Vec<String> =
-                all.iter().map(|(n, v, _)| format!("{n}@{v}")).collect();
+                all.iter().map(|(n, v, _)| name_version(n, v)).collect();
             available.sort();
             Error::AppProfileNotFound {
                 name: name.to_string(),

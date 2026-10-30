@@ -6,6 +6,7 @@ use super::verify::edited_in_place_note;
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::pack::InvalidSides;
 use crate::diff::{Diff, ImageIdChange, InvalidPack, PackDiff, Side};
+use crate::reference::name_version;
 use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{PendingUpdate, Source, Tier};
 use crate::text::and_list;
@@ -129,8 +130,10 @@ fn overwritten_in_place_notes(d: &Diff) -> Vec<String> {
         .map(|o| {
             let name_b = if o.name_b.is_empty() { &o.name } else { &o.name_b };
             format!(
-                "uid {} is {}@{} on one side and {}@{} on the other: the version was overwritten in place",
-                o.uid, o.name, o.version_a, name_b, o.version_b
+                "uid {} is {} on one side and {} on the other: the version was overwritten in place",
+                o.uid,
+                name_version(&o.name, &o.version_a),
+                name_version(name_b, &o.version_b)
             )
         })
         .collect()
@@ -542,8 +545,10 @@ fn draft_note(d: &Diff) -> Option<String> {
     };
     (!d.same && !draft.uid.is_empty() && d.a.uid == d.b.uid).then(|| {
         format!(
-            "{} is the draft of {}@{} (uid {}): its publish makes this change",
-            draft.reference, draft.name, draft.version, draft.uid
+            "{} is the draft of {} (uid {}): its publish makes this change",
+            draft.reference,
+            name_version(&draft.name, &draft.version),
+            draft.uid
         )
     })
 }
