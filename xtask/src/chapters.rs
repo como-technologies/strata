@@ -146,9 +146,20 @@ fn accepted_answer() -> serde_json::Value {
     json!({"machinePools": {"results": []}, "profiles": []})
 }
 
+/// The answer of the instance type route for `us-east-2`: `t3.xlarge` is not offered in the zone
+/// `us-east-2c`, which no pool of `preflight_entity` uses.
+fn instance_types_answer() -> serde_json::Value {
+    json!({"instanceTypes": [
+        {"name": "t3.large", "cpu": 2, "memory": 8, "nonSupportedZones": [],
+            "supportedArchitectures": ["x86_64"]},
+        {"name": "t3.xlarge", "cpu": 4, "memory": 16, "nonSupportedZones": ["us-east-2c"],
+            "supportedArchitectures": ["x86_64"]},
+    ]})
+}
+
 /// Write the answers that the live tier of `strata preflight` reads for `preflight_entity` in
-/// `project`: the cloud account, the property route, the regions, and the validate route, which
-/// refuses the worker pool for its CPU.
+/// `project`: the cloud account, the property route, the regions, the instance types of the region,
+/// the key pairs of the account, and the validate route, which refuses the worker pool for its CPU.
 fn preflight_routes(r: &mut Runner, project: &str) {
     r.answer(
         project,
@@ -164,6 +175,16 @@ fn preflight_routes(r: &mut Runner, project: &str) {
         project,
         &format!("v1/clouds/aws/regions@cloudAccountUid={PLATFORM_AWS}"),
         &json!({"regions": [{"name": "us-east-2", "zones": [{"name": "us-east-2a"}, {"name": "us-east-2b"}, {"name": "us-east-2c"}]}]}),
+    );
+    r.answer(
+        project,
+        &format!("v1/clouds/aws/regions/us-east-2/instancetypes@cloudAccountUid={PLATFORM_AWS}"),
+        &instance_types_answer(),
+    );
+    r.answer(
+        project,
+        &format!("v1/clouds/aws/regions/us-east-2/keypairs@cloudAccountUid={PLATFORM_AWS}"),
+        &json!({"keyNames": ["platform", "lab"]}),
     );
     r.answer(project, AWS_VALIDATE, &cpu_floor_answer());
 }
@@ -3332,6 +3353,25 @@ fn automation(r: &mut Runner) {
         0,
         false,
         "strata preflight --rules --cloud edge --json | jq '.rules[] | select(.id == \"edge-host-in-use\") | {id, tier, check: {kind: .check.kind, method: .check.method, each: (.check.each | gsub(\"\\\\s+\"; \" \") | rtrimstr(\" \")), path: .check.path}}'",
+    );
+    // two rules that read the account of the entity (#143): the instance type route lists the
+    // zones that do not offer a type, and the key pair route lists the key pairs of the region.
+    // The pools move to the zone that the list names, and the key pair is not in the list.
+    r.quiet(
+        r#"jq '.spec.machinepoolconfig[].cloudConfig.azs = ["us-east-2c"]' cluster.json > cluster-zone.json"#,
+    );
+    r.step(
+        "preflight-offering",
+        1,
+        false,
+        "strata preflight cluster-zone.json --cloud aws --no-exec --tier palette --rule instance-offering --strict --quiet | sed -n '4,8p'",
+    );
+    r.quiet(r#"jq '.spec.cloudConfig.sshKeyName = "retired"' cluster.json > cluster-key.json"#);
+    r.step(
+        "preflight-ssh-key",
+        1,
+        false,
+        "strata preflight cluster-key.json --cloud aws --no-exec --tier palette --rule ssh-key-pair --strict --quiet | sed -n '4,6p'",
     );
 }
 

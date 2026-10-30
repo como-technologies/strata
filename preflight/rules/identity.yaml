@@ -571,6 +571,8 @@ rules:
       account, the role does not exist, and the check passes. After a build, a policy of the account
       that is not on the role is the silent failure. A watch sees its effect: a CSI pod in
       `CrashLoopBackOff`.
+      `POST /v1/clouds/aws/policyArns/validate` tells whether each policy ARN of the account exists. This
+      check reads the nodes role, so it stays at the cloud tier.
     check:
       kind: exec
       needs: [aws]
@@ -616,6 +618,8 @@ rules:
       `global-policy-attach-silent` says what Palette does then. The check counts the policies on
       the nodes role plus the policy ARNs of the account that are not on it yet. Before the first
       build, the role does not exist, and the check passes.
+      `POST /v1/clouds/aws/policyArns/validate` tells whether each policy ARN of the account exists. This
+      check counts the policies of the nodes role, so it stays at the cloud tier.
     check:
       kind: exec
       needs: [aws]
@@ -800,6 +804,45 @@ rules:
     tests:
       - fault: fixtures/aws/pod-identity-iaas.json
         clean: fixtures/aws/identity-clean.json
+
+  - id: ssh-key-pair
+    title: The SSH key pair of the cluster is a key pair of the account in the region
+    engines: [aws, eks]
+    tier: palette
+    severity: fail
+    status: source
+    when: .entity.spec.cloudAccountUid != null and (.entity.spec.cloudConfig.sshKeyName // "") != ""
+    what: |
+      The nodes take the key pair `sshKeyName` of the region from EC2. A name that the account does
+      not hold in the region fails the build. The properties route of AWS checks the key pair, and
+      the properties route of EKS checks it with a `vpcId` alone. So an EKS cluster with a dynamic
+      VPC reaches no check of the key pair. The key pair route lists `keyNames` of the account in
+      the region, and the check looks for `sshKeyName` in the list.
+    check:
+      kind: palette
+      method: GET
+      path: /v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/keypairs?cloudAccountUid={{ .entity.spec.cloudAccountUid }}
+      expr: |
+        .entity.spec.cloudConfig as $c
+        | if (.response.ok | not) then ["Palette cannot list the key pairs of region \($c.region): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          else (.response.body.keyNames // []) as $names
+            | if ($names | index($c.sshKeyName)) == null
+              then ["sshKeyName \($c.sshKeyName) is not a key pair of the account in region \($c.region); Palette lists \($names | length) key pair(s)"]
+              else [] end
+          end
+    reproduce:
+      - "aws ec2 describe-key-pairs --region {{ .entity.spec.cloudConfig.region }} --key-names {{ .entity.spec.cloudConfig.sshKeyName }} --query 'KeyPairs[].KeyName' --output text"
+    fix:
+      owner: palette
+      text: Call the key pair route from the properties route of EKS when the VPC is dynamic.
+    evidence:
+      - kind: source
+        note: the key pair route of a region lists keyNames for the account; the properties route of EKS checks the key pair with a vpcId alone
+    tests:
+      - fault: fixtures/aws/ssh-key-missing.json
+        clean: fixtures/aws/ssh-key-listed.json
+      - fault: fixtures/eks/ssh-key-missing.json
+        clean: fixtures/eks/ssh-key-listed.json
 
   - id: gcp-account-roles
     title: A service account of the project holds the five roles of Palette

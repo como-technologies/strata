@@ -92,3 +92,33 @@ the count of its requests:
 A request that Palette does not answer makes the check `ERROR`, and the report
 keeps the requests up to that one. [The rule format](../../reference/preflight-rules.md#a-request-for-each-item)
 states `each`.
+
+## A rule over the list of an account
+
+Palette lists some facts of a cloud account in one request. The instance type
+route lists each type of a region, and `nonSupportedZones` of a type names the
+zones that do not offer it. The key pair route lists the key pairs of the
+account in a region. The tool of the cloud gives the same answer, but it needs
+the credentials of the cloud on your machine. These rules need the key of
+Palette alone.
+
+`instance-offering` fails for each pool whose type names a zone of the pool in
+`nonSupportedZones`. It also fails for a pool whose type the region does not
+list. One request answers every pool. Here the pools name a zone that the list
+marks for `t3.xlarge`:
+
+```text
+{{#include ../../output/preflight-offering.txt}}
+```
+
+`ssh-key-pair` fails when `sshKeyName` of the entity is not in the list of the
+account. The property route of EKS does not check a key pair for a cluster
+with a dynamic VPC. Here the entity names a key pair that the account lacks:
+
+```text
+{{#include ../../output/preflight-ssh-key.txt}}
+```
+
+The lists are the catalog of Palette, not the cloud. A type that the list does
+not mark can still fail, so the `reproduce:` line asks the cloud. See
+[The list routes](../../internals/palette/validate-routes.md#the-list-routes).

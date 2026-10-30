@@ -1,0 +1,9 @@
+{
+  "_base": "clean.json",
+  "_note": "Palette answers 204 for the project and the zone of the pools",
+  "_patch": {
+    "_responses": {
+      "POST /v1/clouds/gcp/properties/validate": { "ok": true, "status": 204, "body": null }
+    }
+  }
+}

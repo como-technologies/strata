@@ -48,6 +48,9 @@ rules:
       `UnsupportedAvailabilityZoneException`. The zone id behind a name such as us-east-1e differs
       for each account, so the check asks EC2 for the ids of the zones the pools name. Palette does
       not check the zone.
+      `GET /v1/clouds/aws/regions/{region}/availabilityzones` lists each zone of the account with
+      `name`, `state`, and `zoneId`. The Local Zone and Wavelength Zone test reads the zone type, so
+      the check stays at the cloud tier until a run shows that the route gives it.
     when: ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.azs // [])[], ((.cloudConfig.subnets // [])[] | .az // empty) ] | map(select(. != null and . != "")) | unique | length) > 0
     check:
       kind: exec
@@ -299,6 +302,8 @@ rules:
       `InsufficientFreeAddresses`. The check sums the nodes (maxSize) of the pools that use a
       subnet. It asks 16 for each node with the VPC CNI (1 with another CNI), plus 16 for the
       cluster. That is a floor, not the real need: the count of pods on each node decides it.
+      `GET /v1/clouds/aws/regions/{region}/vpcs` lists no count of free addresses, so this check stays
+      at the cloud tier.
     when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
     check:
       kind: exec
@@ -418,6 +423,9 @@ rules:
       says fails during the build. Palette lists the subnets of the VPC and
       tests the public ones for MapPublicIpOnLaunch. A subnet id that is not in the VPC is never
       seen, and passes.
+      `GET /v1/clouds/aws/regions/{region}/vpcs` lists each VPC of the account with its subnets: `az`,
+      `isPrivate`, `mapPublicIpOnLaunch`, `subnetId`, and `name`. It answers this check with a key
+      alone. No run shows its answer yet, so the check stays at the cloud tier.
     when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
     check:
       kind: exec

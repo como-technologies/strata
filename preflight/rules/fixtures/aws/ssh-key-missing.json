@@ -1,0 +1,13 @@
+{
+  "_base": "ssh-key-listed.json",
+  "_note": "the account lists no key pair named iris-on-palette in the region",
+  "_patch": {
+    "_responses": {
+      "GET /v1/clouds/aws/regions/us-east-2/keypairs?cloudAccountUid=acc-aws-1": {
+        "ok": true,
+        "status": 200,
+        "body": { "keyNames": ["platform"] }
+      }
+    }
+  }
+}

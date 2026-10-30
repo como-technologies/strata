@@ -78,6 +78,11 @@ holds for an edge host that another cluster uses, in any pool. The report names
 that item. See
 [A rule over a list](../commands/preflight/tiers.md#a-rule-over-a-list).
 
+A rule can also read a list of the cloud account in one request. `instance-offering`
+fails a pool whose instance type a zone does not offer. `ssh-key-pair` fails a key
+pair that the account lacks. See
+[A rule over the list of an account](../commands/preflight/tiers.md#a-rule-over-the-list-of-an-account).
+
 ### After an upgrade of Palette
 
 The first AWS create after an upgrade of Palette updates the CAPA stack of the

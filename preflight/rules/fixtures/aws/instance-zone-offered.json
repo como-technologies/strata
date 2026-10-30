@@ -1,0 +1,18 @@
+{
+  "_base": "clean.json",
+  "_note": "the type t3.xlarge is listed in the region, and its nonSupportedZones names a zone that no pool uses",
+  "_patch": {
+    "_responses": {
+      "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "instanceTypes": [
+            { "name": "t3.large", "cpu": 2, "memory": 8, "nonSupportedZones": [], "supportedArchitectures": ["x86_64"] },
+            { "name": "t3.xlarge", "cpu": 4, "memory": 16, "nonSupportedZones": ["us-east-2c"], "supportedArchitectures": ["x86_64"] }
+          ]
+        }
+      }
+    }
+  }
+}

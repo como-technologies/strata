@@ -11,7 +11,10 @@
 #   1  the clean entity of the engine, from examples/live/preflight/ENGINE.json and the tenant: the
 #      cloud account, the release profile, the region, and the zone of terraform.tfvars
 #   2  each fault on purpose: one edit of the clean entity, and strata preflight --rule ID must
-#      FAIL on it, in seconds. The ledger gets `caught`, or `missed`
+#      FAIL on it, in seconds. The ledger gets `caught`, or `missed`. Three rules read a list of the
+#      cloud account from Palette (#143): instance-offering, ssh-key-pair on aws and eks, and
+#      gcp-properties on gcp. The fault of instance-offering is a type that the instance type route
+#      lists with a zone in nonSupportedZones, read from the route itself
 #   3  the clean entity: every tier, and each rule of severity fail that ran must PASS. The ledger
 #      gets `passed`, or `false-fail`
 #   4  with --build only: the apply of cluster A through the provider, and strata preflight --watch
@@ -129,6 +132,20 @@ fault() {
 # resize: set the size, the minimum, and the maximum of a pool together; Palette refuses a size
 # under the minimum with ShouldBeEqOrGreaterThanParamValues, which is not the fault of the row
 resize='def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n;'
+# offering_edit: print the jq edit of the clean entity that puts the first pool in a zone that the
+# instance type route marks as not offering the type of the pool. The route is read for the region
+# and the account of the entity, and its answer is kept in instancetypes.json. The edit takes the
+# first type that has a zone in nonSupportedZones. Exit 1, with the reason, when the route lists none.
+offering_edit() {
+  local kind=aws pair
+  case "$engine" in gcp|gke) kind=gcp ;; esac
+  "$live/api.sh" get "/v1/clouds/$kind/regions/$region/instancetypes?cloudAccountUid=$A" > instancetypes.json || { echo "api.sh get failed: $(tail -n 1 instancetypes.json)" >&2; return 1; }
+  pair=$(jq -r '[.instanceTypes[]? | select((.nonSupportedZones // []) | length > 0)] | .[0] // empty | "\(.name)\t\(.nonSupportedZones[0])"' instancetypes.json) || { echo "instancetypes.json is not JSON" >&2; return 1; }
+  [ -n "$pair" ] || { echo "the route lists no type with a zone in nonSupportedZones" >&2; return 1; }
+  local type zone
+  IFS=$'\t' read -r type zone <<<"$pair"
+  printf '.spec.machinepoolconfig[0].cloudConfig.instanceType = "%s" | .spec.machinepoolconfig[0].cloudConfig.azs = ["%s"]\n' "$type" "$zone"
+}
 first_pool="$resize .spec.machinepoolconfig[0] |= resize"
 worker_pools="$resize (.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not)) |= resize"
 case "$engine" in
@@ -161,6 +178,29 @@ case "$engine" in
     fault palette-validate "$worker_pools(1)"
     fault gcp-name-length '.metadata.name = "a-cluster-name-that-is-longer-than-fifty-two-characters-x"'
     fault account-missing '.spec.cloudAccountUid = "000000000000000000000000"'
+    ;;
+esac
+
+# The three rules that read a list of the cloud account (#143). The first check shows the shape of
+# the answer of the route; the faults then show that each rule reads it.
+echo "== 2b. the rules that read a list of the cloud account" | tee -a steps.log
+if edit=$(offering_edit 2> offering-edit.err); then
+  check instance-types-shape 0 "the instance type route lists the types of $region as instanceTypes[] with a name and nonSupportedZones" -- \
+    jq -e '(.instanceTypes | length) > 0 and all(.instanceTypes[]; has("name") and (.nonSupportedZones | type) == "array")' instancetypes.json
+  fault instance-offering "$edit"
+else
+  record instance-offering not-made "$(cat offering-edit.err)"
+  echo "instance-offering: $(cat offering-edit.err)" | tee -a steps.log
+fi
+case "$engine" in
+  aws|eks)
+    "$live/api.sh" get "/v1/clouds/aws/regions/$region/keypairs?cloudAccountUid=$A" > keypairs.json 2> keypairs.err
+    check key-pairs-shape 0 "the key pair route lists keyNames[] for $region, and the key $ssh_key of the entity is in it" -- \
+      jq -e --arg k "$ssh_key" '(.keyNames | index($k)) != null' keypairs.json
+    fault ssh-key-pair '.spec.cloudConfig.sshKeyName = "strata-no-such-key"'
+    ;;
+  gcp)
+    fault gcp-properties '.spec.cloudConfig.project = "strata-no-such-project-000000"'
     ;;
 esac
 
