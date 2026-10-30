@@ -34,8 +34,9 @@ The checks, in order:
    usage. `palette-validate` reports the refusal.
 3. The cloud: for AWS, the zones of each worker pool inside the zones of the
    control plane, and with dynamic placement one zone or more for each worker
-   pool. For EKS, the KMS key when encryption is on. For edge-native and
-   vSphere, the SSH key.
+   pool. For EKS, when encryption is on, that the KMS key is in the list of
+   keys of the account: see [The property routes](#the-property-routes). For
+   edge-native and vSphere, the SSH key.
 4. The profiles: an infrastructure profile is there, no pack is in two
    profiles, the packs and their variables, the state of each pack, and the
    FIPS mode. The errors go in `profiles[].packs.results[].errors[]`.
@@ -388,8 +389,24 @@ cloud with the credentials of the cloud account.
 | `POST /v1/clouds/gcp/properties/validate` | `cloudAccountUid`, `projectId`, `region`, `azs[]` | The project, with Cloud Resource Manager; each zone, with Compute. `gcp-properties` calls it. | On a GCP create. Not on a GKE create. |
 | `POST /v1/clouds/gcp/azs/validate` | `uid`, `project`, `region`, `azs[]` | Each zone is a zone of the region. | On demand. |
 | `POST /v1/clouds/aws/s3/validate` | a bucket and credentials | The bucket lists. | On demand. |
+| `GET /v1/clouds/aws/regions/{region}/kmskeys/validate?cloudAccountUid=&keyArn=` | `cloudAccountUid` and `keyArn`, in the query | That the ARN is in the `kms:ListKeys` list of the account. | On an EKS create, when encryption is on. |
 
 No such route exists for Azure, MAAS, or vSphere.
+
+### The KMS key route
+
+The KMS key route checks the list of keys, not the key. It answers `204` when
+the ARN is in the `kms:ListKeys` list of the account. It reads no key state
+and no `kms:CreateGrant`. So a disabled key, or a key that the role cannot use
+to create a grant, passes it. When the role has no `kms:ListKeys`, the route
+answers `500`, not a 4xx. So `palette-validate` finds a key that the account
+does not list, and no other fault of the key. These facts come from the code
+of Palette, not from a live run.
+
+The `kms` rule of `strata preflight` reads the state and the usage of the key
+with `aws kms describe-key`. It does not test `kms:CreateGrant`, which depends
+on the key policy and the IAM policy of the role together. The reproduce lines
+of the rule read the key policy and call the route.
 
 ## The list routes
 

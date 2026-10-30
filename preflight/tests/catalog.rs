@@ -852,3 +852,36 @@ fn ssh_key_pair_names_the_key_pair_and_the_region_for_aws_and_eks() {
         );
     }
 }
+
+/// The `kms` rule fails a key that is in the list of the account and is not `Enabled` (#195). The
+/// route of Palette reads the list alone, so a disabled key passes `palette-validate`.
+#[test]
+fn kms_fails_a_disabled_key_that_the_list_of_keys_holds() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("kms").unwrap();
+    let key = "1234abcd-12ab-34cd-56ef-1234567890ab";
+    for (fixture, expected) in [
+        ("fixtures/eks/kms-key-disabled.json", Some("Disabled")),
+        ("fixtures/eks/kms-clean.json", None),
+    ] {
+        let path = catalog::rules_dir().join(fixture);
+        let (backend, world) = FixtureBackend::split(fixture::load(&path).unwrap());
+        let out = probe::run_check(rule, &world, &backend, &Jq::new());
+        match expected {
+            Some(state) => {
+                assert_eq!(out.verdict, Verdict::Failed, "{fixture}");
+                assert_eq!(
+                    out.messages,
+                    [format!("KMS key {key} is {state}, not Enabled")],
+                    "{fixture}"
+                );
+            }
+            None => assert_eq!(
+                out.verdict,
+                Verdict::Passed,
+                "{fixture}: {:?}",
+                out.messages
+            ),
+        }
+    }
+}

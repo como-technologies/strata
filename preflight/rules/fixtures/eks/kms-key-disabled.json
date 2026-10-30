@@ -1,0 +1,24 @@
+{
+  "_base": "kms-clean.json",
+  "_note": "the KMS key of encryptionConfig.provider is in the list of keys of the account, and its state is Disabled",
+  "_patch": {
+    "_exec": {
+      "aws kms describe-key --key-id arn:aws:kms:us-east-2:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "KeyMetadata": {
+            "AWSAccountId": "123456789012",
+            "KeyId": "1234abcd-12ab-34cd-56ef-1234567890ab",
+            "Arn": "arn:aws:kms:us-east-2:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab",
+            "Enabled": false,
+            "KeyUsage": "ENCRYPT_DECRYPT",
+            "KeyState": "Disabled",
+            "KeyManager": "CUSTOMER",
+            "KeySpec": "SYMMETRIC_DEFAULT"
+          }
+        },
+        "stderr": ""
+      }
+    }
+  }
+}
