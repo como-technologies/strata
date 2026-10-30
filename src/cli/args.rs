@@ -330,7 +330,7 @@ pub(crate) struct BehindArgs {
     /// The JSON of a previous run: each pin names the versions that arrived since
     #[arg(long, value_name = "FILE")]
     pub(crate) since: Option<PathBuf>,
-    /// Do not compare each pin that is behind with the newest version, for the impact
+    /// Do not compare each pin that is behind with the newest version, and do not ask Palette about the move
     #[arg(long)]
     pub(crate) no_impact: bool,
     #[command(flatten)]

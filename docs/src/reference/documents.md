@@ -554,6 +554,18 @@ is the path as a list: strings for keys, numbers for indexes, and
   - `bump`, for a pin that is behind, unless `--no-impact`: `to`, the newest
     version, `impact`, the impact level, and `flags[]`. `flags[]` holds
     `IDENTITY`, `UPSTREAM`, `AUTHORED`, `IMAGES`, or `CHARTS` for each change.
+    - `paletteValidation`: the answer of Palette about the move. `accepts` is
+      `true` when Palette gives no error. `errors[]` is there only when it is
+      not empty. Each error has `code` and `message`. It has `pack` when it
+      names a pack, and `clusters[]` when it is about clusters: the cluster of a
+      cluster record, or the clusters that run the profile version and that the
+      message names. The answer holds the errors for each record that pins the
+      pack. It is absent when no record could be asked, and when a request
+      failed and no answer holds an error. Strata does not read a document that
+      says `accepts` is `false` and gives no error, or that says `true` and
+      gives an error.
+    - `paletteValidationError`, when a request to Palette failed: the message.
+      The pin stays behind.
   - `arrived[]`, with `--since`: the newer versions that the previous report
     did not know. Absent when the previous report had no pin of the pack in
     that registry.

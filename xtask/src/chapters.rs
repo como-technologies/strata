@@ -38,6 +38,8 @@ const A119: &str = "64e0000000000000000000fc";
 // prod
 const A1110: &str = "64e0000000000000000000fd";
 const A1110_PROD: &str = "64e1000000000000000000fd";
+// aws-stack@1.1.11: the content of 1.1.1, with the CSI pack at 1.63.1, the one pin that is behind
+const A1111: &str = "64e0000000000000000000ff";
 // aws-stack@1.3.0: the content of 1.1.1, made with no publish
 const A130: &str = "64e0000000000000000000fe";
 // aws-stack@1.1.1 of the tenant: the content of 1.1.1, published at tenant scope
@@ -2821,6 +2823,11 @@ fn use_cases(r: &mut Runner) {
     r.tenant(|t| t.registries(DEV));
     // the newest kubernetes supports amd64 alone, as loki 3.6.7 does in the Public Repo
     r.tenant(|t| t.pack_architectures(DEV, "kubernetes", "1.36.2", "amd64"));
+    // Palette accepts each move of the two versions: no pack declares a limit
+    r.tenant(|t| {
+        t.profile_upgrade_answer(DEV, A100, None);
+        t.profile_upgrade_answer(DEV, A111, None);
+    });
     r.serve_here(); // state 2: the registry publishes csi-aws-ebs 1.65.0
     r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
     r.step("behind", 1, false, "strata behind 'releases/*/dev.json'");
@@ -2849,6 +2856,38 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "scripts/ci/upstream-report.sh 'releases/*/dev.json' --dry-run --no-impact",
+    );
+
+    // A move that Palette refuses on a cluster that runs the profile. The only pin that is behind
+    // is csi-aws-ebs 1.63.1, two minor versions below 1.65.0. The stand-in refuses each request of
+    // the route, so the profile has no other pin that is behind
+    r.profile(
+        DEV,
+        A1111,
+        "1.1.11",
+        "aws-stack@1.1.1",
+        &[Edit::Upgrade {
+            pack: "csi-aws-ebs",
+            uid: "6a75f441d410c3b5762fed2d",
+            version: "1.63.1",
+        }],
+    );
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A1111], &[]));
+    r.tenant(|t| t.profile_upgrade_answer(DEV, A1111, Some(("csi-aws-ebs", &["payments"]))));
+    r.serve_here(); // state 3: payments runs aws-stack@1.1.11, and Palette refuses the move of its CSI pack
+    r.quiet("strata snapshot aws-stack@1.1.11 -o refused/dev.json");
+    r.step("behind-refused", 1, false, "strata behind refused/dev.json");
+    r.step(
+        "behind-refused-json",
+        1,
+        false,
+        "strata behind refused/dev.json --json | jq -c '.pins[] | select(.behind) | .bump.paletteValidation'",
+    );
+    r.step(
+        "behind-refused-no-impact",
+        1,
+        false,
+        "strata behind refused/dev.json --no-impact",
     );
 
     // The fleet from Palette: the clusters of a label, in two projects, and a record of each

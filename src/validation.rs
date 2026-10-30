@@ -10,6 +10,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 
 use crate::json::{arr, text};
+use crate::text::and_list;
 
 /// Palette's answer to `POST /v1/spectroclusters/{uid}/validate/packs`, for a change from what a
 /// cluster runs to a profile version: the cluster, and the answer. The document holds the fields
@@ -110,12 +111,19 @@ pub struct PaletteRefusal {
     pub code: String,
     /// Palette's sentence.
     pub message: String,
+    /// The clusters that the error is about, sorted. Empty when the error is about no cluster, or
+    /// when Palette names none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clusters: Vec<String>,
 }
 
 impl PaletteRefusal {
-    /// `<code> <pack>: <message>`, with no pack for a refusal of the whole request.
+    /// `<code> on <clusters>` for an error about clusters. Else `<code> <pack>: <message>`, with
+    /// no pack for a refusal of the whole request.
     pub fn line(&self) -> String {
-        if self.pack.is_empty() {
+        if !self.clusters.is_empty() {
+            format!("{} on {}", self.code, and_list(&self.clusters))
+        } else if self.pack.is_empty() {
             format!("{}: {}", self.code, self.message)
         } else {
             format!("{} {}: {}", self.code, self.pack, self.message)
@@ -133,9 +141,43 @@ impl PaletteRefusal {
                     pack: pack.clone(),
                     code: text(e, "/code"),
                     message: text(e, "/message"),
+                    clusters: Vec::new(),
                 })
             })
             .collect()
+    }
+
+    /// The error with the clusters that it is about: the names of `candidates` that its message
+    /// holds as a whole word. A name character is a letter, a digit, `-`, or `_`, so `prod-1` is
+    /// not in a message that names `prod-10`.
+    ///
+    /// Palette names the clusters in the message of an error about a profile. It gives them in no
+    /// field of their own.
+    pub fn naming(mut self, candidates: &[String]) -> PaletteRefusal {
+        let is_name = |c: char| c.is_alphanumeric() || matches!(c, '-' | '_');
+        let held = |name: &str| {
+            !name.is_empty()
+                && self.message.match_indices(name).any(|(at, _)| {
+                    let before = self.message[..at].chars().next_back();
+                    let after = self.message[at + name.len()..].chars().next();
+                    !before.is_some_and(is_name) && !after.is_some_and(is_name)
+                })
+        };
+        let mut named: Vec<String> = candidates
+            .iter()
+            .filter(|name| held(name))
+            .cloned()
+            .collect();
+        named.sort();
+        named.dedup();
+        self.clusters = named;
+        self
+    }
+
+    /// The error with `cluster` as the one cluster that it is about: an answer for one cluster.
+    pub fn on_cluster(mut self, cluster: &str) -> PaletteRefusal {
+        self.clusters = vec![cluster.to_string()];
+        self
     }
 
     /// The refusal of the whole request in the body of a Palette error: its `code` and its
@@ -152,6 +194,7 @@ impl PaletteRefusal {
             pack: String::new(),
             code,
             message: text(&error, "/message"),
+            clusters: Vec::new(),
         })
     }
 }
@@ -222,6 +265,7 @@ mod tests {
             pack: "kubernetes".to_string(),
             code: "PackDependencyNotFound".to_string(),
             message: "cni is required".to_string(),
+            clusters: Vec::new(),
         }
     }
 
@@ -249,6 +293,56 @@ mod tests {
 
         let accepted = serde_json::to_value(PaletteValidation::refused("c1", Vec::new())).unwrap();
         assert_eq!(accepted, json!({"clusterUid": "c1", "accepts": true}));
+    }
+
+    fn names(names: &[&str]) -> Vec<String> {
+        names.iter().map(ToString::to_string).collect()
+    }
+
+    #[test]
+    fn an_error_names_the_clusters_that_its_message_holds_as_a_whole_word() {
+        let error = PaletteRefusal {
+            message: "Pack 'kubernetes' cannot move on clusters: prod-10, (stage_1) and edge."
+                .to_string(),
+            ..refusal()
+        };
+        let candidates = names(&[
+            "prod-1", "prod-10", "stage_1", "edge", "stag", "", "stage_1",
+        ]);
+        let named = error.clone().naming(&candidates);
+        assert_eq!(named.clusters, ["edge", "prod-10", "stage_1"]);
+        assert_eq!(
+            named.line(),
+            "PackDependencyNotFound on edge, prod-10, and stage_1"
+        );
+
+        // a message that names no candidate leaves the error as Palette gave it
+        let none = error.clone().naming(&names(&["prod-1"]));
+        assert!(none.clusters.is_empty());
+        assert_eq!(
+            none.line(),
+            format!("PackDependencyNotFound kubernetes: {}", error.message)
+        );
+        assert_eq!(error.naming(&[]).clusters, Vec::<String>::new());
+    }
+
+    #[test]
+    fn the_clusters_of_an_error_are_in_the_document_only_when_there_are_some() {
+        let plain = serde_json::to_value(refusal()).unwrap();
+        assert!(plain.get("clusters").is_none(), "{plain}");
+        let on = refusal().on_cluster("payments");
+        assert_eq!(on.line(), "PackDependencyNotFound on payments");
+        let json = serde_json::to_value(&on).unwrap();
+        assert_eq!(json["clusters"], json!(["payments"]));
+        assert_eq!(serde_json::from_value::<PaletteRefusal>(json).unwrap(), on);
+        // a document written before the field reads
+        let old = json!({"pack": "kubernetes", "code": "X", "message": "m"});
+        assert!(
+            serde_json::from_value::<PaletteRefusal>(old)
+                .unwrap()
+                .clusters
+                .is_empty()
+        );
     }
 
     #[test]

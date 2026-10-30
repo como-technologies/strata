@@ -319,6 +319,9 @@ impl Renderer for TerminalRenderer {
             if let Some(line) = super::behind::bump_line(pin) {
                 out.push_str(&format!("      {line}\n"));
             }
+            for line in super::behind::palette_lines(pin) {
+                out.push_str(&format!("      {line}\n"));
+            }
             if let Some(arrived) = super::behind::arrived_line(pin) {
                 out.push_str(&format!("      {}\n", p.cyan(&arrived)));
             }

@@ -91,6 +91,7 @@ fn one_of_each() -> Vec<Error> {
                 message: "Pack 'cni-cilium-oss' is required with minimum compatible version \
                               '1.21.0'"
                     .into(),
+                clusters: Vec::new(),
             }],
         },
         Error::CandidateInvalid {

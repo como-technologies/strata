@@ -21,6 +21,13 @@
 #   5  the name route and the import validate route (#273): GET /v1/clusterprofiles/validate/name
 #      and POST /v1/clusterprofiles/import/validate. Each candidate has one fault that the routes
 #      refuse: the version, a pack twice, the name of a manifest, or a manifest twice
+#   6  the bump of a pin (#166): `strata behind` asks the route of the version, POST
+#      /v1/clusterprofiles/{uid}/validate/packs, whether it accepts the move of kubernetes to the
+#      newest version, on a cluster that runs the version. It needs PROFILE=<name>@<version>, a
+#      version that pins kubernetes two minor versions or more below the newest, and a cluster
+#      that runs it, for example the release version of `just live-up` with an older Kubernetes.
+#      With CLUSTER=<name> it asks the route of the cluster for the same move. It asks and
+#      writes nothing. It runs only when you give its number.
 #
 # Results go under runs/<UTC time>/validate-packs/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail
@@ -235,6 +242,48 @@ $one" > validate-same-pack-twice.yaml
       - name: wilma
         content: 'a: 2'" > validate-manifest-twice.yaml
   create_check validate-manifest-twice 'the import validate route refuses a manifest name twice in a pack' DuplicatePackManifestsForbidden
+fi
+
+# The jq filter for the pin of kubernetes that is behind, in a `behind --json` report
+kubernetes_pin='.pins[] | select(.name == "kubernetes" and .behind)'
+
+if [ "$stage" = 6 ]; then
+  if [ -z "${PROFILE:-}" ]; then
+    echo "== stage 6 skipped: give PROFILE=<name>@<version>" | tee -a steps.log
+  else
+    echo "== behind asks Palette whether it accepts the bump of $PROFILE (#166)" | tee -a steps.log
+    check bump-profile-record 0 "#166: a record of $PROFILE" -- "$strata" snapshot "$PROFILE" -o bump-profile.json
+    # exit 1: a pin is behind. The record can pin nothing that is behind, and then the checks below fail
+    check bump-behind '?' '#166: behind asks Palette about the bump of each pin that is behind' -- \
+      "$strata" behind bump-profile.json --json
+    check bump-pair 0 '#166: the newest version of kubernetes is two minor versions or more above the pin' -- \
+      jq -e "$kubernetes_pin | ((.newer[0].version | split(\".\")[1] | tonumber) - (.version | split(\".\")[1] | tonumber)) >= 2" bump-behind.out
+    check bump-asked 0 '#166: the bump of kubernetes holds an answer of Palette' -- \
+      jq -e "[$kubernetes_pin | .bump.paletteValidation] | length == 1" bump-behind.out
+    check bump-refused 0 '#166: Palette refuses the move with DependencyPackUpgradeNotSupported' -- \
+      jq -e "$kubernetes_pin | .bump.paletteValidation | .accepts == false and ([.errors[].code] | index(\"DependencyPackUpgradeNotSupported\") != null)" bump-behind.out
+    check bump-clusters 0 '#166: the message of the error names a cluster that runs the version' -- \
+      jq -e "$kubernetes_pin | .bump.paletteValidation.errors | map(.clusters | length) | max > 0" bump-behind.out
+    check bump-text '?' '#166: behind prints the answer under the bump' -- "$strata" behind bump-profile.json
+    check bump-text-says 0 '#166: palette refuses, with the code and the clusters' -- \
+      grep -Eq '^      palette refuses: DependencyPackUpgradeNotSupported on .+' bump-text.out
+    check bump-no-impact '?' '#166: --no-impact sends no request to a validate route' -- \
+      "$strata" behind bump-profile.json --no-impact --json
+    check bump-no-impact-says 0 '#166: the report holds no bump, so no answer of Palette' -- \
+      jq -e '[.pins[] | select(.bump)] | length == 0' bump-no-impact.out
+    if [ -n "${CLUSTER:-}" ]; then
+      echo "== the route of the cluster $CLUSTER for the same move (#166)" | tee -a steps.log
+      check bump-cluster-record 0 "#166: a record of cluster $CLUSTER" -- "$strata" snapshot "cluster:$CLUSTER" -o bump-cluster.json
+      check bump-cluster '?' '#166: behind asks the route of the cluster about the bump' -- \
+        "$strata" behind bump-cluster.json --json
+      check bump-cluster-asked 0 '#166: the bump of kubernetes holds an answer of Palette' -- \
+        jq -e "[$kubernetes_pin | .bump.paletteValidation] | length == 1" bump-cluster.out
+      # The route takes the tag of the sent pack, or the pack of the profile as it is now. If it
+      # takes the pack of the profile, it accepts the move, and this check fails
+      check bump-cluster-refused 0 '#166: the route of the cluster refuses the move with the code of the profile route, on this cluster' -- \
+        jq -e --arg c "$CLUSTER" "$kubernetes_pin | .bump.paletteValidation | .accepts == false and ([.errors[] | (.clusters // [])[]] | index(\$c) != null)" bump-cluster.out
+    fi
+  fi
 fi
 
 echo

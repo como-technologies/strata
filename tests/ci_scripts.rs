@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
+use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
 
 /// The scripts a release carries. The release workflow installs the published tag and runs the
 /// help of each one; this is the same check, before a tag exists.
@@ -2341,6 +2342,55 @@ fn upstream_report_opens_one_issue_per_pack_behind_names_what_arrived_and_closes
     assert!(u.handed("comment", 2).contains(
         "Each pin of `csi-aws-ebs` in Public Repo is at the newest version it can move to"
     ));
+}
+
+#[test]
+fn upstream_report_adds_the_answer_of_palette_to_the_bump_of_the_issue() {
+    let u = Report::upstream();
+    u.report(1, &["1.65.0"], None);
+    let answers = [
+        (
+            serde_json::json!({"accepts": true}),
+            "; palette accepts |".to_string(),
+        ),
+        (
+            serde_json::json!({"accepts": false, "errors": [
+                {"code": UPGRADE_NOT_SUPPORTED_CODE, "message": "m",
+                 "clusters": ["fred", "wilma"]},
+                {"code": "DisabledPacksForbidden", "message": "m", "pack": "csi-aws-ebs"}]}),
+            format!(
+                "; palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred, wilma, \
+                 DisabledPacksForbidden |"
+            ),
+        ),
+    ];
+    for (answer, cell) in answers {
+        let mut report = read_json(&u.dir.path().join("report.json"));
+        report["pins"][0]["bump"]["paletteValidation"] = answer;
+        u.put("report.json", &report.to_string());
+        let o = u.run(&["releases/*.json", "--dry-run"]);
+        assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+        let body = text(&o.stdout);
+        assert!(
+            body.contains(&format!(
+                "| 1.65.0 | 1.65.0: cluster-wide IDENTITY AUTHORED{cell} - |"
+            )),
+            "{body}"
+        );
+    }
+    // a report with no answer of Palette, as --no-impact writes it, keeps the cell as it was
+    let mut report = read_json(&u.dir.path().join("report.json"));
+    report["pins"][0]["bump"]
+        .as_object_mut()
+        .unwrap()
+        .remove("paletteValidation");
+    u.put("report.json", &report.to_string());
+    let o = u.run(&["releases/*.json", "--dry-run"]);
+    assert!(
+        text(&o.stdout).contains("| 1.65.0 | 1.65.0: cluster-wide IDENTITY AUTHORED | - |"),
+        "{}",
+        text(&o.stdout)
+    );
 }
 
 #[test]

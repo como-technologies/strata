@@ -10,7 +10,9 @@ route checks the packs of a cluster before an update of its profiles:
 `compare --validate` calls it. Two routes check the packs of a profile before a
 create or an update: `snapshot --validate` calls them. Two more routes check
 the name, the version, and the names of the packs and the manifests of a new
-profile: `snapshot --from-candidate --validate` calls them too.
+profile: `snapshot --from-candidate --validate` calls them too. `behind` calls
+the route of a cluster and the route of an update, to ask about the bump of a
+pin.
 
 ## POST /v1/spectroclusters/{cloudType}/validate
 
@@ -130,6 +132,16 @@ A live run shows that the route accepts the packs of the release version on
 the cluster that runs it, at the baseline. Stage 7 of `repave.sh` asks it on
 cluster A: see [repave.sh](../../development/live-runs.md#repavesh).
 
+`behind` sends this body to ask about the bump of a pin on a record of a
+cluster. The profile that holds the pin has `packValues`: its packs as the
+cluster runs them, and the pin as the newest version of the pack. Palette puts
+the sent values over the copy that the cluster holds. No live run shows yet
+what the route does with the sent tag. It can move the pack to that tag. It can
+also take the pack from the profile as it is now. In that case the route accepts
+the move, because it does not check the newest version. Stage 6 of
+`validate-packs.sh` asks it: see
+[validate-packs.sh](../../development/live-runs.md#validate-packssh).
+
 ## POST /v1/spectroclusters/{uid}/validate/repave
 
 This route says whether a change of the profiles of a cluster replaces its
@@ -228,6 +240,41 @@ The answer has the shape of the route above. A live run shows that the route
 takes a published version of a cluster profile that no cluster runs, as an
 update of itself. Stage 3 of `validate-packs.sh` asks it for a version that you
 name.
+
+### The upgrade dependency
+
+A pack can declare a dependency of the type `upgrade`. Its `maxVersion`, such as
+`+0.1`, limits the move of a cluster. These facts come from the code of Palette,
+not from a live run:
+
+- The pack validator reads the dependency of each pack of the body. It runs over
+  each cluster that runs the version.
+- For each cluster, Palette takes the version of the pack that the cluster runs.
+  It derives the highest minor version that the cluster can move to.
+- A pack of the body above that version is an error in `packs.results[]`:
+  `DependencyPackUpgradeNotSupported`. The error holds the names of the clusters.
+  The answer has a code and a message for each error, and no field for the
+  clusters, so the names are in the message.
+- The public documentation states the rule for Kubernetes: update to a newer
+  version one minor version at a time.
+
+No read route gives the dependency. The summary of a pack has no field for it.
+The `packValues[].dependencies` of `GET /v1/packs/{uid}` and of the tags route
+hold the template dependencies. They are `[]` for `kubernetes` 1.36.2 in the
+Public Repo. So strata cannot derive the limit, and asks the route.
+
+`behind` sends this route for a record of a profile version. The body is the
+body of `snapshot <ref> --validate`. The newest version of the pin, with its
+default values, replaces the pin. A pin of `kubernetes` 1.35.3, with
+1.37.0 in the registry, is a move of two minor versions. Palette refuses it on
+each cluster that runs 1.35. The pin and the registry decide whether a live
+example has such a pair.
+
+No live result yet. Stage 6 of `validate-packs.sh` asks the route for a move of
+Kubernetes by two minor versions, on a cluster that runs the profile. It needs a
+profile version that pins an older Kubernetes than the example does. The stage
+also records the text of the message, to see whether it names the clusters. See
+[validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 ## GET /v1/clusterprofiles/validate/name
 

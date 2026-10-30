@@ -218,6 +218,12 @@ decision for a person, not an error, so it is a separate job:
 {{#include output/loop-upstream.txt}}
 ```
 
+The command passes `--no-impact`, so it makes no request to a validate route.
+Without the option, the job also asks Palette whether it accepts the move to the
+newest version. The bump column of each issue then says `palette accepts`, or
+`palette refuses` with the code and the clusters. See
+[Palette accepts the move, or refuses it](./commands/behind.md#palette-accepts-the-move-or-refuses-it).
+
 ### 7. The incident
 
 A pack has a security problem. A person asks which versions carry it, in each

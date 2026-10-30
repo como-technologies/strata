@@ -2,7 +2,7 @@
 //! candidate before its create, or for a version that Palette holds as an update of itself. For a
 //! candidate, also ask whether it takes the name, the version, and the names of the packs and
 //! manifests. `compare --validate`: ask Palette whether it accepts the packs of a profile version on a
-//! cluster.
+//! cluster. `behind` asks the same routes about the bump of a pin: see the `bump` module.
 
 use serde_json::{Value, json};
 
@@ -99,30 +99,89 @@ pub fn profile_import_body(snap: &Snapshot, registries: &[Value]) -> Value {
     })
 }
 
+/// One pack in the body of the profile validate routes, a `v1PackManifestEntity`: the name, the
+/// layer, and the manifests of `p`, with the tag, the uids, the type, and the values of `content`.
+/// `content` is `p` for a pack as the record holds it.
+fn pack_entry(p: &Pack, content: &Pack) -> Value {
+    json!({
+        "name": p.name,
+        "tag": content.tag,
+        "uid": content.pack_uid,
+        "registryUid": content.registry_uid,
+        "type": content.kind,
+        "layer": p.layer,
+        "values": content.values,
+        "manifests": manifests_body(p),
+    })
+}
+
 /// The body of the profile validate routes, a `v1ClusterProfileTemplateDraft`: the `cloudType`,
 /// the `type`, and each pack of the record in profile order as a `v1PackManifestEntity`.
 pub fn profile_validate_body(snap: &Snapshot) -> Value {
-    let packs: Vec<Value> = snap
-        .packs
-        .iter()
-        .map(|p| {
-            json!({
-                "name": p.name,
-                "tag": p.tag,
-                "uid": p.pack_uid,
-                "registryUid": p.registry_uid,
-                "type": p.kind,
-                "layer": p.layer,
-                "values": p.values,
-                "manifests": manifests_body(p),
-            })
-        })
-        .collect();
+    profile_body(snap, |p| pack_entry(p, p))
+}
+
+/// [`profile_validate_body`] for the move of the packs that `is_moved` accepts to the pack `to`.
+/// A moved pack takes the version, the tag, the uids, the type, and the values of `to`, which are
+/// the defaults of that version. It keeps its layer and its manifests.
+pub(super) fn moved_profile_body(
+    snap: &Snapshot,
+    is_moved: impl Fn(&Pack) -> bool,
+    to: &Pack,
+) -> Value {
+    profile_body(snap, |p| pack_entry(p, if is_moved(p) { to } else { p }))
+}
+
+/// The body of the profile validate routes for `snap`, with `entry` for each pack.
+fn profile_body(snap: &Snapshot, entry: impl Fn(&Pack) -> Value) -> Value {
     json!({
         "cloudType": snap.source.cloud_type,
         "type": snap.source.kind,
-        "packs": packs,
+        "packs": snap.packs.iter().map(entry).collect::<Vec<Value>>(),
     })
+}
+
+/// Palette's answer to `POST validate/packs` of a profile: the errors that it gives. `uid` is the
+/// version for the route of an update, or `None` for a profile that Palette does not hold. A refusal
+/// of the whole request is an error of the answer too, with the codes of
+/// [`ValidateRoute::ProfilePacks`].
+///
+/// # Errors
+///
+/// Each error of the request that is not such a refusal.
+pub(super) fn profile_packs_answer<A: PaletteApi>(
+    palette: &Palette<A>,
+    uid: Option<&str>,
+    body: &Value,
+) -> Result<Vec<PaletteRefusal>> {
+    match palette.validate_profile_packs(uid, body) {
+        Ok(answer) => Ok(answer
+            .get("packs")
+            .map(PaletteRefusal::from_constraints)
+            .unwrap_or_default()),
+        Err(e) => whole_request_refusal(&e, ValidateRoute::ProfilePacks)
+            .map(|refusal| vec![refusal])
+            .ok_or(e),
+    }
+}
+
+/// Palette's answer to `POST validate/packs` of the cluster `uid`, for the body `body`. A refusal
+/// of the whole request is an answer too, with the codes of [`ValidateRoute::ClusterPacks`].
+///
+/// # Errors
+///
+/// Each error of the request that is not such a refusal.
+pub(super) fn cluster_packs_answer<A: PaletteApi>(
+    palette: &Palette<A>,
+    uid: &str,
+    body: &Value,
+) -> Result<PaletteValidation> {
+    match palette.validate_packs(uid, body) {
+        Ok(answer) => Ok(PaletteValidation::from_palette(uid, &answer)),
+        Err(e) => whole_request_refusal(&e, ValidateRoute::ClusterPacks)
+            .map(|refusal| PaletteValidation::refused(uid, vec![refusal]))
+            .ok_or(e),
+    }
 }
 
 /// Ask Palette whether it takes the name, the version, and the packs of a profile record.
@@ -176,15 +235,11 @@ pub(crate) fn profile_validation_in<A: PaletteApi>(
             ValidateRoute::ProfileImport,
         )?);
     }
-    match palette.validate_profile_packs(uid, &profile_validate_body(snap)) {
-        Ok(answer) => errors.extend(
-            answer
-                .get("packs")
-                .map(PaletteRefusal::from_constraints)
-                .unwrap_or_default(),
-        ),
-        Err(e) => errors.push(whole_request_refusal(&e, ValidateRoute::ProfilePacks).ok_or(e)?),
-    }
+    errors.extend(profile_packs_answer(
+        palette,
+        uid,
+        &profile_validate_body(snap),
+    )?);
     Ok(ProfileValidation::refused(errors))
 }
 
@@ -202,12 +257,7 @@ pub fn palette_validation<A: PaletteApi>(
     let (cluster, target) = cluster_and_target(a, b, "--validate")?;
     let running =
         AppliedProfile::of_cluster(&palette.subject_document(SubjectKind::Cluster, &cluster.uid)?);
-    match palette.validate_packs(&cluster.uid, &validate_body(&running, target)) {
-        Ok(answer) => Ok(PaletteValidation::from_palette(&cluster.uid, &answer)),
-        Err(e) => whole_request_refusal(&e, ValidateRoute::ClusterPacks)
-            .map(|refusal| PaletteValidation::refused(&cluster.uid, vec![refusal]))
-            .ok_or(e),
-    }
+    cluster_packs_answer(palette, &cluster.uid, &validate_body(&running, target))
 }
 
 /// The error of `snapshot --validate` when Palette refuses the record:
