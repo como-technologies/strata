@@ -36,7 +36,6 @@ rules:
       - kind: report
         ref: palette-pack-digest-findings-2026-09-25 F2
       - kind: source
-        ref: hubble services/service/packsync/internal/service/packsync/pack_service.go skipPackUpdate
         note: Helm, OCI Helm, and OCI Zarf compare the annotations alone; the other kinds compare the digest
     tests:
       - fault: fixtures/eks/helm-chart.json
@@ -72,7 +71,6 @@ rules:
       - kind: report
         ref: palette-pack-digest-findings-2026-09-25 F5
       - kind: source
-        ref: hubble services/service/packsync/internal/service/registrysync/oci/ocizarfregistry_client.go
         note: the digest comes from the tag listing of the registry, and the listing of a Docker registry gives none
     tests:
       - fault: fixtures/eks/no-digest.json
@@ -99,7 +97,6 @@ rules:
       - kind: report
         ref: palette-pack-digest-findings-2026-09-25 F6
       - kind: source
-        ref: hubble services/service/packsync/internal/service/registrysync/pack/packregistrysync_service.go GetPacks
         note: GetPacks and GetPack return no pack for a private registry
 
   - id: profile-follows-push
@@ -125,7 +122,6 @@ rules:
       - kind: run
         ref: "#81"
       - kind: source
-        ref: hubble services/service/packsync/internal/service/packsync/pack_service.go syncPack
         note: an existing pack document is updated when the skip check fails, and the profiles that keep the values of the pack follow
 
   - id: floating-tag
@@ -182,7 +178,7 @@ rules:
         ref: "#68"
         note: Palette refuses a profile that pins a disabled or a deleted version; a deprecated one records as usual
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/clusterprofile/clusterprofile_validate.go validatePackState
+        note: Palette refuses a profile that holds a pack version in a disabled or a deleted state
       - kind: doc
         ref: https://docs.spectrocloud.com/integrations/maintenance-policy/
     tests:
@@ -226,7 +222,7 @@ rules:
         ref: strata live example
         note: a profile with strata-live-pack 1.1.0 and without strata-live-dep is refused with "Pack 'strata-live-dep' is required with minimum compatible version '1.0.0'"
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/validator/pack_dependency_validator.go validatePackDependencies
+        note: Palette checks that each pack of the profiles finds the packs that it requires
       - kind: doc
         ref: https://docs.spectrocloud.com/registries-and-packs/pack-constraints/
     tests:
@@ -267,7 +263,6 @@ rules:
       text: List each missing image with its pack in the validate response, as the pack errors are listed, not as one refusal.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/base/spectrocluster_validate.go validateOciRegistry
         note: each pack of type oci gives an image (the pack name and the version) for its ECR registry, and ValidateEcrRegistriesImages asks the registry
     tests:
       - fault: fixtures/eks/ecr-image-missing.json
@@ -349,7 +344,6 @@ rules:
       text: Remove the password from the log line.
     evidence:
       - kind: source
-        ref: palette pkg/pack/pack.go
         note: "the log line `downloading zarf localPath ..., password: ...` is there since d09668ad1, 2023-02-04"
       - kind: report
         ref: palette-pack-digest-findings-2026-09-25 F7
@@ -378,7 +372,6 @@ rules:
       text: Pass the key to the deploy of an OCI package, or refuse a key that the deploy cannot use.
     evidence:
       - kind: source
-        ref: palette pkg/atop/zarf_atop.go DeployPackage
         note: the key goes to --sget alone; the checksum check is off when the value is empty
       - kind: report
         ref: palette-pack-digest-findings-2026-09-25 F5
@@ -406,7 +399,6 @@ rules:
       text: Refuse an oci:// endpoint at registry create, and name the OCI registry kind.
     evidence:
       - kind: source
-        ref: hubble services/service/packsync/internal/service/registrysync/helm/helmregistry_client.go
         note: the index is read at <endpoint>/index.yaml; downloadHelmChartFromUrl reads oci:// for the URL of a chart alone
 
   - id: registry-sync-delay
@@ -523,7 +515,6 @@ rules:
       text: Read the boot resources of MAAS in the validate route, through the PCG.
     evidence:
       - kind: source
-        ref: palette pkg/provider/maas/maas_image.go ubuntuBaseImage, ensureImage, readBYOSValues
         note: u-1804 bionic, u-2004 focal, u-2204 jammy, u-2404 noble; hasSyncedBaseImage needs Type Synced; the BYOS values are pack.osImageOverride, pack.osName, pack.osVersion
       - kind: doc
         ref: https://docs.spectrocloud.com/integrations/generic-byoi/
@@ -548,8 +539,8 @@ rules:
       such as `r_u-2204-0-k-1294-0`, in the image template folder (`spectro-templates` by default).
       When it is not there, the PCG downloads the OVA from the image host of the Palette instance
       and imports it as a template. So the PCG needs egress to `s3.amazonaws.com` on 443. The docs
-      name `vmwaregoldenimage-console.s3.amazonaws.com`; the hubble test config names
-      `vmwaregoldenimage.s3.amazonaws.com`; a system setting holds the host. Hubble only logs a
+      name `vmwaregoldenimage-console.s3.amazonaws.com`; a test config of Palette names
+      `vmwaregoldenimage.s3.amazonaws.com`; a system setting holds the host. Palette only logs a
       warning when the URL does not answer. No CLI on this machine reaches vCenter with the account
       of the world, so the rule has no check; the reproduce lines use `govc` with the vCenter
       credentials.
@@ -561,10 +552,8 @@ rules:
       text: Check the template, or the URL of the OVA, in the validate route, and fail on a URL that does not answer.
     evidence:
       - kind: source
-        ref: palette pkg/provider/vsphere/govmomi_deploy_ova.go GovmomiDeployOVA
         note: templateName r_<name>; the folder defaults to spectro-templates; the OVA streams from the URL through the PCG
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/vsphere/spectrocluster_vsphere_image.go resolveVsphereImage
         note: <imagesHostEndpoint>/<name>.ova; a URL that does not exist logs a warning
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/

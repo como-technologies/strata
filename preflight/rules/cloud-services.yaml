@@ -126,7 +126,6 @@ rules:
       text: Compare the region of the entity with the enabled regions in the AWS validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go getEnabledRegions
         note: one DescribeRegions dry run for each region of the partition; the list holds the regions that answer
     tests:
       - fault: fixtures/eks/region-not-enabled.json
@@ -154,10 +153,8 @@ rules:
       text: Try the bucket in the validate route, or call the S3 validate route at create.
     evidence:
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsS3Bucket
         note: lists the objects of the bucket; no cluster path calls it
       - kind: source
-        ref: palette pkg/provider/aws/aws_presetup.go
         note: "`template.Spec.S3Buckets.Enable = true` with an empty name prefix, for IRSA on an IaaS cluster"
 
   - id: eks-fargate-govcloud
@@ -182,7 +179,6 @@ rules:
       text: Refuse a Fargate profile for an account of partition aws-us-gov in the validate route.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_presetup.go
         note: "`disableEksFargate := account.GetPartition().IsGovCloud()`, then `template.Spec.EKS.Fargate.Disable = disableEksFargate`"
       - kind: doc
         ref: https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/govcloud-fargate.html
@@ -221,10 +217,8 @@ rules:
       text: Run the region check in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/spectrocluster_service.go validateAzureOrAksClusterCreate
         note: IsValidRegion(CloudTypeAzure, location) on the create path alone; CloudRegionInvalid
       - kind: source
-        ref: hubble services/service/cloud/internal/gen/restapi/embedded_spec.go /v1/clouds/azure/regions
         note: query cloudAccountUid and subscriptionId; the answer is regions[{name, displayName, zones}]
     tests:
       - fault: fixtures/azure/location-unknown.json
@@ -266,10 +260,8 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/architecture/
         note: Azure cluster resources are placed within an existing Resource Group
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/azure_service.go getResourceGroupListInternal
         note: lists every group of the subscription and keeps the ones whose location is the region
       - kind: source
-        ref: palette pkg/provider/azure/azure_sdk.go AzureCopyImage
         note: the storage account of the image is made in cloudConfig.resourceGroup
     tests:
       - fault: fixtures/azure/rg-missing.json
@@ -322,7 +314,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/aks/
         note: both subscriptions must have the Microsoft.ContainerService resource provider registered, for a private DNS zone in another subscription
       - kind: source
-        ref: palette pkg/provider/azure/azure_presetup.go SetUpCloud
         note: returns nil; no provider is registered or read
     tests:
       - fault: fixtures/azure/provider-unregistered.json

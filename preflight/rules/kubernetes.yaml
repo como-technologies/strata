@@ -43,7 +43,7 @@ rules:
       - kind: report
         ref: palette-gke-release-channel-findings-2026-09-28
       - kind: source
-        ref: palette pkg/provider/gcp/gcp_managed.go getDesiredManagedControlPlane
+        note: Palette sets the release channel of the GKE control plane from the cluster config
     tests:
       - fault: fixtures/gke/no-channel.json
         clean: fixtures/gke/clean.json
@@ -109,7 +109,6 @@ rules:
       text: Call getServerConfig in the GKE validate route, and refuse a version the channel does not offer.
     evidence:
       - kind: source
-        ref: palette pkg/provider/gcp/gcp_managed.go getLatestGKEVersion, latestVersionInChannel, effectiveGKEReleaseChannel
         note: a prefix match on major.minor in the channel, then in validMasterVersions; ErrNoCompatibleGKEVersion when none
     tests:
       - fault: fixtures/gke/version-not-offered.json
@@ -161,7 +160,6 @@ rules:
       - kind: doc
         ref: https://docs.aws.amazon.com/eks/latest/APIReference/API_DescribeClusterVersions.html
       - kind: source
-        ref: palette pkg/provider/aws/aws_managed.go getDesiredManagedControlPlane
         note: the version of the pack goes to the AWSManagedControlPlane as it is
     tests:
       - fault: fixtures/eks/version-not-offered.json
@@ -221,7 +219,6 @@ rules:
       text: Ask eks:DescribeAddonVersions in the EKS validate route, for each addon and for the pod identity agent.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_managed.go getDefaultEKSAddonVersion
         note: called for eks-pod-identity-agent when the account is Pod Identity; picks the version whose compatibility says defaultVersion
     tests:
       - fault: fixtures/eks/addon-no-default.json
@@ -260,8 +257,7 @@ rules:
       text: Refuse a cloud-provider setting that does not match the version in the validate route.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/consts.go MinK8sVersionForCCMAWS, pkg/provider/gcp/consts.go MinK8sVersionForCCMGCP
-        note: v1.27.0 and v1.29.0; aws_kubeadm.go sets cloud-provider external at or above the floor, aws_pivot.go installs the CCM
+        note: v1.27.0 and v1.29.0; Palette sets cloud-provider external at or above the floor, and installs the CCM at the pivot
     tests:
       - fault: fixtures/aws/k8s-1-26.json
         clean: fixtures/aws/clean.json
@@ -353,7 +349,6 @@ rules:
       - kind: run
         ref: "#73"
       - kind: source
-        ref: hubble domain/spectroclusterrepave.go ClusterRepaveReasonCode
         note: PackValuesUpdated, PackRemoved, PackAdded, PackUpgraded
     tests:
       - fault: fixtures/eks/repave-k8s-bump.json
@@ -459,7 +454,6 @@ rules:
       - kind: run
         ref: "#73"
       - kind: source
-        ref: hapi models/v1_machine_pool_config_entity.go SkipK8sUpgrade
         note: an enum of enabled and disabled on each pool config
     tests:
       - fault: fixtures/eks/skip-upgrade.json

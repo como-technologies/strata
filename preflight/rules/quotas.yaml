@@ -236,7 +236,7 @@ rules:
         ref: preflight-plan eks 20260929T042910Z
         note: the EKS route answered 200 with no pool error for one t3.xlarge worker; the aws route answers MachinePoolWithMinCpuRequired for the same pool
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/base/cloudconfig_base_service.go ValidateMachineResources
+        note: Palette checks the resources of the machines against what the packs need
     tests:
       - fault: fixtures/eks/validate-cpu.json
         clean: fixtures/eks/clean.json
@@ -261,7 +261,6 @@ rules:
       - kind: run
         ref: teardown lab
       - kind: source
-        ref: hubble svcclient/converter/v1/cluster_converter.go ValidateResourceLimit
         note: "`ShouldBeEqOrGreaterThan(\"cpu limit (cores)\", 3, cpu)`, and the memory limit between 3 and 100000 GiB"
 
   - id: azure-vcpu-quota
@@ -316,7 +315,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/create-azure-cluster/
         note: ensure there is sufficient capacity in the preferred Azure region for vCPUs, VNets, and public IP addresses
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/azure/spectrocluster_azure.go ValidateCreateCluster
         note: name, reserved tags, instance type lookup, and profiles; no quota
     tests:
       - fault: fixtures/azure/vcpu-quota-low.json
