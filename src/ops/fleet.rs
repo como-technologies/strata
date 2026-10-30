@@ -18,7 +18,7 @@ use crate::snapshot::{Snapshot, Tool};
 use crate::term::progress::Progress;
 
 use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
-use crate::json::{arr, first_nonempty, items, str_at, strings, text};
+use crate::json::{arr, first_nonempty, flag, items, str_at, strings, text};
 
 use super::scope_of;
 
@@ -210,7 +210,7 @@ fn filter_of(doc: &Value, name: &str, uid: &str) -> SavedFilter {
         .map(|f| TagCondition {
             key: text(f, "/key"),
             values: strings(f, "/values"),
-            negation: f.get("negation").and_then(Value::as_bool).unwrap_or(false),
+            negation: flag(f, "/negation"),
         })
         .collect();
     SavedFilter {

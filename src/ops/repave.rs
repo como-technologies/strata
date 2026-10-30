@@ -12,7 +12,7 @@ use crate::api::{Palette, PaletteApi};
 use crate::cluster_template::ClusterTemplateRef;
 use crate::diff::{ImpactLevel, PaletteRepave};
 use crate::error::{Error, Result};
-use crate::json::arr;
+use crate::json::{arr, opt_str};
 use crate::profile_type::ProfileType;
 use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind};
 
@@ -113,10 +113,8 @@ pub(super) fn cluster_and_target<'a>(
 /// the cluster route, with no pack values. `isUpgradeNow` is false: when it is true, Palette
 /// ignores the profiles of the request and uses the profiles of the template.
 fn template_body(body: &Value) -> Value {
-    let profiles: Vec<Value> = body["profiles"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let profiles: Vec<Value> = arr(body, "/profiles")
+        .iter()
         .map(|p| json!({"uid": p["uid"]}))
         .collect();
     json!({"profiles": profiles, "isUpgradeNow": false})
@@ -181,7 +179,7 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
     let running_names: BTreeSet<&str> = templates
         .iter()
         .flat_map(|t| arr(t, "/packs"))
-        .filter_map(|p| p["name"].as_str())
+        .filter_map(|p| opt_str(p, "/name"))
         .collect();
     let new_packs: Vec<&Pack> = pending
         .packs
@@ -274,10 +272,8 @@ pub fn palette_repave<A: PaletteApi>(
         let answer = palette.validate_repave(&cluster.uid, &body)?;
         return Ok(PaletteRepave::from_palette(&cluster.uid, &answer, level));
     };
-    let has_pack_values = body["profiles"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let has_pack_values = arr(&body, "/profiles")
+        .iter()
         .any(|p| p.get("packValues").is_some());
     if has_pack_values {
         return Err(Error::Usage {

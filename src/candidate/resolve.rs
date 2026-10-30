@@ -13,7 +13,7 @@ use super::{
 use crate::api::{Palette, PaletteApi, RawProfile};
 use crate::closed_set::ClosedSet;
 use crate::error::{Error, Result};
-use crate::json::{arr, opt_text, str_at, strings, text};
+use crate::json::{arr, opt_str, opt_text, str_at, strings, text};
 use crate::pack_type::PackType;
 use crate::registry::{Registries, pack_type_of, registry_layer, retired_state};
 use crate::snapshot::PresetOption;
@@ -375,10 +375,7 @@ pub(crate) fn resolve_with<A: PaletteApi>(
         preset_options.push(resolved.preset_options);
     }
     // each pack reference has the layer that Palette gives the pack, so check the layers again
-    let known: Vec<Option<&str>> = refs
-        .iter()
-        .map(|r| r.get("layer").and_then(Value::as_str))
-        .collect();
+    let known: Vec<Option<&str>> = refs.iter().map(|r| opt_str(r, "/layer")).collect();
     gaps::check_layers(c, &known).map_err(|broken| broken.at(&loaded.path))?;
     let raw = RawProfile {
         profile: json!({
