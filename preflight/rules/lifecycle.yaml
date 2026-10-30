@@ -245,11 +245,11 @@ rules:
             | "pool \($n): \($f | join(", ")) changed; on \($cloud) that \($effect)" ]
     evidence:
       - kind: source
-        note: DiskSize, InstanceType, SubnetIDs, RemoteAccess, CapacityType, RoleName, AWSLaunchTemplate
+        note: "these fields of the AWS managed machine pool make a new node group: diskSize, instanceType, subnetIDs, remoteAccess, capacityType, roleName, awsLaunchTemplate"
       - kind: source
         note: Palette replaces the machines of a pool when a fixed field of the pool changes
       - kind: source
-        note: InstanceType, SSHKeyName, RootVolume.Size, AMI.ID, SpotMarketOptions.MaxPrice, AdditionalSecurityGroups, Tenancy
+        note: "these fields of the AWS machine make a new machine: instanceType, sshKeyName, rootVolume.size, ami.id, spotMarketOptions.maxPrice, additionalSecurityGroups, tenancy"
     tests:
       - fault: fixtures/eks/disk-change.json
         clean: fixtures/eks/type-same.json
@@ -267,7 +267,7 @@ rules:
       These fields of `cloudConfig` are fixed at the create. AWS: `region`, `vpcId`,
       `bastionDisabled`. EKS: `region`, `vpcId`, `encryptionConfig`. GKE: `project`, `region`,
       `network`, `managedClusterConfig`. Palette stores a new `region`, `vpcId`, and
-      `bastionDisabled` in the cloud config (`UpdateClusterConfig`), and copies `encryptionConfig`
+      `bastionDisabled` in the cloud config, and copies `encryptionConfig`
       only when `isEnabled` is true: a disable is dropped. No source shows that the controller
       applies a stored change to a built cluster, and a VPC or a region cannot move under running
       instances. No run shows what the cluster does with the stored value, so the status is
@@ -436,8 +436,8 @@ rules:
       `spectroComponentsUpgradeForbidden=true` on the cluster document. `POST
       /v1/spectroclusters/{uid}/upgrade/settings` with `spectroComponents: lock` sets it, and
       `unlock` removes it. The teardown notes of the lab say a cluster with the setting on can
-      stay in `Deleting`, and a resume with a second delete moves it. Palette stores
-      and reads the annotation, and shows no delete path that tests it, so the status is inferred.
+      stay in `Deleting`, and a resume with a second delete moves it. Palette stores the
+      annotation, and no delete of Palette reads it, so the status is inferred.
       `spec.clusterConfig.lifecycleConfig.pause` is another setting, the pause of the cluster, not
       this one.
     check:

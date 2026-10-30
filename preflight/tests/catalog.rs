@@ -10,7 +10,7 @@ use strata_preflight::catalog;
 use strata_preflight::fixture;
 use strata_preflight::jq::Jq;
 use strata_preflight::probe::{self, FixtureBackend, Verdict};
-use strata_preflight::rule::{Check, Rule};
+use strata_preflight::rule::{Check, Evidence, Rule};
 
 fn verdict(rule: &Rule, fixture_path: &Path, jq: &Jq) -> (Verdict, Vec<String>) {
     let doc = fixture::load(fixture_path)
@@ -123,7 +123,8 @@ fn the_rules_of_the_capa_stack_name_what_aws_refuses() {
     }
 }
 
-/// Rule 7 of the book: a rule states what Palette does, and names no file of the Palette code.
+/// Rule 7 of the book: a rule states what Palette does, and names no file or code of Palette.
+/// Each name is a whole word: `hapi` is not a hit in "shaping".
 const PALETTE_CODE: [&str; 6] = [
     "hubble",
     "hapi",
@@ -132,6 +133,19 @@ const PALETTE_CODE: [&str; 6] = [
     "optic src/",
     "pkg/",
 ];
+
+/// True when `line` holds `name` as a whole word. A side of `name` that is a letter or a digit
+/// must not touch a letter or a digit of `line`.
+fn names_a_word(line: &str, name: &str) -> bool {
+    let word = |c: char| c.is_ascii_alphanumeric();
+    line.match_indices(name).any(|(at, _)| {
+        let before = line[..at].chars().next_back();
+        let after = line[at + name.len()..].chars().next();
+        let (first, last) = (name.chars().next(), name.chars().next_back());
+        !(first.is_some_and(word) && before.is_some_and(word))
+            && !(last.is_some_and(word) && after.is_some_and(word))
+    })
+}
 
 /// True when `line` names a Go source file: `.go` with no letter or digit after it.
 fn names_a_go_file(line: &str) -> bool {
@@ -149,7 +163,7 @@ fn no_rule_names_a_file_of_the_palette_code() {
     for (name, text) in catalog::SECTIONS {
         for (n, line) in text.lines().enumerate() {
             let lower = line.to_lowercase();
-            if PALETTE_CODE.iter().any(|m| lower.contains(m)) || names_a_go_file(&lower) {
+            if PALETTE_CODE.iter().any(|m| names_a_word(&lower, m)) || names_a_go_file(&lower) {
                 found.push(format!("{name}.yaml:{}: {}", n + 1, line.trim()));
             }
         }
@@ -159,6 +173,163 @@ fn no_rule_names_a_file_of_the_palette_code() {
         "rules that name the Palette code:\n{}",
         found.join("\n")
     );
+}
+
+/// Dotted names that a cloud defines and that are not Go: an Azure resource provider, and an AWS
+/// error code with its reason.
+const CLOUD_NAMES: [&str; 2] = ["Microsoft.", "InvalidAMIID.NotFound"];
+
+/// True when `text` has a Go selector or call such as `pool.Validate(`: a name, a dot, and a name
+/// that starts with a capital letter. A jq path starts with a dot, so `.stdout.Images` is not one.
+/// A name in `CLOUD_NAMES` is not Go.
+fn has_go_selector(text: &str) -> bool {
+    text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '.'))
+        .filter(|token| !token.starts_with('.'))
+        .filter(|token| !CLOUD_NAMES.iter().any(|n| token.starts_with(n)))
+        .any(|token| {
+            let mut parts = token.split('.').filter(|p| !p.is_empty());
+            parts.next();
+            parts.any(|p| p.starts_with(|c: char| c.is_ascii_uppercase()))
+        })
+}
+
+/// True when `text` has a line of Go in a comment: `//` and a letter with no space between. A
+/// URL has a colon before `//`, and the jq operator `//` has a space on each side.
+fn has_commented_go(text: &str) -> bool {
+    text.match_indices("//").any(|(at, _)| {
+        !text[..at].ends_with([':', '/'])
+            && text[at + 2..]
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic())
+    })
+}
+
+/// True when `text` has a commit id: 7 to 40 lower-case hex digits, with a digit and a letter among
+/// them. A quota code such as `L-1216C47A` has capital letters, so it is not one.
+fn has_commit_id(text: &str) -> bool {
+    text.split(|c: char| !c.is_ascii_alphanumeric()).any(|w| {
+        (7..=40).contains(&w.len())
+            && w.chars()
+                .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+            && w.chars().any(|c| c.is_ascii_digit())
+            && w.chars().any(|c| c.is_ascii_lowercase())
+    })
+}
+
+/// True when `text` has a call of a Go function with no selector, such as `CheckPool(`: a name
+/// that starts with a capital letter, and `(` right after it.
+fn has_go_call(text: &str) -> bool {
+    text.match_indices('(').any(|(at, _)| {
+        let reversed: String = text[..at]
+            .chars()
+            .rev()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        reversed
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_ascii_uppercase())
+    })
+}
+
+/// The form of Go code that a text of a rule holds, if it holds one. The texts are `what`, the
+/// `text` of `fix`, and each `note`. The `check` field is jq and is not read here: jq has `!=` and
+/// `.field`.
+fn go_code_in(text: &str) -> Option<&'static str> {
+    if has_go_selector(text) || has_go_call(text) {
+        Some("a Go selector or call")
+    } else if text.contains(":=") {
+        Some("a Go assignment")
+    } else if has_commented_go(text) {
+        Some("a commented-out Go line")
+    } else if has_commit_id(text) {
+        Some("a commit id")
+    } else {
+        None
+    }
+}
+
+/// One line for each text of `rule` that holds Go code: the `what`, the `text` of the fix, and
+/// each `note`.
+fn quoted_go_code(rule: &Rule) -> Vec<String> {
+    let fix = rule.fix.iter().map(|f| ("fix", f.text.as_str()));
+    let notes = rule.evidence.iter().map(|e| ("note", e.note.as_str()));
+    std::iter::once(("what", rule.what.as_str()))
+        .chain(fix)
+        .chain(notes)
+        .filter_map(|(field, text)| {
+            go_code_in(text).map(|form| format!("{}: {field} has {form}: {text}", rule.id))
+        })
+        .collect()
+}
+
+#[test]
+fn no_what_fix_or_note_text_quotes_go_code() {
+    let catalog = catalog::builtin().unwrap();
+    let found: Vec<String> = catalog.rules().flat_map(quoted_go_code).collect();
+    assert!(
+        found.is_empty(),
+        "texts that quote Go code:\n{}",
+        found.join("\n")
+    );
+}
+
+#[test]
+fn the_go_code_test_refuses_a_bad_note_of_each_form() {
+    let catalog = catalog::builtin().unwrap();
+    let clean = catalog.rules().next().unwrap();
+    assert!(quoted_go_code(clean).is_empty(), "{}", clean.id);
+    for (form, bad) in [
+        (
+            "a Go selector or call",
+            "`pool.Resolve(spec)` runs on each pool",
+        ),
+        (
+            "a Go selector or call",
+            "reads cfg.Spec.Region when it is empty",
+        ),
+        (
+            "a Go selector or call",
+            "Run CheckPool in the validate route; CheckPool(spec) fails",
+        ),
+        ("a Go assignment", "`found := lookup(id)`, then it returns"),
+        ("a commented-out Go line", "//if limit > 3 is commented out"),
+        (
+            "a commit id",
+            "the line is there since 1a2b3c4d5, 2020-01-01",
+        ),
+    ] {
+        let mut rule = clean.clone();
+        rule.evidence = vec![Evidence {
+            kind: "source".to_string(),
+            reference: String::new(),
+            note: bad.to_string(),
+        }];
+        let found = quoted_go_code(&rule);
+        assert_eq!(found.len(), 1, "{bad}: {found:?}");
+        assert!(found[0].contains(form), "{bad}: {found:?}");
+        rule.evidence.clear();
+        rule.what = bad.to_string();
+        assert_eq!(quoted_go_code(&rule).len(), 1, "{bad}");
+    }
+}
+
+#[test]
+fn the_go_code_test_passes_jq_and_prose_and_the_names_of_a_cloud() {
+    for good in [
+        "`.exec.stdout.Images` is empty, and `.before != null` holds",
+        "reads `.a // \"x\"` and `pack.podCIDR` at https://docs.example.com/page",
+        "Palette lists no pack. The sync reads kubernetes.io and s3.amazonaws.com",
+        "the image 20260929T041905Z and the version v1.27.0 stay",
+        "the key type ED25519 and the quota L-1216C47A for Microsoft.Compute",
+        "EC2 answers InvalidAMIID.NotFound for the image",
+    ] {
+        assert_eq!(go_code_in(good), None, "{good}");
+    }
+    assert!(names_a_word("the hapi server", "hapi"));
+    assert!(!names_a_word("the shaping of a pool", "hapi"));
+    assert!(names_a_word("see pkg/util", "pkg/"));
 }
 
 #[test]

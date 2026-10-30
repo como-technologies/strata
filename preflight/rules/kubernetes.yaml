@@ -20,8 +20,8 @@ rules:
       cluster in no channel for a new customer. The status says "control plane nodes addition done";
       GCP refuses `CreateCluster` every 3 seconds, and only the events name it. The cluster-level
       passthrough `overrideClusterAPIConfig` with `gcpManagedControlPlane.spec.releaseChannel` sets
-      one. The fix on master (a080d5f6e) sets a default channel; the range of this rule ends at the
-      release that carries it.
+      one. A later fix sets a default channel; the range of this rule ends at the release that
+      carries it.
     check:
       kind: static
       expr: |
@@ -30,7 +30,7 @@ rules:
         else ["no release channel: set overrideClusterAPIConfig to gcpManagedControlPlane.spec.releaseChannel: regular (or rapid, stable)"] end
     fix:
       owner: palette
-      text: Backport a080d5f6e, 06665cadd, and 52dc97037 to the 4.10 line.
+      text: Backport the three fixes of the default channel to the 4.10 line.
     reproduce:
       - "gcloud logging read 'protoPayload.methodName=\"google.container.v1.ClusterManager.CreateCluster\" severity>=WARNING' --project {{ .entity.spec.cloudConfig.project }} --freshness=1h --limit 3 --format='value(timestamp,protoPayload.status.message)'"
     evidence:
@@ -109,7 +109,7 @@ rules:
       text: Call getServerConfig in the GKE validate route, and refuse a version the channel does not offer.
     evidence:
       - kind: source
-        note: a prefix match on major.minor in the channel, then in validMasterVersions; ErrNoCompatibleGKEVersion when none
+        note: Palette matches major.minor against the versions of the channel, then against validMasterVersions, and gives an error when none matches
     tests:
       - fault: fixtures/gke/version-not-offered.json
         clean: fixtures/gke/gke-version-not-offered-clean.json
@@ -233,8 +233,7 @@ rules:
     when: ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s") ] | length) > 0
     what: |
       Palette runs the external cloud controller manager from Kubernetes 1.27 on AWS and from 1.29
-      on GCP: `MinK8sVersionForCCMAWS` is `v1.27.0` and `MinK8sVersionForCCMGCP` is `v1.29.0` in
-      the source. Under the floor, the provider keeps the in-tree cloud provider and installs no
+      on GCP. Under the floor, the provider keeps the in-tree cloud provider and installs no
       controller. A pack under the floor whose values set `cloud-provider: external` then leaves
       each node with the taint `node.cloudprovider.kubernetes.io/uninitialized`, and no pod
       schedules. The floors are the source; the taint is a reading, and no run shows it.

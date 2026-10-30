@@ -153,7 +153,7 @@ rules:
       text: Check the key policy, not only the key, in the validate route.
     evidence:
       - kind: source
-        note: the EKS validate calls ValidateAwsKmsKey when encryptionConfig.isEnabled
+        note: the EKS validate route of Palette checks the KMS key when encryptionConfig.isEnabled
       - kind: source
         note: GET /v1/clouds/aws/regions/{region}/kmskeys/validate?cloudAccountUid=&keyArn= answers 204
     tests:
@@ -205,7 +205,7 @@ rules:
     when: ([ (.profiles // [])[] | .packs[] | select(.layer == "csi") ] | length) > 0
     what: |
       GKE runs its own Persistent Disk CSI driver. Palette does nothing for the CSI layer of a GKE
-      cluster: `ReconcileDefaultCSI` of the GCP provider returns at once. The `gke-csi-gcp-driver`
+      cluster: the step of the GCP provider for the default CSI returns at once. The `gke-csi-gcp-driver`
       pack is the placeholder for that. Another CSI pack installs a second driver next to the
       built-in one, or fails. This is a reading of the source, not a run.
     check:
@@ -344,7 +344,7 @@ rules:
       text: Fail the build when a named storage account is missing, instead of the fallback.
     evidence:
       - kind: source
-        note: checkIfStorageAccountPresent with the custom name, then toHashName, then createStorageAccount; no error for a missing custom account
+        note: Palette looks for the custom storage account. When it finds none, Palette makes an account with a hash name, and gives no error
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/create-azure-cluster/
         note: to use custom storage accounts or containers, you must create them before you create your cluster

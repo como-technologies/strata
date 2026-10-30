@@ -140,7 +140,7 @@ rules:
       text: Read the account IMDS defaults in the validate route, and warn when the hop limit is 1.
     evidence:
       - kind: source
-        note: panics with UnsupportedAmiType when the type is not in domain.AmiTypes()
+        note: Palette returns UnsupportedAmiType for an AMI type that is not in its list of types
       - kind: source
         note: the three AL2023 types; AL2 stays only for clusters that exist
       - kind: doc
@@ -161,8 +161,8 @@ rules:
     when: |
       [ .entity.spec.machinepoolconfig[] | .cloudConfig.awsLaunchTemplate.ami.id // "" | select(. != "") ] | length > 0
     what: |
-      A pool with `awsLaunchTemplate` makes CAPA write an EC2 launch template for the node group,
-      and Palette sets `enableAwsLaunchTemplate`. An AMI id that is not in the region, or not
+      A pool with `awsLaunchTemplate` makes CAPA write an EC2 launch template for the node group.
+      An AMI id that is not in the region, or not
       `available`, fails the node group after the control plane is up. EC2 answers
       `InvalidAMIID.NotFound`, and the node group is `CREATE_FAILED`. Palette copies the template
       and checks no field of it. With no AMI id,
@@ -201,7 +201,7 @@ rules:
       text: Describe the AMI of the launch template in the validate route.
     evidence:
       - kind: source
-        note: "`if e.CloudConfig.AwsLaunchTemplate != nil { EnableAwsLaunchTemplate = true }`; ToAwsLaunchTemplate copies the fields and checks none"
+        note: Palette uses the launch template of a pool that has awsLaunchTemplate; it copies the fields of the template and checks none
       - kind: doc
         ref: https://cluster-api-aws.sigs.k8s.io/topics/eks/pod-networking
     tests:
@@ -304,7 +304,7 @@ rules:
       text: Move the image lookup from after the create into the validate route.
     evidence:
       - kind: source
-        note: builds the name with GetImageName, calls GetAwsImage in the region, and sets the image condition to Failure after the retries
+        note: Palette builds the image name from the pack annotations and asks EC2 for it in the region. It sets the image condition to Failure after the retries
       - kind: source
         note: reads the image id from the pack ref annotation, or from the pack annotations imageId and imageOwner
     tests:
@@ -568,7 +568,7 @@ rules:
       text: Run the system pool checks in the AKS validate route.
     evidence:
       - kind: source
-        note: AksMissingSystemPool when no pool is a system pool; domain.ValidateAksMachinePools for the OS type and the taints
+        note: Palette returns AksMissingSystemPool when no pool is a system pool, and checks the OS type and the taints of a system pool
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/aks/
         note: at least one system node pool; a system pool must have at least one node; system node pools are always Linux
@@ -659,8 +659,8 @@ rules:
     severity: fail
     status: source
     what: |
-      The converter dereferences `resourcePool` and the three fields of `instanceType` with no nil
-      check. A pool without them fails the create with a server error, not a 400. The create
+      A pool without `resourcePool`, or without the three fields of `instanceType`, fails the
+      create with a server error, not a 400. The create
       refuses a pool with no availability zone (`AvailabilityZoneRequired`) after the cluster
       document exists; the validate route does not. The check reads the three fields of each pool.
     check:
@@ -672,10 +672,10 @@ rules:
             ( if (($c.azs // []) | length) == 0 then "pool \($p) names no availability zone: the create fails with AvailabilityZoneRequired after the validate route passed" else empty end ) ]
     fix:
       owner: palette
-      text: Check the three fields in the validate route, and guard the nil pointers in the converter.
+      text: Check the three fields in the validate route, and refuse a pool without them with a 400.
     evidence:
       - kind: source
-        note: "*e.CloudConfig.ResourcePool and e.CloudConfig.InstanceType.MinCPU with no nil guard"
+        note: a pool with no resource pool or no instance type fails the create with a server error
       - kind: source
         note: AvailabilityZoneRequired on the create path
     tests:
@@ -768,7 +768,7 @@ rules:
     status: source
     what: |
       An edge-native cluster has no cloud account; its machines are the registered hosts it names
-      by uid. A uid that is not in the project fails the create at `AssociateEdgeHostDevice`. A
+      by uid. A uid that is not in the project fails the create. A
       host that is part of another cluster is refused with `EdgeHostDeviceAlreadyInUse`. The
       validate route reads neither. `GET /v1/edgehosts/{uid}` gives `status.state` and
       `status.inUseClusters`; the check reads the first host of the first pool. A check of every
@@ -779,7 +779,7 @@ rules:
       path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
       expr: |
         (.entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid) as $u
-        | if (.response.ok | not) then ["edge host \($u) is not registered in this project: \(.response.body.code // .response.status): \(.response.body.message // ""); the create fails at AssociateEdgeHostDevice"]
+        | if (.response.ok | not) then ["edge host \($u) is not registered in this project: \(.response.body.code // .response.status): \(.response.body.message // ""); the create fails"]
           else (.response.body.status // {}) as $s | ([ ($s.inUseClusters // [])[] | .name // .uid ]) as $used
             | if ($used | length) > 0 then ["edge host \($u) (\(.response.body.metadata.name // "")) is \($s.state // "?") and part of cluster(s) \($used | join(", ")): Palette refuses it with EdgeHostDeviceAlreadyInUse"] else [] end
           end
@@ -807,8 +807,8 @@ rules:
     status: source
     what: |
       The console offers hosts in the `ready` state with a `healthy` report. Palette accepts an
-      `unpaired` host and does not read the health at create: both checks are in the source and
-      commented out. The build then waits for an agent that does not report. Palette marks the
+      `unpaired` host at the create, and does not read the health. The build then waits for an
+      agent that does not report. Palette marks the
       health stale after 5 minutes without a report. The check reads the first host of the first
       pool; the reproduce line of `edge-host-in-use` loops over every host.
     check:
@@ -824,10 +824,10 @@ rules:
           end
     fix:
       owner: palette
-      text: Turn the two commented checks of ValidateEdgeHostDevice back on, in the validate route.
+      text: Refuse a host that is not ready, or not healthy, in the validate route.
     evidence:
       - kind: source
-        note: "//if !device.IsEdgeHostHealthy() and //if device.Status.State != domain.EdgeHostReady are commented out"
+        note: Palette accepts a host that is not ready at the create, and does not read the health of a host
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/edge-host-view/
         note: "Ready means the host is ready to be assigned; health is Healthy or Unhealthy"
@@ -862,10 +862,10 @@ rules:
       - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -r '[.metadata.uid, .spec.device.archType] | @tsv'; done"
     fix:
       owner: palette
-      text: Run ValidateEdgeHostArchType in the validate route.
+      text: Run the architecture check of the create in the validate route.
     evidence:
       - kind: source
-        note: eh.GetArchType() != archType for each host of the pool; an empty value is amd64
+        note: Palette compares the architecture of each host of the pool with the architecture of the pool; an empty value is amd64
     tests:
       - fault: fixtures/edge/host-arm64.json
         clean: fixtures/edge/clean.json
@@ -931,7 +931,7 @@ rules:
           + ([ $hosts | map(select(.name != "")) | group_by(.name)[] | select(length > 1) | "host name \(.[0].name) is used by \(length) hosts: Palette refuses it with DuplicateHostName" ])
     fix:
       owner: palette
-      text: Run isMachinePoolEdgeHostDuplicated and validateHostNameDuplication in the validate route.
+      text: Run the two duplicate checks of the create in the validate route.
     evidence:
       - kind: source
         note: Palette refuses an edge host that is in two pools, and a host name that is used two times

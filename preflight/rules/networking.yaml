@@ -95,8 +95,8 @@ rules:
     what: |
       For dynamic placement (no vpcId) Palette makes the VPC with 10.0.0.0/16. A pod CIDR or a
       service CIDR of the Kubernetes pack inside it breaks the routes of the nodes. Palette checks
-      the CIDRs against the VPC for static placement alone: `validatePackValues` returns at once
-      when vpcId is empty. The check reads `pack.podCIDR` and `pack.serviceClusterIpRange`, or the
+      the CIDRs against the VPC for static placement alone, and skips the check when vpcId is
+      empty. The check reads `pack.podCIDR` and `pack.serviceClusterIpRange`, or the
       kubeadm `networking.podSubnet` and `serviceSubnet`, of the Kubernetes pack.
     when: (.profiles | length) > 0
     check:
@@ -118,7 +118,7 @@ rules:
       text: Run the CIDR check against 10.0.0.0/16 for dynamic placement too.
     evidence:
       - kind: source
-        note: '"no validation for dynamic placement" when vpcId is empty; validateK8SCidr tests the VPC CIDR against pack.podCIDR and pack.serviceClusterIpRange'
+        note: Palette skips the CIDR check when vpcId is empty; for static placement it tests the VPC CIDR against pack.podCIDR and pack.serviceClusterIpRange
       - kind: source
         note: 10.0.0.0/16, which Palette uses for the VPC of dynamic placement
     tests:
@@ -133,7 +133,7 @@ rules:
     status: source
     what: |
       For dynamic placement Palette derives the two subnet CIDRs of each zone from the last letter
-      of the zone name (`getAwsAZSubnetCidr`). The letter a gives 10.0.0.0/24 and 10.0.1.0/24, and
+      of the zone name. The letter a gives 10.0.0.0/24 and 10.0.1.0/24, and
       b gives 10.0.2.0/24 and 10.0.3.0/24. A Local Zone or a Wavelength Zone such as us-east-1-bos-1a ends
       in the letter of a parent zone, so two zones get one CIDR pair, and the VPC create fails.
     check:
@@ -162,7 +162,7 @@ rules:
     status: source
     what: |
       EKS takes its service CIDR from the Kubernetes pack: Palette reads `pack.serviceClusterIpRange`
-      into the CAPI cluster network (`GetClusterNetwork`), and CAPA passes it to EKS. Palette has no
+      into the CAPI cluster network, and CAPA passes it to EKS. Palette has no
       CIDR check for EKS. For dynamic placement the VPC is 10.0.0.0/16, and a service CIDR inside it
       breaks the routes. For static placement the VPC CIDR needs `describe-vpcs`: see reproduce.
       The catalog row names the key `serviceIpv4Cidr`; that is the field of EKS, not of the pack.
@@ -190,7 +190,7 @@ rules:
       - kind: source
         note: pack.podCIDR and pack.serviceClusterIpRange of the Kubernetes pack become the CAPI cluster network
       - kind: source
-        note: no CIDR check; Palette checks the CIDR of AWS alone
+        note: Palette checks no CIDR of an EKS cluster, and checks the CIDR of an AWS IaaS cluster alone
     tests:
       - fault: fixtures/eks/service-cidr-in-vpc.json
         clean: fixtures/eks/service-cidr-clean.json
@@ -203,10 +203,9 @@ rules:
     status: source
     what: |
       With no network in the entity, Palette makes a network `<cluster>-network` and one subnet
-      with 10.0.0.0/16 in the region, for GCP and GKE alike (`convertCloudCluster`,
-      `convertManagedCloudCluster`). A pod CIDR or a service CIDR of the Kubernetes pack inside it
-      breaks the routes. GKE gives the pods their own secondary ranges; the pack CIDRs apply to a
-      GCP IaaS cluster, and the check reads them where they are.
+      with 10.0.0.0/16 in the region, for GCP and GKE alike. A pod CIDR or a service CIDR of the
+      Kubernetes pack inside it breaks the routes. GKE gives the pods their own secondary ranges;
+      the pack CIDRs apply to a GCP IaaS cluster, and the check reads them where they are.
     when: (.profiles | length) > 0
     check:
       kind: static
@@ -282,7 +281,7 @@ rules:
       - kind: doc
         ref: https://cloud.google.com/kubernetes-engine/docs/concepts/alias-ips
       - kind: source
-        note: NodeNetwork.PodRangeName and PodRangeCidrBlock are compared, not set from the cloud config
+        note: Palette sets no pod range name and no pod range CIDR from the cloud config
     tests:
       - fault: fixtures/gke/no-secondary-ranges.json
         clean: fixtures/gke/static-network-clean.json
@@ -355,7 +354,7 @@ rules:
       A node needs a 0.0.0.0/0 route to a NAT gateway, an internet gateway, a transit gateway, or a
       NAT instance. Without one it cannot reach Palette, EKS, or the registries: the nodes do not
       join, and the images do not pull. On AWS the row reports instances that delete every 30
-      minutes with no end. The private test of Palette (`isSubnetPrivate`) reads the
+      minutes with no end. The private test of Palette reads the
       internet gateway route alone and checks no NAT route. The check runs for a static VPC on aws
       and eks. For GCP and GKE the router with NAT needs `gcloud compute routers list` (see
       reproduce), and the watch sees the nodes that never join.
@@ -416,8 +415,8 @@ rules:
     status: source
     what: |
       A pool subnet that does not exist, is in another VPC, or is in another zone than the pool
-      says fails during the build. `ValidateAwsSubnets` of Palette lists the subnets of the VPC and
-      tests the public ones for MapPublicIpOnLaunch; a subnet id that is not in the VPC is never
+      says fails during the build. Palette lists the subnets of the VPC and
+      tests the public ones for MapPublicIpOnLaunch. A subnet id that is not in the VPC is never
       seen, and passes.
     when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
     check:
@@ -451,7 +450,7 @@ rules:
       text: Refuse a pool subnet that the VPC listing does not hold, in the EKS property route.
     evidence:
       - kind: source
-        note: the loop runs over the subnets of the VPC; a subnet of the request that is not among them is not tested
+        note: Palette tests the subnets that the VPC lists; a subnet of the request that is not among them is not tested
     tests:
       - fault: fixtures/eks/subnet-mismatch.json
         clean: fixtures/eks/static-vpc-clean.json
@@ -504,8 +503,8 @@ rules:
     what: |
       A subnet without `kubernetes.io/role/elb` (public) or `kubernetes.io/role/internal-elb`
       (private) is not found by the load balancer controller: a Service of type LoadBalancer stays
-      Pending. For EKS with a static VPC Palette adds the tags during the build
-      (`reconcileMCPSubnetTags`); the docs ask for them on the public subnets before the build. The
+      Pending. For EKS with a static VPC Palette adds the tags during the build; the docs ask for
+      them on the public subnets before the build. The
       check reads the tags of the pool subnets as they are now.
     when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
     check:
@@ -627,7 +626,7 @@ rules:
     status: source
     what: |
       With `endpointAccess.publicCIDRs`, Palette builds with public access open, and sets the CIDRs
-      during the build only when private access is on too (`getDesiredManagedControlPlane`). After
+      during the build only when private access is on too. After
       the pivot the target cluster gets the list as configured. Then the list must hold the
       addresses that Palette connects from, and with private access off also the NAT elastic IPs of
       the node subnets, or the node groups fail. The addresses are not in the entity: the check
@@ -778,7 +777,7 @@ rules:
     what: |
       GCP takes at most 63 characters for a network or a subnet name, and at most 40 for a GKE
       cluster name. For a dynamic network Palette derives `<cluster>-network` and
-      `<cluster>-network-<region>` from the cluster name (`getNetworkName`, `getSubnetName`).
+      `<cluster>-network-<region>` from the cluster name.
     check:
       kind: static
       expr: |
@@ -875,7 +874,7 @@ rules:
       text: Check the subnet CIDRs against the vnet CIDR in the converter.
     evidence:
       - kind: source
-        note: "if str.IsNotEmpty(c.VnetName) { validator.ShouldNotBeEmpty(\"VNet CIDR Block\", c.VnetCidrBlock) }; the subnets are copied"
+        note: with vnetName set, Palette needs vnetCidrBlock; it copies the subnets and checks none
       - kind: doc
         ref: https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-faq
         note: a subnet address range must be inside the address space of the virtual network
@@ -1008,7 +1007,7 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/data-center/maas/architecture/
         note: Palette registers a DNS record in MAAS for the deployed cluster
       - kind: source
-        note: DNSDomain is config.Spec.ClusterConfig.Domain
+        note: Palette passes cloudConfig.domain as the DNS domain of the machines
       - kind: source
         note: the route asks the PCG of the account, or the cloud service for a system gateway
     tests:
@@ -1145,7 +1144,7 @@ rules:
       that `controlPlaneEndpoint.host` is inside it: `InvalidCidr` or `IPNotWithinCidrRange` at
       create, not at validate. The first address of the range is the overlay VIP. The range cannot
       change after the create. The hosts must share one layer-2 network that passes broadcasts.
-      Palette has no default range; the console fills one in.
+      Palette has no default range; the console gives one.
     check:
       kind: static
       expr: |
@@ -1162,10 +1161,10 @@ rules:
           else [] end
     fix:
       owner: palette
-      text: Run ValidateCidrConfig in the validate route.
+      text: Run the overlay CIDR check of the create in the validate route.
     evidence:
       - kind: source
-        note: validateCIDR(ControlPlaneEndpoint.Host, Cidr) when Enable; InvalidCidr and IPNotWithinCidrRange
+        note: with the overlay on, Palette tests that controlPlaneEndpoint.host is inside the CIDR; it returns InvalidCidr and IPNotWithinCidrRange
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/edge/networking/vxlan-overlay/
         note: the first IP address in the overlay CIDR range is the overlay VIP; the range cannot change after the create
@@ -1206,7 +1205,7 @@ rules:
       text: Run the NIC check in the validate route, and refuse DHCP on a host with two NICs.
     evidence:
       - kind: source
-        note: IsValidNic against spec.device.nics of the host, on the create path
+        note: Palette tests the NIC name against spec.device.nics of the host at the create
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/cluster-deployment/
         note: a host with more than one NIC must use static IP addresses or the network overlay; DHCP is not supported
@@ -1278,7 +1277,7 @@ rules:
       - kind: source
         note: an empty type is DDNS; the host is required when the type is not DDNS; the enum is VIP, External, DDNS
       - kind: source
-        note: MissingDDnsMapping(datacenter, networkName) for a DHCP cluster with DDNS and no mapping on the PCG
+        note: Palette returns MissingDDnsMapping for a DHCP cluster with DDNS and no mapping of the datacenter and the network name on the PCG
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/data-center/vmware/architecture/
         note: if you are using DHCP, Dynamic DNS is required
@@ -1364,7 +1363,7 @@ rules:
       - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/overlords/vsphere/{{ .account.metadata.annotations.overlordUid }}/pools\" | jq '.items[] | {uid: .metadata.uid, name: .metadata.name, start: .spec.pool.start, end: .spec.pool.end, allotted: (.status.allottedIps | length), single: .spec.restrictToSingleCluster, inUse: .status.inUse}'"
     fix:
       owner: palette
-      text: Run ValidateIpAvailability in the validate route.
+      text: Count the free addresses of the pool in the validate route, as the machine pool create does.
     evidence:
       - kind: source
         note: free is the range less the allotted and the extra addresses; IPPoolExhausted
@@ -1411,7 +1410,7 @@ rules:
       text: Warn in the validate route when a vSphere or a multi-node edge cluster names no NTP server.
     evidence:
       - kind: source
-        note: validator.IsValidAddresses("NTP servers", ...)
+        note: Palette refuses an NTP server that is not an IPv4 address, an IPv6 address, or a DNS name
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/
         note: we recommend specifying NTP servers; without them, time drift issues

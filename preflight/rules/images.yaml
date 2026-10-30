@@ -97,7 +97,7 @@ rules:
       - kind: report
         ref: palette-pack-digest-findings-2026-09-25 F6
       - kind: source
-        note: GetPacks and GetPack return no pack for a private registry
+        note: Palette returns no pack of a private registry when it lists or reads packs
 
   - id: profile-follows-push
     title: A published profile keeps its content after a push to the registry
@@ -263,7 +263,7 @@ rules:
       text: List each missing image with its pack in the validate response, as the pack errors are listed, not as one refusal.
     evidence:
       - kind: source
-        note: each pack of type oci gives an image (the pack name and the version) for its ECR registry, and ValidateEcrRegistriesImages asks the registry
+        note: Palette makes an image of each pack of type oci from the pack name and the version. It asks the ECR registry of the pack for the image
     tests:
       - fault: fixtures/eks/ecr-image-missing.json
         clean: fixtures/eks/oci-pack.json
@@ -344,7 +344,7 @@ rules:
       text: Remove the password from the log line.
     evidence:
       - kind: source
-        note: "the log line `downloading zarf localPath ..., password: ...` is there since d09668ad1, 2023-02-04"
+        note: the controller writes the password of the registry in the log line before the download of a Zarf package
       - kind: report
         ref: palette-pack-digest-findings-2026-09-25 F7
 
@@ -399,7 +399,7 @@ rules:
       text: Refuse an oci:// endpoint at registry create, and name the OCI registry kind.
     evidence:
       - kind: source
-        note: the index is read at <endpoint>/index.yaml; downloadHelmChartFromUrl reads oci:// for the URL of a chart alone
+        note: Palette reads the index at <endpoint>/index.yaml; it reads the oci:// scheme only in the URL of a chart
 
   - id: registry-sync-delay
     title: A new pack version shows in Palette after the sync
@@ -515,7 +515,7 @@ rules:
       text: Read the boot resources of MAAS in the validate route, through the PCG.
     evidence:
       - kind: source
-        note: u-1804 bionic, u-2004 focal, u-2204 jammy, u-2404 noble; hasSyncedBaseImage needs Type Synced; the BYOS values are pack.osImageOverride, pack.osName, pack.osVersion
+        note: The packs u-1804, u-2004, u-2204, and u-2404 give bionic, focal, jammy, and noble. The base image must have the type Synced. The BYOS values are pack.osImageOverride, pack.osName, and pack.osVersion
       - kind: doc
         ref: https://docs.spectrocloud.com/integrations/generic-byoi/
         note: osImageOverride, osName, and osVersion for MAAS; with no match and no URL, the provisioning fails
@@ -539,9 +539,8 @@ rules:
       such as `r_u-2204-0-k-1294-0`, in the image template folder (`spectro-templates` by default).
       When it is not there, the PCG downloads the OVA from the image host of the Palette instance
       and imports it as a template. So the PCG needs egress to `s3.amazonaws.com` on 443. The docs
-      name `vmwaregoldenimage-console.s3.amazonaws.com`; a test config of Palette names
-      `vmwaregoldenimage.s3.amazonaws.com`; a system setting holds the host. Palette only logs a
-      warning when the URL does not answer. No CLI on this machine reaches vCenter with the account
+      name `vmwaregoldenimage-console.s3.amazonaws.com`, and a system setting of Palette holds
+      the host. Palette only logs a warning when the URL does not answer. No CLI on this machine reaches vCenter with the account
       of the world, so the rule has no check; the reproduce lines use `govc` with the vCenter
       credentials.
     reproduce:
