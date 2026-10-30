@@ -1,6 +1,6 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
-use super::changes::{OpLine, artifacts_summary, variable_lines};
+use super::changes::{OpLine, artifacts_summary, tier_op_lines, variable_lines};
 use super::consumers::{
     NOT_LISTED, consumer_count, consumer_counts, consumer_runs, consumers_heading,
     consumers_sentence, edge_hosts_line, second_reading_line,
@@ -10,7 +10,7 @@ use super::list::{
     profile_marks, project_label, registry_heading, version_note, virtual_line, virtual_note,
 };
 use super::notes::{
-    DiffNote, diff_notes, invalid_pack_sentences, pack_order_note, tier_path, tier_states,
+    DiffNote, TierLine, diff_notes, invalid_pack_sentences, pack_order_note, tier_line,
     variables_comparable,
 };
 use super::same_release::{
@@ -19,8 +19,8 @@ use super::same_release::{
 use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
 };
-use super::{Renderer, count_of, dash, entry_error, short};
-use crate::diff::{Diff, VerifyStatus};
+use super::{Renderer, count_of, dash, entry_error, palette_line, short};
+use crate::diff::Diff;
 use crate::error::Result;
 use crate::ops::{
     Chain, ConsumerKind, ConsumersReport, Listing, PackListing, PairStatus, RUNNING_STATE,
@@ -33,6 +33,16 @@ use table::{column_widths, matched, table_line};
 
 mod lines;
 mod table;
+
+/// `text` in the color of a record status: green for a record that agrees with Palette, red for
+/// drift, and yellow for a record that is unverified or that strata could not check.
+fn paint_status(p: &Paint, status: RecordStatus, text: &str) -> String {
+    match status {
+        RecordStatus::Unchanged => p.bgreen(text),
+        RecordStatus::Drifted => p.bred(text),
+        RecordStatus::Unverified | RecordStatus::Error => p.byellow(text),
+    }
+}
 
 /// Renders the text report.
 pub struct TerminalRenderer {
@@ -67,7 +77,7 @@ impl Renderer for TerminalRenderer {
                 DiffNote::Warn(text) => out.push(format!("note       {}", p.byellow(&text))),
                 DiffNote::Good(text) => out.push(format!("note       {}", p.bgreen(&text))),
                 DiffNote::Palette(lines) => {
-                    out.extend(lines.iter().map(|line| format!("palette    {line}")));
+                    out.extend(lines.iter().map(|line| palette_line(line)));
                 }
             }
         }
@@ -103,27 +113,23 @@ impl Renderer for TerminalRenderer {
                 out.push(format!("        {}", op_line(&OpLine::cluster_value(c), p)));
             }
         }
-        let states = tier_states(d);
-        if !states.is_empty() && states.iter().all(|(_, same)| *same) {
-            out.push(format!("  cluster tiers {}", p.dim("unchanged")));
-        } else if !states.is_empty() {
-            let words: Vec<String> = states
-                .iter()
-                .map(|(t, same)| {
-                    if *same {
-                        format!("{t} {}", p.dim("unchanged"))
-                    } else {
-                        format!("{t} {}", p.byellow("CHANGED"))
-                    }
-                })
-                .collect();
-            out.push(format!("  cluster tiers {}", words.join(", ")));
-            for t in d.cluster_tiers.iter().filter(|t| !t.same) {
-                for l in &t.diff {
-                    out.push(format!(
-                        "        {}",
-                        op_line(&OpLine::leaf(&tier_path(&t.tier, &l.path), l), p)
-                    ));
+        match tier_line(d) {
+            TierLine::NotCompared => {}
+            TierLine::Unchanged => out.push(format!("  cluster tiers {}", p.dim("unchanged"))),
+            TierLine::Differ(states) => {
+                let words: Vec<String> = states
+                    .iter()
+                    .map(|(t, same)| {
+                        if *same {
+                            format!("{t} {}", p.dim("unchanged"))
+                        } else {
+                            format!("{t} {}", p.byellow("CHANGED"))
+                        }
+                    })
+                    .collect();
+                out.push(format!("  cluster tiers {}", words.join(", ")));
+                for line in tier_op_lines(d) {
+                    out.push(format!("        {}", op_line(&line, p)));
                 }
             }
         }
@@ -148,11 +154,7 @@ impl Renderer for TerminalRenderer {
         let v = d.verify.as_ref()?;
         let p = &self.paint;
         let parts = verdict_parts(v, d.same, &d.a, str::to_string);
-        let word = match v.status {
-            VerifyStatus::Unchanged => p.bgreen(parts.word()),
-            VerifyStatus::Unverified => p.byellow(parts.word()),
-            VerifyStatus::Drifted => p.bred(parts.word()),
-        };
+        let word = paint_status(p, RecordStatus::from(v.status), parts.word());
         let mut line = format!("{word}: {}", parts.line(&d.a));
         for sentence in invalid_pack_sentences(&v.invalid_packs) {
             line.push_str(&format!("\n{}: {sentence}", p.bred("INVALID")));
@@ -173,12 +175,7 @@ impl Renderer for TerminalRenderer {
         let mut out = String::new();
         for r in &s.records {
             // the words of a column: `OK` padded to the width of `DRIFT`
-            let word = format!("{:<5}", record_word(r.status));
-            let word = match r.status {
-                RecordStatus::Unchanged => p.bgreen(&word),
-                RecordStatus::Drifted => p.bred(&word),
-                RecordStatus::Unverified | RecordStatus::Error => p.byellow(&word),
-            };
+            let word = paint_status(p, r.status, &format!("{:<5}", record_word(r.status)));
             out.push_str(&format!(
                 "{word}  {}  {}  {}\n",
                 r.path,
@@ -606,5 +603,26 @@ mod tests {
         // text that is not ASCII is left alone, because lowercasing can change its length
         assert_eq!(matched(&on, "pack-ß", Some("ß")), "pack-ß");
         assert_eq!(matched(&on, "cilium", Some("CILIUM")), on.byellow("cilium"));
+    }
+
+    #[test]
+    fn a_record_status_has_one_color_in_the_verdict_and_in_the_row_of_the_summary() {
+        let on = Paint::resolve(crate::term::color::ColorMode::Always);
+        assert_eq!(
+            paint_status(&on, RecordStatus::Unchanged, "OK"),
+            on.bgreen("OK")
+        );
+        assert_eq!(
+            paint_status(&on, RecordStatus::Drifted, "DRIFT"),
+            on.bred("DRIFT")
+        );
+        // an error shows the color of an unverified record
+        for status in [RecordStatus::Unverified, RecordStatus::Error] {
+            assert_eq!(paint_status(&on, status, "x"), on.byellow("x"));
+        }
+        assert_eq!(
+            paint_status(&Paint::off(), RecordStatus::Drifted, "DRIFT"),
+            "DRIFT"
+        );
     }
 }

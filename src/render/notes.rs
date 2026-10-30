@@ -250,19 +250,21 @@ pub(crate) fn invalid_mark(pd: &PackDiff) -> Option<String> {
     })
 }
 
+/// The start of each sentence and each warning about an invalid pack: `Palette marks pack
+/// addon/hello-universe invalid`, then `when`, then ` (<reason>)` when Palette gives a reason.
+pub(crate) fn marks_invalid(p: &InvalidPack, when: &str) -> String {
+    let reason = Some(p.reason.as_str()).filter(|r| !r.is_empty());
+    format!(
+        "Palette marks pack {} invalid{when}{}",
+        p.key,
+        reason.map_or_else(String::new, |r| format!(" ({r})"))
+    )
+}
+
 /// One sentence for each pack that Palette marks invalid now: `Palette marks pack
 /// addon/hello-universe invalid now (<reason>)`.
 pub(crate) fn invalid_pack_sentences(packs: &[InvalidPack]) -> Vec<String> {
-    packs
-        .iter()
-        .map(|p| {
-            if p.reason.is_empty() {
-                format!("Palette marks pack {} invalid now", p.key)
-            } else {
-                format!("Palette marks pack {} invalid now ({})", p.key, p.reason)
-            }
-        })
-        .collect()
+    packs.iter().map(|p| marks_invalid(p, " now")).collect()
 }
 
 /// Palette's answer to `--repave`, one line for each reason: `repave: PackValuesUpdated
@@ -509,10 +511,25 @@ pub(crate) fn tier_path(tier: &Open<Tier>, path: &str) -> String {
     }
 }
 
-/// Each tier compared between two cluster records, with a word for its state: `applied same`,
-/// `policy changed`. Empty when no tier was compared.
-pub(crate) fn tier_states(d: &Diff) -> Vec<(&Open<Tier>, bool)> {
-    d.cluster_tiers.iter().map(|t| (&t.tier, t.same)).collect()
+/// How the tiers of two cluster records compare, for the tier line of a report.
+pub(crate) enum TierLine<'a> {
+    /// The diff compared no tier.
+    NotCompared,
+    /// Each tier compared is the same.
+    Unchanged,
+    /// At least one tier differs: each tier compared, with whether it is the same.
+    Differ(Vec<(&'a Open<Tier>, bool)>),
+}
+
+/// How the tiers of `d` compare: see [`TierLine`].
+pub(crate) fn tier_line(d: &Diff) -> TierLine<'_> {
+    if d.cluster_tiers.is_empty() {
+        TierLine::NotCompared
+    } else if d.cluster_tiers.iter().all(|t| t.same) {
+        TierLine::Unchanged
+    } else {
+        TierLine::Differ(d.cluster_tiers.iter().map(|t| (&t.tier, t.same)).collect())
+    }
 }
 
 /// `aws-stack@1.1.1@draft is the draft of aws-stack@1.1.1 (uid u): its publish makes this
@@ -560,5 +577,28 @@ mod tests {
             )
         );
         assert_eq!(outside_root_sentence(&[], &[]), None);
+    }
+
+    #[test]
+    fn a_pack_that_palette_marks_invalid_reads_the_same_with_and_without_a_reason() {
+        let pack = |reason: &str| InvalidPack {
+            key: "os/ubuntu-aws".to_string(),
+            reason: reason.to_string(),
+        };
+        assert_eq!(
+            marks_invalid(&pack(""), ""),
+            "Palette marks pack os/ubuntu-aws invalid"
+        );
+        assert_eq!(
+            marks_invalid(&pack("tag is deleted"), " now"),
+            "Palette marks pack os/ubuntu-aws invalid now (tag is deleted)"
+        );
+        assert_eq!(
+            invalid_pack_sentences(&[pack(""), pack("tag is deleted")]),
+            [
+                "Palette marks pack os/ubuntu-aws invalid now",
+                "Palette marks pack os/ubuntu-aws invalid now (tag is deleted)"
+            ]
+        );
     }
 }

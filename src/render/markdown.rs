@@ -2,7 +2,7 @@
 
 use super::changes::{
     OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, plain_flags, status_mark,
-    status_word, traits_suffix, upstream_line, values_changed, values_summary,
+    status_word, tier_op_lines, traits_suffix, upstream_line, values_changed, values_summary,
     values_unparsed_sentence, variable_lines, version_display,
 };
 use super::consumers::{
@@ -14,8 +14,8 @@ use super::list::{
     profile_marks, project_label, registry_heading, version_note, virtual_group, virtual_line,
 };
 use super::notes::{
-    DiffNote, diff_notes, invalid_mark, invalid_pack_sentences, pack_order_note,
-    pending_profile_names, tier_path, tier_states, variables_comparable,
+    DiffNote, TierLine, diff_notes, invalid_mark, invalid_pack_sentences, pack_order_note,
+    pending_profile_names, tier_line, variables_comparable,
 };
 use super::same_release::{
     chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word,
@@ -176,22 +176,18 @@ impl Renderer for MarkdownRenderer {
         if let Some(line) = artifacts_summary(d) {
             o.push_str(&format!("**Images:** {line}\n\n"));
         }
-        let states = tier_states(d);
-        if !states.is_empty() && states.iter().all(|(_, same)| *same) {
-            o.push_str("**Cluster tiers:** unchanged\n\n");
-        } else if !states.is_empty() {
-            let words: Vec<String> = states
-                .iter()
-                .map(|(t, same)| format!("{t} {}", if *same { "unchanged" } else { "changed" }))
-                .collect();
-            o.push_str(&format!("**Cluster tiers:** {}\n\n", words.join(", ")));
-            let changed: Vec<_> = d.cluster_tiers.iter().filter(|t| !t.same).collect();
-            if !changed.is_empty() {
+        match tier_line(d) {
+            TierLine::NotCompared => {}
+            TierLine::Unchanged => o.push_str("**Cluster tiers:** unchanged\n\n"),
+            TierLine::Differ(states) => {
+                let words: Vec<String> = states
+                    .iter()
+                    .map(|(t, same)| format!("{t} {}", if *same { "unchanged" } else { "changed" }))
+                    .collect();
+                o.push_str(&format!("**Cluster tiers:** {}\n\n", words.join(", ")));
                 o.push_str("<details><summary>cluster tiers that differ</summary>\n\n```diff\n");
-                for t in changed {
-                    for l in &t.diff {
-                        o.push_str(&op_line(&OpLine::leaf(&tier_path(&t.tier, &l.path), l)));
-                    }
+                for line in tier_op_lines(d) {
+                    o.push_str(&op_line(&line));
                 }
                 o.push_str("```\n</details>\n\n");
             }

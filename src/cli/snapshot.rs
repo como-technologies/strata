@@ -10,10 +10,10 @@ use strata::render;
 use strata::term::color::Paint;
 
 use super::args::SnapshotArgs;
-use super::{connect, now_utc, progress};
+use super::{connect, now_utc};
 
 pub(crate) fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
-    let progress = progress(a.quiet);
+    let progress = a.quiet.progress();
     let now = now_utc();
     if a.validate && (a.from_raw.is_some() || a.dir.is_some()) {
         return Err(Error::Usage {
@@ -39,7 +39,7 @@ pub(crate) fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
                 &progress,
             )?;
             // the lines of a set have no color, so the report takes no --color
-            let renderer = render::renderer(a.format(), Paint::off(), a.compact);
+            let renderer = render::renderer(a.format(), Paint::off(), a.compact.compact);
             print!("{}", renderer.render_set(&report)?);
             progress.note(&render::set_counts_line(&report));
             return Ok(ExitCode::from(report.exit_code()));
@@ -89,14 +89,14 @@ pub(crate) fn cmd_snapshot(a: &SnapshotArgs) -> Result<ExitCode> {
     // standard error, beside the record on standard output
     if let Some(v) = &snap.source.palette_validation {
         for line in strata::validation::answer_lines(v.errors()) {
-            eprintln!("palette    {line}");
+            eprintln!("{}", render::palette_line(&line));
         }
     }
     ops::require_acceptance(&snap)?;
     for warning in render::invalid_pack_warnings(&snap) {
         progress.warn(&warning);
     }
-    let text = snap.to_json(a.compact)?;
+    let text = snap.to_json(a.compact.compact)?;
     match &a.output {
         Some(path) => {
             ops::write_file(path, &text)?;

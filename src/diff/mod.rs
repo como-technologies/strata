@@ -41,6 +41,7 @@ pub use pack::{
 pub use variables::{
     VariableChange, VariableSummary, VariablesByName, VariablesDiff, group_variables,
 };
+pub(crate) use verify::invalid_packs;
 pub use verify::{
     AuditEntry, AuditResource, ClusterProfileOverwritten, InvalidPack, RegistrySync, SyncRecovery,
     Verify, VerifyStatus,

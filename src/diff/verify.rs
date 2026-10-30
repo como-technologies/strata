@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::ImageIdChange;
-use crate::json::{is_zero, str_at};
+use crate::json::{first_nonempty, is_zero, str_at};
 use crate::snapshot::Snapshot;
 
 /// The outcome of `verify`, present only in its documents.
@@ -251,15 +251,13 @@ impl AuditEntry {
             text("/spec/actor/user/firstName"),
             text("/spec/actor/user/lastName")
         );
-        let actor = [
-            full_name.trim().to_string(),
-            text("/spec/actor/user/emailId"),
-            text("/spec/actor/user/uid"),
-            text("/spec/actor/serviceName"),
-        ]
-        .into_iter()
-        .find(|s| !s.is_empty())
-        .unwrap_or_else(|| actor_type.clone());
+        let actor = first_nonempty(&[
+            full_name.trim(),
+            &text("/spec/actor/user/emailId"),
+            &text("/spec/actor/user/uid"),
+            &text("/spec/actor/serviceName"),
+            &actor_type,
+        ]);
         AuditEntry {
             time: text("/metadata/creationTimestamp"),
             actor,
@@ -333,4 +331,39 @@ pub(crate) fn invalid_packs(s: &Snapshot) -> Vec<InvalidPack> {
             reason: p.invalid_reason.clone(),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// The actor of the entry that `from_palette` reads from the object `actor`.
+    fn actor_of(actor: Value) -> String {
+        AuditEntry::from_palette(&json!({"spec": {"actor": actor}})).actor
+    }
+
+    #[test]
+    fn the_actor_of_an_entry_is_the_first_of_the_name_the_email_the_uid_the_service_and_the_type() {
+        let user = |first: &str, last: &str, email: &str, uid: &str| {
+            json!({"actorType": "user", "user": {
+                "firstName": first, "lastName": last, "emailId": email, "uid": uid}})
+        };
+        assert_eq!(
+            actor_of(user(" John", "Doe ", "j@example.com", "u1")),
+            "John Doe"
+        );
+        assert_eq!(
+            actor_of(user("", "", "j@example.com", "u1")),
+            "j@example.com"
+        );
+        assert_eq!(actor_of(user("", "", "", "u1")), "u1");
+        assert_eq!(
+            actor_of(json!({"actorType": "service", "serviceName": "system", "user": {}})),
+            "system"
+        );
+        // an entry that names nobody keeps its type, so the line still says who wrote
+        assert_eq!(actor_of(json!({"actorType": "service"})), "service");
+        assert_eq!(actor_of(json!({})), "");
+    }
 }

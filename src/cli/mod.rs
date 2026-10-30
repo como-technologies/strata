@@ -13,6 +13,8 @@ use strata::error::{Error, Result};
 use strata::ops;
 use strata::term::progress::Progress;
 
+use args::ProjectArgs;
+
 pub(crate) mod args;
 pub(crate) mod behind;
 pub(crate) mod candidate;
@@ -103,14 +105,10 @@ fn project_uid_named(config: &Config, name: &str, progress: Progress) -> Result<
 }
 
 /// `--project`, or the uid of the project `--project-name` names.
-fn project_arg(
-    progress: Progress,
-    uid: &Option<String>,
-    name: &Option<String>,
-) -> Result<Option<String>> {
-    match name {
+fn project_arg(progress: Progress, project: &ProjectArgs) -> Result<Option<String>> {
+    match &project.project_name {
         Some(n) => Ok(Some(project_uid_named(&Config::from_env()?, n, progress)?)),
-        None => Ok(uid.clone()),
+        None => Ok(project.project.clone()),
     }
 }
 

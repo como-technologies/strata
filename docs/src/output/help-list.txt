@@ -7,7 +7,7 @@ Arguments:
   [KINDS]...  What to list; with none, profiles and clusters [possible values: profiles, clusters, projects, filters]
 
 Options:
-      --project <PROJECT>            List this project, by uid; '' is tenant scope
+      --project <PROJECT>            Use this project, by uid; '' is tenant scope
       --project-name <PROJECT_NAME>  The same, by project name
       --packs                        Also read each version for its packs, its consumers, and whether it is published
       --pack <TEXT>                  Keep the versions with a pack whose name holds TEXT; sets --packs

@@ -11,7 +11,7 @@ use crate::api::codes::ValidateRoute;
 use crate::api::{Palette, PaletteApi};
 use crate::error::{Error, Result};
 use crate::registry::{Registries, registry_entry};
-use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind};
+use crate::snapshot::{AppliedProfile, Pack, Snapshot, SubjectKind};
 use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
 
 /// The refusal of `--validate` for a ref or a record that is not one version of a cluster
@@ -40,6 +40,14 @@ fn refusal_in<T>(answer: Result<T>, route: ValidateRoute) -> Result<Option<Palet
     }
 }
 
+/// The manifests of the pack `p` in a body of a validate route: the name and the content of each.
+fn manifests_body(p: &Pack) -> Vec<Value> {
+    p.manifests
+        .iter()
+        .map(|m| json!({"name": m.name, "content": m.content}))
+        .collect()
+}
+
 /// The body of `POST /v1/clusterprofiles/import/validate`, a `v1ClusterProfileImportEntity`:
 /// the name, the version, the variables, the type, the cloud, and each pack of the record in
 /// profile order. Palette finds each pack by its name, its `version`, and its registry, so the
@@ -58,9 +66,7 @@ pub fn profile_import_body(snap: &Snapshot, registries: &[Value]) -> Value {
                 "version": p.version,
                 "tag": p.tag,
                 "values": p.values,
-                "manifests": p.manifests.iter()
-                    .map(|m| json!({"name": m.name, "content": m.content}))
-                    .collect::<Vec<_>>(),
+                "manifests": manifests_body(p),
             });
             if !p.registry_uid.is_empty() {
                 let mut metadata = json!({"uid": p.registry_uid});
@@ -108,9 +114,7 @@ pub fn profile_validate_body(snap: &Snapshot) -> Value {
                 "type": p.kind,
                 "layer": p.layer,
                 "values": p.values,
-                "manifests": p.manifests.iter()
-                    .map(|m| json!({"name": m.name, "content": m.content}))
-                    .collect::<Vec<_>>(),
+                "manifests": manifests_body(p),
             })
         })
         .collect();

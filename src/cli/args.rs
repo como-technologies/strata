@@ -109,12 +109,43 @@ pub(crate) struct OutputArgs {
     /// The same as --color=never
     #[arg(long, conflicts_with = "color")]
     pub(crate) no_color: bool,
+    #[command(flatten)]
+    pub(crate) compact: CompactArgs,
+    #[command(flatten)]
+    pub(crate) quiet: QuietArgs,
+}
+
+/// `--compact`, for each command that writes JSON.
+#[derive(Args)]
+pub(crate) struct CompactArgs {
     /// Write the JSON on one line
     #[arg(long)]
     pub(crate) compact: bool,
+}
+
+/// `--quiet`, for each command.
+#[derive(Args)]
+pub(crate) struct QuietArgs {
     /// No progress messages
     #[arg(short, long)]
     pub(crate) quiet: bool,
+}
+
+impl QuietArgs {
+    pub(crate) fn progress(&self) -> Progress {
+        progress(self.quiet)
+    }
+}
+
+/// `--project` and `--project-name`, for each command that works in one project.
+#[derive(Args)]
+pub(crate) struct ProjectArgs {
+    /// Use this project, by uid; '' is tenant scope
+    #[arg(long)]
+    pub(crate) project: Option<String>,
+    /// The same, by project name
+    #[arg(long, conflicts_with = "project")]
+    pub(crate) project_name: Option<String>,
 }
 
 /// The format that `--json` and `--format` select: `--json` has priority, and the terminal is the
@@ -139,10 +170,10 @@ impl OutputArgs {
         })
     }
     pub(crate) fn renderer(&self) -> Box<dyn render::Renderer> {
-        render::renderer(self.format(), self.paint(), self.compact)
+        render::renderer(self.format(), self.paint(), self.compact.compact)
     }
     pub(crate) fn progress(&self) -> Progress {
-        progress(self.quiet)
+        self.quiet.progress()
     }
 }
 
@@ -188,9 +219,8 @@ pub(crate) struct SnapshotArgs {
     /// A refusal exits 2 and writes no record
     #[arg(long)]
     pub(crate) validate: bool,
-    /// Write the JSON on one line
-    #[arg(long)]
-    pub(crate) compact: bool,
+    #[command(flatten)]
+    pub(crate) compact: CompactArgs,
     /// Record the digest of the value Palette gives each macro the content uses. It takes
     /// <name>@<version>, a profile uid, cluster:<cluster>, or clustergroup:<group>
     #[arg(long, conflicts_with_all = ["from_raw", "from_candidate"])]
@@ -225,9 +255,8 @@ pub(crate) struct SnapshotArgs {
         conflicts_with_all = ["format", "output", "raw_dir", "from_raw", "from_candidate"]
     )]
     pub(crate) json: bool,
-    /// No progress messages
-    #[arg(short, long)]
-    pub(crate) quiet: bool,
+    #[command(flatten)]
+    pub(crate) quiet: QuietArgs,
 }
 
 impl SnapshotArgs {
@@ -257,9 +286,8 @@ pub(crate) struct CandidateArgs {
     /// Write the values and the manifests to files in this directory
     #[arg(long, requires = "output")]
     pub(crate) files_dir: Option<PathBuf>,
-    /// No progress messages
-    #[arg(short, long)]
-    pub(crate) quiet: bool,
+    #[command(flatten)]
+    pub(crate) quiet: QuietArgs,
 }
 
 #[derive(Args)]
@@ -267,12 +295,8 @@ pub(crate) struct VerifyArgs {
     /// Snapshot files; quote a pattern such as 'releases/**/*.json'
     #[arg(required = true)]
     pub(crate) snapshots: Vec<String>,
-    /// Check the records in this project, by uid
-    #[arg(long)]
-    pub(crate) project: Option<String>,
-    /// The same, by project name
-    #[arg(long, conflicts_with = "project")]
-    pub(crate) project_name: Option<String>,
+    #[command(flatten)]
+    pub(crate) project: ProjectArgs,
     /// One line for each record and a summary, also for one file
     #[arg(long)]
     pub(crate) summary: bool,
@@ -356,12 +380,8 @@ pub(crate) struct ListArgs {
     /// What to list; with none, profiles and clusters
     #[arg(value_enum)]
     pub(crate) kinds: Vec<ListKind>,
-    /// List this project, by uid; '' is tenant scope
-    #[arg(long)]
-    pub(crate) project: Option<String>,
-    /// The same, by project name
-    #[arg(long, conflicts_with = "project")]
-    pub(crate) project_name: Option<String>,
+    #[command(flatten)]
+    pub(crate) project: ProjectArgs,
     /// Also read each version for its packs, its consumers, and whether it is published
     #[arg(long)]
     pub(crate) packs: bool,
@@ -406,4 +426,45 @@ pub(crate) enum SchemaKind {
     Packs,
     Set,
     Candidate,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    fn parses(args: &[&str]) -> bool {
+        Cli::try_parse_from(std::iter::once(&TOOL_NAME).chain(args)).is_ok()
+    }
+
+    #[test]
+    fn each_command_takes_the_flags_that_it_shares_with_the_others() {
+        assert!(parses(&["snapshot", "aws-stack@1.0.0", "--compact", "-q"]));
+        assert!(parses(&["candidate", "aws-stack@1.0.0", "--quiet"]));
+        assert!(parses(&["verify", "r.json", "--compact", "--quiet"]));
+        assert!(parses(&["verify", "r.json", "--project", ""]));
+        assert!(parses(&["list", "profiles", "--project-name", "lab", "-q"]));
+        assert!(!parses(&[
+            "verify",
+            "r.json",
+            "--project",
+            "p",
+            "--project-name",
+            "n"
+        ]));
+        assert!(!parses(&["list", "--project", "p", "--project-name", "n"]));
+    }
+
+    #[test]
+    fn a_flag_that_commands_share_has_one_help_text() {
+        let command = Cli::command();
+        for flag in ["project", "project_name", "compact", "quiet"] {
+            let texts: std::collections::BTreeSet<Option<String>> = command
+                .get_subcommands()
+                .filter_map(|sub| sub.get_arguments().find(|a| a.get_id() == flag))
+                .map(|arg| arg.get_help().map(ToString::to_string))
+                .collect();
+            assert_eq!(texts.len(), 1, "--{flag} has {texts:?}");
+        }
+    }
 }

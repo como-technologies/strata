@@ -2,7 +2,7 @@
 //! long text cut to a length.
 
 /// The name of an object, or its uid when Palette gives no name.
-pub(crate) fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
+pub fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
     if name.is_empty() { uid } else { name }
 }
 
@@ -47,6 +47,20 @@ pub fn cut(s: &str, n: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_noun_agrees_with_its_count_and_only_one_takes_the_singular() {
+        assert_eq!(plural(0, "cluster", "clusters"), "clusters");
+        assert_eq!(plural(1, "cluster", "clusters"), "cluster");
+        assert_eq!(plural(2, "cluster", "clusters"), "clusters");
+    }
+
+    #[test]
+    fn an_object_shows_its_name_and_its_uid_only_when_it_has_no_name() {
+        assert_eq!(name_or_uid("lab", "u1"), "lab");
+        assert_eq!(name_or_uid("", "u1"), "u1");
+        assert_eq!(name_or_uid("", ""), "");
+    }
 
     #[test]
     fn a_cut_text_has_at_most_n_characters_and_ends_with_a_mark() {

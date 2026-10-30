@@ -56,6 +56,7 @@ use strata::ops;
 use strata::reference::Ref;
 use strata::snapshot::{AppliedProfile, PendingUpdate, Snapshot, SubjectKind};
 use strata::term::progress::Progress;
+use strata::text::name_or_uid;
 
 /// The parameter of a [`UnitDefinition`] that holds the strata candidate document.
 pub const CANDIDATE: &str = "candidate";
@@ -555,16 +556,8 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
         report
             .consumers
             .iter()
-            .map(|cluster| {
-                if cluster.name.is_empty() {
-                    &cluster.uid
-                } else {
-                    &cluster.name
-                }
-            })
-            .map(|name| {
-                InstanceName::new(name.as_str()).map_err(|error| refused(error.to_string()))
-            })
+            .map(|cluster| name_or_uid(&cluster.name, &cluster.uid))
+            .map(|name| InstanceName::new(name).map_err(|error| refused(error.to_string())))
             .collect()
     }
 

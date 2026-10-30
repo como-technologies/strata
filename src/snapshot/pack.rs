@@ -8,7 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use super::IMAGE_ID_ANNOTATION;
+use super::{IMAGE_ID_ANNOTATION, PROVIDER_TYPE_ANNOTATION};
 use crate::api::mask::MASKED;
 use crate::closed_set::{ClosedSet, Open};
 use crate::content::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
@@ -297,7 +297,8 @@ impl Pack {
         let registry_uid = text(pk, "/registryUid");
         let ref_digest = text(pk, "/digest");
         let registry_digest = text(&mm, "/spec/digest");
-        let registry_provider_type = opt_text(pk, "/annotations/ociRegistryProviderType");
+        let registry_provider_type =
+            opt_text(pk, &format!("/annotations/{PROVIDER_TYPE_ANNOTATION}"));
         // only `imageId`: another annotation can hold a secret, and strata reads no other one.
         // Palette gives each annotation as text; a value of another type is not an annotation
         let annotations: BTreeMap<String, String> =

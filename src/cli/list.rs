@@ -13,7 +13,7 @@ pub(crate) fn cmd_list(a: &ListArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let options = ListOptions {
         kinds: a.kinds.clone(),
-        project: project_arg(progress, &a.project, &a.project_name)?,
+        project: project_arg(progress, &a.project)?,
         packs: a.packs,
         pack: a.pack.clone(),
         applied: a.applied,

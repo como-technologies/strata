@@ -7,8 +7,8 @@ use serde_json::Value;
 
 use super::{
     CLOUD_CONFIGS, CLUSTER_GROUP_DASHBOARD, CLUSTER_NOTIFICATIONS, CLUSTER_SUMMARIES, CLUSTERS,
-    ConfigPart, PROFILES, Palette, collection, named_entries, or_unread, own_manifests, route,
-    sorted_names, uids_named, unavailable_note, with_limit,
+    ConfigPart, PROFILES, Palette, collection, named_entries, no_variables, or_unread,
+    own_manifests, route, search_all, sorted_names, uids_named, unavailable_note, with_limit,
 };
 use crate::api::{PaletteApi, RawCluster, ReadErrors};
 use crate::error::{Error, Result, found};
@@ -203,7 +203,7 @@ impl<A: PaletteApi> Palette<A> {
     pub fn cluster_group_members(&self, uid: &str) -> Result<Vec<Value>> {
         self.searched(
             &with_limit(&route(CLUSTER_GROUP_DASHBOARD, &[uid, "virtualClusters"])),
-            &serde_json::json!({"filter": {}, "sort": []}),
+            &search_all(),
         )
     }
 
@@ -244,11 +244,8 @@ impl<A: PaletteApi> Palette<A> {
         let mut variables_unavailable = false;
         for t in &templates {
             let puid = str_at(t, "/uid");
-            let (v, unavailable) = self.variables_or(
-                &route(PROFILES, &[puid]),
-                serde_json::json!({ "variables": [] }),
-                progress,
-            )?;
+            let (v, unavailable) =
+                self.variables_or(&route(PROFILES, &[puid]), no_variables(), progress)?;
             variables_unavailable |= unavailable;
             variables.push(serde_json::json!({"profileUid": puid, "variables": v["variables"]}));
         }
