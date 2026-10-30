@@ -195,6 +195,17 @@ candidate: `ClusterProfileImportRegistriesNotFound`,
 Strata does not copy these checks. A candidate that breaks one of them gives a
 record without `--validate`, and this refusal with `--validate`.
 
+`strata preflight` asks `POST /v1/spectroclusters/{cloudType}/validate`. That
+route refuses a body with a profile of another cloud type with HTTP `500` and
+`ClusterProfilesNotSupported`. Strata does not send it again. The rule
+`palette-validate` reads it as the answer of the route, with the verdict
+`failed` and the message of Palette: see
+[The live tier](../commands/preflight/tiers.md#a-profile-of-another-cloud-type).
+
+| Code | Palette refuses |
+| --- | --- |
+| `ClusterProfilesNotSupported` | A profile of another cloud type than the route, and not of the cloud type `all`. |
+
 A 5xx with a different code, or with no code, is a fault. Strata sends the
 request again.
 

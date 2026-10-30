@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use strata::api::codes::ValidateRoute;
 use strata::api::{Method, PaletteApi};
 use strata::config::KEY_VARS;
 use strata::json::{flag, opt_flag, str_at, text_or, value_or_null};
@@ -20,7 +21,8 @@ use crate::jq::Jq;
 use crate::rule::{Check, Rule};
 
 /// The answer of Palette to one request: a 2xx is `ok`, a 4xx is an answer with its `V1Error`
-/// body, and a 204 is `ok` with a `null` body.
+/// body, and a 204 is `ok` with a `null` body. A refusal of the cluster validate route with HTTP
+/// 500 is an answer too.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Response {
     /// True for a 2xx.
@@ -73,6 +75,13 @@ pub fn is_answer(status: u16) -> bool {
     (400..500).contains(&status) && !matches!(status, 401 | 403 | 429)
 }
 
+/// A refusal of the cluster validate route that Palette gives with HTTP 500, such as a profile of
+/// another cloud type. The route read the body and refused it, so the refusal is an answer, like a
+/// 4xx. Another 5xx is a fault of Palette, and the check did not run.
+fn is_refusal(status: u16, body: &str) -> bool {
+    ValidateRoute::ClusterCreate.refuses_answer(status, body)
+}
+
 impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
     fn palette(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Response> {
         let api = self.palette.ok_or_else(|| Error::Usage {
@@ -91,8 +100,11 @@ impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
                 status: if body.is_null() { 204 } else { 200 },
                 body,
             }),
-            // a 4xx is what a validate route answers when the entity is wrong: it is the result
-            Err(strata::Error::Api { status, body, .. }) if is_answer(status) => {
+            // a 4xx is what a validate route answers when the entity is wrong: it is the result.
+            // The route also refuses with a 500 and a code that it names.
+            Err(strata::Error::Api { status, body, .. })
+                if is_answer(status) || is_refusal(status, &body) =>
+            {
                 // a body that is not JSON, such as a plain-text 404 of the gateway, is an object
                 // with the text as its message, so a program reads `.body.message` either way
                 let body = serde_json::from_str(&body)

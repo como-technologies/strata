@@ -270,7 +270,9 @@ rules:
     when: (.packs | length) > 0
     what: |
       A pack version that does not list the cloud type, such as `cni-cilium-oss` before 1.19.3 on
-      GCP, is refused at create.
+      GCP, is refused at create. The cluster validate route takes a body with such a pack, and
+      `palette-validate` passes. So no route answers this check, and this rule is a gap that
+      preflight fills. Palette owns the rule.
     check:
       kind: static
       expr: |
@@ -286,33 +288,12 @@ rules:
       - kind: run
         ref: teardown lab
         note: cni-cilium-oss before 1.19.3 on GCP is refused
+      - kind: run
+        ref: "#415"
+        note: the cluster validate route takes a body with a pack version that does not list aws
     tests:
       - fault: fixtures/gcp/pack-no-gcp.json
         clean: fixtures/gcp/clean.json
-
-  - id: profile-cloud-mismatch
-    title: Each profile is of the cloud type of the cluster, or of all
-    engines: [all]
-    tier: static
-    severity: fail
-    status: proposed
-    when: (.profiles | length) > 0
-    what: |
-      A profile of another cloud type carries packs that Palette cannot install on this cluster.
-      Palette refuses some at create, and lets others fail during the build.
-    check:
-      kind: static
-      expr: |
-        .cloud as $c
-        | [ .profiles[]
-            | select((.source.cloudType // "all") as $t | $t != "all" and $t != $c and ($t | ascii_downcase) != $c)
-            | "profile \(.source.name)@\(.source.version) is of cloud type \(.source.cloudType), and the cluster is \($c)" ]
-    fix:
-      owner: palette
-      text: Refuse a profile of another cloud type at create.
-    tests:
-      - fault: fixtures/eks/profile-of-gke.json
-        clean: fixtures/eks/clean.json
 
   - id: engine-repave-rules
     title: The repave answer of Palette is the truth on edge, EKS, and GKE

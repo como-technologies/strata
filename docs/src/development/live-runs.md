@@ -790,6 +790,9 @@ that the case names can then leave the catalog. A case that fails shows that the
 route does not answer the check, and the rule stays. See
 [A check that a validate route answers](../reference/preflight-rules.md#a-check-that-a-validate-route-answers).
 
+One case is the other way. The route takes the body of `pack-cloud-support`, so its two checks
+expect the verdict `passed` and no message.
+
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `aws-clean`, `edge-clean`, `eks-clean`, `gcp-clean`, `maas-clean`, `azure-clean`, `vsphere-clean` | 0 | #243: the route takes the clean body of the engine, so a refusal in a case below is about its fault. No result yet. |
@@ -799,8 +802,8 @@ route does not answer the check, and the rule stays. See
 | `ssh-key-format-vsphere`, `ssh-key-format-edge`, each with `-says` | 0 | #243: the route refuses a key that is not an authorized key with `SshKeyValidationFailure` (`ssh-key-format`). No result yet. |
 | `azure-ssh-key-empty`, `azure-ssh-key-empty-says` | 0 | #243: the route refuses an empty `sshKey` (`azure-ssh-key`). No result yet. |
 | `pack-state-disabled`, `pack-state-deleted`, each with `-says` | 0 | #243: the route refuses a profile that holds a pack in the state `disabled` or `deleted` (`pack-state`). No result yet. |
-| `profile-cloud-mismatch`, `profile-cloud-mismatch-says` | 0 | #243: the route refuses a profile of another cloud type (`profile-cloud-mismatch`). No result yet. |
-| `pack-cloud-support`, `pack-cloud-support-says` | 0 | #243: the route refuses a pack version that does not list the cloud type (`pack-cloud-support`). No result yet. |
+| `profile-cloud-mismatch`, `profile-cloud-mismatch-says` | 0 | #243, #415: the route refuses a body with a profile of another cloud type with HTTP 500 and `ClusterProfilesNotSupported`. `palette-validate` gives the verdict `failed` with the message of Palette. The rule `profile-cloud-mismatch` has left the catalog. No result yet. |
+| `pack-cloud-support`, `pack-cloud-support-says` | 0 | #415: the route takes a body with a pack version that does not list the cloud type. `palette-validate` passes and gives no message. So no route answers `pack-cloud-support`, and the rule stays in the catalog as a gap that preflight fills. No result yet. |
 | `vsphere-static-ip-pool-empty`, `vsphere-static-ip-pool-dhcp`, each with `-says` | 0 | #243: the route refuses a static network with no `parentPoolUid`, and a static network on a DHCP cluster (`vsphere-static-ip-pool`). No result yet. |
 | `vsphere-controlplane-endpoint-no-host`, `edge-vip-multi-node-no-host`, each with `-says` | 0 | #243: the route refuses the type `VIP` with an empty host (`vsphere-controlplane-endpoint`, `edge-vip-multi-node`). No result yet. |
 | `azure-subnets-in-vnet-no-cidr`, `azure-subnets-in-vnet-no-cidr-says` | 0 | #243: the route refuses a `vnetName` with an empty `vnetCidrBlock` (`azure-subnets-in-vnet`). No result yet. |

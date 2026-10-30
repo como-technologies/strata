@@ -69,8 +69,8 @@ the provider, this fault comes after a full apply of 20 minutes.
 Other edits that fail the same way: `.spec.cloudAccountUid =
 "000000000000000000000000"` (`account-missing`),
 `.spec.cloudConfig.controlPlaneLoadBalancer = "internal"`
-(`api-endpoint-reach`), `.spec.profiles[0].uid` set to the uid of a GKE profile
-(`profile-cloud-mismatch`).
+(`api-endpoint-reach`), and `.spec.profiles[0].uid` set to the uid of a GKE profile
+(`palette-validate`, with `ClusterProfilesNotSupported`).
 
 ## 2. Build it
 

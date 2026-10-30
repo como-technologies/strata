@@ -46,6 +46,23 @@ create through the provider or the API goes to the create route, so the same
 fault shows after a full apply. See
 [The validate routes](../../internals/palette/validate-routes.md).
 
+## A profile of another cloud type
+
+The validate route refuses a body with a profile of another cloud type. It
+gives HTTP 500, and not a 4xx. Here the body of an AWS create names a profile of
+the cloud type `gcp`. `palette-validate` reads the refusal as the answer of the
+route, so the check fails with the message of Palette:
+
+```text
+{{#include ../../output/preflight-cloud-mismatch.txt}}
+```
+
+A profile of the cloud type `all` fits each cloud. The catalog has no rule of
+its own for this check, because the route answers it. A pack version that does
+not list the cloud type is another case. The route takes that body, so the rule
+`pack-cloud-support` stays in the catalog. See
+[A check that a validate route answers](../../reference/preflight-rules.md#a-check-that-a-validate-route-answers).
+
 ## A cluster as Palette holds it
 
 `strata preflight cluster:UID` turns the cluster into the body of a create.

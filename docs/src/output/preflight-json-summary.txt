@@ -1,9 +1,9 @@
 $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summary, scorecard: [.sections[] | {title, ran, passed, failed, notChecked, readiness}]}'
 {
   "summary": {
-    "rules": 106,
-    "ran": 24,
-    "passed": 21,
+    "rules": 105,
+    "ran": 23,
+    "passed": 20,
     "failed": 0,
     "probeFailed": 2,
     "warned": 1,
@@ -15,7 +15,7 @@ $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summ
     "notChecked": 24,
     "skipped": 41,
     "errors": 0,
-    "readiness": 0.6176470588235294,
+    "readiness": 0.6060606060606061,
     "exitCode": 0,
     "verdict": "OK: each counted check passed; 2 probe(s) failed, not counted"
   },
@@ -62,8 +62,8 @@ $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summ
     },
     {
       "title": "Kubernetes version and engine",
-      "ran": 2,
-      "passed": 2,
+      "ran": 1,
+      "passed": 1,
       "failed": 0,
       "notChecked": 0,
       "readiness": 1.0

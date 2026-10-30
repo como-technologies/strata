@@ -124,7 +124,11 @@ and of each wave, checks them.
 4. **A check of build readiness goes to `strata-preflight`.** Palette has no
    such check, so `strata-preflight` is a product of its own beside strata. It
    follows rule 1: it calls the validate routes of Palette, and adds only the
-   checks that the routes do not make.
+   checks that the routes do not make. [The gaps that preflight fills](./reference/preflight-rules.md#the-gaps-that-preflight-fills)
+   lists them. `pack-cloud-support` is one gap: `POST /v1/spectroclusters/{cloudType}/validate`
+   takes a body with a pack version that does not list the cloud type, so only
+   the create refuses it. Palette owns that rule. A profile of another cloud
+   type is no gap, because the same route refuses it.
 5. **Each item names its question.** An issue names the question of
    [the table in the introduction](./introduction.md#the-model) that it
    answers. Or it names the part of build readiness that it adds. When an item

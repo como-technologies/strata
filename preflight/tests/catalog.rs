@@ -529,7 +529,6 @@ const ISSUE_IDS: &[&str] = &[
     "eks-addon-version",
     "ccm-version",
     "pack-cloud-support",
-    "profile-cloud-mismatch",
     "engine-repave-rules",
     "eks-repave-answers",
     "gke-repave-answers",
@@ -620,10 +619,10 @@ const ISSUE_IDS: &[&str] = &[
 /// is empty: every row of #91 is a rule.
 const PENDING: &[&str] = &[];
 
-/// The rows of #91 that left the catalog (#243), because the validate route of the cluster answers
-/// the check. A call of the route replaces each one: see "A check that a validate route answers"
-/// in the rule format of the book.
-const ANSWERED_BY_THE_ROUTE: &[&str] = &["gke-pool-multiple-3"];
+/// The rows of #91 that left the catalog, because the validate route of the cluster answers the
+/// check: `gke-pool-multiple-3` (#243) and `profile-cloud-mismatch` (#415). A call of the route
+/// replaces each one: see "A check that a validate route answers" in the rule format of the book.
+const ANSWERED_BY_THE_ROUTE: &[&str] = &["gke-pool-multiple-3", "profile-cloud-mismatch"];
 
 #[test]
 fn a_check_that_the_validate_route_answers_is_not_a_rule_of_the_catalog() {
@@ -633,6 +632,16 @@ fn a_check_that_the_validate_route_answers_is_not_a_rule_of_the_catalog() {
         .filter(|id| catalog.rule(id).is_some())
         .collect();
     assert!(back.is_empty(), "a copy of the route is back: {back:?}");
+}
+
+/// A rule that no validate route answers stays in the catalog as a gap that preflight fills, and
+/// its note names the route that takes the fault (#415).
+#[test]
+fn a_rule_that_the_cluster_validate_route_does_not_answer_says_so_in_its_note() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("pack-cloud-support").unwrap();
+    assert!(rule.what.contains("no route answers"), "{}", rule.what);
+    assert!(rule.what.contains("palette-validate"), "{}", rule.what);
 }
 
 /// The fault is in the second item, not the first (#144): a profile that comes second, a host of

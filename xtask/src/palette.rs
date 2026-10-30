@@ -20,6 +20,10 @@
 //! [`REFUSALS`], the answer is that status with that file as the body: Palette refuses the
 //! request.
 //!
+//! The validate route of a create, `POST /v1/spectroclusters/{cloudType}/validate`, reads the body
+//! first. When a profile of the body is of another cloud type, the answer is HTTP 500 with the
+//! code `ClusterProfilesNotSupported`, as Palette gives it: see `profile_cloud_refusal`.
+//!
 //! When the file does not exist, the answer is HTTP 404 with the body that Palette gives. The
 //! server reads each file at each request, so the runner can change the tenant between two
 //! commands, and a page can show what Palette does after an edit in place.
@@ -61,9 +65,34 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     let Some(request) = read_request(&mut stream)? else {
         return Ok(());
     };
+    let (status, body) = match profile_cloud_refusal(root, &request) {
+        Some(body) => (500, body),
+        None => served(root, &request)?,
+    };
+    let reason = match status {
+        200 => "OK",
+        204 => "No Content",
+        403 => "Forbidden",
+        409 => "Conflict",
+        422 => "Unprocessable Entity",
+        500 => "Internal Server Error",
+        _ => "Not Found",
+    };
+    write!(
+        stream,
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\n\
+         Content-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    )?;
+    stream.write_all(&body)?;
+    stream.flush()
+}
+
+/// The status and the body that the files of the tenant give for `request`.
+fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
     let path = file_for(root, request.project.as_deref(), &request.target);
     let refusal = path.as_deref().and_then(refusal_of);
-    let (status, body) = match (path, refusal) {
+    Ok(match (path, refusal) {
         (Some(path), _) if path.is_file() && with_query(&request.target, CLUSTER_SEARCH_PATH) => {
             (200, searched(&fs::read(path)?, &request.body))
         }
@@ -89,24 +118,55 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
             .to_string()
             .into_bytes(),
         ),
-    };
-    let reason = match status {
-        200 => "OK",
-        204 => "No Content",
-        403 => "Forbidden",
-        409 => "Conflict",
-        422 => "Unprocessable Entity",
-        500 => "Internal Server Error",
-        _ => "Not Found",
-    };
-    write!(
-        stream,
-        "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\n\
-         Content-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    )?;
-    stream.write_all(&body)?;
-    stream.flush()
+    })
+}
+
+/// The cloud type in `target`, when it is the validate route of a create:
+/// `/v1/spectroclusters/{cloudType}/validate`.
+fn cluster_validate_cloud(target: &str) -> Option<&str> {
+    let cloud = target
+        .strip_prefix("/v1/spectroclusters/")?
+        .strip_suffix("/validate")?;
+    (!cloud.contains('/')).then_some(cloud)
+}
+
+/// The refusal of the validate route of a create for a body with a profile of another cloud type,
+/// as Palette gives it: HTTP 500, the code `ClusterProfilesNotSupported`, and the names of those
+/// profiles. A profile of the cloud type `all` fits each cloud. `None` when `request` is not that
+/// route, or when each profile of its body fits the cloud of the route.
+///
+/// A live run shows the message for one profile. The stand-in joins the names of several with a
+/// comma, which no run shows.
+fn profile_cloud_refusal(root: &Path, request: &Request) -> Option<Vec<u8>> {
+    let cloud = cluster_validate_cloud(&request.target)?;
+    let entity: serde_json::Value = serde_json::from_slice(&request.body).ok()?;
+    let names: Vec<String> = entity["spec"]["profiles"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| {
+            let route = format!("/v1/clusterprofiles/{}", p["uid"].as_str()?);
+            let file = file_for(root, request.project.as_deref(), &route)?;
+            let profile: serde_json::Value = serde_json::from_slice(&fs::read(file).ok()?).ok()?;
+            let kind = profile["spec"]["published"]["cloudType"].as_str()?;
+            if kind == "all" || kind.eq_ignore_ascii_case(cloud) {
+                return None;
+            }
+            profile["metadata"]["name"].as_str().map(str::to_string)
+        })
+        .collect();
+    if names.is_empty() {
+        return None;
+    }
+    let message = format!(
+        "Cluster profiles '{}' are not supported with '{cloud}' environment",
+        names.join(", ")
+    );
+    Some(
+        serde_json::json!({"code": "ClusterProfilesNotSupported", "message": message})
+            .to_string()
+            .into_bytes(),
+    )
 }
 
 /// True when `target` asks for the route `path` with a query, as a search or a log does.
@@ -434,6 +494,55 @@ mod tests {
             got.unwrap(),
             Path::new("/r/p1/v1/audits@resourceKind=clusterprofile&resourceUid=u1&limit=100.json")
         );
+    }
+
+    /// The validate route of a create refuses a body with a profile of another cloud type with
+    /// HTTP 500 and `ClusterProfilesNotSupported`, as a live run shows (#415). A profile of the
+    /// cloud type `all` fits each cloud.
+    #[test]
+    fn the_validate_route_of_a_create_refuses_a_profile_of_another_cloud_type() {
+        let dir = std::env::temp_dir().join(format!("strata-cloud-type-{}", std::process::id()));
+        let profiles = dir.join("p1/v1/clusterprofiles");
+        fs::create_dir_all(&profiles).unwrap();
+        for (uid, name, cloud) in [
+            ("u-aws", "aws-stack", "aws"),
+            ("u-gcp", "gcp-stack", "gcp"),
+            ("u-all", "addons", "all"),
+        ] {
+            let profile = serde_json::json!({"metadata": {"name": name},
+                "spec": {"published": {"cloudType": cloud}}});
+            fs::write(profiles.join(format!("{uid}.json")), profile.to_string()).unwrap();
+        }
+        let refusal = |target: &str, uids: &[&str]| {
+            let profiles: Vec<_> = uids.iter().map(|u| serde_json::json!({"uid": u})).collect();
+            let request = Request {
+                target: target.to_string(),
+                project: Some("p1".to_string()),
+                body: serde_json::json!({"spec": {"profiles": profiles}})
+                    .to_string()
+                    .into_bytes(),
+            };
+            profile_cloud_refusal(&dir, &request)
+                .map(|body| serde_json::from_slice::<serde_json::Value>(&body).unwrap())
+        };
+        let route = "/v1/spectroclusters/aws/validate";
+        assert_eq!(refusal(route, &["u-aws", "u-all"]), None);
+        let got = refusal(route, &["u-aws", "u-gcp"]).unwrap();
+        assert_eq!(got["code"], "ClusterProfilesNotSupported");
+        assert_eq!(
+            got["message"],
+            "Cluster profiles 'gcp-stack' are not supported with 'aws' environment"
+        );
+        // the route of another cloud type, and another route under it, are not this check
+        assert_eq!(
+            refusal("/v1/spectroclusters/gcp/validate", &["u-gcp"]),
+            None
+        );
+        assert_eq!(
+            refusal("/v1/spectroclusters/aws/validate/packs", &["u-gcp"]),
+            None
+        );
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     /// A file of a refusal gives its status, and the first status of [`REFUSALS`] wins.

@@ -159,6 +159,7 @@ not make the checks that the route answers.
 | Rule that left the catalog | The check | What the route answers |
 | --- | --- | --- |
 | `gke-pool-multiple-3` | The size of a GKE worker pool is a multiple of 3. | `InvalidParam`, "Node pool size should be multiple of 3". A live run shows it: see [What the preflight runs show](../development/live-runs.md#what-the-preflight-runs-show). |
+| `profile-cloud-mismatch` | Each profile is of the cloud type of the cluster, or of `all`. | HTTP 500, `ClusterProfilesNotSupported`, `Cluster profiles '<name>' are not supported with 'aws' environment`. A live run shows it: see [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). `palette-validate` reports the refusal. |
 
 ### The checks that wait for a call of the route
 
@@ -175,8 +176,6 @@ leaves the rule, and its fixtures leave with it.
 | `ssh-key-format` | The vSphere and Edge engines. |
 | `azure-ssh-key` | The empty key. |
 | `pack-state` | The `disabled` and `deleted` states. |
-| `profile-cloud-mismatch` | All of it. |
-| `pack-cloud-support` | All of it. |
 | `vsphere-static-ip-pool` | All of it. |
 | `vsphere-controlplane-endpoint` | The empty host. |
 | `edge-vip-multi-node` | The empty host. |
@@ -197,6 +196,7 @@ them, or they need more than the body of the create. They stay in the catalog.
 | `edge-vip-multi-node` | The count of the hosts. |
 | `azure-subnets-in-vnet` | The containment of the subnet CIDRs in the CIDR of the vnet. |
 | `ntp-servers` | The warning when the cluster names no server. |
+| `pack-cloud-support` | All of it. The route takes a body with a pack version that does not list the cloud type, and `palette-validate` passes. Palette refuses the pack at the create. A live run shows that the route takes the body: see [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). |
 | `template-outside`, the `edge-host-*` rules | They read a document of the tenant. No validate route answers them. |
 | `palette-validate`, `pack-dependency`, `ecr-oci-images`, `worker-cpu-floor`, `eks-public-subnet-mapping`, `iaas-pod-identity`, `sts-account-not-assumable` | They call a route, and copy no answer of it. |
 
