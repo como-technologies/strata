@@ -116,6 +116,24 @@ create_body() {
       "$live/preflight/$engine.json" > "$file"
 }
 
+# ---- the packs of the lab registry --------------------------------------------------------------------
+
+# The registry of the lab and the pack versions in it that the scripts use. pack-states.sh shows what
+# Palette does with each state. addon_pack is a pack that Palette takes in an add-on profile. marked
+# has the mark disabled of Spectro Cloud and no system_state (#125). deleted has system_state deleted.
+public_repo="Public Repo"
+addon_pack=cert-manager
+addon_pack_version=1.21.1
+marked=gloo
+marked_version=1.2.18
+deleted=generic-vm-libvirt
+deleted_version=1.0.0
+
+# registry_uid NAME: the uid of the registry NAME in the project; empty when the key cannot see it
+registry_uid() {
+  "$live/api.sh" get /v1/registries/metadata | jq -r --arg n "$1" '.items[] | select(.name == $n) | .uid'
+}
+
 # ---- checks ------------------------------------------------------------------------------------------
 
 failures=0

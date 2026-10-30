@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# The case bodies of validate-route.sh on AWS (#408). Four cases of the cluster validate route do
+# not depend on the cloud. Each case needs a body of its own, because its fault is in a profile.
+# This script writes those bodies, so that validate-route.sh runs the four cases on AWS.
+#
+#   examples/live/route-bodies.sh BODIES
+#
+# BODIES is the directory for `validate-route.sh BODIES`. The script makes it when it is not
+# there. It writes the clean body of a create on AWS, from the release profile and the cloud
+# account of terraform.tfvars. It also writes one body for each case. A case body is the clean
+# body with one more profile:
+#
+#   aws-clean.json           the body that the route must take
+#   pack-state-disabled      an add-on profile with the pack gloo, which carries the mark disabled
+#   pack-state-deleted       an add-on profile with a pack version in the state deleted
+#   profile-cloud-mismatch   an add-on profile of the cloud type gcp
+#   pack-cloud-support       an add-on profile with a pack version whose cloud types lack aws
+#
+# The script makes each profile through the API, with the name strata-route-<case>, and publishes
+# it. It deletes each profile at its end, when a step fails, and when a signal stops it. Palette
+# can refuse a profile, and the registry can lack a pack in the state of a case. The script then
+# skips that case. steps.log says why, and no body of the case stays in BODIES. The script creates
+# no content in a registry. For pack-cloud-support, it reads the pack listing of Public Repo for
+# the first pack in the layer addon whose cloud types lack aws. PACK_CLOUD_SUPPORT=<pack>@<version>
+# names that pack instead.
+#
+# Needs the release profile of the live example on AWS (just live-profiles), the cloud account of
+# terraform.tfvars, and the key as verify.sh needs it. It builds no cluster, and costs nothing
+# that stays. Results go under runs/<UTC time>/route-bodies/, or OUT. Exit 0 only when no check
+# fails.
+set -uo pipefail
+script=route-bodies
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+[ -x "$strata" ] || die "no strata binary at $strata"
+usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+case "${1:-}" in
+  -h | --help) usage; exit 0 ;;
+  "") usage >&2; exit 2 ;;
+esac
+mkdir -p "$1" && bodies=$(cd "$1" && pwd) || die "no directory $1"
+
+run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/route-bodies}
+mkdir -p "$run" && cd "$run" || exit 2
+
+# The profiles that this run made, one "CASE UID" on a line. cleanup deletes them and empties the list.
+made=""
+cleanup() {
+  local todo=$made id uid
+  made=""
+  while read -r id uid; do
+    [ -z "$id" ] || check "$id-deleted" 0 "#408: the profile of $id is deleted" -- "$live/api.sh" delete "$uid"
+  done <<<"$todo"
+}
+
+summary() {
+  {
+    echo "# case bodies of the cluster validate route"
+    echo
+    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`: bodies in \`$bodies\`."
+    echo
+    summary_table
+  } > summary.md
+}
+finish() { cleanup; summary; }
+trap finish EXIT
+trap 'exit 130' INT TERM
+
+load_outputs
+export PALETTE_PROJECT_UID=$(out project_uid)
+R=$(out release_profile_uid)
+[ -n "$R" ] || die "no release profile; run just live-profiles first"
+profile_cloud=$("$live/api.sh" get "/v1/clusterprofiles/$R" | jq -r '.spec.published.cloudType // empty') ||
+  die "cannot read the release profile $R"
+[ "$profile_cloud" = aws ] || die "the release profile $R is of cloud type ${profile_cloud:-unknown}, not aws: apply with -var cloud=aws"
+public_uid=$(registry_uid "$public_repo")
+[ -n "$public_uid" ] || die "the key cannot see the registry $public_repo"
+
+echo "== the clean body of a create on AWS (#408)" | tee -a steps.log
+create_body aws "$R" strata-route-aws "$bodies/aws-clean.json"
+check aws-clean-body 0 "#408: aws-clean.json names the account $account_name and the release profile $R" -- \
+  jq -e --arg a "$A" --arg r "$R" '.spec.cloudAccountUid == $a and .spec.profiles[0].uid == $r' "$bodies/aws-clean.json"
+
+# case_body CASE NAME PACK VERSION [CLOUD]: make and publish the add-on profile NAME with PACK at
+# VERSION from the registry of the lab, of the cloud type CLOUD or all. Then write BODIES/CASE.json:
+# the clean body and that profile. When Palette refuses the profile, skip the case.
+case_body() {
+  local id=$1 name=$2 pack=$3 version=$4 cloud=${5:-all} uid
+  echo "== $id: the profile $name with $pack@$version" | tee -a steps.log
+  # a body of an earlier run names a profile that is gone. A case that is skipped has no body.
+  rm -f "$bodies/$id.json"
+  "$live/api.sh" delete-named "$name" > /dev/null || die "cannot delete the profile $name of an earlier run"
+  if ! uid=$("$live/api.sh" pin-profile "$name" "$public_uid" spectro "$pack" "$version" "" addon "" "$cloud" 2> "$id.err"); then
+    # the create can pass and the publish fail, and the profile then stays
+    "$live/api.sh" delete-named "$name" > /dev/null 2>&1
+    echo "skipped $id: Palette refuses the profile with $pack@$version: $(head -n 1 "$id.err")" | tee -a steps.log
+    return
+  fi
+  made+="$id $uid"$'\n'
+  jq --arg u "$uid" '.spec.profiles += [{uid: $u, packValues: [], variables: []}]' "$bodies/aws-clean.json" > "$bodies/$id.json" ||
+    { rm -f "$bodies/$id.json"; die "cannot write $bodies/$id.json"; }
+  check "$id-body" 0 "#408: $id.json holds the release profile and $name" -- \
+    jq -e --arg r "$R" --arg u "$uid" '[.spec.profiles[].uid] == [$r, $u]' "$bodies/$id.json"
+}
+
+# pack_without CLOUD: print NAME@VERSION of the first pack in Public Repo, in the layer addon, whose
+# cloud types hold neither CLOUD nor all. A pack with no cloud type supports each cloud. Exit 1
+# when the listing has none.
+pack_without() {
+  local offset=0 page found count
+  while :; do
+    page=$("$live/api.sh" get "/v1/packs?limit=100&offset=$offset") || return 2
+    found=$(jq -r --arg r "$public_uid" --arg c "$1" '[.items[]?
+        | select(.spec.registryUid == $r and .spec.layer == "addon"
+            and ((.spec.cloudTypes // []) | length > 0 and index("all") == null and index($c) == null))
+        | "\(.spec.name)@\(.spec.version)"][0] // empty' <<<"$page")
+    [ -z "$found" ] || { echo "$found"; return 0; }
+    count=$(jq '.listmeta.count // 0' <<<"$page")
+    offset=$((offset + 100))
+    [ "$offset" -lt "$count" ] || return 1
+  done
+}
+
+echo "== the four cases of the profiles (#408)" | tee -a steps.log
+case_body pack-state-disabled strata-route-pack-disabled "$marked" "$marked_version"
+case_body pack-state-deleted strata-route-pack-deleted "$deleted" "$deleted_version"
+case_body profile-cloud-mismatch strata-route-cloud-mismatch "$addon_pack" "$addon_pack_version" gcp
+cloud_pack=${PACK_CLOUD_SUPPORT:-$(pack_without aws 2> pack-cloud-support.err)}
+if [ -n "$cloud_pack" ]; then
+  case_body pack-cloud-support strata-route-cloud-support "${cloud_pack%@*}" "${cloud_pack#*@}"
+else
+  rm -f "$bodies/pack-cloud-support.json"
+  echo "skipped pack-cloud-support: $public_repo lists no pack in the layer addon without aws; give PACK_CLOUD_SUPPORT=<pack>@<version>. $(head -n 1 pack-cloud-support.err)" |
+    tee -a steps.log
+fi
+
+cleanup
+echo "route-bodies: $failures check(s) failed; bodies in $bodies; results in $run"
+[ "$failures" = 0 ]

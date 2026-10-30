@@ -21,24 +21,17 @@ script=pack-states
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
-disabled_reg="Public Repo"
+disabled_reg=$public_repo
 disabled=nginx
 disabled_version=1.15.1
 community="Palette Community Registry"
 deprecated=argo-cd
 deprecated_version=3.26.7
-deleted=generic-vm-libvirt
-deleted_version=1.0.0
-marked=gloo
-marked_version=1.2.18
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/pack-states}
 mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
-registry_uid() {
-  "$live/api.sh" get /v1/registries/metadata | jq -r --arg n "$1" '.items[] | select(.name == $n) | .uid'
-}
 disabled_uid=$(registry_uid "$disabled_reg")
 community_uid=$(registry_uid "$community")
 [ -n "$disabled_uid" ] && [ -n "$community_uid" ] || die "the key cannot see $disabled_reg and $community"

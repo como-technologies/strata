@@ -4304,6 +4304,451 @@ fn validate_route_sh_prints_its_usage_and_needs_a_directory_of_bodies() {
     );
 }
 
+#[test]
+fn validate_route_sh_runs_each_case_whose_body_is_an_aws_body() {
+    let mut stage = Stage::new(serde_json::json!({}));
+    std::fs::create_dir_all(stage.path("bodies")).unwrap();
+    for body in [
+        "aws-clean",
+        "pack-state-disabled",
+        "pack-state-deleted",
+        "profile-cloud-mismatch",
+        "pack-cloud-support",
+    ] {
+        std::fs::write(stage.path(&format!("bodies/{body}.json")), "{}").unwrap();
+    }
+    // each case goes to the route of AWS: the glob names the cloud, so a case on another engine
+    // finds no answer, and passes as a body that the route takes
+    for (case, message) in [
+        (
+            "pack-state-disabled",
+            "DisabledPacksForbidden: Disabled packs 'gloo' are forbidden",
+        ),
+        (
+            "pack-state-deleted",
+            "ClusterProfileInvalidPackState: the pack is deleted",
+        ),
+        (
+            "profile-cloud-mismatch",
+            "InvalidParam: the profile is of another cloud type",
+        ),
+        (
+            "pack-cloud-support",
+            "PackNotSupported: the pack does not support aws",
+        ),
+    ] {
+        stage.strata(
+            &format!("preflight */{case}.json --cloud aws *"),
+            1,
+            &route_report("failed", &[message]),
+        );
+    }
+    stage.strata(
+        "preflight */aws-clean.json --cloud aws *",
+        0,
+        &route_report("passed", &[]),
+    );
+    let bodies = stage.path("bodies");
+    let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(
+        &steps,
+        &[
+            "aws-clean",
+            "pack-state-disabled",
+            "pack-state-disabled-says",
+            "pack-state-deleted",
+            "pack-state-deleted-says",
+            "profile-cloud-mismatch",
+            "profile-cloud-mismatch-says",
+            "pack-cloud-support",
+            "pack-cloud-support-says",
+        ],
+    );
+    for case in [
+        "pack-state-disabled",
+        "pack-state-deleted",
+        "profile-cloud-mismatch",
+        "pack-cloud-support",
+    ] {
+        assert!(!steps.contains(&format!("skipped {case}")), "{steps}");
+    }
+    assert_eq!(steps.matches("aws-clean ").count(), 1, "{steps}");
+}
+
+// ---- route-bodies.sh -------------------------------------------------------------------------------
+
+/// Each case that route-bodies.sh makes, and the profile that it makes for the case.
+const ROUTE_CASES: [(&str, &str); 4] = [
+    ("pack-state-disabled", "strata-route-pack-disabled"),
+    ("pack-state-deleted", "strata-route-pack-deleted"),
+    ("profile-cloud-mismatch", "strata-route-cloud-mismatch"),
+    ("pack-cloud-support", "strata-route-cloud-support"),
+];
+
+/// The pack listing of the lab. It holds the packs that route-bodies.sh pins, and the packs that
+/// its search for `pack-cloud-support` passes over: one of another registry, one that lists aws,
+/// one that lists `all`, one with no cloud type, and one of another layer. `gcp-dns`, which lists
+/// gcp alone, is in the listing when `without_aws` is true.
+fn route_packs(without_aws: bool) -> String {
+    let pack =
+        |name: &str, version: &str, registry: &str, layer: &str, clouds: serde_json::Value| {
+            serde_json::json!({"metadata": {"uid": format!("pk-{name}")},
+            "spec": {"name": name, "version": version, "registryUid": registry,
+                "layer": layer, "cloudTypes": clouds}})
+        };
+    let mut items = vec![
+        pack(
+            "gcp-elsewhere",
+            "1.0.0",
+            "reg-other",
+            "addon",
+            ["gcp"].into(),
+        ),
+        pack(
+            "aws-and-gcp",
+            "3.0.0",
+            "reg-pub",
+            "addon",
+            ["aws", "gcp"].into(),
+        ),
+        pack("all-clouds", "4.0.0", "reg-pub", "addon", ["all"].into()),
+        pack(
+            "no-clouds",
+            "5.0.0",
+            "reg-pub",
+            "addon",
+            serde_json::json!([]),
+        ),
+        pack("gcp-csi", "6.0.0", "reg-pub", "csi", ["gcp"].into()),
+        pack("gloo", "1.2.18", "reg-pub", "addon", ["all"].into()),
+        pack(
+            "generic-vm-libvirt",
+            "1.0.0",
+            "reg-pub",
+            "infra",
+            ["all"].into(),
+        ),
+        pack("cert-manager", "1.21.1", "reg-pub", "addon", ["all"].into()),
+    ];
+    if without_aws {
+        items.push(pack("gcp-dns", "2.0.0", "reg-pub", "addon", ["gcp"].into()));
+    }
+    serde_json::json!({"items": items, "listmeta": {"count": items.len()}}).to_string()
+}
+
+/// A stage of route-bodies.sh in a lab on AWS: the account `lab-aws`, the release profile `r-1`
+/// on AWS, the registry `Public Repo`, and the packs `packs`. Palette makes a profile for each
+/// `POST /v1/clusterprofiles` with the uid `uid-<name>`, and publishes and deletes it.
+fn route_bodies_stage(packs: &str) -> Stage {
+    let mut stage = Stage::new(serde_json::json!({
+        "project_uid": "p-1", "release_profile_uid": "r-1",
+    }));
+    let tfvars = stage.path("terraform.tfvars");
+    std::fs::write(
+        &tfvars,
+        "cloud = \"aws\"\ncloud_account_name = \"lab-aws\"\nregion = \"us-east-2\"\nssh_key_name = \"lab\"\n",
+    )
+    .unwrap();
+    stage.env("TFVARS", tfvars.to_str().unwrap());
+    stage.route(
+        "/v1/cloudaccounts/summary",
+        r#"{"items":[{"kind":"aws","metadata":{"name":"lab-aws","uid":"acc-1"}}]}"#,
+    );
+    stage.route(
+        "/v1/clusterprofiles/r-1",
+        r#"{"spec":{"published":{"cloudType":"aws"}}}"#,
+    );
+    stage.route(
+        "/v1/registries/metadata",
+        r#"{"items":[{"name":"Public Repo","uid":"reg-pub"},{"name":"Other","uid":"reg-other"}]}"#,
+    );
+    stage.route(PROFILE_LISTING, r#"{"items":[]}"#);
+    stage.route("/v1/packs", packs);
+    executable(
+        &stage.path("routes/v1_clusterprofiles.sh"),
+        "#!/usr/bin/env bash\njq -c '{uid: (\"uid-\" + .metadata.name)}' \"$FAKE_ROUTES/sent/POST_v1_clusterprofiles\"\n",
+    );
+    for (_, name) in ROUTE_CASES {
+        stage.route(&format!("/v1/clusterprofiles/uid-{name}/publish"), "{}");
+        stage.route(&format!("/v1/clusterprofiles/uid-{name}"), "{}");
+    }
+    stage
+}
+
+/// The profiles that the script deleted, in order, as the uids.
+fn deleted_profiles(stage: &Stage) -> Vec<String> {
+    lines_of(&stage.path("curl.log"))
+        .iter()
+        .filter_map(|l| l.strip_prefix("DELETE /v1/clusterprofiles/"))
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn route_bodies_sh_writes_the_clean_body_and_the_four_case_bodies_and_deletes_each_profile() {
+    let stage = route_bodies_stage(&route_packs(true));
+    let bodies = stage.path("bodies");
+    let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(
+        !steps.contains("FAIL") && !steps.contains("skipped"),
+        "{steps}"
+    );
+
+    let mut ids = vec!["aws-clean-body".to_string()];
+    for (case, _) in ROUTE_CASES {
+        ids.push(format!("{case}-body"));
+        ids.push(format!("{case}-deleted"));
+    }
+    passed(&steps, &ids.iter().map(String::as_str).collect::<Vec<_>>());
+
+    // the clean body is the body of create_body: the account, the release profile, the region
+    let clean = read_json(&bodies.join("aws-clean.json"));
+    assert_eq!(clean["metadata"]["name"], "strata-route-aws");
+    assert_eq!(clean["spec"]["cloudAccountUid"], "acc-1");
+    assert_eq!(clean["spec"]["cloudConfig"]["region"], "us-east-2");
+    assert_eq!(
+        clean["spec"]["profiles"],
+        serde_json::json!([{"uid": "r-1", "packValues": [], "variables": []}])
+    );
+
+    // a case body is the clean body and one more profile, the one that the script made
+    for (case, name) in ROUTE_CASES {
+        let mut body = read_json(&bodies.join(format!("{case}.json")));
+        assert_eq!(
+            body["spec"]["profiles"],
+            serde_json::json!([
+                {"uid": "r-1", "packValues": [], "variables": []},
+                {"uid": format!("uid-{name}"), "packValues": [], "variables": []},
+            ]),
+            "{case}"
+        );
+        body["spec"]["profiles"] = clean["spec"]["profiles"].clone();
+        assert_eq!(body, clean, "{case}: nothing else changes");
+    }
+
+    // each profile is an add-on profile with the pack of its case, of the cloud type of its case
+    let made: Vec<(String, String, String, String, String, String)> = stage
+        .sent("POST", "/v1/clusterprofiles")
+        .iter()
+        .map(|p| {
+            let template = &p["spec"]["template"];
+            let pack = &template["packs"][0];
+            let field = |v: &serde_json::Value| v.as_str().unwrap().to_string();
+            (
+                field(&p["metadata"]["name"]),
+                field(&template["type"]),
+                field(&template["cloudType"]),
+                field(&pack["name"]),
+                field(&pack["tag"]),
+                field(&pack["uid"]),
+            )
+        })
+        .collect();
+    let want = [
+        (
+            "strata-route-pack-disabled",
+            "all",
+            "gloo",
+            "1.2.18",
+            "pk-gloo",
+        ),
+        (
+            "strata-route-pack-deleted",
+            "all",
+            "generic-vm-libvirt",
+            "1.0.0",
+            "pk-generic-vm-libvirt",
+        ),
+        (
+            "strata-route-cloud-mismatch",
+            "gcp",
+            "cert-manager",
+            "1.21.1",
+            "pk-cert-manager",
+        ),
+        (
+            "strata-route-cloud-support",
+            "all",
+            "gcp-dns",
+            "2.0.0",
+            "pk-gcp-dns",
+        ),
+    ]
+    .map(|(name, cloud, pack, tag, uid)| {
+        let s = str::to_string;
+        (s(name), s("add-on"), s(cloud), s(pack), s(tag), s(uid))
+    });
+    assert_eq!(made, want);
+
+    // the script deletes each profile that it made, after the last create, and nothing else
+    let log = lines_of(&stage.path("curl.log"));
+    let last_create = log
+        .iter()
+        .rposition(|l| l == "POST /v1/clusterprofiles")
+        .unwrap();
+    let first_delete = log.iter().position(|l| l.starts_with("DELETE ")).unwrap();
+    assert!(last_create < first_delete, "{log:?}");
+    assert_eq!(
+        deleted_profiles(&stage),
+        ROUTE_CASES.map(|(_, name)| format!("uid-{name}"))
+    );
+}
+
+#[test]
+fn route_bodies_sh_deletes_each_profile_that_it_made_when_a_step_fails() {
+    let stage = route_bodies_stage(&route_packs(true));
+    // the write of the third body fails, after Palette made its profile
+    stage.command(
+        "jq",
+        r#"#!/usr/bin/env bash
+PATH=${PATH#"$(dirname "$0")":}
+case "$*" in *uid-strata-route-cloud-mismatch*) exit 5 ;; esac
+exec jq "$@"
+"#,
+    );
+    let bodies = stage.path("bodies");
+    let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(2), "{steps}{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("cannot write"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert_eq!(stage.sent("POST", "/v1/clusterprofiles").len(), 3);
+    assert_eq!(
+        deleted_profiles(&stage),
+        [
+            "uid-strata-route-pack-disabled",
+            "uid-strata-route-pack-deleted",
+            "uid-strata-route-cloud-mismatch"
+        ]
+    );
+    passed(
+        &steps,
+        &[
+            "pack-state-disabled-deleted",
+            "pack-state-deleted-deleted",
+            "profile-cloud-mismatch-deleted",
+        ],
+    );
+    assert!(
+        !bodies.join("profile-cloud-mismatch.json").exists(),
+        "a body that failed stays out of the directory"
+    );
+    assert!(!bodies.join("pack-cloud-support.json").exists());
+}
+
+#[test]
+fn route_bodies_sh_skips_a_case_whose_profile_palette_refuses_and_leaves_no_body_for_it() {
+    let stage = route_bodies_stage(&route_packs(true));
+    stage.route(
+        "/v1/clusterprofiles",
+        r#"{"code":"DisabledPacksForbidden","message":"Disabled packs 'gloo' are forbidden"}"#,
+    );
+    std::fs::remove_file(stage.path("routes/v1_clusterprofiles.sh")).unwrap();
+    std::fs::write(stage.path("routes/v1_clusterprofiles.status"), "500").unwrap();
+    // a body of an earlier run names a profile that is gone
+    let bodies = stage.path("bodies");
+    std::fs::create_dir_all(&bodies).unwrap();
+    std::fs::write(bodies.join("pack-state-disabled.json"), "{}").unwrap();
+
+    let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    for (case, _) in ROUTE_CASES {
+        assert!(
+            steps.contains(&format!(
+                "skipped {case}: Palette refuses the profile with "
+            )),
+            "{steps}"
+        );
+        assert!(!bodies.join(format!("{case}.json")).exists(), "{case}");
+    }
+    assert!(
+        steps.contains("skipped pack-state-disabled: Palette refuses the profile with gloo@1.2.18: api.sh: POST /v1/clusterprofiles answered HTTP 500: {\"code\":\"DisabledPacksForbidden\""),
+        "{steps}"
+    );
+    passed(&steps, &["aws-clean-body"]);
+    assert!(bodies.join("aws-clean.json").exists());
+    assert!(
+        deleted_profiles(&stage).is_empty(),
+        "Palette made no profile"
+    );
+}
+
+#[test]
+fn route_bodies_sh_skips_pack_cloud_support_when_the_registry_has_no_pack_without_aws() {
+    let stage = route_bodies_stage(&route_packs(false));
+    let bodies = stage.path("bodies");
+    let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(
+        steps.contains("skipped pack-cloud-support: Public Repo lists no pack in the layer addon without aws; give PACK_CLOUD_SUPPORT=<pack>@<version>."),
+        "{steps}"
+    );
+    assert!(!bodies.join("pack-cloud-support.json").exists());
+    for (case, name) in &ROUTE_CASES[..3] {
+        passed(
+            &steps,
+            &[&format!("{case}-body"), &format!("{case}-deleted")],
+        );
+        assert!(bodies.join(format!("{case}.json")).exists(), "{name}");
+    }
+    assert_eq!(stage.sent("POST", "/v1/clusterprofiles").len(), 3);
+
+    // a pack that the lab names takes the place of the search
+    let mut stage = route_bodies_stage(&route_packs(false));
+    stage.env("PACK_CLOUD_SUPPORT", "all-clouds@4.0.0");
+    let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(
+        &steps,
+        &["pack-cloud-support-body", "pack-cloud-support-deleted"],
+    );
+    let last = stage.sent("POST", "/v1/clusterprofiles").pop().unwrap();
+    assert_eq!(last["metadata"]["name"], "strata-route-cloud-support");
+    assert_eq!(last["spec"]["template"]["packs"][0]["name"], "all-clouds");
+    assert_eq!(last["spec"]["template"]["packs"][0]["tag"], "4.0.0");
+    let searches = lines_of(&stage.path("curl.log"))
+        .iter()
+        .filter(|l| *l == "GET /v1/packs")
+        .count();
+    assert_eq!(searches, 4, "the four pins, and no search of the listing");
+}
+
+#[test]
+fn route_bodies_sh_stops_when_the_release_profile_is_not_on_aws() {
+    let stage = route_bodies_stage(&route_packs(true));
+    stage.route(
+        "/v1/clusterprofiles/r-1",
+        r#"{"spec":{"published":{"cloudType":"gcp"}}}"#,
+    );
+    let bodies = stage.path("bodies");
+    let (o, _) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("is of cloud type gcp, not aws"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(stage.sent("POST", "/v1/clusterprofiles").is_empty());
+}
+
+#[test]
+fn route_bodies_sh_prints_its_usage_and_needs_a_directory() {
+    let stage = Stage::new(serde_json::json!({}));
+    let o = stage.run("route-bodies.sh", &["--help"]).0;
+    assert_eq!(o.status.code(), Some(0));
+    assert!(
+        text(&o.stdout).contains("The case bodies of validate-route.sh on AWS (#408)"),
+        "{}",
+        text(&o.stdout)
+    );
+    let o = stage.run("route-bodies.sh", &[]).0;
+    assert_eq!(o.status.code(), Some(2), "no directory is usage, exit 2");
+}
+
 // ---- loop.sh ---------------------------------------------------------------------------------------
 
 /// A stage in a lab on AWS with the cloud account `lab-aws`, and a run that holds a repository of

@@ -36,9 +36,9 @@ script=validate-packs
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 stage=${1:-all}
-registry="Public Repo"
-pack=cert-manager
-version=1.21.1
+registry=$public_repo
+pack=$addon_pack
+version=$addon_pack_version
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/validate-packs}
 mkdir -p "$run" && cd "$run" || exit 2
@@ -109,8 +109,6 @@ if [ "$stage" = all ] || [ "$stage" = 2 ]; then
     grep -q 'answered HTTP 400: {"code":"ShouldNotBeEmpty"' validate-no-pack.err
   # a pack with the mark `disabled: "true"` and no system_state: Palette serves it, and refuses
   # a profile that holds it. Strata does not copy the rule, and the route answers it
-  marked=gloo
-  marked_version=1.2.18
   {
     echo "name: strata-validate-$marked"
     echo "version: 1.0.0"
