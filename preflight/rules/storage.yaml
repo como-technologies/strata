@@ -120,10 +120,14 @@ rules:
       `encryptionConfig.provider` names the KMS key of the EKS secrets encryption. A key that is
       not in the region, is disabled, or that the cluster role cannot use fails the create. The EKS
       validate route of Palette calls `GET /v1/clouds/aws/regions/{region}/kmskeys/validate` when
-      encryption is on, so `palette-validate` covers the Palette side. This check reads the key with
-      the credentials of this machine: it must exist, and its state must be `Enabled`. The key
-      policy, which says who can use the key, needs `aws kms get-key-policy`; see reproduce. A KMS
-      key of an EBS volume is in the StorageClass parameters, not in the entity.
+      encryption is on. That call checks one fact: the ARN is in the `kms:ListKeys` list of the
+      account. It reads no key state and no `kms:CreateGrant`, so a disabled key passes it. It
+      answers `500` when the role has no `kms:ListKeys`. So `palette-validate` covers the list of
+      keys, not the key. This check reads the key with the credentials of this machine: it must
+      exist, its state must be `Enabled`, and its usage must be `ENCRYPT_DECRYPT`. The check does
+      not test `kms:CreateGrant`. That permission depends on the key policy and the IAM policy of
+      the role together; see reproduce. A KMS key of an EBS volume is in the StorageClass
+      parameters, not in the entity.
     check:
       kind: exec
       needs: [aws]
@@ -150,14 +154,16 @@ rules:
       - "curl -s -o /dev/null -w '%{http_code}\\n' -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/kmskeys/validate?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&keyArn={{ .entity.spec.cloudConfig.encryptionConfig.provider }}\""
     fix:
       owner: palette
-      text: Check the key policy, not only the key, in the validate route.
+      text: Read the state of the key and the kms:CreateGrant permission in the validate route, not only the list of keys, and answer with a 4xx, not 500, when the role has no kms:ListKeys.
     evidence:
       - kind: source
-        note: the EKS validate route of Palette checks the KMS key when encryptionConfig.isEnabled
+        note: when encryptionConfig.isEnabled, the EKS validate route of Palette calls the kmskeys/validate route
       - kind: source
-        note: GET /v1/clouds/aws/regions/{region}/kmskeys/validate?cloudAccountUid=&keyArn= answers 204
+        note: GET /v1/clouds/aws/regions/{region}/kmskeys/validate?cloudAccountUid=&keyArn= answers 204 when the ARN is in kms:ListKeys; it reads no key state and no kms:CreateGrant, and answers 500 when the role has no kms:ListKeys
     tests:
       - fault: fixtures/eks/kms-key-missing.json
+        clean: fixtures/eks/kms-clean.json
+      - fault: fixtures/eks/kms-key-disabled.json
         clean: fixtures/eks/kms-clean.json
 
   - id: eks-encryption-fixed

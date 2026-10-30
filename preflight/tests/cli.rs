@@ -365,3 +365,28 @@ fn the_rules_schema_has_each_as_an_optional_program_of_a_check_of_palette() {
         .collect();
     assert!(!required.contains(&"each"), "{required:?}");
 }
+
+#[test]
+fn the_rules_listing_states_that_palette_checks_the_list_of_kms_keys_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let (code, out, err) = run(&["--rules", "--cloud", "eks", "--json"], dir.path());
+    assert_eq!(code, 0, "{err}");
+    let listing: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let rule = listing["rules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["id"] == "kms")
+        .expect("the listing holds the kms rule");
+    let what = rule["what"].as_str().unwrap();
+    for text in [
+        "the ARN is in the `kms:ListKeys` list",
+        "reads no key state and no `kms:CreateGrant`",
+        "answers `500` when the role has no `kms:ListKeys`",
+    ] {
+        assert!(what.contains(text), "{text}: {what}");
+    }
+    assert!(!what.contains("covers the Palette side"), "{what}");
+    let fix = rule["fix"]["text"].as_str().unwrap();
+    assert!(fix.contains("kms:CreateGrant"), "{fix}");
+}
