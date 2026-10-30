@@ -249,11 +249,13 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
 /// A `curl` that answers by path: the body of `<api path with / as _>` under $FAKE_ROUTES, with
 /// status 200, or 404 when there is no such file.
 ///
-/// A `<key>.status` file overrides the status. When an executable $FAKE_ROUTES/<route key>.sh
+/// A `<key>.status` file overrides the status. A `<key>.keyed.status` file overrides it again for
+/// a request with an ApiKey header. When an executable $FAKE_ROUTES/<route key>.sh
 /// exists, its output is the body of each answer. It logs each request as `METHOD path` to
 /// $FAKE_LOG. It keeps each request body as $FAKE_ROUTES/sent/<METHOD>_<route key>. It adds the
 /// body to $FAKE_ROUTES/sent/<METHOD>_<route key>.all, in the order of the requests. It keeps
-/// the query and the headers, without the key, as $FAKE_ROUTES/sent/<METHOD>_<route key>.request.
+/// the query and the headers as $FAKE_ROUTES/sent/<METHOD>_<route key>.request. The line of the
+/// ApiKey header holds `(hidden)` in place of the key.
 const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
 out=""; write=""; url=""; method=GET; sent=""; headers=""
 while [ $# -gt 0 ]; do
@@ -272,11 +274,12 @@ path=${url#*://*/}; query=""; [ "$path" != "${path#*\?}" ] && query=${path#*\?};
 echo "$method /$path" >> "$FAKE_LOG"
 mkdir -p "$FAKE_ROUTES/sent"
 [ -n "$sent" ] && cp "$sent" "$FAKE_ROUTES/sent/${method}_$key" && cat "$sent" >> "$FAKE_ROUTES/sent/${method}_$key.all"
-printf 'query=%s\n%s' "$query" "$headers" | grep -v '^ApiKey:' > "$FAKE_ROUTES/sent/${method}_$key.request"
+printf 'query=%s\n%s' "$query" "$headers" | sed 's/^ApiKey:.*/ApiKey: (hidden)/' > "$FAKE_ROUTES/sent/${method}_$key.request"
 body="$FAKE_ROUTES/$key"; status=404
 [ -x "$body.sh" ] && "$body.sh" > "$body"
 [ -f "$body" ] && status=200 || body=/dev/null
 [ -f "$FAKE_ROUTES/$key.status" ] && status=$(cat "$FAKE_ROUTES/$key.status")
+case "$headers" in *ApiKey:*) [ -f "$FAKE_ROUTES/$key.keyed.status" ] && status=$(cat "$FAKE_ROUTES/$key.keyed.status") ;; esac
 if [ -n "$out" ]; then cp "$body" "$out"; else cat "$body"; fi
 [ -n "$write" ] && printf '%s' "$status"
 exit 0
@@ -705,6 +708,106 @@ fn api_sh_delete_named_deletes_every_version_of_exactly_that_name() {
     );
     assert!(
         text(&o.stdout).contains("strata-live-move: no versions"),
+        "{}",
+        text(&o.stdout)
+    );
+}
+
+/// The route that gives the release, as Palette answers it: the release to a call with no key,
+/// and HTTP 500 to a call with an ApiKey header.
+fn release_route(routes: &Path) {
+    std::fs::create_dir_all(routes).unwrap();
+    std::fs::write(
+        routes.join("v1_mgmt_app_version"),
+        r#"{"version":{"installedVersion":"4.10.17-patch.1"}}"#,
+    )
+    .unwrap();
+    std::fs::write(routes.join("v1_mgmt_app_version.keyed.status"), "500").unwrap();
+}
+
+#[test]
+fn api_sh_app_version_sends_no_key_and_no_project_header_with_no_key() {
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    release_route(&routes);
+    let request =
+        || std::fs::read_to_string(routes.join("sent/GET_v1_mgmt_app_version.request")).unwrap();
+
+    let o = run_live("api.sh", &["app-version", "--no-key"], root.path(), &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stdout).contains(r#""installedVersion":"4.10.17-patch.1""#),
+        "{}",
+        text(&o.stdout)
+    );
+    let sent = request();
+    assert!(!sent.contains("ApiKey"), "no key: {sent}");
+    assert!(!sent.contains("ProjectUid"), "no project: {sent}");
+
+    let o = run_live("api.sh", &["app-version"], root.path(), &[]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stdout));
+    assert!(
+        text(&o.stderr).contains("GET /v1/mgmt/app/version answered HTTP 500"),
+        "{}",
+        text(&o.stderr)
+    );
+    let sent = request();
+    assert!(sent.contains("ApiKey: (hidden)"), "the key: {sent}");
+    assert!(!sent.contains("ProjectUid"), "no project: {sent}");
+
+    let o = run_live("api.sh", &["app-version", "--key"], root.path(), &[]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("usage: api.sh app-version [--no-key]"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn release_sh_expects_the_release_with_no_key_and_a_refusal_with_the_key() {
+    let ids = [
+        "release-no-key",
+        "release-no-key-says",
+        "release-with-key",
+        "release-with-key-says",
+    ];
+    let stage = Stage::new(baseline_outputs());
+    release_route(&stage.path("routes"));
+    let (o, steps) = stage.run("release.sh", &[]);
+    assert_eq!(o.status.code(), Some(0), "{steps}");
+    passed(&steps, &ids);
+
+    // Palette answers a call with the key too: the run fails on the refusal
+    let stage = Stage::new(baseline_outputs());
+    release_route(&stage.path("routes"));
+    std::fs::remove_file(stage.path("routes/v1_mgmt_app_version.keyed.status")).unwrap();
+    let (o, steps) = stage.run("release.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    assert!(
+        steps
+            .lines()
+            .any(|l| l.starts_with("FAIL") && l.contains("release-with-key ")),
+        "{steps}"
+    );
+
+    // Palette refuses a call with no key: the run fails on the release
+    let stage = Stage::new(baseline_outputs());
+    release_route(&stage.path("routes"));
+    std::fs::write(stage.path("routes/v1_mgmt_app_version.status"), "500").unwrap();
+    let (o, steps) = stage.run("release.sh", &[]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    assert!(
+        steps
+            .lines()
+            .any(|l| l.starts_with("FAIL") && l.contains("release-no-key ")),
+        "{steps}"
+    );
+
+    let o = stage.run("release.sh", &["--help"]).0;
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stdout).contains("The release test (#146)"),
         "{}",
         text(&o.stdout)
     );

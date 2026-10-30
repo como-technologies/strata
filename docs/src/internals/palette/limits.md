@@ -124,9 +124,28 @@ is in the catalog.
 | images | The sync status of the registry of each pack, before a build | `status.sync` of `GET /v1/registries/pack/summary` |
 | profiles | A version with no published template | `status.isPublished` of the profile |
 | lifecycle | A pool renamed, which is a delete and a create; a `size` outside `minSize` and `maxSize` | a static diff of the change |
-| platform | The version of the agent against the release of Palette | no route gives the release to a tenant key |
+| platform | The version of the agent against the release of Palette | the one route that gives the release refuses a tenant key: see [The release of Palette](#the-release-of-palette) |
 | tools | An AWS CLI older than 2.22, which `eks-version-not-offered` needs | `aws --version` |
 | teardown | The IRSA roles a delete leaves | `aws iam list-roles`, by tag |
+
+## The release of Palette
+
+One route gives the release of Palette: `GET /v1/mgmt/app/version`. The public
+API reference does not list it. A call with no `ApiKey` header answers 200. The
+body holds the exact release in `version.installedVersion`, for example
+`4.10.17-patch.1`. A call with any `ApiKey` header answers 500. So a tenant key
+cannot read the release.
+
+Strata does not call this route. Every other call of strata sends the key, and
+this route refuses a call with the key. `--release` stays the input of the
+release: see [the options of `strata preflight`](../../commands/preflight.md#options).
+The run of [release.sh](../../development/live-runs.md#releasesh) makes both
+calls:
+
+```bash
+examples/live/api.sh app-version --no-key   # 200, with the release
+examples/live/api.sh app-version            # HTTP 500
+```
 
 ## What the source of Palette says
 

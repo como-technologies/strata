@@ -66,7 +66,7 @@ reports and the world, or that no file was written.
 | Option | What it does | Page |
 | --- | --- | --- |
 | `--cloud` | Names the engine of a file. A cluster names its own. | |
-| `--release` | Names the Palette release, which a tenant key cannot read. With none, a rule of one release applies. | |
+| `--release` | Names the Palette release. A tenant key cannot read it: the one route that gives it refuses a call with a key. With none, a rule of one release applies. | [The release of Palette](../internals/palette/limits.md#the-release-of-palette) |
 | `--records` | Gives the records of the profiles as files, for a run with no key. With none, strata records each profile from Palette. | |
 | `--probes` | Adds the rules of a file of custom probes. | [Custom probes](preflight/rules.md#custom-probes) |
 | `--tier` | Selects the tiers: `static`, `palette`, `cloud`, as a list. | [The static tier and the live tier](preflight/tiers.md) |
