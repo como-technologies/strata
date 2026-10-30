@@ -374,15 +374,14 @@ fn host() -> Host {
         snapshot_from_raw(&raw, name, &out);
         out.to_str().unwrap().to_string()
     };
-    let bin = dir.path().join("bin");
-    std::fs::create_dir(&bin).unwrap();
-    for (name, body) in [
-        ("gh", FAKE_GH),
-        ("fake-strata", FAKE_STRATA),
-        ("curl", FAKE_GL_CURL),
-    ] {
-        executable(&bin.join(name), body);
-    }
+    let bin = fake_bin(
+        dir.path(),
+        &[
+            ("gh", FAKE_GH),
+            ("fake-strata", FAKE_STRATA),
+            ("curl", FAKE_GL_CURL),
+        ],
+    );
     Host {
         a: snap("a"),
         a2: snap("a2"),
@@ -844,9 +843,7 @@ fn release() -> tempfile::TempDir {
         serde_json::json!({"tag_name": "v9.9.9", "assets": listed}).to_string(),
     )
     .unwrap();
-    let bin = d.join("bin");
-    std::fs::create_dir(&bin).unwrap();
-    executable(&bin.join("curl"), FAKE_RELEASE_CURL);
+    fake_bin(d, &[("curl", FAKE_RELEASE_CURL)]);
     dir
 }
 
@@ -1553,11 +1550,14 @@ impl Report {
     /// The stand-ins of the script `name` under scripts/, with `strata_stand_in` as its strata.
     fn new(name: &str, strata_stand_in: &str) -> Report {
         let dir = tempfile::tempdir().unwrap();
-        let bin = dir.path().join("bin");
-        std::fs::create_dir(&bin).unwrap();
-        executable(&bin.join("strata"), strata_stand_in);
-        executable(&bin.join("gh"), FAKE_ISSUES_GH);
-        executable(&bin.join("curl"), FAKE_GL_CURL);
+        fake_bin(
+            dir.path(),
+            &[
+                ("strata", strata_stand_in),
+                ("gh", FAKE_ISSUES_GH),
+                ("curl", FAKE_GL_CURL),
+            ],
+        );
         Report {
             script: script(name),
             dir,
@@ -2117,11 +2117,12 @@ echo '{}' | jq -r '.a // empty';                  echo "no -e $?"
 fn live_scripts_take_jq_e_on_an_empty_input_as_a_failure_with_each_jq() {
     for old_jq in [false, true] {
         let dir = tempfile::tempdir().unwrap();
-        let bin = dir.path().join("bin");
-        std::fs::create_dir(&bin).unwrap();
-        if old_jq {
-            executable(&bin.join("jq"), JQ_BEFORE_1_7_1);
-        }
+        let commands: &[(&str, &str)] = if old_jq {
+            &[("jq", JQ_BEFORE_1_7_1)]
+        } else {
+            &[]
+        };
+        let bin = fake_bin(dir.path(), commands);
         let o = Command::new("bash")
             .args(["-c", JQ_PROBE, "probe"])
             .arg(live_script("lib.sh"))
@@ -2150,9 +2151,7 @@ esac
 #[test]
 fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
     let root = tempfile::tempdir().unwrap();
-    let bin = root.path().join("bin");
-    std::fs::create_dir_all(&bin).unwrap();
-    executable(&bin.join("tofu"), FAKE_TOFU_APPLY);
+    let bin = fake_bin(root.path(), &[("tofu", FAKE_TOFU_APPLY)]);
     let log = root.path().join("tf.log");
     for flag in ["true", "false"] {
         let _ = std::fs::remove_file(&log);

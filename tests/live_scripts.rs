@@ -17,9 +17,7 @@ echo "host=${SPECTROCLOUD_HOST-<unset>} key=${SPECTROCLOUD_APIKEY:+set} args=$*"
 
 fn tf_sh(envs: &[(&str, &str)], palette_env: Option<&str>) -> Output {
     let dir = tempfile::tempdir().unwrap();
-    let bin = dir.path().join("bin");
-    std::fs::create_dir(&bin).unwrap();
-    executable(&bin.join("tofu"), FAKE_TOFU);
+    let bin = fake_bin(dir.path(), &[("tofu", FAKE_TOFU)]);
     let home = dir.path().join("home");
     std::fs::create_dir(&home).unwrap();
     if let Some(text) = palette_env {
@@ -134,12 +132,11 @@ fn tenant_sh(args: &[&str], status: &str, body: &str) -> (Output, String) {
 /// Run tenant.sh with one canned answer. When `old_jq` is true, `jq` acts as jq 1.6.
 fn tenant_run(args: &[&str], status: &str, body: &str, old_jq: bool) -> (Output, String) {
     let dir = tempfile::tempdir().unwrap();
-    let bin = dir.path().join("bin");
-    std::fs::create_dir(&bin).unwrap();
-    executable(&bin.join("curl"), FAKE_CURL);
+    let mut commands = vec![("curl", FAKE_CURL)];
     if old_jq {
-        executable(&bin.join("jq"), JQ_BEFORE_1_7_1);
+        commands.push(("jq", JQ_BEFORE_1_7_1));
     }
+    let bin = fake_bin(dir.path(), &commands);
     let (status_file, body_file, log) = (
         dir.path().join("status"),
         dir.path().join("body"),
@@ -330,12 +327,9 @@ struct Digest {
 /// and crane, with `envs` in its environment.
 fn tenant_digest(args: &[&str], routes: &[(&str, &str)], envs: &[(&str, &str)]) -> Digest {
     let dir = tempfile::tempdir().unwrap();
-    let (bin, route_dir) = (dir.path().join("bin"), dir.path().join("routes"));
-    for d in [&bin, &route_dir] {
-        std::fs::create_dir(d).unwrap();
-    }
-    executable(&bin.join("helm"), FAKE_HELM);
-    executable(&bin.join("crane"), FAKE_CRANE);
+    fake_bin(dir.path(), &[("helm", FAKE_HELM), ("crane", FAKE_CRANE)]);
+    let route_dir = dir.path().join("routes");
+    std::fs::create_dir(&route_dir).unwrap();
     for (key, body) in routes {
         std::fs::write(route_dir.join(key), body).unwrap();
     }
@@ -745,10 +739,7 @@ fn stuck_cluster_routes(routes: &Path, kubeconfig: bool) {
 }
 
 fn run_live(script: &str, args: &[&str], root: &Path, extra: &[(&str, &str)]) -> Output {
-    let bin = root.join("bin");
-    std::fs::create_dir_all(&bin).unwrap();
-    executable(&bin.join("curl"), FAKE_API_CURL);
-    executable(&bin.join("kubectl"), FAKE_KUBECTL);
+    let bin = fake_bin(root, &[("curl", FAKE_API_CURL), ("kubectl", FAKE_KUBECTL)]);
     let tmp = root.join("tmp");
     std::fs::create_dir_all(&tmp).unwrap();
     let mut c = Command::new("bash");
@@ -914,8 +905,7 @@ fn diagnose_sh_saves_diagnostics_for_every_cluster_in_the_tofu_state() {
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
     )
     .unwrap();
-    std::fs::create_dir_all(root.path().join("bin")).unwrap();
-    executable(&root.path().join("bin/tofu"), FAKE_TOFU_STATE);
+    fake_bin(root.path(), &[("tofu", FAKE_TOFU_STATE)]);
     let out = root.path().join("diag");
     let o = run_live("diagnose.sh", &[out.to_str().unwrap()], root.path(), &[]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
@@ -975,10 +965,13 @@ fn run_baseline(extra: &[(&str, &str)]) -> Output {
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
     )
     .unwrap();
-    let bin = root.path().join("bin");
-    std::fs::create_dir_all(&bin).unwrap();
-    executable(&bin.join("tofu"), FAKE_TOFU_BASELINE);
-    executable(&bin.join("fake-strata"), FAKE_STRATA_BASELINE);
+    let bin = fake_bin(
+        root.path(),
+        &[
+            ("tofu", FAKE_TOFU_BASELINE),
+            ("fake-strata", FAKE_STRATA_BASELINE),
+        ],
+    );
     let strata = bin.join("fake-strata").display().to_string();
     let mut env = vec![("STRATA_BIN", strata.as_str())];
     env.extend_from_slice(extra);
@@ -1048,11 +1041,9 @@ exit 0
 
 fn aws_inventory(answers: &[(&str, &str)]) -> (Output, String) {
     let root = tempfile::tempdir().unwrap();
-    let (bin, fake) = (root.path().join("bin"), root.path().join("aws"));
-    for d in [&bin, &fake] {
-        std::fs::create_dir_all(d).unwrap();
-    }
-    executable(&bin.join("aws"), FAKE_AWS);
+    let bin = fake_bin(root.path(), &[("aws", FAKE_AWS)]);
+    let fake = root.path().join("aws");
+    std::fs::create_dir_all(&fake).unwrap();
     for (op, ids) in answers {
         std::fs::write(fake.join(op), ids).unwrap();
     }
@@ -1350,11 +1341,13 @@ fn tenant_sh_takes_an_empty_answer_of_palette_as_no_answer_with_each_jq() {
         // a 200 with no body to the check of the repave has no isRepaveRequired
         let root = tempfile::tempdir().unwrap();
         let routes = root.path().join("routes");
-        std::fs::create_dir_all(root.path().join("bin")).unwrap();
         std::fs::create_dir_all(&routes).unwrap();
-        if old_jq {
-            executable(&root.path().join("bin/jq"), JQ_BEFORE_1_7_1);
-        }
+        let commands: &[(&str, &str)] = if old_jq {
+            &[("jq", JQ_BEFORE_1_7_1)]
+        } else {
+            &[]
+        };
+        fake_bin(root.path(), commands);
         std::fs::write(
             routes.join("v1_clusterprofiles_prof-2"),
             r#"{"metadata":{"uid":"prof-2"},"spec":{"published":{"packs":[]}}}"#,
@@ -1456,22 +1449,27 @@ echo "$*" >> "$FAKE_AWS_LOG"
 exit 0
 "#;
 
-#[test]
-fn aws_cleanup_takes_yes_in_any_position_and_keeps_the_name_and_the_region() {
+/// Run aws-cleanup.sh with `args` against an `aws` that answers every query with nothing. Gives
+/// what it printed, and each call to `aws`.
+fn aws_cleanup(args: &[&str]) -> (Output, String) {
     let dir = tempfile::tempdir().unwrap();
-    let bin = dir.path().join("bin");
-    std::fs::create_dir(&bin).unwrap();
-    executable(&bin.join("aws"), FAKE_AWS_EMPTY);
+    let bin = fake_bin(dir.path(), &[("aws", FAKE_AWS_EMPTY)]);
     let log = dir.path().join("aws.log");
     let o = Command::new("bash")
         .arg(live_script("aws-cleanup.sh"))
-        .args(["--yes", "barney"])
+        .args(args)
         .env("PATH", path_with(&bin))
         .env("FAKE_AWS_LOG", &log)
         .output()
         .unwrap();
+    let calls = std::fs::read_to_string(&log).unwrap_or_default();
+    (o, calls)
+}
+
+#[test]
+fn aws_cleanup_takes_yes_in_any_position_and_keeps_the_name_and_the_region() {
+    let (o, calls) = aws_cleanup(&["--yes", "barney"]);
     assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
-    let calls = std::fs::read_to_string(&log).unwrap();
     assert!(
         calls.contains("--region us-east-2"),
         "the region stays the default: {calls}"
@@ -1531,23 +1529,11 @@ fn preflight_plan_keeps_a_result_the_ledger_does_not_know_out_of_the_entry() {
 
 #[test]
 fn aws_cleanup_deletes_nothing_without_yes_and_names_what_it_would() {
-    let dir = tempfile::tempdir().unwrap();
-    let bin = dir.path().join("bin");
-    std::fs::create_dir(&bin).unwrap();
-    executable(&bin.join("aws"), FAKE_AWS_EMPTY);
-    let log = dir.path().join("aws.log");
-    let o = Command::new("bash")
-        .arg(live_script("aws-cleanup.sh"))
-        .args(["fred", "us-east-2"])
-        .env("PATH", path_with(&bin))
-        .env("FAKE_AWS_LOG", &log)
-        .output()
-        .unwrap();
+    let (o, calls) = aws_cleanup(&["fred", "us-east-2"]);
     assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
     let out = text(&o.stdout);
     assert!(out.contains("nothing deleted; add --yes"), "{out}");
     assert!(out.contains("eks cluster"), "{out}");
-    let calls = std::fs::read_to_string(&log).unwrap();
     assert!(
         !calls.contains("delete-")
             && !calls.contains("release-address")
@@ -1600,17 +1586,16 @@ struct Stage {
 impl Stage {
     fn new(outputs: serde_json::Value) -> Self {
         let root = tempfile::tempdir().unwrap();
-        let bin = root.path().join("bin");
-        for d in [
-            bin.clone(),
-            root.path().join("routes"),
-            root.path().join("strata"),
-            root.path().join("aws"),
-        ] {
-            std::fs::create_dir_all(d).unwrap();
+        fake_bin(
+            root.path(),
+            &[
+                ("tofu", FAKE_TOFU_STAGE),
+                ("fake-strata", FAKE_STRATA_STAGE),
+            ],
+        );
+        for d in ["routes", "strata", "aws"] {
+            std::fs::create_dir_all(root.path().join(d)).unwrap();
         }
-        executable(&bin.join("tofu"), FAKE_TOFU_STAGE);
-        executable(&bin.join("fake-strata"), FAKE_STRATA_STAGE);
         let outputs: serde_json::Map<String, serde_json::Value> = outputs
             .as_object()
             .unwrap()
@@ -2123,9 +2108,7 @@ fn registry_stage(more: serde_json::Value) -> Stage {
         outputs[k] = v.clone();
     }
     let mut stage = Stage::new(outputs);
-    let bin = stage.path("bin");
-    executable(&bin.join("aws"), FAKE_AWS);
-    executable(&bin.join("oras"), FAKE_ORAS);
+    fake_bin(stage.root.path(), &[("aws", FAKE_AWS), ("oras", FAKE_ORAS)]);
     std::fs::write(stage.path("aws/list-images"), "[]\n").unwrap();
     // the profile route of the stand-in keeps the flag, so the wait for the clear ends at once
     stage.env("INVALID_MINUTES", "0");
@@ -3043,17 +3026,21 @@ fn registry_kinds(packs: &str) -> (Stage, String) {
         "kinds_host": "kinds.example", "kinds_user": "barney",
         "kinds_registries": {"oci-zarf": {"uid": "reg-zarf", "name": "strata-live-oci"}},
     }));
-    let bin = stage.path("bin");
-    executable(
-        &bin.join("tofu"),
-        &FAKE_TOFU_STAGE.replace(
-            "case \"$*\" in\n",
-            "case \"$*\" in\n  *\"output -raw kinds_password\"*) echo pw ;;\n",
-        ),
+    let tofu = FAKE_TOFU_STAGE.replace(
+        "case \"$*\" in\n",
+        "case \"$*\" in\n  *\"output -raw kinds_password\"*) echo pw ;;\n",
     );
-    for tool in ["oras", "helm", "zarf", "spectro"] {
-        executable(&bin.join(tool), "#!/usr/bin/env bash\nexit 0\n");
-    }
+    let nothing = "#!/usr/bin/env bash\nexit 0\n";
+    fake_bin(
+        stage.root.path(),
+        &[
+            ("tofu", &tofu),
+            ("oras", nothing),
+            ("helm", nothing),
+            ("zarf", nothing),
+            ("spectro", nothing),
+        ],
+    );
     stage.route("/v1/registries/pack", r#"{"uid":"reg-packs"}"#);
     stage.strata("packs strata-live-zarf *", 0, packs);
     let (_, steps) = stage.run("registry-kinds.sh", &[]);

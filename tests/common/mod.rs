@@ -1121,6 +1121,17 @@ pub fn strata_bin() -> &'static Path {
     Path::new(env!("CARGO_BIN_EXE_strata"))
 }
 
+/// Make the directory `bin` under `dir`, and put the stand-in commands `commands` in it: each is a
+/// name and the body of its script. Gives the directory, for [`path_with`].
+pub fn fake_bin(dir: &Path, commands: &[(&str, &str)]) -> std::path::PathBuf {
+    let bin = dir.join("bin");
+    fs::create_dir_all(&bin).unwrap();
+    for (name, body) in commands {
+        executable(&bin.join(name), body);
+    }
+    bin
+}
+
 /// `PATH` with the directory `bin` first, so that a stand-in command in it runs in place of the
 /// real one.
 pub fn path_with(bin: &Path) -> String {
