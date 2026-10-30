@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, SEARCH_TAGS, search_condition, search_filter, search_group};
+use crate::closed_set::ClosedSet;
 use crate::conjunction::Conjunction;
 use crate::error::{Error, Result};
 use crate::reference::{Ref, one_named};
@@ -17,7 +18,7 @@ use crate::snapshot::{Snapshot, Tool};
 use crate::term::progress::Progress;
 
 use super::list::{ListedCluster, ProjectListings, TENANT_SCOPE, list_clusters, name_projects_of};
-use crate::json::{arr, first_nonempty, items, str_at, strings, text};
+use crate::json::{arr, first_nonempty, flag, items, str_at, strings, text};
 
 use super::scope_of;
 
@@ -166,6 +167,16 @@ pub enum Resolved {
     Listing,
 }
 
+impl Resolved {
+    /// The noun that names how strata found the clusters, in a report.
+    pub(crate) fn noun(self) -> &'static str {
+        match self {
+            Self::Search => "search of Palette",
+            Self::Listing => "cluster listing",
+        }
+    }
+}
+
 /// The clusters that a query selects, and how strata found them.
 #[derive(Debug, Clone)]
 pub struct Selection {
@@ -209,7 +220,7 @@ fn filter_of(doc: &Value, name: &str, uid: &str) -> SavedFilter {
         .map(|f| TagCondition {
             key: text(f, "/key"),
             values: strings(f, "/values"),
-            negation: f.get("negation").and_then(Value::as_bool).unwrap_or(false),
+            negation: flag(f, "/negation"),
         })
         .collect();
     SavedFilter {

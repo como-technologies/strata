@@ -10,11 +10,18 @@ use crate::error::{Error, Result};
 /// The default Palette API base URL.
 pub const DEFAULT_BASE_URL: &str = "https://api.spectrocloud.com";
 
+/// The file in the home directory that holds the settings below the environment.
+pub(crate) const ENV_FILE: &str = ".palette.env";
+
 /// The variables that hold the API key, the first one preferred.
-pub(crate) const KEY_VARS: [&str; 2] = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
+pub const KEY_VARS: [&str; 2] = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
 const URL_VARS: [&str; 2] = ["PALETTE_API", "SPECTROCLOUD_HOST"];
-const PROJECT_VARS: [&str; 1] = ["PALETTE_PROJECT_UID"];
-const PROJECT_NAME_VAR: &str = "PALETTE_PROJECT";
+/// The variables that hold the uid of the project.
+pub const PROJECT_VARS: [&str; 1] = ["PALETTE_PROJECT_UID"];
+/// The variable that holds the name of the project, below the uid.
+pub const PROJECT_NAME_VAR: &str = "PALETTE_PROJECT";
+/// The variable that stops the progress messages.
+const QUIET_VAR: &str = "STRATA_QUIET";
 const RETRIES_VAR: &str = "STRATA_RETRIES";
 const DEFAULT_RETRIES: u32 = 3;
 /// The variable that sets the longest `Retry-After` wait that strata takes.
@@ -183,6 +190,12 @@ fn shadowed_project_name(
     }
 }
 
+/// True when `STRATA_QUIET` is set to any value, also an empty one. It stops the progress
+/// messages, as `--quiet` does.
+pub fn quiet_from_env() -> bool {
+    std::env::var_os(QUIET_VAR).is_some()
+}
+
 fn env_nonempty(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|v| !v.is_empty())
 }
@@ -190,7 +203,7 @@ fn env_nonempty(key: &str) -> Option<String> {
 /// `KEY=VALUE` lines from `~/.palette.env`, with optional `export ` and quotes.
 fn dotenv_lookup(key: &str) -> Option<String> {
     let home = std::env::var_os("HOME")?;
-    let text = fs::read_to_string(Path::new(&home).join(".palette.env")).ok()?;
+    let text = fs::read_to_string(Path::new(&home).join(ENV_FILE)).ok()?;
     parse_dotenv(&text, key)
 }
 

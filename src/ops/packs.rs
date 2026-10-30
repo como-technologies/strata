@@ -1,13 +1,17 @@
 //! `packs`: the versions a registry offers for a pack.
 
+use std::collections::BTreeMap;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
+use crate::closed_set::{ClosedSet, Open};
 use crate::cloud::supports;
 use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, strings, text};
+use crate::pack_state::PackState;
 use crate::pack_type::PackType;
 use crate::reference::version;
 use crate::registry::{Registries, pack_type_of, registry_layer};
@@ -61,7 +65,7 @@ pub struct PackRegistry {
     /// The state that every version of the pack in this registry has, when they all have the
     /// same one: `deprecated`, `disabled`, or `deleted`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub state: Option<String>,
+    pub state: Option<Open<PackState>>,
     /// True when the registry reports no digest for each version of the pack in it, before
     /// `--latest` or `--cloud` cut the list. A record of such a version is `UNVERIFIED`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -83,12 +87,6 @@ pub struct PackBuild {
     pub kind: PackType,
     /// The clouds this version supports.
     pub cloud_types: Vec<String>,
-    /// The processor architectures this version supports, sorted: `amd64`, `arm64`. From the
-    /// annotation `architecture` of the listing; empty when the listing names none. `packs` is
-    /// not a catalog, so the document does not show them: `behind` reads them, and says what a
-    /// move to a newer version drops.
-    #[serde(skip)]
-    pub architectures: Vec<String>,
     /// Every tag that points at this version, the exact tag first.
     pub tags: Vec<String>,
     /// True for the newest version of the registry's copy, by the order of strata.
@@ -101,7 +99,7 @@ pub struct PackBuild {
     /// The state that the registry listing gives this version: `deprecated`, `disabled`, or
     /// `deleted`. Palette serves no disabled or deleted pack, and refuses a profile that pins one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub state: Option<String>,
+    pub state: Option<Open<PackState>>,
     /// When Palette first listed this version, `metadata.creationTimestamp` of the listing; empty
     /// when the listing gives no time.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -111,11 +109,12 @@ pub struct PackBuild {
 impl PackBuild {
     /// True when the state of this version is `disabled` or `deleted`: Spectro Cloud retired it,
     /// or marked it `disabled`, and a profile cannot hold it. The rule is
-    /// [`is_retired`](crate::registry::is_retired).
+    /// [`PackState::is_retired`].
     pub(crate) fn retired(&self) -> bool {
         self.state
-            .as_deref()
-            .is_some_and(crate::registry::is_retired)
+            .as_ref()
+            .and_then(Open::known)
+            .is_some_and(PackState::is_retired)
     }
 }
 
@@ -137,6 +136,12 @@ pub struct PackOptions {
 /// semantic versions, and `"false"` to each other version.
 const PALETTE_LATEST: &str = "/metadata/annotations/latestVersion";
 
+/// The processor architectures that the listing names for each version, sorted, by registry uid and
+/// version: `amd64`, `arm64`. A version with no architecture in the listing has an empty list.
+/// `packs` is not a catalog, so the document does not show them: `behind` reads them, and says what
+/// a move to a newer version drops.
+pub(crate) type Architectures = BTreeMap<(String, String), Vec<String>>;
+
 /// The annotation of the pack listing that names the processor architectures of a version, as
 /// one text with commas: `amd64`, `amd64,arm64`, or `arm64,amd64`. Not each version has it, and
 /// the versions of one pack can differ.
@@ -144,7 +149,7 @@ const ARCHITECTURE: &str = "/spec/annotations/architecture";
 
 /// The architectures that the listing entry `entry` names, sorted, with no repeat. Empty when the
 /// entry names none.
-fn architectures(entry: &Value) -> Vec<String> {
+fn architectures_of(entry: &Value) -> Vec<String> {
     let mut found: Vec<String> = text(entry, ARCHITECTURE)
         .split(',')
         .map(str::trim)
@@ -157,8 +162,12 @@ fn architectures(entry: &Value) -> Vec<String> {
 }
 
 /// The value of the `states` query that asks Palette for the tags of the retired versions of a
-/// pack. With it, Palette answers with the versions in these states only.
-const RETIRED_STATES: &str = "deprecated,disabled,deleted";
+/// pack: each state that a listing gives. With it, Palette answers with the versions in these
+/// states only.
+fn listed_states() -> String {
+    let listed = PackState::ALL.iter().filter(|s| **s != PackState::Absent);
+    listed.map(|s| s.as_str()).collect::<Vec<_>>().join(",")
+}
 
 /// Join the tag rows of the `answers` of one registry, and keep each row one time.
 ///
@@ -189,10 +198,26 @@ fn merged_tags(answers: &[Value]) -> Vec<Value> {
 pub fn registry_packs<A, F>(
     name: &str,
     options: &PackOptions,
-    mut connect: F,
+    connect: F,
     generated_at: &str,
     progress: &Progress,
 ) -> Result<PackListing>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    read_packs(name, options, connect, generated_at, progress).map(|(listing, _)| listing)
+}
+
+/// [`registry_packs`], and the architectures that the listing names for each version: the part of
+/// the listing that the document leaves out.
+pub(crate) fn read_packs<A, F>(
+    name: &str,
+    options: &PackOptions,
+    mut connect: F,
+    generated_at: &str,
+    progress: &Progress,
+) -> Result<(PackListing, Architectures)>
 where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
@@ -207,7 +232,7 @@ where
     )
 }
 
-/// [`registry_packs`] with the registry listings of the command, so that a later read of the same
+/// [`read_packs`] with the registry listings of the command, so that a later read of the same
 /// command reads them again from memory.
 pub(super) fn registry_packs_in<A: PaletteApi>(
     listings: &mut Registries<'_, A>,
@@ -215,7 +240,7 @@ pub(super) fn registry_packs_in<A: PaletteApi>(
     options: &PackOptions,
     generated_at: &str,
     progress: &Progress,
-) -> Result<PackListing> {
+) -> Result<(PackListing, Architectures)> {
     let palette = listings.palette();
     // the registry listing gives the names, and the reason of an error that finds no pack
     let wanted = match &options.registry {
@@ -226,6 +251,7 @@ pub(super) fn registry_packs_in<A: PaletteApi>(
     let entries = crate::candidate::pack::versions_of(palette, name)?;
 
     let mut registries = Vec::new();
+    let mut architectures = Architectures::new();
     let mut had_the_pack = false;
     for (registry, uid) in &wanted {
         let mut versions: Vec<PackBuild> = Vec::new();
@@ -248,7 +274,7 @@ pub(super) fn registry_packs_in<A: PaletteApi>(
             .iter()
             .any(|e| crate::registry::retired_state(e).is_some())
         {
-            answers.push(found(palette.pack_tags(name, uid, Some(RETIRED_STATES)))?);
+            answers.push(found(palette.pack_tags(name, uid, Some(&listed_states())))?);
         }
         let answers: Vec<Value> = answers.into_iter().flatten().collect();
         let tags_unavailable = answers.is_empty();
@@ -272,7 +298,7 @@ pub(super) fn registry_packs_in<A: PaletteApi>(
             .collect::<std::collections::BTreeSet<_>>()
             .len();
         // one state for the registry, when every version of the pack in it has the same one
-        let states: std::collections::BTreeSet<Option<String>> = mine
+        let states: std::collections::BTreeSet<Option<Open<PackState>>> = mine
             .iter()
             .map(|e| crate::registry::pack_state(e))
             .collect();
@@ -303,13 +329,13 @@ pub(super) fn registry_packs_in<A: PaletteApi>(
             // names none leaves the tags of one version in name order.
             rows.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
             let for_version: Vec<String> = rows.into_iter().map(|(_, tag)| tag).collect();
+            architectures.insert((uid.clone(), version.clone()), architectures_of(e));
             versions.push(PackBuild {
                 version,
                 pack_uid,
                 digest: text(e, "/spec/digest"),
                 kind: pack_type_of(e),
                 cloud_types,
-                architectures: architectures(e),
                 tags: for_version,
                 latest: false,
                 palette_latest: text(e, PALETTE_LATEST) == "true",
@@ -358,14 +384,15 @@ pub(super) fn registry_packs_in<A: PaletteApi>(
             },
         });
     }
-    Ok(PackListing {
+    let listing = PackListing {
         schema: PACKS_SCHEMA.to_string(),
         tool: Tool::current(),
         generated_at: generated_at.to_string(),
         name: name.to_string(),
         cloud: options.cloud.clone(),
         registries,
-    })
+    };
+    Ok((listing, architectures))
 }
 
 /// The tag rows of the registry answer that point at the listing entry `e`.
@@ -415,6 +442,11 @@ mod tests {
 
     /// `packs strata-live-dep` with `options`, from a listing of `versions`.
     fn packs_with(options: &PackOptions, versions: Vec<Value>) -> PackListing {
+        read_with(options, versions).0
+    }
+
+    /// [`packs_with`], and the architectures that the listing names.
+    fn read_with(options: &PackOptions, versions: Vec<Value>) -> (PackListing, Architectures) {
         // Palette gives a tag row to each version that it serves
         let tags: Vec<Value> = versions
             .iter()
@@ -435,7 +467,7 @@ mod tests {
                 "/v1/packs/strata-live-dep/registries/reg-own",
                 serde_json::json!({"layer": "addon", "tags": tags}),
             );
-        registry_packs(
+        read_packs(
             "strata-live-dep",
             options,
             |_| Ok(Palette::new(api.clone())),
@@ -474,16 +506,13 @@ mod tests {
     {
         let mut both = version("pk-2", "2.0.0", &["aws"]);
         both["spec"]["annotations"] = serde_json::json!({"architecture": "arm64,amd64"});
-        let listing = packs_with(
+        let (listing, architectures) = read_with(
             &PackOptions::default(),
             vec![both, version("pk-1", "1.0.0", &["aws"])],
         );
-        let versions = &listing.registries[0].versions;
-        assert_eq!(versions[0].architectures, ["amd64", "arm64"]);
-        assert!(
-            versions[1].architectures.is_empty(),
-            "the listing names none"
-        );
+        let of = |version: &str| &architectures[&("reg-own".to_string(), version.to_string())];
+        assert_eq!(of("2.0.0"), &["amd64", "arm64"]);
+        assert!(of("1.0.0").is_empty(), "the listing names none");
         // `packs` is not a catalog: the document leaves the architectures out
         let json = serde_json::to_value(&listing).unwrap();
         assert!(
@@ -756,7 +785,7 @@ mod tests {
         let registry = nginx_packs(&api);
         assert_eq!(api.calls(RETIRED_PATH), 1);
         assert!(!registry.tags_unavailable);
-        assert_eq!(registry.state.as_deref(), Some("disabled"));
+        assert_eq!(registry.state, Some(PackState::Disabled.into()));
         assert_eq!(tags_of(&registry, "0.26.1"), ["0.26.1", "0.26.x"]);
         assert_eq!(tags_of(&registry, "0.43.0"), ["0.43.0", "0.43.x"]);
     }

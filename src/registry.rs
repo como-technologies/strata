@@ -15,19 +15,18 @@ use std::collections::btree_map::Entry;
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, RegistryKind};
+use crate::closed_set::{ClosedSet, Open};
 use crate::diff::{RegistrySync, SyncRecovery};
 use crate::error::{Error, Result, served, unread_reason};
-use crate::json::{opt_text, str_at, take_items, text};
+use crate::json::{flag, opt_text, str_at, take_items, text};
+use crate::oci_provider::OciProvider;
+use crate::pack_state::PackState;
 use crate::pack_type::PackType;
 use crate::reference::one_named;
 use crate::term::progress::Progress;
 
 /// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
 const SYNC_RECOVERED: &str = "Recovered";
-
-/// The provider type of an OCI registry of packs, in `spec.providerType`. Palette syncs each
-/// such registry.
-const PACK_PROVIDER: &str = "pack";
 
 /// The registry listings of one command, each read one time, when a check first needs it.
 pub(crate) struct Registries<'a, A: PaletteApi> {
@@ -142,11 +141,12 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     ///
     /// The pack listing does not carry it. `None` when Palette has no such listing, when the
     /// listing does not have the registry, and when the entry names no type.
-    pub(crate) fn oci_provider_type(&mut self, uid: &str) -> Result<Option<String>> {
+    pub(crate) fn oci_provider_type(&mut self, uid: &str) -> Result<Option<Open<OciProvider>>> {
         Ok(self
             .summary(RegistryKind::Oci)?
             .and_then(|regs| registry_entry(regs, "/metadata/uid", uid))
-            .and_then(|reg| opt_text(reg, "/spec/providerType")))
+            .and_then(|reg| opt_text(reg, "/spec/providerType"))
+            .map(|text| Open::from_text(&text)))
     }
 
     /// How Palette makes the pack of a layer from the registry `uid`, when it does not sync the
@@ -163,10 +163,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
             return Ok(None);
         };
         let kind = RegistryKind::of_kind(str_at(meta, "/kind"));
-        let private = meta
-            .get("isPrivate")
-            .and_then(Value::as_bool)
-            .unwrap_or(false);
+        let private = flag(meta, "/isPrivate");
         match kind {
             Some(RegistryKind::Helm) => Ok(private.then_some(Unsynced {
                 kind: RegistryKind::Helm,
@@ -180,12 +177,10 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
                     return Ok(None);
                 };
                 // Palette syncs each OCI registry of the provider type pack
-                let provider = opt_text(reg, "/spec/providerType");
-                let syncs = provider.as_deref() == Some(PACK_PROVIDER)
-                    || reg
-                        .pointer("/status/sync/isSyncSupported")
-                        .and_then(Value::as_bool)
-                        == Some(true);
+                let provider =
+                    opt_text(reg, "/spec/providerType").map(|text| Open::from_text(&text));
+                let syncs = provider.as_ref().is_some_and(|p| *p == OciProvider::Pack)
+                    || flag(reg, "/status/sync/isSyncSupported");
                 Ok((!syncs).then_some(Unsynced {
                     kind: RegistryKind::Oci,
                     provider,
@@ -236,7 +231,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
         else {
             return Ok(None);
         };
-        if status.get("isSyncSupported").and_then(Value::as_bool) != Some(true) {
+        if !flag(status, "/isSyncSupported") {
             return Ok(None);
         }
         // Palette writes the zero time for a registry that never completed a sync
@@ -306,7 +301,7 @@ pub(crate) struct Unsynced {
     /// The kind of the registry, which gives the pack its type: `helm` or `oci`.
     pub kind: RegistryKind,
     /// The provider type of an OCI registry: `helm` or `zarf`.
-    pub provider: Option<String>,
+    pub provider: Option<Open<OciProvider>>,
 }
 
 /// The last sync of a registry, read as a note beside an answer.
@@ -328,30 +323,27 @@ const DISABLED_MARK: &str = "/spec/annotations/disabled";
 /// The state that the listing gives a pack version, and nothing for a pack in use.
 ///
 /// The state is the `system_state`: `deprecated`, `disabled`, or `deleted`. It is `disabled` for
-/// a version with the [`DISABLED_MARK`] and no `system_state`.
-pub(crate) fn pack_state(summary: &Value) -> Option<String> {
-    system_state(summary)
-        .or_else(|| (str_at(summary, DISABLED_MARK) == "true").then(|| "disabled".to_string()))
+/// a version with the [`DISABLED_MARK`] and no `system_state`. A `system_state` that this release
+/// does not know stays in the answer as text.
+pub(crate) fn pack_state(summary: &Value) -> Option<Open<PackState>> {
+    system_state(summary).or_else(|| {
+        (str_at(summary, DISABLED_MARK) == "true").then_some(Open::Known(PackState::Disabled))
+    })
 }
 
 /// The state that Spectro Cloud gives a version that it retired: `deprecated`, `disabled`, or
 /// `deleted`.
-fn system_state(summary: &Value) -> Option<String> {
-    opt_text(summary, "/spec/annotations/system_state")
-}
-
-/// True when `state` is a state of a version that Palette no longer serves: `disabled` or
-/// `deleted`. [`retired_state`] and [`PackBuild::retired`](crate::ops::PackBuild::retired) keep
-/// this one rule.
-pub(crate) fn is_retired(state: &str) -> bool {
-    matches!(state, "disabled" | "deleted")
+fn system_state(summary: &Value) -> Option<Open<PackState>> {
+    opt_text(summary, "/spec/annotations/system_state").map(|text| Open::from_text(&text))
 }
 
 /// The state of a pack version that Palette no longer serves: `disabled` or `deleted` in
 /// `system_state`. Palette serves a version with the [`DISABLED_MARK`] alone, and its validate
-/// route refuses a profile that holds it. So strata does not refuse that version itself.
-pub(crate) fn retired_state(summary: &Value) -> Option<String> {
-    system_state(summary).filter(|s| is_retired(s))
+/// route refuses a profile that holds it. So strata does not refuse that version itself. The rule
+/// is [`PackState::is_retired`], and [`PackBuild::retired`](crate::ops::PackBuild::retired) keeps it
+/// too.
+pub(crate) fn retired_state(summary: &Value) -> Option<PackState> {
+    system_state(summary)?.known().filter(|s| s.is_retired())
 }
 
 /// The type of the pack of `summary`, an entry of the pack listing, from its `spec.type`.
@@ -430,14 +422,14 @@ mod tests {
         assert_eq!(registries.name_of("reg-gone").unwrap(), None);
         assert_eq!(registries.names().unwrap().len(), 3);
         assert_eq!(
-            registries.oci_provider_type("reg-zarf").unwrap().as_deref(),
-            Some("zarf")
+            registries.oci_provider_type("reg-zarf").unwrap(),
+            Some(OciProvider::Zarf.into())
         );
         assert_eq!(registries.oci_provider_type("reg-public").unwrap(), None);
         let unsynced = registries.unsynced("reg-zarf").unwrap().unwrap();
         assert_eq!(
-            (unsynced.kind, unsynced.provider.as_deref()),
-            (RegistryKind::Oci, Some("zarf"))
+            (unsynced.kind, unsynced.provider),
+            (RegistryKind::Oci, Some(OciProvider::Zarf.into()))
         );
         assert_eq!(
             registries.unsynced("reg-auth").unwrap().unwrap().kind,
@@ -592,7 +584,7 @@ mod tests {
     #[test]
     fn a_version_with_the_disabled_mark_and_no_system_state_is_disabled_and_not_retired() {
         let marked = json!({"spec": {"annotations": {"disabled": "true"}}});
-        assert_eq!(pack_state(&marked).as_deref(), Some("disabled"));
+        assert_eq!(pack_state(&marked), Some(PackState::Disabled.into()));
         assert_eq!(
             retired_state(&marked),
             None,
@@ -600,8 +592,8 @@ mod tests {
         );
         let deleted =
             json!({"spec": {"annotations": {"disabled": "true", "system_state": "deleted"}}});
-        assert_eq!(pack_state(&deleted).as_deref(), Some("deleted"));
-        assert_eq!(retired_state(&deleted).as_deref(), Some("deleted"));
+        assert_eq!(pack_state(&deleted), Some(PackState::Deleted.into()));
+        assert_eq!(retired_state(&deleted), Some(PackState::Deleted));
         for summary in [
             json!({"spec": {"annotations": {"disabled": "false"}}}),
             json!({"spec": {"annotations": {"disabled": true}}}),
@@ -611,5 +603,15 @@ mod tests {
             assert_eq!(pack_state(&summary), None, "{summary}");
             assert_eq!(retired_state(&summary), None, "{summary}");
         }
+    }
+
+    #[test]
+    fn a_state_that_this_release_does_not_know_stays_text_and_is_not_retired() {
+        let later = json!({"spec": {"annotations": {"system_state": "quarantined"}}});
+        assert_eq!(
+            pack_state(&later),
+            Some(Open::Unknown("quarantined".to_string()))
+        );
+        assert_eq!(retired_state(&later), None);
     }
 }

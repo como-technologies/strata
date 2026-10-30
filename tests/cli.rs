@@ -858,6 +858,11 @@ fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
         open_set_ref(&defs["ClusterSource"]["properties"]["kind"]),
         "#/$defs/SubjectKind"
     );
+    assert_eq!(schema_values(&v, "OciProvider"), ["pack", "helm", "zarf"]);
+    assert_eq!(
+        open_set_ref(&defs["Pack"]["properties"]["registryProviderType"]["anyOf"][0]),
+        "#/$defs/OciProvider"
+    );
     // the tiers of a cluster record stay a map from the name of the tier to the tier, and a name
     // can be any text
     let tiers = &defs["ClusterSource"]["properties"]["tiers"];
@@ -924,6 +929,18 @@ fn the_schema_names_each_value_of_each_closed_set_of_the_other_documents() {
     assert_eq!(
         open_set_ref(&v["$defs"]["Bump"]["properties"]["impact"]),
         "#/$defs/ImpactLevel"
+    );
+    assert_eq!(
+        schema_values(&v, "PackState"),
+        ["deprecated", "disabled", "deleted", "absent"]
+    );
+    assert_eq!(
+        open_set_ref(&v["$defs"]["Pin"]["properties"]["pinnedState"]["anyOf"][0]),
+        "#/$defs/PackState"
+    );
+    assert_eq!(
+        open_set_ref(&v["$defs"]["Newer"]["properties"]["state"]["anyOf"][0]),
+        "#/$defs/PackState"
     );
     let v = schema("consumers");
     assert_eq!(

@@ -7,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::zip_by_key;
-use crate::legend::Described;
+use crate::closed_set::impl_closed_set;
+use crate::closed_set::legend::Described;
 
 /// What happened to one leaf or manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -21,9 +22,13 @@ pub enum Op {
     Removed,
 }
 
-impl Described for Op {
-    const ALL: &'static [Self] = &[Self::Changed, Self::Added, Self::Removed];
+impl_closed_set!(Op {
+    Changed => "changed",
+    Added => "added",
+    Removed => "removed",
+});
 
+impl Described for Op {
     fn describe(self) -> &'static str {
         match self {
             Self::Changed => "The leaf exists on both sides with different values.",

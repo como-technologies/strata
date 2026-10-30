@@ -7,10 +7,11 @@ use serde_json::{Map, Value};
 use super::resolve::resolve_with;
 use super::{Candidate, CandidateLayer, LoadedCandidate, LoadedLayer, RegistryRef};
 use crate::api::{Palette, PaletteApi};
+use crate::closed_set::ClosedSet;
 use crate::error::{Error, Result};
 use crate::json::{str_at, text};
 use crate::profile_type::ProfileType;
-use crate::reference::LATEST;
+use crate::reference::{LATEST, name_version};
 use crate::registry::Registries;
 use crate::snapshot::{PackSource, Snapshot, Template};
 use crate::term::progress::Progress;
@@ -150,7 +151,8 @@ pub(crate) fn pack_snapshot_in<A: PaletteApi>(
         ));
     };
     progress.note(&format!(
-        "recording pack {name}@{resolved} from registry {}",
+        "recording pack {} from registry {}",
+        name_version(name, &resolved),
         named(&registry_uid)
     ));
     // one layer, the registry's own values: the same path a candidate file takes

@@ -1,6 +1,6 @@
 //! The terminal report: plain when piped, colored on a terminal.
 
-use super::changes::{OpLine, artifacts_summary, tier_op_lines, variable_lines};
+use super::changes::{OpLine, artifacts_summary, moved_word, tier_op_lines, variable_lines};
 use super::consumers::{
     NOT_LISTED, consumer_count, consumer_counts, consumer_runs, consumers_heading,
     consumers_sentence, edge_hosts_line, second_reading_line,
@@ -20,6 +20,7 @@ use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
 };
 use super::{Renderer, count_of, dash, entry_error, palette_line, short};
+use crate::closed_set::ClosedSet;
 use crate::diff::Diff;
 use crate::error::Result;
 use crate::ops::{
@@ -97,35 +98,25 @@ impl Renderer for TerminalRenderer {
             out.push(String::new());
             out.push(format!(
                 "  variables {}",
-                if d.variables.changed {
-                    p.byellow("CHANGED")
-                } else {
-                    p.dim("unchanged")
-                }
+                moved_word(d.variables.changed, p)
             ));
         }
         for v in variable_lines(&d.variables.by_name) {
             out.push(format!("        {}", variable_line(&v, p)));
         }
         if let Some(cv) = d.cluster_variables.as_ref().filter(|c| c.changed) {
-            out.push(format!("  cluster values {}", p.byellow("CHANGED")));
+            out.push(format!("  cluster values {}", moved_word(true, p)));
             for c in &cv.values {
                 out.push(format!("        {}", op_line(&OpLine::cluster_value(c), p)));
             }
         }
         match tier_line(d) {
             TierLine::NotCompared => {}
-            TierLine::Unchanged => out.push(format!("  cluster tiers {}", p.dim("unchanged"))),
+            TierLine::Unchanged => out.push(format!("  cluster tiers {}", moved_word(false, p))),
             TierLine::Differ(states) => {
                 let words: Vec<String> = states
                     .iter()
-                    .map(|(t, same)| {
-                        if *same {
-                            format!("{t} {}", p.dim("unchanged"))
-                        } else {
-                            format!("{t} {}", p.byellow("CHANGED"))
-                        }
-                    })
+                    .map(|(t, same)| format!("{t} {}", moved_word(!*same, p)))
                     .collect();
                 out.push(format!("  cluster tiers {}", words.join(", ")));
                 for line in tier_op_lines(d) {

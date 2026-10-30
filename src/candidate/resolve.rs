@@ -11,9 +11,12 @@ use super::{
     gaps,
 };
 use crate::api::{Palette, PaletteApi, RawProfile};
+use crate::closed_set::{ClosedSet, Open};
 use crate::error::{Error, Result};
-use crate::json::{arr, opt_text, str_at, strings, text};
+use crate::json::{arr, opt_str, opt_text, str_at, strings, text};
+use crate::oci_provider::OciProvider;
 use crate::pack_type::PackType;
+use crate::reference::name_version;
 use crate::registry::{Registries, pack_type_of, registry_layer, retired_state};
 use crate::snapshot::{PROVIDER_TYPE_ANNOTATION, PresetOption, manifest_entry};
 use crate::term::progress::Progress;
@@ -66,7 +69,7 @@ fn pack_documents(l: &CandidateLayer, f: &PackFields, manifests: Vec<Value>) -> 
 }
 
 /// Put the provider type of an OCI registry on `pack_ref`, as a published profile carries it.
-fn set_provider_type(pack_ref: &mut Value, provider_type: &str) {
+fn set_provider_type(pack_ref: &mut Value, provider_type: &Open<OciProvider>) {
     pack_ref["annotations"] = json!({ PROVIDER_TYPE_ANNOTATION: provider_type });
 }
 
@@ -159,10 +162,9 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         }
         gaps::check_pack_tag(&from_unsynced, tag).map_err(|broken| broken.at(&self.loaded.path))?;
         self.progress.note(&format!(
-            "{}@{}: registry {} does not sync, so Palette makes the pack when it creates the \
+            "{}: registry {} does not sync, so Palette makes the pack when it creates the \
              profile; the record has no pack uid and no digest",
-            l.name,
-            l.version,
+            name_version(&l.name, &l.version),
             registry_ref.text()
         ));
         let values = loaded_layer.values.clone().unwrap_or_default();
@@ -215,7 +217,7 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
                 name: l.name.clone(),
                 version: l.version.clone(),
                 registry,
-                state,
+                state: state.as_str().to_string(),
             });
         }
         // only the create checks that the pack supports the cloud of the profile
@@ -363,8 +365,8 @@ pub(crate) fn resolve_with<A: PaletteApi>(
 ) -> Result<ResolvedCandidate> {
     let c = &loaded.candidate;
     progress.note(&format!(
-        "resolving {}@{} against the registry",
-        c.name, c.version
+        "resolving {} against the registry",
+        name_version(&c.name, &c.version)
     ));
     let mut resolver = Resolver {
         loaded,
@@ -382,10 +384,7 @@ pub(crate) fn resolve_with<A: PaletteApi>(
         preset_options.push(resolved.preset_options);
     }
     // each pack reference has the layer that Palette gives the pack, so check the layers again
-    let known: Vec<Option<&str>> = refs
-        .iter()
-        .map(|r| r.get("layer").and_then(Value::as_str))
-        .collect();
+    let known: Vec<Option<&str>> = refs.iter().map(|r| opt_str(r, "/layer")).collect();
     gaps::check_layers(c, &known).map_err(|broken| broken.at(&loaded.path))?;
     let raw = RawProfile {
         profile: json!({

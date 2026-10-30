@@ -14,6 +14,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 
 use crate::api::RawProfile;
+use crate::closed_set::ClosedSet;
 use crate::content::layer::Layer;
 use crate::error::{Error, Result};
 use crate::pack_type::PackType;

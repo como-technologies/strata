@@ -50,12 +50,16 @@ where each module goes.
 - Make a value that can be wrong impossible to write. Use an enum for a closed
   set of values, not a `String` or a `&'static str`. Use a struct with named
   fields, not a tuple of four values.
+- Give each closed set its `ALL` and its `as_str` with `impl_closed_set!`, from one table.
+  Do not write a list of the values or a `match` of their texts by hand. The test
+  `tests/closed_set.rs` makes sure that each text is the one that serde writes.
 - Do not store a field that comes from another field. Calculate it with a
   method.
 - Palette documents stay `serde_json::Value`, read with the helpers of
-  `src/json.rs`: `text`, `str_at`, `opt_text`, `arr`, `strings`, `items`,
-  `take_items`, and `first_nonempty`. Do not write a pointer read of text or
-  of an array of your own in a module.
+  `src/json.rs`: `text`, `str_at`, `text_or`, `opt_text`, `opt_str`, `arr`,
+  `strings`, `text_map`, `items`, `take_items`, `first_nonempty`, `flag`,
+  `opt_flag`, `value_at`, and `value_or_null`. Do not write a pointer read of
+  text, of an array, of a flag, or of a value of your own in a module.
   The records of strata are typed structs with
   `#[serde(rename_all = "camelCase")]`, `skip_serializing_if` for an empty
   field, `#[serde(default)]` for a field that an older record does not have,

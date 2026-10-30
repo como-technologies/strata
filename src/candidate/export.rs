@@ -8,6 +8,7 @@
 use serde_json::{Map, Value};
 
 use super::{Candidate, CandidateLayer, CandidateManifest, LayerKind, default_type};
+use crate::closed_set::ClosedSet;
 use crate::json::arr;
 use crate::pack_type::PackType;
 

@@ -10,6 +10,7 @@ use std::path::Path;
 
 use super::{Candidate, CandidateLayer, LayerKind, MINTED_LAYER, loose_semver};
 use crate::api::codes::CreateRule;
+use crate::closed_set::ClosedSet;
 use crate::cloud::{Cloud, supports};
 use crate::content::layer::Layer;
 use crate::error::Error;

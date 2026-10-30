@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use serde_json::Value;
 use serde_yaml::Value as Yaml;
 
+use crate::closed_set::ClosedSet;
 use crate::content::canon::{Canon, canon_yaml};
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, str_at};

@@ -7,7 +7,7 @@ use serde_json::{Map, Value, json};
 
 use crate::api::RawCluster;
 use crate::cloud::Cloud;
-use crate::json::{arr, str_at};
+use crate::json::{arr, str_at, value_at};
 
 /// The key of the shape fields that names the cloud type of the cluster. A record from before
 /// strata read the fields by cloud type does not have it.
@@ -213,9 +213,7 @@ pub(crate) fn fields(cluster: &Value, cloud_config: &Value) -> Value {
         .map(|p| pick(p, &[POOL_FIELDS, pool_fields(cloud)]))
         .collect();
     pools.sort_by(|a, b| str_at(a, "/name").cmp(str_at(b, "/name")));
-    let part = cloud_config
-        .pointer("/spec/clusterConfig")
-        .unwrap_or(&Value::Null);
+    let part = value_at(cloud_config, "/spec/clusterConfig");
     json!({
         CLOUD_TYPE: cloud_type,
         "cloud": pick(part, &[CLOUD_FIELDS, cloud_fields(cloud)]),
@@ -241,7 +239,7 @@ fn as_legacy(v: &Value) -> Value {
         .map(|p| pick(p, &[LEGACY_POOL_FIELDS]))
         .collect();
     json!({
-        "cloud": pick(v.get("cloud").unwrap_or(&Value::Null), &[LEGACY_CLOUD_FIELDS]),
+        "cloud": pick(value_at(v, "/cloud"), &[LEGACY_CLOUD_FIELDS]),
         "pools": pools,
     })
 }

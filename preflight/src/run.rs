@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use strata::api::PaletteApi;
+use strata::ops::{DELETED_STATE, ERROR_STATE, RUNNING_STATE};
 use strata::term::progress::Progress;
 use strata::text::cut;
 
@@ -317,9 +318,9 @@ fn verbose_line(rule: &Rule, o: &Outcome, color: bool) -> String {
 /// is in error or goes.
 fn state_color(state: &str) -> &'static str {
     match state {
-        "Running" => "32",
+        RUNNING_STATE => "32",
         "Provisioning" | "Pending" | "Importing" => "33",
-        "Error" | "Deleting" | "Deleted" => "31",
+        ERROR_STATE | "Deleting" | DELETED_STATE => "31",
         _ => "0",
     }
 }
@@ -577,11 +578,11 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
             break;
         }
         // a cluster that runs ends the watch: a failure it read on past is in the report
-        if state == "Running" {
+        if state == RUNNING_STATE {
             final_state = state;
             break;
         }
-        if matches!(state.as_str(), "Deleted" | "Error") {
+        if matches!(state.as_str(), DELETED_STATE | ERROR_STATE) {
             final_state = state;
             break;
         }

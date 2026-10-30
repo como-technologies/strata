@@ -6,6 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::closed_set::{ClosedSet, impl_closed_set};
 use crate::json::str_at;
 
 /// Where a profile version lives. Palette gives it in `metadata.annotations.scope` of the profile
@@ -25,26 +26,13 @@ pub enum ProfileScope {
     System,
 }
 
+impl_closed_set!(ProfileScope {
+    Project => "project",
+    Tenant => "tenant",
+    System => "system",
+});
+
 impl ProfileScope {
-    /// The scope as Palette names it: `project`, `tenant`, or `system`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Project => "project",
-            Self::Tenant => "tenant",
-            Self::System => "system",
-        }
-    }
-
-    /// The scope that Palette names `text`, or none for another text.
-    pub(crate) fn parse(text: &str) -> Option<Self> {
-        match text {
-            "project" => Some(Self::Project),
-            "tenant" => Some(Self::Tenant),
-            "system" => Some(Self::System),
-            _ => None,
-        }
-    }
-
     /// The scope of a listing: [`ProfileScope::Project`] in a project, and
     /// [`ProfileScope::Tenant`] at tenant scope, where `project_uid` is empty.
     pub(crate) fn of_listing(project_uid: &str) -> Self {
@@ -106,17 +94,9 @@ mod tests {
 
     #[test]
     fn a_scope_parses_and_prints_as_palette_names_it() {
-        for scope in [
-            ProfileScope::Project,
-            ProfileScope::Tenant,
-            ProfileScope::System,
-        ] {
-            assert_eq!(ProfileScope::parse(scope.as_str()), Some(scope));
+        for scope in ProfileScope::ALL {
+            assert_eq!(ProfileScope::parse(scope.as_str()), Some(*scope));
             assert_eq!(scope.to_string(), scope.as_str());
-            assert_eq!(
-                serde_json::to_value(scope).unwrap(),
-                Value::from(scope.as_str())
-            );
         }
         assert_eq!(ProfileScope::parse("global"), None);
     }

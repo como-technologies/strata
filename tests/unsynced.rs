@@ -7,6 +7,7 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
+use strata::closed_set::Open;
 use strata::error::Error;
 use strata::ops::{self, PairStatus, Policy};
 use strata::snapshot::UpstreamSource;
@@ -80,7 +81,10 @@ fn a_layer_from_an_oci_registry_with_sync_off_names_its_provider_type() {
     let snap = candidate_snapshot(&file, &tenant()).unwrap();
     let p = &snap.packs[0];
     assert_eq!((p.kind.as_str(), p.pack_uid.as_str()), ("oci", ""));
-    assert_eq!(p.registry_provider_type.as_deref(), Some("zarf"));
+    assert_eq!(
+        p.registry_provider_type.as_ref().map(Open::as_str),
+        Some("zarf")
+    );
     assert_eq!(p.hash.upstream_source, UpstreamSource::NoDigest);
 }
 
@@ -364,12 +368,18 @@ fn a_resolve_reads_the_registry_listing_and_the_oci_summary_one_time() {
     let snap = candidate_snapshot(&file, &api).unwrap();
     assert_eq!(snap.packs.len(), 3);
     assert_eq!(
-        snap.packs[0].registry_provider_type.as_deref(),
+        snap.packs[0]
+            .registry_provider_type
+            .as_ref()
+            .map(Open::as_str),
         Some("zarf"),
         "the listed chart names the provider type of its registry"
     );
     assert_eq!(
-        snap.packs[1].registry_provider_type.as_deref(),
+        snap.packs[1]
+            .registry_provider_type
+            .as_ref()
+            .map(Open::as_str),
         Some("zarf")
     );
     assert_eq!(snap.packs[2].kind, "helm");

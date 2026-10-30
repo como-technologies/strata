@@ -10,9 +10,9 @@ use serde_json::{Value, json};
 
 use super::{SubjectKind, macro_placeholder};
 use crate::api::RawCluster;
-use crate::closed_set::{ClosedSet, Open};
+use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canonical_json, sha256_hex};
-use crate::json::{arr, str_at, text};
+use crate::json::{arr, flag, str_at, text};
 use crate::profile_type::ProfileType;
 use crate::repave::PendingRepave;
 
@@ -133,24 +133,13 @@ pub enum Tier {
     Shape,
 }
 
-impl Tier {
-    /// The tier as the documents name it: `applied`, `labels`, `policy`, `running`, or `shape`.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Applied => "applied",
-            Self::Labels => "labels",
-            Self::Policy => "policy",
-            Self::Running => "running",
-            Self::Shape => "shape",
-        }
-    }
-}
-
-impl ClosedSet for Tier {
-    fn as_str(self) -> &'static str {
-        Tier::as_str(self)
-    }
-}
+impl_closed_set!(Tier {
+    Applied => "applied",
+    Labels => "labels",
+    Policy => "policy",
+    Running => "running",
+    Shape => "shape",
+});
 
 impl fmt::Display for Tier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -330,7 +319,7 @@ impl PendingUpdate {
         let mut out = Vec::new();
         for n in notifications.as_array().into_iter().flatten().rev() {
             let open = str_at(n, "/action/actionType") == PROFILE_UPDATE_ACTION
-                && n.pointer("/action/isDone").and_then(Value::as_bool) != Some(true);
+                && !flag(n, "/action/isDone");
             if !open {
                 continue;
             }
@@ -382,7 +371,7 @@ impl ClusterVariable {
                 .filter(|e| text(e, "/profileUid") == p.uid)
                 .flat_map(|e| arr(e, "/variables"))
                 .map(|v| {
-                    let sensitive = v.get("isSensitive").and_then(Value::as_bool) == Some(true);
+                    let sensitive = flag(v, "/isSensitive");
                     ClusterVariable {
                         profile: p.name.clone(),
                         profile_uid: p.uid.clone(),

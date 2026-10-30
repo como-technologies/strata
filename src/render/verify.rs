@@ -6,10 +6,12 @@ use super::notes::{
 };
 use super::same_release::record_word;
 use super::{count_of, entry_error, registry_sync_suffix};
+use crate::closed_set::ClosedSet;
 use crate::diff::{Diff, ImpactLevel, Verify, VerifyStatus};
 use crate::ops::{
     ACTIVE_STATE, IN_USE_STATE, RUNNING_STATE, RecordStatus, VerifiedRecord, VerifySummary,
 };
+use crate::reference::name_version;
 use crate::snapshot::{Naming, Source};
 use crate::text::name_or_uid;
 
@@ -18,7 +20,7 @@ pub(crate) fn record_label(name: &str, version: &str) -> String {
     if name.is_empty() {
         "-".to_string()
     } else {
-        format!("{name}@{version}")
+        name_version(name, version)
     }
 }
 
@@ -39,8 +41,9 @@ fn profiles_overwritten_sentence(v: &Verify, recorded: &Source) -> Option<String
             .iter()
             .map(|o| {
                 let runs = format!(
-                    "cluster {cluster} runs {}@{}, but uid {}",
-                    o.name, o.cluster_version, o.uid
+                    "cluster {cluster} runs {}, but uid {}",
+                    name_version(&o.name, &o.cluster_version),
+                    o.uid
                 );
                 if o.profile_version.is_empty() {
                     format!("{runs} no longer exists")
@@ -238,9 +241,8 @@ pub(super) fn edited_in_place_note(d: &Diff) -> Option<String> {
     (d.edited_in_place && !gone).then(|| {
         let clusters = d.a.cluster.is_some() || d.b.cluster.is_some();
         format!(
-            "both sides are {}@{} (uid {}): the version was edited in place{}",
-            d.a.name,
-            d.a.version,
+            "both sides are {} (uid {}): the version was edited in place{}",
+            name_version(&d.a.name, &d.a.version),
             d.a.uid,
             if clusters {
                 ", or changed on a cluster"

@@ -4,11 +4,11 @@ use serde_json::Value;
 
 use super::notes::{tag_rename, tier_path};
 use super::{short_digest, show, shown};
+use crate::closed_set::ClosedSet;
 use crate::diff::{
     ChangeFlag, ClusterValueChange, Diff, Leaf, ManifestChange, Op, PackDiff, Status, ValuesDiff,
     VariableSummary, VariablesByName,
 };
-use crate::legend::document_name;
 use crate::term::color::Paint;
 
 /// The mark of a pack in a comparison, as the text reports print it.
@@ -45,6 +45,26 @@ pub(crate) fn status_word(status: Status) -> &'static str {
         Status::Changed => "CHANGED",
         Status::Added => "ADDED",
         Status::Removed => "REMOVED",
+    }
+}
+
+/// The status of a part of a comparison that has no status of its own, such as the variables.
+/// The part moved or it did not.
+pub(crate) fn moved(changed: bool) -> Status {
+    if changed {
+        Status::Changed
+    } else {
+        Status::Unchanged
+    }
+}
+
+/// The word of [`moved`] for the terminal: `CHANGED` in yellow, or `unchanged` dimmed.
+pub(crate) fn moved_word(changed: bool, p: &Paint) -> String {
+    let word = status_word(moved(changed));
+    if changed {
+        p.byellow(word)
+    } else {
+        p.dim(word)
     }
 }
 
@@ -248,7 +268,7 @@ pub(crate) fn values_unparsed_sentence(code: fn(&str) -> String) -> String {
 ///
 /// `code` puts the name in the form of the report.
 pub(crate) fn manifest_change(m: &ManifestChange, code: fn(&str) -> String) -> String {
-    format!("manifest {} {}", code(&m.name), document_name(&m.op))
+    format!("manifest {} {}", code(&m.name), m.op.as_str())
 }
 
 /// `1 variable value changed`, `2 variable values changed`.
@@ -275,5 +295,26 @@ pub(crate) fn traits_suffix(v: &VariableSummary) -> String {
         String::new()
     } else {
         format!(" ({})", t.join(", "))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_part_that_moved_is_changed_and_one_that_did_not_is_unchanged() {
+        assert_eq!(moved(true), Status::Changed);
+        assert_eq!(moved(false), Status::Unchanged);
+        let off = Paint::off();
+        assert_eq!(moved_word(true, &off), "CHANGED");
+        assert_eq!(moved_word(false, &off), "unchanged");
+        for status in Status::ALL {
+            assert_eq!(
+                status_word(*status).to_lowercase(),
+                status.as_str(),
+                "the word of a status is its name in the documents"
+            );
+        }
     }
 }

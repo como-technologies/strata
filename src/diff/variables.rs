@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::leaf::{Leaf, leaf_diff};
 use super::zip_by_key;
-use crate::json::text;
+use crate::json::{flag, text};
 
 /// Profile variables compared by name.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -66,13 +66,13 @@ impl VariableSummary {
     }
 
     fn from_value(v: &Value) -> VariableSummary {
-        let flag = |k: &str| v.get(k).and_then(Value::as_bool).unwrap_or(false);
+        let on = |ptr: &str| flag(v, ptr);
         VariableSummary {
             name: text(v, "/name"),
-            required: flag("required"),
-            sensitive: flag("isSensitive"),
-            hidden: flag("hidden"),
-            immutable: flag("immutable"),
+            required: on("/required"),
+            sensitive: on("/isSensitive"),
+            hidden: on("/hidden"),
+            immutable: on("/immutable"),
         }
     }
 }

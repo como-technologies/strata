@@ -565,7 +565,11 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
         let candidate = candidate_of(unit)?;
         // The candidate is in memory, and its values and manifests are in it, so no file is
         // read. The name is the ref of the record, as the path of a candidate file would be.
-        let named = format!("{}@{}", unit.name, unit.version);
+        let named = Ref::NameVersion {
+            name: unit.name.to_string(),
+            version: unit.version.to_string(),
+        }
+        .to_string();
         let loaded = candidate::check(candidate, Path::new(&named)).map_err(port_error)?;
         let snapshot = ops::snapshot_from_loaded(
             &loaded,

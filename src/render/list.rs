@@ -3,6 +3,7 @@
 use super::notes::marks_invalid;
 use super::verify::record_label;
 use super::{count_of, dash, entry_error, joined_note};
+use crate::closed_set::{ClosedSet, Open};
 use crate::diff::invalid_packs;
 use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
 use crate::snapshot::Snapshot;
@@ -64,9 +65,11 @@ pub(crate) fn query_line(l: &Listing) -> Option<String> {
         parts.push(format!("the saved filter {name}{expr}"));
     }
     let how = match l.resolved {
-        Some(crate::ops::Resolved::Search) => "from the search of Palette, at tenant scope",
-        Some(crate::ops::Resolved::Listing) => "from the cluster listing, labels matched by strata",
-        None => "",
+        Some(r @ Resolved::Search) => format!("from the {}, at tenant scope", r.noun()),
+        Some(r @ Resolved::Listing) => {
+            format!("from the {}, labels matched by strata", r.noun())
+        }
+        None => String::new(),
     };
     Some(format!("the clusters with {}, {how}", and_list(&parts)))
 }
@@ -100,7 +103,7 @@ fn registry_note(r: &crate::ops::PackRegistry) -> Option<String> {
         (None, true) => Some("no tags: the registry answered 404"),
     };
     joined_note([
-        r.state.as_deref(),
+        r.state.as_ref().map(Open::as_str),
         tags,
         r.no_digests.then_some("no digests"),
     ])
@@ -138,7 +141,7 @@ pub(crate) fn registry_heading(
 /// and strata does not. A version that both call the latest needs no mark.
 pub(crate) fn version_note(v: &crate::ops::PackBuild) -> Option<String> {
     joined_note([
-        v.state.as_deref(),
+        v.state.as_ref().map(Open::as_str),
         v.digest.is_empty().then_some("no digest"),
         (v.palette_latest && !v.latest).then_some("latest in Palette"),
     ])
@@ -190,13 +193,12 @@ pub(crate) fn pack_version(pk: &crate::ops::ListedPack) -> String {
 /// `2 of 3 clusters recorded, 1 removed; found by the search of Palette`: the counts of a set.
 pub fn set_counts_line(r: &SetReport) -> String {
     let c = &r.summary;
-    let found = match r.resolved {
-        Resolved::Search => "search of Palette",
-        Resolved::Listing => "cluster listing",
-    };
     format!(
-        "{} of {} clusters recorded, {} removed; found by the {found}",
-        c.recorded, c.clusters, c.removed
+        "{} of {} clusters recorded, {} removed; found by the {}",
+        c.recorded,
+        c.clusters,
+        c.removed,
+        r.resolved.noun()
     )
 }
 

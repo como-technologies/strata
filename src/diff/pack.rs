@@ -9,10 +9,10 @@ use serde_json::Value;
 
 use super::leaf::{Leaf, Op, leaf_diff};
 use super::{Diff, zip_by_key};
-use crate::closed_set::{ClosedSet, Open};
+use crate::closed_set::legend::Described;
+use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::canonical_json;
 use crate::diff::impact::{Impact, presence_impact};
-use crate::legend::Described;
 use crate::snapshot::{Pack, UpstreamSource};
 
 /// What happened to one pack.
@@ -29,9 +29,14 @@ pub enum Status {
     Removed,
 }
 
-impl Described for Status {
-    const ALL: &'static [Self] = &[Self::Unchanged, Self::Changed, Self::Added, Self::Removed];
+impl_closed_set!(Status {
+    Unchanged => "unchanged",
+    Changed => "changed",
+    Added => "added",
+    Removed => "removed",
+});
 
+impl Described for Status {
     fn describe(self) -> &'static str {
         match self {
             Self::Unchanged => "Same node hash on both sides.",
@@ -60,24 +65,13 @@ pub enum ChangeFlag {
     Charts,
 }
 
-impl ChangeFlag {
-    /// The name of the flag: `IDENTITY`, `UPSTREAM`, `AUTHORED`, `IMAGES`, or `CHARTS`.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Identity => "IDENTITY",
-            Self::Upstream => "UPSTREAM",
-            Self::Authored => "AUTHORED",
-            Self::Images => "IMAGES",
-            Self::Charts => "CHARTS",
-        }
-    }
-}
-
-impl ClosedSet for ChangeFlag {
-    fn as_str(self) -> &'static str {
-        ChangeFlag::as_str(self)
-    }
-}
+impl_closed_set!(ChangeFlag {
+    Identity => "IDENTITY",
+    Upstream => "UPSTREAM",
+    Authored => "AUTHORED",
+    Images => "IMAGES",
+    Charts => "CHARTS",
+});
 
 impl fmt::Display for ChangeFlag {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

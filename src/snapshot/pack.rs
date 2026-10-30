@@ -10,10 +10,11 @@ use serde_json::{Map, Value, json};
 
 use super::{IMAGE_ID_ANNOTATION, PROVIDER_TYPE_ANNOTATION};
 use crate::api::mask::MASKED;
-use crate::closed_set::{ClosedSet, Open};
+use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
 use crate::content::layer::Layer;
-use crate::json::{arr, first_nonempty, opt_text, str_at, text};
+use crate::json::{arr, first_nonempty, flag, opt_str, opt_text, str_at, text, value_at};
+use crate::oci_provider::OciProvider;
 use crate::pack_type::PackType;
 
 /// One layer of the profile: a pack with its configuration and its hashes.
@@ -45,7 +46,7 @@ pub struct Pack {
     /// `zarf`, as the pack ref of the profile gives it in its annotations. Palette follows a new
     /// digest in a different way for each. Outside the root: the registry uid is in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub registry_provider_type: Option<String>,
+    pub registry_provider_type: Option<Open<OciProvider>>,
     /// The annotation `imageId` of the pack ref, when Palette gives it. A record keeps no other
     /// annotation, because an annotation can hold a secret. Outside the root: a record written
     /// before this field has none, and a record of strata 0.17 to 0.19 holds each annotation.
@@ -128,14 +129,10 @@ pub struct PackChart {
 /// The images and the charts that parsed values declare, from `pack.content`: each sorted, and
 /// each image once.
 pub fn pack_content(values: &Value) -> (Vec<String>, Vec<PackChart>) {
-    let content = values.pointer("/pack/content").unwrap_or(&Value::Null);
+    let content = value_at(values, "/pack/content");
     let mut images: Vec<String> = arr(content, "/images")
         .iter()
-        .filter_map(|i| {
-            i.get("image")
-                .and_then(Value::as_str)
-                .or_else(|| i.as_str())
-        })
+        .filter_map(|i| opt_str(i, "/image").or_else(|| i.as_str()))
         .map(str::to_string)
         .filter(|i| !i.is_empty())
         .collect();
@@ -196,22 +193,11 @@ pub enum UpstreamSource {
     NoDigest,
 }
 
-impl UpstreamSource {
-    /// The source as the documents name it: `packRef.digest`, `packSummary.digest`, or `none`.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::PackRef => "packRef.digest",
-            Self::PackSummary => "packSummary.digest",
-            Self::NoDigest => "none",
-        }
-    }
-}
-
-impl ClosedSet for UpstreamSource {
-    fn as_str(self) -> &'static str {
-        UpstreamSource::as_str(self)
-    }
-}
+impl_closed_set!(UpstreamSource {
+    PackRef => "packRef.digest",
+    PackSummary => "packSummary.digest",
+    NoDigest => "none",
+});
 
 impl fmt::Display for UpstreamSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -298,7 +284,8 @@ impl Pack {
         let ref_digest = text(pk, "/digest");
         let registry_digest = text(&mm, "/spec/digest");
         let registry_provider_type =
-            opt_text(pk, &format!("/annotations/{PROVIDER_TYPE_ANNOTATION}"));
+            opt_text(pk, &format!("/annotations/{PROVIDER_TYPE_ANNOTATION}"))
+                .map(|text| Open::from_text(&text));
         // only `imageId`: another annotation can hold a secret, and strata reads no other one.
         // Palette gives each annotation as text; a value of another type is not an annotation
         let annotations: BTreeMap<String, String> =
@@ -307,7 +294,7 @@ impl Pack {
                 .into_iter()
                 .collect();
         // a reason without the flag is not a reason: Palette clears the flag when the tag is back
-        let invalid = pk.get("isInvalid").and_then(Value::as_bool) == Some(true);
+        let invalid = flag(pk, "/isInvalid");
         let invalid_reason = if invalid {
             text(pk, "/inValidReason")
         } else {

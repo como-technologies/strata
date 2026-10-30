@@ -5,6 +5,7 @@ use serde_json::Value;
 use super::{count_of, dash, entry_error};
 use crate::diff::Diff;
 use crate::ops::{ClustersRead, Consumer, ConsumersReport};
+use crate::reference::name_version;
 use crate::snapshot::Source;
 
 /// What a row says about a consumer that the second reading found, and that the consumer list of
@@ -24,7 +25,7 @@ pub(crate) fn consumer_runs(
     (!c.version.is_empty() && c.version != r.profile.version).then(|| {
         format!(
             "runs {}, which uid {} no longer names",
-            code(&format!("{}@{}", r.profile.name, c.version)),
+            code(&name_version(&r.profile.name, &c.version)),
             code(&r.profile.uid)
         )
     })
@@ -61,7 +62,10 @@ pub(crate) fn consumers_sentence(d: &Diff) -> Option<String> {
     };
     let consumers = profile.consumers.as_ref()?;
     let count = consumer_count(consumers.count);
-    let has = format!("{}@{} has {count}", profile.name, profile.version);
+    let has = format!(
+        "{} has {count}",
+        name_version(&profile.name, &profile.version)
+    );
     match &other.cluster {
         // the consumer list of Palette names clusters, and never an edge host
         Some(c) if !c.kind.is_cluster() => Some(has),
@@ -168,9 +172,8 @@ pub(crate) fn consumers_heading(r: &ConsumersReport) -> String {
         consumer_count(r.count)
     };
     format!(
-        "{}@{} (uid {}): {count}",
-        r.profile.name,
-        r.profile.version,
+        "{} (uid {}): {count}",
+        name_version(&r.profile.name, &r.profile.version),
         dash(&r.profile.uid)
     )
 }

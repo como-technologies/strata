@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use crate::api::Method;
 use crate::api::codes::CreateRule;
-use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR};
+use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR, PROJECT_NAME_VAR};
 use crate::text::{and_list, cut};
 
 mod class;
@@ -18,7 +18,8 @@ pub use class::FailureClass;
 pub enum Error {
     /// No API key in the environment or in `~/.palette.env`.
     #[error(
-        "{primary} is required to fetch from Palette (or {alternate}, or a line in ~/.palette.env)"
+        "{primary} is required to fetch from Palette (or {alternate}, or a line in ~/{})",
+        crate::config::ENV_FILE
     )]
     MissingCredential {
         /// The preferred variable name.
@@ -441,8 +442,10 @@ pub enum Error {
 fn key_hint(status: u16) -> String {
     if status == 401 || status == 403 {
         format!(
-            "; check {}, {}, or ~/.palette.env: the key can be wrong, expired, or for another tenant",
-            KEY_VARS[0], KEY_VARS[1]
+            "; check {}, {}, or ~/{}: the key can be wrong, expired, or for another tenant",
+            KEY_VARS[0],
+            KEY_VARS[1],
+            crate::config::ENV_FILE
         )
     } else {
         String::new()
@@ -506,9 +509,10 @@ fn list_or_none(items: &[String]) -> String {
 /// reader needs a project first.
 fn profile_not_found_hint(name: &str, tenant_scope: bool) -> String {
     if tenant_scope {
-        "this is tenant scope, which holds only the profiles of the tenant: set PALETTE_PROJECT, \
-         or give --project-name, and `strata list projects` shows the projects this key can see"
-            .to_string()
+        format!(
+            "this is tenant scope, which holds only the profiles of the tenant: set {PROJECT_NAME_VAR}, \
+             or give --project-name, and `strata list projects` shows the projects this key can see"
+        )
     } else {
         format!(
             "`strata list` shows the profiles in it, and `strata list --pack {name}` the profiles \

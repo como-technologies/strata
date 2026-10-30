@@ -17,6 +17,8 @@ pub enum Layer {
     Csi,
     /// Add-on: anything above the infrastructure layers.
     Addon,
+    /// The layer that strata gives each tier of an app profile.
+    App,
     /// A layer name strata does not know.
     Other,
 }
@@ -31,12 +33,13 @@ impl Layer {
             "cni" => Layer::Cni,
             "csi" => Layer::Csi,
             "addon" => Layer::Addon,
+            "app" => Layer::App,
             _ => Layer::Other,
         }
     }
 
-    /// The layer as Palette names it: `kernel`, `os`, `k8s`, `cni`, `csi`, or `addon`. `other`
-    /// for a name strata does not know.
+    /// The layer as Palette names it: `kernel`, `os`, `k8s`, `cni`, `csi`, or `addon`. `app` for a
+    /// tier of an app profile, and `other` for a name strata does not know.
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Layer::Kernel => "kernel",
@@ -45,6 +48,7 @@ impl Layer {
             Layer::Cni => "cni",
             Layer::Csi => "csi",
             Layer::Addon => "addon",
+            Layer::App => "app",
             Layer::Other => "other",
         }
     }
@@ -58,7 +62,7 @@ impl Layer {
             Layer::Cni => 3,
             Layer::Csi => 4,
             Layer::Addon => 5,
-            Layer::Other => 9,
+            Layer::App | Layer::Other => 9,
         }
     }
 }
@@ -114,6 +118,7 @@ mod tests {
             Layer::Cni,
             Layer::Csi,
             Layer::Addon,
+            Layer::App,
         ] {
             assert_eq!(Layer::parse(layer.as_str()), layer);
             assert_eq!(layer.to_string(), layer.as_str());

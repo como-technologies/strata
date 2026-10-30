@@ -1,9 +1,9 @@
 //! The pull request comment.
 
 use super::changes::{
-    OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, plain_flags, status_mark,
-    status_word, tier_op_lines, traits_suffix, upstream_line, values_changed, values_summary,
-    values_unparsed_sentence, variable_lines, version_display,
+    OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, moved, plain_flags,
+    status_mark, status_word, tier_op_lines, traits_suffix, upstream_line, values_changed,
+    values_summary, values_unparsed_sentence, variable_lines, version_display,
 };
 use super::consumers::{
     NOT_LISTED, consumer_count, consumer_counts, consumer_runs, consumers_heading,
@@ -24,6 +24,7 @@ use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
 };
 use super::{Renderer, capitalized, count_of, dash, entry_error, short};
+use crate::closed_set::ClosedSet;
 use crate::diff::{Diff, Leaf, Op, Status};
 use crate::error::Result;
 use crate::ops::{
@@ -98,14 +99,7 @@ impl Renderer for MarkdownRenderer {
         let s = &d.summary;
         // two packs have no profile variables, and no request asked for any
         let variables = if variables_comparable(d) {
-            format!(
-                " · variables: {}",
-                if s.variables_changed {
-                    "changed"
-                } else {
-                    "unchanged"
-                }
-            )
+            format!(" · variables: {}", moved(s.variables_changed).as_str())
         } else {
             String::new()
         };
@@ -178,11 +172,14 @@ impl Renderer for MarkdownRenderer {
         }
         match tier_line(d) {
             TierLine::NotCompared => {}
-            TierLine::Unchanged => o.push_str("**Cluster tiers:** unchanged\n\n"),
+            TierLine::Unchanged => o.push_str(&format!(
+                "**Cluster tiers:** {}\n\n",
+                Status::Unchanged.as_str()
+            )),
             TierLine::Differ(states) => {
                 let words: Vec<String> = states
                     .iter()
-                    .map(|(t, same)| format!("{t} {}", if *same { "unchanged" } else { "changed" }))
+                    .map(|(t, same)| format!("{t} {}", moved(!*same).as_str()))
                     .collect();
                 o.push_str(&format!("**Cluster tiers:** {}\n\n", words.join(", ")));
                 o.push_str("<details><summary>cluster tiers that differ</summary>\n\n```diff\n");

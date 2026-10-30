@@ -3,6 +3,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::closed_set::impl_closed_set;
+
 /// The `type` of a pack, as a pack reference of Palette names it, as a record keeps it, and as
 /// `packs` lists it.
 ///
@@ -29,42 +31,22 @@ pub enum PackType {
     Manifest,
 }
 
-impl PackType {
-    /// The type as the documents name it: `spectro`, `helm`, `oci`, or `manifest`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Spectro => "spectro",
-            Self::Helm => "helm",
-            Self::Oci => "oci",
-            Self::Manifest => "manifest",
-        }
-    }
-
-    /// The type that the documents name `text`, or none for another text.
-    pub(crate) fn parse(text: &str) -> Option<Self> {
-        match text {
-            "spectro" => Some(Self::Spectro),
-            "helm" => Some(Self::Helm),
-            "oci" => Some(Self::Oci),
-            "manifest" => Some(Self::Manifest),
-            _ => None,
-        }
-    }
-}
+impl_closed_set!(PackType {
+    Spectro => "spectro",
+    Helm => "helm",
+    Oci => "oci",
+    Manifest => "manifest",
+});
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::closed_set::ClosedSet;
 
     #[test]
     fn a_pack_type_parses_and_prints_as_the_documents_name_it() {
-        for kind in [
-            PackType::Spectro,
-            PackType::Helm,
-            PackType::Oci,
-            PackType::Manifest,
-        ] {
-            assert_eq!(PackType::parse(kind.as_str()), Some(kind));
+        for kind in PackType::ALL {
+            assert_eq!(PackType::parse(kind.as_str()), Some(*kind));
         }
         assert_eq!(PackType::parse("container"), None);
         assert_eq!(PackType::parse(""), None);

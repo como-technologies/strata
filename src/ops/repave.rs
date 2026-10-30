@@ -12,8 +12,9 @@ use crate::api::{Palette, PaletteApi};
 use crate::cluster_template::ClusterTemplateRef;
 use crate::diff::{ImpactLevel, PaletteRepave};
 use crate::error::{Error, Result};
-use crate::json::arr;
+use crate::json::{arr, opt_str};
 use crate::profile_type::ProfileType;
+use crate::reference::{Ref, name_version};
 use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind};
 
 /// One entry of `packValues` in the body of `validate/repave`: the pack by name, with its tag,
@@ -113,10 +114,8 @@ pub(super) fn cluster_and_target<'a>(
 /// the cluster route, with no pack values. `isUpgradeNow` is false: when it is true, Palette
 /// ignores the profiles of the request and uses the profiles of the template.
 fn template_body(body: &Value) -> Value {
-    let profiles: Vec<Value> = body["profiles"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let profiles: Vec<Value> = arr(body, "/profiles")
+        .iter()
         .map(|p| json!({"uid": p["uid"]}))
         .collect();
     json!({"profiles": profiles, "isUpgradeNow": false})
@@ -171,9 +170,15 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
     {
         return Err(Error::Usage {
             message: format!(
-                "the record of the update that waits holds {}@{}, and the cluster {} does not run \
-                 it now. Record cluster:{}@pending again",
-                old.name, old.version, source.name, source.name
+                "the record of the update that waits holds {}, and the cluster {} does not run \
+                 it now. Record {} again",
+                name_version(&old.name, &old.version),
+                source.name,
+                Ref::Cluster {
+                    uid: source.name.clone(),
+                    profile: None,
+                    pending: true,
+                }
             ),
         });
     }
@@ -181,7 +186,7 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
     let running_names: BTreeSet<&str> = templates
         .iter()
         .flat_map(|t| arr(t, "/packs"))
-        .filter_map(|p| p["name"].as_str())
+        .filter_map(|p| opt_str(p, "/name"))
         .collect();
     let new_packs: Vec<&Pack> = pending
         .packs
@@ -264,8 +269,9 @@ pub fn palette_repave<A: PaletteApi>(
             let doc = palette.subject_document(SubjectKind::Cluster, &cluster.uid)?;
             let body = validate_body(&AppliedProfile::of_cluster(&doc), target);
             let asked = format!(
-                "{}@{}: the cluster {} runs it",
-                target.source.name, target.source.version, cluster.name
+                "{}: the cluster {} runs it",
+                name_version(&target.source.name, &target.source.version),
+                cluster.name
             );
             (cluster, doc, body, asked)
         }
@@ -274,10 +280,8 @@ pub fn palette_repave<A: PaletteApi>(
         let answer = palette.validate_repave(&cluster.uid, &body)?;
         return Ok(PaletteRepave::from_palette(&cluster.uid, &answer, level));
     };
-    let has_pack_values = body["profiles"]
-        .as_array()
-        .into_iter()
-        .flatten()
+    let has_pack_values = arr(&body, "/profiles")
+        .iter()
         .any(|p| p.get("packValues").is_some());
     if has_pack_values {
         return Err(Error::Usage {

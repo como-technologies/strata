@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
 use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
-use strata::config::Config;
+use strata::config::{self, Config};
 use strata::term::color::ColorMode;
 use strata::term::progress::Progress;
 use strata_preflight::confidence::{self, Ledger};
@@ -271,8 +271,7 @@ fn client(config: Config, progress: Progress) -> Palette<Retry<HttpApi>> {
 
 fn run_cli(cli: Cli) -> Result<ExitCode> {
     // --verbose asks for the lines, so it wins over STRATA_QUIET; --quiet wins over both
-    let progress =
-        Progress::new(cli.quiet || (std::env::var_os("STRATA_QUIET").is_some() && !cli.verbose));
+    let progress = Progress::new(cli.quiet || (config::quiet_from_env() && !cli.verbose));
     if let Some(kind) = cli.schema {
         let schema = match kind {
             SchemaKind::Report => schemars::schema_for!(Report),

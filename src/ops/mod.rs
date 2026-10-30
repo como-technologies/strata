@@ -139,6 +139,12 @@ where
     F: FnOnce() -> Result<Palette<A>>,
 {
     options.check(reference)?;
+    let text = reference.to_string();
+    // a ref that a request answers connects first, and the record names the project of the client
+    let live = |read: &dyn Fn(&Palette<A>) -> Result<Snapshot>| {
+        let palette = connect()?;
+        Ok(read(&palette)?.with_project(palette.project_uid()))
+    };
     match reference {
         Ref::Snapshot(path) => Snapshot::load(path),
         Ref::ClusterSet { .. } => Err(Error::Usage {
@@ -148,50 +154,36 @@ where
                  `strata list clusters` lists them"
             ),
         }),
-        _ => {
-            let palette = connect()?;
-            Ok(fetched(reference, options, &palette, fetched_at, progress)?
-                .with_project(palette.project_uid()))
-        }
-    }
-}
-
-/// The snapshot of `reference` through `palette`, for each kind of ref that a request answers.
-fn fetched<A: PaletteApi>(
-    reference: &Ref,
-    options: &SnapshotOptions,
-    palette: &Palette<A>,
-    fetched_at: &str,
-    progress: &Progress,
-) -> Result<Snapshot> {
-    let text = reference.to_string();
-    match reference {
-        Ref::NameVersion { name, version } => {
+        Ref::NameVersion { name, version } => live(&|palette| {
             let uid = palette.resolve(name, version)?;
             profile_snapshot(palette, &uid, options, &text, fetched_at, progress)
+        }),
+        Ref::Uid(uid) => {
+            live(&|palette| profile_snapshot(palette, uid, options, &text, fetched_at, progress))
         }
-        Ref::Uid(uid) => profile_snapshot(palette, uid, options, &text, fetched_at, progress),
-        Ref::Draft { id, version } => {
+        Ref::Draft { id, version } => live(&|palette| {
             draft_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress)
-        }
+        }),
         Ref::Pack {
             registry,
             name,
             version,
-        } => crate::candidate::pack_snapshot(
-            palette,
-            registry.as_deref(),
-            name,
-            version,
-            &text,
-            fetched_at,
-            progress,
-        ),
+        } => live(&|palette| {
+            crate::candidate::pack_snapshot(
+                palette,
+                registry.as_deref(),
+                name,
+                version,
+                &text,
+                fetched_at,
+                progress,
+            )
+        }),
         Ref::Cluster {
             uid,
             profile,
             pending,
-        } => {
+        } => live(&|palette| {
             let raw = palette.fetch_subject(SubjectKind::Cluster, uid, progress)?;
             let reads = HolderReads {
                 profile: profile.as_deref(),
@@ -209,14 +201,14 @@ fn fetched<A: PaletteApi>(
                 &text,
                 fetched_at,
             )
-        }
-        Ref::AppProfile { id, version } => {
+        }),
+        Ref::AppProfile { id, version } => live(&|palette| {
             app_profile_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress)
-        }
-        Ref::ClusterGroup { uid } => {
+        }),
+        Ref::ClusterGroup { uid } => live(&|palette| {
             cluster_group_snapshot(palette, uid, options.macros, &text, fetched_at, progress)
-        }
-        Ref::EdgeHost { uid, profile } => {
+        }),
+        Ref::EdgeHost { uid, profile } => live(&|palette| {
             let raw = palette.fetch_subject(SubjectKind::EdgeHost, uid, progress)?;
             let reads = HolderReads {
                 profile: profile.as_deref(),
@@ -231,10 +223,7 @@ fn fetched<A: PaletteApi>(
                 &text,
                 fetched_at,
             )
-        }
-        Ref::Snapshot(_) | Ref::ClusterSet { .. } => {
-            unreachable!("snapshot_for answers a file and a set before it connects")
-        }
+        }),
     }
 }
 

@@ -15,12 +15,13 @@ use crate::closed_set::Open;
 use crate::cloud::supports;
 use crate::diff::{ChangeFlag, Diff, ImpactLevel, RegistrySync};
 use crate::error::{Error, Result};
+use crate::pack_state::PackState;
 use crate::reference::{Ref, version};
 use crate::registry::{Registries, RegistrySyncNote};
 use crate::snapshot::{Snapshot, Tool, load_document};
 use crate::term::progress::Progress;
 
-use super::packs::{PackBuild, PackOptions, registry_packs_in};
+use super::packs::{Architectures, PackBuild, PackOptions, registry_packs_in};
 use super::scope_of;
 
 /// The schema id of the document `behind` writes.
@@ -123,7 +124,7 @@ pub struct Pin {
     /// The state that the registry gives the pinned version: `deprecated`, `disabled`, or
     /// `deleted`; `absent` when the registry no longer lists it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pinned_state: Option<String>,
+    pub pinned_state: Option<Open<PackState>>,
     /// Each record that pins it.
     pub pinned_by: Vec<PinnedBy>,
     /// The newer versions that the registry offers, newest first. A version that the registry
@@ -175,7 +176,7 @@ pub struct Newer {
     pub version: String,
     /// `deprecated`, when the registry says so.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub state: Option<String>,
+    pub state: Option<Open<PackState>>,
     /// True for the version that Palette calls the latest: see [`PackBuild::palette_latest`].
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub palette_latest: bool,
@@ -224,8 +225,9 @@ pub struct BehindOptions {
     pub since: Option<BehindReport>,
 }
 
-/// What a registry offers for one pack: the registry name, and its versions.
-type Offered = (String, Vec<PackBuild>);
+/// What a registry offers for one pack: the registry name, its versions, and the architectures
+/// that the listing names for them.
+type Offered = (String, Vec<PackBuild>, Architectures);
 
 /// A floating tag names no one version: `1.x`, `1.30.x`, `LTS__24.x`.
 pub fn is_floating(tag: &str) -> bool {
@@ -426,15 +428,17 @@ fn read_pin<A: PaletteApi>(
                 generated_at,
                 progress,
             )
-            .map(|l| {
-                l.registries
+            .map(|(l, architectures)| {
+                let (registry, versions) = l
+                    .registries
                     .into_iter()
                     .next()
                     .map(|r| (r.registry, r.versions))
-                    .unwrap_or_default()
+                    .unwrap_or_default();
+                (registry, versions, architectures)
             })
         });
-    let (registry, builds) = match offered {
+    let (registry, builds, listed) = match offered {
         Ok(found) => found.clone(),
         Err(e) => {
             pin.error = Some(e.to_json());
@@ -445,7 +449,7 @@ fn read_pin<A: PaletteApi>(
     let pinned = builds.iter().find(|b| b.version == pin.version);
     pin.pinned_state = match pinned {
         Some(b) => b.state.clone(),
-        None => Some("absent".to_string()),
+        None => Some(PackState::Absent.into()),
     };
     // the version that a floating tag names now. A profile with values of its own stays on
     // the pinned version until a person applies the update. So each version above the pin
@@ -457,7 +461,12 @@ fn read_pin<A: PaletteApi>(
             .map(|b| b.version.clone());
     }
     let clouds: Vec<String> = pinned.map(|b| b.cloud_types.clone()).unwrap_or_default();
-    let architectures: Vec<String> = pinned.map(|b| b.architectures.clone()).unwrap_or_default();
+    let architectures_of = |version: &str| -> &[String] {
+        listed
+            .get(&(pin.registry_uid.clone(), version.to_string()))
+            .map_or(&[], Vec::as_slice)
+    };
+    let architectures = pinned.map_or(&[][..], |b| architectures_of(&b.version));
     // a newer version fits when it supports one cloud of the pinned version. A pinned version
     // with no cloud type supports each cloud, so each newer version fits it
     let fits =
@@ -472,7 +481,7 @@ fn read_pin<A: PaletteApi>(
             state: b.state.clone(),
             palette_latest: b.palette_latest,
             listed: b.listed.clone(),
-            drops: dropped(&architectures, &b.architectures),
+            drops: dropped(architectures, architectures_of(&b.version)),
         })
         .collect();
     pin.behind = !pin.newer.is_empty();
