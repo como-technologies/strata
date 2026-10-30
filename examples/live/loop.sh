@@ -102,7 +102,7 @@ if stage 2 "a change, in a pull request"; then
   sed "s/^name: .*/name: $NAME-ask/" repo/change.yaml > repo/ask.yaml
   check ask-candidate 0 '#385: Palette accepts the packs of the candidate, and the record holds the answer' -- \
     in_repo bash -c "\"$strata\" snapshot --from-candidate ask.yaml --validate -o ask.json && jq -e '.source.paletteValidation.accepts' ask.json"
-  check comment 0'#81: the comment of the pull request, and the label decision' -- \
+  check comment 0 '#81: the comment of the pull request, and the label decision' -- \
     in_repo bash -c "\"$ci/pr-comment.sh\" releases/1.0.0.json candidate.json --dry-run > comment.md"
   check comment-says 0 '#81: the comment names the change and its impact' -- \
     grep -Eq '^\*\*Result:\*\* CHANGED · max impact: `[a-z-]+`' repo/comment.md

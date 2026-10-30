@@ -3262,7 +3262,8 @@ fn lab_stage() -> Stage {
 }
 
 #[test]
-fn loop_sh_stage_2_asks_palette_about_the_packs_of_the_candidate_under_a_name_the_project_lacks() {
+fn loop_sh_stage_2_asks_palette_under_a_name_the_project_lacks_and_writes_the_comment_of_the_pull_request()
+ {
     let mut stage = lab_stage();
     stage.strata(
         "candidate n-1 -o change.yaml",
@@ -3274,11 +3275,40 @@ fn loop_sh_stage_2_asks_palette_about_the_packs_of_the_candidate_under_a_name_th
         0,
         r#"{"source":{"paletteValidation":{"accepts":true}}}"#,
     );
+    // the comment compares the record of the release with the candidate, and both differ
+    stage.strata(
+        "snapshot --from-candidate change.yaml -o candidate.json",
+        0,
+        "{}",
+    );
+    stage.strata(
+        "compare releases/1.0.0.json candidate.json --format json",
+        1,
+        r#"{"summary":{"maxImpact":"repave"}}"#,
+    );
+    stage.strata(
+        "compare releases/1.0.0.json candidate.json --format markdown",
+        1,
+        "**Result:** CHANGED · max impact: `repave`\n",
+    );
+    let release = stage.path("out/repo/releases/1.0.0.json");
+    std::fs::create_dir_all(release.parent().unwrap()).unwrap();
+    std::fs::write(&release, "{}").unwrap();
 
     // the merge at the end of the stage needs a commit on main, which this repository lacks, so
     // the script stops there with exit 2
     let (_, steps) = stage.run("loop.sh", &["2"]);
-    passed(&steps, &["candidate", "ask-candidate"]);
+    passed(
+        &steps,
+        &[
+            "candidate",
+            "candidate-record",
+            "ask-candidate",
+            "comment",
+            "comment-says",
+            "commit-branch",
+        ],
+    );
     let ask = std::fs::read_to_string(stage.path("out/repo/ask.yaml")).unwrap();
     assert!(ask.starts_with("name: strata-live-profile-ask\n"), "{ask}");
     assert!(ask.contains("version: 1.0.1"), "{ask}");

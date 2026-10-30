@@ -81,8 +81,8 @@ for a second approver.
 
 Palette answers two more questions about a change on a cluster: does it repave
 the nodes, and does it accept the packs? It answers for a version that it holds.
-The candidate is not in Palette yet, so these questions come in step 3, after
-the publish.
+The candidate is not in Palette yet, so these questions come in
+[step 3](#3-the-publish), after the publish.
 
 ### 2. The merge
 

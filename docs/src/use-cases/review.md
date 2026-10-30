@@ -115,6 +115,14 @@ approved:
 
 `IDENTICAL`: Palette has the version that the reviewer approved.
 
+`same-release` is the question "are these one release?", where `compare` is the
+question "what differs?". It takes two or more records, in the order a release
+moves through them, and passes when each pair holds the same content. It reads
+past the differences that carry no content — another uid, another project,
+another tag name for one build — and `compare` reports those as changes because
+its job is to report every difference. Use `same-release` for a gate, and
+`compare` to read what a gate rejected.
+
 ## Ask Palette about the version
 
 Before the publish, `snapshot --from-candidate --validate` asks Palette if it
@@ -127,14 +135,6 @@ Does Palette accept the packs on that cluster? See
 [Ask Palette if the change repaves](../commands/compare/repave.md) and
 [Ask Palette if it accepts the packs](../commands/compare/validate.md).
 [Step 3 of the everyday loop](../loop.md#3-the-publish) shows both.
-
-`same-release` is the question "are these one release?", where `compare` is the
-question "what differs?". It takes two or more records, in the order a release
-moves through them, and passes when each pair holds the same content. It reads
-past the differences that carry no content — another uid, another project,
-another tag name for one build — and `compare` reports those as changes because
-its job is to report every difference. Use `same-release` for a gate, and
-`compare` to read what a gate rejected.
 
 ## Palette behavior
 
