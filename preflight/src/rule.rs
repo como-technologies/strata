@@ -46,13 +46,33 @@ use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use strata::api::Method;
+use strata::cloud::CLOUD_ALL;
 
 use crate::error::{Error, Result};
+use crate::world::CLOUDS;
 
-/// The engines a rule can name. `all` stands for every engine.
-pub const ENGINES: &[&str] = &[
-    "all", "aws", "eks", "gcp", "gke", "azure", "aks", "maas", "edge", "vsphere", "lab",
-];
+/// The engine `lab`: it marks a check of the lab. No run of the plan records it, so a promotion
+/// counts the clouds alone.
+const ENGINE_LAB: &str = "lab";
+
+/// The engines a rule can name: `all`, which stands for every engine, then each cloud of
+/// [`CLOUDS`], then `lab`.
+pub fn engines() -> impl Iterator<Item = &'static str> {
+    std::iter::once(CLOUD_ALL)
+        .chain(CLOUDS.iter().copied())
+        .chain(std::iter::once(ENGINE_LAB))
+}
+
+/// True when a rule can name `engine`.
+fn is_engine(engine: &str) -> bool {
+    engines().any(|e| e == engine)
+}
+
+/// The engines a rule can name, as a list for a message.
+fn engine_list() -> String {
+    engines().collect::<Vec<_>>().join(", ")
+}
 
 /// Where a check can find the fault.
 #[derive(
@@ -277,7 +297,7 @@ impl Reproduce {
             Reproduce::Lines(l) => l.clone(),
             Reproduce::ByEngine(m) => m
                 .get(engine)
-                .or_else(|| m.get("all"))
+                .or_else(|| m.get(CLOUD_ALL))
                 .cloned()
                 .unwrap_or_default(),
         }
@@ -313,15 +333,9 @@ pub struct RuleTest {
     pub clean: Option<PathBuf>,
 }
 
-/// The HTTP method of a Palette check.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Default)]
-#[serde(rename_all = "UPPERCASE")]
-pub enum Method {
-    /// Read.
-    #[default]
-    Get,
-    /// Ask a question that changes nothing, such as a validate route.
-    Post,
+/// The method of a check of Palette that names none: a read.
+fn read() -> Method {
+    Method::Get
 }
 
 /// The check of a rule: how strata-preflight finds the fault. Each kind runs a jq program over
@@ -340,7 +354,7 @@ pub enum Check {
     /// `ok: true` with a `null` body.
     Palette {
         /// `GET` or `POST`.
-        #[serde(default)]
+        #[serde(default = "read")]
         method: Method,
         /// The path, with `{{ jq }}` templates over the world: `/v1/spectroclusters/{{ .cloud }}/validate`.
         path: String,
@@ -470,7 +484,7 @@ impl Rule {
     pub fn applies_to(&self, engine: &str) -> bool {
         self.engines
             .iter()
-            .any(|e| e == "all" || e.eq_ignore_ascii_case(engine))
+            .any(|e| e == CLOUD_ALL || e.eq_ignore_ascii_case(engine))
     }
 
     /// True when the rule applies to the Palette release `release`, or when no release is
@@ -612,11 +626,8 @@ fn check_section(section: &Section, path: &Path) -> Result<()> {
             return Err(at("no engines; name one, or `all`".into()));
         }
         for e in &rule.engines {
-            if !ENGINES.contains(&e.as_str()) {
-                return Err(at(format!(
-                    "engine '{e}' is not one of {}",
-                    ENGINES.join(", ")
-                )));
+            if !is_engine(e) {
+                return Err(at(format!("engine '{e}' is not one of {}", engine_list())));
             }
         }
         if let Some(check) = &rule.check {
@@ -662,10 +673,10 @@ fn check_section(section: &Section, path: &Path) -> Result<()> {
         }
         if let Reproduce::ByEngine(m) = &rule.reproduce {
             for e in m.keys() {
-                if !ENGINES.contains(&e.as_str()) {
+                if !is_engine(e) {
                     return Err(at(format!(
                         "reproduce names the engine '{e}', which is not one of {}",
-                        ENGINES.join(", ")
+                        engine_list()
                     )));
                 }
             }
@@ -799,6 +810,46 @@ rules:
         );
         assert!(s.rules[0].applies_to("gke"));
         assert!(!s.rules[0].applies_to("eks"));
+    }
+
+    #[test]
+    fn a_rule_names_all_each_cloud_and_the_lab_as_its_engines() {
+        let names: Vec<&str> = engines().collect();
+        assert_eq!(names.first(), Some(&CLOUD_ALL));
+        assert_eq!(names.last(), Some(&ENGINE_LAB));
+        assert_eq!(&names[1..names.len() - 1], CLOUDS);
+        assert_eq!(
+            engine_list(),
+            "all, aws, eks, gcp, gke, azure, aks, maas, edge, vsphere, lab"
+        );
+        assert!(names.iter().all(|e| is_engine(e)));
+        assert!(!is_engine("openstack"));
+    }
+
+    #[test]
+    fn a_check_of_palette_reads_unless_it_names_a_method() {
+        let check: Check =
+            serde_yaml::from_str("kind: palette\npath: /v1/x\nexpr: 'true'").unwrap();
+        assert!(matches!(
+            check,
+            Check::Palette {
+                method: Method::Get,
+                ..
+            }
+        ));
+        let check: Check =
+            serde_yaml::from_str("kind: palette\nmethod: POST\npath: /v1/x\nexpr: 'true'").unwrap();
+        assert!(matches!(
+            check,
+            Check::Palette {
+                method: Method::Post,
+                ..
+            }
+        ));
+        let err =
+            serde_yaml::from_str::<Check>("kind: palette\nmethod: get\npath: /v1/x\nexpr: 'true'")
+                .unwrap_err();
+        assert!(err.to_string().contains("unknown variant"), "{err}");
     }
 
     #[test]

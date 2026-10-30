@@ -206,3 +206,43 @@ fn an_entity_with_no_cloud_says_to_give_one_and_a_bad_cloud_is_refused() {
         "a JSON error with --json: {err}"
     );
 }
+
+#[test]
+fn a_cluster_ref_names_the_whole_cluster_and_needs_palette() {
+    let dir = tempfile::tempdir().unwrap();
+    for source in ["cluster:abc/profile", "cluster:abc@pending"] {
+        let (code, _, err) = run(&[source, "--offline"], dir.path());
+        assert_eq!(code, 2, "{source}");
+        assert!(
+            err.contains("with no profile and no @pending"),
+            "{source}: {err}"
+        );
+    }
+    let (code, _, err) = run(&["cluster:abc", "--offline"], dir.path());
+    assert_eq!(code, 2);
+    assert!(err.contains("cluster:UID needs Palette"), "{err}");
+}
+
+#[test]
+fn the_rules_schema_takes_get_and_post_and_reads_when_a_check_names_no_method() {
+    let dir = tempfile::tempdir().unwrap();
+    let (code, out, err) = run(&["--schema", "rules"], dir.path());
+    assert_eq!(code, 0, "{err}");
+    let schema: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let values: Vec<&str> = schema["$defs"]["Method"]["oneOf"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|v| v["const"].as_str())
+        .collect();
+    assert_eq!(values, ["GET", "POST"]);
+    let method = schema["$defs"]["Check"]["oneOf"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["properties"]["kind"]["const"] == "palette")
+        .map(|c| c["properties"]["method"].clone())
+        .unwrap();
+    assert_eq!(method["$ref"], "#/$defs/Method");
+    assert_eq!(method["default"], "GET");
+}

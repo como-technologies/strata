@@ -8,6 +8,7 @@ use std::time::Duration;
 use clap::{Parser, ValueEnum};
 use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
 use strata::config::{self, Config};
+use strata::reference::Ref;
 use strata::term::color::ColorMode;
 use strata::term::progress::Progress;
 use strata_preflight::confidence::{self, Ledger};
@@ -325,20 +326,25 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
     let palette = if live { Some(connect(progress)?) } else { None };
 
     // the world: the entity, and what the static rules need beside it
-    let mut world = match source.strip_prefix("cluster:") {
-        Some(uid) => {
+    let mut world = match Ref::parse(&source) {
+        Ref::Cluster {
+            uid,
+            profile: None,
+            pending: false,
+        } => {
             let palette = palette.as_ref().ok_or_else(|| Error::Usage {
                 message: "cluster:UID needs Palette: drop --offline, or give the entity as a file"
                     .to_string(),
             })?;
-            let uid = if uid.chars().all(|c| c.is_ascii_hexdigit()) && uid.len() == 24 {
-                uid.to_string()
-            } else {
-                palette.cluster_uid_named(uid)?
-            };
             World::from_cluster(palette, &uid, &progress)?
         }
-        None => World::from_file(std::path::Path::new(&source), cli.cloud.as_deref())?,
+        Ref::Cluster { .. } => {
+            return Err(Error::Usage {
+                message: "the checks read the whole cluster: give cluster:UID with no profile and no @pending"
+                    .to_string(),
+            });
+        }
+        _ => World::from_file(std::path::Path::new(&source), cli.cloud.as_deref())?,
     };
     world.release = cli.release.clone();
     if let Some(change) = &cli.change {
@@ -366,7 +372,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
         run::watch(run::WatchInputs {
             catalog: &catalog,
             world: &world,
-            api: palette.api(),
+            palette,
             ledger: &ledger,
             selection: &selection,
             options: &WatchOptions {

@@ -42,6 +42,10 @@ empty text. The schema now gives the field the pack types. A record of a
 cluster leaves out a label whose value is not text, where 0.21.0 kept it with
 empty text. The labels are outside the root, so no root changes.
 
+After 0.22.1, `preflight --schema rules` describes the method of a Palette check
+with the words of the library. The values `GET` and `POST`, and the default
+`GET`, stay. A rule file reads the same, and the id stays.
+
 A field can also become absent, and that keeps the id as well. For most fields
 absent is a value: a field that is false, empty, or zero is left out, and each
 such field says so at its own definition in

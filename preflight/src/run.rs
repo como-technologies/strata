@@ -6,8 +6,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use strata::api::PaletteApi;
+use strata::api::{Palette, PaletteApi, cluster_events_path, cluster_summary_path, subject_path};
+use strata::json::{arr, str_at, text, text_or};
 use strata::ops::{DELETED_STATE, ERROR_STATE, RUNNING_STATE};
+use strata::snapshot::SubjectKind;
 use strata::term::progress::Progress;
 use strata::text::cut;
 
@@ -197,12 +199,7 @@ fn subject_of(world: &World) -> Subject {
         cloud: world.cloud.clone(),
         release: world.release.clone(),
         source: world.source.clone(),
-        name: world
-            .entity
-            .pointer("/metadata/name")
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string(),
+        name: text(&world.entity, "/metadata/name"),
         cluster_uid: world.cluster_uid.clone(),
     }
 }
@@ -262,17 +259,15 @@ impl Default for WatchOptions {
 ///
 /// The summary is `null`, and the events are empty, after a 404 or the 403 of a project key. A
 /// 401 or a 429 stops the watch with the error that names it, as a read of the world does.
-pub fn reading<A: PaletteApi>(api: &A, uid: &str, elapsed: Duration) -> Result<Value> {
-    let cluster = api.get_json(&format!("/v1/spectroclusters/{uid}"))?;
-    let summary = match api.get_json(&format!("/v1/dashboard/spectroclusters/{uid}")) {
+pub fn reading<A: PaletteApi>(palette: &Palette<A>, uid: &str, elapsed: Duration) -> Result<Value> {
+    let cluster = palette.subject_document(SubjectKind::Cluster, uid)?;
+    let summary = match palette.fetch_cluster_summary(uid) {
         Ok(s) => s,
         Err(strata::Error::Api { status, .. }) if unreadable(status) => Value::Null,
         Err(e) => return Err(e.into()),
     };
-    let events = match api.get_json(&format!(
-        "/v1/events/components/spectrocluster/{uid}?limit=50"
-    )) {
-        Ok(e) => e.get("items").cloned().unwrap_or(Value::Array(vec![])),
+    let events = match palette.cluster_events(uid) {
+        Ok(e) => Value::Array(e),
         Err(strata::Error::Api { status, .. }) if unreadable(status) => Value::Array(vec![]),
         Err(e) => return Err(e.into()),
     };
@@ -325,6 +320,9 @@ fn state_color(state: &str) -> &'static str {
     }
 }
 
+/// What a line of `--verbose` shows for a field that the reading does not have.
+const UNKNOWN: &str = "?";
+
 /// The lines of `--verbose` for one reading: the three requests it made and what they gave, then
 /// each condition that changed since the reading before, then each event new since it, the
 /// newest 15 at most.
@@ -336,38 +334,31 @@ fn reading_lines(
     color: bool,
 ) -> Vec<String> {
     let mut out = Vec::new();
-    let text = |v: Option<&Value>| v.and_then(Value::as_str).unwrap_or("?").to_string();
-    let events = read
-        .get("events")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let state = text(read.pointer("/cluster/status/state"));
+    let events = arr(read, "/events");
+    let state = text_or(read, "/cluster/status/state", UNKNOWN);
     out.push(format!(
         "{} state {}, health {}, {} events",
         paint(
             color,
             "2",
             &format!(
-                "watch: read GET /v1/spectroclusters/{uid}, GET /v1/dashboard/spectroclusters/{uid}, GET /v1/events/components/spectrocluster/{uid}?limit=50:"
+                "watch: read GET {}, GET {}, GET {}:",
+                subject_path(SubjectKind::Cluster, uid),
+                cluster_summary_path(uid),
+                cluster_events_path(uid)
             )
         ),
         paint(color, state_color(&state), &state),
-        text(read.pointer("/summary/status/health/state")),
+        text_or(read, "/summary/status/health/state", UNKNOWN),
         events.len()
     ));
-    for c in read
-        .pointer("/cluster/status/conditions")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
-        let kind = text(c.get("type"));
-        let status = text(c.get("status"));
-        let reason = text(c.get("reason"));
+    for c in arr(read, "/cluster/status/conditions") {
+        let kind = text_or(c, "/type", UNKNOWN);
+        let status = text_or(c, "/status", UNKNOWN);
+        let reason = text_or(c, "/reason", UNKNOWN);
         let now = format!("{status} {reason}");
         if seen_conditions.insert(kind.clone(), now.clone()).as_deref() != Some(now.as_str()) {
-            let message = text(c.get("message"));
+            let message = text_or(c, "/message", UNKNOWN);
             let status_color = match status.as_str() {
                 "True" => "32",
                 "False" => "33",
@@ -376,7 +367,7 @@ fn reading_lines(
             out.push(format!(
                 "watch: condition {kind}={} {reason}{}",
                 paint(color, status_color, &status),
-                if message == "?" || message.is_empty() {
+                if message == UNKNOWN || message.is_empty() {
                     String::new()
                 } else {
                     paint(color, "2", &format!(": {}", cut(&message, 160)))
@@ -387,9 +378,10 @@ fn reading_lines(
     let mut fresh: Vec<(String, String)> = events
         .iter()
         .map(|e| {
-            let at = text(e.pointer("/metadata/creationTimestamp"));
-            let reason = e.get("reason").and_then(Value::as_str).unwrap_or("");
-            let key = format!("{at} {reason} {}", text(e.get("message")));
+            let at = text_or(e, "/metadata/creationTimestamp", UNKNOWN);
+            let reason = str_at(e, "/reason");
+            let message = text_or(e, "/message", UNKNOWN);
+            let key = format!("{at} {reason} {message}");
             let line = format!(
                 "watch: event {}{}: {}",
                 paint(color, "36", &at),
@@ -398,7 +390,7 @@ fn reading_lines(
                 } else {
                     format!(" {reason}")
                 },
-                cut(&probe::one_line(text(e.get("message"))), 200)
+                cut(&probe::one_line(message), 200)
             );
             (key, line)
         })
@@ -447,7 +439,7 @@ pub struct WatchInputs<'a, A: PaletteApi> {
     /// The world of the cluster.
     pub world: &'a World,
     /// The Palette client.
-    pub api: &'a A,
+    pub palette: &'a Palette<A>,
     /// The ledger, for the confidence of each rule.
     pub ledger: &'a Ledger,
     /// What to run.
@@ -477,7 +469,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
     let WatchInputs {
         catalog,
         world,
-        api,
+        palette,
         ledger,
         selection,
         options,
@@ -528,13 +520,9 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
     }
     loop {
         let elapsed = started.elapsed();
-        let read = reading(api, &uid, elapsed)?;
+        let read = reading(palette, &uid, elapsed)?;
         readings += 1;
-        let state = read
-            .pointer("/cluster/status/state")
-            .and_then(Value::as_str)
-            .unwrap_or("?")
-            .to_string();
+        let state = text_or(&read, "/cluster/status/state", UNKNOWN);
         if verbose {
             for line in reading_lines(&uid, &read, &mut seen_conditions, &mut seen_events, color) {
                 progress.note(&line);
@@ -946,7 +934,7 @@ rules:
         let (report, _) = watch(WatchInputs {
             catalog: &c,
             world: &w,
-            api: &api,
+            palette: &Palette::new(&api),
             ledger: &Ledger::default(),
             selection: &Selection {
                 strict: true,
@@ -988,16 +976,30 @@ rules:
         let gone = strata::api::MemoryApi::new()
             .with("/v1/spectroclusters/c1", cluster.clone())
             .failing(events, 403, "{}");
-        let read = reading(&gone, "c1", Duration::from_secs(1)).unwrap();
+        let read = reading(&Palette::new(&gone), "c1", Duration::from_secs(1)).unwrap();
         assert_eq!(read["summary"], Value::Null);
         assert_eq!(read["events"], json!([]));
         for status in [401, 429] {
             let refused = strata::api::MemoryApi::new()
                 .with("/v1/spectroclusters/c1", cluster.clone())
                 .failing(summary, status, "{}");
-            let err = reading(&refused, "c1", Duration::from_secs(1)).unwrap_err();
+            let err = reading(&Palette::new(&refused), "c1", Duration::from_secs(1)).unwrap_err();
             assert!(err.to_string().contains(&format!("HTTP {status}")), "{err}");
         }
+    }
+
+    #[test]
+    fn a_reading_of_a_cluster_with_no_event_has_an_empty_list_of_events() {
+        let cluster = json!({"metadata": {"uid": "c1"}, "status": {"state": "Provisioning"}});
+        // Palette gives `items: null` when the cluster has no event
+        let api = strata::api::MemoryApi::new()
+            .with("/v1/spectroclusters/c1", cluster)
+            .with(
+                "/v1/events/components/spectrocluster/c1?limit=50",
+                json!({"items": null}),
+            );
+        let read = reading(&Palette::new(&api), "c1", Duration::from_secs(1)).unwrap();
+        assert_eq!(read["events"], json!([]));
     }
 
     #[test]
@@ -1029,7 +1031,7 @@ rules:
         let (report, _) = watch(WatchInputs {
             catalog: &c,
             world: &w,
-            api: &api,
+            palette: &Palette::new(&api),
             ledger: &Ledger::default(),
             selection: &Selection::default(),
             options: &WatchOptions::default(),
@@ -1075,7 +1077,7 @@ rules:
         let (report, _) = watch(WatchInputs {
             catalog: &c,
             world: &w,
-            api: &api,
+            palette: &Palette::new(&api),
             ledger: &Ledger::default(),
             selection: &Selection {
                 strict: true,
@@ -1138,7 +1140,7 @@ rules:
         let (report, reading) = watch(WatchInputs {
             catalog: &c,
             world: &w,
-            api: &api,
+            palette: &Palette::new(&api),
             ledger: &Ledger::default(),
             selection: &Selection::default(),
             options: &WatchOptions::default(),

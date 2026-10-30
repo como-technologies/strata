@@ -7,12 +7,23 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use strata::text::cut;
 
 use crate::confidence::Confidence;
 use crate::jq::Jq;
 use crate::probe::{Outcome, Verdict};
 use crate::rule::{Catalog, Evidence, Fix, Level, Rule, Severity, Status, Tier};
+
+mod markdown;
+mod reproduce;
+pub(crate) mod scorecard;
+mod terminal;
+
+pub use markdown::markdown;
+pub use scorecard::scorecard;
+pub use terminal::terminal;
+
+use reproduce::auto_reproduce;
+use scorecard::summarize;
 
 /// The schema id of the report.
 pub const REPORT_SCHEMA: &str = "strata-preflight/1";
@@ -43,6 +54,17 @@ pub struct Subject {
     /// The cluster uid, for an existing cluster.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster_uid: Option<String>,
+}
+
+impl Subject {
+    /// The name of the cluster, or `-` when the entity has none.
+    pub fn name_or_dash(&self) -> &str {
+        if self.name.is_empty() {
+            "-"
+        } else {
+            &self.name
+        }
+    }
 }
 
 /// The options of the run that change what the report holds.
@@ -411,265 +433,6 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
     }
 }
 
-/// The line a person runs to see the same thing the check saw: the `jq` over the world file, the
-/// `curl` to Palette, or the command.
-fn auto_reproduce(
-    rule: &Rule,
-    outcome: &Outcome,
-    subject: &Subject,
-    out_dir: Option<&str>,
-) -> Vec<String> {
-    use crate::rule::Check;
-    // with no --out, the two files are not on disk: $OUT names where --out would put them
-    let dir = out_dir.unwrap_or("$OUT");
-    let mut lines = Vec::new();
-    match &rule.check {
-        Some(Check::Static { expr }) => {
-            lines.push(format!("jq '{}' {dir}/world.json", one_line(expr)));
-        }
-        Some(Check::Palette {
-            method, expr, body, ..
-        }) => {
-            let path = outcome
-                .ran
-                .as_deref()
-                .and_then(|r| r.split_once(' '))
-                .map(|(_, p)| p.to_string())
-                .unwrap_or_default();
-            let data = match (method, body) {
-                // a rule with its own body program sends what the program gives, not the entity
-                (crate::rule::Method::Post, Some(program)) => {
-                    lines.push(format!(
-                        "jq '{}' {dir}/world.json > request.json",
-                        one_line(program)
-                    ));
-                    " -X POST -H 'Content-Type: application/json' --data @request.json".to_string()
-                }
-                (crate::rule::Method::Post, None) => format!(
-                    " -X POST -H 'Content-Type: application/json' --data @{dir}/entity.json"
-                ),
-                (crate::rule::Method::Get, _) => String::new(),
-            };
-            lines.push(format!(
-                "code=$(curl -s -o body.json -w '%{{http_code}}' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\"{data} \"${{PALETTE_API:-{base}}}{path}\")",
-                base = strata::config::DEFAULT_BASE_URL
-            ));
-            lines.push(format!(
-                "jq --arg code \"$code\" --slurpfile body body.json '.response = {{ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)}} | {}' {dir}/world.json",
-                one_line(expr)
-            ));
-        }
-        Some(Check::Exec { expr, .. }) => {
-            if let Some(ran) = &outcome.ran {
-                lines.push(ran.clone());
-                lines.push(format!(
-                    "jq --argjson out \"$(<the output>)\" '.exec = {{exit: 0, stdout: $out, stderr: \"\"}} | {}' {dir}/world.json",
-                    one_line(expr)
-                ));
-            }
-        }
-        Some(Check::Watch { .. }) => {
-            if let Some(uid) = &subject.cluster_uid {
-                lines.push(format!(
-                    "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${{PALETTE_API:-{base}}}/v1/events/components/spectrocluster/{uid}?limit=50\"",
-                    base = strata::config::DEFAULT_BASE_URL
-                ));
-            }
-        }
-        None => {}
-    }
-    lines
-}
-
-fn one_line(expr: &str) -> String {
-    expr.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .replace('\'', "'\\''")
-}
-
-/// The scorecard: one line for each section that has a row for this engine.
-pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore> {
-    let mut out = Vec::new();
-    for section in &catalog.sections {
-        let rows: Vec<&CheckResult> = checks
-            .iter()
-            .filter(|c| c.section == section.section)
-            .collect();
-        if rows.is_empty() {
-            continue;
-        }
-        let ran: Vec<&&CheckResult> = rows
-            .iter()
-            .filter(|c| {
-                matches!(c.verdict, Verdict::Passed | Verdict::Failed)
-                    && c.severity != Severity::Note
-            })
-            .collect();
-        let passed = ran.iter().filter(|c| c.verdict == Verdict::Passed).count() as u32;
-        let failed = ran.len() as u32 - passed;
-        let not_run = rows
-            .iter()
-            .filter(|c| c.verdict == Verdict::NotRun && c.severity != Severity::Note)
-            .count() as u32;
-        let with_runs = rows
-            .iter()
-            .filter(|c| c.confidence.as_ref().is_some_and(Confidence::has_runs))
-            .count() as u32;
-        let weakest = rows
-            .iter()
-            .filter_map(|c| c.confidence.as_ref().and_then(Confidence::weakest_bound))
-            .fold(None, |acc: Option<f64>, b| {
-                Some(acc.map_or(b, |a| a.min(b)))
-            });
-        out.push(SectionScore {
-            section: section.section.clone(),
-            title: section.title.clone(),
-            rows: rows.len() as u32,
-            seen: rows.iter().filter(|c| c.status == Status::Seen).count() as u32,
-            with_check: rows
-                .iter()
-                .filter(|c| catalog.rule(&c.id).is_some_and(|r| r.check.is_some()))
-                .count() as u32,
-            preflight: rows.iter().filter(|c| c.level == Level::Preflight).count() as u32,
-            with_runs,
-            weakest_bound: weakest,
-            ran: ran.len() as u32,
-            passed,
-            failed,
-            not_run,
-            not_checked: rows
-                .iter()
-                .filter(|c| c.verdict == Verdict::NotChecked)
-                .count() as u32,
-            readiness: readiness_of(passed, ran.len() as u32 + not_run),
-        });
-    }
-    out
-}
-
-/// The readiness: the checks that passed over the checks that apply, or none when none applies.
-fn readiness_of(passed: u32, apply: u32) -> Option<f64> {
-    (apply > 0).then(|| f64::from(passed) / f64::from(apply))
-}
-
-/// Why the checks did not run, with the count of each reason.
-pub(crate) fn not_run_reasons<'a>(
-    checks: impl Iterator<Item = &'a CheckResult>,
-) -> BTreeMap<String, u32> {
-    let mut out = BTreeMap::new();
-    for c in checks.filter(|c| c.verdict == Verdict::NotRun) {
-        let why = c.messages.first().cloned().unwrap_or_default();
-        *out.entry(why).or_insert(0) += 1;
-    }
-    out
-}
-
-/// `N check(s) did not run: reason (count); reason (count)`.
-pub(crate) fn not_run_text(reasons: &BTreeMap<String, u32>) -> String {
-    let n: u32 = reasons.values().sum();
-    let why: Vec<String> = reasons.iter().map(|(r, c)| format!("{r} ({c})")).collect();
-    format!(
-        "{n} check{} did not run: {}",
-        if n == 1 { "" } else { "s" },
-        why.join("; ")
-    )
-}
-
-/// What `--out` wrote, or what it would write.
-pub(crate) fn written_text(out_dir: Option<&str>) -> String {
-    match out_dir {
-        Some(dir) => format!("Written to {dir}: report.html, report.md, report.json, world.json, entity.json."),
-        None => "No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).".to_string(),
-    }
-}
-
-fn summarize(checks: &[CheckResult], sections: &[SectionScore], options: &Options) -> Summary {
-    let count = |f: &dyn Fn(&CheckResult) -> bool| checks.iter().filter(|c| f(c)).count() as u32;
-    let ran = sections.iter().map(|s| s.ran).sum();
-    let passed = sections.iter().map(|s| s.passed).sum();
-    let failed = count(&|c| c.counts_as_failure);
-    let probe_failed = count(&|c| {
-        c.verdict == Verdict::Failed
-            && c.level == Level::Probe
-            && c.severity == Severity::Fail
-            && !c.counts_as_failure
-    });
-    let warned = count(&|c| c.verdict == Verdict::Failed && c.severity == Severity::Warn);
-    let noted = count(&|c| c.verdict == Verdict::Failed && c.severity == Severity::Note);
-    let not_checked = count(&|c| c.verdict == Verdict::NotChecked);
-    // a note is outside the readiness whether it ran or not, as `ran` leaves it out
-    let not_run = count(&|c| c.verdict == Verdict::NotRun && c.severity != Severity::Note);
-    let not_run_reasons = not_run_reasons(checks.iter().filter(|c| c.severity != Severity::Note));
-    let skipped = count(&|c| c.verdict == Verdict::Skipped);
-    let errors = count(&|c| c.verdict == Verdict::Error);
-    let readiness = readiness_of(passed, ran + not_run);
-    let under_ready = match (options.ready, readiness) {
-        (Some(want), Some(have)) => have < want,
-        (Some(_), None) => true,
-        _ => false,
-    };
-    let (exit_code, verdict) = if failed > 0 {
-        let ids: Vec<&str> = checks
-            .iter()
-            .filter(|c| c.counts_as_failure)
-            .map(|c| c.id.as_str())
-            .collect();
-        (
-            1,
-            format!("FAIL: {failed} check(s) failed: {}", ids.join(", ")),
-        )
-    } else if under_ready {
-        (
-            1,
-            format!(
-                "NOT READY: readiness {} is under {}",
-                readiness.map_or_else(|| "none".to_string(), percent),
-                percent(options.ready.unwrap_or(0.0))
-            ),
-        )
-    } else if errors > 0 {
-        let ids: Vec<&str> = checks
-            .iter()
-            .filter(|c| c.verdict == Verdict::Error)
-            .map(|c| c.id.as_str())
-            .collect();
-        (
-            2,
-            format!(
-                "ERROR: {errors} check(s) could not answer: {}",
-                ids.join(", ")
-            ),
-        )
-    } else if ran == 0 {
-        (0, "OK: no check ran".to_string())
-    } else {
-        let probes = if probe_failed > 0 {
-            format!("; {probe_failed} probe(s) failed, not counted")
-        } else {
-            String::new()
-        };
-        (0, format!("OK: each counted check passed{probes}"))
-    };
-    Summary {
-        rules: checks.len() as u32,
-        ran,
-        passed,
-        failed,
-        probe_failed,
-        warned,
-        noted,
-        not_run,
-        not_run_reasons,
-        not_checked,
-        skipped,
-        errors,
-        readiness,
-        exit_code,
-        verdict,
-    }
-}
-
 /// The report formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
@@ -718,10 +481,6 @@ pub(crate) fn paint(color: bool, code: &str, text: &str) -> String {
     }
 }
 
-fn label_color(c: &CheckResult) -> &'static str {
-    label_color_for(c.verdict, c.severity, c.level)
-}
-
 /// The ANSI color of a label: green for a pass, red for a counted failure, magenta for a failed
 /// probe, yellow for a warning, cyan for a note, dim for what did not run.
 pub(crate) fn label_color_for(verdict: Verdict, severity: Severity, level: Level) -> &'static str {
@@ -736,304 +495,6 @@ pub(crate) fn label_color_for(verdict: Verdict, severity: Severity, level: Level
         (Verdict::Skipped, _, _) => "2",
         (Verdict::Error, _, _) => "31",
     }
-}
-
-/// The terminal form.
-pub fn terminal(r: &Report, color: bool) -> String {
-    let mut out = String::new();
-    let release = r
-        .subject
-        .release
-        .as_deref()
-        .map_or("release not given".to_string(), |x| format!("release {x}"));
-    let tiers: Vec<&str> = r.options.tiers.iter().map(|t| t.name()).collect();
-    out.push_str(&format!(
-        "{}: {} cluster {} ({}), Palette {release}, tiers {}{}\n",
-        crate::TOOL_NAME,
-        r.subject.cloud,
-        if r.subject.name.is_empty() {
-            "-"
-        } else {
-            &r.subject.name
-        },
-        r.subject.source,
-        tiers.join(", "),
-        if r.options.strict { ", strict" } else { "" }
-    ));
-    for sc in &r.sections {
-        let rows: Vec<&CheckResult> = r
-            .checks
-            .iter()
-            .filter(|c| c.section == sc.section)
-            .collect();
-        let visible: Vec<&CheckResult> = rows
-            .iter()
-            .copied()
-            .filter(|c| !matches!(c.verdict, Verdict::Skipped | Verdict::NotRun))
-            .collect();
-        if visible.is_empty() && sc.not_run == 0 {
-            continue;
-        }
-        out.push_str(&format!("\n{}\n", paint(color, "1", &sc.title)));
-        if sc.not_run > 0 {
-            // one line for the checks of the section that did not run, not one line each
-            out.push_str(&format!(
-                "  {}  {}\n",
-                paint(color, "2", &format!("{:<12}", "NOT RUN")),
-                not_run_text(&not_run_reasons(
-                    rows.iter()
-                        .copied()
-                        .filter(|c| c.severity != Severity::Note)
-                ))
-            ));
-        }
-        for c in visible {
-            let label = format!("{:<12}", c.label());
-            let conf = c
-                .confidence
-                .as_ref()
-                .map(|k| format!("  catch {} clean {}", k.catch.text(), k.clean.text()))
-                .unwrap_or_default();
-            out.push_str(&format!(
-                "  {}  {:<28} {:<60} {:>5} ms{conf}\n",
-                paint(color, label_color(c), &label),
-                c.id,
-                cut(&c.title, 60),
-                c.elapsed_ms
-            ));
-            if c.verdict != Verdict::Passed {
-                for m in &c.messages {
-                    out.push_str(&format!("{:<16}{m}\n", ""));
-                }
-                if let Some(ran) = &c.ran {
-                    out.push_str(&format!(
-                        "{:<16}{} {ran}{}\n",
-                        "",
-                        paint(color, "2", "ran:"),
-                        c.answer
-                            .as_ref()
-                            .map(|a| format!(" -> {a}"))
-                            .unwrap_or_default()
-                    ));
-                }
-            }
-            if matches!(
-                c.verdict,
-                Verdict::Failed | Verdict::NotChecked | Verdict::Error
-            ) {
-                for line in &c.reproduce {
-                    out.push_str(&format!(
-                        "{:<16}{} {line}\n",
-                        "",
-                        paint(color, "2", "reproduce:")
-                    ));
-                }
-                if c.verdict == Verdict::Failed
-                    && let Some(fix) = &c.fix
-                    && !fix.text.is_empty()
-                {
-                    out.push_str(&format!(
-                        "{:<16}{} {} ({})\n",
-                        "",
-                        paint(color, "2", "fix:"),
-                        fix.text,
-                        fix.owner
-                    ));
-                }
-            }
-        }
-    }
-    out.push_str(&format!("\n{}\n", paint(color, "1", "Section scorecard")));
-    out.push_str(&format!(
-        "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>4} {:>7} {:>4} {:>4} {:>4} {:>7} {:>11} {:>5}\n",
-        "section",
-        "rows",
-        "seen",
-        "check",
-        "preflight",
-        "runs",
-        "weakest",
-        "ran",
-        "pass",
-        "fail",
-        "not run",
-        "not checked",
-        "ready"
-    ));
-    for s in &r.sections {
-        out.push_str(&format!(
-            "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>4} {:>7} {:>4} {:>4} {:>4} {:>7} {:>11} {:>5}\n",
-            cut(&s.title, 28),
-            s.rows,
-            s.seen,
-            s.with_check,
-            s.preflight,
-            s.with_runs,
-            s.weakest_bound
-                .map_or_else(|| "no runs".to_string(), percent),
-            s.ran,
-            s.passed,
-            s.failed,
-            s.not_run,
-            s.not_checked,
-            pct(s.readiness)
-        ));
-    }
-    out.push_str(&format!(
-        "{}\n",
-        paint(color, "2", &scorecard_legend(&r.sections))
-    ));
-    let s = &r.summary;
-    out.push_str(&format!(
-        "\n{} rules apply; {} ran: {} passed, {} failed, {} probe(s) failed, {} warning(s), {} note(s); {} did not run, {} not checked, {} do not apply, {} error(s); readiness {}: {} of {} checks passed\n",
-        s.rules, s.ran, s.passed, s.failed, s.probe_failed, s.warned, s.noted, s.not_run, s.not_checked, s.skipped, s.errors, pct(s.readiness), s.passed, s.ran + s.not_run
-    ));
-    if s.not_run > 0 {
-        out.push_str(&format!(
-            "{}\n",
-            paint(color, "2", &not_run_text(&s.not_run_reasons))
-        ));
-    }
-    out.push_str(&format!(
-        "{}\n",
-        paint(color, "2", &written_text(r.options.out_dir.as_deref()))
-    ));
-    let code = if s.exit_code == 0 { "32" } else { "31" };
-    out.push_str(&format!("{}\n", paint(color, code, &s.verdict)));
-    out
-}
-
-/// The markdown form: a pull request comment.
-pub fn markdown(r: &Report) -> String {
-    let mut out = String::new();
-    let s = &r.summary;
-    out.push_str(&format!(
-        "## strata-preflight: {} cluster `{}`\n\n",
-        r.subject.cloud,
-        if r.subject.name.is_empty() {
-            "-"
-        } else {
-            &r.subject.name
-        }
-    ));
-    out.push_str(&format!(
-        "**{}** — source `{}`, Palette {}, tiers {}{}. {} ran: {} passed, {} failed, {} probe(s) failed; {} did not run, {} not checked; readiness **{}** ({} of {} checks passed).\n\n",
-        s.verdict,
-        r.subject.source,
-        r.subject.release.as_deref().unwrap_or("release not given"),
-        r.options.tiers.iter().map(|t| t.name()).collect::<Vec<_>>().join(", "),
-        if r.options.strict { ", strict" } else { "" },
-        s.ran, s.passed, s.failed, s.probe_failed, s.not_run, s.not_checked, pct(s.readiness), s.passed, s.ran + s.not_run
-    ));
-    out.push_str(
-        "| result | rule | tier | what | time | confidence |\n|---|---|---|---|---|---|\n",
-    );
-    for c in r
-        .checks
-        .iter()
-        .filter(|c| !matches!(c.verdict, Verdict::Skipped | Verdict::NotRun))
-    {
-        let what = if c.verdict == Verdict::Passed {
-            c.title.clone()
-        } else {
-            let mut t = c.title.clone();
-            if !c.messages.is_empty() {
-                t.push_str("<br>");
-                t.push_str(
-                    &c.messages
-                        .iter()
-                        .map(|m| md_escape(m))
-                        .collect::<Vec<_>>()
-                        .join("<br>"),
-                );
-            }
-            t
-        };
-        let conf = c
-            .confidence
-            .as_ref()
-            .map(|k| format!("catch {}, clean {}", k.catch.text(), k.clean.text()))
-            .unwrap_or_else(|| "no runs".to_string());
-        out.push_str(&format!(
-            "| {} | `{}` | {} | {} | {} ms | {} |\n",
-            c.label(),
-            c.id,
-            c.tier.letter(),
-            what,
-            c.elapsed_ms,
-            conf
-        ));
-    }
-    let repro: Vec<&CheckResult> = r
-        .checks
-        .iter()
-        .filter(|c| {
-            matches!(
-                c.verdict,
-                Verdict::Failed | Verdict::NotChecked | Verdict::Error
-            ) && !c.reproduce.is_empty()
-        })
-        .collect();
-    if !repro.is_empty() {
-        out.push_str("\n<details><summary>Reproduce by hand</summary>\n\n");
-        for c in repro {
-            out.push_str(&format!(
-                "**`{}`** — {}\n\n```bash\n{}\n```\n\n",
-                c.id,
-                c.title,
-                c.reproduce.join("\n")
-            ));
-            if let Some(fix) = &c.fix
-                && !fix.text.is_empty()
-            {
-                out.push_str(&format!("Fix ({}): {}\n\n", fix.owner, fix.text));
-            }
-        }
-        out.push_str("</details>\n");
-    }
-    if s.not_run > 0 {
-        out.push_str(&format!("\n{}\n", not_run_text(&s.not_run_reasons)));
-    }
-    out.push_str(&format!(
-        "\n{}\n",
-        written_text(r.options.out_dir.as_deref())
-    ));
-    out.push_str("\n### Section scorecard\n\n| section | rows | seen | with a check | preflight | with runs | weakest bound | ran | passed | failed | did not run | not checked | readiness |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
-    for sc in &r.sections {
-        out.push_str(&format!(
-            "| {} | {} | {} ({}) | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
-            sc.title,
-            sc.rows,
-            sc.seen,
-            pct((sc.rows > 0).then(|| f64::from(sc.seen) / f64::from(sc.rows))),
-            sc.with_check,
-            sc.preflight,
-            sc.with_runs,
-            sc.weakest_bound
-                .map_or_else(|| "no runs".to_string(), percent),
-            sc.ran,
-            sc.passed,
-            sc.failed,
-            sc.not_run,
-            sc.not_checked,
-            pct(sc.readiness)
-        ));
-    }
-    out.push_str(&format!("\n{}\n", scorecard_legend(&r.sections)));
-    out
-}
-
-/// What the evidence columns of the scorecard mean, with the count of promoted rules here.
-pub(crate) fn scorecard_legend(sections: &[SectionScore]) -> String {
-    let promoted: u32 = sections.iter().map(|s| s.preflight).sum();
-    let checks: u32 = sections.iter().map(|s| s.with_check).sum();
-    format!(
-        "runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: {promoted} of {checks} checks."
-    )
-}
-
-fn md_escape(s: &str) -> String {
-    s.replace('|', "\\|").replace('\n', " ")
 }
 
 #[cfg(test)]
@@ -1231,6 +692,58 @@ rules:
             Some("out"),
         );
         assert!(lines[0].contains("--data @out/entity.json"), "{}", lines[0]);
+    }
+
+    #[test]
+    fn the_reproduce_line_of_a_watch_reads_the_events_route_that_the_watch_reads() {
+        let section = r"
+section: lifecycle
+title: L
+rules:
+  - id: webhook-call-failed
+    title: t
+    engines: [all]
+    tier: watch
+    status: seen
+    what: w
+    check: {kind: watch, expr: '[]'}
+";
+        let mut c = crate::rule::Catalog::default();
+        c.push(
+            crate::rule::Catalog::parse_section(section, std::path::Path::new("l.yaml")).unwrap(),
+            std::path::Path::new("l.yaml"),
+        )
+        .unwrap();
+        let mut subject = Subject {
+            cloud: "aws".into(),
+            release: None,
+            source: "cluster:c1".into(),
+            name: String::new(),
+            cluster_uid: Some("c 1".into()),
+        };
+        let outcome = Outcome::not_run(Verdict::Failed, "m");
+        let rule = c.rule("webhook-call-failed").unwrap();
+        let lines = auto_reproduce(rule, &outcome, &subject, None);
+        assert_eq!(lines.len(), 1);
+        let route = strata::api::cluster_events_path("c 1");
+        assert!(lines[0].ends_with(&format!("}}{route}\"")), "{}", lines[0]);
+        assert!(route.ends_with("c%201?limit=50"), "{route}");
+        subject.cluster_uid = None;
+        assert!(auto_reproduce(rule, &outcome, &subject, None).is_empty());
+    }
+
+    #[test]
+    fn a_subject_with_no_name_shows_a_dash() {
+        let mut subject = Subject {
+            cloud: "aws".into(),
+            release: None,
+            source: "c.json".into(),
+            name: String::new(),
+            cluster_uid: None,
+        };
+        assert_eq!(subject.name_or_dash(), "-");
+        subject.name = "fred".into();
+        assert_eq!(subject.name_or_dash(), "fred");
     }
 
     #[test]

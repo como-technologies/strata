@@ -52,6 +52,7 @@ use knurl_ports::{PlatformRead, PortError, Result};
 use serde_json::Value;
 use strata::api::{Palette, PaletteApi};
 use strata::candidate::{self, Candidate, CandidateLayer};
+use strata::json::{arr, str_at};
 use strata::ops;
 use strata::reference::Ref;
 use strata::snapshot::{AppliedProfile, PendingUpdate, Snapshot, SubjectKind};
@@ -130,35 +131,17 @@ fn refused(message: String) -> PortError {
 /// `UnHealthy`. An unhealthy cluster names its first condition. Any other state, or none, is
 /// Unknown: the port does not invent a health.
 fn health_of(summary: &Value) -> Health {
-    let text = |pointer: &str| {
-        summary
-            .pointer(pointer)
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .to_string()
-    };
-    match text("/status/health/state").as_str() {
+    match str_at(summary, "/status/health/state") {
         "Healthy" => Health::Healthy,
         "UnHealthy" => {
-            let reason = summary
-                .pointer("/status/health/conditions")
-                .and_then(Value::as_array)
-                .and_then(|conditions| {
-                    conditions.iter().find_map(|condition| {
-                        let message = condition
-                            .pointer("/message")
-                            .and_then(Value::as_str)
-                            .unwrap_or("");
-                        let kind = condition
-                            .pointer("/type")
-                            .and_then(Value::as_str)
-                            .unwrap_or("");
-                        match (kind, message) {
-                            ("", "") => None,
-                            (kind, "") => Some(kind.to_string()),
-                            (_, message) => Some(message.to_string()),
-                        }
-                    })
+            let reason = arr(summary, "/status/health/conditions")
+                .iter()
+                .find_map(|condition| {
+                    match (str_at(condition, "/type"), str_at(condition, "/message")) {
+                        ("", "") => None,
+                        (kind, "") => Some(kind.to_string()),
+                        (_, message) => Some(message.to_string()),
+                    }
                 })
                 .unwrap_or_else(|| "UnHealthy".to_string());
             Health::Unhealthy(reason)
@@ -511,19 +494,11 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
             let held = PinObservation::new(version(&copy.source.version)?, exact, content);
             pins.insert(unit_name(&copy.source.name)?, held);
         }
-        let state = raw
-            .cluster
-            .pointer("/status/state")
-            .and_then(Value::as_str)
-            .unwrap_or("");
+        let state = str_at(&raw.cluster, "/status/state");
         // The health is on the cluster summary, and not on the cluster document. A Palette that
         // does not serve the summary, with HTTP 404 or 405, gives no health, and the port says
         // Unknown for that.
-        let uid = raw
-            .cluster
-            .pointer("/metadata/uid")
-            .and_then(Value::as_str)
-            .unwrap_or("");
+        let uid = str_at(&raw.cluster, "/metadata/uid");
         let health = match palette.fetch_cluster_summary(uid) {
             Ok(summary) => health_of(&summary),
             Err(error) if error.is_missing_route() => Health::Unknown,

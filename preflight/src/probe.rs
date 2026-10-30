@@ -11,12 +11,13 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use strata::api::PaletteApi;
+use strata::api::{Method, PaletteApi};
 use strata::config::KEY_VARS;
+use strata::json::{flag, str_at, text_or, value_or_null};
 
 use crate::error::{Error, Result};
 use crate::jq::Jq;
-use crate::rule::{Check, Method, Rule};
+use crate::rule::{Check, Rule};
 
 /// The answer of Palette to one request: a 2xx is `ok`, a 4xx is an answer with its `V1Error`
 /// body, and a 204 is `ok` with a `null` body.
@@ -164,7 +165,7 @@ impl FixtureBackend {
 
 impl Backend for FixtureBackend {
     fn palette(&self, method: Method, path: &str, _body: Option<&Value>) -> Result<Response> {
-        let key = format!("{} {path}", method_name(method));
+        let key = format!("{method} {path}");
         self.responses
             .get(&key)
             .cloned()
@@ -188,13 +189,6 @@ impl Backend for FixtureBackend {
 
     fn has_palette(&self) -> bool {
         self.has_palette
-    }
-}
-
-fn method_name(m: Method) -> &'static str {
-    match m {
-        Method::Get => "GET",
-        Method::Post => "POST",
     }
 }
 
@@ -306,10 +300,10 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
                     Ok(b) => Some(b),
                     Err(e) => return Outcome::new(Verdict::Error, vec![e.to_string()], started),
                 },
-                (Method::Post, None) => Some(world.get("entity").cloned().unwrap_or(Value::Null)),
+                (Method::Post, None) => Some(value_or_null(world, "/entity")),
                 (Method::Get, _) => None,
             };
-            let ran = format!("{} {path}", method_name(*method));
+            let ran = format!("{method} {path}");
             match backend.palette(*method, &path, body.as_ref()) {
                 Ok(response) => {
                     let mut with = world.clone();
@@ -411,26 +405,20 @@ fn judge(rule: &Rule, expr: &str, world: &Value, jq: &Jq, started: Instant) -> O
     }
     let mut failures = Vec::new();
     for out in outputs {
-        match out {
+        match &out {
             Value::Bool(true) => {}
             Value::Bool(false) => failures.push("the check is false".to_string()),
             Value::Array(items) => {
                 for item in items {
                     failures.push(one_line(match item {
-                        Value::String(s) => s,
+                        Value::String(s) => s.clone(),
                         other => other.to_string(),
                     }));
                 }
             }
-            Value::Object(o) => {
-                let pass = o.get("pass").and_then(Value::as_bool).unwrap_or(false);
-                if !pass {
-                    failures.push(one_line(
-                        o.get("message")
-                            .and_then(Value::as_str)
-                            .map(str::to_string)
-                            .unwrap_or_else(|| "the check is false".to_string()),
-                    ));
+            Value::Object(_) => {
+                if !flag(&out, "/pass") {
+                    failures.push(one_line(text_or(&out, "/message", "the check is false")));
                 }
             }
             // null is a path that is not in the world, not a pass: a wrong program says so
@@ -570,11 +558,7 @@ fn run_command(argv: &[String], timeout: Duration) -> Result<ExecOutput> {
 /// The `V1Error` of Palette as one line: `code: message`.
 pub fn palette_error_line(body: &Value) -> String {
     match (body.get("code"), body.get("message")) {
-        (Some(c), Some(m)) => format!(
-            "{}: {}",
-            c.as_str().unwrap_or_default(),
-            m.as_str().unwrap_or_default()
-        ),
+        (Some(_), Some(_)) => format!("{}: {}", str_at(body, "/code"), str_at(body, "/message")),
         _ => body.to_string(),
     }
 }
@@ -590,7 +574,7 @@ mod tests {
             id: "t".into(),
             title: "t".into(),
             section: "s".into(),
-            engines: vec!["all".into()],
+            engines: vec![strata::cloud::CLOUD_ALL.into()],
             tier: check.tier(),
             level: Level::Probe,
             severity: Severity::Fail,
