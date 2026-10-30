@@ -191,6 +191,9 @@ pub enum Edit {
     /// Give the profile another name, as `PATCH /v1/clusterprofiles/{uid}/metadata` does: the
     /// uid and the version stay.
     Name(&'static str),
+    /// Give the profile another cloud type, such as `gcp` for a profile that the body of an AWS
+    /// create names. `spec.published.cloudType` changes, and the packs stay.
+    CloudType(&'static str),
     /// Add one command to `kubeadmconfig.postKubeadmCommands` of the Kubernetes pack: a key that
     /// Palette repaves on.
     KubeadmCommand(&'static str),
@@ -299,6 +302,7 @@ impl Edit {
             }
             Edit::Version(version) => doc["spec"]["version"] = json!(version),
             Edit::Name(name) => doc["metadata"]["name"] = json!(name),
+            Edit::CloudType(cloud) => doc["spec"]["published"]["cloudType"] = json!(cloud),
             Edit::KubeadmCommand(command) => {
                 for pack in packs_mut(doc) {
                     if pack["name"] == "kubernetes"

@@ -39,7 +39,9 @@ The checks, in order:
    edge-native and vSphere, the SSH key.
 4. The profiles: an infrastructure profile is there, no pack is in two
    profiles, the packs and their variables, the state of each pack, and the
-   FIPS mode. The errors go in `profiles[].packs.results[].errors[]`.
+   FIPS mode. The errors go in `profiles[].packs.results[].errors[]`. A profile
+   of another cloud type than the route, and not of `all`, refuses the whole
+   entity: see below.
 5. The machines: each pool against the CPU and memory the packs need. The
    errors go in `machinePools.results[].errors[]`: one worker of four cores
    with the packs of the live example is `MachinePoolWithMinCpuRequired`,
@@ -55,6 +57,27 @@ The checks, in order:
 The answer is `200` with the errors of the packs and the pools, or a 4xx
 `V1Error` with `code` and `message` for a refusal of the whole entity. The
 route calls no cloud.
+
+A refusal of the whole entity can also be HTTP `500`. A live run shows it for a
+body with an add-on profile of another cloud type. The answer is HTTP `500`, the
+code `ClusterProfilesNotSupported`, and the message
+`Cluster profiles '<name>' are not supported with 'aws' environment`. A profile of
+the cloud type `all` fits each cloud. Strata does not send this refusal again.
+`palette-validate` reads it as the answer of the route, with the verdict
+`failed` and the message of Palette: see
+[Refusals that strata does not send again](../../reference/errors.md#refusals-that-strata-does-not-send-again).
+
+The same live run shows what the route does not check. It takes a body with an
+add-on profile that holds a pack version that does not list the cloud type, and
+`palette-validate` passes. Palette refuses such a pack at the create. So no
+route answers this check before the create, and `pack-cloud-support` is a gap
+that preflight fills: see
+[The gaps that preflight fills](../../reference/preflight-rules.md#the-gaps-that-preflight-fills).
+
+The same run shows two refusals of the create of a profile. A disabled pack gives
+HTTP `500` and `DisabledPacksForbidden`. A deleted pack gives HTTP `500` and
+`ClusterProfileInvalidPackState`. So a body cannot name a new profile that holds
+either pack. See [Pack states](./packs.md#pack-states).
 
 **Who calls it.** The console, in its create wizard. The Terraform provider,
 palette-cli, and the SDK for cloud clusters do not. The create path of the API

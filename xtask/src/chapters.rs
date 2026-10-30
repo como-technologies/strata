@@ -54,6 +54,9 @@ const A112_PROD: &str = "64e1000000000000000000d4";
 const PAYMENTS: &str = "64f1000000000000000000e1";
 // the cloud account platform-aws of the preflight chapter and the loop chapter
 const PLATFORM_AWS: &str = "64f3000000000000000000a1";
+// gcp-stack@1.0.0: a profile of the cloud type gcp, which the preflight chapter puts in the body of an
+// AWS create
+const GCP_STACK: &str = "64f3000000000000000000b1";
 const SEARCH: &str = "64f1000000000000000000e2";
 const LEDGER: &str = "64f1000000000000000000e3";
 const LEGACY: &str = "64f1000000000000000000e7";
@@ -3412,6 +3415,24 @@ fn automation(r: &mut Runner) {
         1,
         false,
         "strata preflight cluster-key.json --cloud aws --no-exec --tier palette --rule ssh-key-pair --strict --quiet | sed -n '4,6p'",
+    );
+    // a profile of another cloud type (#415): the validate route refuses the body with HTTP 500 and
+    // the code ClusterProfilesNotSupported, and palette-validate reports the refusal as a failure
+    r.profile(
+        DEV,
+        GCP_STACK,
+        "1.0.0",
+        "aws-stack@1.0.0",
+        &[Edit::Name("gcp-stack"), Edit::CloudType("gcp")],
+    );
+    r.quiet(&format!(
+        r#"jq '.spec.profiles += [{{"uid": "{GCP_STACK}", "packValues": [], "variables": []}}]' cluster.json > cluster-gcp.json"#
+    ));
+    r.step(
+        "preflight-cloud-mismatch",
+        1,
+        false,
+        "strata preflight cluster-gcp.json --cloud aws --no-exec --tier palette --rule palette-validate --strict --quiet | sed -n '4,8p'",
     );
 }
 

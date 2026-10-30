@@ -10,6 +10,8 @@
 //!
 //! Each comment states what Palette does, and not where its code does it.
 
+use crate::validation::PaletteRefusal;
+
 /// The codes of the refusals that Palette answers with HTTP 500 on a route that is not a validate
 /// route.
 ///
@@ -140,6 +142,12 @@ const CLOUD_TYPE: Check = &["UnSupportedCloudType"];
 /// The import validate route runs it too.
 const CREATE_VALIDATION: Check = &["ClusterProfileCreationValidationFailure"];
 
+/// Each profile of the body is of the cloud type of the route, or of the cloud type `all`.
+///
+/// Only the cluster validate route runs it. A live run shows that it refuses a body with an add-on
+/// profile of another cloud type, with HTTP 500.
+const PROFILE_CLOUD: Check = &["ClusterProfilesNotSupported"];
+
 /// A validate route of Palette.
 ///
 /// Each refuses the whole request with an HTTP error and a code before it checks each pack. Strata
@@ -165,15 +173,20 @@ pub enum ValidateRoute {
     ///
     /// `snapshot --validate` sends it.
     ProfileImport,
+    /// `POST /v1/spectroclusters/{cloudType}/validate`: the body of a create.
+    ///
+    /// `strata preflight` sends it, as the rule `palette-validate`.
+    ClusterCreate,
 }
 
 impl ValidateRoute {
     /// Each route.
-    pub(crate) const ALL: [ValidateRoute; 4] = [
+    pub(crate) const ALL: [ValidateRoute; 5] = [
         ValidateRoute::ClusterPacks,
         ValidateRoute::ProfilePacks,
         ValidateRoute::ProfileName,
         ValidateRoute::ProfileImport,
+        ValidateRoute::ClusterCreate,
     ];
 
     /// The checks of the route that refuse the whole request with HTTP 500, each one table of
@@ -211,6 +224,7 @@ impl ValidateRoute {
                 NAME_AND_VERSION,
                 CREATE_VALIDATION,
             ],
+            ValidateRoute::ClusterCreate => &[PROFILE_CLOUD],
         }
     }
 
@@ -239,6 +253,15 @@ impl ValidateRoute {
             (ValidateRoute::ProfilePacks | ValidateRoute::ProfileImport, 422) => true,
             _ => false,
         }
+    }
+
+    /// Whether the route refuses the whole request with the HTTP error `status` and `body`.
+    ///
+    /// `body` is the body of the Palette error. The route refuses it when the `code` of that body
+    /// is a code that the route refuses with `status`. A body that is not JSON with a `code` is no
+    /// refusal.
+    pub fn refuses_answer(self, status: u16, body: &str) -> bool {
+        PaletteRefusal::from_error_body(body).is_some_and(|r| self.refuses(status, &r.code))
     }
 }
 
@@ -275,6 +298,7 @@ impl CreateRule {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::{Error, FailureClass};
 
     /// Each rule of the create.
     const RULES: [CreateRule; 4] = [
@@ -285,7 +309,7 @@ mod tests {
     ];
 
     /// Each table of one check.
-    const CHECKS: [Check; 12] = [
+    const CHECKS: [Check; 13] = [
         PACK_YAML,
         DASHBOARD_PACKS,
         PACK_METADATA,
@@ -298,6 +322,7 @@ mod tests {
         PROFILE_LIMIT,
         CLOUD_TYPE,
         CREATE_VALIDATION,
+        PROFILE_CLOUD,
     ];
 
     #[test]
@@ -337,6 +362,7 @@ mod tests {
         assert_eq!(ValidateRoute::ProfilePacks.refusal_codes().count(), 6);
         assert_eq!(ValidateRoute::ProfileName.refusal_codes().count(), 2);
         assert_eq!(ValidateRoute::ProfileImport.refusal_codes().count(), 16);
+        assert_eq!(ValidateRoute::ClusterCreate.refusal_codes().count(), 1);
         for route in ValidateRoute::ALL {
             for code in route.refusal_codes() {
                 assert!(route.refuses(500, code), "{route:?} {code}");
@@ -368,6 +394,46 @@ mod tests {
                 assert!(route.refuses(500, code), "{route:?} {code}");
             }
             assert!(!ValidateRoute::ProfileName.refuses(500, code), "{code}");
+        }
+    }
+
+    #[test]
+    fn only_the_cluster_validate_route_refuses_a_profile_of_another_cloud_type() {
+        for code in PROFILE_CLOUD {
+            assert!(ValidateRoute::ClusterCreate.refuses(500, code), "{code}");
+            assert!(!ValidateRoute::ClusterCreate.refuses(503, code), "{code}");
+            for route in [
+                ValidateRoute::ClusterPacks,
+                ValidateRoute::ProfilePacks,
+                ValidateRoute::ProfileName,
+                ValidateRoute::ProfileImport,
+            ] {
+                assert!(!route.refuses(500, code), "{route:?} {code}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_route_reads_a_refusal_from_the_body_of_a_palette_error() {
+        let body = r#"{"code":"ClusterProfilesNotSupported","message":"Cluster profiles 'p' are not supported with 'aws' environment"}"#;
+        assert!(ValidateRoute::ClusterCreate.refuses_answer(500, body));
+        assert!(!ValidateRoute::ClusterCreate.refuses_answer(502, body));
+        assert!(!ValidateRoute::ProfilePacks.refuses_answer(500, body));
+        assert!(!ValidateRoute::ClusterCreate.refuses_answer(500, "<html>"));
+        assert!(!ValidateRoute::ClusterCreate.refuses_answer(500, r#"{"code":"InternalError"}"#));
+    }
+
+    #[test]
+    fn a_retry_does_not_send_again_the_refusal_of_the_cluster_validate_route() {
+        for code in ValidateRoute::ClusterCreate.refusal_codes() {
+            let error = Error::Api {
+                method: crate::api::Method::Post,
+                path: "/v1/spectroclusters/aws/validate".into(),
+                status: 500,
+                body: format!(r#"{{"code":"{code}","message":"refused"}}"#),
+                retry_after: None,
+            };
+            assert_eq!(error.class(), FailureClass::Terminal, "{code}");
         }
     }
 

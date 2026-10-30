@@ -22,7 +22,10 @@
 #
 # Each case has two checks. `<case>` is that the route refuses the body. `<case>-says` is that the
 # refusal names the fault. A case that fails shows that the route does not answer the check, so
-# its rule stays in the catalog.
+# its rule stays in the catalog. One case is the other way (#415): the route takes the body of
+# pack-cloud-support, so no route answers that check, and its rule is a gap that preflight fills.
+# Its `<case>` is that palette-validate passes, and its `<case>-says` is that the report holds no
+# message of palette-validate.
 #
 # Needs the key as verify.sh needs it, and the cloud accounts that the bodies name. It builds no
 # cluster, and costs nothing. Results go under runs/<UTC time>/validate-route/, or OUT. Exit 0
@@ -67,6 +70,11 @@ names() {
   jq -e --arg s "$1" '[.checks[] | select(.id == "palette-validate") | (.messages // [])[]] | any(.[]; test($s; "i"))' "$2" > /dev/null
 }
 
+# no_message FILE: palette-validate has no message in the report FILE
+no_message() {
+  jq -e '[.checks[] | select(.id == "palette-validate") | (.messages // [])[]] | length == 0' "$1" > /dev/null
+}
+
 # clean ENGINE: the route takes the body of ENGINE. The check runs once for each engine.
 clean() {
   [ -e "$1-clean.out" ] || [ ! -f "$bodies/$1-clean.json" ] && return 0
@@ -91,6 +99,16 @@ fault() {
   check "$id-says" 0 "#243: the refusal of $id matches $says" -- names "$says" "$id.out"
 }
 
+# takes CASE ENGINE: the fault of CASE is the file BODIES/CASE.json. The route must take it, so no
+# route answers the check of CASE, and its rule stays in the catalog as a gap that preflight fills.
+takes() {
+  local id=$1 engine=$2 body=$bodies/$1.json
+  [ -f "$body" ] || { echo "skipped $id: no $body" | tee -a steps.log; return; }
+  clean "$engine"
+  check "$id" 0 "#415: the route takes the body of $id, so no route answers the check" -- route_says passed "$engine" "$body"
+  check "$id-says" 0 "#415: the report of $id holds no message of palette-validate" -- no_message "$id.out"
+}
+
 echo "== the cases of the rules that copy a check of the route (#243)" | tee -a steps.log
 # vsphere-instance-floor: the CPU, the memory, the disk, and the missing instance type
 type_of='.spec.machinepoolconfig[0].cloudConfig.instanceType'
@@ -111,9 +129,11 @@ fault azure-ssh-key-empty azure 'sshKey' '.spec.cloudConfig.sshKey = ""'
 # pack-state: a profile that holds a pack in the state disabled, and one in the state deleted
 fault pack-state-disabled aws 'disabled' -
 fault pack-state-deleted aws 'deleted' -
-# profile-cloud-mismatch and pack-cloud-support: the fault is in a profile, and the body is an AWS body
-fault profile-cloud-mismatch aws '.' -
-fault pack-cloud-support aws '.' -
+# profile-cloud-mismatch and pack-cloud-support: the fault is in a profile, and the body is an AWS body.
+# The route refuses a profile of another cloud type with HTTP 500 and ClusterProfilesNotSupported.
+# It takes a pack version that does not list the cloud type.
+fault profile-cloud-mismatch aws 'ClusterProfilesNotSupported' -
+takes pack-cloud-support aws
 # vsphere-static-ip-pool: a static network with no pool, and a DHCP cluster with a static network
 network='(.spec.cloudConfig.placement.network, (.spec.machinepoolconfig[].cloudConfig.placements[]?.network))'
 fault vsphere-static-ip-pool-empty vsphere 'ParentPoolUid' \

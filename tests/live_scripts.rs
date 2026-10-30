@@ -4049,8 +4049,10 @@ fn route_report(verdict: &str, messages: &[&str]) -> String {
         .to_string()
 }
 
-/// The four cases of validate-route.sh whose body is an AWS body, and what the route says of each.
-const AWS_CASE_REFUSALS: [(&str, &str); 4] = [
+/// The three cases of validate-route.sh whose body is an AWS body and that the route refuses, and
+/// what the route says of each. The profile of `profile-cloud-mismatch` is of the cloud type gcp:
+/// Palette answers HTTP 500, and `palette-validate` reads it as a refusal (#415).
+const AWS_CASE_REFUSALS: [(&str, &str); 3] = [
     (
         "pack-state-disabled",
         "DisabledPacksForbidden: Disabled packs 'gloo' are forbidden",
@@ -4061,13 +4063,13 @@ const AWS_CASE_REFUSALS: [(&str, &str); 4] = [
     ),
     (
         "profile-cloud-mismatch",
-        "InvalidParam: the profile is of another cloud type",
-    ),
-    (
-        "pack-cloud-support",
-        "PackNotSupported: the pack does not support aws",
+        "ClusterProfilesNotSupported: Cluster profiles 'strata-route-cloud-mismatch' are not supported with 'aws' environment",
     ),
 ];
+
+/// The case of validate-route.sh whose body is an AWS body and that the route takes: a pack version
+/// that does not list the cloud type. No route answers this check (#415).
+const AWS_CASE_TAKEN: &str = "pack-cloud-support";
 
 /// A body of a create on vSphere that holds what the faults of validate-route.sh edit.
 const VSPHERE_BODY: &str = r#"{"spec": {
@@ -4368,6 +4370,11 @@ fn validate_route_sh_runs_each_case_whose_body_is_an_aws_body() {
         );
     }
     stage.strata(
+        &format!("preflight */{AWS_CASE_TAKEN}.json --cloud aws *"),
+        0,
+        &route_report("passed", &[]),
+    );
+    stage.strata(
         "preflight */aws-clean.json --cloud aws *",
         0,
         &route_report("passed", &[]),
@@ -4398,6 +4405,59 @@ fn validate_route_sh_runs_each_case_whose_body_is_an_aws_body() {
         assert!(!steps.contains(&format!("skipped {case}")), "{steps}");
     }
     assert_eq!(steps.matches("aws-clean ").count(), 1, "{steps}");
+}
+
+#[test]
+fn validate_route_sh_expects_the_route_to_take_a_pack_version_that_does_not_list_the_cloud_type() {
+    // the route takes the body, so no route answers the check, and the rule stays (#415)
+    let mut stage = Stage::new(serde_json::json!({}));
+    std::fs::create_dir_all(stage.path("bodies")).unwrap();
+    for body in ["aws-clean", AWS_CASE_TAKEN] {
+        std::fs::write(stage.path(&format!("bodies/{body}.json")), "{}").unwrap();
+    }
+    stage.strata(
+        "preflight */aws-clean.json --cloud aws *",
+        0,
+        &route_report("passed", &[]),
+    );
+    let taken = format!("preflight */{AWS_CASE_TAKEN}.json --cloud aws *");
+    stage.strata(&taken, 0, &route_report("passed", &[]));
+    let bodies = stage.path("bodies");
+    let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    passed(&steps, &[AWS_CASE_TAKEN, "pack-cloud-support-says"]);
+
+    // a route that refuses the body answers the check: both checks fail, so the lead removes the
+    // rule from the catalog
+    let mut stage = Stage::new(serde_json::json!({}));
+    std::fs::create_dir_all(stage.path("bodies")).unwrap();
+    for body in ["aws-clean", AWS_CASE_TAKEN] {
+        std::fs::write(stage.path(&format!("bodies/{body}.json")), "{}").unwrap();
+    }
+    stage.strata(
+        "preflight */aws-clean.json --cloud aws *",
+        0,
+        &route_report("passed", &[]),
+    );
+    stage.strata(
+        &taken,
+        1,
+        &route_report(
+            "failed",
+            &["PackNotSupported: the pack does not support aws"],
+        ),
+    );
+    let bodies = stage.path("bodies");
+    let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    for id in [AWS_CASE_TAKEN, "pack-cloud-support-says"] {
+        assert!(
+            steps
+                .lines()
+                .any(|l| l.starts_with("FAIL") && l.contains(&format!("{id} "))),
+            "{id}: {steps}"
+        );
+    }
 }
 
 // ---- route-bodies.sh -------------------------------------------------------------------------------
@@ -4483,7 +4543,8 @@ exec "$(dirname "$0")/fake-strata-rules" "$@"
 /// A stage of route-bodies.sh in a lab on AWS: the account `lab-aws`, the release profile `r-1`
 /// on AWS, the registry `Public Repo`, and the packs `packs`. Palette makes a profile for each
 /// `POST /v1/clusterprofiles` with the uid `uid-<name>`, and publishes and deletes it. The
-/// validate route refuses the fault of each case, except the cases in `takes`, which it takes.
+/// validate route refuses the fault of each case, except `pack-cloud-support` and the cases in
+/// `takes`, which it takes.
 fn route_bodies_stage(packs: &str, takes: &[&str]) -> Stage {
     let mut stage = Stage::new(serde_json::json!({
         "project_uid": "p-1", "release_profile_uid": "r-1",
@@ -4535,6 +4596,11 @@ fn route_bodies_stage(packs: &str, takes: &[&str]) -> Stage {
             &report,
         );
     }
+    stage.strata(
+        &format!("preflight */{AWS_CASE_TAKEN}.json --cloud aws *"),
+        0,
+        &route_report("passed", &[]),
+    );
     stage
 }
 
