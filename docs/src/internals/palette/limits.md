@@ -83,8 +83,8 @@ These are open:
   the `packValues` of the version gets a repave. No run applies such a version
   to a cluster. See
   [A variable in a field that repaves](profiles.md#a-variable-in-a-field-that-repaves).
-- The answer of the instance type route and of the key pair route. No run calls
-  them, so the stand-in of the book models them. See
+- The GCP answer of the instance type route, and the answer of the key pair
+  route. No run shows them, so the stand-in of the book models them. See
   [The list routes](validate-routes.md#the-list-routes).
 
 ## What strata preflight does not check
@@ -211,8 +211,8 @@ makes no claim that depends on them.
   notifications: see
   [The saved answers of Palette](../../commands/snapshot/no-network.md#the-saved-answers-of-palette).
 - **The zones that do not offer an instance type.** The instance type route of a
-  region lists each type with `nonSupportedZones`, the zones that do not offer
-  it. Palette fills the list for most types. `instance-offering` reads it, for
+  region lists each type in `type`, with `nonSupportedZones`, the zones that do
+  not offer it. Palette fills the list for most types. `instance-offering` reads it, for
   AWS, EKS, GCP, and GKE. A type that the list
   does not mark can still fail in the cloud.
 - **The key pairs of an account.** `GET /v1/clouds/aws/regions/{region}/keypairs`

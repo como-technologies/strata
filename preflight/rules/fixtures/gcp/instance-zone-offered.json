@@ -8,8 +8,8 @@
         "status": 200,
         "body": {
           "instanceTypes": [
-            { "name": "e2-standard-2", "cpu": 2, "memory": 8, "nonSupportedZones": [], "supportedArchitectures": ["x86_64"] },
-            { "name": "e2-standard-4", "cpu": 4, "memory": 16, "nonSupportedZones": ["us-east1-c"], "supportedArchitectures": ["x86_64"] }
+            { "category": "General purpose", "cpu": 2, "memory": 8, "price": 0.067, "type": "e2-standard-2", "cost": { "price": [{ "onDemand": 0.067, "os": "linux" }] }, "nonSupportedZones": [], "supportedArchitectures": ["x86_64"] },
+            { "category": "General purpose", "cpu": 4, "memory": 16, "price": 0.134, "type": "e2-standard-4", "cost": { "price": [{ "onDemand": 0.134, "os": "linux" }] }, "nonSupportedZones": ["us-east1-c"], "supportedArchitectures": ["x86_64"] }
           ]
         }
       }

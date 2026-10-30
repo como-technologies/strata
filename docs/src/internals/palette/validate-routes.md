@@ -415,9 +415,10 @@ Strata reads each list and compares it with the entity.
 
 | Route | Gives | Read by |
 | --- | --- | --- |
-| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | Each instance type of the region: `name`, `cpu`, `memory`, `gpu`, `price`, `supportedArchitectures[]`, and `nonSupportedZones[]`. | `instance-offering` |
+| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | Each instance type of the region: `type`, `category`, `cpu`, `memory`, `price`, `cost`, `supportedArchitectures[]`, and `nonSupportedZones[]`. | `instance-offering` |
 | `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `keyNames[]`: the key pairs of the account in the region. | `ssh-key-pair` |
 
+`type` of an entry names the instance type. An entry has no `name`.
 `nonSupportedZones` of a type names the zones that do not offer it. So one
 request answers every pool of the entity: a pool fails when its type names a
 zone of the pool, or when the region does not list the type. Palette fills
@@ -429,7 +430,10 @@ cluster with a dynamic VPC reaches no check of the key pair, and the key pair
 route answers it. The console calls the property route of AWS on an AWS
 create, and that route checks the key pair.
 
-No run calls these two routes. The stand-in of the book models them: see
+A run shows the answer of the AWS route: its body holds `instanceTypes` alone.
+No run shows the GCP answer of the instance type route, or the key pair route.
+The rule reads `type` for GCP too, and the check `instance-types-shape` shows
+the GCP entry. The stand-in of the book models the three answers: see
 [What no run covers](limits.md#what-no-run-covers).
 
 ## The account routes
