@@ -185,6 +185,11 @@ live-validate-packs: build
 live-validate-route bodies: build
     examples/live/validate-route.sh {{bodies}}
 
+# The four case bodies of live-validate-route on AWS: the clean body, and a profile for each case that
+# it deletes at its end. Needs live-profiles with cloud = aws; no cluster (#408)
+live-route-bodies bodies: build
+    examples/live/route-bodies.sh {{bodies}}
+
 # The profile export checks: the export of each version of the example, read as a candidate;
 # each request is a GET, no cluster, no cost (#156)
 live-export: build

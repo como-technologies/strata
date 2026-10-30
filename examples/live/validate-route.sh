@@ -17,6 +17,8 @@
 #   pack-state-deleted     a profile with a deleted pack
 #   profile-cloud-mismatch a profile of another cloud type
 #   pack-cloud-support     a pack version that does not list the cloud type
+# Each of the last four runs on AWS, with the engine of its body. route-bodies.sh writes aws-clean.json
+# and those four bodies.
 #
 # Each case has two checks. `<case>` is that the route refuses the body. `<case>-says` is that the
 # refusal names the fault. A case that fails shows that the route does not answer the check, so
@@ -109,9 +111,9 @@ fault azure-ssh-key-empty azure 'sshKey' '.spec.cloudConfig.sshKey = ""'
 # pack-state: a profile that holds a pack in the state disabled, and one in the state deleted
 fault pack-state-disabled aws 'disabled' -
 fault pack-state-deleted aws 'deleted' -
-# profile-cloud-mismatch and pack-cloud-support: the fault is in a profile
+# profile-cloud-mismatch and pack-cloud-support: the fault is in a profile, and the body is an AWS body
 fault profile-cloud-mismatch aws '.' -
-fault pack-cloud-support gcp '.' -
+fault pack-cloud-support aws '.' -
 # vsphere-static-ip-pool: a static network with no pool, and a DHCP cluster with a static network
 network='(.spec.cloudConfig.placement.network, (.spec.machinepoolconfig[].cloudConfig.placements[]?.network))'
 fault vsphere-static-ip-pool-empty vsphere 'ParentPoolUid' \

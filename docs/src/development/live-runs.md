@@ -8,7 +8,8 @@ its checks establishes, so you can see the coverage without running anything.
 [its checks are on the live example page](./live-example.md#the-checks-of-verifysh).
 `packs.sh` and `knurl.sh` read too. The other scripts below write to the tenant;
 `pack-states.sh` keeps nothing that it writes. `validate-packs.sh` writes only
-in stage 4, which deletes the profile that it makes.
+in stage 4, which deletes the profile that it makes. `route-bodies.sh` deletes each
+profile that it makes.
 
 Each check names its expected exit code. A run that gets another code fails, and
 prints both. The issue numbers name what the check was written for.
@@ -779,8 +780,9 @@ No cluster, no profile of its own, and no cost. It asks
 `strata preflight --rule palette-validate`. It needs the key, a directory with
 the body of a create for each engine, and the cloud accounts that the bodies
 name. A case makes one fault. The fault is one edit of the body of its engine, or
-a body of its own when the fault is in a profile. A case whose body is not in
-the directory is skipped, and `steps.log` names it.
+a body of its own when the fault is in a profile. [`route-bodies.sh`](#route-bodiessh)
+writes four of those bodies on AWS. A case whose body is not in the directory is
+skipped, and `steps.log` names it.
 
 A case that passes shows that the route answers the check. The part of the rule
 that the case names can then leave the catalog. A case that fails shows that the
@@ -802,6 +804,39 @@ route does not answer the check, and the rule stays. See
 | `vsphere-controlplane-endpoint-no-host`, `edge-vip-multi-node-no-host`, each with `-says` | 0 | #243: the route refuses the type `VIP` with an empty host (`vsphere-controlplane-endpoint`, `edge-vip-multi-node`). No result yet. |
 | `azure-subnets-in-vnet-no-cidr`, `azure-subnets-in-vnet-no-cidr-says` | 0 | #243: the route refuses a `vnetName` with an empty `vnetCidrBlock` (`azure-subnets-in-vnet`). No result yet. |
 | `ntp-servers-vsphere`, `ntp-servers-edge`, `ntp-servers-maas`, each with `-says` | 0 | #243: the route refuses a server that is not an address or a name (`ntp-servers`). No result yet. |
+
+## route-bodies.sh
+
+No cluster, and no cost that stays. It writes the bodies that
+[`validate-route.sh`](#validate-routesh) needs for four cases on AWS. The fault
+of each case is in a profile. The script needs the key, the release profile of
+the live example on AWS, and the cloud account of `terraform.tfvars`.
+
+A case body is the clean body of a create on AWS with one more profile. The
+script makes that profile through the API, with the name `strata-route-<case>`,
+and publishes it. It deletes each profile at its end, when a step fails, and
+when a signal stops it. It creates no content in a registry.
+
+| Case | The profile |
+|---|---|
+| `pack-state-disabled` | An add-on profile with `gloo` 1.2.18, which carries the mark `disabled`. |
+| `pack-state-deleted` | An add-on profile with `generic-vm-libvirt` 1.0.0, which is `deleted` in `Public Repo`. |
+| `profile-cloud-mismatch` | An add-on profile of the cloud type `gcp`, with `cert-manager` 1.21.1. |
+| `pack-cloud-support` | An add-on profile with a pack in the layer `addon` whose cloud types lack `aws`. The script reads the pack listing of `Public Repo` for it, or takes `PACK_CLOUD_SUPPORT=<pack>@<version>`. |
+
+Palette can refuse the profile of a case, and the registry can lack the pack.
+Palette refuses a profile that holds a pack in the state `disabled` or
+`deleted`: see [Pack states](../internals/palette/packs.md#pack-states). So the
+two cases of `pack-state` run only when Palette takes such a profile. The script
+skips a case when Palette refuses its profile, and `steps.log` names the case with
+the refusal. No body of that case stays in the directory, and `validate-route.sh`
+skips it.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `aws-clean-body` | 0 | #408: `aws-clean.json` names the cloud account of the lab and the release profile. No result yet. |
+| `pack-state-disabled-body`, `pack-state-deleted-body`, `profile-cloud-mismatch-body`, `pack-cloud-support-body` | 0 | #408: Palette takes the profile of the case, and the body holds the release profile and that profile. A case that is skipped has no check. No result yet. |
+| `pack-state-disabled-deleted`, `pack-state-deleted-deleted`, `profile-cloud-mismatch-deleted`, `pack-cloud-support-deleted` | 0 | #408: the script deletes the profile of each case that it made. No result yet. |
 
 ## export.sh
 
