@@ -3,8 +3,7 @@
 use super::changes::{
     OpLine, VarLine, artifact_lines, artifacts_summary, manifest_change, moved, plain_flags,
     status_mark, status_word, tier_op_lines, traits_suffix, upstream_line, values_changed,
-    values_summary,
-    values_unparsed_sentence, variable_lines, version_display,
+    values_summary, values_unparsed_sentence, variable_lines, version_display,
 };
 use super::consumers::{
     NOT_LISTED, consumer_count, consumer_counts, consumer_runs, consumers_heading,
