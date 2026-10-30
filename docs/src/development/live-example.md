@@ -16,6 +16,7 @@ show.
 | `packs.sh` | `pack:` refs against the tenant's own registries (#55). Read-only, and it needs no cluster. |
 | `pack-states.sh` | Pack versions that Spectro Cloud deprecated, disabled, or deleted: what `packs` and `snapshot` report, and which profiles Palette refuses (#68). It needs no cluster. |
 | `validate-packs.sh` | What Palette answers when `snapshot --validate` asks whether it takes the packs of a candidate, and of a version (#152). Stage 4: the layer that Palette gives a pack whose profile gives another layer than its registry (#210, #254). Stage 5: the name, the version, and the names of the packs and the manifests of a candidate (#273). It needs no cluster and no profile. |
+| `validate-route.sh` | Whether the validate route of a cluster refuses the fault that a rule of the preflight catalog copies (#243). It asks the route with one fault of a body for each case. It needs the key and a body of a create for each engine, and no cluster. |
 | `export.sh` | The export of each version of the example, read with `snapshot --from-candidate`, and what the export route answers (#156). It needs the profiles, and no cluster. |
 | `registry.sh` | The example's own OCI pack registry: a push, a push again of one version with other bytes, and a new version, and what Palette does after each (#66); a tag that the registry deletes while a profile pins it (#108). It needs the profiles, and no cluster. |
 | `template.sh` | The lock of a cluster template on the versions it links, and the order in which a cluster installs the packs of two add-on profiles (#66). It needs the profiles and no cluster, and it ends with the removal of the example. |
@@ -113,6 +114,7 @@ its end.
 | `packs.sh` | The pack ref test (#55). |
 | `pack-states.sh` | The pack state test (#68). |
 | `validate-packs.sh` | The profile validate test (#152). |
+| `validate-route.sh` | The cluster validate route test (#243). |
 | `export.sh` | The profile export test (#156). |
 | `merge-gate.sh` | The merge gate test (#57). |
 | `knurl.sh` | The knurl adapter test. |
@@ -184,6 +186,7 @@ each.
 | `packs.sh` | nothing; it only reads | the baseline |
 | `pack-states.sh` | nothing that stays: a probe profile, deleted at once | the baseline |
 | `validate-packs.sh` | nothing that stays: stage 4 makes one profile, and deletes it | the baseline |
+| `validate-route.sh` | nothing; it only asks a validate route | the baseline |
 | `export.sh` | nothing; it only reads | the baseline |
 | `release.sh` | nothing; it only reads | the baseline |
 | `merge-gate.sh` | the add-on version, which stage 4 edits in place and stage 5 puts back | the profiles, the clusters, the baseline |
@@ -550,6 +553,7 @@ just live-knurl                                                                #
 just live-who                                                                  # #69, stage 2 needs just live-up
 just live-draft                                                                # #155, needs just live-profiles
 just live-release                                                              # #146, needs only the key
+just live-validate-route BODIES                                                   # #243, needs the key and a directory of bodies; no cluster
 just live-pending                                                              # #70, needs just live-up
 just live-macros                                                               # #72, needs just live-up
 just live-macro-repave                                                         # #72, needs just live-up; leaves a repave that waits, so live-down follows

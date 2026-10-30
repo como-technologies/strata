@@ -150,7 +150,6 @@ first_pool="$resize .spec.machinepoolconfig[0] |= resize"
 worker_pools="$resize (.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not)) |= resize"
 case "$engine" in
   gke)
-    fault gke-pool-multiple-3 "$first_pool(4)"
     fault palette-validate "$first_pool(4)"
     fault gke-no-release-channel '.spec.cloudConfig.overrideClusterAPIConfig = ""'
     fault gke-no-gpu '.spec.machinepoolconfig[0].cloudConfig.instanceType = "a2-highgpu-1g"'

@@ -178,6 +178,13 @@ live-pack-states: build
 live-validate-packs: build
     examples/live/validate-packs.sh
 
+# Each case sends one fault to the validate route of a cluster. A rule of the preflight catalog
+# stays until the route refuses the fault of its case. Needs the key and a directory of bodies.
+
+# The cluster validate route checks: does the route refuse the fault that a rule copies (#243)
+live-validate-route bodies: build
+    examples/live/validate-route.sh {{bodies}}
+
 # The profile export checks: the export of each version of the example, read as a candidate;
 # each request is a GET, no cluster, no cost (#156)
 live-export: build
