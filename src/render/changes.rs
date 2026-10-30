@@ -48,8 +48,8 @@ pub(crate) fn status_word(status: Status) -> &'static str {
     }
 }
 
-/// The status of a part of a comparison that has no status of its own, such as the variables or a
-/// tier of a cluster: it moved or it did not.
+/// The status of a part of a comparison that has no status of its own, such as the variables.
+/// The part moved or it did not.
 pub(crate) fn moved(changed: bool) -> Status {
     if changed {
         Status::Changed

@@ -29,8 +29,8 @@ struct Set {
     names: fn() -> Vec<String>,
     /// The text of each value of `ClosedSet::ALL`.
     all: fn() -> Vec<&'static str>,
-    /// For the text of a value: the text that serde writes for it, the text of `as_str`, and the
-    /// text of the value that `parse` reads.
+    /// For the text of a value: the text that serde writes, the text of `as_str`, and the text
+    /// of the value that `parse` reads.
     texts: fn(&str) -> (Value, &'static str, Option<&'static str>),
 }
 
@@ -110,8 +110,8 @@ fn all_texts<T: ClosedSet>() -> Vec<&'static str> {
     T::ALL.iter().map(|v| v.as_str()).collect()
 }
 
-/// For the value that `text` names: the text that serde writes for it, the text of its `as_str`,
-/// and the text of the value that `parse` reads from `text`.
+/// For the value that `text` names, three texts. The first is the text that serde writes. The
+/// second is the text of its `as_str`. The third is the text of the value that `parse` reads.
 fn texts_of<T: ClosedSet>(text: &str) -> (Value, &'static str, Option<&'static str>) {
     let value: T =
         serde_json::from_value(Value::from(text)).unwrap_or_else(|e| panic!("{text}: {e}"));

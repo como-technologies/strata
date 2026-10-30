@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::closed_set::impl_closed_set;
 
-/// The provider type of an OCI registry, as `spec.providerType` of the OCI summary listing names
-/// it, and as the pack ref of a profile gives it in its annotations.
+/// The provider type of an OCI registry. The OCI summary listing names it in `spec.providerType`.
+/// The pack ref of a profile gives it in its annotations.
 ///
 /// Palette follows a new digest in a different way for each provider type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
