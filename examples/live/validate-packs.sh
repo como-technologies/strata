@@ -252,7 +252,7 @@ if [ "$stage" = 6 ]; then
     echo "== stage 6 skipped: give PROFILE=<name>@<version>" | tee -a steps.log
   else
     echo "== behind asks Palette whether it accepts the bump of $PROFILE (#166)" | tee -a steps.log
-    check bump-record 0 "#166: a record of $PROFILE" -- "$strata" snapshot "$PROFILE" -o bump-profile.json
+    check bump-profile-record 0 "#166: a record of $PROFILE" -- "$strata" snapshot "$PROFILE" -o bump-profile.json
     # exit 1: a pin is behind. The record can pin nothing that is behind, and then the checks below fail
     check bump-behind '?' '#166: behind asks Palette about the bump of each pin that is behind' -- \
       "$strata" behind bump-profile.json --json

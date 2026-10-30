@@ -743,7 +743,7 @@ nothing.
 | `validate-same-pack-twice`, `-says`, `-no-record` | 2, 0, 1 | #273: the API schema refuses two equal layers with HTTP 422 and the code `610` |
 | `validate-manifest-name`, `-says`, `-no-record` | 2, 0, 1 | #273: the import validate route refuses the manifest name `Wilma_1`: `InvalidName` |
 | `validate-manifest-twice`, `-says`, `-no-record` | 2, 0, 1 | #273: the import validate route refuses one manifest name two times in a layer: `DuplicatePackManifestsForbidden` |
-| `bump-record` | 0 | #166: a record of `PROFILE`. No result yet. |
+| `bump-profile-record` | 0 | #166: a record of `PROFILE`. No result yet. |
 | `bump-pair` | 0 | #166: the newest version of `kubernetes` is two minor versions or more above the pin. No result yet. |
 | `bump-asked` | 0 | #166: `behind` asks the route of the version, and the bump of `kubernetes` holds an answer of Palette in `bump.paletteValidation`. No result yet. |
 | `bump-refused`, `bump-clusters` | 0 | #166: Palette refuses the move with `DependencyPackUpgradeNotSupported`, and the error names a cluster that runs the version. No result yet. |

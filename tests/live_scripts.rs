@@ -3394,7 +3394,7 @@ fn validate_packs_sh_stage_6_asks_behind_about_the_bump_of_kubernetes_for_the_pr
     passed(
         &steps,
         &[
-            "bump-record",
+            "bump-profile-record",
             "bump-pair",
             "bump-asked",
             "bump-refused",
