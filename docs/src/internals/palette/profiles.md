@@ -376,7 +376,7 @@ see [The validate routes](./validate-routes.md#post-v1clusterprofilesvalidatepac
 Two more routes check rules of the create and write nothing.
 `GET /v1/clusterprofiles/validate/name` checks the name and the version.
 `POST /v1/clusterprofiles/import/validate` checks the names of the packs and
-the manifests, and a repeat of each. A live run shows each refusal: see
+the manifests, a repeat of each, and a disabled pack. A live run shows each refusal: see
 [The validate routes](./validate-routes.md#get-v1clusterprofilesvalidatename).
 `snapshot --from-candidate --validate` asks the three routes.
 

@@ -132,8 +132,8 @@ profile after them:
 
 1. `GET /v1/clusterprofiles/validate/name` checks the name and the version.
 2. `POST /v1/clusterprofiles/import/validate` checks the names of the packs and
-   the manifests, and a repeat of each. Strata sends the candidate in the
-   shape of a profile export, with the registry of each pack from
+   the manifests, a repeat of each, and a pack that Spectro Cloud disabled.
+   Strata sends the candidate in the shape of a profile export, with the registry of each pack from
    `GET /v1/registries/metadata`.
 3. `POST /v1/clusterprofiles/validate/packs` checks the values and the
    manifests of each pack, a pack that Spectro Cloud disabled, the
@@ -165,6 +165,15 @@ refuses a dependency:
 
 ```text
 {{#include ../output/candidate-validate-refuses.txt}}
+```
+
+Spectro Cloud marks some versions as `disabled`. A profile must not hold such a
+version. Palette serves it, so strata records it without `--validate`. With
+`--validate`, the import validate route refuses the candidate, and the message
+names the pack:
+
+```text
+{{#include ../output/candidate-validate-disabled.txt}}
 ```
 
 A line names the code of Palette, the pack, and the message of Palette. A

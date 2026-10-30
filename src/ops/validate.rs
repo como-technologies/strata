@@ -189,7 +189,7 @@ pub(super) fn cluster_packs_answer<A: PaletteApi>(
 /// A record with no uid, of a candidate, goes to the three routes that check a create. `GET
 /// /v1/clusterprofiles/validate/name` checks the name and the version. `POST
 /// /v1/clusterprofiles/import/validate` checks the names of the packs and the manifests, and a
-/// repeat of each. `POST /v1/clusterprofiles/validate/packs` checks the packs. A record of a
+/// repeat of each, and a disabled pack. `POST /v1/clusterprofiles/validate/packs` checks the packs. A record of a
 /// version that Palette holds goes to `POST /v1/clusterprofiles/{uid}/validate/packs`, the check
 /// of an update of that version. That check also reads the clusters that run the version. The
 /// answer holds the refusals of each route. No request changes anything.

@@ -15178,6 +15178,54 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
 }
 
 #[test]
+fn snapshot_validate_of_a_candidate_with_a_disabled_pack_prints_the_refusal_of_the_import_route() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let recorded_b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let file = dir.path().join("c.yaml");
+    candidate::write(&Candidate::from_snapshot(&recorded_b).unwrap(), &file, None).unwrap();
+    // the import validate route runs the check of a disabled pack before the route of the packs,
+    // and gives the refusal as HTTP 500, word for word
+    let pack = recorded_b.packs[0].name.as_str();
+    let message = format!("Disabled packs '{pack}' are forbidden");
+    let body = format!(
+        r#"{{"code":"DisabledPacksForbidden","details":null,"message":"{message}","ref":"r"}}"#
+    );
+    let api = serve_candidate_checks(serve_registry_for_b(dir.path()), &recorded_b)
+        .failing(post(IMPORT_ROUTE), 500, body)
+        .with(
+            post(PROFILE_VALIDATE_PACKS),
+            serde_json::json!({"packs": {"results": []}}),
+        );
+    let snap = ops::snapshot_from_candidate(
+        &file,
+        true,
+        || Ok(Palette::new(&api)),
+        "t1",
+        &Progress::silent(),
+    )
+    .unwrap();
+    // an answer of Palette, not an error of the request: the route is not asked again
+    assert_eq!(api.calls(&post(IMPORT_ROUTE)), 1);
+    let v = snap.source.palette_validation.clone().unwrap();
+    assert!(!v.accepts());
+    let lines = strata::validation::answer_lines(v.errors());
+    assert_eq!(
+        lines,
+        [format!("refuses: DisabledPacksForbidden: {message}")]
+    );
+    assert_eq!(
+        render::palette_line(&lines[0]),
+        format!("palette    refuses: DisabledPacksForbidden: {message}")
+    );
+    // the command line exits as it does for each refusal of Palette, and writes no record
+    let err = ops::require_acceptance(&snap).unwrap_err();
+    assert!(matches!(err, Error::PaletteRefuses { .. }), "{err}");
+    assert_eq!(err.kind(), "palette-refuses");
+    assert_eq!(err.exit_code(), 2);
+}
+
+#[test]
 fn a_candidate_with_a_fault_that_only_a_route_answers_gives_a_record_with_the_same_root() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());

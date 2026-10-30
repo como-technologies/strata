@@ -2209,6 +2209,20 @@ impl Tenant {
         self.write(project, &path, &listing);
     }
 
+    /// Give one version of a pack in the listing of the Public Repo the mark `disabled: "true"`, as
+    /// Spectro Cloud marks `gloo` 1.2.18: the version keeps no `system_state`, and Palette serves
+    /// it. `registries` takes the mark away.
+    pub fn mark_pack_disabled(&self, project: &str, name: &str, version: &str) {
+        let path = pack_listing(name);
+        let mut listing = self.read(project, &path);
+        for item in listing["items"].as_array_mut().into_iter().flatten() {
+            if item["spec"]["version"] == version && item["spec"]["registryUid"] == PUBLIC_REPO {
+                item["spec"]["annotations"]["disabled"] = json!("true");
+            }
+        }
+        self.write(project, &path, &listing);
+    }
+
     /// Publish a rebuild of one version of a pack in the Public Repo as `<version>-rev1`, as
     /// Spectro Cloud publishes `1.19.3-rev1` of cert-manager. Palette orders the versions by
     /// semantic version, so the rebuild sorts below its base: the mark `latestVersion` and the
