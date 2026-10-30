@@ -579,7 +579,7 @@ pub(crate) fn load_document<T: DeserializeOwned>(
     };
     let found = str_at(&v, "/schema");
     if found != schema {
-        return Err(if document_name(found) == document_name(schema) {
+        return Err(if schema_document(found) == schema_document(schema) {
             Error::UnsupportedSchema {
                 path: path.to_path_buf(),
                 found: found.to_string(),
@@ -598,7 +598,7 @@ pub(crate) fn load_document<T: DeserializeOwned>(
 
 /// The name of the document in the schema id `id`: the text before its last `/`, which each
 /// version of the document shares. None when `id` is no schema id.
-fn document_name(id: &str) -> Option<&str> {
+fn schema_document(id: &str) -> Option<&str> {
     id.rsplit_once('/').map(|(name, _)| name)
 }
 
