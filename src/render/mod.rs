@@ -17,6 +17,7 @@ use serde_json::Value;
 
 use crate::diff::Diff;
 use crate::error::Result;
+use crate::json::opt_str;
 use crate::ops::{Chain, ConsumersReport, Listing, PackListing, SetReport, VerifySummary};
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
@@ -90,7 +91,7 @@ pub(crate) fn count_of(n: usize, singular: &str) -> String {
 
 /// The error message of a listed entry, when it has one.
 pub(crate) fn entry_error(error: Option<&Value>) -> Option<&str> {
-    error.and_then(|e| e.get("message")).and_then(Value::as_str)
+    error.and_then(|e| opt_str(e, "/message"))
 }
 
 /// The text with its first letter in upper case.

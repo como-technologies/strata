@@ -52,7 +52,6 @@ pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Re
 ///
 /// Without `registry`, strata uses the registry that has the pack version, and refuses when
 /// several do. `version` may be [`LATEST`].
-#[allow(clippy::too_many_arguments)]
 pub fn pack_snapshot<A: PaletteApi>(
     palette: &Palette<A>,
     registry: Option<&str>,
@@ -76,7 +75,6 @@ pub fn pack_snapshot<A: PaletteApi>(
 
 /// [`pack_snapshot`] with the registry listings of the command, so that a later check of the
 /// same command reads them again from memory.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn pack_snapshot_in<A: PaletteApi>(
     registries: &mut Registries<'_, A>,
     registry: Option<&str>,

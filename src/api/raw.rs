@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use super::mask::{MASKED, mask_group_values};
 use crate::error::{Error, Result};
-use crate::json::{arr, flag, opt_text, str_at, value_or_null};
+use crate::json::{arr, flag, opt_text, str_at, value_at, value_or_null};
 use crate::snapshot::Template;
 
 /// The three raw API responses a snapshot is built from, and the project they were fetched in.
@@ -483,8 +483,10 @@ impl RawCluster {
         let variables = arr(&self.variables, "")
             .iter()
             .find(|v| str_at(v, "/profileUid") == uid)
-            .and_then(|v| v.get("variables").cloned())
-            .unwrap_or_else(|| serde_json::json!([]));
+            .map_or_else(
+                || serde_json::json!([]),
+                |v| value_at(v, "/variables").clone(),
+            );
         RawProfile {
             profile,
             manifests,

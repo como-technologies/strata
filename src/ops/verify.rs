@@ -137,6 +137,7 @@ fn live_holder<A: PaletteApi>(
         pending: c.pending,
         macros: c.macro_values.is_some(),
         shape: c.tier(Tier::Shape).is_some(),
+        members: false,
         raw_dir: None,
     };
     holder_snapshot(

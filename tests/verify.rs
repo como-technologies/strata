@@ -14263,7 +14263,7 @@ fn verify_reports_a_gone_edge_host_or_cluster_group_as_drift_and_not_as_an_error
 }
 
 #[test]
-fn the_live_record_of_a_cluster_group_holds_its_virtual_clusters_as_the_record_does() {
+fn snapshot_reads_the_virtual_clusters_of_a_cluster_group_and_verify_sends_no_such_request() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let api = serve_cluster_group(MemoryApi::new(), dir.path());
@@ -14279,9 +14279,11 @@ fn the_live_record_of_a_cluster_group_holds_its_virtual_clusters_as_the_record_d
             .collect()
     };
     assert_eq!(members(&recorded), ["lab-cluster"]);
+    assert_eq!(api.calls(&post(GROUP_MEMBERS)), 1);
     let v = ops::verify(&recorded, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
     assert!(v.unchanged);
-    assert_eq!(members(&v.live), members(&recorded));
+    assert!(members(&v.live).is_empty());
+    assert_eq!(api.calls(&post(GROUP_MEMBERS)), 1);
 }
 
 #[test]

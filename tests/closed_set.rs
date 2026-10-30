@@ -8,6 +8,7 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;
+use strata::api::Method;
 use strata::closed_set::ClosedSet;
 use strata::conjunction::Conjunction;
 use strata::diff::{ChangeFlag, ImpactLevel, Op, Status};
@@ -51,8 +52,9 @@ fn set<T: ClosedSet>(released: &'static [&'static str]) -> Set {
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value and keep the schema id, because a record of
 /// an earlier release then reads the value as unknown.
-fn sets() -> [Set; 18] {
+fn sets() -> [Set; 19] {
     [
+        set::<Method>(&["GET", "POST"]),
         set::<Implementation>(&["rust", "bash"]),
         set::<Template>(&["published", "draft", "applied", "candidate", "registry"]),
         set::<SubjectKind>(&["cluster", "edgeHost", "clusterGroup"]),

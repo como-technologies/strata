@@ -432,6 +432,7 @@ where
     } else {
         let named = match projects.as_deref() {
             Some(p) => p,
+            // the name is a convenience, so a listing that strata cannot read leaves it empty
             None => listings.of(&home).unwrap_or_default(),
         };
         named

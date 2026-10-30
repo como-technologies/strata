@@ -259,6 +259,11 @@ impl Default for WatchOptions {
 ///
 /// The summary is `null`, and the events are empty, after a 404 or the 403 of a project key. A
 /// 401 or a 429 stops the watch with the error that names it, as a read of the world does.
+///
+/// # Errors
+///
+/// [`Error::Palette`] with the error of the request for the cluster document, also a 404. The error
+/// of the summary or of the events, unless it is a 4xx other than a 401 or a 429.
 pub fn reading<A: PaletteApi>(palette: &Palette<A>, uid: &str, elapsed: Duration) -> Result<Value> {
     let cluster = palette.subject_document(SubjectKind::Cluster, uid)?;
     let summary = match palette.fetch_cluster_summary(uid) {
@@ -348,7 +353,7 @@ fn reading_lines(
                 cluster_events_path(uid)
             )
         ),
-        paint(color, state_color(&state), &state),
+        paint(color, state_color(state), state),
         text_or(read, "/summary/status/health/state", UNKNOWN),
         events.len()
     ));
@@ -357,20 +362,24 @@ fn reading_lines(
         let status = text_or(c, "/status", UNKNOWN);
         let reason = text_or(c, "/reason", UNKNOWN);
         let now = format!("{status} {reason}");
-        if seen_conditions.insert(kind.clone(), now.clone()).as_deref() != Some(now.as_str()) {
+        if seen_conditions
+            .insert(kind.to_string(), now.clone())
+            .as_deref()
+            != Some(now.as_str())
+        {
             let message = text_or(c, "/message", UNKNOWN);
-            let status_color = match status.as_str() {
+            let status_color = match status {
                 "True" => "32",
                 "False" => "33",
                 _ => "0",
             };
             out.push(format!(
                 "watch: condition {kind}={} {reason}{}",
-                paint(color, status_color, &status),
+                paint(color, status_color, status),
                 if message == UNKNOWN || message.is_empty() {
                     String::new()
                 } else {
-                    paint(color, "2", &format!(": {}", cut(&message, 160)))
+                    paint(color, "2", &format!(": {}", cut(message, 160)))
                 }
             ));
         }
@@ -384,13 +393,13 @@ fn reading_lines(
             let key = format!("{at} {reason} {message}");
             let line = format!(
                 "watch: event {}{}: {}",
-                paint(color, "36", &at),
+                paint(color, "36", at),
                 if reason.is_empty() {
                     String::new()
                 } else {
                     format!(" {reason}")
                 },
-                cut(&probe::one_line(message), 200)
+                cut(&probe::one_line(message.to_string()), 200)
             );
             (key, line)
         })
@@ -522,7 +531,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
         let elapsed = started.elapsed();
         let read = reading(palette, &uid, elapsed)?;
         readings += 1;
-        let state = text_or(&read, "/cluster/status/state", UNKNOWN);
+        let state = text_or(&read, "/cluster/status/state", UNKNOWN).to_string();
         if verbose {
             for line in reading_lines(&uid, &read, &mut seen_conditions, &mut seen_events, color) {
                 progress.note(&line);

@@ -3,6 +3,7 @@
 use serde_json::{Map, Value};
 
 use super::Error;
+use crate::closed_set::ClosedSet;
 
 impl Error {
     /// The machine-readable form: `kind`, `message`, and the fields of the variant.

@@ -86,6 +86,7 @@ mod tests {
     #[test]
     fn order_follows_palette() {
         let mut layers = vec![
+            Layer::App,
             Layer::Addon,
             Layer::Csi,
             Layer::Os,
@@ -102,6 +103,7 @@ mod tests {
                 Layer::Cni,
                 Layer::Csi,
                 Layer::Addon,
+                Layer::App,
                 Layer::Other
             ]
         );

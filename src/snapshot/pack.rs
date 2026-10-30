@@ -284,8 +284,7 @@ impl Pack {
         let ref_digest = text(pk, "/digest");
         let registry_digest = text(&mm, "/spec/digest");
         let registry_provider_type =
-            opt_text(pk, &format!("/annotations/{PROVIDER_TYPE_ANNOTATION}"))
-                .map(|text| Open::from_text(&text));
+            opt_str(pk, &format!("/annotations/{PROVIDER_TYPE_ANNOTATION}")).map(Open::from_text);
         // only `imageId`: another annotation can hold a secret, and strata reads no other one.
         // Palette gives each annotation as text; a value of another type is not an annotation
         let annotations: BTreeMap<String, String> =

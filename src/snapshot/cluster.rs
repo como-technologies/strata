@@ -317,7 +317,7 @@ impl PendingUpdate {
     /// cluster's copy takes the change, whether or not the request that pushed it resolved it.
     pub fn read(notifications: &Value, covered: &[AppliedProfile]) -> Vec<PendingUpdate> {
         let mut out = Vec::new();
-        for n in notifications.as_array().into_iter().flatten().rev() {
+        for n in arr(notifications, "").iter().rev() {
             let open = str_at(n, "/action/actionType") == PROFILE_UPDATE_ACTION
                 && !flag(n, "/action/isDone");
             if !open {
@@ -363,7 +363,7 @@ impl ClusterVariable {
     /// The values the cluster in `raw` gives the variables of `profiles`, in that order and then
     /// by name.
     pub(super) fn read(raw: &RawCluster, profiles: &[AppliedProfile]) -> Vec<ClusterVariable> {
-        let entries = raw.variables.as_array().cloned().unwrap_or_default();
+        let entries = arr(&raw.variables, "");
         let mut out = Vec::new();
         for p in profiles {
             let mut of_profile: Vec<ClusterVariable> = entries

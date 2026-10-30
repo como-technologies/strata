@@ -24,7 +24,7 @@ use std::path::Path;
 use serde_json::{Map, Value, json};
 use strata::api::{Palette, PaletteApi, RawCluster};
 use strata::cloud::CLOUD_EDGE_NATIVE;
-use strata::json::{arr, opt_str, opt_text, str_at, value_at, value_or_null};
+use strata::json::{arr, opt_str, opt_text, str_at, text_map, value_at, value_or_null};
 use strata::reference::Ref;
 use strata::snapshot::{Snapshot, SubjectKind};
 use strata::term::progress::Progress;
@@ -169,14 +169,19 @@ impl World {
     /// A world from an existing cluster, as Palette holds it now: the cluster document, its cloud
     /// config, and its profiles become the body of a create. `id` is the uid of the cluster, or
     /// its name when no cluster has that uid.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Palette`] with the error of a request, such as a cluster that the scope does not
+    /// have, or a name that two clusters have. [`Error::Input`] when the document names no cloud
+    /// type.
     pub fn from_cluster<A: PaletteApi>(
         palette: &Palette<A>,
         id: &str,
         progress: &Progress,
     ) -> Result<World> {
-        let cluster = palette.subject_by_id(SubjectKind::Cluster, id, &Progress::silent())?;
+        let cluster = palette.subject_by_id(SubjectKind::Cluster, id, progress)?;
         let uid = opt_str(&cluster, "/metadata/uid").unwrap_or(id);
-        progress.note(&format!("reading cluster {uid}"));
         let cloud_type = RawCluster::cloud_type(&cluster);
         if cloud_type.is_empty() {
             return Err(Error::Input {
@@ -462,8 +467,8 @@ fn entity_of(cluster: &Value, config: &Value, account_uid: Option<&str>) -> Valu
     json!({
         "metadata": {
             "name": value_at(cluster, "/metadata/name"),
-            "labels": cluster.pointer("/metadata/labels").cloned().unwrap_or(json!({})),
-            "annotations": cluster.pointer("/metadata/annotations").cloned().unwrap_or(json!({})),
+            "labels": text_map(cluster, "/metadata/labels"),
+            "annotations": text_map(cluster, "/metadata/annotations"),
         },
         "spec": Value::Object(spec),
     })
@@ -687,6 +692,51 @@ mod tests {
         );
         assert_eq!(pools[1]["poolConfig"]["name"], "cp");
         assert_eq!(entity["spec"]["cloudConfig"]["region"], "us-east-2");
+    }
+
+    #[test]
+    fn a_change_adds_a_pool_with_an_empty_name_and_does_not_merge_it_into_another() {
+        let mut entity = json!({"spec": {"machinepoolconfig": [
+            {"cloudConfig": {"instanceType": "t3.xlarge"}, "poolConfig": {"name": "", "size": 2}}]}});
+        let change = json!({"spec": {"machinepoolconfig": [
+            {"cloudConfig": {"instanceType": "m5.xlarge"}, "poolConfig": {"name": "", "size": 3}}]}});
+        merge_change(&mut entity, &change);
+        let pools = entity["spec"]["machinepoolconfig"].as_array().unwrap();
+        assert_eq!(pools.len(), 2);
+        assert_eq!(pools[0]["poolConfig"]["size"], 2);
+        assert_eq!(pools[1]["poolConfig"]["size"], 3);
+    }
+
+    #[test]
+    fn the_entity_of_a_cluster_keeps_the_labels_and_the_annotations_that_are_text() {
+        let api = strata::api::MemoryApi::new()
+            .with(
+                "/v1/spectroclusters/c1",
+                json!({"metadata": {"uid": "c1", "name": "barney",
+                    "labels": {"env": "dev", "n": 1}, "annotations": {"owner": "ops"}},
+                    "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"}}}),
+            )
+            .with("/v1/cloudconfigs/aws/cc1", json!({"spec": {}}));
+        let world = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap();
+        assert_eq!(
+            world.entity["metadata"]["labels"],
+            json!({"env": "dev"}),
+            "a value that is not text is no label"
+        );
+        assert_eq!(
+            world.entity["metadata"]["annotations"],
+            json!({"owner": "ops"})
+        );
+        let bare = strata::api::MemoryApi::new()
+            .with(
+                "/v1/spectroclusters/c2",
+                json!({"metadata": {"uid": "c2", "name": "wilma"},
+                    "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc2"}}}),
+            )
+            .with("/v1/cloudconfigs/aws/cc2", json!({"spec": {}}));
+        let world = World::from_cluster(&Palette::new(bare), "c2", &Progress::silent()).unwrap();
+        assert_eq!(world.entity["metadata"]["labels"], json!({}));
+        assert_eq!(world.entity["metadata"]["annotations"], json!({}));
     }
 
     #[test]

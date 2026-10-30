@@ -322,27 +322,29 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
     })?;
     let now = now_utc();
     let ledger = ledger_of(&cli)?;
+    let reference = Ref::parse(&source);
+    // a wrong use of the source is a usage error, so it comes before the first request
+    if let Ref::Cluster {
+        profile, pending, ..
+    } = &reference
+        && (profile.is_some() || *pending)
+    {
+        return Err(Error::Usage {
+            message: "the checks read the whole cluster: give cluster:UID with no profile and no @pending"
+                .to_string(),
+        });
+    }
     let live = !cli.offline;
     let palette = if live { Some(connect(progress)?) } else { None };
 
     // the world: the entity, and what the static rules need beside it
-    let mut world = match Ref::parse(&source) {
-        Ref::Cluster {
-            uid,
-            profile: None,
-            pending: false,
-        } => {
+    let mut world = match reference {
+        Ref::Cluster { uid, .. } => {
             let palette = palette.as_ref().ok_or_else(|| Error::Usage {
                 message: "cluster:UID needs Palette: drop --offline, or give the entity as a file"
                     .to_string(),
             })?;
             World::from_cluster(palette, &uid, &progress)?
-        }
-        Ref::Cluster { .. } => {
-            return Err(Error::Usage {
-                message: "the checks read the whole cluster: give cluster:UID with no profile and no @pending"
-                    .to_string(),
-            });
         }
         _ => World::from_file(std::path::Path::new(&source), cli.cloud.as_deref())?,
     };

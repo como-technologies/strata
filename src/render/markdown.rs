@@ -172,10 +172,9 @@ impl Renderer for MarkdownRenderer {
         }
         match tier_line(d) {
             TierLine::NotCompared => {}
-            TierLine::Unchanged => o.push_str(&format!(
-                "**Cluster tiers:** {}\n\n",
-                Status::Unchanged.as_str()
-            )),
+            TierLine::Unchanged => {
+                o.push_str(&format!("**Cluster tiers:** {}\n\n", moved(false).as_str()))
+            }
             TierLine::Differ(states) => {
                 let words: Vec<String> = states
                     .iter()
