@@ -198,14 +198,32 @@ where
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
     let palette = connect(None)?;
+    registry_packs_in(
+        &mut Registries::new(&palette),
+        name,
+        options,
+        generated_at,
+        progress,
+    )
+}
+
+/// [`registry_packs`] with the registry listings of the command, so that a later read of the same
+/// command reads them again from memory.
+pub(super) fn registry_packs_in<A: PaletteApi>(
+    listings: &mut Registries<'_, A>,
+    name: &str,
+    options: &PackOptions,
+    generated_at: &str,
+    progress: &Progress,
+) -> Result<PackListing> {
+    let palette = listings.palette();
     // the registry listing gives the names, and the reason of an error that finds no pack
-    let mut listings = Registries::new(&palette);
     let wanted = match &options.registry {
         Some(r) => vec![listings.by_ref(r)?],
         None => listings.names()?,
     };
     progress.note(&format!("reading the versions of {name}"));
-    let entries = crate::candidate::pack::versions_of(&palette, name)?;
+    let entries = crate::candidate::pack::versions_of(palette, name)?;
 
     let mut registries = Vec::new();
     let mut had_the_pack = false;

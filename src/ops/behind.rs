@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
+use crate::candidate::pack::pack_snapshot_in;
 use crate::closed_set::Open;
 use crate::cloud::supports;
 use crate::diff::{ChangeFlag, Diff, ImpactLevel, RegistrySync};
@@ -19,7 +20,7 @@ use crate::registry::{Registries, RegistrySyncNote};
 use crate::snapshot::{Snapshot, Tool, load_document};
 use crate::term::progress::Progress;
 
-use super::packs::{PackBuild, PackOptions, registry_packs};
+use super::packs::{PackBuild, PackOptions, registry_packs_in};
 use super::scope_of;
 
 /// The schema id of the document `behind` writes.
@@ -231,10 +232,32 @@ pub fn is_floating(tag: &str) -> bool {
     tag.split(['.', '_', '-']).any(|part| part == "x")
 }
 
+/// One pin in the records: a pack name, a registry, a pinned version, and a tag. The order of the
+/// fields is the order of the pins in the report.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct PinKey {
+    name: String,
+    registry_uid: String,
+    version: String,
+    tag: String,
+}
+
+/// What `behind` has read for all the scopes: each pack of each registry, and the last sync of
+/// each registry, each read one time.
+#[derive(Default)]
+struct Reads {
+    /// The pack name and the registry uid, to what the registry offers.
+    offers: BTreeMap<(String, String), Result<Offered>>,
+    /// The registry uid, to its last sync.
+    syncs: BTreeMap<String, RegistrySyncNote>,
+}
+
 /// Report the pack versions that `records` pin, and the newer versions that the registries offer.
-/// Each record is read in its own project, with a client from `connect`; each pack of a
-/// registry is read one time. A record that cannot be read is an error of the whole run: strata
-/// cannot say what it pins.
+/// Each pin is read in the project of the first record that pins it. `connect` is called one time
+/// for each project, and each project has one cache of the registry listings; each pack of a
+/// registry is read one time. A pin in a project that `connect` cannot reach has the error of
+/// `connect`. A record that cannot be read is an error of the whole run: strata cannot say what
+/// it pins.
 pub fn behind<A, F>(
     records: &[PathBuf],
     options: &BehindOptions,
@@ -246,18 +269,18 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    // pack name, registry uid, version, tag -> the pin, and the project of its first record
-    let mut pins: BTreeMap<(String, String, String, String), (Pin, String)> = BTreeMap::new();
+    // the pin, and the project of its first record
+    let mut pins: BTreeMap<PinKey, (Pin, String)> = BTreeMap::new();
     for path in records {
         let snap = Snapshot::load(path)?;
         let subject = snap.source.title();
         for p in snap.packs.iter().filter(|p| !p.registry_uid.is_empty()) {
-            let key = (
-                p.name.clone(),
-                p.registry_uid.clone(),
-                p.version.clone(),
-                p.tag.clone(),
-            );
+            let key = PinKey {
+                name: p.name.clone(),
+                registry_uid: p.registry_uid.clone(),
+                version: p.version.clone(),
+                tag: p.tag.clone(),
+            };
             let entry = pins.entry(key).or_insert_with(|| {
                 (
                     Pin {
@@ -292,125 +315,43 @@ where
         }
     }
 
-    // each pack of each registry, read one time; the last sync of each registry, read one time
-    let mut offers: BTreeMap<(String, String), Result<Offered>> = BTreeMap::new();
-    let mut syncs: BTreeMap<String, RegistrySyncNote> = BTreeMap::new();
-    let mut out: Vec<(Pin, String)> = Vec::with_capacity(pins.len());
-    for ((name, registry_uid, _, _), (mut pin, project)) in pins {
-        let scope = scope_of(&project);
-        let offered = offers
-            .entry((name.clone(), registry_uid.clone()))
-            .or_insert_with(|| {
-                registry_packs(
-                    &name,
-                    &PackOptions {
-                        registry: Some(registry_uid.clone()),
-                        ..PackOptions::default()
-                    },
-                    |_| connect(scope),
-                    generated_at,
-                    progress,
-                )
-                .map(|l| {
-                    l.registries
-                        .into_iter()
-                        .next()
-                        .map(|r| (r.registry, r.versions))
-                        .unwrap_or_default()
-                })
-            });
-        let (registry, builds) = match offered {
-            Ok(found) => found.clone(),
+    // A cache of the registry listings borrows its client. So the pins go by scope: each scope
+    // connects one time, and keeps its cache for all its pins
+    let mut scopes: BTreeMap<Option<String>, Vec<(PinKey, Pin)>> = BTreeMap::new();
+    for (key, (pin, project)) in pins {
+        scopes
+            .entry(scope_of(&project).map(str::to_string))
+            .or_default()
+            .push((key, pin));
+    }
+    let mut reads = Reads::default();
+    let mut checked: BTreeMap<PinKey, Pin> = BTreeMap::new();
+    for (scope, group) in scopes {
+        let palette = match connect(scope.as_deref()) {
+            Ok(palette) => palette,
             Err(e) => {
-                pin.error = Some(e.to_json());
-                out.push((pin, project));
+                for (key, mut pin) in group {
+                    pin.error = Some(e.to_json());
+                    checked.insert(key, pin);
+                }
                 continue;
             }
         };
-        pin.registry = registry;
-        let pinned = builds.iter().find(|b| b.version == pin.version);
-        pin.pinned_state = match pinned {
-            Some(b) => b.state.clone(),
-            None => Some("absent".to_string()),
-        };
-        // the version that a floating tag names now. A profile with values of its own stays on
-        // the pinned version until a person applies the update. So each version above the pin
-        // is newer, also the one that the tag names
-        if pin.floating {
-            pin.resolved = builds
-                .iter()
-                .find(|b| b.tags.iter().any(|t| t == &pin.tag))
-                .map(|b| b.version.clone());
-        }
-        let clouds: Vec<String> = pinned.map(|b| b.cloud_types.clone()).unwrap_or_default();
-        let architectures: Vec<String> =
-            pinned.map(|b| b.architectures.clone()).unwrap_or_default();
-        // a newer version fits when it supports one cloud of the pinned version. A pinned version
-        // with no cloud type supports each cloud, so each newer version fits it
-        let fits =
-            |b: &PackBuild| clouds.is_empty() || clouds.iter().any(|c| supports(&b.cloud_types, c));
-        pin.newer = builds
-            .iter()
-            .filter(|b| version::compare(&b.version, &pin.version) == std::cmp::Ordering::Greater)
-            .filter(|b| !b.retired())
-            .filter(|b| fits(b))
-            .map(|b| Newer {
-                version: b.version.clone(),
-                state: b.state.clone(),
-                palette_latest: b.palette_latest,
-                listed: b.listed.clone(),
-                drops: dropped(&architectures, &b.architectures),
-            })
-            .collect();
-        pin.behind = !pin.newer.is_empty();
-        // a pin that is current is current against the copy of the registry in Palette. When
-        // the last sync did not complete, the copy is the copy of an earlier sync, and the pin
-        // says so. A pin that is behind needs no note: a newer version in the copy is a newer
-        // version in the registry. The first build gives the kind of the registry. A registry
-        // with no build of the pack is not in the listing, so it gets no note
-        if !pin.behind
-            && let Some(first) = builds.first()
-        {
-            let note = match syncs.entry(registry_uid.clone()) {
-                Entry::Occupied(e) => e.into_mut(),
-                Entry::Vacant(v) => {
-                    let palette = connect(scope)?;
-                    v.insert(Registries::new(&palette).sync_note(
-                        &registry_uid,
-                        Some(first.kind),
-                        progress,
-                    )?)
+        let mut listings = Registries::new(&palette);
+        for (key, mut pin) in group {
+            read_pin(&mut pin, &mut listings, &mut reads, generated_at, progress)?;
+            if options.impact && pin.behind {
+                let to = pin.newer[0].version.clone();
+                progress.note(&format!("comparing {} {} with {to}", pin.name, pin.version));
+                match bump_of(&mut listings, &pin, &to, generated_at, progress) {
+                    Ok(bump) => pin.bump = Some(bump),
+                    Err(e) => pin.error = Some(e.to_json()),
                 }
-            };
-            pin.registry_sync = note.sync.as_ref().filter(|s| !s.completed()).cloned();
-            pin.registry_sync_error = note.error.clone();
-        }
-        out.push((pin, project));
-    }
-
-    if options.impact {
-        for (pin, project) in out.iter_mut().filter(|(p, _)| p.behind) {
-            let to = pin.newer[0].version.clone();
-            progress.note(&format!("comparing {} {} with {to}", pin.name, pin.version));
-            let scope = scope_of(project);
-            let bump = connect(scope).and_then(|palette| {
-                bump_of(
-                    &pin.name,
-                    &pin.registry_uid,
-                    &pin.version,
-                    &to,
-                    &palette,
-                    generated_at,
-                    progress,
-                )
-            });
-            match bump {
-                Ok(bump) => pin.bump = Some(bump),
-                Err(e) => pin.error = Some(e.to_json()),
             }
+            checked.insert(key, pin);
         }
     }
-    let mut out: Vec<Pin> = out.into_iter().map(|(pin, _)| pin).collect();
+    let mut out: Vec<Pin> = checked.into_values().collect();
 
     let mut arrived = 0;
     if let Some(previous) = &options.since {
@@ -459,6 +400,102 @@ where
     })
 }
 
+/// Fill in `pin` from what its registry offers: the registry name, the state of the pinned
+/// version, the newer versions, and, for a pin that is current, the last sync of the registry.
+///
+/// `listings` is the cache of the scope of the pin, and `reads` what the other pins read. A pack
+/// that the registry cannot give is the error of `pin`.
+fn read_pin<A: PaletteApi>(
+    pin: &mut Pin,
+    listings: &mut Registries<'_, A>,
+    reads: &mut Reads,
+    generated_at: &str,
+    progress: &Progress,
+) -> Result<()> {
+    let offered = reads
+        .offers
+        .entry((pin.name.clone(), pin.registry_uid.clone()))
+        .or_insert_with(|| {
+            registry_packs_in(
+                listings,
+                &pin.name,
+                &PackOptions {
+                    registry: Some(pin.registry_uid.clone()),
+                    ..PackOptions::default()
+                },
+                generated_at,
+                progress,
+            )
+            .map(|l| {
+                l.registries
+                    .into_iter()
+                    .next()
+                    .map(|r| (r.registry, r.versions))
+                    .unwrap_or_default()
+            })
+        });
+    let (registry, builds) = match offered {
+        Ok(found) => found.clone(),
+        Err(e) => {
+            pin.error = Some(e.to_json());
+            return Ok(());
+        }
+    };
+    pin.registry = registry;
+    let pinned = builds.iter().find(|b| b.version == pin.version);
+    pin.pinned_state = match pinned {
+        Some(b) => b.state.clone(),
+        None => Some("absent".to_string()),
+    };
+    // the version that a floating tag names now. A profile with values of its own stays on
+    // the pinned version until a person applies the update. So each version above the pin
+    // is newer, also the one that the tag names
+    if pin.floating {
+        pin.resolved = builds
+            .iter()
+            .find(|b| b.tags.iter().any(|t| t == &pin.tag))
+            .map(|b| b.version.clone());
+    }
+    let clouds: Vec<String> = pinned.map(|b| b.cloud_types.clone()).unwrap_or_default();
+    let architectures: Vec<String> = pinned.map(|b| b.architectures.clone()).unwrap_or_default();
+    // a newer version fits when it supports one cloud of the pinned version. A pinned version
+    // with no cloud type supports each cloud, so each newer version fits it
+    let fits =
+        |b: &PackBuild| clouds.is_empty() || clouds.iter().any(|c| supports(&b.cloud_types, c));
+    pin.newer = builds
+        .iter()
+        .filter(|b| version::compare(&b.version, &pin.version) == std::cmp::Ordering::Greater)
+        .filter(|b| !b.retired())
+        .filter(|b| fits(b))
+        .map(|b| Newer {
+            version: b.version.clone(),
+            state: b.state.clone(),
+            palette_latest: b.palette_latest,
+            listed: b.listed.clone(),
+            drops: dropped(&architectures, &b.architectures),
+        })
+        .collect();
+    pin.behind = !pin.newer.is_empty();
+    // a pin that is current is current against the copy of the registry in Palette. When
+    // the last sync did not complete, the copy is the copy of an earlier sync, and the pin
+    // says so. A pin that is behind needs no note: a newer version in the copy is a newer
+    // version in the registry. The first build gives the kind of the registry. A registry
+    // with no build of the pack is not in the listing, so it gets no note
+    if !pin.behind
+        && let Some(first) = builds.first()
+    {
+        let note = match reads.syncs.entry(pin.registry_uid.clone()) {
+            Entry::Occupied(e) => e.into_mut(),
+            Entry::Vacant(v) => {
+                v.insert(listings.sync_note(&pin.registry_uid, Some(first.kind), progress)?)
+            }
+        };
+        pin.registry_sync = note.sync.as_ref().filter(|s| !s.completed()).cloned();
+        pin.registry_sync_error = note.error.clone();
+    }
+    Ok(())
+}
+
 /// The architectures of `pinned` that `newer` does not support: what a move drops. When the
 /// listing names the architectures of only one of the two versions, strata cannot say what a
 /// move drops, and the answer is empty.
@@ -474,26 +511,24 @@ fn dropped(pinned: &[String], newer: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// What a move from `from` to `to` of one pack in one registry does: `compare` of the two pack
-/// versions.
+/// What a move from the pinned version of `pin` to the version `to` does: `compare` of the two
+/// pack versions, which `listings` reads.
 fn bump_of<A: PaletteApi>(
-    name: &str,
-    registry_uid: &str,
-    from: &str,
+    listings: &mut Registries<'_, A>,
+    pin: &Pin,
     to: &str,
-    palette: &Palette<A>,
     at: &str,
     progress: &Progress,
 ) -> Result<Bump> {
-    let take = |version: &str| {
-        crate::candidate::pack_snapshot(
-            palette,
-            Some(registry_uid),
-            name,
+    let mut take = |version: &str| {
+        pack_snapshot_in(
+            listings,
+            Some(&pin.registry_uid),
+            &pin.name,
             version,
             &Ref::Pack {
                 registry: None,
-                name: name.to_string(),
+                name: pin.name.clone(),
                 version: version.to_string(),
             }
             .to_string(),
@@ -501,9 +536,12 @@ fn bump_of<A: PaletteApi>(
             progress,
         )
     };
-    let (a, b) = (take(from)?, take(to)?);
+    let (a, b) = (take(&pin.version)?, take(to)?);
     let d = super::compare(&a, &b, at);
-    Bump::of(to, &d, name).ok_or_else(|| Error::Usage {
-        message: format!("the comparison of {name} {from} and {to} holds no such pack"),
+    Bump::of(to, &d, &pin.name).ok_or_else(|| Error::Usage {
+        message: format!(
+            "the comparison of {} {} and {to} holds no such pack",
+            pin.name, pin.version
+        ),
     })
 }
