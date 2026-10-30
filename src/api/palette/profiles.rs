@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 use serde_json::Value;
 
 use super::{
-    APP_DEPLOYMENTS, APP_PROFILE_LISTING, APP_PROFILES, EDGE_HOSTS, PACKS, PROFILE_SEARCH,
-    PROFILES, Palette, SEARCH_PAGE, TIER_CONTAINER_REGISTRY, TIER_INSTALL_ORDER, install_order,
+    APP_DEPLOYMENTS, APP_PROFILE_LISTING, APP_PROFILES, EDGE_HOSTS, PROFILE_SEARCH, PROFILES,
+    Palette, SEARCH_PAGE, TIER_CONTAINER_REGISTRY, TIER_INSTALL_ORDER, install_order,
     listed_versions, no_variables, query_value, route, with_limit,
 };
 use crate::api::{PaletteApi, RawProfile, mask};
@@ -362,7 +362,7 @@ impl<A: PaletteApi> Palette<A> {
             progress.note(&format!(
                 "reading the schema of pack {uid} to mask the draft"
             ));
-            if let Some(pack) = found(self.api.get_json(&route(PACKS, &[&uid])))? {
+            if let Some(pack) = found(self.pack_document(&uid))? {
                 let fields = mask::password_fields(&pack, &uid);
                 if !fields.is_empty() {
                     secrets.insert(uid, fields);

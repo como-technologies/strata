@@ -1,28 +1,61 @@
 //! The reads of a cluster, of a cluster group, and of an edge host.
 //!
-//! They give the summary, the raw responses of a record, the cloud config, the resolved values,
-//! and the repave and validate routes of a cluster.
+//! They give the summary, the events, the raw responses of a record, the cloud config, the cloud
+//! account, the resolved values, and the repave and validate routes of a cluster.
 
 use serde_json::Value;
 
 use super::{
-    CLOUD_CONFIGS, CLUSTER_GROUP_DASHBOARD, CLUSTER_NOTIFICATIONS, CLUSTER_SUMMARIES, CLUSTERS,
-    ConfigPart, PROFILES, Palette, collection, named_entries, no_variables, or_unread,
-    own_manifests, route, search_all, sorted_names, uids_named, unavailable_note, with_limit,
+    CLOUD_ACCOUNTS, CLOUD_CONFIGS, CLUSTER_EVENTS, CLUSTER_EVENTS_LIMIT, CLUSTER_GROUP_DASHBOARD,
+    CLUSTER_NOTIFICATIONS, CLUSTER_SUMMARIES, CLUSTERS, ConfigPart, PROFILES, Palette, collection,
+    named_entries, no_variables, or_unread, own_manifests, route, search_all, sorted_names,
+    uids_named, unavailable_note, with_limit,
 };
 use crate::api::{PaletteApi, RawCluster, ReadErrors};
 use crate::error::{Error, Result, found};
-use crate::json::{arr, str_at, text};
+use crate::json::{arr, str_at, take_items, text};
 use crate::reference::one_named;
 use crate::snapshot::SubjectKind;
 use crate::term::progress::Progress;
+
+/// The route of the document of the object `uid` of `kind`, such as `/v1/spectroclusters/{uid}` for
+/// a cluster.
+pub fn subject_path(kind: SubjectKind, uid: &str) -> String {
+    route(collection(kind), &[uid])
+}
+
+/// The route of the cluster summary: `/v1/dashboard/spectroclusters/{uid}`.
+pub fn cluster_summary_path(uid: &str) -> String {
+    route(CLUSTER_SUMMARIES, &[uid])
+}
+
+/// The route of the events of a cluster, with the page size that strata reads:
+/// `/v1/events/components/spectrocluster/{uid}?limit=50`.
+pub fn cluster_events_path(uid: &str) -> String {
+    format!(
+        "{}?limit={CLUSTER_EVENTS_LIMIT}",
+        route(CLUSTER_EVENTS, &[uid])
+    )
+}
 
 impl<A: PaletteApi> Palette<A> {
     /// The cluster summary, `GET /v1/dashboard/spectroclusters/{uid}`: what the dashboard shows
     /// for one cluster. Its `status.health` is the health of the cluster, which the cluster
     /// document does not carry.
     pub fn fetch_cluster_summary(&self, uid: &str) -> Result<Value> {
-        self.api.get_json(&route(CLUSTER_SUMMARIES, &[uid]))
+        self.api.get_json(&cluster_summary_path(uid))
+    }
+
+    /// The events of the cluster `uid`, `GET /v1/events/components/spectrocluster/{uid}?limit=50`:
+    /// the first 50 events that Palette keeps for it, as the `items` of the answer. Palette gives
+    /// `items: null` when the cluster has none, and the list is then empty. The read does not page.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, also [`Error::Api`] with HTTP 404 when Palette has no cluster with
+    /// the uid `uid`.
+    pub fn cluster_events(&self, uid: &str) -> Result<Vec<Value>> {
+        Ok(take_items(self.api.get_json(&cluster_events_path(uid))?))
     }
 
     /// The raw documents of the cluster, edge host, or cluster group `id`, in the shape of a
@@ -70,14 +103,20 @@ impl<A: PaletteApi> Palette<A> {
     /// Each error of the request, also [`Error::Api`] with HTTP 404 when Palette has no object
     /// with the uid `uid`.
     pub fn subject_document(&self, kind: SubjectKind, uid: &str) -> Result<Value> {
-        self.api.get_json(&route(collection(kind), &[uid]))
+        self.api.get_json(&subject_path(kind, uid))
     }
 
     /// The document of the object `id` of `kind`: [`Palette::subject_document`] of the uid `id`.
     ///
-    /// When no object has that uid, it is the document of the one object named `id` in the scope. A
-    /// note names the uid of a name.
-    fn subject_by_id(&self, kind: SubjectKind, id: &str, progress: &Progress) -> Result<Value> {
+    /// When no object has that uid, it is the document of the one object named `id` in the scope.
+    /// `progress` gets a note for the read, and a note that names the uid of a name.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails. [`Error::ClusterNotFound`],
+    /// [`Error::EdgeHostNotFound`], or [`Error::ClusterGroupNotFound`] when `id` is no uid and no
+    /// name in the scope. The `NameAmbiguous` kind of the same object when two have the name.
+    pub fn subject_by_id(&self, kind: SubjectKind, id: &str, progress: &Progress) -> Result<Value> {
         progress.note(&format!("fetching {} {id}", kind.noun()));
         match found(self.subject_document(kind, id))? {
             Some(doc) => Ok(doc),
@@ -301,6 +340,19 @@ impl<A: PaletteApi> Palette<A> {
             });
         }
         self.api.get_json(&route(CLOUD_CONFIGS, &[kind, uid]))
+    }
+
+    /// The cloud account `uid` of the cloud type `kind`, `GET /v1/cloudaccounts/{kind}/{uid}`.
+    /// `kind` is the cloud type that the route names, such as `aws`. A managed cluster uses the
+    /// account of its cloud: an `eks` cluster uses an `aws` account. The document can hold
+    /// secrets, and the caller must not write them out.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, also [`Error::Api`] with HTTP 404 when Palette has no such
+    /// account.
+    pub fn cloud_account(&self, kind: &str, uid: &str) -> Result<Value> {
+        self.api.get_json(&route(CLOUD_ACCOUNTS, &[kind, uid]))
     }
 
     /// The value Palette gives each macro for the cluster or the cluster group `uid`: `GET

@@ -18,6 +18,8 @@ mod retry;
 
 use std::fmt;
 
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::{Error, Result};
@@ -29,13 +31,16 @@ pub(crate) use palette::{
     PACK_LISTING_PAGE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, named_entries,
     profile_versions, search_condition, search_filter, search_group,
 };
-pub use palette::{Palette, SearchedClusters};
+pub use palette::{
+    Palette, SearchedClusters, cluster_events_path, cluster_summary_path, subject_path,
+};
 pub(crate) use raw::recorded_template;
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft};
 pub use retry::{Retry, RetryPolicy};
 
 /// The method of a request that strata sends to Palette.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "UPPERCASE")]
 pub enum Method {
     /// A read of a document: [`PaletteApi::get_json`].
     Get,
@@ -92,5 +97,26 @@ impl<A: PaletteApi + ?Sized> PaletteApi for &A {
 
     fn project_uid(&self) -> Option<&str> {
         (**self).project_uid()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_method_is_written_and_read_as_its_http_name() {
+        for method in [Method::Get, Method::Post] {
+            assert_eq!(
+                serde_json::to_value(method).unwrap(),
+                Value::from(method.as_str())
+            );
+            assert_eq!(method.to_string(), method.as_str());
+            assert_eq!(
+                serde_json::from_value::<Method>(Value::from(method.as_str())).unwrap(),
+                method
+            );
+        }
+        assert!(serde_json::from_value::<Method>(Value::from("get")).is_err());
     }
 }
