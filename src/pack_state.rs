@@ -7,18 +7,18 @@ use crate::closed_set::impl_closed_set;
 
 /// The state of a pack version, as the listing of its registry gives it and as `behind` names it.
 ///
-/// A version in use has no state. A state of `disabled` or `deleted` is a version that Palette no
-/// longer serves: see [`PackState::is_retired`].
+/// A version in use has no state. Palette refuses a profile that pins a version in the state
+/// `disabled` or `deleted`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum PackState {
-    /// Spectro Cloud deprecated the version. Palette still serves it.
+    /// The `system_state` of the version is `deprecated`.
     Deprecated,
-    /// Spectro Cloud disabled the version, or marked it `disabled`. Palette serves no such
-    /// version, and refuses a profile that pins one.
+    /// The version is disabled: its `system_state` says so, or the listing marks it. Palette
+    /// refuses a profile that pins it.
     Disabled,
-    /// Spectro Cloud deleted the version. Palette serves no such version, and refuses a profile
-    /// that pins one.
+    /// The `system_state` of the version is `deleted`. Palette serves no such version, and
+    /// refuses a profile that pins one.
     Deleted,
     /// The registry no longer lists the version, or does not serve it in this tenant. `behind`
     /// gives this state to a pinned version. A listing never gives it.
@@ -33,7 +33,7 @@ impl_closed_set!(PackState {
 });
 
 impl PackState {
-    /// True for a state of a version that Palette no longer serves: `disabled` or `deleted`.
+    /// True for `disabled` and `deleted`: a profile cannot pin a version in such a state.
     pub(crate) fn is_retired(self) -> bool {
         matches!(self, Self::Disabled | Self::Deleted)
     }
