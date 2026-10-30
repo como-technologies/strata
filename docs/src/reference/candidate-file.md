@@ -125,8 +125,9 @@ A candidate that breaks one of them gives a record. To ask Palette before you pu
 
 ## The registry lookups
 
-Strata reads `GET /v1/registries/metadata` one time for each resolve, and only
-when it needs it. A resolve needs this listing in three cases:
+Strata reads `GET /v1/registries/metadata` one time for each command, and only
+when it needs it. `--validate` uses the listing that the resolve read. A resolve
+needs this listing in three cases:
 
 - A layer names its registry by name.
 - The listing of the packs does not have the version of a layer.
