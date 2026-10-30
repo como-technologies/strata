@@ -25,9 +25,11 @@
 //! - [`cluster_template`]: the cluster templates of Palette.
 //! - [`conjunction`]: how the conditions of a search of Palette join.
 //! - [`pack_type`] and [`profile_type`]: the type of a pack, and the type of a profile.
+//! - [`pack_state`] and [`oci_provider`]: the state of a pack version in a registry, and the
+//!   provider type of an OCI registry.
 //! - [`text`]: the texts that a message builds.
-//! - [`json`]: the reads of a document of Palette, such as the text at a pointer, with the value
-//!   that a field gives when it is not there.
+//! - [`json`]: the reads of a document of Palette, such as the text at a pointer.
+//!   Each read gives a fixed value for a field that is not there.
 //! - [`render`]: the terminal, markdown, and JSON renderers behind one trait.
 //! - [`ops`]: the operations the CLI exposes, free of argument parsing and exit codes.
 //! - [`error`]: the error type, with its exit codes and its machine-readable form.

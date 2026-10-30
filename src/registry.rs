@@ -18,7 +18,7 @@ use crate::api::{Palette, PaletteApi, RegistryKind};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::{RegistrySync, SyncRecovery};
 use crate::error::{Error, Result, served, unread_reason};
-use crate::json::{flag, opt_text, str_at, take_items, text};
+use crate::json::{flag, opt_str, opt_text, str_at, take_items, text};
 use crate::oci_provider::OciProvider;
 use crate::pack_state::PackState;
 use crate::pack_type::PackType;
@@ -145,8 +145,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
         Ok(self
             .summary(RegistryKind::Oci)?
             .and_then(|regs| registry_entry(regs, "/metadata/uid", uid))
-            .and_then(|reg| opt_text(reg, "/spec/providerType"))
-            .map(|text| Open::from_text(&text)))
+            .and_then(provider_of))
     }
 
     /// How Palette makes the pack of a layer from the registry `uid`, when it does not sync the
@@ -177,8 +176,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
                     return Ok(None);
                 };
                 // Palette syncs each OCI registry of the provider type pack
-                let provider =
-                    opt_text(reg, "/spec/providerType").map(|text| Open::from_text(&text));
+                let provider = provider_of(reg);
                 let syncs = provider.as_ref().is_some_and(|p| *p == OciProvider::Pack)
                     || flag(reg, "/status/sync/isSyncSupported");
                 Ok((!syncs).then_some(Unsynced {
@@ -295,6 +293,12 @@ pub(crate) fn registry_entry<'e>(entries: &'e [Value], ptr: &str, uid: &str) -> 
     entries.iter().find(|it| str_at(it, ptr) == uid)
 }
 
+/// The provider type of the OCI registry in `reg`, an entry of the OCI summary listing, or `None`
+/// when the entry names no type.
+fn provider_of(reg: &Value) -> Option<Open<OciProvider>> {
+    opt_str(reg, "/spec/providerType").map(Open::from_text)
+}
+
 /// How Palette makes the pack of a layer from a registry that it does not sync.
 #[derive(Debug, Clone)]
 pub(crate) struct Unsynced {
@@ -334,7 +338,7 @@ pub(crate) fn pack_state(summary: &Value) -> Option<Open<PackState>> {
 /// The state that Spectro Cloud gives a version that it retired: `deprecated`, `disabled`, or
 /// `deleted`.
 fn system_state(summary: &Value) -> Option<Open<PackState>> {
-    opt_text(summary, "/spec/annotations/system_state").map(|text| Open::from_text(&text))
+    opt_str(summary, "/spec/annotations/system_state").map(Open::from_text)
 }
 
 /// The state of a pack version that Palette no longer serves: `disabled` or `deleted` in

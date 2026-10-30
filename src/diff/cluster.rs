@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use super::leaf::{Leaf, Op, leaf_diff};
 use super::zip_by_key;
 use crate::closed_set::Open;
-use crate::json::str_at;
+use crate::json::{arr, str_at};
 use crate::snapshot::{ClusterTier, ClusterVariable, Snapshot, Tier};
 
 /// The values two clusters give their profile variables, compared.
@@ -133,7 +133,7 @@ pub(super) fn running_behind(side: Side, s: &Snapshot) -> Vec<RunningBehind> {
     else {
         return Vec::new();
     };
-    let running = tier.fields.as_array().cloned().unwrap_or_default();
+    let running = arr(&tier.fields, "");
     s.packs
         .iter()
         .filter_map(|p| {

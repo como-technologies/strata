@@ -225,9 +225,15 @@ pub struct BehindOptions {
     pub since: Option<BehindReport>,
 }
 
-/// What a registry offers for one pack: the registry name, its versions, and the architectures
-/// that the listing names for them.
-type Offered = (String, Vec<PackBuild>, Architectures);
+/// What a registry offers for one pack.
+struct Offered {
+    /// The name of the registry.
+    registry: String,
+    /// The versions of the pack in the registry.
+    builds: Vec<PackBuild>,
+    /// The architectures that the listing names for those versions.
+    architectures: Architectures,
+}
 
 /// A floating tag names no one version: `1.x`, `1.30.x`, `LTS__24.x`.
 pub fn is_floating(tag: &str) -> bool {
@@ -260,6 +266,12 @@ struct Reads {
 /// registry is read one time. A pin in a project that `connect` cannot reach has the error of
 /// `connect`. A record that cannot be read is an error of the whole run: strata cannot say what
 /// it pins.
+///
+/// # Errors
+///
+/// The error of [`Snapshot::load`] for a record that strata cannot read, such as [`Error::Io`] or
+/// [`Error::NotSnapshot`]. A request that fails for one pin gives the error of that pin in the
+/// report, and not an error of the run.
 pub fn behind<A, F>(
     records: &[PathBuf],
     options: &BehindOptions,
@@ -428,24 +440,29 @@ fn read_pin<A: PaletteApi>(
                 generated_at,
                 progress,
             )
-            .map(|(l, architectures)| {
-                let (registry, versions) = l
+            .map(|(listing, mut architectures)| {
+                let (registry, builds) = listing
                     .registries
                     .into_iter()
                     .next()
                     .map(|r| (r.registry, r.versions))
                     .unwrap_or_default();
-                (registry, versions, architectures)
+                Offered {
+                    registry,
+                    builds,
+                    architectures: architectures.remove(&pin.registry_uid).unwrap_or_default(),
+                }
             })
         });
-    let (registry, builds, listed) = match offered {
-        Ok(found) => found.clone(),
+    let offered = match offered {
+        Ok(found) => &*found,
         Err(e) => {
             pin.error = Some(e.to_json());
             return Ok(());
         }
     };
-    pin.registry = registry;
+    pin.registry.clone_from(&offered.registry);
+    let builds = &offered.builds;
     let pinned = builds.iter().find(|b| b.version == pin.version);
     pin.pinned_state = match pinned {
         Some(b) => b.state.clone(),
@@ -460,10 +477,11 @@ fn read_pin<A: PaletteApi>(
             .find(|b| b.tags.iter().any(|t| t == &pin.tag))
             .map(|b| b.version.clone());
     }
-    let clouds: Vec<String> = pinned.map(|b| b.cloud_types.clone()).unwrap_or_default();
+    let clouds: &[String] = pinned.map_or(&[], |b| b.cloud_types.as_slice());
     let architectures_of = |version: &str| -> &[String] {
-        listed
-            .get(&(pin.registry_uid.clone(), version.to_string()))
+        offered
+            .architectures
+            .get(version)
             .map_or(&[], Vec::as_slice)
     };
     let architectures = pinned.map_or(&[][..], |b| architectures_of(&b.version));

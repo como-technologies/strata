@@ -22,6 +22,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::closed_set::{ClosedSet, impl_closed_set};
 use crate::error::{Error, Result};
 
 pub use audit::AuditKind;
@@ -48,15 +49,10 @@ pub enum Method {
     Post,
 }
 
-impl Method {
-    /// The name of the method in HTTP: `GET` or `POST`.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Get => "GET",
-            Self::Post => "POST",
-        }
-    }
-}
+impl_closed_set!(Method {
+    Get => "GET",
+    Post => "POST",
+});
 
 impl fmt::Display for Method {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -106,7 +102,7 @@ mod tests {
 
     #[test]
     fn a_method_is_written_and_read_as_its_http_name() {
-        for method in [Method::Get, Method::Post] {
+        for &method in Method::ALL {
             assert_eq!(
                 serde_json::to_value(method).unwrap(),
                 Value::from(method.as_str())

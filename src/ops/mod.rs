@@ -190,6 +190,7 @@ where
                 pending: *pending,
                 macros: options.macros,
                 shape: options.shape,
+                members: false,
                 raw_dir: options.raw_dir.as_deref(),
             };
             holder_snapshot(
@@ -266,6 +267,9 @@ struct HolderReads<'a> {
     macros: bool,
     /// Record the shape tier of a cluster, with one more request.
     shape: bool,
+    /// Record the virtual clusters of a cluster group, with one more request. `verify` reads none:
+    /// the record keeps them outside the root, and no verdict shows them.
+    members: bool,
     /// Save the raw answers of Palette in this directory.
     raw_dir: Option<&'a Path>,
 }
@@ -275,8 +279,9 @@ struct HolderReads<'a> {
 /// A holder is a cluster, an edge host, or a cluster group, and `kind` tells which. `raw` comes
 /// from [`Palette::fetch_subject`], or from [`Palette::subject_raw`] when the caller read the
 /// document already. `uid` is the holder as the caller names it. The document gives the uid when
-/// it has one. The record of a cluster group holds its virtual clusters, outside the root.
-/// `snapshot` and `verify` both make their record here, so the two records have the same parts.
+/// it has one. `snapshot` and `verify` both make their record here, so the two records have the
+/// same parts in the root. The record of a cluster group holds its virtual clusters, outside the
+/// root, only when `reads.members` is true.
 fn holder_snapshot<A: PaletteApi>(
     palette: &Palette<A>,
     kind: SubjectKind,
@@ -307,7 +312,7 @@ fn holder_snapshot<A: PaletteApi>(
         snap
     }
     .with_kind(kind);
-    if kind == SubjectKind::ClusterGroup
+    if reads.members
         && let Some(c) = snap.source.cluster.as_mut()
     {
         c.members = palette
@@ -359,6 +364,7 @@ pub fn cluster_group_snapshot<A: PaletteApi>(
     let raw = palette.fetch_subject(SubjectKind::ClusterGroup, group, progress)?;
     let reads = HolderReads {
         macros,
+        members: true,
         ..HolderReads::default()
     };
     holder_snapshot(

@@ -33,6 +33,15 @@ impl_closed_set!(PackState {
 });
 
 impl PackState {
+    /// True for a state that a listing of Palette gives: each state but `absent`, which only
+    /// strata gives.
+    pub(crate) fn listed(self) -> bool {
+        match self {
+            Self::Deprecated | Self::Disabled | Self::Deleted => true,
+            Self::Absent => false,
+        }
+    }
+
     /// True for `disabled` and `deleted`: a profile cannot pin a version in such a state.
     pub(crate) fn is_retired(self) -> bool {
         matches!(self, Self::Disabled | Self::Deleted)
@@ -52,5 +61,22 @@ mod tests {
             .filter(|s| s.is_retired())
             .collect();
         assert_eq!(retired, [PackState::Disabled, PackState::Deleted]);
+    }
+
+    #[test]
+    fn each_state_but_absent_is_listed_by_palette() {
+        let listed: Vec<PackState> = PackState::ALL
+            .iter()
+            .copied()
+            .filter(|s| s.listed())
+            .collect();
+        assert_eq!(
+            listed,
+            [
+                PackState::Deprecated,
+                PackState::Disabled,
+                PackState::Deleted
+            ]
+        );
     }
 }

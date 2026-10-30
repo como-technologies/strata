@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use strata::api::{Method, PaletteApi};
 use strata::config::KEY_VARS;
-use strata::json::{flag, str_at, text_or, value_or_null};
+use strata::json::{flag, opt_flag, str_at, text_or, value_or_null};
 
 use crate::error::{Error, Result};
 use crate::jq::Jq;
@@ -149,7 +149,7 @@ impl FixtureBackend {
             .unwrap_or_default();
         let tools = take(&mut fixture, "_tools").and_then(|v| serde_json::from_value(v).ok());
         let has_palette = take(&mut fixture, "_palette")
-            .and_then(|v| v.as_bool())
+            .and_then(|v| opt_flag(&v, ""))
             .unwrap_or(true);
         (
             FixtureBackend {
@@ -418,7 +418,9 @@ fn judge(rule: &Rule, expr: &str, world: &Value, jq: &Jq, started: Instant) -> O
             }
             Value::Object(_) => {
                 if !flag(&out, "/pass") {
-                    failures.push(one_line(text_or(&out, "/message", "the check is false")));
+                    failures.push(one_line(
+                        text_or(&out, "/message", "the check is false").to_string(),
+                    ));
                 }
             }
             // null is a path that is not in the world, not a pass: a wrong program says so

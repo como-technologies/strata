@@ -224,6 +224,58 @@ fn a_cluster_ref_names_the_whole_cluster_and_needs_palette() {
 }
 
 #[test]
+fn a_cluster_ref_with_a_profile_is_a_usage_error_with_no_key_and_before_any_request() {
+    use std::io::Write;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // a server on this machine that counts the requests and refuses each one
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let host = format!("http://{}", listener.local_addr().unwrap());
+    let requests = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&requests);
+    std::thread::spawn(move || {
+        for stream in listener.incoming().flatten() {
+            counter.fetch_add(1, Ordering::SeqCst);
+            let mut stream = stream;
+            let _ = stream
+                .write_all(b"HTTP/1.1 500 Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    for source in ["cluster:barney/addons", "cluster:barney@pending"] {
+        // with no key, and with a key and a project name, which makes a project lookup first
+        for key in [None, Some("k")] {
+            let mut command = Command::new(bin());
+            command
+                .args([source, "--json"])
+                .current_dir(dir.path())
+                .env("HOME", dir.path())
+                .env("STRATA_QUIET", "1")
+                .env("STRATA_RETRIES", "0")
+                .env("NO_COLOR", "1")
+                .env("PALETTE_API", &host)
+                .env("PALETTE_PROJECT", "payments")
+                .env_remove("PALETTE_PROJECT_UID")
+                .env_remove("SPECTROCLOUD_APIKEY")
+                .env_remove("SPECTROCLOUD_HOST");
+            match key {
+                Some(key) => command.env("PALETTE_API_KEY", key),
+                None => command.env_remove("PALETTE_API_KEY"),
+            };
+            let output = command.output().unwrap();
+            let err = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(output.status.code(), Some(2), "{source} {key:?}: {err}");
+            assert!(
+                err.contains("\"kind\":\"usage\"") && err.contains("no profile and no @pending"),
+                "{source} {key:?}: {err}"
+            );
+        }
+    }
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
+}
+
+#[test]
 fn the_rules_schema_takes_get_and_post_and_reads_when_a_check_names_no_method() {
     let dir = tempfile::tempdir().unwrap();
     let (code, out, err) = run(&["--schema", "rules"], dir.path());

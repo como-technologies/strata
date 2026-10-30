@@ -28,11 +28,8 @@ pub fn text(v: &Value, ptr: &str) -> String {
 
 /// The text at the pointer `ptr` of `v`, or `default` when `v` has no text there. An empty text
 /// stays empty: this is not a search for the first text that is not empty.
-pub fn text_or(v: &Value, ptr: &str, default: &str) -> String {
-    v.pointer(ptr)
-        .and_then(Value::as_str)
-        .unwrap_or(default)
-        .to_string()
+pub fn text_or<'a>(v: &'a Value, ptr: &str, default: &'a str) -> &'a str {
+    v.pointer(ptr).and_then(Value::as_str).unwrap_or(default)
 }
 
 /// The text at the pointer `ptr` of `v`, when it is there and not empty.
@@ -47,7 +44,7 @@ pub fn opt_text(v: &Value, ptr: &str) -> Option<String> {
 
 /// The bool at the pointer `ptr` of `v`, or `None` when `v` has no bool there. Use it when a field
 /// that is not there differs from `false`.
-pub(crate) fn opt_flag(v: &Value, ptr: &str) -> Option<bool> {
+pub fn opt_flag(v: &Value, ptr: &str) -> Option<bool> {
     v.pointer(ptr).and_then(Value::as_bool)
 }
 
@@ -93,7 +90,7 @@ pub fn strings(v: &Value, ptr: &str) -> Vec<String> {
 ///
 /// Palette gives a label as text. So a value of another type is no label, and a tag filter must
 /// not match it as a label with an empty value.
-pub(crate) fn text_map(v: &Value, ptr: &str) -> BTreeMap<String, String> {
+pub fn text_map(v: &Value, ptr: &str) -> BTreeMap<String, String> {
     v.pointer(ptr)
         .and_then(Value::as_object)
         .into_iter()

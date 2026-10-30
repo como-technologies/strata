@@ -23,7 +23,7 @@ use crate::repave::{PendingRepave, is_pending};
 /// The text at `ptr` in `v`, or `default` when `v` has no text there. An empty text stays empty,
 /// so the hash of the variables does not change: this is not [`first_nonempty`].
 fn str_or(v: &Value, ptr: &str, default: &str) -> Value {
-    Value::String(text_or(v, ptr, default))
+    Value::from(text_or(v, ptr, default))
 }
 
 fn bool_or(v: &Value, ptr: &str) -> Value {

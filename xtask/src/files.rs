@@ -80,7 +80,8 @@ mod tests {
 
     #[test]
     fn a_directory_that_does_not_exist_has_no_file() {
-        let missing = std::env::temp_dir().join("strata-files-missing");
+        let missing =
+            std::env::temp_dir().join(format!("strata-files-missing-{}", std::process::id()));
         assert!(files_with_ext(&missing, "md").is_empty());
         assert!(pages(&missing).is_empty());
     }

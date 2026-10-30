@@ -42,6 +42,11 @@ impl<A: PaletteApi> Palette<A> {
     /// The cluster summary, `GET /v1/dashboard/spectroclusters/{uid}`: what the dashboard shows
     /// for one cluster. Its `status.health` is the health of the cluster, which the cluster
     /// document does not carry.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, also [`Error::Api`] with HTTP 404 when Palette has no cluster with
+    /// the uid `uid`.
     pub fn fetch_cluster_summary(&self, uid: &str) -> Result<Value> {
         self.api.get_json(&cluster_summary_path(uid))
     }
