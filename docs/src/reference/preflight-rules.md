@@ -139,6 +139,67 @@ The report keeps each request in `requests[]`. `--verbose` prints one line for
 each request. See
 [The static tier and the live tier](../commands/preflight/tiers.md#a-rule-over-a-list).
 
+## A check that a validate route answers
+
+A check that a validate route answers is a call of that route. A validate route
+of Palette converts the body of a create with the rules of the create.
+`palette-validate` sends the body to the route of the cloud type, so the route
+reports each check that it answers. The catalog does not copy such a check,
+because a copy goes stale when Palette changes the rule. See
+[the rules of the scope](../boundary.md#the-rules-of-the-scope).
+
+A rule leaves the catalog only when the route answers it. A call of the route
+that changes nothing must show the answer, or a live check that exists. A guess
+is not enough. A rule that the route does not answer stays in the catalog. It is
+a gap that preflight fills. The call needs the key, so a run with no key does
+not make the checks that the route answers.
+
+### The checks that the route answers
+
+| Rule that left the catalog | The check | What the route answers |
+| --- | --- | --- |
+| `gke-pool-multiple-3` | The size of a GKE worker pool is a multiple of 3. | `InvalidParam`, "Node pool size should be multiple of 3". A live run shows it: see [What the preflight runs show](../development/live-runs.md#what-the-preflight-runs-show). |
+
+### The checks that wait for a call of the route
+
+Each rule in this table copies a check that the route is expected to answer.
+The rule stays in the catalog until [`validate-route.sh`](../development/live-runs.md#validate-routesh)
+shows that the route refuses the fault. Then the part in the second column
+leaves the rule, and its fixtures leave with it.
+
+| Rule | The part that the route is expected to answer |
+| --- | --- |
+| `vsphere-instance-floor` | All of it: the CPU, the memory, the disk, and the missing instance type. |
+| `eks-ami-type` | The AL2 type, and a type that is not known. |
+| `edge-two-node` | The Kubernetes pack that is not K3s. |
+| `ssh-key-format` | The vSphere and Edge engines. |
+| `azure-ssh-key` | The empty key. |
+| `pack-state` | The `disabled` and `deleted` states. |
+| `profile-cloud-mismatch` | All of it. |
+| `pack-cloud-support` | All of it. |
+| `vsphere-static-ip-pool` | All of it. |
+| `vsphere-controlplane-endpoint` | The empty host. |
+| `edge-vip-multi-node` | The empty host. |
+| `azure-subnets-in-vnet` | The empty `vnetCidrBlock`. |
+| `ntp-servers` | The format of a server. |
+
+### The gaps that preflight fills
+
+These checks are not copies of an answer of the route. The route does not report
+them, or they need more than the body of the create. They stay in the catalog.
+
+| Rule | What stays |
+| --- | --- |
+| `eks-ami-type` | The hop limit of the instance metadata. |
+| `edge-two-node` | The count of the control plane hosts, and the priority of each. |
+| `ssh-key-format` | The MAAS engine. |
+| `vsphere-controlplane-endpoint` | The mapping of the dynamic DNS. |
+| `edge-vip-multi-node` | The count of the hosts. |
+| `azure-subnets-in-vnet` | The containment of the subnet CIDRs in the CIDR of the vnet. |
+| `ntp-servers` | The warning when the cluster names no server. |
+| `template-outside`, the `edge-host-*` rules | They read a document of the tenant. No validate route answers them. |
+| `palette-validate`, `pack-dependency`, `ecr-oci-images`, `worker-cpu-floor`, `eks-public-subnet-mapping`, `iaas-pod-identity`, `sts-account-not-assumable` | They call a route, and copy no answer of it. |
+
 ## The world document
 
 ```text
@@ -196,7 +257,7 @@ runs:
     engine: gke
     release: "4.10"
     results:
-      - {rule: gke-pool-multiple-3, result: caught}    # the run made the fault, and the check found it
+      - {rule: gcp-name-length, result: caught}        # the run made the fault, and the check found it
       - {rule: gke-api-off, result: passed}            # a clean build, and the check passed
       - {rule: eks-one-zone, result: missed}           # the run made the fault, and the check passed: wrong
       - {rule: worker-cpu-floor, result: false-fail}   # a clean build, and the check failed: wrong

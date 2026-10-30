@@ -450,7 +450,8 @@ fn the_ids_of_the_catalog_of_the_issue_are_all_here_or_listed_as_pending() {
     );
 }
 
-/// The rows of the catalog of #91, in the order of its three comments.
+/// The rows of the catalog of #91, in the order of its three comments. A row that
+/// `ANSWERED_BY_THE_ROUTE` names is not here.
 const ISSUE_IDS: &[&str] = &[
     // identity and permissions
     "eks-role-no-eks-policy",
@@ -507,7 +508,6 @@ const ISSUE_IDS: &[&str] = &[
     "registry-https",
     "igw-detach",
     // compute and pools
-    "gke-pool-multiple-3",
     "instance-offering",
     "spot-capacity",
     "eks-worker-needed",
@@ -619,6 +619,21 @@ const ISSUE_IDS: &[&str] = &[
 /// The rows of #91 that are not rules yet. Each one becomes a rule, and leaves this list. The list
 /// is empty: every row of #91 is a rule.
 const PENDING: &[&str] = &[];
+
+/// The rows of #91 that left the catalog (#243), because the validate route of the cluster answers
+/// the check. A call of the route replaces each one: see "A check that a validate route answers"
+/// in the rule format of the book.
+const ANSWERED_BY_THE_ROUTE: &[&str] = &["gke-pool-multiple-3"];
+
+#[test]
+fn a_check_that_the_validate_route_answers_is_not_a_rule_of_the_catalog() {
+    let catalog = catalog::builtin().unwrap();
+    let back: Vec<&&str> = ANSWERED_BY_THE_ROUTE
+        .iter()
+        .filter(|id| catalog.rule(id).is_some())
+        .collect();
+    assert!(back.is_empty(), "a copy of the route is back: {back:?}");
+}
 
 /// The fault is in the second item, not the first (#144): a profile that comes second, a host of
 /// the second pool, a second pool with a host resource group, and a second compute cluster. Each

@@ -761,6 +761,37 @@ with another layer than its registry with `{"packs":{"results":[]}}`, the
 answer of a body that it takes. So strata refuses the candidate itself: see
 [The layer of a pack](../internals/palette/packs.md#the-layer-of-a-pack).
 
+## validate-route.sh
+
+No cluster, no profile of its own, and no cost. It asks
+`POST /v1/spectroclusters/{cloudType}/validate`, which changes nothing, through
+`strata preflight --rule palette-validate`. It needs the key, a directory with
+the body of a create for each engine, and the cloud accounts that the bodies
+name. A case makes one fault. The fault is one edit of the body of its engine, or
+a body of its own when the fault is in a profile. A case whose body is not in
+the directory is skipped, and `steps.log` names it.
+
+A case that passes shows that the route answers the check. The part of the rule
+that the case names can then leave the catalog. A case that fails shows that the
+route does not answer the check, and the rule stays. See
+[A check that a validate route answers](../reference/preflight-rules.md#a-check-that-a-validate-route-answers).
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `aws-clean`, `edge-clean`, `eks-clean`, `gcp-clean`, `maas-clean`, `azure-clean`, `vsphere-clean` | 0 | #243: the route takes the clean body of the engine, so a refusal in a case below is about its fault. No result yet. |
+| `vsphere-instance-floor-cpu`, `-memory`, `-disk`, `-no-type`, each with `-says` | 0 | #243: the route refuses a pool with no CPU, 512 MiB of memory, a 10 GiB disk, or no instance type (`vsphere-instance-floor`). No result yet. |
+| `eks-ami-type-al2`, `eks-ami-type-unknown`, each with `-says` | 0 | #243: the route refuses the type `AL2_x86_64` with `UnsupportedAmiType`, and a type that is not known (`eks-ami-type`). No result yet. |
+| `edge-two-node-pxk`, `edge-two-node-pxk-says` | 0 | #243: the route refuses a two-node cluster whose Kubernetes pack is not K3s with `TwoNodeClusterPackMissing` (`edge-two-node`). No result yet. |
+| `ssh-key-format-vsphere`, `ssh-key-format-edge`, each with `-says` | 0 | #243: the route refuses a key that is not an authorized key with `SshKeyValidationFailure` (`ssh-key-format`). No result yet. |
+| `azure-ssh-key-empty`, `azure-ssh-key-empty-says` | 0 | #243: the route refuses an empty `sshKey` (`azure-ssh-key`). No result yet. |
+| `pack-state-disabled`, `pack-state-deleted`, each with `-says` | 0 | #243: the route refuses a profile that holds a pack in the state `disabled` or `deleted` (`pack-state`). No result yet. |
+| `profile-cloud-mismatch`, `profile-cloud-mismatch-says` | 0 | #243: the route refuses a profile of another cloud type (`profile-cloud-mismatch`). No result yet. |
+| `pack-cloud-support`, `pack-cloud-support-says` | 0 | #243: the route refuses a pack version that does not list the cloud type (`pack-cloud-support`). No result yet. |
+| `vsphere-static-ip-pool-empty`, `vsphere-static-ip-pool-dhcp`, each with `-says` | 0 | #243: the route refuses a static network with no `parentPoolUid`, and a static network on a DHCP cluster (`vsphere-static-ip-pool`). No result yet. |
+| `vsphere-controlplane-endpoint-no-host`, `edge-vip-multi-node-no-host`, each with `-says` | 0 | #243: the route refuses the type `VIP` with an empty host (`vsphere-controlplane-endpoint`, `edge-vip-multi-node`). No result yet. |
+| `azure-subnets-in-vnet-no-cidr`, `azure-subnets-in-vnet-no-cidr-says` | 0 | #243: the route refuses a `vnetName` with an empty `vnetCidrBlock` (`azure-subnets-in-vnet`). No result yet. |
+| `ntp-servers-vsphere`, `ntp-servers-edge`, `ntp-servers-maas`, each with `-says` | 0 | #243: the route refuses a server that is not an address or a name (`ntp-servers`). No result yet. |
+
 ## export.sh
 
 No cluster, no profile of its own, and no cost. Each request is a `GET`. It
@@ -1180,7 +1211,7 @@ this table names the faults.
 
 | Engine | The faults made on purpose, by rule id |
 |---|---|
-| `gke` | `gke-pool-multiple-3`, `palette-validate` (a pool of 4), `gke-no-release-channel`, `gke-no-gpu`, `gke-autopilot`, `gcp-name-length`, `account-missing`, `instance-offering` |
+| `gke` | `palette-validate` (a pool of 4), `gke-no-release-channel`, `gke-no-gpu`, `gke-autopilot`, `gcp-name-length`, `account-missing`, `instance-offering` |
 | `eks` | `eks-one-zone`, `eks-worker-needed`, `update-strategy-eks`, `api-endpoint-reach`, `account-missing`, `instance-offering`, `ssh-key-pair` |
 | `aws` | `worker-cpu-floor`, `palette-validate` (one worker of four cores), `api-endpoint-reach`, `account-missing`, `instance-offering`, `ssh-key-pair` |
 | `gcp` | `worker-cpu-floor`, `palette-validate`, `gcp-name-length`, `account-missing`, `instance-offering`, `gcp-properties` |
@@ -1292,8 +1323,8 @@ GKE clusters of #90 and the GCP clusters of #74 all the same. So a documented
 role or API that a check does not find is a warning to read, and both rules
 are `warn`. The plan does not build, so a rule from the source stays a probe
 after these runs: `strata preflight --promotion` promotes a static rule only
-when a live run shows the fault (`status: seen`), such as `gke-pool-multiple-3`
-and `gke-no-release-channel` from #90.
+when a live run shows the fault (`status: seen`), such as
+`gke-no-release-channel` from #90.
 
 **gcp.** Four faults made on purpose, four caught. The GCP validate route
 applies the CPU floor as the AWS one does: one worker of four cores is

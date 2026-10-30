@@ -5,43 +5,6 @@ about: |
   The machine pools of the cluster: their size, their instance types, and what each engine needs
   of them before Palette can build the pool.
 rules:
-  - id: gke-pool-multiple-3
-    title: A GKE worker pool size is a multiple of 3
-    engines: [gke]
-    tier: static
-    level: preflight
-    severity: fail
-    promotion:
-      bar: 0.8
-      runs: ["20260929T043631Z"]
-    status: seen
-    what: |
-      Palette refuses a GKE worker pool whose size is not a multiple of 3, with `InvalidParam`
-      "Node pool size should be multiple of 3", at the create. Through the provider, that is after
-      a full apply. The rule holds for each worker pool, zonal or regional.
-    check:
-      kind: static
-      expr: |
-        [ .entity.spec.machinepoolconfig[]
-          | select((.poolConfig.isControlPlane // false) | not)
-          | select(((.poolConfig.size // 0) % 3) != 0)
-          | "pool \(.poolConfig.name) has size \(.poolConfig.size), not a multiple of 3" ]
-    fix:
-      owner: provider
-      text: Call the validate route of Palette at plan time, so the size is refused before the apply.
-    evidence:
-      - kind: run
-        ref: "#90"
-        note: "`InvalidParam` at create, after a full apply, with a pool of 4"
-      - kind: run
-        ref: "20260929T043631Z"
-        note: the plan made the fault and the check found it; the clean entity passed
-      - kind: source
-        note: the converter panics with InvalidParam for a managed GCP pool whose size is not a multiple of 3
-    tests:
-      - fault: fixtures/gke/pool-4.json
-        clean: fixtures/gke/clean.json
-
   - id: instance-offering
     title: The instance type is offered in each zone of the pool
     engines: [aws, eks, gcp, gke]

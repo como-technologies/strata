@@ -3546,6 +3546,290 @@ fn validate_packs_sh_stage_6_needs_a_profile_and_runs_only_when_its_number_is_gi
     assert!(!steps.contains("bump-"), "{steps}");
 }
 
+// ---- validate-route.sh -----------------------------------------------------------------------------
+
+/// The report of `strata preflight --rule palette-validate --json`, with the one check.
+fn route_report(verdict: &str, messages: &[&str]) -> String {
+    serde_json::json!({"checks": [{"id": "palette-validate", "verdict": verdict, "messages": messages}]})
+        .to_string()
+}
+
+/// A body of a create on vSphere that holds what the faults of validate-route.sh edit.
+const VSPHERE_BODY: &str = r#"{"spec": {
+  "cloudConfig": {
+    "staticIp": true,
+    "placement": {"network": {"networkName": "net", "parentPoolUid": "pool-1", "staticIp": true}},
+    "sshKeys": ["ssh-ed25519 AAAA barney"],
+    "ntpServers": ["pool.ntp.org"],
+    "controlPlaneEndpoint": {"type": "VIP", "host": "10.0.0.5"}
+  },
+  "machinepoolconfig": [{
+    "poolConfig": {"name": "worker-pool"},
+    "cloudConfig": {
+      "instanceType": {"numCPUs": 4, "memoryMiB": 8192, "diskGiB": 60},
+      "placements": [{"network": {"networkName": "net", "parentPoolUid": "pool-1", "staticIp": true}}]
+    }
+  }]
+}}"#;
+
+/// A stage for validate-route.sh with the clean bodies of vSphere and EKS in `bodies/`, and the
+/// answers of the route to the faults that it makes. `answers` replaces the answer for a case with
+/// a verdict and a message: a fault that the route takes, or a refusal for another reason.
+fn validate_route_stage(answers: &[(&str, &str, &str)]) -> Stage {
+    let mut stage = Stage::new(serde_json::json!({}));
+    std::fs::create_dir_all(stage.path("bodies")).unwrap();
+    std::fs::write(stage.path("bodies/vsphere-clean.json"), VSPHERE_BODY).unwrap();
+    std::fs::write(
+        stage.path("bodies/eks-clean.json"),
+        r#"{"spec": {"machinepoolconfig": [{"poolConfig": {"name": "worker-pool"}, "cloudConfig": {"amiType": "AL2023_x86_64_STANDARD"}}]}}"#,
+    )
+    .unwrap();
+    // a body of its own: the fault is in a profile
+    std::fs::write(stage.path("bodies/pack-state-disabled.json"), "{}").unwrap();
+    let refusals = [
+        (
+            "vsphere-instance-floor-cpu",
+            "InvalidParam: numCPUs should be equal or greater than 1",
+        ),
+        (
+            "vsphere-instance-floor-memory",
+            "InvalidParam: memoryMiB should be equal or greater than 1024 MiB",
+        ),
+        (
+            "vsphere-instance-floor-disk",
+            "InvalidParam: diskGiB should be equal or greater than 20 GiB",
+        ),
+        (
+            "vsphere-instance-floor-no-type",
+            "InvalidParam: instanceType should not be empty",
+        ),
+        ("eks-ami-type-al2", "UnsupportedAmiType: AL2_x86_64"),
+        (
+            "eks-ami-type-unknown",
+            "InvalidParam: Invalid parameter 'AmiType'",
+        ),
+        (
+            "ssh-key-format-vsphere",
+            "SshKeyValidationFailure: ssh: no key found",
+        ),
+        (
+            "vsphere-static-ip-pool-empty",
+            "InvalidParam: ParentPoolUid should not be empty",
+        ),
+        (
+            "vsphere-static-ip-pool-dhcp",
+            "InvalidParam: staticIp is not allowed on a DHCP cluster",
+        ),
+        (
+            "vsphere-controlplane-endpoint-no-host",
+            "InvalidParam: Host endpoint should not be empty",
+        ),
+        (
+            "ntp-servers-vsphere",
+            "InvalidParam: ntpServers entry is not an address",
+        ),
+        (
+            "pack-state-disabled",
+            "DisabledPacksForbidden: Disabled packs 'nginx' are forbidden",
+        ),
+    ];
+    for (case, message) in refusals {
+        let (verdict, message) = answers
+            .iter()
+            .find(|a| a.0 == case)
+            .map_or(("failed", message), |a| (a.1, a.2));
+        let messages: Vec<&str> = if message.is_empty() {
+            vec![]
+        } else {
+            vec![message]
+        };
+        let glob = if case == "pack-state-disabled" {
+            format!("preflight */{case}.json *")
+        } else {
+            format!("preflight {case}.json *")
+        };
+        stage.strata(&glob, 1, &route_report(verdict, &messages));
+    }
+    for engine in ["vsphere", "eks"] {
+        stage.strata(
+            &format!("preflight */{engine}-clean.json *"),
+            0,
+            &route_report("passed", &[]),
+        );
+    }
+    stage
+}
+
+#[test]
+fn validate_route_sh_sends_each_fault_to_the_route_and_expects_a_refusal_that_names_it() {
+    let stage = validate_route_stage(&[]);
+    let bodies = stage.path("bodies");
+    let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+
+    let cases = [
+        "vsphere-instance-floor-cpu",
+        "vsphere-instance-floor-memory",
+        "vsphere-instance-floor-disk",
+        "vsphere-instance-floor-no-type",
+        "eks-ami-type-al2",
+        "eks-ami-type-unknown",
+        "ssh-key-format-vsphere",
+        "vsphere-static-ip-pool-empty",
+        "vsphere-static-ip-pool-dhcp",
+        "vsphere-controlplane-endpoint-no-host",
+        "ntp-servers-vsphere",
+        "pack-state-disabled",
+    ];
+    let says: Vec<String> = cases.iter().map(|c| format!("{c}-says")).collect();
+    let mut ids = vec!["vsphere-clean", "eks-clean"];
+    ids.extend(cases);
+    ids.extend(says.iter().map(String::as_str));
+    passed(&steps, &ids);
+    // the clean body is asked for once, and a case with no body of its engine is named and skipped
+    assert_eq!(steps.matches("vsphere-clean ").count(), 1, "{steps}");
+    for skipped in [
+        "edge-two-node-pxk",
+        "azure-ssh-key-empty",
+        "ntp-servers-edge",
+        "pack-cloud-support",
+    ] {
+        assert!(
+            steps.contains(&format!("skipped {skipped}: no ")),
+            "{steps}"
+        );
+    }
+    assert!(
+        !steps.contains("pack-state-disabled: no"),
+        "an own body is read: {steps}"
+    );
+
+    // each fault is one edit of the clean body of its engine, and nothing else changes
+    let made =
+        |case: &str| -> serde_json::Value { read_json(&stage.path(&format!("out/{case}.json"))) };
+    let clean: serde_json::Value = serde_json::from_str(VSPHERE_BODY).unwrap();
+    let pool = "/spec/machinepoolconfig/0/cloudConfig";
+    assert_eq!(
+        made("vsphere-instance-floor-cpu").pointer(&format!("{pool}/instanceType/numCPUs")),
+        Some(&serde_json::json!(0))
+    );
+    assert_eq!(
+        made("vsphere-instance-floor-memory").pointer(&format!("{pool}/instanceType/memoryMiB")),
+        Some(&serde_json::json!(512))
+    );
+    assert_eq!(
+        made("vsphere-instance-floor-disk").pointer(&format!("{pool}/instanceType/diskGiB")),
+        Some(&serde_json::json!(10))
+    );
+    assert_eq!(
+        made("vsphere-instance-floor-no-type").pointer(&format!("{pool}/instanceType")),
+        None
+    );
+    assert_eq!(
+        made("ssh-key-format-vsphere")["spec"]["cloudConfig"]["sshKeys"],
+        serde_json::json!(["ssh-rsa"])
+    );
+    let empty = made("vsphere-static-ip-pool-empty");
+    assert_eq!(
+        empty.pointer("/spec/cloudConfig/placement/network/parentPoolUid"),
+        Some(&serde_json::json!(""))
+    );
+    assert_eq!(
+        empty.pointer(&format!("{pool}/placements/0/network/parentPoolUid")),
+        Some(&serde_json::json!(""))
+    );
+    let dhcp = made("vsphere-static-ip-pool-dhcp");
+    assert_eq!(
+        dhcp.pointer("/spec/cloudConfig/staticIp"),
+        Some(&serde_json::json!(false))
+    );
+    assert_eq!(
+        dhcp.pointer(&format!("{pool}/placements/0/network/staticIp")),
+        Some(&serde_json::json!(true))
+    );
+    assert_eq!(
+        made("vsphere-controlplane-endpoint-no-host")
+            .pointer("/spec/cloudConfig/controlPlaneEndpoint"),
+        Some(&serde_json::json!({"type": "VIP", "host": ""}))
+    );
+    assert_eq!(
+        made("ntp-servers-vsphere")["spec"]["cloudConfig"]["ntpServers"],
+        serde_json::json!(["not a host name!"])
+    );
+    assert_eq!(
+        made("eks-ami-type-al2").pointer("/spec/machinepoolconfig/0/cloudConfig/amiType"),
+        Some(&serde_json::json!("AL2_x86_64"))
+    );
+    // an edit leaves the rest of the body as it was
+    let mut same = made("ssh-key-format-vsphere");
+    same["spec"]["cloudConfig"]["sshKeys"] = clean["spec"]["cloudConfig"]["sshKeys"].clone();
+    assert_eq!(same, clean);
+}
+
+#[test]
+fn validate_route_sh_fails_on_a_fault_that_the_route_takes_and_on_a_refusal_for_another_reason() {
+    // the route takes an AL2 type: the rule `eks-ami-type` must stay
+    let stage = validate_route_stage(&[("eks-ami-type-al2", "passed", "")]);
+    let bodies = stage.path("bodies");
+    let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    assert!(
+        steps
+            .lines()
+            .any(|l| l.starts_with("FAIL") && l.contains("eks-ami-type-al2 ")),
+        "{steps}"
+    );
+    assert!(
+        steps
+            .lines()
+            .any(|l| l.starts_with("FAIL") && l.contains("eks-ami-type-al2-says ")),
+        "the report of a body that passed names no fault: {steps}"
+    );
+    passed(
+        &steps,
+        &["eks-ami-type-unknown", "vsphere-instance-floor-cpu"],
+    );
+
+    // the route refuses the cpu fault, but not for the fault: the refusal does not name the cpu
+    let stage = validate_route_stage(&[(
+        "vsphere-instance-floor-cpu",
+        "failed",
+        "ResourceNotFound: cloud account 'x' does not exist",
+    )]);
+    let bodies = stage.path("bodies");
+    let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1), "{steps}");
+    passed(&steps, &["vsphere-instance-floor-cpu"]);
+    assert!(
+        steps
+            .lines()
+            .any(|l| l.starts_with("FAIL") && l.contains("vsphere-instance-floor-cpu-says ")),
+        "{steps}"
+    );
+}
+
+#[test]
+fn validate_route_sh_prints_its_usage_and_needs_a_directory_of_bodies() {
+    let stage = Stage::new(serde_json::json!({}));
+    let o = stage.run("validate-route.sh", &["--help"]).0;
+    assert_eq!(o.status.code(), Some(0));
+    assert!(
+        text(&o.stdout).contains("The cluster validate route test (#243)"),
+        "{}",
+        text(&o.stdout)
+    );
+    let o = stage.run("validate-route.sh", &[]).0;
+    assert_eq!(o.status.code(), Some(2), "no directory is usage, exit 2");
+    let o = stage.run("validate-route.sh", &["/no/such/directory"]).0;
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("no directory /no/such/directory"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
 // ---- loop.sh ---------------------------------------------------------------------------------------
 
 /// A stage in a lab on AWS with the cloud account `lab-aws`, and a run that holds a repository of
