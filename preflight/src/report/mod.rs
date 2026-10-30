@@ -576,6 +576,31 @@ mod tests {
     }
 
     #[test]
+    fn an_evidence_entry_with_an_empty_reference_has_no_ref_in_the_json() {
+        let mut entry = check("a", Verdict::Passed, Level::Probe, Severity::Fail, false);
+        entry.evidence = vec![
+            Evidence {
+                kind: "source".into(),
+                reference: String::new(),
+                note: "Palette refuses the create.".into(),
+            },
+            Evidence {
+                kind: "run".into(),
+                reference: "20260929T042910Z".into(),
+                note: String::new(),
+            },
+        ];
+        let json = serde_json::to_value(&entry).unwrap();
+        assert_eq!(
+            json["evidence"],
+            serde_json::json!([
+                {"kind": "source", "note": "Palette refuses the create."},
+                {"kind": "run", "ref": "20260929T042910Z"},
+            ])
+        );
+    }
+
+    #[test]
     fn a_check_that_did_not_run_lowers_the_readiness_and_a_rule_that_does_not_apply_does_not() {
         let mut not_run = check("b", Verdict::NotRun, Level::Probe, Severity::Fail, false);
         not_run.messages = vec!["tier palette was not asked for".into()];

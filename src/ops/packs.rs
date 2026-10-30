@@ -221,7 +221,7 @@ where
 /// command reads them again from memory.
 ///
 /// It gives the architectures that the listing names for each version too: the part of the listing
-/// that the document leaves out. They are by registry uid, and then by version.
+/// that the document does not show. They are by registry uid, and then by version.
 pub(super) fn registry_packs_in<A: PaletteApi>(
     listings: &mut Registries<'_, A>,
     name: &str,

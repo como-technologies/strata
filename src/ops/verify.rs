@@ -131,7 +131,7 @@ fn live_holder<A: PaletteApi>(
     progress: &Progress,
 ) -> Result<Snapshot> {
     let raw = palette.subject_raw(kind, doc, progress)?;
-    // the record decides what the live record reads: a record that holds a part is checked on it
+    // the record decides what the live record reads: strata checks each part that the record holds
     let reads = HolderReads {
         profile: c.profile.as_deref(),
         pending: c.pending,

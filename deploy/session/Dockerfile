@@ -8,8 +8,8 @@
 # digest: a change of this file counts only after a change of that pin.
 FROM ghcr.io/como-technologies/riff-base@sha256:2799cd2e7c6e23ab4b9b576ad1331e7315044378a490317624c93d3d984ad5b1
 
-# The CI builds with the stable Rust of the day of its run. RUST_VERSION is that stable on the day
-# of the image, so that clippy finds the same lints as the CI. RUST_MSRV is the rust-version of
+# The CI builds with the latest stable Rust. RUST_VERSION is the latest stable Rust at the build of
+# the image, so that clippy finds the same lints as the CI. RUST_MSRV is the rust-version of
 # Cargo.toml, for the check "the lowest Rust version".
 ARG RUST_VERSION=1.99.1
 ARG RUST_MSRV=1.88
@@ -29,8 +29,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # jq: the scripts read each answer of Palette and each summary of strata with it, and the tests
-# run the scripts. The jq of Debian is 1.6. The CI has 1.7.1, and only from 1.7.1 does `jq -e`
-# exit with 4 on an empty file, which the tests of the CI scripts need.
+# run the scripts. The jq of Debian is 1.6. The CI has 1.7.1. From jq 1.7, `jq -e` exits with 4 on
+# an empty file, which the tests of the CI scripts need.
 RUN curl -fsSL -o /usr/local/bin/jq \
       "https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-amd64" \
  && echo "${JQ_SHA256}  /usr/local/bin/jq" | sha256sum -c - \

@@ -16,7 +16,7 @@ of each response.
 | `GET /v1/clusterprofiles/{uid}` | The metadata, the consumers, and the published pack references. `metadata.annotations.scope` gives the scope of the version: `project`, `tenant`, or `system`. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` | The registry digests and the manifest contents. |
 | `GET /v1/clusterprofiles/{uid}/variables` | The profile variables. |
-| `GET /v1/packs/{uid}` | Only when the profile has a draft: for each pack of the draft, `packValues[].schema[]`, with the `name` and the `format` of each value. Strata writes `********` over each value whose format is `password`. See [Secrets in the values](../internals/palette/profiles.md#secrets-in-the-values). `strata preflight` with a key also reads it for the pack of each layer of the profiles of the entity. A pack that Palette does not give, with a 404 or a 403 of a project key, has no entry in the world. |
+| `GET /v1/packs/{uid}` | Only when the profile has a draft: for each pack of the draft, `packValues[].schema[]`, with the `name` and the `format` of each value. Strata writes `********` over each value whose format is `password`. See [Secrets in the values](../internals/palette/profiles.md#secrets-in-the-values). `strata preflight` with a key also reads it for the pack of each layer of the profiles of the entity. A pack that Palette does not give, with each 4xx but 401 and 429, has no entry in the world. |
 | `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}` | Only for a version with a draft, once for each manifest of its two templates: `spec.published.content` and `spec.draft.content`. While a draft waits, `packs/manifests` gives the content of neither template. See [Drafts](../internals/palette/profiles.md#drafts). |
 | `GET /v1/dashboard/clusterprofiles/metadata` | The listing: `list`, and the uid of `<name>@<version>` and of `<name>@latest`. In a project, it holds the profiles of the project and the profiles of the tenant. |
 | `POST /v1/dashboard/clusterprofiles?limit=50` | The profile search, with the filter `scope`: one item for each profile name of that scope, with the uid of each version in `specSummary.versions[]`. `list` reads it for the scope of each version. In a project, it reads the tenant versions and the system versions. At tenant scope, it reads the system versions. Palette gives 50 names on a page, and strata raises `offset` as for `/v1/packs`. A Palette with no profile search answers HTTP 404 or 405, and the scopes stay unknown. |
@@ -40,10 +40,10 @@ reports the version as gone. A cluster does the same with its own document. See
 | `GET /v1/spectroclusters/{uid}/config/rbacs` | `items[]`: the role bindings of the cluster, each with `spec.bindings[]` of `namespace`, `role`, `subjects`, and `type`. A cluster record and `verify` read it for the `policy` tier. After an HTTP 404 or 405, `rbacs` holds `null`. After another HTTP error, the tier has no `rbacs`, `errors.rbacs` of the tier holds the error, and strata still writes the record. |
 | `GET /v1/spectroclusters/{uid}/config/namespaces` | `items[]`: the namespaces of the cluster, each with `metadata.name`, `spec.isRegex`, and `spec.resourceAllocation`. A cluster record and `verify` read it for the `policy` tier. After an HTTP 404 or 405, `namespaces` holds `null`. After another HTTP error, the tier has no `namespaces`, `errors.namespaces` of the tier holds the error, and strata still writes the record. |
 | `GET /v1/dashboard/spectroclusters/meta` | The listing: `list clusters`, the uid of a cluster name, and the second reading of `consumers` when the search takes no `clusterProfiles`. A cluster name goes out first as `GET /v1/spectroclusters/<name>`; strata reads the listing after that HTTP 404. |
-| `GET /v1/dashboard/spectroclusters/{uid}` | The summary: the health of the cluster, in `status.health.state`. The cluster document does not carry it. No command of strata reads this request. [The knurl adapter](../automation/knurl.md) reads it for each cluster, and `strata preflight --watch` reads it at each reading. |
+| `GET /v1/dashboard/spectroclusters/{uid}` | The summary: the health of the cluster, in `status.health.state`. The cluster document does not carry it. `strata preflight --watch` reads it at each reading, and [the knurl adapter](../automation/knurl.md) reads it for each cluster. No other command reads it. |
 | `GET /v1/notifications/spectrocluster/{uid}` | Whether an update waits for the cluster, every page. A cluster record and `list clusters --applied` read it. |
-| `GET /v1/events/components/spectrocluster/{uid}?limit=50` | The first 50 events of the cluster, in `items[]`. Palette gives `items: null` when the cluster has none. `strata preflight --watch` reads it at each reading, and keeps no other page. A 404 or a 403 of a project key gives no event. |
-| `GET /v1/cloudaccounts/{cloudType}/{uid}` | The cloud account that the entity names, for `strata preflight` with a key. A managed cluster uses the account of its cloud: `eks` uses `aws`. The world keeps no secret of it. A 404 or a 403 of a project key gives `null`. |
+| `GET /v1/events/components/spectrocluster/{uid}?limit=50` | The first 50 events of the cluster, in `items[]`. Palette gives `items: null` when the cluster has none. `strata preflight --watch` reads it at each reading, and keeps no other page. Each 4xx but 401 and 429 gives no event. |
+| `GET /v1/cloudaccounts/{cloudType}/{uid}` | The cloud account that the entity names, for `strata preflight` with a key. A managed cluster uses the account of its cloud: `eks` uses `aws`. The world keeps no secret of it. Each 4xx but 401 and 429 gives `null`. |
 | `GET /v1/spectroclusters/{uid}/repave/status` | The repave that waits for approval: its `source`, its reasons, and the time of its state. A cluster record reads it only when the cluster document says `status.repave.state: Pending`. After an HTTP error, `pendingRepaveError` holds the error, and strata still writes the record. |
 | `GET /v1/spectroclusters/{uid}/profileUpdates` | `profiles[]`: each profile of the cluster as the update that waits gives it, in the shape of `spec.clusterProfileTemplates`. `cluster:<cluster>@pending` reads it. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` | For `@pending`: the manifests of each profile in `profiles[]`. The cluster holds no copy of them yet. |
@@ -118,9 +118,11 @@ did not name: [consumers](../commands/consumers.md) says why, and
 the app profile lists, in its own project, and nothing more. `verify` on a
 cluster record reads each profile that the cluster runs.
 
-A command reads the project listing of a scope one time, and each registry
-listing of a scope one time. `behind` connects one time for each project of its
-pins, and keeps the registry listings of that project for all its pins.
+A command reads the project listing of a scope one time. A record, a resolve
+with its validate, and `behind` read each registry listing of a scope one time.
+`verify` of many pack records reads the registry listings again for each record.
+`behind` connects one time for each project of its pins, and keeps the registry
+listings of that project for all its pins.
 
 Palette serves `/v1/packs` 100 entries at a time. Strata raises `offset` by the
 entries it got, until a page is short or `offset` reaches `listmeta.count`.

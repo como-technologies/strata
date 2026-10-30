@@ -298,3 +298,14 @@ fn the_rules_schema_takes_get_and_post_and_reads_when_a_check_names_no_method() 
     assert_eq!(method["$ref"], "#/$defs/Method");
     assert_eq!(method["default"], "GET");
 }
+
+#[test]
+fn the_report_schema_does_not_require_the_ref_of_an_evidence_entry() {
+    let dir = tempfile::tempdir().unwrap();
+    let (code, out, err) = run(&["--schema", "report"], dir.path());
+    assert_eq!(code, 0, "{err}");
+    let schema: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let evidence = &schema["$defs"]["Evidence"];
+    assert!(evidence["properties"]["ref"].is_object(), "{evidence}");
+    assert_eq!(evidence["required"], serde_json::json!(["kind"]));
+}

@@ -595,9 +595,9 @@ impl ProjectListings {
     }
 }
 
-/// Fill in each row's project name from the project listing of `home`, which `listings` keeps.
-/// The name is a convenience, so a listing that cannot be read leaves every name empty and the
-/// reports print the uid alone. No request is made when no row names a project.
+/// Give each row the name of its project, from the project listing of `home` that `listings` keeps.
+/// The name is a convenience. So when strata cannot read the listing, each name stays empty and the
+/// reports print the uid alone. Strata sends no request when no row names a project.
 pub(super) fn name_projects_of<T, A: PaletteApi>(
     rows: &mut [T],
     uid_of: impl Fn(&T) -> &String,

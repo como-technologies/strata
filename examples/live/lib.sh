@@ -15,9 +15,9 @@ flag=${flag:-false}
 
 die() { echo "$script: $*" >&2; exit 2; }
 
-# A jq before 1.7.1 exits with 0 for `jq -e` when its input is empty, as it is when the command
+# A jq older than 1.7 exits with 0 for `jq -e` when its input is empty, as it is when the command
 # before it failed. A check on that output passes. For such a jq, this function exits with 4 when
-# `jq -e` prints nothing, as jq 1.7.1 does. `export -f` gives it to `bash -c` and to the scripts
+# `jq -e` prints nothing, as jq 1.7 does. `export -f` gives it to `bash -c` and to the scripts
 # that this one starts.
 if : | command jq -e . > /dev/null 2>&1; then
   jq() {

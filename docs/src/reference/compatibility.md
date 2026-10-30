@@ -42,8 +42,8 @@ empty text. The schema now gives the field the pack types. A record of a
 cluster leaves out a label whose value is not text, where 0.21.0 kept it with
 empty text. The labels are outside the root, so no root changes.
 
-After 0.22.1, `preflight --schema rules` describes the method of a Palette check
-with the words of the library. The values `GET` and `POST`, and the default
+After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
+from the library of strata. The values `GET` and `POST`, and the default
 `GET`, stay. A rule file reads the same, and the id stays.
 
 A field can also become absent, and that keeps the id as well. For most fields
@@ -120,9 +120,11 @@ strata reads each value of them:
 - the `status` of a sync
 
 Strata only writes its other documents, such as `strata-packs/1` and
-`strata-diff/1`, and does not read them. So their closed sets stay closed. A
-program can read such a document with the types of the library, such as
-`ops::PackBuild`. Then a value of a later release gives an error.
+`strata-diff/1`, and does not read them. So their closed sets stay closed. The
+`state` of a version and of a registry in `strata-packs/1` is an exception: it
+takes any text. A program can read such a document with the types of the
+library, such as `ops::PackBuild`. Then a value of a later release gives an
+error, except in that `state`.
 
 ## The command line
 
@@ -144,6 +146,20 @@ A jq program that reads `.events[]` now works in that case.
 After 0.22.1, `preflight cluster:<c>/<profile>` and `preflight
 cluster:<c>@pending` give a `usage` error and exit `2`. The checks read the
 whole cluster. These two forms failed before with a name lookup.
+
+After 0.22.1, an entry of `evidence[]` in the report of `strata preflight`
+has no `ref` when its reference is empty. It had `"ref": ""` before. The
+output of `preflight --schema report` no longer lists `ref` as required. A
+program that reads `ref` must read an absent `ref` as empty text.
+
+After 0.22.1, `behind` writes its report when strata cannot connect for the
+project of some pins. Each pin of that project has `error`, the run goes on, and
+the exit code is `2`, as for each pin error. Before, the run could stop with no
+report.
+
+After 0.22.1, `preflight cluster:<name>` no longer takes a source of 24 hex
+digits as a uid with no check. Strata tries each id as a uid first, and then as
+a name, as `strata snapshot` does. A name costs one more request, a 404.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later

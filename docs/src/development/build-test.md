@@ -26,7 +26,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/snapshot/` | A record: the document in `mod.rs`, the pack in `pack.rs`, the record of a cluster in `cluster.rs`, and the build from the responses in `build.rs`. `shape.rs` and `policy.rs` hold the fields of the `shape` tier and the `policy` tier of a cluster record. |
 | `src/cloud.rs` | The cloud types of Palette, and the rule for a pack that supports a cloud. |
 | `src/closed_set/` | The closed sets of a document. `mod.rs` holds the trait `ClosedSet`, its macro `impl_closed_set`, and `Open`. `legend.rs` holds the legend of a document: the meaning of each value of a closed set, by its name in the documents. |
-| `src/pack_type.rs`, `src/pack_state.rs`, `src/oci_provider.rs`, `src/profile_type.rs`, `src/scope.rs`, `src/conjunction.rs` | The closed sets of a document: the type and the state of a pack, the provider type of an OCI registry, the type of a profile, the scope of a version, and the join of a search. Each is one enum. `impl_closed_set` gives it `ALL`, `as_str`, and `parse`. |
+| `src/pack_type.rs`, `src/pack_state.rs`, `src/oci_provider.rs`, `src/profile_type.rs`, `src/scope.rs`, `src/conjunction.rs` | The closed sets of a document. `pack_type.rs` and `pack_state.rs` hold the type and the state of a pack, and `oci_provider.rs` the provider type of an OCI registry. `profile_type.rs` holds the type of a profile, `scope.rs` the scope of a version, and `conjunction.rs` the join of a search. Each is one enum. `impl_closed_set` gives it `ALL` and `as_str`, and the trait `ClosedSet` gives `parse`. |
 | `src/diff/` | The comparison of two snapshots. `mod.rs` holds the document and `compute`, and `leaf.rs` the comparison of a leaf. `pack.rs` compares the packs, `variables.rs` the variables, and `cluster.rs` the cluster records. `verify.rs` holds the verify report. `impact.rs` holds the impact of a change to a pack: the rules table and its levels. |
 | `src/validation.rs` | The answer of Palette to a validate route, which a record and a comparison share. |
 | `src/repave.rs` | The reasons of Palette for a repave, and a repave that waits for approval. |
@@ -44,7 +44,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `xtask/` | The development tools. `palette.rs` is the stand-in for the Palette API. `tenant.rs` and `chapters.rs` build the tenant of each chapter of the book. `book.rs` is the runner that writes `docs/src/output/`. `checks.rs` holds the rules that the pages must keep, and `files.rs` holds the scans of a directory. |
 | `tests/` | The tests of the crate, in one crate: `main.rs` names each file as a module, and `common/mod.rs` holds each helper that two files use. `cargo test verify::` runs the tests of `verify.rs`. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
-| `preflight/` | `strata-preflight`, a package of its own in the workspace: the rule format (`rule.rs`), the catalog (`catalog.rs`, `rules/*.yaml`), the jq engine (`jq.rs`), the world (`world.rs`), the checks (`probe.rs`), the run and the watch (`run.rs`), the confidence and the ledger (`confidence.rs`, `evidence/runs.yaml`), the report (`report/`, and `html.rs` for the page), and the fixtures of its tests (`fixture.rs`, `rules/fixtures/`). See [How preflight works](../internals/preflight.md). `report/mod.rs` holds the document, `scorecard.rs` the counts, `terminal.rs` and `markdown.rs` the two text forms, and `reproduce.rs` the lines that a person runs by hand. |
+| `preflight/` | `strata-preflight`, a package of its own in the workspace: see [How preflight works](../internals/preflight.md). `rule.rs` holds the rule format, `catalog.rs` and `rules/*.yaml` the catalog, and `jq.rs` the jq engine. `world.rs` holds the world, `probe.rs` the checks, and `run.rs` the run and the watch. `confidence.rs` and `evidence/runs.yaml` hold the confidence and the ledger, and `fixture.rs` and `rules/fixtures/` the fixtures of the tests. `report/` holds the report, and `html.rs` the page. In `report/`, `mod.rs` holds the document, `scorecard.rs` the counts, `terminal.rs` and `markdown.rs` the text forms, and `reproduce.rs` the lines to run by hand. |
 
 `api/palette/tests.rs`, `candidate/tests.rs`, and `error/tests.rs` hold the unit
 tests of their directory.
@@ -78,7 +78,7 @@ command directly. `cargo xtask` with no command prints its usage and exits `2`. 
 - the library tests against `MemoryApi`, a Palette API in memory
 - the tests of the binary over fixtures with the shape of the API responses
 - the tests of the scripts in `scripts/` and `examples/live/`, with stand-ins
-  for `gh` and `tofu`, and for a `jq` before 1.7.1
+  for `gh` and `tofu`, and for a `jq` older than 1.7
 - the fuzzing in `tests/fuzz.rs`
 
 No test uses the network.

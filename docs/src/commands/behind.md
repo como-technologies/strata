@@ -159,7 +159,7 @@ A scheduled job that keeps one issue open for each pack that is behind is
 - For each registry with a pin that is current, strata also reads the sync of
   the registry one time. It comes from the summary listing of its kind.
 - When strata cannot connect for a project, each pin of that project has the
-  error, and the other pins stay.
+  error. Strata still reads the pins of the other projects.
 - Behind is a decision, and not an error, so run `behind` apart from `verify`:
   the two fail for different reasons, and need different people.
 

@@ -134,7 +134,7 @@ fn tenant_run(args: &[&str], status: &str, body: &str, old_jq: bool) -> (Output,
     let dir = tempfile::tempdir().unwrap();
     let mut commands = vec![("curl", FAKE_CURL)];
     if old_jq {
-        commands.push(("jq", JQ_BEFORE_1_7_1));
+        commands.push(("jq", JQ_1_6));
     }
     let bin = fake_bin(dir.path(), &commands);
     let (status_file, body_file, log) = (
@@ -156,7 +156,7 @@ fn tenant_run(args: &[&str], status: &str, body: &str, old_jq: bool) -> (Output,
         .env("FAKE_CURL_LOG", &log)
         .output()
         .unwrap();
-    let urls = std::fs::read_to_string(&log).unwrap_or_default();
+    let urls = std::fs::read_to_string(&log).unwrap();
     (o, urls)
 }
 
@@ -334,6 +334,9 @@ fn tenant_digest(args: &[&str], routes: &[(&str, &str)], envs: &[(&str, &str)]) 
         std::fs::write(route_dir.join(key), body).unwrap();
     }
     let log = dir.path().join("tools.log");
+    // helm and crane write the log only when the script runs them. An empty log means no call, and
+    // the `unwrap` below stops the test when the log is gone.
+    std::fs::write(&log, "").unwrap();
     let log_path = log.display().to_string();
     let mut env = vec![("FAKE_TOOL_LOG", log_path.as_str())];
     env.extend_from_slice(envs);
@@ -344,7 +347,7 @@ fn tenant_digest(args: &[&str], routes: &[(&str, &str)], envs: &[(&str, &str)]) 
     let tmp = dir.path().join("tmp");
     Digest {
         out,
-        log: std::fs::read_to_string(&log).unwrap_or_default(),
+        log: std::fs::read_to_string(&log).unwrap(),
         tmp: tmp.display().to_string(),
         tmp_left: std::fs::read_dir(&tmp).unwrap().count(),
     }
@@ -771,7 +774,7 @@ fn files_under(dir: &Path) -> Vec<(String, String)> {
                 stack.push(p);
             } else {
                 let rel = p.strip_prefix(dir).unwrap().display().to_string();
-                out.push((rel, std::fs::read_to_string(&p).unwrap_or_default()));
+                out.push((rel, std::fs::read_to_string(&p).unwrap()));
             }
         }
     }
@@ -818,9 +821,8 @@ fn tenant_sh_diagnose_saves_what_holds_a_cluster_without_keeping_its_kubeconfig(
         "the kubeconfig carries credentials and is never saved: {names:?}"
     );
     assert!(!names.contains(&"errors.txt"), "nothing failed: {names:?}");
-    let sent = |key: &str| {
-        std::fs::read_to_string(root.path().join("routes/sent").join(key)).unwrap_or_default()
-    };
+    let sent =
+        |key: &str| std::fs::read_to_string(root.path().join("routes/sent").join(key)).unwrap();
     let kubeconfig_request = sent("GET_v1_spectroclusters_c-1_assets_kubeconfig.request");
     assert!(
         !kubeconfig_request.contains("application/json"),
@@ -1054,7 +1056,7 @@ fn aws_inventory(answers: &[(&str, &str)]) -> (Output, String) {
         .env("FAKE_AWS", &fake)
         .output()
         .unwrap();
-    let calls = std::fs::read_to_string(fake.join("calls.log")).unwrap_or_default();
+    let calls = std::fs::read_to_string(fake.join("calls.log")).unwrap();
     (o, calls)
 }
 
@@ -1327,7 +1329,7 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
 #[test]
 fn tenant_sh_takes_an_empty_answer_of_palette_as_no_answer_with_each_jq() {
     for old_jq in [false, true] {
-        let case = format!("jq before 1.7.1: {old_jq}");
+        let case = format!("old jq: {old_jq}");
 
         // a 404 with no body is a gateway problem, not a deleted cluster
         let (o, _) = tenant_run(&["cluster", "c-123"], "404", "", old_jq);
@@ -1342,11 +1344,7 @@ fn tenant_sh_takes_an_empty_answer_of_palette_as_no_answer_with_each_jq() {
         let root = tempfile::tempdir().unwrap();
         let routes = root.path().join("routes");
         std::fs::create_dir_all(&routes).unwrap();
-        let commands: &[(&str, &str)] = if old_jq {
-            &[("jq", JQ_BEFORE_1_7_1)]
-        } else {
-            &[]
-        };
+        let commands: &[(&str, &str)] = if old_jq { &[("jq", JQ_1_6)] } else { &[] };
         fake_bin(root.path(), commands);
         std::fs::write(
             routes.join("v1_clusterprofiles_prof-2"),
@@ -1670,16 +1668,33 @@ impl Stage {
             .map(|(k, v)| (*k, v.as_str()))
             .chain(self.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
             .collect();
+        // a script that runs no stage writes no steps.log. An empty log means no step, and the
+        // `unwrap` below stops the test when the log is gone.
+        std::fs::create_dir_all(root.join("out")).unwrap();
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(root.join("out/steps.log"))
+            .unwrap();
         let o = run_live(script, args, root, &env);
-        let steps = std::fs::read_to_string(root.join("out/steps.log")).unwrap_or_default();
+        let steps = std::fs::read_to_string(root.join("out/steps.log")).unwrap();
         (o, steps)
     }
 
-    /// Each body of `METHOD path` that the script sent, in order.
+    /// Each body of `METHOD path` that the script sent, in order. The list is empty when the
+    /// script sent none to that route, but only after the script sent a request to some route:
+    /// the stand-in makes the directory `routes/sent` at its first request.
     fn sent(&self, method: &str, path: &str) -> Vec<serde_json::Value> {
         let key = path.trim_start_matches('/').replace('/', "_");
-        let all = self.path(&format!("routes/sent/{method}_{key}.all"));
-        serde_json::Deserializer::from_str(&std::fs::read_to_string(all).unwrap_or_default())
+        let dir = self.path("routes/sent");
+        assert!(dir.is_dir(), "the script sent no request to any route");
+        let all = dir.join(format!("{method}_{key}.all"));
+        let sent = if all.exists() {
+            std::fs::read_to_string(all).unwrap()
+        } else {
+            String::new()
+        };
+        serde_json::Deserializer::from_str(&sent)
             .into_iter::<serde_json::Value>()
             .map(Result::unwrap)
             .collect()
@@ -1687,7 +1702,7 @@ impl Stage {
 
     /// Each command that OpenTofu ran, one line each.
     fn tofu_calls(&self) -> String {
-        std::fs::read_to_string(self.path("tofu.log")).unwrap_or_default()
+        std::fs::read_to_string(self.path("tofu.log")).unwrap()
     }
 }
 

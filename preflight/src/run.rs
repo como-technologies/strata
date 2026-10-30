@@ -257,13 +257,13 @@ impl Default for WatchOptions {
 
 /// One reading of a cluster during a build.
 ///
-/// The summary is `null`, and the events are empty, after a 404 or the 403 of a project key. A
-/// 401 or a 429 stops the watch with the error that names it, as a read of the world does.
+/// The summary is `null`, and the events are empty, after each 4xx but 401 and 429. A 401 or a 429
+/// stops the watch with the error that names it, as a read of the world does.
 ///
 /// # Errors
 ///
 /// [`Error::Palette`] with the error of the request for the cluster document, also a 404. The error
-/// of the summary or of the events, unless it is a 4xx other than a 401 or a 429.
+/// of the summary or of the events, when it is a 401, a 429, or not a 4xx.
 pub fn reading<A: PaletteApi>(palette: &Palette<A>, uid: &str, elapsed: Duration) -> Result<Value> {
     let cluster = palette.subject_document(SubjectKind::Cluster, uid)?;
     let summary = match palette.fetch_cluster_summary(uid) {

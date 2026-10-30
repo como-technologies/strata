@@ -239,8 +239,8 @@ cluster() {
     404)
       # A real not-found carries a JSON body with code ResourceNotFound. A plain-text 404 comes
       # from a gateway outage, when OpenTofu can report a destroy complete while the cluster runs.
-      # An empty body is a gateway problem too: `-s` makes it `[]`, because a jq before 1.7.1 exits
-      # with 0 for `jq -e` on an empty file.
+      # An empty body is a gateway problem too: `-s` makes it `[]`, because a jq older than 1.7
+      # exits with 0 for `jq -e` on an empty file.
       if jq -es '.[0].code == "ResourceNotFound"' "$tmp" >/dev/null 2>&1; then
         echo "$uid: not found"
         return 0

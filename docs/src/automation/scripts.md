@@ -40,7 +40,7 @@ status of `jq`, not of `strata`, so do not join the two with `&&`: that never
 reaches the test. Under `set -e`, run the comparison with `|| true`, or read its
 status on purpose.
 
-A `jq` older than 1.7.1 exits with `0` for an empty file, for example the report
+A `jq` older than 1.7 exits with `0` for an empty file, for example the report
 of a `strata` that failed. The gate then passes. Make sure that the file has
 content first:
 

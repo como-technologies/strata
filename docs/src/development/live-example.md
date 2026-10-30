@@ -99,7 +99,7 @@ its end.
 | `terraform/` | The profiles and the clusters, and the variables that the scripts set. `main.tf` holds the profiles; `cloud-aws.tf`, `cloud-gcp.tf`, and `cloud-eks.tf` hold the cloud account, the clusters, and the infrastructure packs of each cloud. `iam/eks-controllers.json` is the EKS policy of Palette, for the role of `cloud-eks.tf`. |
 | `tofu-install.sh` | Installs the pinned OpenTofu. `just tofu-install` runs it, and `just tofu-uninstall` removes it. |
 | `tf.sh` | Runs `tofu` with the key and the Palette address that strata uses. |
-| `lib.sh` | What the scripts share: the checks and their summary, the applies, the wait for a cluster, and the baseline. With a `jq` older than 1.7.1, it makes `jq -e` exit with `4` on an empty input, so a check on the output of a failed command fails. |
+| `lib.sh` | What the scripts share: the checks and their summary, the applies, the wait for a cluster, and the baseline. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on the output of a failed command fails. |
 | `baseline.sh` | Checks that the example is at its baseline. Each script needs it before it starts and after it ends. |
 | `tenant.sh` | Read-only lookups: the names for `terraform.tfvars`, the state of a cluster and what holds it, the cluster listing itself, diagnostics, the repave check of Palette, and a pack digest from its Helm or OCI registry. |
 | `diagnose.sh` | Saves diagnostics for each cluster in the state. The scripts and `just live-up` and `just live-down` run it when an apply fails or a wait stops. |

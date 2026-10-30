@@ -605,7 +605,9 @@ what it answered.
   - `elapsedMs`, and `ran`, the request or the command the check ran, with
     `answer`, its HTTP status or exit code.
   - `reproduce[]`: the lines a person runs to see the same thing.
-  - `fix` with `owner` and `text`; `evidence[]` with `kind`, `ref`, `note`.
+  - `fix` with `owner` and `text`; `evidence[]` with `kind`, `ref`, `note`. An
+    entry with an empty reference has no `ref`, and an entry with no note has
+    no `note`.
   - `confidence`, when the ledger has runs of the rule on this engine: `catch`
     and `clean`, each with `correct`, `total`, `rate`, and `lowerBound`; `bar`;
     `meetsBar`; and `runs[]`.
