@@ -1069,8 +1069,9 @@ pub fn markdown() -> Box<dyn strata::render::Renderer> {
     )
 }
 
-/// The summary of `strata verify` on the file of `record`, against the in-memory Palette `api` for
-/// each scope, read at `t1`.
+/// Run `strata verify` on `record` against the in-memory Palette `api`, read at `t1`.
+///
+/// The record goes in a file first, as `verify` reads one.
 pub fn verify_summary(
     record: &strata::snapshot::Snapshot,
     api: &strata::api::MemoryApi,

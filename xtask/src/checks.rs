@@ -19,7 +19,7 @@ pub struct OutputState {
     /// The name of the output file, without `.txt`.
     pub output: String,
     pub chapter: String,
-    /// The seed that reaches the output: one more than the `serve_here` calls before the step.
+    /// The state that the output belongs to: `just playground CHAPTER-N` serves state N.
     pub state: u32,
 }
 
@@ -351,8 +351,8 @@ fn seed_faults(
         .collect()
 }
 
-/// A live result is a fact, with no run id and no date. A reader cannot look a run id up, and a
-/// date tells them nothing about what strata does now. The pages once carried more than twenty of
+/// A live result is a fact, with no run id and no date. A reader cannot find a run id, and a date
+/// tells them nothing about what strata does now. The pages once carried more than twenty of
 /// them, which said only when somebody happened to run the example.
 fn cited_run_ids(repo: &Path) -> Vec<String> {
     let mut bad = Vec::new();

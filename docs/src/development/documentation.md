@@ -34,7 +34,8 @@ cargo install mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
    [What Palette does](../internals/palette.md), and add the check that
    establishes it to
    [What the live example verifies](./live-runs.md). Neither page tells the
-   reader which day a run happened on.
+   reader which day a run happened on. `just docs-check` fails on a page that
+   cites a run id.
 7. **Do not cite the code of Palette.** A page or a code comment states what
    Palette does. It does not give a path, a line number, or a function name
    from the code of Spectro Cloud. That code changes, and the reference becomes
