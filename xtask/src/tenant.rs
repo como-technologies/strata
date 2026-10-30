@@ -12,6 +12,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
 
+use crate::files::files_with_ext;
+
 /// The directory of the documents that Palette serves at tenant scope, with no `ProjectUid`.
 pub const TENANT: &str = "tenant";
 
@@ -663,16 +665,7 @@ impl Tenant {
     /// The documents directly inside one directory of a project, in name order, so a listing does
     /// not move when a file system gives another order.
     fn documents_in(&self, project: &str, path: &str) -> Vec<Value> {
-        let dir = self.root.join(project).join(path);
-        let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.is_file() && p.extension().is_some_and(|e| e == "json"))
-            .collect();
-        files.sort();
-        files
+        files_with_ext(&self.root.join(project).join(path), "json")
             .iter()
             .filter_map(|f| std::fs::read_to_string(f).ok())
             .filter_map(|t| serde_json::from_str(&t).ok())

@@ -8,28 +8,21 @@ use strata::diff::Status;
 use strata::diff::VerifyStatus;
 use strata::error::Error;
 use strata::ops;
-use strata::render::{self, Format};
 use strata::snapshot::{Snapshot, Template, UpstreamSource};
-use strata::term::color::Paint;
 use strata::term::progress::Progress;
 
 use crate::common;
 use common::{
-    PROFILE_LISTING, manifest_content, manifest_digest, manifest_entity, manifest_route,
-    no_template, no_variables, profile_document, serve_profile, snapshot_of,
+    DRAFT_PROFILE_UID, DRAFT_RULES, PROFILE_LISTING, PUBLISHED_RULES, RULES_UID, manifest_content,
+    manifest_digest, manifest_entity, manifest_route, no_template, no_variables, profile_document,
+    serve_profile, snapshot_of,
 };
 
-const UID: &str = "64f0000000000000000000d1";
-const RULES: &str = "64f00000000000000000a0e1";
 const ADDED: &str = "64f00000000000000000a0e2";
 const PUBLISHED_K8S: &str =
     "kubeadmconfig:\n  apiServer:\n    extraArgs:\n      audit-log-maxage: \"30\"";
 const DRAFT_K8S: &str =
     "kubeadmconfig:\n  apiServer:\n    extraArgs:\n      audit-log-maxage: \"90\"";
-const PUBLISHED_RULES: &str =
-    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: warn";
-const DRAFT_RULES: &str =
-    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: error";
 const ADDED_QUOTA: &str = "apiVersion: v1\nkind: ResourceQuota\nmetadata:\n  name: quota";
 
 /// A pack ref of a template: the Kubernetes pack with `k8s` as its values, and the manifest pack
@@ -54,11 +47,11 @@ fn template(k8s: &str, refs: Value) -> Value {
 fn palette_with_draft() -> MemoryApi {
     let published = template(
         PUBLISHED_K8S,
-        json!([{"name": "rules", "uid": RULES, "kind": "manifest"}]),
+        json!([{"name": "rules", "uid": RULES_UID, "kind": "manifest"}]),
     );
     let draft = template(
         DRAFT_K8S,
-        json!([{"name": "rules", "uid": RULES, "kind": "manifest"},
+        json!([{"name": "rules", "uid": RULES_UID, "kind": "manifest"},
                {"name": "quota", "uid": ADDED, "kind": "manifest"}]),
     );
     serve(published, draft, |name| match name {
@@ -66,11 +59,11 @@ fn palette_with_draft() -> MemoryApi {
         _ => "",
     })
     .with(
-        manifest_route(UID, "team-rules", RULES),
-        manifest_entity(RULES, "rules", PUBLISHED_RULES, DRAFT_RULES),
+        manifest_route(DRAFT_PROFILE_UID, "team-rules", RULES_UID),
+        manifest_entity(RULES_UID, "rules", PUBLISHED_RULES, DRAFT_RULES),
     )
     .with(
-        manifest_route(UID, "team-rules", ADDED),
+        manifest_route(DRAFT_PROFILE_UID, "team-rules", ADDED),
         manifest_entity(ADDED, "quota", "", ADDED_QUOTA),
     )
 }
@@ -105,13 +98,18 @@ fn serve(published: Value, draft: Value, content: impl Fn(&str) -> &'static str)
                             "manifests": manifests}})
         })
         .collect();
-    let document = profile_document(UID, "lab-profile", "1.0.0", published, Some(draft));
-    let manifests =
-        json!({"metadata": {"name": "lab-profile", "uid": UID}, "spec": {"packs": packs}});
-    serve_profile(MemoryApi::new(), UID, document, manifests, no_variables()).with(
+    let document = profile_document(
+        DRAFT_PROFILE_UID,
+        "lab-profile",
+        "1.0.0",
+        published,
+        Some(draft),
+    );
+    let manifests = json!({"metadata": {"name": "lab-profile", "uid": DRAFT_PROFILE_UID}, "spec": {"packs": packs}});
+    serve_profile(MemoryApi::new(), DRAFT_PROFILE_UID, document, manifests, no_variables()).with(
         PROFILE_LISTING,
         json!({"items": [
-            {"metadata": {"name": "lab-profile", "uid": UID}, "spec": {"version": "1.0.0"}}
+            {"metadata": {"name": "lab-profile", "uid": DRAFT_PROFILE_UID}, "spec": {"version": "1.0.0"}}
         ]}),
     )
 }
@@ -123,15 +121,15 @@ fn values<'a>(snap: &'a Snapshot, pack: &str) -> &'a str {
 #[test]
 fn a_draft_records_apart_from_its_version_and_compare_names_the_layer_that_the_publish_changes() {
     let api = palette_with_draft();
-    let version = snapshot_of(&api, UID).unwrap();
-    let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
+    let version = snapshot_of(&api, DRAFT_PROFILE_UID).unwrap();
+    let draft = snapshot_of(&api, &format!("{DRAFT_PROFILE_UID}@draft")).unwrap();
 
     assert_eq!(version.source.template, Template::Published);
     assert_eq!(draft.source.template, Template::Draft);
     assert!(!version.source.is_draft());
     assert!(draft.source.is_draft());
-    assert_eq!(draft.source.reference, format!("{UID}@draft"));
-    assert_eq!(draft.source.uid, UID);
+    assert_eq!(draft.source.reference, format!("{DRAFT_PROFILE_UID}@draft"));
+    assert_eq!(draft.source.uid, DRAFT_PROFILE_UID);
     assert_ne!(version.root, draft.root, "the draft is another content");
 
     // each record holds the content of its own template
@@ -160,7 +158,7 @@ fn a_draft_records_apart_from_its_version_and_compare_names_the_layer_that_the_p
 #[test]
 fn a_draft_by_name_and_version_reads_the_same_draft() {
     let api = palette_with_draft();
-    let by_uid = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
+    let by_uid = snapshot_of(&api, &format!("{DRAFT_PROFILE_UID}@draft")).unwrap();
     let by_name = snapshot_of(&api, "lab-profile@1.0.0@draft").unwrap();
     assert_eq!(by_name.root, by_uid.root);
     assert_eq!(by_name.source.reference, "lab-profile@1.0.0@draft");
@@ -171,21 +169,21 @@ fn a_draft_by_name_and_version_reads_the_same_draft() {
 fn a_version_with_no_draft_is_the_error_no_draft_and_reads_no_manifest_by_uid() {
     let published = template(
         PUBLISHED_K8S,
-        json!([{"name": "rules", "uid": RULES, "kind": "manifest"}]),
+        json!([{"name": "rules", "uid": RULES_UID, "kind": "manifest"}]),
     );
     let api = serve(published, no_template(), |_| PUBLISHED_RULES);
-    let err = snapshot_of(&api, &format!("{UID}@draft")).unwrap_err();
+    let err = snapshot_of(&api, &format!("{DRAFT_PROFILE_UID}@draft")).unwrap_err();
     assert!(
-        matches!(&err, Error::NoDraft { uid, .. } if uid == UID),
+        matches!(&err, Error::NoDraft { uid, .. } if uid == DRAFT_PROFILE_UID),
         "{err}"
     );
     assert_eq!(err.kind(), "no-draft");
     assert!(err.to_string().contains("has no draft"), "{err}");
 
     // the record of the version needs no more requests than before
-    let version = snapshot_of(&api, UID).unwrap();
+    let version = snapshot_of(&api, DRAFT_PROFILE_UID).unwrap();
     assert_eq!(manifest_content(&version, "rules"), Some(PUBLISHED_RULES));
-    let path = manifest_route(UID, "team-rules", RULES);
+    let path = manifest_route(DRAFT_PROFILE_UID, "team-rules", RULES_UID);
     assert_eq!(api.calls(&path), 0);
 }
 
@@ -195,16 +193,16 @@ fn a_version_that_was_never_published_records_the_manifest_content_of_its_draft(
     // that was never published has none
     let draft = template(
         DRAFT_K8S,
-        json!([{"name": "rules", "uid": RULES, "kind": "manifest"}]),
+        json!([{"name": "rules", "uid": RULES_UID, "kind": "manifest"}]),
     );
     let api = serve(no_template(), draft, |_| "").with(
-        manifest_route(UID, "team-rules", RULES),
-        manifest_entity(RULES, "rules", "", DRAFT_RULES),
+        manifest_route(DRAFT_PROFILE_UID, "team-rules", RULES_UID),
+        manifest_entity(RULES_UID, "rules", "", DRAFT_RULES),
     );
-    let snap = snapshot_of(&api, UID).unwrap();
+    let snap = snapshot_of(&api, DRAFT_PROFILE_UID).unwrap();
     assert_eq!(snap.source.template, Template::Draft);
     assert_eq!(manifest_content(&snap, "rules"), Some(DRAFT_RULES));
-    let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
+    let draft = snapshot_of(&api, &format!("{DRAFT_PROFILE_UID}@draft")).unwrap();
     assert_eq!(draft.root, snap.root, "the draft is the only template");
 
     // the record is of a draft, with or without @draft in its ref: the template says so
@@ -212,16 +210,14 @@ fn a_version_that_was_never_published_records_the_manifest_content_of_its_draft(
     assert!(draft.source.is_draft());
     let v = ops::verify(&snap, &Palette::new(&api), "t1", &Progress::silent()).unwrap();
     assert!(v.unchanged);
-    let verdict = render::renderer(Format::Terminal, Paint::off(), false)
-        .verdict(&v.diff)
-        .unwrap();
+    let verdict = common::terminal().verdict(&v.diff).unwrap();
     assert!(verdict.contains("holds the draft recorded t0"), "{verdict}");
 }
 
 #[test]
 fn the_candidate_of_a_draft_holds_the_content_of_the_draft() {
     let api = palette_with_draft();
-    let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
+    let draft = snapshot_of(&api, &format!("{DRAFT_PROFILE_UID}@draft")).unwrap();
     let c = Candidate::from_snapshot(&draft).unwrap();
     let text = strata::candidate::to_yaml(&c).unwrap();
     assert!(text.contains("audit-log-maxage: \"90\""), "{text}");
@@ -233,9 +229,9 @@ fn the_candidate_of_a_draft_holds_the_content_of_the_draft() {
 #[test]
 fn a_record_of_the_draft_verifies_against_the_version_once_the_draft_is_published() {
     let api = palette_with_draft();
-    let version = snapshot_of(&api, UID).unwrap();
-    let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
-    let r = render::renderer(Format::Terminal, Paint::off(), false);
+    let version = snapshot_of(&api, DRAFT_PROFILE_UID).unwrap();
+    let draft = snapshot_of(&api, &format!("{DRAFT_PROFILE_UID}@draft")).unwrap();
+    let r = common::terminal();
 
     // a version and its draft: not an edit in place
     let d = ops::compare(&version, &draft, "t1");
@@ -243,7 +239,7 @@ fn a_record_of_the_draft_verifies_against_the_version_once_the_draft_is_publishe
     let text = r.render(&d, &version, &draft, false).unwrap();
     assert!(
         text.contains(&format!(
-            "{UID}@draft is the draft of lab-profile@1.0.0 (uid {UID}): its publish makes this change"
+            "{DRAFT_PROFILE_UID}@draft is the draft of lab-profile@1.0.0 (uid {DRAFT_PROFILE_UID}): its publish makes this change"
         )),
         "{text}"
     );
@@ -265,7 +261,7 @@ fn a_record_of_the_draft_verifies_against_the_version_once_the_draft_is_publishe
     // the publish makes the draft the published template, and empties the draft
     let published = template(
         DRAFT_K8S,
-        json!([{"name": "rules", "uid": RULES, "kind": "manifest"},
+        json!([{"name": "rules", "uid": RULES_UID, "kind": "manifest"},
                {"name": "quota", "uid": ADDED, "kind": "manifest"}]),
     );
     let after = serve(published, no_template(), |name| match name {
@@ -287,7 +283,7 @@ fn a_record_of_the_draft_verifies_against_the_version_once_the_draft_is_publishe
         "the record of the version from before the publish drifts"
     );
     assert!(matches!(
-        snapshot_of(&after, &format!("{UID}@draft")),
+        snapshot_of(&after, &format!("{DRAFT_PROFILE_UID}@draft")),
         Err(Error::NoDraft { .. })
     ));
 }
@@ -306,7 +302,7 @@ fn a_record_of_the_version_takes_nothing_from_a_pack_that_only_the_draft_has() {
     draft["packs"][0]["tag"] = json!("1.30.7");
     draft["packs"][0]["digest"] = json!("sha256:k8s1307");
     let api = serve(published, draft, |_| "");
-    let version = snapshot_of(&api, UID).unwrap();
+    let version = snapshot_of(&api, DRAFT_PROFILE_UID).unwrap();
     let k8s = version
         .packs
         .iter()
@@ -318,7 +314,7 @@ fn a_record_of_the_version_takes_nothing_from_a_pack_that_only_the_draft_has() {
         UpstreamSource::NoDigest,
         "packs/manifests lists the 1.30.7 of the draft, and its digest is not the digest of 1.30.6"
     );
-    let draft = snapshot_of(&api, &format!("{UID}@draft")).unwrap();
+    let draft = snapshot_of(&api, &format!("{DRAFT_PROFILE_UID}@draft")).unwrap();
     let k8s = draft.packs.iter().find(|p| p.name == "kubernetes").unwrap();
     assert_eq!(k8s.version, "1.30.7");
     assert_eq!(k8s.hash.upstream_source, UpstreamSource::PackRef);

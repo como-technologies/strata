@@ -7,9 +7,7 @@ use serde_json::{Value, json};
 use strata::api::{MemoryApi, Palette};
 use strata::diff::{self, MaskedPack, VerifyStatus};
 use strata::ops::{self, PairStatus, Policy};
-use strata::render::{self, Format};
 use strata::snapshot::Snapshot;
-use strata::term::color::Paint;
 use strata::term::progress::Progress;
 
 use crate::common;
@@ -109,17 +107,13 @@ fn same_release_of_two_records_with_a_masked_value_names_the_pack_and_passes() {
             paths: vec![PATH.to_string()],
         }]
     );
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render_chain(&chain)
-        .unwrap();
+    let text = common::terminal().render_chain(&chain).unwrap();
     assert!(
         text.contains(&format!("\n               {NOTE}\n")),
         "{text}"
     );
     assert!(text.contains("SAME RELEASE: 1 pair passed"), "{text}");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render_chain(&chain)
-        .unwrap();
+    let md = common::markdown().render_chain(&chain).unwrap();
     assert!(md.contains(&format!("<br>{NOTE}")), "{md}");
     let json: Value = serde_json::to_value(&chain).unwrap();
     assert_eq!(
@@ -133,13 +127,9 @@ fn compare_of_two_records_with_a_masked_value_prints_the_note() {
     let (a, b) = (record(), record());
     let d = diff::compute(&a, &b, "t1", None);
     assert!(d.same);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let text = common::terminal().render(&d, &a, &b, false).unwrap();
     assert!(text.contains(&format!("note       {NOTE}\n")), "{text}");
-    let md = render::renderer(Format::Markdown, Paint::off(), false)
-        .render(&d, &a, &b, false)
-        .unwrap();
+    let md = common::markdown().render(&d, &a, &b, false).unwrap();
     assert!(md.contains(&format!("**Note:** {NOTE}")), "{md}");
     let grafana = d.packs.iter().find(|p| p.name == "grafana").unwrap();
     assert_eq!(grafana.masked, [PATH]);
@@ -155,7 +145,7 @@ fn verify_names_the_pack_with_a_masked_value_beside_its_line() {
     assert!(v.unchanged);
     let ver = v.diff.verify.as_ref().unwrap();
     assert_eq!(ver.status, VerifyStatus::Unchanged);
-    let text = render::renderer(Format::Terminal, Paint::off(), false)
+    let text = common::terminal()
         .render(&v.diff, &recorded, &v.live, false)
         .unwrap();
     let lines: Vec<&str> = text.lines().collect();

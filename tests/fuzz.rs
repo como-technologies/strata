@@ -20,7 +20,8 @@ use strata::term::progress::Progress;
 use common::{
     CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, Run, UID_B,
     against_closed_port, cluster_manifests_route, cluster_ref, cluster_route,
-    cluster_variables_route, listing, manifests_route, profile_route, strata_bin, variables_route,
+    cluster_variables_route, listing, manifests_route, profile_route, snapshot_of_ref, strata_bin,
+    variables_route,
 };
 
 /// xorshift64*: a deterministic source of cases, so a failure has a seed that reproduces it.
@@ -299,13 +300,7 @@ fn a_profile_of_junk_gives_a_record_that_round_trips() {
     let mut reached = 0;
     for case in 0..2_000 {
         let api = api_of_junk(&mut rng, uid);
-        let snap = ops::snapshot_for(
-            &Ref::Uid(uid.to_string()),
-            &ops::SnapshotOptions::default(),
-            || Ok(Palette::new(&api)),
-            "t0",
-            &Progress::silent(),
-        );
+        let snap = snapshot_of_ref(&api, &Ref::Uid(uid.to_string()), "t0");
         assert!(is_answer(&snap), "seed {} case {case}", seed());
         if snap.is_ok() {
             reached += 1;
@@ -346,13 +341,7 @@ fn a_cluster_of_junk_snapshots_or_errors() {
     let mut rng = Rng::new(seed().wrapping_add(3));
     for case in 0..2_000 {
         let api = api_of_junk(&mut rng, uid);
-        let r = ops::snapshot_for(
-            &cluster_ref(uid, None, false),
-            &ops::SnapshotOptions::default(),
-            || Ok(Palette::new(&api)),
-            "t0",
-            &Progress::silent(),
-        );
+        let r = snapshot_of_ref(&api, &cluster_ref(uid, None, false), "t0");
         assert!(is_answer(&r), "seed {} case {case}", seed());
     }
 }
@@ -393,13 +382,7 @@ fn a_diff_of_two_junk_records_answers() {
     let mut made: Vec<Snapshot> = Vec::new();
     while made.len() < 60 {
         let api = api_of_junk(&mut rng, uid);
-        if let Ok(s) = ops::snapshot_for(
-            &Ref::Uid(uid.to_string()),
-            &ops::SnapshotOptions::default(),
-            || Ok(Palette::new(&api)),
-            "t0",
-            &Progress::silent(),
-        ) {
+        if let Ok(s) = snapshot_of_ref(&api, &Ref::Uid(uid.to_string()), "t0") {
             made.push(s);
         }
     }

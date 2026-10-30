@@ -451,7 +451,7 @@ impl AppliedProfile {
 
     /// The template of the profile `uid` in `spec.clusterProfileTemplates` of a document: a
     /// cluster, a cluster group, or an edge host. `None` when the document does not apply it.
-    pub(crate) fn template_of<'a>(doc: &'a Value, uid: &str) -> Option<&'a Value> {
+    pub fn template_of<'a>(doc: &'a Value, uid: &str) -> Option<&'a Value> {
         arr(doc, "/spec/clusterProfileTemplates")
             .iter()
             .find(|t| str_at(t, "/uid") == uid)

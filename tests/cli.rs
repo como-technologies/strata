@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use common::{
-    PROFILE_LISTING, PROJECT_LISTING, Run, against_closed_port, read_json, snapshot_from_raw,
-    strata_bin, write_record,
+    PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port, read_json,
+    snapshot_from_raw, strata_bin, write_record,
 };
 
 const ESC: char = '\x1b';
@@ -199,7 +199,7 @@ fn changed_profiles_report_every_kind_of_change() {
     let t = &r.out;
     assert!(has_line(
         t,
-        "^lab-profile@1.2.0 (uid 64f0000000000000000000a1)  ->  lab-profile@1.3.0 (uid 64f0000000000000000000b2)"
+        &format!("^lab-profile@1.2.0 (uid {UID_A})  ->  lab-profile@1.3.0 (uid {UID_B})")
     ));
     assert!(t.contains("CHANGED"));
     assert!(has_line(t, "^consumers  0 -> 2 clusters"));
@@ -704,7 +704,7 @@ fn a_cluster_snapshot_from_raw_compares_against_profile_records() {
         has_line(
             &r.out,
             &format!(
-                "^lab-profile@1.3.0 (uid 64f0000000000000000000b2)  ->  lab-profile@1.3.0 on cluster lab-cluster (uid {uid})"
+                "^lab-profile@1.3.0 (uid {UID_B})  ->  lab-profile@1.3.0 on cluster lab-cluster (uid {uid})"
             )
         ),
         "{}",
