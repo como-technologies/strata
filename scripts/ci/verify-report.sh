@@ -150,7 +150,8 @@ now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # ---- the check -------------------------------------------------------------------------------
 code=0
 "$strata" verify --summary --quiet --format json "${allow[@]+"${allow[@]}"}" "${patterns[@]}" > "$work/summary.json" 2> "$work/summary.err" || code=$?
-if ! jq -e '.schema == "strata-verify-summary/1"' "$work/summary.json" > /dev/null 2>&1; then
+# -s reads the file as an array: a jq before 1.7.1 exits with 0 for `jq -e` on an empty file
+if ! jq -es '.[0].schema == "strata-verify-summary/1"' "$work/summary.json" > /dev/null 2>&1; then
   cat "$work/summary.err" >&2
   die "strata verify checked nothing (exit $code); no issue was touched"
 fi

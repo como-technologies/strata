@@ -995,6 +995,31 @@ pub fn path_with(bin: &Path) -> String {
     format!("{}:{}", bin.display(), std::env::var("PATH").unwrap())
 }
 
+/// A `jq` that acts as jq 1.6 and jq 1.7.0, which the jq of Debian 12 and kadomony are: `jq -e`
+/// exits with 0 when its input is empty. jq 1.7.1 exits with 4. A call with `-s` or `-n` always
+/// has an input value, so it gets no fault. Each other call goes to the next `jq` in `PATH`, so a
+/// test shows the fault with the jq 1.7.1 of the CI and of the session image.
+///
+/// The input is the last argument when it is a file, and else the standard input.
+pub const JQ_BEFORE_1_7_1: &str = r#"#!/usr/bin/env bash
+PATH=${PATH#"$(dirname "$0")":}
+exit_status= whole=
+for a in "$@"; do
+  case "$a" in --exit-status) exit_status=1 ;; --slurp|--null-input) whole=1 ;; --*) continue ;; esac
+  case "$a" in -*e*) exit_status=1 ;; esac
+  case "$a" in -*[sn]*) whole=1 ;; esac
+done
+[ -n "$exit_status" ] && [ -z "$whole" ] || exec jq "$@"
+input=${!#}
+if [ ! -f "$input" ]; then
+  input=$(mktemp)
+  trap 'rm -f "$input"' EXIT
+  cat > "$input"
+fi
+grep -q '[^[:space:]]' "$input" || exit 0
+jq "$@" < "$input"
+"#;
+
 /// The lines of the file at `path`, or none when there is no file.
 pub fn lines_of(path: &Path) -> Vec<String> {
     fs::read_to_string(path)

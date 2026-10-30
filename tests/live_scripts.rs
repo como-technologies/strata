@@ -128,10 +128,18 @@ fn tenant_cluster(status: &str, body: &str) -> (Output, String) {
 
 /// Run tenant.sh with one canned answer, and report what it asked for.
 fn tenant_sh(args: &[&str], status: &str, body: &str) -> (Output, String) {
+    tenant_run(args, status, body, false)
+}
+
+/// Run tenant.sh with one canned answer. When `old_jq` is true, `jq` acts as jq 1.6.
+fn tenant_run(args: &[&str], status: &str, body: &str, old_jq: bool) -> (Output, String) {
     let dir = tempfile::tempdir().unwrap();
     let bin = dir.path().join("bin");
     std::fs::create_dir(&bin).unwrap();
     executable(&bin.join("curl"), FAKE_CURL);
+    if old_jq {
+        executable(&bin.join("jq"), JQ_BEFORE_1_7_1);
+    }
     let (status_file, body_file, log) = (
         dir.path().join("status"),
         dir.path().join("body"),
@@ -1323,6 +1331,49 @@ fn tenant_sh_repave_asks_palette_whether_a_move_to_another_profile_version_repav
         "{}",
         text(&o.stderr)
     );
+}
+
+#[test]
+fn tenant_sh_takes_an_empty_answer_of_palette_as_no_answer_with_each_jq() {
+    for old_jq in [false, true] {
+        let case = format!("jq before 1.7.1: {old_jq}");
+
+        // a 404 with no body is a gateway problem, not a deleted cluster
+        let (o, _) = tenant_run(&["cluster", "c-123"], "404", "", old_jq);
+        assert_eq!(o.status.code(), Some(2), "{case}: {}", text(&o.stdout));
+        assert!(
+            text(&o.stderr).contains("not proof of deletion"),
+            "{case}: {}",
+            text(&o.stderr)
+        );
+
+        // a 200 with no body to the check of the repave has no isRepaveRequired
+        let root = tempfile::tempdir().unwrap();
+        let routes = root.path().join("routes");
+        std::fs::create_dir_all(root.path().join("bin")).unwrap();
+        std::fs::create_dir_all(&routes).unwrap();
+        if old_jq {
+            executable(&root.path().join("bin/jq"), JQ_BEFORE_1_7_1);
+        }
+        std::fs::write(
+            routes.join("v1_clusterprofiles_prof-2"),
+            r#"{"metadata":{"uid":"prof-2"},"spec":{"published":{"packs":[]}}}"#,
+        )
+        .unwrap();
+        std::fs::write(routes.join("v1_spectroclusters_c-1_validate_repave"), "").unwrap();
+        let o = run_live(
+            "tenant.sh",
+            &["repave", "c-1", "prof-1", "prof-2"],
+            root.path(),
+            &[],
+        );
+        assert_eq!(o.status.code(), Some(2), "{case}: {}", text(&o.stdout));
+        assert!(
+            text(&o.stderr).contains("Palette's answer has no isRepaveRequired"),
+            "{case}: {}",
+            text(&o.stderr)
+        );
+    }
 }
 
 // ---- preflight.sh and preflight-plan.sh ------------------------------------------------------------

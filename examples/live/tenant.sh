@@ -148,7 +148,8 @@ repave() {
     ${PROJECT:+-H "ProjectUid: $PROJECT"} --data-binary "@$tmp/body" \
     "$API/v1/spectroclusters/$cluster/validate/repave")
   [ "$status" = 200 ] || die "validating the repave of $cluster answered HTTP $status: $(head -c 300 "$tmp/answer")"
-  jq -e 'has("isRepaveRequired")' "$tmp/answer" > /dev/null || die "Palette's answer has no isRepaveRequired"
+  jq -es '.[0] | type == "object" and has("isRepaveRequired")' "$tmp/answer" > /dev/null \
+    || die "Palette's answer has no isRepaveRequired"
   if jq -e '.isRepaveRequired' "$tmp/answer" > /dev/null; then
     echo "$what: repave"
     jq -r '(.reasons // [])[] | "  \(.code): \(.message)\(if (.pack.diffConfigKeys // []) == [] then "" else " (\(.pack.diffConfigKeys | join(", ")))" end)"' "$tmp/answer"
@@ -238,7 +239,9 @@ cluster() {
     404)
       # A real not-found carries a JSON body with code ResourceNotFound. A plain-text 404 comes
       # from a gateway outage, when OpenTofu can report a destroy complete while the cluster runs.
-      if jq -e '.code == "ResourceNotFound"' "$tmp" >/dev/null 2>&1; then
+      # An empty body is a gateway problem too: `-s` makes it `[]`, because a jq before 1.7.1 exits
+      # with 0 for `jq -e` on an empty file.
+      if jq -es '.[0].code == "ResourceNotFound"' "$tmp" >/dev/null 2>&1; then
         echo "$uid: not found"
         return 0
       fi
