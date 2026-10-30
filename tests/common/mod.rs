@@ -826,9 +826,34 @@ pub fn resolved_values_route(uid: &str) -> String {
     format!("/v1/clusterprofiles/{uid}/packs/resolvedValues")
 }
 
+/// The value of each macro of the cluster `uid`, as Palette resolves it.
+pub fn cluster_resolved_values_route(uid: &str) -> String {
+    format!("{}/packs/resolvedValues", cluster_route(uid))
+}
+
+/// The value of each macro of the cluster group `uid`, as Palette resolves it.
+pub fn group_resolved_values_route(uid: &str) -> String {
+    format!("{}/packs/resolvedValues", group_route(uid))
+}
+
 /// The document of the cluster `uid`, `GET /v1/spectroclusters/{uid}`.
 pub fn cluster_route(uid: &str) -> String {
     format!("/v1/spectroclusters/{uid}")
+}
+
+/// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`.
+pub fn group_route(uid: &str) -> String {
+    format!("/v1/clustergroups/{uid}")
+}
+
+/// The document of the app profile `uid`, `GET /v1/appProfiles/{uid}`.
+pub fn app_profile_route(uid: &str) -> String {
+    format!("/v1/appProfiles/{uid}")
+}
+
+/// The document of the edge host `uid`, `GET /v1/edgehosts/{uid}`.
+pub fn edge_host_route(uid: &str) -> String {
+    format!("/v1/edgehosts/{uid}")
 }
 
 /// The pack manifests of each profile of the cluster `uid`.

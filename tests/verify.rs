@@ -21,11 +21,13 @@ use strata::term::progress::Progress;
 use common::{
     CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
     OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, REGISTRY_LISTING,
-    SECRET_VALUE, UID_A, UID_ADDONS, UID_B, candidate_snapshot, cluster_manifests_route,
-    cluster_ref, cluster_route, cluster_variables_route, listing, manifest_route, manifests_route,
-    no_manifests, no_template, no_variables, pack_listing_route, post, profile_document,
-    profile_route, read_json, resolved_values_route, serve_fixture, serve_profile, snapshot_of,
-    snapshot_of_at, snapshot_of_ref, strata_bin, template, variables_route, write_record,
+    SECRET_VALUE, UID_A, UID_ADDONS, UID_B, app_profile_route, candidate_snapshot,
+    cluster_manifests_route, cluster_ref, cluster_resolved_values_route, cluster_route,
+    cluster_variables_route, edge_host_route, group_resolved_values_route, group_route, listing,
+    manifest_route, manifests_route, no_manifests, no_template, no_variables, pack_listing_route,
+    post, profile_document, profile_route, read_json, resolved_values_route, serve_fixture,
+    serve_profile, snapshot_of, snapshot_of_at, snapshot_of_ref, strata_bin, template,
+    variables_route, write_record,
 };
 
 #[test]
@@ -1925,12 +1927,12 @@ fn verify_refetches_the_cluster_for_a_cluster_record() {
 
 /// The route of the role bindings of the fixture cluster.
 fn rbacs_route() -> String {
-    format!("/v1/spectroclusters/{CLUSTER_UID}/config/rbacs")
+    format!("{}/config/rbacs", cluster_route(CLUSTER_UID))
 }
 
 /// The route of the namespaces of the fixture cluster.
 fn namespaces_route() -> String {
-    format!("/v1/spectroclusters/{CLUSTER_UID}/config/namespaces")
+    format!("{}/config/namespaces", cluster_route(CLUSTER_UID))
 }
 
 /// Cluster b with the five settings of the policy tier, and one role binding to `subjects` and
@@ -2344,7 +2346,7 @@ fn a_consumer_row_names_its_project_and_falls_back_to_the_uid() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let api = serve_b_with_named_consumer(dir.path()).with(
-        "/v1/spectroclusters/cluster-aaa",
+        cluster_route("cluster-aaa"),
         cluster_doc("cluster-aaa", "alpha", "p1", "Running"),
     );
 
@@ -2395,7 +2397,7 @@ fn a_consumer_with_no_project_is_read_in_the_scope_the_profile_was_read_in() {
     let in_p1 = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_B)
         .with(profile_route(UID_B), profile)
         .with(
-            "/v1/spectroclusters/cluster-aaa",
+            cluster_route("cluster-aaa"),
             cluster_doc("cluster-aaa", "alpha", "", "Running"),
         );
 
@@ -2434,7 +2436,7 @@ fn consumers_lists_each_cluster_with_name_project_and_state_from_its_own_project
     common::make_fixtures(dir.path());
     let tenant = serve_b_with_named_consumer(dir.path());
     let in_p1 = MemoryApi::new().with(
-        "/v1/spectroclusters/cluster-aaa",
+        cluster_route("cluster-aaa"),
         cluster_doc("cluster-aaa", "alpha", "p1", "Running"),
     );
     let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
@@ -2539,11 +2541,11 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
     };
     let in_p1 = MemoryApi::new()
         .with(
-            "/v1/spectroclusters/cluster-aaa",
+            cluster_route("cluster-aaa"),
             runs("cluster-aaa", "alpha", "1.3.0"),
         )
         .with(
-            "/v1/spectroclusters/cluster-bbb",
+            cluster_route("cluster-bbb"),
             runs("cluster-bbb", "beta", "1.2.9"),
         );
     let connect = |scope: Option<&str>| {
@@ -2800,7 +2802,7 @@ fn consumers_exits_1_when_a_consumer_is_found_and_the_second_reading_fails() {
     common::make_fixtures(dir.path());
     let api = serve_b_with_named_consumer(dir.path())
         .with(
-            "/v1/spectroclusters/cluster-aaa",
+            cluster_route("cluster-aaa"),
             cluster_doc("cluster-aaa", "alpha", "p1", "Running"),
         )
         .failing(CLUSTER_LISTING, 500, "boom");
@@ -2843,7 +2845,7 @@ fn the_second_reading_finds_a_consumer_the_profile_does_not_list() {
                 "status": {"state": "Running"}
             }]),
         )
-        .with("/v1/spectroclusters/cluster-ccc", applies);
+        .with(cluster_route("cluster-ccc"), applies);
     let r = ops::consumers(
         &Ref::Uid(UID_A.into()),
         |_| Ok(Palette::new(api.clone())),
@@ -3006,14 +3008,8 @@ fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
             serde_json::json!({"items": [search_item("cluster-vvv", "vc-1", "p1", "nested")],
                                "listmeta": {"continue": ""}}),
         )
-        .with(
-            "/v1/spectroclusters/cluster-ccc",
-            runs("cluster-ccc", "gamma"),
-        )
-        .with(
-            "/v1/spectroclusters/cluster-vvv",
-            runs("cluster-vvv", "vc-1"),
-        );
+        .with(cluster_route("cluster-ccc"), runs("cluster-ccc", "gamma"))
+        .with(cluster_route("cluster-vvv"), runs("cluster-vvv", "vc-1"));
     let r = ops::consumers(
         &Ref::Uid(UID_A.into()),
         |_| Ok(Palette::new(&api)),
@@ -3040,8 +3036,8 @@ fn the_second_reading_asks_the_cluster_search_and_finds_a_virtual_cluster() {
         .filter(|(path, _)| path == CLUSTER_SEARCH)
         .count();
     assert_eq!(searches, 2);
-    assert_eq!(api.calls("/v1/spectroclusters/cluster-ccc"), 1);
-    assert_eq!(api.calls("/v1/spectroclusters/cluster-vvv"), 1);
+    assert_eq!(api.calls(&cluster_route("cluster-ccc")), 1);
+    assert_eq!(api.calls(&cluster_route("cluster-vvv")), 1);
     assert_eq!(api.calls(CLUSTER_LISTING), 0);
 
     let text = render::renderer(Format::Terminal, Paint::off(), false)
@@ -3126,7 +3122,7 @@ fn with_pinning_group(api: MemoryApi) -> MemoryApi {
         serde_json::json!({"items": [{"uid": "g1", "name": "dev-group"}]}),
     )
     .with(
-        "/v1/clustergroups/g1",
+        group_route("g1"),
         serde_json::json!({"metadata": {"uid": "g1", "name": "dev-group"},
             "spec": {"clusterProfileTemplates": [{"uid": UID_A, "name": "lab-profile"}]}}),
     )
@@ -3136,7 +3132,7 @@ fn with_pinning_group(api: MemoryApi) -> MemoryApi {
         serde_json::json!({"items": [{"metadata": {"uid": "vc-1", "name": "vc-1",
             "annotations": {"projectUid": "p1"}}}], "listmeta": {"continue": ""}}),
     )
-    .with("/v1/spectroclusters/vc-1", vc)
+    .with(cluster_route("vc-1"), vc)
 }
 
 #[test]
@@ -3158,7 +3154,7 @@ fn the_second_reading_asks_for_no_virtual_cluster_when_the_search_takes_no_envir
             serde_json::json!({"items": [search_item("cluster-ccc", "gamma", "p1", "aws")],
                                "listmeta": {"continue": ""}}),
         )
-        .with("/v1/spectroclusters/cluster-ccc", runs);
+        .with(cluster_route("cluster-ccc"), runs);
     let r = ops::consumers(
         &Ref::Uid(UID_A.into()),
         |_| Ok(Palette::new(&api)),
@@ -3207,7 +3203,7 @@ fn the_second_reading_finds_a_virtual_cluster_through_the_group_that_pins_the_ve
         ),
         (1, 1, 1)
     );
-    assert_eq!(api.calls("/v1/spectroclusters/vc-1"), 1);
+    assert_eq!(api.calls(&cluster_route("vc-1")), 1);
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render_consumers(&r)
         .unwrap();
@@ -3248,7 +3244,7 @@ fn the_second_reading_does_not_read_again_a_virtual_cluster_that_the_list_names(
     assert!(!r.consumers[0].unlisted);
     assert_eq!((r.clusters_read.groups, r.clusters_read.members), (1, 0));
     // read once, for the consumer list, and not again by the group reading
-    assert_eq!(api.calls("/v1/spectroclusters/vc-1"), 1);
+    assert_eq!(api.calls(&cluster_route("vc-1")), 1);
 }
 
 #[test]
@@ -3266,8 +3262,8 @@ fn the_line_of_the_second_reading_counts_a_virtual_cluster_that_strata_cannot_re
             serde_json::json!({"items": [{"metadata": {"uid": "c-9", "name": "c-9",
                 "annotations": {"projectUid": "p1"}}}], "listmeta": {"continue": ""}}),
         )
-        .with("/v1/spectroclusters/c-9", c9)
-        .failing("/v1/spectroclusters/vc-1", 500, "boom");
+        .with(cluster_route("c-9"), c9)
+        .failing(cluster_route("vc-1"), 500, "boom");
     let r = ops::consumers(
         &Ref::Uid(UID_A.into()),
         |_| Ok(Palette::new(&api)),
@@ -3303,7 +3299,7 @@ fn the_second_reading_reads_a_group_in_the_scope_of_the_key_when_the_tenant_cann
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     let tenant = with_pinning_group(serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A))
-        .failing("/v1/clustergroups/g1", 403, "forbidden")
+        .failing(group_route("g1"), 403, "forbidden")
         .failing(MEMBERS_POST.as_str(), 403, "forbidden");
     let home = with_pinning_group(serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A));
     let r = ops::consumers(
@@ -3320,8 +3316,8 @@ fn the_second_reading_reads_a_group_in_the_scope_of_the_key_when_the_tenant_cann
     assert_eq!(r.consumers[0].uid, "vc-1");
     assert_eq!((r.clusters_read.groups, r.clusters_read.members), (1, 1));
     assert!(r.clusters_read.groups_error.is_none());
-    assert_eq!(tenant.calls("/v1/clustergroups/g1"), 1);
-    assert_eq!(home.calls("/v1/clustergroups/g1"), 1);
+    assert_eq!(tenant.calls(&group_route("g1")), 1);
+    assert_eq!(home.calls(&group_route("g1")), 1);
     // the tenant refuses the virtual clusters of the group too, and the scope of the key lists them
     assert_eq!(tenant.calls(&MEMBERS_POST), 1);
     assert_eq!(home.calls(&MEMBERS_POST), 1);
@@ -3359,7 +3355,7 @@ fn the_second_reading_searches_a_project_profile_in_its_own_project() {
             &profile_search("lab-profile", true),
             serde_json::json!({"items": [], "listmeta": {"continue": ""}}),
         )
-        .with("/v1/spectroclusters/cluster-ccc", doc);
+        .with(cluster_route("cluster-ccc"), doc);
     let scopes = std::cell::RefCell::new(Vec::new());
     let r = ops::consumers(
         &Ref::Uid(UID_A.into()),
@@ -3407,9 +3403,9 @@ fn the_second_reading_reads_the_listing_when_the_search_takes_no_profile() {
                  "status": {"state": "Running"}},
             ]),
         )
-        .with("/v1/spectroclusters/cluster-ccc", applies)
+        .with(cluster_route("cluster-ccc"), applies)
         .with(
-            "/v1/spectroclusters/cluster-ddd",
+            cluster_route("cluster-ddd"),
             cluster_doc("cluster-ddd", "delta", "p1", "Running"),
         );
     let r = ops::consumers(
@@ -3425,7 +3421,7 @@ fn the_second_reading_reads_the_listing_when_the_search_takes_no_profile() {
     assert_eq!((r.clusters_read.read, r.clusters_read.unread), (2, 0));
     assert!(api.posted().iter().all(|(path, _)| path != CLUSTER_SEARCH));
     assert!(api.calls(CLUSTER_LISTING) >= 1);
-    assert_eq!(api.calls("/v1/spectroclusters/cluster-ddd"), 1);
+    assert_eq!(api.calls(&cluster_route("cluster-ddd")), 1);
     let text = render::renderer(Format::Terminal, Paint::off(), false)
         .render_consumers(&r)
         .unwrap();
@@ -4346,7 +4342,7 @@ fn a_linked_and_a_shared_version() -> MemoryApi {
         .with(profile_route("u-l1"), linked)
         .with(profile_route("u-s1"), shared)
         .with(
-            "/v1/spectroclusters/c-fred",
+            cluster_route("c-fred"),
             serde_json::json!({
                 "metadata": {"name": "fred", "uid": "c-fred", "annotations": {"projectUid": "p1"}},
                 "spec": {"clusterProfileTemplates": [{"uid": "u-s1", "profileVersion": "1.1.0"}]},
@@ -4926,7 +4922,7 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
             ]),
         )
         .with(
-            "/v1/spectroclusters/c1",
+            cluster_route("c1"),
             cluster_document(
                 "c1",
                 &[
@@ -4936,7 +4932,7 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
             ),
         )
         .with(
-            "/v1/spectroclusters/c2",
+            cluster_route("c2"),
             cluster_document("c2", &[("lab-profile", "1.2.0", UID_A, "cluster")]),
         )
         // an update of the add-on waits for c1; c2 serves no notifications, so it is unknown
@@ -4960,14 +4956,14 @@ fn list_with_applied_reads_each_cluster_for_the_profiles_it_applies() {
 
     // the option is what costs the requests: without it, the listing alone answers
     let plain = list(&clusters);
-    assert_eq!(api.calls("/v1/spectroclusters/c1"), 0);
+    assert_eq!(api.calls(&cluster_route("c1")), 0);
     assert!(plain.clusters.as_ref().unwrap()[0].profiles.is_none());
 
     let l = list(&ListOptions {
         applied: true,
         ..clusters.clone()
     });
-    assert_eq!(api.calls("/v1/spectroclusters/c1"), 1);
+    assert_eq!(api.calls(&cluster_route("c1")), 1);
     let listed = l.clusters.as_ref().unwrap();
     assert_eq!(
         listed.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(),
@@ -5039,15 +5035,15 @@ fn list_with_applied_keeps_a_cluster_it_cannot_read_and_reads_each_project_once(
         ]),
     );
     let p1 = listing.clone().with(
-        "/v1/spectroclusters/c1",
+        cluster_route("c1"),
         cluster_document("c1", &[("lab-profile", "1.3.0", UID_B, "cluster")]),
     );
     let p2 = MemoryApi::new()
         .with(
-            "/v1/spectroclusters/c7",
+            cluster_route("c7"),
             cluster_document("c7", &[("lab-profile", "1.2.0", UID_A, "cluster")]),
         )
-        .failing("/v1/spectroclusters/c9", 404, "no such cluster");
+        .failing(cluster_route("c9"), 404, "no such cluster");
     let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
     let connect = |project: Option<&str>| {
         scopes.borrow_mut().push(project.map(str::to_string));
@@ -5134,7 +5130,7 @@ fn list_clusters_gives_the_cluster_type_of_each_cluster_as_palette_lists_it() {
     assert_eq!(json["clusters"][0]["clusterType"], "AlloyMonitor");
     assert_eq!(json["clusters"][1]["clusterType"], "PureManage");
     // the type is in the listing, so it costs no request
-    assert_eq!(api.calls("/v1/spectroclusters/c1"), 0);
+    assert_eq!(api.calls(&cluster_route("c1")), 0);
 }
 
 #[test]
@@ -5151,15 +5147,15 @@ fn list_with_applied_says_why_an_imported_cluster_has_no_profile_and_a_built_clu
             ]),
         )
         // read-only mode: an imported cluster with no profile
-        .with("/v1/spectroclusters/c3", cluster_document("c3", &[]))
+        .with(cluster_route("c3"), cluster_document("c3", &[]))
         // a cluster that Palette built, with no profile: the listing cannot say why
-        .with("/v1/spectroclusters/c4", cluster_document("c4", &[]))
+        .with(cluster_route("c4"), cluster_document("c4", &[]))
         // full permission mode: an imported cluster with an add-on profile
         .with(
-            "/v1/spectroclusters/c5",
+            cluster_route("c5"),
             cluster_document("c5", &[("lab-addons", "2.0.0", UID_ADDONS, "add-on")]),
         )
-        .failing("/v1/spectroclusters/c6", 404, "no such cluster");
+        .failing(cluster_route("c6"), 404, "no such cluster");
     let l = listing(
         &api,
         &ListOptions {
@@ -5241,15 +5237,15 @@ fn list_with_a_cluster_text_keeps_the_clusters_that_match_and_reads_only_those()
             ]),
         )
         .with(
-            "/v1/spectroclusters/c1",
+            cluster_route("c1"),
             cluster_document("c1", &[("lab-profile", "1.3.0", UID_B, "cluster")]),
         )
         .with(
-            "/v1/spectroclusters/c2",
+            cluster_route("c2"),
             cluster_document("c2", &[("lab-profile", "1.2.0", UID_A, "cluster")]),
         )
         .with(
-            "/v1/spectroclusters/c7",
+            cluster_route("c7"),
             cluster_document("c7", &[("lab-profile", "1.3.0", UID_B, "cluster")]),
         );
     let list = |text: &str| {
@@ -5284,7 +5280,7 @@ fn list_with_a_cluster_text_keeps_the_clusters_that_match_and_reads_only_those()
         "--cluster reads the profiles, as --pack reads the packs"
     );
     assert_eq!(
-        api.calls("/v1/spectroclusters/c2"),
+        api.calls(&cluster_route("c2")),
         0,
         "a cluster the text does not match is never read"
     );
@@ -7913,10 +7909,10 @@ fn verify_who_reads_the_log_of_a_cluster_group_as_clustergroup_and_of_an_app_pro
     // a cluster group whose pin was edited after the record
     let group_api = serve_cluster_group(MemoryApi::new(), dir.path());
     let group = common::snapshot_of(&group_api, "clustergroup:g1").unwrap();
-    let mut doc = group_api.get_json("/v1/clustergroups/g1").unwrap();
+    let mut doc = group_api.get_json(&group_route("g1")).unwrap();
     doc["spec"]["clusterProfileTemplates"][0]["packs"][0]["values"] = Value::from("edited: true\n");
     let group_log = "/v1/audits?resourceKind=clustergroup&resourceUid=g1&startTime=t0&limit=100";
-    let edited = group_api.clone().with("/v1/clustergroups/g1", doc).with(
+    let edited = group_api.clone().with(group_route("g1"), doc).with(
         group_log,
         audits_page(
             vec![audit_of(
@@ -8458,22 +8454,22 @@ fn list_and_compare_name_a_cluster_that_is_behind() {
 
 /// The repave status of the cluster fixture.
 fn repave_route() -> String {
-    format!("/v1/spectroclusters/{CLUSTER_UID}/repave/status")
+    format!("{}/repave/status", cluster_route(CLUSTER_UID))
 }
 
 /// The route that asks Palette if a change of the cluster fixture repaves it.
 fn validate_repave_route() -> String {
-    format!("/v1/spectroclusters/{CLUSTER_UID}/validate/repave")
+    format!("{}/validate/repave", cluster_route(CLUSTER_UID))
 }
 
 /// The route that asks Palette if it takes the packs of a change of the cluster fixture.
 fn validate_packs_route() -> String {
-    format!("/v1/spectroclusters/{CLUSTER_UID}/validate/packs")
+    format!("{}/validate/packs", cluster_route(CLUSTER_UID))
 }
 
 /// The update that waits for the cluster fixture.
 fn profile_updates_route() -> String {
-    format!("/v1/spectroclusters/{CLUSTER_UID}/profileUpdates")
+    format!("{}/profileUpdates", cluster_route(CLUSTER_UID))
 }
 
 /// The repave of a macro change in a field that repaves, in the shape that Palette gives it. Each
@@ -9360,7 +9356,7 @@ fn a_cluster_record_with_macro_digests_drifts_when_a_macro_value_moves() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
     cluster_with_macro(dir.path(), "cluster-macro");
-    let path = format!("/v1/spectroclusters/{CLUSTER_UID}/packs/resolvedValues");
+    let path = cluster_resolved_values_route(CLUSTER_UID);
     let tenant = |region: &str| {
         serve_cluster(MemoryApi::new(), dir.path(), "cluster-macro")
             .with(path.as_str(), resolved(region))
@@ -11526,7 +11522,7 @@ fn serve_edge_host(api: MemoryApi, raw_root: &Path) -> MemoryApi {
         .iter()
         .map(|t| serde_json::json!({"uid": t["uid"], "name": t["name"], "version": t["profileVersion"]}))
         .collect();
-    let mut api = api.with("/v1/edgehosts/e1", host).with(
+    let mut api = api.with(edge_host_route("e1"), host).with(
         post(EDGE_HOST_SEARCH),
         serde_json::json!({"items": [{
             "metadata": {"uid": "e1", "name": "edge-1", "annotations": {"projectUid": "p1"}},
@@ -11596,7 +11592,7 @@ fn an_edge_host_record_holds_the_profiles_bound_to_it() {
     let b_uid = b[0]["uid"].as_str().unwrap().to_string();
     let rebound = serve_edge_host(MemoryApi::new(), dir.path())
         .with(
-            "/v1/edgehosts/e1",
+            edge_host_route("e1"),
             serde_json::json!({
                 "metadata": {"uid": "e1", "name": "edge-1"},
                 "spec": {"clusterProfileTemplates": b},
@@ -11669,7 +11665,7 @@ fn an_edge_host_record_holds_its_own_copy_of_each_manifest() {
     let host = |copy: &str, profile: &str| {
         serve_edge_host(MemoryApi::new(), dir.path())
             .with(
-                "/v1/edgehosts/e1",
+                edge_host_route("e1"),
                 serde_json::json!({
                     "metadata": {"uid": "e1", "name": "edge-1"},
                     "spec": {"clusterProfileTemplates": templates.clone()},
@@ -11747,7 +11743,7 @@ fn a_cluster_group_record_holds_its_own_copy_of_each_manifest() {
     let group = |copy: &str, profile: &str| {
         serve_edge_host(MemoryApi::new(), dir.path())
             .with(
-                "/v1/clustergroups/g1",
+                group_route("g1"),
                 serde_json::json!({
                     "metadata": {"uid": "g1", "name": "group-1"},
                     "spec": {"type": "hostCluster", "clusterProfileTemplates": templates.clone()},
@@ -11985,7 +11981,7 @@ fn serve_cluster_group(api: MemoryApi, raw_root: &Path) -> MemoryApi {
     let manifests = read_json(&m.join("manifests.json"))["profiles"].clone();
     let (i, _) = merged_addon_template(raw_root);
     serve_cluster(api, raw_root, "cluster-merged")
-        .with("/v1/clustergroups/g1", group_doc(raw_root))
+        .with(group_route("g1"), group_doc(raw_root))
         .with(
             GROUP_LISTING,
             serde_json::json!({"items": [{"uid": "g1", "name": "group-1", "scope": "project"}]}),
@@ -12122,7 +12118,7 @@ fn a_cluster_group_record_with_macro_digests_reads_the_values_of_the_group() {
     let (_, addon) = merged_uids(dir.path());
     // the pin reads the macro region in the values of its first pack
     let base = serve_cluster_group(MemoryApi::new(), dir.path());
-    let mut doc = base.get_json("/v1/clustergroups/g1").unwrap();
+    let mut doc = base.get_json(&group_route("g1")).unwrap();
     let pack = &mut doc["spec"]["clusterProfileTemplates"][0]["packs"][0];
     let values = pack["values"].as_str().unwrap_or_default().to_string();
     pack["values"] = Value::from(format!(
@@ -12130,8 +12126,8 @@ fn a_cluster_group_record_with_macro_digests_reads_the_values_of_the_group() {
     ));
     // only the route of the group answers: a request to the route of a cluster is a 404
     let tenant = |region: &str| {
-        base.clone().with("/v1/clustergroups/g1", doc.clone()).with(
-            "/v1/clustergroups/g1/packs/resolvedValues",
+        base.clone().with(group_route("g1"), doc.clone()).with(
+            group_resolved_values_route("g1"),
             serde_json::json!({"profiles": [{"uid": addon, "resolved": {
                 "{{.spectro.macro.region}}": region,
             }}]}),
@@ -12162,7 +12158,7 @@ fn a_cluster_group_record_with_macro_digests_reads_the_values_of_the_group() {
 
     // without --macros, no request for the values
     let plain = ops::cluster_group_snapshot(
-        &Palette::new(base.clone().with("/v1/clustergroups/g1", doc.clone())),
+        &Palette::new(base.clone().with(group_route("g1"), doc.clone())),
         "g1",
         false,
         "clustergroup:g1",
@@ -12235,7 +12231,7 @@ fn a_cluster_group_record_holds_the_config_of_each_virtual_cluster_in_a_policy_t
         if let Some(c) = config {
             doc["spec"]["clustersConfig"] = c;
         }
-        serve_cluster_group(MemoryApi::new(), dir.path()).with("/v1/clustergroups/g1", doc)
+        serve_cluster_group(MemoryApi::new(), dir.path()).with(group_route("g1"), doc)
     };
     let snap = |api: &MemoryApi| common::snapshot_of(api, "clustergroup:g1").unwrap();
     let api = serve(Some(clusters_config(6000, GROUP_VALUES)));
@@ -12379,7 +12375,7 @@ fn a_raw_directory_of_a_cluster_group_masks_each_password_and_gives_the_record_o
                   users:\n- name: fred\n  password: pebbles-clear-secret\n";
     let mut doc = group_doc(dir.path());
     doc["spec"]["clustersConfig"] = clusters_config(6000, values);
-    let api = serve_cluster_group(MemoryApi::new(), dir.path()).with("/v1/clustergroups/g1", doc);
+    let api = serve_cluster_group(MemoryApi::new(), dir.path()).with(group_route("g1"), doc);
     let fetched = Palette::new(api)
         .fetch_subject(SubjectKind::ClusterGroup, "g1", &Progress::silent())
         .unwrap();
@@ -12429,7 +12425,7 @@ fn serve_app_profile(api: MemoryApi, replicas: &str) -> MemoryApi {
         ]}),
     )
     .with(
-        "/v1/appProfiles/ap1",
+        app_profile_route("ap1"),
         serde_json::json!({"metadata": {"name": "shop", "uid": "ap1"},
             "spec": {"version": "1.0.0", "template": {"appTiers": [
                 {"name": "web", "uid": "t1", "type": "helm", "version": "2.1.0"},
@@ -12661,7 +12657,7 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
         serde_json::json!({"kind": "app", "uid": "d1", "name": "shop-dev", "projectUid": "p1",
             "state": "Deployed", "version": "1.0.0"})
     );
-    assert_eq!(api.calls("/v1/appProfiles/ap1"), 1);
+    assert_eq!(api.calls(&app_profile_route("ap1")), 1);
     assert_eq!(api.calls("/v1/appDeployments/d1"), 1);
     assert_eq!(
         api.calls(CLUSTER_LISTING),
@@ -12723,12 +12719,12 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
                 "status": {"state": "Updating"}}),
         )
         .failing("/v1/appDeployments/d2", 403, "no access");
-    let mut doc: Value = moved.get_json("/v1/appProfiles/ap1").unwrap();
+    let mut doc: Value = moved.get_json(&app_profile_route("ap1")).unwrap();
     doc["status"]["inUseApps"].as_array_mut().unwrap().push(
         serde_json::json!({"kind": "appdeployment", "uid": "d2", "name": "shop-qa",
             "projectUid": "p2"}),
     );
-    let moved = moved.with("/v1/appProfiles/ap1", doc);
+    let moved = moved.with(app_profile_route("ap1"), doc);
     let r = consumers(&moved, &Ref::parse("appprofile:ap1"));
     assert_eq!((r.count, r.overwritten, r.exit_code()), (2, 1, 1));
     assert_eq!(
@@ -12742,9 +12738,9 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
     assert!(r.consumers[1].error.is_some());
 
     // no deployment: no consumers, exit 0
-    let mut doc: Value = api.get_json("/v1/appProfiles/ap1").unwrap();
+    let mut doc: Value = api.get_json(&app_profile_route("ap1")).unwrap();
     doc["status"]["inUseApps"] = serde_json::json!([]);
-    let free = api.clone().with("/v1/appProfiles/ap1", doc);
+    let free = api.clone().with(app_profile_route("ap1"), doc);
     let r = consumers(&free, &Ref::parse("appprofile:shop@1.0.0"));
     assert_eq!((r.count, r.exit_code()), (0, 0));
     let text = render::renderer(Format::Terminal, Paint::off(), false)
@@ -14642,9 +14638,9 @@ fn verify_reports_a_gone_edge_host_or_cluster_group_as_drift_and_not_as_an_error
     assert!(line.ends_with("; the edge host is ready"), "{line}");
     for (active, suffix) in [(true, ""), (false, "; the cluster group is inactive")] {
         let api = serve_cluster_group(MemoryApi::new(), dir.path());
-        let mut doc = api.get_json("/v1/clustergroups/g1").unwrap();
+        let mut doc = api.get_json(&group_route("g1")).unwrap();
         doc["status"] = serde_json::json!({"isActive": active});
-        let api = api.with("/v1/clustergroups/g1", doc);
+        let api = api.with(group_route("g1"), doc);
         let v = ops::verify(&group, &Palette::new(api), "t1", &Progress::silent()).unwrap();
         assert!(v.unchanged);
         let line = verdict_of(&v);
@@ -14734,7 +14730,7 @@ const PROFILE_VALIDATE_PACKS: &str = "/v1/clusterprofiles/validate/packs";
 
 /// The route that asks Palette if it takes the packs of an update of the profile version `uid`.
 fn update_validate_packs_route(uid: &str) -> String {
-    format!("/v1/clusterprofiles/{uid}/validate/packs")
+    format!("{}/validate/packs", profile_route(uid))
 }
 
 /// The registry listing that `snapshot --validate` reads for the body of the import validate
