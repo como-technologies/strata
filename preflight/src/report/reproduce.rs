@@ -22,6 +22,21 @@ pub(super) fn auto_reproduce(
         Some(Check::Static { expr }) => {
             lines.push(format!("jq '{}' {dir}/world.json", one_line(expr)));
         }
+        // a request for each item: the lines show each request. A POST body depends on the item,
+        // so a POST rule gets its lines from its own `reproduce`.
+        Some(Check::Palette {
+            method,
+            each: Some(_),
+            ..
+        }) => {
+            if *method == Method::Get {
+                for call in &outcome.calls {
+                    lines.push(curl_get(
+                        call.ran.split_once(' ').map_or(&call.ran, |(_, path)| path),
+                    ));
+                }
+            }
+        }
         Some(Check::Palette {
             method, expr, body, ..
         }) => {
@@ -65,16 +80,19 @@ pub(super) fn auto_reproduce(
         }
         Some(Check::Watch { .. }) => {
             if let Some(uid) = &subject.cluster_uid {
-                lines.push(format!(
-                    "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${{PALETTE_API:-{base}}}{path}\"",
-                    base = DEFAULT_BASE_URL,
-                    path = cluster_events_path(uid)
-                ));
+                lines.push(curl_get(&cluster_events_path(uid)));
             }
         }
         None => {}
     }
     lines
+}
+
+/// The `curl` that reads `path` of Palette.
+fn curl_get(path: &str) -> String {
+    format!(
+        "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${{PALETTE_API:-{DEFAULT_BASE_URL}}}{path}\""
+    )
 }
 
 fn one_line(expr: &str) -> String {

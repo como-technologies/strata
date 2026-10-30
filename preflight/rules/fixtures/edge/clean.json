@@ -261,6 +261,116 @@
           "inUseClusters": []
         }
       }
+    },
+    "GET /v1/edgehosts/edge-host-w-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "w-1",
+          "uid": "edge-host-w-1"
+        },
+        "spec": {
+          "type": "edge-native",
+          "version": "4.10.4",
+          "device": {
+            "archType": "amd64",
+            "cpu": {
+              "cores": 8
+            },
+            "memory": {
+              "sizeInMB": 32768
+            },
+            "disks": [
+              {
+                "controller": "",
+                "size": 240,
+                "vendor": ""
+              }
+            ],
+            "nics": [
+              {
+                "nicName": "eno1",
+                "ip": "10.10.100.21",
+                "isDefault": true,
+                "macAddr": "52:54:00:aa:bb:11"
+              }
+            ],
+            "os": {
+              "family": "ubuntu",
+              "version": "22.04"
+            }
+          },
+          "host": {
+            "hostAddress": "10.10.100.21",
+            "hostUid": "edge-host-w-1"
+          }
+        },
+        "status": {
+          "state": "ready",
+          "health": {
+            "state": "healthy",
+            "agentVersion": "4.10.4",
+            "message": ""
+          },
+          "inUseClusters": []
+        }
+      }
+    },
+    "GET /v1/edgehosts/edge-host-w-2": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "w-2",
+          "uid": "edge-host-w-2"
+        },
+        "spec": {
+          "type": "edge-native",
+          "version": "4.10.4",
+          "device": {
+            "archType": "amd64",
+            "cpu": {
+              "cores": 8
+            },
+            "memory": {
+              "sizeInMB": 32768
+            },
+            "disks": [
+              {
+                "controller": "",
+                "size": 240,
+                "vendor": ""
+              }
+            ],
+            "nics": [
+              {
+                "nicName": "eno1",
+                "ip": "10.10.100.22",
+                "isDefault": true,
+                "macAddr": "52:54:00:aa:bb:12"
+              }
+            ],
+            "os": {
+              "family": "ubuntu",
+              "version": "22.04"
+            }
+          },
+          "host": {
+            "hostAddress": "10.10.100.22",
+            "hostUid": "edge-host-w-2"
+          }
+        },
+        "status": {
+          "state": "ready",
+          "health": {
+            "state": "healthy",
+            "agentVersion": "4.10.4",
+            "message": ""
+          },
+          "inUseClusters": []
+        }
+      }
     }
   }
 }

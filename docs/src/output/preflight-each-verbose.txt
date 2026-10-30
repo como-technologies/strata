@@ -1,0 +1,10 @@
+$ strata preflight cluster-addon.json --cloud aws --no-exec --tier palette --rule template-outside --strict --verbose --color never 2>&1 > /dev/null
+strata: looking up project dev
+strata: recording profile 64e0000000000000000000c3
+strata: fetching profile 64e0000000000000000000c3
+strata: recording profile 64e0000000000000000000b2
+strata: fetching profile 64e0000000000000000000b2
+strata: palette: template-outside
+strata: palette: template-outside: GET /v1/clusterprofiles/64e0000000000000000000c3 -> HTTP 200
+strata: palette: template-outside: GET /v1/clusterprofiles/64e0000000000000000000b2 -> HTTP 200
+strata: palette: template-outside: 2 requests -> 1 ms, PROBE FAIL: profile 64e0000000000000000000b2 (aws-stack) is linked to the cluster template aws-standard, and the entity names no clusterTemplate: Palette refuses the create with ClusterCreateWithTemplateProfileForbidden

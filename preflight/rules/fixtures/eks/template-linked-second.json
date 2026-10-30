@@ -1,0 +1,35 @@
+{
+  "_base": "full-records.json",
+  "_note": "the entity names an add-on profile after the first one, and a cluster template links the add-on",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "profiles": [
+          {
+            "uid": "prof-addon-1",
+            "packValues": [],
+            "variables": []
+          }
+        ]
+      }
+    },
+    "_responses": {
+      "GET /v1/clusterprofiles/prof-addon-1": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "status": {
+            "inUseClusterTemplates": [
+              {
+                "kind": "clustertemplate",
+                "name": "strata-live-template",
+                "uid": "tpl-eks-1",
+                "projectUid": "proj-1"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -46,6 +46,11 @@ After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
 `GET`, stay. A rule file reads the same, and the id stays.
 
+After 0.23.0, a check of Palette in a rule file can have `each`. An entry of
+`checks[]` in the report of `strata preflight` has `requests[]` for such a
+rule, in place of `ran` and `answer`. Both are new fields, so the ids stay.
+`preflight --schema rules` and `preflight --schema report` list them.
+
 A field can also become absent, and that keeps the id as well. For most fields
 absent is a value: a field that is false, empty, or zero is left out, and each
 such field says so at its own definition in

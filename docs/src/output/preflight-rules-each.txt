@@ -1,0 +1,11 @@
+$ strata preflight --rules --cloud edge --json | jq '.rules[] | select(.id == "edge-host-in-use") | {id, tier, check: {kind: .check.kind, method: .check.method, each: (.check.each | gsub("\\s+"; " ") | rtrimstr(" ")), path: .check.path}}'
+{
+  "id": "edge-host-in-use",
+  "tier": "palette",
+  "check": {
+    "kind": "palette",
+    "method": "GET",
+    "each": "[ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]",
+    "path": "/v1/edgehosts/{{ $item.host.hostUid }}"
+  }
+}

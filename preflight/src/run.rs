@@ -117,7 +117,7 @@ pub fn applicable<'a>(
 /// True when the `when` program of a rule gives `true` on the world. A program that fails does
 /// not hold, so a rule with a broken `when` is `SKIP` and not a wrong verdict.
 fn holds(jq: &Jq, rule: &Rule, when: &str, world: &Value) -> bool {
-    matches!(jq.first(&rule.id, when, world), Ok(Value::Bool(true)))
+    matches!(jq.first(&rule.id, when, world, None), Ok(Value::Bool(true)))
 }
 
 /// The inputs of a run.
@@ -165,9 +165,9 @@ pub fn run(inputs: RunInputs<'_>) -> Result<Report> {
                     .note(&format!("{}: {}", rule.effective_tier().name(), rule.id));
                 let outcome = probe::run_check(rule, &world_value, inputs.backend, &jq);
                 if inputs.verbose {
-                    inputs
-                        .progress
-                        .note(&verbose_line(rule, &outcome, inputs.color));
+                    for line in verbose_lines(rule, &outcome, inputs.color) {
+                        inputs.progress.note(&line);
+                    }
                 }
                 outcome
             }
@@ -284,6 +284,34 @@ pub fn reading<A: PaletteApi>(palette: &Palette<A>, uid: &str, elapsed: Duration
     }))
 }
 
+/// The lines of `--verbose` for one check: one line for each request of a check with `each`, then
+/// the line of the check.
+fn verbose_lines(rule: &Rule, o: &Outcome, color: bool) -> Vec<String> {
+    let tier = rule.effective_tier().name();
+    let mut lines: Vec<String> = o
+        .calls
+        .iter()
+        .map(|c| {
+            let answer = c.answer.as_ref().map(|a| format!(" -> {a}"));
+            let request = format!("{}{}", c.ran, answer.unwrap_or_default());
+            format!("{tier}: {}: {}", rule.id, paint(color, "2", &request))
+        })
+        .collect();
+    lines.push(verbose_line(rule, o, color));
+    lines
+}
+
+/// What a check ran, for its line of `--verbose`: its request or command, the count of the requests
+/// of a check with `each`, or the program alone.
+fn what_ran(o: &Outcome) -> String {
+    match (&o.ran, o.calls.len()) {
+        (Some(ran), _) => ran.clone(),
+        (None, 0) => "jq over the world".to_string(),
+        (None, 1) => "1 request".to_string(),
+        (None, n) => format!("{n} requests"),
+    }
+}
+
 /// One line of `--verbose`: what the check ran, its answer, the time, and the verdict, with the
 /// first message when it did not pass.
 fn verbose_line(rule: &Rule, o: &Outcome, color: bool) -> String {
@@ -296,7 +324,7 @@ fn verbose_line(rule: &Rule, o: &Outcome, color: bool) -> String {
             "2",
             &format!(
                 "{} -> {}{} ms,",
-                o.ran.as_deref().unwrap_or("jq over the world"),
+                what_ran(o),
                 o.answer
                     .as_ref()
                     .map(|a| format!("{a}, "))
@@ -1172,5 +1200,51 @@ rules:
         // the reading the rules saw is the world of --out
         assert_eq!(reading["cluster"]["status"]["state"], "Running");
         assert_eq!(reading["events"].as_array().map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn a_check_with_each_prints_a_line_for_each_request_and_the_count_of_requests_on_its_line() {
+        let section = r#"
+section: compute
+title: Compute and pools
+rules:
+  - id: edge-host-in-use
+    title: Each edge host is free
+    engines: [edge]
+    tier: palette
+    status: source
+    what: w
+    check:
+      kind: palette
+      each: '[.hosts[]]'
+      path: /v1/edgehosts/{{ $item }}
+      expr: '[.responses[] | select(.response.ok | not) | "edge host \(.item) is not there"]'
+"#;
+        let mut c = Catalog::default();
+        c.push(
+            Catalog::parse_section(section, Path::new("e.yaml")).unwrap(),
+            Path::new("e.yaml"),
+        )
+        .unwrap();
+        let (backend, world) = FixtureBackend::split(json!({"hosts": ["h1", "h2"],
+            "_responses": {"GET /v1/edgehosts/h1": {"ok": true, "status": 200, "body": {}},
+                "GET /v1/edgehosts/h2": {"ok": false, "status": 404, "body": {}}}}));
+        let rule = c.rule("edge-host-in-use").unwrap();
+        let outcome = probe::run_check(rule, &world, &backend, &Jq::new());
+        let lines = verbose_lines(rule, &outcome, false);
+        assert_eq!(lines.len(), 3, "{lines:?}");
+        assert_eq!(
+            lines[..2],
+            [
+                "palette: edge-host-in-use: GET /v1/edgehosts/h1 -> HTTP 200",
+                "palette: edge-host-in-use: GET /v1/edgehosts/h2 -> HTTP 404",
+            ]
+        );
+        assert!(
+            lines[2].starts_with("palette: edge-host-in-use: 2 requests -> ")
+                && lines[2].ends_with(" ms, PROBE FAIL: edge host h2 is not there"),
+            "{}",
+            lines[2]
+        );
     }
 }

@@ -74,12 +74,14 @@ pub fn terminal(r: &Report, color: bool) -> String {
                 for m in &c.messages {
                     out.push_str(&format!("{:<16}{m}\n", ""));
                 }
-                if let Some(ran) = &c.ran {
+                let one = c.ran.iter().map(|ran| (ran, &c.answer));
+                let each = c.requests.iter().map(|r| (&r.ran, &r.answer));
+                for (ran, answer) in one.chain(each) {
                     out.push_str(&format!(
                         "{:<16}{} {ran}{}\n",
                         "",
                         paint(color, "2", "ran:"),
-                        c.answer
+                        answer
                             .as_ref()
                             .map(|a| format!(" -> {a}"))
                             .unwrap_or_default()

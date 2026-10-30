@@ -18,6 +18,14 @@ without this book:
 {{#include ../../output/preflight-rules-json.txt}}
 ```
 
+A rule that reads a list has an `each` in its check. The check of Palette makes one
+request for each item of that list. Here the edge host rule reads each host of
+each pool:
+
+```text
+{{#include ../../output/preflight-rules-each.txt}}
+```
+
 The rules are data in the binary, one file for each section under
 `preflight/rules/`. [The rule format](../../reference/preflight-rules.md) states
 the format.

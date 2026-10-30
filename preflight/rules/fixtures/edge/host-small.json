@@ -1,59 +1,27 @@
 {
   "_base": "clean.json",
   "_note": "one core, 4 GB, and a 64 GB disk",
-  "_responses": {
-    "GET /v1/edgehosts/edge-host-cp-1": {
-      "ok": true,
-      "status": 200,
-      "body": {
-        "metadata": {
-          "name": "cp-1",
-          "uid": "edge-host-cp-1"
-        },
-        "spec": {
-          "type": "edge-native",
-          "version": "4.10.4",
-          "device": {
-            "archType": "amd64",
-            "cpu": {
-              "cores": 1
-            },
-            "memory": {
-              "sizeInMB": 4096
-            },
-            "disks": [
-              {
-                "controller": "",
-                "size": 64,
-                "vendor": ""
-              }
-            ],
-            "nics": [
-              {
-                "nicName": "eno1",
-                "ip": "10.10.100.11",
-                "isDefault": true,
-                "macAddr": "52:54:00:aa:bb:01"
-              }
-            ],
-            "os": {
-              "family": "ubuntu",
-              "version": "22.04"
+  "_patch": {
+    "_responses": {
+      "GET /v1/edgehosts/edge-host-cp-1": {
+        "body": {
+          "spec": {
+            "device": {
+              "cpu": {
+                "cores": 1
+              },
+              "memory": {
+                "sizeInMB": 4096
+              },
+              "disks": [
+                {
+                  "controller": "",
+                  "size": 64,
+                  "vendor": ""
+                }
+              ]
             }
-          },
-          "host": {
-            "hostAddress": "10.10.100.11",
-            "hostUid": "edge-host-cp-1"
           }
-        },
-        "status": {
-          "state": "ready",
-          "health": {
-            "state": "healthy",
-            "agentVersion": "4.10.4",
-            "message": ""
-          },
-          "inUseClusters": []
         }
       }
     }

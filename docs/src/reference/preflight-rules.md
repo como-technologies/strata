@@ -67,7 +67,7 @@ rules:
 | Tier | Letter in #91 | Where the check runs | Kind of check |
 | --- | --- | --- | --- |
 | `static` | S | The entity and the records alone. No key, no network. | `static` |
-| `palette` | P | One request to Palette. | `palette` |
+| `palette` | P | One request to Palette, or one request for each item of a list. | `palette` |
 | `cloud` | C | One command with the tool of the cloud, on this machine. | `exec`, or no check with `reproduce` lines |
 | `watch` | W | The conditions and the events of the cluster during the build. | `watch` |
 | `race` | X | No check before the build finds it; the watch finds its effect. | none |
@@ -88,7 +88,7 @@ each message is one failure; or an object `{pass, message}`.
 | Kind | Fields | Adds to the world |
 | --- | --- | --- |
 | `static` | `expr` | nothing |
-| `palette` | `method` (`GET`, `POST`), `path` (with `{{ jq }}` templates), `body` (a jq program that gives the body of a POST; default `.entity`), `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx or a transport error is `ERROR`. |
+| `palette` | `method` (`GET`, `POST`), `path` (with `{{ jq }}` templates), `body` (a jq program that gives the body of a POST; default `.entity`), `each` (a jq program that gives a list; see [A request for each item](#a-request-for-each-item)), `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx or a transport error is `ERROR`. With `each`, `responses` instead. |
 | `exec` | `argv` (each with templates), `needs` (the tools, checked on the PATH), `timeout` (seconds, default 60), `expr` | `exec`: `{exit, stdout, stderr}`. `stdout` is JSON when it parses. A tool that is not there is `NOT CHECKED`. |
 | `watch` | `expr` | `cluster`, `summary`, `events`, `elapsed` (seconds), on each reading |
 
@@ -99,6 +99,45 @@ value against a list with `(["a", "b"] | index($v)) != null`. A program that
 does not compile makes the rule `ERROR`, and the message names it. So does a
 program that gives no output, or `null`: a path that is not in the world is a
 wrong program, not a pass.
+
+## A request for each item
+
+A rule over a list needs one request for each item. The items can be the
+profiles of the entity, the hosts of every pool, or the pools with a host
+resource group. Give the check of Palette an `each`: a jq program over the world
+that outputs a list. The check makes its request one time for each item, in the
+order of the list.
+
+`$item` is the item in the templates of `path` and in the program of `body`.
+`expr` runs one time, over the world with `responses` added instead of
+`response`. `responses` has one `{item, response}` for each item. Each
+`response` has the shape of `response` above, so a 4xx for one item is the
+answer for that item.
+
+```yaml
+check:
+  kind: palette
+  each: .entity.spec.profiles
+  path: /v1/clusterprofiles/{{ $item.uid }}
+  expr: |
+    [ .responses[]
+      | select((.response.body.status.inUseClusterTemplates // []) | length > 0)
+      | "profile \(.item.uid) is linked to a cluster template" ]
+```
+
+A check with no `each` makes one request. A list with no item makes no request,
+and `responses` is empty. The verdict is `ERROR` when `each` does not output a
+list, when a template fails, or when Palette does not answer one request. The
+catalog refuses a `path` or a `body` that reads `$item` when the check has no
+`each`.
+
+To send one request for several items, group the items in `each`.
+`vsphere-compute-resources` sends one request for each compute cluster, and
+lists the pools of that cluster in the item.
+
+The report keeps each request in `requests[]`. `--verbose` prints one line for
+each request. See
+[The static tier and the live tier](../commands/preflight/tiers.md#a-rule-over-a-list).
 
 ## The world document
 
@@ -129,7 +168,8 @@ the world as `world.json`.
 A fixture is a world with the answers written in, for the test of the catalog:
 `_responses` maps `"METHOD /path"` to a `response`, `_exec` maps a command to
 its output, `_tools` lists the tools that are "there", and `_palette: false`
-says no key. A fixture can say `_base` and hold only what differs:
+says no key. A check with `each` needs one entry of `_responses` for each
+request. A fixture can say `_base` and hold only what differs:
 
 ```json
 { "_base": "clean.json",
@@ -140,8 +180,9 @@ says no key. A fixture can say `_base` and hold only what differs:
 
 `_patch` merges as a change of a cluster merges: an object key by key, a pool
 by its name, a profile by its uid, a variable by its name; another list
-replaces. `_delete` removes each JSON pointer. The test of the catalog runs
-every fixture, and refuses a fixture that no rule names.
+replaces. A `_responses` beside `_base` replaces the answers of the base, so put
+it in `_patch` to add to them. `_delete` removes each JSON pointer. The test of
+the catalog runs every fixture, and refuses a fixture that no rule names.
 
 ## The ledger
 

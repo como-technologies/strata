@@ -3308,6 +3308,31 @@ fn automation(r: &mut Runner) {
         false,
         "strata preflight --promotion | tail -n 2",
     );
+    // a rule over a list asks once for each item: the entity names a second profile, and a
+    // cluster template links it
+    r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    r.tenant(|t| t.cluster_template(DEV, AWS_STANDARD, "aws-standard", &[A110]));
+    r.quiet(&format!(
+        r#"jq '.spec.profiles += [{{"uid": "{A110}", "packValues": [], "variables": []}}]' cluster.json > cluster-addon.json"#
+    ));
+    r.step(
+        "preflight-each",
+        1,
+        false,
+        "strata preflight cluster-addon.json --cloud aws --no-exec --tier palette --rule template-outside --strict --quiet | sed -n '4,12p'",
+    );
+    r.step(
+        "preflight-each-verbose",
+        1,
+        false,
+        "strata preflight cluster-addon.json --cloud aws --no-exec --tier palette --rule template-outside --strict --verbose --color never 2>&1 > /dev/null",
+    );
+    r.step(
+        "preflight-rules-each",
+        0,
+        false,
+        "strata preflight --rules --cloud edge --json | jq '.rules[] | select(.id == \"edge-host-in-use\") | {id, tier, check: {kind: .check.kind, method: .check.method, each: (.check.each | gsub(\"\\\\s+\"; \" \") | rtrimstr(\" \")), path: .check.path}}'",
+    );
 }
 
 /// The spec of the cloud config of a vSphere cluster, in the model of the API reference of

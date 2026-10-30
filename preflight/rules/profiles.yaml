@@ -136,19 +136,21 @@ rules:
     what: |
       A cluster outside a template cannot use a profile version that a template links: Palette
       refuses the create with `ClusterCreateWithTemplateProfileForbidden`. `GET /v1/clusterprofiles/{uid}`
-      lists the templates in `status.inUseClusterTemplates`. The check reads the first profile of
-      the entity, and fails when a template links it and the entity names no `clusterTemplate`.
-      The reproduce line reads each profile.
+      lists the templates in `status.inUseClusterTemplates`. The check reads each profile of the
+      entity, one request for each, and fails for each profile that a template links when the
+      entity names no `clusterTemplate`. An add-on profile is a profile of the entity too.
     check:
       kind: palette
       method: GET
-      path: /v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}
+      each: .entity.spec.profiles
+      path: /v1/clusterprofiles/{{ $item.uid }}
       expr: |
-        .entity.spec.profiles[0].uid as $u
-        | if (.response.ok | not) then ["Palette cannot read profile \($u): \(.response.body.code // .response.status)"]
-          elif ((.response.body.status.inUseClusterTemplates // []) | length) > 0 and ((.entity.spec.clusterTemplate // null) == null)
-          then ["profile \(.response.body.metadata.name // $u) is linked to the cluster template \([ .response.body.status.inUseClusterTemplates[] | .name // .uid ] | join(", ")), and the entity names no clusterTemplate: Palette refuses the create with ClusterCreateWithTemplateProfileForbidden"]
-          else [] end
+        (.entity.spec.clusterTemplate // null) as $template
+        | [ .responses[] | .item.uid as $u | .response as $r
+            | if ($r.ok | not) then "Palette cannot read profile \($u): \($r.body.code // $r.status)"
+              elif (($r.body.status.inUseClusterTemplates // []) | length) > 0 and $template == null
+              then "profile \($u)\(if ($r.body.metadata.name // "") != "" then " (\($r.body.metadata.name))" else "" end) is linked to the cluster template \([ $r.body.status.inUseClusterTemplates[] | .name // .uid ] | join(", ")), and the entity names no clusterTemplate: Palette refuses the create with ClusterCreateWithTemplateProfileForbidden"
+              else empty end ]
     reproduce:
       - "for u in {{ [ .entity.spec.profiles[].uid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/clusterprofiles/$u\" | jq '{name: .metadata.name, templates: .status.inUseClusterTemplates}'; done"
     fix:
@@ -165,6 +167,7 @@ rules:
     tests:
       - fault: fixtures/eks/template-linked.json
         clean: fixtures/eks/full-records.json
+      - fault: fixtures/eks/template-linked-second.json
 
   - id: variables-in-use
     title: The variable definitions of a version in use stay as they are

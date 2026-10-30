@@ -447,21 +447,24 @@ rules:
       agent from an older minor release misses the features that the profile and the release
       expect. The docs gate some features on the agent version. The check compares the
       major.minor of `status.health.agentVersion` with the release given; it is a reading of the
-      matrix, not a run. It reads the first host of the first pool.
+      matrix, not a run. It reads each host of each pool, one request for each.
     check:
       kind: palette
       method: GET
-      path: /v1/edgehosts/{{ .entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid }}
+      each: |
+        [ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]
+      path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
         def mm: split(".") | .[:2] | map(sub("[^0-9].*$"; "") | if . == "" then 0 else tonumber end);
-        (.entity.spec.machinepoolconfig[0].cloudConfig.edgeHosts[0].hostUid) as $u | .release as $rel
-        | if (.response.ok | not) then ["Palette cannot read edge host \($u): \(.response.body.code // .response.status): \(.response.body.message // "")"]
-          else (.response.body.status.health.agentVersion // .response.body.spec.version // "") as $a
-            | if $a == "" then ["edge host \($u) reports no agent version"]
-              else ($a | mm) as $av | ($rel | mm) as $rv
-                | if ($av[0] < $rv[0]) or ($av[0] == $rv[0] and ($av[1] // 0) < ($rv[1] // 0)) then ["edge host \($u) runs agent \($a), and Palette is \($rel): the compatibility matrix pairs each Palette release with an agent release, and an older agent misses the features of the profile; upgrade the host first"] else [] end
-              end
-          end
+        .release as $rel
+        | [ .responses[] | .item.host.hostUid as $u | .response as $r
+          | if ($r.ok | not) then "Palette cannot read edge host \($u): \($r.body.code // $r.status): \($r.body.message // "")"
+            else ($r.body.status.health.agentVersion // $r.body.spec.version // "") as $a
+              | if $a == "" then "edge host \($u) reports no agent version"
+                else ($a | mm) as $av | ($rel | mm) as $rv
+                  | if ($av[0] < $rv[0]) or ($av[0] == $rv[0] and ($av[1] // 0) < ($rv[1] // 0)) then "edge host \($u) runs agent \($a), and Palette is \($rel): the compatibility matrix pairs each Palette release with an agent release, and an older agent misses the features of the profile; upgrade the host first" else empty end
+                end
+            end ]
     reproduce:
       - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -r '[.metadata.uid, .status.health.agentVersion, .spec.version] | @tsv'; done"
     fix:
@@ -476,3 +479,4 @@ rules:
     tests:
       - fault: fixtures/edge/agent-old.json
         clean: fixtures/edge/clean.json
+      - fault: fixtures/edge/agent-old-second-pool.json

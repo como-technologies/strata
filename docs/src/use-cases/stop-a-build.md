@@ -72,6 +72,12 @@ yet. The `reproduce:` lines say what to run by hand. The fix of the CPU floor is
 on the person: two workers, or a larger type. Change the file, run the command
 again, until it is clean.
 
+A rule that reads a list asks Palette once for each item. An add-on profile that
+a cluster template links fails the build in any position of the list. The same
+holds for an edge host that another cluster uses, in any pool. The report names
+that item. See
+[A rule over a list](../commands/preflight/tiers.md#a-rule-over-a-list).
+
 ### After an upgrade of Palette
 
 The first AWS create after an upgrade of Palette updates the CAPA stack of the

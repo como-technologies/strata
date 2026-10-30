@@ -18,7 +18,7 @@ fn verdict(rule: &Rule, fixture_path: &Path, jq: &Jq) -> (Verdict, Vec<String>) 
     let (backend, world) = FixtureBackend::split(doc);
     if let Some(when) = &rule.when {
         let holds = jq
-            .first(&rule.id, when, &world)
+            .first(&rule.id, when, &world, None)
             .unwrap_or_else(|e| panic!("{}: when: {e}", rule.id));
         assert_eq!(
             holds,
@@ -118,8 +118,8 @@ fn the_rules_of_the_capa_stack_name_what_aws_refuses() {
             .when
             .as_ref()
             .unwrap();
-        assert_eq!(jq.first(id, when, &manual).unwrap(), false, "{id}");
-        assert_eq!(jq.first(id, when, &managed).unwrap(), true, "{id}");
+        assert_eq!(jq.first(id, when, &manual, None).unwrap(), false, "{id}");
+        assert_eq!(jq.first(id, when, &managed, None).unwrap(), true, "{id}");
     }
 }
 
@@ -619,3 +619,108 @@ const ISSUE_IDS: &[&str] = &[
 /// The rows of #91 that are not rules yet. Each one becomes a rule, and leaves this list. The list
 /// is empty: every row of #91 is a rule.
 const PENDING: &[&str] = &[];
+
+/// The fault is in the second item, not the first (#144): a profile that comes second, a host of
+/// the second pool, a second pool with a host resource group, and a second compute cluster. Each
+/// check reads every item, and each message names the item that holds the fault and no other.
+#[test]
+fn a_rule_with_each_finds_the_fault_of_a_later_item_and_names_only_that_item() {
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    for (id, fixture, named, other) in [
+        (
+            "template-outside",
+            "template-linked-second.json",
+            "prof-addon-1",
+            "prof-eks-1",
+        ),
+        (
+            "edge-host-in-use",
+            "host-in-use-second-pool.json",
+            "edge-host-w-2",
+            "edge-host-cp-1",
+        ),
+        (
+            "edge-host-health",
+            "host-unhealthy-second-pool.json",
+            "edge-host-w-2",
+            "edge-host-w-1",
+        ),
+        (
+            "edge-host-arch",
+            "host-arm64-second-pool.json",
+            "edge-host-w-2",
+            "edge-host-w-1",
+        ),
+        (
+            "edge-host-resources",
+            "host-small-second-pool.json",
+            "edge-host-w-2",
+            "edge-host-w-1",
+        ),
+        (
+            "edge-host-nic",
+            "nic-unknown-second-pool.json",
+            "edge-host-w-2",
+            "edge-host-w-1",
+        ),
+        (
+            "edge-agent-version",
+            "agent-old-second-pool.json",
+            "edge-host-w-2",
+            "edge-host-w-1",
+        ),
+        (
+            "dedicated-hosts",
+            "hrg-second-pool-no-capacity.json",
+            "pool worker-pool",
+            "pool cp-pool",
+        ),
+        (
+            "vsphere-compute-resources",
+            "datastore-missing-second-pool.json",
+            "pool worker-pool",
+            "pool cp-pool",
+        ),
+        (
+            "vsphere-compute-resources",
+            "datastore-missing-second-cluster.json",
+            "compute cluster Cluster02",
+            "compute cluster Cluster01",
+        ),
+    ] {
+        let rule = catalog.rule(id).unwrap();
+        let fault = rule
+            .tests
+            .iter()
+            .filter_map(|t| t.fault.as_ref())
+            .find(|p| p.ends_with(fixture))
+            .unwrap_or_else(|| panic!("{id} names no test with {fixture}"));
+        let (v, messages) = verdict(rule, fault, &jq);
+        assert_eq!(v, Verdict::Failed, "{id}: {messages:?}");
+        assert!(
+            messages
+                .iter()
+                .all(|m| m.contains(named) && !m.contains(other)),
+            "{id}: every message names {named} and not {other}: {messages:?}"
+        );
+    }
+}
+
+#[test]
+fn a_rule_with_each_asks_for_every_host_of_every_pool() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("edge-host-in-use").unwrap();
+    let clean = rule.tests[0].clean.as_ref().unwrap();
+    let (backend, world) = FixtureBackend::split(fixture::load(clean).unwrap());
+    let out = probe::run_check(rule, &world, &backend, &Jq::new());
+    assert_eq!(out.verdict, Verdict::Passed, "{:?}", out.messages);
+    assert_eq!(
+        out.calls.iter().map(|c| c.ran.as_str()).collect::<Vec<_>>(),
+        [
+            "GET /v1/edgehosts/edge-host-cp-1",
+            "GET /v1/edgehosts/edge-host-w-1",
+            "GET /v1/edgehosts/edge-host-w-2",
+        ]
+    );
+}
