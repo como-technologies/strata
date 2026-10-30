@@ -323,6 +323,12 @@ variable "second_addon" {
   default     = false
 }
 
+variable "cluster_in_template" {
+  description = "Build the clusters in the cluster template, which gives them its profiles; the template must exist, so set template too. The clouds aws and gcp only"
+  type        = bool
+  default     = false
+}
+
 # examples/live/tag-only.sh's variables (#19).
 variable "tag_only_versions" {
   description = "Release versions that differ from 1.0.0 only in the OS pack's tag name, as version => tag"

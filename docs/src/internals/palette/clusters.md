@@ -49,7 +49,9 @@ itself. A cluster on AWS gives these fields:
   `GET /v1/spectroclusters/{uid}/config/namespaces`. Each answers `items`. A
   deleted cluster of the live example gives `{"items": []}` for each. For a
   uid that is not a cluster of the project, Palette answers HTTP 404 with the
-  code `ResourceNotFound`.
+  code `ResourceNotFound`. For the key of an active user with no role in the
+  project, the bindings route answers HTTP 500, and not 403. The body holds the
+  code `ResourceAccessDenied`, and a message that names the project.
 - Palette takes an edit of the subjects of a binding through
   `PUT /v1/spectroclusters/{uid}/config/rbacs`, and the bindings route then
   gives the new subject. The edit also changes the `spcHash` of the cluster.

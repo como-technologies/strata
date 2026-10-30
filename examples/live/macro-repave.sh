@@ -32,8 +32,6 @@ case "$from" in 1|2|3|4|5) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 macro=strata_probe
-# the one line of the Kubernetes pack under postKubeadmCommands; the OS pack has the key too
-edit_from=$'    - \'chmod 600 /var/lib/kubelet/config.yaml\'\n'
 edit_to=$'    - \'chmod 600 /var/lib/kubelet/config.yaml\'\n    - \'echo {{.spectro.macro.strata_probe}}\'\n'
 stable=${STABLE_MINUTES:-12}
 watch_minutes=${WATCH_MINUTES:-45}
@@ -115,7 +113,7 @@ fi
 if stage 2 "a macro in an infrastructure layer"; then
   check macro-set 0 "the project macro $macro gets the value one" -- "$live/api.sh" macro-set "$macro" one
   check macro-edit 0 "the Kubernetes pack of the release version reads it in postKubeadmCommands" -- \
-    "$live/api.sh" edit "$R" "$edit_from" "$edit_to"
+    "$live/api.sh" edit "$R" "$kubeadm_from" "$edit_to"
   check edit-notification 0 "Palette opens a notification for the edit of the profile" -- \
     bash -c "sleep 15; \"$live/api.sh\" get /v1/notifications/spectrocluster/$C | jq -e '[.items[]? | select(.action.isDone == false)] | length > 0'"
   check macro-accept 0 "cluster A takes the update" -- "$live/api.sh" apply "$C"
@@ -161,7 +159,7 @@ if stage 4 "what each record says"; then
 fi
 
 if stage 5 "undo"; then
-  check undo-edit 0 "the release version back" -- "$live/api.sh" edit "$R" "$edit_to" "$edit_from"
+  check undo-edit 0 "the release version back" -- "$live/api.sh" edit "$R" "$edit_to" "$kubeadm_from"
   check undo-accept 2 "Palette refuses the update of cluster A while the repave waits for approval" -- \
     "$live/api.sh" apply "$C"
   check undo-accept-says 0 "and says why" -- grep -q "repave is pending for approval" undo-accept.err

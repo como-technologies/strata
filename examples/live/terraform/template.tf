@@ -1,7 +1,9 @@
 # A cluster template (#66): a maintenance policy, and a template that links the release version
 # and the add-on version. Palette locks a profile version that a template links. template.sh
 # links the versions before any cluster runs them, tries an edit in place, and then builds a
-# cluster outside the template with the linked versions. Everything here goes with live-down.
+# cluster outside the template with the linked versions. With cluster_in_template, the cluster
+# is built in the template instead, and takes its profiles (#276). Everything here goes with
+# live-down.
 
 resource "spectrocloud_cluster_config_policy" "maintenance" {
   count   = var.template ? 1 : 0

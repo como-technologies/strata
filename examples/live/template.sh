@@ -2,8 +2,10 @@
 # The cluster template test (#66): Palette locks a profile version that a cluster template links.
 # The script links the release version and the add-on version before any cluster runs them, tries
 # an edit in place of a linked version, and then builds a cluster outside the template with the
-# linked versions, to record what Palette answers. With the cluster Running, the start time of
-# each add-on pack gives the order in which the cluster installs the packs of two add-on profiles.
+# linked versions, to record what Palette answers. It builds a cluster in the template, and asks
+# the route of the cluster and the route of the template if a change repaves it (#276). With a
+# cluster Running outside the template, the start time of each add-on pack gives the order in
+# which the cluster installs the packs of two add-on profiles.
 #
 #   just live-profiles && just live-template
 #
@@ -12,15 +14,18 @@
 #      linked release version
 #   2  an edit in place of the linked release version is refused, and the version verifies
 #   3  a cluster outside the template, with a linked version, is refused
-#   4  the template is removed, and the cluster is built with the same versions and a second
+#   4  a cluster in the template, which takes the profiles of the template (#276): the route of the
+#      cluster answers no repave for a change that repaves, and compare --repave asks the route of
+#      the template, which answers repave; then the cluster is removed
+#   5  the template is removed, and the cluster is built with the same versions and a second
 #      add-on profile: the edit in place is accepted again, and the start time of each add-on pack
 #      gives the order in which the cluster installs the packs of two add-on profiles
-#   5  the example is removed: the cluster and every profile
+#   6  the example is removed: the cluster and every profile
 #
-# Needs tofu, jq, and no cluster: the link must come before a cluster runs the versions. The script
-# ends with the removal of the whole example, as live-down does, because step 4 edits a version
-# that the cluster runs. Results go under runs/<UTC time>/template/, or OUT. Exit 0 only when no
-# check fails.
+# Needs tofu, jq, and no cluster: the link must come before a cluster runs the versions. It builds
+# two clusters, one after the other, on aws or gcp. The script ends with the removal of the whole
+# example, as live-down does, because step 5 edits a version that the cluster runs. Results go
+# under runs/<UTC time>/template/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail
 script=template
 flag=false
@@ -109,9 +114,39 @@ check cluster-outside-template 1 "#66: Palette refuses a cluster outside the tem
 check refusal-says 0 "#66: the refusal names the template" -- \
   grep -q 'ClusterCreateWithTemplateProfileForbidden' cluster-outside-template.err
 
-# ---- 4. the template is removed, and the cluster is built --------------------------------------
+# ---- 4. a cluster in the template ----------------------------------------------------------------
 
-echo "== 4. the template is removed, and the cluster runs the versions with a second add-on profile" | tee -a steps.log
+echo "== 4. a cluster in the template: the route of the cluster and the route of the template" | tee -a steps.log
+apply -var template=true -var cluster_in_template=true
+C=$(out cluster_uid)
+N1=$(out next_profile_uid)
+[ -n "$C" ] || die "no cluster after the apply"
+[ -n "$N1" ] || die "no uid of version 1.0.1 after the apply"
+wait_running "$C"
+check in-template-doc 0 "the cluster document" -- "$live/api.sh" get "/v1/spectroclusters/$C"
+check in-template-names 0 "#276: the cluster document names the template in spec.clusterTemplate.uid" -- \
+  jq -e --arg t "$T" '.spec.clusterTemplate.uid == $t' in-template-doc.out
+check in-template-runs-release 0 "#276: the cluster runs the release version of the template: IDENTICAL" -- \
+  "$strata" compare release.json "cluster:$C/$N"
+check in-template-edit 0 "the Kubernetes pack of version 1.0.1, which the template does not link, gets one more kubeadm command" -- \
+  "$live/api.sh" edit "$N1" "$kubeadm_from" "$kubeadm_to"
+check cluster-route 0 "#276: the route of the cluster answers no repave for the move to that version: for a cluster in a template, it compares nothing" -- \
+  "$live/tenant.sh" repave "$C" "$P" "$N1"
+check cluster-route-says 0 "#276: and it names no reason" -- grep -q ': no repave$' cluster-route.out
+check template-route 1 "#276: compare --repave of the same move: CHANGED, and strata asks the route of the template" -- \
+  "$strata" compare "cluster:$C/$N" "$N1" --repave
+check template-route-names 0 "#276: the first palette line names the template that governs the cluster" -- \
+  grep -q "^palette    the cluster template $T governs the cluster: Palette answers for the template, by profile uid\$" template-route.out
+check template-route-says 0 "#276: the route of the template answers repave, for the Kubernetes pack and the kubeadm key" -- \
+  grep -q '^palette    repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)$' template-route.out
+check template-route-json 0 "#276: --json carries paletteRepave: required true, the key in the reason, and the template" -- \
+  bash -c "\"$strata\" compare cluster:$C/$N $N1 --repave --json | jq -e --arg t $T '.paletteRepave | .required == true and .clusterUid == \"$C\" and .clusterTemplate.uid == \$t and (.reasons[0].keys | index(\"kubeadmconfig.postKubeadmCommands\"))'"
+check in-template-undo 0 "the Kubernetes pack of version 1.0.1 back" -- "$live/api.sh" edit "$N1" "$kubeadm_to" "$kubeadm_from"
+apply -var cluster=false -var template=true
+
+# ---- 5. the template is removed, and the cluster is built --------------------------------------
+
+echo "== 5. the template is removed, and the cluster runs the versions with a second add-on profile" | tee -a steps.log
 apply -var second_addon=true
 C=$(out cluster_uid)
 A2=$(out addon2_profile_uid)
@@ -149,9 +184,9 @@ install_order() {
 }
 check addon-order 0 "#66: the packs of two add-on profiles start within thirty seconds of each other, whatever order the cluster lists the profiles in" -- install_order
 
-# ---- 5. the example is removed -------------------------------------------------------------------
+# ---- 6. the example is removed -------------------------------------------------------------------
 
-echo "== 5. the example is removed" | tee -a steps.log
+echo "== 6. the example is removed" | tee -a steps.log
 "$live/tf.sh" destroy -input=false -auto-approve -no-color > destroy.txt 2>&1 \
   || "$live/tf.sh" destroy -input=false -auto-approve -no-color >> destroy.txt 2>&1 \
   || { "$live/diagnose.sh" "$PWD/diagnostics" >&2; die "tofu destroy failed; see $PWD/destroy.txt"; }
