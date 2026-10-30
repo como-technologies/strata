@@ -551,7 +551,7 @@ state in `spec.annotations.system_state`, with the time in
 | none | the tags and the values | not in the answer | Palette creates it |
 | `deprecated` | the tags and the values | the tags and the values | Palette creates it |
 | `disabled` | not in the answer | the tags and the values | Palette refuses it: HTTP 500, `ClusterProfileInvalidPackState`, "pack `<name>:<version>` is disabled" |
-| `deleted` | not in the answer | the tags and the values | Palette refuses it: HTTP 500, `ClusterProfileInvalidPackState`, "pack `<name>:<version>` is deleted" |
+| `deleted` | not in the answer | the tags and the values | Palette refuses it: HTTP 500, `ClusterProfileInvalidPackState`, "Cluster Profile operation not supported as pack `<name>:<version>` is deleted" |
 
 With no query, Palette answers 404 with `ResourceNotFound` when the answer has
 no version. So a 404 for a pack that the listing names is a fact about
@@ -577,6 +577,19 @@ at the create and on the validate routes: HTTP 500,
 [the packs route](validate-routes.md#post-v1clusterprofilesvalidatepacks),
 [the import validate route](validate-routes.md#post-v1clusterprofilesimportvalidate),
 and [validate-packs.sh](../../development/live-runs.md#validate-packssh).
+
+The create of a profile refuses both retired packs of the live example:
+
+- `POST /v1/clusterprofiles` with `gloo` 1.2.18 gives HTTP 500,
+  `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`.
+- The same request with `generic-vm-libvirt` 1.0.0, which is deleted, gives HTTP 500,
+  `ClusterProfileInvalidPackState`.
+
+So a new profile cannot hold a disabled pack or a deleted pack. Only a profile that
+holds the pack before Palette disables or deletes it can carry it. The live example
+makes no such profile. So the cases `pack-state-disabled` and `pack-state-deleted` of
+the validate route stay skipped. See
+[route-bodies.sh](../../development/live-runs.md#route-bodiessh).
 
 Strata reads the state from the listing:
 

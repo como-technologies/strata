@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The case bodies of validate-route.sh on AWS (#408). Four cases of the cluster validate route do
 # not depend on the cloud. Each case needs a body of its own, because its fault is in a profile.
-# This script writes those bodies, so that validate-route.sh runs the four cases on AWS.
+# This script writes those bodies, and runs validate-route.sh on them (#413).
 #
 #   examples/live/route-bodies.sh BODIES
 #
@@ -17,17 +17,25 @@
 #   pack-cloud-support       an add-on profile with a pack version whose cloud types lack aws
 #
 # The script makes each profile through the API, with the name strata-route-<case>, and publishes
-# it. It deletes each profile at its end, when a step fails, and when a signal stops it. Palette
-# can refuse a profile, and the registry can lack a pack in the state of a case. The script then
-# skips that case. steps.log says why, and no body of the case stays in BODIES. The script creates
-# no content in a registry. For pack-cloud-support, it reads the pack listing of Public Repo for
-# the first pack in the layer addon whose cloud types lack aws. PACK_CLOUD_SUPPORT=<pack>@<version>
-# names that pack instead.
+# it. A case body names its profile, and Palette answers 404 `ResourceNotFound` for a profile that
+# is gone. So the script runs `validate-route.sh BODIES` itself, while the profiles are there.
+# Only then does it delete each profile and the body of each case. It does the same when a step
+# fails, and when a signal stops it. A later `validate-route.sh BODIES` skips the four cases,
+# because no body of a case stays in BODIES. aws-clean.json stays: it names the release profile.
+# The results of validate-route.sh go under validate-route/ in the results of this script.
+#
+# Palette can refuse a profile, and the registry can lack a pack in the state of a case. The
+# script then skips that case. steps.log says why, and no body of the case stays in BODIES. The
+# create of a profile refuses a disabled pack and a deleted pack. So the two cases of pack-state
+# stay skipped, unless a profile holds a pack that Palette disables or deletes later. The script
+# creates no content in a registry. For pack-cloud-support, it reads the pack listing of Public
+# Repo for the first pack in the layer addon whose cloud types lack aws.
+# PACK_CLOUD_SUPPORT=<pack>@<version> names that pack instead.
 #
 # Needs the release profile of the live example on AWS (just live-profiles), the cloud account of
 # terraform.tfvars, and the key as verify.sh needs it. It builds no cluster, and costs nothing
 # that stays. Results go under runs/<UTC time>/route-bodies/, or OUT. Exit 0 only when no check
-# fails.
+# fails, and that includes the checks of validate-route.sh.
 set -uo pipefail
 script=route-bodies
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
@@ -42,13 +50,16 @@ mkdir -p "$1" && bodies=$(cd "$1" && pwd) || die "no directory $1"
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/route-bodies}
 mkdir -p "$run" && cd "$run" || exit 2
 
-# The profiles that this run made, one "CASE UID" on a line. cleanup deletes them and empties the list.
+# The profiles that this run made, one "CASE UID" on a line. cleanup deletes them and the body of
+# each case, and empties the list. A body that stays would name a profile that is gone.
 made=""
 cleanup() {
   local todo=$made id uid
   made=""
   while read -r id uid; do
-    [ -z "$id" ] || check "$id-deleted" 0 "#408: the profile of $id is deleted" -- "$live/api.sh" delete "$uid"
+    [ -n "$id" ] || continue
+    rm -f "$bodies/$id.json"
+    check "$id-deleted" 0 "#408: the profile of $id is deleted" -- "$live/api.sh" delete "$uid"
   done <<<"$todo"
 }
 
@@ -133,6 +144,12 @@ else
     tee -a steps.log
 fi
 
+# A body names a profile, and Palette answers 404 for a profile that is gone. So the profiles stay
+# until validate-route.sh has sent each body (#413).
+echo "== validate-route.sh on the bodies, while the profiles are there (#413)" | tee -a steps.log
+check validate-route 0 "#413: validate-route.sh runs on the bodies while the profiles of the cases are there" -- \
+  env OUT="$PWD/validate-route" "$live/validate-route.sh" "$bodies"
+
 cleanup
-echo "route-bodies: $failures check(s) failed; bodies in $bodies; results in $run"
+echo "route-bodies: $failures check(s) failed; results of validate-route.sh in $run/validate-route; results in $run"
 [ "$failures" = 0 ]
