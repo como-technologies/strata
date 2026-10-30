@@ -1,6 +1,5 @@
 //! The API responses a snapshot is built from, and their directory on disk.
 
-use std::fs;
 use std::path::Path;
 
 use serde::de::DeserializeOwned;
@@ -80,37 +79,34 @@ const SCOPE_FILE: &str = "scope.json";
 /// read.
 const RESOLVED_VALUES_FILE: &str = "resolved-values.json";
 
-/// The project saved in `dir`, or `None` when it has no scope file or names no project.
-fn read_scope(dir: &Path) -> Result<Option<String>> {
-    scope_field(dir, "projectUid")
+/// The scope file of a raw directory, read one time.
+struct SavedScope {
+    /// The project saved in the directory, or `None` when it has no scope file or names no
+    /// project.
+    project_uid: Option<String>,
+    /// When the responses were read from Palette. `None` for a directory that an older build
+    /// saved, which recorded no time.
+    fetched_at: Option<String>,
+    /// Whether the variables endpoint was unavailable. A directory that an older build saved
+    /// records nothing, which reads as available. The stand-in and a real empty list look alike,
+    /// and only this flag tells them apart.
+    variables_unavailable: bool,
 }
 
-/// When the responses in `dir` were read from Palette. `None` for a directory that an older build
-/// saved, which recorded no time.
-fn read_scope_fetched_at(dir: &Path) -> Result<Option<String>> {
-    scope_field(dir, "fetchedAt")
-}
-
-/// Whether the variables endpoint was unavailable when `dir` was saved. A directory that an older
-/// build saved records nothing, which reads as available: the stand-in and a real empty list look
-/// alike, and only this flag tells them apart.
-fn read_scope_variables_unavailable(dir: &Path) -> Result<bool> {
-    if !dir.join(SCOPE_FILE).is_file() {
-        return Ok(false);
+impl SavedScope {
+    /// The scope file of `dir`, or each field empty when `dir` has no scope file.
+    fn read(dir: &Path) -> Result<SavedScope> {
+        let scope: Option<Value> = read_optional(dir, SCOPE_FILE)?;
+        let scope = scope.unwrap_or(Value::Null);
+        Ok(SavedScope {
+            project_uid: opt_text(&scope, "/projectUid"),
+            fetched_at: opt_text(&scope, "/fetchedAt"),
+            variables_unavailable: scope
+                .get("variablesUnavailable")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        })
     }
-    let scope: Value = read_json_file(dir, SCOPE_FILE)?;
-    Ok(scope
-        .get("variablesUnavailable")
-        .and_then(Value::as_bool)
-        .unwrap_or(false))
-}
-
-fn scope_field(dir: &Path, key: &str) -> Result<Option<String>> {
-    if !dir.join(SCOPE_FILE).is_file() {
-        return Ok(None);
-    }
-    let scope: Value = read_json_file(dir, SCOPE_FILE)?;
-    Ok(opt_text(&scope, &format!("/{key}")))
 }
 
 /// The scope file's document: the project uid, empty at tenant scope, the time the responses were
@@ -170,12 +166,7 @@ fn masked_notifications(notifications: &Value) -> Value {
         .flat_map(|m| m.values_mut());
     for event in events {
         for field in EVENT_VALUE_FIELDS {
-            if let Some(v) = event
-                .get_mut(field)
-                .filter(|v| !v.is_null() && v.as_str() != Some(""))
-            {
-                *v = Value::String(MASKED.to_string());
-            }
+            mask_field(event, field);
         }
     }
     out
@@ -195,14 +186,20 @@ fn masked_repave(repave: &Value) -> Value {
         .filter_map(Value::as_object_mut)
         .flat_map(|p| p.values_mut());
     for side in sides {
-        if let Some(v) = side
-            .get_mut("values")
-            .filter(|v| !v.is_null() && v.as_str() != Some(""))
-        {
-            *v = Value::String(MASKED.to_string());
-        }
+        mask_field(side, "values");
     }
     out
+}
+
+/// Put the mask over `field` of `object`, when the field holds a value. A null or empty value
+/// stays as it is, so the directory still says that it held none.
+fn mask_field(object: &mut serde_json::Value, field: &str) {
+    if let Some(v) = object
+        .get_mut(field)
+        .filter(|v| !v.is_null() && v.as_str() != Some(""))
+    {
+        *v = Value::String(MASKED.to_string());
+    }
 }
 
 /// A copy of `cluster` with `********` over each password in the values of a cluster group, as
@@ -218,16 +215,10 @@ fn masked_group(cluster: &Value) -> Result<Value> {
     Ok(out)
 }
 
-/// Write each named document under `dir`, creating it.
+/// Write each named document under `dir`, creating it, through [`crate::file::write_file`].
 fn write_json_files(dir: &Path, files: &[(&str, &Value)]) -> Result<()> {
-    fs::create_dir_all(dir).map_err(|source| Error::Io {
-        path: dir.to_path_buf(),
-        source,
-    })?;
     for (name, v) in files {
-        let path = dir.join(name);
-        fs::write(&path, serde_json::to_string_pretty(v)?)
-            .map_err(|source| Error::Io { path, source })?;
+        crate::file::write_file(&dir.join(name), &serde_json::to_string_pretty(v)?)?;
     }
     Ok(())
 }
@@ -235,13 +226,17 @@ fn write_json_files(dir: &Path, files: &[(&str, &Value)]) -> Result<()> {
 impl RawProfile {
     /// Read the three files from `dir`, and the project from `scope.json` when it is there.
     pub fn load_dir(dir: &Path) -> Result<RawProfile> {
+        let profile = read_json_file(dir, PROFILE_FILE)?;
+        let manifests = read_json_file(dir, MANIFESTS_FILE)?;
+        let variables = read_json_file(dir, VARIABLES_FILE)?;
+        let scope = SavedScope::read(dir)?;
         Ok(RawProfile {
-            profile: read_json_file(dir, PROFILE_FILE)?,
-            manifests: read_json_file(dir, MANIFESTS_FILE)?,
-            variables: read_json_file(dir, VARIABLES_FILE)?,
-            variables_unavailable: read_scope_variables_unavailable(dir)?,
-            project_uid: read_scope(dir)?,
-            fetched_at: read_scope_fetched_at(dir)?,
+            profile,
+            manifests,
+            variables,
+            variables_unavailable: scope.variables_unavailable,
+            project_uid: scope.project_uid,
+            fetched_at: scope.fetched_at,
             manifest_entities: read_optional(dir, MANIFEST_ENTITIES_FILE)?,
             resolved_values: read_optional(dir, RESOLVED_VALUES_FILE)?,
         })
@@ -350,13 +345,17 @@ impl RawCluster {
 
     /// Read the three files from `dir`, and the project from `scope.json` when it is there.
     pub fn load_dir(dir: &Path) -> Result<RawCluster> {
+        let cluster = read_json_file(dir, Self::MARKER)?;
+        let manifests = read_json_file(dir, MANIFESTS_FILE)?;
+        let variables = read_json_file(dir, VARIABLES_FILE)?;
+        let scope = SavedScope::read(dir)?;
         Ok(RawCluster {
-            cluster: read_json_file(dir, Self::MARKER)?,
-            manifests: read_json_file(dir, MANIFESTS_FILE)?,
-            variables: read_json_file(dir, VARIABLES_FILE)?,
-            variables_unavailable: read_scope_variables_unavailable(dir)?,
-            project_uid: read_scope(dir)?,
-            fetched_at: read_scope_fetched_at(dir)?,
+            cluster,
+            manifests,
+            variables,
+            variables_unavailable: scope.variables_unavailable,
+            project_uid: scope.project_uid,
+            fetched_at: scope.fetched_at,
             notifications: read_optional(dir, Self::NOTIFICATIONS)?,
             repave: read_optional(dir, Self::REPAVE)?,
             resolved_values: read_optional(dir, Self::RESOLVED_VALUES)?,
@@ -527,7 +526,7 @@ mod tests {
         assert_eq!(back.project_uid.as_deref(), Some("p1"));
         assert_eq!(back.manifest_entities, raw.manifest_entities);
         assert_eq!(back.resolved_values, raw.resolved_values);
-        fs::write(dir.path().join(VARIABLES_FILE), "").unwrap();
+        std::fs::write(dir.path().join(VARIABLES_FILE), "").unwrap();
         assert!(matches!(
             RawProfile::load_dir(dir.path()).unwrap_err(),
             Error::EmptyFile(_)

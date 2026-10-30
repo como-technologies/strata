@@ -99,13 +99,9 @@ fn second_reading_counts(read: &crate::ops::ClustersRead) -> String {
         (0, Some(e)) => format!("{counts}; cluster groups not read ({})", error_message(e)),
         (g, _) => format!(
             "{counts}; {g} cluster {} the version, {} other virtual {}, {} read",
-            if g == 1 { "group pins" } else { "groups pin" },
+            crate::text::plural(g, "group pins", "groups pin"),
             read.members,
-            if read.members == 1 {
-                "cluster"
-            } else {
-                "clusters"
-            },
+            crate::text::plural(read.members, "cluster", "clusters"),
             read.members.saturating_sub(read.members_unread)
         ),
     }
@@ -124,7 +120,7 @@ fn second_reading_main(read: &crate::ops::ClustersRead) -> String {
         Some(crate::ops::Resolved::Search) => format!(
             "the cluster search names {} other {} with the profile, {} read",
             n,
-            if n == 1 { "cluster" } else { "clusters" },
+            crate::text::plural(n, "cluster", "clusters"),
             read_n
         ),
         _ => format!("{read_n} of {n} clusters read"),
