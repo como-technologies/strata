@@ -5,10 +5,10 @@
 //! in another shape. [`super::load`] reads it when the file has `spec.template.packs`, so a team
 //! that keeps the export in git does not write a second file for strata.
 
-use crate::closed_set::ClosedSet;
 use serde_json::{Map, Value};
 
 use super::{Candidate, CandidateLayer, CandidateManifest, LayerKind, default_type};
+use crate::closed_set::ClosedSet;
 use crate::json::arr;
 use crate::pack_type::PackType;
 

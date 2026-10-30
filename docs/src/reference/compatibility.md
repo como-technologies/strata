@@ -86,6 +86,7 @@ fields take a value of a later release:
   `source.cluster.tiers`, and `upstreamSource` in the `hash` of each pack, in
   `strata-snapshot/1`.
 - `bump.impact` and each value of `bump.flags[]`, in `strata-behind/1`.
+- `pinnedState` of a pin, and `state` of a newer version, in `strata-behind/1`.
 
 A release does not rename or remove a value of these sets and keep the id.
 
@@ -111,7 +112,6 @@ strata reads each value of them:
 
 - the `type` and the `layer` of a pack
 - the `type` of a profile
-- `pinnedState`, and the `state` of a newer version
 - the `status` of a sync
 
 Strata only writes its other documents, such as `strata-packs/1` and

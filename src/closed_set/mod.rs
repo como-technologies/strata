@@ -37,8 +37,8 @@
 //! [`Open`] reads a value in three steps:
 //!
 //! 1. Read the value as text. A value that is not text, such as `1`, gives an error.
-//! 2. Read the text as `T`, with the serde rules of `T`.
-//! 3. If `T` reads the text, the value is [`Open::Known`]. If not, the value is
+//! 2. Look the text up in [`ClosedSet::ALL`], by [`ClosedSet::as_str`].
+//! 3. If the text names a value of `T`, the value is [`Open::Known`]. If not, the value is
 //!    [`Open::Unknown`] with the text, and there is no error.
 //!
 //! [`Open`] always writes the text of [`Open::as_str`]. A known value writes the text of its
@@ -98,7 +98,7 @@ use std::cmp::Ordering;
 use std::fmt;
 
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
-use serde::de::{DeserializeOwned, IntoDeserializer};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub(crate) mod legend;
@@ -156,6 +156,11 @@ pub enum Open<T> {
 }
 
 impl<T: ClosedSet> Open<T> {
+    /// The value that `text` names, or [`Open::Unknown`] with the text when it names no value.
+    pub fn from_text(text: &str) -> Open<T> {
+        T::parse(text).map_or_else(|| Open::Unknown(text.to_string()), Open::Known)
+    }
+
     /// The value, when this release knows it.
     pub fn known(&self) -> Option<T> {
         match self {
@@ -224,13 +229,11 @@ impl<T: ClosedSet> Serialize for Open<T> {
 }
 
 impl<'de, T: ClosedSet> Deserialize<'de> for Open<T> {
-    /// Read the text, and then the value of `T` that the text names, as `T` reads it.
+    /// Read the text, and then the value of `T` that the text names: see [`Open::from_text`].
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let text = String::deserialize(deserializer)?;
-        let value: Result<T, serde::de::value::Error> =
-            T::deserialize(text.as_str().into_deserializer());
         // a text that names no value of `T` is a value of a later release, and not an error
-        Ok(value.map_or(Open::Unknown(text), Open::Known))
+        Ok(Open::from_text(&text))
     }
 }
 

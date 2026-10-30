@@ -14,6 +14,7 @@ use strata::closed_set::ClosedSet;
 use strata::conjunction::Conjunction;
 use strata::diff::{ChangeFlag, ImpactLevel, Op, Status};
 use strata::ops::{PairStatus, Policy, RecordStatus};
+use strata::pack_state::PackState;
 use strata::pack_type::PackType;
 use strata::profile_type::ProfileType;
 use strata::scope::ProfileScope;
@@ -51,7 +52,7 @@ fn set<T: ClosedSet>(released: &'static [&'static str]) -> Set {
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value and keep the schema id, because a record of
 /// an earlier release then reads the value as unknown.
-fn sets() -> [Set; 16] {
+fn sets() -> [Set; 17] {
     [
         set::<Implementation>(&["rust", "bash"]),
         set::<Template>(&["published", "draft", "applied", "candidate", "registry"]),
@@ -78,6 +79,7 @@ fn sets() -> [Set; 16] {
             "unknown-upstream",
         ]),
         set::<Policy>(&["exact", "registry-move"]),
+        set::<PackState>(&["deprecated", "disabled", "deleted", "absent"]),
         set::<PackType>(&["spectro", "helm", "oci", "manifest"]),
         set::<ProfileType>(&["cluster", "infra", "add-on", "system", "app", "pack"]),
         set::<ProfileScope>(&["project", "tenant", "system"]),

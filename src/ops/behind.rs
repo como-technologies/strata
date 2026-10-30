@@ -15,6 +15,7 @@ use crate::closed_set::Open;
 use crate::cloud::supports;
 use crate::diff::{ChangeFlag, Diff, ImpactLevel, RegistrySync};
 use crate::error::{Error, Result};
+use crate::pack_state::PackState;
 use crate::reference::{Ref, version};
 use crate::registry::{Registries, RegistrySyncNote};
 use crate::snapshot::{Snapshot, Tool, load_document};
@@ -123,7 +124,7 @@ pub struct Pin {
     /// The state that the registry gives the pinned version: `deprecated`, `disabled`, or
     /// `deleted`; `absent` when the registry no longer lists it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pinned_state: Option<String>,
+    pub pinned_state: Option<Open<PackState>>,
     /// Each record that pins it.
     pub pinned_by: Vec<PinnedBy>,
     /// The newer versions that the registry offers, newest first. A version that the registry
@@ -175,7 +176,7 @@ pub struct Newer {
     pub version: String,
     /// `deprecated`, when the registry says so.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub state: Option<String>,
+    pub state: Option<Open<PackState>>,
     /// True for the version that Palette calls the latest: see [`PackBuild::palette_latest`].
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub palette_latest: bool,
@@ -445,7 +446,7 @@ fn read_pin<A: PaletteApi>(
     let pinned = builds.iter().find(|b| b.version == pin.version);
     pin.pinned_state = match pinned {
         Some(b) => b.state.clone(),
-        None => Some("absent".to_string()),
+        None => Some(PackState::Absent.into()),
     };
     // the version that a floating tag names now. A profile with values of its own stays on
     // the pinned version until a person applies the update. So each version above the pin

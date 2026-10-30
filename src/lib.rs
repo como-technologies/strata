@@ -88,6 +88,7 @@ pub mod error;
 pub(crate) mod file;
 pub(crate) mod json;
 pub mod ops;
+pub mod pack_state;
 pub mod pack_type;
 pub mod profile_type;
 pub mod reference;

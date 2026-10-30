@@ -3,7 +3,6 @@
 //! They give the uid of a name, the documents, the variables, the manifests, and the validate
 //! routes of a profile.
 
-use crate::closed_set::ClosedSet;
 use std::collections::BTreeSet;
 
 use serde_json::Value;
@@ -14,6 +13,7 @@ use super::{
     listed_versions, no_variables, query_value, route, with_limit,
 };
 use crate::api::{PaletteApi, RawProfile, mask};
+use crate::closed_set::ClosedSet;
 use crate::cloud::CLOUD_ALL;
 use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, text};

@@ -3,8 +3,7 @@
 
 use super::dash;
 use super::verify::edited_in_place_note;
-use crate::closed_set::ClosedSet;
-use crate::closed_set::Open;
+use crate::closed_set::{ClosedSet, Open};
 use crate::diff::pack::InvalidSides;
 use crate::diff::{Diff, ImageIdChange, InvalidPack, PackDiff, Side};
 use crate::repave::PaletteRepaveReason;

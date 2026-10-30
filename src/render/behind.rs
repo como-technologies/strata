@@ -77,7 +77,12 @@ pub(crate) fn arrived_line(pin: &crate::ops::Pin) -> Option<String> {
 /// `1.66.0 (drops arm64)`, or `1.64.0 (deprecated, drops arm64)`.
 fn newer_version(n: &crate::ops::Newer) -> String {
     let drops = (!n.drops.is_empty()).then(|| format!("drops {}", and_list(&n.drops)));
-    let notes: Vec<String> = n.state.iter().cloned().chain(drops).collect();
+    let notes: Vec<String> = n
+        .state
+        .iter()
+        .map(ToString::to_string)
+        .chain(drops)
+        .collect();
     if notes.is_empty() {
         n.version.clone()
     } else {

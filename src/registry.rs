@@ -9,16 +9,17 @@
 //!
 //! The state that the listing gives a pack version, such as `deleted` or `disabled`, is here too.
 
-use crate::closed_set::ClosedSet;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, RegistryKind};
+use crate::closed_set::{ClosedSet, Open};
 use crate::diff::{RegistrySync, SyncRecovery};
 use crate::error::{Error, Result, served, unread_reason};
 use crate::json::{opt_text, str_at, take_items, text};
+use crate::pack_state::PackState;
 use crate::pack_type::PackType;
 use crate::reference::one_named;
 use crate::term::progress::Progress;
@@ -329,30 +330,27 @@ const DISABLED_MARK: &str = "/spec/annotations/disabled";
 /// The state that the listing gives a pack version, and nothing for a pack in use.
 ///
 /// The state is the `system_state`: `deprecated`, `disabled`, or `deleted`. It is `disabled` for
-/// a version with the [`DISABLED_MARK`] and no `system_state`.
-pub(crate) fn pack_state(summary: &Value) -> Option<String> {
-    system_state(summary)
-        .or_else(|| (str_at(summary, DISABLED_MARK) == "true").then(|| "disabled".to_string()))
+/// a version with the [`DISABLED_MARK`] and no `system_state`. A `system_state` that this release
+/// does not know stays in the answer as text.
+pub(crate) fn pack_state(summary: &Value) -> Option<Open<PackState>> {
+    system_state(summary).or_else(|| {
+        (str_at(summary, DISABLED_MARK) == "true").then_some(Open::Known(PackState::Disabled))
+    })
 }
 
 /// The state that Spectro Cloud gives a version that it retired: `deprecated`, `disabled`, or
 /// `deleted`.
-fn system_state(summary: &Value) -> Option<String> {
-    opt_text(summary, "/spec/annotations/system_state")
-}
-
-/// True when `state` is a state of a version that Palette no longer serves: `disabled` or
-/// `deleted`. [`retired_state`] and [`PackBuild::retired`](crate::ops::PackBuild::retired) keep
-/// this one rule.
-pub(crate) fn is_retired(state: &str) -> bool {
-    matches!(state, "disabled" | "deleted")
+fn system_state(summary: &Value) -> Option<Open<PackState>> {
+    opt_text(summary, "/spec/annotations/system_state").map(|text| Open::from_text(&text))
 }
 
 /// The state of a pack version that Palette no longer serves: `disabled` or `deleted` in
 /// `system_state`. Palette serves a version with the [`DISABLED_MARK`] alone, and its validate
-/// route refuses a profile that holds it. So strata does not refuse that version itself.
-pub(crate) fn retired_state(summary: &Value) -> Option<String> {
-    system_state(summary).filter(|s| is_retired(s))
+/// route refuses a profile that holds it. So strata does not refuse that version itself. The rule
+/// is [`PackState::is_retired`], and [`PackBuild::retired`](crate::ops::PackBuild::retired) keeps it
+/// too.
+pub(crate) fn retired_state(summary: &Value) -> Option<PackState> {
+    system_state(summary)?.known().filter(|s| s.is_retired())
 }
 
 /// The type of the pack of `summary`, an entry of the pack listing, from its `spec.type`.
@@ -593,7 +591,7 @@ mod tests {
     #[test]
     fn a_version_with_the_disabled_mark_and_no_system_state_is_disabled_and_not_retired() {
         let marked = json!({"spec": {"annotations": {"disabled": "true"}}});
-        assert_eq!(pack_state(&marked).as_deref(), Some("disabled"));
+        assert_eq!(pack_state(&marked), Some(PackState::Disabled.into()));
         assert_eq!(
             retired_state(&marked),
             None,
@@ -601,8 +599,8 @@ mod tests {
         );
         let deleted =
             json!({"spec": {"annotations": {"disabled": "true", "system_state": "deleted"}}});
-        assert_eq!(pack_state(&deleted).as_deref(), Some("deleted"));
-        assert_eq!(retired_state(&deleted).as_deref(), Some("deleted"));
+        assert_eq!(pack_state(&deleted), Some(PackState::Deleted.into()));
+        assert_eq!(retired_state(&deleted), Some(PackState::Deleted));
         for summary in [
             json!({"spec": {"annotations": {"disabled": "false"}}}),
             json!({"spec": {"annotations": {"disabled": true}}}),
@@ -612,5 +610,15 @@ mod tests {
             assert_eq!(pack_state(&summary), None, "{summary}");
             assert_eq!(retired_state(&summary), None, "{summary}");
         }
+    }
+
+    #[test]
+    fn a_state_that_this_release_does_not_know_stays_text_and_is_not_retired() {
+        let later = json!({"spec": {"annotations": {"system_state": "quarantined"}}});
+        assert_eq!(
+            pack_state(&later),
+            Some(Open::Unknown("quarantined".to_string()))
+        );
+        assert_eq!(retired_state(&later), None);
     }
 }

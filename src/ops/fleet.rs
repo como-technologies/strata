@@ -1,7 +1,6 @@
 //! The fleet: the clusters that a query of labels selects, from a search of Palette or a saved tag
 //! filter, and a record of each.
 
-use crate::closed_set::ClosedSet;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -11,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, SEARCH_TAGS, search_condition, search_filter, search_group};
+use crate::closed_set::ClosedSet;
 use crate::conjunction::Conjunction;
 use crate::error::{Error, Result};
 use crate::reference::{Ref, one_named};

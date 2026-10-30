@@ -1,6 +1,5 @@
 //! The versions of a pack in the registries, and the record of one pack version.
 
-use crate::closed_set::ClosedSet;
 use std::path::PathBuf;
 
 use serde_json::{Map, Value};
@@ -8,6 +7,7 @@ use serde_json::{Map, Value};
 use super::resolve::resolve_with;
 use super::{Candidate, CandidateLayer, LoadedCandidate, LoadedLayer, RegistryRef};
 use crate::api::{Palette, PaletteApi};
+use crate::closed_set::ClosedSet;
 use crate::error::{Error, Result};
 use crate::json::{str_at, text};
 use crate::profile_type::ProfileType;

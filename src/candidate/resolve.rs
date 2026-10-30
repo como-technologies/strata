@@ -1,7 +1,6 @@
 //! The resolve of each layer: the pack that the registry gives, and the documents of a published
 //! profile.
 
-use crate::closed_set::ClosedSet;
 use serde_json::{Value, json};
 
 use super::pack::find_version;
@@ -12,6 +11,7 @@ use super::{
     gaps,
 };
 use crate::api::{Palette, PaletteApi, RawProfile};
+use crate::closed_set::ClosedSet;
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, str_at, strings, text};
 use crate::pack_type::PackType;
@@ -216,7 +216,7 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
                 name: l.name.clone(),
                 version: l.version.clone(),
                 registry,
-                state,
+                state: state.as_str().to_string(),
             });
         }
         // only the create checks that the pack supports the cloud of the profile

@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
+use crate::closed_set::{ClosedSet, Open};
 use crate::cloud::supports;
 use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, strings, text};
+use crate::pack_state::PackState;
 use crate::pack_type::PackType;
 use crate::reference::version;
 use crate::registry::{Registries, pack_type_of, registry_layer};
@@ -61,7 +63,7 @@ pub struct PackRegistry {
     /// The state that every version of the pack in this registry has, when they all have the
     /// same one: `deprecated`, `disabled`, or `deleted`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub state: Option<String>,
+    pub state: Option<Open<PackState>>,
     /// True when the registry reports no digest for each version of the pack in it, before
     /// `--latest` or `--cloud` cut the list. A record of such a version is `UNVERIFIED`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -101,7 +103,7 @@ pub struct PackBuild {
     /// The state that the registry listing gives this version: `deprecated`, `disabled`, or
     /// `deleted`. Palette serves no disabled or deleted pack, and refuses a profile that pins one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub state: Option<String>,
+    pub state: Option<Open<PackState>>,
     /// When Palette first listed this version, `metadata.creationTimestamp` of the listing; empty
     /// when the listing gives no time.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -111,11 +113,12 @@ pub struct PackBuild {
 impl PackBuild {
     /// True when the state of this version is `disabled` or `deleted`: Spectro Cloud retired it,
     /// or marked it `disabled`, and a profile cannot hold it. The rule is
-    /// [`is_retired`](crate::registry::is_retired).
+    /// [`PackState::is_retired`].
     pub(crate) fn retired(&self) -> bool {
         self.state
-            .as_deref()
-            .is_some_and(crate::registry::is_retired)
+            .as_ref()
+            .and_then(Open::known)
+            .is_some_and(PackState::is_retired)
     }
 }
 
@@ -157,8 +160,12 @@ fn architectures(entry: &Value) -> Vec<String> {
 }
 
 /// The value of the `states` query that asks Palette for the tags of the retired versions of a
-/// pack. With it, Palette answers with the versions in these states only.
-const RETIRED_STATES: &str = "deprecated,disabled,deleted";
+/// pack: each state that a listing gives. With it, Palette answers with the versions in these
+/// states only.
+fn listed_states() -> String {
+    let listed = PackState::ALL.iter().filter(|s| **s != PackState::Absent);
+    listed.map(|s| s.as_str()).collect::<Vec<_>>().join(",")
+}
 
 /// Join the tag rows of the `answers` of one registry, and keep each row one time.
 ///
@@ -248,7 +255,7 @@ pub(super) fn registry_packs_in<A: PaletteApi>(
             .iter()
             .any(|e| crate::registry::retired_state(e).is_some())
         {
-            answers.push(found(palette.pack_tags(name, uid, Some(RETIRED_STATES)))?);
+            answers.push(found(palette.pack_tags(name, uid, Some(&listed_states())))?);
         }
         let answers: Vec<Value> = answers.into_iter().flatten().collect();
         let tags_unavailable = answers.is_empty();
@@ -272,7 +279,7 @@ pub(super) fn registry_packs_in<A: PaletteApi>(
             .collect::<std::collections::BTreeSet<_>>()
             .len();
         // one state for the registry, when every version of the pack in it has the same one
-        let states: std::collections::BTreeSet<Option<String>> = mine
+        let states: std::collections::BTreeSet<Option<Open<PackState>>> = mine
             .iter()
             .map(|e| crate::registry::pack_state(e))
             .collect();
@@ -756,7 +763,7 @@ mod tests {
         let registry = nginx_packs(&api);
         assert_eq!(api.calls(RETIRED_PATH), 1);
         assert!(!registry.tags_unavailable);
-        assert_eq!(registry.state.as_deref(), Some("disabled"));
+        assert_eq!(registry.state, Some(PackState::Disabled.into()));
         assert_eq!(tags_of(&registry, "0.26.1"), ["0.26.1", "0.26.x"]);
         assert_eq!(tags_of(&registry, "0.43.0"), ["0.43.0", "0.43.x"]);
     }

@@ -7,7 +7,6 @@
 //! as the published version. A `manifest` layer holds manifests from no registry. Strata makes no
 //! request for it, and its pack has no uid until Palette mints one at the create.
 
-use crate::closed_set::ClosedSet;
 use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
@@ -15,6 +14,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 
 use crate::api::RawProfile;
+use crate::closed_set::ClosedSet;
 use crate::content::layer::Layer;
 use crate::error::{Error, Result};
 use crate::pack_type::PackType;
