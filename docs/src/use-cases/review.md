@@ -115,6 +115,19 @@ approved:
 
 `IDENTICAL`: Palette has the version that the reviewer approved.
 
+## Ask Palette about the version
+
+Before the publish, `snapshot --from-candidate --validate` asks Palette if it
+accepts the packs of the candidate. See
+[Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
+
+Palette answers two more questions only for a version that it holds, so they
+follow the publish. Does the move of a cluster to the version repave the nodes?
+Does Palette accept the packs on that cluster? See
+[Ask Palette if the change repaves](../commands/compare/repave.md) and
+[Ask Palette if it accepts the packs](../commands/compare/validate.md).
+[Step 3 of the everyday loop](../loop.md#3-the-publish) shows both.
+
 `same-release` is the question "are these one release?", where `compare` is the
 question "what differs?". It takes two or more records, in the order a release
 moves through them, and passes when each pair holds the same content. It reads

@@ -1,0 +1,3 @@
+$ jq '(.spec.machinepoolconfig[] | select(.poolConfig.name == "worker-pool") | .poolConfig.size) = 2' cluster.json > fixed.json && mv fixed.json cluster.json && jq -c '.spec.machinepoolconfig[].poolConfig | {name, size}' cluster.json
+{"name":"cp-pool","size":1}
+{"name":"worker-pool","size":2}

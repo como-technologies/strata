@@ -72,6 +72,41 @@ instances() {
   done | sort | paste -sd ' ' -
 }
 
+# ---- the body of a create ----------------------------------------------------------------------------
+
+# var NAME: the value of NAME in terraform/terraform.tfvars, or in the file TFVARS; empty when the
+# file does not set it
+var() { sed -n "s/^$1 *= *\"\(.*\)\"/\1/p" "${TFVARS:-$live/terraform/terraform.tfvars}" | head -n 1; }
+
+# create_body ENGINE PROFILE NAME FILE: write the body of the create of a cluster named NAME to FILE,
+# from preflight/ENGINE.json and the tenant: the profile with the uid PROFILE, the cloud account of
+# terraform.tfvars, and its region and zone. ENGINE is aws, eks, gcp, or gke. It stops the script
+# when the tenant has no such cloud account. It leaves the summary of the accounts in accounts.json,
+# and sets the account uid in $A and its facts in $account_name, $region, $az, $ssh_key, and $project.
+create_body() {
+  local engine=$1 profile=$2 name=$3 file=$4 kind
+  case "$engine" in
+    aws|eks)
+      account_name=$(var cloud_account_name)
+      kind=aws; region=$(var region); region=${region:-us-east-2}; az=$(var az); az=${az:-${region}a}
+      ssh_key=$(var ssh_key_name); project=""
+      ;;
+    gcp|gke)
+      account_name=$(var gcp_cloud_account_name); kind=gcp
+      region=$(var gcp_region); region=${region:-us-east1}; az=$(var gcp_zone); az=${az:-${region}-b}
+      ssh_key=""; project=$(var gcp_project)
+      ;;
+  esac
+  # the name_prefix of the example defaults to strata-live
+  [ "$engine" = eks ] && account_name="$( { var name_prefix; } | grep . || echo strata-live)-eks"
+  "$live/api.sh" get "/v1/cloudaccounts/summary" > accounts.json 2> accounts.err || die "cannot list the cloud accounts; see $PWD/accounts.err"
+  A=$(jq -r --arg n "$account_name" --arg k "$kind" '.items[] | select(.metadata.name == $n and .kind == $k) | .metadata.uid' accounts.json | head -n 1)
+  [ -n "$A" ] || die "no cloud account named $account_name of kind $kind in the project; the summary lists: $(jq -r '.items[] | "\(.metadata.name) (\(.kind))"' accounts.json | paste -sd ', ' -)"
+  sed -e "s/__ACCOUNT_UID__/$A/g" -e "s/__PROFILE_UID__/$profile/g" -e "s/__REGION__/$region/g" -e "s/__AZ__/$az/g" \
+      -e "s/__SSH_KEY__/$ssh_key/g" -e "s/__PROJECT__/$project/g" -e "s/__NAME__/$name/g" \
+      "$live/preflight/$engine.json" > "$file"
+}
+
 # ---- checks ------------------------------------------------------------------------------------------
 
 failures=0

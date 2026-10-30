@@ -105,9 +105,9 @@ const MACRO_REGION: &[Edit] = &[Edit::Macro {
     name: "region",
 }];
 
-/// The body of an AWS create for the preflight chapter: the profile aws-stack@1.1.1 of dev, the
-/// cloud account platform-aws, and two pools of t3.xlarge in one zone.
-fn preflight_entity() -> String {
+/// The body of an AWS create named `name`, for the profile `profile`: the cloud account
+/// platform-aws, and two pools of t3.xlarge in one zone, with one worker.
+fn preflight_entity(name: &str, profile: &str) -> String {
     let pool = |name: &str, size: u32, control_plane: bool| {
         json!({
             "cloudConfig": {"instanceType": "t3.xlarge", "azs": ["us-east-2a"], "rootDeviceSize": 60},
@@ -116,15 +116,54 @@ fn preflight_entity() -> String {
         })
     };
     let entity = json!({
-        "metadata": {"name": "payments", "labels": {"env": "prod"}},
+        "metadata": {"name": name, "labels": {"env": "prod"}},
         "spec": {
             "cloudAccountUid": PLATFORM_AWS,
             "cloudConfig": {"region": "us-east-2", "sshKeyName": "platform", "vpcId": ""},
             "machinepoolconfig": [pool("cp-pool", 1, true), pool("worker-pool", 1, false)],
-            "profiles": [{"uid": A111, "packValues": [], "variables": []}],
+            "profiles": [{"uid": profile, "packValues": [], "variables": []}],
         },
     });
     serde_json::to_string_pretty(&entity).expect("a JSON document")
+}
+
+/// The route of Palette that checks the body of an AWS create, with nothing created.
+const AWS_VALIDATE: &str = "v1/spectroclusters/aws/validate";
+
+/// The answer of the validate route when a pool has too few cores for the packs: the one worker of
+/// `preflight_entity` has 4 cores, and the packs need 4.1.
+fn cpu_floor_answer() -> serde_json::Value {
+    json!({"machinePools": {"results": [{"name": "worker-pool", "displayName": "worker-pool",
+        "errors": [{"code": "MachinePoolResourcesInsufficient",
+            "message": "A minimum allocation of '4.1' CPU cores is required across all worker nodes"}]}]},
+        "profiles": []})
+}
+
+/// The answer of the validate route when it finds no fault.
+fn accepted_answer() -> serde_json::Value {
+    json!({"machinePools": {"results": []}, "profiles": []})
+}
+
+/// Write the answers that the live tier of `strata preflight` reads for `preflight_entity` in
+/// `project`: the cloud account, the property route, the regions, and the validate route, which
+/// refuses the worker pool for its CPU.
+fn preflight_routes(r: &mut Runner, project: &str) {
+    r.answer(
+        project,
+        &format!("v1/cloudaccounts/aws/{PLATFORM_AWS}"),
+        &json!({"kind": "aws", "metadata": {"name": "platform-aws", "uid": PLATFORM_AWS},
+            "spec": {"credentialType": "secret", "partition": "aws", "policyARNs": []}, "status": {"state": "Active"}}),
+    );
+    // the property route of AWS answers 204 with no body; the stand-in serves 200 with an empty
+    // object, which a rule reads the same way (`ok`); the regions of the account, with the query
+    // in the file name as the stand-in maps it
+    r.answer(project, "v1/clouds/aws/properties/validate", &json!({}));
+    r.answer(
+        project,
+        &format!("v1/clouds/aws/regions@cloudAccountUid={PLATFORM_AWS}"),
+        &json!({"regions": [{"name": "us-east-2", "zones": [{"name": "us-east-2a"}, {"name": "us-east-2b"}, {"name": "us-east-2c"}]}]}),
+    );
+    r.answer(project, AWS_VALIDATE, &cpu_floor_answer());
 }
 
 /// The git settings that the merge-gate chapters need, so a commit is the same on every machine.
@@ -280,6 +319,9 @@ fn the_loop(r: &mut Runner) {
     label(r, DEV, PAYMENTS, "dev");
     label(r, PROD, PAYMENTS_PROD, "prod");
     r.tenant(|t| t.tag_filter("production", PRODUCTION, "env", "prod"));
+    // Palette takes the name aws-stack@1.1.0 and the packs of the candidate, which it does not hold
+    r.tenant(|t| t.profile_create_checks(DEV, ("aws-stack", "1.1.0"), None, None));
+    r.tenant(|t| t.profile_packs_answer(DEV, None, None));
     // the repository of the team: main holds the record of what each project runs
     r.quiet("git init -q -b main . && git remote add origin .");
     r.quiet("strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json &&\n  PALETTE_PROJECT=prod strata snapshot aws-stack@1.0.0 -o releases/1.0.0/prod.json &&\n  git add releases && git commit -qm \"dev and prod run aws-stack@1.0.0\"");
@@ -288,7 +330,13 @@ fn the_loop(r: &mut Runner) {
     // 1. a developer changes the profile in a pull request
     r.quiet("git checkout -q -b aws-stack-1.1.0");
     r.write_file("aws-stack.yaml", CANDIDATE_YAML);
-    r.quiet("strata snapshot --from-candidate aws-stack.yaml -o candidate.json &&\n  git add aws-stack.yaml && git commit -qm \"aws-stack 1.1.0: Kubernetes 1.36, Ubuntu 24.04\"");
+    r.step(
+        "loop-candidate",
+        0,
+        true,
+        "strata snapshot --from-candidate aws-stack.yaml --validate -o candidate.json",
+    );
+    r.quiet("git add aws-stack.yaml && git commit -qm \"aws-stack 1.1.0: Kubernetes 1.36, Ubuntu 24.04\"");
     r.step(
         "loop-review",
         0,
@@ -307,6 +355,9 @@ fn the_loop(r: &mut Runner) {
 
     // 3. the pipeline of the team publishes the version, and records it
     r.profile(DEV, A110, "1.1.0", "aws-stack@1.1.0", &[]);
+    // Palette answers for the move of payments to the version: it repaves, and it takes the packs
+    r.tenant(|t| t.repave_answer(DEV, PAYMENTS, true));
+    r.tenant(|t| t.packs_answer(DEV, PAYMENTS, None));
     r.serve_here(); // state 2: the pipeline published 1.1.0 in dev
     r.step(
         "loop-publish",
@@ -321,6 +372,19 @@ fn the_loop(r: &mut Runner) {
         "strata same-release candidate.json releases/1.1.0/dev.json",
     );
     r.quiet("git add releases && git commit -qm \"record aws-stack@1.1.0 in dev\"");
+    // before dev moves payments, the pipeline asks Palette about the move
+    r.step(
+        "loop-ask-repave",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.0 --repave | grep -E '^(aws-stack|root |palette)'",
+    );
+    r.step(
+        "loop-ask-validate",
+        1,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.0 --validate | grep -E '^(aws-stack|root |palette)'",
+    );
     // dev moves payments to the new version, and a record says what the cluster runs
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110], &[]));
     label(r, DEV, PAYMENTS, "dev");
@@ -343,9 +407,47 @@ fn the_loop(r: &mut Runner) {
     r.tenant(|t| t.cluster(PROD, PAYMENTS_PROD, "payments", &[A110_PROD], &[]));
     label(r, PROD, PAYMENTS_PROD, "prod");
     r.quiet("git add releases && git commit -qm \"promote aws-stack@1.1.0 to prod\"");
-    r.serve_here(); // state 3: both projects run 1.1.0, and main records it
 
-    // 5. the nightly jobs. The fleet first: the records of the clusters that Palette names prod.
+    // 5. before a build: the team writes the body of the create of a cluster that prod builds on
+    // the release, and asks Palette about it, with nothing created
+    r.write_file("cluster.json", &preflight_entity("ledger", A110_PROD));
+    preflight_routes(r, PROD);
+    r.serve_here(); // state 3: both projects run 1.1.0, main records it, and Palette refuses a worker pool
+    r.step(
+        "loop-body",
+        0,
+        false,
+        "jq -c '{name: .metadata.name, profile: .spec.profiles[0].uid, pools: [.spec.machinepoolconfig[].poolConfig | {name, size}]}' cluster.json",
+    );
+    r.step(
+        "loop-preflight-static",
+        0,
+        false,
+        "PALETTE_PROJECT=prod strata preflight cluster.json --cloud aws --tier static --offline --quiet | grep -E '^(OK|FAIL)'",
+    );
+    r.step(
+        "loop-preflight-live",
+        1,
+        false,
+        r#"PALETTE_PROJECT=prod strata preflight cluster.json --cloud aws --no-exec --strict --json --quiet | jq -r '.checks[] | select(.verdict == "failed" and .severity == "fail") | "\(.id): \((.messages // []) | join("; "))"'"#,
+    );
+    // the fix is two workers; Palette then finds no fault
+    r.step(
+        "loop-preflight-fix",
+        0,
+        false,
+        r#"jq '(.spec.machinepoolconfig[] | select(.poolConfig.name == "worker-pool") | .poolConfig.size) = 2' cluster.json > fixed.json && mv fixed.json cluster.json && jq -c '.spec.machinepoolconfig[].poolConfig | {name, size}' cluster.json"#,
+    );
+    r.answer(PROD, AWS_VALIDATE, &accepted_answer());
+    r.serve_here(); // state 4: Palette finds no fault in the body with two workers
+    r.step(
+        "loop-preflight-clean",
+        0,
+        false,
+        "PALETTE_PROJECT=prod strata preflight cluster.json --cloud aws --no-exec --strict --quiet | grep -E '^(OK|FAIL)'",
+    );
+
+    // 6. the nightly jobs. The fleet first: the records of the clusters that Palette names prod.
     r.step(
         "loop-fleet",
         0,
@@ -355,7 +457,7 @@ fn the_loop(r: &mut Runner) {
     r.quiet("git add fleet && git commit -qm \"the fleet of prod\"");
     // a person edits the published version in prod through the API, with no review
     r.tenant(|t| t.edit(PROD, A110_PROD, RETAIN));
-    r.serve_here(); // state 4: somebody edited aws-stack@1.1.0 in prod in place
+    r.serve_here(); // state 5: somebody edited aws-stack@1.1.0 in prod in place
     r.step(
         "loop-nightly",
         1,
@@ -380,7 +482,7 @@ fn the_loop(r: &mut Runner) {
         "scripts/ci/upstream-report.sh 'releases/**/*.json' --dry-run --no-impact > upstream.md",
     );
 
-    // 6. an incident: a pack has a security problem, and a person asks who carries it
+    // 7. an incident: a pack has a security problem, and a person asks who carries it
     for project in ["dev", "prod"] {
         r.step(
             "loop-incident-full",
@@ -403,7 +505,7 @@ fn the_loop(r: &mut Runner) {
         );
     }
 
-    // 7. the retire of the version that nothing runs now
+    // 8. the retire of the version that nothing runs now
     r.step("loop-retire", 0, false, "strata consumers aws-stack@1.0.0");
 }
 
@@ -3051,30 +3153,8 @@ fn automation(r: &mut Runner) {
     r.chapter("preflight", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
-    r.write_file("cluster.json", &preflight_entity());
-    r.answer(
-        DEV,
-        &format!("v1/cloudaccounts/aws/{PLATFORM_AWS}"),
-        &json!({"kind": "aws", "metadata": {"name": "platform-aws", "uid": PLATFORM_AWS},
-            "spec": {"credentialType": "secret", "partition": "aws", "policyARNs": []}, "status": {"state": "Active"}}),
-    );
-    // the property route of AWS answers 204 with no body; the stand-in serves 200 with an empty
-    // object, which a rule reads the same way (`ok`); the regions of the account, with the query
-    // in the file name as the stand-in maps it
-    r.answer(DEV, "v1/clouds/aws/properties/validate", &json!({}));
-    r.answer(
-        DEV,
-        &format!("v1/clouds/aws/regions@cloudAccountUid={PLATFORM_AWS}"),
-        &json!({"regions": [{"name": "us-east-2", "zones": [{"name": "us-east-2a"}, {"name": "us-east-2b"}, {"name": "us-east-2c"}]}]}),
-    );
-    r.answer(
-        DEV,
-        "v1/spectroclusters/aws/validate",
-        &json!({"machinePools": {"results": [{"name": "worker-pool", "displayName": "worker-pool",
-            "errors": [{"code": "MachinePoolResourcesInsufficient",
-                "message": "A minimum allocation of '4.1' CPU cores is required across all worker nodes"}]}]},
-            "profiles": []}),
-    );
+    r.write_file("cluster.json", &preflight_entity("payments", A111));
+    preflight_routes(r, DEV);
     r.step(
         "preflight-static",
         0,

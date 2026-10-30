@@ -995,16 +995,23 @@ exits `1` when the order did not change.
 The everyday loop, end to end: [The everyday loop](../loop.md) tells it. The
 records are in a git repository that the script builds, and every script of CI
 runs in it. It changes cluster A and the add-on version through the API, and
-undoes each change. It needs the example at its baseline with cluster A.
+undoes each change. Stages 2 to 4 only ask Palette: the asks and the body of a
+create change nothing in the tenant. `loop.sh N` resumes at stage N. It needs
+the example at its baseline with cluster A.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `record-release`, `record-addon`, `record-cluster`, `commit-main` | 0 | main records the release version, the add-on version, and cluster A |
 | `cluster-runs-release` | 0 | #81: cluster A runs the recorded release |
 | `candidate`, `candidate-record` | 0 | #81: the change: the next version as a candidate file, and as a record before Palette has it |
+| `ask-candidate` | 0 | #385: `snapshot --from-candidate --validate` asks Palette if it accepts the packs of the candidate, under a name that the project lacks, and the record holds the answer. No result yet. |
 | `comment`, `comment-says` | 0 | #81: `pr-comment.sh` writes the comment of the pull request, with the change and its impact |
 | `commit-branch`, `merge-gate` | 0 | #81: the merge gate is clear: the records after the merge verify |
 | `record-next`, `same-release`, `commit-publish` | 0 | #81: Palette holds the content that the reviewer read, by the root |
+| `ask-repave`, `ask-repave-answer` | 1, 0 | #385: `compare --repave` asks Palette if the move of cluster A to the next version repaves. The command exits `1` because the roots differ, and the report holds `paletteRepave.required`. No result yet. |
+| `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. No result yet. |
+| `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request, and in the tier of Palette, which calls the validate routes and creates nothing. No result yet. |
+| `preflight-fault` | 1 | #385: a body with a cloud account that the project lacks fails the gate `--strict`. No result yet. |
 | `nightly` | 0 | #81: `verify-report.sh` finds every record unchanged |
 | `fleet`, `fleet-has-a` | 0 | #81: the fleet of a label holds cluster A |
 | `upstream` | 1 | #81: `upstream-report.sh` finds pins that the registry has passed |

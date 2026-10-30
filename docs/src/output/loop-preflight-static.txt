@@ -1,0 +1,2 @@
+$ PALETTE_PROJECT=prod strata preflight cluster.json --cloud aws --tier static --offline --quiet | grep -E '^(OK|FAIL)'
+OK: each counted check passed

@@ -15,11 +15,12 @@ Palette, shows each change after the approval.
 
 | When | Who | The question | What runs | Page |
 | --- | --- | --- | --- | --- |
-| A change | the author, in a pull request | What does this change do to the clusters? | `pr-comment.sh`: `snapshot --from-candidate` and `compare` | [Review a change](./use-cases/review.md) |
+| A change | the author, in a pull request | Does Palette accept the packs? What does this change do to the clusters? | `snapshot --from-candidate --validate`, then `pr-comment.sh`: `snapshot --from-candidate` and `compare` | [Review a change](./use-cases/review.md) |
 | The merge button | the merge gate | Do the records after the merge still hold? | `merge-gate.sh` | [The merge gate](./automation/merge-gate.md) |
 | The publish | the pipeline of the team | Does Palette hold what the reviewer approved? | `snapshot`, then `same-release` | [Review a change](./use-cases/review.md) |
+| The move of a cluster | the pipeline of the team | Does the move repave the nodes? Does Palette accept the packs? | `compare cluster:<name> <version> --repave` and `--validate` | [Ask Palette if the change repaves](./commands/compare/repave.md), [Ask Palette if it accepts the packs](./commands/compare/validate.md) |
 | A promotion | a person, on demand | Do the projects hold one release? | `same-release` | [Promote a release](./use-cases/promote.md) |
-| Before a build | the pipeline, and the person who writes the cluster | Can Palette build this cluster? | `preflight` on the pull request, before the build, and during it | [Can Palette build this cluster?](./use-cases/stop-a-build.md) |
+| Before a build | the pipeline, and the person who writes the cluster | Can Palette build this cluster? | `preflight`: the static tier on the pull request, the live tier before the build, and the watch during it | [Can Palette build this cluster?](./use-cases/stop-a-build.md) |
 | Each night | a scheduled job | Did a version change under its record? | `verify-report.sh` | [Drift issues](./automation/drift-issues.md) |
 | Each night | a scheduled job | Which clusters are the fleet? | `snapshot filter:<name> --dir --prune` | [Find the fleet](./use-cases/fleet.md) |
 | Each night | a scheduled job | Does the registry have newer versions of what we pin? | `upstream-report.sh` | [Upstream issues](./automation/upstream-issues.md) |
@@ -28,9 +29,11 @@ Palette, shows each change after the approval.
 
 ```mermaid
 flowchart LR
-  change["a change<br/>pr-comment.sh"] --> merge["the merge<br/>merge-gate.sh"]
-  merge --> publish["the publish<br/>same-release"]
+  change["a change<br/>validate, pr-comment.sh"] --> merge["the merge<br/>merge-gate.sh"]
+  merge --> publish["the publish<br/>same-release, repave, validate"]
   publish --> record[("the records<br/>in Git")]
+  publish --> promote["the promotion<br/>same-release"]
+  promote --> build["before a build<br/>preflight"]
   record --> nightly["each night<br/>verify, fleet, behind"]
   nightly -- "an issue" --> person["a person<br/>compare, verify --who"]
   person -- "a new version" --> change
@@ -50,13 +53,22 @@ each project.
 
 **Follow along.** `just playground loop-1` serves this tenant on this machine,
 with no key and no cost. The tenant changes as the day goes on, so this page
-has four seeds. Each section names the one it needs.
+has five seeds. Each section names the one it needs.
 
 ### 1. The change
 
-A developer writes `aws-stack@1.1.0` as a candidate file on a branch. The job
-of the pull request compares it with the record of what `dev` runs, and posts
-the comment:
+A developer writes `aws-stack@1.1.0` as a candidate file on a branch. Palette
+does not hold that version yet. The author asks Palette if it accepts the packs
+of the candidate. The command changes nothing in Palette, and it writes the
+record of the candidate:
+
+```text
+{{#include output/loop-candidate.txt}}
+```
+
+[Ask Palette before you publish](./commands/candidate.md#ask-palette-before-you-publish)
+gives the three routes that Palette checks. The job of the pull request compares
+the record with the record of what `dev` runs, and posts the comment:
 
 ```text
 {{#include output/loop-review.txt}}
@@ -66,6 +78,11 @@ The result line counts the packs that changed, and the rest of the comment names
 each one with its impact. The maximum impact is
 `repave`, so the job adds the label `repave`, and the rules of the team can ask
 for a second approver.
+
+Palette answers two more questions about a change on a cluster: does it repave
+the nodes, and does it accept the packs? It answers for a version that it holds.
+The candidate is not in Palette yet, so these questions come in step 3, after
+the publish.
 
 ### 2. The merge
 
@@ -89,8 +106,24 @@ whether it is the version that the reviewer read:
 ```
 
 `IDENTICAL`: the root of the published version is the root of the candidate.
-The check is by content, not by a tag or a name. `dev` moves `payments` to the
-new version, and the cluster runs it:
+The check is by content, not by a tag or a name.
+
+Palette holds the version now, so the pipeline asks it two questions about the
+move of `payments`. Does the move repave the nodes? Does Palette accept the
+packs?
+
+```text
+{{#include output/loop-ask-repave.txt}}
+{{#include output/loop-ask-validate.txt}}
+```
+
+Each `palette` line is the answer of Palette. Strata compares no value for it.
+The two commands exit `1`, because the roots differ. The pipeline reads the
+answers, and the team decides. [Ask Palette if the change repaves](./commands/compare/repave.md)
+and [Ask Palette if it accepts the packs](./commands/compare/validate.md) give
+the codes and the options.
+
+`dev` moves `payments` to the new version, and the cluster runs it:
 
 ```text
 {{#include output/loop-cluster.txt}}
@@ -105,9 +138,54 @@ hold one release:
 {{#include output/loop-promote.txt}}
 ```
 
-### 5. The night
+### 5. Before a build
 
 **Follow along.** `just playground loop-3` is the tenant after the promotion.
+It also holds the cloud account of `prod` and the validate route of Palette.
+
+`prod` builds a new cluster, `ledger`, on the release that the promotion gave
+it. The team writes the body of the create in `cluster.json`, as in
+[Can Palette build this cluster?](./use-cases/stop-a-build.md). The output shows
+the name, the profile in `prod`, and the pools:
+
+```text
+{{#include output/loop-body.txt}}
+```
+
+The static tier needs no key. It reads the file and the records, so the pull
+request can run it:
+
+```text
+{{#include output/loop-preflight-static.txt}}
+```
+
+Before the build, the live tier asks the validate routes of Palette. They check
+the body and create nothing. Here Palette refuses the worker pool: one
+`t3.xlarge` has fewer cores than the packs need. `--strict` makes the exit code
+`1`:
+
+```text
+{{#include output/loop-preflight-live.txt}}
+```
+
+The fix is a second worker. Change the file, and ask again.
+
+**Follow along.** `just playground loop-4` is the tenant where Palette finds no
+fault in the new body.
+
+```text
+{{#include output/loop-preflight-fix.txt}}
+{{#include output/loop-preflight-clean.txt}}
+```
+
+The pipeline builds the cluster on exit `0` only.
+[Can Palette build this cluster?](./use-cases/stop-a-build.md) gives the rest:
+the watch during the build, the tiers, and how a probe becomes a check.
+
+### 6. The night
+
+**Follow along.** `just playground loop-4` is the tenant after the promotion
+and the fix.
 
 The fleet comes from Palette, not from a list that a person keeps. The job
 records each cluster that the filter `production` selects, and commits the
@@ -117,7 +195,7 @@ directory:
 {{#include output/loop-fleet.txt}}
 ```
 
-**Follow along.** `just playground loop-4` is the tenant after a person edits
+**Follow along.** `just playground loop-5` is the tenant after a person edits
 `aws-stack@1.1.0` in `prod` in place, through the API, outside the review of
 the team.
 
@@ -140,7 +218,7 @@ decision for a person, not an error, so it is a separate job:
 {{#include output/loop-upstream.txt}}
 ```
 
-### 6. The incident
+### 7. The incident
 
 A pack has a security problem. A person asks which versions carry it, in each
 project, and which clusters run them:
@@ -150,7 +228,7 @@ project, and which clusters run them:
 {{#include output/loop-consumers.txt}}
 ```
 
-### 7. The retire
+### 8. The retire
 
 Nothing runs `aws-stack@1.0.0` now. The retire gate is open:
 
@@ -178,6 +256,7 @@ record of the cluster shows it. See
 
 The live run of `just live-loop` runs this loop end to end against a tenant,
 with the records in a git repository: the comment, the merge gate, the publish,
-the nightly jobs, a value overridden on a cluster, an edit in place, an
-incident, and a retire. See
+the asks of Palette about a move, `preflight` on the body of a cluster, the
+nightly jobs, a value overridden on a cluster, an edit in place, an incident,
+and a retire. See
 [What the live example verifies](./development/live-runs.md#loopsh).
