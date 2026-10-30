@@ -31,7 +31,6 @@ rules:
       - kind: report
         ref: palette-precreate-validation-gaps-findings-2026-09-28 F6
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/eks/spectrocluster_eks.go
         note: no minimum count of zones for EKS
     tests:
       - fault: fixtures/eks/one-zone.json
@@ -119,11 +118,9 @@ rules:
       text: Run the CIDR check against 10.0.0.0/16 for dynamic placement too.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/aws/spectrocluster_aws_validate.go validatePackValues
         note: '"no validation for dynamic placement" when vpcId is empty; validateK8SCidr tests the VPC CIDR against pack.podCIDR and pack.serviceClusterIpRange'
       - kind: source
-        ref: palette pkg/provider/aws/consts.go DefaultAwsVpcCidr
-        note: 10.0.0.0/16, used by aws_cluster.go for the VPC of dynamic placement
+        note: 10.0.0.0/16, which Palette uses for the VPC of dynamic placement
     tests:
       - fault: fixtures/aws/pod-cidr-in-vpc.json
         clean: fixtures/aws/clean.json
@@ -152,7 +149,6 @@ rules:
       text: Refuse two zones with one last letter, or derive the CIDR from the zone id.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_cluster.go getAwsAZSubnetCidr
         note: the CIDR comes from the last character of the zone name alone
     tests:
       - fault: fixtures/aws/local-zone-letter.json
@@ -192,11 +188,9 @@ rules:
       text: Add the CIDR check of the AWS validate route to the EKS one, for both placements.
     evidence:
       - kind: source
-        ref: palette pkg/provider/common/provider.go GetClusterNetwork
         note: pack.podCIDR and pack.serviceClusterIpRange of the Kubernetes pack become the CAPI cluster network
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/eks/spectrocluster_eks.go
-        note: no CIDR check; the AWS one is in spectrocluster_aws_validate.go alone
+        note: no CIDR check; Palette checks the CIDR of AWS alone
     tests:
       - fault: fixtures/eks/service-cidr-in-vpc.json
         clean: fixtures/eks/service-cidr-clean.json
@@ -233,7 +227,6 @@ rules:
       text: Check the pack CIDRs against 10.0.0.0/16 in the GCP validate route when the network is empty.
     evidence:
       - kind: source
-        ref: palette pkg/provider/gcp/gcp_cluster.go convertManagedCloudCluster, convertCloudCluster
         note: subnetCidrRange 10.0.0.0/16 for the one subnet of a dynamic network
     tests:
       - fault: fixtures/gcp/pod-cidr-in-network.json
@@ -289,7 +282,6 @@ rules:
       - kind: doc
         ref: https://cloud.google.com/kubernetes-engine/docs/concepts/alias-ips
       - kind: source
-        ref: palette pkg/provider/gcp/gcp_managed.go
         note: NodeNetwork.PodRangeName and PodRangeCidrBlock are compared, not set from the cloud config
     tests:
       - fault: fixtures/gke/no-secondary-ranges.json
@@ -407,7 +399,6 @@ rules:
       text: Check the default route of each pool subnet in the property routes, for AWS and GCP.
     evidence:
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go isSubnetPrivate, hasIgwPrefix
         note: a subnet is private when its route table has no igw route; no test of a NAT route
       - kind: doc
         ref: https://docs.aws.amazon.com/eks/latest/userguide/private-clusters.html
@@ -460,7 +451,6 @@ rules:
       text: Refuse a pool subnet that the VPC listing does not hold, in the EKS property route.
     evidence:
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsSubnets
         note: the loop runs over the subnets of the VPC; a subnet of the request that is not among them is not tested
     tests:
       - fault: fixtures/eks/subnet-mismatch.json
@@ -500,7 +490,6 @@ rules:
       text: Call the EKS property route from the cluster validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateEksCloudProperties, ValidateAwsSubnets
         note: a public subnet without MapPublicIpOnLaunch answers InvalidSubnetMapping
     tests:
       - fault: fixtures/eks/public-subnet-no-map.json
@@ -547,7 +536,6 @@ rules:
       text: Check the tags of the pool subnets in the property routes, and add them for AWS as for EKS.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_managed.go reconcileMCPSubnetTags
         note: EKS with a static VPC gets the elb and internal-elb tags during the build
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/architecture/
@@ -659,7 +647,6 @@ rules:
       text: Check the list against the NAT addresses of the VPC and the addresses of Palette in the validate route.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_managed.go getDesiredManagedControlPlane, configurePublicAccessCIDRs
         note: the CIDRs apply in the pilot phase with private access alone, and in the target cluster as configured; Palette adds its own addresses from the configmap eks-public-access-cidrs in the pilot phase alone
     tests:
       - fault: fixtures/eks/public-cidrs.json
@@ -704,7 +691,7 @@ rules:
       HTTPS_PROXY, or httpProxy. Then it looks for a NO_PROXY entry that covers each CIDR of the
       Kubernetes pack, and 10.0.0.0/16 for dynamic placement on aws and eks. A proxy set in the
       environment of Palette or of the PCG is not in the entity. For it Palette writes NO_PROXY
-      with the service CIDR and USER_NO_PROXY, not the pod CIDR (`aws_kubeadm.go`).
+      with the service CIDR and USER_NO_PROXY, not the pod CIDR.
     when: (.profiles | length) > 0
     check:
       kind: static
@@ -734,7 +721,6 @@ rules:
       text: Add the pod CIDR to the NO_PROXY that Palette writes, and check a NO_PROXY of the pack values at create.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_kubeadm.go
         note: NO_PROXY for containerd is 127.0.0.1, localhost, the service CIDR blocks, and USER_NO_PROXY; the pod CIDR is not in it
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/cluster-management/cluster-proxy/
@@ -772,10 +758,8 @@ rules:
       text: Refuse a Cilium pack on EKS whose values set neither ENI mode nor kube-proxy replacement, in the validate route.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_managed.go ShouldDisableDefaultCNI, ShouldDisableKubeProxy
         note: both default to true for a Cilium pack; charts.cilium.disableVPCCNI and charts.cilium.disableKubeProxy set to false keep them on
       - kind: source
-        ref: palette pkg/provider/common/common.go IsCiliumCNIPack
         note: a CNI pack whose lowercase name holds cilium
       - kind: doc
         ref: https://docs.cilium.io/en/stable/network/concepts/ipam/eni/
@@ -809,7 +793,7 @@ rules:
       text: Check the derived name lengths in the name route.
     evidence:
       - kind: source
-        ref: palette pkg/provider/gcp/gcp_cluster.go getNetworkName, getSubnetName
+        note: Palette makes the names of the network and the subnet from the cluster name
       - kind: doc
         ref: https://cloud.google.com/compute/docs/naming-resources
     tests:
@@ -891,7 +875,6 @@ rules:
       text: Check the subnet CIDRs against the vnet CIDR in the converter.
     evidence:
       - kind: source
-        ref: hubble svcclient/converter/v1/cloudconfig_converter.go ToAzureClusterConfig
         note: "if str.IsNotEmpty(c.VnetName) { validator.ShouldNotBeEmpty(\"VNet CIDR Block\", c.VnetCidrBlock) }; the subnets are copied"
       - kind: doc
         ref: https://learn.microsoft.com/en-us/azure/virtual-network/virtual-networks-faq
@@ -939,7 +922,6 @@ rules:
       text: Read the vnet and the subnets in the validate route when vnetName is set.
     evidence:
       - kind: source
-        ref: palette pkg/provider/azure/azure_cluster.go getSubnetID
         note: "/subscriptions/<sub>/resourceGroups/<vnetRG>/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/<name>, built from the config and never read back"
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/create-azure-cluster/
@@ -987,7 +969,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/aks/
         note: the private DNS zone of the API server must be named private.<cluster-region>.azmk8s.io
       - kind: source
-        ref: hubble svcclient/converter/v1/cloudconfig_converter.go ToInfraLBConfig
         note: defaults ipAllocationMethod to Dynamic and type to Public, and checks nothing
     tests:
       - fault: fixtures/azure/private-lb-dynamic.json
@@ -1027,10 +1008,8 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/data-center/maas/architecture/
         note: Palette registers a DNS record in MAAS for the deployed cluster
       - kind: source
-        ref: palette pkg/provider/maas/maas_cluster.go convertCloudCluster
         note: DNSDomain is config.Spec.ClusterConfig.Domain
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/overlord/overlord_properties_maas.go GetMaasDomainsByAccount
         note: the route asks the PCG of the account, or the cloud service for a system gateway
     tests:
       - fault: fixtures/maas/domain-missing.json
@@ -1069,7 +1048,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/data-center/maas/create-manage-maas-clusters/
         note: "Availability zones: the MAAS zones in which to deploy nodes"
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/maas/machinepool_maas.go CreateMachinePools
         note: AvailabilityZoneRequired on the create path alone
     tests:
       - fault: fixtures/maas/zone-unknown.json
@@ -1103,9 +1081,8 @@ rules:
       text: Run the LXD and IPAM checks in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/maas/cloudconfig_maas.go validateUseLxdVmConfiguration, validateIpamNetworkConfig
+        note: Palette checks the LXD VM config and the IPAM network config of a MAAS cluster
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/overlords_v1_converter.go ToMaasNetworkConfig
         note: staticIp with an empty parentPoolUid is refused
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/data-center/maas/create-manage-maas-lxd-clusters/
@@ -1124,7 +1101,7 @@ rules:
     status: source
     what: |
       The docs need one address for the virtual IP (VIP) of the cluster, and the hosts of a
-      cluster on one network. With one host, kube-vip is off and the host address serves. Hubble
+      cluster on one network. With one host, kube-vip is off and the host address serves. Palette
       does not check the count: a create with two hosts and no `controlPlaneEndpoint` passes, and
       kube-vip has no address. The converter refuses an empty host when the type is `VIP` and the
       endpoint object is there. The types are `VIP`, `External`, and `DDNS`; `IP` and an empty type
@@ -1136,7 +1113,7 @@ rules:
         | (.entity.spec.cloudConfig.controlPlaneEndpoint // {}) as $e | ($e.type // "") as $t | ($e.host // "") as $h
         | (if $t == "" or $t == "IP" then "VIP" else $t end) as $type
         | [ ( if (["VIP", "External", "DDNS"] | index($type)) == null then "controlPlaneEndpoint.type \($t) is not VIP, External, or DDNS" else empty end ),
-            ( if $type == "VIP" and $h == "" and $hosts > 1 then "\($hosts) hosts and no controlPlaneEndpoint.host: a multi-node cluster needs one virtual IP for the API server; hubble does not check it, and kube-vip gets no address" else empty end ),
+            ( if $type == "VIP" and $h == "" and $hosts > 1 then "\($hosts) hosts and no controlPlaneEndpoint.host: a multi-node cluster needs one virtual IP for the API server; Palette does not check it, and kube-vip gets no address" else empty end ),
             ( if $type == "VIP" and $h != "" and ($h | test("^([0-9]{1,3}\\.){3}[0-9]{1,3}$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"; "i") | not) then "controlPlaneEndpoint.host \($h) is not an IP or a host name" else empty end ),
             ( if $type == "DDNS" and $h == "" and (($e.ddnsSearchDomain // "") == "") then "controlPlaneEndpoint.type is DDNS with no host and no ddnsSearchDomain" else empty end ) ]
     fix:
@@ -1150,7 +1127,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/edge/networking/kubevip/
         note: kube-vip is disabled when the VIP is the address of the host, as in a single-node cluster
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go getControlPlaneEndPoint
         note: an empty type or IP becomes VIP; the host is required for VIP alone; a nil endpoint passes with any host count
     tests:
       - fault: fixtures/edge/vip-no-host.json
@@ -1169,7 +1145,7 @@ rules:
       that `controlPlaneEndpoint.host` is inside it: `InvalidCidr` or `IPNotWithinCidrRange` at
       create, not at validate. The first address of the range is the overlay VIP. The range cannot
       change after the create. The hosts must share one layer-2 network that passes broadcasts.
-      Hubble has no default range; the console fills one in.
+      Palette has no default range; the console fills one in.
     check:
       kind: static
       expr: |
@@ -1189,7 +1165,6 @@ rules:
       text: Run ValidateCidrConfig in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/edgenative/machinepool_edgenative_validator.go ValidateCidrConfig
         note: validateCIDR(ControlPlaneEndpoint.Host, Cidr) when Enable; InvalidCidr and IPNotWithinCidrRange
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/edge/networking/vxlan-overlay/
@@ -1231,7 +1206,6 @@ rules:
       text: Run the NIC check in the validate route, and refuse DHCP on a host with two NICs.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/edgenative/machinepool_edgenative_validator.go validateEdgeHostNic
         note: IsValidNic against spec.device.nics of the host, on the create path
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/cluster-deployment/
@@ -1250,7 +1224,7 @@ rules:
     status: inferred
     what: |
       The console asks four fields for a static address: the IP, the default gateway, the subnet
-      mask, and a DNS server. Hubble copies `nic` and checks none of them. A host with an address
+      mask, and a DNS server. Palette copies `nic` and checks none of them. A host with an address
       and no gateway cannot reach Palette, and the build waits for it. This is a reading of the
       docs and the converter, not a run. The check reads each host with `nic.ip` or `staticIP`.
     check:
@@ -1260,7 +1234,7 @@ rules:
           | select(((.nic.ip // .staticIP // "") != "")) | .hostUid as $u | (.nic // {}) as $n | (.nic.ip // .staticIP) as $ip
           | [ (if ($n.gateway // "") == "" then "gateway" else empty end), (if ($n.subnet // "") == "" then "subnet" else empty end), (if (($n.dns // []) | length) == 0 then "dns" else empty end) ] as $missing
           | select(($missing | length) > 0)
-          | "host \($u) of pool \($p) has the static IP \($ip) and no \($missing | join(", ")): the console asks for all four, and hubble checks none" ]
+          | "host \($u) of pool \($p) has the static IP \($ip) and no \($missing | join(", ")): the console asks for all four, and Palette checks none" ]
     fix:
       owner: palette
       text: Check the four fields of a static NIC in the converter.
@@ -1269,7 +1243,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/cluster-deployment/
         note: static IP fields IP address, Default gateway, Subnet mask, DNS server
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToEdgeNativeNic
         note: copies macAddr, ip, subnet, gateway, dns, nicName, and isDefault with no check
     tests:
       - fault: fixtures/edge/static-ip-no-gateway.json
@@ -1303,10 +1276,8 @@ rules:
       text: Refuse a DHCP cluster with DDNS and no DNS mapping in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToControlPlaneEndPoint
         note: an empty type is DDNS; the host is required when the type is not DDNS; the enum is VIP, External, DDNS
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/vsphere/spectrocluster_vsphere.go createClusterOp
         note: MissingDDnsMapping(datacenter, networkName) for a DHCP cluster with DDNS and no mapping on the PCG
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/data-center/vmware/architecture/
@@ -1341,7 +1312,7 @@ rules:
       text: The check exists in the converter; strata-preflight runs it before the request.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToVsphereNetworkConfig, checkStaticIpDataConsistency
+        note: Palette checks the static IP data of each placement when it converts the network config
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/
         note: an IPAM pool is required to assign static IP addresses to the nodes
@@ -1396,10 +1367,8 @@ rules:
       text: Run ValidateIpAvailability in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/vsphere/spectrocluster_vsphere_ipam.go validateIsIpAvailable
         note: free is the range less the allotted and the extra addresses; IPPoolExhausted
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/ipam/ipam_service.go GetIpCountPerPlacement
         note: extra is 1, 2 for a control plane pool, 0 with RollingUpdateScaleIn
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/pcg/manage-pcg/create-manage-node-pool/
@@ -1442,7 +1411,6 @@ rules:
       text: Warn in the validate route when a vSphere or a multi-node edge cluster names no NTP server.
     evidence:
       - kind: source
-        ref: hubble svcclient/converter/v1/cloudconfig_converter.go ToVsphereClusterConfig, ToMaasClusterConfig
         note: validator.IsValidAddresses("NTP servers", ...)
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/

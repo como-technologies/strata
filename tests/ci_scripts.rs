@@ -1574,6 +1574,11 @@ impl Report {
         std::fs::write(self.dir.path().join(name), body).unwrap();
     }
 
+    /// Run the script with a `jq` that acts as jq 1.6: see [`JQ_BEFORE_1_7_1`].
+    fn use_jq_before_1_7_1(&self) {
+        executable(&self.dir.path().join("bin/jq"), JQ_BEFORE_1_7_1);
+    }
+
     /// The summary that strata prints for verify-report.sh, from (path, status, name, version)
     /// per record.
     fn summary(&self, exit: i32, records: &[(&str, &str, &str, &str)]) {
@@ -1912,23 +1917,45 @@ fn verify_report_opens_updates_and_closes_gitlab_issues_the_same_way() {
     );
 }
 
+/// What a `strata` that checked nothing prints on standard output: nothing, or only white space.
+const PRINTED_NOTHING: [&str; 2] = ["", " \n"];
+
+/// The exit codes that a `strata` that checked nothing can have: a crash gives 2, and a `strata`
+/// that fails without a code gives 0.
+const EXITS_OF_NOTHING: [&str; 2] = ["0", "2"];
+
 #[test]
 fn verify_report_touches_no_issue_when_verify_checks_nothing() {
-    let d = Report::verify();
-    d.put(
-        "summary.err",
-        r#"{"error":{"kind":"pattern","message":"'releases/*.json' matched no files"}}"#,
-    );
-    d.put("summary.exit", "2");
-    let o = d.run(&["releases/*.json", "--repo", "o/r"]);
-    assert_eq!(o.status.code(), Some(2));
-    assert!(d.log("gh.log").is_empty(), "{:?}", d.log("gh.log"));
-    let err = text(&o.stderr);
-    assert!(err.contains("matched no files"), "{err}");
-    assert!(
-        err.contains("verify-report: strata verify checked nothing (exit 2)"),
-        "{err}"
-    );
+    for old_jq in [false, true] {
+        for printed in PRINTED_NOTHING {
+            for exit in EXITS_OF_NOTHING {
+                let d = Report::verify();
+                if old_jq {
+                    d.use_jq_before_1_7_1();
+                }
+                d.put("summary.json", printed);
+                d.put(
+                    "summary.err",
+                    r#"{"error":{"kind":"pattern","message":"'releases/*.json' matched no files"}}"#,
+                );
+                d.put("summary.exit", exit);
+                let o = d.run(&["releases/*.json", "--repo", "o/r"]);
+                let case = format!(
+                    "jq before 1.7.1: {old_jq}, strata printed {printed:?} and exited {exit}"
+                );
+                assert_eq!(o.status.code(), Some(2), "{case}");
+                assert!(d.log("gh.log").is_empty(), "{case}: {:?}", d.log("gh.log"));
+                let err = text(&o.stderr);
+                assert!(err.contains("matched no files"), "{case}: {err}");
+                assert!(
+                    err.contains(&format!(
+                        "verify-report: strata verify checked nothing (exit {exit})"
+                    )),
+                    "{case}: {err}"
+                );
+            }
+        }
+    }
 }
 
 #[test]
@@ -2071,6 +2098,45 @@ fn live_scripts_refuse_a_strata_binary_older_than_the_sources() {
         .output()
         .unwrap();
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+}
+
+/// The calls of `jq` that a script of the live example makes on an empty input, each with the exit
+/// code it prints. lib.sh is the first argument.
+const JQ_PROBE: &str = r#"
+STRATA_BIN=/bin/true script=probe . "$1"
+: | jq -e . > /dev/null;                          echo "empty input $?"
+: > empty.json; jq -e '.a == 1' empty.json;       echo "empty file $?"
+bash -c ': | jq -e . > /dev/null; echo "in bash -c $?"'
+echo '{"a":1}' | jq -e '.a == 1' > /dev/null;     echo "true $?"
+echo '{"a":1}' | jq -e '.a == 2' > /dev/null;     echo "false $?"
+echo '{"a":1}' | jq -er '.b // empty' > /dev/null; echo "no output $?"
+echo '{}' | jq -r '.a // empty';                  echo "no -e $?"
+"#;
+
+#[test]
+fn live_scripts_take_jq_e_on_an_empty_input_as_a_failure_with_each_jq() {
+    for old_jq in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir(&bin).unwrap();
+        if old_jq {
+            executable(&bin.join("jq"), JQ_BEFORE_1_7_1);
+        }
+        let o = Command::new("bash")
+            .args(["-c", JQ_PROBE, "probe"])
+            .arg(live_script("lib.sh"))
+            .current_dir(dir.path())
+            .env("PATH", path_with(&bin))
+            .env_remove("STRATA_BIN")
+            .output()
+            .unwrap();
+        assert_eq!(
+            text(&o.stdout),
+            "empty input 4\nempty file 4\nin bash -c 4\ntrue 0\nfalse 1\nno output 4\nno -e 0\n",
+            "jq before 1.7.1: {old_jq}: {}",
+            text(&o.stderr)
+        );
+    }
 }
 
 /// A `tofu` for lib.sh's applies: logs each call and has no outputs.
@@ -2302,15 +2368,35 @@ fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
 
 #[test]
 fn upstream_report_touches_no_issue_when_behind_checks_nothing() {
-    let u = Report::upstream();
-    u.put("report.json", "");
-    u.put("report.exit", "2");
-    let o = u.run(&["releases/*.json", "--repo", "o/r"]);
-    assert_eq!(o.status.code(), Some(2));
-    assert!(
-        text(&o.stderr).contains("strata behind checked nothing (exit 2); no issue was touched")
-    );
-    assert_eq!(u.log("gh.log").len(), 1, "only the list of open issues");
+    for old_jq in [false, true] {
+        for printed in PRINTED_NOTHING {
+            for exit in EXITS_OF_NOTHING {
+                let u = Report::upstream();
+                if old_jq {
+                    u.use_jq_before_1_7_1();
+                }
+                u.put("report.json", printed);
+                u.put("report.exit", exit);
+                let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+                let case = format!(
+                    "jq before 1.7.1: {old_jq}, strata printed {printed:?} and exited {exit}"
+                );
+                assert_eq!(o.status.code(), Some(2), "{case}");
+                assert!(
+                    text(&o.stderr).contains(&format!(
+                        "strata behind checked nothing (exit {exit}); no issue was touched"
+                    )),
+                    "{case}: {}",
+                    text(&o.stderr)
+                );
+                assert_eq!(
+                    u.log("gh.log").len(),
+                    1,
+                    "{case}: only the list of open issues"
+                );
+            }
+        }
+    }
 }
 
 /// The scripts that open issues ship one by one, so each holds its own copy of the host

@@ -78,7 +78,7 @@ command directly. `cargo xtask` with no command prints its usage and exits `2`. 
 - the library tests against `MemoryApi`, a Palette API in memory
 - the tests of the binary over fixtures with the shape of the API responses
 - the tests of the scripts in `scripts/` and `examples/live/`, with stand-ins
-  for `gh` and `tofu`
+  for `gh` and `tofu`, and for a `jq` before 1.7.1
 - the fuzzing in `tests/fuzz.rs`
 
 No test uses the network.

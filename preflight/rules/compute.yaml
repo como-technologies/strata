@@ -37,7 +37,6 @@ rules:
         ref: "20260929T043631Z"
         note: the plan made the fault and the check found it; the clean entity passed
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToMachinePoolBasicConfig
         note: the converter panics with InvalidParam for a managed GCP pool whose size is not a multiple of 3
     tests:
       - fault: fixtures/gke/pool-4.json
@@ -67,7 +66,6 @@ rules:
       text: Check the offering in the validate route, with "unknown" when the permission is missing.
     evidence:
       - kind: source
-        ref: hubble domain/cloudmeta.go InstanceType, InstanceTypes
         note: the catalog holds the CPU, the memory, and the price of each type for a region, and no zone
 
   - id: spot-capacity
@@ -142,16 +140,14 @@ rules:
       text: Read the account IMDS defaults in the validate route, and warn when the hop limit is 1.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToEksMachinePoolConfigs
         note: panics with UnsupportedAmiType when the type is not in domain.AmiTypes()
       - kind: source
-        ref: hubble domain/cloudmetaami.go AmiTypes
         note: the three AL2023 types; AL2 stays only for clusters that exist
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
         note: the EC2 instance hop limit must be 2 for IMDSv2 with AL2023
       - kind: source
-        ref: palette pkg/provider/aws/aws_managed.go getInstanceMetadataOptionsFromDefaults
+        note: Palette gives an EKS pool its instance metadata options from its defaults
     tests:
       - fault: fixtures/eks/ami-al2.json
         clean: fixtures/eks/clean.json
@@ -205,7 +201,6 @@ rules:
       text: Describe the AMI of the launch template in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToEksMachinePoolConfigParam
         note: "`if e.CloudConfig.AwsLaunchTemplate != nil { EnableAwsLaunchTemplate = true }`; ToAwsLaunchTemplate copies the fields and checks none"
       - kind: doc
         ref: https://cluster-api-aws.sigs.k8s.io/topics/eks/pod-networking
@@ -309,10 +304,8 @@ rules:
       text: Move the image lookup from after the create into the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/aws/spectrocluster_aws_image.go resolveAwsImage
         note: builds the name with GetImageName, calls GetAwsImage in the region, and sets the image condition to Failure after the retries
       - kind: source
-        ref: palette pkg/provider/aws/aws_image.go getAWSAmi
         note: reads the image id from the pack ref annotation, or from the pack annotations imageId and imageOwner
     tests:
       - fault: fixtures/aws/image-missing.json
@@ -365,7 +358,6 @@ rules:
         ref: "#74"
         note: the image of Kubernetes 1.36.2 is not shared, and the cluster stays Provisioning with no instance
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/gcp_service.go GetGcpImageUrl
         note: formats the URL from the image project and the name, and calls no GCP API
     tests:
       - fault: fixtures/gcp/image-not-shared.json
@@ -408,7 +400,6 @@ rules:
       text: Compare rootDeviceSize with the volume size of the image in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go GetVolumeSize
         note: reads the root block device of the image; no cluster path calls it
     tests:
       - fault: fixtures/aws/byoi-volume-small.json
@@ -450,7 +441,6 @@ rules:
       text: Call the capacity route for each host resource group pool at create.
     evidence:
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsHrgCapacity
         note: sums AvailableInstanceCapacity of the hosts for the type, and answers isValid when it covers replicaCount
     tests:
       - fault: fixtures/aws/hrg-no-capacity.json
@@ -578,7 +568,6 @@ rules:
       text: Run the system pool checks in the AKS validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/azure/machinepool_azure.go ToAzureMachinePools
         note: AksMissingSystemPool when no pool is a system pool; domain.ValidateAksMachinePools for the OS type and the taints
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/aks/
@@ -621,7 +610,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/data-center/maas/create-manage-maas-clusters/
         note: "Resource pool: the MAAS resource pool from which to deploy nodes"
       - kind: source
-        ref: palette pkg/provider/maas/maas_worker.go getMaasMachineSpec
         note: ResourcePool, MinCPU, MinMemoryInMB, and Tags go to CAPMAAS
     tests:
       - fault: fixtures/maas/pool-missing.json
@@ -687,10 +675,8 @@ rules:
       text: Check the three fields in the validate route, and guard the nil pointers in the converter.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToMaasMachinePoolConfigParam
         note: "*e.CloudConfig.ResourcePool and e.CloudConfig.InstanceType.MinCPU with no nil guard"
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/maas/machinepool_maas.go CreateMachinePools
         note: AvailabilityZoneRequired on the create path
     tests:
       - fault: fixtures/maas/no-instance-type.json
@@ -725,7 +711,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/data-center/maas/create-manage-maas-clusters/
         note: Minimum CPU and Minimum Memory select machines from the resource pool with at least that amount
       - kind: source
-        ref: palette pkg/provider/maas/maas_worker.go getMaasMachineSpec
         note: ResourcePool, MinCPU, MinMemoryInMB, and Tags go to CAPMAAS; MinDiskSizeInGB is for LXD VMs alone
 
   - id: edge-two-node
@@ -740,7 +725,7 @@ rules:
       `secondary`. The Kubernetes pack carries the k3s engine annotation (`TwoNodeClusterPackMissing`). A
       priority on a worker host, or with the mode off, is refused. The validate route runs the
       pack check alone; the create runs the rest. The docs also list Palette Optimized Canonical
-      for two-node clusters; hubble takes K3s alone, and this rule follows hubble.
+      for two-node clusters; Palette takes K3s alone, and this rule follows Palette.
     check:
       kind: static
       expr: |
@@ -752,7 +737,7 @@ rules:
         | if $two then
             [ ( if ($cp | length) != 2 then "isTwoNodeCluster with \($cp | length) control plane host(s): Palette refuses it with \"Two-node cluster can only support two control-plane edge hosts\"" else empty end ),
               ( if (($prio | index("primary")) == null) or (($prio | index("secondary")) == null) then "the two-node candidate priorities are \($prio | join(", ") | if . == "" then "not set" else . end): Palette needs one primary and one secondary (InvalidTwoNodeCandidatesPriority)" else empty end ),
-              ( if ((.profiles // []) | length) > 0 and ((k8s_names | length) == 0 or (k8s_names | all(.[]; test("k3s")) | not)) then "the Kubernetes pack is \(k8s_names | join(", ")): Palette refuses a two-node cluster without the k3s engine (TwoNodeClusterPackMissing); the docs also list Palette Optimized Canonical, and hubble takes K3s alone" else empty end ),
+              ( if ((.profiles // []) | length) > 0 and ((k8s_names | length) == 0 or (k8s_names | all(.[]; test("k3s")) | not)) then "the Kubernetes pack is \(k8s_names | join(", ")): Palette refuses a two-node cluster without the k3s engine (TwoNodeClusterPackMissing); the docs also list Palette Optimized Canonical, and Palette takes K3s alone" else empty end ),
               ( $worker_prio[] | "worker pool \(.) sets twoNodeCandidatePriority: candidates are control plane hosts alone (InvalidTwoNodeCandidates)" ) ]
           else
             [ ( if ($prio | length) > 0 then "twoNodeCandidatePriority is set on \($prio | length) host(s) and isTwoNodeCluster is off: Palette refuses it with TwoNodeClusterNotEnabled" else empty end ) ]
@@ -762,9 +747,8 @@ rules:
       text: Run the two-node count and priority checks in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/edgenative/machinepool_edgenative_validator.go validateTwoNodeCluster, validateCandidatePriority
+        note: Palette checks a two-node edge cluster and the priority of each candidate host
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/edgenative/spectrocluster_edgenative.go IsK3PackExists
         note: the pack annotation spectrocloud.com/edge-native/k8s-engine must be k3s
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/edge/architecture/two-node/
@@ -806,7 +790,6 @@ rules:
       text: Read each host in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/edgehost/edgehost_service.go ValidateEdgeHostDevice
         note: EdgeHostDeviceAlreadyInUse when the host has associated clusters other than this one
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/edge-host-view/
@@ -823,7 +806,7 @@ rules:
     severity: warn
     status: source
     what: |
-      The console offers hosts in the `ready` state with a `healthy` report. Hubble accepts an
+      The console offers hosts in the `ready` state with a `healthy` report. Palette accepts an
       `unpaired` host and does not read the health at create: both checks are in the source and
       commented out. The build then waits for an agent that does not report. Palette marks the
       health stale after 5 minutes without a report. The check reads the first host of the first
@@ -844,7 +827,6 @@ rules:
       text: Turn the two commented checks of ValidateEdgeHostDevice back on, in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/edgehost/edgehost_service.go ValidateEdgeHostDevice
         note: "//if !device.IsEdgeHostHealthy() and //if device.Status.State != domain.EdgeHostReady are commented out"
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/edge/site-deployment/edge-host-view/
@@ -883,7 +865,6 @@ rules:
       text: Run ValidateEdgeHostArchType in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/edgehost/edgehost_validator.go UnMatchingArchTypeEdgeHosts
         note: eh.GetArchType() != archType for each host of the pool; an empty value is amd64
     tests:
       - fault: fixtures/edge/host-arm64.json
@@ -926,7 +907,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/edge/architecture/
         note: a minimum of 100 GB storage
       - kind: source
-        ref: hubble domain/edgehost.go
         note: disk size is in GB
     tests:
       - fault: fixtures/edge/host-small.json
@@ -954,7 +934,7 @@ rules:
       text: Run isMachinePoolEdgeHostDuplicated and validateHostNameDuplication in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/cloudconfig/internal/edgenative/machinepool_edgenative_validator.go isMachinePoolEdgeHostDuplicated, validateHostNameDuplication
+        note: Palette refuses an edge host that is in two pools, and a host name that is used two times
     tests:
       - fault: fixtures/edge/host-duplicate.json
         clean: fixtures/edge/clean.json
@@ -988,7 +968,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/
         note: Datacenter, Deployment Folder, Image Template Folder, and Network Type are required; each pool has Compute Cluster, Resource Pool, Datastore, Network
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToVspherePlacementConfig
         note: each field falls back to the cluster placement, and none is checked for emptiness
     tests:
       - fault: fixtures/vsphere/no-datacenter.json
@@ -1029,7 +1008,6 @@ rules:
       text: Read the datacenter and the folders in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/overlord/overlord_properties_vsphere.go GetVsphereDatacentersByAccount
         note: the PCG answers items[{datacenter, computeclusters, folders}]
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/data-center/vmware/permissions/
@@ -1072,10 +1050,9 @@ rules:
       text: Read the resources of each placement in the validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/overlord/overlord_properties_vsphere.go
         note: the PCG answers computecluster{datastores, networks, resourcePools} for a datacenter and a compute cluster
       - kind: source
-        ref: palette-sdk-go api/models/v1_vsphere_compute_cluster.go
+        note: the API of Palette gives the datastores, the networks, and the resource pools of each compute cluster
     tests:
       - fault: fixtures/vsphere/datastore-missing.json
         clean: fixtures/vsphere/clean.json
@@ -1104,7 +1081,6 @@ rules:
       text: The check exists in the converter; strata-preflight runs it before the request.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToVsphereInstanceType
         note: "\"equal or greater than 1\", \"equal or greater than 1024 MiB\", \"equal or greater than 20 GiB\""
       - kind: doc
         ref: https://docs.spectrocloud.com/tutorials/getting-started/palette/vmware/deploy-k8s-cluster/

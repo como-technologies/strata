@@ -123,6 +123,63 @@ fn the_rules_of_the_capa_stack_name_what_aws_refuses() {
     }
 }
 
+/// Rule 7 of the book: a rule states what Palette does, and names no file of the Palette code.
+const PALETTE_CODE: [&str; 6] = [
+    "hubble",
+    "hapi",
+    "palette-sdk-go",
+    "terraform-provider-spectrocloud",
+    "optic src/",
+    "pkg/",
+];
+
+/// True when `line` names a Go source file: `.go` with no letter or digit after it.
+fn names_a_go_file(line: &str) -> bool {
+    line.match_indices(".go").any(|(at, _)| {
+        line[at + 3..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_ascii_alphanumeric())
+    })
+}
+
+#[test]
+fn no_rule_names_a_file_of_the_palette_code() {
+    let mut found = Vec::new();
+    for (name, text) in catalog::SECTIONS {
+        for (n, line) in text.lines().enumerate() {
+            let lower = line.to_lowercase();
+            if PALETTE_CODE.iter().any(|m| lower.contains(m)) || names_a_go_file(&lower) {
+                found.push(format!("{name}.yaml:{}: {}", n + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "rules that name the Palette code:\n{}",
+        found.join("\n")
+    );
+}
+
+#[test]
+fn each_source_entry_states_what_palette_does() {
+    let catalog = catalog::builtin().unwrap();
+    let silent: Vec<&str> = catalog
+        .rules()
+        .filter(|r| {
+            r.evidence
+                .iter()
+                .any(|e| e.kind == "source" && e.note.is_empty())
+        })
+        .map(|r| r.id.as_str())
+        .collect();
+    assert!(
+        silent.is_empty(),
+        "source entries with no note: {}",
+        silent.join(", ")
+    );
+}
+
 #[test]
 fn every_rule_with_a_check_has_a_test() {
     let catalog = catalog::builtin().unwrap();

@@ -153,7 +153,6 @@ rules:
         ref: preflight-plan aws 20260929T041905Z, eks 20260929T042910Z
         note: with no --resource-arns, iam:PassRole and the EKS actions gave implicitDeny on roles that build clusters; the EC2, load balancer, and CloudFormation actions gave allowed
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsAccount, ValidateArns
         note: the account validate assumes the role and calls DescribeRegions; ValidateArns calls GetPolicy on each policy ARN
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/
@@ -187,7 +186,6 @@ rules:
       - kind: run
         ref: teardown lab
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go ValidateAwsAccount
         note: assumes the role with the external id, then calls DescribeRegions
     tests:
       - fault: fixtures/eks/account-refused.json
@@ -238,6 +236,7 @@ rules:
         ref: "#89"
       - kind: source
         ref: strata examples/live/terraform/cloud-eks.tf time_sleep.eks_role
+        note: the live example waits 30 s after it makes the role, before Palette assumes it
 
   - id: eks-core-policies
     title: The core policies of Palette exist in the AWS account
@@ -281,6 +280,7 @@ rules:
         ref: "#89"
       - kind: source
         ref: strata examples/live/terraform/cloud-eks.tf data.aws_iam_policy.palette_core
+        note: the live example reads the core policies of Palette from the AWS account
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/core-iam-policies/
     tests:
@@ -342,7 +342,6 @@ rules:
       text: Describe the stack and the three CAPA roles in the cluster validate route.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_presetup.go SetUpCloud
         note: DescribeStacks in each region; AccessDenied and "does not exist" both continue to the next region; a stack that is not COMPLETE is skipped
       - kind: run
         ref: "#365"
@@ -397,10 +396,9 @@ rules:
       text: Run validateBootstrapStackHealth in the validate route, in manual mode too.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_presetup.go validateBootstrapStackHealth
         note: GetRole on five roles and GetInstanceProfile on three profiles, each with the NamePrefix of the account; SetUpCloud returns before it when the stack is managed by hand
       - kind: source
-        ref: palette pkg/provider/aws/aws_common.go shouldUserManageCloudFormationStack
+        note: Palette reads from the cloud account if the user manages the CloudFormation stack by hand
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/minimum-permissions-policies/
     tests:
@@ -600,7 +598,6 @@ rules:
       text: Fail the build on the attach error.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_presetup.go handleGlobalRoleAdditionalPolicies
         note: AttachRolePolicy in a loop over the roles; an error is logged with "unable to attach policy to role", and the loop continues
     tests:
       - fault: fixtures/eks/nodes-policy-not-attached.json
@@ -650,7 +647,7 @@ rules:
       - kind: doc
         ref: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html
       - kind: source
-        ref: palette pkg/provider/aws/aws_presetup.go handleGlobalRoleAdditionalPolicies
+        note: Palette adds the additional policies of the global role to the nodes role
     tests:
       - fault: fixtures/eks/nodes-ten-policies.json
         clean: fixtures/eks/identity-clean.json
@@ -703,6 +700,7 @@ rules:
         ref: teardown lab
       - kind: source
         ref: strata docs/src/development/live-example.md Prerequisites
+        note: the prerequisites of the live example give the nodes role this policy
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/additional-iam-policies-specific-use-cases/
     tests:
@@ -740,8 +738,7 @@ rules:
       text: Check the names and the policies in the validate route, and read the role in IAM.
     evidence:
       - kind: source
-        ref: palette pkg/provider/aws/aws_irsa.go getIRSARolesConfig
-        note: the roles come from managedControlPlane.irsaRoles of the k8s pack; irsa/reconciler.go refuses a foreign owner and adopts an untagged role that matches
+        note: the roles come from managedControlPlane.irsaRoles of the k8s pack; the IRSA reconciler of Palette refuses a foreign owner and adopts an untagged role that matches
       - kind: doc
         ref: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_iam-quotas.html
     tests:
@@ -799,7 +796,6 @@ rules:
       text: The check exists in the properties route; strata-preflight calls it.
     evidence:
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/aws_service.go validateAwsCloudAccountSupport
         note: FeatureNotSupported("Pod Identity for AWS infrastructure clusters") when the account is Pod Identity
     tests:
       - fault: fixtures/aws/pod-identity-iaas.json
@@ -857,7 +853,6 @@ rules:
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/gcp/add-gcp-accounts/
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/gcp_service.go ValidateGcpAccount
         note: the key parses, and projects.list is not empty; no permission is tested
       - kind: report
         ref: palette-precreate-validation-gaps-findings-2026-09-28 B5
@@ -914,6 +909,7 @@ rules:
         ref: "#74"
       - kind: source
         ref: strata docs/src/internals/palette/clusters.md A cluster on GCP
+        note: the book states what a cluster on GCP needs of this account
     tests:
       - fault: fixtures/gcp/default-sa-no-role.json
         clean: fixtures/gcp/identity-clean.json
@@ -1032,7 +1028,7 @@ rules:
       A cloud account made seconds before the build can still fail its first call. IAM propagates
       a new role or a new key in some seconds, and the #89 lab waits 30 s after the role create.
       The check reads `metadata.creationTimestamp` of the account and warns under 2 minutes. The
-      2 minutes are a reading, not a measurement. Hubble never sets `status.state` of a cloud
+      2 minutes are a reading, not a measurement. Palette never sets `status.state` of a cloud
       account; the field is normally empty, so the check reads it only when it has a value that is
       not `Active`. No run of these engines shows the fault.
     check:
@@ -1053,10 +1049,8 @@ rules:
         ref: "#89"
         note: the lab waits 30 s after the IAM role create before Palette assumes it
       - kind: source
-        ref: hubble svcclient/converter/v1/cloudaccount_converter.go ToApiCloudAccountStatus
-        note: status.state passes through from the document; no hubble code sets a value for it
+        note: status.state passes through from the document; Palette sets no value for it
       - kind: source
-        ref: palette-sdk-go api/models/v1_object_meta.go
         note: creationTimestamp is RFC3339 in UTC
     tests:
       - fault: fixtures/azure/account-new.json
@@ -1086,10 +1080,8 @@ rules:
       text: The check exists in Palette; strata-preflight runs it before the request.
     evidence:
       - kind: source
-        ref: hubble svcclient/validator/params_validator.go ValidatePublicSshKey
         note: ssh.ParseAuthorizedKey on each key; a failure is SshKeyValidationFailure
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/spectrocluster/internal/vsphere/spectrocluster_vsphere.go ValidateCreateCluster
         note: ValidateSshs runs in the validate route and in the create
     tests:
       - fault: fixtures/vsphere/ssh-key-bad.json
@@ -1103,7 +1095,7 @@ rules:
     status: source
     what: |
       The converter refuses an Azure or AKS create without `cloudConfig.sshKey`: "Parameter
-      'cloudConfig.sshKey' should not be empty". The provider tolerates an empty key; hubble does
+      'cloudConfig.sshKey' should not be empty". The provider tolerates an empty key; Palette does
       not. The docs need a key pair in the Azure environment. For AKS the docs take RSA and ED25519
       keys alone. The check reads the field and its type word.
     check:
@@ -1119,7 +1111,6 @@ rules:
       text: Refuse the key type in the AKS validate route.
     evidence:
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/handler/converter/v1/clusters_v1_converter.go ToSpectroAzureClusterSpecParam
         note: validator.ShouldNotBeEmpty("cloudConfig.sshKey", s.CloudConfig.SSHKey)
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/aks/
@@ -1178,7 +1169,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/required-permissions/
         note: custom roles on the subscription, or on the resource group and the vnet; the subscription scope is the recommendation
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/azure_service.go validateAzureAccountStandard
         note: lists the subscriptions of the principal; no role or permission is read
     tests:
       - fault: fixtures/azure/roles-other-rg.json
@@ -1209,7 +1199,6 @@ rules:
       text: Check the AAD profile in the AKS validate route.
     evidence:
       - kind: source
-        ref: palette pkg/provider/azure/azure_managed_controlplane.go validateAADProfile
         note: "\"minimum required AdminGroupObjectIDs is 1\"; the cluster config fields are dereferenced without a nil check"
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/enable-iam-features-aks/enable-microsoft-entra-id-aks/
@@ -1250,7 +1239,6 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/pcg/deploy-pcg/maas/
         note: "MAAS Server URL, example http://10.1.1.1:5240/MAAS"
       - kind: source
-        ref: hubble services/service/spectrocluster/internal/service/overlord/overlord_properties_maas.go VerifyMaasAccount
         note: net.ValidateEndpoint on the endpoint, then a credentials check through the PCG
     tests:
       - fault: fixtures/maas/endpoint-bad.json
@@ -1281,10 +1269,8 @@ rules:
       - "curl -sk -o /dev/null -w '%{http_code}\\n' https://{{ .account.spec.vcenterServer // \"<vcenter>\" }}/sdk   # from the PCG; vCenter answers on 443"
     evidence:
       - kind: source
-        ref: hubble services/service/cloud/internal/service/cloudservice/vsphere_service.go ValidateVsphereAccount
         note: refuses a server that starts with http or https, then opens a session
       - kind: source
-        ref: hubble svcclient/converter/v1/cloudaccount_converter.go ToVsphereCloudAccountSpec
         note: ShouldNotBeNil("VcenterServer") and ValidServerEndpoint
     tests:
       - fault: fixtures/vsphere/vcenter-https.json

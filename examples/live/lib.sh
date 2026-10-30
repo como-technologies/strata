@@ -15,6 +15,27 @@ flag=${flag:-false}
 
 die() { echo "$script: $*" >&2; exit 2; }
 
+# A jq before 1.7.1 exits with 0 for `jq -e` when its input is empty, as it is when the command
+# before it failed. A check on that output passes. For such a jq, this function exits with 4 when
+# `jq -e` prints nothing, as jq 1.7.1 does. `export -f` gives it to `bash -c` and to the scripts
+# that this one starts.
+if : | command jq -e . > /dev/null 2>&1; then
+  jq() {
+    local arg exit_status= printed rc
+    for arg in "$@"; do
+      case "$arg" in --exit-status) exit_status=1 ;; --*) ;; -*e*) exit_status=1 ;; esac
+    done
+    [ -n "$exit_status" ] || { command jq "$@"; return; }
+    printed=$(mktemp) || return 2
+    command jq "$@" | tee "$printed"
+    rc=${PIPESTATUS[0]}
+    [ "$rc" -ne 0 ] || [ -s "$printed" ] || rc=4
+    rm -f "$printed"
+    return "$rc"
+  }
+  export -f jq
+fi
+
 # The default binary must be built from these sources: a run with an older one tests old code.
 # `just build`, and each live recipe, builds it. A binary set with STRATA_BIN is the caller's.
 if [ -z "${STRATA_BIN:-}" ] && [ -e "$strata" ]; then

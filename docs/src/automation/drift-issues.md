@@ -37,8 +37,9 @@ digest: its issue says that `--allow-no-digest` accepts it. See
 [verify](../commands/verify.md#the-verdicts).
 
 When `verify` checks nothing, for example when no pattern matches a file, the
-script exits `2` and touches no issue. A host call that fails ends the script
-with the status of that call.
+script exits `2` and touches no issue. It does so when `verify` prints nothing,
+also with a `jq` older than 1.7.1. A host call that fails ends the script with
+the status of that call.
 
 A record finds a macro that changed only when it holds the digests of the
 macro values. Take it with `strata snapshot <ref> --macros`, for a version, a
