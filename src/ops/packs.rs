@@ -137,9 +137,9 @@ pub struct PackOptions {
 const PALETTE_LATEST: &str = "/metadata/annotations/latestVersion";
 
 /// The processor architectures that the listing names for each version, sorted, by registry uid and
-/// version: `amd64`, `arm64`. A version that the listing names none for has an empty list. `packs`
-/// is not a catalog, so the document does not show them: `behind` reads them, and says what a move
-/// to a newer version drops.
+/// version: `amd64`, `arm64`. A version with no architecture in the listing has an empty list.
+/// `packs` is not a catalog, so the document does not show them: `behind` reads them, and says what
+/// a move to a newer version drops.
 pub(crate) type Architectures = BTreeMap<(String, String), Vec<String>>;
 
 /// The annotation of the pack listing that names the processor architectures of a version, as

@@ -37,7 +37,7 @@
 //! [`Open`] reads a value in three steps:
 //!
 //! 1. Read the value as text. A value that is not text, such as `1`, gives an error.
-//! 2. Look the text up in [`ClosedSet::ALL`], by [`ClosedSet::as_str`].
+//! 2. Find the text in [`ClosedSet::ALL`], by [`ClosedSet::as_str`].
 //! 3. If the text names a value of `T`, the value is [`Open::Known`]. If not, the value is
 //!    [`Open::Unknown`] with the text, and there is no error.
 //!

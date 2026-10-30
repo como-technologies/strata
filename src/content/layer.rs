@@ -17,7 +17,7 @@ pub enum Layer {
     Csi,
     /// Add-on: anything above the infrastructure layers.
     Addon,
-    /// The layer that strata gives each tier of an app profile. Palette has no such layer.
+    /// The layer that strata gives each tier of an app profile.
     App,
     /// A layer name strata does not know.
     Other,
