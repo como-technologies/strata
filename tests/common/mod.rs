@@ -174,6 +174,20 @@ pub const UID_ADDONS: &str = "64f0000000000000000000d4";
 /// A cluster variable value that must never reach a snapshot.
 pub const SECRET_VALUE: &str = "s3cr3t-value";
 
+/// The uid of the profile version that the tests of a draft serve.
+pub const DRAFT_PROFILE_UID: &str = "64f0000000000000000000d1";
+
+/// The uid of the manifest `rules` in the tests of a draft.
+pub const RULES_UID: &str = "64f00000000000000000a0e1";
+
+/// The content of the manifest `rules` in the published template of the tests of a draft.
+pub const PUBLISHED_RULES: &str =
+    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: warn";
+
+/// The content of the manifest `rules` in the draft template of the tests of a draft.
+pub const DRAFT_RULES: &str =
+    "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: rules\ndata:\n  level: error";
+
 /// The JSON document in the file at `path`.
 pub fn read_json(path: &Path) -> Value {
     serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
