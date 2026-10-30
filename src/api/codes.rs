@@ -46,7 +46,7 @@ pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
 ///
 /// The route then checks nothing, so strata reads them as errors and not as an answer. A retry gets
 /// the same error.
-pub(crate) const PROFILE_IMPORT_MATCH_CODES: [&str; 4] = [
+pub const PROFILE_IMPORT_MATCH_CODES: [&str; 4] = [
     "ClusterProfileImportRegistriesNotFound",
     "ClusterProfileImportOciRegistriesNotFound",
     "ClusterProfileImportPrivateHelmRegistriesNotFound",

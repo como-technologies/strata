@@ -7,7 +7,8 @@ use std::path::Path;
 
 use serde_json::Value;
 use strata::api::codes::{
-    CreateRule, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE, ValidateRoute,
+    CreateRule, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE,
+    PROFILE_IMPORT_MATCH_CODES, ValidateRoute,
 };
 use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
@@ -11610,27 +11611,19 @@ fn consumers_counts_a_cluster_template_that_links_the_version() {
 
 // ---- cluster groups ---------------------------------------------------------------------------
 
-/// The template of the add-on profile of cluster-merged, and its place in the templates of the
-/// cluster.
-fn merged_addon_template(raw_root: &Path) -> (usize, Value) {
+/// The template of the add-on profile in the document of cluster-merged.
+fn merged_addon_template(raw_root: &Path) -> Value {
     let (_, addon) = merged_uids(raw_root);
-    let templates = read_json(&raw_root.join("cluster-merged").join("cluster.json"))["spec"]
-        ["clusterProfileTemplates"]
-        .clone();
-    templates
-        .as_array()
+    let cluster = read_json(&raw_root.join("cluster-merged").join("cluster.json"));
+    strata::snapshot::AppliedProfile::template_of(&cluster, &addon)
         .unwrap()
-        .iter()
-        .cloned()
-        .enumerate()
-        .find(|(_, t)| t["uid"] == addon.as_str())
-        .unwrap()
+        .clone()
 }
 
 /// The document of the cluster group `g1`, `group-1`, that pins the add-on profile of
 /// cluster-merged.
 fn group_doc(raw_root: &Path) -> Value {
-    let (_, template) = merged_addon_template(raw_root);
+    let template = merged_addon_template(raw_root);
     serde_json::json!({
         "metadata": {"uid": "g1", "name": "group-1"},
         "spec": {"type": "hostCluster", "clusterProfileTemplates": [template]},
@@ -11643,7 +11636,13 @@ fn serve_cluster_group(api: MemoryApi, raw_root: &Path) -> MemoryApi {
     let m = raw_root.join("cluster-merged");
     let (_, addon) = merged_uids(raw_root);
     let manifests = read_json(&m.join("manifests.json"))["profiles"].clone();
-    let (i, _) = merged_addon_template(raw_root);
+    let addon_manifests = manifests
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["metadata"]["uid"] == addon.as_str())
+        .unwrap()
+        .clone();
     serve_cluster(api, raw_root, "cluster-merged")
         .with(group_route("g1"), group_doc(raw_root))
         .with(
@@ -11655,7 +11654,7 @@ fn serve_cluster_group(api: MemoryApi, raw_root: &Path) -> MemoryApi {
             serde_json::json!({"items": [{"metadata": {"uid": CLUSTER_UID, "name": "lab-cluster",
                 "annotations": {"projectUid": "p1"}}}], "listmeta": {"continue": ""}}),
         )
-        .with(manifests_route(&addon), manifests[i].clone())
+        .with(manifests_route(&addon), addon_manifests)
         .with(
             variables_route(&addon),
             read_json(&raw_root.join("addons").join("variables.json")),
@@ -14655,15 +14654,14 @@ fn snapshot_validate_of_a_candidate_takes_a_refusal_of_the_name_route_or_the_imp
 
     // the import route did not match a pack to a registry, so it checked nothing: an error of
     // strata, which the retry does not send again. A 403 and a 500 with another code are errors
-    assert_eq!(
-        class_of(500, "ClusterProfileImportPackNotFound"),
-        FailureClass::Terminal
-    );
-    for (status, code) in [
-        (500, "ClusterProfileImportPackNotFound"),
-        (403, "Forbidden"),
-        (500, "InternalError"),
-    ] {
+    for code in PROFILE_IMPORT_MATCH_CODES {
+        assert_eq!(class_of(500, code), FailureClass::Terminal, "{code}");
+    }
+    let match_errors = PROFILE_IMPORT_MATCH_CODES.map(|code| (500, code));
+    for (status, code) in match_errors
+        .into_iter()
+        .chain([(403, "Forbidden"), (500, "InternalError")])
+    {
         let err = refusal(accepting().failing(&import, status, body_of(code))).unwrap_err();
         assert!(
             matches!(err, Error::Api { status: s, .. } if s == status),
