@@ -1661,9 +1661,9 @@ fn offering_edit(engine: &str, region: &str, answer: &str) -> (Output, String) {
 #[test]
 fn preflight_plan_makes_the_fault_of_instance_offering_from_the_instance_type_route() {
     let answer = r#"{"instanceTypes":[
-        {"name":"t3.large","nonSupportedZones":[]},
-        {"name":"t3.xlarge","nonSupportedZones":["us-east-2c","us-east-2d"]},
-        {"name":"m5.large","nonSupportedZones":["us-east-2a"]}]}"#;
+        {"type":"t3.large","nonSupportedZones":[]},
+        {"type":"t3.xlarge","nonSupportedZones":["us-east-2c","us-east-2d"]},
+        {"type":"m5.large","nonSupportedZones":["us-east-2a"]}]}"#;
     for (engine, region, path) in [
         (
             "aws",
@@ -1705,11 +1705,43 @@ fn preflight_plan_makes_the_fault_of_instance_offering_from_the_instance_type_ro
     }
 }
 
+/// The check `instance-types-shape` of the plan tests the field `type`, as Palette names the type
+/// of an entry (#404). The answer of the live run passes it, and an entry with `name` fails it.
+#[test]
+fn preflight_plan_tests_the_shape_of_the_instance_type_route_by_type() {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    let line = script
+        .lines()
+        .skip_while(|l| !l.contains("check instance-types-shape"))
+        .nth(1)
+        .unwrap();
+    let filter = &line[line.find('\'').unwrap() + 1..line.rfind('\'').unwrap()];
+    let dir = tempfile::tempdir().unwrap();
+    for (answer, status) in [
+        (
+            r#"{"instanceTypes":[{"category":"GPU instance","cpu":32,"memory":488,"price":7.2,"type":"p2.8xlarge","cost":{"price":[{"onDemand":7.2,"os":"linux"}]},"nonSupportedZones":["us-east-2a","us-east-2b","us-east-2c"],"supportedArchitectures":["x86_64"]}]}"#,
+            Some(0),
+        ),
+        (
+            r#"{"instanceTypes":[{"name":"p2.8xlarge","nonSupportedZones":[]}]}"#,
+            Some(1),
+        ),
+    ] {
+        std::fs::write(dir.path().join("instancetypes.json"), answer).unwrap();
+        let o = Command::new("jq")
+            .args(["-e", filter])
+            .arg(dir.path().join("instancetypes.json"))
+            .output()
+            .unwrap();
+        assert_eq!(o.status.code(), status, "{answer}");
+    }
+}
+
 #[test]
 fn preflight_plan_makes_no_fault_of_instance_offering_when_the_route_lists_no_zone_that_a_type_lacks()
  {
     for answer in [
-        r#"{"instanceTypes":[{"name":"t3.large","nonSupportedZones":[]}]}"#,
+        r#"{"instanceTypes":[{"type":"t3.large","nonSupportedZones":[]}]}"#,
         "{}",
     ] {
         let (o, _) = offering_edit("aws", "us-east-2", answer);

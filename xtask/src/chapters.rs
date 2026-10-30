@@ -146,14 +146,26 @@ fn accepted_answer() -> serde_json::Value {
     json!({"machinePools": {"results": []}, "profiles": []})
 }
 
+/// One entry of the answer of the instance type route, as Palette gives it: the name of the type is
+/// `type`, and an entry has no `name`.
+fn instance_type(
+    name: &str,
+    cpu: u32,
+    memory: u32,
+    price: f64,
+    not_offered: &[&str],
+) -> serde_json::Value {
+    json!({"category": "General purpose", "cpu": cpu, "memory": memory, "price": price, "type": name,
+        "cost": {"price": [{"onDemand": price, "os": "linux"}]},
+        "nonSupportedZones": not_offered, "supportedArchitectures": ["x86_64"]})
+}
+
 /// The answer of the instance type route for `us-east-2`: `t3.xlarge` is not offered in the zone
 /// `us-east-2c`, which no pool of `preflight_entity` uses.
 fn instance_types_answer() -> serde_json::Value {
     json!({"instanceTypes": [
-        {"name": "t3.large", "cpu": 2, "memory": 8, "nonSupportedZones": [],
-            "supportedArchitectures": ["x86_64"]},
-        {"name": "t3.xlarge", "cpu": 4, "memory": 16, "nonSupportedZones": ["us-east-2c"],
-            "supportedArchitectures": ["x86_64"]},
+        instance_type("t3.large", 2, 8, 0.0832, &[]),
+        instance_type("t3.xlarge", 4, 16, 0.1664, &["us-east-2c"]),
     ]})
 }
 

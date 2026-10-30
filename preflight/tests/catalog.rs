@@ -790,6 +790,54 @@ fn instance_offering_names_the_pool_the_type_and_the_zone_for_aws_and_gcp() {
     }
 }
 
+/// `instance-offering` reads the type of an entry from `type`, as the instance type route of
+/// Palette gives it (#404). An entry has no `name`: a list with `name` alone names no type.
+#[test]
+fn instance_offering_reads_the_type_of_an_entry_from_type() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("instance-offering").unwrap();
+    let path = catalog::rules_dir().join("fixtures/aws/instance-zone-offered.json");
+    let key = "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1";
+    let live = serde_json::json!({"category": "GPU instance", "cpu": 32, "memory": 488,
+        "price": 7.2, "type": "p2.8xlarge",
+        "cost": {"price": [{"onDemand": 7.2, "os": "linux"}]},
+        "nonSupportedZones": ["us-east-2a", "us-east-2b", "us-east-2c"],
+        "supportedArchitectures": ["x86_64"]});
+    let named = serde_json::json!({"name": "p2.8xlarge", "nonSupportedZones": []});
+    for (entry, zone, expected) in [
+        (&live, "us-east-2d", vec![]),
+        (
+            &live,
+            "us-east-2a",
+            vec![
+                "pool cp-pool: the type p2.8xlarge is not offered in the zone us-east-2a",
+                "pool worker-pool: the type p2.8xlarge is not offered in the zone us-east-2a",
+            ],
+        ),
+        (
+            &named,
+            "us-east-2d",
+            vec![
+                "pool cp-pool: the type p2.8xlarge is not in the list of region us-east-2",
+                "pool worker-pool: the type p2.8xlarge is not in the list of region us-east-2",
+            ],
+        ),
+    ] {
+        let mut doc = fixture::load(&path).unwrap();
+        doc["_responses"][key]["body"] = serde_json::json!({ "instanceTypes": [entry] });
+        for pool in doc["entity"]["spec"]["machinepoolconfig"]
+            .as_array_mut()
+            .unwrap()
+        {
+            pool["cloudConfig"]["instanceType"] = "p2.8xlarge".into();
+            pool["cloudConfig"]["azs"] = serde_json::json!([zone]);
+        }
+        let (backend, world) = FixtureBackend::split(doc);
+        let out = probe::run_check(rule, &world, &backend, &Jq::new());
+        assert_eq!(out.messages, expected, "{entry}");
+    }
+}
+
 /// A pool with no zone, as a GKE pool of a region, is checked against the list of the region alone.
 #[test]
 fn instance_offering_checks_a_pool_with_no_zone_against_the_list_of_the_region() {

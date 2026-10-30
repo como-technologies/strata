@@ -8,8 +8,8 @@
         "status": 200,
         "body": {
           "instanceTypes": [
-            { "name": "t3.large", "cpu": 2, "memory": 8, "nonSupportedZones": [], "supportedArchitectures": ["x86_64"] },
-            { "name": "t3.xlarge", "cpu": 4, "memory": 16, "nonSupportedZones": ["us-east-2a"], "supportedArchitectures": ["x86_64"] }
+            { "category": "General purpose", "cpu": 2, "memory": 8, "price": 0.0832, "type": "t3.large", "cost": { "price": [{ "onDemand": 0.0832, "os": "linux" }] }, "nonSupportedZones": [], "supportedArchitectures": ["x86_64"] },
+            { "category": "General purpose", "cpu": 4, "memory": 16, "price": 0.1664, "type": "t3.xlarge", "cost": { "price": [{ "onDemand": 0.1664, "os": "linux" }] }, "nonSupportedZones": ["us-east-2a"], "supportedArchitectures": ["x86_64"] }
           ]
         }
       }

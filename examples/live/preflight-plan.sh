@@ -140,7 +140,7 @@ offering_edit() {
   local kind=aws pair
   case "$engine" in gcp|gke) kind=gcp ;; esac
   "$live/api.sh" get "/v1/clouds/$kind/regions/$region/instancetypes?cloudAccountUid=$A" > instancetypes.json || { echo "api.sh get failed: $(tail -n 1 instancetypes.json)" >&2; return 1; }
-  pair=$(jq -r '[.instanceTypes[]? | select((.nonSupportedZones // []) | length > 0)] | .[0] // empty | "\(.name)\t\(.nonSupportedZones[0])"' instancetypes.json) || { echo "instancetypes.json is not JSON" >&2; return 1; }
+  pair=$(jq -r '[.instanceTypes[]? | select((.nonSupportedZones // []) | length > 0)] | .[0] // empty | "\(.type)\t\(.nonSupportedZones[0])"' instancetypes.json) || { echo "instancetypes.json is not JSON" >&2; return 1; }
   [ -n "$pair" ] || { echo "the route lists no type with a zone in nonSupportedZones" >&2; return 1; }
   local type zone
   IFS=$'\t' read -r type zone <<<"$pair"
@@ -184,8 +184,8 @@ esac
 # the answer of the route; the faults then show that each rule reads it.
 echo "== 2b. the rules that read a list of the cloud account" | tee -a steps.log
 if edit=$(offering_edit 2> offering-edit.err); then
-  check instance-types-shape 0 "the instance type route lists the types of $region as instanceTypes[] with a name and nonSupportedZones" -- \
-    jq -e '(.instanceTypes | length) > 0 and all(.instanceTypes[]; has("name") and (.nonSupportedZones | type) == "array")' instancetypes.json
+  check instance-types-shape 0 "the instance type route lists the types of $region as instanceTypes[] with a type and nonSupportedZones" -- \
+    jq -e '(.instanceTypes | length) > 0 and all(.instanceTypes[]; has("type") and (.nonSupportedZones | type) == "array")' instancetypes.json
   fault instance-offering "$edit"
 else
   record instance-offering not-made "$(cat offering-edit.err)"
