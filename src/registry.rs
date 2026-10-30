@@ -19,6 +19,7 @@ use crate::closed_set::{ClosedSet, Open};
 use crate::diff::{RegistrySync, SyncRecovery};
 use crate::error::{Error, Result, served, unread_reason};
 use crate::json::{opt_text, str_at, take_items, text};
+use crate::oci_provider::OciProvider;
 use crate::pack_state::PackState;
 use crate::pack_type::PackType;
 use crate::reference::one_named;
@@ -26,10 +27,6 @@ use crate::term::progress::Progress;
 
 /// The state that Palette gives to the recovery of a sync when no sync waits for a recovery.
 const SYNC_RECOVERED: &str = "Recovered";
-
-/// The provider type of an OCI registry of packs, in `spec.providerType`. Palette syncs each
-/// such registry.
-const PACK_PROVIDER: &str = "pack";
 
 /// The registry listings of one command, each read one time, when a check first needs it.
 pub(crate) struct Registries<'a, A: PaletteApi> {
@@ -144,11 +141,12 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
     ///
     /// The pack listing does not carry it. `None` when Palette has no such listing, when the
     /// listing does not have the registry, and when the entry names no type.
-    pub(crate) fn oci_provider_type(&mut self, uid: &str) -> Result<Option<String>> {
+    pub(crate) fn oci_provider_type(&mut self, uid: &str) -> Result<Option<Open<OciProvider>>> {
         Ok(self
             .summary(RegistryKind::Oci)?
             .and_then(|regs| registry_entry(regs, "/metadata/uid", uid))
-            .and_then(|reg| opt_text(reg, "/spec/providerType")))
+            .and_then(|reg| opt_text(reg, "/spec/providerType"))
+            .map(|text| Open::from_text(&text)))
     }
 
     /// How Palette makes the pack of a layer from the registry `uid`, when it does not sync the
@@ -182,8 +180,9 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
                     return Ok(None);
                 };
                 // Palette syncs each OCI registry of the provider type pack
-                let provider = opt_text(reg, "/spec/providerType");
-                let syncs = provider.as_deref() == Some(PACK_PROVIDER)
+                let provider =
+                    opt_text(reg, "/spec/providerType").map(|text| Open::from_text(&text));
+                let syncs = provider.as_ref().is_some_and(|p| *p == OciProvider::Pack)
                     || reg
                         .pointer("/status/sync/isSyncSupported")
                         .and_then(Value::as_bool)
@@ -308,7 +307,7 @@ pub(crate) struct Unsynced {
     /// The kind of the registry, which gives the pack its type: `helm` or `oci`.
     pub kind: RegistryKind,
     /// The provider type of an OCI registry: `helm` or `zarf`.
-    pub provider: Option<String>,
+    pub provider: Option<Open<OciProvider>>,
 }
 
 /// The last sync of a registry, read as a note beside an answer.
@@ -429,14 +428,14 @@ mod tests {
         assert_eq!(registries.name_of("reg-gone").unwrap(), None);
         assert_eq!(registries.names().unwrap().len(), 3);
         assert_eq!(
-            registries.oci_provider_type("reg-zarf").unwrap().as_deref(),
-            Some("zarf")
+            registries.oci_provider_type("reg-zarf").unwrap(),
+            Some(OciProvider::Zarf.into())
         );
         assert_eq!(registries.oci_provider_type("reg-public").unwrap(), None);
         let unsynced = registries.unsynced("reg-zarf").unwrap().unwrap();
         assert_eq!(
-            (unsynced.kind, unsynced.provider.as_deref()),
-            (RegistryKind::Oci, Some("zarf"))
+            (unsynced.kind, unsynced.provider),
+            (RegistryKind::Oci, Some(OciProvider::Zarf.into()))
         );
         assert_eq!(
             registries.unsynced("reg-auth").unwrap().unwrap().kind,

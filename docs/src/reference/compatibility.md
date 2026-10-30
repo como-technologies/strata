@@ -85,6 +85,7 @@ fields take a value of a later release:
 - `source.template`, `source.cluster.kind`, the name of each tier in
   `source.cluster.tiers`, and `upstreamSource` in the `hash` of each pack, in
   `strata-snapshot/1`.
+- `registryProviderType` of each pack, in `strata-snapshot/1`.
 - `bump.impact` and each value of `bump.flags[]`, in `strata-behind/1`.
 - `pinnedState` of a pin, and `state` of a newer version, in `strata-behind/1`.
 

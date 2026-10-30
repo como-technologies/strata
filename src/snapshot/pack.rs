@@ -14,6 +14,7 @@ use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
 use crate::content::layer::Layer;
 use crate::json::{arr, first_nonempty, opt_text, str_at, text};
+use crate::oci_provider::OciProvider;
 use crate::pack_type::PackType;
 
 /// One layer of the profile: a pack with its configuration and its hashes.
@@ -45,7 +46,7 @@ pub struct Pack {
     /// `zarf`, as the pack ref of the profile gives it in its annotations. Palette follows a new
     /// digest in a different way for each. Outside the root: the registry uid is in it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub registry_provider_type: Option<String>,
+    pub registry_provider_type: Option<Open<OciProvider>>,
     /// The annotation `imageId` of the pack ref, when Palette gives it. A record keeps no other
     /// annotation, because an annotation can hold a secret. Outside the root: a record written
     /// before this field has none, and a record of strata 0.17 to 0.19 holds each annotation.
@@ -286,8 +287,11 @@ impl Pack {
         let registry_uid = text(pk, "/registryUid");
         let ref_digest = text(pk, "/digest");
         let registry_digest = text(&mm, "/spec/digest");
-        let registry_provider_type =
-            opt_text(pk, &format!("/annotations/{PROVIDER_TYPE_ANNOTATION}"));
+        let registry_provider_type = opt_text(
+            pk,
+            &format!("/annotations/{PROVIDER_TYPE_ANNOTATION}"),
+        )
+        .map(|text| Open::from_text(&text));
         // only `imageId`: another annotation can hold a secret, and strata reads no other one.
         // Palette gives each annotation as text; a value of another type is not an annotation
         let annotations: BTreeMap<String, String> =

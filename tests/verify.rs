@@ -10223,7 +10223,10 @@ fn a_pack_from_an_oci_registry_records_the_provider_type_outside_the_root() {
             &pack(serde_json::json!({"ociRegistryProviderType": kind})),
             &[],
         );
-        assert_eq!(p.registry_provider_type.as_deref(), Some(kind));
+        assert_eq!(
+            p.registry_provider_type.as_ref().map(Open::as_str),
+            Some(kind)
+        );
         let doc = serde_json::to_value(&p).unwrap();
         assert_eq!(doc["registryProviderType"], kind);
     }
@@ -10263,7 +10266,10 @@ fn a_record_of_a_pack_from_an_oci_registry_names_its_provider_type() {
     );
     let pack = snapshot_of(&listed, "pack:Mirror/csi-aws-ebs@1.64.0").unwrap();
     assert_eq!(
-        pack.packs[0].registry_provider_type.as_deref(),
+        pack.packs[0]
+            .registry_provider_type
+            .as_ref()
+            .map(Open::as_str),
         Some("helm")
     );
     // a Palette that answers the listing with a 4xx gives a record that names no provider type

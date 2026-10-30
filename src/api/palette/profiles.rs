@@ -15,6 +15,7 @@ use super::{
 use crate::api::{PaletteApi, RawProfile, mask};
 use crate::closed_set::ClosedSet;
 use crate::cloud::CLOUD_ALL;
+use crate::content::layer::Layer;
 use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, text};
 use crate::profile_type::ProfileType;
@@ -247,7 +248,7 @@ impl<A: PaletteApi> Palette<A> {
                 params.insert(TIER_CONTAINER_REGISTRY.to_string(), Value::from(registry));
             }
             packs.push(serde_json::json!({
-                "name": name, "layer": "app", "type": text(tier, "/spec/type"),
+                "name": name, "layer": Layer::App.as_str(), "type": text(tier, "/spec/type"),
                 "tag": text(tier, "/spec/version"), "version": text(tier, "/spec/version"),
                 "packUid": text(tier, "/spec/sourceAppTierUid"),
                 "registryUid": text(tier, "/spec/registryUid"),
