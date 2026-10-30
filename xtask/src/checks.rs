@@ -1,42 +1,46 @@
-//! The rules the book must keep, which no other check can see.
+//! The rules the book .filter(|m| m.starts_with(&format!("{USE_CASES}/broken.md: cannot read the file")))ust keep, which no other check can see.
 //!
 //! A rule lands here when a walk of the pages finds the same defect twice.
 //! `docs/examples/checklist.md` is the procedure; this is what stops the drift.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use regex::Regex;
+
+use crate::files::pages;
+
+/// The use cases of the book, from the root of the repository.
+const USE_CASES: &str = "docs/src/use-cases";
+
+/// An output that a step wrote, with the chapter that wrote it and the state of that chapter then.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct OutputState {
+    /// The name of the output file, without `.txt`.
+    pub output: String,
+    pub chapter: String,
+    /// The seed that reaches the output: one more than the `serve_here` calls before the step.
+    pub state: u32,
+}
 
 /// Every rule. Returns the messages, so the caller decides what to do with them.
 ///
 /// `chapters` maps the name of each chapter that the runner defined to its number of states.
-pub fn check(repo: &Path, chapters: &BTreeMap<String, u32>) -> Vec<String> {
+/// `states` names the chapter and the state of each output that the runner wrote.
+pub fn check(
+    repo: &Path,
+    chapters: &BTreeMap<String, u32>,
+    states: &BTreeSet<OutputState>,
+) -> Vec<String> {
     let mut bad = Vec::new();
     bad.extend(release_tags(repo));
     bad.extend(links_resolve(repo));
     bad.extend(follow_along_first(repo));
     bad.extend(command_flags(repo));
     bad.extend(playgrounds(repo, chapters));
+    bad.extend(seeds(repo, states));
+    bad.extend(cited_run_ids(repo));
     bad
-}
-
-/// Every markdown page of the book.
-fn pages(dir: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return out;
-    };
-    let mut entries: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            out.extend(pages(&path));
-        } else if path.extension().is_some_and(|e| e == "md") {
-            out.push(path);
-        }
-    }
-    out
 }
 
 fn shown(repo: &Path, page: &Path) -> String {
@@ -171,7 +175,7 @@ fn anchors(text: &str) -> BTreeSet<String> {
 /// before the first command, or the first thing the page asks for is a server it has not named.
 fn follow_along_first(repo: &Path) -> Vec<String> {
     let mut bad = Vec::new();
-    for page in pages(&repo.join("docs/src/use-cases")) {
+    for page in pages(&repo.join(USE_CASES)) {
         let Some(text) = read(repo, &page, &mut bad) else {
             continue;
         };
@@ -298,6 +302,90 @@ fn playground_faults(name: &str, text: &str, chapters: &BTreeMap<String, u32>) -
     bad
 }
 
+/// A page that includes an output from past the first `serve_here` of its chapter must name the
+/// seed that reaches it. `just playground CHAPTER` serves state 1, so a page that shows a later
+/// state and says only `CHAPTER` sends the reader to a tenant where its blocks cannot run.
+fn seeds(repo: &Path, states: &BTreeSet<OutputState>) -> Vec<String> {
+    let include = Regex::new(r"\{\{#include \.\./output/([a-z0-9-]+)\.txt").expect("a pattern");
+    let mut bad = Vec::new();
+    for page in pages(&repo.join(USE_CASES)) {
+        if let Some(text) = read(repo, &page, &mut bad) {
+            bad.extend(seed_faults(&shown(repo, &page), &text, &include, states));
+        }
+    }
+    bad
+}
+
+/// The messages for each output in `text` that a later state of its chapter reaches, and that
+/// `text` gives no seed for. `name` is the page, for the messages, and `include` finds the outputs.
+fn seed_faults(
+    name: &str,
+    text: &str,
+    include: &Regex,
+    states: &BTreeSet<OutputState>,
+) -> Vec<String> {
+    let mut wanted: Vec<(&str, u32)> = include
+        .captures_iter(text)
+        .flat_map(|found| {
+            let output = found.get(1).map_or("", |m| m.as_str());
+            states
+                .iter()
+                .filter(move |s| s.output == output)
+                .map(|s| (s.chapter.as_str(), s.state))
+        })
+        .filter(|(_, state)| *state > 1)
+        .collect();
+    wanted.sort();
+    wanted.dedup();
+    wanted
+        .into_iter()
+        .filter_map(|(chapter, state)| {
+            let seed = format!("{chapter}-{state}");
+            (!text.contains(&seed)).then(|| {
+                format!(
+                    "{name} shows state {state} of the chapter '{chapter}' and never names the \
+                     seed '{seed}'; a reader on 'just playground {chapter}' cannot run it"
+                )
+            })
+        })
+        .collect()
+}
+
+/// A live result is a fact, with no run id and no date. A reader cannot look a run id up, and a
+/// date tells them nothing about what strata does now. The pages once carried more than twenty of
+/// them, which said only when somebody happened to run the example.
+fn cited_run_ids(repo: &Path) -> Vec<String> {
+    let mut bad = Vec::new();
+    for page in pages(&repo.join("docs/src")) {
+        if let Some(text) = read(repo, &page, &mut bad) {
+            let name = shown(repo, &page);
+            bad.extend(run_ids(&text).into_iter().map(|id| {
+                format!(
+                    "{name} cites the run id {id}. State what the run established, in the \
+                     present tense, and put the check in development/live-runs.md"
+                )
+            }));
+        }
+    }
+    bad
+}
+
+/// Every `2026MMDDTHHMMSSZ` in a text.
+fn run_ids(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for i in 0..text.len().saturating_sub(15) {
+        let Some(w) = text.get(i..i + 16) else {
+            continue;
+        };
+        let b = w.as_bytes();
+        let digits = |r: std::ops::Range<usize>| b[r].iter().all(u8::is_ascii_digit);
+        if w.starts_with("2026") && b[8] == b'T' && b[15] == b'Z' && digits(4..8) && digits(9..15) {
+            out.push(w.to_string());
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -305,20 +393,21 @@ mod tests {
     #[test]
     fn each_check_reports_a_page_that_it_cannot_read() {
         let repo = std::env::temp_dir().join(format!("strata-checks-{}", std::process::id()));
-        let use_cases = repo.join("docs/src/use-cases");
+        let use_cases = repo.join(USE_CASES);
         std::fs::create_dir_all(&use_cases).unwrap();
         std::fs::write(repo.join("Cargo.toml"), "version = \"1.0.0\"\n").unwrap();
         std::fs::write(repo.join("README.md"), "strata\n").unwrap();
         // bytes that are not UTF-8, so the read of the page fails
         std::fs::write(use_cases.join("broken.md"), [0xff, 0xfe]).unwrap();
-        let bad = check(&repo, &chapters());
+        let bad = check(&repo, &chapters(), &BTreeSet::new());
         std::fs::remove_dir_all(&repo).unwrap();
-        // release_tags, links_resolve, follow_along_first, and playgrounds each read the page
+        // release_tags, links_resolve, follow_along_first, playgrounds, seeds, and cited_run_ids each
+        // read the page
         let unread = bad
             .iter()
-            .filter(|m| m.starts_with("docs/src/use-cases/broken.md: cannot read the file"))
+            .filter(|m| m.starts_with(&format!("{USE_CASES}/broken.md: cannot read the file")))
             .count();
-        assert_eq!(unread, 4, "{bad:?}");
+        assert_eq!(unread, 6, "{bad:?}");
     }
 
     /// The chapters of a small runner: `list` with one state, and `loop` with four.
@@ -358,6 +447,69 @@ mod tests {
                 "page.md:1 gives `just playground loop-5`, and the chapter 'loop' has 4 states",
                 "page.md:2 gives `just playground loop-0`, and the chapter 'loop' has 4 states",
             ]
+        );
+    }
+    /// The outputs of a small runner: `o1` is state 3 of `loop`, and `o2` is state 1 of it.
+    fn states() -> BTreeSet<OutputState> {
+        let output = |output: &str, state: u32| OutputState {
+            output: output.to_string(),
+            chapter: "loop".to_string(),
+            state,
+        };
+        BTreeSet::from([output("o1", 3), output("o2", 1)])
+    }
+
+    fn include() -> Regex {
+        Regex::new(r"\{\{#include \.\./output/([a-z0-9-]+)\.txt").unwrap()
+    }
+
+    #[test]
+    fn a_page_that_shows_a_later_state_and_names_its_seed_passes() {
+        let text = "just playground loop-3\n{{#include ../output/o1.txt}}\n";
+        assert_eq!(
+            seed_faults("page.md", text, &include(), &states()),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn a_page_that_shows_the_first_state_needs_no_seed() {
+        let text = "just playground loop\n{{#include ../output/o2.txt}}\n";
+        assert_eq!(
+            seed_faults("page.md", text, &include(), &states()),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn a_page_that_shows_a_later_state_and_names_no_seed_fails() {
+        let text = "just playground loop\n{{#include ../output/o1.txt}}\n";
+        assert_eq!(
+            seed_faults("page.md", text, &include(), &states()),
+            vec![
+                "page.md shows state 3 of the chapter 'loop' and never names the seed 'loop-3'; \
+                 a reader on 'just playground loop' cannot run it"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_page_that_cites_a_run_id_fails_and_a_page_with_none_passes() {
+        let repo = std::env::temp_dir().join(format!("strata-run-ids-{}", std::process::id()));
+        let docs = repo.join("docs/src");
+        std::fs::create_dir_all(docs.join("sub")).unwrap();
+        std::fs::write(docs.join("clean.md"), "A date is 2026-09-30.\n").unwrap();
+        std::fs::write(
+            docs.join("sub/cited.md"),
+            "Run 20260930T120000Z shows it.\n",
+        )
+        .unwrap();
+        let bad = cited_run_ids(&repo);
+        std::fs::remove_dir_all(&repo).unwrap();
+        assert_eq!(bad.len(), 1, "{bad:?}");
+        assert!(
+            bad[0].starts_with("docs/src/sub/cited.md cites the run id 20260930T120000Z."),
+            "{bad:?}"
         );
     }
 }

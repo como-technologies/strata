@@ -11,6 +11,8 @@ use std::process::{Child, Command, Stdio};
 
 use regex::Regex;
 
+use crate::checks::OutputState;
+use crate::files::files_with_ext;
 use crate::tenant::{Edit, PROJECT_LISTING, TENANT, Tenant};
 
 /// What the run is for.
@@ -67,7 +69,7 @@ pub struct Runner {
     serves_seen: u32,
     mutated: u32,
     /// Which seed reaches each output, for the page check. One name can be written by two steps.
-    states: BTreeSet<(String, String, u32)>,
+    states: BTreeSet<OutputState>,
     /// The name of each chapter that the run defined, and how many states it has. The playground
     /// and the page check read it, so no second list of the chapters can disagree with the runner.
     chapters: BTreeMap<String, u32>,
@@ -305,6 +307,15 @@ impl Runner {
         self.serves_seen + self.mutated
     }
 
+    /// Note that the output `name` is the output of the state that the chapter has now.
+    fn note_state(&mut self, name: &str) {
+        self.states.insert(OutputState {
+            output: name.to_string(),
+            chapter: self.chapter.clone(),
+            state: self.state(),
+        });
+    }
+
     /// The playground hands the tenant over at this line and builds no more of the chapter.
     pub fn serve_here(&mut self) {
         self.serves_seen += 1;
@@ -363,8 +374,7 @@ impl Runner {
         let mut existing = std::fs::read_to_string(&file).unwrap_or_default();
         existing.push_str(&text);
         std::fs::write(&file, existing).expect("an output file");
-        self.states
-            .insert((name.to_string(), self.chapter.clone(), self.state()));
+        self.note_state(name);
     }
 
     /// A step the book does not show. It must pass.
@@ -475,8 +485,7 @@ impl Runner {
             ));
         }
         std::fs::write(self.out.join(format!("{name}.txt")), out).expect("an excerpt");
-        self.states
-            .insert((name.to_string(), self.chapter.clone(), self.state()));
+        self.note_state(name);
     }
 
     /// Write `docs/src/output/`, or say what is not current, and return the exit code.
@@ -491,8 +500,7 @@ impl Runner {
                 names.join(" ")
             ));
         }
-        self.check_seeds();
-        let problems = crate::checks::check(&self.repo, &self.chapters);
+        let problems = crate::checks::check(&self.repo, &self.chapters, &self.states);
         if !problems.is_empty() {
             for problem in &problems {
                 eprintln!("docs-examples: {problem}");
@@ -545,54 +553,6 @@ impl Runner {
             );
         }
         std::process::ExitCode::SUCCESS
-    }
-
-    /// A page that includes an output from past the first `serve_here` of its chapter must name
-    /// the seed that reaches it. `just playground CHAPTER` serves state 1, so a page that shows a
-    /// later state and says only `CHAPTER` sends the reader to a tenant where its blocks cannot run.
-    fn check_seeds(&self) {
-        let pages = self.repo.join("docs/src/use-cases");
-        let include = Regex::new(r"\{\{#include \.\./output/([a-z0-9-]+)\.txt").expect("a pattern");
-        let mut bad = false;
-        let mut files: Vec<PathBuf> = std::fs::read_dir(&pages)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|e| e == "md"))
-            .collect();
-        files.sort();
-        for page in files {
-            let text = std::fs::read_to_string(&page).unwrap_or_default();
-            let name = page.file_name().unwrap().to_string_lossy().into_owned();
-            let mut wanted: Vec<(String, u32)> = include
-                .captures_iter(&text)
-                .flat_map(|c| {
-                    let output = c[1].to_string();
-                    self.states
-                        .iter()
-                        .filter(move |(name, _, _)| *name == output)
-                        .map(|(_, chapter, state)| (chapter.clone(), *state))
-                })
-                .filter(|(_, state)| *state > 1)
-                .collect();
-            wanted.sort();
-            wanted.dedup();
-            for (chapter, state) in wanted {
-                let seed = format!("{chapter}-{state}");
-                if !text.contains(&seed) {
-                    eprintln!(
-                        "docs-examples: {name} shows state {state} of the chapter '{chapter}' \
-                         and never names the seed '{seed}'; a reader on \
-                         'just playground {chapter}' cannot run it"
-                    );
-                    bad = true;
-                }
-            }
-        }
-        if bad {
-            std::process::exit(1);
-        }
     }
 
     fn serve_wait(&mut self) -> ! {
@@ -676,12 +636,8 @@ impl Drop for Runner {
 }
 
 fn sorted_files(dir: &Path) -> BTreeMap<String, String> {
-    std::fs::read_dir(dir)
+    files_with_ext(dir, "txt")
         .into_iter()
-        .flatten()
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|e| e == "txt"))
         .filter_map(|p| {
             let name = p.file_name()?.to_string_lossy().into_owned();
             Some((name, std::fs::read_to_string(&p).ok()?))

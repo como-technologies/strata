@@ -14,6 +14,7 @@
 mod book;
 mod chapters;
 mod checks;
+mod files;
 mod palette;
 mod tenant;
 
