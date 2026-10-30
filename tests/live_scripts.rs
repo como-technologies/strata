@@ -3332,6 +3332,51 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
     );
 }
 
+/// The text of a file of the OpenTofu configuration of the live example.
+fn terraform_file(name: &str) -> String {
+    std::fs::read_to_string(live_script("terraform").join(name)).unwrap()
+}
+
+#[test]
+fn a_cluster_in_the_cluster_template_gets_a_time_zone_because_palette_refuses_it_without_one() {
+    let variables = terraform_file("variables.tf");
+    let declaration = variables
+        .split("variable \"cluster_timezone\" {")
+        .nth(1)
+        .expect("variables.tf declares cluster_timezone")
+        .split("\n}\n")
+        .next()
+        .unwrap();
+    let default = declaration
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("default"))
+        .and_then(|l| l.trim_start().strip_prefix('='))
+        .map(|l| l.trim().trim_matches('"'))
+        .expect("cluster_timezone has a default");
+    assert!(
+        !default.is_empty() && !default.contains(' '),
+        "the default is a name of the IANA time zone database: {default:?}"
+    );
+
+    // The clouds whose cluster resource takes a cluster template: variables.tf says aws and gcp.
+    let mut templated: Vec<String> = std::fs::read_dir(live_script("terraform"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.starts_with("cloud-") && name.ends_with(".tf"))
+        .filter(|name| terraform_file(name).contains("dynamic \"cluster_template\""))
+        .collect();
+    templated.sort();
+    assert_eq!(templated, ["cloud-aws.tf", "cloud-gcp.tf"]);
+    for name in templated {
+        assert!(
+            terraform_file(&name).contains(
+                "cluster_timezone = var.cluster_in_template ? var.cluster_timezone : null"
+            ),
+            "{name}: the cluster in the template has a time zone, and the other clusters keep theirs"
+        );
+    }
+}
+
 #[test]
 fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_it() {
     let mut stage = Stage::new(baseline_outputs());

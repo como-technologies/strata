@@ -329,6 +329,16 @@ variable "cluster_in_template" {
   default     = false
 }
 
+variable "cluster_timezone" {
+  description = "The time zone of a cluster in the cluster template, a name of the IANA time zone database. Palette refuses the create of such a cluster with no time zone: ShouldNotBeEmpty, parameter timezone"
+  type        = string
+  default     = "America/Chicago"
+  validation {
+    condition     = var.cluster_timezone != ""
+    error_message = "cluster_timezone is a name of the IANA time zone database, and it is not empty."
+  }
+}
+
 # examples/live/tag-only.sh's variables (#19).
 variable "tag_only_versions" {
   description = "Release versions that differ from 1.0.0 only in the OS pack's tag name, as version => tag"

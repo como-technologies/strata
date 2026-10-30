@@ -366,6 +366,20 @@ ask the first three:
 `compare --repave` sends the route of the template for such a cluster: see
 [A cluster in a cluster template](../../commands/compare/repave.md#a-cluster-in-a-cluster-template).
 
+## A cluster in a cluster template needs a time zone
+
+Palette refuses the create of a cluster in a cluster template when the request
+gives no time zone. The refusal is `ShouldNotBeEmpty`. Its message is
+"Parameter 'timezone' should not be empty", and its data is
+`{"name":"timezone"}`. A cluster outside a template needs no time zone: Palette
+gives it `Etc/UTC`.
+
+The attribute `cluster_timezone` of the provider gives the time zone, as a name
+of the IANA time zone database, such as `America/Chicago`. The live example
+sets it for the cluster that `cluster_in_template` builds. Step 4 of
+[template.sh](../../development/live-runs.md#templatesh) stops at the apply
+when the cluster has no time zone.
+
 ## What the create of a version checks
 
 Palette refuses a profile version at the create when it breaks a rule. Some
