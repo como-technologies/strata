@@ -53,8 +53,69 @@ under a pin name each record that pins it.
   the tenant, says so, as `the pinned version is absent`.
 - A pack with no registry, such as a manifest pack, has no pins.
 
-`--no-impact` skips the comparison of each bump: it costs two pack reads for each
-pin that is behind.
+`--no-impact` skips the comparison of each bump and the question to Palette. The
+comparison costs two pack reads for each pin that is behind.
+
+## Palette accepts the move, or refuses it
+
+`bump to` says what a move does. It does not say that Palette takes the move. A
+pack can declare how far a cluster can move from the version it runs. Palette
+refuses a move that goes further than that. The public documentation gives the
+rule for Kubernetes: a cluster moves one minor version at a time.
+
+For each pin that is behind, `behind` asks Palette about the move to the newest
+version. The answer is under the `bump to` line:
+
+```text
+{{#include ../output/behind-refused.txt}}
+```
+
+- `palette accepts`: Palette gives no error for the move.
+- `palette refuses: <code> on <clusters>`: Palette gives the error `<code>`, and
+  names the clusters in its message. `DependencyPackUpgradeNotSupported` is the
+  code of a move that the pack does not allow.
+- `palette refuses: <code> <pack>: <message>`: the message names no cluster that
+  runs the version, so the line gives the message of Palette.
+- `palette gave no answer: <message>`: a request failed. The pin stays behind,
+  and the exit does not change. Strata prints `palette accepts` only when each
+  request answered.
+
+`--json` gives the answer in `bump.paletteValidation`: the code, the message of
+Palette, and the clusters of each error. A request that failed is in
+`bump.paletteValidationError`.
+
+```text
+{{#include ../output/behind-refused-json.txt}}
+```
+
+Strata asks once for each record that pins the pack. The answer holds the errors
+of all the records:
+
+- A record of a profile version that Palette holds goes to
+  `POST /v1/clusterprofiles/{uid}/validate/packs`. The body has the packs of the
+  record, with the newest version of the pack in the place of the pin. That
+  version has its default values. Palette checks the body against each cluster
+  that runs the version.
+- A record of a cluster goes to `POST /v1/spectroclusters/{uid}/validate/packs`.
+  The body names each profile of the cluster by its uid. The profile that holds
+  the pin has the packs that the cluster runs. The newest version of the pack
+  replaces the pin.
+- A candidate, a pack record, an edge host, a cluster group, and an app profile
+  get no request. The update that waits for a cluster gets none.
+
+Palette gives each error a code and a message, and no field for the clusters.
+The message names them. When Palette refuses a move for a profile, strata reads
+the profile document. It keeps the clusters that run the version and that the
+message names. A cluster record needs no such read: the route is the route of its
+cluster.
+
+Strata asks in the project of the first record that pins the pack. It skips the
+records of another project. [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesuidvalidatepacks)
+states what each route checks.
+
+`--no-impact` sends none of these requests. Without it, strata sends one request
+for each pin that is behind and each record that it asks about. It reads the
+document of each cluster record one time.
 
 ## A pin that is current against an older copy
 

@@ -12,7 +12,8 @@
 #   4  before a build: the body of a create on the release, and strata preflight on it, the
 #      static tier and the tier of Palette; they create nothing
 #   5  the nightly jobs: every record verifies, the fleet of a label is recorded, and the
-#      registry has newer versions of what the records pin
+#      registry has newer versions of what the records pin, and whether Palette accepts the move
+#      to each of them
 #   6  behind is not different: a value that a person overrides on cluster A opens no
 #      notification, and the record of the cluster reports the drift; the override is undone
 #   7  an edit of a published version in place: the nightly job opens an issue, --who names the
@@ -158,6 +159,10 @@ if stage 5 "the nightly jobs"; then
     bash -c "jq -e --arg c $C '.source.cluster.uid == \$c' repo/fleet/*.json | grep -q true"
   check upstream 1 '#81: upstream-report.sh: the registry has newer versions of what the records pin' -- \
     in_repo "$ci/upstream-report.sh" 'releases/*.json' --dry-run --no-impact
+  check upstream-asks 1 '#166: upstream-report.sh asks Palette whether it accepts the bump of each pin that is behind' -- \
+    in_repo "$ci/upstream-report.sh" 'releases/*.json' --dry-run
+  check upstream-asks-says 0 '#166: the bump column of an issue holds the answer of Palette' -- \
+    grep -Eq '; palette (accepts|refuses: )' upstream-asks.out
 fi
 
 if stage 6 "behind is not different"; then

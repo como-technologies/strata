@@ -41,6 +41,14 @@ pub const PACK_MACRO_UNDEFINED_CODE: &str = "PackMacroUndefined";
 /// integration pack needs read-only has values other than its defaults.
 pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
 
+/// The code of the error for a move that a pack does not allow: a pack of the body is above the
+/// highest version that a cluster can move to from the version it runs.
+///
+/// The validate routes of the packs answer it in `packs.results[]` with HTTP 200, with the other
+/// errors of a pack. It is not a refusal of the whole request, so no table of a check holds it.
+/// `behind` prints it under the bump, and strata decides nothing from it.
+pub const UPGRADE_NOT_SUPPORTED_CODE: &str = "DependencyPackUpgradeNotSupported";
+
 /// The codes of the errors that the import validate route gives with HTTP 500 when it matches no
 /// pack of the body to a registry.
 ///
@@ -310,6 +318,8 @@ mod tests {
         for rule in RULES {
             assert!(!codes.contains(&rule.code()), "{rule:?}");
         }
+        // an error of a pack in a 200 answer is in no table of a refusal of the whole request
+        assert!(!codes.contains(&UPGRADE_NOT_SUPPORTED_CODE));
         // each check that a route runs is one of the tables
         for route in ValidateRoute::ALL {
             for check in route.checks() {

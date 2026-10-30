@@ -2,6 +2,7 @@
 
 use super::{count_of, registry_sync_suffix};
 use crate::text::and_list;
+use crate::validation::answer_lines;
 
 /// `4 pins from 2 records: 1 behind`, with the floating pins, the pins not checked, and the
 /// versions that arrived when there are any.
@@ -88,6 +89,26 @@ fn newer_version(n: &crate::ops::Newer) -> String {
     } else {
         format!("{} ({})", n.version, notes.join(", "))
     }
+}
+
+/// The answer of Palette about the bump of a pin, one line each: `palette accepts`, or `palette
+/// refuses: DependencyPackUpgradeNotSupported on payments` for each error. An error that names no
+/// cluster gives its pack and its message. When a request failed, a line gives its message:
+/// `palette gave no answer: <message>`. Empty when Palette was not asked.
+pub(crate) fn palette_lines(pin: &crate::ops::Pin) -> Vec<String> {
+    let Some(bump) = pin.bump.as_ref() else {
+        return Vec::new();
+    };
+    let answer = bump
+        .palette_validation
+        .iter()
+        .flat_map(|v| answer_lines(v.errors()))
+        .map(|line| format!("palette {line}"));
+    let failed = bump
+        .palette_validation_error
+        .iter()
+        .map(|e| format!("palette gave no answer: {e}"));
+    answer.chain(failed).collect()
 }
 
 /// `bump to 1.65.0: in-place IDENTITY UPSTREAM AUTHORED`, for a pin with a bump. When Palette

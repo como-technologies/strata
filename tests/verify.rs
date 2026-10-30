@@ -8,7 +8,7 @@ use std::path::Path;
 use serde_json::Value;
 use strata::api::codes::{
     CreateRule, PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE,
-    PROFILE_IMPORT_MATCH_CODES, ValidateRoute,
+    PROFILE_IMPORT_MATCH_CODES, UPGRADE_NOT_SUPPORTED_CODE, ValidateRoute,
 };
 use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::closed_set::{ClosedSet, Open};
@@ -13296,6 +13296,466 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     assert_eq!(next.since.as_deref(), Some("2026-09-26T00:00:00Z"));
     let json = serde_json::to_value(&next).unwrap();
     assert_eq!(json["pins"][0]["arrived"], serde_json::json!(["1.64.0"]));
+}
+
+// ---- behind asks Palette about the bump ------------------------------------------------------
+
+/// The uid of the profile version that the records of the ask pin csi-aws-ebs in.
+const BUMP_PROFILE_UID: &str = "pr1";
+
+/// The name of the cluster that the tests of the ask run.
+const BUMP_CLUSTER: &str = "payments";
+
+/// What Palette says about a move of csi-aws-ebs from 1.63.1 to 1.65.0 on the cluster `payments`.
+const UPGRADE_REFUSAL: &str = "Pack 'csi-aws-ebs' cannot move from 1.63.1 to 1.65.0 on the \
+                               clusters: payments";
+
+/// The answer of `validate/packs` of a profile with the error of a move that the pack does not
+/// allow, for the pack csi-aws-ebs.
+fn upgrade_refusal(message: &str) -> Value {
+    serde_json::json!({"packs": {"results": [{"name": "csi-aws-ebs",
+        "errors": [{"code": UPGRADE_NOT_SUPPORTED_CODE, "message": message}]}]}})
+}
+
+/// The record of a profile version that pins csi-aws-ebs 1.63.1: the record of the pack, with the
+/// uid and the name of a profile version.
+fn profile_pinning(api: &MemoryApi) -> strata::snapshot::Snapshot {
+    let mut snap = snapshot_of(api, "pack:csi-aws-ebs@1.63.1").unwrap();
+    snap.source.pack = None;
+    snap.source.uid = BUMP_PROFILE_UID.to_string();
+    snap.source.name = "csi-stack".to_string();
+    snap.source.version = "1.0.0".to_string();
+    snap.source.kind = ProfileType::AddOn.as_str().to_string();
+    snap
+}
+
+/// The record of the cluster `payments`, which runs `profile_pinning`: the same pack, in a record
+/// of a cluster with the uid `c1`.
+fn cluster_pinning(api: &MemoryApi) -> strata::snapshot::Snapshot {
+    let mut snap = profile_pinning(api);
+    snap.source.cluster = Some(strata::snapshot::ClusterSource {
+        uid: "c1".to_string(),
+        name: BUMP_CLUSTER.to_string(),
+        ..Default::default()
+    });
+    snap
+}
+
+/// The document of the cluster `c1`: it runs `profile_pinning`, and its template names the pack
+/// with the tag and the values of the record.
+fn cluster_document_running(snap: &strata::snapshot::Snapshot) -> Value {
+    let pack = &snap.packs[0];
+    serde_json::json!({"metadata": {"name": BUMP_CLUSTER, "uid": "c1"},
+        "spec": {"clusterProfileTemplates": [
+            {"uid": "infra1", "name": "base", "profileVersion": "2.0.0", "type": "infra",
+             "packs": [{"name": "kubernetes", "tag": "1.35.3", "type": "spectro",
+                        "values": "k: 1"}]},
+            {"uid": BUMP_PROFILE_UID, "name": "csi-stack", "profileVersion": "1.0.0",
+             "type": "add-on",
+             "packs": [{"name": pack.name, "tag": pack.tag, "type": pack.kind,
+                        "values": "cluster: 1"}]}]}})
+}
+
+/// The profile document of `profile_pinning`: it names the two clusters that run the version.
+fn profile_document_running() -> Value {
+    serde_json::json!({"metadata": {"name": "csi-stack", "uid": BUMP_PROFILE_UID},
+        "status": {"inUseClusters": [
+            {"uid": "c1", "name": BUMP_CLUSTER}, {"uid": "c2", "name": "billing"}]}})
+}
+
+fn write_bump_record(
+    dir: &Path,
+    name: &str,
+    snap: &strata::snapshot::Snapshot,
+) -> std::path::PathBuf {
+    let path = dir.join(name);
+    fs::write(&path, snap.to_json(false).unwrap()).unwrap();
+    path
+}
+
+/// `behind` with the impact, on `api` itself, so that the test reads what `behind` posted.
+fn behind_asking(api: &MemoryApi, records: &[std::path::PathBuf]) -> ops::BehindReport {
+    ops::behind(
+        records,
+        &ops::BehindOptions {
+            impact: true,
+            since: None,
+        },
+        |_| Ok(Palette::new(api)),
+        "2026-09-26T00:00:00Z",
+        &Progress::silent(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn behind_prints_the_refusal_of_palette_for_the_bump_of_a_record_of_a_profile_with_its_cluster() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind();
+    let record = profile_pinning(&base);
+    let target = snapshot_of(&base, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let route = post(&update_validate_packs_route(BUMP_PROFILE_UID));
+    let api = base
+        .with(route.clone(), upgrade_refusal(UPGRADE_REFUSAL))
+        .with(profile_route(BUMP_PROFILE_UID), profile_document_running());
+    let records = [write_bump_record(dir.path(), "csi.json", &record)];
+    let r = behind_asking(&api, &records);
+
+    // one request to the route of the version, with its packs and the bumped pack in the place of
+    // the pin: the version, the tag, the uids, and the values of 1.65.0
+    let posted = api.posted();
+    assert_eq!(posted.len(), 1, "{posted:?}");
+    assert_eq!(posted[0].0, update_validate_packs_route(BUMP_PROFILE_UID));
+    let pack = &posted[0].1["packs"][0];
+    assert_eq!(posted[0].1["packs"].as_array().unwrap().len(), 1);
+    assert_eq!(pack["name"], "csi-aws-ebs");
+    assert_eq!(pack["tag"], target.packs[0].tag.as_str());
+    assert_eq!(pack["uid"], target.packs[0].pack_uid.as_str());
+    assert_eq!(pack["registryUid"], target.packs[0].registry_uid.as_str());
+    assert_eq!(pack["values"], target.packs[0].values.as_str());
+    assert_eq!(pack["layer"], record.packs[0].layer.as_str());
+    assert_ne!(target.packs[0].pack_uid, record.packs[0].pack_uid);
+
+    // the document of the profile names the clusters, and the message names one of them
+    let validation = r.pins[0].bump.as_ref().unwrap();
+    let answer = validation.palette_validation.as_ref().unwrap();
+    assert!(!answer.accepts());
+    assert_eq!(answer.errors()[0].code, UPGRADE_NOT_SUPPORTED_CODE);
+    assert_eq!(answer.errors()[0].clusters, [BUMP_CLUSTER]);
+    let text = common::terminal().render_behind(&r).unwrap();
+    let refusal = format!("      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments\n");
+    assert!(text.contains(&refusal), "{text}");
+    // the answer of Palette is under the bump line
+    let (bump_at, refusal_at) = (
+        text.find("bump to 1.65.0").unwrap(),
+        text.find(&refusal).unwrap(),
+    );
+    assert!(bump_at < refusal_at, "{text}");
+    let md = common::markdown().render_behind(&r).unwrap();
+    assert!(
+        md.contains(&format!(
+            "<br>palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments"
+        )),
+        "{md}"
+    );
+
+    // --json carries the code, the message, and the cluster
+    let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        json["pins"][0]["bump"]["paletteValidation"],
+        serde_json::json!({"accepts": false, "errors": [{
+            "pack": "csi-aws-ebs", "code": UPGRADE_NOT_SUPPORTED_CODE,
+            "message": UPGRADE_REFUSAL, "clusters": [BUMP_CLUSTER]}]})
+    );
+    assert_eq!(
+        r.exit_code(),
+        1,
+        "the pin is behind, and the ask changes no exit"
+    );
+    assert!(
+        json["pins"][0]["bump"]
+            .get("paletteValidationError")
+            .is_none()
+    );
+}
+
+#[test]
+fn behind_prints_that_palette_accepts_when_it_gives_no_error_for_the_bump() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind();
+    let record = profile_pinning(&base);
+    let api = base.with(
+        post(&update_validate_packs_route(BUMP_PROFILE_UID)),
+        serde_json::json!({"packs": {"results": []}}),
+    );
+    let r = behind_asking(&api, &[write_bump_record(dir.path(), "csi.json", &record)]);
+    let answer = r.pins[0].bump.as_ref().unwrap().palette_validation.as_ref();
+    assert!(answer.unwrap().accepts());
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(text.contains("      palette accepts\n"), "{text}");
+    assert!(!text.contains("palette refuses"), "{text}");
+    assert_eq!(
+        serde_json::to_value(&r).unwrap()["pins"][0]["bump"]["paletteValidation"],
+        serde_json::json!({"accepts": true})
+    );
+    // Palette gave no error, so strata read no document of the profile for the names
+    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 0);
+}
+
+#[test]
+fn behind_with_no_impact_makes_no_validate_request() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind();
+    let record = profile_pinning(&base);
+    let cluster = cluster_pinning(&base);
+    let api = base
+        .with(
+            post(&update_validate_packs_route(BUMP_PROFILE_UID)),
+            upgrade_refusal(UPGRADE_REFUSAL),
+        )
+        .with(cluster_route("c1"), cluster_document_running(&cluster))
+        .with(
+            post(&format!("{}/validate/packs", cluster_route("c1"))),
+            serde_json::json!({}),
+        );
+    let records = [
+        write_bump_record(dir.path(), "csi.json", &record),
+        write_bump_record(dir.path(), "cluster.json", &cluster),
+    ];
+    let r = ops::behind(
+        &records,
+        &ops::BehindOptions::default(),
+        |_| Ok(Palette::new(&api)),
+        "2026-09-26T00:00:00Z",
+        &Progress::silent(),
+    )
+    .unwrap();
+    assert!(r.pins[0].behind && r.pins[0].bump.is_none());
+    assert!(api.posted().is_empty(), "{:?}", api.posted());
+    assert_eq!(api.calls(&cluster_route("c1")), 0);
+    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 0);
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(!text.contains("palette "), "{text}");
+}
+
+#[test]
+fn behind_asks_the_route_of_a_cluster_about_the_bump_of_a_record_of_a_cluster() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind();
+    let cluster = cluster_pinning(&base);
+    let target = snapshot_of(&base, "pack:csi-aws-ebs@1.65.0").unwrap();
+    let route = format!("{}/validate/packs", cluster_route("c1"));
+    // Palette gives the error of a pack under each profile that holds it
+    let answer = serde_json::json!({"profiles": [{"uid": BUMP_PROFILE_UID,
+        "packs": upgrade_refusal(UPGRADE_REFUSAL)["packs"]}]});
+    let api = base
+        .with(cluster_route("c1"), cluster_document_running(&cluster))
+        .with(post(&route), answer);
+    let r = behind_asking(
+        &api,
+        &[write_bump_record(dir.path(), "cluster.json", &cluster)],
+    );
+
+    // the profile with the pin has the pack values: its packs as the cluster runs them, and the
+    // pack as 1.65.0. The other profile of the cluster has its uid alone
+    let posted = api.posted();
+    assert_eq!(posted.len(), 1, "{posted:?}");
+    assert_eq!(posted[0].0, route);
+    let values = serde_json::json!({"name": "csi-aws-ebs", "tag": target.packs[0].tag,
+        "type": target.packs[0].kind, "values": target.packs[0].values});
+    assert_eq!(
+        posted[0].1,
+        serde_json::json!({"profiles": [{"uid": "infra1"},
+            {"uid": BUMP_PROFILE_UID, "packValues": [values]}]})
+    );
+    // the route is the route of the cluster, so the document of the profile is not read
+    assert_eq!(api.calls(&profile_route(BUMP_PROFILE_UID)), 0);
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(
+        text.contains(&format!(
+            "      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments\n"
+        )),
+        "{text}"
+    );
+    let json = serde_json::to_value(&r).unwrap();
+    assert_eq!(
+        json["pins"][0]["bump"]["paletteValidation"]["errors"][0]["clusters"],
+        serde_json::json!([BUMP_CLUSTER])
+    );
+
+    // a 200 with no profile: Palette accepts
+    let accepting = api.clone().with(post(&route), serde_json::json!({}));
+    let r = behind_asking(
+        &accepting,
+        &[write_bump_record(dir.path(), "cluster.json", &cluster)],
+    );
+    assert!(
+        r.pins[0]
+            .bump
+            .as_ref()
+            .unwrap()
+            .palette_validation
+            .as_ref()
+            .unwrap()
+            .accepts()
+    );
+}
+
+#[test]
+fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind();
+    let record = profile_pinning(&base);
+    let cluster = cluster_pinning(&base);
+    let cluster_route_packs = post(&format!("{}/validate/packs", cluster_route("c1")));
+    let records = [
+        write_bump_record(dir.path(), "csi.json", &record),
+        write_bump_record(dir.path(), "cluster.json", &cluster),
+        // a pack record: no cluster runs it, so it is not asked
+        write_bump_record(
+            dir.path(),
+            "pack.json",
+            &snapshot_of(&base, "pack:csi-aws-ebs@1.63.1").unwrap(),
+        ),
+    ];
+    let api = base
+        .with(profile_route(BUMP_PROFILE_UID), profile_document_running())
+        .with(cluster_route("c1"), cluster_document_running(&cluster));
+
+    // the profile refuses and the cluster accepts: the pin holds the refusal
+    let both = api
+        .clone()
+        .with(
+            post(&update_validate_packs_route(BUMP_PROFILE_UID)),
+            upgrade_refusal(UPGRADE_REFUSAL),
+        )
+        .with(cluster_route_packs.clone(), serde_json::json!({}));
+    let r = behind_asking(&both, &records);
+    assert_eq!(both.posted().len(), 2, "{:?}", both.posted());
+    let answer = r.pins[0]
+        .bump
+        .as_ref()
+        .unwrap()
+        .palette_validation
+        .as_ref()
+        .unwrap();
+    assert_eq!(answer.errors().len(), 1);
+
+    // both accept: Palette accepts
+    let accepting = api
+        .clone()
+        .with(
+            post(&update_validate_packs_route(BUMP_PROFILE_UID)),
+            serde_json::json!({}),
+        )
+        .with(cluster_route_packs.clone(), serde_json::json!({}));
+    let r = behind_asking(&accepting, &records);
+    assert!(
+        r.pins[0]
+            .bump
+            .as_ref()
+            .unwrap()
+            .palette_validation
+            .as_ref()
+            .unwrap()
+            .accepts()
+    );
+
+    // one request fails and the other accepts: strata cannot say that Palette accepts, and says
+    // why. The pin stays behind and the exit stays 1
+    let failing = api
+        .clone()
+        .failing(
+            post(&update_validate_packs_route(BUMP_PROFILE_UID)),
+            403,
+            "no access",
+        )
+        .with(cluster_route_packs.clone(), serde_json::json!({}));
+    let r = behind_asking(&failing, &records);
+    let bump = r.pins[0].bump.as_ref().unwrap();
+    assert!(bump.palette_validation.is_none());
+    assert!(
+        bump.palette_validation_error
+            .as_deref()
+            .is_some_and(|e| e.contains("403")),
+        "{:?}",
+        bump.palette_validation_error
+    );
+    assert!(r.pins[0].behind && r.pins[0].error.is_none());
+    assert_eq!(r.exit_code(), 1);
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(text.contains("      palette gave no answer: "), "{text}");
+    assert!(!text.contains("palette accepts"), "{text}");
+
+    // one request fails and the other refuses: the refusal stands, with the message of the failure
+    let refusing = api
+        .clone()
+        .failing(
+            post(&update_validate_packs_route(BUMP_PROFILE_UID)),
+            403,
+            "no access",
+        )
+        .with(
+            cluster_route_packs,
+            serde_json::json!({"profiles": [{"uid": BUMP_PROFILE_UID, "packs":
+                upgrade_refusal(UPGRADE_REFUSAL)["packs"]}]}),
+        );
+    let r = behind_asking(&refusing, &records);
+    let bump = r.pins[0].bump.as_ref().unwrap();
+    assert!(!bump.palette_validation.as_ref().unwrap().accepts());
+    assert!(bump.palette_validation_error.is_some());
+}
+
+#[test]
+fn behind_gives_the_message_of_palette_when_an_error_names_no_cluster_that_runs_the_profile() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind();
+    let record = profile_pinning(&base);
+    // Palette names a cluster that the document of the profile does not list
+    let message = "Pack 'csi-aws-ebs' cannot move on the clusters: orders";
+    let api = base
+        .with(
+            post(&update_validate_packs_route(BUMP_PROFILE_UID)),
+            upgrade_refusal(message),
+        )
+        .with(profile_route(BUMP_PROFILE_UID), profile_document_running());
+    let r = behind_asking(&api, &[write_bump_record(dir.path(), "csi.json", &record)]);
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(
+        text.contains(&format!(
+            "      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} csi-aws-ebs: {message}\n"
+        )),
+        "{text}"
+    );
+
+    // the document of the profile is not readable: the refusal stands, with the message
+    let unread = api.failing(profile_route(BUMP_PROFILE_UID), 500, "boom");
+    let r = behind_asking(
+        &unread,
+        &[write_bump_record(dir.path(), "csi.json", &record)],
+    );
+    let bump = r.pins[0].bump.as_ref().unwrap();
+    assert!(!bump.palette_validation.as_ref().unwrap().accepts());
+    assert!(bump.palette_validation_error.is_none());
+}
+
+#[test]
+fn behind_does_not_ask_about_a_record_that_no_cluster_runs() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind();
+    // a candidate has no uid, and a pack record is no profile
+    let mut candidate = profile_pinning(&base);
+    candidate.source.uid = String::new();
+    let pack = snapshot_of(&base, "pack:csi-aws-ebs@1.63.1").unwrap();
+    // the cluster of the record runs no profile with the pin now
+    let cluster = cluster_pinning(&base);
+    let mut moved_doc = cluster_document_running(&cluster);
+    moved_doc["spec"]["clusterProfileTemplates"][1]["packs"] = serde_json::json!([]);
+    // the update that waits for a cluster is not what the cluster runs
+    let mut pending = cluster_pinning(&base);
+    pending.source.cluster.as_mut().unwrap().pending = true;
+    let api = base.with(cluster_route("c1"), moved_doc);
+    let records = [
+        write_bump_record(dir.path(), "candidate.json", &candidate),
+        write_bump_record(dir.path(), "pack.json", &pack),
+        write_bump_record(dir.path(), "cluster.json", &cluster),
+        write_bump_record(dir.path(), "pending.json", &pending),
+    ];
+    let r = behind_asking(&api, &records);
+    assert!(api.posted().is_empty(), "{:?}", api.posted());
+    let bump = r.pins[0].bump.as_ref().unwrap();
+    assert!(bump.palette_validation.is_none() && bump.palette_validation_error.is_none());
+    let json = serde_json::to_value(&r).unwrap();
+    assert!(json["pins"][0]["bump"].get("paletteValidation").is_none());
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(!text.contains("palette "), "{text}");
+}
+
+#[test]
+fn a_bump_of_a_report_written_before_the_ask_reads_with_no_answer_of_palette() {
+    let old = serde_json::json!({"to": "1.65.0", "impact": "cluster-wide", "flags": ["IDENTITY"]});
+    let bump: ops::Bump = serde_json::from_value(old).unwrap();
+    assert!(bump.palette_validation.is_none() && bump.palette_validation_error.is_none());
 }
 
 #[test]

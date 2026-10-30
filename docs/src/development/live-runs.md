@@ -704,7 +704,7 @@ this result. This is the source for
 
 ## validate-packs.sh
 
-No cluster and no cost. In stages 1, 2, 3, and 5, each request to Palette is a
+No cluster and no cost. In stages 1, 2, 3, 5, and 6, each request to Palette is a
 read or a request to a validate route, which writes nothing. It uses `cert-manager`
 1.21.1 from the Public Repo, in an add-on candidate, and `gloo` 1.2.18 for the
 mark `disabled`. Stage 3 runs only with a profile version of the project: give
@@ -713,7 +713,11 @@ Palette takes the version on the route of an update. It refuses a candidate
 with that name and version on the name route. Stage 4 makes the profile
 `strata-live-layer` and deletes it. It runs only when you give its number:
 `validate-packs.sh 4`. Stage 5 asks the name route and the import validate
-route.
+route. Stage 6 runs only when you give its number: `PROFILE=<name>@<version>
+validate-packs.sh 6`. It needs a profile version that a cluster runs and that
+pins Kubernetes two minor versions or more below the newest version. With
+`CLUSTER=<name>`, it also asks the route of the cluster. It asks, and it writes
+nothing.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -739,9 +743,18 @@ route.
 | `validate-same-pack-twice`, `-says`, `-no-record` | 2, 0, 1 | #273: the API schema refuses two equal layers with HTTP 422 and the code `610` |
 | `validate-manifest-name`, `-says`, `-no-record` | 2, 0, 1 | #273: the import validate route refuses the manifest name `Wilma_1`: `InvalidName` |
 | `validate-manifest-twice`, `-says`, `-no-record` | 2, 0, 1 | #273: the import validate route refuses one manifest name two times in a layer: `DuplicatePackManifestsForbidden` |
+| `bump-record` | 0 | #166: a record of `PROFILE`. No result yet. |
+| `bump-pair` | 0 | #166: the newest version of `kubernetes` is two minor versions or more above the pin. No result yet. |
+| `bump-asked` | 0 | #166: `behind` asks the route of the version, and the bump of `kubernetes` holds an answer of Palette in `bump.paletteValidation`. No result yet. |
+| `bump-refused`, `bump-clusters` | 0 | #166: Palette refuses the move with `DependencyPackUpgradeNotSupported`, and the error names a cluster that runs the version. No result yet. |
+| `bump-text-says` | 0 | #166: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on <clusters>` under the bump. No result yet. |
+| `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. No result yet. |
+| `bump-cluster-record`, `bump-cluster-asked` | 0 | #166: with `CLUSTER`, `behind` on the record of the cluster asks the route of the cluster, and the bump holds an answer. No result yet. |
+| `bump-cluster-refused` | 0 | #166: the route of the cluster refuses the same move, on this cluster. If the route takes the pack of the profile as it is now, it accepts, and this check fails. No result yet. |
 
-No pack of the Public Repo lists a dependency in its tags route, so no stage
-asks for a refusal of a dependency.
+No pack of the Public Repo lists a dependency in its tags route. Only stage 6
+asks for a refusal of a dependency, the upgrade dependency, which no read route
+gives.
 
 The validate route does not check the layer of a pack. Palette answers a pack
 with another layer than its registry with `{"packs":{"results":[]}}`, the
@@ -1027,6 +1040,7 @@ the example at its baseline with cluster A.
 | `nightly` | 0 | #81: `verify-report.sh` finds every record unchanged |
 | `fleet`, `fleet-has-a` | 0 | #81: the fleet of a label holds cluster A |
 | `upstream` | 1 | #81: `upstream-report.sh` finds pins that the registry has passed |
+| `upstream-asks`, `upstream-asks-says` | 1, 0 | #166: `upstream-report.sh` with the impact asks Palette about the bump of each pin that is behind, and the bump column of an issue holds the answer. No result yet. |
 | `override`, `override-record`, `override-not-behind` | 0 | #81: a value overridden on cluster A opens no notification: Palette says that no update waits |
 | `override-drift` | 1 | #81: the record of cluster A reports the drift |
 | `override-release` | 0 | #81: the records of the versions verify: the profiles did not change |

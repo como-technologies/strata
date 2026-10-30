@@ -57,10 +57,30 @@ pub(super) fn consumer_uids(doc: &Value) -> Vec<String> {
     uids
 }
 
+/// The names of the clusters a profile document says use it: `status.inUseClusters`, in order,
+/// without an empty name.
+pub(super) fn consumer_names(doc: &Value) -> Vec<String> {
+    arr(doc, "/status/inUseClusters")
+        .iter()
+        .map(|n| text(n, "/name"))
+        .filter(|name| !name.is_empty())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn the_consumer_names_come_from_the_clusters_that_the_document_names() {
+        let doc = json!({"status": {
+            "inUseClusterUids": ["c3"],
+            "inUseClusters": [{"uid": "c1", "name": "prod-1"}, {"uid": "c2"}, {"name": "edge"}],
+        }});
+        assert_eq!(consumer_names(&doc), ["prod-1", "edge"]);
+        assert!(consumer_names(&json!({"status": {}})).is_empty());
+    }
 
     #[test]
     fn the_consumer_uids_come_by_uid_first_and_then_by_name_with_no_repeat() {

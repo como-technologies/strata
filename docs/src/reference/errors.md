@@ -143,6 +143,12 @@ The API schema of both routes refuses two equal packs with HTTP `422`, and the
 code is the number `610`. `snapshot --validate` prints it as the answer of
 Palette too.
 
+`behind` reads the refusals of the cluster route and of the route of an update as
+the answer too. It prints them under `bump to`, and its exit does not change.
+Each other error of a request is a `palette gave no answer` line there, and the
+pin stays behind: see
+[Palette accepts the move, or refuses it](../commands/behind.md#palette-accepts-the-move-or-refuses-it).
+
 For a candidate, `snapshot --validate` also asks
 `GET /v1/clusterprofiles/validate/name`. It refuses a name and a version that
 the project holds with HTTP `409` and `ClusterProfileAlreadyExists`. It refuses

@@ -14,7 +14,8 @@ plans the next release.
 
 **Follow along.** `just playground behind-1` serves this tenant as it was last
 week, before the registry published `csi-aws-ebs` 1.65.0, and
-`just playground behind-2` serves it today.
+`just playground behind-2` serves it today. `just playground behind-3` adds a
+profile that Palette refuses to move.
 
 ## 1. Last week
 
@@ -31,16 +32,45 @@ The run keeps its JSON in `behind.json`.
 ```
 
 Four pins of `aws-stack@1.0.0` are behind, and each line under one says what the
-bump does. The Kubernetes bump and the OS bump are `repave`: plan them. The pins
-of `aws-stack@1.1.1` are current. The OS pins are floating tags. Each pins the
-version that its tag names now, so the tag adds no version to move to.
-`LTS__20.4.x` never reaches 22.04 or 24.04.
+bump does. The Kubernetes bump and the OS bump are `repave`: plan them. The line
+`palette accepts` says that Palette takes the move on the clusters that run the
+profile. The pins of `aws-stack@1.1.1` are current. The OS pins are floating
+tags. Each pins the version that its tag names now, so the tag adds no version
+to move to. `LTS__20.4.x` never reaches 22.04 or 24.04.
 
 With last week's run, the report says what arrived since:
 
 ```text
 {{#include ../output/behind-since-lines.txt}}
 ```
+
+## 3. A move that Palette refuses
+
+A bump can be a move that Palette refuses. A pack can declare how far a cluster
+can move from the version it runs. `aws-stack@1.1.11` pins `csi-aws-ebs` 1.63.1,
+the registry has 1.65.0, and the cluster `payments` runs the profile:
+
+```text
+{{#include ../output/behind-refused.txt}}
+```
+
+`palette refuses` gives the code of Palette and the cluster. The bump line says
+`cluster-wide`, and it does not show the refusal. `--json` also gives the message
+of Palette:
+
+```text
+{{#include ../output/behind-refused-json.txt}}
+```
+
+`--no-impact` skips the question, as it skips the comparison:
+
+```text
+{{#include ../output/behind-refused-no-impact.txt}}
+```
+
+The playground answers each request of the route in the same way. A real Palette
+answers for the packs of the body, so only the pack that declares the limit gets
+the refusal.
 
 ## What to do
 
@@ -49,6 +79,10 @@ With last week's run, the report says what arrived since:
   issue open for each pack that is behind.
 - Read the bump before you move a pin: `repave` needs a window, and `in-place`
   does not.
+- When Palette refuses a move, pick a closer version in `newer`. `behind` asks about
+  the newest version only. To ask about another version, make a candidate with
+  that version and run `snapshot --from-candidate --validate`: see
+  [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
 - Move the pin in a new release version, and not in place. Then `verify` of the
   old records still holds, and `compare` of the two versions says what changed:
   see [What changed between two pack versions](./pack-versions.md).

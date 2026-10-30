@@ -375,6 +375,16 @@ impl Edit {
     }
 }
 
+/// One entry of `packs.results` in the answer of a validate route: the pack `pack`, and one
+/// error with its `code` and its `message`.
+fn pack_result(pack: &str, code: &str, message: &str) -> Value {
+    json!({
+        "name": pack,
+        "displayName": pack,
+        "errors": [{"code": code, "message": message}],
+    })
+}
+
 fn packs_mut(doc: &mut Value) -> impl Iterator<Item = &mut Value> {
     doc["spec"]["published"]["packs"]
         .as_array_mut()
@@ -1863,17 +1873,15 @@ impl Tenant {
     pub fn packs_answer(&self, project: &str, cluster: &str, refusal: Option<PackRefusal>) {
         let profiles: Vec<Value> = refusal
             .map(|r| {
-                json!({"uid": r.profile, "packs": {"results": [{
-                    "name": r.pack,
-                    "displayName": r.pack,
-                    "errors": [{
-                        "code": "DependencyPackWithMinVersionRequired",
-                        "message": format!(
-                            "Pack '{}' is required with minimum compatible version '{}'",
-                            r.required, r.version
-                        ),
-                    }],
-                }]}})
+                let message = format!(
+                    "Pack '{}' is required with minimum compatible version '{}'",
+                    r.required, r.version
+                );
+                json!({"uid": r.profile, "packs": {"results": [pack_result(
+                    r.pack,
+                    "DependencyPackWithMinVersionRequired",
+                    &message,
+                )]}})
             })
             .into_iter()
             .collect();
@@ -1884,12 +1892,12 @@ impl Tenant {
         );
     }
 
-    /// The answer of `POST /v1/clusterprofiles/validate/packs`, or of `POST
-    /// /v1/clusterprofiles/{uid}/validate/packs` with `profile`. A refusal is `(pack, required,
-    /// version)`: `pack` requires `required` at `version` or newer, and the packs of the body do
-    /// not hold it. Palette gives the error, with its code and its message, under
-    /// `packs.results`, and gives an empty `results` when it accepts. The stand-in gives one
-    /// answer for every request; it does not check anything.
+    /// The answer of `POST /v1/clusterprofiles/{uid}/validate/packs` with `profile`, or of `POST
+    /// /v1/clusterprofiles/validate/packs` with none. A refusal is `(pack, required, version)`:
+    /// `pack` requires `required` at `version` or newer, and the packs of the body do not hold it.
+    /// Palette gives the error, with its code and its message, under `packs.results`, and gives an
+    /// empty `results` when it accepts. The stand-in gives one answer for every request; it does
+    /// not check anything.
     pub fn profile_packs_answer(
         &self,
         project: &str,
@@ -1898,20 +1906,49 @@ impl Tenant {
     ) {
         let results: Vec<Value> = refusal
             .map(|(pack, required, version)| {
-                json!({
-                    "name": pack,
-                    "displayName": pack,
-                    "errors": [{
-                        "code": "DependencyPackWithMinVersionRequired",
-                        "message": format!(
-                            "Pack '{required}' is required with minimum compatible version \
-                             '{version}'"
-                        ),
-                    }],
-                })
+                pack_result(
+                    pack,
+                    "DependencyPackWithMinVersionRequired",
+                    &format!(
+                        "Pack '{required}' is required with minimum compatible version \
+                         '{version}'"
+                    ),
+                )
             })
             .into_iter()
             .collect();
+        self.write_profile_packs(project, profile, results);
+    }
+
+    /// The answer of `POST /v1/clusterprofiles/{uid}/validate/packs` for a move that a pack does
+    /// not allow on `clusters`, which run the version `profile`: Palette gives
+    /// `DependencyPackUpgradeNotSupported` under `packs.results`, and names the clusters in the
+    /// message. With no refusal, Palette accepts. The text of the message is the stand-in's: a
+    /// live check records the text of Palette. The stand-in gives one answer for every request.
+    pub fn profile_upgrade_answer(
+        &self,
+        project: &str,
+        profile: &str,
+        refusal: Option<(&str, &[&str])>,
+    ) {
+        let results: Vec<Value> = refusal
+            .map(|(pack, clusters)| {
+                pack_result(
+                    pack,
+                    "DependencyPackUpgradeNotSupported",
+                    &format!(
+                        "Pack '{pack}' cannot move to this version on the clusters: {}",
+                        clusters.join(", ")
+                    ),
+                )
+            })
+            .into_iter()
+            .collect();
+        self.write_profile_packs(project, Some(profile), results);
+    }
+
+    /// Write the answer of the packs route of a profile with `results` under `packs`.
+    fn write_profile_packs(&self, project: &str, profile: Option<&str>, results: Vec<Value>) {
         let path = match profile {
             Some(uid) => format!("{}/validate/packs", profile_route(uid)),
             None => format!("{PROFILES}/validate/packs"),

@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use common::*;
+use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
 
 // ---- examples/live helpers -------------------------------------------------------------------
 
@@ -3332,6 +3333,125 @@ fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_
     assert_eq!(exists["version"], "1.0.0");
 }
 
+/// The report of `strata behind --json` for a record that pins kubernetes 1.35.3, with the newest
+/// version `newest`, and the answer `validation` of Palette for the bump.
+fn kubernetes_bump_report(newest: &str, validation: &serde_json::Value) -> String {
+    serde_json::json!({"pins": [
+        {"name": "cni", "version": "1.0.0", "behind": false},
+        {"name": "kubernetes", "version": "1.35.3", "behind": true,
+         "newer": [{"version": newest}],
+         "bump": {"to": newest, "paletteValidation": validation}}]})
+    .to_string()
+}
+
+/// The answer of Palette that refuses the move of kubernetes on the cluster `fred`.
+fn upgrade_refused() -> serde_json::Value {
+    serde_json::json!({"accepts": false, "errors": [{
+        "pack": "kubernetes", "code": UPGRADE_NOT_SUPPORTED_CODE,
+        "message": "on the clusters: fred", "clusters": ["fred"]}]})
+}
+
+/// A stage 6 run of validate-packs.sh on the profile `strata-live-release@1.0.0` and the cluster
+/// `fred`, where `strata behind --json` gives `report` for both records. Gives steps.log.
+fn bump_stage(report: &str) -> (Stage, String) {
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.env("PROFILE", "strata-live-release@1.0.0");
+    stage.env("CLUSTER", "fred");
+    stage.strata(
+        "snapshot strata-live-release@1.0.0 -o bump-profile.json",
+        0,
+        "{}",
+    );
+    stage.strata("snapshot cluster:fred -o bump-cluster.json", 0, "{}");
+    stage.strata("behind bump-profile.json --json", 1, report);
+    stage.strata("behind bump-cluster.json --json", 1, report);
+    stage.strata(
+        "behind bump-profile.json --no-impact --json",
+        1,
+        r#"{"pins":[{"name":"kubernetes","version":"1.35.3","behind":true}]}"#,
+    );
+    stage.strata(
+        "behind bump-profile.json",
+        1,
+        &format!(
+            "~ [k8s  ] kubernetes  1.35.3  Public Repo  behind: 1.37.0\n      bump to 1.37.0: repave IDENTITY\n      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred\n"
+        ),
+    );
+    let (o, steps) = stage.run("validate-packs.sh", &["6"]);
+    assert!(
+        steps.contains("== behind asks Palette"),
+        "{steps}{}",
+        text(&o.stderr)
+    );
+    (stage, steps)
+}
+
+#[test]
+fn validate_packs_sh_stage_6_asks_behind_about_the_bump_of_kubernetes_for_the_profile_and_the_cluster()
+ {
+    let (_, steps) = bump_stage(&kubernetes_bump_report("1.37.0", &upgrade_refused()));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "bump-record",
+            "bump-pair",
+            "bump-asked",
+            "bump-refused",
+            "bump-clusters",
+            "bump-text-says",
+            "bump-no-impact-says",
+            "bump-cluster-record",
+            "bump-cluster-asked",
+            "bump-cluster-refused",
+        ],
+    );
+    assert!(
+        !steps.contains("== a candidate whose") && !steps.contains("== the name route"),
+        "stage 6 runs alone: {steps}"
+    );
+}
+
+#[test]
+fn validate_packs_sh_stage_6_fails_when_palette_accepts_a_move_of_two_minor_versions() {
+    // Palette accepts, and the newest version is one minor version above the pin
+    let (_, steps) = bump_stage(&kubernetes_bump_report(
+        "1.36.2",
+        &serde_json::json!({"accepts": true}),
+    ));
+    passed(&steps, &["bump-asked", "bump-cluster-asked"]);
+    for id in [
+        "bump-pair",
+        "bump-refused",
+        "bump-clusters",
+        "bump-cluster-refused",
+    ] {
+        assert!(
+            steps
+                .lines()
+                .any(|l| l.starts_with("FAIL") && l.split_whitespace().nth(1) == Some(id)),
+            "{id} failed:\n{steps}"
+        );
+    }
+}
+
+#[test]
+fn validate_packs_sh_stage_6_needs_a_profile_and_runs_only_when_its_number_is_given() {
+    let stage = Stage::new(serde_json::json!({}));
+    let (o, steps) = stage.run("validate-packs.sh", &["6"]);
+    assert!(
+        steps.contains("stage 6 skipped: give PROFILE"),
+        "{steps}{}",
+        text(&o.stderr)
+    );
+    assert!(!steps.contains("bump-"), "{steps}");
+
+    let mut stage = Stage::new(serde_json::json!({}));
+    stage.env("PROFILE", "strata-live-release@1.0.0");
+    let (_, steps) = stage.run("validate-packs.sh", &["5"]);
+    assert!(!steps.contains("bump-"), "{steps}");
+}
+
 // ---- loop.sh ---------------------------------------------------------------------------------------
 
 /// A stage in a lab on AWS with the cloud account `lab-aws`, and a run that holds a repository of
@@ -3415,6 +3535,49 @@ fn loop_sh_stage_2_asks_palette_under_a_name_the_project_lacks_and_writes_the_co
     let ask = std::fs::read_to_string(stage.path("out/repo/ask.yaml")).unwrap();
     assert!(ask.starts_with("name: strata-live-profile-ask\n"), "{ask}");
     assert!(ask.contains("version: 1.0.1"), "{ask}");
+}
+
+#[test]
+fn loop_sh_stage_5_asks_palette_about_the_bump_of_each_pin_that_the_nightly_job_finds_behind() {
+    let mut stage = lab_stage();
+    // the report of `behind`, with the answer of Palette in the bump when there is one
+    let report = |validation: Option<serde_json::Value>| {
+        let mut bump =
+            serde_json::json!({"to": "1.37.0", "impact": "repave", "flags": ["IDENTITY"]});
+        if let Some(validation) = validation {
+            bump["paletteValidation"] = validation;
+        }
+        serde_json::json!({"schema": "strata-behind/1", "generatedAt": "2026-09-26T06:00:00Z",
+            "pins": [{"name": "kubernetes", "layer": "k8s", "registry": "Public Repo",
+                "registryUid": "reg-public", "version": "1.35.3", "tag": "1.35.3",
+                "behind": true, "newer": [{"version": "1.37.0"}],
+                "pinnedBy": [{"path": "releases/1.0.0.json",
+                    "subject": "strata-live-profile@1.0.0"}],
+                "bump": bump}]})
+        .to_string()
+    };
+    stage.strata(
+        "behind --quiet --format json --no-impact *",
+        1,
+        &report(None),
+    );
+    stage.strata(
+        "behind --quiet --format json releases/*.json",
+        1,
+        &report(Some(upgrade_refused())),
+    );
+    let (_, steps) = stage.run("loop.sh", &["5"]);
+    passed(&steps, &["upstream", "upstream-asks", "upstream-asks-says"]);
+    let issue = std::fs::read_to_string(stage.path("out/upstream-asks.out")).unwrap();
+    assert!(
+        issue.contains(&format!(
+            "| 1.37.0 | 1.37.0: repave IDENTITY; palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred | - |"
+        )),
+        "{issue}"
+    );
+    // the check with --no-impact sends no question: its issue holds no answer
+    let quick = std::fs::read_to_string(stage.path("out/upstream.out")).unwrap();
+    assert!(!quick.contains("palette"), "{quick}");
 }
 
 #[test]

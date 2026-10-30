@@ -31,6 +31,11 @@ first line, and the label `strata-behind`:
 A pack that strata could not check keeps its issue as it is. An issue of a pack
 that no record pins is left alone.
 
+The bump column of an issue gives the impact of the move to the newest version. It
+also says whether Palette accepts the move: `palette accepts`, or `palette
+refuses` with the code and the clusters. See
+[Palette accepts the move, or refuses it](../commands/behind.md#palette-accepts-the-move-or-refuses-it).
+
 ## Two runs name what arrived
 
 The second line of each issue keeps the pins of its pack as JSON, in a comment
@@ -50,7 +55,7 @@ scripts/ci/upstream-report.sh 'releases/**/*.json'
 | `--repo OWNER/REPO` | The repository of the issues. The CI variables give it on a runner. |
 | `--host github\|gitlab` | The code host. The CI variables choose it when this is absent. |
 | `--label NAME` | The label of the issues. `strata-behind` by default. |
-| `--no-impact` | Do not compare each pin that is behind with the newest version. |
+| `--no-impact` | Do not compare each pin that is behind with the newest version, and do not ask Palette about the move. |
 | `--save FILE` | Keep the report of the run. |
 | `--dry-run` | Print each issue body and the action for each issue, and call no host. |
 

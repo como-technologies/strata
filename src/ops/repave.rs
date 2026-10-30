@@ -12,7 +12,7 @@ use crate::api::{Palette, PaletteApi};
 use crate::cluster_template::ClusterTemplateRef;
 use crate::diff::{ImpactLevel, PaletteRepave};
 use crate::error::{Error, Result};
-use crate::json::{arr, opt_str};
+use crate::json::{arr, opt_str, text};
 use crate::profile_type::ProfileType;
 use crate::reference::{Ref, name_version};
 use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind};
@@ -21,6 +21,45 @@ use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind
 /// its type, and its values.
 fn pack_value(p: &Pack) -> Value {
     json!({"name": p.name, "tag": p.tag, "type": p.kind, "values": p.values})
+}
+
+/// The body of `validate/packs` for a move of one pack of the cluster whose document is `doc`.
+/// `is_moved` accepts the pack as the template of its profile holds it, and `to` is the pack
+/// that it moves to, with the tag, the type, and the values of that version.
+///
+/// The profile that holds the pack has `packValues`: its packs as the cluster runs them, and the
+/// moved pack as `to`. The body names each other profile by its uid alone. `None` when no profile
+/// of the cluster holds the pack.
+pub(super) fn moved_pack_body(
+    doc: &Value,
+    is_moved: impl Fn(&Value) -> bool,
+    to: &Pack,
+) -> Option<Value> {
+    let mut found = false;
+    let profiles: Vec<Value> = AppliedProfile::of_cluster(doc)
+        .iter()
+        .map(|r| {
+            let current =
+                AppliedProfile::template_of(doc, &r.uid).map_or(&[][..], |t| arr(t, "/packs"));
+            if !current.iter().any(&is_moved) {
+                return json!({"uid": r.uid});
+            }
+            found = true;
+            let packs: Vec<Value> = current
+                .iter()
+                .map(|c| {
+                    if is_moved(c) {
+                        pack_value(to)
+                    } else {
+                        json!({"name": text(c, "/name"), "tag": text(c, "/tag"),
+                            "type": text(c, "/type"), "values": text(c, "/values")})
+                    }
+                })
+                .collect();
+            json!({"uid": r.uid, "packValues": packs})
+        })
+        .collect();
+    found.then(|| json!({ "profiles": profiles }))
 }
 
 /// The body of `validate/repave` for a move of `cluster` to `target`. The request names each

@@ -2,8 +2,8 @@
 
 Strata reads. Most requests are `GET` requests. Ten are `POST` requests, and
 none of them changes anything. Four are searches that Palette takes as a
-`POST`. With the other six, `compare --repave`, `compare --validate`, and
-`snapshot --validate` ask Palette a question. Each request has the
+`POST`. With the other six, `compare --repave`, `compare --validate`,
+`snapshot --validate`, and `behind` ask Palette a question. Each request has the
 headers `ApiKey` and `Accept: application/json`. A request in a project has
 the header `ProjectUid` too. The
 [Palette API reference](https://docs.spectrocloud.com/api/v1/) gives the shape
@@ -20,7 +20,7 @@ of each response.
 | `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}` | Only for a version with a draft, once for each manifest of its two templates: `spec.published.content` and `spec.draft.content`. While a draft waits, `packs/manifests` gives the content of neither template. See [Drafts](../internals/palette/profiles.md#drafts). |
 | `GET /v1/dashboard/clusterprofiles/metadata` | The listing: `list`, and the uid of `<name>@<version>` and of `<name>@latest`. In a project, it holds the profiles of the project and the profiles of the tenant. |
 | `POST /v1/dashboard/clusterprofiles?limit=50` | The profile search, with the filter `scope`: one item for each profile name of that scope, with the uid of each version in `specSummary.versions[]`. `list` reads it for the scope of each version. In a project, it reads the tenant versions and the system versions. At tenant scope, it reads the system versions. Palette gives 50 names on a page, and strata raises `offset` as for `/v1/packs`. A Palette with no profile search answers HTTP 404 or 405, and the scopes stay unknown. |
-| `POST /v1/clusterprofiles/{uid}/validate/packs` | Whether Palette takes the packs of the version as an update of itself, for `snapshot <ref> --validate`. The request changes nothing. |
+| `POST /v1/clusterprofiles/{uid}/validate/packs` | Whether Palette takes the packs of the version as an update of itself, for `snapshot <ref> --validate`. `behind` also sends it, with the newest version in the place of the pin. Palette checks it against the clusters that run the version. The request changes nothing. |
 
 A missing variables endpoint, HTTP 404 or 405 on an older Palette, counts as no
 variables. The record says so in `source.variablesUnavailable`: see
@@ -53,7 +53,7 @@ reports the version as gone. A cluster does the same with its own document. See
 | `GET /v1/cloudconfigs/{cloudType}/{configUid}` | The machine pools and the cloud part of the cluster, for `snapshot --shape`, and `verify` of a record that holds the `shape` tier. |
 | `POST /v1/spectroclusters/{uid}/validate/repave` | Whether a change of the profiles of the cluster replaces its nodes, for `compare --repave`: a move to a profile version, or the update that waits. The request changes nothing. |
 | `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave` | The same answer for a cluster template, for `compare --repave` of a cluster that the template governs. The body names the profiles by uid, with `isUpgradeNow: false`. The request changes nothing. |
-| `POST /v1/spectroclusters/{uid}/validate/packs` | Whether Palette accepts the packs of a change of the profiles of the cluster, for `compare --validate`. It takes the body of `validate/repave`, and changes nothing. |
+| `POST /v1/spectroclusters/{uid}/validate/packs` | Whether Palette accepts the packs of a change of the profiles of the cluster, for `compare --validate`. It takes the body of `validate/repave`, and changes nothing. `behind` sends it for a record of a cluster. The newest version replaces the pin. |
 
 ## The fleet
 

@@ -365,15 +365,22 @@ impl Renderer for MarkdownRenderer {
                 .iter()
                 .map(|b| format!("`{}` ({})", escape(&b.path), escape(&b.subject)))
                 .collect();
+            let bump: Vec<String> = super::behind::bump_line(pin)
+                .into_iter()
+                .chain(super::behind::palette_lines(pin))
+                .map(|l| escape(&l))
+                .collect();
             o.push_str(&format!(
                 "| `{}` | `{}` | {} | {} | {} | {} |\n",
                 escape(&pin.name),
                 escape(&pin.version),
                 escape(dash(&pin.registry)),
                 escape(&status),
-                super::behind::bump_line(pin)
-                    .map(|l| escape(&l))
-                    .unwrap_or_else(|| "-".to_string()),
+                if bump.is_empty() {
+                    "-".to_string()
+                } else {
+                    bump.join("<br>")
+                },
                 by.join("<br>")
             ));
         }

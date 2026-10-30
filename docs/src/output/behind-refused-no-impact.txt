@@ -1,0 +1,13 @@
+$ strata behind refused/dev.json --no-impact
+5 pins from 1 record: 1 behind, 1 floating
+  [addon] cert-manager    1.21.1  Public Repo  current
+      pinned by refused/dev.json (aws-stack@1.1.11)
+  [cni  ] cni-cilium-oss  1.20.1  Public Repo  current
+      pinned by refused/dev.json (aws-stack@1.1.11)
+~ [csi  ] csi-aws-ebs     1.63.1  Public Repo  behind: 1.65.0, 1.64.0
+      1.65.0 listed since 2026-09-11T14:32:12.028Z
+      pinned by refused/dev.json (aws-stack@1.1.11)
+  [k8s  ] kubernetes      1.36.2  Public Repo  current
+      pinned by refused/dev.json (aws-stack@1.1.11)
+  [os   ] ubuntu-aws      24.04   Public Repo  current (floating tag LTS__24.x, now 24.04)
+      pinned by refused/dev.json (aws-stack@1.1.11)
