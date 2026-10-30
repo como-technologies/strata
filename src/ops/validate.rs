@@ -146,6 +146,16 @@ pub fn profile_validation<A: PaletteApi>(
     palette: &Palette<A>,
     snap: &Snapshot,
 ) -> Result<ProfileValidation> {
+    profile_validation_in(&mut Registries::new(palette), snap)
+}
+
+/// [`profile_validation`] with the registry listings of the command, so that a candidate that
+/// [`resolve`](crate::candidate::resolve) read sends no second read of them.
+pub(crate) fn profile_validation_in<A: PaletteApi>(
+    registries: &mut Registries<'_, A>,
+    snap: &Snapshot,
+) -> Result<ProfileValidation> {
+    let palette = registries.palette();
     if !snap.source.is_profile_version() {
         return Err(Error::Usage {
             message: VALIDATE_TAKES.to_string(),
@@ -156,7 +166,7 @@ pub fn profile_validation<A: PaletteApi>(
     if uid.is_none() {
         let name = palette.validate_profile_name(&snap.source.name, &snap.source.version);
         errors.extend(refusal_in(name, ValidateRoute::ProfileName)?);
-        let body = profile_import_body(snap, Registries::new(palette).metadata()?);
+        let body = profile_import_body(snap, registries.metadata()?);
         errors.extend(refusal_in(
             palette.validate_profile_import(&body),
             ValidateRoute::ProfileImport,

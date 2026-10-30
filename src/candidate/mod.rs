@@ -25,7 +25,7 @@ mod export;
 mod gaps;
 pub(crate) mod pack;
 mod presets;
-mod resolve;
+pub(crate) mod resolve;
 mod rules;
 
 pub use pack::pack_snapshot;

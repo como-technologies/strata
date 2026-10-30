@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use super::consumer_list::consumer_uids;
 use super::fleet::Resolved;
-use super::list::{TENANT_SCOPE, name_projects_of};
+use super::list::{ProjectListings, TENANT_SCOPE, name_projects_of};
 use super::{client_for, scope_of};
 use crate::api::{Palette, PaletteApi};
 use crate::cluster_template::ClusterTemplateRef;
@@ -495,6 +495,7 @@ where
         |c| &c.project_uid,
         |c| &mut c.project_name,
         &home,
+        &mut ProjectListings::default(),
     );
 
     Ok(report(

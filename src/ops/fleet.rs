@@ -17,7 +17,7 @@ use crate::reference::{Ref, one_named};
 use crate::snapshot::{Snapshot, Tool};
 use crate::term::progress::Progress;
 
-use super::list::{ListedCluster, TENANT_SCOPE, list_clusters, name_projects_of};
+use super::list::{ListedCluster, ProjectListings, TENANT_SCOPE, list_clusters, name_projects_of};
 use crate::json::{arr, first_nonempty, flag, items, str_at, strings, text};
 
 use super::scope_of;
@@ -295,6 +295,17 @@ pub fn select<A: PaletteApi>(
     tenant: &Palette<A>,
     progress: &Progress,
 ) -> Result<Selection> {
+    select_in(query, tenant, &mut ProjectListings::default(), progress)
+}
+
+/// [`select`] with the project listings of the command, so that a later check of the same command
+/// reads them again from memory.
+pub(super) fn select_in<A: PaletteApi>(
+    query: &ClusterQuery,
+    tenant: &Palette<A>,
+    listings: &mut ProjectListings,
+    progress: &Progress,
+) -> Result<Selection> {
     let filter = match &query.filter {
         Some(wanted) => Some(find_filter(tenant, wanted)?),
         None => None,
@@ -335,6 +346,7 @@ pub fn select<A: PaletteApi>(
         |c| &c.project_uid,
         |c| &mut c.project_name,
         tenant,
+        listings,
     );
     Ok(Selection {
         clusters,

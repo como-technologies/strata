@@ -150,11 +150,16 @@ A scheduled job that keeps one issue open for each pack that is behind is
   `'releases/**/*.json'`: strata expands them. A record of a profile, a cluster,
   an edge host, a cluster group, an app profile, or a pack each gives the pins of
   its packs.
+- Strata connects one time for each project of the pins. A pin is in the
+  project of the first record that pins it. For each project, strata reads each
+  listing of the registries one time.
 - Strata reads each pack of each registry one time, in the project of the
   first record that pins it. It reads the paged listing of the versions, and the
   tags of the pack in the registry.
 - For each registry with a pin that is current, strata also reads the sync of
   the registry one time. It comes from the summary listing of its kind.
+- When strata cannot connect for a project, each pin of that project has the
+  error, and the other pins stay.
 - Behind is a decision, and not an error, so run `behind` apart from `verify`:
   the two fail for different reasons, and need different people.
 

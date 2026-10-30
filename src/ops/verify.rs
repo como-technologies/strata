@@ -22,7 +22,7 @@ use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
 use crate::term::progress::Progress;
 
 use super::consumers::{ACTIVE_STATE, DELETED_STATE, INACTIVE_STATE};
-use super::{connected, scope_of};
+use super::{HolderReads, connected, holder_snapshot, scope_of};
 
 /// The outcome of a verification.
 #[derive(Debug)]
@@ -130,27 +130,24 @@ fn live_holder<A: PaletteApi>(
     checked_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    let mut raw = palette.subject_raw(kind, doc, progress)?;
-    // a record of the update that waits is checked on what waits now
-    if c.pending {
-        raw = palette.with_pending(raw)?;
-    }
-    // strata also checks the macro values of a record that holds their digests
-    if c.macro_values.is_some() {
-        raw.resolved_values = Some(palette.resolved_values(kind, &c.uid)?);
-    }
-    // and one that holds the shape tier on its shape
-    if c.tier(Tier::Shape).is_some() {
-        raw.cloud_config = Some(palette.cloud_config(&raw.cluster)?);
-    }
-    let live = Snapshot::from_cluster(
-        &raw,
-        c.profile.as_deref(),
+    let raw = palette.subject_raw(kind, doc, progress)?;
+    // the record decides what the live record reads: a record that holds a part is checked on it
+    let reads = HolderReads {
+        profile: c.profile.as_deref(),
+        pending: c.pending,
+        macros: c.macro_values.is_some(),
+        shape: c.tier(Tier::Shape).is_some(),
+        raw_dir: None,
+    };
+    holder_snapshot(
+        palette,
+        kind,
+        raw,
+        &c.uid,
+        &reads,
         &recorded.source.reference,
         checked_at,
-    )?;
-    let live = if c.pending { live.mark_pending() } else { live };
-    Ok(live.with_kind(kind))
+    )
 }
 
 /// The kind of the object of the cluster record `c`, which tells strata how to read the object.
@@ -241,8 +238,10 @@ pub fn verify_with<A: PaletteApi>(
             recorded.source.title(),
             recorded.source.fetched_at
         ));
-        let live = crate::candidate::pack_snapshot(
-            palette,
+        // one cache for the record and the sync note: each registry listing is read one time
+        let mut registries = Registries::new(palette);
+        let live = crate::candidate::pack::pack_snapshot_in(
+            &mut registries,
             Some(&p.registry_uid),
             &p.name,
             &p.version,
@@ -255,7 +254,7 @@ pub fn verify_with<A: PaletteApi>(
         let pack_type = live.packs.first().and_then(Pack::pack_type);
         // the sync is a note beside the verdict: a failed read of it is named, and the verdict
         // stands
-        let sync = Registries::new(palette).sync_note(&p.registry_uid, pack_type, progress)?;
+        let sync = registries.sync_note(&p.registry_uid, pack_type, progress)?;
         let image_ids_changed = images_moved_alone(recorded, &live);
         let unchanged = recorded.root == live.root && image_ids_changed.is_empty();
         // no last_modified: the time of a pack in the listing is its create time, so it is not

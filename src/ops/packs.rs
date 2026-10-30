@@ -198,7 +198,7 @@ fn merged_tags(answers: &[Value]) -> Vec<Value> {
 pub fn registry_packs<A, F>(
     name: &str,
     options: &PackOptions,
-    connect: F,
+    mut connect: F,
     generated_at: &str,
     progress: &Progress,
 ) -> Result<PackListing>
@@ -206,31 +206,35 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    read_packs(name, options, connect, generated_at, progress).map(|(listing, _)| listing)
+    let palette = connect(None)?;
+    read_packs_in(
+        &mut Registries::new(&palette),
+        name,
+        options,
+        generated_at,
+        progress,
+    )
+    .map(|(listing, _)| listing)
 }
 
-/// [`registry_packs`], and the architectures that the listing names for each version: the part of
-/// the listing that the document leaves out.
-pub(crate) fn read_packs<A, F>(
+/// [`registry_packs`] with the registry listings of the command, so that a later read of the same
+/// command reads them again from memory. It also gives the architectures that the listing names for
+/// each version: the part of the listing that the document leaves out.
+pub(super) fn read_packs_in<A: PaletteApi>(
+    listings: &mut Registries<'_, A>,
     name: &str,
     options: &PackOptions,
-    mut connect: F,
     generated_at: &str,
     progress: &Progress,
-) -> Result<(PackListing, Architectures)>
-where
-    A: PaletteApi,
-    F: FnMut(Option<&str>) -> Result<Palette<A>>,
-{
-    let palette = connect(None)?;
+) -> Result<(PackListing, Architectures)> {
+    let palette = listings.palette();
     // the registry listing gives the names, and the reason of an error that finds no pack
-    let mut listings = Registries::new(&palette);
     let wanted = match &options.registry {
         Some(r) => vec![listings.by_ref(r)?],
         None => listings.names()?,
     };
     progress.note(&format!("reading the versions of {name}"));
-    let entries = crate::candidate::pack::versions_of(&palette, name)?;
+    let entries = crate::candidate::pack::versions_of(palette, name)?;
 
     let mut registries = Vec::new();
     let mut architectures = Architectures::new();
@@ -449,10 +453,11 @@ mod tests {
                 "/v1/packs/strata-live-dep/registries/reg-own",
                 serde_json::json!({"layer": "addon", "tags": tags}),
             );
-        read_packs(
+        let palette = Palette::new(api);
+        read_packs_in(
+            &mut Registries::new(&palette),
             "strata-live-dep",
             options,
-            |_| Ok(Palette::new(api.clone())),
             "2026-10-05T00:00:00Z",
             &Progress::silent(),
         )
