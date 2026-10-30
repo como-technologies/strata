@@ -123,6 +123,19 @@ another tag name for one build — and `compare` reports those as changes becaus
 its job is to report every difference. Use `same-release` for a gate, and
 `compare` to read what a gate rejected.
 
+## Ask Palette about the version
+
+Before the publish, `snapshot --from-candidate --validate` asks Palette if it
+accepts the packs of the candidate. See
+[Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
+
+Palette answers two more questions only for a version that it holds, so they
+follow the publish. Does the move of a cluster to the version repave the nodes?
+Does Palette accept the packs on that cluster? See
+[Ask Palette if the change repaves](../commands/compare/repave.md) and
+[Ask Palette if it accepts the packs](../commands/compare/validate.md).
+[Step 3 of the everyday loop](../loop.md#3-the-publish) shows both.
+
 ## Palette behavior
 
 A published profile version has the same root as its candidate, because Palette

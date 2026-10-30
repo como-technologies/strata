@@ -1,0 +1,2 @@
+$ jq -c '{name: .metadata.name, profile: .spec.profiles[0].uid, pools: [.spec.machinepoolconfig[].poolConfig | {name, size}]}' cluster.json
+{"name":"ledger","profile":"64e1000000000000000000b2","pools":[{"name":"cp-pool","size":1},{"name":"worker-pool","size":1}]}

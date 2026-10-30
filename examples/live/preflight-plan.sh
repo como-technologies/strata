@@ -55,8 +55,6 @@ while [ $# -gt 0 ]; do
 done
 [ -z "$down" ] || [ -n "$build" ] || die "--down goes with --build"
 
-tfvars=$live/terraform/terraform.tfvars
-var() { sed -n "s/^$1 *= *\"\(.*\)\"/\1/p" "$tfvars" | head -n 1; }
 ledger=$live/../../preflight/evidence/runs.yaml
 release=${PALETTE_RELEASE:-}
 
@@ -93,27 +91,8 @@ trap summary EXIT
 
 # ---- 1. the clean entity -------------------------------------------------------------------------------
 echo "== 1. the clean entity of $engine" | tee -a steps.log
-case "$engine" in
-  aws|eks)
-    account_name=$(var cloud_account_name)
-    kind=aws; region=$(var region); region=${region:-us-east-2}; az=$(var az); az=${az:-${region}a}
-    ssh_key=$(var ssh_key_name); project=""
-    ;;
-  gcp|gke)
-    account_name=$(var gcp_cloud_account_name); kind=gcp
-    region=$(var gcp_region); region=${region:-us-east1}; az=$(var gcp_zone); az=${az:-${region}-b}
-    ssh_key=""; project=$(var gcp_project)
-    ;;
-esac
-# the name_prefix of the example defaults to strata-live
-[ "$engine" = eks ] && account_name="$( { var name_prefix; } | grep . || echo strata-live)-eks"
-"$live/api.sh" get "/v1/cloudaccounts/summary" > accounts.json 2> accounts.err || die "cannot list the cloud accounts; see $PWD/accounts.err"
-A=$(jq -r --arg n "$account_name" --arg k "$kind" '.items[] | select(.metadata.name == $n and .kind == $k) | .metadata.uid' accounts.json | head -n 1)
-[ -n "$A" ] || die "no cloud account named $account_name of kind $kind in the project; the summary lists: $(jq -r '.items[] | "\(.metadata.name) (\(.kind))"' accounts.json | paste -sd ', ' -)"
 name="strata-preflight-$engine"
-sed -e "s/__ACCOUNT_UID__/$A/g" -e "s/__PROFILE_UID__/$R/g" -e "s/__REGION__/$region/g" -e "s/__AZ__/$az/g" \
-    -e "s/__SSH_KEY__/$ssh_key/g" -e "s/__PROJECT__/$project/g" -e "s/__NAME__/$name/g" \
-    "$live/preflight/$engine.json" > clean.json
+create_body "$engine" "$R" "$name" clean.json
 check clean-entity 0 "the clean entity of $engine parses, and names the account $account_name and the profile $R" -- \
   jq -e --arg a "$A" --arg r "$R" '.spec.cloudAccountUid == $a and .spec.profiles[0].uid == $r' clean.json
 

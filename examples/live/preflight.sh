@@ -16,8 +16,6 @@ script=preflight
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata; run just build"
 
-tfvars=$live/terraform/terraform.tfvars
-var() { sed -n "s/^$1 *= *\"\(.*\)\"/\1/p" "$tfvars" | head -n 1; }
 cloud=$(var cloud)
 cloud=${cloud:-aws}
 while [ $# -gt 0 ]; do

@@ -3228,3 +3228,147 @@ fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_
     assert_eq!(exists["name"], "strata-live-profile");
     assert_eq!(exists["version"], "1.0.0");
 }
+
+// ---- loop.sh ---------------------------------------------------------------------------------------
+
+/// A stage in a lab on AWS with the cloud account `lab-aws`, and a run that holds a repository of
+/// the team: an empty one on `main`, where `loop.sh` resumes.
+fn lab_stage() -> Stage {
+    let mut stage = Stage::new(serde_json::json!({
+        "project_uid": "p-1", "cluster_uid": "c-a", "release_profile_uid": "r-1",
+        "next_profile_uid": "n-1", "addon_profile_uid": "ad-1",
+        "profile_name": "strata-live-profile",
+    }));
+    let tfvars = stage.path("terraform.tfvars");
+    std::fs::write(
+        &tfvars,
+        "cloud = \"aws\"\ncloud_account_name = \"lab-aws\"\nregion = \"us-east-2\"\nssh_key_name = \"lab\"\n",
+    )
+    .unwrap();
+    stage.env("TFVARS", tfvars.to_str().unwrap());
+    stage.route(
+        "/v1/cloudaccounts/summary",
+        r#"{"items":[{"kind":"aws","metadata":{"name":"lab-aws","uid":"acc-1"}}]}"#,
+    );
+    let repo = stage.path("out/repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let init = Command::new("git")
+        .args(["init", "-q", "-b", "main"])
+        .current_dir(&repo)
+        .output()
+        .unwrap();
+    assert!(init.status.success(), "{}", text(&init.stderr));
+    stage
+}
+
+#[test]
+fn loop_sh_stage_2_asks_palette_under_a_name_the_project_lacks_and_writes_the_comment_of_the_pull_request()
+ {
+    let mut stage = lab_stage();
+    stage.strata(
+        "candidate n-1 -o change.yaml",
+        0,
+        "name: strata-live-profile\nversion: 1.0.1\nlayers:\n  - name: ubuntu-aws\n",
+    );
+    stage.strata(
+        "snapshot --from-candidate ask.yaml --validate -o ask.json",
+        0,
+        r#"{"source":{"paletteValidation":{"accepts":true}}}"#,
+    );
+    // the comment compares the record of the release with the candidate, and both differ
+    stage.strata(
+        "snapshot --from-candidate change.yaml -o candidate.json",
+        0,
+        "{}",
+    );
+    stage.strata(
+        "compare releases/1.0.0.json candidate.json --format json",
+        1,
+        r#"{"summary":{"maxImpact":"repave"}}"#,
+    );
+    stage.strata(
+        "compare releases/1.0.0.json candidate.json --format markdown",
+        1,
+        "**Result:** CHANGED · max impact: `repave`\n",
+    );
+    let release = stage.path("out/repo/releases/1.0.0.json");
+    std::fs::create_dir_all(release.parent().unwrap()).unwrap();
+    std::fs::write(&release, "{}").unwrap();
+
+    // the merge at the end of the stage needs a commit on main, which this repository lacks, so
+    // the script stops there with exit 2
+    let (_, steps) = stage.run("loop.sh", &["2"]);
+    passed(
+        &steps,
+        &[
+            "candidate",
+            "candidate-record",
+            "ask-candidate",
+            "comment",
+            "comment-says",
+            "commit-branch",
+        ],
+    );
+    let ask = std::fs::read_to_string(stage.path("out/repo/ask.yaml")).unwrap();
+    assert!(ask.starts_with("name: strata-live-profile-ask\n"), "{ask}");
+    assert!(ask.contains("version: 1.0.1"), "{ask}");
+}
+
+#[test]
+fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_body_of_a_create() {
+    let mut stage = lab_stage();
+    stage.strata(
+        "compare cluster:c-a/r-1 n-1 --repave --json",
+        1,
+        r#"{"paletteRepave":{"required":true,"reasons":[],"agrees":true}}"#,
+    );
+    stage.strata(
+        "compare cluster:c-a/r-1 n-1 --validate --json",
+        1,
+        r#"{"paletteValidation":{"accepts":true,"errors":[]}}"#,
+    );
+    stage.strata(
+        "preflight build.json --cloud aws --tier static --offline --quiet",
+        0,
+        "OK: each counted check passed\n",
+    );
+    stage.strata(
+        "preflight build.json --cloud aws --tier static,palette --no-exec --strict --quiet",
+        0,
+        "OK: each counted check passed\n",
+    );
+    stage.strata(
+        "preflight build-fault.json --cloud aws --tier static,palette --no-exec --strict --quiet",
+        1,
+        "FAIL: 1 check(s) failed: account-missing\n",
+    );
+
+    let (_, steps) = stage.run("loop.sh", &["3"]);
+    passed(
+        &steps,
+        &[
+            "ask-repave",
+            "ask-repave-answer",
+            "ask-validate",
+            "ask-validate-answer",
+            "build-body",
+            "preflight-static",
+            "preflight-live",
+            "preflight-fault",
+        ],
+    );
+    // the body is the create of a cluster on the release in the account of the lab
+    let body = read_json(&stage.path("out/build.json"));
+    assert_eq!(body["metadata"]["name"], "strata-loop-build");
+    assert_eq!(body["spec"]["cloudAccountUid"], "acc-1");
+    assert_eq!(body["spec"]["profiles"][0]["uid"], "r-1");
+    assert_eq!(body["spec"]["cloudConfig"]["region"], "us-east-2");
+    let fault = read_json(&stage.path("out/build-fault.json"));
+    assert_eq!(fault["spec"]["cloudAccountUid"], "000000000000000000000000");
+    // the asks and the preflight write nothing to Palette: the script sent only reads
+    let curl = std::fs::read_to_string(stage.path("curl.log")).unwrap();
+    assert!(
+        curl.lines().all(|l| l.starts_with("GET ")),
+        "a request that is not a read:\n{curl}"
+    );
+}

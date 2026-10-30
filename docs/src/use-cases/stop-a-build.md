@@ -178,6 +178,9 @@ gives the steps when a delete does not end.
 lab that runs this story on a real tenant: `just live-watch --build --down`
 builds a cluster and streams the watch of step 3 to the terminal.
 
+[The everyday loop](../loop.md#5-before-a-build) puts this check between the
+promotion of a release and the build of a cluster on it.
+
 ## What the runs show
 
 The catalog comes from the live runs of #47 to #90 and from a read of the

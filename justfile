@@ -201,7 +201,7 @@ live-registry: build
 live-fleet: build
     examples/live/fleet.sh
 
-# The everyday loop, end to end: a change, the gates, the publish, the nightly jobs, an override, an edit in place, an incident, and a retire, with the records in a git repository (#81). Needs live-up; undoes each change.
+# The everyday loop, end to end: a change, the gates, the publish, the asks of Palette about a move, preflight on the body of a create, the nightly jobs, an override, an edit in place, an incident, and a retire, with the records in a git repository (#81, #385). Needs live-up; undoes each change.
 live-loop: build
     examples/live/loop.sh
 

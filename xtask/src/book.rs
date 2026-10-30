@@ -287,12 +287,10 @@ impl Runner {
     }
 
     /// Write the answer of one request of the tenant, for a route no other helper writes.
+    ///
+    /// A served run writes it too, when it builds this chapter: the playground serves the answer.
     pub fn answer(&mut self, project: &str, path: &str, value: &serde_json::Value) {
-        if self.serving() {
-            return;
-        }
-        self.changed();
-        self.tenant.put(project, path, value);
+        self.tenant(|t| t.put(project, path, value));
     }
 
     /// Write a file into the chapter's working directory, as a candidate file a page shows.
@@ -705,6 +703,36 @@ pub fn die(message: &str) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// A runner whose stand-in is a script that writes a port and waits for the end of its input.
+    /// Only one test starts a runner, because each runner works in a directory of the process id.
+    fn runner(mode: Mode) -> Runner {
+        let repo = std::env::temp_dir().join(format!("strata-book-test-{}", std::process::id()));
+        std::fs::create_dir_all(&repo).expect("a directory");
+        let script = repo.join("stand-in");
+        std::fs::write(&script, "#!/bin/sh\necho 4242 > \"$3\"\ncat > /dev/null\n")
+            .expect("a script");
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("a mode");
+        Runner::start(&repo, &repo.join("strata"), &script, mode).expect("a runner")
+    }
+
+    #[test]
+    fn a_served_run_writes_the_answer_of_the_chapter_it_builds_and_no_other() {
+        let mode = Mode::Serve {
+            chapter: "served".to_string(),
+            seed: 1,
+        };
+        let mut r = runner(mode);
+        let answer = serde_json::json!({"ok": true});
+        r.chapter("other", &[]);
+        r.answer("p", "v1/other", &answer);
+        assert!(!r.tenant.doc("p", "v1/other").exists());
+        r.chapter("served", &[]);
+        r.answer("p", "v1/served", &answer);
+        assert!(r.tenant.doc("p", "v1/served").is_file());
+        let _ = std::fs::remove_dir_all(r.repo.clone());
+    }
 
     #[test]
     fn a_playground_name_splits_into_its_chapter_and_its_state() {
