@@ -21,5 +21,5 @@ confidence of each rule is counted:
 repository depends on the crate by its git address:
 
 ```toml
-strata-preflight = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.22.1" }
+strata-preflight = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.23.0" }
 ```
