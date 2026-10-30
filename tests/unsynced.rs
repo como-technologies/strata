@@ -16,8 +16,8 @@ use strata::term::progress::Progress;
 
 use crate::common;
 use common::{
-    OCI_REGISTRY_SUMMARY, REGISTRY_LISTING, candidate_snapshot, no_variables, pack_listing_route,
-    profile_document, snapshot_of, template,
+    OCI_REGISTRY_SUMMARY, REGISTRY_LISTING, candidate_snapshot, no_variables, profile_document,
+    serve_pack_listing, serve_registry_pack, snapshot_of, template, write_yaml,
 };
 
 const CHART: &str = "strata-live-chart";
@@ -25,18 +25,10 @@ const PRIVATE: &str = "reg-charts-auth";
 const PUBLIC: &str = "reg-charts";
 const ZARF: &str = "reg-zarf";
 
-fn listing(path_name: &str, items: Value) -> (String, Value) {
-    (
-        pack_listing_route(path_name),
-        json!({"items": items, "listmeta": {"count": items.as_array().map_or(0, Vec::len)}}),
-    )
-}
-
 /// A tenant with a private Helm registry, a Helm registry that syncs, and an OCI registry of the
 /// provider type zarf with sync off. The listing has no version of the chart.
 fn tenant() -> MemoryApi {
-    let (path, empty) = listing(CHART, json!([]));
-    MemoryApi::new()
+    let api = MemoryApi::new()
         .with(
             REGISTRY_LISTING,
             json!({"items": [
@@ -50,8 +42,8 @@ fn tenant() -> MemoryApi {
             json!({"items": [{"metadata": {"uid": ZARF, "name": "zarf"},
                 "spec": {"providerType": "zarf"},
                 "status": {"sync": {"isSyncSupported": false}}}]}),
-        )
-        .with(path, empty)
+        );
+    serve_pack_listing(api, CHART, json!([]))
 }
 
 fn candidate(dir: &Path, registry: &str, layer: Value) -> std::path::PathBuf {
@@ -63,7 +55,7 @@ fn candidate(dir: &Path, registry: &str, layer: Value) -> std::path::PathBuf {
     let doc = json!({"name": "charts-probe", "version": "1.0.0", "type": "add-on",
         "cloudType": "all", "layers": [l]});
     let file = dir.join(format!("{registry}.yaml"));
-    fs::write(&file, serde_yaml::to_string(&doc).unwrap()).unwrap();
+    write_yaml(&file, &doc);
     file
 }
 
@@ -121,14 +113,13 @@ fn a_layer_from_a_registry_that_syncs_is_still_pack_not_found() {
 fn a_version_that_the_listing_has_goes_through_the_listing_also_in_a_private_registry() {
     // a pack that Palette made for an earlier profile is in the listing, with its uid
     let dir = tempfile::tempdir().unwrap();
-    let (path, items) = listing(
+    let api = serve_registry_pack(
+        tenant(),
         CHART,
         json!([{"metadata": {"uid": "pk-minted"}, "spec": {"name": CHART, "version": "1.0.0",
             "registryUid": PRIVATE, "layer": "addon", "type": "helm"}}]),
-    );
-    let api = tenant().with(path, items).with(
-        format!("/v1/packs/{CHART}/registries/{PRIVATE}"),
         json!({"tags": [{"tag": "1.0.0", "packUid": "pk-minted", "version": "1.0.0"}]}),
+        PRIVATE,
     );
     let file = candidate(dir.path(), "charts-auth", json!({}));
     let snap = candidate_snapshot(&file, &api).unwrap();
@@ -356,12 +347,14 @@ fn a_resolve_reads_the_registry_listing_and_the_oci_summary_one_time() {
         "spec": {"name": "listed-chart", "version": "1.0.0", "registryUid": ZARF,
                  "digest": "sha256:l1", "layer": "addon", "type": "oci", "values": "a: 1\n"},
     });
-    let (path, one) = listing("listed-chart", json!([listed]));
-    let (other_path, empty) = listing("other-chart", json!([]));
-    let api = tenant().with(path, one).with(other_path, empty).with(
-        format!("/v1/packs/listed-chart/registries/{ZARF}"),
+    let api = serve_registry_pack(
+        tenant(),
+        "listed-chart",
+        json!([listed]),
         json!({"tags": [{"tag": "1.0.0", "packUid": "pack-listed-1"}]}),
+        ZARF,
     );
+    let api = serve_pack_listing(api, "other-chart", json!([]));
     let dir = tempfile::tempdir().unwrap();
     let doc = json!({"name": "charts-probe", "version": "1.0.0", "type": "add-on",
     "cloudType": "all", "layers": [
@@ -371,7 +364,7 @@ fn a_resolve_reads_the_registry_listing_and_the_oci_summary_one_time() {
          "values": "replicas: 1\n"},
     ]});
     let file = dir.path().join("three.yaml");
-    fs::write(&file, serde_yaml::to_string(&doc).unwrap()).unwrap();
+    write_yaml(&file, &doc);
     let snap = candidate_snapshot(&file, &api).unwrap();
     assert_eq!(snap.packs.len(), 3);
     assert_eq!(

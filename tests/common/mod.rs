@@ -184,6 +184,11 @@ pub fn write_record(path: &Path, doc: &Value) {
     fs::write(path, serde_json::to_string_pretty(doc).unwrap()).unwrap();
 }
 
+/// Write `doc`, a candidate, to the file at `path` as YAML.
+pub fn write_yaml(path: &Path, doc: &Value) {
+    fs::write(path, serde_yaml::to_string(doc).unwrap()).unwrap();
+}
+
 /// Assemble a cluster that runs the profile fixtures `profiles`, in order, the way Palette returns
 /// it: applied templates on the cluster, per-profile pack manifests, and per-profile variables
 /// with values: `values` by name, else the default, and SECRET_VALUE for a sensitive variable.
@@ -871,11 +876,42 @@ pub fn pack_listing_route(name: &str) -> String {
     format!("/v1/packs?filters=spec.name={name}&limit=100&offset=0")
 }
 
+/// The pack `name` in the registry `registry`, `GET /v1/packs/{name}/registries/{registry}`: its
+/// tags.
+pub fn pack_entity_route(name: &str, registry: &str) -> String {
+    format!("/v1/packs/{name}/registries/{registry}")
+}
+
 /// The registry listing, `GET /v1/registries/metadata`.
 pub const REGISTRY_LISTING: &str = "/v1/registries/metadata";
 
 /// The summary of the OCI registries, `GET /v1/registries/oci/summary`.
 pub const OCI_REGISTRY_SUMMARY: &str = "/v1/registries/oci/summary";
+
+/// Serve the pack listing of the pack `name`: the pack summaries `items`, an array, and their count.
+pub fn serve_pack_listing(
+    api: strata::api::MemoryApi,
+    name: &str,
+    items: Value,
+) -> strata::api::MemoryApi {
+    let count = items.as_array().map_or(0, Vec::len);
+    api.with(
+        pack_listing_route(name),
+        json!({"items": items, "listmeta": {"count": count}}),
+    )
+}
+
+/// The registry endpoints strata reads for one pack, as the examples cached them from a live
+/// tenant: the version listing filtered by name, and the pack entity with its tags.
+pub fn serve_registry_pack(
+    api: strata::api::MemoryApi,
+    name: &str,
+    summaries: Value,
+    entity: Value,
+    registry: &str,
+) -> strata::api::MemoryApi {
+    serve_pack_listing(api, name, summaries).with(pack_entity_route(name, registry), entity)
+}
 
 /// One manifest `manifest` of the pack `pack` of the profile version `uid`, with the content of
 /// each template.

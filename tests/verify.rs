@@ -24,10 +24,11 @@ use common::{
     SECRET_VALUE, UID_A, UID_ADDONS, UID_B, app_profile_route, candidate_snapshot,
     cluster_manifests_route, cluster_ref, cluster_resolved_values_route, cluster_route,
     cluster_variables_route, edge_host_route, group_resolved_values_route, group_route, listing,
-    manifest_route, manifests_route, no_manifests, no_template, no_variables, pack_listing_route,
-    post, profile_document, profile_route, read_json, resolved_values_route, serve_fixture,
-    serve_profile, snapshot_of, snapshot_of_at, snapshot_of_ref, strata_bin, template,
-    variables_route, write_record,
+    manifest_route, manifests_route, no_manifests, no_template, no_variables, pack_entity_route,
+    pack_listing_route, post, profile_document, profile_route, read_json, resolved_values_route,
+    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
+    snapshot_of_at, snapshot_of_ref, strata_bin, template, variables_route, write_record,
+    write_yaml,
 };
 
 #[test]
@@ -5328,27 +5329,6 @@ fn list_fails_when_a_listing_cannot_be_read() {
 
 // ---- candidates ------------------------------------------------------------------------------
 
-/// The registry endpoints strata reads for one pack, as the examples cached them from a live
-/// tenant: the version listing filtered by name, and the pack entity with its tags.
-fn serve_registry_pack(
-    api: MemoryApi,
-    name: &str,
-    summaries: Value,
-    entity: Value,
-    registry: &str,
-) -> MemoryApi {
-    let count = summaries.as_array().map(Vec::len).unwrap_or(0);
-    api.with(
-        pack_listing_route(name),
-        serde_json::json!({"items": summaries, "listmeta": {"count": count}}),
-    )
-    .with(format!("/v1/packs/{name}/registries/{registry}"), entity)
-}
-
-fn write_yaml(path: &Path, doc: &Value) {
-    fs::write(path, serde_yaml::to_string(doc).unwrap()).unwrap();
-}
-
 fn never_connect() -> strata::Result<Palette<MemoryApi>> {
     panic!("local errors are found before connecting")
 }
@@ -6614,23 +6594,16 @@ fn serve_registry(extra: Vec<Value>, entities: &[(&str, Value)]) -> MemoryApi {
 
 /// The same, with the pack versions spelled out.
 fn serve_summaries(summaries: Vec<Value>, entities: &[(&str, Value)]) -> MemoryApi {
-    let mut api = MemoryApi::new()
-        .with(
-            REGISTRY_LISTING,
-            serde_json::json!({"items": [
-                {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
-                {"name": "Mirror", "uid": "reg-mirror", "kind": "oci"},
-            ]}),
-        )
-        .with(
-            pack_listing_route("csi-aws-ebs"),
-            serde_json::json!({"items": summaries, "listmeta": {"count": 9}}),
-        );
+    let api = MemoryApi::new().with(
+        REGISTRY_LISTING,
+        serde_json::json!({"items": [
+            {"name": "Public Repo", "uid": "reg-public", "kind": "pack"},
+            {"name": "Mirror", "uid": "reg-mirror", "kind": "oci"},
+        ]}),
+    );
+    let mut api = serve_pack_listing(api, "csi-aws-ebs", Value::Array(summaries));
     for (registry, entity) in entities {
-        api = api.with(
-            format!("/v1/packs/csi-aws-ebs/registries/{registry}"),
-            entity.clone(),
-        );
+        api = api.with(pack_entity_route("csi-aws-ebs", registry), entity.clone());
     }
     api
 }
@@ -6781,7 +6754,7 @@ fn packs_pages_past_a_hundred_versions_and_counts_a_repeated_one_once() {
             serde_json::json!({"items": second, "listmeta": {"count": 103}}),
         )
         .with(
-            "/v1/packs/csi-aws-ebs/registries/reg-public",
+            pack_entity_route("csi-aws-ebs", "reg-public"),
             (0..100).fold(with_tag(public_entity(), "1.200.0", "pk-200"), |e, i| {
                 with_tag(e, &format!("1.{i}.0"), &format!("pk-{i}"))
             }),
@@ -6953,7 +6926,8 @@ fn packs_gives_the_state_disabled_to_a_version_with_the_mark_and_reads_its_tags_
     for registry in ["reg-public", "reg-mirror"] {
         assert_eq!(
             api.calls(&format!(
-                "/v1/packs/csi-aws-ebs/registries/{registry}?states=deprecated,disabled,deleted"
+                "{}?states=deprecated,disabled,deleted",
+                pack_entity_route("csi-aws-ebs", registry)
             )),
             0,
             "{registry}: no states query for a version that Palette serves"
@@ -7015,7 +6989,7 @@ fn packs_lists_only_the_retired_versions_of_a_registry_that_answers_404_and_stop
     );
 
     let api = serve_registry(vec![], &[]).failing(
-        "/v1/packs/csi-aws-ebs/registries/reg-public",
+        pack_entity_route("csi-aws-ebs", "reg-public"),
         403,
         "forbidden",
     );
@@ -7144,15 +7118,14 @@ fn packs_refuses_a_registry_that_is_not_visible_and_a_pack_no_registry_has() {
         "the error lists what is visible: {err}"
     );
 
-    let api = MemoryApi::new()
-        .with(
+    let api = serve_pack_listing(
+        MemoryApi::new().with(
             REGISTRY_LISTING,
             serde_json::json!({"items": [{"name": "Public Repo", "uid": "reg-public", "kind": "pack"}]}),
-        )
-        .with(
-            pack_listing_route("nowhere"),
-            serde_json::json!({"items": [], "listmeta": {"count": 0}}),
-        );
+        ),
+        "nowhere",
+        serde_json::json!([]),
+    );
     // no registry was named and no version was asked for, so the error states neither: it names
     // the pack name alone, and points at the command that finds a pack inside a profile
     let err = packs_of(&api, "nowhere", ops::PackOptions::default()).unwrap_err();
@@ -13148,12 +13121,8 @@ fn serve_two_packs_of_the_oci_registry() -> MemoryApi {
             .iter()
             .map(|b| serde_json::json!({"tag": b["spec"]["version"], "packUid": b["metadata"]["uid"]}))
             .collect();
-        api.with(
-            pack_listing_route(name),
-            serde_json::json!({"items": builds, "listmeta": {"count": 9}}),
-        )
-        .with(
-            format!("/v1/packs/{name}/registries/reg-mirror"),
+        serve_pack_listing(api, name, Value::Array(builds)).with(
+            pack_entity_route(name, "reg-mirror"),
             serde_json::json!({"layer": "csi", "tags": tags}),
         )
     };
