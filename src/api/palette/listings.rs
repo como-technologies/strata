@@ -10,7 +10,7 @@ use super::{
     CLUSTER_SEARCH_SCHEMA, EDGE_HOST_SEARCH, PACK_LISTING_PAGE, PACKS, PROFILE_LISTING,
     PROJECT_LISTING, Palette, REGISTRIES, REGISTRY_METADATA, RegistryKind, SEARCH_ENVIRONMENT,
     SEARCH_STRING, SearchedClusters, TAG_FILTER_LISTING, TAG_FILTERS, named_entries, query_value,
-    route, sorted_names, uids_named, with_limit, with_nested,
+    route, search_all, sorted_names, uids_named, with_limit, with_nested,
 };
 use crate::api::{AuditKind, PaletteApi};
 use crate::error::{Error, Result, served};
@@ -116,10 +116,7 @@ impl<A: PaletteApi> Palette<A> {
     /// Each item names the profiles bound to the host in `spec.clusterProfileTemplates`, as a
     /// summary: uid, name, and version.
     pub fn edge_hosts(&self) -> Result<Vec<Value>> {
-        self.searched(
-            &with_limit(EDGE_HOST_SEARCH),
-            &serde_json::json!({"filter": {}, "sort": []}),
-        )
+        self.searched(&with_limit(EDGE_HOST_SEARCH), &search_all())
     }
 
     /// The clusters that a search filter selects, `POST /v1/dashboard/spectroclusters/search`,

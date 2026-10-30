@@ -333,7 +333,7 @@ issue open for each record that drifted. See
 - Strata checks each record in the project that the record names. A record from
   tenant scope has no project, so strata checks it in the configured project.
 - `--project <uid>` or `--project-name <name>` checks each record in that
-  project, not in the project of the record.
+  project, not in the project of the record. `--project ''` is tenant scope.
 - `--format markdown` writes one table for many files, and the full report for
   one file.
 - `--json` writes [`strata-diff/1`](../reference/documents.md#strata-diff1) for

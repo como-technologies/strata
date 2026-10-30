@@ -89,12 +89,18 @@ pub(crate) fn manifest_of(entity: &Value, reference: &Value, template: Template)
     } else {
         Template::Published
     };
-    json!({
-        "name": first_nonempty(&[str_at(reference, "/name"), str_at(entity, "/metadata/name")]),
-        "uid": first_nonempty(&[str_at(reference, "/uid"), str_at(entity, "/metadata/uid")]),
-        "digest": text(entity, &format!("/spec/{from}/digest")),
-        "content": text(entity, &format!("/spec/{from}/content")),
-    })
+    manifest_entry(
+        &first_nonempty(&[str_at(reference, "/name"), str_at(entity, "/metadata/name")]),
+        &first_nonempty(&[str_at(reference, "/uid"), str_at(entity, "/metadata/uid")]),
+        &text(entity, &format!("/spec/{from}/digest")),
+        &text(entity, &format!("/spec/{from}/content")),
+    )
+}
+
+/// One manifest as a record reads it, from its four fields. A manifest of a candidate has no uid
+/// and no digest yet, so those two are empty text.
+pub(crate) fn manifest_entry(name: &str, uid: &str, digest: &str, content: &str) -> Value {
+    json!({"name": name, "uid": uid, "digest": digest, "content": content})
 }
 
 impl Snapshot {
@@ -103,6 +109,18 @@ impl Snapshot {
     pub fn from_raw(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
         let template = crate::api::recorded_template(&raw.profile);
         Self::from_raw_template(raw, reference, fetched_at, template)
+    }
+
+    /// Build a snapshot of an app profile from its raw API responses. Its consumers are app
+    /// deployments, and not clusters, so the record counts none.
+    pub(crate) fn from_app_profile(
+        raw: &RawProfile,
+        reference: &str,
+        fetched_at: &str,
+    ) -> Result<Snapshot> {
+        let mut snap = Self::from_raw(raw, reference, fetched_at)?;
+        snap.source.consumers = None;
+        Ok(snap)
     }
 
     /// Build a snapshot of the draft template of one profile: what the next publish makes the

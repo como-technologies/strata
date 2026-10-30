@@ -19,6 +19,7 @@ use crate::error::{Error, Result};
 use crate::pack_type::PackType;
 use crate::profile_type::ProfileType;
 use crate::snapshot::{PresetOption, Snapshot};
+use rules::invalid_at;
 
 mod export;
 mod gaps;
@@ -115,11 +116,8 @@ impl Candidate {
 
 /// The candidate as YAML.
 pub fn to_yaml(candidate: &Candidate) -> Result<String> {
-    serde_yaml::to_string(candidate).map_err(|e| Error::CandidateInvalid {
-        path: PathBuf::from(&candidate.name),
-        rule: None,
-        message: e.to_string(),
-    })
+    serde_yaml::to_string(candidate)
+        .map_err(|e| invalid_at(Path::new(&candidate.name))(e.to_string()))
 }
 
 /// Write `candidate` as YAML to `path`. With `files_dir`, each layer's values go to

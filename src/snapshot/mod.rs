@@ -22,7 +22,7 @@ pub use crate::validation::ProfileValidation;
 use pack::masked_paths;
 
 mod build;
-pub(crate) use build::manifest_of;
+pub(crate) use build::{manifest_entry, manifest_of};
 mod cluster;
 mod pack;
 pub(crate) mod policy;
@@ -89,6 +89,10 @@ pub const CONTENT_DIGEST: &str = "content/1";
 /// The annotation of a pack ref that names the machine image of an OS pack, such as an AMI. A
 /// bring-your-own-image OS pack holds it. The OS pack `ubuntu-aws` of the Public Repo does not.
 pub const IMAGE_ID_ANNOTATION: &str = "imageId";
+
+/// The annotation of a pack ref that names the provider type of the OCI registry of the pack, as a
+/// published profile carries it: `pack`, `helm`, or `zarf`.
+pub(crate) const PROVIDER_TYPE_ANNOTATION: &str = "ociRegistryProviderType";
 
 /// One published profile version: its root, per-pack hashes, canonical values, and raw contents.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

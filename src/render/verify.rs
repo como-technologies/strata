@@ -255,12 +255,15 @@ fn record_values_changed(r: &crate::ops::VerifiedRecord) -> usize {
     r.cluster_variables.as_ref().map_or(0, |c| c.values.len())
 }
 
+/// What `verify --who` states when the audit log holds no write since the record.
+const NO_AUDIT_ENTRY: &str = "no audit entry since the record";
+
 /// What `verify --who` found: `who: 2 writes in the audit log since the record`, or `who: no
 /// audit entry since the record`. `None` without `--who`.
 pub(crate) fn who_heading(v: &Verify) -> Option<String> {
     let who = v.who.as_ref()?;
     Some(if who.is_empty() {
-        "who: no audit entry since the record".to_string()
+        format!("who: {NO_AUDIT_ENTRY}")
     } else {
         format!(
             "who: {} in the audit log since the record",
@@ -318,7 +321,7 @@ fn who_suffix(r: &crate::ops::VerifiedRecord) -> String {
             "; last write: {} ({}), {} at {}",
             e.actor, e.actor_type, e.action, e.time
         ),
-        None => "; no audit entry since the record".to_string(),
+        None => format!("; {NO_AUDIT_ENTRY}"),
     }
 }
 

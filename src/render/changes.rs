@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use super::notes::tag_rename;
+use super::notes::{tag_rename, tier_path};
 use super::{short_digest, show, shown};
 use crate::diff::{
     ChangeFlag, ClusterValueChange, Diff, Leaf, ManifestChange, Op, PackDiff, Status, ValuesDiff,
@@ -21,6 +21,19 @@ pub(crate) fn status_mark(status: Status) -> &'static str {
         Status::Added => "+",
         Status::Removed => "-",
     }
+}
+
+/// The lines of the leaves that differ in the tiers of `d`, each with the path inside its tier.
+pub(crate) fn tier_op_lines(d: &Diff) -> Vec<OpLine> {
+    d.cluster_tiers
+        .iter()
+        .filter(|t| !t.same)
+        .flat_map(|t| {
+            t.diff
+                .iter()
+                .map(|l| OpLine::leaf(&tier_path(&t.tier, &l.path), l))
+        })
+        .collect()
 }
 
 /// The word of a pack in a comparison, as the text reports print it.

@@ -10,7 +10,7 @@ use serde_json::Value;
 use super::{
     APP_DEPLOYMENTS, APP_PROFILE_LISTING, APP_PROFILES, EDGE_HOSTS, PACKS, PROFILE_SEARCH,
     PROFILES, Palette, SEARCH_PAGE, TIER_CONTAINER_REGISTRY, TIER_INSTALL_ORDER, install_order,
-    listed_versions, query_value, route, with_limit,
+    listed_versions, no_variables, query_value, route, with_limit,
 };
 use crate::api::{PaletteApi, RawProfile, mask};
 use crate::cloud::CLOUD_ALL;
@@ -271,7 +271,7 @@ impl<A: PaletteApi> Palette<A> {
                         "packs": packs}},
             }),
             manifests: serde_json::json!({"spec": {"packs": mpacks}}),
-            variables: serde_json::json!({ "variables": [] }),
+            variables: no_variables(),
             variables_unavailable: false,
             project_uid: self.project_uid().map(str::to_string),
             fetched_at: None,
@@ -329,11 +329,8 @@ impl<A: PaletteApi> Palette<A> {
         let mut manifests = self.profile_pack_manifests(uid)?;
         self.mask_draft(&mut profile, &mut manifests, progress)?;
         let manifest_entities = self.manifest_entities(uid, &profile, progress)?;
-        let (variables, variables_unavailable) = self.variables_or(
-            &route(PROFILES, &[uid]),
-            serde_json::json!({ "variables": [] }),
-            progress,
-        )?;
+        let (variables, variables_unavailable) =
+            self.variables_or(&route(PROFILES, &[uid]), no_variables(), progress)?;
         Ok(RawProfile {
             profile,
             manifests,

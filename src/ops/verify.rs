@@ -313,9 +313,7 @@ pub fn verify_with<A: PaletteApi>(
             match found(palette.fetch_app_profile(uid, progress))? {
                 Some(raw) => {
                     last_modified = opt_text(&raw.profile, "/metadata/lastModifiedTimestamp");
-                    let mut live = Snapshot::from_raw(&raw, uid, checked_at)?;
-                    live.source.consumers = None;
-                    live
+                    Snapshot::from_app_profile(&raw, uid, checked_at)?
                 }
                 None => {
                     gone = true;

@@ -903,6 +903,18 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
     assert_eq!(*scopes.borrow(), vec![Some("p9".to_string())]);
     assert_eq!(s.summary.status, RecordStatus::Drifted);
     assert_eq!(s.exit_code(), 1);
+
+    // an empty project is the tenant scope: it also overrides the scope of each record
+    scopes.borrow_mut().clear();
+    ops::verify_many(
+        &paths[..2],
+        Some(""),
+        connect,
+        "t1",
+        &ops::VerifyOptions::default(),
+        &Progress::silent(),
+    );
+    assert_eq!(*scopes.borrow(), vec![Some(String::new())]);
 }
 
 #[test]

@@ -7,10 +7,10 @@ use strata::reference::Ref;
 use strata::{candidate, ops, render};
 
 use super::args::CandidateArgs;
-use super::{connect, now_utc, progress};
+use super::{connect, now_utc};
 
 pub(crate) fn cmd_candidate(a: &CandidateArgs) -> Result<ExitCode> {
-    let progress = progress(a.quiet);
+    let progress = a.quiet.progress();
     let reference = Ref::parse(&a.r#ref);
     // a record can hold a profile version too: Candidate::from_snapshot says
     if !reference.is_profile_version() && !matches!(reference, Ref::Snapshot(_)) {
