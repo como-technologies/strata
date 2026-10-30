@@ -143,7 +143,7 @@ include them. `strata preflight --rules --json` lists the request of every rule.
 
 | Request | Read by | Gives |
 | --- | --- | --- |
-| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | `instance-offering` | Each instance type of the region, with `type` and `nonSupportedZones[]`, the zones that do not offer the type. One request answers every pool. |
+| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | `instance-offering` | Each instance type of the region, with `type` and `nonSupportedZones`. The field lists the zones that do not offer the type, and is `null` when each zone offers it. One request answers every pool. |
 | `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `ssh-key-pair` | `keyNames[]`: the key pairs of the account in the region. |
 | `POST /v1/clouds/gcp/properties/validate` | `gcp-properties` | `204` when the account reads the project and each zone of the pools. The body has `cloudAccountUid`, `projectId`, `region`, and `azs[]`. |
 

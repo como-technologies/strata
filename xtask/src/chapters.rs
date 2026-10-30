@@ -147,25 +147,26 @@ fn accepted_answer() -> serde_json::Value {
 }
 
 /// One entry of the answer of the instance type route, as Palette gives it: the name of the type is
-/// `type`, and an entry has no `name`.
+/// `type`, and an entry has no `name`. `not_offered` is `None` for a type that each zone offers:
+/// Palette gives `null` for it, as it does for most types.
 fn instance_type(
     name: &str,
     cpu: u32,
     memory: u32,
     price: f64,
-    not_offered: &[&str],
+    not_offered: Option<&[&str]>,
 ) -> serde_json::Value {
     json!({"category": "General purpose", "cpu": cpu, "memory": memory, "price": price, "type": name,
         "cost": {"price": [{"onDemand": price, "os": "linux"}]},
         "nonSupportedZones": not_offered, "supportedArchitectures": ["x86_64"]})
 }
 
-/// The answer of the instance type route for `us-east-2`: `t3.xlarge` is not offered in the zone
-/// `us-east-2c`, which no pool of `preflight_entity` uses.
+/// The answer of the instance type route for `us-east-2`: each zone offers `t3.large`, and
+/// `t3.xlarge` is not offered in the zone `us-east-2c`, which no pool of `preflight_entity` uses.
 fn instance_types_answer() -> serde_json::Value {
     json!({"instanceTypes": [
-        instance_type("t3.large", 2, 8, 0.0832, &[]),
-        instance_type("t3.xlarge", 4, 16, 0.1664, &["us-east-2c"]),
+        instance_type("t3.large", 2, 8, 0.0832, None),
+        instance_type("t3.xlarge", 4, 16, 0.1664, Some(&["us-east-2c"])),
     ]})
 }
 
@@ -3394,6 +3395,16 @@ fn automation(r: &mut Runner) {
         1,
         false,
         "strata preflight cluster-zone.json --cloud aws --no-exec --tier palette --rule instance-offering --strict --quiet | sed -n '4,8p'",
+    );
+    // the route gives null for a type that each zone offers: t3.large passes in the same zone
+    r.quiet(
+        r#"jq '.spec.machinepoolconfig[].cloudConfig.instanceType = "t3.large"' cluster-zone.json > cluster-null.json"#,
+    );
+    r.step(
+        "preflight-offering-null",
+        0,
+        false,
+        "strata preflight cluster-null.json --cloud aws --no-exec --tier palette --rule instance-offering --strict --quiet | sed -n '4p'",
     );
     r.quiet(r#"jq '.spec.cloudConfig.sshKeyName = "retired"' cluster.json > cluster-key.json"#);
     r.step(

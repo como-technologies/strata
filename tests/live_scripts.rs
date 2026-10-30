@@ -1664,11 +1664,12 @@ fn offering_edit(engine: &str, region: &str, answer: &str) -> (Output, String) {
 
 /// The fault of `instance-offering` in the plan of the lab (#143) comes from the instance type
 /// route: the first type that has a zone in `nonSupportedZones`, for the region and the account of
-/// the entity, on the route of the cloud of the engine.
+/// the entity, on the route of the cloud of the engine. A type with `null` has no such zone (#411).
 #[test]
 fn preflight_plan_makes_the_fault_of_instance_offering_from_the_instance_type_route() {
     let answer = r#"{"instanceTypes":[
         {"type":"t3.large","nonSupportedZones":[]},
+        {"type":"c5.large","nonSupportedZones":null},
         {"type":"t3.xlarge","nonSupportedZones":["us-east-2c","us-east-2d"]},
         {"type":"m5.large","nonSupportedZones":["us-east-2a"]}]}"#;
     for (engine, region, path) in [
@@ -1713,7 +1714,9 @@ fn preflight_plan_makes_the_fault_of_instance_offering_from_the_instance_type_ro
 }
 
 /// The check `instance-types-shape` of the plan tests the field `type`, as Palette names the type
-/// of an entry (#404). The answer of the live run passes it, and an entry with `name` fails it.
+/// of an entry (#404), and takes `nonSupportedZones` as an array or `null` (#411). The answer of
+/// the live run passes it. An entry with `name` and no `type` fails it, and so does a field of
+/// another type.
 #[test]
 fn preflight_plan_tests_the_shape_of_the_instance_type_route_by_type() {
     let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
@@ -1729,10 +1732,28 @@ fn preflight_plan_tests_the_shape_of_the_instance_type_route_by_type() {
             r#"{"instanceTypes":[{"category":"GPU instance","cpu":32,"memory":488,"price":7.2,"type":"p2.8xlarge","cost":{"price":[{"onDemand":7.2,"os":"linux"}]},"nonSupportedZones":["us-east-2a","us-east-2b","us-east-2c"],"supportedArchitectures":["x86_64"]}]}"#,
             Some(0),
         ),
+        // most types of Palette give null: each zone offers the type
+        (
+            r#"{"instanceTypes":[{"category":"General purpose","cpu":2,"memory":8,"price":0.0832,"type":"t3.large","cost":{"price":[{"onDemand":0.0832,"os":"linux"}]},"nonSupportedZones":null,"supportedArchitectures":["x86_64"]}]}"#,
+            Some(0),
+        ),
+        (
+            r#"{"instanceTypes":[{"type":"t3.large","nonSupportedZones":null},{"type":"p2.8xlarge","nonSupportedZones":["us-east-2a"]},{"type":"t3.xlarge","nonSupportedZones":[]}]}"#,
+            Some(0),
+        ),
         (
             r#"{"instanceTypes":[{"name":"p2.8xlarge","nonSupportedZones":[]}]}"#,
             Some(1),
         ),
+        (
+            r#"{"instanceTypes":[{"name":"t3.large","nonSupportedZones":null}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"instanceTypes":[{"type":"t3.large","nonSupportedZones":"us-east-2a"}]}"#,
+            Some(1),
+        ),
+        (r#"{"instanceTypes":[]}"#, Some(1)),
     ] {
         std::fs::write(dir.path().join("instancetypes.json"), answer).unwrap();
         let o = Command::new("jq")

@@ -212,9 +212,9 @@ makes no claim that depends on them.
   [The saved answers of Palette](../../commands/snapshot/no-network.md#the-saved-answers-of-palette).
 - **The zones that do not offer an instance type.** The instance type route of a
   region lists each type in `type`, with `nonSupportedZones`, the zones that do
-  not offer it. Palette fills the list for most types. `instance-offering` reads it, for
-  AWS, EKS, GCP, and GKE. A type that the list
-  does not mark can still fail in the cloud.
+  not offer it. The field is `null` for a type that each zone offers. Most types
+  give `null`. `instance-offering` reads it, for AWS, EKS, GCP, and GKE. A
+  type that the list does not mark can still fail in the cloud.
 - **The key pairs of an account.** `GET /v1/clouds/aws/regions/{region}/keypairs`
   lists `keyNames` of the account in the region. The property route of EKS
   checks the key pair with a `vpcId` alone, so an EKS cluster with a dynamic VPC

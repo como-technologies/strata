@@ -111,6 +111,14 @@ marks for `t3.xlarge`:
 {{#include ../../output/preflight-offering.txt}}
 ```
 
+Palette gives `null` in `nonSupportedZones` for a type that each zone offers.
+Most types give `null`. The rule reads `null` as no zone. Here the same pools use
+`t3.large`, and they pass in that zone:
+
+```text
+{{#include ../../output/preflight-offering-null.txt}}
+```
+
 `ssh-key-pair` fails when `sshKeyName` of the entity is not in the list of the
 account. The property route of EKS does not check a key pair for a cluster
 with a dynamic VPC. Here the entity names a key pair that the account lacks:

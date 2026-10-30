@@ -14,7 +14,8 @@
 #      FAIL on it, in seconds. The ledger gets `caught`, or `missed`. Three rules read a list of the
 #      cloud account from Palette (#143): instance-offering, ssh-key-pair on aws and eks, and
 #      gcp-properties on gcp. The fault of instance-offering is a type that the instance type route
-#      lists with a zone in nonSupportedZones, read from the route itself
+#      lists with a zone in nonSupportedZones (null for a type that each zone offers), read from the
+#      route itself
 #   3  the clean entity: every tier, and each rule of severity fail that ran must PASS. The ledger
 #      gets `passed`, or `false-fail`
 #   4  with --build only: the apply of cluster A through the provider, and strata preflight --watch
@@ -184,8 +185,8 @@ esac
 # the answer of the route; the faults then show that each rule reads it.
 echo "== 2b. the rules that read a list of the cloud account" | tee -a steps.log
 if edit=$(offering_edit 2> offering-edit.err); then
-  check instance-types-shape 0 "the instance type route lists the types of $region as instanceTypes[] with a type and nonSupportedZones" -- \
-    jq -e '(.instanceTypes | length) > 0 and all(.instanceTypes[]; has("type") and (.nonSupportedZones | type) == "array")' instancetypes.json
+  check instance-types-shape 0 "the instance type route lists the types of $region as instanceTypes[] with a type, and nonSupportedZones as an array or null" -- \
+    jq -e '(.instanceTypes | length) > 0 and all(.instanceTypes[]; has("type") and ((.nonSupportedZones | type) | . == "array" or . == "null"))' instancetypes.json
   fault instance-offering "$edit"
 else
   record instance-offering not-made "$(cat offering-edit.err)"
