@@ -44,3 +44,25 @@ cores for the packs. The console calls this route in its create wizard. A
 create through the provider or the API goes to the create route, so the same
 fault shows after a full apply. See
 [The validate routes](../../internals/palette/validate-routes.md).
+
+## A cluster as Palette holds it
+
+`strata preflight cluster:UID` turns the cluster into the body of a create.
+Each profile of that body holds the variables of the cluster: the `name` of each
+variable and the `value` that the cluster gives it. `--out` writes the body to
+`entity.json`:
+
+```text
+{{#include ../../output/preflight-cluster-variables.txt}}
+```
+
+The validate route reads these values. So `palette-validate` and
+`worker-cpu-floor` answer for the values of the cluster, and not for the default
+values of the profile. A rule over `.entity.spec.profiles[].variables` reads
+them too. See
+[The validate routes](../../internals/palette/validate-routes.md#the-variables-of-the-body).
+
+Palette masks the value of a sensitive variable in its answer. Strata sends the
+mask as Palette gives it, so the validate route gets a mask and not the secret.
+A change file merges over the variables by name. A variable of the file
+replaces the value of the variable with that name. A new name adds a variable.

@@ -159,7 +159,7 @@ as it was.
 | 1 | `strata preflight FILE --cloud aws` | static, `POST .../validate`, the property and account routes, `aws` |
 | 2 | `POST /v1/spectroclusters/aws` | the create route, with the same body |
 | 3 | `strata preflight cluster:UID --watch` | `GET` of the cluster, its summary, and its events, every 30 seconds |
-| 4 | `strata preflight cluster:UID [CHANGE]` | the cluster document and its cloud config, then every tier |
+| 4 | `strata preflight cluster:UID [CHANGE]` | the cluster document, its cloud config, and its variables, then every tier |
 | 5 | `DELETE /v1/spectroclusters/UID` | the delete route; the inventory of the cloud after |
 
 The same story, without a key or a tenant, is

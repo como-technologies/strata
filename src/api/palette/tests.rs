@@ -524,3 +524,36 @@ fn the_path_functions_give_the_route_that_the_read_sends() {
     assert_eq!(api.calls(&cluster_summary_path("u1")), 1);
     assert_eq!(api.calls(&subject_path(SubjectKind::Cluster, "u1")), 1);
 }
+
+#[test]
+fn the_variables_of_a_cluster_come_with_a_flag_for_a_missing_route() {
+    let entries = json!([{"profileUid": "p1", "variables": [{"name": "a", "value": "1"}]}]);
+    let api = MemoryApi::new()
+        .with("/v1/spectroclusters/c1", json!({"metadata": {"uid": "c1"}}))
+        .with("/v1/spectroclusters/c1/variables", entries.clone());
+    let (answer, missing) = Palette::new(&api)
+        .cluster_variables("c1", &Progress::silent())
+        .unwrap();
+    assert_eq!((answer, missing), (entries, false));
+    // an older Palette answers 404 or 405 for the route: no variable, and the flag
+    for status in [404, 405] {
+        let older = MemoryApi::new()
+            .with("/v1/spectroclusters/c1", json!({"metadata": {"uid": "c1"}}))
+            .failing("/v1/spectroclusters/c1/variables", status, "{}");
+        let (answer, missing) = Palette::new(&older)
+            .cluster_variables("c1", &Progress::silent())
+            .unwrap();
+        assert_eq!((answer, missing), (json!([]), true), "{status}");
+    }
+    // a cluster that Palette does not have is an error, and so is any other failure
+    let gone = MemoryApi::new();
+    let err = Palette::new(&gone)
+        .cluster_variables("c1", &Progress::silent())
+        .unwrap_err();
+    assert!(matches!(err, Error::Api { status: 404, .. }), "{err}");
+    let broken = MemoryApi::new().failing("/v1/spectroclusters/c1/variables", 500, "boom");
+    let err = Palette::new(&broken)
+        .cluster_variables("c1", &Progress::silent())
+        .unwrap_err();
+    assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
+}

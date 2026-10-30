@@ -107,7 +107,8 @@ wrong program, not a pass.
   "cloud":      "eks",                the engine
   "release":    "4.10" | null,        --release
   "source":     "cluster.json",       where the entity came from
-  "entity":     { metadata, spec },   the body of POST /v1/spectroclusters/{cloudType}
+  "entity":     { metadata, spec },   the body of POST /v1/spectroclusters/{cloudType}; for cluster:UID,
+                                      each profile holds the variables of the cluster
   "before":     { ... } | null,       the entity before a change
   "profiles":   [ record, ... ],      one strata record for each profile of the entity
   "packs":      { "<packUid>": ... }, GET /v1/packs/{uid} for each layer, when live
@@ -138,9 +139,9 @@ says no key. A fixture can say `_base` and hold only what differs:
 ```
 
 `_patch` merges as a change of a cluster merges: an object key by key, a pool
-by its name, a profile by its uid; another list replaces. `_delete` removes each
-JSON pointer. The test of the catalog runs every fixture, and refuses a fixture
-that no rule names.
+by its name, a profile by its uid, a variable by its name; another list
+replaces. `_delete` removes each JSON pointer. The test of the catalog runs
+every fixture, and refuses a fixture that no rule names.
 
 ## The ledger
 

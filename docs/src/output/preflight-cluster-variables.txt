@@ -1,0 +1,2 @@
+$ strata preflight cluster:64f1000000000000000000e1 --tier static --quiet --out cluster-world > /dev/null; jq -c '.spec.profiles[] | {uid, variables}' cluster-world/entity.json
+{"uid":"64e0000000000000000000c3","variables":[{"name":"platform_owner","value":"team-payments"}]}

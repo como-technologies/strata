@@ -54,6 +54,22 @@ palette-cli, and the SDK for cloud clusters do not. The create path of the API
 runs the checks of the name and the limits, not those of the packs and the
 machines.
 
+### The variables of the body
+
+The route reads `variables[]` of each profile of the body. Each variable must
+be a variable of the profile, and its value must pass the schema of the
+variable. Palette then puts each value into the values of the packs, for the
+checks of the cloud config. One such check compares the CIDRs of the Kubernetes
+pack with the CIDR of the VPC.
+
+A body with no `variables[]` gives the route no value to check. A value of a
+pack that reads `{{.spectro.var.NAME}}` then reaches the checks of the cloud
+config unresolved. `strata preflight cluster:UID` sends the name and the value
+of each variable of the cluster, so `palette-validate` answers for the cluster.
+Palette masks the value of a sensitive variable in its answer, and strata
+sends the mask.
+
+
 ## POST /v1/spectroclusters/{uid}/validate/packs
 
 This route checks a cluster before an update of its profiles. The body is a

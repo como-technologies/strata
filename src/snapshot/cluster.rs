@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::{SubjectKind, macro_placeholder};
-use crate::api::RawCluster;
+use crate::api::{RawCluster, profile_variables};
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canonical_json, sha256_hex};
 use crate::json::{arr, flag, str_at, text};
@@ -363,13 +363,9 @@ impl ClusterVariable {
     /// The values the cluster in `raw` gives the variables of `profiles`, in that order and then
     /// by name.
     pub(super) fn read(raw: &RawCluster, profiles: &[AppliedProfile]) -> Vec<ClusterVariable> {
-        let entries = arr(&raw.variables, "");
         let mut out = Vec::new();
         for p in profiles {
-            let mut of_profile: Vec<ClusterVariable> = entries
-                .iter()
-                .filter(|e| text(e, "/profileUid") == p.uid)
-                .flat_map(|e| arr(e, "/variables"))
+            let mut of_profile: Vec<ClusterVariable> = profile_variables(&raw.variables, &p.uid)
                 .map(|v| {
                     let sensitive = flag(v, "/isSensitive");
                     ClusterVariable {

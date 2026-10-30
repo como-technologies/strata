@@ -3181,8 +3181,17 @@ fn automation(r: &mut Runner) {
     );
     // once Running: the cluster as Palette holds it, a change of its worker pool before the
     // change is made, and one reading of the watch (the stand-in's cluster is Running, so the
-    // watch ends at once; a real build reads every 30 seconds until Running)
-    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
+    // watch ends at once; a real build reads every 30 seconds until Running). The cluster gives
+    // the variable of its profile a value, and the entity of the cluster carries it.
+    r.tenant(|t| {
+        t.cluster(
+            DEV,
+            PAYMENTS,
+            "payments",
+            &[A111],
+            &[("platform_owner", "team-payments")],
+        )
+    });
     r.write_file(
         "change.json",
         r#"{"spec": {"machinepoolconfig": [{"poolConfig": {"name": "worker-pool"}, "cloudConfig": {"instanceType": "m5.xlarge"}}]}}"#,
@@ -3192,6 +3201,15 @@ fn automation(r: &mut Runner) {
         0,
         false,
         &format!("strata preflight cluster:{PAYMENTS} --tier static,palette --quiet | tail -n 4"),
+    );
+    r.step(
+        "preflight-cluster-variables",
+        0,
+        false,
+        &format!(
+            "strata preflight cluster:{PAYMENTS} --tier static --quiet --out cluster-world > /dev/null; \
+             jq -c '.spec.profiles[] | {{uid, variables}}' cluster-world/entity.json"
+        ),
     );
     r.step(
         "preflight-change",
