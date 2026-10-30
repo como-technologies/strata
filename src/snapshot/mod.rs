@@ -11,7 +11,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::closed_set::{ClosedSet, Open};
+use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::hash::content_of;
 use crate::error::{Error, Result};
 use crate::json::str_at;
@@ -55,25 +55,13 @@ pub enum Template {
     Registry,
 }
 
-impl Template {
-    /// The template as the documents name it: `published`, `draft`, `applied`, `candidate`, or
-    /// `registry`.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Published => "published",
-            Self::Draft => "draft",
-            Self::Applied => "applied",
-            Self::Candidate => "candidate",
-            Self::Registry => "registry",
-        }
-    }
-}
-
-impl ClosedSet for Template {
-    fn as_str(self) -> &'static str {
-        Template::as_str(self)
-    }
-}
+impl_closed_set!(Template {
+    Published => "published",
+    Draft => "draft",
+    Applied => "applied",
+    Candidate => "candidate",
+    Registry => "registry",
+});
 
 impl fmt::Display for Template {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -154,21 +142,10 @@ pub enum Implementation {
     Bash,
 }
 
-impl Implementation {
-    /// The implementation as the documents name it: `rust` or `bash`.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::Rust => "rust",
-            Self::Bash => "bash",
-        }
-    }
-}
-
-impl ClosedSet for Implementation {
-    fn as_str(self) -> &'static str {
-        Implementation::as_str(self)
-    }
-}
+impl_closed_set!(Implementation {
+    Rust => "rust",
+    Bash => "bash",
+});
 
 impl Tool {
     /// This build of strata, as every document it writes records it.
@@ -390,22 +367,13 @@ impl SubjectKind {
             SubjectKind::ClusterGroup => "cluster group",
         }
     }
-
-    /// The kind as the documents name it: `cluster`, `edgeHost`, or `clusterGroup`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            SubjectKind::Cluster => "cluster",
-            SubjectKind::EdgeHost => "edgeHost",
-            SubjectKind::ClusterGroup => "clusterGroup",
-        }
-    }
 }
 
-impl ClosedSet for SubjectKind {
-    fn as_str(self) -> &'static str {
-        SubjectKind::as_str(self)
-    }
-}
+impl_closed_set!(SubjectKind {
+    Cluster => "cluster",
+    EdgeHost => "edgeHost",
+    ClusterGroup => "clusterGroup",
+});
 
 impl Open<SubjectKind> {
     /// True for a cluster. A kind that a later release wrote is not a cluster.
@@ -641,61 +609,8 @@ fn document_name(id: &str) -> Option<&str> {
 mod tests {
     use super::*;
 
-    /// `as_str` of each value equals its text in the documents, and the text reads back.
-    fn names_its_values<T>(values: &[T], as_str: fn(T) -> &'static str)
-    where
-        T: Copy + PartialEq + fmt::Debug + Serialize + serde::de::DeserializeOwned,
-    {
-        for v in values {
-            let text = Value::String(as_str(*v).to_string());
-            assert_eq!(serde_json::to_value(v).unwrap(), text);
-            assert_eq!(serde_json::from_value::<T>(text).unwrap(), *v);
-        }
-    }
-
     #[test]
-    fn each_closed_set_of_a_record_prints_as_the_documents_name_it() {
-        names_its_values(
-            &[
-                Template::Published,
-                Template::Draft,
-                Template::Applied,
-                Template::Candidate,
-                Template::Registry,
-            ],
-            Template::as_str,
-        );
-        names_its_values(
-            &[
-                UpstreamSource::PackRef,
-                UpstreamSource::PackSummary,
-                UpstreamSource::NoDigest,
-            ],
-            UpstreamSource::as_str,
-        );
-        names_its_values(
-            &[
-                Tier::Applied,
-                Tier::Labels,
-                Tier::Policy,
-                Tier::Running,
-                Tier::Shape,
-            ],
-            Tier::as_str,
-        );
-        names_its_values(
-            &[Implementation::Rust, Implementation::Bash],
-            Implementation::as_str,
-        );
-        names_its_values(
-            &[
-                SubjectKind::Cluster,
-                SubjectKind::EdgeHost,
-                SubjectKind::ClusterGroup,
-            ],
-            SubjectKind::as_str,
-        );
-        // the map of the tiers keeps the order of the names, as a map keyed by text did
+    fn the_map_of_the_tiers_keeps_the_order_of_their_names() {
         let tiers: BTreeMap<Tier, u8> = [
             (Tier::Shape, 0),
             (Tier::Running, 0),

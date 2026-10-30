@@ -1,6 +1,7 @@
 //! Library-level tests for the operations, with an in-memory Palette API.
 
 use crate::common;
+use strata::closed_set::ClosedSet;
 
 use std::fs;
 use std::path::Path;

@@ -14,7 +14,8 @@
 //! # The two parts
 //!
 //! [`ClosedSet`] is the trait of the enum. The enum has only unit variants, and serde writes
-//! each variant as text. [`ClosedSet::as_str`] gives the same text. [`Open`] uses `as_str` to
+//! each variant as text. [`ClosedSet::as_str`] gives the same text, and [`ClosedSet::ALL`] lists
+//! the values. The macro `impl_closed_set` writes both from one table. [`Open`] uses `as_str` to
 //! compare, sort, and show a value, with no call to serde.
 //!
 //! > **Make sure that `as_str` gives the text that serde writes.** If the two texts are different,
@@ -66,6 +67,12 @@
 //! The JSON Schema of an [`Open`] field is `anyOf` the schema of `T` and any text. So a validator
 //! accepts each value of the set, and also a value of a later release.
 //!
+//! # The legend
+//!
+//! The module `legend` holds the legend of a document: the meaning of each value of a set. It names
+//! each value with [`ClosedSet::as_str`] and lists the values with [`ClosedSet::ALL`]. So no other
+//! table names the values of a set.
+//!
 //! # Examples
 //!
 //! A later release adds the tier `network`, and writes this map of tiers. This release reads the
@@ -94,11 +101,46 @@ use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::{DeserializeOwned, IntoDeserializer};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+pub(crate) mod legend;
+
 /// A closed set of values that a document names by text: an enum of unit variants.
-pub trait ClosedSet: Copy + Serialize + DeserializeOwned + JsonSchema {
+///
+/// A set lists its values in [`ClosedSet::ALL`] and names each one with [`ClosedSet::as_str`].
+/// Implement both with the macro `impl_closed_set`, from one table of the values and their texts,
+/// so that no list of the values is written twice.
+pub trait ClosedSet: Copy + Serialize + DeserializeOwned + JsonSchema + 'static {
+    /// Each value of the set, in the order of the type.
+    const ALL: &'static [Self];
+
     /// The value as the documents name it: the text that serde writes for it.
     fn as_str(self) -> &'static str;
+
+    /// The value that the documents name `text`, or `None` for another text.
+    fn parse(text: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|v| v.as_str() == text)
+    }
 }
+
+/// Implement [`ClosedSet`] for an enum of unit variants, from the table of its values and their
+/// texts.
+///
+/// The table gives [`ClosedSet::ALL`] and [`ClosedSet::as_str`]. The `match` of `as_str` names each
+/// variant, so a variant that the table does not list is a compile error. `tests/closed_set.rs`
+/// makes sure that each text is the one that serde writes.
+macro_rules! impl_closed_set {
+    ($set:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
+        impl $crate::closed_set::ClosedSet for $set {
+            const ALL: &'static [Self] = &[$(Self::$variant),+];
+
+            fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $text),+
+                }
+            }
+        }
+    };
+}
+pub(crate) use impl_closed_set;
 
 /// A value of the closed set `T` in a document that strata writes and reads.
 ///
@@ -231,13 +273,21 @@ mod tests {
         DarkBlue,
     }
 
-    impl ClosedSet for Color {
-        fn as_str(self) -> &'static str {
-            match self {
-                Color::Red => "red",
-                Color::DarkBlue => "darkBlue",
-            }
+    impl_closed_set!(Color {
+        Red => "red",
+        DarkBlue => "darkBlue",
+    });
+
+    #[test]
+    fn a_set_lists_each_value_and_parses_the_text_of_each_one() {
+        assert_eq!(Color::ALL, [Color::Red, Color::DarkBlue]);
+        assert_eq!(Color::parse("darkBlue"), Some(Color::DarkBlue));
+        for color in Color::ALL {
+            assert_eq!(Color::parse(color.as_str()), Some(*color));
         }
+        // the text is the one of the documents, not the name of the variant
+        assert_eq!(Color::parse("DarkBlue"), None);
+        assert_eq!(Color::parse(""), None);
     }
 
     #[test]

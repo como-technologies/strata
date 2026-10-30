@@ -1,5 +1,6 @@
 //! The versions of a pack in the registries, and the record of one pack version.
 
+use crate::closed_set::ClosedSet;
 use std::path::PathBuf;
 
 use serde_json::{Map, Value};

@@ -5,8 +5,9 @@ use std::collections::{BTreeMap, HashMap};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::closed_set::impl_closed_set;
+use crate::closed_set::legend::{Described, legend};
 use crate::diff::{self, ChangeFlag, Diff, ImageIdChange, MaskedPack, PackDiff, Status};
-use crate::legend::{Described, legend};
 use crate::render::changes::{VALUES_UNPARSED, manifest_change};
 use crate::render::notes::no_upstream_digest;
 use crate::snapshot::{Pack, Snapshot, Tool};
@@ -26,9 +27,12 @@ pub enum Policy {
     RegistryMove,
 }
 
-impl Described for Policy {
-    const ALL: &'static [Self] = &[Self::Exact, Self::RegistryMove];
+impl_closed_set!(Policy {
+    Exact => "exact",
+    RegistryMove => "registry-move",
+});
 
+impl Described for Policy {
     fn describe(self) -> &'static str {
         match self {
             Self::Exact => "Only equal roots pass.",
@@ -64,15 +68,15 @@ impl PairStatus {
     }
 }
 
-impl Described for PairStatus {
-    const ALL: &'static [Self] = &[
-        Self::Identical,
-        Self::SameContent,
-        Self::RegistryMove,
-        Self::Different,
-        Self::UnknownUpstream,
-    ];
+impl_closed_set!(PairStatus {
+    Identical => "identical",
+    SameContent => "same-content",
+    RegistryMove => "registry-move",
+    Different => "different",
+    UnknownUpstream => "unknown-upstream",
+});
 
+impl Described for PairStatus {
     fn describe(self) -> &'static str {
         match self {
             Self::Identical => {

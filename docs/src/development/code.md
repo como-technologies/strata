@@ -50,6 +50,9 @@ where each module goes.
 - Make a value that can be wrong impossible to write. Use an enum for a closed
   set of values, not a `String` or a `&'static str`. Use a struct with named
   fields, not a tuple of four values.
+- Give each closed set its `ALL` and its `as_str` with `impl_closed_set!`, from one table.
+  Do not write a list of the values or a `match` of their texts by hand. The test
+  `tests/closed_set.rs` makes sure that each text is the one that serde writes.
 - Do not store a field that comes from another field. Calculate it with a
   method.
 - Palette documents stay `serde_json::Value`, read with the helpers of

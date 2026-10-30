@@ -5,6 +5,8 @@ use std::fmt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use crate::closed_set::{ClosedSet, impl_closed_set};
+
 /// How the conditions of a group join, as the search of Palette names it: `and` or `or`. A saved
 /// tag filter holds one, and each group of a search request gives one.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -17,24 +19,10 @@ pub enum Conjunction {
     Or,
 }
 
-impl Conjunction {
-    /// The conjunction as Palette names it: `and` or `or`.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::And => "and",
-            Self::Or => "or",
-        }
-    }
-
-    /// The conjunction that the text names, or `None` for another text.
-    pub(crate) fn parse(text: &str) -> Option<Self> {
-        match text {
-            "and" => Some(Self::And),
-            "or" => Some(Self::Or),
-            _ => None,
-        }
-    }
-}
+impl_closed_set!(Conjunction {
+    And => "and",
+    Or => "or",
+});
 
 impl fmt::Display for Conjunction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -48,14 +36,9 @@ mod tests {
 
     #[test]
     fn a_conjunction_parses_and_prints_as_palette_names_it() {
-        for conjunction in [Conjunction::And, Conjunction::Or] {
-            assert_eq!(Conjunction::parse(conjunction.as_str()), Some(conjunction));
-            let json = serde_json::to_value(conjunction).unwrap();
-            assert_eq!(json, conjunction.as_str());
-            assert_eq!(
-                serde_json::from_value::<Conjunction>(json).unwrap(),
-                conjunction
-            );
+        for conjunction in Conjunction::ALL {
+            assert_eq!(Conjunction::parse(conjunction.as_str()), Some(*conjunction));
+            assert_eq!(conjunction.to_string(), conjunction.as_str());
         }
         assert_eq!(Conjunction::parse("AND"), None);
         assert_eq!(Conjunction::parse(""), None);

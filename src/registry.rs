@@ -9,6 +9,7 @@
 //!
 //! The state that the listing gives a pack version, such as `deleted` or `disabled`, is here too.
 
+use crate::closed_set::ClosedSet;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 

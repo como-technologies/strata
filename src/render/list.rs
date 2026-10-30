@@ -3,6 +3,7 @@
 use super::notes::marks_invalid;
 use super::verify::record_label;
 use super::{count_of, dash, entry_error, joined_note};
+use crate::closed_set::ClosedSet;
 use crate::diff::invalid_packs;
 use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
 use crate::snapshot::Snapshot;

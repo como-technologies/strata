@@ -6,6 +6,7 @@
 //! problem in the words of the file. When a route of Palette answers a rule before the create,
 //! strata removes its check. The book lists each rule in "The gaps that strata fills".
 
+use crate::closed_set::ClosedSet;
 use std::path::Path;
 
 use super::{Candidate, CandidateLayer, LayerKind, MINTED_LAYER, loose_semver};

@@ -24,6 +24,7 @@ use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
 };
 use super::{Renderer, capitalized, count_of, dash, entry_error, short};
+use crate::closed_set::ClosedSet;
 use crate::diff::{Diff, Leaf, Op, Status};
 use crate::error::Result;
 use crate::ops::{

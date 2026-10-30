@@ -1,6 +1,7 @@
 //! The resolve of each layer: the pack that the registry gives, and the documents of a published
 //! profile.
 
+use crate::closed_set::ClosedSet;
 use serde_json::{Value, json};
 
 use super::pack::find_version;

@@ -4,9 +4,9 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::closed_set::ClosedSet;
+use crate::closed_set::impl_closed_set;
+use crate::closed_set::legend::Described;
 use crate::content::layer::Layer;
-use crate::legend::Described;
 
 /// Ordered by severity, so `max` picks the worst.
 #[derive(
@@ -31,16 +31,16 @@ pub enum ImpactLevel {
     Repave,
 }
 
-impl Described for ImpactLevel {
-    const ALL: &'static [Self] = &[
-        Self::None,
-        Self::Sync,
-        Self::InPlace,
-        Self::ClusterWide,
-        Self::MayRepave,
-        Self::Repave,
-    ];
+impl_closed_set!(ImpactLevel {
+    None => "none",
+    Sync => "sync",
+    InPlace => "in-place",
+    ClusterWide => "cluster-wide",
+    MayRepave => "may-repave",
+    Repave => "repave",
+});
 
+impl Described for ImpactLevel {
     fn describe(self) -> &'static str {
         match self {
             Self::None => {
@@ -58,26 +58,6 @@ impl Described for ImpactLevel {
                 "Nodes are replaced on a cluster of the kubeadm engine: OS image or Kubernetes version change. compare --repave asks Palette."
             }
         }
-    }
-}
-
-impl ImpactLevel {
-    /// The level as the documents and the reports name it: `in-place`, `may-repave`.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::Sync => "sync",
-            Self::InPlace => "in-place",
-            Self::ClusterWide => "cluster-wide",
-            Self::MayRepave => "may-repave",
-            Self::Repave => "repave",
-        }
-    }
-}
-
-impl ClosedSet for ImpactLevel {
-    fn as_str(self) -> &'static str {
-        ImpactLevel::as_str(self)
     }
 }
 
@@ -275,19 +255,13 @@ pub fn presence_impact(layer: &str, added: bool) -> Impact {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::closed_set::ClosedSet;
 
     #[test]
     fn the_text_of_an_impact_level_is_its_name_in_the_documents() {
-        for level in [
-            ImpactLevel::None,
-            ImpactLevel::Sync,
-            ImpactLevel::InPlace,
-            ImpactLevel::ClusterWide,
-            ImpactLevel::MayRepave,
-            ImpactLevel::Repave,
-        ] {
+        for level in ImpactLevel::ALL {
             assert_eq!(
-                serde_json::to_value(level).unwrap(),
+                serde_json::to_value(*level).unwrap(),
                 serde_json::Value::from(level.as_str()),
                 "{level:?}"
             );

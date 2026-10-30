@@ -6,6 +6,7 @@ use super::notes::{
 };
 use super::same_release::record_word;
 use super::{count_of, entry_error, registry_sync_suffix};
+use crate::closed_set::ClosedSet;
 use crate::diff::{Diff, ImpactLevel, Verify, VerifyStatus};
 use crate::ops::{
     ACTIVE_STATE, IN_USE_STATE, RUNNING_STATE, RecordStatus, VerifiedRecord, VerifySummary,
