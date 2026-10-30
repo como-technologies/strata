@@ -139,7 +139,7 @@ rules:
     status: source
     what: |
       An AWS cluster with IRSA needs an S3 bucket for its OIDC documents. The bootstrap stack of
-      Palette turns `S3Buckets` on with an empty name prefix. When the account cannot make the bucket
+      Palette enables the S3 bucket with an empty name prefix. When the account cannot make the bucket
       (a service control policy, a Block Public Access setting, or a name in use), CAPA fails the
       cluster. Palette has `POST /v1/clouds/aws/s3/validate`, and the create does not call it. That
       route lists the objects of a bucket with the credentials in its body, and makes no bucket.
@@ -155,7 +155,7 @@ rules:
       - kind: source
         note: lists the objects of the bucket; no cluster path calls it
       - kind: source
-        note: "`template.Spec.S3Buckets.Enable = true` with an empty name prefix, for IRSA on an IaaS cluster"
+        note: Palette enables the S3 bucket, with an empty name prefix, for IRSA on an IaaS cluster
 
   - id: eks-fargate-govcloud
     title: An EKS cluster in GovCloud has no Fargate profile
@@ -179,7 +179,7 @@ rules:
       text: Refuse a Fargate profile for an account of partition aws-us-gov in the validate route.
     evidence:
       - kind: source
-        note: "`disableEksFargate := account.GetPartition().IsGovCloud()`, then `template.Spec.EKS.Fargate.Disable = disableEksFargate`"
+        note: Palette disables Fargate in the bootstrap stack when the partition of the account is GovCloud
       - kind: doc
         ref: https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/govcloud-fargate.html
     tests:
@@ -217,7 +217,7 @@ rules:
       text: Run the region check in the validate route.
     evidence:
       - kind: source
-        note: IsValidRegion(CloudTypeAzure, location) on the create path alone; CloudRegionInvalid
+        note: the create checks the location against the regions of Azure and returns CloudRegionInvalid; the validate route does not
       - kind: source
         note: query cloudAccountUid and subscriptionId; the answer is regions[{name, displayName, zones}]
     tests:

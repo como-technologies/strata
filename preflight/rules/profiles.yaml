@@ -192,7 +192,7 @@ rules:
       - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}\" | jq '.status.inUseClusters'"
     evidence:
       - kind: source
-        note: validateInUseClustersForClusterProfileVariables runs before the update
+        note: Palette tests the clusters that use the profile version before it updates the variables
       - kind: doc
         ref: https://docs.spectrocloud.com/profiles/cluster-profiles/create-cluster-profiles/define-profile-variables/modify-cluster-profile-variables/
     tests:

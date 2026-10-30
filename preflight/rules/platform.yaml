@@ -56,8 +56,8 @@ rules:
     severity: fail
     status: seen
     what: |
-      GCP refuses the build, and the status of the cluster shows no error: `ReconcileManagedControlPlaneStatus`
-      of the GCP provider returns nothing, so `ControlPlaneNodeAdditionDone` is `True`. The
+      GCP refuses the build, and the status of the cluster shows no error: the GCP provider
+      reports nothing to the status, so `ControlPlaneNodeAdditionDone` is `True`. The
       refusal is in the events alone, as `GCPManagedControlPlaneReconcile` with the message of GCP,
       or `ReconcileError`. A stop of CAPG after a pool change, "machinePoolList length (1) !=
       managedMachinePoolList length (2)", comes in the same event and shows in no condition.
@@ -370,7 +370,7 @@ rules:
     what: |
       Palette gives a delete to the pilot only while `DeProvisionDone` is absent. After that, the
       agent in the cluster runs the delete. Palette moves a delete to the cleanup cluster only
-      when it cannot reach the target cluster for `ForcePivotWaitDuration`, 10 minutes. A
+      when it cannot reach the target cluster for 10 minutes. A
       deleting cluster with a live agent that makes no progress stays where it is; no step of the
       source moves it. In one run a second delete request moved it, by a path that is not in the
       source. No check before a build finds it; the watch sees the state.
@@ -420,7 +420,7 @@ rules:
       text: Show the PCG state next to the cloud account in the console, and in the validate route of MAAS.
     evidence:
       - kind: source
-        note: "!ol.IsSystem() && ol.Status.State != domain.ClusterRunning"
+        note: Palette refuses a PCG that is not Running, unless the PCG is a system gateway
       - kind: source
         note: OverlordClusterNotReady and OverlordClusterUnHealthyState in the vSphere validate route
       - kind: source

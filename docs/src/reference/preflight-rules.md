@@ -58,7 +58,7 @@ rules:
 | `check` | see below | The check. A rule with none is a row: `NOT CHECKED` with its `reproduce` lines. |
 | `fix` | `owner`, `text` | The fix for good: `palette`, `provider`, `lab`, `strata`, `operator`, or `none`. |
 | `reproduce` | commands | What a person runs to see the same thing. `{{ jq }}` templates over the world are filled in the report. |
-| `evidence` | `kind`, `ref`, `note` | `run` (an issue or a run id), `source` (the source of Palette shows it), `doc` (a page), `report` (a findings report and its finding). A `source` entry has a `note` that states what Palette does. It names no file of the Palette code: its `ref` is empty, or a file of this repository. |
+| `evidence` | `kind`, `ref`, `note` | `run`: an issue or a run id. `source`: the source or the documentation of Palette shows it. `doc`: a page. `report`: a findings report and its finding. A `source` entry has a `note` that states what Palette does. It quotes no code of Palette, and names no file, function, or commit of it. Its `ref` is empty, or a file of this repository. |
 | `promotion` | `bar`, `runs` | For a preflight check: the bar its bounds met, `0.8`, and the run ids of the promotion. |
 | `tests` | `fault`, `clean` | Fixtures the test of the catalog runs the check on: the fault must fail, the clean must pass. |
 

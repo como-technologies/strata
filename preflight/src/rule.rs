@@ -252,8 +252,9 @@ pub struct Fix {
 
 /// One piece of evidence: a live run, the source of Palette, a public page, or a findings report.
 ///
-/// An entry of the kind `source` names no file of the Palette code (rule 7 of the book). Its
-/// note states what Palette does, and its reference is empty, or a file of this repository.
+/// An entry of the kind `source` quotes no code of Palette, and names no file, function, or
+/// commit of it (rule 7 of the book). Its note states what Palette does, and its reference is
+/// empty, or a file of this repository.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Evidence {
     /// `run`, `source`, `doc`, or `report`.

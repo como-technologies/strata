@@ -153,7 +153,7 @@ rules:
         ref: preflight-plan aws 20260929T041905Z, eks 20260929T042910Z
         note: with no --resource-arns, iam:PassRole and the EKS actions gave implicitDeny on roles that build clusters; the EC2, load balancer, and CloudFormation actions gave allowed
       - kind: source
-        note: the account validate assumes the role and calls DescribeRegions; ValidateArns calls GetPolicy on each policy ARN
+        note: the account validate of Palette assumes the role and calls DescribeRegions; it calls GetPolicy on each policy ARN
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/required-iam-policies/
     tests:
@@ -366,9 +366,9 @@ rules:
       makes no CloudFormation stack. It expects the CAPA roles and instance profiles to exist:
       `control-plane.`, `controllers.`, and `nodes.cluster-api-provider-aws.sigs.k8s.io`, with the
       `namePrefix` of the account in front. A missing role or instance profile fails the instance
-      launch. Palette has this probe (`validateBootstrapStackHealth`) for a stack it manages, and
-      does not run it in manual mode. The check lists the instance profiles; each of the three must
-      exist and hold a role.
+      launch. Palette tests the roles and the instance profiles of a stack that it manages, and
+      does not run this test in manual mode. The check lists the instance profiles; each of the
+      three must exist and hold a role.
     check:
       kind: exec
       needs: [aws]
@@ -393,10 +393,10 @@ rules:
       - "aws iam get-role --role-name {{ (.account.spec.namePrefix // \"\") }}eks-nodegroup.cluster-api-provider-aws.sigs.k8s.io --query Role.Arn --output text"
     fix:
       owner: palette
-      text: Run validateBootstrapStackHealth in the validate route, in manual mode too.
+      text: Test the roles and the instance profiles in the validate route, in manual mode too.
     evidence:
       - kind: source
-        note: GetRole on five roles and GetInstanceProfile on three profiles, each with the NamePrefix of the account; SetUpCloud returns before it when the stack is managed by hand
+        note: Palette calls GetRole on five roles and GetInstanceProfile on three profiles, with the name prefix of the account. It makes no call for a stack that a person manages by hand
       - kind: source
         note: Palette reads from the cloud account if the user manages the CloudFormation stack by hand
       - kind: doc
@@ -796,7 +796,7 @@ rules:
       text: The check exists in the properties route; strata-preflight calls it.
     evidence:
       - kind: source
-        note: FeatureNotSupported("Pod Identity for AWS infrastructure clusters") when the account is Pod Identity
+        note: Palette returns FeatureNotSupported, with the message "Pod Identity for AWS infrastructure clusters", when the account is Pod Identity
     tests:
       - fault: fixtures/aws/pod-identity-iaas.json
         clean: fixtures/aws/identity-clean.json
@@ -1029,8 +1029,8 @@ rules:
       a new role or a new key in some seconds, and the #89 lab waits 30 s after the role create.
       The check reads `metadata.creationTimestamp` of the account and warns under 2 minutes. The
       2 minutes are a reading, not a measurement. Palette never sets `status.state` of a cloud
-      account; the field is normally empty, so the check reads it only when it has a value that is
-      not `Active`. No run of these engines shows the fault.
+      account, and the field is normally empty. So the check reads it only when it has a value
+      that is not `Active`. No run of these engines shows the fault.
     check:
       kind: static
       expr: |
@@ -1049,7 +1049,7 @@ rules:
         ref: "#89"
         note: the lab waits 30 s after the IAM role create before Palette assumes it
       - kind: source
-        note: status.state passes through from the document; Palette sets no value for it
+        note: Palette copies status.state from the document, and sets no value for it
       - kind: source
         note: creationTimestamp is RFC3339 in UTC
     tests:
@@ -1064,7 +1064,7 @@ rules:
     severity: fail
     status: source
     what: |
-      Palette parses each entry of `cloudConfig.sshKeys` with `ssh.ParseAuthorizedKey`. An entry
+      Palette parses each entry of `cloudConfig.sshKeys` as an authorized key. An entry
       without the type word, or with a blob that is not base64, is refused with
       `SshKeyValidationFailure`. The vSphere and Edge validate routes run the check; the MAAS create
       runs it. The static check reads the same format: a type, a blob, and an optional comment. An
@@ -1080,9 +1080,9 @@ rules:
       text: The check exists in Palette; strata-preflight runs it before the request.
     evidence:
       - kind: source
-        note: ssh.ParseAuthorizedKey on each key; a failure is SshKeyValidationFailure
+        note: Palette parses each key as an authorized key; a failure is SshKeyValidationFailure
       - kind: source
-        note: ValidateSshs runs in the validate route and in the create
+        note: Palette checks the keys in the validate route and in the create
     tests:
       - fault: fixtures/vsphere/ssh-key-bad.json
         clean: fixtures/vsphere/clean.json
@@ -1111,7 +1111,7 @@ rules:
       text: Refuse the key type in the AKS validate route.
     evidence:
       - kind: source
-        note: validator.ShouldNotBeEmpty("cloudConfig.sshKey", s.CloudConfig.SSHKey)
+        note: Palette refuses an empty cloudConfig.sshKey at the create
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/aks/
         note: only RSA and ED25519 SSH keys are supported for AKS
@@ -1239,7 +1239,7 @@ rules:
         ref: https://docs.spectrocloud.com/clusters/pcg/deploy-pcg/maas/
         note: "MAAS Server URL, example http://10.1.1.1:5240/MAAS"
       - kind: source
-        note: net.ValidateEndpoint on the endpoint, then a credentials check through the PCG
+        note: Palette checks the endpoint, then checks the credentials through the PCG
     tests:
       - fault: fixtures/maas/endpoint-bad.json
         clean: fixtures/maas/clean.json
@@ -1252,7 +1252,7 @@ rules:
     status: source
     when: .account != null
     what: |
-      `ValidateVsphereAccount` refuses a `vcenterServer` that starts with `http` or `https`: "Vcenter
+      Palette refuses a `vcenterServer` that starts with `http` or `https`: "Vcenter
       server name should not start with http or https". The account converter refuses a value
       that is not a server endpoint. The account validate route, `POST /v1/clouds/vsphere/account/validate`,
       needs the password, and the world holds it redacted, so strata-preflight cannot call it. The
@@ -1271,7 +1271,7 @@ rules:
       - kind: source
         note: refuses a server that starts with http or https, then opens a session
       - kind: source
-        note: ShouldNotBeNil("VcenterServer") and ValidServerEndpoint
+        note: Palette refuses an empty vcenterServer, and a value that is not a server endpoint
     tests:
       - fault: fixtures/vsphere/vcenter-https.json
         clean: fixtures/vsphere/clean.json

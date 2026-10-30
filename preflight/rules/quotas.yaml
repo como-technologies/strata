@@ -261,7 +261,7 @@ rules:
       - kind: run
         ref: teardown lab
       - kind: source
-        note: "`ShouldBeEqOrGreaterThan(\"cpu limit (cores)\", 3, cpu)`, and the memory limit between 3 and 100000 GiB"
+        note: Palette refuses a CPU limit under 3 cores, and a memory limit under 3 GiB or over 100000 GiB
 
   - id: azure-vcpu-quota
     title: The regional vCPU quota covers the pools
