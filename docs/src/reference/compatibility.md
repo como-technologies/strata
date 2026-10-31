@@ -92,8 +92,8 @@ absent means unknown: `source.consumers`, `rootLive`, `maxImpact`,
 `old`, or `new` of a sensitive variable. `updatesPending` joined
 `source.cluster` in 0.10.0, and `strata-list/1` in the same release: absent
 means that strata could not read the notifications, and
-`errors.updatesPending` says why. `repavePending` joined `source.cluster` after
-0.17.0: absent means a record of an older release, or of an object that is not
+`errors.updatesPending` says why. `repavePending` joined `source.cluster` in
+0.18.0: absent means a record of an older release, or of an object that is not
 a cluster. In 0.7.0
 `source.consumers` became absent on a record that no consumers request
 produced, where 0.6.3 wrote `count: 0` and stated a count that nothing counted.
@@ -102,7 +102,7 @@ names each field that changed this way, with the release that changed it. The
 id stays, because the root does not cover these fields and every record of the
 id still compares.
 
-One root changed after 0.17.0 with no new id. A record of an app profile now
+One root changed in 0.18.0 with no new id. A record of an app profile now
 holds the install order of each tier, and lists the tiers in that order. See
 [Edge hosts, cluster groups, and app profiles](../commands/snapshot/other-objects.md).
 So when the tiers of an app profile have an install order, its root differs
@@ -115,6 +115,33 @@ whose id names another document, or no document, is not a snapshot. The report
 that `behind --since` reads follows the same rule. The JSON Schema of each
 document holds its id as a `const`. So a validator that reads
 `strata schema <kind>` refuses a document of another id too.
+
+### The fields of release 0.18.0
+
+Release 0.18.0 added the fields below to the records, and kept the id
+`strata-snapshot/1`. The root covers none of them, except the two params of an
+app tier. A field of a tier is a key of `fields` in that tier, in
+`source.cluster.tiers`. For each field, absent or null means an older record,
+or a part that strata could not read. The table tells which. `repavePending` is
+in the list of eight fields above.
+
+| Field | What absent or null means |
+| --- | --- |
+| `pendingRepave` | No repave waits. When `repavePending` is `true`, strata could not read the repave, and `errors.pendingRepave` says why. |
+| `rbacs` and `namespaces` of `policy` | `null`: strata did not read the route. Palette answered HTTP 404 or 405, or `--from-raw` read a directory that an older version saved. Absent: Palette answered another error, and `errors` of the tier names the field. A record of strata 0.19 holds `null` in that case. |
+| `resources` and `rbac` of `policy` | A record of 0.18.0 or later. Only a record of 0.17.0 or before holds them, in place of `rbacs` and `namespaces`. |
+| `updateWorkerPoolsInParallel`, `controlPlaneHealthCheckTimeout`, `clusterMetaAttribute`, and `applySetting` of `policy` | A record of 0.17.0 or before. A newer record holds all four. When Palette gives no value, the value is `false` or empty text. |
+| `agentUpgrades` of `policy` | A record of 0.17.0 or before, or of 0.19.0 or later. Only 0.18.0 wrote it, as `allowed` or `paused`. From 0.19.0, `spectroComponentsUpgradeForbidden` replaces it, only when the cluster has the annotation. |
+| `cloudType` of `shape` | A record of 0.17.0 or before. |
+| `policy` of a cluster group | A record of 0.17.0 or before. The group had no `policy` tier. |
+| `invalid` and `invalidReason` of a pack | Palette does not mark the pack invalid. A record of 0.17.0 or before cannot say. |
+| `masked` of a pack | No value of the pack holds the mask. Strata finds `masked` in the values when it reads a record of 0.17.0 or before. |
+| `installOrder` and `containerRegistryUid` in the `params` of an app tier | Palette gives the tier none. A record of 0.17.0 or before holds neither, so a tier with an install order has another root. |
+
+`compare` and `verify` read an older record on the fields that it holds, and a
+record without a tier still verifies. See
+[The policy tier](../commands/snapshot/cluster.md#the-policy-tier) and
+[The shape on each cloud](../commands/snapshot/cluster.md#the-shape-on-each-cloud).
 
 ### A value that strata does not know
 

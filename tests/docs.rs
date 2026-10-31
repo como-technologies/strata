@@ -47,7 +47,7 @@ fn linked(text: &str, prefix: &str) -> Vec<String> {
 fn section<'a>(text: &'a str, from: &str, to: Option<&str>) -> &'a str {
     let start = text
         .find(from)
-        .unwrap_or_else(|| panic!("the index has no {from:?} heading"));
+        .unwrap_or_else(|| panic!("the page has no {from:?} heading"));
     let rest = &text[start..];
     match to.and_then(|t| rest.find(t)) {
         Some(end) => &rest[..end],
@@ -219,4 +219,57 @@ fn the_code_table_of_each_validate_route_in_the_book_holds_the_codes_of_the_rout
             "{route:?}: the table in errors.md and ValidateRoute::refusal_codes differ"
         );
     }
+}
+
+/// The fields that release 0.18.0 added to a record, with no new schema id. A reader of an older
+/// record must know the release, and what a field that is absent or null means.
+const RELEASE_0_18_0_FIELDS: &[&str] = &[
+    "pendingRepave",
+    "rbacs",
+    "namespaces",
+    "resources",
+    "rbac",
+    "updateWorkerPoolsInParallel",
+    "controlPlaneHealthCheckTimeout",
+    "clusterMetaAttribute",
+    "applySetting",
+    "agentUpgrades",
+    "cloudType",
+    "invalid",
+    "invalidReason",
+    "masked",
+    "installOrder",
+    "containerRegistryUid",
+];
+
+/// The page of the compatibility rules named the release of Wave 4 as "after 0.17.0", and it left
+/// most of the fields of that wave out. A reader who holds an older record cannot tell a field
+/// that Palette did not give from a field that the release did not write.
+#[test]
+fn compatibility_names_release_0_18_0_and_what_each_absent_field_of_wave_4_means() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let table = section(&page, "### The fields of release 0.18.0", Some("\n### "));
+    let rows: Vec<&str> = table.lines().filter(|l| l.starts_with('|')).collect();
+    for field in RELEASE_0_18_0_FIELDS {
+        let name = format!("`{field}`");
+        assert!(
+            rows.iter().any(|row| row.contains(&name)),
+            "the table of release 0.18.0 in compatibility.md has no row for {name}"
+        );
+    }
+
+    // a line break can fall inside a sentence
+    let flat = page.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        flat.contains("`repavePending` joined `source.cluster` in 0.18.0"),
+        "compatibility.md does not name the release that added repavePending"
+    );
+    assert!(
+        flat.contains("One root changed in 0.18.0"),
+        "compatibility.md does not name the release that changed the root of an app profile"
+    );
+    assert!(
+        !flat.contains("after 0.17.0"),
+        "compatibility.md names the release before 0.18.0 in place of 0.18.0"
+    );
 }
