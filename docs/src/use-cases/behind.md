@@ -63,6 +63,13 @@ of Palette:
 {{#include ../output/behind-refused-json.txt}}
 ```
 
+The record of the cluster `payments` pins the same pack. `behind` gives it the
+same bump, and it asks the route of the cluster:
+
+```text
+{{#include ../output/behind-cluster.txt}}
+```
+
 `--no-impact` skips the question, as it skips the comparison:
 
 ```text

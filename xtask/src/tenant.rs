@@ -389,6 +389,24 @@ fn pack_result(pack: &str, code: &str, message: &str) -> Value {
     })
 }
 
+/// The entries of `packs.results` for a move that the pack `pack` does not allow on `clusters`:
+/// one error, `DependencyPackUpgradeNotSupported`. Empty when there is no refusal.
+fn upgrade_results(refusal: Option<(&str, &[&str])>) -> Vec<Value> {
+    refusal
+        .map(|(pack, clusters)| {
+            pack_result(
+                pack,
+                "DependencyPackUpgradeNotSupported",
+                &format!(
+                    "Pack '{pack}' cannot move to this version on the clusters: {}",
+                    clusters.join(", ")
+                ),
+            )
+        })
+        .into_iter()
+        .collect()
+}
+
 fn packs_mut(doc: &mut Value) -> impl Iterator<Item = &mut Value> {
     doc["spec"]["published"]["packs"]
         .as_array_mut()
@@ -1935,20 +1953,29 @@ impl Tenant {
         profile: &str,
         refusal: Option<(&str, &[&str])>,
     ) {
-        let results: Vec<Value> = refusal
-            .map(|(pack, clusters)| {
-                pack_result(
-                    pack,
-                    "DependencyPackUpgradeNotSupported",
-                    &format!(
-                        "Pack '{pack}' cannot move to this version on the clusters: {}",
-                        clusters.join(", ")
-                    ),
-                )
-            })
+        self.write_profile_packs(project, Some(profile), upgrade_results(refusal));
+    }
+
+    /// The answer of `POST /v1/spectroclusters/{uid}/validate/packs` for a move that a pack does
+    /// not allow on `clusters`, which include `cluster`. Palette gives the profile `profile` of the
+    /// cluster, with `DependencyPackUpgradeNotSupported` under `packs.results`, and names the
+    /// clusters in the message. With no refusal, Palette gives no profile. The text of the message
+    /// is the stand-in's. The stand-in gives one answer for every request.
+    pub fn cluster_upgrade_answer(
+        &self,
+        project: &str,
+        (cluster, profile): (&str, &str),
+        refusal: Option<(&str, &[&str])>,
+    ) {
+        let profiles: Vec<Value> = refusal
+            .map(|r| json!({"uid": profile, "packs": {"results": upgrade_results(Some(r))}}))
             .into_iter()
             .collect();
-        self.write_profile_packs(project, Some(profile), results);
+        self.write(
+            project,
+            &format!("{}/validate/packs", cluster_route(cluster)),
+            &json!({ "profiles": profiles }),
+        );
     }
 
     /// Write the answer of the packs route of a profile with `results` under `packs`.
@@ -2588,6 +2615,18 @@ mod tests {
         assert_eq!(pack["type"], "oci");
         assert_eq!(pack["registryUid"], PALETTE_REGISTRY);
         assert_eq!(pack["packUid"], OCI_CSI_PACK);
+    }
+
+    #[test]
+    fn the_upgrade_refusal_names_the_pack_and_the_clusters_in_the_message() {
+        let results = upgrade_results(Some(("csi-aws-ebs", &["payments", "billing"])));
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0]["name"], "csi-aws-ebs");
+        let error = &results[0]["errors"][0];
+        assert_eq!(error["code"], "DependencyPackUpgradeNotSupported");
+        let message = error["message"].as_str().unwrap();
+        assert!(message.ends_with("payments, billing"), "{message}");
+        assert!(upgrade_results(None).is_empty());
     }
 
     /// The edits compose in order, as the chapter that writes `OCI_CSI | RETAIN` needs.
