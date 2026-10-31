@@ -1103,7 +1103,7 @@ fn release_sh_expects_the_release_with_no_key_and_a_refusal_with_the_key() {
     std::fs::remove_file(stage.path("routes/v1_mgmt_app_version.keyed.status")).unwrap();
     let (o, steps) = stage.run("release.sh", &[]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
-    assert!(check_failed(&steps, "release-with-key"), "{steps}");
+    failed(&steps, &["release-with-key"]);
 
     // Palette refuses a call with no key: the run fails on the release
     let stage = Stage::new(baseline_outputs());
@@ -1111,7 +1111,7 @@ fn release_sh_expects_the_release_with_no_key_and_a_refusal_with_the_key() {
     std::fs::write(stage.path("routes/v1_mgmt_app_version.status"), "500").unwrap();
     let (o, steps) = stage.run("release.sh", &[]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
-    assert!(check_failed(&steps, "release-no-key"), "{steps}");
+    failed(&steps, &["release-no-key"]);
 
     let o = stage.run("release.sh", &["--help"]).0;
     assert_eq!(o.status.code(), Some(2));
@@ -2443,30 +2443,35 @@ fi
     }
 }
 
+/// True when `steps` has a line of the check `id` that starts with `verdict`: `PASS` or `FAIL`.
+fn has_verdict(steps: &str, verdict: &str, id: &str) -> bool {
+    steps
+        .lines()
+        .any(|l| l.starts_with(verdict) && l.split_whitespace().nth(1) == Some(id))
+}
+
 /// Each check of `ids` passed.
 fn passed(steps: &str, ids: &[&str]) {
     for id in ids {
-        assert!(
-            steps
-                .lines()
-                .any(|l| l.starts_with("PASS") && l.split_whitespace().nth(1) == Some(*id)),
-            "{id} passed:\n{steps}"
-        );
+        assert!(has_verdict(steps, "PASS", id), "{id} passed:\n{steps}");
     }
-}
-
-/// True when the check `id` failed: its line in `steps` starts with `FAIL`.
-fn check_failed(steps: &str, id: &str) -> bool {
-    steps
-        .lines()
-        .any(|l| l.starts_with("FAIL") && l.split_whitespace().nth(1) == Some(id))
 }
 
 /// Each check of `ids` failed.
 fn failed(steps: &str, ids: &[&str]) {
     for id in ids {
-        assert!(check_failed(steps, id), "{id} failed:\n{steps}");
+        assert!(has_verdict(steps, "FAIL", id), "{id} failed:\n{steps}");
     }
+}
+
+#[test]
+fn a_verdict_line_matches_its_verdict_and_the_whole_id_of_the_check() {
+    let steps = "PASS  a-b      expected 0, got 0\nFAIL  a        expected 0, got 1\n";
+    assert!(has_verdict(steps, "PASS", "a-b"));
+    assert!(has_verdict(steps, "FAIL", "a"));
+    assert!(!has_verdict(steps, "PASS", "a"));
+    assert!(!has_verdict(steps, "FAIL", "a-b"));
+    assert!(!has_verdict(steps, "FAIL", "a-"));
 }
 
 /// The outputs of the live example at its baseline, with cluster A `c-a` named fred.
@@ -2537,7 +2542,7 @@ fn packs_sh_stage_5_finds_no_annotation_of_the_os_pack_in_a_record_and_each_one_
         ),
     );
     let (_, steps) = stage.run("packs.sh", &[]);
-    assert!(check_failed(&steps, "os-annotations"), "{steps}");
+    failed(&steps, &["os-annotations"]);
 }
 
 #[test]
@@ -2629,14 +2634,9 @@ fn tiers_sh_stage_5_reads_a_404_of_the_bindings_as_a_cluster_with_none() {
             "subjects":[{"name":"barney@example.com","type":"User"}],"type":"ClusterRoleBinding"}]}}}}}}"#,
     );
     let (_, steps) = stage.run("tiers.sh", &["5"]);
-    assert!(
-        steps.contains("PASS  rbac-before") && steps.contains("PASS  rbac-after "),
-        "{steps}"
-    );
-    assert!(
-        steps.contains("FAIL  rbac-add"),
-        "no route answers the PUT here: {steps}"
-    );
+    passed(&steps, &["rbac-before", "rbac-after"]);
+    // no route answers the PUT here
+    failed(&steps, &["rbac-add"]);
 }
 
 /// A `strata` for tiers.sh stage 6. It writes a record that says which key it read with: the
@@ -2902,10 +2902,8 @@ fn cluster_group_sh_stage_1_lists_the_virtual_cluster_and_resolves_its_name() {
     );
     let (_, steps) = stage.run("cluster-group.sh", &["1"]);
     passed(&steps, &["member-listed"]);
-    assert!(
-        steps.contains("FAIL  member-listed-group"),
-        "the check sees a list with no virtual cluster: {steps}"
-    );
+    // the check sees a list with no virtual cluster
+    failed(&steps, &["member-listed-group"]);
 }
 
 #[test]
@@ -2949,10 +2947,8 @@ fn cluster_group_sh_stage_3_changes_the_cpu_limit_of_the_group_and_puts_it_back(
             "limit-compare-tier",
         ],
     );
-    assert!(
-        steps.contains("FAIL  limit-undone"),
-        "the stand-in still gives a changed tier after the undo, and the check sees it: {steps}"
-    );
+    // the stand-in still gives a changed tier after the undo, and the check sees it
+    failed(&steps, &["limit-undone"]);
     let applies: Vec<String> = stage
         .tofu_calls()
         .lines()
@@ -3246,8 +3242,8 @@ fn packs_sh_counts_the_versions_of_all_registries_against_the_100_of_one_page() 
         97,
         "kubernetes in Public Repo (97 versions)\n  1.36.2  1.36.x\n",
     );
-    assert!(steps.contains("FAIL  packs-paged-listing"), "{steps}");
-    assert!(steps.contains("FAIL  packs-paged-count"), "{steps}");
+    failed(&steps, &["packs-paged-listing"]);
+    failed(&steps, &["packs-paged-count"]);
 }
 
 /// A run of packs.sh whose Helm summary listing gives the Bitnami registry the sync `sync`, and
@@ -3323,7 +3319,7 @@ fn packs_sh_stage_8_checks_the_sync_note_of_a_pin_that_is_current_against_an_old
         "1 pin from 1 record: 0 behind\n  [addon] nginx  25.1.5  Bitnami  current\n",
         r#"{"pins":[{}]}"#,
     );
-    assert!(steps.contains("FAIL  stale-note"), "{steps}");
+    failed(&steps, &["stale-note"]);
 }
 
 #[test]
@@ -3994,7 +3990,7 @@ fn draft_sh_creates_a_version_with_no_publish_lists_it_as_a_draft_and_deletes_it
 fn draft_sh_fails_the_check_when_list_says_that_the_copy_is_published() {
     let stage = unpublished_stage(true);
     let (o, steps) = stage.run("draft.sh", &[]);
-    assert!(steps.contains("FAIL  unpublished-listed"), "{steps}");
+    failed(&steps, &["unpublished-listed"]);
     assert_ne!(o.status.code(), Some(0));
 }
 
@@ -4130,7 +4126,7 @@ fn scope_sh_makes_a_tenant_profile_with_no_project_and_checks_each_answer_about_
 fn scope_sh_fails_the_annotation_check_when_the_document_of_the_copy_says_project() {
     let stage = scope_stage("project");
     let (o, steps) = stage.run("scope.sh", &[]);
-    assert!(steps.contains("FAIL  annotation-tenant"), "{steps}");
+    failed(&steps, &["annotation-tenant"]);
     assert_ne!(o.status.code(), Some(0));
     let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap();
     assert!(
@@ -4185,8 +4181,8 @@ fn packs_sh_stage_7_says_that_the_move_to_the_newer_version_drops_arm64() {
         r#"{"pins":[{"version":"2.10.2","newer":[{"version":"3.6.7"}]}]}"#,
     );
     passed(&steps, &["arch-listing", "arch-record", "arch-behind"]);
-    assert!(steps.contains("FAIL  arch-behind-says"), "{steps}");
-    assert!(steps.contains("FAIL  arch-behind-json"), "{steps}");
+    failed(&steps, &["arch-behind-says"]);
+    failed(&steps, &["arch-behind-json"]);
 }
 
 /// A run of `registry-kinds.sh` against the stand-ins. The tools of the registries do nothing.
@@ -4238,11 +4234,11 @@ fn registry_kinds_sh_checks_that_packs_says_no_digest_on_the_row_and_in_the_head
     let (_, steps) = registry_kinds(&format!(
         "strata-live-zarf in strata-live-oci (1 version)\n{row}"
     ));
-    assert!(check_failed(&steps, "packs-zarf-says"), "{steps}");
+    failed(&steps, &["packs-zarf-says"]);
     let (_, steps) = registry_kinds(
         "strata-live-zarf in strata-live-oci (1 version, no digests)\n  1.0.0  pk-z  oci  all  1.0.0\n",
     );
-    assert!(check_failed(&steps, "packs-zarf-says"), "{steps}");
+    failed(&steps, &["packs-zarf-says"]);
 }
 
 /// The hook of the fake name route. It gives HTTP 500 and `VersionParseFailure` for the version
@@ -4949,11 +4945,8 @@ fn validate_route_sh_fails_on_a_fault_that_the_route_takes_and_on_a_refusal_for_
     let bodies = stage.path("bodies");
     let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
-    assert!(check_failed(&steps, "eks-ami-type-al2"), "{steps}");
-    assert!(
-        check_failed(&steps, "eks-ami-type-al2-says"),
-        "the report of a body that passed names no fault: {steps}"
-    );
+    // the report of a body that passed names no fault
+    failed(&steps, &["eks-ami-type-al2", "eks-ami-type-al2-says"]);
     passed(
         &steps,
         &["eks-ami-type-unknown", "vsphere-instance-floor-cpu"],
@@ -4969,10 +4962,7 @@ fn validate_route_sh_fails_on_a_fault_that_the_route_takes_and_on_a_refusal_for_
     let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
     passed(&steps, &["vsphere-instance-floor-cpu"]);
-    assert!(
-        check_failed(&steps, "vsphere-instance-floor-cpu-says"),
-        "{steps}"
-    );
+    failed(&steps, &["vsphere-instance-floor-cpu-says"]);
 }
 
 #[test]
@@ -5345,15 +5335,10 @@ fn route_bodies_sh_fails_and_deletes_each_profile_when_the_route_takes_a_fault()
     let bodies = stage.path("bodies");
     let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
-    assert!(
-        check_failed(&steps, "validate-route"),
-        "a route that takes a fault fails the run: {steps}"
-    );
+    // a route that takes a fault fails the run
+    failed(&steps, &["validate-route"]);
     let route_steps = std::fs::read_to_string(stage.path("out/validate-route/steps.log")).unwrap();
-    assert!(
-        check_failed(&route_steps, "profile-cloud-mismatch"),
-        "{route_steps}"
-    );
+    failed(&route_steps, &["profile-cloud-mismatch"]);
     // the failure does not leave a profile or a body
     assert_eq!(
         deleted_profiles(&stage),

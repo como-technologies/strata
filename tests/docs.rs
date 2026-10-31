@@ -10,7 +10,7 @@ use crate::common;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use common::{version_of, walk};
+use common::{repo_file, version_of, walk};
 use strata::api::codes::ValidateRoute;
 
 fn docs() -> PathBuf {
@@ -95,7 +95,7 @@ fn every_use_case_is_in_the_navigation_and_the_list_in_one_order() {
 #[test]
 fn the_readme_version_badge_is_the_version_in_cargo_toml() {
     let version = version_of("Cargo.toml");
-    let readme = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"));
+    let readme = repo_file("README.md");
     let badge = format!("badge/version-{version}-blue");
     assert!(
         readme.contains(&badge),
@@ -311,10 +311,8 @@ fn publish_fan_out_runs_the_installer_with_the_signature_check_and_says_what_it_
 /// variable to explain a behavior, and then it links to `gitlab.md`.
 #[test]
 fn the_variables_of_the_gitlab_preflight_job_are_described_on_gitlab_md_and_listed_nowhere_else() {
-    let drop_in: serde_yaml::Value = serde_yaml::from_str(&read(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/ci/gitlab/strata.yml"),
-    ))
-    .unwrap();
+    let drop_in: serde_yaml::Value =
+        serde_yaml::from_str(&repo_file("examples/ci/gitlab/strata.yml")).unwrap();
     let names: Vec<&str> = drop_in["variables"]
         .as_mapping()
         .unwrap()

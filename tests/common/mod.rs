@@ -765,8 +765,7 @@ pub fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
 /// The version of a manifest, from the root of the repository: `Cargo.toml` or
 /// `preflight/Cargo.toml`.
 pub fn version_of(manifest: &str) -> String {
-    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(manifest))
-        .unwrap_or_else(|e| panic!("{manifest}: {e}"))
+    repo_file(manifest)
         .lines()
         .find_map(|l| l.strip_prefix("version = \"").map(str::to_owned))
         .and_then(|l| l.strip_suffix('"').map(str::to_owned))
@@ -794,6 +793,45 @@ pub fn executable(path: &Path, body: &str) {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
+}
+
+// ---- the workflow helpers ----------------------------------------------------------------------
+
+/// The text of a file of the repository, by its path from the root.
+pub fn repo_file(path: &str) -> String {
+    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path))
+        .unwrap_or_else(|e| panic!("{path}: {e}"))
+}
+
+/// The text of the workflow `file` of `.github/workflows/`.
+pub fn workflow_text(file: &str) -> String {
+    repo_file(&format!(".github/workflows/{file}"))
+}
+
+/// The workflow `file` of `.github/workflows/`, parsed.
+pub fn workflow(file: &str) -> serde_yaml::Value {
+    serde_yaml::from_str(&workflow_text(file)).unwrap_or_else(|e| panic!("{file}: not YAML: {e}"))
+}
+
+/// The steps of each job of the workflow `doc`, in order.
+pub fn steps(doc: &serde_yaml::Value) -> impl Iterator<Item = &serde_yaml::Value> {
+    doc["jobs"]
+        .as_mapping()
+        .expect("a workflow has jobs")
+        .values()
+        .flat_map(|job| job["steps"].as_sequence().into_iter().flatten())
+}
+
+/// Whether `text` holds `word` as a whole word: the character after it is not a letter, a digit,
+/// or one of `joins`. `--thresh` is not in `--threshold`, and `$NAME` is not in `$NAME_2`,
+/// although the longer text contains the shorter one.
+pub fn whole_word(text: &str, word: &str, joins: &[char]) -> bool {
+    text.match_indices(word).any(|(i, _)| {
+        text[i + word.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_ascii_alphanumeric() && !joins.contains(&c))
+    })
 }
 
 // ---- the snapshot helpers ----------------------------------------------------------------------
