@@ -70,6 +70,7 @@ pub struct Verify {
     /// host, or the cluster group. It costs no request. Absent when Palette gives no time, when
     /// the object is gone, and for a pack record: the pack listing gives the create time there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<Rfc3339>")]
     pub last_modified: Option<String>,
     /// For an `unverified` record: the key of each pack with no upstream digest.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

@@ -559,6 +559,7 @@ pub struct VerifiedRecord {
     /// When Palette last changed the object of the record, as in `verify.lastModified`, whatever
     /// the status.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<Rfc3339>")]
     pub last_modified: Option<String>,
     /// Each pack that Palette marks invalid now, as in `verify.invalidPacks`, whatever the
     /// status.

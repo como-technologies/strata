@@ -1200,8 +1200,17 @@ fn date_time(property: &serde_json::Value) -> bool {
             .is_some_and(|options| options.iter().any(is_time))
 }
 
-/// Each property of the schema `v` whose name is one of `names`, with the path to it.
-fn named_properties<'a>(
+/// True when the name of a property is the name of a time field: one of `names`, or a name that
+/// ends in `At`, `Time`, or `Modified`. The ending finds a new time field with no change here.
+fn is_time_name(name: &str, names: &[&str]) -> bool {
+    names.contains(&name)
+        || ["At", "Time", "Modified"]
+            .iter()
+            .any(|end| name.ends_with(end))
+}
+
+/// Each property of the schema `v` whose name is the name of a time field, with the path to it.
+fn time_properties<'a>(
     v: &'a serde_json::Value,
     names: &[&str],
     at: &str,
@@ -1209,14 +1218,14 @@ fn named_properties<'a>(
 ) {
     if let Some(properties) = v["properties"].as_object() {
         for (name, property) in properties {
-            if names.contains(&name.as_str()) {
+            if is_time_name(name, names) {
                 found.push((format!("{at}.{name}"), property));
             }
         }
     }
     if let Some(defs) = v["$defs"].as_object() {
         for (def, schema) in defs {
-            named_properties(schema, names, def, found);
+            time_properties(schema, names, def, found);
         }
     }
 }
@@ -1234,6 +1243,7 @@ fn the_schema_of_each_time_field_gives_it_the_format_date_time() {
         "deletedAt",
         "lastRunTime",
         "lastSyncedTime",
+        "lastModified",
     ];
     let mut seen = Vec::new();
     for kind in [
@@ -1249,7 +1259,7 @@ fn the_schema_of_each_time_field_gives_it_the_format_date_time() {
     ] {
         let v = schema(kind);
         let mut found = Vec::new();
-        named_properties(&v, &names, kind, &mut found);
+        time_properties(&v, &names, kind, &mut found);
         for (at, property) in found {
             assert!(date_time(property), "{at}: {property}");
             seen.push(at);
