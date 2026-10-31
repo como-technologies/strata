@@ -1,5 +1,5 @@
 $ strata preflight cluster-zone.json --cloud aws --no-exec --tier palette --rule instance-offering --strict --quiet | sed -n '4,8p'
-  PROBE FAIL    instance-offering            The instance type is offered in each zone of the pool            1 ms
+  PROBE FAIL    instance-offering            The instance type is offered in each zone of the pool            1 ms  catch 3/3 (37%) clean 2/3 (14%)
                 pool cp-pool: the type t3.xlarge is not offered in the zone us-east-2c
                 pool worker-pool: the type t3.xlarge is not offered in the zone us-east-2c
                 ran: GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=64f3000000000000000000a1 -> HTTP 200
