@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::leaf::{Leaf, leaf_diff};
 use super::zip_by_key;
-use crate::json::{flag, text};
+use crate::snapshot::Variable;
 
 /// Profile variables compared by name.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -65,14 +65,13 @@ impl VariableSummary {
         .collect()
     }
 
-    fn from_value(v: &Value) -> VariableSummary {
-        let on = |ptr: &str| flag(v, ptr);
+    fn of(v: &Variable) -> VariableSummary {
         VariableSummary {
-            name: text(v, "/name"),
-            required: on("/required"),
-            sensitive: on("/isSensitive"),
-            hidden: on("/hidden"),
-            immutable: on("/immutable"),
+            name: v.name.clone(),
+            required: v.required,
+            sensitive: v.is_sensitive,
+            hidden: v.hidden,
+            immutable: v.immutable,
         }
     }
 }
@@ -88,25 +87,25 @@ pub struct VariableChange {
 
 /// Each variable of a normalized list, with its name. Two variables of one name are one, the
 /// last.
-fn named(vars: &[Value]) -> impl Iterator<Item = (String, &Value)> {
-    vars.iter().map(|v| (text(v, "/name"), v))
+fn named(vars: &[Variable]) -> impl Iterator<Item = (String, &Variable)> {
+    vars.iter().map(|v| (v.name.clone(), v))
 }
 
 /// The variables of a normalized list as one document, by name: see [`named`].
-pub(super) fn by_name(vars: &[Value]) -> Value {
-    Value::Object(named(vars).map(|(n, v)| (n, v.clone())).collect())
+pub(super) fn by_name(vars: &[Variable]) -> Value {
+    Value::Object(named(vars).map(|(n, v)| (n, v.to_value())).collect())
 }
 
 /// Group two normalized variable lists by name: added, removed, and changed with the fields that
 /// differ. Names are sorted.
-pub fn group_variables(a: &[Value], b: &[Value]) -> VariablesByName {
+pub fn group_variables(a: &[Variable], b: &[Variable]) -> VariablesByName {
     let mut g = VariablesByName::default();
     for (name, x, y) in zip_by_key(named(a), named(b)) {
         match (x, y) {
-            (None, Some(y)) => g.added.push(VariableSummary::from_value(y)),
-            (Some(x), None) => g.removed.push(VariableSummary::from_value(x)),
+            (None, Some(y)) => g.added.push(VariableSummary::of(y)),
+            (Some(x), None) => g.removed.push(VariableSummary::of(x)),
             (Some(x), Some(y)) => {
-                let fields = leaf_diff(x, y);
+                let fields = leaf_diff(&x.to_value(), &y.to_value());
                 if !fields.is_empty() {
                     g.changed.push(VariableChange { name, fields });
                 }
@@ -122,12 +121,15 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::diff::Segment;
 
     #[test]
     fn variables_are_grouped_by_name_with_relative_field_paths() {
         let var = |name: &str, default: &str, sensitive: bool| {
-            json!({"name": name, "defaultValue": default, "required": true, "hidden": false,
-                   "immutable": false, "isSensitive": sensitive, "format": "string"})
+            Variable::from_palette(
+                &json!({"name": name, "defaultValue": default, "required": true,
+                   "isSensitive": sensitive}),
+            )
         };
         let a = vec![var("cluster_env", "dev", false), var("gone", "", true)];
         let b = vec![
@@ -144,7 +146,10 @@ mod tests {
         assert_eq!(g.changed[0].name, "cluster_env");
         assert_eq!(g.changed[0].fields.len(), 1);
         assert_eq!(g.changed[0].fields[0].path, "defaultValue");
-        assert_eq!(g.changed[0].fields[0].segments, vec![json!("defaultValue")]);
+        assert_eq!(
+            g.changed[0].fields[0].segments,
+            vec![Segment::Key("defaultValue".into())]
+        );
         assert_eq!(g.changed[0].fields[0].old, Some(json!("dev")));
         assert_eq!(g.changed[0].fields[0].new, Some(json!("staging")));
         assert_eq!(

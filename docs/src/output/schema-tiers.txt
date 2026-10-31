@@ -1,0 +1,2 @@
+$ strata schema snapshot | jq -c '."$defs".ClusterSource.properties.tiers.properties | keys'
+["applied","policy","running","shape"]

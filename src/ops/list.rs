@@ -10,11 +10,12 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, named_entries, profile_versions, recorded_template};
 use crate::cloud::Cloud;
-use crate::error::{Result, served};
+use crate::error::{ErrorDocument, Result, served};
 use crate::reference::{Ref, name_version, version};
 use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
+use crate::timestamp::Rfc3339;
 
 use crate::json::{arr, first_nonempty, items, opt_flag, opt_text, str_at, text, text_map};
 
@@ -137,6 +138,7 @@ pub struct ListedProfile {
     pub published: Option<bool>,
     /// With packs: why the profile document could not be read, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,
 }
 
@@ -240,6 +242,7 @@ pub struct ListedCluster {
     pub profiles: Option<Vec<AppliedProfile>>,
     /// With applied: why the cluster document could not be read, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,
     /// With applied: whether Palette says that an update waits for the cluster, as
     /// `source.cluster.updatesPending` of a record. Absent when the notifications were not read.
@@ -283,6 +286,7 @@ pub struct Listing {
     /// Which tool wrote the document.
     pub tool: Tool,
     /// When, RFC 3339 UTC.
+    #[schemars(with = "Rfc3339")]
     pub generated_at: String,
     /// The project the profiles and clusters were listed in; empty for tenant scope.
     pub project_uid: String,

@@ -11,6 +11,12 @@ of each document. A field of a closed set in a record or in `strata-behind/1` al
 takes a value of a later release. See
 [A value that strata does not know](compatibility.md#a-value-that-strata-does-not-know).
 
+An `error` in a document is the error document of [Errors](./errors.md): `kind`,
+`message`, and the fields of the kind. The schema requires `kind` and
+`message`. Each time in a document is a time in RFC 3339, and the schema gives
+it `format: date-time`. A time that Palette gives is empty or absent when
+Palette gives none.
+
 | Schema id | Written by | `strata schema` |
 | --- | --- | --- |
 | `strata-snapshot/1` | `snapshot` | `snapshot` |
@@ -109,7 +115,9 @@ profile, or pack version.
       field and the error. `fields` then does not hold the field, so the hash
       does not cover it. `errors` is not part of the hash either. A record of
       strata 0.19 holds `null` for the field. The tiers are `applied`,
-      `running`, `policy`, and, with `snapshot --shape`, `shape`. See
+      `running`, `policy`, and, with `snapshot --shape`, `shape`. The schema
+      lists the keys of `fields` for each of these four tiers. It also takes
+      the name of a tier of a later release, with any `fields`. See
       [More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
       The `fields` of `shape` are `cloudType`, `cloud`, and `pools[]`, by
       [The shape on each cloud](../commands/snapshot/cluster.md#the-shape-on-each-cloud).
@@ -141,7 +149,16 @@ profile, or pack version.
       `value`, and `sensitive`. `verify` reads only the uids, so a rename does
       not stop it. A sensitive variable has `sensitive: true`, and no value or
       hash.
-- `variables` and `variablesHash`: the profile variables.
+- `variables` and `variablesHash`: the profile variables, sorted by name, and
+  the hash of the list. A variable has twelve fields: `name`, `displayName`,
+  `description`, `format`, `defaultValue`, `regex`, `required`, `immutable`,
+  `hidden`, `isSensitive`, `inputType`, and `options[]` with `label`, `value`,
+  and `description`. `format` and `inputType` are as Palette gives them in
+  `v1VariableFormat` and `v1VariableInputType`. A field that Palette does not
+  give is `string` for `format`, `text` for `inputType`, `false` for a flag, and
+  empty text for the rest. A variable with no `name` has an empty `name`. The
+  schema requires `name` alone, so a candidate can give a variable with a
+  `name` and a `defaultValue`.
 - `packs[]`: one entry for each pack, in the order the profile holds them. The
   diff document sorts its packs by layer and then by name; the snapshot does
   not.
@@ -170,10 +187,10 @@ profile, or pack version.
     the pack. They are outside the root, and `snapshot` writes a warning on
     standard error for each such pack. A record written before these fields has
     neither.
-  - `params`: the params of the pack on the profile, as a map. For an app tier,
-    its properties: each name and its value. They also hold `installOrder`, the
-    install order of the tier, and `containerRegistryUid`, each only when
-    Palette gives it. See
+  - `params`: the params of the pack on the profile, as a map of text. For an
+    app tier, its properties: each name and its value. They also hold
+    `installOrder`, the install order of the tier, as an integer, and
+    `containerRegistryUid`, each only when Palette gives it. See
     [Edge hosts, cluster groups, and app profiles](../commands/snapshot/other-objects.md).
   - `values`: the raw values YAML. Palette writes `********` over each value
     whose schema format is `password`. Strata does the same for the packs of a
@@ -367,8 +384,9 @@ Each changed value is a leaf with `op`, `path`, `segments`, `old`, and `new`. A
 leaf is a scalar or an empty container. The path joins keys with a dot. A list
 item is `[i]`. When each item of a list is an object with a unique `name`, the
 item is `[name=<value>]`, so an inserted item shows as one addition. `segments`
-is the path as a list: strings for keys, numbers for indexes, and
-`{"name": ...}` for named items.
+is the path as a list. A key is a string, an index is an integer, and a named
+item is an object `{"name": ...}`. The schema gives each segment an `anyOf`
+of these three types.
 
 ## strata-verify-summary/1
 

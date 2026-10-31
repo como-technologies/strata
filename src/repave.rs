@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::json::{arr, first_nonempty, str_at, strings, text};
+use crate::timestamp::Rfc3339OrEmpty;
 
 /// The state of a repave that waits for approval, in `status.repave.state` of a cluster. Palette
 /// also gives `Approved` and `Reverted`.
@@ -72,6 +73,7 @@ pub struct PendingRepave {
     /// `user`.
     pub source: String,
     /// When the repave started to wait, in RFC 3339.
+    #[schemars(with = "Rfc3339OrEmpty")]
     pub since: String,
     /// Each reason Palette gives, in its order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

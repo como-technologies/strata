@@ -19,7 +19,7 @@ use crate::content::layer::Layer;
 use crate::error::{Error, Result};
 use crate::pack_type::PackType;
 use crate::profile_type::ProfileType;
-use crate::snapshot::{PresetOption, Snapshot};
+use crate::snapshot::{PresetOption, Snapshot, Variable};
 use rules::invalid_at;
 
 mod export;
@@ -57,9 +57,10 @@ pub struct Candidate {
     pub registry_uid: Option<String>,
     /// The layers, in profile order.
     pub layers: Vec<CandidateLayer>,
-    /// Profile variable definitions, as Palette returns them.
+    /// Profile variable definitions. A variable needs a `name`; the other fields default as a
+    /// record of the variable holds them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub variables: Vec<Value>,
+    pub variables: Vec<Variable>,
 }
 
 impl Candidate {

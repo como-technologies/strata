@@ -43,7 +43,7 @@ variables:
 | `cloudType` | no | The cloud of the profile. The default is empty. |
 | `registry` or `registryUid` | no | The registry for each layer that names none. It does not apply to a `manifest` layer. |
 | `layers[]` | yes | One entry for each pack, in profile order. At least one. |
-| `variables[]` | no | The profile variable definitions, in the form Palette returns them. |
+| `variables[]` | no | The profile variable definitions. A variable needs a `name`. Each other field has the default of a record: see [the variables of a record](documents.md#strata-snapshot1). |
 
 A program can also give strata a candidate in memory, as JSON, through the
 library. It then writes no file.

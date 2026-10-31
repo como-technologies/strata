@@ -23,7 +23,7 @@ const NAMESPACES: &str = "namespaces";
 /// The key of the policy fields of a cluster record from before strata read the bindings: the
 /// references to the bindings and the namespaces. The policy tier of a cluster group does not
 /// have it either.
-const LEGACY_RESOURCES: &str = "resources";
+pub(super) const LEGACY_RESOURCES: &str = "resources";
 
 /// The policy fields that a record from before strata read the bindings holds, less the
 /// references to the bindings and the namespaces. Do not change this list: `compare` and `verify`
@@ -33,12 +33,12 @@ const LEGACY_FIELDS: &[&str] = &["osPatch", "lifecycle", "machineHealth", "timez
 /// The annotation of a cluster that pauses the upgrades of the agent of Palette.
 ///
 /// It is also the key of the policy field that holds its value as Palette gives it.
-const AGENT_UPGRADES_FORBIDDEN: &str = "spectroComponentsUpgradeForbidden";
+pub(super) const AGENT_UPGRADES_FORBIDDEN: &str = "spectroComponentsUpgradeForbidden";
 
 /// The key of the policy fields of a cluster record from strata 0.18: `allowed` or `paused`, which
 /// strata found from the annotation. Do not use it in a new record: `compare` and `verify` find an
 /// older record by it.
-const LEGACY_AGENT_UPGRADES: &str = "agentUpgrades";
+pub(super) const LEGACY_AGENT_UPGRADES: &str = "agentUpgrades";
 
 /// The fields of the policy tier of the cluster in `raw`, whose `spec.clusterConfig` is `config`.
 /// The bindings and the namespaces come from their own routes, without the uids and the times.

@@ -51,7 +51,7 @@ const TAG_FILTER_LISTING: &str = "/v1/filters/metadata?filterType=tag";
 const AUDIT_PAGE: u32 = 100;
 /// The field of a tier that gives its place in the install of the app profile. Palette installs
 /// the tiers in this order, and does not give the field for a tier whose order is 0.
-const TIER_INSTALL_ORDER: &str = "installOrder";
+pub(crate) const TIER_INSTALL_ORDER: &str = "installOrder";
 /// The field of a container tier that gives the registry of its image.
 const TIER_CONTAINER_REGISTRY: &str = "containerRegistryUid";
 /// The collection of the profile versions. A uid names one: `/v1/clusterprofiles/{uid}`.

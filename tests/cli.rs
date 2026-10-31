@@ -1026,6 +1026,293 @@ fn the_schema_names_the_model_of_palette_and_copies_no_value_of_a_field_that_pal
     }
 }
 
+/// The twelve fields of a profile variable, by name.
+const VARIABLE_FIELDS: [&str; 12] = [
+    "defaultValue",
+    "description",
+    "displayName",
+    "format",
+    "hidden",
+    "immutable",
+    "inputType",
+    "isSensitive",
+    "name",
+    "options",
+    "regex",
+    "required",
+];
+
+/// The names of the properties of the schema `object`, in the order of the document.
+fn property_names(object: &serde_json::Value) -> Vec<&str> {
+    object["properties"]
+        .as_object()
+        .unwrap_or_else(|| panic!("no properties: {object}"))
+        .keys()
+        .map(String::as_str)
+        .collect()
+}
+
+#[test]
+fn the_schema_of_a_record_and_of_a_candidate_name_the_twelve_fields_of_a_variable() {
+    for kind in ["snapshot", "candidate"] {
+        let v = schema(kind);
+        let variable = &v["properties"]["variables"]["items"];
+        assert_eq!(property_names(variable), VARIABLE_FIELDS, "{kind}");
+        assert_eq!(variable["required"], serde_json::json!(["name"]), "{kind}");
+        let option = &v["$defs"]["VariableOption"];
+        assert_eq!(
+            property_names(option),
+            ["description", "label", "value"],
+            "{kind}: {option}"
+        );
+        assert_eq!(
+            variable["properties"]["options"]["items"]["$ref"], "#/$defs/VariableOption",
+            "{kind}"
+        );
+    }
+}
+
+#[test]
+fn the_schema_of_a_variable_names_the_model_of_palette_and_copies_no_value_of_it() {
+    let snapshot = schema("snapshot");
+    let variable = &snapshot["properties"]["variables"]["items"]["properties"];
+    for (field, model) in [
+        ("format", "v1VariableFormat"),
+        ("inputType", "v1VariableInputType"),
+    ] {
+        let text = variable[field]["description"].as_str().unwrap();
+        assert!(text.contains("as Palette gives it"), "{field}: {text}");
+        assert!(text.contains(model), "{field} names {model}: {text}");
+        assert!(
+            variable[field].get("enum").is_none(),
+            "{field}: a set that Palette owns"
+        );
+        assert_eq!(variable[field]["type"], "string", "{field}");
+        for value in ["ipv4", "ipv6", "base64", "dropdown", "multiline"] {
+            assert!(!text.contains(value), "{field} copies {value}: {text}");
+        }
+    }
+}
+
+#[test]
+fn the_schema_of_a_leaf_gives_a_segment_a_key_an_index_or_a_named_item() {
+    for kind in ["diff", "verify-summary"] {
+        let v = schema(kind);
+        let any_of = &v["$defs"]["Leaf"]["properties"]["segments"]["items"]["anyOf"];
+        assert_eq!(any_of.as_array().unwrap().len(), 3, "{kind}");
+        let types: Vec<&serde_json::Value> = any_of
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|s| &s["type"])
+            .collect();
+        assert_eq!(types, ["string", "integer", "object"], "{kind}");
+        assert_eq!(any_of[2]["required"], serde_json::json!(["name"]), "{kind}");
+        assert_eq!(any_of[2]["properties"]["name"]["type"], "string", "{kind}");
+    }
+}
+
+#[test]
+fn the_schema_of_a_record_types_the_params_and_the_tiers() {
+    let v = schema("snapshot");
+    let params = &v["$defs"]["Pack"]["properties"]["params"];
+    assert_eq!(params["type"], "object");
+    assert_eq!(params["additionalProperties"]["type"], "string");
+    assert_eq!(
+        params["properties"]["installOrder"]["type"], "integer",
+        "the install order of a tier is the one param that is a number"
+    );
+    let tiers = &v["$defs"]["ClusterSource"]["properties"]["tiers"];
+    assert_eq!(
+        property_names(tiers),
+        ["applied", "policy", "running", "shape"],
+        "a record carries no tier labels: only compare gives it"
+    );
+    let names = &tiers["propertyNames"]["anyOf"];
+    assert_eq!(names[0]["$ref"], "#/$defs/Tier");
+    assert_eq!(
+        names[1]["type"], "string",
+        "the name of a tier of a later release"
+    );
+    assert_eq!(tiers["additionalProperties"]["$ref"], "#/$defs/ClusterTier");
+    let fields = |tier: &str| &tiers["properties"][tier]["allOf"][1]["properties"]["fields"];
+    assert_eq!(
+        property_names(fields("applied")),
+        ["spcHash", "spcInfraHash"]
+    );
+    assert_eq!(
+        property_names(&fields("running")["items"]),
+        ["name", "profileUid", "version"]
+    );
+    for key in [
+        "osPatch",
+        "lifecycle",
+        "machineHealth",
+        "timezone",
+        "rbacs",
+        "namespaces",
+        "fips",
+    ] {
+        assert!(fields("policy")["properties"].get(key).is_some(), "{key}");
+    }
+    assert_eq!(
+        property_names(fields("shape")),
+        ["cloud", "cloudType", "pools"]
+    );
+    assert!(fields("shape")["properties"]["pools"]["items"]["properties"]["name"].is_boolean());
+}
+
+#[test]
+fn the_schema_of_each_error_is_an_object_with_a_kind_and_a_message() {
+    for (kind, def, field) in [
+        ("list", "ListedProfile", "error"),
+        ("list", "ListedCluster", "error"),
+        ("consumers", "Consumer", "error"),
+        ("consumers", "ClustersRead", "error"),
+        ("consumers", "ClustersRead", "groupsError"),
+        ("consumers", "EdgeHostsRead", "error"),
+        ("set", "ListedCluster", "error"),
+        ("verify-summary", "VerifiedRecord", "error"),
+        ("set", "SetRecord", "error"),
+        ("behind", "Pin", "error"),
+    ] {
+        let v = schema(kind);
+        let property = &v["$defs"][def]["properties"][field];
+        assert_eq!(
+            property["anyOf"][0]["$ref"], "#/$defs/ErrorDocument",
+            "{kind} {def}.{field}: {property}"
+        );
+        let error = &v["$defs"]["ErrorDocument"];
+        assert_eq!(error["type"], "object", "{kind}");
+        assert_eq!(error["required"], serde_json::json!(["kind", "message"]));
+        assert_eq!(error["properties"]["kind"]["type"], "string");
+        assert_eq!(error["properties"]["message"]["type"], "string");
+    }
+}
+
+/// True when the schema `property` of a time field is a time in RFC 3339. A field that Palette
+/// gives, or that a report holds only sometimes, is `anyOf` the time and empty text, or null.
+fn date_time(property: &serde_json::Value) -> bool {
+    let is_time = |s: &serde_json::Value| s["format"] == "date-time";
+    is_time(property)
+        || property["anyOf"]
+            .as_array()
+            .is_some_and(|options| options.iter().any(is_time))
+}
+
+/// True when the name of a property is the name of a time field: one of `names`, or a name that
+/// ends in `At`, `Time`, or `Modified`. The ending finds a new time field with no change here.
+fn is_time_name(name: &str, names: &[&str]) -> bool {
+    names.contains(&name)
+        || ["At", "Time", "Modified"]
+            .iter()
+            .any(|end| name.ends_with(end))
+}
+
+/// Each property of the schema `v` whose name is the name of a time field, with the path to it.
+fn time_properties<'a>(
+    v: &'a serde_json::Value,
+    names: &[&str],
+    at: &str,
+    found: &mut Vec<(String, &'a serde_json::Value)>,
+) {
+    if let Some(properties) = v["properties"].as_object() {
+        for (name, property) in properties {
+            if is_time_name(name, names) {
+                found.push((format!("{at}.{name}"), property));
+            }
+        }
+    }
+    if let Some(defs) = v["$defs"].as_object() {
+        for (def, schema) in defs {
+            time_properties(schema, names, def, found);
+        }
+    }
+}
+
+#[test]
+fn the_schema_of_each_time_field_gives_it_the_format_date_time() {
+    let names = [
+        "fetchedAt",
+        "generatedAt",
+        "since",
+        "time",
+        "recordedAt",
+        "checkedAt",
+        "listed",
+        "deletedAt",
+        "lastRunTime",
+        "lastSyncedTime",
+        "lastModified",
+    ];
+    let mut seen = Vec::new();
+    for kind in [
+        "snapshot",
+        "diff",
+        "verify-summary",
+        "chain",
+        "consumers",
+        "behind",
+        "set",
+        "list",
+        "packs",
+    ] {
+        let v = schema(kind);
+        let mut found = Vec::new();
+        time_properties(&v, &names, kind, &mut found);
+        for (at, property) in found {
+            assert!(date_time(property), "{at}: {property}");
+            seen.push(at);
+        }
+    }
+    for name in names {
+        assert!(
+            seen.iter().any(|at| at.ends_with(&format!(".{name}"))),
+            "no schema has the time field {name}: {seen:?}"
+        );
+    }
+}
+
+/// The root and the `variablesHash` that strata 0.24.0 gives the profile `a` of the fixtures with
+/// the variables of [`the_variables_of_an_older_release_keep_their_root_and_their_hash`]. They
+/// hold a field of another name, a format that is not text, and a bare name.
+const OLDER_VARIABLES_ROOT: &str =
+    "8c8b5780bf3b563be53d0d04a314bc817874b33eea20e139f7d4410bbf18d13d";
+const OLDER_VARIABLES_HASH: &str =
+    "ce5f9cb050c99ef9e9d75a6fa929826cbf1b477d718b7f12b874c6de7c8e00f9";
+
+#[test]
+fn the_variables_of_an_older_release_keep_their_root_and_their_hash() {
+    let dir = tempfile::tempdir().unwrap();
+    let raw = dir.path().join("fx");
+    common::make_fixtures(&raw);
+    std::fs::write(
+        raw.join("a/variables.json"),
+        serde_json::json!({"variables": [
+            {"name": "tier", "displayName": "Tier", "description": "The tier.", "format": "string",
+             "defaultValue": "gold", "regex": "^[a-z]+$", "required": true, "immutable": true,
+             "hidden": true, "isSensitive": true, "inputType": "dropdown",
+             "options": [{"label": "Gold", "value": "gold", "description": "Best"},
+                         {"label": "Tin", "value": "tin"}],
+             "extra": 7},
+            {"name": "bare"},
+            {"name": "numbers", "format": 3, "defaultValue": 5, "required": "yes",
+             "options": [{"label": 1, "value": null}]},
+        ]})
+        .to_string(),
+    )
+    .unwrap();
+    let record = read_json(Path::new(&record_of(&raw, dir.path(), "a")));
+    assert_eq!(record["variablesHash"], OLDER_VARIABLES_HASH);
+    assert_eq!(record["root"], OLDER_VARIABLES_ROOT);
+    // the file holds the twelve fields of each variable and no other, in the order of their names
+    let tier = record["variables"][2].as_object().unwrap();
+    assert_eq!(tier.len(), 12);
+    assert!(tier.get("extra").is_none());
+    assert_eq!(record["variables"][0]["name"], "bare");
+    assert_eq!(record["variables"][1]["format"], "string");
+}
+
 #[test]
 fn schema_subcommand_prints_json_schema() {
     for (kind, id) in [

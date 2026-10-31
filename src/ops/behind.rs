@@ -14,13 +14,14 @@ use crate::candidate::pack::pack_snapshot_in;
 use crate::closed_set::Open;
 use crate::cloud::supports;
 use crate::diff::{ChangeFlag, Diff, ImpactLevel, RegistrySync};
-use crate::error::{Error, Result};
+use crate::error::{Error, ErrorDocument, Result};
 use crate::json::str_at;
 use crate::pack_state::PackState;
 use crate::reference::{Ref, version};
 use crate::registry::{Registries, RegistrySyncNote};
 use crate::snapshot::{Pack, Snapshot, Tool, load_document};
 use crate::term::progress::Progress;
+use crate::timestamp::Rfc3339;
 use crate::validation::ProfileValidation;
 
 use super::bump::BumpQuestions;
@@ -41,11 +42,13 @@ pub struct BehindReport {
     /// Which tool wrote the document.
     pub tool: Tool,
     /// When, RFC 3339 UTC.
+    #[schemars(with = "Rfc3339")]
     pub generated_at: String,
     /// The records read, in the order given.
     pub records: Vec<String>,
     /// With `--since`: when the previous report was written. `arrived` on each pin is against it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<Rfc3339>")]
     pub since: Option<String>,
     /// One entry for each pack, registry, pinned version, and tag, in the order of the pack name.
     pub pins: Vec<Pin>,
@@ -148,6 +151,7 @@ pub struct Pin {
     pub arrived: Option<Vec<String>>,
     /// Why strata could not check the pin, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,
     /// For a pin that is current: the last sync of its registry, when that sync did not
     /// complete. The copy of the registry in Palette is then the copy of an earlier sync, and
@@ -186,6 +190,7 @@ pub struct Newer {
     pub palette_latest: bool,
     /// When Palette first listed the version; empty when the listing gives no time.
     #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schemars(with = "Rfc3339")]
     pub listed: String,
     /// The architectures of the pinned version that this version does not support: a move to it
     /// drops them. Empty when the listing names the architectures of only one of the two.

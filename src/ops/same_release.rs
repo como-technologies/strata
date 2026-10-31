@@ -11,6 +11,7 @@ use crate::diff::{self, ChangeFlag, Diff, ImageIdChange, MaskedPack, PackDiff, S
 use crate::render::changes::{VALUES_UNPARSED, manifest_change};
 use crate::render::notes::no_upstream_digest;
 use crate::snapshot::{Pack, Snapshot, Tool};
+use crate::timestamp::Rfc3339;
 
 /// Schema id of the document `same-release` writes.
 pub const CHAIN_SCHEMA: &str = "strata-chain/1";
@@ -190,6 +191,7 @@ pub struct Chain {
     /// Which tool wrote the document.
     pub tool: Tool,
     /// When, RFC 3339 UTC.
+    #[schemars(with = "Rfc3339")]
     pub generated_at: String,
     /// What the statuses and policies mean.
     pub legend: ChainLegend,

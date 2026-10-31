@@ -11,12 +11,12 @@ use crate::json::{arr, str_at, value_at};
 
 /// The key of the shape fields that names the cloud type of the cluster. A record from before
 /// strata read the fields by cloud type does not have it.
-const CLOUD_TYPE: &str = "cloudType";
+pub(super) const CLOUD_TYPE: &str = "cloudType";
 
 /// The machine pool fields that a person chooses on each cloud. A cloud that does not give a
 /// field has no such key in the tier. The ids that Palette gives each cluster, such as its
 /// subnets and security groups, stay out.
-const POOL_FIELDS: &[&str] = &[
+pub(super) const POOL_FIELDS: &[&str] = &[
     "name",
     "isControlPlane",
     "useControlPlaneAsWorker",
@@ -39,7 +39,7 @@ const POOL_FIELDS: &[&str] = &[
 ];
 
 /// The cloud part fields that a person chooses on each cloud.
-const CLOUD_FIELDS: &[&str] = &["overrideClusterAPIConfig"];
+pub(super) const CLOUD_FIELDS: &[&str] = &["overrideClusterAPIConfig"];
 
 /// The key of the id that Palette gives each vSphere placement of a cluster.
 const PLACEMENT_UID: &str = "uid";

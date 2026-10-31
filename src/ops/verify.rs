@@ -14,12 +14,13 @@ use crate::diff::{
     self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImageIdChange, ImpactLevel,
     InvalidPack, Verify, VerifyStatus,
 };
-use crate::error::{Error, Result, found};
+use crate::error::{Error, ErrorDocument, Result, found};
 use crate::json::{flag, is_zero, opt_flag, opt_text, str_at, text};
 use crate::reference::name_version;
 use crate::registry::Registries;
 use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
 use crate::term::progress::Progress;
+use crate::timestamp::Rfc3339;
 
 use super::consumers::{ACTIVE_STATE, DELETED_STATE, INACTIVE_STATE};
 use super::{HolderReads, connected, holder_snapshot, scope_of};
@@ -531,6 +532,7 @@ pub struct VerifiedRecord {
     /// The project the record was checked in; empty for tenant scope.
     pub project_uid: String,
     /// When the record was taken.
+    #[schemars(with = "Rfc3339")]
     pub recorded_at: String,
     /// The root in the record.
     pub root_recorded: String,
@@ -557,6 +559,7 @@ pub struct VerifiedRecord {
     /// When Palette last changed the object of the record, as in `verify.lastModified`, whatever
     /// the status.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<Rfc3339>")]
     pub last_modified: Option<String>,
     /// Each pack that Palette marks invalid now, as in `verify.invalidPacks`, whatever the
     /// status.
@@ -564,6 +567,7 @@ pub struct VerifiedRecord {
     pub invalid_packs: Vec<InvalidPack>,
     /// The error object, for records that could not be checked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,
 }
 
@@ -605,6 +609,7 @@ pub struct VerifySummary {
     /// Which tool wrote the document.
     pub tool: Tool,
     /// When, RFC 3339 UTC.
+    #[schemars(with = "Rfc3339")]
     pub generated_at: String,
     /// What each status means.
     pub legend: VerifyLegend,

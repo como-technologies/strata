@@ -12,10 +12,11 @@ use serde_json::Value;
 use crate::api::{Palette, PaletteApi, SEARCH_TAGS, search_condition, search_filter, search_group};
 use crate::closed_set::ClosedSet;
 use crate::conjunction::Conjunction;
-use crate::error::{Error, Result};
+use crate::error::{Error, ErrorDocument, Result};
 use crate::reference::{Ref, one_named};
 use crate::snapshot::{Snapshot, Tool};
 use crate::term::progress::Progress;
+use crate::timestamp::Rfc3339;
 
 use super::list::{ListedCluster, ProjectListings, TENANT_SCOPE, list_clusters, name_projects_of};
 use crate::json::{arr, first_nonempty, flag, items, str_at, strings, text};
@@ -381,6 +382,7 @@ pub struct SetRecord {
     pub root: Option<String>,
     /// Why strata could not record the cluster, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,
 }
 
@@ -408,6 +410,7 @@ pub struct SetReport {
     /// Which tool wrote the document.
     pub tool: Tool,
     /// When, RFC 3339 UTC.
+    #[schemars(with = "Rfc3339")]
     pub generated_at: String,
     /// The query of the clusters: the labels, the saved tag filter, or both.
     pub query: ClusterQuery,
