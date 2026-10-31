@@ -108,11 +108,11 @@ fn policy_fields() -> Value {
         ),
         ("fips", typed("The FIPS mode of the cluster.", "string")),
         (
-            "rbacs",
+            policy::RBACS,
             list_or_null("Each role binding of the cluster. Null when strata did not read them."),
         ),
         (
-            "namespaces",
+            policy::NAMESPACES,
             list_or_null("Each namespace of the cluster. Null when strata did not read them."),
         ),
         (
@@ -258,62 +258,4 @@ fn shape_fields() -> Value {
             },
         },
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::BTreeSet;
-
-    use schemars::schema_for;
-    use serde_json::json;
-
-    use super::*;
-    use crate::snapshot::ClusterSource;
-
-    /// The schema of the tiers of a cluster record.
-    fn tiers_schema() -> Value {
-        let schema = serde_json::to_value(schema_for!(ClusterSource)).unwrap();
-        schema["properties"]["tiers"].clone()
-    }
-
-    #[test]
-    fn the_tiers_name_the_tiers_of_a_record_and_take_the_tier_of_a_later_release() {
-        let tiers = tiers_schema();
-        let names: Vec<&str> = tiers["properties"]
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect();
-        assert_eq!(names, ["applied", "policy", "running", "shape"]);
-        assert_eq!(tiers["additionalProperties"]["$ref"], "#/$defs/ClusterTier");
-        let key_names = &tiers["propertyNames"]["anyOf"];
-        assert_eq!(key_names[0]["$ref"], "#/$defs/Tier");
-        assert_eq!(key_names[1]["type"], "string");
-    }
-
-    #[test]
-    fn the_policy_tier_of_a_cluster_group_has_only_keys_that_the_schema_names() {
-        let fields = policy::group_fields(&json!({
-            "endpointType": "LoadBalancer", "kubernetesDistroType": "k3s",
-            "limitConfig": {"cpu": 1}, "values": "a: [",
-            "hostClustersConfig": [{"clusterUid": "c1", "endpointConfig": {}}],
-        }));
-        let tiers = tiers_schema();
-        let named: BTreeSet<&str> =
-            tiers["properties"]["policy"]["allOf"][1]["properties"]["fields"]["properties"]
-                .as_object()
-                .unwrap()
-                .keys()
-                .map(String::as_str)
-                .collect();
-        let written: BTreeSet<&str> = fields
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect();
-        assert!(written.contains("valuesParseError"), "{written:?}");
-        assert!(written.is_subset(&named), "{written:?} against {named:?}");
-    }
 }

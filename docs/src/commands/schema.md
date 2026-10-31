@@ -42,14 +42,19 @@ the shape of each one, so a validator refuses a value of another shape:
   The one exception is `installOrder` of an app tier, which is an integer.
 - A cluster record lists the keys of each tier by its name. `propertyNames`
   also takes the name of a tier of a later release.
+- A cluster record lists the parts that strata could not read in
+  `source.cluster.errors`. The schema names the keys, and `propertyNames` also
+  takes the key of a later release.
 - An `error` is an object with a `kind` and a `message`, and the fields of the
   kind. See [Errors](../reference/errors.md).
-- Each time has `format: date-time`.
+- Each time has `format: date-time`. One time can be empty text: `recordedAt`
+  of a row of `verify --summary` for a file that strata cannot read.
 
 ```text
 {{#include ../output/schema-variable.txt}}
 {{#include ../output/schema-segment.txt}}
 {{#include ../output/schema-tiers.txt}}
+{{#include ../output/schema-read-errors.txt}}
 {{#include ../output/schema-time.txt}}
 ```
 

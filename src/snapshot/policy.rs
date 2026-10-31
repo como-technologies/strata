@@ -15,10 +15,10 @@ use crate::content::canon::{canon_yaml_hashed, canonical_json, sha256_hex};
 use crate::json::{arr, flag, items, str_at, value_at, value_or_null};
 
 /// The key of the policy fields that holds the role bindings.
-const RBACS: &str = "rbacs";
+pub(super) const RBACS: &str = "rbacs";
 
 /// The key of the policy fields that holds the namespaces.
-const NAMESPACES: &str = "namespaces";
+pub(super) const NAMESPACES: &str = "namespaces";
 
 /// The key of the policy fields of a cluster record from before strata read the bindings: the
 /// references to the bindings and the namespaces. The policy tier of a cluster group does not
@@ -82,8 +82,8 @@ fn agent_upgrades_forbidden(cluster: &Value) -> Option<&Value> {
 /// error other than 404.
 pub(crate) fn errors(raw: &RawCluster) -> BTreeMap<String, String> {
     unread([
-        (RBACS, &raw.errors.rbacs),
-        (NAMESPACES, &raw.errors.namespaces),
+        (RBACS.to_string(), &raw.errors.rbacs),
+        (NAMESPACES.to_string(), &raw.errors.namespaces),
     ])
 }
 

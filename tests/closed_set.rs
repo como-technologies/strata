@@ -18,7 +18,7 @@ use strata::pack_state::PackState;
 use strata::pack_type::PackType;
 use strata::profile_type::ProfileType;
 use strata::scope::ProfileScope;
-use strata::snapshot::{Implementation, SubjectKind, Template, Tier, UpstreamSource};
+use strata::snapshot::{ClusterRead, Implementation, SubjectKind, Template, Tier, UpstreamSource};
 
 /// One closed set with no type parameter, so that one list holds each set.
 struct Set {
@@ -52,13 +52,14 @@ fn set<T: ClosedSet>(released: &'static [&'static str]) -> Set {
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value and keep the schema id, because a record of
 /// an earlier release then reads the value as unknown.
-fn sets() -> [Set; 19] {
+fn sets() -> [Set; 20] {
     [
         set::<Method>(&["GET", "POST"]),
         set::<Implementation>(&["rust", "bash"]),
         set::<Template>(&["published", "draft", "applied", "candidate", "registry"]),
         set::<SubjectKind>(&["cluster", "edgeHost", "clusterGroup"]),
         set::<Tier>(&["applied", "labels", "policy", "running", "shape"]),
+        set::<ClusterRead>(&["updatesPending", "pendingRepave"]),
         set::<UpstreamSource>(&["packRef.digest", "packSummary.digest", "none"]),
         set::<ImpactLevel>(&[
             "none",

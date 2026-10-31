@@ -5,6 +5,8 @@ use crate::common;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use strata::snapshot::Tier;
+
 use common::{
     PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port, read_json,
     snapshot_from_raw, strata_bin, write_record,
@@ -868,11 +870,6 @@ fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
         open_set_ref(&defs["Pack"]["properties"]["registryProviderType"]["anyOf"][0]),
         "#/$defs/OciProvider"
     );
-    // the tiers of a cluster record stay a map from the name of the tier to the tier, and a name
-    // can be any text
-    let tiers = &defs["ClusterSource"]["properties"]["tiers"];
-    assert_eq!(tiers["type"], "object");
-    assert_eq!(tiers["additionalProperties"]["$ref"], "#/$defs/ClusterTier");
 
     let v = schema("diff");
     assert_eq!(
@@ -1154,13 +1151,13 @@ fn the_schema_of_a_record_types_the_params_and_the_tiers() {
         "the name of a tier of a later release"
     );
     assert_eq!(tiers["additionalProperties"]["$ref"], "#/$defs/ClusterTier");
-    let fields = |tier: &str| &tiers["properties"][tier]["allOf"][1]["properties"]["fields"];
+    let fields = |tier: Tier| common::tier_fields(&v, tier);
     assert_eq!(
-        property_names(fields("applied")),
+        property_names(fields(Tier::Applied)),
         ["spcHash", "spcInfraHash"]
     );
     assert_eq!(
-        property_names(&fields("running")["items"]),
+        property_names(&fields(Tier::Running)["items"]),
         ["name", "profileUid", "version"]
     );
     for key in [
@@ -1172,13 +1169,31 @@ fn the_schema_of_a_record_types_the_params_and_the_tiers() {
         "namespaces",
         "fips",
     ] {
-        assert!(fields("policy")["properties"].get(key).is_some(), "{key}");
+        assert!(
+            fields(Tier::Policy)["properties"].get(key).is_some(),
+            "{key}"
+        );
     }
     assert_eq!(
-        property_names(fields("shape")),
+        property_names(fields(Tier::Shape)),
         ["cloud", "cloudType", "pools"]
     );
-    assert!(fields("shape")["properties"]["pools"]["items"]["properties"]["name"].is_boolean());
+    assert!(fields(Tier::Shape)["properties"]["pools"]["items"]["properties"]["name"].is_boolean());
+}
+
+#[test]
+fn the_schema_of_a_record_names_the_parts_of_a_cluster_that_strata_could_not_read() {
+    let v = schema("snapshot");
+    let errors = &v["$defs"]["ClusterSource"]["properties"]["errors"];
+    assert_eq!(errors["type"], "object");
+    assert_eq!(errors["additionalProperties"]["type"], "string");
+    let names = &errors["propertyNames"]["anyOf"];
+    assert_eq!(names[0]["$ref"], "#/$defs/ClusterRead");
+    assert_eq!(names[1]["type"], "string", "the part of a later release");
+    assert_eq!(
+        schema_values(&v, "ClusterRead"),
+        ["updatesPending", "pendingRepave"]
+    );
 }
 
 #[test]
@@ -1290,6 +1305,42 @@ fn the_schema_of_each_time_field_gives_it_the_format_date_time() {
             "no schema has the time field {name}: {seen:?}"
         );
     }
+}
+
+#[test]
+fn the_summary_row_of_a_file_that_strata_cannot_read_matches_the_schema_of_the_row() {
+    let dir = tempfile::tempdir().unwrap();
+    let not_a_record = dir.path().join("notarecord.json");
+    std::fs::write(&not_a_record, "{}").unwrap();
+    let missing = dir.path().join("missing.json");
+    let r = run(&[
+        "verify",
+        "--summary",
+        "--json",
+        not_a_record.to_str().unwrap(),
+        missing.to_str().unwrap(),
+    ]);
+    assert_eq!(r.code, 2, "{}", r.err);
+    let summary: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    let rows = summary["records"].as_array().unwrap();
+    assert_eq!(rows.len(), 2);
+    let recorded_at =
+        &schema("verify-summary")["$defs"]["VerifiedRecord"]["properties"]["recordedAt"];
+    for row in rows {
+        assert_eq!(row["status"], "error", "{row}");
+        let time = row["recordedAt"].as_str().unwrap();
+        assert_eq!(time, "", "strata read no time from the file");
+        assert!(
+            common::text_matches_schema(recorded_at, time),
+            "{recorded_at}"
+        );
+    }
+    // the schema still refuses a text that is not a time
+    assert!(!common::text_matches_schema(recorded_at, "yesterday"));
+    assert!(common::text_matches_schema(
+        recorded_at,
+        "2026-09-17T09:30:00Z"
+    ));
 }
 
 /// The root and the `variablesHash` that strata 0.24.0 gives the profile `a` of the fixtures with

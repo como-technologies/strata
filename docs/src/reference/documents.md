@@ -12,10 +12,10 @@ takes a value of a later release. See
 [A value that strata does not know](compatibility.md#a-value-that-strata-does-not-know).
 
 An `error` in a document is the error document of [Errors](./errors.md): `kind`,
-`message`, and the fields of the kind. The schema requires `kind` and
-`message`. Each time in a document is a time in RFC 3339, and the schema gives
-it `format: date-time`. A time that Palette gives is empty or absent when
-Palette gives none.
+`message`, and the fields of the kind. Each time in a document is a time in RFC
+3339. A time that Palette gives is empty or absent when Palette gives none. The
+schema states the shape of each open field: see
+[The shape of each open field](../commands/schema.md#the-shape-of-each-open-field).
 
 | Schema id | Written by | `strata schema` |
 | --- | --- | --- |
@@ -100,10 +100,10 @@ profile, or pack version.
       [Whether a repave waits](../commands/snapshot/cluster.md#whether-a-repave-waits).
     - `errors`, only when strata could not read a part of the cluster that is
       beside the copy: the field and the error. The keys are `updatesPending`
-      and `pendingRepave`. The tiers have `errors` in the same shape. A record
-      of strata 0.24 and before holds `updatesPendingError` and
-      `pendingRepaveError` in place of these two entries. Strata reads them
-      into `errors`.
+      and `pendingRepave`. A key of a later release loads too. The tiers have
+      `errors` in the same shape. A record of strata 0.24 and before holds
+      `updatesPendingError` and `pendingRepaveError` in place of these two
+      entries. Strata reads them into `errors`.
     - `macroValues`, only with `snapshot --macros`: each user macro that the
       content uses, with a digest. The digest is the `sha256:` of the value
       that Palette gives the macro for this cluster or cluster group. It is
@@ -396,7 +396,8 @@ of these three types.
   whose content is the same and that hold a pack with no upstream digest.
 - `records[]`: one entry for each file, in the order given: `path`, `status`,
   `name`, `version`, `uid`, `projectUid`, `recordedAt`, `rootRecorded`, and
-  `rootLive` when strata read the live profile.
+  `rootLive` when strata read the live profile. `recordedAt` is empty when
+  strata could not read the file.
   - A drifted record adds `maxImpact`, `packsChanged`, and the full `diff`. An
     unverified record adds the `diff`, which names the packs.
   - A cluster record with changed variable values adds `clusterVariables`,

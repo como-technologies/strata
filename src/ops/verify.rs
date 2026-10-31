@@ -20,7 +20,7 @@ use crate::reference::name_version;
 use crate::registry::Registries;
 use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
 use crate::term::progress::Progress;
-use crate::timestamp::Rfc3339;
+use crate::timestamp::{Rfc3339, Rfc3339OrEmpty};
 
 use super::consumers::{ACTIVE_STATE, DELETED_STATE, INACTIVE_STATE};
 use super::{HolderReads, connected, holder_snapshot, scope_of};
@@ -531,8 +531,8 @@ pub struct VerifiedRecord {
     pub uid: String,
     /// The project the record was checked in; empty for tenant scope.
     pub project_uid: String,
-    /// When the record was taken.
-    #[schemars(with = "Rfc3339")]
+    /// When the record was taken; empty when strata could not read the file.
+    #[schemars(with = "Rfc3339OrEmpty")]
     pub recorded_at: String,
     /// The root in the record.
     pub root_recorded: String,

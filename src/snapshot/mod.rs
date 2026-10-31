@@ -21,7 +21,7 @@ pub use crate::repave::PendingRepave;
 use crate::text::name_or_uid;
 use crate::timestamp::Rfc3339;
 pub use crate::validation::ProfileValidation;
-use cluster::{PENDING_REPAVE, UPDATES_PENDING, read_older_errors};
+use cluster::read_older_errors;
 use pack::masked_paths;
 
 mod build;
@@ -34,8 +34,8 @@ mod tier_schema;
 mod variable;
 
 pub use cluster::{
-    AppliedProfile, ClusterSource, ClusterTier, ClusterVariable, GroupMember, PendingUpdate, Tier,
-    cluster_tiers, macro_digests,
+    AppliedProfile, ClusterRead, ClusterSource, ClusterTier, ClusterVariable, GroupMember,
+    PendingUpdate, Tier, cluster_tiers, macro_digests,
 };
 pub use pack::{Manifest, Pack, PackChart, PackHash, PresetOption, UpstreamSource, pack_content};
 pub use variable::{Variable, VariableOption};
@@ -514,8 +514,8 @@ impl Snapshot {
             c.pending_updates.clear();
             c.repave_pending = None;
             c.pending_repave = None;
-            c.errors.remove(UPDATES_PENDING);
-            c.errors.remove(PENDING_REPAVE);
+            c.errors.remove(&ClusterRead::UpdatesPending.into());
+            c.errors.remove(&ClusterRead::PendingRepave.into());
         }
         self
     }
@@ -531,7 +531,7 @@ impl Snapshot {
                 c.variables.clear();
                 c.repave_pending = None;
                 c.pending_repave = None;
-                c.errors.remove(PENDING_REPAVE);
+                c.errors.remove(&ClusterRead::PendingRepave.into());
             }
         }
         self
