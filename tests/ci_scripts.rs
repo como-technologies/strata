@@ -193,6 +193,10 @@ fn the_ci_drop_ins_name_the_version_this_repository_is_at() {
     for file in DROP_INS {
         for token in repo_file(file).split(|c: char| c.is_whitespace() || c == '"' || c == '\'') {
             let token = token.trim_end_matches(&[',', ';', ')', '`'][..]);
+            // the pin of an action of another repository, such as sigstore/cosign-installer@v4.1.2
+            if token.contains('@') && !token.starts_with("como-technologies/") {
+                continue;
+            }
             let named = token.rsplit('@').next().unwrap_or(token);
             let looks_like_a_tag = named.starts_with('v')
                 && named.len() > 3
