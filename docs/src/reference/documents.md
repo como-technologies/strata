@@ -44,7 +44,9 @@ profile, or pack version.
   - `ref`: the ref as typed, a name or a uid, without an empty part after a
     separator: `cluster:<uid>/` records `cluster:<uid>`.
   - `uid`, `projectUid` (empty for tenant scope), `name`, `version`,
-    `cloudType`, `type`, and `tags`. `type` is `app` for an app profile.
+    `cloudType`, `type`, and `tags`. `type` is `cluster`, `infra`, `add-on`, or
+    `system` for a cluster profile, as Palette gives it in `v1ProfileType`.
+    Strata writes `app` for an app profile and `pack` for a pack record.
   - `template`: `published`, `draft`, `applied` for a cluster, `candidate`, or
     `registry` for a pack record. `draft` is a record of `<ref>@draft`, or of a
     version that was never published.
@@ -138,7 +140,11 @@ profile, or pack version.
   diff document sorts its packs by layer and then by name; the snapshot does
   not.
   - The identity fields: `key` (`<layer>/<name>`), `name`, `layer`, `type`,
-    `tag`, `version`, `packUid`, and `registryUid`.
+    `tag`, `version`, `packUid`, and `registryUid`. `layer` is the layer name
+    as Palette gives it in `v1PackLayer`, and `type` is the pack type as
+    Palette gives it in `v1PackType`. Strata writes the layer `app` for each
+    tier of an app profile. The `type` of such a tier is the type that Palette
+    gives it in `v1AppTierType`.
   - `refDigest`, the digest on the pack reference, and `registryDigest`, the
     digest of the pack in the manifests document.
   - `registryProviderType`, only for a pack from an OCI registry: `pack`,
@@ -337,11 +343,12 @@ A comparison of two sides, `a` and `b`.
     record: each write to the object of the record that the audit log of
     Palette holds since `recordedAt`, oldest first. For a cluster record, also
     each write to a profile of `profilesOverwritten`. Each entry has `time`,
-    `actor`, `actorType` (`user` or `service`), `actorUid` (for a user),
-    `action`, `summary` (when Palette gives one), `userMsg` (the note of a
-    person, when the entry has one), `resource` (the `kind`, the `name`, and
-    the `uid` of the object of the write, when Palette gives it), and
-    `auditUid`. An empty list means the log holds no write since the record.
+    `actor`, `actorType` (as Palette gives it in `v1AuditActor`), `actorUid`
+    (for a user), `action` (as Palette gives it in `v1AuditActionType`),
+    `summary` (when Palette gives one), `userMsg` (the note of a person, when
+    the entry has one), `resource` (the `kind`, the `name`, and the `uid` of
+    the object of the write, when Palette gives it), and `auditUid`. An empty
+    list means the log holds no write since the record.
   - `lastModified`: when Palette last changed the object of the record, from
     `metadata.lastModifiedTimestamp` of its document. The document is the
     profile, the app profile, the cluster, the edge host, or the cluster group.
@@ -417,9 +424,11 @@ is the path as a list: strings for keys, numbers for indexes, and
   them when strata could read the project listing. The names and the projects
   come from `status.inUseClusters` of the profile, from
   `status.inUseClusterTemplates` for a cluster template, and from
-  `status.inUseApps` of an app profile. A cluster template has an empty `state`
-  and an empty `version`. `unlisted`, only when true: the profile did not list
-  the cluster, and the second reading found it.
+  `status.inUseApps` of an app profile. `state` is `status.state` of the
+  cluster, as Palette gives it in `v1ClusterState`. It is `unknown` when strata
+  cannot read the cluster. A cluster template has an empty `state` and an empty
+  `version`. `unlisted`, only when true: the profile did not list the cluster,
+  and the second reading found it.
 - `clustersRead`: the second reading. `resolved`: `search` when strata asked
   the cluster search for the clusters that run a version of the profile, by its
   name, or `listing` when
@@ -472,10 +481,11 @@ is the path as a list: strings for keys, numbers for indexes, and
     the version reads: the published template when it has packs, else the
     draft.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, `clusterType`, and
-    `projectUid`. `clusterType` is the type as Palette lists it. `PureManage`
-    is a cluster that Palette built. `AlloyMonitor`, `AlloyAssist`, and
-    `AlloyExtend` are clusters that a person imported. It is absent when the
-    listing gave none.
+    `projectUid`. `state` is `status.state` of the cluster, as Palette gives
+    it in `v1ClusterState`. `clusterType` is the type as Palette lists it.
+    `PureManage` is a cluster that Palette built. `AlloyMonitor`,
+    `AlloyAssist`, and `AlloyExtend` are clusters that a person imported. It is
+    absent when the listing gave none.
     `projectName` joins them when strata could read the project listing.
     `labels`: the labels of the cluster, as a map; a tag with no value has the
     value `spectro__tag`. `virtual`, for a virtual cluster alone: `clusterGroup`

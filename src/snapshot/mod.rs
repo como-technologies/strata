@@ -178,7 +178,9 @@ pub struct Source {
     pub version: String,
     /// Cloud type of the template, for example `aws`.
     pub cloud_type: String,
-    /// Profile type: cluster, infra, add-on, system
+    /// The type of the profile: `cluster`, `infra`, `add-on`, or `system` for a cluster profile,
+    /// as Palette gives it in `v1ProfileType`. Strata writes `app` for an app profile and `pack`
+    /// for a pack record.
     #[serde(rename = "type")]
     pub kind: String,
     /// The template that strata read the packs from: see [`Template`].
