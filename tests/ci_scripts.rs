@@ -2345,45 +2345,102 @@ fn upstream_report_opens_one_issue_per_pack_behind_names_what_arrived_and_closes
 }
 
 #[test]
-fn upstream_report_adds_the_answer_of_palette_to_the_bump_of_the_issue() {
+fn upstream_report_writes_the_answer_of_palette_to_the_bump_as_behind_writes_it() {
     let u = Report::upstream();
     u.report(1, &["1.65.0"], None);
-    let answers = [
+    let error = |pack: &str, code: &str, message: &str, clusters: &[&str]| serde_json::json!({"pack": pack, "code": code, "message": message, "clusters": clusters});
+    let refuses = |errors: Vec<serde_json::Value>| {
+        Some(serde_json::json!({"accepts": false, "errors": errors}))
+    };
+    let upgrade =
+        |clusters: &[&str]| error("csi-aws-ebs", UPGRADE_NOT_SUPPORTED_CODE, "m", clusters);
+    // the answer of Palette in the bump, and the message of a request that failed
+    let cases = [
+        (Some(serde_json::json!({"accepts": true})), None),
+        (refuses(vec![upgrade(&["fred"])]), None),
+        (refuses(vec![upgrade(&["fred", "wilma"])]), None),
+        (refuses(vec![upgrade(&["betty", "fred", "wilma"])]), None),
+        // an error that names no cluster gives its pack and its message, or only its message
         (
-            serde_json::json!({"accepts": true}),
-            "; palette accepts |".to_string(),
+            refuses(vec![error(
+                "csi-aws-ebs",
+                "DisabledPacksForbidden",
+                "m",
+                &[],
+            )]),
+            None,
         ),
+        (refuses(vec![error("", "NameInvalid", "m", &[])]), None),
+        // one line for each error, and a message with the mark of a column
         (
-            serde_json::json!({"accepts": false, "errors": [
-                {"code": UPGRADE_NOT_SUPPORTED_CODE, "message": "m",
-                 "clusters": ["fred", "wilma"]},
-                {"code": "DisabledPacksForbidden", "message": "m", "pack": "csi-aws-ebs"}]}),
-            format!(
-                "; palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred, wilma, \
-                 DisabledPacksForbidden |"
-            ),
+            refuses(vec![
+                upgrade(&["fred", "wilma"]),
+                error("csi-aws-ebs", "DisabledPacksForbidden", "a | b", &[]),
+            ]),
+            None,
+        ),
+        // a request that failed, with no answer or with a refusal that stands
+        (None, Some("HTTP 403: no access")),
+        (
+            refuses(vec![upgrade(&["fred"])]),
+            Some("1 record of project prod was not asked"),
         ),
     ];
-    for (answer, cell) in answers {
+    for (validation, failed) in cases {
         let mut report = read_json(&u.dir.path().join("report.json"));
-        report["pins"][0]["bump"]["paletteValidation"] = answer;
+        if let Some(validation) = validation {
+            report["pins"][0]["bump"]["paletteValidation"] = validation;
+        }
+        if let Some(failed) = failed {
+            report["pins"][0]["bump"]["paletteValidationError"] = serde_json::json!(failed);
+        }
         u.put("report.json", &report.to_string());
+
+        // the cell is the bump line of `behind --format markdown` without its "bump to", and then
+        // the same lines under it
+        let behind: strata::ops::BehindReport = serde_json::from_value(report).unwrap();
+        let md = common::markdown().render_behind(&behind).unwrap();
+        let row = md
+            .lines()
+            .find(|l| l.starts_with("| `csi-aws-ebs`"))
+            .unwrap();
+        let cell = row
+            .split(" | ")
+            .nth(4)
+            .unwrap()
+            .strip_prefix("bump to ")
+            .unwrap();
         let o = u.run(&["releases/*.json", "--dry-run"]);
         assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
         let body = text(&o.stdout);
         assert!(
-            body.contains(&format!(
-                "| 1.65.0 | 1.65.0: cluster-wide IDENTITY AUTHORED{cell} - |"
-            )),
-            "{body}"
+            body.contains(&format!("| 1.65.0 | {cell} | - |")),
+            "{cell}\n{body}"
         );
     }
+
+    // the cell, word for word
+    let mut report = read_json(&u.dir.path().join("report.json"));
+    report["pins"][0]["bump"]["paletteValidation"] =
+        refuses(vec![upgrade(&["betty", "fred", "wilma"])]).unwrap();
+    report["pins"][0]["bump"]["paletteValidationError"] = serde_json::json!("m");
+    u.put("report.json", &report.to_string());
+    let o = u.run(&["releases/*.json", "--dry-run"]);
+    assert!(
+        text(&o.stdout).contains(&format!(
+            "| 1.65.0 | 1.65.0: cluster-wide IDENTITY AUTHORED<br>palette refuses: \
+             {UPGRADE_NOT_SUPPORTED_CODE} on betty, fred, and wilma<br>palette gave no answer: m \
+             | - |"
+        )),
+        "{}",
+        text(&o.stdout)
+    );
+
     // a report with no answer of Palette, as --no-impact writes it, keeps the cell as it was
     let mut report = read_json(&u.dir.path().join("report.json"));
-    report["pins"][0]["bump"]
-        .as_object_mut()
-        .unwrap()
-        .remove("paletteValidation");
+    let bump = report["pins"][0]["bump"].as_object_mut().unwrap();
+    bump.remove("paletteValidation");
+    bump.remove("paletteValidationError");
     u.put("report.json", &report.to_string());
     let o = u.run(&["releases/*.json", "--dry-run"]);
     assert!(

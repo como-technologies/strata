@@ -33,7 +33,7 @@ pub struct PaletteValidation {
 /// as `accepts` and `errors`: see [`PaletteValidation`] for the answer for a cluster.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProfileValidation {
-    /// Each error that Palette gives, sorted by pack, code, and message, with no copy.
+    /// Each error that Palette gives, sorted by pack, code, message, and clusters, with no copy.
     errors: Vec<PaletteRefusal>,
 }
 
@@ -50,8 +50,8 @@ pub struct ProfileValidation {
 struct ValidationDocument<'a> {
     /// True when Palette gives no error.
     accepts: bool,
-    /// Each error that Palette gives, sorted by pack, code, and message. Palette gives them in
-    /// no fixed order.
+    /// Each error that Palette gives, sorted by pack, code, message, and clusters. Palette gives
+    /// them in no fixed order.
     #[serde(default, skip_serializing_if = "<[_]>::is_empty")]
     errors: Cow<'a, [PaletteRefusal]>,
 }
@@ -153,7 +153,7 @@ impl PaletteRefusal {
     ///
     /// Palette names the clusters in the message of an error about a profile. It gives them in no
     /// field of their own.
-    pub fn naming(mut self, candidates: &[String]) -> PaletteRefusal {
+    pub(crate) fn naming(mut self, candidates: &[String]) -> PaletteRefusal {
         let is_name = |c: char| c.is_alphanumeric() || matches!(c, '-' | '_');
         let held = |name: &str| {
             !name.is_empty()
@@ -175,7 +175,7 @@ impl PaletteRefusal {
     }
 
     /// The error with `cluster` as the one cluster that it is about: an answer for one cluster.
-    pub fn on_cluster(mut self, cluster: &str) -> PaletteRefusal {
+    pub(crate) fn on_cluster(mut self, cluster: &str) -> PaletteRefusal {
         self.clusters = vec![cluster.to_string()];
         self
     }
@@ -249,9 +249,14 @@ impl ProfileValidation {
         self.errors.is_empty()
     }
 
-    /// Each error that Palette gives, sorted by pack, code, and message, with no copy.
+    /// Each error that Palette gives, sorted by pack, code, message, and clusters, with no copy.
     pub fn errors(&self) -> &[PaletteRefusal] {
         &self.errors
+    }
+
+    /// The errors of the answer, in the order of [`ProfileValidation::errors`].
+    pub(crate) fn into_errors(self) -> Vec<PaletteRefusal> {
+        self.errors
     }
 }
 

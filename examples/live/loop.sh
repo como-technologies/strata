@@ -159,7 +159,7 @@ if stage 5 "the nightly jobs"; then
   check upstream-asks 1 '#166: upstream-report.sh asks Palette whether it accepts the bump of each pin that is behind' -- \
     in_repo "$ci/upstream-report.sh" 'releases/*.json' --dry-run
   check upstream-asks-says 0 '#166: the bump column of an issue holds the answer of Palette' -- \
-    grep -Eq '; palette (accepts|refuses: )' upstream-asks.out
+    grep -Eq '<br>palette (accepts|refuses: )' upstream-asks.out
 fi
 
 if stage 6 "behind is not different"; then
