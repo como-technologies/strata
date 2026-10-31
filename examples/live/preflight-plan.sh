@@ -194,8 +194,8 @@ case "$engine" in
     "$live/api.sh" get "/v1/clouds/aws/regions/$region/keypairs?cloudAccountUid=$A" > keypairs.json 2> keypairs.err
     check key-pairs-shape 0 "the key pair route lists keyNames[] for $region, and the key $ssh_key of the entity is in it" -- \
       jq -e --arg k "$ssh_key" '(.keyNames | index($k)) != null' keypairs.json
-    # ssh-key-pair names eks alone: the properties route of aws refuses a key pair that the region
-    # lacks (HTTP 500, AwsKeyPairNotFound), and iaas-pod-identity sends it the key pair (#430)
+    # ssh-key-pair names eks alone. The properties route of aws refuses a key pair that the region
+    # lacks (HTTP 500, AwsKeyPairNotFound). iaas-pod-identity sends it the key pair (#430)
     case "$engine" in
       aws)
         fault iaas-pod-identity '.spec.cloudConfig.sshKeyName = "strata-no-such-key"'

@@ -419,9 +419,8 @@ It takes a candidate of `cert-manager` 1.21.1 from the Public Repo. See
 
 Each answers a request that is right with a 2xx status, and a fault with an
 HTTP error and a `V1Error`. Each calls the cloud with the credentials of the
-cloud account. A live run shows the AWS route: HTTP `200` for a key pair that the
-region holds, and HTTP `500` with the code `AwsKeyPairNotFound` for one that it
-lacks.
+cloud account. A live run shows the answers of the AWS route: see
+[The list routes](#the-list-routes).
 
 | Route | Body | Checks | Called before a create? |
 | --- | --- | --- | --- |
@@ -472,14 +471,17 @@ pair route answers it. The console calls the property route of AWS on an AWS
 create, and that route checks the key pair.
 
 A live run shows that the property route of AWS refuses a key pair that the
-region lacks. The answer is HTTP `500`, the code `AwsKeyPairNotFound`, and a
-message such as `Aws KeyPair 'strata-no-such-key' not found for region
-us-east-2; caused by: InvalidKeyPair.NotFound: The key pair 'strata-no-such-key'
-does not exist`. The same body with the key pair of the lab gets HTTP `200`.
-`iaas-pod-identity` sends the key pair to that route, so `ssh-key-pair` does not
-name AWS.
+region lacks. The answer is HTTP `500` with the code `AwsKeyPairNotFound`. The
+message reads:
 
-A run on AWS also shows the key pair route: `ssh-key-pair` finds the key pair of
+```text
+Aws KeyPair 'strata-no-such-key' not found for region us-east-2; caused by: InvalidKeyPair.NotFound: The key pair 'strata-no-such-key' does not exist
+```
+
+The same body with the key pair of the lab gets HTTP `200`. `iaas-pod-identity`
+sends the key pair to that route, so `ssh-key-pair` does not name AWS.
+
+A run on AWS also shows the key pair route. `ssh-key-pair` finds the key pair of
 the clean entity in `keyNames`, and fails a name that is not there. A run shows
 the answer of the AWS instance type route: its body holds `instanceTypes` alone.
 No run shows the GCP answer of the instance type route. The rule reads `type`

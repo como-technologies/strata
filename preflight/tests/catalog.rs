@@ -992,9 +992,9 @@ fn ssh_key_pair_leaves_aws_to_the_properties_route_that_iaas_pod_identity_calls(
     );
 }
 
-/// `ssh-key-pair` applies where `eks-public-subnet-mapping` does not: the property route of EKS
-/// checks the key pair only when the body has a `vpcId`, and that rule sends the route only with a
-/// `vpcId` and a subnet id (#430). On each body, one of the two rules applies.
+/// `ssh-key-pair` applies where `eks-public-subnet-mapping` does not. The property route of EKS
+/// checks the key pair only when the body has a `vpcId`. `eks-public-subnet-mapping` sends the
+/// route only with a `vpcId` and a subnet id (#430). On each body, one of the two rules applies.
 #[test]
 fn ssh_key_pair_applies_where_eks_public_subnet_mapping_does_not() {
     let catalog = catalog::builtin().unwrap();
@@ -1101,7 +1101,7 @@ fn kms_fails_a_disabled_key_that_the_list_of_keys_holds() {
 }
 
 /// The world gives `accountKind` and `routeCloud`, so no rule maps the engine to a cloud itself
-/// (#430). A path or a program that wrote `edge-native`, or `then "aws"`, would be a second copy of
+/// (#430). A path or a program that writes `edge-native`, or `then "aws"`, is a second copy of
 /// `account_kind` or `route_cloud`.
 #[test]
 fn no_check_maps_the_engine_to_a_cloud_itself() {
