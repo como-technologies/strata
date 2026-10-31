@@ -3,6 +3,7 @@
 
 use crate::common;
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -52,18 +53,31 @@ fn every_script_a_release_carries_prints_its_help_and_exits_0() {
 /// The files a team copies, and the reusable workflows they call. They name scripts, options and a
 /// release version, and nothing else reads them: a renamed option or a moved script breaks a
 /// drop-in silently.
-const DROP_INS: [&str; 6] = [
+const DROP_INS: [&str; 8] = [
     "examples/ci/github/strata.yml",
     "examples/ci/gitlab/strata.yml",
     ".github/workflows/comment.yml",
     ".github/workflows/verify.yml",
     ".github/workflows/upstream.yml",
     ".github/workflows/merge-gate.yml",
+    ".github/workflows/preflight.yml",
+    ".github/workflows/preflight-comment.yml",
 ];
 
 fn repo_file(path: &str) -> String {
     std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path))
         .unwrap_or_else(|e| panic!("{path}: {e}"))
+}
+
+/// Whether `text` names `flag` as a word: `--thresh` is not `--threshold`, although one contains
+/// the other.
+fn has_flag(text: &str, flag: &str) -> bool {
+    text.match_indices(flag).any(|(i, _)| {
+        text[i + flag.len()..]
+            .chars()
+            .next()
+            .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-')
+    })
 }
 
 /// The `--help` of one script that ships.
@@ -102,15 +116,6 @@ fn the_ci_drop_ins_name_only_scripts_that_ship() {
 #[test]
 fn the_ci_drop_ins_pass_only_options_the_scripts_have() {
     let helps: Vec<(&str, String)> = SHIPPED.iter().map(|n| (*n, help_of(n))).collect();
-    // as a word: --thresh is not --threshold, although one contains the other
-    let has_flag = |help: &str, flag: &str| {
-        help.match_indices(flag).any(|(i, _)| {
-            help[i + flag.len()..]
-                .chars()
-                .next()
-                .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-')
-        })
-    };
     let known = |flag: &str| helps.iter().any(|(_, h)| has_flag(h, flag));
     for file in DROP_INS {
         let body = repo_file(file);
@@ -250,6 +255,515 @@ fn the_release_check_runs_the_scripts_the_installer_installs() {
         checks, installs,
         "the release workflow runs scripts the installer does not install, or misses one it does"
     );
+}
+
+// ---- the options of the tools that a pipeline wraps -------------------------------------------
+
+/// Where a tool lists its options.
+enum Listed {
+    /// A script of `scripts/ci/`: the usage lines of its help.
+    Script(&'static str),
+    /// A command of strata: the `Options:` of the help that the book prints.
+    Command(&'static str),
+}
+
+impl Listed {
+    /// Each option of the tool, except `--help` and `--version`.
+    fn options(&self) -> BTreeSet<String> {
+        let mut found = BTreeSet::new();
+        let flag_of = |token: &str| {
+            let flag = token.trim_matches(['[', ']', ',', ';']);
+            flag.starts_with("--").then(|| flag.to_string())
+        };
+        match self {
+            Listed::Script(name) => {
+                // `  scripts/ci/NAME <ref>... [--a] [--b X]`, and the indented lines that go on
+                let mut in_usage = false;
+                for line in help_of(name).lines() {
+                    let begins =
+                        line.starts_with(' ') && line.trim_start().starts_with("scripts/ci/");
+                    in_usage = begins || (in_usage && line.starts_with(' '));
+                    if in_usage {
+                        found.extend(line.split_whitespace().filter_map(flag_of));
+                    }
+                }
+            }
+            Listed::Command(name) => {
+                let help = repo_file(&format!("docs/src/output/help-{name}.txt"));
+                let mut in_options = false;
+                for line in help.lines() {
+                    if line.trim_start().starts_with('-') && in_options {
+                        // `  -q, --quiet` and `      --format <FORMAT>`: the first long name
+                        found.extend(line.split_whitespace().find_map(flag_of));
+                    }
+                    in_options = line == "Options:" || (in_options && !line.is_empty());
+                }
+            }
+        }
+        found.remove("--help");
+        found.remove("--version");
+        found
+    }
+}
+
+/// One option that a pipeline sets: the reusable workflow takes it from an input, and the GitLab
+/// job from a variable. An empty `input` or `variable` means the wrapper sets the option itself,
+/// from the event or from the key, and offers no setting for it.
+struct Reach {
+    flag: &'static str,
+    input: &'static str,
+    variable: &'static str,
+}
+
+const fn reach(flag: &'static str, input: &'static str, variable: &'static str) -> Reach {
+    Reach {
+        flag,
+        input,
+        variable,
+    }
+}
+
+/// Options that a wrapper does not pass on purpose, with the reason.
+struct Left {
+    flags: &'static [&'static str],
+    why: &'static str,
+}
+
+/// The options that choose how a command prints. A gate prints to the log of its job, and its
+/// exit status is the verdict.
+const PRINTING: Left = Left {
+    flags: &[
+        "--format",
+        "--json",
+        "--color",
+        "--no-color",
+        "--compact",
+        "--quiet",
+    ],
+    why: "the gate prints to the log of the job, and its exit status is the verdict",
+};
+
+/// A reusable workflow and the GitLab job that wrap the same tool.
+struct Wrapper {
+    workflow: &'static str,
+    job: &'static str,
+    tool: Listed,
+    reaches: &'static [Reach],
+    left: &'static [Left],
+}
+
+const HOST: Left = Left {
+    flags: &["--host"],
+    why: "the script picks the host from the CI variables",
+};
+
+const DRY_RUN: Left = Left {
+    flags: &["--dry-run"],
+    why: "it touches no host, so a person tries it at a terminal",
+};
+
+const WRAPPERS: [Wrapper; 8] = [
+    Wrapper {
+        workflow: "comment.yml",
+        job: "strata-comment",
+        tool: Listed::Script("pr-comment.sh"),
+        reaches: &[
+            reach("--pr", "", ""),
+            reach("--repo", "", ""),
+            reach("--label", "label", "STRATA_LABEL"),
+            reach("--threshold", "threshold", "STRATA_THRESHOLD"),
+            reach("--repave", "repave", "STRATA_REPAVE"),
+        ],
+        left: &[
+            HOST,
+            DRY_RUN,
+            Left {
+                flags: &["--preflight"],
+                why: "preflight-comment.yml posts the report of a preflight",
+            },
+        ],
+    },
+    Wrapper {
+        workflow: "preflight-comment.yml",
+        // GitLab has no workflow of its own for it: the job of the preflight posts the note
+        job: "strata-preflight",
+        tool: Listed::Script("pr-comment.sh"),
+        reaches: &[
+            reach("--pr", "", ""),
+            reach("--repo", "", ""),
+            reach("--preflight", "", "STRATA_PREFLIGHT_COMMENT"),
+        ],
+        left: &[
+            HOST,
+            DRY_RUN,
+            Left {
+                flags: &["--label", "--threshold", "--repave"],
+                why: "the preflight comment compares nothing and sets no label",
+            },
+        ],
+    },
+    Wrapper {
+        workflow: "merge-gate.yml",
+        job: "strata-merge-gate",
+        tool: Listed::Script("merge-gate.sh"),
+        reaches: &[
+            reach("--no-verify", "verify", ""),
+            reach(
+                "--allow-rollback",
+                "rollback-label",
+                "STRATA_ROLLBACK_LABEL",
+            ),
+            reach(
+                "--allow-no-digest",
+                "allow-no-digest",
+                "STRATA_ALLOW_NO_DIGEST",
+            ),
+        ],
+        left: &[
+            Left {
+                flags: &["--base"],
+                why: "the workflow sets GITHUB_BASE_REF from its input base",
+            },
+            Left {
+                flags: &["--remote"],
+                why: "the checkout of the job names its remote origin",
+            },
+        ],
+    },
+    Wrapper {
+        workflow: "verify.yml",
+        job: "strata-verify",
+        tool: Listed::Script("verify-report.sh"),
+        reaches: &[
+            reach("--repo", "", ""),
+            reach("--label", "label", "STRATA_DRIFT_LABEL"),
+            reach(
+                "--allow-no-digest",
+                "allow-no-digest",
+                "STRATA_ALLOW_NO_DIGEST",
+            ),
+            reach("--who", "who", "STRATA_WHO"),
+        ],
+        left: &[HOST, DRY_RUN],
+    },
+    Wrapper {
+        workflow: "upstream.yml",
+        job: "strata-upstream",
+        tool: Listed::Script("upstream-report.sh"),
+        reaches: &[
+            reach("--repo", "", ""),
+            reach("--label", "label", "STRATA_BEHIND_LABEL"),
+            reach("--no-impact", "no-impact", "STRATA_NO_IMPACT"),
+            reach("--save", "save", "STRATA_SAVE"),
+        ],
+        left: &[HOST, DRY_RUN],
+    },
+    Wrapper {
+        workflow: "promote-gate.yml",
+        job: "strata-promote-gate",
+        tool: Listed::Command("same-release"),
+        reaches: &[reach("--allow", "allow", "STRATA_PROMOTE_ALLOW")],
+        left: &[PRINTING],
+    },
+    Wrapper {
+        workflow: "retire-gate.yml",
+        job: "strata-retire-gate",
+        tool: Listed::Command("consumers"),
+        reaches: &[],
+        left: &[
+            PRINTING,
+            Left {
+                flags: &["--list-only"],
+                why: "the gate reads each cluster, because the list of Palette can omit a consumer",
+            },
+        ],
+    },
+    Wrapper {
+        workflow: "preflight.yml",
+        job: "strata-preflight",
+        tool: Listed::Command("preflight"),
+        reaches: &[
+            reach("--cloud", "cloud", "STRATA_PREFLIGHT_CLOUD"),
+            reach("--release", "release", "STRATA_PREFLIGHT_RELEASE"),
+            reach("--records", "records", "STRATA_PREFLIGHT_RECORDS"),
+            reach("--probes", "probes", "STRATA_PREFLIGHT_PROBES"),
+            reach("--tier", "tier", "STRATA_PREFLIGHT_TIER"),
+            reach("--rule", "rule", "STRATA_PREFLIGHT_RULE"),
+            reach("--strict", "strict", "STRATA_PREFLIGHT_STRICT"),
+            reach("--ready", "ready", "STRATA_PREFLIGHT_READY"),
+            reach("--no-exec", "no-exec", "STRATA_PREFLIGHT_NO_EXEC"),
+            reach("--verbose", "verbose", "STRATA_PREFLIGHT_VERBOSE"),
+            reach("--watch", "watch", "STRATA_PREFLIGHT_WATCH"),
+            reach("--every", "every", "STRATA_PREFLIGHT_EVERY"),
+            reach("--limit", "limit", "STRATA_PREFLIGHT_LIMIT"),
+            reach("--out", "out", "STRATA_PREFLIGHT_OUT"),
+            // set by the wrapper: the markdown goes to the summary and to the artifact, and a run
+            // with no key reads nothing from Palette
+            reach("--format", "", ""),
+            reach("--quiet", "", ""),
+            reach("--offline", "", ""),
+        ],
+        left: &[
+            Left {
+                flags: &["--rules", "--promotion", "--ledger", "--schema"],
+                why: "a mode that checks no cluster",
+            },
+            Left {
+                flags: &["--json", "--compact", "--color", "--no-color"],
+                why: "the wrapper fixes the markdown report",
+            },
+        ],
+    },
+];
+
+/// The options that a tool has and a wrapper neither sets nor omits on purpose, and the
+/// options that the wrapper names for a tool that does not have them.
+fn unaccounted(options: &BTreeSet<String>, reaches: &[Reach], left: &[Left]) -> Vec<String> {
+    let named: BTreeSet<&str> = reaches
+        .iter()
+        .map(|r| r.flag)
+        .chain(left.iter().flat_map(|l| l.flags.iter().copied()))
+        .collect();
+    let mut wrong: Vec<String> = options
+        .iter()
+        .filter(|o| !named.contains(o.as_str()))
+        .map(|o| format!("{o} is an option of the tool, and nothing says what the wrapper does"))
+        .collect();
+    wrong.extend(
+        named
+            .iter()
+            .filter(|n| !options.contains(**n))
+            .map(|n| format!("{n} is not an option of the tool")),
+    );
+    wrong.extend(
+        left.iter()
+            .filter(|l| l.why.is_empty())
+            .map(|l| format!("{:?} is left out with no reason", l.flags)),
+    );
+    wrong
+}
+
+/// What a workflow runs: the commands and the values of the environment of each step, without
+/// the comments.
+fn executed_by(workflow: &serde_yaml::Value) -> String {
+    let mut text = String::new();
+    let mut keep = |value: &str| {
+        for line in value.lines().filter(|l| !l.trim_start().starts_with('#')) {
+            text.push_str(line);
+            text.push('\n');
+        }
+    };
+    for job in workflow["jobs"]
+        .as_mapping()
+        .expect("a workflow has jobs")
+        .values()
+    {
+        for step in job["steps"].as_sequence().into_iter().flatten() {
+            step["run"].as_str().into_iter().for_each(&mut keep);
+            for value in step["env"]
+                .as_mapping()
+                .into_iter()
+                .flat_map(|e| e.values())
+            {
+                value.as_str().into_iter().for_each(&mut keep);
+            }
+        }
+    }
+    text
+}
+
+/// The lines of one job of the GitLab drop-in, without the comments.
+fn gitlab_job_text(gitlab: &str, job: &str) -> String {
+    let head = format!("{job}:");
+    gitlab
+        .lines()
+        .skip_while(|l| *l != head)
+        .skip(1)
+        .take_while(|l| l.is_empty() || l.starts_with(' '))
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Whether `text` reads the variable, as `$NAME` or `${NAME`, and not a longer name.
+fn reads_variable(text: &str, name: &str) -> bool {
+    [format!("${name}"), format!("${{{name}")]
+        .iter()
+        .any(|read| {
+            text.match_indices(read.as_str()).any(|(i, _)| {
+                text[i + read.len()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '_')
+            })
+        })
+}
+
+/// Each reusable workflow takes each option of its script, or of its command, from an input, sets
+/// it itself, or omits it with a reason. A new option of the script fails this test until a
+/// person decides which one it is.
+#[test]
+fn each_reusable_workflow_names_each_option_of_its_script() {
+    for w in &WRAPPERS {
+        let name = w.workflow;
+        let wrong = unaccounted(&w.tool.options(), w.reaches, w.left);
+        assert!(wrong.is_empty(), "{name}: {wrong:#?}");
+
+        let workflow: serde_yaml::Value =
+            serde_yaml::from_str(&repo_file(&format!(".github/workflows/{name}"))).unwrap();
+        let inputs = workflow["on"]["workflow_call"]["inputs"]
+            .as_mapping()
+            .unwrap_or_else(|| panic!("{name} has no inputs"));
+        let executed = executed_by(&workflow);
+        for r in w.reaches {
+            assert!(
+                has_flag(&executed, r.flag),
+                "{name} never passes {} to the tool",
+                r.flag
+            );
+            assert!(
+                r.input.is_empty() || inputs.contains_key(r.input),
+                "{name} has no input {} for {}",
+                r.input,
+                r.flag
+            );
+        }
+    }
+}
+
+/// The GitLab job reads the variable that takes the place of each input, and passes the option.
+#[test]
+fn each_gitlab_job_sets_the_options_that_its_reusable_workflow_sets() {
+    let gitlab = repo_file("examples/ci/gitlab/strata.yml");
+    for w in &WRAPPERS {
+        let job = gitlab_job_text(&gitlab, w.job);
+        assert!(!job.is_empty(), "the drop-in has no job {}", w.job);
+        for r in w.reaches.iter().filter(|r| !r.variable.is_empty()) {
+            assert!(
+                reads_variable(&job, r.variable),
+                "{} never reads {} for {}",
+                w.job,
+                r.variable,
+                r.flag
+            );
+            assert!(has_flag(&job, r.flag), "{} never passes {}", w.job, r.flag);
+            assert!(
+                gitlab.contains(&format!("\n  {}:", r.variable)),
+                "the drop-in gives {} no default",
+                r.variable
+            );
+        }
+    }
+}
+
+/// The promotion gate reads a ref such as `name@version` in a project, as the retire gate does.
+#[test]
+fn the_promote_gate_takes_the_project_of_a_ref_as_the_retire_gate_does() {
+    let promote = repo_file(".github/workflows/promote-gate.yml");
+    let retire = repo_file(".github/workflows/retire-gate.yml");
+    assert!(promote.contains("PALETTE_PROJECT: ${{ inputs.project }}"));
+    assert!(retire.contains("PALETTE_PROJECT: ${{ inputs.project }}"));
+    assert!(promote.contains("PALETTE_PROJECT_UID: ${{ secrets.palette-project-uid }}"));
+    let doc: serde_yaml::Value = serde_yaml::from_str(&promote).unwrap();
+    let call = &doc["on"]["workflow_call"];
+    assert!(call["inputs"]["project"].is_mapping());
+    assert!(call["secrets"]["palette-project-uid"].is_mapping());
+}
+
+/// A script passes to its command the options that a pipeline sets, and the script is the only
+/// place that does: the workflow and the job call the script.
+struct Passes {
+    script: &'static str,
+    command: &'static str,
+    passed: &'static [Reach],
+    left: &'static [Left],
+}
+
+const PROJECT: Left = Left {
+    flags: &["--project", "--project-name"],
+    why: "the project comes from PALETTE_PROJECT_UID or PALETTE_PROJECT",
+};
+
+const FORMATS: Left = Left {
+    flags: &["--json", "--color", "--no-color", "--compact"],
+    why: "the script asks for the format that it reads",
+};
+
+const PASSES: [Passes; 3] = [
+    Passes {
+        script: "verify-report.sh",
+        command: "verify",
+        passed: &[
+            reach("--allow-no-digest", "", ""),
+            reach("--who", "", ""),
+            reach("--summary", "", ""),
+            reach("--format", "", ""),
+            reach("--quiet", "", ""),
+        ],
+        left: &[PROJECT, FORMATS],
+    },
+    Passes {
+        script: "merge-gate.sh",
+        command: "verify",
+        passed: &[
+            reach("--allow-no-digest", "", ""),
+            reach("--summary", "", ""),
+            reach("--json", "", ""),
+            reach("--quiet", "", ""),
+        ],
+        left: &[
+            PROJECT,
+            Left {
+                flags: &["--who"],
+                why: "the gate stops the merge, and the drift issue names who",
+            },
+            Left {
+                flags: &["--format", "--color", "--no-color", "--compact"],
+                why: "the gate reads the status and the summary",
+            },
+        ],
+    },
+    Passes {
+        script: "upstream-report.sh",
+        command: "behind",
+        passed: &[
+            reach("--no-impact", "", ""),
+            reach("--since", "", ""),
+            reach("--format", "", ""),
+            reach("--quiet", "", ""),
+        ],
+        left: &[FORMATS],
+    },
+];
+
+/// Each option of `strata verify` and `strata behind` reaches the script that wraps it, or the
+/// script omits it with a reason.
+#[test]
+fn each_script_passes_the_options_of_its_command_or_omits_them_on_purpose() {
+    for p in &PASSES {
+        let options = Listed::Command(p.command).options();
+        let wrong = unaccounted(&options, p.passed, p.left);
+        assert!(
+            wrong.is_empty(),
+            "{} for {}: {wrong:#?}",
+            p.script,
+            p.command
+        );
+        let code: String = repo_file(&format!("scripts/ci/{}", p.script))
+            .lines()
+            .filter(|l| !l.trim_start().starts_with('#'))
+            .collect::<Vec<_>>()
+            .join("\n");
+        for r in p.passed {
+            assert!(
+                has_flag(&code, r.flag),
+                "{} never passes {} to {}",
+                p.script,
+                r.flag,
+                p.command
+            );
+        }
+    }
 }
 
 // ---- pr-comment.sh ---------------------------------------------------------------------------
@@ -1108,6 +1622,210 @@ fn pr_comment_stops_on_what_gitlab_answers_and_asks_for_a_token_that_can_write()
         text(&o.stderr)
     );
     assert!(h.gl_calls().is_empty(), "no call before the token is there");
+}
+
+/// A markdown report of `strata preflight`, in a file of the stand-in home.
+fn preflight_report(h: &Host) -> String {
+    let report = h.home.join("report.md");
+    std::fs::write(
+        &report,
+        "## Preflight: payments\n\n| check | verdict |\n|---|---|\n| `eks-subnets` | FAIL |\n",
+    )
+    .unwrap();
+    report.display().to_string()
+}
+
+#[test]
+fn pr_comment_preflight_posts_the_report_under_its_own_marker_and_touches_no_label() {
+    let h = host();
+    let report = preflight_report(&h);
+    // no strata is needed: the report is a file
+    let o = h.run_with(
+        &["--preflight", &report, "--pr", "7", "--repo", "o/r"],
+        &[("STRATA_BIN", "/nonexistent/strata")],
+    );
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    let calls = h.calls();
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("pr comment 7 --repo o/r --body-file ")),
+        "{calls:?}"
+    );
+    assert!(
+        !calls
+            .iter()
+            .any(|c| c.contains("label") || c.starts_with("pr edit")),
+        "a preflight report sets no label: {calls:?}"
+    );
+    let body = h.saved_body();
+    assert!(
+        body.starts_with("<!-- strata-preflight -->\n## Preflight: payments"),
+        "{body}"
+    );
+    assert!(body.contains("| `eks-subnets` | FAIL |"), "{body}");
+    assert!(
+        text(&o.stderr).contains("comment posted"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn pr_comment_preflight_updates_its_own_comment_and_leaves_the_comparison_comment() {
+    let h = host();
+    let report = preflight_report(&h);
+    std::fs::write(
+        &h.comments,
+        r#"[{"id": 9, "body": "<!-- strata -->\nthe comparison"}, {"id": 123, "body": "<!-- strata-preflight -->\nthe last push"}]"#,
+    )
+    .unwrap();
+    let o = h.run(&["--preflight", &report, "--pr", "7", "--repo", "o/r"]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let calls = h.calls();
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("api -X PATCH repos/o/r/issues/comments/123 -F body=@")),
+        "{calls:?}"
+    );
+    assert!(
+        !calls
+            .iter()
+            .any(|c| c.contains("comments/9") || c.starts_with("pr comment")),
+        "{calls:?}"
+    );
+
+    // a pull request with a comparison comment and no preflight comment gets a second comment, and
+    // the comparison run leaves the preflight comment as it is
+    std::fs::write(
+        &h.comments,
+        r#"[{"id": 9, "body": "<!-- strata -->\nthe comparison"}]"#,
+    )
+    .unwrap();
+    let o = h.run(&["--preflight", &report, "--pr", "7", "--repo", "o/r"]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        h.calls().iter().any(|c| c.starts_with("pr comment 7")),
+        "{:?}",
+        h.calls()
+    );
+    std::fs::write(
+        &h.comments,
+        r#"[{"id": 5, "body": "<!-- strata-preflight -->\nthe report"}]"#,
+    )
+    .unwrap();
+    let o = h.run(&[&h.a, &h.b, "--pr", "7", "--repo", "o/r"]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        h.calls().iter().any(|c| c.starts_with("pr comment 7")),
+        "the comparison does not take the preflight comment: {:?}",
+        h.calls()
+    );
+}
+
+#[test]
+fn pr_comment_preflight_dry_run_prints_the_comment_and_calls_no_host() {
+    let h = host();
+    let report = preflight_report(&h);
+    let o = h.run(&["--preflight", &report, "--dry-run"]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stdout).starts_with("<!-- strata-preflight -->\n## Preflight: payments"),
+        "{}",
+        text(&o.stdout)
+    );
+    assert!(h.calls().is_empty(), "{:?}", h.calls());
+}
+
+#[test]
+fn pr_comment_preflight_stops_on_a_missing_report_and_on_a_comparison_option() {
+    let h = host();
+    let report = preflight_report(&h);
+    let missing = h.home.join("none.md").display().to_string();
+    let o = h.run(&["--preflight", &missing, "--pr", "7", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("missing or empty"),
+        "{}",
+        text(&o.stderr)
+    );
+    let empty = h.home.join("empty.md");
+    std::fs::write(&empty, "").unwrap();
+    let o = h.run(&[
+        "--preflight",
+        empty.to_str().unwrap(),
+        "--pr",
+        "7",
+        "--repo",
+        "o/r",
+    ]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+
+    for extra in [
+        vec![h.a.as_str()],
+        vec!["--label", "x"],
+        vec!["--threshold", "sync"],
+        vec!["--repave"],
+    ] {
+        let mut args = vec!["--preflight", report.as_str(), "--pr", "7", "--repo", "o/r"];
+        args.extend(extra.iter().copied());
+        let o = h.run(&args);
+        assert_eq!(o.status.code(), Some(2), "{extra:?}: {}", text(&o.stderr));
+        assert!(
+            text(&o.stderr).contains("--preflight takes no ref"),
+            "{extra:?}: {}",
+            text(&o.stderr)
+        );
+    }
+    assert!(
+        h.calls().is_empty(),
+        "no host call on a wrong use: {:?}",
+        h.calls()
+    );
+}
+
+#[test]
+fn pr_comment_preflight_posts_and_updates_one_marked_note_on_gitlab() {
+    let h = host();
+    let report = preflight_report(&h);
+    let o = h.run_gitlab(&["--preflight", &report], &[]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    let calls = h.gl_calls();
+    assert!(
+        calls[0].starts_with("GET /projects/42/merge_requests/7/notes"),
+        "{calls:?}"
+    );
+    assert!(
+        calls[1].starts_with("POST /projects/42/merge_requests/7/notes body@"),
+        "{calls:?}"
+    );
+    assert_eq!(calls.len(), 2, "a note, and no label: {calls:?}");
+    assert!(
+        h.gl_handed(2)
+            .starts_with("<!-- strata-preflight -->\n## Preflight: payments"),
+        "{}",
+        h.gl_handed(2)
+    );
+
+    h.put_gl(
+        "gl-notes.json",
+        r#"[{"id": 11, "body": "<!-- strata -->\nthe comparison"}, {"id": 55, "body": "<!-- strata-preflight -->\nthe last push"}]"#,
+    );
+    let o = h.run_gitlab(&["--preflight", &report], &[]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        h.gl_calls()
+            .iter()
+            .any(|c| c.starts_with("PUT /projects/42/merge_requests/7/notes/55 body@")),
+        "{:?}",
+        h.gl_calls()
+    );
+    assert!(
+        text(&o.stderr).contains("comment 55 updated"),
+        "{}",
+        text(&o.stderr)
+    );
 }
 
 // ---- install-strata.sh -------------------------------------------------------------------------
@@ -2584,6 +3302,69 @@ fn verify_report_opens_an_issue_for_an_unverified_record_and_passes_allow_no_dig
 }
 
 #[test]
+fn verify_report_asks_who_changed_a_record_that_drifted_and_puts_the_answer_in_its_issue() {
+    let d = Report::verify();
+    d.summary(
+        1,
+        &[
+            ("releases/a.json", "unchanged", "lab-profile", "1.2.0"),
+            ("releases/b.json", "drifted", "lab-profile", "1.3.0"),
+        ],
+    );
+    // what `strata verify --who` adds to the report of a record that drifted
+    d.record(
+        "b",
+        1,
+        "**DRIFT**: published version lab-profile@1.3.0 differs\n\n**who:** 1 write in the audit log since the record\n\n- 2026-09-18T14:02:11.482Z John Doe (user) update\n",
+        "",
+    );
+
+    // without the option, the check of the record asks for no audit log
+    let o = d.run(&["releases/*.json", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(
+        d.log("strata.log").iter().all(|l| !l.contains("--who")),
+        "{:?}",
+        d.log("strata.log")
+    );
+
+    // with it, the check of each record that did not verify asks, and the summary does not
+    let o = d.run(&["releases/*.json", "--who", "--dry-run"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let log = d.log("strata.log");
+    assert_eq!(log.len(), 2, "{log:?}");
+    assert!(
+        log[0].contains("--summary") && !log[0].contains("--who"),
+        "{log:?}"
+    );
+    assert_eq!(
+        log[1],
+        "verify releases/b.json --quiet --format markdown --who"
+    );
+    let out = text(&o.stdout);
+    assert!(out.contains("John Doe (user) update"), "{out}");
+    assert!(
+        out.starts_with("<!-- strata-verify: releases/b.json -->"),
+        "{out}"
+    );
+
+    // the issue that a run opens holds the same body
+    let o = d.run(&["releases/*.json", "--who", "--repo", "o/r"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let create = d
+        .log("gh.log")
+        .iter()
+        .position(|l| l.starts_with("issue create"))
+        .expect("an issue is opened")
+        + 1;
+    assert!(
+        d.handed("body", create).contains("John Doe (user) update"),
+        "{}",
+        d.handed("body", create)
+    );
+}
+
+#[test]
 fn live_scripts_refuse_a_strata_binary_older_than_the_sources() {
     let root = tempfile::tempdir().unwrap();
     let live = root.path().join("examples/live");
@@ -3018,6 +3799,26 @@ fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
         text(&o.stderr)
             .contains("would close the open issue for kubernetes in Public Repo, if any")
     );
+}
+
+#[test]
+fn upstream_report_keeps_the_report_of_the_run_in_the_file_that_save_names() {
+    let u = Report::upstream();
+    u.report(1, &["1.65.0"], None);
+    let saved = u.dir.path().join("kept/behind.json");
+    std::fs::create_dir(saved.parent().unwrap()).unwrap();
+    let o = u.run(&[
+        "releases/*.json",
+        "--dry-run",
+        "--save",
+        saved.to_str().unwrap(),
+    ]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let kept: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&saved).expect("the report is kept"))
+            .unwrap();
+    assert_eq!(kept["schema"], "strata-behind/1");
+    assert_eq!(kept["summary"]["behind"], 1);
 }
 
 #[test]

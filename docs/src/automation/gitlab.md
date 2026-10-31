@@ -5,7 +5,7 @@ set of functions: `gh` for GitHub, and the REST API v4 with `curl` for GitLab.
 
 | Script | On GitHub | On GitLab |
 | --- | --- | --- |
-| [`pr-comment.sh`](./pr-comments.md) | one comment on the pull request, and a label | one note on the merge request, and a label |
+| [`pr-comment.sh`](./pr-comments.md) | one comment on the pull request, and a label; with `--preflight`, one comment for the preflight report | one note on the merge request, and a label; with `--preflight`, one note for the preflight report |
 | [`verify-report.sh`](./drift-issues.md) | one issue per record that drifted, is unverified, or could not be checked | the same, as GitLab issues |
 | [`upstream-report.sh`](./upstream-issues.md) | one issue per pack that is behind | the same, as GitLab issues |
 | [`merge-gate.sh`](./merge-gate.md) | a required status check | a job that "Pipelines must succeed" waits for |
@@ -18,7 +18,7 @@ variable is set. `merge-gate.sh` calls no host, and it has no such option.
 
 ## The pipeline
 
-`examples/ci/gitlab/strata.yml` holds the six jobs, ready to include. Copy
+`examples/ci/gitlab/strata.yml` holds the seven jobs, ready to include. Copy
 it into `.gitlab/strata.yml` and include it:
 
 ```yaml
@@ -35,6 +35,7 @@ variables:
 | Job | Runs on | Does |
 | --- | --- | --- |
 | `strata-comment` | each merge request pipeline | Compares `STRATA_A` with `STRATA_B`, and keeps one note and the label. |
+| `strata-preflight` | each merge request pipeline | Runs `strata preflight` on the body of a create, and keeps the report as an artifact. With `STRATA_PREFLIGHT_COMMENT`, it also keeps one note. See [Preflight in a pipeline](./preflight.md#on-github-and-gitlab). |
 | `strata-merge-gate` | each merge request pipeline | Checks the merge result. Make the merge button wait for it. |
 | `strata-verify` | a pipeline schedule | Checks `STRATA_RECORDS` against Palette and keeps one issue per record that drifted, is unverified, or could not be checked. |
 | `strata-upstream` | a pipeline schedule | Checks the pins of `STRATA_RECORDS` against the registries and keeps one issue per pack that is behind, with the label `STRATA_BEHIND_LABEL`. |
@@ -56,6 +57,18 @@ in Settings, Merge requests, turn on "Pipelines must succeed".
 | `STRATA_PROMOTE` | the promotion gate | The records, in promotion order. Give it on the pipeline run, not as a project variable: the job appears only in a pipeline that carries it. |
 | `STRATA_RETIRE` | the retire gate | The version to retire, as `name@version`. Give it on the pipeline run, as above. |
 | `STRATA_BEHIND_LABEL` | the upstream report | The label of its issues, `strata-behind` by default. |
+| `STRATA_ALLOW_NO_DIGEST` | the merge gate, the drift report | `true` gives the script `--allow-no-digest`: a pack with no upstream digest does not make the record red. `false` by default. |
+| `STRATA_WHO` | the drift report | `true` gives the script `--who`: the issue of a record that drifted names who changed it. `false` by default. |
+| `STRATA_NO_IMPACT` | the upstream report | `true` gives the script `--no-impact`. `false` by default. |
+| `STRATA_SAVE` | the upstream report | A file for `--save`, which keeps the report of the run. The job keeps the file as an artifact. Empty by default: no file. |
+| `STRATA_PROMOTE_ALLOW` | the promotion gate | The differences to accept, separated by spaces: `registry-move`, `no-digest`. Empty by default. |
+| `PALETTE_PROJECT` | a ref in a project | The project by name, for a ref such as `name@version` in the promotion gate or the retire gate. `PALETTE_PROJECT_UID` wins over it. |
+| `STRATA_PREFLIGHT_SOURCE` | the preflight job | The body of the create, or `cluster:UID`. `clusters/payments.json` by default. |
+| `STRATA_PREFLIGHT_CLOUD`, `_TIER`, `_RECORDS` | the preflight job | `--cloud`, `--tier`, and `--records`. `eks`, `static`, and `releases/**/*.json` by default. |
+| `STRATA_PREFLIGHT_CHANGE`, `_PROBES`, `_RELEASE`, `_READY`, `_RULE`, `_EVERY`, `_LIMIT` | the preflight job | The change file, `--probes`, `--release`, `--ready`, `--rule`, `--every`, and `--limit`. Empty by default: the option is not given. `_RULE` is a list separated by spaces. |
+| `STRATA_PREFLIGHT_STRICT`, `_NO_EXEC`, `_VERBOSE`, `_WATCH` | the preflight job | `true` gives the option of the same name. `false` by default. |
+| `STRATA_PREFLIGHT_OUT` | the preflight job | The directory for `--out`. `preflight` by default. The job keeps it as an artifact. |
+| `STRATA_PREFLIGHT_COMMENT` | the preflight job | `true` posts `report.md` as one note on the merge request, with `pr-comment.sh --preflight`. `false` by default. It needs `GITLAB_TOKEN`. |
 
 The jobs read the merge request from `CI_MERGE_REQUEST_IID`, the project from
 `CI_PROJECT_ID`, and the API from `CI_API_V4_URL`, so a self-hosted GitLab needs

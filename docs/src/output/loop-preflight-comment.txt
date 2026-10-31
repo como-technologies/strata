@@ -1,0 +1,6 @@
+$ PALETTE_PROJECT=prod strata preflight cluster.json --cloud aws --tier static --offline --quiet --out preflight > /dev/null && scripts/ci/pr-comment.sh --preflight preflight/report.md --dry-run | sed -n '1,4p'
+pr-comment: would post the preflight comment, or update the one that carries <!-- strata-preflight -->
+<!-- strata-preflight -->
+## strata-preflight: aws cluster `ledger`
+
+**OK: each counted check passed** — source `cluster.json`, Palette release not given, tiers static. 4 ran: 4 passed, 0 failed, 0 probe(s) failed; 16 did not run, 24 not checked; readiness **20%** (4 of 20 checks passed).

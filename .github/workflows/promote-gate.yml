@@ -14,7 +14,11 @@ on:
         required: true
         type: string
       allow:
-        description: 'A difference to accept: registry-move, for a promotion that moves packs to another registry. Empty accepts none.'
+        description: 'The differences to accept, as a list separated by spaces or newlines: registry-move, for a promotion that moves packs to another registry, and no-digest. Empty accepts none.'
+        default: ""
+        type: string
+      project:
+        description: The Palette project that holds a ref such as name@version, by name; empty means tenant scope. A file needs none.
         default: ""
         type: string
       palette-api:
@@ -31,6 +35,9 @@ on:
         required: false
       palette-api-key:
         description: PALETTE_API_KEY. Records are files and need no key; a ref does.
+        required: false
+      palette-project-uid:
+        description: PALETTE_PROJECT_UID, the project of a ref by its uid. It wins over project.
         required: false
 
 permissions:
@@ -62,13 +69,16 @@ jobs:
       - name: the records are one release
         env:
           PALETTE_API_KEY: ${{ secrets.palette-api-key }}
+          PALETTE_PROJECT_UID: ${{ secrets.palette-project-uid }}
+          PALETTE_PROJECT: ${{ inputs.project }}
           PALETTE_API: ${{ inputs.palette-api }}
           RECORDS: ${{ inputs.records }}
           ALLOW: ${{ inputs.allow }}
         run: |
           # split the records on whitespace, and keep their order: same-release reads each pair
           set -f
+          # one --allow for each difference: same-release takes the option more than one time
           allow=()
-          [ -z "$ALLOW" ] || allow=(--allow "$ALLOW")
+          for a in $ALLOW; do allow+=(--allow "$a"); done
           # shellcheck disable=SC2086
           .strata/bin/strata same-release $RECORDS "${allow[@]}"

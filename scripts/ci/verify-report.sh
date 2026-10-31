@@ -2,8 +2,8 @@
 # Report the records a scheduled `strata verify` finds drifted, unverified, or cannot check, as
 # issues.
 #
-#   scripts/ci/verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--label NAME]
-#                               [--allow-no-digest] [--dry-run]
+#   scripts/ci/verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--host github|gitlab]
+#                               [--label NAME] [--allow-no-digest] [--who] [--dry-run]
 #
 # Runs `strata verify --summary --format json` over the records; strata expands a quoted pattern
 # such as 'releases/**/*.json'. Each record that did not verify is checked again on its own for its
@@ -12,8 +12,10 @@
 # issue labeled NAME (default strata-drift), found by the marker
 # <!-- strata-verify: <path> --> on the first line of its body: opened on the first run that finds
 # it, updated with the latest report on each later run, and closed with a comment on the first run
-# where the record verifies again. Issues of records not given are left alone. --dry-run prints
-# each issue body and what would happen, and calls no host.
+# where the record verifies again. Issues of records not given are left alone. --who adds who
+# changed a record that drifted, and when: `strata verify --who` reads the audit log of Palette,
+# and the issue body lists each write since the record. --dry-run prints each issue body and what
+# would happen, and calls no host.
 #
 # Exit 0 when every record verified, 1 when any drifted or is unverified, 2 when any could not be
 # checked or verify checked nothing; the issues are handled first, so a scheduled job shows the
@@ -112,6 +114,7 @@ label_description="strata: a record that drifted or could not be checked"
 dry=""
 host_kind=""
 allow=()
+who=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) repo=$2; shift 2 ;;
@@ -119,12 +122,13 @@ while [ $# -gt 0 ]; do
     --label) label=$2; shift 2 ;;
     --dry-run) dry=1; shift ;;
     --allow-no-digest) allow=(--allow-no-digest); shift ;;
-    -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --who) who=(--who); shift ;;
+    -h|--help) sed -n '2,/^set -euo/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) patterns+=("$1"); shift ;;
   esac
 done
-[ ${#patterns[@]} -gt 0 ] || die "usage: verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--host github|gitlab] [--label NAME] [--allow-no-digest] [--dry-run]"
+[ ${#patterns[@]} -gt 0 ] || die "usage: verify-report.sh <record or pattern>... [--repo OWNER/REPO] [--host github|gitlab] [--label NAME] [--allow-no-digest] [--who] [--dry-run]"
 
 # The CI variables name the host when nothing else does.
 if [ -z "$host_kind" ]; then
@@ -188,7 +192,8 @@ while IFS= read -r record <&3; do
   body="$work/body.md"
   if [ "$status" != unchanged ]; then
     rc=0
-    "$strata" verify "$path" --quiet --format markdown "${allow[@]+"${allow[@]}"}" > "$work/report.md" 2> "$work/report.err" || rc=$?
+    # --who only here: it reads the audit log, and only a record that did not verify has an issue
+    "$strata" verify "$path" --quiet --format markdown "${allow[@]+"${allow[@]}"}" "${who[@]+"${who[@]}"}" > "$work/report.md" 2> "$work/report.err" || rc=$?
     # exit 1 is drift or unverified; the summary says which, unless the second check disagrees
     case "$rc" in
       0) status=unchanged ;;

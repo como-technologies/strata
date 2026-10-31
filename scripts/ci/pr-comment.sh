@@ -19,6 +19,15 @@
 # below those levels still reads the table when Palette says "no repave". Without an answer, the
 # table decides. The note on standard error says which one decided.
 #
+#   scripts/ci/pr-comment.sh --preflight FILE [--pr N] [--repo OWNER/REPO] [--host github|gitlab]
+#                            [--dry-run]
+#
+# --preflight FILE posts the markdown report of `strata preflight`, such as the report.md of
+# --out, in place of a comparison. It takes no ref, no label, and no threshold. The comment starts
+# with the marker <!-- strata-preflight -->, so it is a comment of its own beside the comparison;
+# a later run finds it by that marker and updates it. A missing or empty FILE is an error: the
+# preflight wrote no report, and the comment of the last push stays as it is.
+#
 # Hosts: GitHub through `gh`, and GitLab through the REST API v4 with `curl`. --host picks one;
 # without it, the CI variables do: GITLAB_CI or CI_PROJECT_ID means GitLab, else GitHub. On GitLab
 # the merge request is CI_MERGE_REQUEST_IID, the project CI_PROJECT_ID or --repo, the API
@@ -39,7 +48,7 @@ github_repo() { gh repo view --json nameWithOwner | jq -r .nameWithOwner; }
 github_pr_number() { gh pr view --json number | jq -r .number; }
 github_find_comment() {
   gh api "repos/$repo/issues/$pr/comments" --paginate \
-    | jq -r '.[] | select(.body | startswith("<!-- strata -->")) | .id' | sed -n 1p
+    | jq -r --arg m "$marker" '.[] | select(.body | startswith($m)) | .id' | sed -n 1p
 }
 github_post_comment() { gh pr comment "$pr" --repo "$repo" --body-file "$1"; }
 github_update_comment() { gh api -X PATCH "repos/$repo/issues/comments/$1" -F "body=@$2" >/dev/null; }
@@ -70,7 +79,7 @@ gitlab_repo() { printf '%s' "${CI_PROJECT_PATH:-$project}"; }
 gitlab_pr_number() { printf '%s' "${CI_MERGE_REQUEST_IID:-}"; }
 gitlab_find_comment() {
   gitlab_api GET "/merge_requests/$pr/notes?per_page=100&sort=asc" \
-    | jq -r '.[] | select(.body | startswith("<!-- strata -->")) | .id' | sed -n 1p
+    | jq -r --arg m "$marker" '.[] | select(.body | startswith($m)) | .id' | sed -n 1p
 }
 gitlab_post_comment() {
   gitlab_api POST "/merge_requests/$pr/notes" --data-urlencode "body@$1" >/dev/null
@@ -102,21 +111,31 @@ threshold="repave"
 repave=""
 dry=""
 host_kind=""
+preflight=""
+marker="<!-- strata -->"
+compare_only=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --pr) pr=$2; shift 2 ;;
     --repo) repo=$2; shift 2 ;;
     --host) host_kind=$2; shift 2 ;;
-    --label) label=$2; shift 2 ;;
-    --threshold) threshold=$2; shift 2 ;;
-    --repave) repave=1; shift ;;
+    --label) label=$2; compare_only=1; shift 2 ;;
+    --threshold) threshold=$2; compare_only=1; shift 2 ;;
+    --repave) repave=1; compare_only=1; shift ;;
+    --preflight) preflight=$2; marker="<!-- strata-preflight -->"; shift 2 ;;
     --dry-run) dry=1; shift ;;
     -h|--help) sed -n '2,/^set -euo/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) refs+=("$1"); shift ;;
   esac
 done
-[ ${#refs[@]} -eq 2 ] || die "usage: pr-comment.sh <A> <B> [--pr N] [--repo OWNER/REPO] [--host github|gitlab] [--label NAME] [--threshold LEVEL] [--repave] [--dry-run]"
+if [ -n "$preflight" ]; then
+  [ ${#refs[@]} -eq 0 ] && [ -z "$compare_only" ] ||
+    die "--preflight takes no ref, no --label, no --threshold, and no --repave"
+else
+  [ ${#refs[@]} -eq 2 ] || die "usage: pr-comment.sh <A> <B> [--pr N] [--repo OWNER/REPO] [--host github|gitlab] [--label NAME] [--threshold LEVEL] [--repave] [--dry-run]
+       pr-comment.sh --preflight FILE [--pr N] [--repo OWNER/REPO] [--host github|gitlab] [--dry-run]"
+fi
 
 # The CI variables name the host when nothing else does.
 if [ -z "$host_kind" ]; then
@@ -144,10 +163,46 @@ rank() {
 }
 threshold_rank=$(rank "$threshold")
 
-# ---- the comparison --------------------------------------------------------------------------
-strata=${STRATA_BIN:-strata}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+
+# resolve_target: the repository and the pull request, from the host when the flags do not name them
+resolve_target() {
+  [ -n "$repo" ] || repo=$(host repo)
+  [ -n "$pr" ] || pr=$(host pr_number)
+  [ -n "$repo" ] && [ -n "$pr" ] || die "could not determine the repository and pull request; pass --repo and --pr"
+}
+
+# publish_comment FILE: update the comment that carries the marker, or post FILE as a new one
+publish_comment() {
+  local existing
+  existing=$(host find_comment)
+  if [ -n "$existing" ]; then
+    host update_comment "$existing" "$1"
+    comment_note="comment $existing updated"
+  else
+    host post_comment "$1"
+    comment_note="comment posted"
+  fi
+}
+
+# ---- the preflight report --------------------------------------------------------------------
+if [ -n "$preflight" ]; then
+  [ -s "$preflight" ] || die "$preflight is missing or empty: strata preflight wrote no report"
+  { echo "$marker"; cat "$preflight"; } > "$work/comment.md"
+  if [ -n "$dry" ]; then
+    cat "$work/comment.md"
+    note "would post the preflight comment, or update the one that carries $marker"
+    exit 0
+  fi
+  resolve_target
+  publish_comment "$work/comment.md"
+  note "$comment_note"
+  exit 0
+fi
+
+# ---- the comparison --------------------------------------------------------------------------
+strata=${STRATA_BIN:-strata}
 
 # A live ref is fetched once; both renderings then read files.
 files=()
@@ -194,7 +249,7 @@ if [ -z "$asked" ]; then
   compare json "$work/report.json"
   compare markdown "$work/report.md"
 fi
-{ echo "<!-- strata -->"; cat "$work/report.md"; } > "$work/comment.md"
+{ echo "$marker"; cat "$work/report.md"; } > "$work/comment.md"
 
 max=$(jq -r .summary.maxImpact "$work/report.json")
 if [ "$(rank "$max")" -ge "$threshold_rank" ]; then want_label=1; else want_label=0; fi
@@ -228,18 +283,8 @@ if [ -n "$dry" ]; then
 fi
 
 # ---- the host --------------------------------------------------------------------------------
-[ -n "$repo" ] || repo=$(host repo)
-[ -n "$pr" ] || pr=$(host pr_number)
-[ -n "$repo" ] && [ -n "$pr" ] || die "could not determine the repository and pull request; pass --repo and --pr"
-
-existing=$(host find_comment)
-if [ -n "$existing" ]; then
-  host update_comment "$existing" "$work/comment.md"
-  comment_note="comment $existing updated"
-else
-  host post_comment "$work/comment.md"
-  comment_note="comment posted"
-fi
+resolve_target
+publish_comment "$work/comment.md"
 
 # Read the listings into variables first: grep -q exits early, and under pipefail the writer's
 # broken pipe would read as "no such label".

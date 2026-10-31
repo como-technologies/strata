@@ -2,8 +2,8 @@
 # Report the pack versions that records pin and that a registry offers a newer version of, as
 # issues: a scheduled `strata behind`.
 #
-#   scripts/ci/upstream-report.sh <record or pattern>... [--repo OWNER/REPO] [--label NAME]
-#                                 [--no-impact] [--save FILE] [--dry-run]
+#   scripts/ci/upstream-report.sh <record or pattern>... [--repo OWNER/REPO] [--host github|gitlab]
+#                                 [--label NAME] [--no-impact] [--save FILE] [--dry-run]
 #
 # Runs `strata behind --format json` over the records; strata expands a quoted pattern such as
 # 'releases/**/*.json'. Each pack of a registry that a record pins behind the newest version it can

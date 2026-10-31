@@ -86,6 +86,9 @@ request id.
 
 - Strata reads the log only for a record that drifted. An unchanged record
   costs no request.
+- `verify-report.sh --who` gives the option to the check of each record that
+  did not verify, so the issue of a drifted record lists the writes. See
+  [Name who changed the record](../automation/drift-issues.md#name-who-changed-the-record).
 - With many records, the line of a drifted record ends with the last write.
 - Palette keeps no audit log for a pack in a registry. `--who` reads nothing
   for a pack record.

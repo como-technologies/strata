@@ -1154,6 +1154,7 @@ needs the example at its baseline with cluster A.
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
 | `ask-repave-comment`, `ask-repave-comment-says` | 0 | #157: `pr-comment.sh --repave` asks Palette about the same move (no result yet). The comment holds the `Palette:` line, and the note on standard error says that Palette decided the label. |
 | `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request, and in the tier of Palette, which calls the validate routes and creates nothing. |
+| `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` turns the markdown report of the static tier into the comment of the pull request (no result yet). The comment starts with `<!-- strata-preflight -->` and holds the verdict. |
 | `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it |
 | `preflight-offering` | 0 | #143: `instance-offering` asks the instance type route of the region with the account of the body, one request for all its pools, and passes: the type of the release body is offered in its zone |
 | `preflight-key-pair` | 0 | #433: the rule that reads the key pair of the body passes (no result yet). On AWS it is `iaas-pod-identity`, which sends the key pair to the properties route. On EKS it is `ssh-key-pair`. A body on GCP or GKE has no key pair, and the check does not run. |
@@ -1169,6 +1170,7 @@ needs the example at its baseline with cluster A.
 | `edit` | 0 | #81: a person edits the add-on version in place, through the API |
 | `nightly-drift`, `nightly-names` | 1, 0 | #81: the nightly job opens an issue for the add-on record |
 | `who`, `who-says` | 1, 0 | #81: `--who` names a person who wrote the edit |
+| `nightly-who`, `nightly-who-says` | 1, 0 | #158: `verify-report.sh --who` puts the audit log in the issue of the add-on record, and the body names the last write: an update by a person (no result yet) |
 | `cluster-kept`, `behind-record`, `behind` | 0 | #81: cluster A keeps its copy, and Palette says that an update waits for it |
 | `edit-undo`, `edit-gone` | 0 | the edit is undone, and the add-on record verifies again |
 | `incident-list`, `incident-list-has` | 0 | #81: `list --pack` finds the release among the versions that carry the CSI pack |

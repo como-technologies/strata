@@ -2,8 +2,9 @@
 # report, and the two gates that run on demand.
 #
 # Copy this file to .github/workflows/strata.yml in your own repository and set the refs and the
-# records that your repository holds. It calls seven reusable workflows of the strata repository.
-# A version bump is twelve lines here: each job names the tag twice, once in `uses: ...@TAG` and once
+# records that your repository holds. It calls seven reusable workflows of the strata repository,
+# and an eighth when you turn on the comment of the preflight.
+# A version bump is sixteen lines here: each job names the tag twice, once in `uses: ...@TAG` and once
 # in `strata-version:`. Both must carry the same tag. `uses:` selects the workflow file, and
 # `strata-version:` is what each workflow checks this repository out at and downloads the binary
 # for, so a mismatch runs one release's workflow against another release's scripts.
@@ -65,9 +66,29 @@ jobs:
       cloud: eks
       tier: static
       records: releases/**/*.json
+      # no-exec: true               # run no command of a cloud tool
+      # rule: example-region        # only these rules, by id, separated by spaces
+      # verbose: true               # print what each check ran to the log
+      # ready: "80"                 # exit 1 when the readiness is under this percentage
+      # out: preflight              # the directory of report.md and the other files
+      # watch: true                 # source: cluster:UID; the job from the create, with the key,
+      # every: "30"                 #   reads the build every 30 seconds
+      # limit: "3600"               #   for 3600 seconds at most
       strata-version: v0.24.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
+
+  # the report of the preflight as one comment on the pull request, updated on each push. Remove
+  # the comment marks to turn it on. The condition runs the job also after a failed preflight,
+  # because a person must read a failed report
+  # preflight-comment:
+  #   needs: preflight
+  #   if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+  #   uses: como-technologies/strata/.github/workflows/preflight-comment.yml@v0.24.0
+  #   with:
+  #     strata-version: v0.24.0
+  #   secrets:
+  #     strata-token: ${{ secrets.STRATA_READ_TOKEN }}
 
   # the records of the merge result, against the default branch as it is now
   gate:
@@ -75,6 +96,7 @@ jobs:
     uses: como-technologies/strata/.github/workflows/merge-gate.yml@v0.24.0
     with:
       records: releases/**/*.json
+      # allow-no-digest: true       # accept a pack from a registry that lists no digest
       strata-version: v0.24.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
@@ -86,6 +108,8 @@ jobs:
     uses: como-technologies/strata/.github/workflows/verify.yml@v0.24.0
     with:
       records: releases/**/*.json
+      # allow-no-digest: true       # accept a pack from a registry that lists no digest
+      # who: true                   # name who changed a record that drifted, from the audit log
       strata-version: v0.24.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
@@ -98,6 +122,8 @@ jobs:
     uses: como-technologies/strata/.github/workflows/upstream.yml@v0.24.0
     with:
       records: releases/**/*.json
+      # no-impact: true             # skip the comparison and the question to Palette
+      # save: behind.json           # keep the report of the run as the artifact strata-behind
       strata-version: v0.24.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
@@ -109,10 +135,13 @@ jobs:
     uses: como-technologies/strata/.github/workflows/promote-gate.yml@v0.24.0
     with:
       records: ${{ inputs.promote }}
+      # allow: registry-move no-digest   # the differences to accept, separated by spaces
+      # project: dev                     # the project of a ref such as name@version
       strata-version: v0.24.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
       palette-api-key: ${{ secrets.PALETTE_API_KEY }}
+      # palette-project-uid: ${{ secrets.PALETTE_PROJECT_UID }}   # the project by uid
 
   # no cluster runs the version, so the delete that follows is safe
   retire-gate:

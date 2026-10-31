@@ -4,8 +4,9 @@ name: strata preflight
 # Palette can build a cluster before the build: the body of the create, or an existing cluster, against
 # the catalog of strata-preflight; see docs/src/automation/preflight.md. The report goes to the job
 # summary and to an artifact, and the exit status of strata is the status of the job. It downloads
-# the two release binaries, checks them against SHA256SUMS, and runs `strata preflight`. Other CI
-# systems run the binary directly.
+# the two release binaries, checks them against SHA256SUMS, and runs `strata preflight`. For a
+# comment on the pull request, call preflight-comment.yml in a second job. Other CI systems run
+# the binary directly.
 on:
   workflow_call:
     inputs:
@@ -44,6 +45,34 @@ on:
       ready:
         description: Exit 1 when the readiness is under this percentage; empty is no gate
         default: ""
+        type: string
+      no-exec:
+        description: Run no command of a cloud tool; each cloud rule is NOT CHECKED
+        default: false
+        type: boolean
+      rule:
+        description: Only these rules, by id, separated by spaces; an id that is not in the catalog is an error. Empty runs every rule
+        default: ""
+        type: string
+      verbose:
+        description: Print what each check ran to the log of the job; the report does not change
+        default: false
+        type: boolean
+      watch:
+        description: Watch the build of the cluster, with source cluster:UID, until it is Running or stuck; needs the key
+        default: false
+        type: boolean
+      every:
+        description: With watch, the seconds between two readings; empty is 30
+        default: ""
+        type: string
+      limit:
+        description: With watch, the longest watch in seconds; empty is 3600
+        default: ""
+        type: string
+      out:
+        description: The directory in the checkout that gets report.md, report.json, report.html, world.json, and entity.json; the artifact holds it
+        default: preflight
         type: string
       palette-api:
         description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
@@ -106,6 +135,13 @@ jobs:
           RELEASE: ${{ inputs.release }}
           STRICT: ${{ inputs.strict }}
           READY: ${{ inputs.ready }}
+          NO_EXEC: ${{ inputs.no-exec }}
+          RULE: ${{ inputs.rule }}
+          VERBOSE: ${{ inputs.verbose }}
+          WATCH: ${{ inputs.watch }}
+          EVERY: ${{ inputs.every }}
+          LIMIT: ${{ inputs.limit }}
+          OUT: ${{ inputs.out }}
         run: |
           args=("$SOURCE")
           [ -z "$CHANGE" ] || args+=("$CHANGE")
@@ -114,7 +150,17 @@ jobs:
           [ -z "$PROBES" ] || args+=(--probes "$PROBES")
           [ -z "$RELEASE" ] || args+=(--release "$RELEASE")
           [ -z "$READY" ] || args+=(--ready "$READY")
+          [ -z "$EVERY" ] || args+=(--every "$EVERY")
+          [ -z "$LIMIT" ] || args+=(--limit "$LIMIT")
           [ "$STRICT" != "true" ] || args+=(--strict)
+          [ "$NO_EXEC" != "true" ] || args+=(--no-exec)
+          [ "$WATCH" != "true" ] || args+=(--watch)
+          # --quiet wins over --verbose, so a verbose run omits it
+          [ "$VERBOSE" != "true" ] || args+=(--verbose)
+          [ "$VERBOSE" = "true" ] || args+=(--quiet)
+          # each rule id is one argument
+          read -ra rules <<< "$RULE"
+          for r in "${rules[@]}"; do args+=(--rule "$r"); done
           # with no key, the static tier alone, and nothing read from Palette
           [ -n "$PALETTE_API_KEY" ] || args+=(--offline)
           # each record pattern is one argument, which strata expands; the shell must not expand
@@ -122,7 +168,7 @@ jobs:
           read -ra records <<< "$RECORDS"
           for r in "${records[@]}"; do args+=(--records "$r"); done
           set +e
-          .strata/bin/strata preflight "${args[@]}" --out preflight --format markdown --quiet > preflight.md
+          .strata/bin/strata preflight "${args[@]}" --out "$OUT" --format markdown > preflight.md
           code=$?
           set -e
           cat preflight.md >> "$GITHUB_STEP_SUMMARY"
@@ -131,5 +177,5 @@ jobs:
         if: always()
         with:
           name: preflight
-          path: preflight/
+          path: ${{ inputs.out }}/
           if-no-files-found: ignore

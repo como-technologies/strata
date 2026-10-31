@@ -43,22 +43,30 @@ or the version as the input:
 | Input | Gate | Function |
 | --- | --- | --- |
 | `records` | promotion | The records, in promotion order, separated by spaces. |
-| `allow` | promotion | `registry-move`, for a promotion that moves packs to another registry. |
+| `allow` | promotion | The differences to accept, separated by spaces or new lines: `registry-move` for a promotion that moves packs to another registry, and `no-digest`. |
 | `version` | retire | The version to retire, as `name@version` or a profile uid. |
-| `project` | retire | The project that holds the version, by name; empty is tenant scope. |
+| `project` | both | The project that holds a ref such as `name@version`, by name; empty is tenant scope. A record that is a file needs none. |
 | `palette-api` | both | A self-hosted Palette; empty is `https://api.spectrocloud.com`. |
 | `strata-version` | both | The strata release, a tag of this repository. |
 
 The promotion gate reads records, which are files, so it needs
-`palette-api-key` only when a record is a ref. The retire gate reads the
-clusters, so it always needs the key.
+`palette-api-key` only when a record is a ref. A ref such as `name@version`
+resolves in one project. The promotion gate takes `project`, or the secret
+`palette-project-uid`, which names the project by its uid and wins over
+`project`. The retire gate reads the clusters, so it always needs the key.
+
+The workflow gives each difference of `allow` its own `--allow`, so
+`registry-move no-digest` runs `strata same-release` with
+`--allow registry-move --allow no-digest`.
 
 ## On GitLab
 
 `examples/ci/gitlab/strata.yml` holds `strata-promote-gate` and
 `strata-retire-gate`. Both are manual jobs: set `STRATA_PROMOTE` to the records,
-or `STRATA_RETIRE` to `name@version`, and run the job from the pipeline. See
-[GitLab CI](./gitlab.md).
+or `STRATA_RETIRE` to `name@version`, and run the job from the pipeline.
+`STRATA_PROMOTE_ALLOW` lists the differences that the promotion gate accepts,
+separated by spaces. A ref in a project reads `PALETTE_PROJECT` or
+`PALETTE_PROJECT_UID`, which a CI/CD variable sets. See [GitLab CI](./gitlab.md).
 
 ## Put the delete after the gate
 

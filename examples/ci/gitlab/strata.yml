@@ -12,6 +12,9 @@
 #     # STRATA_REPAVE: "true"       # a cluster against a version: Palette's answer decides the label
 #     STRATA_RECORDS: "releases/**/*.json"
 #
+# Each job reads more variables than these; the list below has the default of each one, and
+# docs/src/automation/gitlab.md says what each one does.
+#
 # CI/CD variables to set, masked:
 #   GITLAB_TOKEN      a project or group access token with the api scope. The job token cannot
 #                     write notes, labels or issues, so the jobs need this one.
@@ -31,6 +34,37 @@ variables:
   STRATA_DRIFT_LABEL: strata-drift
   STRATA_BEHIND_LABEL: strata-behind
   STRATA_ROLLBACK_LABEL: rollback
+  # "true" accepts a pack with no upstream digest, in the merge gate and in the drift report
+  STRATA_ALLOW_NO_DIGEST: "false"
+  # "true" adds who changed a record that drifted, and when, to its drift issue
+  STRATA_WHO: "false"
+  # "true" skips the comparison of each pin that is behind, and the question to Palette
+  STRATA_NO_IMPACT: "false"
+  # a file that keeps the report of the upstream job as an artifact; empty keeps none
+  STRATA_SAVE: ""
+  # the differences that the promotion gate accepts, separated by spaces: registry-move no-digest
+  STRATA_PROMOTE_ALLOW: ""
+  # the preflight job: the source, the engine of a file, the tiers, the records, and the options
+  # of the command by the same names. Without PALETTE_API_KEY the job runs the static tier alone.
+  STRATA_PREFLIGHT_SOURCE: clusters/payments.json
+  STRATA_PREFLIGHT_CLOUD: eks
+  STRATA_PREFLIGHT_CHANGE: ""
+  STRATA_PREFLIGHT_TIER: static
+  STRATA_PREFLIGHT_RECORDS: "releases/**/*.json"
+  STRATA_PREFLIGHT_PROBES: ""
+  STRATA_PREFLIGHT_RELEASE: ""
+  STRATA_PREFLIGHT_STRICT: "false"
+  STRATA_PREFLIGHT_READY: ""
+  STRATA_PREFLIGHT_NO_EXEC: "false"
+  STRATA_PREFLIGHT_RULE: ""
+  STRATA_PREFLIGHT_VERBOSE: "false"
+  # "true" watches the build of the cluster in STRATA_PREFLIGHT_SOURCE, which is cluster:UID
+  STRATA_PREFLIGHT_WATCH: "false"
+  STRATA_PREFLIGHT_EVERY: ""
+  STRATA_PREFLIGHT_LIMIT: ""
+  STRATA_PREFLIGHT_OUT: preflight
+  # "true" posts the report as one note on the merge request, which needs GITLAB_TOKEN
+  STRATA_PREFLIGHT_COMMENT: "false"
 
 # Installs the release binary and the scripts of one strata version, with the checksums checked.
 .strata:
@@ -67,19 +101,54 @@ strata-comment:
 # Can Palette build the cluster this merge request changes? The static tier, with the records of
 # this repository: no key, milliseconds. The installer puts strata-preflight beside strata, and
 # `strata preflight` runs it. The live tier runs before the build, with the key, from the job that
-# builds: see docs/src/automation/preflight.md. The report is the job's artifact.
+# builds: see docs/src/automation/preflight.md. The report is the job's artifact. The job takes
+# the options of the command from the variables STRATA_PREFLIGHT_*, as the reusable workflow
+# takes them from its inputs.
 strata-preflight:
   extends: .strata
   stage: test
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
-    - .strata/strata preflight clusters/payments.json --cloud eks --tier static
-        --records 'releases/**/*.json' --offline --out preflight --format markdown --quiet
-        | tee preflight.md
+    - |
+      # strata expands each record pattern, so the shell must not expand it first
+      set -f
+      args=("$STRATA_PREFLIGHT_SOURCE")
+      [ -z "$STRATA_PREFLIGHT_CHANGE" ] || args+=("$STRATA_PREFLIGHT_CHANGE")
+      [ -z "$STRATA_PREFLIGHT_CLOUD" ] || args+=(--cloud "$STRATA_PREFLIGHT_CLOUD")
+      [ -z "$STRATA_PREFLIGHT_TIER" ] || args+=(--tier "$STRATA_PREFLIGHT_TIER")
+      [ -z "$STRATA_PREFLIGHT_PROBES" ] || args+=(--probes "$STRATA_PREFLIGHT_PROBES")
+      [ -z "$STRATA_PREFLIGHT_RELEASE" ] || args+=(--release "$STRATA_PREFLIGHT_RELEASE")
+      [ -z "$STRATA_PREFLIGHT_READY" ] || args+=(--ready "$STRATA_PREFLIGHT_READY")
+      [ -z "$STRATA_PREFLIGHT_EVERY" ] || args+=(--every "$STRATA_PREFLIGHT_EVERY")
+      [ -z "$STRATA_PREFLIGHT_LIMIT" ] || args+=(--limit "$STRATA_PREFLIGHT_LIMIT")
+      [ "$STRATA_PREFLIGHT_STRICT" != "true" ] || args+=(--strict)
+      [ "$STRATA_PREFLIGHT_NO_EXEC" != "true" ] || args+=(--no-exec)
+      [ "$STRATA_PREFLIGHT_WATCH" != "true" ] || args+=(--watch)
+      # --quiet wins over --verbose, so a verbose run omits it
+      [ "$STRATA_PREFLIGHT_VERBOSE" != "true" ] || args+=(--verbose)
+      [ "$STRATA_PREFLIGHT_VERBOSE" = "true" ] || args+=(--quiet)
+      # the static tier reads nothing from Palette, so the key of the other jobs does not make
+      # this job connect; with no key, nothing is read either
+      if [ -z "${PALETTE_API_KEY:-}" ] ||
+        { [ "$STRATA_PREFLIGHT_TIER" = static ] && [ "$STRATA_PREFLIGHT_WATCH" != "true" ]; }; then
+        args+=(--offline)
+      fi
+      # each rule id and each record pattern is one argument, which strata expands
+      for r in $STRATA_PREFLIGHT_RULE; do args+=(--rule "$r"); done
+      for r in $STRATA_PREFLIGHT_RECORDS; do args+=(--records "$r"); done
+      code=0
+      .strata/strata preflight "${args[@]}" --out "$STRATA_PREFLIGHT_OUT" --format markdown \
+        > preflight.md || code=$?
+      cat preflight.md
+      # also after a failed preflight: a person must read a failed report
+      if [ "$STRATA_PREFLIGHT_COMMENT" = "true" ]; then
+        .strata/pr-comment.sh --preflight "$STRATA_PREFLIGHT_OUT/report.md"
+      fi
+      exit "$code"
   artifacts:
     when: always
-    paths: [preflight/, preflight.md]
+    paths: ["$STRATA_PREFLIGHT_OUT/", preflight.md]
 
 # The check the merge button waits for: the records of the merge result, against the target
 # branch as it is now. GIT_DEPTH 0 gives the job the history a merge needs.
@@ -98,7 +167,9 @@ strata-merge-gate:
       rollback=""
       if printf '%s' "${CI_MERGE_REQUEST_LABELS:-}" | tr ',' '\n' \
         | grep -qx "$STRATA_ROLLBACK_LABEL"; then rollback=--allow-rollback; fi
-      .strata/merge-gate.sh $STRATA_RECORDS $rollback
+      allow_no_digest=""
+      if [ "$STRATA_ALLOW_NO_DIGEST" = "true" ]; then allow_no_digest=--allow-no-digest; fi
+      .strata/merge-gate.sh $STRATA_RECORDS $rollback $allow_no_digest
 
 # A scheduled pipeline: verify every record, and keep one issue open per record that drifted or
 # could not be checked. Add the schedule in CI/CD > Schedules.
@@ -108,7 +179,12 @@ strata-verify:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   script:
-    - .strata/verify-report.sh $STRATA_RECORDS --label "$STRATA_DRIFT_LABEL"
+    - |
+      allow_no_digest=""
+      if [ "$STRATA_ALLOW_NO_DIGEST" = "true" ]; then allow_no_digest=--allow-no-digest; fi
+      who=""
+      if [ "$STRATA_WHO" = "true" ]; then who=--who; fi
+      .strata/verify-report.sh $STRATA_RECORDS --label "$STRATA_DRIFT_LABEL" $allow_no_digest $who
 
 # The same schedule: keep one issue open per pack that a record pins behind a newer version of its
 # registry. Behind is a decision and not an error, so it keeps its own issues and its own job.
@@ -118,10 +194,21 @@ strata-upstream:
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
   script:
-    - .strata/upstream-report.sh $STRATA_RECORDS --label "$STRATA_BEHIND_LABEL"
+    - |
+      no_impact=""
+      if [ "$STRATA_NO_IMPACT" = "true" ]; then no_impact=--no-impact; fi
+      save=()
+      if [ -n "$STRATA_SAVE" ]; then save=(--save "$STRATA_SAVE"); fi
+      .strata/upstream-report.sh $STRATA_RECORDS --label "$STRATA_BEHIND_LABEL" $no_impact \
+        "${save[@]+"${save[@]}"}"
+  artifacts:
+    when: always
+    paths: ["$STRATA_SAVE"]
 
 # The records of a promotion are one release, before a cluster moves. A manual job: run it from the
-# pipeline view, with STRATA_PROMOTE set to the records in promotion order.
+# pipeline view, with STRATA_PROMOTE set to the records in promotion order. STRATA_PROMOTE_ALLOW
+# lists the differences to accept. A ref such as name@version reads PALETTE_PROJECT (a name) or
+# PALETTE_PROJECT_UID, which a CI/CD variable sets.
 strata-promote-gate:
   extends: .strata
   stage: test
@@ -129,7 +216,10 @@ strata-promote-gate:
   rules:
     - if: $STRATA_PROMOTE
   script:
-    - $STRATA_BIN same-release $STRATA_PROMOTE
+    - |
+      allow=()
+      for a in $STRATA_PROMOTE_ALLOW; do allow+=(--allow "$a"); done
+      $STRATA_BIN same-release $STRATA_PROMOTE "${allow[@]+"${allow[@]}"}"
 
 # No cluster runs the version, so a delete can follow. A manual job: set STRATA_RETIRE to
 # name@version. Exit 1 names each cluster that still runs it, and the delete must not run.
