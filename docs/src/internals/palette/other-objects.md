@@ -42,6 +42,14 @@ The code of Palette gives the rule: Palette puts the profile as it is now
 in place of each profile that the open notification names, and keeps the other
 profiles of the cluster.
 
+A live run asks the repave question with the update that waits. For a manifest
+of the add-on version, Palette answers no repave. For one more kubeadm command
+in the Kubernetes pack of the release version, Palette answers repave:
+`PackValuesUpdated` for `kubernetes` and `kubeadmconfig.postKubeadmCommands`.
+The checks `addon-repave` and `k8s-repave` of
+[pending.sh](../../development/live-runs.md#pendingsh) show it. See
+[Ask about the update that waits](../../commands/compare/repave.md#ask-about-the-update-that-waits).
+
 ## Edge hosts
 
 `GET /v1/edgehosts/<uid>` gives the profiles bound to an edge host in

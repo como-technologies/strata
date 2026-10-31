@@ -55,29 +55,19 @@ These are open:
   alone, because strata prints one refusal when two routes give the same one.
   See
   [The validate routes](validate-routes.md#post-v1clusterprofilesimportvalidate).
-- The route of a cluster template,
-  `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave`, and the
-  answer of the route of the cluster for a cluster in a template. The stand-in
-  of the book models them, and no run shows them yet. Step 4 of
-  [template.sh](../../development/live-runs.md#templatesh) asks both routes
-  for a cluster in a template, and has no result yet. See
-  [A cluster in a cluster template](../../commands/compare/repave.md#a-cluster-in-a-cluster-template).
 - An HTTP 403 on `config/rbacs`, `config/namespaces`, or `repave/status`. The
   stand-in gives the body `AccessDenied`, and no run shows that body yet. A key
   of an active user with no role in the project gets HTTP 500 and not 403: see
   [Cluster tiers](clusters.md#cluster-tiers). Stage 6 of
   [tiers.sh](../../development/live-runs.md#tierssh) reads `config/rbacs` with
-  such a key, and has no result yet. See
+  such a key. Palette answers HTTP 500 with the code `ResourceAccessDenied` and
+  the message `Project '<project uid>' access denied`. `strata record` of the
+  cluster makes no record and exits `2`. See
   [The policy tier](../../commands/snapshot/cluster.md#the-policy-tier).
 - An imported cluster: no run imports one. So no run shows the `clusterType`
   of an import in the listing, or a read-only import with no add-on profile.
   The stand-in of the book models them. See
   [An imported cluster](clusters.md#an-imported-cluster).
-- `compare --repave` with `cluster:<c>@pending`: no run asks Palette about an
-  update that waits yet. Stages 2 and 6 of
-  [pending.sh](../../development/live-runs.md#pendingsh) ask it, and have no
-  result yet. See
-  [Ask about the update that waits](../../commands/compare/repave.md#ask-about-the-update-that-waits).
 - A move of a cluster to a version that reads a profile variable in a field
   that repaves. The body of `compare --repave` gets no repave, and a body with
   the `packValues` of the version gets a repave. No run applies such a version
