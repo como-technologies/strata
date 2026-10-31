@@ -104,6 +104,16 @@ The answer holds the errors of all the records:
 - A candidate, a pack record, an edge host, a cluster group, and an app profile
   get no request. The update that waits for a cluster gets none.
 
+A record of a cluster and the record of the profile that the cluster runs pin
+the same packs. So `behind` gives them the same bump: the same newest version,
+the same impact level, and the same change flags. Only the route of the question
+differs. This is the record of the cluster `payments`, which runs
+`aws-stack@1.1.11`:
+
+```text
+{{#include ../output/behind-cluster.txt}}
+```
+
 The message of an error names the clusters. See
 [The upgrade dependency](../internals/palette/validate-routes.md#the-upgrade-dependency)
 for the field.

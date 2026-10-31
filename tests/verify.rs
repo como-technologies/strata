@@ -13538,6 +13538,82 @@ fn behind_asks_the_route_of_a_cluster_about_the_bump_of_a_record_of_a_cluster() 
     );
 }
 
+/// The pack csi-aws-ebs 1.63.1 of the registry of the tests, as a profile and a cluster hold it in
+/// their templates.
+fn csi_template_pack(api: &MemoryApi) -> Value {
+    let pack = &snapshot_of(api, "pack:csi-aws-ebs@1.63.1").unwrap().packs[0];
+    serde_json::json!({"name": pack.name, "layer": pack.layer, "type": pack.kind,
+        "tag": pack.tag, "version": pack.version, "registryUid": pack.registry_uid,
+        "packUid": pack.pack_uid, "values": pack.values})
+}
+
+#[test]
+fn behind_names_the_same_bump_for_a_pin_in_the_record_of_a_cluster_and_in_the_record_of_its_profile()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind();
+    let pack = csi_template_pack(&base);
+    // the profile version, and the cluster that runs it: both hold the pack as Palette gives it
+    let mut profile = common::profile_document(
+        BUMP_PROFILE_UID,
+        "csi-stack",
+        "1.0.0",
+        common::template("aws", "add-on", serde_json::json!([pack])),
+        None,
+    );
+    profile["status"]["inUseClusters"] = serde_json::json!([{"uid": "c1", "name": BUMP_CLUSTER}]);
+    let cluster_doc = serde_json::json!({
+        "metadata": {"name": BUMP_CLUSTER, "uid": "c1"},
+        "spec": {"clusterProfileTemplates": [{"uid": BUMP_PROFILE_UID, "name": "csi-stack",
+            "profileVersion": "1.0.0", "type": "add-on", "cloudType": "aws",
+            "packs": [pack]}]}});
+    let refusal = upgrade_refusal(UPGRADE_REFUSAL);
+    let api = common::serve_profile(
+        base,
+        BUMP_PROFILE_UID,
+        profile,
+        common::no_manifests(),
+        common::no_variables(),
+    )
+    .with(cluster_route("c1"), cluster_doc)
+    .with(
+        common::cluster_manifests_route("c1"),
+        serde_json::json!({"profiles": []}),
+    )
+    .with(
+        common::cluster_variables_route("c1"),
+        common::no_variables(),
+    )
+    .with(
+        post(&update_validate_packs_route(BUMP_PROFILE_UID)),
+        refusal.clone(),
+    )
+    .with(
+        post(&format!("{}/validate/packs", cluster_route("c1"))),
+        serde_json::json!({"profiles": [{"uid": BUMP_PROFILE_UID, "packs": refusal["packs"]}]}),
+    );
+
+    let profile_record = common::snapshot_of_ref(
+        &api,
+        &strata::reference::Ref::Uid(BUMP_PROFILE_UID.to_string()),
+        "t0",
+    )
+    .unwrap();
+    let cluster_record = snapshot_of(&api, "cluster:c1").unwrap();
+    let bump_of = |record: &strata::snapshot::Snapshot, file: &str| {
+        let path = dir.path().join(file);
+        common::write_snapshot(&path, record, false);
+        let report = behind_of(&api, &[path], &WITH_IMPACT);
+        assert!(report.pins[0].error.is_none(), "{:?}", report.pins[0].error);
+        serde_json::to_value(&report.pins[0].bump).unwrap()
+    };
+    let of_profile = bump_of(&profile_record, "profile.json");
+    let of_cluster = bump_of(&cluster_record, "cluster.json");
+    assert_eq!(of_profile["to"], "1.65.0", "{of_profile}");
+    // the answer is the same too: Palette refuses the move on the cluster
+    assert_eq!(of_cluster, of_profile);
+}
+
 #[test]
 fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
     let dir = tempfile::tempdir().unwrap();

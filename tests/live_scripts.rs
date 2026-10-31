@@ -1103,12 +1103,7 @@ fn release_sh_expects_the_release_with_no_key_and_a_refusal_with_the_key() {
     std::fs::remove_file(stage.path("routes/v1_mgmt_app_version.keyed.status")).unwrap();
     let (o, steps) = stage.run("release.sh", &[]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
-    assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("FAIL") && l.contains("release-with-key ")),
-        "{steps}"
-    );
+    assert!(check_failed(&steps, "release-with-key"), "{steps}");
 
     // Palette refuses a call with no key: the run fails on the release
     let stage = Stage::new(baseline_outputs());
@@ -1116,12 +1111,7 @@ fn release_sh_expects_the_release_with_no_key_and_a_refusal_with_the_key() {
     std::fs::write(stage.path("routes/v1_mgmt_app_version.status"), "500").unwrap();
     let (o, steps) = stage.run("release.sh", &[]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
-    assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("FAIL") && l.contains("release-no-key ")),
-        "{steps}"
-    );
+    assert!(check_failed(&steps, "release-no-key"), "{steps}");
 
     let o = stage.run("release.sh", &["--help"]).0;
     assert_eq!(o.status.code(), Some(2));
@@ -2465,6 +2455,20 @@ fn passed(steps: &str, ids: &[&str]) {
     }
 }
 
+/// True when the check `id` failed: its line in `steps` starts with `FAIL`.
+fn check_failed(steps: &str, id: &str) -> bool {
+    steps
+        .lines()
+        .any(|l| l.starts_with("FAIL") && l.split_whitespace().nth(1) == Some(id))
+}
+
+/// Each check of `ids` failed.
+fn failed(steps: &str, ids: &[&str]) {
+    for id in ids {
+        assert!(check_failed(steps, id), "{id} failed:\n{steps}");
+    }
+}
+
 /// The outputs of the live example at its baseline, with cluster A `c-a` named fred.
 fn baseline_outputs() -> serde_json::Value {
     serde_json::json!({
@@ -2533,12 +2537,7 @@ fn packs_sh_stage_5_finds_no_annotation_of_the_os_pack_in_a_record_and_each_one_
         ),
     );
     let (_, steps) = stage.run("packs.sh", &[]);
-    assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("FAIL") && l.split_whitespace().nth(1) == Some("os-annotations")),
-        "{steps}"
-    );
+    assert!(check_failed(&steps, "os-annotations"), "{steps}");
 }
 
 #[test]
@@ -2735,14 +2734,10 @@ fn tiers_sh_stage_6_fails_the_status_check_when_palette_answers_403_in_place_of_
     stage.env("STRATA_LIVE_LIMITED_KEY", "limited-k");
     let (o, steps) = stage.run("tiers.sh", &["6"]);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
-    for failed in ["limited-status", "limited-code-says", "limited-message"] {
-        assert!(
-            steps
-                .lines()
-                .any(|l| l.starts_with("FAIL") && l.split_whitespace().nth(1) == Some(failed)),
-            "{failed} fails: {steps}"
-        );
-    }
+    failed(
+        &steps,
+        &["limited-status", "limited-code-says", "limited-message"],
+    );
     passed(&steps, &["limited-read"]);
 }
 
@@ -4240,19 +4235,14 @@ fn registry_kinds_sh_checks_that_packs_says_no_digest_on_the_row_and_in_the_head
     );
 
     // a heading with no mark, or a row with no mark, fails the check
-    let failed = |steps: &str| {
-        steps.lines().any(|l| {
-            l.starts_with("FAIL") && l.split_whitespace().nth(1) == Some("packs-zarf-says")
-        })
-    };
     let (_, steps) = registry_kinds(&format!(
         "strata-live-zarf in strata-live-oci (1 version)\n{row}"
     ));
-    assert!(failed(&steps), "{steps}");
+    assert!(check_failed(&steps, "packs-zarf-says"), "{steps}");
     let (_, steps) = registry_kinds(
         "strata-live-zarf in strata-live-oci (1 version, no digests)\n  1.0.0  pk-z  oci  all  1.0.0\n",
     );
-    assert!(failed(&steps), "{steps}");
+    assert!(check_failed(&steps, "packs-zarf-says"), "{steps}");
 }
 
 /// The hook of the fake name route. It gives HTTP 500 and `VersionParseFailure` for the version
@@ -4409,8 +4399,9 @@ fn upgrade_refused() -> serde_json::Value {
 }
 
 /// A stage 6 run of validate-packs.sh on the profile `strata-live-release@1.0.0` and the cluster
-/// `fred`, where `strata behind --json` gives `report` for both records. Gives steps.log.
-fn bump_stage(report: &str) -> (Stage, String) {
+/// `fred`, where `strata behind --json` gives `report` for the record of the profile and
+/// `cluster_report` for the record of the cluster. Gives steps.log.
+fn bump_stage(report: &str, cluster_report: &str) -> (Stage, String) {
     let mut stage = Stage::new(serde_json::json!({}));
     stage.env("PROFILE", "strata-live-release@1.0.0");
     stage.env("CLUSTER", "fred");
@@ -4421,7 +4412,7 @@ fn bump_stage(report: &str) -> (Stage, String) {
     );
     stage.strata("snapshot cluster:fred -o bump-cluster.json", 0, "{}");
     stage.strata("behind bump-profile.json --json", 1, report);
-    stage.strata("behind bump-cluster.json --json", 1, report);
+    stage.strata("behind bump-cluster.json --json", 1, cluster_report);
     stage.strata(
         "behind bump-profile.json --no-impact --json",
         1,
@@ -4446,7 +4437,8 @@ fn bump_stage(report: &str) -> (Stage, String) {
 #[test]
 fn validate_packs_sh_stage_6_asks_behind_about_the_bump_of_kubernetes_for_the_profile_and_the_cluster()
  {
-    let (_, steps) = bump_stage(&kubernetes_bump_report("1.37.0", &upgrade_refused()));
+    let report = kubernetes_bump_report("1.37.0", &upgrade_refused());
+    let (_, steps) = bump_stage(&report, &report);
     assert!(!steps.contains("FAIL"), "{steps}");
     passed(
         &steps,
@@ -4459,6 +4451,7 @@ fn validate_packs_sh_stage_6_asks_behind_about_the_bump_of_kubernetes_for_the_pr
             "bump-text-says",
             "bump-no-impact-says",
             "bump-cluster-record",
+            "bump-cluster-same",
             "bump-cluster-asked",
             "bump-cluster-refused",
         ],
@@ -4472,24 +4465,56 @@ fn validate_packs_sh_stage_6_asks_behind_about_the_bump_of_kubernetes_for_the_pr
 #[test]
 fn validate_packs_sh_stage_6_fails_when_palette_accepts_a_move_of_two_minor_versions() {
     // Palette accepts, and the newest version is one minor version above the pin
-    let (_, steps) = bump_stage(&kubernetes_bump_report(
-        "1.36.2",
-        &serde_json::json!({"accepts": true}),
-    ));
-    passed(&steps, &["bump-asked", "bump-cluster-asked"]);
-    for id in [
-        "bump-pair",
-        "bump-refused",
-        "bump-clusters",
-        "bump-cluster-refused",
-    ] {
-        assert!(
-            steps
-                .lines()
-                .any(|l| l.starts_with("FAIL") && l.split_whitespace().nth(1) == Some(id)),
-            "{id} failed:\n{steps}"
-        );
-    }
+    let report = kubernetes_bump_report("1.36.2", &serde_json::json!({"accepts": true}));
+    let (_, steps) = bump_stage(&report, &report);
+    passed(
+        &steps,
+        &["bump-asked", "bump-cluster-same", "bump-cluster-asked"],
+    );
+    failed(
+        &steps,
+        &[
+            "bump-pair",
+            "bump-refused",
+            "bump-clusters",
+            "bump-cluster-refused",
+        ],
+    );
+}
+
+#[test]
+fn validate_packs_sh_stage_6_fails_when_the_report_of_the_cluster_holds_no_answer_of_palette() {
+    // the record of the cluster has a bump, and Palette gave no answer for it
+    let profile = kubernetes_bump_report("1.37.0", &upgrade_refused());
+    let mut cluster: serde_json::Value = serde_json::from_str(&profile).unwrap();
+    cluster["pins"][1]["bump"]
+        .as_object_mut()
+        .unwrap()
+        .remove("paletteValidation");
+    let (_, steps) = bump_stage(&profile, &cluster.to_string());
+    passed(&steps, &["bump-cluster-same"]);
+    failed(&steps, &["bump-cluster-asked", "bump-cluster-refused"]);
+}
+
+#[test]
+fn validate_packs_sh_stage_6_fails_when_the_report_of_the_cluster_names_another_bump_or_none() {
+    let profile = kubernetes_bump_report("1.37.0", &upgrade_refused());
+    // the record of the cluster names another version to move to
+    let other = kubernetes_bump_report("1.36.2", &upgrade_refused());
+    let (_, steps) = bump_stage(&profile, &other);
+    failed(&steps, &["bump-cluster-same"]);
+    // the record of the cluster has no bump: the pin is behind, and the bump is absent
+    let mut none: serde_json::Value = serde_json::from_str(&profile).unwrap();
+    none["pins"][1].as_object_mut().unwrap().remove("bump");
+    let (_, steps) = bump_stage(&profile, &none.to_string());
+    failed(
+        &steps,
+        &[
+            "bump-cluster-same",
+            "bump-cluster-asked",
+            "bump-cluster-refused",
+        ],
+    );
 }
 
 #[test]
@@ -4797,16 +4822,9 @@ fn validate_route_sh_fails_on_a_fault_that_the_route_takes_and_on_a_refusal_for_
     let bodies = stage.path("bodies");
     let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
+    assert!(check_failed(&steps, "eks-ami-type-al2"), "{steps}");
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("FAIL") && l.contains("eks-ami-type-al2 ")),
-        "{steps}"
-    );
-    assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("FAIL") && l.contains("eks-ami-type-al2-says ")),
+        check_failed(&steps, "eks-ami-type-al2-says"),
         "the report of a body that passed names no fault: {steps}"
     );
     passed(
@@ -4825,9 +4843,7 @@ fn validate_route_sh_fails_on_a_fault_that_the_route_takes_and_on_a_refusal_for_
     assert_eq!(o.status.code(), Some(1), "{steps}");
     passed(&steps, &["vsphere-instance-floor-cpu"]);
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("FAIL") && l.contains("vsphere-instance-floor-cpu-says ")),
+        check_failed(&steps, "vsphere-instance-floor-cpu-says"),
         "{steps}"
     );
 }
@@ -4923,14 +4939,7 @@ fn validate_route_sh_expects_the_route_to_take_a_pack_version_that_does_not_list
     let bodies = stage.path("bodies");
     let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(1), "{steps}");
-    for id in [taken, &says] {
-        assert!(
-            steps
-                .lines()
-                .any(|l| l.starts_with("FAIL") && l.contains(&format!("{id} "))),
-            "{id}: {steps}"
-        );
-    }
+    failed(&steps, &[taken, &says]);
 }
 
 // ---- route-bodies.sh -------------------------------------------------------------------------------
@@ -5210,16 +5219,12 @@ fn route_bodies_sh_fails_and_deletes_each_profile_when_the_route_takes_a_fault()
     let (o, steps) = stage.run("route-bodies.sh", &[bodies.to_str().unwrap()]);
     assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
     assert!(
-        steps
-            .lines()
-            .any(|l| l.starts_with("FAIL") && l.contains("validate-route ")),
+        check_failed(&steps, "validate-route"),
         "a route that takes a fault fails the run: {steps}"
     );
     let route_steps = std::fs::read_to_string(stage.path("out/validate-route/steps.log")).unwrap();
     assert!(
-        route_steps
-            .lines()
-            .any(|l| l.starts_with("FAIL") && l.contains("profile-cloud-mismatch ")),
+        check_failed(&route_steps, "profile-cloud-mismatch"),
         "{route_steps}"
     );
     // the failure does not leave a profile or a body

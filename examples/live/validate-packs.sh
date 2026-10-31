@@ -251,7 +251,7 @@ if [ "$stage" = 6 ]; then
     check bump-pair 0 '#166: the newest version of kubernetes is two minor versions or more above the pin' -- \
       jq -e "$kubernetes_pin | ((.newer[0].version | split(\".\")[1] | tonumber) - (.version | split(\".\")[1] | tonumber)) >= 2" bump-behind.out
     check bump-asked 0 '#166: the bump of kubernetes holds an answer of Palette' -- \
-      jq -e "[$kubernetes_pin | .bump.paletteValidation] | length == 1" bump-behind.out
+      jq -e "[$kubernetes_pin | select(.bump.paletteValidation != null)] | length == 1" bump-behind.out
     check bump-refused 0 '#166: Palette refuses the move with DependencyPackUpgradeNotSupported' -- \
       jq -e "$kubernetes_pin | .bump.paletteValidation | .accepts == false and ([.errors[].code] | index(\"DependencyPackUpgradeNotSupported\") != null)" bump-behind.out
     check bump-clusters 0 '#166: the message of the error names a cluster that runs the version' -- \
@@ -268,8 +268,12 @@ if [ "$stage" = 6 ]; then
       check bump-cluster-record 0 "#166: a record of cluster $CLUSTER" -- "$strata" snapshot "cluster:$CLUSTER" -o bump-cluster.json
       check bump-cluster '?' '#166: behind asks the route of the cluster about the bump' -- \
         "$strata" behind bump-cluster.json --json
+      # The pin of the cluster is the pin of the profile, so the bump is the same: the version, the
+      # impact, and the flags. An answer that differs is the answer of the route
+      check bump-cluster-same 0 '#419: the bump of kubernetes in the record of the cluster is the bump in the record of the profile' -- \
+        jq -e --slurpfile profile bump-behind.out "[$kubernetes_pin | select(.bump != null) | .bump | {to, impact, flags}] == [\$profile[0] | $kubernetes_pin | select(.bump != null) | .bump | {to, impact, flags}]" bump-cluster.out
       check bump-cluster-asked 0 '#166: the bump of kubernetes holds an answer of Palette' -- \
-        jq -e "[$kubernetes_pin | .bump.paletteValidation] | length == 1" bump-cluster.out
+        jq -e "[$kubernetes_pin | select(.bump.paletteValidation != null)] | length == 1" bump-cluster.out
       # The route takes the tag of the sent pack, or the pack of the profile as it is now. If it
       # takes the pack of the profile, it accepts the move, and this check fails
       check bump-cluster-refused 0 '#166: the route of the cluster refuses the move with the code of the profile route, on this cluster' -- \
