@@ -31,7 +31,7 @@ use strata::api::{Palette, PaletteApi, RawCluster, profile_variables};
 use strata::cloud::CLOUD_EDGE_NATIVE;
 use strata::json::{arr, opt_str, opt_text, str_at, text_map, value_at, value_or_null};
 use strata::reference::Ref;
-use strata::snapshot::{Snapshot, SubjectKind};
+use strata::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use strata::term::progress::Progress;
 
 use crate::error::{Error, Result};
@@ -449,6 +449,17 @@ pub fn infer_cloud(entity: &Value) -> Option<String> {
     None
 }
 
+/// The entry of `packValues` in the body of a create for `pack`, a pack of a template: the pack as
+/// the template holds it, and the name and the uid of each of its manifests.
+fn pack_entry(pack: &Value) -> Value {
+    let mut entry = AppliedProfile::template_pack_value(pack);
+    entry["manifests"] = arr(pack, "/manifests")
+        .iter()
+        .map(|m| json!({"name": value_at(m, "/name"), "uid": value_at(m, "/uid")}))
+        .collect();
+    entry
+}
+
 /// The body of a create, from a cluster document, its cloud config, and the answer of its
 /// variables route, `variables`. Each profile sends the name and the value of its variables, as a
 /// create sends them.
@@ -467,17 +478,7 @@ fn entity_of(
         .map(|t| {
             json!({
                 "uid": value_or_null(t, "/uid"),
-                "packValues": arr(t, "/packs").iter().map(|p| {
-                    json!({
-                        "name": value_at(p, "/name"),
-                        "tag": value_at(p, "/tag"),
-                        "type": value_at(p, "/type"),
-                        "values": value_at(p, "/values"),
-                        "manifests": arr(p, "/manifests").iter().map(|m| {
-                            json!({"name": value_at(m, "/name"), "uid": value_at(m, "/uid")})
-                        }).collect::<Vec<_>>(),
-                    })
-                }).collect::<Vec<_>>(),
+                "packValues": arr(t, "/packs").iter().map(pack_entry).collect::<Vec<_>>(),
                 "variables": profile_variables(variables, str_at(t, "/uid")).map(|v| {
                     json!({"name": value_at(v, "/name"), "value": value_at(v, "/value")})
                 }).collect::<Vec<_>>(),
@@ -942,6 +943,26 @@ mod tests {
         );
         assert_eq!(e["spec"]["clusterType"], "AlloyAssist");
         assert_eq!(e["spec"]["profiles"][0]["variables"], json!([]));
+    }
+
+    #[test]
+    fn a_pack_of_a_template_keeps_its_manifests_and_gives_empty_text_for_a_missing_field() {
+        let cluster = json!({"spec": {"clusterProfileTemplates": [{"uid": "p1", "packs": [
+            {"name": "k8s", "tag": "1.32", "type": "spectro", "values": "x: 1\n"},
+            {"name": "lab", "type": "manifest", "manifests": [{"name": "m", "uid": "m1", "content": "a"}]},
+        ]}]}});
+        let e = entity_of(&cluster, &json!({}), None, &json!([]));
+        let packs = &e["spec"]["profiles"][0]["packValues"];
+        assert_eq!(
+            packs[0],
+            json!({"name": "k8s", "tag": "1.32", "type": "spectro", "values": "x: 1\n",
+                "manifests": []})
+        );
+        assert_eq!(
+            packs[1],
+            json!({"name": "lab", "tag": "", "type": "manifest", "values": "",
+                "manifests": [{"name": "m", "uid": "m1"}]})
+        );
     }
 
     /// A cluster of two profiles, and the answer of its variables route: the first profile

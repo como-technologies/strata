@@ -49,15 +49,12 @@ impl Error {
 /// True when the body of a Palette error is JSON with a `code` of a refusal by design.
 ///
 /// Such a code is in [`REFUSAL_CODES`], in `PROFILE_IMPORT_MATCH_CODES`, or in a check of a
-/// [`ValidateRoute`]. The code comes from [`PaletteRefusal::from_error_body`], the one read of the
-/// code of a Palette error.
+/// [`ValidateRoute`]. Each [`ValidateRoute`] says which bodies are a refusal of its checks.
 fn is_refusal(body: &str) -> bool {
     PaletteRefusal::from_error_body(body).is_some_and(|r| {
         let code = r.code.as_str();
-        REFUSAL_CODES.contains(&code)
-            || PROFILE_IMPORT_MATCH_CODES.contains(&code)
-            || ValidateRoute::ALL
-                .iter()
-                .any(|route| route.refuses(500, code))
-    })
+        REFUSAL_CODES.contains(&code) || PROFILE_IMPORT_MATCH_CODES.contains(&code)
+    }) || ValidateRoute::ALL
+        .iter()
+        .any(|route| route.refusal(500, body).is_some())
 }

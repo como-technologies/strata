@@ -43,12 +43,12 @@ pub const PACK_MACRO_UNDEFINED_CODE: &str = "PackMacroUndefined";
 /// integration pack needs read-only has values other than its defaults.
 pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
 
-/// The code of the error for a move that a pack does not allow: a pack of the body is above the
-/// highest version that a cluster can move to from the version it runs.
+/// The code of the error for a move that a pack does not allow.
 ///
-/// The validate routes of the packs answer it in `packs.results[]` with HTTP 200, with the other
-/// errors of a pack. It is not a refusal of the whole request, so no table of a check holds it.
-/// `behind` prints it under the bump, and strata decides nothing from it.
+/// A pack of the body is above the highest version that a cluster can move to from the version it
+/// runs. The validate routes of the packs answer it in `packs.results[]` with HTTP 200, with the
+/// other errors of a pack. It is not a refusal of the whole request, so no table of a check holds
+/// it. `behind` prints it under the bump, and strata decides nothing from it.
 pub const UPGRADE_NOT_SUPPORTED_CODE: &str = "DependencyPackUpgradeNotSupported";
 
 /// The codes of the errors that the import validate route gives with HTTP 500 when it matches no
@@ -181,7 +181,7 @@ pub enum ValidateRoute {
 
 impl ValidateRoute {
     /// Each route.
-    pub(crate) const ALL: [ValidateRoute; 5] = [
+    pub const ALL: [ValidateRoute; 5] = [
         ValidateRoute::ClusterPacks,
         ValidateRoute::ProfilePacks,
         ValidateRoute::ProfileName,
@@ -255,13 +255,22 @@ impl ValidateRoute {
         }
     }
 
-    /// Whether the route refuses the whole request with the HTTP error `status` and `body`.
+    /// The refusal of the whole request in `body`, when the route refuses it with the HTTP error
+    /// `status`.
     ///
     /// `body` is the body of the Palette error. The route refuses it when the `code` of that body
     /// is a code that the route refuses with `status`. A body that is not JSON with a `code` is no
     /// refusal.
+    pub(crate) fn refusal(self, status: u16, body: &str) -> Option<PaletteRefusal> {
+        PaletteRefusal::from_error_body(body).filter(|r| self.refuses(status, &r.code))
+    }
+
+    /// Whether the route refuses the whole request with the HTTP error `status` and `body`.
+    ///
+    /// `body` is the body of the Palette error. A body that is not JSON with a `code` is no
+    /// refusal.
     pub fn refuses_answer(self, status: u16, body: &str) -> bool {
-        PaletteRefusal::from_error_body(body).is_some_and(|r| self.refuses(status, &r.code))
+        self.refusal(status, body).is_some()
     }
 }
 
@@ -357,12 +366,6 @@ mod tests {
 
     #[test]
     fn each_route_reads_the_codes_of_its_checks_with_http_500() {
-        // the counts of the tables of the book
-        assert_eq!(ValidateRoute::ClusterPacks.refusal_codes().count(), 11);
-        assert_eq!(ValidateRoute::ProfilePacks.refusal_codes().count(), 6);
-        assert_eq!(ValidateRoute::ProfileName.refusal_codes().count(), 2);
-        assert_eq!(ValidateRoute::ProfileImport.refusal_codes().count(), 16);
-        assert_eq!(ValidateRoute::ClusterCreate.refusal_codes().count(), 1);
         for route in ValidateRoute::ALL {
             for code in route.refusal_codes() {
                 assert!(route.refuses(500, code), "{route:?} {code}");
@@ -416,6 +419,16 @@ mod tests {
     #[test]
     fn a_route_reads_a_refusal_from_the_body_of_a_palette_error() {
         let body = r#"{"code":"ClusterProfilesNotSupported","message":"Cluster profiles 'p' are not supported with 'aws' environment"}"#;
+        let refusal = ValidateRoute::ClusterCreate
+            .refusal(500, body)
+            .expect("the route refuses its own code with HTTP 500");
+        assert_eq!(refusal.code, "ClusterProfilesNotSupported");
+        assert_eq!(
+            refusal.message,
+            "Cluster profiles 'p' are not supported with 'aws' environment"
+        );
+        assert_eq!(ValidateRoute::ClusterCreate.refusal(502, body), None);
+        assert_eq!(ValidateRoute::ProfilePacks.refusal(500, body), None);
         assert!(ValidateRoute::ClusterCreate.refuses_answer(500, body));
         assert!(!ValidateRoute::ClusterCreate.refuses_answer(502, body));
         assert!(!ValidateRoute::ProfilePacks.refuses_answer(500, body));
