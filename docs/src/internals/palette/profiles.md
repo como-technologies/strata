@@ -340,21 +340,27 @@ keeps no template, and has the root from before the link. Palette shows the
 templates, and `strata consumers` counts them. See
 [The cluster templates of a version](../../commands/snapshot/profile-version.md#the-cluster-templates-of-a-version).
 
-The template also takes the repave question of its clusters. No live run has
-shown these facts yet. The checks `in-template-names`, `cluster-route`, and
-`template-route` of [template.sh](../../development/live-runs.md#templatesh)
-ask the first three:
+The template also takes the repave question of its clusters. A live run shows
+the first three facts of this list: see
+[template.sh](../../development/live-runs.md#templatesh). The other facts come
+from the code of Palette, and no live run checks them:
 
 - The cluster document names the template in `spec.clusterTemplate`, with
-  `uid` and `projectUid`.
+  `uid` and `projectUid`. The checks `in-template-doc` and `in-template-names`
+  read the `uid`.
 - `POST /v1/spectroclusters/<uid>/validate/repave` compares nothing for such a
   cluster. The answer is `200` with `isRepaveRequired: false` and no reason:
-  the same answer as a change that does not repave.
+  the same answer as a change that does not repave. The checks `cluster-route`
+  and `cluster-route-says` show it.
 - `POST /v1/spectroclusters/clusterTemplates/<uid>/validate/repave` answers
   for the template. The body is `profiles[]`, each with a `uid` only, and
-  `isUpgradeNow`. Palette asks the question of one cluster of the template,
-  with the profiles of the body as the target. A profile that the cluster runs
-  keeps its copy, and a new uid takes its published packs.
+  `isUpgradeNow`. The checks `template-route`, `template-route-names`,
+  `template-route-says`, and `template-route-json` show the answer. For the
+  same move as the route of the cluster, Palette says repave:
+  `PackValuesUpdated` for `kubernetes` and `kubeadmconfig.postKubeadmCommands`.
+  Palette asks the question of one cluster of the template, with the profiles
+  of the body as the target. A profile that the cluster runs keeps its copy,
+  and a new uid takes its published packs.
 - Palette takes that cluster from a map, in no fixed order. So two requests
   can ask two different clusters of the template, and the cluster that
   `compare` names can be a different one.
