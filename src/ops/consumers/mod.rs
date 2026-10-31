@@ -120,7 +120,8 @@ pub struct Consumer {
     /// could not be read, and the reports fall back to the uid.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub project_name: String,
-    /// The cluster's `status.state`, for example `Running`, or `unknown` when it could not be read.
+    /// The cluster's `status.state`, as Palette gives it in `v1ClusterState`, or `unknown` when
+    /// strata could not read it.
     /// Empty for a cluster template: a template has no state.
     pub state: String,
     /// The version the cluster's own copy of the profile names, from the cluster document; empty

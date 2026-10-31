@@ -204,12 +204,12 @@ pub struct AuditEntry {
     /// Who wrote: the name of a user, else the email or the uid of the user; or the name of a
     /// Palette service, such as `system` or `cluster-agent`.
     pub actor: String,
-    /// `user` or `service`, as Palette gives it.
+    /// The type of the actor, as Palette gives it in `actorType` of `v1AuditActor`.
     pub actor_type: String,
     /// The uid of the user; empty for a service.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub actor_uid: String,
-    /// `create`, `update`, `delete`, `activity`, or `action`, as Palette gives it.
+    /// The action of the write, as Palette gives it in `v1AuditActionType`.
     pub action: String,
     /// What Palette says changed, when it says it, such as the manifest that an edit changed.
     #[serde(default, skip_serializing_if = "String::is_empty")]

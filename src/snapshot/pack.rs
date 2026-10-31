@@ -23,11 +23,13 @@ use crate::pack_type::PackType;
 pub struct Pack {
     /// `<layer>/<name>`, the key of the pack's node hash in the root
     pub key: String,
-    /// Palette layer name: os, k8s, cni, csi, addon.
+    /// The layer name, as Palette gives it in `v1PackLayer`. Strata writes `app` for each tier of
+    /// an app profile.
     pub layer: String,
     /// Pack name.
     pub name: String,
-    /// Pack type: spectro, helm, manifest, oci.
+    /// The type of the pack, as Palette gives it in `v1PackType`. A tier of an app profile has the
+    /// type that Palette gives it in `v1AppTierType`.
     #[serde(rename = "type")]
     pub kind: String,
     /// Tag as pinned on the profile.

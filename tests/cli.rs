@@ -953,6 +953,91 @@ fn the_schema_names_each_value_of_each_closed_set_of_the_other_documents() {
     );
 }
 
+/// The `description` of `field` in the definition `def` of the schema of a document.
+fn schema_description(schema: &serde_json::Value, def: &str, field: &str) -> String {
+    schema["$defs"][def]["properties"][field]["description"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{def}.{field} has no description: {}", schema["$defs"][def]))
+        .to_string()
+}
+
+#[test]
+fn the_schema_names_the_values_that_strata_writes_in_a_field_that_palette_gives() {
+    let schema = |kind: &str| -> serde_json::Value {
+        let r = run(&["schema", kind]);
+        assert_eq!(r.code, 0, "{}", r.err);
+        serde_json::from_str(&r.out).unwrap()
+    };
+    let snapshot = schema("snapshot");
+    for (def, field) in [("Source", "type"), ("Pack", "layer")] {
+        let text = schema_description(&snapshot, def, field);
+        assert!(text.contains("`app`"), "{def}.{field}: {text}");
+    }
+    let text = schema_description(&snapshot, "Source", "type");
+    assert!(
+        text.contains("`pack`"),
+        "a pack record has the type pack: {text}"
+    );
+    let consumers = schema("consumers");
+    let text = schema_description(&consumers, "Consumer", "state");
+    assert!(text.contains("`unknown`"), "strata writes unknown: {text}");
+}
+
+#[test]
+fn the_schema_names_the_model_of_palette_and_copies_no_value_of_a_field_that_palette_owns() {
+    let schema = |kind: &str| -> serde_json::Value {
+        let r = run(&["schema", kind]);
+        assert_eq!(r.code, 0, "{}", r.err);
+        serde_json::from_str(&r.out).unwrap()
+    };
+    let (snapshot, candidate, diff) = (schema("snapshot"), schema("candidate"), schema("diff"));
+    let (list, consumers) = (schema("list"), schema("consumers"));
+    let fields = [
+        (&snapshot, "Pack", "layer", "v1PackLayer"),
+        (&snapshot, "Pack", "type", "v1PackType"),
+        (&snapshot, "Pack", "type", "v1AppTierType"),
+        (&candidate, "CandidateLayer", "layer", "v1PackLayer"),
+        (&diff, "AuditEntry", "actorType", "v1AuditActor"),
+        (&diff, "AuditEntry", "action", "v1AuditActionType"),
+        (&list, "ListedCluster", "state", "v1ClusterState"),
+        (&consumers, "Consumer", "state", "v1ClusterState"),
+    ];
+    // a value that Palette has today in one of these fields: a later release of Palette can
+    // change the set, so the description must not copy it
+    let copied = [
+        "k8s",
+        "cni",
+        "csi",
+        "kernel",
+        "spectro",
+        "helm",
+        "oci",
+        "operator-instance",
+        "container",
+        "service",
+        "activity",
+        "publish",
+        "deploy",
+        "Running",
+        "Deleting",
+        "Provisioning",
+    ];
+    for (document, def, field, model) in fields {
+        let text = schema_description(document, def, field);
+        assert!(
+            text.contains("as Palette gives it"),
+            "{def}.{field}: {text}"
+        );
+        assert!(text.contains(model), "{def}.{field} names {model}: {text}");
+        for value in copied {
+            assert!(
+                !text.contains(value),
+                "{def}.{field} copies {value}: {text}"
+            );
+        }
+    }
+}
+
 #[test]
 fn schema_subcommand_prints_json_schema() {
     for (kind, id) in [

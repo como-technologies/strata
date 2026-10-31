@@ -198,9 +198,9 @@ pub struct CandidateLayer {
     /// Pack version. For a `manifest` layer, the version that Palette gives its own manifest
     /// pack: `strata candidate` copies it from the record.
     pub version: String,
-    /// Layer: os, k8s, cni, csi, addon. Defaults to the registry's. Palette takes the layer
-    /// from the registry, so a layer from a registry takes only that layer. A `manifest` layer
-    /// takes only `addon`, the layer that Palette gives each manifest pack.
+    /// The layer name, as Palette gives it in `v1PackLayer`. Defaults to the registry's. Palette
+    /// takes the layer from the registry, so a layer from a registry takes only that layer. A
+    /// `manifest` layer takes only `addon`, the layer that Palette gives each manifest pack.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<String>,
     /// `manifest` for a layer of manifests from no registry: it names no registry, and it needs
