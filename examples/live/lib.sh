@@ -108,9 +108,9 @@ var() { sed -n "s/^$1 *= *\"\(.*\)\"/\1/p" "${TFVARS:-$live/terraform/terraform.
 # create_body ENGINE PROFILE NAME FILE: write the body of the create of a cluster named NAME to FILE,
 # from preflight/ENGINE.json and the tenant: the profile with the uid PROFILE, the cloud account of
 # terraform.tfvars, and its region and zone. ENGINE is aws, eks, gcp, or gke. It stops the script
-# when the tenant has no such cloud account. It leaves the summary of the accounts in accounts.json,
-# and sets the account uid in $A and its facts in $account_name, $account_kind (the kind of the cloud
-# account: aws or gcp), $region, $az, $ssh_key, and $project.
+# when the tenant has no such cloud account. It leaves the summary of the accounts in accounts.json.
+# It sets the account uid in $A, and its facts in $account_name, $account_kind, $region, $az,
+# $ssh_key, and $project. $account_kind is the kind of the cloud account: aws or gcp.
 create_body() {
   local engine=$1 profile=$2 name=$3 file=$4
   case "$engine" in

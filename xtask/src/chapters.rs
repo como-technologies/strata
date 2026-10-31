@@ -183,9 +183,9 @@ fn preflight_routes(r: &mut Runner, project: &str) {
         &json!({"kind": "aws", "metadata": {"name": "platform-aws", "uid": PLATFORM_AWS},
             "spec": {"credentialType": "secret", "partition": "aws", "policyARNs": []}, "status": {"state": "Active"}}),
     );
-    // the property route of AWS answers 200 for a key pair that the region holds, and the stand-in
-    // serves an empty object, which a rule reads as `ok`; the regions of the account, with the
-    // query in the file name as the stand-in maps it
+    // the property route of AWS answers 200 for a key pair that the region holds. The stand-in
+    // serves an empty object, which a rule reads as `ok`. The regions of the account follow, with
+    // the query in the file name as the stand-in maps it
     r.answer(project, "v1/clouds/aws/properties/validate", &json!({}));
     r.answer(
         project,
@@ -3389,8 +3389,9 @@ fn automation(r: &mut Runner) {
     );
     // two rules that read the account of the entity (#143): the instance type route lists the
     // zones that do not offer a type, and the key pair route lists the key pairs of the region.
-    // The pools move to the zone that the list names. The key pair is not in the list, on an EKS
-    // body with a dynamic VPC: the AWS properties route checks the key pair of an AWS body.
+    // The pools move to the zone that the list names, and the key pair is not in the list. The key
+    // pair step uses an EKS body with a dynamic VPC. The AWS properties route checks the key pair
+    // of an AWS body.
     r.quiet(
         r#"jq '.spec.machinepoolconfig[].cloudConfig.azs = ["us-east-2c"]' cluster.json > cluster-zone.json"#,
     );

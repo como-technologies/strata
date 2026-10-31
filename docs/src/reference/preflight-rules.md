@@ -222,7 +222,7 @@ them, or they need more than the body of the create. They stay in the catalog.
 }
 ```
 
-`accountKind` is the kind of the cloud account of the engine: `eks` uses an
+`accountKind` is the kind of the cloud account of the engine. `eks` uses an
 account of kind `aws`, `gke` one of kind `gcp`, and `aks` one of kind `azure`.
 `routeCloud` is the cloud type of the engine in a route of Palette: the engine
 itself, and `edge-native` for `edge`. A rule reads these two fields, and does not

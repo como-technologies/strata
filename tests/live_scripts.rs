@@ -1948,7 +1948,7 @@ fn preflight_plan_keeps_a_result_the_ledger_does_not_know_out_of_the_entry() {
 }
 
 /// Run `offering_edit` of preflight-plan.sh for `engine`, with the `account_kind` that `create_body`
-/// sets, against a `api.sh` that answers every `get` with the file `answer`. Gives the output, and
+/// sets, against an `api.sh` that answers every `get` with the file `answer`. Gives the output, and
 /// the path that the function asked for.
 fn offering_edit(engine: &str, account_kind: &str, region: &str, answer: &str) -> (Output, String) {
     let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
