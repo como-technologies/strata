@@ -74,9 +74,7 @@ route answers this check before the create, and `pack-cloud-support` is a gap
 that preflight fills: see
 [The gaps that preflight fills](../../reference/preflight-rules.md#the-gaps-that-preflight-fills).
 
-The create of a profile refuses a disabled pack and a deleted pack. So a body
-cannot name a new profile that holds either pack. See
-[Pack states](./packs.md#pack-states).
+For a disabled pack and a deleted pack, see [Pack states](./packs.md#pack-states).
 
 **Who calls it.** The console, in its create wizard. The Terraform provider,
 palette-cli, and the SDK for cloud clusters do not. The create path of the API

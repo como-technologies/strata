@@ -104,8 +104,9 @@ The answer holds the errors of all the records:
 - A candidate, a pack record, an edge host, a cluster group, and an app profile
   get no request. The update that waits for a cluster gets none.
 
-The message of an error names the clusters, and the error has no field for them:
-see [The upgrade dependency](../internals/palette/validate-routes.md#the-upgrade-dependency).
+The message of an error names the clusters. See
+[The upgrade dependency](../internals/palette/validate-routes.md#the-upgrade-dependency)
+for the field.
 When Palette refuses a move for a profile, strata reads the profile document. It
 keeps the clusters that run the version and that the message names. A cluster
 record needs no such read: the route is the route of its cluster.
