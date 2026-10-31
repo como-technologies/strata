@@ -800,7 +800,53 @@ case "$url" in
 esac
 "#;
 
-/// A release with the four files a job downloads, and the checksums over them.
+/// The SHA-256 digest of a file, as `sha256sum` prints it.
+fn sha256_of(path: &Path) -> String {
+    let sum = Command::new("sha256sum").arg(path).output().unwrap();
+    text(&sum.stdout)
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_string()
+}
+
+/// The tools that `install-strata.sh` and the stand-in `curl` call, found on the `PATH` of the test.
+const INSTALLER_TOOLS: [&str; 13] = [
+    "bash",
+    "chmod",
+    "cp",
+    "head",
+    "jq",
+    "mkdir",
+    "mktemp",
+    "mv",
+    "rm",
+    "sed",
+    "sha256sum",
+    "tail",
+    "uname",
+];
+
+/// A directory with a link to each tool of the installer, and to no `cosign`. A machine of a
+/// developer can have a real `cosign` on its `PATH`, which the tests that name its absence must
+/// not find.
+fn tools_without_cosign(d: &Path) -> PathBuf {
+    let tools = d.join("tools");
+    std::fs::create_dir_all(&tools).unwrap();
+    let path = std::env::var("PATH").unwrap();
+    for name in INSTALLER_TOOLS {
+        let found = path
+            .split(':')
+            .map(|dir| Path::new(dir).join(name))
+            .find(|p| p.is_file())
+            .unwrap_or_else(|| panic!("{name} is not on the PATH"));
+        std::os::unix::fs::symlink(found, tools.join(name)).unwrap();
+    }
+    tools
+}
+
+/// A release with the four files a job downloads, the checksums over them, and the bundle that
+/// signs the checksums. The bundle of the stand-in `cosign` is the digest of the file it signs.
 fn release() -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let d = dir.path();
@@ -827,26 +873,24 @@ fn release() -> tempfile::TempDir {
     let mut listed = Vec::new();
     for (id, name, body) in files {
         std::fs::write(assets.join(id), body).unwrap();
-        let sum = Command::new("sha256sum")
-            .arg(assets.join(id))
-            .output()
-            .unwrap();
-        let sum = text(&sum.stdout);
-        sums.push_str(&format!(
-            "{}  {}\n",
-            sum.split_whitespace().next().unwrap(),
-            name
-        ));
+        sums.push_str(&format!("{}  {}\n", sha256_of(&assets.join(id)), name));
         listed.push(serde_json::json!({"name": name, "id": id.parse::<u32>().unwrap()}));
     }
     std::fs::write(assets.join("5"), &sums).unwrap();
     listed.push(serde_json::json!({"name": "SHA256SUMS", "id": 5}));
+    std::fs::write(
+        assets.join("9"),
+        format!("signed {}", sha256_of(&assets.join("5"))),
+    )
+    .unwrap();
+    listed.push(serde_json::json!({"name": "SHA256SUMS.sigstore.json", "id": 9}));
     std::fs::write(
         d.join("release.json"),
         serde_json::json!({"tag_name": "v9.9.9", "assets": listed}).to_string(),
     )
     .unwrap();
     fake_bin(d, &[("curl", FAKE_RELEASE_CURL)]);
+    tools_without_cosign(d);
     dir
 }
 
@@ -855,7 +899,10 @@ fn install(d: &Path, args: &[&str]) -> Output {
         .arg(script("ci/install-strata.sh"))
         .args(args)
         .current_dir(d)
-        .env("PATH", path_with(&d.join("bin")))
+        .env(
+            "PATH",
+            format!("{}:{}", d.join("bin").display(), d.join("tools").display()),
+        )
         .env("FAKE_REL", d)
         .env("STRATA_API", "https://host.example/api")
         .env("STRATA_REPO", "o/r")
@@ -1018,6 +1065,176 @@ fn install_strata_says_which_file_a_release_does_not_have() {
     assert_eq!(o.status.code(), Some(2));
     assert!(
         text(&o.stderr).contains("the release v9.9.9 has no pr-comment.sh"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+/// A `cosign` that checks a bundle the way a real one checks a signature: the bundle must name the
+/// digest of the file. It records its arguments, so a test sees the identity and the issuer.
+const FAKE_COSIGN: &str = r#"#!/usr/bin/env bash
+set -euo pipefail
+echo "$*" >> "$FAKE_REL/cosign.log"
+[ "$1" = verify-blob ] || { echo "no such command: $1" >&2; exit 64; }
+blob=$2
+shift 2
+bundle=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --bundle) bundle=$2; shift 2 ;;
+    *) shift ;;
+  esac
+done
+digest=$(sha256sum "$blob")
+[ "$(< "$bundle")" = "signed ${digest%% *}" ] || { echo "Error: invalid signature when validating the bundle" >&2; exit 1; }
+echo "Verified OK" >&2
+"#;
+
+/// The installer, with a stand-in `cosign` in front of the tools, and the arguments of the
+/// release `v9.9.9` of `o/r`.
+fn install_signed(d: &Path, extra: &[&str]) -> Output {
+    fake_bin(d, &[("cosign", FAKE_COSIGN)]);
+    let mut args = vec![
+        "--version",
+        "v9.9.9",
+        "--dir",
+        "here",
+        "--target",
+        "x86_64-unknown-linux-musl",
+    ];
+    args.extend_from_slice(extra);
+    install(d, &args)
+}
+
+#[test]
+fn install_strata_verifies_the_signature_of_the_sums_and_says_so() {
+    let r = release();
+    let d = r.path();
+    let o = install_signed(d, &["--require-signature"]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("signature verified"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(d.join("here/strata").exists(), "the binary is installed");
+    let log = std::fs::read_to_string(d.join("cosign.log")).unwrap();
+    assert!(
+        log.contains(
+            "--certificate-identity \
+             https://github.com/o/r/.github/workflows/release.yml@refs/tags/v9.9.9"
+        ),
+        "the identity is the release workflow of the repository, at the tag: {log}"
+    );
+    assert!(
+        log.contains("--certificate-oidc-issuer https://token.actions.githubusercontent.com"),
+        "{log}"
+    );
+}
+
+#[test]
+fn install_strata_installs_nothing_when_the_bundle_is_the_signature_of_another_file() {
+    let r = release();
+    let d = r.path();
+    // a valid signature, but of a file that is not SHA256SUMS
+    std::fs::write(d.join("assets/9"), "signed 0000").unwrap();
+    let o = install_signed(d, &["--require-signature"]);
+    assert_eq!(o.status.code(), Some(2));
+    let err = text(&o.stderr);
+    assert!(
+        err.contains("the signature of SHA256SUMS in v9.9.9 does not verify")
+            && err.contains("invalid signature"),
+        "{err}"
+    );
+    assert!(
+        !d.join("here/strata").exists(),
+        "the check comes before anything is installed"
+    );
+
+    // the same stop without the option: a signature that fails is never skipped
+    let o = install_signed(d, &[]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+}
+
+#[test]
+fn install_strata_without_cosign_installs_and_says_that_it_did_not_verify() {
+    let r = release();
+    let d = r.path();
+    let o = install(
+        d,
+        &[
+            "--version",
+            "v9.9.9",
+            "--dir",
+            "here",
+            "--target",
+            "x86_64-unknown-linux-musl",
+        ],
+    );
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("signature not verified: cosign is not on the PATH"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(d.join("here/strata").exists());
+    let calls = std::fs::read_to_string(d.join("curl.log")).unwrap();
+    assert!(
+        !calls.contains("/releases/assets/9"),
+        "no bundle comes down when nothing reads it: {calls}"
+    );
+}
+
+#[test]
+fn install_strata_requires_cosign_before_any_download_when_asked_to() {
+    let r = release();
+    let d = r.path();
+    let o = install(
+        d,
+        &[
+            "--version",
+            "v9.9.9",
+            "--dir",
+            "here",
+            "--target",
+            "x86_64-unknown-linux-musl",
+            "--require-signature",
+        ],
+    );
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("--require-signature needs cosign"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!d.join("curl.log").exists(), "no request went out");
+    assert!(!d.join("here").exists(), "nothing is installed");
+}
+
+#[test]
+fn install_strata_requires_a_bundle_in_the_release_when_asked_to() {
+    let r = release();
+    let d = r.path();
+    let doc = std::fs::read_to_string(d.join("release.json")).unwrap();
+    std::fs::write(
+        d.join("release.json"),
+        doc.replace("SHA256SUMS.sigstore.json", "something-else.json"),
+    )
+    .unwrap();
+    let o = install_signed(d, &["--require-signature"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("the release v9.9.9 has no SHA256SUMS.sigstore.json"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!d.join("here/strata").exists());
+
+    // without the option, the install goes on and says what it did not check
+    let o = install_signed(d, &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("signature not verified: the release v9.9.9 has no"),
         "{}",
         text(&o.stderr)
     );

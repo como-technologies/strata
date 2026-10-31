@@ -62,8 +62,9 @@ no setting. `--repo group/subgroup/project` names a project from a terminal.
 
 ## Install strata in a job
 
-`install-strata.sh` downloads one release, checks every file against
-`SHA256SUMS`, and prints the path of the binary:
+`install-strata.sh` downloads one release, checks the signature of `SHA256SUMS`
+when `cosign` is on the `PATH`, checks every file against `SHA256SUMS`, and
+prints the path of the binary:
 
 ```bash
 bash install-strata.sh --version v0.24.0 --dir .strata
@@ -82,6 +83,10 @@ itself is a release file: the pipeline downloads it first. A token in `STRATA_TO
 none.
 
 [Install](../install.md#one-command) lists the options of the installer.
+[Check the signature](../install.md#check-the-signature) gives the identity that
+the signature must have. The image of the drop-in has no `cosign`, so its job
+prints that it did not check the signature. To require the check, install
+`cosign` 3 or later in the job, and add `--require-signature` to the command.
 
 ## What is the same, and what is not
 

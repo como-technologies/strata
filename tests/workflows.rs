@@ -97,3 +97,70 @@ fn the_lint_and_test_job_runs_the_tests_of_xtask() {
         .collect();
     assert!(runs.contains(&"cargo test -p xtask"), "{runs:?}");
 }
+
+/// A workflow that downloads a release makes sure that the release workflow signed `SHA256SUMS`
+/// before it trusts a file against the sums. The check names the repository, the workflow, and
+/// the tag, so a release from another workflow or another tag does not pass.
+#[test]
+fn each_workflow_that_downloads_a_release_verifies_the_signature_of_the_sums_first() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows");
+    let mut seen = 0;
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let path = entry.unwrap().path();
+        let text = std::fs::read_to_string(&path).unwrap();
+        if !text.contains("gh release download") {
+            continue;
+        }
+        seen += 1;
+        let name = path.display();
+        assert!(
+            text.contains("uses: sigstore/cosign-installer@"),
+            "{name}: no cosign in the job"
+        );
+        assert!(
+            text.contains("--pattern SHA256SUMS --pattern SHA256SUMS.sigstore.json"),
+            "{name}: the bundle of SHA256SUMS does not come down"
+        );
+        assert!(
+            text.contains(
+                "--certificate-identity \"https://github.com/como-technologies/strata/.github/workflows/release.yml@refs/tags/$VERSION\""
+            ) && text.contains(
+                "--certificate-oidc-issuer https://token.actions.githubusercontent.com"
+            ),
+            "{name}: the check does not name the identity of the release workflow"
+        );
+        let verify = text.find("cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json");
+        let sums = text.find("sha256sum --check");
+        assert!(
+            verify.is_some() && verify < sums,
+            "{name}: the signature check must come before the check of the sums"
+        );
+    }
+    assert!(seen >= 7, "only {seen} workflows download a release");
+}
+
+/// The last job of the release workflow installs the tag that it published, as a consumer does.
+/// It fails when the signature of `SHA256SUMS` does not verify, and when `cosign` is not there.
+#[test]
+fn the_release_check_installs_the_published_tag_with_a_required_signature() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/release.yml");
+    let doc: serde_yaml::Value =
+        serde_yaml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let steps = doc["jobs"]["check"]["steps"]
+        .as_sequence()
+        .expect("the release workflow has a job named check");
+    let at = |wanted: &dyn Fn(&serde_yaml::Value) -> bool| steps.iter().position(wanted);
+    let cosign = at(&|s| {
+        s["uses"]
+            .as_str()
+            .is_some_and(|u| u.starts_with("sigstore/cosign-installer@"))
+    })
+    .expect("the check job installs cosign");
+    let install = at(&|s| {
+        s["run"].as_str().is_some_and(|r| {
+            r.contains("scripts/ci/install-strata.sh") && r.contains("--require-signature")
+        })
+    })
+    .expect("the check job installs the tag with --require-signature");
+    assert!(cosign < install, "cosign comes before the installer runs");
+}

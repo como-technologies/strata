@@ -40,8 +40,8 @@ The release workflow then:
    over all of them
 4. signs each file with cosign, and checks the signatures
 5. publishes the GitHub release with generated notes
-6. installs the published release with `install-strata.sh`, and runs each script
-   it installed
+6. installs the published release with `install-strata.sh --require-signature`,
+   which checks the signature of `SHA256SUMS`, and runs each script it installed
 
 Users install it as [Install](../install.md) shows. The version rules are in
 [Versions and compatibility](../reference/compatibility.md).

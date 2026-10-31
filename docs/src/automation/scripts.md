@@ -102,7 +102,7 @@ release and has everything.
 | [`merge-gate.sh`](./merge-gate.md) | The check that the merge button waits for: the records of the merge result. |
 | [`verify-report.sh`](./drift-issues.md) | One issue per record that drifted, is unverified, or could not be checked. |
 | [`upstream-report.sh`](./upstream-issues.md) | One issue per pack that a record pins behind a newer version of its registry. |
-| [`install-strata.sh`](./gitlab.md#install-strata-in-a-job) | One release, with the checksums checked. |
+| [`install-strata.sh`](./gitlab.md#install-strata-in-a-job) | One release, with the signature and the checksums checked. |
 
 They run on GitHub and on GitLab. `examples/ci/github/strata.yml` and
 `examples/ci/gitlab/strata.yml` are the two drop-ins that call them. See

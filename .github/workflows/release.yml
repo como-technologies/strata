@@ -120,12 +120,15 @@ jobs:
       # the release as a consumer gets it: the installer asks the release for each file it needs,
       # so a release that lacks one fails here instead of in somebody's pipeline
       - uses: actions/checkout@v7
+      # the installer verifies the signature of SHA256SUMS with cosign, as a consumer does
+      - uses: sigstore/cosign-installer@v4.1.2
       - name: install the tag that was just published
         env:
           STRATA_TOKEN: ${{ github.token }}
           STRATA_REPO: ${{ github.repository }}
         run: |
-          scripts/ci/install-strata.sh --version "${{ github.ref_name }}" --dir .published
+          scripts/ci/install-strata.sh --version "${{ github.ref_name }}" --dir .published \
+            --require-signature
       - name: run the binaries and each script it installed
         run: |
           .published/strata --version
