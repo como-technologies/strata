@@ -13,13 +13,14 @@ use super::list::{ProjectListings, TENANT_SCOPE, name_projects_of};
 use super::{client_for, scope_of};
 use crate::api::{Palette, PaletteApi};
 use crate::cluster_template::ClusterTemplateRef;
-use crate::error::{Error, Result};
+use crate::error::{Error, ErrorDocument, Result};
 use crate::json::{arr, first_nonempty, is_zero, str_at, text};
 use crate::profile_type::ProfileType;
 use crate::reference::Ref;
 use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind, Tool};
 use crate::term::progress::Progress;
+use crate::timestamp::Rfc3339;
 use reads::{edge_hosts_bound, second_reading};
 
 mod app;
@@ -132,6 +133,7 @@ pub struct Consumer {
     pub version: String,
     /// Why the cluster could not be read, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,
     /// True when the consumer list of the profile did not name this cluster, and the cluster
     /// document did: the second reading found it.
@@ -219,6 +221,7 @@ pub struct ClustersRead {
     /// Why the search or the listing could not be read, when it could not. Then `read` is 0, and
     /// the consumer list of the profile stands alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,
     /// True when the second reading was not done, as `--list-only` asks, or for an app profile.
     /// Then the consumer list of the profile stands alone, and an empty list can be an error of
@@ -242,6 +245,7 @@ pub struct ClustersRead {
     pub members_unread: usize,
     /// Why strata could not read the cluster groups, or one of them, when it could not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<ErrorDocument>")]
     pub groups_error: Option<Value>,
 }
 
@@ -264,6 +268,7 @@ pub struct EdgeHostsRead {
     pub read: usize,
     /// Why the edge hosts could not be listed, when they could not. Then no edge host counts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<ErrorDocument>")]
     pub error: Option<Value>,
     /// True when strata did not search the edge hosts: for an app profile.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -299,6 +304,7 @@ pub struct ConsumersReport {
     /// Which tool wrote the document.
     pub tool: Tool,
     /// When, RFC 3339 UTC.
+    #[schemars(with = "Rfc3339")]
     pub generated_at: String,
     /// The profile version.
     pub profile: ConsumedProfile,

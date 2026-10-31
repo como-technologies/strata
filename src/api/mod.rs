@@ -29,8 +29,8 @@ pub use audit::AuditKind;
 pub use http::HttpApi;
 pub use memory::MemoryApi;
 pub(crate) use palette::{
-    PACK_LISTING_PAGE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, named_entries,
-    profile_versions, search_condition, search_filter, search_group,
+    PACK_LISTING_PAGE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER,
+    named_entries, profile_versions, search_condition, search_filter, search_group,
 };
 pub use palette::{
     Palette, SearchedClusters, VariablesRead, cluster_events_path, cluster_summary_path,

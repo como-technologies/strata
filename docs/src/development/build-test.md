@@ -4,7 +4,7 @@
 just build             # target/release/strata and target/release/strata-preflight
 just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings
 just test              # the unit, library, binary, and script tests, and the tests of xtask
-just library-example   # examples/library, a crate that uses strata as a library
+just library-example   # examples/library and examples/library-preflight, crates that use the libraries
 just examples          # examples/ from the tracked registry data
 just docs-check        # docs/src/output/ is the output of this build
 ```

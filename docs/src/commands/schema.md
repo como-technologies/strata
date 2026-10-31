@@ -29,6 +29,32 @@ id. The diff, verify-summary, and chain documents also have a `legend` that
 explains their values in words.
 [JSON documents](../reference/documents.md) describes each field.
 
+## The shape of each open field
+
+Some fields hold a JSON document, and not a fixed set of keys. The schema states
+the shape of each one, so a validator refuses a value of another shape:
+
+- A profile variable of a record or of a candidate has twelve fields. Only
+  `name` is required.
+- A segment of the path of a leaf is a string, an integer, or an object with a
+  `name`.
+- The `params` of a pack are an object of text. The one exception is
+  `installOrder` of an app tier, which is an integer.
+- A cluster record lists the keys of each tier by its name. `propertyNames`
+  also takes the name of a tier of a later release.
+- An `error` is an object with a `kind` and a `message`, and the fields of the
+  kind. See [Errors](../reference/errors.md).
+- Each time has `format: date-time`.
+
+```text
+{{#include ../output/schema-variable.txt}}
+{{#include ../output/schema-segment.txt}}
+{{#include ../output/schema-tiers.txt}}
+{{#include ../output/schema-time.txt}}
+```
+
+A record that an older release wrote still validates, and it keeps its root.
+
 ## Options
 
 ```text

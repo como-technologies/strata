@@ -4,11 +4,12 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use super::{IMAGE_ID_ANNOTATION, PROVIDER_TYPE_ANNOTATION};
+use crate::api::TIER_INSTALL_ORDER;
 use crate::api::mask::MASKED;
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
@@ -16,6 +17,21 @@ use crate::content::layer::Layer;
 use crate::json::{arr, first_nonempty, flag, opt_str, opt_text, str_at, text, value_at};
 use crate::oci_provider::OciProvider;
 use crate::pack_type::PackType;
+
+/// The schema of [`Pack::params`]: an object whose values are text, but for the install order of a
+/// tier of an app profile, which is an integer.
+fn params_schema(_: &mut SchemaGenerator) -> Schema {
+    json_schema!({
+        "type": "object",
+        "properties": {
+            TIER_INSTALL_ORDER: {
+                "description": "The place of a tier in the install of the app profile.",
+                "type": "integer",
+            },
+        },
+        "additionalProperties": {"type": "string"},
+    })
+}
 
 /// One layer of the profile: a pack with its configuration and its hashes.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -64,7 +80,9 @@ pub struct Pack {
     /// the pack is not invalid.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub invalid_reason: String,
-    /// Pack params as set on the profile.
+    /// Pack params as set on the profile: each name and its value, as text. The params of a tier of
+    /// an app profile also hold `installOrder`, an integer.
+    #[schemars(schema_with = "params_schema")]
     pub params: Value,
     /// Raw values YAML as returned by the API
     pub values: String,

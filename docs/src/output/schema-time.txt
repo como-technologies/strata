@@ -1,0 +1,2 @@
+$ strata schema snapshot | jq -r '."$defs".Source.properties.fetchedAt.format'
+date-time

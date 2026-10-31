@@ -11,6 +11,7 @@ use super::{Candidate, CandidateLayer, CandidateManifest, LayerKind, default_typ
 use crate::closed_set::ClosedSet;
 use crate::json::arr;
 use crate::pack_type::PackType;
+use crate::snapshot::Variable;
 
 /// The packs of an export. A file that has an array here is an export.
 const PACKS: &str = "/spec/template/packs";
@@ -54,7 +55,10 @@ pub(super) fn to_candidate(doc: &Value) -> Result<Candidate, String> {
         registry: None,
         registry_uid: None,
         layers,
-        variables: list(doc, "/spec/variables", "")?.to_vec(),
+        variables: list(doc, "/spec/variables", "")?
+            .iter()
+            .map(Variable::from_palette)
+            .collect(),
     })
 }
 

@@ -8,6 +8,7 @@ use serde_json::Value;
 use super::ImageIdChange;
 use crate::json::{first_nonempty, is_zero, str_at};
 use crate::snapshot::Snapshot;
+use crate::timestamp::{Rfc3339, Rfc3339OrEmpty};
 
 /// The outcome of `verify`, present only in its documents.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -18,8 +19,10 @@ pub struct Verify {
     /// Profile uid that was re-fetched.
     pub uid: String,
     /// When the record was taken.
+    #[schemars(with = "Rfc3339")]
     pub recorded_at: String,
     /// When the live profile was fetched.
+    #[schemars(with = "Rfc3339")]
     pub checked_at: String,
     /// For a profile record whose uid now names another version: that `name@version`. The
     /// recorded version was overwritten in place, so `status` is drifted even when the roots
@@ -38,6 +41,7 @@ pub struct Verify {
     /// For a gone object whose document Palette keeps: when it was deleted, from
     /// `metadata.deletionTimestamp`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<Rfc3339>")]
     pub deleted_at: Option<String>,
     /// For a record of a cluster, an edge host, or a cluster group: the state of the object now,
     /// as Palette gives it. `status.state` of a cluster (such as `Running`, `Deleting`, `Error`) or
@@ -66,6 +70,7 @@ pub struct Verify {
     /// host, or the cluster group. It costs no request. Absent when Palette gives no time, when
     /// the object is gone, and for a pack record: the pack listing gives the create time there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<Rfc3339>")]
     pub last_modified: Option<String>,
     /// For an `unverified` record: the key of each pack with no upstream digest.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -148,10 +153,12 @@ const SYNC_FAILED: &str = "Failed";
 pub struct RegistrySync {
     /// When the last sync that completed started, as Palette gives it in `lastSyncedTime`. Empty
     /// when no sync completed.
+    #[schemars(with = "Rfc3339OrEmpty")]
     pub last_synced_time: String,
     /// When the last sync started, also a sync that runs or that failed, as Palette gives it in
     /// `lastRunTime`. Empty when Palette gives no time.
     #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schemars(with = "Rfc3339")]
     pub last_run_time: String,
     /// The state of the last sync: `Completed`, `InProgress`, or `Failed`, as Palette gives it.
     pub status: String,
@@ -200,6 +207,7 @@ pub struct SyncRecovery {
 #[serde(rename_all = "camelCase")]
 pub struct AuditEntry {
     /// When Palette logged the write, as Palette gives it.
+    #[schemars(with = "Rfc3339OrEmpty")]
     pub time: String,
     /// Who wrote: the name of a user, else the email or the uid of the user; or the name of a
     /// Palette service, such as `system` or `cluster-agent`.

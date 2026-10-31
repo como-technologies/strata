@@ -477,3 +477,22 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
     );
     assert_eq!(app["uids"], serde_json::json!(["a1", "a2"]));
 }
+
+#[test]
+fn the_schema_of_an_error_document_names_the_keys_that_to_json_writes_for_every_kind() {
+    let schema = serde_json::to_value(schemars::schema_for!(ErrorDocument)).unwrap();
+    let named: Vec<&str> = schema["properties"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(named, ["kind", "message"]);
+    assert_eq!(schema["required"], serde_json::json!(["kind", "message"]));
+    for e in one_of_each() {
+        let j = e.to_json();
+        for key in named.iter() {
+            assert!(j[key].is_string(), "{} has no text {key}: {j}", e.kind());
+        }
+    }
+}

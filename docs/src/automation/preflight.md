@@ -219,6 +219,13 @@ account. Give the release with its patch (`--release 4.10.12`): a patch release
 can change the stack too. See
 [After an upgrade of Palette](../use-cases/stop-a-build.md#after-an-upgrade-of-palette).
 
+## In a Rust program
+
+`strata-preflight` is a library too. A Rust program can run the catalog over an
+entity of its own, with no command line. [Use strata-preflight as a
+library](./library.md#use-strata-preflight-as-a-library) shows the dependency,
+the items to start from, and an example crate.
+
 ## The lab
 
 The live example of this repository runs the same three tiers around each

@@ -1036,6 +1036,30 @@ fn commands(r: &mut Runner) {
         false,
         r#"strata schema diff | jq -r '.required | join(", ")'"#,
     );
+    r.step(
+        "schema-variable",
+        0,
+        false,
+        r#"strata schema snapshot | jq -c '.properties.variables.items.properties | keys'"#,
+    );
+    r.step(
+        "schema-segment",
+        0,
+        false,
+        r#"strata schema diff | jq -c '."$defs".Leaf.properties.segments.items.anyOf | map(.type)'"#,
+    );
+    r.step(
+        "schema-tiers",
+        0,
+        false,
+        r#"strata schema snapshot | jq -c '."$defs".ClusterSource.properties.tiers.properties | keys'"#,
+    );
+    r.step(
+        "schema-time",
+        0,
+        false,
+        r#"strata schema snapshot | jq -r '."$defs".Source.properties.fetchedAt.format'"#,
+    );
 }
 
 const CANDIDATE_YAML: &str = "\

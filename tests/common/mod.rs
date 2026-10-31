@@ -710,6 +710,17 @@ pub fn live_script(name: &str) -> std::path::PathBuf {
         .join(name)
 }
 
+/// The version of a manifest, from the root of the repository: `Cargo.toml` or
+/// `preflight/Cargo.toml`.
+pub fn version_of(manifest: &str) -> String {
+    fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(manifest))
+        .unwrap_or_else(|e| panic!("{manifest}: {e}"))
+        .lines()
+        .find_map(|l| l.strip_prefix("version = \"").map(str::to_owned))
+        .and_then(|l| l.strip_suffix('"').map(str::to_owned))
+        .unwrap_or_else(|| panic!("{manifest} has a version line"))
+}
+
 pub fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }

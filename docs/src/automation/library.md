@@ -1,7 +1,8 @@
 # The Rust library
 
 The crate is a library. The command line is a small layer over it. A Rust
-program can use the same parts:
+program can use the same parts. `strata-preflight` is a library too: see
+[Use strata-preflight as a library](#use-strata-preflight-as-a-library).
 
 | Item | Function |
 | --- | --- |
@@ -79,6 +80,56 @@ Without it, the git of Cargo fails with "no authentication methods succeeded".
 The crate is not on crates.io. The name `strata` there belongs to another crate,
 so `cargo add strata` gets the wrong one.
 
+## Use strata-preflight as a library
+
+`strata-preflight` is a second crate in the same repository. It checks that
+Palette can build a cluster. [Preflight in a pipeline](./preflight.md) shows
+the command. A Rust program can run the same catalog over an entity of its own,
+or read the ledger of runs, with no command line.
+
+Give `strata-preflight` and `strata` the same git address and the same tag:
+
+```toml
+[dependencies]
+strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.24.0" }
+strata-preflight = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.24.0" }
+```
+
+The package is `strata-preflight`, and Rust code names the crate
+`strata_preflight`. A run takes a `strata::term::progress::Progress`, so the
+program needs `strata` too. With one tag, Cargo builds one copy of `strata`.
+[Add the dependency](#add-the-dependency) says how Cargo fetches the private
+repository. The crate is not on crates.io.
+
+A program starts from these items:
+
+| Item | Function |
+| --- | --- |
+| `world::World::from_file`, `world::World::from_cluster` | The input of a run. `from_file` reads the body of a create from a JSON or YAML file. It takes the cloud, or reads the cloud from the file. `from_cluster` reads a cluster as Palette holds it now, through a `Palette` client. |
+| `World::with_change`, `World::with_records`, `World::with_palette` | What a world adds: a change file, the records of the profiles that the entity names, or the profiles, the packs, and the cloud account that Palette gives. |
+| `catalog::builtin`, `catalog::with_probes`, `rule::Catalog` | The rules of the binary, and the same rules with the files of custom probes after them. `Catalog::rules` lists them. |
+| `run::Selection`, `run::RunInputs`, `run::run` | The tiers and the rule ids to run, the inputs of a run, and the run. `run` gives a `Report`. A rule that finds a fault is a result in the report, not an `Err`. |
+| `probe::Backend`, `probe::LiveBackend` | Where a check gets an answer from outside the world. `LiveBackend` with `palette: None` runs the static tier with no key and no network. |
+| `report::Report`, `report::CheckResult`, `probe::Verdict` | The result: one `CheckResult` with a `Verdict` for each rule that applies. `Report::exit_code` is the exit code of the command: `0`, `1`, or `2`. `Report::counted_failures` lists the failures that make it `1`. |
+| `report::render`, `report::Format` | The report as terminal text, markdown, JSON, or an HTML page. |
+| `confidence::Ledger`, `confidence::Confidence`, `confidence::promotion`, `catalog::LEDGER` | The ledger of runs, and the confidence of each rule that it gives. `catalog::LEDGER` is the ledger in the binary. `Ledger::load` and `Ledger::extend` add the ledger of a company. `promotion` says which level each rule has earned. |
+| `run::watch`, `run::WatchInputs` | The watch during a build. It needs a `Palette` client. |
+| `fixture::load`, `probe::FixtureBackend`, `probe::run_check` | A world with the answers written in, for the test of a rule of a company. |
+| `error::Error` | The one error type. A run that cannot answer is an `Err`, and the command gives exit code `2` for it. |
+
+`examples/library-preflight/` is a separate crate that depends on
+`strata-preflight` by path. It loads the catalog and reads
+`preflight/rules/fixtures/aws/clean.json`. It runs the static rule
+`aws-local-zone-letter` and prints the verdict. It needs no key, no network,
+and no command line:
+
+```rust
+{{#include ../../../examples/library-preflight/src/main.rs:run}}
+```
+
+The program prints `PASS`, the id of the rule, and its title. It exits with
+code `1` when the verdict is not `PASS`.
+
 ## Read the API
 
 ```bash
@@ -86,11 +137,13 @@ cargo doc --open
 ```
 
 Each public item has documentation. The build refuses an item without it. In a
-clone of strata, `just api-docs` builds the same pages into `target/doc/strata/`.
+clone of strata, `just api-docs` builds the same pages into `target/doc/strata/`
+and `target/doc/strata_preflight/`.
 
 The crate documentation starts with an example that runs as a test.
 `examples/library/` is a separate crate that uses strata as a library, with no
-command line and no network:
+command line and no network. `examples/library-preflight/` does the same for
+`strata-preflight`. One recipe runs both:
 
 ```bash
 just library-example
