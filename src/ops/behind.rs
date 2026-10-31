@@ -15,7 +15,7 @@ use crate::closed_set::Open;
 use crate::cloud::supports;
 use crate::diff::{ChangeFlag, Diff, ImpactLevel, RegistrySync};
 use crate::error::{Error, Result};
-use crate::json::text;
+use crate::json::str_at;
 use crate::pack_state::PackState;
 use crate::reference::{Ref, version};
 use crate::registry::{Registries, RegistrySyncNote};
@@ -205,12 +205,14 @@ pub struct Bump {
     pub flags: Vec<Open<ChangeFlag>>,
     /// Whether Palette accepts the move, with the errors that it gives and the clusters that they
     /// name. Palette checks the move against the packs of the clusters that run the profile of
-    /// each record that pins the pack. Absent when no record of the pin is a profile version that
-    /// Palette holds or a cluster. Also absent when a request failed and no answer holds an
-    /// error: Palette accepts only when each request answered.
+    /// each record that pins the pack in the project of the pin. Absent when strata can ask no
+    /// record of the pin. Also absent when a request failed or strata did not ask a record, and no
+    /// answer holds an error. Strata says that Palette accepts only when it asked each record and
+    /// each request answered.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation: Option<ProfileValidation>,
-    /// Why a request to Palette failed, when one did. The pin stays behind.
+    /// Why a request to Palette failed, when one did. Also the records of another project that
+    /// strata did not ask, such as `1 record of project p2 was not asked`. The pin stays behind.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation_error: Option<String>,
 }
@@ -237,7 +239,7 @@ impl Bump {
 pub struct BehindOptions {
     /// Compare each pin that is behind with the newest version, for its impact: two pack reads
     /// for each such pin. Also ask Palette whether it accepts the move, with one request for each
-    /// record that pins it, and a read of the cluster document for a record of a cluster.
+    /// record that pins it. A record of a cluster also costs a read of the cluster document.
     pub impact: bool,
     /// The report of the previous run: each pin names the versions that arrived since.
     pub since: Option<BehindReport>,
@@ -268,6 +270,18 @@ struct PinKey {
     tag: String,
 }
 
+impl PinKey {
+    /// The pin that the pack `p` of a record makes.
+    fn of(p: &Pack) -> PinKey {
+        PinKey {
+            name: p.name.clone(),
+            registry_uid: p.registry_uid.clone(),
+            version: p.version.clone(),
+            tag: p.tag.clone(),
+        }
+    }
+}
+
 /// What `behind` has read for all the scopes: each pack of each registry, and the last sync of
 /// each registry, each read one time.
 #[derive(Default)]
@@ -279,11 +293,15 @@ struct Reads {
 }
 
 /// Report the pack versions that `records` pin, and the newer versions that the registries offer.
+///
 /// Strata reads each pin in the project of the first record that pins it. It calls `connect` one
 /// time for each project, and keeps one cache of the registry listings for each project. It reads
 /// each pack of a registry one time. A pin in a project that `connect` cannot reach has the error
 /// of `connect`. When strata cannot read a record, the whole run fails: strata cannot say what the
 /// record pins.
+///
+/// With `options.impact`, strata asks Palette about the bump of a pin in the project of the pin.
+/// It does not ask a record of another project that pins the pack, and the bump says so.
 ///
 /// # Errors
 ///
@@ -310,12 +328,7 @@ where
         let snap = Snapshot::load(path)?;
         let subject = snap.source.title();
         for p in snap.packs.iter().filter(|p| !p.registry_uid.is_empty()) {
-            let key = PinKey {
-                name: p.name.clone(),
-                registry_uid: p.registry_uid.clone(),
-                version: p.version.clone(),
-                tag: p.tag.clone(),
-            };
+            let key = PinKey::of(p);
             let held = holders.entry(key.clone()).or_default();
             if held.last() != Some(&loaded.len()) {
                 held.push(loaded.len());
@@ -378,22 +391,19 @@ where
             }
         };
         let mut listings = Registries::new(&palette);
-        let mut questions = BumpQuestions::new(&palette);
+        let mut questions = BumpQuestions::new(&palette, scope.as_deref());
         for (key, mut pin) in group {
             read_pin(&mut pin, &mut listings, &mut reads, generated_at, progress)?;
             if options.impact && pin.behind {
-                // Palette answers in the project of the connection, so strata asks it about
-                // the records of that project
-                let here: Vec<&Snapshot> = holders
+                let holding: Vec<&Snapshot> = holders
                     .get(&key)
                     .into_iter()
                     .flatten()
                     .filter_map(|&i| loaded.get(i))
-                    .filter(|r| scope_of(&r.source.project_uid) == scope.as_deref())
                     .collect();
                 read_bump(
                     &mut pin,
-                    &here,
+                    &holding,
                     &mut listings,
                     &mut questions,
                     generated_at,
@@ -577,10 +587,10 @@ fn dropped(pinned: &[String], newer: &[String]) -> Vec<String> {
 }
 
 /// Give `pin` its bump: what a move to the newest version does, and the answer of Palette for
-/// the records `here` that pin it. A comparison that fails is the error of `pin`.
+/// the records `holding` that pin it. A comparison that fails is the error of `pin`.
 fn read_bump<A: PaletteApi>(
     pin: &mut Pin,
-    here: &[&Snapshot],
+    holding: &[&Snapshot],
     listings: &mut Registries<'_, A>,
     questions: &mut BumpQuestions<'_, A>,
     at: &str,
@@ -594,7 +604,7 @@ fn read_bump<A: PaletteApi>(
                 "asking Palette about {} {} to {to}",
                 pin.name, pin.version
             ));
-            let asked = questions.ask(here, pin, &target);
+            let asked = questions.ask(holding, pin, &target);
             bump.palette_validation = asked.validation;
             bump.palette_validation_error = asked.error;
             pin.bump = Some(bump);
@@ -649,15 +659,22 @@ fn bump_of<A: PaletteApi>(
 impl Pin {
     /// True when `p` is the pack that this pin names, as a record holds it.
     pub(super) fn pins(&self, p: &Pack) -> bool {
-        p.name == self.name
-            && p.registry_uid == self.registry_uid
-            && p.version == self.version
-            && p.tag == self.tag
+        PinKey::of(p) == self.key()
     }
 
     /// True when `c` is the pack that this pin names, as the template of a profile in the
     /// document of a cluster holds it. The template names the pack and its tag.
     pub(super) fn is_in_template(&self, c: &Value) -> bool {
-        text(c, "/name") == self.name && text(c, "/tag") == self.tag
+        str_at(c, "/name") == self.name && str_at(c, "/tag") == self.tag
+    }
+
+    /// What identifies this pin in the records.
+    fn key(&self) -> PinKey {
+        PinKey {
+            name: self.name.clone(),
+            registry_uid: self.registry_uid.clone(),
+            version: self.version.clone(),
+            tag: self.tag.clone(),
+        }
     }
 }

@@ -15,9 +15,10 @@
 # arrived since its last update; the issue that a run opens says that this run is the first to find
 # the pack behind. A pack that strata could not check keeps its issue as it is.
 # Issues of packs that no record pins are left alone. The bump column also says whether Palette
-# accepts the move, and names the clusters that it refuses it on. --no-impact skips the comparison
-# of each pin with the newest version, and the question to Palette. --save FILE keeps the report
-# of the run. --dry-run prints each issue body and what would happen, and calls no host.
+# accepts the move. When Palette refuses it, the column gives each error as `strata behind` writes
+# it. --no-impact skips the comparison of each pin with the newest version, and the question to
+# Palette. --save FILE keeps the report of the run. --dry-run prints each issue body and what would
+# happen, and calls no host.
 #
 # Exit 0 when no pin is behind, 1 when one is, 2 when a pin could not be checked or strata checked
 # nothing; the issues are handled first, so a scheduled job shows the state too. Behind is a
@@ -123,7 +124,7 @@ while [ $# -gt 0 ]; do
     --dry-run) dry=1; shift ;;
     --no-impact) impact=(--no-impact); shift ;;
     --save) save=$2; shift 2 ;;
-    -h|--help) sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) patterns+=("$1"); shift ;;
   esac
@@ -240,11 +241,24 @@ while IFS= read -r group <&3; do
     echo
     echo "| pinned | newer | bump | arrived | pinned by |"
     echo "|---|---|---|---|---|"
-    jq -r '.pins[] | "| `\(.version)`\(if .floating then " (floating tag `\(.tag)`)" else "" end) | \(
+    # the lines under the bump of `strata behind`: PaletteRefusal::line and palette_lines
+    jq -r 'def and_list: if length < 3 then join(" and ") else (.[:-1] | join(", ")) + ", and " + .[-1] end;
+      def refusal_line:
+        if (.clusters // [] | length) > 0 then "\(.code) on \(.clusters | and_list)"
+        elif (.pack // "") == "" then "\(.code): \(.message)"
+        else "\(.code) \(.pack): \(.message)" end;
+      def palette_lines:
+        (.paletteValidation // empty
+          | if .accepts then "palette accepts" else (.errors // [])[] | "palette refuses: \(refusal_line)" end),
+        (.paletteValidationError // empty | "palette gave no answer: \(.)");
+      def bump_cell:
+        (["\(.to): \(.impact) \(.flags | join(" "))"] + [palette_lines])
+        | map(split("|") | join("\\|")) | join("<br>");
+      .pins[] | "| `\(.version)`\(if .floating then " (floating tag `\(.tag)`)" else "" end) | \(
         if .behind then [.newer[] | .version + ([(.state // empty), (.drops // [] | select(length > 0) | "drops \(join(" and "))"), (.listed // "" | select(. != "") | "listed \(.[0:10])")]
           | if length > 0 then " (\(join(", ")))" else "" end)] | join(", ")
         elif .error then "not checked: \(.error.message)" else "current" end) | \(
-        if .bump then "\(.bump.to): \(.bump.impact) \(.bump.flags | join(" "))\(.bump.paletteValidation | if . == null then "" elif .accepts then "; palette accepts" else "; palette refuses: " + ([.errors[] | .code + (if (.clusters // [] | length) > 0 then " on " + (.clusters | join(", ")) else "" end)] | join(", ")) end)" else "-" end) | \(
+        if .bump then (.bump | bump_cell) else "-" end) | \(
         if .arrived == null then "-" elif (.arrived | length) == 0 then "none" else (.arrived | join(", ")) end) | \(
         [.pinnedBy[] | "`\(.path)` (\(.subject))"] | join("<br>")) |"' <<<"$group"
     echo
