@@ -407,6 +407,28 @@ fn upgrade_results(refusal: Option<(&str, &[&str])>) -> Vec<Value> {
         .collect()
 }
 
+/// The entries of `packs.results` for a pack `pack` that requires the pack `required` at
+/// `version` or newer, when the packs do not hold it: one error,
+/// `DependencyPackWithMinVersionRequired`.
+fn min_version_results(pack: &str, required: &str, version: &str) -> Vec<Value> {
+    vec![pack_result(
+        pack,
+        "DependencyPackWithMinVersionRequired",
+        &format!("Pack '{required}' is required with minimum compatible version '{version}'"),
+    )]
+}
+
+/// The body of the answer of `validate/packs` for a cluster: the profile `profile` with `results`
+/// under `packs`. With no `results`, Palette accepts, and the body has no profile.
+fn cluster_packs_body(profile: &str, results: Vec<Value>) -> Value {
+    let profiles: Vec<Value> = if results.is_empty() {
+        Vec::new()
+    } else {
+        vec![json!({"uid": profile, "packs": {"results": results}})]
+    };
+    json!({ "profiles": profiles })
+}
+
 fn packs_mut(doc: &mut Value) -> impl Iterator<Item = &mut Value> {
     doc["spec"]["published"]["packs"]
         .as_array_mut()
@@ -1895,21 +1917,13 @@ impl Tenant {
     /// Palette keeps the tag of the copy that the cluster holds, and checks no sent tag. The
     /// stand-in gives one answer for every request; it does not check anything.
     pub fn packs_answer(&self, project: &str, cluster: &str, refusal: Option<PackRefusal>) {
-        let profiles: Vec<Value> = refusal
-            .map(|r| {
-                let message = format!(
-                    "Pack '{}' is required with minimum compatible version '{}'",
-                    r.required, r.version
-                );
-                json!({"uid": r.profile, "packs": {"results": [pack_result(
-                    r.pack,
-                    "DependencyPackWithMinVersionRequired",
-                    &message,
-                )]}})
-            })
-            .into_iter()
-            .collect();
-        self.write_cluster_packs(project, cluster, profiles);
+        let (profile, results) = refusal.map_or(("", Vec::new()), |r| {
+            (
+                r.profile,
+                min_version_results(r.pack, r.required, r.version),
+            )
+        });
+        self.write_cluster_packs(project, cluster, profile, results);
     }
 
     /// The answer of `POST /v1/clusterprofiles/{uid}/validate/packs` with `profile`, or of `POST
@@ -1924,19 +1938,9 @@ impl Tenant {
         profile: Option<&str>,
         refusal: Option<(&str, &str, &str)>,
     ) {
-        let results: Vec<Value> = refusal
-            .map(|(pack, required, version)| {
-                pack_result(
-                    pack,
-                    "DependencyPackWithMinVersionRequired",
-                    &format!(
-                        "Pack '{required}' is required with minimum compatible version \
-                         '{version}'"
-                    ),
-                )
-            })
-            .into_iter()
-            .collect();
+        let results = refusal.map_or_else(Vec::new, |(pack, required, version)| {
+            min_version_results(pack, required, version)
+        });
         self.write_profile_packs(project, profile, results);
     }
 
@@ -1954,10 +1958,17 @@ impl Tenant {
         self.write_profile_packs(project, Some(profile), upgrade_results(refusal));
     }
 
-    /// Write the answer of the packs route of a cluster with `profiles` in the body.
-    fn write_cluster_packs(&self, project: &str, cluster: &str, profiles: Vec<Value>) {
+    /// Write the answer of the packs route of a cluster: the profile `profile` with `results`
+    /// under `packs`, and no profile when `results` is empty.
+    fn write_cluster_packs(
+        &self,
+        project: &str,
+        cluster: &str,
+        profile: &str,
+        results: Vec<Value>,
+    ) {
         let path = format!("{}/validate/packs", cluster_route(cluster));
-        self.write(project, &path, &json!({ "profiles": profiles }));
+        self.write(project, &path, &cluster_packs_body(profile, results));
     }
 
     /// Write the answer of the packs route of a profile with `results` under `packs`.
@@ -2609,6 +2620,32 @@ mod tests {
         let message = error["message"].as_str().unwrap();
         assert!(message.ends_with("payments, billing"), "{message}");
         assert!(upgrade_results(None).is_empty());
+    }
+
+    #[test]
+    fn the_min_version_refusal_names_the_pack_and_the_minimum_version_in_the_message() {
+        let results = min_version_results("cni-cilium-oss", "kubernetes", "1.37.0");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0]["name"], "cni-cilium-oss");
+        let error = &results[0]["errors"][0];
+        assert_eq!(error["code"], "DependencyPackWithMinVersionRequired");
+        assert_eq!(
+            error["message"],
+            "Pack 'kubernetes' is required with minimum compatible version '1.37.0'"
+        );
+    }
+
+    #[test]
+    fn the_answer_for_a_cluster_holds_the_profile_with_its_results_and_no_profile_without_them() {
+        let results = min_version_results("cni-cilium-oss", "kubernetes", "1.37.0");
+        let body = cluster_packs_body("profile-1", results.clone());
+        assert_eq!(body["profiles"].as_array().map(Vec::len), Some(1));
+        assert_eq!(body["profiles"][0]["uid"], "profile-1");
+        assert_eq!(body["profiles"][0]["packs"]["results"], json!(results));
+        assert_eq!(
+            cluster_packs_body("profile-1", Vec::new()),
+            json!({"profiles": []})
+        );
     }
 
     /// The edits compose in order, as the chapter that writes `OCI_CSI | RETAIN` needs.

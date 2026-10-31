@@ -10,7 +10,7 @@ use crate::common;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use common::{INSTALLING_WORKFLOWS, schema, version_of, walk};
+use common::{INSTALLING_WORKFLOWS, repo_file, schema, version_of, walk};
 use strata::api::codes::ValidateRoute;
 
 fn docs() -> PathBuf {
@@ -100,7 +100,7 @@ fn every_use_case_is_in_the_navigation_and_the_list_in_one_order() {
 #[test]
 fn the_readme_version_badge_is_the_version_in_cargo_toml() {
     let version = version_of("Cargo.toml");
-    let readme = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"));
+    let readme = repo_file("README.md");
     let badge = format!("badge/version-{version}-blue");
     assert!(
         readme.contains(&badge),
@@ -147,13 +147,7 @@ fn every_page_the_navigation_names_exists() {
 /// not. One of them sits above the generated help that names it.
 #[test]
 fn the_kind_tables_list_every_kind_the_help_names() {
-    let help = read(&docs().join("output/help-schema.txt"));
-    let at = help
-        .find("possible values: ")
-        .expect("the help lists the kinds");
-    let list = &help[at + "possible values: ".len()..];
-    let list = &list[..list.find(']').expect("the list ends")];
-    let kinds: Vec<&str> = list.split(", ").collect();
+    let kinds = schema_kinds();
     assert!(kinds.len() > 5, "only {} kinds parsed", kinds.len());
 
     for (page, cell) in [
@@ -332,18 +326,13 @@ fn compatibility_has_a_section_for_release_0_25_0_above_release_0_24_0_and_links
 #[test]
 fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_and_what_a_caller_does()
  {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows");
-    let mut checking: Vec<String> = std::fs::read_dir(&dir)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .filter(|path| path.extension().is_some_and(|e| e == "yml"))
-        .filter(|path| {
-            let text = read(path);
+    let checking: Vec<String> = common::workflow_files()
+        .into_iter()
+        .filter(|file| {
+            let text = common::workflow_text(file);
             text.contains("workflow_call:") && text.contains("sigstore/cosign-installer@")
         })
-        .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
         .collect();
-    checking.sort();
     assert_eq!(
         checking, INSTALLING_WORKFLOWS,
         "a reusable workflow runs cosign, and the list of the tests lacks it"
@@ -361,6 +350,8 @@ fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_a
         "runs the `install-strata.sh` of the tag in `strata-version`, with `--require-signature`",
         "`cosign verify-blob`",
         "must permit `sigstore/cosign-installer`",
+        "`retire-gate.yml` also runs `actions/checkout`",
+        "permit `actions/checkout` too",
         "reach github.com",
         "**`strata-version` must be v0.25.0 or later.**",
         "so the job stops with `unknown option`",
@@ -373,19 +364,15 @@ fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_a
     }
 }
 
-/// The kinds that `strata schema` takes, from its help.
+/// The kinds that `strata schema` takes, from its generated help.
 fn schema_kinds() -> Vec<String> {
-    let help = common::Run::of(
-        std::process::Command::new(common::strata_bin()).args(["schema", "--help"]),
-    );
-    help.out
+    let help = read(&docs().join("output/help-schema.txt"));
+    let list = help
         .split("[possible values: ")
         .nth(1)
         .and_then(|rest| rest.split(']').next())
-        .expect("the help of schema lists its kinds")
-        .split(", ")
-        .map(str::to_string)
-        .collect()
+        .expect("the help of schema lists its kinds");
+    list.split(", ").map(str::to_string).collect()
 }
 
 /// The rename of the two read errors reached `strata-diff/1` and `strata-verify-summary/1`, which
@@ -487,10 +474,8 @@ fn publish_fan_out_runs_the_installer_with_the_signature_check_and_says_what_it_
 /// variable to explain a behavior, and then it links to `gitlab.md`.
 #[test]
 fn the_variables_of_the_gitlab_preflight_job_are_described_on_gitlab_md_and_listed_nowhere_else() {
-    let drop_in: serde_yaml::Value = serde_yaml::from_str(&read(
-        &Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/ci/gitlab/strata.yml"),
-    ))
-    .unwrap();
+    let drop_in: serde_yaml::Value =
+        serde_yaml::from_str(&repo_file("examples/ci/gitlab/strata.yml")).unwrap();
     let names: Vec<&str> = drop_in["variables"]
         .as_mapping()
         .unwrap()

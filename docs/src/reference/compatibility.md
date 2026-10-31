@@ -378,8 +378,10 @@ field, a value, an input, or an option is in the sections above.
   verify, the job fails and installs nothing. Release 0.24.0 checked the binary
   against `SHA256SUMS` only.
 - **An organization that permits only some actions must permit
-  `sigstore/cosign-installer`.** A self-hosted runner must reach github.com for
-  the cosign release, and the trust root of Sigstore. The installer needs `curl`
+  `sigstore/cosign-installer`.** `retire-gate.yml` also runs `actions/checkout`
+  now. Release 0.24.0 used no action in that workflow, so permit
+  `actions/checkout` too. A self-hosted runner must reach github.com for the
+  cosign release, and the trust root of Sigstore. The installer needs `curl`
   and `jq` on the runner. The permissions of the workflows do not change. See
   [The reusable workflows](../install.md#the-reusable-workflows).
 - **`strata-version` must be v0.25.0 or later.** A workflow runs the installer of

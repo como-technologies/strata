@@ -3,36 +3,40 @@
 //! it cannot parse; the reusable workflows never run here, so nothing else would show it. A
 //! colon and a space inside an unquoted description is the fault this found.
 
-use std::path::Path;
 use std::process::Command;
 
-use crate::common::{INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, text};
+use crate::common::{
+    INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, repo_file, steps, text, workflow,
+    workflow_files, workflow_text,
+};
 
 #[test]
 fn every_workflow_file_parses_and_has_on_and_jobs() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows");
-    let mut seen = 0;
-    for entry in std::fs::read_dir(&dir).unwrap() {
-        let path = entry.unwrap().path();
-        if path.extension().is_none_or(|e| e != "yml" && e != "yaml") {
-            continue;
-        }
-        seen += 1;
-        let text = std::fs::read_to_string(&path).unwrap();
-        let doc: serde_yaml::Value = serde_yaml::from_str(&text)
-            .unwrap_or_else(|e| panic!("{}: not YAML: {e}", path.display()));
+    let files = workflow_files();
+    for file in &files {
+        let doc = workflow(file);
         let map = doc
             .as_mapping()
-            .unwrap_or_else(|| panic!("{}: not a mapping", path.display()));
+            .unwrap_or_else(|| panic!("{file}: not a mapping"));
         for key in ["on", "jobs"] {
-            assert!(map.contains_key(key), "{}: no `{key}` key", path.display());
+            assert!(map.contains_key(key), "{file}: no `{key}` key");
         }
     }
     assert!(
-        seen >= 5,
-        "only {seen} workflow files under {}",
-        dir.display()
+        files.len() >= 5,
+        "only {} workflow files under .github/workflows",
+        files.len()
     );
+}
+
+#[test]
+fn the_steps_of_a_workflow_are_the_steps_of_each_job_in_order_and_a_job_with_no_steps_adds_none() {
+    let doc: serde_yaml::Value = serde_yaml::from_str(
+        "jobs:\n  a:\n    steps:\n      - name: one\n      - name: two\n  b:\n    uses: ./x.yml\n  c:\n    steps:\n      - name: three\n",
+    )
+    .unwrap();
+    let names: Vec<&str> = steps(&doc).filter_map(|s| s["name"].as_str()).collect();
+    assert_eq!(names, ["one", "two", "three"]);
 }
 
 /// The verify reads one check run named `Gate` on the head commit of a pull request, and sets no
@@ -41,9 +45,7 @@ fn every_workflow_file_parses_and_has_on_and_jobs() {
 /// `if: always()` lets a verify pass a commit that a check refused.
 #[test]
 fn the_gate_job_of_ci_needs_the_checks_and_has_no_condition() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/ci.yml");
-    let text = std::fs::read_to_string(&path).unwrap();
-    let doc: serde_yaml::Value = serde_yaml::from_str(&text).unwrap();
+    let doc = workflow("ci.yml");
     let jobs = doc["jobs"].as_mapping().expect("ci.yml has jobs");
     let gate = jobs
         .values()
@@ -66,8 +68,7 @@ fn the_gate_job_of_ci_needs_the_checks_and_has_no_condition() {
 /// of the recipe has no `-` before it, so a test that fails makes `just test` exit non-zero.
 #[test]
 fn the_lint_and_test_job_runs_the_tests_of_xtask() {
-    let justfile =
-        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("justfile")).unwrap();
+    let justfile = repo_file("justfile");
     let recipe: Vec<&str> = justfile
         .lines()
         .skip_while(|line| !line.starts_with("test:"))
@@ -77,9 +78,7 @@ fn the_lint_and_test_job_runs_the_tests_of_xtask() {
         .collect();
     assert!(recipe.contains(&"cargo test -p xtask"), "{recipe:?}");
 
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/checks.yml");
-    let text = std::fs::read_to_string(&path).unwrap();
-    let doc: serde_yaml::Value = serde_yaml::from_str(&text).unwrap();
+    let doc = workflow("checks.yml");
     let job = doc["jobs"]
         .as_mapping()
         .expect("checks.yml has jobs")
@@ -103,10 +102,12 @@ fn the_lint_and_test_job_runs_the_tests_of_xtask() {
 #[test]
 fn each_workflow_that_installs_a_release_runs_the_installer_with_cosign_and_the_tag_checked_out() {
     for file in INSTALLING_WORKFLOWS {
-        let steps = steps(file);
+        let doc = workflow(file);
+        let steps: Vec<&serde_yaml::Value> = steps(&doc).collect();
         let position = |wanted: &dyn Fn(&serde_yaml::Value) -> bool| {
             steps
                 .iter()
+                .copied()
                 .position(wanted)
                 .unwrap_or_else(|| panic!("{file}: a step is missing"))
         };
@@ -167,9 +168,7 @@ fn no_workflow_copies_the_download_or_the_signature_check_of_a_release() {
 /// It fails when the signature of `SHA256SUMS` does not verify, and when `cosign` is not there.
 #[test]
 fn the_release_check_installs_the_published_tag_with_a_required_signature() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/release.yml");
-    let doc: serde_yaml::Value =
-        serde_yaml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let doc = workflow("release.yml");
     let steps = doc["jobs"]["check"]["steps"]
         .as_sequence()
         .expect("the release workflow has a job named check");
@@ -217,36 +216,13 @@ impl StepRun {
     }
 }
 
-/// The text of the workflow `file` of `.github/workflows/`.
-fn workflow_text(file: &str) -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".github/workflows")
-        .join(file);
-    std::fs::read_to_string(&path).unwrap()
-}
-
-/// The workflow `file` of `.github/workflows/`, parsed.
-fn workflow(file: &str) -> serde_yaml::Value {
-    serde_yaml::from_str(&workflow_text(file)).unwrap_or_else(|e| panic!("{file}: not YAML: {e}"))
-}
-
-/// The steps of each job of the workflow `file`, in order.
-fn steps(file: &str) -> Vec<serde_yaml::Value> {
-    workflow(file)["jobs"]
-        .as_mapping()
-        .unwrap()
-        .values()
-        .flat_map(|job| job["steps"].as_sequence().into_iter().flatten().cloned())
-        .collect()
-}
-
 /// Run the `run` script of the step `step` of the workflow `file` in a fresh directory.
 ///
 /// Each variable of the `env` of the step is empty unless `env` gives it a value. `tools` are the
 /// paths, under the directory, of the stand-ins that [`LOGGING_TOOL`] describes.
 fn run_step(file: &str, step: &str, env: &[(&str, &str)], tools: &[&str]) -> StepRun {
-    let step = steps(file)
-        .into_iter()
+    let doc = workflow(file);
+    let step = steps(&doc)
         .find(|s| s["name"].as_str() == Some(step))
         .unwrap_or_else(|| panic!("{file} has no step named {step}"));
     let dir = tempfile::tempdir().unwrap();
@@ -277,8 +253,8 @@ fn run_step(file: &str, step: &str, env: &[(&str, &str)], tools: &[&str]) -> Ste
 #[test]
 fn the_preflight_step_appends_the_report_to_the_summary_and_keeps_the_exit_status_of_a_failed_run()
 {
-    let step = steps("preflight.yml")
-        .into_iter()
+    let doc = workflow("preflight.yml");
+    let step = steps(&doc)
         .find(|s| s["name"].as_str() == Some("preflight"))
         .unwrap();
     assert_eq!(
@@ -355,8 +331,8 @@ fn the_preflight_workflow_asks_for_no_write_permission_and_posts_no_comment() {
 #[test]
 fn the_comment_workflow_reads_the_artifact_that_the_preflight_workflow_keeps() {
     let artifact = |file: &str, action: &str| -> serde_yaml::Value {
-        let step = steps(file)
-            .into_iter()
+        let doc = workflow(file);
+        let step = steps(&doc)
             .find(|s| s["uses"].as_str().is_some_and(|u| u.starts_with(action)))
             .unwrap_or_else(|| panic!("{file} has no step that uses {action}"));
         step["with"].clone()
@@ -494,8 +470,8 @@ fn the_promote_gate_step_gives_each_allowed_difference_its_own_option() {
 #[test]
 fn the_install_step_of_each_workflow_requires_the_signature_of_the_version_it_was_given() {
     for file in INSTALLING_WORKFLOWS {
-        let name = steps(file)
-            .iter()
+        let doc = workflow(file);
+        let name = steps(&doc)
             .find(|s| {
                 s["run"]
                     .as_str()
