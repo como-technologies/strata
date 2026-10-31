@@ -777,6 +777,28 @@ pub fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
+/// The JSON Schema that `strata schema <kind>` prints.
+pub fn schema(kind: &str) -> Value {
+    let r = Run::of(
+        Command::new(strata_bin())
+            .args(["schema", kind])
+            .env("STRATA_QUIET", "1"),
+    );
+    assert_eq!(r.code, 0, "{}", r.err);
+    serde_json::from_str(&r.out).unwrap()
+}
+
+/// The reusable workflows that install a release of strata, in `.github/workflows/`.
+pub const INSTALLING_WORKFLOWS: [&str; 7] = [
+    "comment.yml",
+    "merge-gate.yml",
+    "preflight.yml",
+    "promote-gate.yml",
+    "retire-gate.yml",
+    "upstream.yml",
+    "verify.yml",
+];
+
 /// Run git in `dir` with no user or global configuration, so signing settings cannot leak in.
 pub fn git(dir: &Path, args: &[&str]) -> std::process::Output {
     let mut c = Command::new("git");

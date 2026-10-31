@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::common::{LOGGING_TOOL, executable, git, text};
+use crate::common::{INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, text};
 
 #[test]
 fn every_workflow_file_parses_and_has_on_and_jobs() {
@@ -95,17 +95,6 @@ fn the_lint_and_test_job_runs_the_tests_of_xtask() {
     assert!(runs.contains(&"just test"), "{runs:?}");
     assert!(!runs.contains(&"cargo test -p xtask"), "{runs:?}");
 }
-
-/// The reusable workflows that install a release of strata.
-const INSTALLING_WORKFLOWS: [&str; 7] = [
-    "comment.yml",
-    "merge-gate.yml",
-    "preflight.yml",
-    "promote-gate.yml",
-    "retire-gate.yml",
-    "upstream.yml",
-    "verify.yml",
-];
 
 /// A workflow that installs a release runs `install-strata.sh` from this repository at the tag
 /// of `strata-version`. The installer makes sure that the release workflow signed `SHA256SUMS`,

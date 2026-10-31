@@ -129,8 +129,10 @@ The job fails in each of these cases:
 | A binary does not match `SHA256SUMS`. | The file is not the file that the release lists. |
 
 The workflow file and the installer come from the same tag, so one tag sets the
-trust. An organization that limits the actions of its repositories
-must allow `actions/checkout` and `sigstore/cosign-installer`.
+trust. Give that tag to the workflow and to `strata-version`. The installer of
+v0.24.0 and before has no `--require-signature`, so with such a `strata-version`
+the job stops with `unknown option`. An organization that limits the actions of
+its repositories must allow `actions/checkout` and `sigstore/cosign-installer`.
 `preflight-comment.yml` installs no binary: it runs one script from the tag.
 
 ## Build from source
