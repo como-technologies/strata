@@ -35,25 +35,6 @@ fn every_workflow_file_parses_and_has_on_and_jobs() {
     );
 }
 
-/// The preflight workflow passes each record pattern to strata as the caller typed it. An
-/// unquoted `$RECORDS` in a `for` list is expanded by bash first, which reads `**` as `*` and
-/// keeps only the files that match, so a pattern such as `releases/**/*.json` loses records.
-#[test]
-fn the_preflight_workflow_does_not_let_the_shell_expand_the_record_patterns() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/preflight.yml");
-    let text = std::fs::read_to_string(&path).unwrap();
-    assert!(
-        !text.contains("in $RECORDS"),
-        "{}: the record patterns go through an unquoted expansion",
-        path.display()
-    );
-    assert!(
-        text.contains("read -ra records <<< \"$RECORDS\""),
-        "{}: the record patterns are not split with read -ra",
-        path.display()
-    );
-}
-
 /// The verify reads one check run named `Gate` on the head commit of a pull request, and sets no
 /// success while that run has none. The job needs `checks` and has no `if`, so GitHub runs it only
 /// when each check passed, and skips it when one failed. A renamed job, a lost `needs`, or an
@@ -309,76 +290,34 @@ fn run_step(file: &str, step: &str, env: &[(&str, &str)], tools: &[&str]) -> Ste
     StepRun { dir, output }
 }
 
+/// The step runs `preflight.sh` and appends the report to the summary of the job. `shell: bash`
+/// sets `pipefail`, so the pipe to `tee` leaves the exit status of the script as the status of the
+/// step. A failed run keeps its report in the summary and its status.
 #[test]
-fn the_preflight_step_passes_the_options_of_a_watch_to_strata() {
-    let run = run_step(
-        "preflight.yml",
-        "preflight",
-        &[
-            ("SOURCE", "cluster:64f0"),
-            ("WATCH", "true"),
-            ("EVERY", "5"),
-            ("LIMIT", "60"),
-            ("NO_EXEC", "true"),
-            ("RULE", "eks-subnets eks-roles"),
-            ("PALETTE_API_KEY", "a-key"),
-            ("OUT", "out"),
-            ("FAKE_OUT", "# the report\n"),
-        ],
-        &[".strata/bin/strata"],
-    );
-    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+fn the_preflight_step_appends_the_report_to_the_summary_and_keeps_the_exit_status_of_a_failed_run()
+{
+    let step = steps("preflight.yml")
+        .into_iter()
+        .find(|s| s["name"].as_str() == Some("preflight"))
+        .unwrap();
     assert_eq!(
-        run.calls(),
-        [
-            "strata preflight cluster:64f0 --every 5 --limit 60 --no-exec --watch --quiet \
-             --rule eks-subnets --rule eks-roles --out out --format markdown"
-        ]
+        step["shell"].as_str(),
+        Some("bash"),
+        "without pipefail the pipe hides the status of the script"
     );
-    assert_eq!(run.summary(), "# the report\n");
-}
 
-#[test]
-fn the_preflight_step_without_a_key_reads_nothing_and_a_verbose_run_omits_quiet() {
-    let run = run_step(
-        "preflight.yml",
-        "preflight",
-        &[
-            ("SOURCE", "clusters/payments.json"),
-            ("CLOUD", "eks"),
-            ("TIER", "static"),
-            ("RECORDS", "releases/**/*.json other/*.json"),
-            ("VERBOSE", "true"),
-            ("OUT", "preflight"),
-        ],
-        &[".strata/bin/strata"],
-    );
-    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
-    assert_eq!(
-        run.calls(),
-        [
-            "strata preflight clusters/payments.json --cloud eks --tier static --verbose \
-             --offline --records releases/**/*.json --records other/*.json \
-             --out preflight --format markdown"
-        ]
-    );
-}
-
-#[test]
-fn the_preflight_step_keeps_the_report_and_the_exit_status_of_a_failed_run() {
-    let run = run_step(
-        "preflight.yml",
-        "preflight",
-        &[
-            ("SOURCE", "clusters/payments.json"),
-            ("OUT", "preflight"),
-            ("FAKE_OUT", "# 1 check failed\n"),
-            ("FAKE_EXIT", "1"),
-        ],
-        &[".strata/bin/strata"],
-    );
-    assert_eq!(run.output.status.code(), Some(1));
-    assert_eq!(run.summary(), "# 1 check failed\n");
+    for (exit, summary) in [("0", "# the report\n"), ("1", "# 1 check failed\n")] {
+        let run = run_step(
+            "preflight.yml",
+            "preflight",
+            &[("FAKE_OUT", summary), ("FAKE_EXIT", exit)],
+            &[".strata/scripts/ci/preflight.sh"],
+        );
+        assert_eq!(run.output.status.code(), exit.parse::<i32>().ok());
+        // the script takes no argument: the step gives it the inputs as variables
+        assert_eq!(run.calls(), ["preflight.sh "]);
+        assert_eq!(run.summary(), summary);
+    }
 }
 
 #[test]

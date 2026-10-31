@@ -1,10 +1,10 @@
 # The CI drop-ins
 
 One file per code host. Each one runs the same seven jobs, with the same reports
-and exit codes. Four of them run from the scripts in `scripts/ci/`. The two
-gates and the preflight job run `strata same-release`, `strata consumers`, and
-`strata preflight` directly, because the exit status of those commands is the
-gate.
+and exit codes. Five of them run from the scripts in `scripts/ci/`. The two
+gates run `strata same-release` and `strata consumers` directly, because the
+exit status of those commands is the gate. The preflight job calls
+`preflight.sh`, which passes the exit status of `strata preflight` on.
 
 | File | Copy it to | Runs |
 | --- | --- | --- |

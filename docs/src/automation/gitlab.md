@@ -8,13 +8,15 @@ set of functions: `gh` for GitHub, and the REST API v4 with `curl` for GitLab.
 | [`pr-comment.sh`](./pr-comments.md) | one comment on the pull request, and a label; with `--preflight`, one comment for the preflight report | one note on the merge request, and a label; with `--preflight`, one note for the preflight report |
 | [`verify-report.sh`](./drift-issues.md) | one issue per record that drifted, is unverified, or could not be checked | the same, as GitLab issues |
 | [`upstream-report.sh`](./upstream-issues.md) | one issue per pack that is behind | the same, as GitLab issues |
+| [`preflight.sh`](./preflight.md#on-another-host) | `strata preflight` with its options from the inputs of the workflow | the same, from the variables `STRATA_PREFLIGHT_*`; with `STRATA_PREFLIGHT_COMMENT`, one note for the report |
 | [`merge-gate.sh`](./merge-gate.md) | a required status check | a job that "Pipelines must succeed" waits for |
 
 `pr-comment.sh`, `verify-report.sh`, and `upstream-report.sh` take `--host
 github` or `--host gitlab`.
 Without it, the CI variables pick: `GITLAB_CI` or `CI_PROJECT_ID` means GitLab,
 and everything else means GitHub. A terminal needs `--host gitlab` when no CI
-variable is set. `merge-gate.sh` calls no host, and it has no such option.
+variable is set. `merge-gate.sh` calls no host, and it has no such option. `preflight.sh` has none
+either: its comment picks the host from the CI variables.
 
 ## The pipeline
 
@@ -35,7 +37,7 @@ variables:
 | Job | Runs on | Does |
 | --- | --- | --- |
 | `strata-comment` | each merge request pipeline | Compares `STRATA_A` with `STRATA_B`, and keeps one note and the label. |
-| `strata-preflight` | each merge request pipeline | Runs `strata preflight` on the body of a create, and keeps the report as an artifact. With `STRATA_PREFLIGHT_COMMENT`, it also keeps one note. See [Preflight in a pipeline](./preflight.md#on-github-and-gitlab). |
+| `strata-preflight` | each merge request pipeline | Runs `preflight.sh` on the body of a create, and keeps the report as an artifact. With `STRATA_PREFLIGHT_COMMENT`, it also keeps one note. See [Preflight in a pipeline](./preflight.md#on-github-and-gitlab). |
 | `strata-merge-gate` | each merge request pipeline | Checks the merge result. Make the merge button wait for it. |
 | `strata-verify` | a pipeline schedule | Checks `STRATA_RECORDS` against Palette and keeps one issue per record that drifted, is unverified, or could not be checked. |
 | `strata-upstream` | a pipeline schedule | Checks the pins of `STRATA_RECORDS` against the registries and keeps one issue per pack that is behind, with the label `STRATA_BEHIND_LABEL`. |
@@ -86,7 +88,7 @@ export STRATA_BIN=$PWD/.strata/strata
 .strata/merge-gate.sh "releases/*.json"
 ```
 
-Each release carries the binary for four targets, `SHA256SUMS`, and the four
+Each release carries the binary for four targets, `SHA256SUMS`, and the five
 scripts, so one download gives a job everything. Use **v0.5.2** or later: it is
 the first release with all four. `v0.5.1` carries three of them and no
 `merge-gate.sh`, and `v0.5.0` carries none. An older pipeline clones this

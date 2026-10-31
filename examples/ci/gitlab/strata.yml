@@ -6,7 +6,7 @@
 #   include:
 #     - local: .gitlab/strata.yml      # or a remote: URL, or a component
 #   variables:
-#     STRATA_VERSION: vX.Y.Z          # a release that carries the five scripts
+#     STRATA_VERSION: vX.Y.Z          # a release that carries the six scripts
 #     STRATA_A: releases/dev.json      # the record the target branch has
 #     STRATA_B: candidate.yaml         # what this merge request proposes
 #     # STRATA_REPAVE: "true"       # a cluster against a version: Palette's answer decides the label
@@ -101,54 +101,26 @@ strata-comment:
 # Can Palette build the cluster this merge request changes? The static tier, with the records of
 # this repository: no key, milliseconds. The installer puts strata-preflight beside strata, and
 # `strata preflight` runs it. The live tier runs before the build, with the key, from the job that
-# builds: see docs/src/automation/preflight.md. The report is the job's artifact. The job takes
-# the options of the command from the variables STRATA_PREFLIGHT_*, as the reusable workflow
-# takes them from its inputs.
+# builds: see docs/src/automation/preflight.md. The report is the job's artifact. The script
+# preflight.sh reads the variables STRATA_PREFLIGHT_* and builds the options of the command. The
+# reusable workflow sets the same variables from its inputs.
 strata-preflight:
   extends: .strata
   stage: test
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
+    # the static tier reads nothing from Palette, so the key of the other jobs does not make this
+    # job connect
     - |
-      # strata expands each record pattern, so the shell must not expand it first
-      set -f
-      args=("$STRATA_PREFLIGHT_SOURCE")
-      [ -z "$STRATA_PREFLIGHT_CHANGE" ] || args+=("$STRATA_PREFLIGHT_CHANGE")
-      [ -z "$STRATA_PREFLIGHT_CLOUD" ] || args+=(--cloud "$STRATA_PREFLIGHT_CLOUD")
-      [ -z "$STRATA_PREFLIGHT_TIER" ] || args+=(--tier "$STRATA_PREFLIGHT_TIER")
-      [ -z "$STRATA_PREFLIGHT_PROBES" ] || args+=(--probes "$STRATA_PREFLIGHT_PROBES")
-      [ -z "$STRATA_PREFLIGHT_RELEASE" ] || args+=(--release "$STRATA_PREFLIGHT_RELEASE")
-      [ -z "$STRATA_PREFLIGHT_READY" ] || args+=(--ready "$STRATA_PREFLIGHT_READY")
-      [ -z "$STRATA_PREFLIGHT_EVERY" ] || args+=(--every "$STRATA_PREFLIGHT_EVERY")
-      [ -z "$STRATA_PREFLIGHT_LIMIT" ] || args+=(--limit "$STRATA_PREFLIGHT_LIMIT")
-      [ "$STRATA_PREFLIGHT_STRICT" != "true" ] || args+=(--strict)
-      [ "$STRATA_PREFLIGHT_NO_EXEC" != "true" ] || args+=(--no-exec)
-      [ "$STRATA_PREFLIGHT_WATCH" != "true" ] || args+=(--watch)
-      # --quiet wins over --verbose, so a verbose run omits it
-      [ "$STRATA_PREFLIGHT_VERBOSE" != "true" ] || args+=(--verbose)
-      [ "$STRATA_PREFLIGHT_VERBOSE" = "true" ] || args+=(--quiet)
-      # the static tier reads nothing from Palette, so the key of the other jobs does not make
-      # this job connect; with no key, nothing is read either
-      if [ -z "${PALETTE_API_KEY:-}" ] ||
-        { [ "$STRATA_PREFLIGHT_TIER" = static ] && [ "$STRATA_PREFLIGHT_WATCH" != "true" ]; }; then
-        args+=(--offline)
+      offline=""
+      if [ "$STRATA_PREFLIGHT_TIER" = static ] && [ "$STRATA_PREFLIGHT_WATCH" != "true" ]; then
+        offline=--offline
       fi
-      # each rule id and each record pattern is one argument, which strata expands
-      for r in $STRATA_PREFLIGHT_RULE; do args+=(--rule "$r"); done
-      for r in $STRATA_PREFLIGHT_RECORDS; do args+=(--records "$r"); done
-      code=0
-      .strata/strata preflight "${args[@]}" --out "$STRATA_PREFLIGHT_OUT" --format markdown \
-        > preflight.md || code=$?
-      cat preflight.md
-      # also after a failed preflight: a person must read a failed report
-      if [ "$STRATA_PREFLIGHT_COMMENT" = "true" ]; then
-        .strata/pr-comment.sh --preflight "$STRATA_PREFLIGHT_OUT/report.md"
-      fi
-      exit "$code"
+      .strata/preflight.sh $offline
   artifacts:
     when: always
-    paths: ["$STRATA_PREFLIGHT_OUT/", preflight.md]
+    paths: ["$STRATA_PREFLIGHT_OUT/"]
 
 # The check the merge button waits for: the records of the merge result, against the target
 # branch as it is now. GIT_DEPTH 0 gives the job the history a merge needs.

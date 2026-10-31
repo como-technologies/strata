@@ -180,8 +180,9 @@ The checkout of a pull request is already the merge result, so the gate finds
 nothing to merge and checks what the button lands.
 
 **GitLab.** Include [the pipeline](./gitlab.md), which runs `strata-merge-gate`
-on each merge request pipeline. The variable `STRATA_ALLOW_NO_DIGEST` set to
-`true` gives the job `--allow-no-digest`. In Settings, Merge requests, turn on
+on each merge request pipeline. The variable `STRATA_ALLOW_NO_DIGEST` takes the
+place of the input `allow-no-digest`: see
+[the variables](./gitlab.md#the-variables). In Settings, Merge requests, turn on
 "Pipelines must succeed". Merged results pipelines and merge trains run the pipeline on the
 merge result, which is what this gate checks anyway.
 

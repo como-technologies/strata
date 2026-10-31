@@ -178,10 +178,14 @@ gives the steps when a delete does not end.
 ## Where this runs
 
 - On each pull request: the static tier, with the records of the repository.
+  `preflight-comment.yml`, or `pr-comment.sh --preflight` on another host, posts
+  the report as a comment: see
+  [The report as a comment](../automation/preflight.md#the-report-as-a-comment).
 - Before each build: the live tier, with a key. `--strict` makes exit `1` the
   gate.
 - During the build: `--watch cluster:UID`, which stops at the first known stuck
-  state with its evidence.
+  state with its evidence. In the workflow, give the input `watch`: see
+  [The watch in the workflow](../automation/preflight.md#the-watch-in-the-workflow).
 - In a scoping meeting: the report as HTML, with the section scorecard and the
   readiness of each section. A section under 80% says where the work is before
   a first build.

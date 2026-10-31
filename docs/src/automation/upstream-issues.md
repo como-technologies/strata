@@ -92,5 +92,5 @@ pipeline. The host functions are the ones of `verify-report.sh`: see
 
 The other inputs of the workflow are `records`, `strata-version`, and
 `palette-api`. With `save`, the workflow uploads the file as the artifact
-`strata-behind`, also when a pin is behind and the job fails. The GitLab job
-keeps the file `STRATA_SAVE` as an artifact.
+`strata-behind`, also when a pin is behind and the job fails.
+[GitLab CI](./gitlab.md#the-variables) says what the job does with `STRATA_SAVE`.

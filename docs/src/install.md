@@ -30,7 +30,7 @@ of them, and a Sigstore signature for each file.
 `install-strata.sh` is in every release. It reads the release and finds the
 binary for this machine. It checks the signature of `SHA256SUMS` when `cosign`
 is on the `PATH`. It checks each file against `SHA256SUMS`. It puts the binary and
-the three CI scripts in the directory. Then it prints the path of the binary:
+the CI scripts in the directory. Then it prints the path of the binary:
 
 ```bash
 gh release download --repo como-technologies/strata --pattern install-strata.sh -O - \
