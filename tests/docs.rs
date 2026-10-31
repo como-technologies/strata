@@ -5,9 +5,12 @@
 //! other is invisible to a reader who came the other way. That happened to "What changed between
 //! two pack versions", which reached the navigation and never reached the list.
 
+use crate::common;
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use common::version_of;
 use strata::api::codes::ValidateRoute;
 
 fn docs() -> PathBuf {
@@ -91,14 +94,8 @@ fn every_use_case_is_in_the_navigation_and_the_list_in_one_order() {
 /// drift, so the drift is a test failure instead of a wrong number on the front page.
 #[test]
 fn the_readme_version_badge_is_the_version_in_cargo_toml() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let manifest = read(&root.join("Cargo.toml"));
-    let version = manifest
-        .lines()
-        .find_map(|l| l.strip_prefix("version = \""))
-        .and_then(|l| l.strip_suffix('"'))
-        .expect("Cargo.toml has a version line");
-    let readme = read(&root.join("README.md"));
+    let version = version_of("Cargo.toml");
+    let readme = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"));
     let badge = format!("badge/version-{version}-blue");
     assert!(
         readme.contains(&badge),
@@ -111,14 +108,6 @@ fn the_readme_version_badge_is_the_version_in_cargo_toml() {
 /// manifest, so it can drift: `just version` rewrites it only while it names the same version.
 #[test]
 fn the_preflight_crate_has_the_version_of_strata() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let version_of = |manifest: &str| {
-        read(&root.join(manifest))
-            .lines()
-            .find_map(|l| l.strip_prefix("version = \"").map(str::to_owned))
-            .and_then(|l| l.strip_suffix('"').map(str::to_owned))
-            .unwrap_or_else(|| panic!("{manifest} has a version line"))
-    };
     let strata = version_of("Cargo.toml");
     let preflight = version_of("preflight/Cargo.toml");
     assert_eq!(

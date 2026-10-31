@@ -47,8 +47,9 @@ examples/profiles/
 examples/clusters/
 examples/reports/
 
-# the library example resolves its own dependencies
+# the library examples resolve their own dependencies
 examples/library/Cargo.lock
+examples/library-preflight/Cargo.lock
 
 # the knurl adapter is its own package, and it resolves its own dependencies too
 adapter/Cargo.lock

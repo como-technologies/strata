@@ -38,8 +38,8 @@ where each module goes.
 
 ## Visibility
 
-- `pub` is the library API. Give it only to what `examples/library`, the tests,
-  or another crate use.
+- `pub` is the library API. Give it only to what `examples/library`,
+  `examples/library-preflight`, the tests, or another crate use.
 - Use `pub(crate)` or `pub(super)` for each other item. Do not re-export a
   helper from `mod.rs` to make a call shorter.
 - One entry point for one operation. A flag is an argument or a field of an

@@ -1,0 +1,15 @@
+[package]
+name = "strata-preflight-library-example"
+version = "0.1.0"
+edition = "2024"
+description = "A program that uses the strata-preflight library without its command line"
+publish = false
+
+[dependencies]
+# Inside this repository. Elsewhere, git dependencies on a release tag; see
+# docs/src/automation/library.md, Use strata-preflight as a library.
+strata = { path = "../.." }
+strata-preflight = { path = "../../preflight" }
+
+# Not a member of the strata package: built on its own with `just library-example`.
+[workspace]

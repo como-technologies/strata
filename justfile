@@ -46,9 +46,10 @@ lint:
     cargo clippy --workspace --all-targets -- -D warnings
     {{rustdoc}} -p xtask
 
-# Build and run examples/library, a separate crate that uses strata as a library
+# Build and run examples/library and examples/library-preflight, crates that use strata and strata-preflight as libraries
 library-example:
     cargo run --quiet --manifest-path examples/library/Cargo.toml --target-dir target/library-example
+    cargo run --quiet --manifest-path examples/library-preflight/Cargo.toml --target-dir target/library-example
 
 # knurl is a private repository, so Cargo fetches it with the git command line. The adapter is
 # its own package: `cargo build` and `cargo test` at the root never build it, and no release
