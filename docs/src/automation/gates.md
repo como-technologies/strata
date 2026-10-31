@@ -64,9 +64,9 @@ The workflow gives each difference of `allow` its own `--allow`, so
 `examples/ci/gitlab/strata.yml` holds `strata-promote-gate` and
 `strata-retire-gate`. Both are manual jobs: set `STRATA_PROMOTE` to the records,
 or `STRATA_RETIRE` to `name@version`, and run the job from the pipeline.
-`STRATA_PROMOTE_ALLOW` lists the differences that the promotion gate accepts,
-separated by spaces. A ref in a project reads `PALETTE_PROJECT` or
-`PALETTE_PROJECT_UID`, which a CI/CD variable sets. See [GitLab CI](./gitlab.md).
+`STRATA_PROMOTE_ALLOW` takes the place of the input `allow`. A ref in a project
+reads `PALETTE_PROJECT` or `PALETTE_PROJECT_UID`. [GitLab
+CI](./gitlab.md#the-variables) says what each variable does.
 
 ## Put the delete after the gate
 

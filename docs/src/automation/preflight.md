@@ -66,9 +66,10 @@ the watch is the step that says `Running`.
 
 `.github/workflows/preflight.yml` is a reusable workflow: the caller gives the
 source, the cloud, the tiers, the records, and the release of strata, and the
-job installs the two binaries, runs `strata preflight`, writes the markdown to
-the job summary, and keeps the directory of `--out` as an artifact. Its exit
-status is the status of strata.
+job installs the two binaries, runs `scripts/ci/preflight.sh`, writes the
+markdown to the job summary, and keeps the directory of `--out` as an artifact.
+The script builds the options of `strata preflight`, and its exit status is the
+status of strata.
 
 | Input | Meaning |
 | --- | --- |
@@ -150,15 +151,27 @@ passed, or at the limit. Set the limit under the timeout of the job.
 ### GitLab
 
 The job `strata-preflight` reads one variable for each input, with the prefix
-`STRATA_PREFLIGHT_`: `SOURCE`, `CLOUD`, `CHANGE`, `TIER`, `RECORDS`, `PROBES`,
-`RELEASE`, `STRICT`, `READY`, `NO_EXEC`, `RULE`, `VERBOSE`, `WATCH`, `EVERY`,
-`LIMIT`, `OUT`, and `COMMENT`. [GitLab CI](./gitlab.md#the-variables) gives the
-default of each one.
+`STRATA_PREFLIGHT_`. [GitLab CI](./gitlab.md#the-variables) lists them and gives
+the default of each one.
 
 The job runs the static tier with `--offline`, also when `PALETTE_API_KEY` is
 set for the other jobs. For the live tier, or for the watch, set
 `STRATA_PREFLIGHT_TIER` to an empty value. The job then reads Palette when the
 key is set.
+
+### On another host
+
+The reusable workflow and the GitLab job call one script,
+`scripts/ci/preflight.sh`. A pipeline on another host calls it too. The
+installer puts it beside `pr-comment.sh`, which the comment needs.
+
+Set `STRATA_BIN` to the binary, and set the variables with the prefix
+`STRATA_PREFLIGHT_`. [GitLab CI](./gitlab.md#the-variables) lists them. The
+script prints the markdown report and exits with the status of `strata
+preflight`.
+
+The script has one option, `--offline`: it reads nothing from Palette. The script
+gives it too when `PALETTE_API_KEY` is empty.
 
 ## Custom probes of a company
 

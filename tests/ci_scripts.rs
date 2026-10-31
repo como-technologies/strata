@@ -12,11 +12,12 @@ use strata::api::codes::UPGRADE_NOT_SUPPORTED_CODE;
 
 /// The scripts a release carries. The release workflow installs the published tag and runs the
 /// help of each one; this is the same check, before a tag exists.
-const SHIPPED: [&str; 5] = [
+const SHIPPED: [&str; 6] = [
     "pr-comment.sh",
     "merge-gate.sh",
     "verify-report.sh",
     "upstream-report.sh",
+    "preflight.sh",
     "install-strata.sh",
 ];
 
@@ -393,7 +394,7 @@ const DRY_RUN: Left = Left {
     why: "it touches no host, so a person tries it at a terminal",
 };
 
-const WRAPPERS: [Wrapper; 8] = [
+const WRAPPERS: [Wrapper; 7] = [
     Wrapper {
         workflow: "comment.yml",
         job: "strata-comment",
@@ -416,13 +417,14 @@ const WRAPPERS: [Wrapper; 8] = [
     },
     Wrapper {
         workflow: "preflight-comment.yml",
-        // GitLab has no workflow of its own for it: the job of the preflight posts the note
+        // GitLab has no workflow of its own for it: preflight.sh posts the note in the job of the
+        // preflight, when STRATA_PREFLIGHT_COMMENT is true
         job: "strata-preflight",
         tool: Listed::Script("pr-comment.sh"),
         reaches: &[
             reach("--pr", "", ""),
             reach("--repo", "", ""),
-            reach("--preflight", "", "STRATA_PREFLIGHT_COMMENT"),
+            reach("--preflight", "", ""),
         ],
         left: &[
             HOST,
@@ -506,42 +508,6 @@ const WRAPPERS: [Wrapper; 8] = [
             Left {
                 flags: &["--list-only"],
                 why: "the gate reads each cluster, because the list of Palette can omit a consumer",
-            },
-        ],
-    },
-    Wrapper {
-        workflow: "preflight.yml",
-        job: "strata-preflight",
-        tool: Listed::Command("preflight"),
-        reaches: &[
-            reach("--cloud", "cloud", "STRATA_PREFLIGHT_CLOUD"),
-            reach("--release", "release", "STRATA_PREFLIGHT_RELEASE"),
-            reach("--records", "records", "STRATA_PREFLIGHT_RECORDS"),
-            reach("--probes", "probes", "STRATA_PREFLIGHT_PROBES"),
-            reach("--tier", "tier", "STRATA_PREFLIGHT_TIER"),
-            reach("--rule", "rule", "STRATA_PREFLIGHT_RULE"),
-            reach("--strict", "strict", "STRATA_PREFLIGHT_STRICT"),
-            reach("--ready", "ready", "STRATA_PREFLIGHT_READY"),
-            reach("--no-exec", "no-exec", "STRATA_PREFLIGHT_NO_EXEC"),
-            reach("--verbose", "verbose", "STRATA_PREFLIGHT_VERBOSE"),
-            reach("--watch", "watch", "STRATA_PREFLIGHT_WATCH"),
-            reach("--every", "every", "STRATA_PREFLIGHT_EVERY"),
-            reach("--limit", "limit", "STRATA_PREFLIGHT_LIMIT"),
-            reach("--out", "out", "STRATA_PREFLIGHT_OUT"),
-            // set by the wrapper: the markdown goes to the summary and to the artifact, and a run
-            // with no key reads nothing from Palette
-            reach("--format", "", ""),
-            reach("--quiet", "", ""),
-            reach("--offline", "", ""),
-        ],
-        left: &[
-            Left {
-                flags: &["--rules", "--promotion", "--ledger", "--schema"],
-                why: "a mode that checks no cluster",
-            },
-            Left {
-                flags: &["--json", "--compact", "--color", "--no-color"],
-                why: "the wrapper fixes the markdown report",
             },
         ],
     },
@@ -720,7 +686,40 @@ const FORMATS: Left = Left {
     why: "the script asks for the format that it reads",
 };
 
-const PASSES: [Passes; 3] = [
+/// The options of `strata preflight` that a pipeline sets. `preflight.sh` reads the variable of
+/// each one and passes the option. The reusable workflow sets the variable from the input, and the
+/// GitLab drop-in gives the variable a default. An empty input or variable means that the script
+/// sets the option itself.
+const PREFLIGHT: [Reach; 17] = [
+    reach("--cloud", "cloud", "STRATA_PREFLIGHT_CLOUD"),
+    reach("--release", "release", "STRATA_PREFLIGHT_RELEASE"),
+    reach("--records", "records", "STRATA_PREFLIGHT_RECORDS"),
+    reach("--probes", "probes", "STRATA_PREFLIGHT_PROBES"),
+    reach("--tier", "tier", "STRATA_PREFLIGHT_TIER"),
+    reach("--rule", "rule", "STRATA_PREFLIGHT_RULE"),
+    reach("--strict", "strict", "STRATA_PREFLIGHT_STRICT"),
+    reach("--ready", "ready", "STRATA_PREFLIGHT_READY"),
+    reach("--no-exec", "no-exec", "STRATA_PREFLIGHT_NO_EXEC"),
+    reach("--verbose", "verbose", "STRATA_PREFLIGHT_VERBOSE"),
+    reach("--watch", "watch", "STRATA_PREFLIGHT_WATCH"),
+    reach("--every", "every", "STRATA_PREFLIGHT_EVERY"),
+    reach("--limit", "limit", "STRATA_PREFLIGHT_LIMIT"),
+    reach("--out", "out", "STRATA_PREFLIGHT_OUT"),
+    // set by the script: the markdown goes to standard output and to the directory of --out, and
+    // a run with no key reads nothing from Palette
+    reach("--format", "", ""),
+    reach("--quiet", "", ""),
+    reach("--offline", "", ""),
+];
+
+/// The two arguments of `strata preflight`, as the input of the workflow and the variable that
+/// `preflight.sh` reads.
+const PREFLIGHT_ARGUMENTS: [(&str, &str); 2] = [
+    ("source", "STRATA_PREFLIGHT_SOURCE"),
+    ("change", "STRATA_PREFLIGHT_CHANGE"),
+];
+
+const PASSES: [Passes; 4] = [
     Passes {
         script: "verify-report.sh",
         command: "verify",
@@ -765,10 +764,34 @@ const PASSES: [Passes; 3] = [
         ],
         left: &[FORMATS],
     },
+    Passes {
+        script: "preflight.sh",
+        command: "preflight",
+        passed: &PREFLIGHT,
+        left: &[
+            Left {
+                flags: &["--rules", "--promotion", "--ledger", "--schema"],
+                why: "a mode that checks no cluster",
+            },
+            Left {
+                flags: &["--json", "--compact", "--color", "--no-color"],
+                why: "the script fixes the markdown report",
+            },
+        ],
+    },
 ];
 
-/// Each option of `strata verify` and `strata behind` reaches the script that wraps it, or the
-/// script omits it with a reason.
+/// The lines of a file of the repository that are not comments.
+fn code_of(path: &str) -> String {
+    repo_file(path)
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Each option of `strata verify`, `strata behind`, and `strata preflight` reaches the script that
+/// wraps it, or the script omits it with a reason.
 #[test]
 fn each_script_passes_the_options_of_its_command_or_omits_them_on_purpose() {
     for p in &PASSES {
@@ -780,11 +803,7 @@ fn each_script_passes_the_options_of_its_command_or_omits_them_on_purpose() {
             p.script,
             p.command
         );
-        let code: String = repo_file(&format!("scripts/ci/{}", p.script))
-            .lines()
-            .filter(|l| !l.trim_start().starts_with('#'))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let code = code_of(&format!("scripts/ci/{}", p.script));
         for r in p.passed {
             assert!(
                 has_flag(&code, r.flag),
@@ -795,6 +814,119 @@ fn each_script_passes_the_options_of_its_command_or_omits_them_on_purpose() {
             );
         }
     }
+}
+
+/// The reusable workflow and the GitLab job build no option of `strata preflight`: they give each
+/// input to `preflight.sh` as a variable, and the script builds the list in one place.
+#[test]
+fn the_preflight_workflow_and_the_gitlab_job_give_each_input_to_the_script_as_a_variable() {
+    let script = code_of("scripts/ci/preflight.sh");
+    let gitlab = repo_file("examples/ci/gitlab/strata.yml");
+    let job = gitlab_job_text(&gitlab, "strata-preflight");
+    let workflow: serde_yaml::Value =
+        serde_yaml::from_str(&repo_file(".github/workflows/preflight.yml")).unwrap();
+    let inputs = workflow["on"]["workflow_call"]["inputs"]
+        .as_mapping()
+        .unwrap();
+    let executed = executed_by(&workflow);
+    let step = workflow["jobs"]["preflight"]["steps"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .find(|s| {
+            s["run"]
+                .as_str()
+                .is_some_and(|r| r.contains("scripts/ci/preflight.sh"))
+        })
+        .expect("the workflow runs preflight.sh");
+    assert!(
+        job.contains("preflight.sh"),
+        "the job never runs the script"
+    );
+
+    let variables = PREFLIGHT
+        .iter()
+        .filter(|r| !r.variable.is_empty())
+        .map(|r| (r.input, r.variable))
+        .chain(PREFLIGHT_ARGUMENTS);
+    for (input, variable) in variables {
+        assert!(
+            reads_variable(&script, variable),
+            "preflight.sh never reads {variable}"
+        );
+        assert!(
+            inputs.contains_key(input),
+            "preflight.yml has no input {input} for {variable}"
+        );
+        assert_eq!(
+            step["env"][variable].as_str(),
+            Some(format!("${{{{ inputs.{input} }}}}").as_str()),
+            "the step does not set {variable} from the input {input}"
+        );
+        assert!(
+            gitlab.contains(&format!("\n  {variable}:")),
+            "the drop-in gives {variable} no default"
+        );
+    }
+
+    // the comment is for GitLab: a caller of preflight.yml calls preflight-comment.yml
+    assert!(reads_variable(&script, "STRATA_PREFLIGHT_COMMENT"));
+    assert!(has_flag(&script, "--preflight"));
+    assert!(gitlab.contains("\n  STRATA_PREFLIGHT_COMMENT:"));
+
+    // neither of the two names an option of the command, except the one that the job chooses
+    for r in &PREFLIGHT {
+        assert!(
+            !has_flag(&executed, r.flag),
+            "preflight.yml passes {} itself",
+            r.flag
+        );
+        assert!(
+            r.flag == "--offline" || !has_flag(&job, r.flag),
+            "the GitLab job passes {} itself",
+            r.flag
+        );
+    }
+}
+
+/// The key of the project is set for the other jobs, so the static tier reads nothing from
+/// Palette unless the job watches a build. The job runs its script lines with the variables that
+/// the drop-in sets, and `preflight.sh` is a stand-in that logs its arguments.
+#[test]
+fn the_gitlab_preflight_job_gives_the_script_offline_for_the_static_tier_without_a_watch() {
+    let gitlab: serde_yaml::Value =
+        serde_yaml::from_str(&repo_file("examples/ci/gitlab/strata.yml")).unwrap();
+    let lines: Vec<&str> = gitlab["strata-preflight"]["script"]
+        .as_sequence()
+        .expect("the job has script lines")
+        .iter()
+        .map(|l| l.as_str().unwrap())
+        .collect();
+    let run = |tier: &str, watch: &str| -> String {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join(".strata")).unwrap();
+        executable(
+            &dir.path().join(".strata/preflight.sh"),
+            "#!/usr/bin/env bash\necho \"preflight.sh $*\" >> calls.log\n",
+        );
+        let o = Command::new("bash")
+            .args(["--noprofile", "--norc", "-eo", "pipefail", "-c"])
+            .arg(lines.join("\n"))
+            .current_dir(dir.path())
+            .env("STRATA_PREFLIGHT_TIER", tier)
+            .env("STRATA_PREFLIGHT_WATCH", watch)
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "{}", text(&o.stderr));
+        std::fs::read_to_string(dir.path().join("calls.log"))
+            .unwrap()
+            .trim()
+            .to_string()
+    };
+    assert_eq!(run("static", "false"), "preflight.sh --offline");
+    assert_eq!(run("static", "true"), "preflight.sh");
+    assert_eq!(run("", "false"), "preflight.sh");
+    assert_eq!(run("palette", "false"), "preflight.sh");
 }
 
 // ---- pr-comment.sh ---------------------------------------------------------------------------
@@ -1669,14 +1801,14 @@ fn pr_comment_stops_on_what_gitlab_answers_and_asks_for_a_token_that_can_write()
     assert!(h.gl_calls().is_empty(), "no call before the token is there");
 }
 
-/// A markdown report of `strata preflight`, in a file of the stand-in home.
+/// A markdown report of `strata preflight`.
+const PREFLIGHT_REPORT: &str =
+    "## Preflight: payments\n\n| check | verdict |\n|---|---|\n| `eks-subnets` | FAIL |\n";
+
+/// The report, in a file of the stand-in home.
 fn preflight_report(h: &Host) -> String {
     let report = h.home.join("report.md");
-    std::fs::write(
-        &report,
-        "## Preflight: payments\n\n| check | verdict |\n|---|---|\n| `eks-subnets` | FAIL |\n",
-    )
-    .unwrap();
+    std::fs::write(&report, PREFLIGHT_REPORT).unwrap();
     report.display().to_string()
 }
 
@@ -1963,6 +2095,7 @@ fn release() -> tempfile::TempDir {
             "strata-preflight-x86_64-unknown-linux-musl",
             "#!/bin/sh\necho strata-preflight 9.9.9\n",
         ),
+        ("10", "preflight.sh", "#!/bin/sh\necho preflight\n"),
     ];
     let mut sums = String::new();
     let mut listed = Vec::new();
@@ -3909,4 +4042,287 @@ fn the_issue_scripts_hold_the_same_host_functions() {
         s[start..end].to_string()
     };
     assert_eq!(section("verify-report.sh"), section("upstream-report.sh"));
+}
+
+// ---- preflight.sh ------------------------------------------------------------------------------
+
+/// A job directory with the stand-in `strata` and `gh`, and a record that a pattern could match.
+struct PreflightJob {
+    dir: tempfile::TempDir,
+    bin: PathBuf,
+}
+
+fn preflight_job() -> PreflightJob {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = fake_bin(dir.path(), &[("strata", LOGGING_TOOL), ("gh", FAKE_GH)]);
+    // a shell without globstar reads `releases/**/*.json` as `releases/*/*.json`, and finds this
+    std::fs::create_dir_all(dir.path().join("releases/prod")).unwrap();
+    std::fs::write(dir.path().join("releases/prod/eks.json"), "{}").unwrap();
+    PreflightJob { dir, bin }
+}
+
+impl PreflightJob {
+    /// Run `preflight.sh` with the variables `envs` and the arguments `args`, and no key. A runner
+    /// sets GITHUB_REPOSITORY, which `pr-comment.sh` reads: the stand-in `gh` must give the repo.
+    fn run(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
+        let d = self.dir.path();
+        std::fs::write(d.join("strata.log"), "").unwrap();
+        std::fs::write(d.join("gh.log"), "").unwrap();
+        let mut c = Command::new("bash");
+        c.arg(script("ci/preflight.sh"))
+            .args(args)
+            .current_dir(d)
+            .env("PATH", path_with(&self.bin))
+            .env("STRATA_BIN", self.bin.join("strata"))
+            .env("FAKE_LOG", d.join("strata.log"))
+            .env("FAKE_GH_LOG", d.join("gh.log"))
+            .env("FAKE_GH_SAVED_BODY", d.join("saved-body.md"))
+            .env_remove("GITHUB_REPOSITORY")
+            .env_remove("PALETTE_API_KEY");
+        for (k, v) in envs {
+            c.env(k, v);
+        }
+        c.output().unwrap()
+    }
+
+    /// The calls of the stand-in `strata`, one for each line.
+    fn strata_calls(&self) -> Vec<String> {
+        lines_of(&self.dir.path().join("strata.log"))
+    }
+
+    fn gh_calls(&self) -> Vec<String> {
+        lines_of(&self.dir.path().join("gh.log"))
+    }
+}
+
+#[test]
+fn preflight_sh_builds_the_list_of_arguments_from_the_variables() {
+    let job = preflight_job();
+    let o = job.run(
+        &[],
+        &[
+            ("STRATA_PREFLIGHT_SOURCE", "cluster:64f0"),
+            ("STRATA_PREFLIGHT_CHANGE", "change.json"),
+            ("STRATA_PREFLIGHT_CLOUD", "eks"),
+            ("STRATA_PREFLIGHT_TIER", "static,palette"),
+            ("STRATA_PREFLIGHT_PROBES", "probes.yaml"),
+            ("STRATA_PREFLIGHT_RELEASE", "4.10"),
+            ("STRATA_PREFLIGHT_READY", "80"),
+            ("STRATA_PREFLIGHT_EVERY", "5"),
+            ("STRATA_PREFLIGHT_LIMIT", "60"),
+            ("STRATA_PREFLIGHT_STRICT", "true"),
+            ("STRATA_PREFLIGHT_NO_EXEC", "true"),
+            ("STRATA_PREFLIGHT_WATCH", "true"),
+            ("STRATA_PREFLIGHT_RULE", "eks-subnets  eks-roles"),
+            (
+                "STRATA_PREFLIGHT_RECORDS",
+                "releases/**/*.json other/*.json",
+            ),
+            ("STRATA_PREFLIGHT_OUT", "out"),
+            ("PALETTE_API_KEY", "a-key"),
+            ("FAKE_OUT", PREFLIGHT_REPORT),
+        ],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(
+        job.strata_calls(),
+        [
+            "strata preflight cluster:64f0 change.json --cloud eks --tier static,palette \
+             --probes probes.yaml --release 4.10 --ready 80 --every 5 --limit 60 --strict \
+             --no-exec --watch --quiet --rule eks-subnets --rule eks-roles \
+             --records releases/**/*.json --records other/*.json --out out --format markdown"
+        ]
+    );
+    assert_eq!(text(&o.stdout), PREFLIGHT_REPORT);
+}
+
+/// Strata expands a record pattern. A shell that expands it first reads `**` as `*`, and drops the
+/// records that only `**` finds.
+#[test]
+fn preflight_sh_passes_each_record_pattern_as_typed_and_expands_none() {
+    let job = preflight_job();
+    let o = job.run(
+        &[],
+        &[
+            ("STRATA_PREFLIGHT_SOURCE", "clusters/payments.json"),
+            (
+                "STRATA_PREFLIGHT_RECORDS",
+                "releases/**/*.json releases/*/*.json",
+            ),
+        ],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(
+        job.strata_calls(),
+        [
+            "strata preflight clusters/payments.json --quiet --offline --records releases/**/*.json \
+          --records releases/*/*.json --out preflight --format markdown"
+        ]
+    );
+}
+
+#[test]
+fn preflight_sh_gives_no_option_for_an_empty_variable_and_a_value_other_than_true() {
+    let job = preflight_job();
+    let o = job.run(
+        &[],
+        &[
+            ("STRATA_PREFLIGHT_SOURCE", "clusters/payments.json"),
+            ("STRATA_PREFLIGHT_CLOUD", ""),
+            ("STRATA_PREFLIGHT_STRICT", "false"),
+            ("STRATA_PREFLIGHT_VERBOSE", "false"),
+            ("PALETTE_API_KEY", "a-key"),
+        ],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(
+        job.strata_calls(),
+        ["strata preflight clusters/payments.json --quiet --out preflight --format markdown"]
+    );
+}
+
+#[test]
+fn preflight_sh_reads_nothing_from_palette_without_a_key_or_with_the_option_offline() {
+    let job = preflight_job();
+    let source = ("STRATA_PREFLIGHT_SOURCE", "clusters/payments.json");
+    for (args, envs, offline) in [
+        (vec![], vec![source], true),
+        (vec![], vec![source, ("PALETTE_API_KEY", "a-key")], false),
+        (
+            vec!["--offline"],
+            vec![source, ("PALETTE_API_KEY", "a-key")],
+            true,
+        ),
+    ] {
+        let o = job.run(&args, &envs);
+        assert!(o.status.success(), "{}", text(&o.stderr));
+        let calls = job.strata_calls();
+        assert_eq!(
+            calls[0].contains(" --offline "),
+            offline,
+            "{args:?} {envs:?}: {calls:?}"
+        );
+    }
+}
+
+#[test]
+fn preflight_sh_omits_quiet_for_a_verbose_run() {
+    let job = preflight_job();
+    let o = job.run(
+        &[],
+        &[
+            ("STRATA_PREFLIGHT_SOURCE", "clusters/payments.json"),
+            ("STRATA_PREFLIGHT_VERBOSE", "true"),
+        ],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let call = &job.strata_calls()[0];
+    assert!(call.contains(" --verbose "), "{call}");
+    assert!(!call.contains("--quiet"), "{call}");
+}
+
+#[test]
+fn preflight_sh_exits_with_the_status_of_strata_and_prints_the_report_of_a_failed_run() {
+    let job = preflight_job();
+    for code in ["1", "2"] {
+        let o = job.run(
+            &[],
+            &[
+                ("STRATA_PREFLIGHT_SOURCE", "clusters/payments.json"),
+                ("FAKE_EXIT", code),
+                ("FAKE_OUT", PREFLIGHT_REPORT),
+            ],
+        );
+        assert_eq!(o.status.code(), code.parse::<i32>().ok());
+        assert_eq!(text(&o.stdout), PREFLIGHT_REPORT);
+    }
+}
+
+#[test]
+fn preflight_sh_stops_with_exit_2_before_strata_runs_when_it_cannot_run() {
+    let job = preflight_job();
+    let source = ("STRATA_PREFLIGHT_SOURCE", "clusters/payments.json");
+    for (args, envs, said) in [
+        (vec![], vec![], "STRATA_PREFLIGHT_SOURCE"),
+        (
+            vec![],
+            vec![("STRATA_PREFLIGHT_SOURCE", "")],
+            "STRATA_PREFLIGHT_SOURCE",
+        ),
+        (vec!["--nope"], vec![source], "unknown option --nope"),
+        (
+            vec![],
+            vec![source, ("STRATA_BIN", "/nonexistent/strata")],
+            "no strata at /nonexistent/strata",
+        ),
+    ] {
+        let o = job.run(&args, &envs);
+        assert_eq!(o.status.code(), Some(2), "{args:?} {envs:?}");
+        assert!(text(&o.stderr).contains(said), "{}", text(&o.stderr));
+        assert!(job.strata_calls().is_empty(), "{:?}", job.strata_calls());
+    }
+}
+
+#[test]
+fn preflight_sh_posts_the_report_also_after_a_failed_preflight_when_the_comment_is_on() {
+    let job = preflight_job();
+    let source = ("STRATA_PREFLIGHT_SOURCE", "clusters/payments.json");
+    let o = job.run(
+        &[],
+        &[
+            source,
+            ("STRATA_PREFLIGHT_COMMENT", "true"),
+            ("FAKE_EXIT", "1"),
+            ("FAKE_OUT", PREFLIGHT_REPORT),
+        ],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = job.gh_calls();
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("pr comment 7 --repo o/r --body-file ")),
+        "{calls:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(job.dir.path().join("saved-body.md")).unwrap(),
+        format!("<!-- strata-preflight -->\n{PREFLIGHT_REPORT}"),
+        "the comment is the report of --out"
+    );
+
+    // a comment is off unless the variable is true
+    for value in ["", "false"] {
+        let o = job.run(
+            &[],
+            &[
+                source,
+                ("STRATA_PREFLIGHT_COMMENT", value),
+                ("FAKE_OUT", PREFLIGHT_REPORT),
+            ],
+        );
+        assert!(o.status.success(), "{}", text(&o.stderr));
+        assert!(job.gh_calls().is_empty(), "{:?}", job.gh_calls());
+    }
+}
+
+#[test]
+fn preflight_sh_turns_a_failed_comment_into_exit_2_and_keeps_a_failed_status_of_strata() {
+    let job = preflight_job();
+    // strata wrote no report, so pr-comment.sh stops: the comment of the last push stays
+    for (strata_exit, exit) in [("0", 2), ("1", 1)] {
+        let o = job.run(
+            &[],
+            &[
+                ("STRATA_PREFLIGHT_SOURCE", "clusters/payments.json"),
+                ("STRATA_PREFLIGHT_COMMENT", "true"),
+                ("FAKE_EXIT", strata_exit),
+            ],
+        );
+        assert_eq!(o.status.code(), Some(exit), "{}", text(&o.stderr));
+        assert!(
+            text(&o.stderr).contains("missing or empty"),
+            "{}",
+            text(&o.stderr)
+        );
+    }
 }

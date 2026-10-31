@@ -88,7 +88,8 @@ jobs:
         run: |
           # a CI job on any host downloads one release: the binary and the scripts that use it
           cp ../scripts/ci/pr-comment.sh ../scripts/ci/merge-gate.sh ../scripts/ci/verify-report.sh \
-            ../scripts/ci/upstream-report.sh ../scripts/ci/install-strata.sh .
+            ../scripts/ci/upstream-report.sh ../scripts/ci/preflight.sh \
+            ../scripts/ci/install-strata.sh .
           sha256sum strata-* *.sh > SHA256SUMS
           files=(strata-* *.sh SHA256SUMS)
           for f in "${files[@]}"; do
@@ -137,7 +138,7 @@ jobs:
           .published/strata preflight --rules --cloud eks > /dev/null
           # the scripts the installer installs; it does not install itself, because running it
           # is how you got it
-          for s in pr-comment.sh merge-gate.sh verify-report.sh upstream-report.sh; do
+          for s in pr-comment.sh merge-gate.sh verify-report.sh upstream-report.sh preflight.sh; do
             echo "== $s"
             .published/"$s" --help > /dev/null
           done

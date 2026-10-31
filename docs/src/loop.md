@@ -171,6 +171,9 @@ request can run it:
 {{#include output/loop-preflight-static.txt}}
 ```
 
+A pipeline runs the same command through `preflight.sh`, which reads its options
+from variables. See [On another host](./automation/preflight.md#on-another-host).
+
 The pull request can also show the report. `pr-comment.sh --preflight` posts
 `report.md` as a comment of its own, with the marker `<!-- strata-preflight -->`,
 and updates it on each push. On GitHub, the reusable workflow

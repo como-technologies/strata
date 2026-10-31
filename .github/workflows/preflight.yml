@@ -5,8 +5,9 @@ name: strata preflight
 # the catalog of strata-preflight; see docs/src/automation/preflight.md. The report goes to the job
 # summary and to an artifact, and the exit status of strata is the status of the job. It installs
 # the two release binaries with scripts/ci/install-strata.sh, which checks the signature of
-# SHA256SUMS and each binary, and runs `strata preflight`. For a comment on the pull request,
-# call preflight-comment.yml in a second job. Other CI systems run the binary directly.
+# SHA256SUMS and each binary, and runs scripts/ci/preflight.sh, which builds the options of
+# `strata preflight` from the inputs. For a comment on the pull request, call
+# preflight-comment.yml in a second job. Other CI systems run the script directly.
 on:
   workflow_call:
     inputs:
@@ -119,57 +120,30 @@ jobs:
           .strata/scripts/ci/install-strata.sh --version "$VERSION" --dir .strata/bin --bin-only \
             --require-signature
       - name: preflight
+        # shell: bash sets pipefail, so the status of the script is the status of the step
+        shell: bash
         env:
           PALETTE_API_KEY: ${{ secrets.palette-api-key }}
           PALETTE_PROJECT_UID: ${{ secrets.palette-project-uid }}
           PALETTE_API: ${{ inputs.palette-api }}
-          SOURCE: ${{ inputs.source }}
-          CLOUD: ${{ inputs.cloud }}
-          CHANGE: ${{ inputs.change }}
-          TIER: ${{ inputs.tier }}
-          RECORDS: ${{ inputs.records }}
-          PROBES: ${{ inputs.probes }}
-          RELEASE: ${{ inputs.release }}
-          STRICT: ${{ inputs.strict }}
-          READY: ${{ inputs.ready }}
-          NO_EXEC: ${{ inputs.no-exec }}
-          RULE: ${{ inputs.rule }}
-          VERBOSE: ${{ inputs.verbose }}
-          WATCH: ${{ inputs.watch }}
-          EVERY: ${{ inputs.every }}
-          LIMIT: ${{ inputs.limit }}
-          OUT: ${{ inputs.out }}
-        run: |
-          args=("$SOURCE")
-          [ -z "$CHANGE" ] || args+=("$CHANGE")
-          [ -z "$CLOUD" ] || args+=(--cloud "$CLOUD")
-          [ -z "$TIER" ] || args+=(--tier "$TIER")
-          [ -z "$PROBES" ] || args+=(--probes "$PROBES")
-          [ -z "$RELEASE" ] || args+=(--release "$RELEASE")
-          [ -z "$READY" ] || args+=(--ready "$READY")
-          [ -z "$EVERY" ] || args+=(--every "$EVERY")
-          [ -z "$LIMIT" ] || args+=(--limit "$LIMIT")
-          [ "$STRICT" != "true" ] || args+=(--strict)
-          [ "$NO_EXEC" != "true" ] || args+=(--no-exec)
-          [ "$WATCH" != "true" ] || args+=(--watch)
-          # --quiet wins over --verbose, so a verbose run omits it
-          [ "$VERBOSE" != "true" ] || args+=(--verbose)
-          [ "$VERBOSE" = "true" ] || args+=(--quiet)
-          # each rule id is one argument
-          read -ra rules <<< "$RULE"
-          for r in "${rules[@]}"; do args+=(--rule "$r"); done
-          # with no key, the static tier alone, and nothing read from Palette
-          [ -n "$PALETTE_API_KEY" ] || args+=(--offline)
-          # each record pattern is one argument, which strata expands; the shell must not expand
-          # it first, because bash reads `**` as `*` and drops the files it does not match
-          read -ra records <<< "$RECORDS"
-          for r in "${records[@]}"; do args+=(--records "$r"); done
-          set +e
-          .strata/bin/strata preflight "${args[@]}" --out "$OUT" --format markdown > preflight.md
-          code=$?
-          set -e
-          cat preflight.md >> "$GITHUB_STEP_SUMMARY"
-          exit "$code"
+          STRATA_BIN: .strata/bin/strata
+          STRATA_PREFLIGHT_SOURCE: ${{ inputs.source }}
+          STRATA_PREFLIGHT_CLOUD: ${{ inputs.cloud }}
+          STRATA_PREFLIGHT_CHANGE: ${{ inputs.change }}
+          STRATA_PREFLIGHT_TIER: ${{ inputs.tier }}
+          STRATA_PREFLIGHT_RECORDS: ${{ inputs.records }}
+          STRATA_PREFLIGHT_PROBES: ${{ inputs.probes }}
+          STRATA_PREFLIGHT_RELEASE: ${{ inputs.release }}
+          STRATA_PREFLIGHT_STRICT: ${{ inputs.strict }}
+          STRATA_PREFLIGHT_READY: ${{ inputs.ready }}
+          STRATA_PREFLIGHT_NO_EXEC: ${{ inputs.no-exec }}
+          STRATA_PREFLIGHT_RULE: ${{ inputs.rule }}
+          STRATA_PREFLIGHT_VERBOSE: ${{ inputs.verbose }}
+          STRATA_PREFLIGHT_WATCH: ${{ inputs.watch }}
+          STRATA_PREFLIGHT_EVERY: ${{ inputs.every }}
+          STRATA_PREFLIGHT_LIMIT: ${{ inputs.limit }}
+          STRATA_PREFLIGHT_OUT: ${{ inputs.out }}
+        run: .strata/scripts/ci/preflight.sh | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
         if: always()
         with:

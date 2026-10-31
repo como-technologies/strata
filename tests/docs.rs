@@ -10,7 +10,7 @@ use crate::common;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use common::version_of;
+use common::{version_of, walk};
 use strata::api::codes::ValidateRoute;
 
 fn docs() -> PathBuf {
@@ -304,4 +304,89 @@ fn publish_fan_out_runs_the_installer_with_the_signature_check_and_says_what_it_
         flat.contains("(../install.md#check-the-signature)"),
         "publish-fan-out.md does not link to the identity that the signature must have"
     );
+}
+
+/// Each variable of the GitLab preflight job has its description on `gitlab.md`, and no other page
+/// lists them. Two pages that list them need two changes for one default. A page can name one
+/// variable to explain a behavior, and then it links to `gitlab.md`.
+#[test]
+fn the_variables_of_the_gitlab_preflight_job_are_described_on_gitlab_md_and_listed_nowhere_else() {
+    let drop_in: serde_yaml::Value = serde_yaml::from_str(&read(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/ci/gitlab/strata.yml"),
+    ))
+    .unwrap();
+    let names: Vec<&str> = drop_in["variables"]
+        .as_mapping()
+        .unwrap()
+        .keys()
+        .filter_map(|k| k.as_str())
+        .filter(|k| k.starts_with("STRATA_PREFLIGHT_"))
+        .collect();
+    assert!(names.len() >= 17, "the drop-in sets {names:?}");
+
+    // the table abbreviates a run of names: `STRATA_PREFLIGHT_CLOUD`, `_TIER`, `_RECORDS`
+    let gitlab = read(&docs().join("automation/gitlab.md"));
+    let table = section(&gitlab, "## The variables", Some("\n## "));
+    for name in &names {
+        let short = format!("`{}`", name.trim_start_matches("STRATA_PREFLIGHT"));
+        assert!(
+            table.contains(name) || table.contains(&short),
+            "the table of gitlab.md does not describe {name}"
+        );
+    }
+
+    // the generated output holds what strata prints, and live-runs.md holds the checks of the lab
+    for page in walk(&docs()) {
+        if page.extension().is_none_or(|e| e != "md")
+            || page.starts_with(docs().join("output"))
+            || page.ends_with("automation/gitlab.md")
+            || page.ends_with("development/live-runs.md")
+        {
+            continue;
+        }
+        let text = read(&page);
+        // a list can write the prefix once, and then each name as `CLOUD`
+        let named = names
+            .iter()
+            .filter(|n| {
+                let bare = format!("`{}`", n.trim_start_matches("STRATA_PREFLIGHT_"));
+                text.contains(**n) || text.contains(&bare)
+            })
+            .count();
+        assert!(
+            named <= 2,
+            "{} names {named} variables of the preflight job: link to gitlab.md in place of a list",
+            page.display()
+        );
+    }
+    let preflight = read(&docs().join("automation/preflight.md"));
+    assert!(preflight.contains("(./gitlab.md#the-variables)"));
+}
+
+/// The use case gave the fix for a team and left out two steps of the workflow: the report as a
+/// comment, and the watch. A reader who follows the use case then builds the old job.
+#[test]
+fn stop_a_build_shows_the_comment_and_the_watch_of_the_workflow() {
+    let page = read(&docs().join("use-cases/stop-a-build.md"));
+    let runs = section(&page, "## Where this runs", None);
+    // a line break can fall inside a sentence
+    let flat = runs.split_whitespace().collect::<Vec<_>>().join(" ");
+    for needle in [
+        "`preflight-comment.yml`, or `pr-comment.sh --preflight` on another host, posts the report as a comment",
+        "(../automation/preflight.md#the-report-as-a-comment)",
+        "In the workflow, give the input `watch`",
+        "(../automation/preflight.md#the-watch-in-the-workflow)",
+    ] {
+        assert!(flat.contains(needle), "stop-a-build.md lacks {needle:?}");
+    }
+    let preflight = read(&docs().join("automation/preflight.md"));
+    for heading in [
+        "### The report as a comment",
+        "### The watch in the workflow",
+    ] {
+        assert!(
+            preflight.contains(heading),
+            "preflight.md has no {heading:?}"
+        );
+    }
 }
