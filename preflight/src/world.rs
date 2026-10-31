@@ -205,8 +205,8 @@ impl World {
         let config = palette.cloud_config(&cluster)?;
         let account_uid = opt_str(&config, "/spec/cloudAccountRef/uid")
             .or_else(|| opt_str(&cluster, "/spec/cloudAccountRef/uid"));
-        // the flag is true for a Palette with no variables route, and the profiles then send none
-        let (variables, _) = palette.cluster_variables(uid, progress)?;
+        // a Palette with no variables route gives an empty answer, and the profiles then send none
+        let variables = palette.cluster_variables(uid, progress)?.answer;
         let entity = entity_of(&cluster, &config, account_uid, &variables);
         Ok(World {
             cloud,

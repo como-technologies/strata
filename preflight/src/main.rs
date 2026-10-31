@@ -49,7 +49,7 @@ struct Cli {
     /// The tiers to run: static, palette, cloud, as a list; default all three
     #[arg(long, value_name = "TIER", value_delimiter = ',')]
     tier: Vec<String>,
-    /// Only these rules, by id; give it again for more
+    /// Only these rules, by id; give it again for more; an id that is not in the catalog is an error
     #[arg(long, value_name = "ID")]
     rule: Vec<String>,
     /// Count a failed probe as a failed check
@@ -320,6 +320,14 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
     let source = cli.source.clone().ok_or_else(|| Error::Usage {
         message: "give the body of a create as a file, or cluster:UID; --rules lists the rules, and --help the options".to_string(),
     })?;
+    let selection = Selection {
+        tiers: tiers.clone(),
+        ids: cli.rule.clone(),
+        strict: cli.strict,
+        ready: cli.ready.map(|p| p / 100.0),
+    };
+    // a wrong id is a usage error, so it comes before the first request
+    selection.require_known(&catalog)?;
     let now = now_utc();
     let ledger = ledger_of(&cli)?;
     let reference = Ref::parse(&source);
@@ -359,12 +367,6 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
         world = world.with_palette(p, &now, &progress)?;
     }
 
-    let selection = Selection {
-        tiers: tiers.clone(),
-        ids: cli.rule.clone(),
-        strict: cli.strict,
-        ready: cli.ready.map(|p| p / 100.0),
-    };
     let out_dir = cli.out.as_ref().map(|d| d.display().to_string());
     let mut reading: Option<serde_json::Value> = None;
     let report = if cli.watch {

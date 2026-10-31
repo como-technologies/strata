@@ -1,0 +1,2 @@
+$ strata preflight cluster.json --cloud aws --offline --rule gke-pool-multiple-3
+strata-preflight: --rule: no rule has the id gke-pool-multiple-3. Run strata-preflight --rules to list the ids

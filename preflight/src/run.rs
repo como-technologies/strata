@@ -45,6 +45,32 @@ impl Default for Selection {
     }
 }
 
+impl Selection {
+    /// Makes sure that each id of `ids` names a rule of `catalog`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] that names each id that the catalog does not have, and tells how to list
+    /// the ids. A rule that left the catalog is one of them.
+    pub fn require_known(&self, catalog: &Catalog) -> Result<()> {
+        let unknown: Vec<&str> = self
+            .ids
+            .iter()
+            .map(String::as_str)
+            .filter(|id| catalog.rules().all(|r| r.id != *id))
+            .collect();
+        if unknown.is_empty() {
+            return Ok(());
+        }
+        Err(Error::Usage {
+            message: format!(
+                "--rule: no rule has the id {}. Run strata-preflight --rules to list the ids",
+                unknown.join(", ")
+            ),
+        })
+    }
+}
+
 /// The rules of the catalog that apply to `world` under `selection`, in the order of the
 /// catalog, each with why it does not run when it does not. `jq` runs the `when` of each rule
 /// over `world_value`.

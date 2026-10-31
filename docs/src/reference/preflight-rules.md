@@ -163,6 +163,9 @@ not make the checks that the route answers.
 | `gke-pool-multiple-3` | The size of a GKE worker pool is a multiple of 3. | `InvalidParam`, "Node pool size should be multiple of 3". A live run shows it: see [What the preflight runs show](../development/live-runs.md#what-the-preflight-runs-show). |
 | `profile-cloud-mismatch` | Each profile is of the cloud type of the cluster, or of `all`. | HTTP 500, `ClusterProfilesNotSupported`, `Cluster profiles '<name>' are not supported with 'aws' environment`. A live run shows it: see [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). `palette-validate` reports the refusal. |
 
+A run with `--rule` and one of these ids is a `usage` error with exit `2`, because the
+id is not in the catalog.
+
 ### The checks that wait for a call of the route
 
 Each rule in this table copies a check that strata expects the route to answer.

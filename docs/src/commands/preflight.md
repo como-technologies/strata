@@ -70,7 +70,7 @@ reports and the world, or that no file was written.
 | `--records` | Gives the records of the profiles as files, for a run with no key. With none, strata records each profile from Palette. | |
 | `--probes` | Adds the rules of a file of custom probes. | [Custom probes](preflight/rules.md#custom-probes) |
 | `--tier` | Selects the tiers: `static`, `palette`, `cloud`, as a list. | [The static tier and the live tier](preflight/tiers.md) |
-| `--rule` | Selects rules by id. | |
+| `--rule` | Selects rules by id. An id that is not in the catalog is a `usage` error with exit `2`. | [The rules](preflight/rules.md#the-rules) |
 | `--strict` | Counts a failed probe as a failed check. | |
 | `--ready` | Exits `1` when the readiness is under the percentage. | |
 | `--offline` | Reads nothing from Palette. | |
