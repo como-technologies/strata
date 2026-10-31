@@ -5200,7 +5200,7 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
     stage.strata(
         "preflight build.json --cloud aws --tier palette --rule template-outside --json --quiet",
         0,
-        r#"{"checks":[{"id":"template-outside","verdict":"passed","requests":[{"ran":"GET /v1/clusterprofiles/r-1","answer":"HTTP 200"}]}]}"#,
+        r#"{"checks":[{"id":"template-outside","verdict":"passed","requests":[{"method":"GET","path":"/v1/clusterprofiles/r-1","answer":"HTTP 200"}]}]}"#,
     );
     stage.strata(
         "preflight build.json --cloud aws --tier palette --rule instance-offering --json --quiet",

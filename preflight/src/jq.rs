@@ -24,8 +24,9 @@ pub(crate) const ITEM: &str = "$item";
 /// Compiles and runs jq programs, and keeps each compiled program for the next input.
 #[derive(Default)]
 pub struct Jq {
-    /// Each program, compiled with `$item` as a variable (`true`) or without it (`false`).
-    compiled: RefCell<HashMap<(bool, String), Rc<Filter>>>,
+    /// Each program, compiled without `$item` (slot 0) and with it as a variable (slot 1). The key
+    /// is the program alone, so a lookup borrows the text of the program.
+    compiled: RefCell<HashMap<String, [Option<Rc<Filter>>; 2]>>,
 }
 
 impl Jq {
@@ -35,9 +36,14 @@ impl Jq {
     }
 
     fn compile(&self, rule: &str, program: &str, with_item: bool) -> Result<Rc<Filter>> {
-        let key = (with_item, program.to_string());
-        if let Some(f) = self.compiled.borrow().get(&key) {
-            return Ok(f.clone());
+        let slot = usize::from(with_item);
+        if let Some(f) = self
+            .compiled
+            .borrow()
+            .get(program)
+            .and_then(|forms| forms[slot].clone())
+        {
+            return Ok(f);
         }
         let defs = jaq_core::defs()
             .chain(jaq_std::defs())
@@ -69,7 +75,10 @@ impl Jq {
                 message: format!("the program does not compile: {}", compile_errors(&errs)),
             })?;
         let filter = Rc::new(filter);
-        self.compiled.borrow_mut().insert(key, filter.clone());
+        self.compiled
+            .borrow_mut()
+            .entry(program.to_string())
+            .or_default()[slot] = Some(filter.clone());
         Ok(filter)
     }
 
@@ -77,6 +86,11 @@ impl Jq {
     ///
     /// `item` is the value of `$item`, for a check with `each`. With no item, a program that reads
     /// `$item` does not compile.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Jq`] when the program does not parse, does not compile, or fails on `input`. A
+    /// program that reads `$item` does not compile when `item` is `None`.
     pub fn run(
         &self,
         rule: &str,
@@ -109,6 +123,10 @@ impl Jq {
     }
 
     /// Run `program` and give its first output, or `null` when it gives none.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Jq::run`].
     pub fn first(
         &self,
         rule: &str,
@@ -126,6 +144,11 @@ impl Jq {
     /// Fill each `{{ jq }}` of `template` with the first output of that program on `input`, as
     /// text: a string stays as it is, and another value is its JSON. `item` is the value of
     /// `$item` in each program.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Jq`] when `template` has a `{{` with no `}}`, and the errors of [`Jq::run`] for
+    /// each program of the template.
     pub fn render(
         &self,
         rule: &str,
@@ -235,6 +258,23 @@ mod tests {
         jq.run("t", ".a", &json!({"a": 1}), None).unwrap();
         jq.run("t", ".a", &json!({"a": 2}), None).unwrap();
         assert_eq!(jq.compiled.borrow().len(), 1);
+    }
+
+    #[test]
+    fn a_program_keeps_one_form_without_the_item_and_one_with_it() {
+        let jq = Jq::new();
+        let item = json!({"uid": "h1"});
+        jq.run("t", ".a", &json!({"a": 1}), None).unwrap();
+        assert_eq!(
+            jq.compiled.borrow()[".a"].each_ref().map(Option::is_some),
+            [true, false]
+        );
+        jq.run("t", ".a", &json!({"a": 1}), Some(&item)).unwrap();
+        assert_eq!(jq.compiled.borrow().len(), 1, "one key for the program");
+        assert_eq!(
+            jq.compiled.borrow()[".a"].each_ref().map(Option::is_some),
+            [true, true]
+        );
     }
 
     #[test]

@@ -42,29 +42,7 @@ fn the_validate_route_gets_the_variable_values_of_the_cluster() {
         json!({"name": "pod_cidr", "value": "10.244.0.0/16"}),
         "the entity that --out writes to entity.json"
     );
-    let catalog = catalog::builtin().unwrap();
-    let backend = LiveBackend {
-        palette: Some(&api),
-        no_exec: true,
-    };
-    let report = run::run(RunInputs {
-        catalog: &catalog,
-        world: &world,
-        backend: &backend,
-        ledger: &Ledger::default(),
-        selection: &Selection {
-            tiers: vec![Tier::Palette],
-            ids: vec!["palette-validate".to_string()],
-            ..Selection::default()
-        },
-        now: "t",
-        out_dir: None,
-        progress: &Progress::silent(),
-        verbose: false,
-        color: false,
-    })
-    .unwrap();
-    assert_eq!(report.checks.len(), 1, "{:?}", report.checks);
+    palette_validate(&api);
     let posted: Vec<_> = api
         .posted()
         .into_iter()

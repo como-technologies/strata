@@ -9,12 +9,12 @@ use std::path::{Path, PathBuf};
 use strata_preflight::catalog;
 use strata_preflight::fixture;
 use strata_preflight::jq::Jq;
-use strata_preflight::probe::{self, FixtureBackend, Verdict};
+use strata_preflight::probe::{self, Call, FixtureBackend, Outcome, Verdict};
 use strata_preflight::rule::{Check, Evidence, Rule};
 
-fn verdict(rule: &Rule, fixture_path: &Path, jq: &Jq) -> (Verdict, Vec<String>) {
-    let doc = fixture::load(fixture_path)
-        .unwrap_or_else(|e| panic!("{}: fixture {}: {e}", rule.id, fixture_path.display()));
+/// Run the check of `rule` on the fixture `doc`. The test fails when `when` does not hold on the
+/// fixture: a guard that hides the check passes every test.
+fn outcome_of(rule: &Rule, doc: serde_json::Value, jq: &Jq) -> Outcome {
     let (backend, world) = FixtureBackend::split(doc);
     if let Some(when) = &rule.when {
         let holds = jq
@@ -23,15 +23,20 @@ fn verdict(rule: &Rule, fixture_path: &Path, jq: &Jq) -> (Verdict, Vec<String>) 
         assert_eq!(
             holds,
             serde_json::Value::Bool(true),
-            "{}: `when` ({when}) does not hold on {}, so the check would not run",
-            rule.id,
-            fixture_path.display()
+            "{}: `when` ({when}) does not hold on the fixture, so the check would not run",
+            rule.id
         );
     }
-    let outcome = match rule.check {
+    match rule.check {
         Some(Check::Watch { .. }) => probe::judge_watch(rule, &world, jq),
         _ => probe::run_check(rule, &world, &backend, jq),
-    };
+    }
+}
+
+fn verdict(rule: &Rule, fixture_path: &Path, jq: &Jq) -> (Verdict, Vec<String>) {
+    let doc = fixture::load(fixture_path)
+        .unwrap_or_else(|e| panic!("{}: fixture {}: {e}", rule.id, fixture_path.display()));
+    let outcome = outcome_of(rule, doc, jq);
     (outcome.verdict, outcome.messages)
 }
 
@@ -736,11 +741,10 @@ fn a_rule_with_each_asks_for_every_host_of_every_pool() {
     let catalog = catalog::builtin().unwrap();
     let rule = catalog.rule("edge-host-in-use").unwrap();
     let clean = rule.tests[0].clean.as_ref().unwrap();
-    let (backend, world) = FixtureBackend::split(fixture::load(clean).unwrap());
-    let out = probe::run_check(rule, &world, &backend, &Jq::new());
+    let out = outcome_of(rule, fixture::load(clean).unwrap(), &Jq::new());
     assert_eq!(out.verdict, Verdict::Passed, "{:?}", out.messages);
     assert_eq!(
-        out.calls.iter().map(|c| c.ran.as_str()).collect::<Vec<_>>(),
+        out.ran.requests().iter().map(Call::ran).collect::<Vec<_>>(),
         [
             "GET /v1/edgehosts/edge-host-cp-1",
             "GET /v1/edgehosts/edge-host-w-1",
@@ -750,7 +754,7 @@ fn a_rule_with_each_asks_for_every_host_of_every_pool() {
 }
 
 /// The messages of `instance-offering` name the pool, the type, and the zone (#143), also when the
-/// region does not list the type, and the rule asks one request for every pool.
+/// region does not list the type. The rule makes one request, and it answers every pool.
 #[test]
 fn instance_offering_names_the_pool_the_type_and_the_zone_for_aws_and_gcp() {
     let catalog = catalog::builtin().unwrap();
@@ -782,8 +786,7 @@ fn instance_offering_names_the_pool_the_type_and_the_zone_for_aws_and_gcp() {
         ),
     ] {
         let path = catalog::rules_dir().join(fixture);
-        let (backend, world) = FixtureBackend::split(fixture::load(&path).unwrap());
-        let out = probe::run_check(rule, &world, &backend, &Jq::new());
+        let out = outcome_of(rule, fixture::load(&path).unwrap(), &Jq::new());
         assert_eq!(
             out.verdict,
             Verdict::Failed,
@@ -792,7 +795,7 @@ fn instance_offering_names_the_pool_the_type_and_the_zone_for_aws_and_gcp() {
         );
         assert_eq!(out.messages, expected, "{fixture}");
         assert_eq!(
-            out.ran.as_deref(),
+            out.ran.text().as_deref(),
             Some(ran),
             "{fixture}: one request answers every pool"
         );
@@ -841,8 +844,7 @@ fn instance_offering_reads_the_type_of_an_entry_from_type() {
             pool["cloudConfig"]["instanceType"] = "p2.8xlarge".into();
             pool["cloudConfig"]["azs"] = serde_json::json!([zone]);
         }
-        let (backend, world) = FixtureBackend::split(doc);
-        let out = probe::run_check(rule, &world, &backend, &Jq::new());
+        let out = outcome_of(rule, doc, &Jq::new());
         assert_eq!(out.messages, expected, "{entry}");
     }
 }
@@ -884,8 +886,7 @@ fn instance_offering_passes_a_pool_whose_type_has_null_in_non_supported_zones_in
                 assert_eq!(pool["cloudConfig"]["instanceType"], kind, "{fixture}");
                 pool["cloudConfig"]["azs"] = serde_json::json!([zone]);
             }
-            let (backend, world) = FixtureBackend::split(doc);
-            let out = probe::run_check(rule, &world, &backend, &Jq::new());
+            let out = outcome_of(rule, doc, &Jq::new());
             assert_eq!(
                 out.verdict,
                 Verdict::Passed,
@@ -909,8 +910,7 @@ fn instance_offering_checks_a_pool_with_no_zone_against_the_list_of_the_region()
     {
         pool["cloudConfig"]["azs"] = serde_json::Value::Null;
     }
-    let (backend, world) = FixtureBackend::split(doc);
-    let out = probe::run_check(rule, &world, &backend, &Jq::new());
+    let out = outcome_of(rule, doc, &Jq::new());
     assert_eq!(out.verdict, Verdict::Passed, "{:?}", out.messages);
 }
 
@@ -934,8 +934,7 @@ fn instance_offering_fails_when_palette_refuses_or_gives_no_list_of_types() {
     ] {
         let mut doc = fixture::load(&path).unwrap();
         doc["_responses"][key] = answer;
-        let (backend, world) = FixtureBackend::split(doc);
-        let out = probe::run_check(rule, &world, &backend, &Jq::new());
+        let out = outcome_of(rule, doc, &Jq::new());
         assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
         assert_eq!(out.messages, [expected]);
     }
@@ -952,12 +951,12 @@ fn ssh_key_pair_names_the_key_pair_and_the_region_for_aws_and_eks() {
         "fixtures/eks/ssh-key-missing.json",
     ] {
         let path = catalog::rules_dir().join(fixture);
-        let (backend, world) = FixtureBackend::split(fixture::load(&path).unwrap());
+        let doc = fixture::load(&path).unwrap();
         assert_eq!(
-            world["entity"]["spec"]["cloudConfig"]["vpcId"], "",
+            doc["entity"]["spec"]["cloudConfig"]["vpcId"], "",
             "{fixture}: a dynamic VPC"
         );
-        let out = probe::run_check(rule, &world, &backend, &Jq::new());
+        let out = outcome_of(rule, doc, &Jq::new());
         assert_eq!(
             out.verdict,
             Verdict::Failed,
@@ -986,8 +985,7 @@ fn kms_fails_a_disabled_key_that_the_list_of_keys_holds() {
         ("fixtures/eks/kms-clean.json", None),
     ] {
         let path = catalog::rules_dir().join(fixture);
-        let (backend, world) = FixtureBackend::split(fixture::load(&path).unwrap());
-        let out = probe::run_check(rule, &world, &backend, &Jq::new());
+        let out = outcome_of(rule, fixture::load(&path).unwrap(), &Jq::new());
         match expected {
             Some(state) => {
                 assert_eq!(out.verdict, Verdict::Failed, "{fixture}");

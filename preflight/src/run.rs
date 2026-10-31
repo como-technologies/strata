@@ -289,13 +289,10 @@ pub fn reading<A: PaletteApi>(palette: &Palette<A>, uid: &str, elapsed: Duration
 fn verbose_lines(rule: &Rule, o: &Outcome, color: bool) -> Vec<String> {
     let tier = rule.effective_tier().name();
     let mut lines: Vec<String> = o
-        .calls
+        .ran
+        .requests()
         .iter()
-        .map(|c| {
-            let answer = c.answer.as_ref().map(|a| format!(" -> {a}"));
-            let request = format!("{}{}", c.ran, answer.unwrap_or_default());
-            format!("{tier}: {}: {}", rule.id, paint(color, "2", &request))
-        })
+        .map(|c| format!("{tier}: {}: {}", rule.id, paint(color, "2", &c.line())))
         .collect();
     lines.push(verbose_line(rule, o, color));
     lines
@@ -304,8 +301,8 @@ fn verbose_lines(rule: &Rule, o: &Outcome, color: bool) -> Vec<String> {
 /// What a check ran, for its line of `--verbose`: its request or command, the count of the requests
 /// of a check with `each`, or the program alone.
 fn what_ran(o: &Outcome) -> String {
-    match (&o.ran, o.calls.len()) {
-        (Some(ran), _) => ran.clone(),
+    match (o.ran.text(), o.ran.requests().len()) {
+        (Some(ran), _) => ran,
         (None, 0) => "jq over the world".to_string(),
         (None, 1) => "1 request".to_string(),
         (None, n) => format!("{n} requests"),
@@ -325,10 +322,7 @@ fn verbose_line(rule: &Rule, o: &Outcome, color: bool) -> String {
             &format!(
                 "{} -> {}{} ms,",
                 what_ran(o),
-                o.answer
-                    .as_ref()
-                    .map(|a| format!("{a}, "))
-                    .unwrap_or_default(),
+                o.ran.answer().map(|a| format!("{a}, ")).unwrap_or_default(),
                 o.elapsed.as_millis()
             )
         ),
