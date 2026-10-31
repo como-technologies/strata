@@ -760,8 +760,8 @@ fn the_blocks_that_the_style_review_of_wave_11_named_have_six_sentences_or_fewer
     }
 }
 
-/// The comment that holds the first comment line with `anchor`: the lines of `//`, `///`, or `//!`
-/// around it, up to a blank comment line, as one line without the marks.
+/// The comment that holds the first comment line with `anchor`. The comment is the lines around it
+/// that start with `//`, up to a blank comment line. The result is one line without the marks.
 fn comment(text: &str, anchor: &str) -> String {
     let lines: Vec<&str> = text.lines().collect();
     let body = |i: usize| {
@@ -846,6 +846,10 @@ fn the_rust_comments_that_the_style_review_of_wave_11_named_keep_to_25_words() {
         ),
         ("tests/docs.rs", "The block of `text` that holds"),
         ("tests/docs.rs", "The sentences of `block`."),
+        (
+            "tests/docs.rs",
+            "The comment that holds the first comment line",
+        ),
     ];
     for (file, anchor) in comments {
         for sentence in sentences(&comment(&repo_file(file), anchor)) {
