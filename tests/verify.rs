@@ -8022,7 +8022,7 @@ fn a_cluster_record_says_which_update_waits_from_the_open_notifications() {
     let all = snapshot_cluster(&api, None).unwrap();
     let c = all.source.cluster.as_ref().unwrap();
     assert_eq!(c.updates_pending, Some(true));
-    assert_eq!(c.updates_pending_error, None);
+    assert_eq!(c.updates_pending_error(), None);
     assert_eq!(
         c.pending_updates
             .iter()
@@ -8077,15 +8077,21 @@ fn a_cluster_record_says_when_it_could_not_read_whether_an_update_waits() {
     let c = recorded.source.cluster.as_ref().unwrap();
     assert_eq!(c.updates_pending, None);
     assert!(
-        c.updates_pending_error
-            .as_deref()
-            .unwrap()
-            .starts_with("HTTP 404"),
+        c.updates_pending_error().unwrap().starts_with("HTTP 404"),
         "{:?}",
-        c.updates_pending_error
+        c.updates_pending_error()
     );
     let json = serde_json::to_value(&recorded).unwrap();
     assert!(json["source"]["cluster"].get("updatesPending").is_none());
+    assert_eq!(
+        json["source"]["cluster"]["errors"]["updatesPending"],
+        c.updates_pending_error().unwrap()
+    );
+    assert!(
+        json["source"]["cluster"]
+            .get("updatesPendingError")
+            .is_none()
+    );
 }
 
 #[test]
@@ -8385,14 +8391,16 @@ fn a_cluster_record_holds_the_error_of_the_route_of_the_repave_and_verify_names_
     let c = waits.source.cluster.as_ref().unwrap();
     assert_eq!(c.repave_pending, Some(true), "the cluster document says it");
     assert!(c.pending_repave.is_none());
-    assert_eq!(
-        c.pending_repave_error.as_deref(),
-        Some("HTTP 403: forbidden")
-    );
+    assert_eq!(c.pending_repave_error(), Some("HTTP 403: forbidden"));
     let json = serde_json::to_value(&waits).unwrap();
     assert_eq!(
-        json["source"]["cluster"]["pendingRepaveError"],
+        json["source"]["cluster"]["errors"]["pendingRepave"],
         "HTTP 403: forbidden"
+    );
+    assert!(
+        json["source"]["cluster"]
+            .get("pendingRepaveError")
+            .is_none()
     );
 
     let v = ops::verify(&before, &Palette::new(api), "t1", &Progress::silent()).unwrap();
@@ -8407,16 +8415,72 @@ fn a_cluster_record_holds_the_error_of_the_route_of_the_repave_and_verify_names_
 
     // the error says nothing about the profiles of a pending update, or of another kind
     let pending = waits.clone().mark_pending();
+    assert!(pending.source.cluster.unwrap().errors.is_empty());
+    let host = waits.with_kind(strata::snapshot::SubjectKind::EdgeHost);
     assert!(
-        pending
-            .source
+        host.source
             .cluster
             .unwrap()
-            .pending_repave_error
+            .pending_repave_error()
             .is_none()
     );
-    let host = waits.with_kind(strata::snapshot::SubjectKind::EdgeHost);
-    assert!(host.source.cluster.unwrap().pending_repave_error.is_none());
+}
+
+/// Strata 0.24 and before wrote why it could not read the notifications and the repave in
+/// `updatesPendingError` and `pendingRepaveError`. A record now holds both in `errors`, as a tier
+/// does, and an older record gives the same answer.
+#[test]
+fn an_older_record_with_the_read_errors_of_a_cluster_in_two_fields_loads_into_errors() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_repave(dir.path(), "cluster-merged", "Pending")
+        .failing(repave_route(), 403, "forbidden")
+        .failing(notifications_route(), 404, "not found");
+    let current = snapshot_cluster(&api, None).unwrap();
+    let c = current.source.cluster.as_ref().unwrap();
+    assert!(c.updates_pending_error().is_some() && c.pending_repave_error().is_some());
+
+    // the record as strata 0.24 wrote it
+    let mut older = serde_json::to_value(&current).unwrap();
+    let cluster = older["source"]["cluster"].as_object_mut().unwrap();
+    let errors = cluster.remove("errors").unwrap();
+    cluster.insert(
+        "updatesPendingError".into(),
+        errors["updatesPending"].clone(),
+    );
+    cluster.insert("pendingRepaveError".into(), errors["pendingRepave"].clone());
+    let saved = dir.path().join("older.json");
+    write_record(&saved, &older);
+
+    let loaded = Snapshot::load(&saved).unwrap();
+    assert_eq!(
+        serde_json::to_value(&loaded).unwrap()["source"]["cluster"],
+        serde_json::to_value(&current).unwrap()["source"]["cluster"],
+        "the record is the record that strata writes now"
+    );
+    let c = loaded.source.cluster.as_ref().unwrap();
+    assert_eq!(c.pending_repave_error(), Some("HTTP 403: forbidden"));
+    assert_eq!(c.updates_pending_error(), Some("HTTP 404: not found"));
+
+    // and verify says the same about it
+    let verified = |recorded: &Snapshot| {
+        let v = ops::verify(
+            recorded,
+            &Palette::new(api.clone()),
+            "t1",
+            &Progress::silent(),
+        )
+        .unwrap();
+        common::terminal()
+            .render(&v.diff, recorded, &v.live, false)
+            .unwrap()
+    };
+    let text = verified(&loaded);
+    assert!(
+        text.contains("(strata could not read its reasons: HTTP 403: forbidden)"),
+        "{text}"
+    );
+    assert_eq!(text, verified(&current));
 }
 
 /// Palette shows the templates that link a version, and `consumers` reads them live. So a record
@@ -8571,14 +8635,8 @@ fn a_raw_directory_keeps_each_read_error_so_the_record_is_the_record_of_the_fetc
         serde_json::to_value(&direct).unwrap()
     );
     let c = from_raw.source.cluster.unwrap();
-    assert_eq!(
-        c.updates_pending_error.as_deref(),
-        Some("HTTP 403: forbidden")
-    );
-    assert_eq!(
-        c.pending_repave_error.as_deref(),
-        Some("HTTP 403: forbidden")
-    );
+    assert_eq!(c.updates_pending_error(), Some("HTTP 403: forbidden"));
+    assert_eq!(c.pending_repave_error(), Some("HTTP 403: forbidden"));
     let policy = &c.tier(Tier::Policy).unwrap();
     assert_eq!(
         policy.errors.keys().collect::<Vec<_>>(),
@@ -11159,7 +11217,7 @@ fn a_pending_cluster_ref_records_the_release_that_the_waiting_update_brings() {
     let c = pending.source.cluster.as_ref().unwrap();
     assert!(c.pending);
     assert_eq!(
-        (c.updates_pending, c.updates_pending_error.as_deref()),
+        (c.updates_pending, c.updates_pending_error()),
         (None, None),
         "whether an update waits is a statement about the copy that runs"
     );

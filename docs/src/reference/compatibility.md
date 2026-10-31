@@ -55,6 +55,19 @@ the report showed each request two times. The `reproduce` lines that call Palett
 read `PALETTE_API`, with the header `ProjectUid`, as the automatic lines do. Some
 read `PALETTE_HOST`, which nothing set.
 
+After 0.24.0, a record of a cluster holds why strata could not read the
+notifications and the repave in `source.cluster.errors`, as `updatesPending`
+and `pendingRepave`. A tier holds its read errors in its own `errors`, in the
+same shape. Release 0.24.0 wrote `updatesPendingError` and `pendingRepaveError`
+for these two. Strata reads an older record into `errors`, so `compare`,
+`verify`, and the notes give the same answer for it. The id stays, because the
+root does not cover these fields. An older strata that reads a new record shows
+no reason, and the record still compares. A script that reads
+`updatesPendingError` or `pendingRepaveError` must read `errors` too. In the
+library, `ClusterSource` has no field `updates_pending_error` or
+`pending_repave_error`. Its methods `updates_pending_error()` and
+`pending_repave_error()` give the same text.
+
 A field can also become absent, and that keeps the id as well. For most fields
 absent is a value: a field that is false, empty, or zero is left out, and each
 such field says so at its own definition in
@@ -63,9 +76,10 @@ absent means unknown: `source.consumers`, `rootLive`, `maxImpact`,
 `packsChanged`, `error`, `updatesPending`, `repavePending`, and the `value`,
 `old`, or `new` of a sensitive variable. `updatesPending` joined
 `source.cluster` in 0.10.0, and `strata-list/1` in the same release: absent
-means that strata could not read the notifications, and `updatesPendingError`
-says why. `repavePending` joined `source.cluster` after 0.17.0: absent means a
-record of an older release, or of an object that is not a cluster. In 0.7.0
+means that strata could not read the notifications, and
+`errors.updatesPending` says why. `repavePending` joined `source.cluster` after
+0.17.0: absent means a record of an older release, or of an object that is not
+a cluster. In 0.7.0
 `source.consumers` became absent on a record that no consumers request
 produced, where 0.6.3 wrote `count: 0` and stated a count that nothing counted.
 A reader that takes absent for zero reads such a record wrong, so this page

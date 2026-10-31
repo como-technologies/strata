@@ -55,9 +55,6 @@ pub struct ClusterSource {
     /// Outside the root: it is Palette's statement about the copy, not the copy.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updates_pending: Option<bool>,
-    /// Why the notifications could not be read, when `updatesPending` is absent for that reason.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub updates_pending_error: Option<String>,
     /// Each change that waits, as the open notifications name it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub pending_updates: Vec<PendingUpdate>,
@@ -70,10 +67,15 @@ pub struct ClusterSource {
     /// waits, and when strata could not read it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_repave: Option<PendingRepave>,
-    /// Why strata could not read the repave that waits, when `pendingRepave` is absent for that
-    /// reason.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pending_repave_error: Option<String>,
+    /// Why strata could not read a part of the cluster that is beside the copy. The key is the
+    /// field that is then absent: `updatesPending` or `pendingRepave`. The reason is the HTTP
+    /// error of Palette, such as `HTTP 403: forbidden`. The tiers have their own `errors`, in the
+    /// same shape. Outside the root.
+    ///
+    /// A record of strata 0.24 and before holds `updatesPendingError` and `pendingRepaveError`
+    /// instead. [`Snapshot::load`](super::Snapshot::load) reads them into this map.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub errors: BTreeMap<String, String>,
     /// With `snapshot --macros`: each user macro the recorded content uses, and the `sha256:` of
     /// the value Palette gives it for this cluster, or `unresolved`. A value can be a secret, so
     /// the record holds its digest and not the value. Outside the root; `verify` reads the values
@@ -104,11 +106,84 @@ pub struct ClusterSource {
     pub tiers: BTreeMap<Open<Tier>, ClusterTier>,
 }
 
+/// The key of [`ClusterSource::errors`] for `updatesPending`: why strata could not read the
+/// notifications.
+pub(super) const UPDATES_PENDING: &str = "updatesPending";
+
+/// The key of [`ClusterSource::errors`] for `pendingRepave`: why strata could not read the repave
+/// that waits.
+pub(super) const PENDING_REPAVE: &str = "pendingRepave";
+
+/// The fields of a record of strata 0.24 and before that held a read error of the cluster, with
+/// the key of [`ClusterSource::errors`] that holds it now. Do not change this list: `load` reads
+/// an older record through it.
+const OLDER_ERRORS: [(&str, &str); 2] = [
+    ("updatesPendingError", UPDATES_PENDING),
+    ("pendingRepaveError", PENDING_REPAVE),
+];
+
 impl ClusterSource {
     /// The tier `tier` of the record, when the record carries it.
     pub fn tier(&self, tier: Tier) -> Option<&ClusterTier> {
         self.tiers.get(&Open::Known(tier))
     }
+
+    /// Why strata could not read the notifications, when `updates_pending` is absent for that
+    /// reason.
+    pub fn updates_pending_error(&self) -> Option<&str> {
+        self.errors.get(UPDATES_PENDING).map(String::as_str)
+    }
+
+    /// Why strata could not read the repave that waits, when `pending_repave` is absent for that
+    /// reason.
+    pub fn pending_repave_error(&self) -> Option<&str> {
+        self.errors.get(PENDING_REPAVE).map(String::as_str)
+    }
+}
+
+/// Move the read errors of the cluster in the record `record` from the fields of strata 0.24 and
+/// before to `source.cluster.errors`. An entry that `errors` holds already stays.
+pub(super) fn read_older_errors(record: &mut Value) {
+    let Some(cluster) = record
+        .pointer_mut("/source/cluster")
+        .and_then(Value::as_object_mut)
+    else {
+        return;
+    };
+    for (older, key) in OLDER_ERRORS {
+        // an older record can hold null here, which is no error
+        let Some(why) = cluster.remove(older).filter(Value::is_string) else {
+            continue;
+        };
+        if let Some(errors) = cluster
+            .entry("errors")
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+        {
+            errors.entry(key).or_insert(why);
+        }
+    }
+}
+
+/// The part of the cluster in `raw` that strata could not read and that is beside the copy, with
+/// why: the notifications and the repave that waits. The role bindings and the namespaces are in
+/// the `errors` of the tier `policy`.
+pub(crate) fn cluster_errors(raw: &RawCluster) -> BTreeMap<String, String> {
+    unread([
+        (UPDATES_PENDING, &raw.errors.notifications),
+        (PENDING_REPAVE, &raw.errors.repave),
+    ])
+}
+
+/// The entries of `reasons` that hold a reason, as a map from the field to why strata could not
+/// read it.
+pub(super) fn unread<const N: usize>(
+    reasons: [(&str, &Option<String>); N],
+) -> BTreeMap<String, String> {
+    reasons
+        .into_iter()
+        .filter_map(|(key, why)| Some((key.to_string(), why.clone()?)))
+        .collect()
 }
 
 /// A tier of a cluster record: a part of the cluster beside its release, with a hash of its own.
@@ -546,5 +621,68 @@ mod tests {
         assert_eq!(unread.fields, read.fields);
         assert_eq!(unread.hash, read.hash);
         assert_eq!(unread.errors, errors);
+    }
+
+    #[test]
+    fn the_read_errors_of_an_older_record_move_into_errors_and_an_entry_of_errors_stays() {
+        let mut record = json!({"source": {"cluster": {
+            "uid": "c1",
+            "updatesPendingError": "HTTP 404: not found",
+            "pendingRepaveError": "HTTP 403: forbidden",
+        }}});
+        read_older_errors(&mut record);
+        assert_eq!(
+            record["source"]["cluster"],
+            json!({"uid": "c1", "errors": {
+                "updatesPending": "HTTP 404: not found",
+                "pendingRepave": "HTTP 403: forbidden",
+            }})
+        );
+
+        // a record that holds both shapes keeps the entry of the new one
+        let mut both = json!({"source": {"cluster": {
+            "pendingRepaveError": "HTTP 500: older",
+            "errors": {"pendingRepave": "HTTP 403: newer", "updatesPending": "HTTP 404: x"},
+        }}});
+        read_older_errors(&mut both);
+        assert_eq!(
+            both["source"]["cluster"],
+            json!({"errors": {"pendingRepave": "HTTP 403: newer", "updatesPending": "HTTP 404: x"}})
+        );
+    }
+
+    #[test]
+    fn a_record_with_no_read_error_or_no_cluster_does_not_change() {
+        for record in [
+            json!({"source": {"cluster": {"uid": "c1", "updatesPending": true}}}),
+            json!({"source": {"uid": "p1"}}),
+            json!({}),
+        ] {
+            let mut read = record.clone();
+            read_older_errors(&mut read);
+            assert_eq!(read, record);
+        }
+    }
+
+    #[test]
+    fn an_older_field_that_holds_null_is_no_error() {
+        let mut record = json!({"source": {"cluster": {"updatesPendingError": null}}});
+        read_older_errors(&mut record);
+        assert_eq!(record, json!({"source": {"cluster": {}}}));
+    }
+
+    #[test]
+    fn the_errors_of_a_cluster_name_the_field_that_strata_could_not_read() {
+        let reasons = [
+            (UPDATES_PENDING, &Some("HTTP 404: not found".to_string())),
+            (PENDING_REPAVE, &None),
+        ];
+        assert_eq!(
+            unread(reasons),
+            BTreeMap::from([(
+                UPDATES_PENDING.to_string(),
+                "HTTP 404: not found".to_string()
+            )])
+        );
     }
 }

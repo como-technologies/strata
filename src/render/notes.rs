@@ -425,7 +425,7 @@ fn repave_pending_notes(d: &Diff) -> Vec<String> {
                 if !reasons.is_empty() {
                     note.push_str(&format!(": {}", reasons.join("; ")));
                 }
-            } else if let Some(e) = &c.pending_repave_error {
+            } else if let Some(e) = c.pending_repave_error() {
                 note.push_str(&format!(" (strata could not read its reasons: {e})"));
             }
             note.push_str(". Palette refuses an update of its profiles until a person approves it");

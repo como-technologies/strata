@@ -20,6 +20,7 @@ use crate::reference::name_version;
 pub use crate::repave::PendingRepave;
 use crate::text::name_or_uid;
 pub use crate::validation::ProfileValidation;
+use cluster::{PENDING_REPAVE, UPDATES_PENDING, read_older_errors};
 use pack::masked_paths;
 
 mod build;
@@ -503,11 +504,11 @@ impl Snapshot {
         if let Some(c) = self.source.cluster.as_mut() {
             c.pending = true;
             c.updates_pending = None;
-            c.updates_pending_error = None;
             c.pending_updates.clear();
             c.repave_pending = None;
             c.pending_repave = None;
-            c.pending_repave_error = None;
+            c.errors.remove(UPDATES_PENDING);
+            c.errors.remove(PENDING_REPAVE);
         }
         self
     }
@@ -523,7 +524,7 @@ impl Snapshot {
                 c.variables.clear();
                 c.repave_pending = None;
                 c.pending_repave = None;
-                c.pending_repave_error = None;
+                c.errors.remove(PENDING_REPAVE);
             }
         }
         self
@@ -538,9 +539,11 @@ impl Snapshot {
     /// - [`Error::NotSnapshot`] for a file that is not a snapshot.
     /// - [`Error::Io`] when strata cannot read the file.
     pub fn load(path: &Path) -> Result<Snapshot> {
-        let mut snap: Snapshot = load_document(path, SNAPSHOT_SCHEMA, || {
+        let mut document = read_document(path, SNAPSHOT_SCHEMA, || {
             Error::NotSnapshot(path.to_path_buf())
         })?;
+        read_older_errors(&mut document);
+        let mut snap: Snapshot = parse_document(path, SNAPSHOT_SCHEMA, document)?;
         snap.fill_content();
         Ok(snap)
     }
@@ -577,6 +580,16 @@ pub(crate) fn load_document<T: DeserializeOwned>(
     schema: &'static str,
     not_one: impl FnOnce() -> Error,
 ) -> Result<T> {
+    parse_document(path, schema, read_document(path, schema, not_one)?)
+}
+
+/// Read the JSON of the document of the schema id `schema` at `path`, with its id checked. The
+/// errors are those of [`load_document`] for a file that is not the document.
+fn read_document(
+    path: &Path,
+    schema: &'static str,
+    not_one: impl FnOnce() -> Error,
+) -> Result<Value> {
     let text = crate::file::read_file(path)?;
     let Ok(v) = serde_json::from_str::<Value>(&text) else {
         return Err(not_one());
@@ -593,7 +606,16 @@ pub(crate) fn load_document<T: DeserializeOwned>(
             not_one()
         });
     }
-    serde_json::from_value(v).map_err(|source| Error::SnapshotSchema {
+    Ok(v)
+}
+
+/// Read the fields of `document`, the JSON that [`read_document`] gave for the file at `path`.
+fn parse_document<T: DeserializeOwned>(
+    path: &Path,
+    schema: &'static str,
+    document: Value,
+) -> Result<T> {
+    serde_json::from_value(document).map_err(|source| Error::SnapshotSchema {
         path: path.to_path_buf(),
         schema,
         source,
