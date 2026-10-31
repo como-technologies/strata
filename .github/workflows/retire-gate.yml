@@ -7,8 +7,9 @@ name: strata retire gate
 # and the report names each one. A cluster that strata cannot read counts as a consumer, so it also
 # exits 1. Exit 2 means strata could not answer at all. Strata deletes nothing: the delete is the
 # caller's own step, after this one.
-# It downloads the strata release binary and checks it against SHA256SUMS. Other CI systems run
-# `strata consumers` directly, which is all this workflow does.
+# It installs the strata release with scripts/ci/install-strata.sh, which checks the signature of
+# SHA256SUMS and the binary. Other CI systems run `strata consumers` directly, which is all this
+# workflow does after the install.
 on:
   workflow_call:
     inputs:
@@ -43,23 +44,22 @@ jobs:
   retire-gate:
     runs-on: ubuntu-latest
     steps:
-      # the release workflow of this repository signed SHA256SUMS; cosign 3 reads its bundle
+      # this repository at the requested tag, for the installer
+      - uses: actions/checkout@v7
+        with:
+          repository: como-technologies/strata
+          ref: ${{ inputs.strata-version }}
+          path: .strata
+          token: ${{ secrets.strata-token || github.token }}
+      # the installer checks the signature of SHA256SUMS, and cosign 3 reads its bundle
       - uses: sigstore/cosign-installer@v4.1.2
       - name: install strata
         env:
           GH_TOKEN: ${{ secrets.strata-token || github.token }}
           VERSION: ${{ inputs.strata-version }}
         run: |
-          mkdir -p .strata/bin && cd .strata/bin
-          gh release download "$VERSION" --repo como-technologies/strata \
-            --pattern strata-x86_64-unknown-linux-musl --pattern SHA256SUMS --pattern SHA256SUMS.sigstore.json
-          cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
-            --certificate-identity "https://github.com/como-technologies/strata/.github/workflows/release.yml@refs/tags/$VERSION" \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com
-          sha256sum --check --ignore-missing SHA256SUMS
-          chmod +x strata-x86_64-unknown-linux-musl
-          mv strata-x86_64-unknown-linux-musl strata
-          ./strata --version
+          .strata/scripts/ci/install-strata.sh --version "$VERSION" --dir .strata/bin --bin-only \
+            --require-signature
       - name: no cluster runs the version
         env:
           PALETTE_API_KEY: ${{ secrets.palette-api-key }}

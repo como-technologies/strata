@@ -3,10 +3,10 @@ name: strata preflight
 # Reusable workflow. A repository calls it from its own pull request or build workflow to check that
 # Palette can build a cluster before the build: the body of the create, or an existing cluster, against
 # the catalog of strata-preflight; see docs/src/automation/preflight.md. The report goes to the job
-# summary and to an artifact, and the exit status of strata is the status of the job. It downloads
-# the two release binaries, checks them against SHA256SUMS, and runs `strata preflight`. For a
-# comment on the pull request, call preflight-comment.yml in a second job. Other CI systems run
-# the binary directly.
+# summary and to an artifact, and the exit status of strata is the status of the job. It installs
+# the two release binaries with scripts/ci/install-strata.sh, which checks the signature of
+# SHA256SUMS and each binary, and runs `strata preflight`. For a comment on the pull request,
+# call preflight-comment.yml in a second job. Other CI systems run the binary directly.
 on:
   workflow_call:
     inputs:
@@ -102,25 +102,22 @@ jobs:
     steps:
       # the caller's repository, where the entity and the records live
       - uses: actions/checkout@v7
-      # the release workflow of this repository signed SHA256SUMS; cosign 3 reads its bundle
+      # this repository at the requested tag, for the installer
+      - uses: actions/checkout@v7
+        with:
+          repository: como-technologies/strata
+          ref: ${{ inputs.strata-version }}
+          path: .strata
+          token: ${{ secrets.strata-token || github.token }}
+      # the installer checks the signature of SHA256SUMS, and cosign 3 reads its bundle
       - uses: sigstore/cosign-installer@v4.1.2
       - name: install strata and strata-preflight
         env:
           GH_TOKEN: ${{ secrets.strata-token || github.token }}
           VERSION: ${{ inputs.strata-version }}
         run: |
-          mkdir -p .strata/bin && cd .strata/bin
-          gh release download "$VERSION" --repo como-technologies/strata \
-            --pattern strata-x86_64-unknown-linux-musl --pattern strata-preflight-x86_64-unknown-linux-musl \
-            --pattern SHA256SUMS --pattern SHA256SUMS.sigstore.json
-          cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
-            --certificate-identity "https://github.com/como-technologies/strata/.github/workflows/release.yml@refs/tags/$VERSION" \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com
-          sha256sum --check --ignore-missing SHA256SUMS
-          chmod +x strata-x86_64-unknown-linux-musl strata-preflight-x86_64-unknown-linux-musl
-          mv strata-x86_64-unknown-linux-musl strata
-          mv strata-preflight-x86_64-unknown-linux-musl strata-preflight
-          ./strata --version && ./strata-preflight --version
+          .strata/scripts/ci/install-strata.sh --version "$VERSION" --dir .strata/bin --bin-only \
+            --require-signature
       - name: preflight
         env:
           PALETTE_API_KEY: ${{ secrets.palette-api-key }}

@@ -106,13 +106,32 @@ file.
 
 ### The reusable workflows
 
-Each reusable workflow of this repository that downloads a binary installs
-`cosign` with the action `sigstore/cosign-installer`. It checks the signature of
-`SHA256SUMS` with the identity above, at the release in `strata-version`, before
-it checks the binary against the list. If the signature does not verify, the job
-fails. An organization that limits the actions of its repositories must allow
-`sigstore/cosign-installer`. `preflight-comment.yml` downloads no binary: it
-runs one script from the tag.
+Seven reusable workflows of this repository install strata: `comment.yml`,
+`merge-gate.yml`, `preflight.yml`, `promote-gate.yml`, `retire-gate.yml`,
+`upstream.yml`, and `verify.yml`. Each one runs the same three steps:
+
+1. It checks out this repository at the tag in `strata-version`, into `.strata`.
+2. It installs `cosign` with the action `sigstore/cosign-installer`.
+3. It runs `.strata/scripts/ci/install-strata.sh` with `--require-signature`
+   and `--bin-only`.
+
+The installer is the only code that checks a release. It makes sure that the
+release workflow of this repository signed `SHA256SUMS` at that tag, with the
+identity above. Then it checks each binary against the list. The binaries go to
+`.strata/bin`. `preflight.yml` gets `strata` and `strata-preflight` there.
+
+The job fails in each of these cases:
+
+| Case | Why the job fails |
+| --- | --- |
+| The signature does not verify. | The release workflow of this repository did not make the list. |
+| The release has no signature. | `--require-signature` makes a missing signature an error. |
+| A binary does not match `SHA256SUMS`. | The file is not the file that the release lists. |
+
+The workflow file and the installer come from the same tag, so one tag sets the
+trust. An organization that limits the actions of its repositories
+must allow `actions/checkout` and `sigstore/cosign-installer`.
+`preflight-comment.yml` installs no binary: it runs one script from the tag.
 
 ## Build from source
 

@@ -4,8 +4,9 @@ name: strata merge gate
 # result before the merge button: the records as they will be after the merge, against the base
 # branch as it is now; see docs/src/automation/merge-gate.md. Make it a required status check, with
 # "Require branches to be up to date before merging", or put it in the merge queue.
-# It downloads the strata release binary, checks it against SHA256SUMS, and runs
-# scripts/ci/merge-gate.sh from the same tag. Other CI systems run the script directly.
+# It installs the strata release with scripts/ci/install-strata.sh, which checks the signature of
+# SHA256SUMS and the binary, and runs scripts/ci/merge-gate.sh from the same tag. Other CI systems
+# run the script directly.
 on:
   workflow_call:
     inputs:
@@ -56,30 +57,22 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      # this repository at the requested tag, for the script
+      # this repository at the requested tag, for the installer and the script
       - uses: actions/checkout@v7
         with:
           repository: como-technologies/strata
           ref: ${{ inputs.strata-version }}
           path: .strata
           token: ${{ secrets.strata-token || github.token }}
-      # the release workflow of this repository signed SHA256SUMS; cosign 3 reads its bundle
+      # the installer checks the signature of SHA256SUMS, and cosign 3 reads its bundle
       - uses: sigstore/cosign-installer@v4.1.2
       - name: install strata
         env:
           GH_TOKEN: ${{ secrets.strata-token || github.token }}
           VERSION: ${{ inputs.strata-version }}
         run: |
-          mkdir -p .strata/bin && cd .strata/bin
-          gh release download "$VERSION" --repo como-technologies/strata \
-            --pattern strata-x86_64-unknown-linux-musl --pattern SHA256SUMS --pattern SHA256SUMS.sigstore.json
-          cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
-            --certificate-identity "https://github.com/como-technologies/strata/.github/workflows/release.yml@refs/tags/$VERSION" \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com
-          sha256sum --check --ignore-missing SHA256SUMS
-          chmod +x strata-x86_64-unknown-linux-musl
-          mv strata-x86_64-unknown-linux-musl strata
-          ./strata --version
+          .strata/scripts/ci/install-strata.sh --version "$VERSION" --dir .strata/bin --bin-only \
+            --require-signature
       - name: check the merge result
         env:
           STRATA_BIN: ${{ github.workspace }}/.strata/bin/strata

@@ -3,9 +3,9 @@ name: strata upstream report
 # Reusable workflow. A repository calls it from its own scheduled workflow to report the pack
 # versions that its strata records pin behind a newer version of the registry, and keep one issue
 # open per pack that is behind; see docs/src/automation/upstream-issues.md.
-# The caller sets the schedule. It downloads the strata release binary, checks it against
-# SHA256SUMS, and runs scripts/ci/upstream-report.sh from the same tag. Other CI systems run the
-# script directly.
+# The caller sets the schedule. It installs the strata release with
+# scripts/ci/install-strata.sh, which checks the signature of SHA256SUMS and the binary, and runs
+# scripts/ci/upstream-report.sh from the same tag. Other CI systems run the script directly.
 on:
   workflow_call:
     inputs:
@@ -51,30 +51,22 @@ jobs:
     steps:
       # the caller's repository, where the records live
       - uses: actions/checkout@v7
-      # this repository at the requested tag, for the script
+      # this repository at the requested tag, for the installer and the script
       - uses: actions/checkout@v7
         with:
           repository: como-technologies/strata
           ref: ${{ inputs.strata-version }}
           path: .strata
           token: ${{ secrets.strata-token || github.token }}
-      # the release workflow of this repository signed SHA256SUMS; cosign 3 reads its bundle
+      # the installer checks the signature of SHA256SUMS, and cosign 3 reads its bundle
       - uses: sigstore/cosign-installer@v4.1.2
       - name: install strata
         env:
           GH_TOKEN: ${{ secrets.strata-token || github.token }}
           VERSION: ${{ inputs.strata-version }}
         run: |
-          mkdir -p .strata/bin && cd .strata/bin
-          gh release download "$VERSION" --repo como-technologies/strata \
-            --pattern strata-x86_64-unknown-linux-musl --pattern SHA256SUMS --pattern SHA256SUMS.sigstore.json
-          cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
-            --certificate-identity "https://github.com/como-technologies/strata/.github/workflows/release.yml@refs/tags/$VERSION" \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com
-          sha256sum --check --ignore-missing SHA256SUMS
-          chmod +x strata-x86_64-unknown-linux-musl
-          mv strata-x86_64-unknown-linux-musl strata
-          ./strata --version
+          .strata/scripts/ci/install-strata.sh --version "$VERSION" --dir .strata/bin --bin-only \
+            --require-signature
       - name: check the pins and report
         env:
           # the caller's token: it owns the issues

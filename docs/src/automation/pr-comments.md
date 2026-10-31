@@ -165,11 +165,10 @@ jobs:
 | `palette-api-key` | A ref that is not a snapshot file, and `repave`. |
 | `palette-project-uid` | A ref that is not a snapshot file, in a project, and `repave`. |
 
-The workflow downloads the release binary, checks the signature of `SHA256SUMS`,
-checks the binary against it, and runs the script with the token of the caller.
-[The reusable workflows](../install.md#the-reusable-workflows) tell what the
-signature check needs. Another CI system installs strata
-and runs the script.
+The workflow installs the release binary with `install-strata.sh`, which checks the
+signature of `SHA256SUMS` and the binary against it. Then it runs the script with
+the token of the caller. [The reusable workflows](../install.md#the-reusable-workflows)
+tell what each job checks. Another CI system installs strata and runs the script.
 
 ## While this repository is private
 

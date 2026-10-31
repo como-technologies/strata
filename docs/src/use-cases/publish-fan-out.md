@@ -121,8 +121,16 @@ beside the binary:
 
 ```bash
 # from a release of strata, into .strata/ of your checkout
-bash install-strata.sh --version v0.24.0 --dir .strata
+bash install-strata.sh --version v0.24.0 --dir .strata --require-signature
 ```
+
+The installer makes sure that the release workflow of strata signed `SHA256SUMS`,
+then checks each file against the list. `--require-signature` stops the install
+when `cosign` 3 or later is not on the `PATH`, and when the release has no
+signature. Without the option and without `cosign`, the installer installs and
+prints that it did not check the signature.
+[Check the signature](../install.md#check-the-signature) gives the identity that
+the signature must have.
 
 ```bash
 # what do the environments run right now, and does any record no longer match?
