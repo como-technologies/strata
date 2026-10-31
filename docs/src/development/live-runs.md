@@ -392,17 +392,17 @@ one after the other, on AWS or GCP.
 | `lock-manifest-verify` | 1 | #81: the record of the linked add-on version from before reports `DRIFT` |
 | `lock-manifest-back` | 0 | the manifest is put back, and the record verifies |
 | `cluster-outside-template`, `refusal-says` | 1, 0 | #66: a cluster outside the template with a linked version is refused, `ClusterCreateWithTemplateProfileForbidden` |
-| `in-template-doc`, `in-template-names`, `in-template-runs-release` | 0 | #276: a cluster built in the template has `spec.clusterTemplate.uid` of the template, and runs the release version of the template. No result yet. |
-| `in-template-edit`, `in-template-undo` | 0 | #276: the Kubernetes pack of version 1.0.1, which the template does not link, gets one more kubeadm command, and then loses it. No result yet. |
-| `cluster-route`, `cluster-route-says` | 0 | #276: the route of the cluster answers no repave for the move of the cluster to that version, with no reason. No result yet. |
-| `template-route`, `template-route-names`, `template-route-says`, `template-route-json` | 1, 0 | #276: `compare --repave` of the same move asks the route of the template. The first `palette` line names the template, and Palette says repave: `PackValuesUpdated` for `kubernetes` and `kubeadmconfig.postKubeadmCommands`. No result yet. |
+| `in-template-doc`, `in-template-names`, `in-template-runs-release` | 0 | #276: a cluster built in the template has `spec.clusterTemplate.uid` of the template, and runs the release version of the template. |
+| `in-template-edit`, `in-template-undo` | 0 | #276: the Kubernetes pack of version 1.0.1, which the template does not link, gets one more kubeadm command, and then loses it. |
+| `cluster-route`, `cluster-route-says` | 0 | #276: the route of the cluster answers no repave for the move of the cluster to that version, with no reason. |
+| `template-route`, `template-route-names`, `template-route-says`, `template-route-json` | 1, 0 | #276: `compare --repave` of the same move asks the route of the template. The first `palette` line names the template, and Palette says repave: `PackValuesUpdated` for `kubernetes` and `kubeadmconfig.postKubeadmCommands`. |
 | `cluster-runs-release`, `cluster-doc`, `cluster-three-profiles` | 0 | with the template gone, the cluster runs the release version and two add-on profiles |
 | `lock-gone`, `lock-gone-verify` | 0, 1 | #66: the edit in place is accepted again, and the record from before reports `DRIFT`: the lock was the template's |
 | `addon-order` | 0 | #66: the packs of the two add-on profiles start within thirty seconds of each other, whatever order the cluster lists the profiles in: the listed order is no install order. |
 
 Step 4 builds the cluster in the template with the OpenTofu variable
 `cluster_in_template`. The cluster then takes the profiles of the template. The
-checks of the repave answer for such a cluster have no result yet: see
+checks of the repave answer for such a cluster show the facts in
 [The lock of a cluster template](../internals/palette/profiles.md#the-lock-of-a-cluster-template).
 
 A cluster in a template needs a time zone. The variable `cluster_timezone`
@@ -536,8 +536,8 @@ This is the source for
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `release-no-key`, `release-no-key-says` | 0 | #146: a call with no key answers 200, and the body holds `version.installedVersion`. No result yet. |
-| `release-with-key`, `release-with-key-says` | 2, 0 | #146: a call with the `ApiKey` header answers HTTP 500, so a tenant key cannot read the release. No result yet. |
+| `release-no-key`, `release-no-key-says` | 0 | #146: a call with no key answers 200, and the body holds `version.installedVersion`. |
+| `release-with-key`, `release-with-key-says` | 2, 0 | #146: a call with the `ApiKey` header answers HTTP 500, so a tenant key cannot read the release. |
 
 ## pending.sh
 
@@ -558,7 +558,7 @@ makes one change in place and puts it back, so it ends at the baseline.
 | `addon-at-pending`, `addon-pending-root` | 0 | #78: after the edit, the record of `@pending` has another root than the copy that runs |
 | `addon-pending-compare`, `addon-pending-compare-says` | 1, 0 | #78: `compare cluster:<uid> cluster:<uid>@pending` names the pack of the add-on `AUTHORED`, and no pack of the release |
 | `addon-pending-verify` | 0 | #78: `verify` of the pending record, while the update still waits |
-| `addon-repave`, `addon-repave-says`, `addon-repave-json` | 1, 0, 0 | #276: `compare --repave` of the cluster with `cluster:<uid>@pending` exits `1`, and the `palette` line holds the answer of Palette for a manifest of the add-on: no repave. No result yet. |
+| `addon-repave`, `addon-repave-says`, `addon-repave-json` | 1, 0, 0 | #276: `compare --repave` of the cluster with `cluster:<uid>@pending` exits `1`, and the `palette` line holds the answer of Palette for a manifest of the add-on: no repave. |
 | `accept`, `accept-none` | 0 | #70: a push of the content without `resolveNotification` closes the update all the same |
 | `accept-record`, `accept-as-pending` | 0 | #78: the cluster then runs the root that the record of `@pending` held |
 | `accept-undo`, `accept-undo-pending`, `accept-again`, `accept-again-none` | 0 | #70: the undo is an edit too, and opens an update; the accept with `resolveNotification` closes it |
@@ -567,9 +567,9 @@ makes one change in place and puts it back, so it ends at the baseline.
 | `values-undo`, `values-undo-none` | 0 | #70: an edit that gives the profile the content of the copy again closes the update, with no update of the cluster |
 | `values-baseline-none` | 0 | #70: the apply of the baseline, which writes the same content, opens no update |
 | `bump-uid-kept`, `bump-record`, `bump-none` | 0 | #70: a new version number alone, in place with the flag off, keeps the uid and opens no update |
-| `k8s-edit`, `k8s-pending` | 0 | #276: one more kubeadm command in the Kubernetes pack of the release version, in place, opens an update. No result yet. |
-| `k8s-repave`, `k8s-repave-says`, `k8s-repave-json` | 1, 0, 0 | #276: `compare --repave` of the cluster with `cluster:<uid>@pending` exits `1`. The `palette` line and `paletteRepave` hold the answer of Palette: repave, `PackValuesUpdated` for `kubernetes` and `kubeadmconfig.postKubeadmCommands`. No result yet. |
-| `k8s-undo`, `k8s-undo-none`, `k8s-baseline-none` | 0 | #276: the undo closes the update with no update of the cluster, and the apply of the baseline opens none. No result yet. |
+| `k8s-edit`, `k8s-pending` | 0 | #276: one more kubeadm command in the Kubernetes pack of the release version, in place, opens an update. |
+| `k8s-repave`, `k8s-repave-says`, `k8s-repave-json` | 1, 0, 0 | #276: `compare --repave` of the cluster with `cluster:<uid>@pending` exits `1`. The `palette` line and `paletteRepave` hold the answer of Palette: repave, `PackValuesUpdated` for `kubernetes` and `kubeadmconfig.postKubeadmCommands`. |
+| `k8s-undo`, `k8s-undo-none`, `k8s-baseline-none` | 0 | #276: the undo closes the update with no update of the cluster, and the apply of the baseline opens none. |
 
 ## macros.sh
 
@@ -743,7 +743,7 @@ nothing.
 | `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #152, #242: strata sends values that are not YAML to Palette. Palette refuses the whole request, `PackValuesYamlInvalid`, with no pack. Strata exits `2` and writes no record |
 | `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette refuses the same body as the whole request, `PackValuesYamlInvalid` with no pack, and sends the refusal as HTTP 500 |
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
-| `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`: `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`, of the whole request. The import validate route gives it with HTTP 500. Strata prints `palette    refuses`, exits `2`, and writes no record (no result yet) |
+| `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`: `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`, of the whole request. The import validate route gives it with HTTP 500. Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
 | `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`, "Cluster Profile with name '<name>' and version '<version>' already exists". Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
@@ -761,13 +761,13 @@ nothing.
 | `validate-same-pack-twice`, `-says`, `-no-record` | 2, 0, 1 | #273: the API schema refuses two equal layers with HTTP 422 and the code `610` |
 | `validate-manifest-name`, `-says`, `-no-record` | 2, 0, 1 | #273: the import validate route refuses the manifest name `Wilma_1`: `InvalidName` |
 | `validate-manifest-twice`, `-says`, `-no-record` | 2, 0, 1 | #273: the import validate route refuses one manifest name two times in a layer: `DuplicatePackManifestsForbidden` |
-| `bump-profile-record` | 0 | #166: a record of `PROFILE`. No result yet. |
-| `bump-pair` | 0 | #166: the newest version of `kubernetes` is two minor versions or more above the pin. No result yet. |
-| `bump-asked` | 0 | #166: `behind` asks the route of the version, and the bump of `kubernetes` holds an answer of Palette in `bump.paletteValidation`. No result yet. |
-| `bump-refused`, `bump-clusters` | 0 | #166: Palette refuses the move with `DependencyPackUpgradeNotSupported`, and the error names a cluster that runs the version. No result yet. |
-| `bump-text-says` | 0 | #166: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on <clusters>` under the bump. No result yet. |
-| `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. No result yet. |
-| `bump-cluster-record`, `bump-cluster-asked` | 0 | #166: with `CLUSTER`, `behind` on the record of the cluster asks the route of the cluster, and the bump holds an answer. No result yet. |
+| `bump-profile-record` | 0 | #166: a record of `PROFILE`. |
+| `bump-pair` | 0 | #166: the newest version of `kubernetes` is two minor versions or more above the pin. |
+| `bump-asked` | 0 | #166: `behind` asks the route of the version, and the bump of `kubernetes` holds an answer of Palette in `bump.paletteValidation`. |
+| `bump-refused`, `bump-clusters` | 0 | #166: Palette refuses the move with `DependencyPackUpgradeNotSupported`, and the error names a cluster that runs the version. |
+| `bump-text-says` | 0 | #166: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on <clusters>` under the bump. |
+| `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. |
+| `bump-cluster-record`, `bump-cluster-asked` | 0 | #166: with `CLUSTER`, `behind` on the record of the cluster asks the route of the cluster, and the bump holds an answer. |
 | `bump-cluster-refused` | 0 | #166: the route of the cluster refuses the same move, on this cluster. If the route takes the pack of the profile as it is now, it accepts, and this check fails. No result yet. |
 
 No pack of the Public Repo lists a dependency in its tags route. Only stage 6
@@ -801,15 +801,15 @@ expect the verdict `passed` and no message.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `aws-clean`, `edge-clean`, `eks-clean`, `gcp-clean`, `maas-clean`, `azure-clean`, `vsphere-clean` | 0 | #243: the route takes the clean body of the engine, so a refusal in a case below is about its fault. No result yet. |
+| `aws-clean`, `edge-clean`, `eks-clean`, `gcp-clean`, `maas-clean`, `azure-clean`, `vsphere-clean` | 0 | #243: the route takes the clean body of the engine, so a refusal in a case below is about its fault. A live run shows it on AWS: `aws-clean` passed. The other engines need a lab account of their cloud (#409). |
 | `vsphere-instance-floor-cpu`, `-memory`, `-disk`, `-no-type`, each with `-says` | 0 | #243: the route refuses a pool with no CPU, 512 MiB of memory, a 10 GiB disk, or no instance type (`vsphere-instance-floor`). No result yet. |
 | `eks-ami-type-al2`, `eks-ami-type-unknown`, each with `-says` | 0 | #243: the route refuses the type `AL2_x86_64` with `UnsupportedAmiType`, and a type that is not known (`eks-ami-type`). No result yet. |
 | `edge-two-node-pxk`, `edge-two-node-pxk-says` | 0 | #243: the route refuses a two-node cluster whose Kubernetes pack is not K3s with `TwoNodeClusterPackMissing` (`edge-two-node`). No result yet. |
 | `ssh-key-format-vsphere`, `ssh-key-format-edge`, each with `-says` | 0 | #243: the route refuses a key that is not an authorized key with `SshKeyValidationFailure` (`ssh-key-format`). No result yet. |
 | `azure-ssh-key-empty`, `azure-ssh-key-empty-says` | 0 | #243: the route refuses an empty `sshKey` (`azure-ssh-key`). No result yet. |
-| `pack-state-disabled`, `pack-state-deleted`, each with `-says` | 0 | #243: the route refuses a profile that holds a pack in the state `disabled` or `deleted` (`pack-state`). No result yet. |
-| `profile-cloud-mismatch`, `profile-cloud-mismatch-says` | 0 | #243, #415: the route refuses a body with a profile of another cloud type with HTTP 500 and `ClusterProfilesNotSupported`. `palette-validate` gives the verdict `failed` with the message of Palette. The rule `profile-cloud-mismatch` has left the catalog. No result yet. |
-| `pack-cloud-support`, `pack-cloud-support-says` | 0 | #415: the route takes a body with a pack version that does not list the cloud type. `palette-validate` passes and gives no message. So no route answers `pack-cloud-support`, and the rule stays in the catalog as a gap that preflight fills. No result yet. |
+| `pack-state-disabled`, `pack-state-deleted`, each with `-says` | 0 | #243: the route refuses a profile that holds a pack in the state `disabled` or `deleted` (`pack-state`). No live run can show it: Palette refuses a new profile with such a pack at the create, as the cases of [`route-bodies.sh`](#route-bodiessh) show. |
+| `profile-cloud-mismatch`, `profile-cloud-mismatch-says` | 0 | #243, #415: the route refuses a body with a profile of another cloud type with HTTP 500 and `ClusterProfilesNotSupported`. `palette-validate` gives the verdict `failed` with the message of Palette. The rule `profile-cloud-mismatch` has left the catalog. |
+| `pack-cloud-support`, `pack-cloud-support-says` | 0 | #415: the route takes a body with a pack version that does not list the cloud type. `palette-validate` passes and gives no message. So no route answers `pack-cloud-support`, and the rule stays in the catalog as a gap that preflight fills. |
 | `vsphere-static-ip-pool-empty`, `vsphere-static-ip-pool-dhcp`, each with `-says` | 0 | #243: the route refuses a static network with no `parentPoolUid`, and a static network on a DHCP cluster (`vsphere-static-ip-pool`). No result yet. |
 | `vsphere-controlplane-endpoint-no-host`, `edge-vip-multi-node-no-host`, each with `-says` | 0 | #243: the route refuses the type `VIP` with an empty host (`vsphere-controlplane-endpoint`, `edge-vip-multi-node`). No result yet. |
 | `azure-subnets-in-vnet-no-cidr`, `azure-subnets-in-vnet-no-cidr-says` | 0 | #243: the route refuses a `vnetName` with an empty `vnetCidrBlock` (`azure-subnets-in-vnet`). No result yet. |
@@ -863,10 +863,10 @@ stays in the directory, and `validate-route.sh` skips it.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `aws-clean-body` | 0 | #408: `aws-clean.json` names the cloud account of the lab and the release profile. No result yet. |
-| `pack-state-disabled-body`, `pack-state-deleted-body`, `profile-cloud-mismatch-body`, `pack-cloud-support-body` | 0 | #408: Palette takes the profile of the case, and the body holds the release profile and that profile. A case that is skipped has no check. No result yet. |
-| `validate-route` | 0 | #413: `validate-route.sh` exits 0 on the bodies, while the profiles of the cases are in the tenant. Its checks are those of [`validate-route.sh`](#validate-routesh), in `validate-route/steps.log`. No result yet. |
-| `pack-state-disabled-deleted`, `pack-state-deleted-deleted`, `profile-cloud-mismatch-deleted`, `pack-cloud-support-deleted` | 0 | #408, #413: the script deletes the profile of each case that it made, after `validate-route.sh` has run. No result yet. |
+| `aws-clean-body` | 0 | #408: `aws-clean.json` names the cloud account of the lab and the release profile. |
+| `pack-state-disabled-body`, `pack-state-deleted-body`, `profile-cloud-mismatch-body`, `pack-cloud-support-body` | 0 | #408: Palette takes the profile of the case, and the body holds the release profile and that profile. A case that is skipped has no check. |
+| `validate-route` | 0 | #413: `validate-route.sh` exits 0 on the bodies, while the profiles of the cases are in the tenant. Its checks are those of [`validate-route.sh`](#validate-routesh), in `validate-route/steps.log`. |
+| `pack-state-disabled-deleted`, `pack-state-deleted-deleted`, `profile-cloud-mismatch-deleted`, `pack-cloud-support-deleted` | 0 | #408, #413: the script deletes the profile of each case that it made, after `validate-route.sh` has run. |
 
 ## export.sh
 
@@ -956,9 +956,9 @@ role in the project. It runs only as `tiers.sh 6`. With no key set, it says
 | `rbac-verify`, `rbac-verify-says` | 0 | #106: `verify` of the record exits `0`, and names `policy CHANGED` |
 | `rbac-undo`, `rbac-after-read`, `rbac-after` | 0 | the role bindings of cluster A are as before the stage |
 | `limited-control` | 0 | #276: the key of the example reads the role bindings of cluster A |
-| `limited-read`, `limited-status` | 2, 0 | #276: the second key does not read them: Palette answers HTTP 500, and not 403, and `api.sh` exits `2`. No result yet. |
-| `limited-code`, `limited-code-says`, `limited-message` | ?, 0, 0 | #276: the body holds the code `ResourceAccessDenied` and the message `Project '<project uid>' access denied`. No result yet. |
-| `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer: a record of cluster A that it reads with the second key, and the `errors` of its policy tier. No result yet. |
+| `limited-read`, `limited-status` | 2, 0 | #276: the second key does not read them: Palette answers HTTP 500, and not 403, and `api.sh` exits `2`. |
+| `limited-code`, `limited-code-says`, `limited-message` | ?, 0, 0 | #276: the body holds the code `ResourceAccessDenied` and the message `Project '<project uid>' access denied`. |
+| `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer: a record of cluster A that it reads with the second key, and the `errors` of its policy tier. Live, `strata record` of cluster A with the second key makes no record. It exits `2`, and it prints the answer of Palette: HTTP 500, `ResourceAccessDenied`, `Project '<project uid>' access denied`. So no record holds `errors`, and `limited-record-errors` has no file to read (exit `2`). |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
@@ -1150,13 +1150,13 @@ the example at its baseline with cluster A.
 | `ask-repave`, `ask-repave-answer` | 1, 0 | #385: `compare --repave` asks Palette if the move of cluster A to the next version repaves. The command exits `1` because the roots differ, and the report holds `paletteRepave.required`. |
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
 | `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request, and in the tier of Palette, which calls the validate routes and creates nothing. |
-| `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it (no result yet) |
-| `preflight-offering` | 0 | #143: `instance-offering` asks the instance type route of the region with the account of the body, one request for all its pools, and passes: the type of the release body is offered in its zone (no result yet) |
+| `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it |
+| `preflight-offering` | 0 | #143: `instance-offering` asks the instance type route of the region with the account of the body, one request for all its pools, and passes: the type of the release body is offered in its zone |
 | `preflight-fault` | 1 | #385: a body with a cloud account that the project lacks fails the gate `--strict`. |
 | `nightly` | 0 | #81: `verify-report.sh` finds every record unchanged |
 | `fleet`, `fleet-has-a` | 0 | #81: the fleet of a label holds cluster A |
 | `upstream` | 1 | #81: `upstream-report.sh` finds pins that the registry has passed |
-| `upstream-asks`, `upstream-asks-says` | 1, 0 | #166: `upstream-report.sh` with the impact asks Palette about the bump of each pin that is behind, and the bump column of an issue holds the answer. No result yet. |
+| `upstream-asks`, `upstream-asks-says` | 1, 0 | #166: `upstream-report.sh` with the impact asks Palette about the bump of each pin that is behind, and the bump column of an issue holds the answer. |
 | `override`, `override-record`, `override-not-behind` | 0 | #81: a value overridden on cluster A opens no notification: Palette says that no update waits |
 | `override-drift` | 1 | #81: the record of cluster A reports the drift |
 | `override-release` | 0 | #81: the records of the versions verify: the profiles did not change |
