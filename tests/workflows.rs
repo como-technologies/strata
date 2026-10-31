@@ -115,45 +115,82 @@ fn the_lint_and_test_job_runs_the_tests_of_xtask() {
     assert!(!runs.contains(&"cargo test -p xtask"), "{runs:?}");
 }
 
-/// A workflow that downloads a release makes sure that the release workflow signed `SHA256SUMS`
-/// before it trusts a file against the sums. The check names the repository, the workflow, and
-/// the tag, so a release from another workflow or another tag does not pass.
+/// The reusable workflows that install a release of strata.
+const INSTALLING_WORKFLOWS: [&str; 7] = [
+    "comment.yml",
+    "merge-gate.yml",
+    "preflight.yml",
+    "promote-gate.yml",
+    "retire-gate.yml",
+    "upstream.yml",
+    "verify.yml",
+];
+
+/// A workflow that installs a release runs `install-strata.sh` from this repository at the tag
+/// of `strata-version`. The installer makes sure that the release workflow signed `SHA256SUMS`,
+/// and checks each file against the sums. A workflow has no copy of that check, so one path
+/// holds the rule of the signature. The checkout of the tag and cosign come before the install.
 #[test]
-fn each_workflow_that_downloads_a_release_verifies_the_signature_of_the_sums_first() {
-    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows");
-    let mut seen = 0;
-    for entry in std::fs::read_dir(&dir).unwrap() {
-        let path = entry.unwrap().path();
-        let text = std::fs::read_to_string(&path).unwrap();
-        if !text.contains("gh release download") {
-            continue;
-        }
-        seen += 1;
-        let name = path.display();
+fn each_workflow_that_installs_a_release_runs_the_installer_with_cosign_and_the_tag_checked_out() {
+    for file in INSTALLING_WORKFLOWS {
+        let steps = steps(file);
+        let position = |wanted: &dyn Fn(&serde_yaml::Value) -> bool| {
+            steps
+                .iter()
+                .position(wanted)
+                .unwrap_or_else(|| panic!("{file}: a step is missing"))
+        };
+        let checkout = position(&|s| {
+            s["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("actions/checkout@"))
+                && s["with"]["repository"].as_str() == Some("como-technologies/strata")
+                && s["with"]["ref"].as_str() == Some("${{ inputs.strata-version }}")
+                && s["with"]["path"].as_str() == Some(".strata")
+        });
+        let cosign = position(&|s| {
+            s["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("sigstore/cosign-installer@"))
+        });
+        let install = position(&|s| {
+            s["run"].as_str().is_some_and(|r| {
+                r.contains(".strata/scripts/ci/install-strata.sh")
+                    && r.contains("--require-signature")
+            })
+        });
         assert!(
-            text.contains("uses: sigstore/cosign-installer@"),
-            "{name}: no cosign in the job"
+            checkout < install && cosign < install,
+            "{file}: the checkout of the tag and cosign come before the installer"
         );
-        assert!(
-            text.contains("--pattern SHA256SUMS --pattern SHA256SUMS.sigstore.json"),
-            "{name}: the bundle of SHA256SUMS does not come down"
+        // the installer reads the token from GH_TOKEN, and the version from the call
+        assert_eq!(
+            steps[install]["env"]["GH_TOKEN"].as_str(),
+            Some("${{ secrets.strata-token || github.token }}"),
+            "{file}"
         );
-        assert!(
-            text.contains(
-                "--certificate-identity \"https://github.com/como-technologies/strata/.github/workflows/release.yml@refs/tags/$VERSION\""
-            ) && text.contains(
-                "--certificate-oidc-issuer https://token.actions.githubusercontent.com"
-            ),
-            "{name}: the check does not name the identity of the release workflow"
-        );
-        let verify = text.find("cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json");
-        let sums = text.find("sha256sum --check");
-        assert!(
-            verify.is_some() && verify < sums,
-            "{name}: the signature check must come before the check of the sums"
+        assert_eq!(
+            steps[install]["env"]["VERSION"].as_str(),
+            Some("${{ inputs.strata-version }}"),
+            "{file}"
         );
     }
-    assert!(seen >= 7, "only {seen} workflows download a release");
+}
+
+/// The check of the signature is in the installer alone. A workflow that copies it, or that
+/// downloads a release by hand, can drift from the rule that the installer holds. `release.yml`
+/// signs the files and checks them, so it is not one of these workflows.
+#[test]
+fn no_workflow_copies_the_download_or_the_signature_check_of_a_release() {
+    for file in INSTALLING_WORKFLOWS {
+        let text = workflow_text(file);
+        for copy in ["gh release download", "cosign verify-blob", "sha256sum"] {
+            assert!(
+                !text.contains(copy),
+                "{file}: has its own copy of `{copy}`; run scripts/ci/install-strata.sh"
+            );
+        }
+    }
 }
 
 /// The last job of the release workflow installs the tag that it published, as a consumer does.
@@ -218,13 +255,27 @@ printf '%s' "${FAKE_OUT-}"
 exit "${FAKE_EXIT:-0}"
 "#;
 
-/// The workflow `file` of `.github/workflows/`, parsed.
-fn workflow(file: &str) -> serde_yaml::Value {
+/// The text of the workflow `file` of `.github/workflows/`.
+fn workflow_text(file: &str) -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(".github/workflows")
         .join(file);
-    serde_yaml::from_str(&std::fs::read_to_string(&path).unwrap())
-        .unwrap_or_else(|e| panic!("{file}: not YAML: {e}"))
+    std::fs::read_to_string(&path).unwrap()
+}
+
+/// The workflow `file` of `.github/workflows/`, parsed.
+fn workflow(file: &str) -> serde_yaml::Value {
+    serde_yaml::from_str(&workflow_text(file)).unwrap_or_else(|e| panic!("{file}: not YAML: {e}"))
+}
+
+/// The steps of each job of the workflow `file`, in order.
+fn steps(file: &str) -> Vec<serde_yaml::Value> {
+    workflow(file)["jobs"]
+        .as_mapping()
+        .unwrap()
+        .values()
+        .flat_map(|job| job["steps"].as_sequence().into_iter().flatten().cloned())
+        .collect()
 }
 
 /// Run the `run` script of the step `step` of the workflow `file` in a fresh directory.
@@ -232,12 +283,8 @@ fn workflow(file: &str) -> serde_yaml::Value {
 /// Each variable of the `env` of the step is empty unless `env` gives it a value. `tools` are the
 /// paths, under the directory, of the stand-ins that [`LOGGING_TOOL`] describes.
 fn run_step(file: &str, step: &str, env: &[(&str, &str)], tools: &[&str]) -> StepRun {
-    let doc = workflow(file);
-    let step = doc["jobs"]
-        .as_mapping()
-        .unwrap()
-        .values()
-        .flat_map(|job| job["steps"].as_sequence().into_iter().flatten())
+    let step = steps(file)
+        .into_iter()
         .find(|s| s["name"].as_str() == Some(step))
         .unwrap_or_else(|| panic!("{file} has no step named {step}"));
     let dir = tempfile::tempdir().unwrap();
@@ -388,15 +435,10 @@ fn the_preflight_workflow_asks_for_no_write_permission_and_posts_no_comment() {
 #[test]
 fn the_comment_workflow_reads_the_artifact_that_the_preflight_workflow_keeps() {
     let artifact = |file: &str, action: &str| -> serde_yaml::Value {
-        let doc = workflow(file);
-        let step = doc["jobs"]
-            .as_mapping()
-            .unwrap()
-            .values()
-            .flat_map(|job| job["steps"].as_sequence().into_iter().flatten())
+        let step = steps(file)
+            .into_iter()
             .find(|s| s["uses"].as_str().is_some_and(|u| u.starts_with(action)))
-            .unwrap_or_else(|| panic!("{file} has no step that uses {action}"))
-            .clone();
+            .unwrap_or_else(|| panic!("{file} has no step that uses {action}"));
         step["with"].clone()
     };
     let kept = artifact("preflight.yml", "actions/upload-artifact@");
@@ -522,6 +564,40 @@ fn the_promote_gate_step_gives_each_allowed_difference_its_own_option() {
         assert_eq!(
             run.calls(),
             ["strata same-release dev.json prod.json --allow registry-move --allow no-digest"]
+        );
+    }
+}
+
+/// Each workflow gives the installer the tag of `strata-version`, a directory that holds the
+/// binaries beside each other, and `--require-signature`: a runner with no cosign fails the job
+/// and does not install a binary that nothing signed.
+#[test]
+fn the_install_step_of_each_workflow_requires_the_signature_of_the_version_it_was_given() {
+    for file in INSTALLING_WORKFLOWS {
+        let name = steps(file)
+            .iter()
+            .find(|s| {
+                s["run"]
+                    .as_str()
+                    .is_some_and(|r| r.contains("install-strata.sh"))
+            })
+            .and_then(|s| s["name"].as_str().map(str::to_string))
+            .unwrap_or_else(|| panic!("{file} has no step that runs the installer"));
+        let run = run_step(
+            file,
+            &name,
+            &[("VERSION", "v1.2.3")],
+            &[".strata/scripts/ci/install-strata.sh"],
+        );
+        assert!(
+            run.output.status.success(),
+            "{file}: {}",
+            text(&run.output.stderr)
+        );
+        assert_eq!(
+            run.calls(),
+            ["install-strata.sh --version v1.2.3 --dir .strata/bin --bin-only --require-signature"],
+            "{file}"
         );
     }
 }

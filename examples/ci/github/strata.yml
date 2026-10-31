@@ -6,7 +6,7 @@
 # and an eighth when you turn on the comment of the preflight.
 # A version bump is sixteen lines here: each job names the tag twice, once in `uses: ...@TAG` and once
 # in `strata-version:`. Both must carry the same tag. `uses:` selects the workflow file, and
-# `strata-version:` is what each workflow checks this repository out at and downloads the binary
+# `strata-version:` is what each workflow checks this repository out at and installs the binary
 # for, so a mismatch runs one release's workflow against another release's scripts.
 #
 # Secrets to set in the repository or the organization:
