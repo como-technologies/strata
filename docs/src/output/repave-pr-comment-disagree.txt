@@ -1,0 +1,5 @@
+$ STRATA_QUIET=1 scripts/ci/pr-comment.sh cluster:payments aws-stack@1.1.7 --repave --dry-run > comment.md
+pr-comment: max impact: repave; label repave: Palette says no repave; would remove label repave if present
+$ grep -E '^\*\*(Palette|Note)' comment.md
+**Palette:** no repave
+**Note:** the impact table says repave, and Palette says no repave for this cluster: the table does not describe its upgrade engine

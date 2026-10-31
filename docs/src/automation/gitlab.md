@@ -49,8 +49,9 @@ in Settings, Merge requests, turn on "Pipelines must succeed".
 | Variable | Needed for | Note |
 | --- | --- | --- |
 | `GITLAB_TOKEN` | the note, the label, the issues | A project or group access token with the `api` scope. **The job token cannot write notes or issues.** Mask it. |
-| `PALETTE_API_KEY` | verify, the upstream report, and a ref that is not a file | Mask it. |
+| `PALETTE_API_KEY` | verify, the upstream report, `STRATA_REPAVE`, and a ref that is not a file | Mask it. |
 | `PALETTE_PROJECT_UID` | a ref in a project | |
+| `STRATA_REPAVE` | the comment | `true` asks Palette if the change repaves the cluster, and its answer decides the label. `false` by default. See [Pull request comments](./pr-comments.md#ask-palette-if-the-change-repaves). |
 | `STRATA_TOKEN` | the download | A token that can read the strata releases, while that repository is private. |
 | `STRATA_PROMOTE` | the promotion gate | The records, in promotion order. Give it on the pipeline run, not as a project variable: the job appears only in a pipeline that carries it. |
 | `STRATA_RETIRE` | the retire gate | The version to retire, as `name@version`. Give it on the pipeline run, as above. |

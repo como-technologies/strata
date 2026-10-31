@@ -63,6 +63,9 @@ does not repave. See
 `/v1/spectroclusters/<uid>/validate/repave`. The `POST` asks a question and
 changes nothing: the cluster keeps its instances.
 
+The comment of a pull request asks the same question. See
+[Ask Palette if the change repaves](../../automation/pr-comments.md#ask-palette-if-the-change-repaves).
+
 ## Ask about the update that waits
 
 When an update waits for a cluster, give `cluster:<cluster>@pending` as the

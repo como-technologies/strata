@@ -22,6 +22,60 @@ to a file, so the block holds the label line alone:
 {{#include ../output/review-pr-comment.txt}}
 ```
 
+## Ask Palette if the change repaves
+
+The label comes from the impact table, and the table is a hint. For a cluster,
+Palette answers the question itself. `--repave` asks Palette, as
+[`compare --repave`](../commands/compare/repave.md) does, and puts the answer in
+the comment. One ref must be a cluster, and the other a profile version that
+Palette holds:
+
+```bash
+scripts/ci/pr-comment.sh cluster:payments aws-stack@1.1.6 --repave
+```
+
+The comment gets the `Palette:` line of the report. The label follows the answer
+of Palette, and not the table. Here the table says `may-repave`, which is below
+the threshold. Palette says repave, so the script adds the label. The note on
+standard error says which one decided:
+
+```text
+{{#include ../output/repave-pr-comment.txt}}
+```
+
+When Palette says no repave, the script removes the label. A change of the CSI
+values is `cluster-wide` in the table, and Palette says no repave:
+
+```text
+{{#include ../output/repave-pr-comment-csi.txt}}
+```
+
+Palette also says no repave for a new Kubernetes version, where the table says
+`repave`. The script removes the label, and the comment carries the note that the
+two disagree:
+
+```text
+{{#include ../output/repave-pr-comment-disagree.txt}}
+```
+
+| Palette says | The label |
+| --- | --- |
+| repave | The script adds the label, also where the table says otherwise. |
+| no repave | The script removes the label, also where the table says otherwise. A threshold below `may-repave` still reads the table. |
+| nothing | The table decides, as it does without `--repave`. |
+
+Palette says nothing when the pair has no cluster, or when the profile side has
+no uid in Palette, as a candidate has none. A request to Palette that fails has
+the same result. The script says why on standard error, and the table decides:
+
+```text
+{{#include ../output/repave-pr-comment-gap.txt}}
+```
+
+`--repave` needs the key of Palette, because Palette answers for a cluster. The
+script asks once for each rendering of the report, so Palette gets the question
+twice. The question changes nothing in Palette.
+
 ## Options
 
 | Option | Default | Function |
@@ -31,6 +85,7 @@ to a file, so the block holds the label line alone:
 | `--host github\|gitlab` | from the CI variables | The code host. |
 | `--label NAME` | `repave` | The label. |
 | `--threshold LEVEL` | `repave` | The lowest [impact](../reference/impact.md) that adds the label. |
+| `--repave` | | Ask Palette if the change repaves the cluster, and let its answer decide the label. |
 | `--dry-run` | | Print, and change nothing. |
 
 The script is in this repository, at `scripts/ci/pr-comment.sh`. It needs `strata`
@@ -78,13 +133,14 @@ jobs:
 | `strata-version` | yes | The strata release, a tag of this repository. |
 | `label` | no | The label. Default `repave`. |
 | `threshold` | no | The impact that earns the label. Default `repave`. |
+| `repave` | no | Ask Palette if the change repaves the cluster. Default `false`. |
 | `palette-api` | no | A self-hosted Palette address. |
 
 | Secret | Needed for |
 | --- | --- |
 | `strata-token` | A read token for this repository, while it is private. |
-| `palette-api-key` | A ref that is not a snapshot file. |
-| `palette-project-uid` | A ref that is not a snapshot file, in a project. |
+| `palette-api-key` | A ref that is not a snapshot file, and `repave`. |
+| `palette-project-uid` | A ref that is not a snapshot file, in a project, and `repave`. |
 
 The workflow downloads the release binary, checks it against `SHA256SUMS`, and
 runs the script with the token of the caller. Another CI system installs strata

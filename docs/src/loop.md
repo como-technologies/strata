@@ -18,7 +18,7 @@ Palette, shows each change after the approval.
 | A change | the author, in a pull request | Does Palette accept the packs? What does this change do to the clusters? | `snapshot --from-candidate --validate`, then `pr-comment.sh`: `snapshot --from-candidate` and `compare` | [Review a change](./use-cases/review.md) |
 | The merge button | the merge gate | Do the records after the merge still hold? | `merge-gate.sh` | [The merge gate](./automation/merge-gate.md) |
 | The publish | the pipeline of the team | Does Palette hold what the reviewer approved? | `snapshot`, then `same-release` | [Review a change](./use-cases/review.md) |
-| The move of a cluster | the pipeline of the team | Does the move repave the nodes? Does Palette accept the packs? | `compare cluster:<name> <version> --repave` and `--validate` | [Ask Palette if the change repaves](./commands/compare/repave.md), [Ask Palette if it accepts the packs](./commands/compare/validate.md) |
+| The move of a cluster | the pipeline of the team | Does the move repave the nodes? Does Palette accept the packs? | `compare cluster:<name> <version> --repave` and `--validate`, and `pr-comment.sh --repave` on the pull request of the move | [Ask Palette if the change repaves](./commands/compare/repave.md), [Ask Palette if it accepts the packs](./commands/compare/validate.md) |
 | A promotion | a person, on demand | Do the projects hold one release? | `same-release` | [Promote a release](./use-cases/promote.md) |
 | Before a build | the pipeline, and the person who writes the cluster | Can Palette build this cluster? | `preflight`: the static tier on the pull request, the live tier before the build, and the watch during it | [Can Palette build this cluster?](./use-cases/stop-a-build.md) |
 | Each night | a scheduled job | Did a version change under its record? | `verify-report.sh` | [Drift issues](./automation/drift-issues.md) |
@@ -122,6 +122,18 @@ The two commands exit `1`, because the roots differ. The pipeline reads the
 answers, and the team decides. [Ask Palette if the change repaves](./commands/compare/repave.md)
 and [Ask Palette if it accepts the packs](./commands/compare/validate.md) give
 the codes and the options.
+
+The pull request that moves `payments` can ask the same question. With
+`--repave`, `pr-comment.sh` puts the answer of Palette in the comment, and the
+label `repave` follows that answer. The table of impacts decides when Palette
+gives no answer. The note below says which one decided:
+
+```text
+{{#include output/loop-ask-repave-comment.txt}}
+```
+
+[Ask Palette if the change repaves](./automation/pr-comments.md#ask-palette-if-the-change-repaves)
+gives the rule for the label.
 
 `dev` moves `payments` to the new version, and the cluster runs it:
 

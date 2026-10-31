@@ -426,6 +426,19 @@ fn the_loop(r: &mut Runner) {
         false,
         "strata compare cluster:payments aws-stack@1.1.0 --validate | grep -E '^(aws-stack|root |palette)'",
     );
+    // the pull request that moves the cluster: its comment holds the answer, and the label follows it
+    r.step(
+        "loop-ask-repave-comment",
+        0,
+        true,
+        "STRATA_QUIET=1 scripts/ci/pr-comment.sh cluster:payments aws-stack@1.1.0 --repave --dry-run > comment.md",
+    );
+    r.step(
+        "loop-ask-repave-comment",
+        0,
+        false,
+        "grep '^\\*\\*Palette' comment.md",
+    );
     // dev moves payments to the new version, and a record says what the cluster runs
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A110], &[]));
     label(r, DEV, PAYMENTS, "dev");
@@ -2296,6 +2309,21 @@ fn use_cases(r: &mut Runner) {
         false,
         "strata compare cluster:payments aws-stack@1.1.6 --repave --json | jq .paletteRepave",
     );
+    // the comment of the pull request that moves the cluster: the answer of Palette decides the
+    // label. The table says may-repave for this change, which is below the threshold
+    r.step(
+        "repave-pr-comment",
+        0,
+        true,
+        "STRATA_QUIET=1 scripts/ci/pr-comment.sh cluster:payments aws-stack@1.1.6 --repave --dry-run > comment.md",
+    );
+    r.step(
+        "repave-pr-comment",
+        0,
+        false,
+        "grep '^\\*\\*Palette' comment.md",
+    );
+    r.serve_here(); // state 1: Palette says that the kubeadm change repaves
     r.tenant(|t| t.repave_answer(DEV, PAYMENTS, false));
     r.step(
         "repave-csi",
@@ -2308,6 +2336,18 @@ fn use_cases(r: &mut Runner) {
         "repave-csi",
         r"^(aws-stack|root |note |palette|[ ~] \[csi|      impact)",
     );
+    r.step(
+        "repave-pr-comment-csi",
+        0,
+        true,
+        "STRATA_QUIET=1 scripts/ci/pr-comment.sh cluster:payments aws-stack@1.1.2 --repave --dry-run > comment.md",
+    );
+    r.step(
+        "repave-pr-comment-csi",
+        0,
+        false,
+        "grep '^\\*\\*Palette' comment.md",
+    );
     r.profile(
         DEV,
         A117,
@@ -2319,6 +2359,7 @@ fn use_cases(r: &mut Runner) {
             version: "1.36.3",
         }],
     );
+    r.serve_here(); // state 2: Palette says that no change repaves, and 1.1.7 exists
     r.step(
         "repave-disagree",
         1,
@@ -2329,6 +2370,27 @@ fn use_cases(r: &mut Runner) {
         "repave-disagree-lines",
         "repave-disagree",
         r"^(aws-stack|root |note |palette|[ ~] \[k8s|      impact)",
+    );
+    // the table says repave for a new Kubernetes version, and Palette says no: the label follows
+    // Palette, and the comment carries the note of the disagreement
+    r.step(
+        "repave-pr-comment-disagree",
+        0,
+        true,
+        "STRATA_QUIET=1 scripts/ci/pr-comment.sh cluster:payments aws-stack@1.1.7 --repave --dry-run > comment.md",
+    );
+    r.step(
+        "repave-pr-comment-disagree",
+        0,
+        false,
+        "grep -E '^\\*\\*(Palette|Note)' comment.md",
+    );
+    // two versions have no cluster to ask about, so the table decides
+    r.step(
+        "repave-pr-comment-gap",
+        0,
+        true,
+        "STRATA_QUIET=1 scripts/ci/pr-comment.sh aws-stack@1.1.1 aws-stack@1.1.6 --repave --dry-run > comment.md",
     );
     r.step(
         "repave-usage",
