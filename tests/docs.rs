@@ -111,20 +111,39 @@ fn the_readme_version_badge_is_the_version_in_cargo_toml() {
 /// manifest, so it can drift: `just version` rewrites it only while it names the same version.
 #[test]
 fn the_preflight_crate_has_the_version_of_strata() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let version_of = |manifest: &str| {
-        read(&root.join(manifest))
-            .lines()
-            .find_map(|l| l.strip_prefix("version = \"").map(str::to_owned))
-            .and_then(|l| l.strip_suffix('"').map(str::to_owned))
-            .unwrap_or_else(|| panic!("{manifest} has a version line"))
-    };
     let strata = version_of("Cargo.toml");
     let preflight = version_of("preflight/Cargo.toml");
     assert_eq!(
         preflight, strata,
         "preflight/Cargo.toml is {preflight} and Cargo.toml is {strata}: a release keeps them equal"
     );
+}
+
+/// The version line of a manifest, from the root of the repository.
+fn version_of(manifest: &str) -> String {
+    read(&Path::new(env!("CARGO_MANIFEST_DIR")).join(manifest))
+        .lines()
+        .find_map(|l| l.strip_prefix("version = \"").map(str::to_owned))
+        .and_then(|l| l.strip_suffix('"').map(str::to_owned))
+        .unwrap_or_else(|| panic!("{manifest} has a version line"))
+}
+
+/// Another repository depends on each library crate by its git address and a release tag. The
+/// page of the library shows both lines, and `just version` moves the tag of each with the
+/// release. A line that names another tag sends a reader to the wrong release.
+#[test]
+fn the_library_page_shows_the_git_dependency_of_each_crate_at_this_release() {
+    let page = read(&docs().join("automation/library.md"));
+    let tag = format!("v{}", version_of("Cargo.toml"));
+    for package in ["strata", "strata-preflight"] {
+        let line = format!(
+            "{package} = {{ git = \"ssh://git@github.com/como-technologies/strata.git\", tag = \"{tag}\" }}"
+        );
+        assert!(
+            page.lines().any(|l| l == line),
+            "automation/library.md has no line {line:?}"
+        );
+    }
 }
 
 #[test]
