@@ -416,3 +416,45 @@ impl Pack {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Whether `params_problem` refuses the one param `name` with `value`.
+    fn refused(name: &str, value: Value) -> bool {
+        params_problem(&Map::from_iter([(name.to_string(), value)])).is_some()
+    }
+
+    #[test]
+    fn the_rule_for_a_param_refuses_what_the_schema_of_the_params_refuses() {
+        let schema = params_schema(&mut SchemaGenerator::default());
+        assert_eq!(schema.as_value()["additionalProperties"]["type"], "string");
+        assert_eq!(
+            schema.as_value()["properties"][TIER_INSTALL_ORDER]["type"],
+            "integer"
+        );
+        assert!(!refused("replicas", json!("3")));
+        assert!(!refused("replicas", json!("")));
+        assert!(!refused(TIER_INSTALL_ORDER, json!(2)));
+        for value in [json!(3), json!(true), json!(null), json!(["a"]), json!({})] {
+            assert!(refused("replicas", value.clone()), "{value}");
+        }
+        for value in [json!("2"), json!(2.5), json!(null), json!(true)] {
+            assert!(refused(TIER_INSTALL_ORDER, value.clone()), "{value}");
+        }
+    }
+
+    #[test]
+    fn the_problem_of_a_param_names_the_param_and_the_type_that_it_needs() {
+        let problem = |params: Value| params_problem(params.as_object().unwrap());
+        assert_eq!(
+            problem(json!({"installOrder": "2"})).as_deref(),
+            Some(r#"the param installOrder is "2", and it must be an integer"#)
+        );
+        assert_eq!(
+            problem(json!({"replicas": 3})).as_deref(),
+            Some("the param replicas is 3, and it must be text")
+        );
+    }
+}
