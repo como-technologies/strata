@@ -1093,7 +1093,7 @@ pub fn verify_summary_with(
 ) -> strata::ops::VerifySummary {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("record.json");
-    fs::write(&path, record.to_json(true).unwrap()).unwrap();
+    write_snapshot(&path, record, true);
     strata::ops::verify_many(
         &[path],
         None,
