@@ -18,8 +18,6 @@ confidence of each rule is counted:
 <https://legendary-train-pzq9ojj.pages.github.io/commands/preflight.html>.
 
 `strata preflight ...` runs this binary when both are installed. Another
-repository depends on the crate by its git address:
-
-```toml
-strata-preflight = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.24.0" }
-```
+repository depends on the crate by its git address and its name. The book shows
+the dependency and the items to start from:
+<https://legendary-train-pzq9ojj.pages.github.io/automation/library.html#use-strata-preflight-as-a-library>.
