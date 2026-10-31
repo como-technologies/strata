@@ -30,10 +30,11 @@ build-target target:
       *) cargo build --release --target "{{target}}" -p strata -p strata-preflight ;;
     esac
 
-# Run the unit, library, binary, and script tests of strata and of strata-preflight. No network.
+# Run the tests of strata, of strata-preflight, and of xtask, the stand-in for Palette. No network.
 test: stand-in
     cargo test
     cargo test -p strata-preflight
+    cargo test -p xtask
 
 # The rustdoc command of `just lint` and `just api-docs`. The two recipes share one command, so
 # that they share one build. `just lint` adds the package xtask.
