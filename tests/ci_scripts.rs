@@ -50,6 +50,37 @@ fn every_script_a_release_carries_prints_its_help_and_exits_0() {
     }
 }
 
+/// The line of each script that prints its help: the comment block from line 2 to the first line
+/// of `set -euo`. A script ships alone and cannot source a function, so each one has this line.
+const HELP_LINE: &str = r#"sed -n '2,/^set -euo/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'"#;
+
+#[test]
+fn each_script_prints_its_whole_header_as_its_help_from_one_line() {
+    for name in SHIPPED {
+        let source = repo_file(&format!("scripts/ci/{name}"));
+        assert!(
+            source.contains(HELP_LINE),
+            "{name} prints its help from a line range, or in another form than the others"
+        );
+        // the header ends at the line before the first `set -euo`, and each line of it is a comment
+        let expected: Vec<&str> = source
+            .lines()
+            .skip(1)
+            .take_while(|l| !l.starts_with("set -euo"))
+            .map(|l| {
+                l.strip_prefix("# ")
+                    .or_else(|| l.strip_prefix('#'))
+                    .unwrap_or_else(|| panic!("{name}: a line of the header is not a comment: {l}"))
+            })
+            .collect();
+        assert_eq!(
+            help_of(name).lines().collect::<Vec<_>>(),
+            expected,
+            "{name} --help is not its header, line for line"
+        );
+    }
+}
+
 /// The files a team copies, and the reusable workflows they call. They name scripts, options and a
 /// release version, and nothing else reads them: a renamed option or a moved script breaks a
 /// drop-in silently.
@@ -794,10 +825,13 @@ esac
 /// A `strata` that logs every call and answers `snapshot <ref> -o <file>` with a canned snapshot,
 /// so a live ref needs no Palette; everything else goes to the real binary.
 ///
-/// `compare --repave` is the one question that needs Palette. The stand-in runs the real
-/// comparison without the option and adds the answer in FAKE_REPAVE_JSON (the `paletteRepave` of
-/// the report) or FAKE_REPAVE_TEXT (the `Palette:` line of the markdown). When FAKE_REPAVE_FAIL is
-/// set, it exits 2 as strata does when Palette gives no answer.
+/// `compare --repave` is the one question that needs Palette. The real binary decides which pair
+/// the question applies to, and it does so before any request. The stand-in asks it with a Palette
+/// that nothing listens at, and passes on its refusal of the pair as strata prints it. For any
+/// other pair, the stand-in runs the real comparison without the option and adds the answer in
+/// FAKE_REPAVE_JSON (the `paletteRepave` of the report) or FAKE_REPAVE_TEXT (the `Palette:` line
+/// of the markdown). When FAKE_REPAVE_FAIL is set, it exits 2 as strata does when Palette gives
+/// no answer.
 const FAKE_STRATA: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 echo "$*" >> "$FAKE_STRATA_LOG"
@@ -807,6 +841,9 @@ if [ "$1" = snapshot ]; then
 fi
 if [ "$1" = compare ] && [[ " $* " == *" --repave "* ]]; then
   if [ -n "${FAKE_REPAVE_FAIL:-}" ]; then echo "strata: Palette gave no answer" >&2; exit 2; fi
+  refusal=$(PALETTE_API_KEY=k PALETTE_API=http://127.0.0.1:9 STRATA_RETRIES=0 \
+    "$REAL_STRATA" compare "$2" "$3" --repave 2>&1 >/dev/null | grep '^strata: --repave needs' || true)
+  if [ -n "$refusal" ]; then echo "$refusal" >&2; exit 2; fi
   args=()
   for a in "$@"; do [ "$a" = --repave ] || args+=("$a"); done
   code=0
@@ -1424,54 +1461,62 @@ fn pr_comment_repave_reads_the_table_below_may_repave_when_palette_says_no_repav
 }
 
 #[test]
-fn pr_comment_repave_says_why_it_asks_nothing_and_the_table_decides() {
+fn pr_comment_repave_leaves_to_strata_which_pair_it_applies_to_and_the_table_decides_for_the_rest()
+{
     let h = host();
-
-    // two profile versions: no cluster
-    let o = h.run_repave(
-        &[&h.a, &h.b, "--repave", "--dry-run"],
-        PALETTE_KEEPS,
-        PALETTE_KEEPS_TEXT,
-        &[],
-    );
-    assert!(o.status.success(), "{}", text(&o.stderr));
-    let said = text(&o.stderr);
-    assert!(
-        said.contains("--repave does not apply: neither ref is a cluster"),
-        "{said}"
-    );
-    assert!(
-        said.contains(
-            "max impact: repave; label repave: the table decides; would add label repave"
-        ),
-        "{said}"
-    );
-    assert!(!text(&o.stdout).contains("Palette:"), "{}", text(&o.stdout));
-    assert!(
-        h.strata_calls().iter().all(|c| !c.contains("--repave")),
-        "Palette is not asked: {:?}",
-        h.strata_calls()
-    );
-
-    // a candidate is not in Palette
     let cluster = h.cluster_of(&h.a);
     let candidate = h.candidate_of(&h.b);
-    let o = h.run_repave(
-        &[&cluster, &candidate, "--repave", "--dry-run"],
-        PALETTE_KEEPS,
-        PALETTE_KEEPS_TEXT,
-        &[],
-    );
-    assert!(o.status.success(), "{}", text(&o.stderr));
+    let billing = h.edited("billing.json", &h.b, |source| {
+        source["cluster"] = serde_json::json!({"uid": "c-2", "name": "billing", "profiles": []});
+    });
+    let pairs = [
+        // two profile versions: no cluster
+        (
+            [h.a.clone(), h.b.clone()],
+            "strata: --repave needs one side that is a cluster and one that is a profile version\n",
+        ),
+        // a candidate is not in Palette
+        (
+            [cluster.clone(), candidate],
+            "strata: --repave needs the profile side to be a profile version that Palette holds, with its uid",
+        ),
+        // two clusters: a pair that the script once passed on to strata
+        (
+            [cluster, billing],
+            "strata: --repave needs one side that is a cluster and one that is a profile version, or",
+        ),
+    ];
+    for ([a, b], refusal) in &pairs {
+        let o = h.run_repave(
+            &[a, b, "--repave", "--dry-run"],
+            PALETTE_KEEPS,
+            PALETTE_KEEPS_TEXT,
+            &[],
+        );
+        assert!(o.status.success(), "{}", text(&o.stderr));
+        let said = text(&o.stderr);
+        assert!(said.contains(refusal), "strata says why:\n{said}");
+        assert!(
+            said.contains("pr-comment: --repave got no answer, so the table decides"),
+            "{said}"
+        );
+        assert!(
+            said.contains("label repave: the table decides; would add label repave"),
+            "{said}"
+        );
+        assert!(!text(&o.stdout).contains("Palette:"), "{}", text(&o.stdout));
+        assert!(
+            h.strata_calls()
+                .iter()
+                .any(|c| c.starts_with("compare ") && c.contains(" --repave")),
+            "the script asks strata, which decides: {:?}",
+            h.strata_calls()
+        );
+    }
+    // the script reads no record to decide
     assert!(
-        text(&o.stderr).contains("--repave does not apply: the profile side has no uid"),
-        "{}",
-        text(&o.stderr)
-    );
-    assert!(
-        h.strata_calls().iter().all(|c| !c.contains("--repave")),
-        "{:?}",
-        h.strata_calls()
+        !repo_file("scripts/ci/pr-comment.sh").contains(".source"),
+        "pr-comment.sh looks in a record: strata decides which pair --repave applies to"
     );
 }
 
@@ -1488,7 +1533,7 @@ fn pr_comment_repave_goes_on_with_the_table_when_palette_gives_no_answer() {
     assert!(o.status.success(), "{}", text(&o.stderr));
     let said = text(&o.stderr);
     assert!(
-        said.contains("--repave got no answer from Palette"),
+        said.contains("pr-comment: --repave got no answer, so the table decides"),
         "{said}"
     );
     assert!(

@@ -50,9 +50,10 @@ values is `cluster-wide` in the table, and Palette says no repave:
 {{#include ../output/repave-pr-comment-csi.txt}}
 ```
 
-Palette also says no repave for a new Kubernetes version, where the table says
-`repave`. The script removes the label, and the comment carries the note that the
-two disagree:
+When Palette answers as it does for an Edge cluster, it says no repave for a new
+Kubernetes version, where the table says `repave`. See
+[What no run covers](../internals/palette/limits.md). The script removes the
+label, and the comment carries the note that the two disagree:
 
 ```text
 {{#include ../output/repave-pr-comment-disagree.txt}}
@@ -64,9 +65,11 @@ two disagree:
 | no repave | The script removes the label, also where the table says otherwise. A threshold below `may-repave` still reads the table. |
 | nothing | The table decides, as it does without `--repave`. |
 
-Palette says nothing when the pair has no cluster, or when the profile side has
-no uid in Palette, as a candidate has none. A request to Palette that fails has
-the same result. The script says why on standard error, and the table decides:
+Strata decides which pair the question applies to, and the script does not.
+Strata refuses a pair that has no cluster. It also refuses a pair where the
+profile side has no uid in Palette, as a candidate has none. A request to
+Palette that fails has the same result. Strata says why on standard error, and
+the script says that the table decides:
 
 ```text
 {{#include ../output/repave-pr-comment-gap.txt}}

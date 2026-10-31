@@ -1,3 +1,4 @@
 $ STRATA_QUIET=1 scripts/ci/pr-comment.sh aws-stack@1.1.1 aws-stack@1.1.6 --repave --dry-run > comment.md
-pr-comment: --repave does not apply: neither ref is a cluster
+strata: --repave needs one side that is a cluster and one that is a profile version
+pr-comment: --repave got no answer, so the table decides
 pr-comment: max impact: may-repave; label repave: the table decides; would remove label repave if present

@@ -55,7 +55,7 @@ while [ $# -gt 0 ]; do
     --no-verify) verify=""; shift ;;
     --allow-rollback) allow_rollback=1; shift ;;
     --allow-no-digest) allow=(--allow-no-digest); shift ;;
-    -h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,/^set -euo/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) patterns+=("$1"); shift ;;
   esac

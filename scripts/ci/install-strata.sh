@@ -44,7 +44,7 @@ while [ $# -gt 0 ]; do
     --target) target=$2; shift 2 ;;
     --bin-only) bin_only=1; shift ;;
     --require-signature) require_signature=1; shift ;;
-    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,/^set -euo/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option $1" ;;
   esac
 done
