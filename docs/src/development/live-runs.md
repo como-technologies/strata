@@ -767,7 +767,9 @@ nothing.
 | `bump-refused`, `bump-clusters` | 0 | #166: Palette refuses the move with `DependencyPackUpgradeNotSupported`, and the error names a cluster that runs the version. |
 | `bump-text-says` | 0 | #166: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on <clusters>` under the bump. |
 | `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. |
-| `bump-cluster-record`, `bump-cluster-asked` | 0 | #166: with `CLUSTER`, `behind` on the record of the cluster asks the route of the cluster, and the bump holds an answer. |
+| `bump-cluster-record` | 0 | #166: a record of the cluster `CLUSTER`. |
+| `bump-cluster-same` | 0 | #419: with `CLUSTER`, the bump of `kubernetes` in the record of the cluster has the version, the impact level, and the change flags of the bump in the record of the profile. No result yet. |
+| `bump-cluster-asked` | 0 | #166: `behind` on the record of the cluster asks the route of the cluster, and the bump holds an answer of Palette in `bump.paletteValidation`. |
 | `bump-cluster-refused` | 0 | #166: the route of the cluster refuses the same move, on this cluster. If the route takes the pack of the profile as it is now, it accepts, and this check fails. No result yet. |
 
 No pack of the Public Repo lists a dependency in its tags route. Only stage 6

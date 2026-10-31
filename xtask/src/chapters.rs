@@ -2997,7 +2997,10 @@ fn use_cases(r: &mut Runner) {
         }],
     );
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A1111], &[]));
-    r.tenant(|t| t.profile_upgrade_answer(DEV, A1111, Some(("csi-aws-ebs", &["payments"]))));
+    r.tenant(|t| {
+        t.profile_upgrade_answer(DEV, A1111, Some(("csi-aws-ebs", &["payments"])));
+        t.cluster_upgrade_answer(DEV, (PAYMENTS, A1111), Some(("csi-aws-ebs", &["payments"])));
+    });
     r.serve_here(); // state 3: payments runs aws-stack@1.1.11, and Palette refuses the move of its CSI pack
     r.quiet("strata snapshot aws-stack@1.1.11 -o refused/dev.json");
     r.step("behind-refused", 1, false, "strata behind refused/dev.json");
@@ -3012,6 +3015,14 @@ fn use_cases(r: &mut Runner) {
         1,
         false,
         "strata behind refused/dev.json --no-impact",
+    );
+    r.quiet("strata snapshot cluster:payments -o refused/payments.json");
+    // The record of the cluster that runs the profile pins the same pack, and gets the same bump
+    r.step(
+        "behind-cluster",
+        1,
+        false,
+        "strata behind refused/payments.json",
     );
 
     // The fleet from Palette: the clusters of a label, in two projects, and a record of each
