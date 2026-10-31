@@ -553,9 +553,8 @@ fn stop_a_build_shows_the_comment_and_the_watch_of_the_workflow() {
 
 // ---- the style review of Wave 11 -------------------------------------------------------------
 
-/// The block of `text` that holds the first line with `anchor`: a paragraph, one list item without
-/// the items nested in it, or one row of a table. The block is one line, without the mark of the
-/// list.
+/// The block of `text` that holds the first line with `anchor`. It is a paragraph, a list item
+/// without its nested items, or a table row. The block is one line, without the mark of the list.
 fn block(text: &str, anchor: &str) -> String {
     let lines: Vec<&str> = text.lines().collect();
     let at = lines
@@ -579,8 +578,8 @@ fn block(text: &str, anchor: &str) -> String {
         .to_string()
 }
 
-/// The sentences of `block`. A sentence ends at a full stop, a question mark, or an exclamation
-/// mark that is outside a code span and has a space or the end after it.
+/// The sentences of `block`. A sentence ends at one of three marks: a full stop, a question mark,
+/// or an exclamation mark. The mark is outside a code span, and a space or the end follows it.
 fn sentences(block: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut current = String::new();
@@ -758,6 +757,104 @@ fn the_blocks_that_the_style_review_of_wave_11_named_have_six_sentences_or_fewer
             found <= 6,
             "{page}: {found} sentences in the block of {anchor:?}"
         );
+    }
+}
+
+/// The comment that holds the first comment line with `anchor`: the lines of `//`, `///`, or `//!`
+/// around it, up to a blank comment line, as one line without the marks.
+fn comment(text: &str, anchor: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let body = |i: usize| {
+        let line = lines[i].trim_start();
+        let marks = line.starts_with("//");
+        let words = line.trim_start_matches('/').trim_start_matches('!').trim();
+        (marks && !words.is_empty()).then_some(words)
+    };
+    let at = (0..lines.len())
+        .find(|&i| body(i).is_some() && lines[i].contains(anchor))
+        .unwrap_or_else(|| panic!("no comment line holds {anchor:?}"));
+    let from = (0..=at).rev().take_while(|&i| body(i).is_some()).last();
+    let to = (at..lines.len()).take_while(|&i| body(i).is_some()).last();
+    let text: Vec<&str> = (from.unwrap_or(at)..=to.unwrap_or(at))
+        .filter_map(body)
+        .collect();
+    text.join(" ")
+}
+
+/// The style review of Wave 11 found comments in the Rust files with a sentence over the limit of
+/// 25 words for a description.
+#[test]
+fn the_rust_comments_that_the_style_review_of_wave_11_named_keep_to_25_words() {
+    let comments = [
+        (
+            "src/snapshot/cluster.rs",
+            "The fields of a record of strata 0.24 and before",
+        ),
+        (
+            "src/snapshot/cluster.rs",
+            "The parts of the cluster in `raw` that strata could not read",
+        ),
+        ("src/snapshot/pack.rs", "The schema of [`Pack::params`]"),
+        (
+            "src/snapshot/variable.rs",
+            "The variable that strata keeps of `v`",
+        ),
+        (
+            "xtask/src/chapters.rs",
+            "the table says repave for a new Kubernetes version",
+        ),
+        (
+            "tests/ci_scripts.rs",
+            "The options of a tool that a wrapper neither sets",
+        ),
+        (
+            "tests/ci_scripts.rs",
+            "A script passes to its command the options",
+        ),
+        (
+            "tests/ci_scripts.rs",
+            "the stand-in runs the real comparison without the option",
+        ),
+        (
+            "tests/ci_scripts.rs",
+            "a pull request with a comparison comment and no preflight",
+        ),
+        (
+            "tests/cli.rs",
+            "a value that Palette has today in one of these fields",
+        ),
+        (
+            "tests/cli.rs",
+            "True when the name of a property is the name of a time field",
+        ),
+        (
+            "tests/live_scripts.rs",
+            "`strata behind --json` gives `report`",
+        ),
+        (
+            "tests/live_scripts.rs",
+            "the stage edits the add-on through the API",
+        ),
+        ("tests/workflows.rs", "`act` is not in every container"),
+        (
+            "tests/workflows.rs",
+            "GitHub fails a call from a caller that grants less",
+        ),
+        (
+            "tests/workflows.rs",
+            "The comment takes the report from the artifact",
+        ),
+        ("tests/docs.rs", "The block of `text` that holds"),
+        ("tests/docs.rs", "The sentences of `block`."),
+    ];
+    for (file, anchor) in comments {
+        for sentence in sentences(&comment(&repo_file(file), anchor)) {
+            assert!(
+                words(&sentence) <= 25,
+                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
+                words(&sentence)
+            );
+        }
     }
 }
 

@@ -166,8 +166,8 @@ pub struct VariableOption {
 }
 
 impl Variable {
-    /// The variable that strata keeps of `v`, a variable of Palette: the same fields, and the
-    /// default of the field for each one that Palette does not give.
+    /// The variable that strata keeps of `v`, a variable of Palette. It has the same fields as
+    /// `v`. Each field that Palette does not give has its default.
     ///
     /// The defaults are those that each record of an older release holds, so its `variablesHash`
     /// stays. One case differs: a name that is not there. A record of an older release holds
