@@ -710,6 +710,37 @@ pub fn live_script(name: &str) -> std::path::PathBuf {
         .join(name)
 }
 
+/// A stand-in that logs its name and its arguments to the file `FAKE_LOG`, prints `FAKE_OUT`, and
+/// exits with `FAKE_EXIT`. With `--out DIR`, it also writes `FAKE_OUT` to `DIR/report.md`, as
+/// `strata preflight` writes its report.
+pub const LOGGING_TOOL: &str = r#"#!/usr/bin/env bash
+echo "$(basename "$0") $*" >> "$FAKE_LOG"
+prev=""
+for a in "$@"; do
+  [ "$prev" != --out ] || { mkdir -p "$a"; printf '%s' "${FAKE_OUT-}" > "$a/report.md"; }
+  prev=$a
+done
+printf '%s' "${FAKE_OUT-}"
+exit "${FAKE_EXIT:-0}"
+"#;
+
+/// Each file under a directory, at any depth.
+pub fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    let Ok(entries) = fs::read_dir(dir) else {
+        return out;
+    };
+    for e in entries.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            out.extend(walk(&p));
+        } else {
+            out.push(p);
+        }
+    }
+    out
+}
+
 /// The version of a manifest, from the root of the repository: `Cargo.toml` or
 /// `preflight/Cargo.toml`.
 pub fn version_of(manifest: &str) -> String {

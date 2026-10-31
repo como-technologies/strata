@@ -1801,14 +1801,14 @@ fn pr_comment_stops_on_what_gitlab_answers_and_asks_for_a_token_that_can_write()
     assert!(h.gl_calls().is_empty(), "no call before the token is there");
 }
 
-/// A markdown report of `strata preflight`, in a file of the stand-in home.
+/// A markdown report of `strata preflight`.
+const PREFLIGHT_REPORT: &str =
+    "## Preflight: payments\n\n| check | verdict |\n|---|---|\n| `eks-subnets` | FAIL |\n";
+
+/// The report, in a file of the stand-in home.
 fn preflight_report(h: &Host) -> String {
     let report = h.home.join("report.md");
-    std::fs::write(
-        &report,
-        "## Preflight: payments\n\n| check | verdict |\n|---|---|\n| `eks-subnets` | FAIL |\n",
-    )
-    .unwrap();
+    std::fs::write(&report, PREFLIGHT_REPORT).unwrap();
     report.display().to_string()
 }
 
@@ -4046,21 +4046,6 @@ fn the_issue_scripts_hold_the_same_host_functions() {
 
 // ---- preflight.sh ------------------------------------------------------------------------------
 
-/// A `strata` that logs its arguments, writes `FAKE_REPORT` to standard output and to the
-/// `report.md` of the directory that `--out` names, and exits with `FAKE_EXIT`.
-const FAKE_PREFLIGHT_STRATA: &str = r#"#!/usr/bin/env bash
-echo "$*" >> "$FAKE_STRATA_LOG"
-prev=""
-for a in "$@"; do
-  [ "$prev" != --out ] || { mkdir -p "$a"; printf '%s' "${FAKE_REPORT-}" > "$a/report.md"; }
-  prev=$a
-done
-printf '%s' "${FAKE_REPORT-}"
-exit "${FAKE_EXIT:-0}"
-"#;
-
-const PREFLIGHT_REPORT: &str = "## Preflight: payments\n\n| check | verdict |\n|---|---|\n";
-
 /// A job directory with the stand-in `strata` and `gh`, and a record that a pattern could match.
 struct PreflightJob {
     dir: tempfile::TempDir,
@@ -4069,10 +4054,7 @@ struct PreflightJob {
 
 fn preflight_job() -> PreflightJob {
     let dir = tempfile::tempdir().unwrap();
-    let bin = fake_bin(
-        dir.path(),
-        &[("strata", FAKE_PREFLIGHT_STRATA), ("gh", FAKE_GH)],
-    );
+    let bin = fake_bin(dir.path(), &[("strata", LOGGING_TOOL), ("gh", FAKE_GH)]);
     // a shell without globstar reads `releases/**/*.json` as `releases/*/*.json`, and finds this
     std::fs::create_dir_all(dir.path().join("releases/prod")).unwrap();
     std::fs::write(dir.path().join("releases/prod/eks.json"), "{}").unwrap();
@@ -4091,7 +4073,7 @@ impl PreflightJob {
             .current_dir(d)
             .env("PATH", path_with(&self.bin))
             .env("STRATA_BIN", self.bin.join("strata"))
-            .env("FAKE_STRATA_LOG", d.join("strata.log"))
+            .env("FAKE_LOG", d.join("strata.log"))
             .env("FAKE_GH_LOG", d.join("gh.log"))
             .env("FAKE_GH_SAVED_BODY", d.join("saved-body.md"))
             .env_remove("PALETTE_API_KEY");
@@ -4136,14 +4118,14 @@ fn preflight_sh_builds_the_list_of_arguments_from_the_variables() {
             ),
             ("STRATA_PREFLIGHT_OUT", "out"),
             ("PALETTE_API_KEY", "a-key"),
-            ("FAKE_REPORT", PREFLIGHT_REPORT),
+            ("FAKE_OUT", PREFLIGHT_REPORT),
         ],
     );
     assert!(o.status.success(), "{}", text(&o.stderr));
     assert_eq!(
         job.strata_calls(),
         [
-            "preflight cluster:64f0 change.json --cloud eks --tier static,palette \
+            "strata preflight cluster:64f0 change.json --cloud eks --tier static,palette \
              --probes probes.yaml --release 4.10 --ready 80 --every 5 --limit 60 --strict \
              --no-exec --watch --quiet --rule eks-subnets --rule eks-roles \
              --records releases/**/*.json --records other/*.json --out out --format markdown"
@@ -4171,7 +4153,7 @@ fn preflight_sh_passes_each_record_pattern_as_typed_and_expands_none() {
     assert_eq!(
         job.strata_calls(),
         [
-            "preflight clusters/payments.json --quiet --offline --records releases/**/*.json \
+            "strata preflight clusters/payments.json --quiet --offline --records releases/**/*.json \
           --records releases/*/*.json --out preflight --format markdown"
         ]
     );
@@ -4193,7 +4175,7 @@ fn preflight_sh_gives_no_option_for_an_empty_variable_and_a_value_other_than_tru
     assert!(o.status.success(), "{}", text(&o.stderr));
     assert_eq!(
         job.strata_calls(),
-        ["preflight clusters/payments.json --quiet --out preflight --format markdown"]
+        ["strata preflight clusters/payments.json --quiet --out preflight --format markdown"]
     );
 }
 
@@ -4246,7 +4228,7 @@ fn preflight_sh_exits_with_the_status_of_strata_and_prints_the_report_of_a_faile
             &[
                 ("STRATA_PREFLIGHT_SOURCE", "clusters/payments.json"),
                 ("FAKE_EXIT", code),
-                ("FAKE_REPORT", PREFLIGHT_REPORT),
+                ("FAKE_OUT", PREFLIGHT_REPORT),
             ],
         );
         assert_eq!(o.status.code(), code.parse::<i32>().ok());
@@ -4289,7 +4271,7 @@ fn preflight_sh_posts_the_report_also_after_a_failed_preflight_when_the_comment_
             source,
             ("STRATA_PREFLIGHT_COMMENT", "true"),
             ("FAKE_EXIT", "1"),
-            ("FAKE_REPORT", PREFLIGHT_REPORT),
+            ("FAKE_OUT", PREFLIGHT_REPORT),
         ],
     );
     assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
@@ -4313,7 +4295,7 @@ fn preflight_sh_posts_the_report_also_after_a_failed_preflight_when_the_comment_
             &[
                 source,
                 ("STRATA_PREFLIGHT_COMMENT", value),
-                ("FAKE_REPORT", PREFLIGHT_REPORT),
+                ("FAKE_OUT", PREFLIGHT_REPORT),
             ],
         );
         assert!(o.status.success(), "{}", text(&o.stderr));

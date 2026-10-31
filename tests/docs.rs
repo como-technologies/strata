@@ -10,7 +10,7 @@ use crate::common;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use common::version_of;
+use common::{version_of, walk};
 use strata::api::codes::ValidateRoute;
 
 fn docs() -> PathBuf {
@@ -306,20 +306,6 @@ fn publish_fan_out_runs_the_installer_with_the_signature_check_and_says_what_it_
     );
 }
 
-/// The markdown pages under `dir`, except the generated output.
-fn pages(dir: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_dir() && path.file_name().is_some_and(|n| n != "output") {
-            out.extend(pages(&path));
-        } else if path.extension().is_some_and(|e| e == "md") {
-            out.push(path);
-        }
-    }
-    out
-}
-
 /// Each variable of the GitLab preflight job has its description on `gitlab.md`, and no other page
 /// lists them. Two pages that list them need two changes for one default. A page can name one
 /// variable to explain a behavior, and then it links to `gitlab.md`.
@@ -349,8 +335,13 @@ fn the_variables_of_the_gitlab_preflight_job_are_described_on_gitlab_md_and_list
         );
     }
 
-    for page in pages(&docs()) {
-        if page.ends_with("automation/gitlab.md") || page.ends_with("development/live-runs.md") {
+    // the generated output holds what strata prints, and live-runs.md holds the checks of the lab
+    for page in walk(&docs()) {
+        if page.extension().is_none_or(|e| e != "md")
+            || page.starts_with(docs().join("output"))
+            || page.ends_with("automation/gitlab.md")
+            || page.ends_with("development/live-runs.md")
+        {
             continue;
         }
         let text = read(&page);

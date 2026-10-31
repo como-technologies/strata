@@ -5,8 +5,9 @@
 //! make that change fail. They hold the values of each set, and make sure that serde, the JSON
 //! Schema, and `ClosedSet::as_str` give one text for each value.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
+use crate::common::walk;
 use serde_json::Value;
 use strata::api::Method;
 use strata::closed_set::ClosedSet;
@@ -156,23 +157,6 @@ fn a_closed_set_holds_each_value_that_a_release_wrote_and_no_other() {
             set.name
         );
     }
-}
-
-/// Each file under a directory, at any depth.
-fn walk(dir: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return out;
-    };
-    for e in entries.flatten() {
-        let p = e.path();
-        if p.is_dir() {
-            out.extend(walk(&p));
-        } else {
-            out.push(p);
-        }
-    }
-    out
 }
 
 #[test]

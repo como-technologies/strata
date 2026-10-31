@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::common::{executable, git, text};
+use crate::common::{LOGGING_TOOL, executable, git, text};
 
 #[test]
 fn every_workflow_file_parses_and_has_on_and_jobs() {
@@ -227,14 +227,6 @@ impl StepRun {
         std::fs::read_to_string(self.dir.path().join("summary.md")).unwrap_or_default()
     }
 }
-
-/// A stand-in that logs its name and its arguments, prints `FAKE_OUT`, and exits with
-/// `FAKE_EXIT`.
-const LOGGING_TOOL: &str = r#"#!/usr/bin/env bash
-echo "$(basename "$0") $*" >> "$FAKE_LOG"
-printf '%s' "${FAKE_OUT-}"
-exit "${FAKE_EXIT:-0}"
-"#;
 
 /// The text of the workflow `file` of `.github/workflows/`.
 fn workflow_text(file: &str) -> String {
