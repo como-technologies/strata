@@ -295,8 +295,9 @@ fn the_preflight_comment_step_posts_the_report_that_the_preflight_kept() {
 
 /// A caller that grants `contents: read` alone calls `preflight.yml`, as it did before the
 /// comment. GitHub fails a call from a caller that grants less than the workflow asks for. It
-/// fails the call also when the step that needs the permission does not run. So only `preflight-comment.yml` asks for
-/// `pull-requests: write`, and `preflight.yml` has no input that posts a comment.
+/// fails the call also when the step that needs the permission does not run. So only
+/// `preflight-comment.yml` asks for `pull-requests: write`, and `preflight.yml` has no input that
+/// posts a comment.
 #[test]
 fn the_preflight_workflow_asks_for_no_write_permission_and_posts_no_comment() {
     let preflight = workflow("preflight.yml");

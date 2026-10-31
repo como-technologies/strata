@@ -7,9 +7,9 @@
 # Downloads into DIR (default .strata) the two binaries for this machine, strata and
 # strata-preflight, and SHA256SUMS. Also downloads the CI scripts pr-comment.sh, merge-gate.sh,
 # verify-report.sh, upstream-report.sh, and preflight.sh. Checks the signature and the checksums,
-# and prints the path of the strata binary. A job then sets STRATA_BIN to that path and runs DIR/<script>. `strata preflight` runs the
-# strata-preflight beside it. A release from before strata-preflight has no such binary, and the
-# installer says so.
+# and prints the path of the strata binary. A job then sets STRATA_BIN to that path and runs
+# DIR/<script>. `strata preflight` runs the strata-preflight beside it. A release from before
+# strata-preflight has no such binary, and the installer says so.
 #
 # --bin-only installs the binaries alone, into a directory on your PATH. The installer checks the
 # signature and the checksums before it installs any file.
