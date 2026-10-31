@@ -96,22 +96,6 @@ const DROP_INS: [&str; 8] = [
     ".github/workflows/preflight-comment.yml",
 ];
 
-fn repo_file(path: &str) -> String {
-    std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path))
-        .unwrap_or_else(|e| panic!("{path}: {e}"))
-}
-
-/// Whether `text` names `flag` as a word: `--thresh` is not `--threshold`, although one contains
-/// the other.
-fn has_flag(text: &str, flag: &str) -> bool {
-    text.match_indices(flag).any(|(i, _)| {
-        text[i + flag.len()..]
-            .chars()
-            .next()
-            .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '-')
-    })
-}
-
 /// The `--help` of one script that ships.
 fn help_of(name: &str) -> String {
     let o = Command::new("bash")
@@ -148,7 +132,7 @@ fn the_ci_drop_ins_name_only_scripts_that_ship() {
 #[test]
 fn the_ci_drop_ins_pass_only_options_the_scripts_have() {
     let helps: Vec<(&str, String)> = SHIPPED.iter().map(|n| (*n, help_of(n))).collect();
-    let known = |flag: &str| helps.iter().any(|(_, h)| has_flag(h, flag));
+    let known = |flag: &str| helps.iter().any(|(_, h)| whole_word(h, flag, &['-']));
     for file in DROP_INS {
         let body = repo_file(file);
         let mut lines = body.lines().peekable();
@@ -254,7 +238,7 @@ fn the_ci_drop_ins_name_the_version_this_repository_is_at() {
 #[test]
 fn the_release_check_runs_the_scripts_the_installer_installs() {
     let installer = repo_file("scripts/ci/install-strata.sh");
-    let release = repo_file(".github/workflows/release.yml");
+    let release = workflow_text("release.yml");
 
     // `scripts=(pr-comment.sh merge-gate.sh verify-report.sh)` in the installer. --bin-only empties
     // that list at run time; this is the declaration, which names every script a full install gets.
@@ -550,20 +534,14 @@ fn executed_by(workflow: &serde_yaml::Value) -> String {
             text.push('\n');
         }
     };
-    for job in workflow["jobs"]
-        .as_mapping()
-        .expect("a workflow has jobs")
-        .values()
-    {
-        for step in job["steps"].as_sequence().into_iter().flatten() {
-            step["run"].as_str().into_iter().for_each(&mut keep);
-            for value in step["env"]
-                .as_mapping()
-                .into_iter()
-                .flat_map(|e| e.values())
-            {
-                value.as_str().into_iter().for_each(&mut keep);
-            }
+    for step in steps(workflow) {
+        step["run"].as_str().into_iter().for_each(&mut keep);
+        for value in step["env"]
+            .as_mapping()
+            .into_iter()
+            .flat_map(|e| e.values())
+        {
+            value.as_str().into_iter().for_each(&mut keep);
         }
     }
     text
@@ -586,14 +564,23 @@ fn gitlab_job_text(gitlab: &str, job: &str) -> String {
 fn reads_variable(text: &str, name: &str) -> bool {
     [format!("${name}"), format!("${{{name}")]
         .iter()
-        .any(|read| {
-            text.match_indices(read.as_str()).any(|(i, _)| {
-                text[i + read.len()..]
-                    .chars()
-                    .next()
-                    .is_none_or(|c| !c.is_ascii_alphanumeric() && c != '_')
-            })
-        })
+        .any(|read| whole_word(text, read, &['_']))
+}
+
+#[test]
+fn a_flag_or_a_variable_is_not_found_in_a_longer_word_that_starts_with_it() {
+    assert!(whole_word("run --tier 3", "--tier", &['-']));
+    assert!(whole_word("run --tier", "--tier", &['-']));
+    assert!(!whole_word("run --tier-high 3", "--tier", &['-']));
+    assert!(!whole_word("run --tiers 3", "--tier", &['-']));
+    // the first place is a longer word, and the second place is the word
+    assert!(whole_word("--tier-high --tier=3", "--tier", &['-']));
+
+    assert!(reads_variable("echo $NAME-x", "NAME"));
+    assert!(reads_variable("echo ${NAME:-}", "NAME"));
+    assert!(!reads_variable("echo $NAME_2", "NAME"));
+    assert!(!reads_variable("echo ${NAME_2:-}", "NAME"));
+    assert!(!reads_variable("echo $NAMES", "NAME"));
 }
 
 /// Each reusable workflow takes each option of its script, or of its command, from an input, sets
@@ -606,15 +593,14 @@ fn each_reusable_workflow_names_each_option_of_its_script() {
         let wrong = unaccounted(&w.tool.options(), w.reaches, w.left);
         assert!(wrong.is_empty(), "{name}: {wrong:#?}");
 
-        let workflow: serde_yaml::Value =
-            serde_yaml::from_str(&repo_file(&format!(".github/workflows/{name}"))).unwrap();
+        let workflow = workflow(name);
         let inputs = workflow["on"]["workflow_call"]["inputs"]
             .as_mapping()
             .unwrap_or_else(|| panic!("{name} has no inputs"));
         let executed = executed_by(&workflow);
         for r in w.reaches {
             assert!(
-                has_flag(&executed, r.flag),
+                whole_word(&executed, r.flag, &['-']),
                 "{name} never passes {} to the tool",
                 r.flag
             );
@@ -643,7 +629,12 @@ fn each_gitlab_job_sets_the_options_that_its_reusable_workflow_sets() {
                 r.variable,
                 r.flag
             );
-            assert!(has_flag(&job, r.flag), "{} never passes {}", w.job, r.flag);
+            assert!(
+                whole_word(&job, r.flag, &['-']),
+                "{} never passes {}",
+                w.job,
+                r.flag
+            );
             assert!(
                 gitlab.contains(&format!("\n  {}:", r.variable)),
                 "the drop-in gives {} no default",
@@ -656,13 +647,12 @@ fn each_gitlab_job_sets_the_options_that_its_reusable_workflow_sets() {
 /// The promotion gate reads a ref such as `name@version` in a project, as the retire gate does.
 #[test]
 fn the_promote_gate_takes_the_project_of_a_ref_as_the_retire_gate_does() {
-    let promote = repo_file(".github/workflows/promote-gate.yml");
-    let retire = repo_file(".github/workflows/retire-gate.yml");
+    let promote = workflow_text("promote-gate.yml");
+    let retire = workflow_text("retire-gate.yml");
     assert!(promote.contains("PALETTE_PROJECT: ${{ inputs.project }}"));
     assert!(retire.contains("PALETTE_PROJECT: ${{ inputs.project }}"));
     assert!(promote.contains("PALETTE_PROJECT_UID: ${{ secrets.palette-project-uid }}"));
-    let doc: serde_yaml::Value = serde_yaml::from_str(&promote).unwrap();
-    let call = &doc["on"]["workflow_call"];
+    let call = &workflow("promote-gate.yml")["on"]["workflow_call"];
     assert!(call["inputs"]["project"].is_mapping());
     assert!(call["secrets"]["palette-project-uid"].is_mapping());
 }
@@ -806,7 +796,7 @@ fn each_script_passes_the_options_of_its_command_or_omits_them_on_purpose() {
         let code = code_of(&format!("scripts/ci/{}", p.script));
         for r in p.passed {
             assert!(
-                has_flag(&code, r.flag),
+                whole_word(&code, r.flag, &['-']),
                 "{} never passes {} to {}",
                 p.script,
                 r.flag,
@@ -823,8 +813,7 @@ fn the_preflight_workflow_and_the_gitlab_job_give_each_input_to_the_script_as_a_
     let script = code_of("scripts/ci/preflight.sh");
     let gitlab = repo_file("examples/ci/gitlab/strata.yml");
     let job = gitlab_job_text(&gitlab, "strata-preflight");
-    let workflow: serde_yaml::Value =
-        serde_yaml::from_str(&repo_file(".github/workflows/preflight.yml")).unwrap();
+    let workflow = workflow("preflight.yml");
     let inputs = workflow["on"]["workflow_call"]["inputs"]
         .as_mapping()
         .unwrap();
@@ -871,18 +860,18 @@ fn the_preflight_workflow_and_the_gitlab_job_give_each_input_to_the_script_as_a_
 
     // the comment is for GitLab: a caller of preflight.yml calls preflight-comment.yml
     assert!(reads_variable(&script, "STRATA_PREFLIGHT_COMMENT"));
-    assert!(has_flag(&script, "--preflight"));
+    assert!(whole_word(&script, "--preflight", &['-']));
     assert!(gitlab.contains("\n  STRATA_PREFLIGHT_COMMENT:"));
 
     // neither of the two names an option of the command, except the one that the job chooses
     for r in &PREFLIGHT {
         assert!(
-            !has_flag(&executed, r.flag),
+            !whole_word(&executed, r.flag, &['-']),
             "preflight.yml passes {} itself",
             r.flag
         );
         assert!(
-            r.flag == "--offline" || !has_flag(&job, r.flag),
+            r.flag == "--offline" || !whole_word(&job, r.flag, &['-']),
             "the GitLab job passes {} itself",
             r.flag
         );
