@@ -17,6 +17,7 @@ use crate::reference::version;
 use crate::registry::{Registries, pack_type_of, registry_layer};
 use crate::snapshot::Tool;
 use crate::term::progress::Progress;
+use crate::timestamp::Rfc3339;
 
 /// The schema id of the document `packs` writes.
 pub const PACKS_SCHEMA: &str = "strata-packs/1";
@@ -32,6 +33,7 @@ pub struct PackListing {
     /// Which tool wrote the document.
     pub tool: Tool,
     /// When, RFC 3339 UTC.
+    #[schemars(with = "Rfc3339")]
     pub generated_at: String,
     /// The pack that was asked for.
     pub name: String,
@@ -103,6 +105,7 @@ pub struct PackBuild {
     /// When Palette first listed this version, `metadata.creationTimestamp` of the listing; empty
     /// when the listing gives no time.
     #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schemars(with = "Rfc3339")]
     pub listed: String,
 }
 

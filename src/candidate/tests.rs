@@ -571,3 +571,34 @@ fn palette_takes_a_loose_semantic_version_or_a_text_with_three_numbers_as_the_ve
         )
     );
 }
+
+#[test]
+fn a_variable_with_a_name_and_a_default_loads_with_the_defaults_of_a_record() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("c.yaml");
+    let with = |variables: &str| {
+        std::fs::write(&file, format!("{SAME_CANDIDATE}{variables}")).unwrap();
+        load(&file)
+    };
+    let c = with("- name: tier\n  defaultValue: gold\n")
+        .unwrap()
+        .candidate;
+    let tier = &c.variables[1];
+    assert_eq!(
+        (tier.name.as_str(), tier.default_value.as_str()),
+        ("tier", "gold")
+    );
+    assert_eq!(
+        (tier.format.as_str(), tier.input_type.as_str()),
+        ("string", "text")
+    );
+    assert!(!tier.required && tier.options.is_empty());
+    // a variable of Palette keeps the twelve fields, so a field of another name is not kept
+    assert!(with("- name: tier\n  order: 3\n").is_ok());
+    match with("- displayName: no name\n").unwrap_err() {
+        Error::CandidateInvalid { message, .. } => {
+            assert!(message.contains("missing field `name`"), "{message}")
+        }
+        other => panic!("not candidate-invalid: {other}"),
+    }
+}

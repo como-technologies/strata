@@ -1,9 +1,49 @@
 //! The machine-readable form of an error, for programs that read errors.
 
+use std::borrow::Cow;
+
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde_json::{Map, Value};
 
 use super::Error;
 use crate::closed_set::ClosedSet;
+
+/// The key of the kind of an error in its document.
+const KIND: &str = "kind";
+
+/// The key of the message of an error in its document.
+const MESSAGE: &str = "message";
+
+/// The schema of the document that [`Error::to_json`] gives: an object with `kind` and `message`,
+/// and the fields of the kind.
+///
+/// A field of a report that holds such a document takes this schema with
+/// `#[schemars(with = "ErrorDocument")]`, and the field stays a [`Value`] in the code.
+pub(crate) struct ErrorDocument;
+
+impl JsonSchema for ErrorDocument {
+    fn schema_name() -> Cow<'static, str> {
+        "ErrorDocument".into()
+    }
+
+    fn json_schema(_: &mut SchemaGenerator) -> Schema {
+        json_schema!({
+            "description": "The error of strata as a document: `kind` and `message`, and the fields of the kind. The page \"Errors\" of the book gives the fields of each kind.",
+            "type": "object",
+            "properties": {
+                KIND: {
+                    "description": "The kind of the error, in lowercase words with hyphens, such as `api`.",
+                    "type": "string",
+                },
+                MESSAGE: {
+                    "description": "The message that strata prints for the error.",
+                    "type": "string",
+                },
+            },
+            "required": [KIND, MESSAGE],
+        })
+    }
+}
 
 impl Error {
     /// The machine-readable form: `kind`, `message`, and the fields of the variant.
@@ -11,8 +51,8 @@ impl Error {
     /// The page "Errors" of the book gives the fields of each kind.
     pub fn to_json(&self) -> Value {
         let mut m = Map::new();
-        m.insert("kind".into(), Value::from(self.kind()));
-        m.insert("message".into(), Value::from(self.to_string()));
+        m.insert(KIND.into(), Value::from(self.kind()));
+        m.insert(MESSAGE.into(), Value::from(self.to_string()));
         let path = |m: &mut Map<String, Value>, p: &std::path::Path| {
             m.insert("path".into(), Value::from(p.display().to_string()));
         };

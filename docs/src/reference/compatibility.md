@@ -68,6 +68,21 @@ library, `ClusterSource` has no field `updates_pending_error` or
 `pending_repave_error`. Its methods `updates_pending_error()` and
 `pending_repave_error()` give the same text.
 
+After 0.24.0, the schema states the shape of each field that it left open. A
+variable has its twelve fields, and `name` is required. A segment of a leaf is
+a key, an integer, or an object with a `name`. The `params` of a pack are an
+object of text, but for `installOrder`, which is an integer. A tier has the
+keys of its `fields`. An `error` has a `kind` and a `message`. A time has
+`format: date-time`. A document stays the same, so the ids stay, no root
+changes, and a variable has its keys in the same order.
+
+One case differs. A variable that Palette gives with no `name` has an empty
+`name`. Before, its `name` was `null`. Its record has another `variablesHash`,
+and strata does not read a record that holds `name: null`. In the library,
+`Snapshot::variables` and `Candidate::variables` are `Vec<Variable>` in place
+of `Vec<Value>`. `Leaf::segments` is `Vec<Segment>` in place of `Vec<Value>`.
+The function `diff::group_variables` takes `&[Variable]`.
+
 A field can also become absent, and that keeps the id as well. For most fields
 absent is a value: a field that is false, empty, or zero is left out, and each
 such field says so at its own definition in

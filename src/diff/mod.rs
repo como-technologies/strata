@@ -15,6 +15,7 @@ use crate::content::layer::Layer;
 use crate::json::flag;
 pub use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{Pack, Snapshot, Source, Tool};
+use crate::timestamp::Rfc3339;
 pub use crate::validation::{PaletteRefusal, PaletteValidation};
 use cluster::{cluster_values_diff, overwritten_in_place, running_behind, tiers_diff};
 pub use impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
@@ -34,7 +35,7 @@ mod verify;
 pub use cluster::{
     ClusterValueChange, ClusterVariablesDiff, OverwrittenProfile, RunningBehind, Side, TierDiff,
 };
-pub use leaf::{Leaf, Op, leaf_diff};
+pub use leaf::{Leaf, Op, Segment, leaf_diff};
 pub use pack::{
     ArtifactChange, ChangeFlag, ManifestChange, MaskedPack, PackDiff, PackSide, ParamChange,
     Status, ValuesDiff,
@@ -61,6 +62,7 @@ pub struct Diff {
     /// Which tool wrote the document.
     pub tool: Tool,
     /// When, RFC 3339 UTC.
+    #[schemars(with = "Rfc3339")]
     pub generated_at: String,
     /// What the flags, statuses, ops and impact levels mean
     pub legend: Legend,

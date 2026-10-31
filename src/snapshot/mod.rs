@@ -19,6 +19,7 @@ use crate::profile_type::ProfileType;
 use crate::reference::name_version;
 pub use crate::repave::PendingRepave;
 use crate::text::name_or_uid;
+use crate::timestamp::Rfc3339;
 pub use crate::validation::ProfileValidation;
 use cluster::{PENDING_REPAVE, UPDATES_PENDING, read_older_errors};
 use pack::masked_paths;
@@ -29,12 +30,15 @@ mod cluster;
 mod pack;
 pub(crate) mod policy;
 pub(crate) mod shape;
+mod tier_schema;
+mod variable;
 
 pub use cluster::{
     AppliedProfile, ClusterSource, ClusterTier, ClusterVariable, GroupMember, PendingUpdate, Tier,
     cluster_tiers, macro_digests,
 };
 pub use pack::{Manifest, Pack, PackChart, PackHash, PresetOption, UpstreamSource, pack_content};
+pub use variable::{Variable, VariableOption};
 
 /// Schema id written into every snapshot.
 pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
@@ -96,7 +100,7 @@ pub struct Snapshot {
     /// Where it came from.
     pub source: Source,
     /// Profile variables, normalized and sorted by name
-    pub variables: Vec<Value>,
+    pub variables: Vec<Variable>,
     /// sha256 of the canonical JSON of `variables`
     pub variables_hash: String,
     /// Packs in profile order
@@ -201,6 +205,7 @@ pub struct Source {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub variables_unavailable: bool,
     /// When the snapshot was taken, RFC 3339 UTC.
+    #[schemars(with = "Rfc3339")]
     pub fetched_at: String,
     /// Present when the snapshot records what a cluster runs rather than a published profile.
     #[serde(default, skip_serializing_if = "Option::is_none")]

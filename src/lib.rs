@@ -104,6 +104,7 @@ pub mod scope;
 pub mod snapshot;
 pub mod term;
 pub mod text;
+pub(crate) mod timestamp;
 pub mod validation;
 
 pub use error::{Error, Result};

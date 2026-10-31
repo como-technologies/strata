@@ -15,6 +15,7 @@ use crate::content::canon::{canonical_json, sha256_hex};
 use crate::json::{arr, flag, str_at, text};
 use crate::profile_type::ProfileType;
 use crate::repave::PendingRepave;
+use crate::timestamp::Rfc3339OrEmpty;
 
 /// A virtual cluster of a cluster group.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -103,6 +104,7 @@ pub struct ClusterSource {
     /// gives each virtual cluster. Each tier has its own hash. A record names the tiers that it
     /// carries by carrying them, so a record without one still verifies. Outside the root.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[schemars(schema_with = "super::tier_schema::tiers")]
     pub tiers: BTreeMap<Open<Tier>, ClusterTier>,
 }
 
@@ -380,6 +382,7 @@ pub struct PendingUpdate {
     /// What Palette says changed, such as `Manifest 'x' is updated in the pack 'x(x)'`.
     pub message: String,
     /// When Palette made the notification.
+    #[schemars(with = "Rfc3339OrEmpty")]
     pub since: String,
 }
 

@@ -10458,6 +10458,52 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
 }
 
 #[test]
+fn the_schema_of_the_tiers_names_each_key_of_the_fields_that_a_record_holds() {
+    let dir = tempfile::tempdir().unwrap();
+    let (api, _) = cluster_record_with_tiers(dir.path());
+    let palette = Palette::new(api.with("/v1/cloudconfigs/aws/cc1", cloud_config(2)));
+    let mut raw = palette
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    raw.cluster["metadata"]["annotations"] =
+        serde_json::json!({"spectroComponentsUpgradeForbidden": "true"});
+    raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
+    let snap = Snapshot::from_cluster(&raw, None, "cluster", "t0").unwrap();
+    let cluster = snap.source.cluster.as_ref().unwrap();
+    assert_eq!(
+        cluster.tiers.len(),
+        4,
+        "applied, policy, running, and shape"
+    );
+
+    let schema = serde_json::to_value(schemars::schema_for!(Snapshot)).unwrap();
+    let tiers = &schema["$defs"]["ClusterSource"]["properties"]["tiers"]["properties"];
+    // each key of `written` has a property in `named`
+    let check = |written: &Value, named: &Value, at: &str| {
+        for key in written.as_object().unwrap().keys() {
+            assert!(named["properties"].get(key).is_some(), "{at} has {key}");
+        }
+    };
+    let fields = |tier: Tier| &tiers[tier.as_str()]["allOf"][1]["properties"]["fields"];
+    let written = |tier: Tier| &cluster.tier(tier).unwrap().fields;
+    check(written(Tier::Applied), fields(Tier::Applied), "applied");
+    for pack in written(Tier::Running).as_array().unwrap() {
+        check(pack, &fields(Tier::Running)["items"], "running");
+    }
+    check(written(Tier::Policy), fields(Tier::Policy), "policy");
+    let shape = written(Tier::Shape);
+    check(shape, fields(Tier::Shape), "shape");
+    // the keys that only some clouds have, such as the region, stay open
+    for pool in shape["pools"].as_array().unwrap() {
+        check(
+            pool,
+            &fields(Tier::Shape)["properties"]["pools"]["items"],
+            "shape.pools",
+        );
+    }
+}
+
+#[test]
 fn a_cluster_record_without_tiers_still_verifies() {
     let dir = tempfile::tempdir().unwrap();
     let (api, snap) = cluster_record_with_tiers(dir.path());

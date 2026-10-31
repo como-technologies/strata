@@ -10,53 +10,13 @@ use super::cluster::{
     macro_digests, profile_macro_digests,
 };
 use super::pack::Pack;
+use super::variable::{Variable, hash_of};
 use super::{Consumers, SNAPSHOT_SCHEMA, Snapshot, Source, SubjectKind, Template, Tool, macros_of};
 use crate::api::{RawCluster, RawProfile};
-use crate::content::canon::{canonical_json, sha256_hex};
 use crate::content::hash::{content_of, root_of};
 use crate::error::{Error, Result};
-use crate::json::{
-    arr, first_nonempty, flag, str_at, strings, text, text_map, text_or, value_or_null,
-};
+use crate::json::{arr, first_nonempty, str_at, strings, text, text_map};
 use crate::repave::{PendingRepave, is_pending};
-
-/// The text at `ptr` in `v`, or `default` when `v` has no text there. An empty text stays empty,
-/// so the hash of the variables does not change: this is not [`first_nonempty`].
-fn str_or(v: &Value, ptr: &str, default: &str) -> Value {
-    Value::from(text_or(v, ptr, default))
-}
-
-fn bool_or(v: &Value, ptr: &str) -> Value {
-    Value::Bool(flag(v, ptr))
-}
-
-/// Same field set and defaults as the bash extraction, so hashes agree across implementations.
-fn normalize_variable(v: &Value) -> Value {
-    let options: Vec<Value> = arr(v, "/options")
-        .iter()
-        .map(|o| {
-            json!({
-                "label": str_or(o, "/label", ""),
-                "value": str_or(o, "/value", ""),
-                "description": str_or(o, "/description", ""),
-            })
-        })
-        .collect();
-    json!({
-        "name": value_or_null(v, "/name"),
-        "displayName": str_or(v, "/displayName", ""),
-        "description": str_or(v, "/description", ""),
-        "format": str_or(v, "/format", "string"),
-        "defaultValue": str_or(v, "/defaultValue", ""),
-        "regex": str_or(v, "/regex", ""),
-        "required": bool_or(v, "/required"),
-        "immutable": bool_or(v, "/immutable"),
-        "hidden": bool_or(v, "/hidden"),
-        "isSensitive": bool_or(v, "/isSensitive"),
-        "inputType": str_or(v, "/inputType", "text"),
-        "options": options,
-    })
-}
 
 /// The manifests of pack `pk` of one template, each as [`manifest_of`] gives it, from the
 /// answers of the manifests by uid (see [`RawProfile::manifest_entities`]).
@@ -155,9 +115,9 @@ impl Snapshot {
 
         let tags = text_map(prof, "/metadata/labels");
         let clusters = strings(prof, "/status/inUseClusterUids");
-        let variables: Vec<Value> = arr(&raw.variables, "/variables")
+        let variables: Vec<Variable> = arr(&raw.variables, "/variables")
             .iter()
-            .map(normalize_variable)
+            .map(Variable::from_palette)
             .collect();
         let packs: Vec<Pack> = tpl_packs
             .iter()
@@ -205,11 +165,11 @@ impl Snapshot {
     /// it is a change of the schema id.
     pub(super) fn assemble(
         source: Source,
-        mut variables: Vec<Value>,
+        mut variables: Vec<Variable>,
         packs: Vec<Pack>,
     ) -> Snapshot {
-        variables.sort_by_key(|v| text(v, "/name"));
-        let variables_hash = sha256_hex(&canonical_json(&Value::Array(variables.clone())));
+        variables.sort_by(|a, b| a.name.cmp(&b.name));
+        let variables_hash = hash_of(&variables);
         Snapshot {
             schema: SNAPSHOT_SCHEMA.to_string(),
             tool: Tool::current(),
@@ -288,7 +248,7 @@ impl Snapshot {
             .collect::<Result<Vec<Snapshot>>>()?;
         let covered: Vec<AppliedProfile> = chosen.iter().map(|&i| applied[i].clone()).collect();
 
-        let variables: Vec<Value> = parts.iter().flat_map(|p| p.variables.clone()).collect();
+        let variables: Vec<Variable> = parts.iter().flat_map(|p| p.variables.clone()).collect();
         let packs: Vec<Pack> = parts.iter().flat_map(|p| p.packs.clone()).collect();
 
         let joined = |f: fn(&Source) -> &String| {

@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use super::zip_by_key;
 use crate::closed_set::impl_closed_set;
@@ -46,8 +46,8 @@ pub struct Leaf {
     pub op: Op,
     /// Dotted path; array items as `[i]`, or `[name=<value>]` when every item has a unique name
     pub path: String,
-    /// The same path as segments: strings for keys, integers for indexes, {"name": ...} for named items
-    pub segments: Vec<Value>,
+    /// The same path as segments, in order
+    pub segments: Vec<Segment>,
     /// Value in A, absent for additions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub old: Option<Value>,
@@ -56,37 +56,38 @@ pub struct Leaf {
     pub new: Option<Value>,
 }
 
-enum Seg {
+/// One step of the path of a leaf. JSON writes a key as text, an index as an integer, and a named
+/// item as an object with its `name`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+#[schemars(inline)]
+pub enum Segment {
+    /// A key of an object.
     Key(String),
+    /// The index of an item of a list.
     Index(usize),
-    Named(String),
+    /// An item of a list that has a unique `name`, found by that name.
+    Named {
+        /// The name of the item.
+        name: String,
+    },
 }
 
-fn render_path(segs: &[Seg]) -> String {
+fn render_path(segs: &[Segment]) -> String {
     let mut out = String::new();
     for seg in segs {
         match seg {
-            Seg::Key(k) => {
+            Segment::Key(k) => {
                 if !out.is_empty() {
                     out.push('.');
                 }
                 out.push_str(k);
             }
-            Seg::Index(i) => out.push_str(&format!("[{i}]")),
-            Seg::Named(n) => out.push_str(&format!("[name={n}]")),
+            Segment::Index(i) => out.push_str(&format!("[{i}]")),
+            Segment::Named { name } => out.push_str(&format!("[name={name}]")),
         }
     }
     out
-}
-
-fn segments_json(segs: &[Seg]) -> Vec<Value> {
-    segs.iter()
-        .map(|s| match s {
-            Seg::Key(k) => Value::String(k.clone()),
-            Seg::Index(i) => Value::from(*i),
-            Seg::Named(n) => json!({ "name": n }),
-        })
-        .collect()
 }
 
 /// When every item is an object with a unique string `name`, address items by name so that an
@@ -103,13 +104,13 @@ fn name_keys(items: &[Value]) -> Option<Vec<String>> {
     Some(names)
 }
 
-type Leaves = BTreeMap<String, (Vec<Value>, Value)>;
+type Leaves = BTreeMap<String, (Vec<Segment>, Value)>;
 
-fn flatten(v: &Value, path: &mut Vec<Seg>, out: &mut Leaves) {
+fn flatten(v: &Value, path: &mut Vec<Segment>, out: &mut Leaves) {
     match v {
         Value::Object(m) if !m.is_empty() => {
             for (k, x) in m {
-                path.push(Seg::Key(k.clone()));
+                path.push(Segment::Key(k.clone()));
                 flatten(x, path, out);
                 path.pop();
             }
@@ -117,20 +118,20 @@ fn flatten(v: &Value, path: &mut Vec<Seg>, out: &mut Leaves) {
         Value::Array(a) if !a.is_empty() => {
             if let Some(names) = name_keys(a) {
                 for (x, n) in a.iter().zip(names) {
-                    path.push(Seg::Named(n));
+                    path.push(Segment::Named { name: n });
                     flatten(x, path, out);
                     path.pop();
                 }
             } else {
                 for (i, x) in a.iter().enumerate() {
-                    path.push(Seg::Index(i));
+                    path.push(Segment::Index(i));
                     flatten(x, path, out);
                     path.pop();
                 }
             }
         }
         _ => {
-            out.insert(render_path(path), (segments_json(path), v.clone()));
+            out.insert(render_path(path), (path.clone(), v.clone()));
         }
     }
 }
@@ -247,7 +248,37 @@ mod tests {
         );
         assert_eq!(
             d[0].segments,
-            vec![json!("env"), json!({"name": "B"}), json!("value")]
+            vec![
+                Segment::Key("env".into()),
+                Segment::Named { name: "B".into() },
+                Segment::Key("value".into())
+            ]
+        );
+    }
+
+    #[test]
+    fn a_segment_is_text_for_a_key_an_integer_for_an_index_and_an_object_for_a_named_item() {
+        let listed = leaf_diff(&json!({"a": [1, 2]}), &json!({"a": [1, 3]}));
+        let named = leaf_diff(
+            &json!({"e": [{"name": "A", "v": 1}]}),
+            &json!({"e": [{"name": "A", "v": 2}]}),
+        );
+        assert_eq!(
+            serde_json::to_value(&listed[0].segments).unwrap(),
+            json!(["a", 1])
+        );
+        assert_eq!(
+            serde_json::to_value(&named[0].segments).unwrap(),
+            json!(["e", {"name": "A"}, "v"])
+        );
+        let read: Vec<Segment> = serde_json::from_value(json!(["e", 0, {"name": "A"}])).unwrap();
+        assert_eq!(
+            read,
+            [
+                Segment::Key("e".into()),
+                Segment::Index(0),
+                Segment::Named { name: "A".into() }
+            ]
         );
     }
 

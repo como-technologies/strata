@@ -1,0 +1,2 @@
+$ strata schema snapshot | jq -c '.properties.variables.items.properties | keys'
+["defaultValue","description","displayName","format","hidden","immutable","inputType","isSensitive","name","options","regex","required"]

@@ -11,6 +11,8 @@ use crate::text::{and_list, cut};
 mod class;
 mod json;
 
+pub(crate) use json::ErrorDocument;
+
 pub use class::FailureClass;
 
 /// Everything that can go wrong in the library.
