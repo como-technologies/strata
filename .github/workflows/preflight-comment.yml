@@ -1,6 +1,6 @@
 name: strata preflight comment
 
-# Reusable workflow. It posts the report of a preflight as one comment on the pull request; see
+# This reusable workflow posts the report of a preflight as one comment on the pull request; see
 # docs/src/automation/preflight.md. A repository calls it in a second job, with `needs:` on the
 # job that calls preflight.yml. It takes report.md from the artifact `preflight` of that job, and
 # runs scripts/ci/pr-comment.sh --preflight from the same tag. The comment starts with the marker

@@ -8,8 +8,8 @@ exit status of those commands is the gate. The preflight job calls
 
 | File | Copy it to | Runs |
 | --- | --- | --- |
-| `github/strata.yml` | `.github/workflows/strata.yml` of your repository | the comment, the preflight check, and the merge gate on a pull request, the drift report and the upstream report on a schedule, the promotion gate and the retire gate on demand |
-| `gitlab/strata.yml` | `.gitlab/strata.yml` of your project, and include it | the comment, the preflight check, and the merge gate on a merge request pipeline, the drift report and the upstream report on a pipeline schedule, the promotion gate and the retire gate as manual jobs |
+| `github/strata.yml` | `.github/workflows/strata.yml` of your repository | On a pull request: the comment, the preflight check, and the merge gate. On a schedule: the drift report and the upstream report. On demand: the promotion gate and the retire gate. |
+| `gitlab/strata.yml` | `.gitlab/strata.yml` of your project, and include it | On a merge request pipeline: the comment, the preflight check, and the merge gate. On a pipeline schedule: the drift report and the upstream report. As manual jobs: the promotion gate and the retire gate. |
 
 Set the refs and the records that your repository holds, and the version of
 strata that the jobs install. Each option that a pipeline sets has an input in
@@ -25,8 +25,8 @@ The GitHub file calls eight **reusable workflows** that live in
 `.github/workflows/` of this repository: `comment.yml`, `preflight.yml`,
 `preflight-comment.yml`, `verify.yml`, `upstream.yml`, `merge-gate.yml`,
 `promote-gate.yml` and `retire-gate.yml`. The job of `preflight-comment.yml` is
-in a comment of the file: turn it on to get the preflight report as a comment.
-GitHub resolves `uses: owner/repo/.github/workflows/x.yml@tag` only under that
+in a comment of the file. Remove the comment marks to post the preflight report
+as a comment. GitHub resolves `uses: owner/repo/.github/workflows/x.yml@tag` only under that
 path, so those eight cannot move here. They are published, not
 examples: your repository calls them and never copies them.
 

@@ -112,8 +112,8 @@ version:
 - Take packs from a registry that Palette syncs, so each pack has a digest.
 - Before you pin a version, read `strata packs`. A row with `no digest` is a
   version that a record cannot verify.
-- Where a pack has none, decide it one time, and pass `--allow-no-digest` to
-  `verify`, `merge-gate.sh`, and `verify-report.sh`, and `--allow no-digest` to
+- Where a pack has none, decide it one time. Then give `--allow-no-digest` to
+  `verify`, `merge-gate.sh`, and `verify-report.sh`. Give `--allow no-digest` to
   `same-release`. In a pipeline, set the input `allow-no-digest` of
   `merge-gate.yml` and `verify.yml`, and `allow: no-digest` for
   `promote-gate.yml`. On GitLab, set `STRATA_ALLOW_NO_DIGEST` and

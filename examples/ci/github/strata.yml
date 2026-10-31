@@ -3,7 +3,7 @@
 #
 # Copy this file to .github/workflows/strata.yml in your own repository and set the refs and the
 # records that your repository holds. It calls seven reusable workflows of the strata repository,
-# and an eighth when you turn on the comment of the preflight.
+# and an eighth when you use the job of the preflight comment.
 # A version bump is sixteen lines here: each job names the tag twice, once in `uses: ...@TAG` and once
 # in `strata-version:`. Both must carry the same tag. `uses:` selects the workflow file, and
 # `strata-version:` is what each workflow checks this repository out at and installs the binary
@@ -79,7 +79,7 @@ jobs:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
 
   # the report of the preflight as one comment on the pull request, updated on each push. Remove
-  # the comment marks to turn it on. The condition runs the job also after a failed preflight,
+  # the comment marks to use it. The condition runs the job also after a failed preflight,
   # because a person must read a failed report
   # preflight-comment:
   #   needs: preflight

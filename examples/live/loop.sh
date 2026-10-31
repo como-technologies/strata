@@ -9,17 +9,17 @@
 #      packs of the candidate, the comment of the pull request, and the merge gate
 #   3  the publish: the published next version is the candidate that the reviewer read, and
 #      Palette is asked if the move of cluster A to it repaves, and if it accepts the packs
-#   4  before a build: the body of a create on the release, and strata preflight on it, the
-#      static tier and the tier of Palette, and the static report as the comment of the pull
-#      request; they create nothing
+#   4  before a build: strata preflight runs the static tier and the tier of Palette on the body
+#      of a create on the release. The comment of the pull request holds the static report. The
+#      stage creates nothing
 #   5  the nightly jobs: every record verifies, the fleet of a label is recorded, and the
 #      registry has newer versions of what the records pin, and whether Palette accepts the move
 #      to each of them
 #   6  behind is not different: a value that a person overrides on cluster A opens no
 #      notification, and the record of the cluster reports the drift; the override is undone
-#   7  an edit of a published version in place: the nightly job opens an issue, --who names the
-#      writer, in the command and in the issue of the nightly job, and cluster A keeps its copy
-#      while an update waits for it; the edit is undone
+#   7  an edit of a published version in place: the nightly job opens an issue. --who names the
+#      writer in the command and in the issue of the nightly job. Cluster A keeps its copy while
+#      an update waits for it. The stage undoes the edit
 #   8  an incident: which versions carry a pack, and which clusters run the release
 #   9  the retire: nothing runs the next version, so the gate is open
 #
@@ -139,7 +139,7 @@ if stage 4 "before a build"; then
     jq -e --arg a "$A" --arg r "$REL" '.spec.cloudAccountUid == $a and .spec.profiles[0].uid == $r' build.json
   check preflight-static 0 '#385: the static tier of preflight finds no fault in the body, with no request' -- \
     "$strata" preflight build.json --cloud "$engine" --tier static --offline --quiet
-  check preflight-comment 0 '#158: pr-comment.sh --preflight turns the markdown report of the static tier into the comment of the pull request' -- \
+  check preflight-comment 0 '#158: pr-comment.sh --preflight posts the markdown report of the static tier as the comment of the pull request' -- \
     bash -c "\"$strata\" preflight build.json --cloud \"$engine\" --tier static --offline --quiet --format markdown > preflight-report.md && \"$ci/pr-comment.sh\" --preflight preflight-report.md --dry-run > preflight-comment.md"
   check preflight-comment-says 0 '#158: the comment starts with the marker of its own and holds the verdict' -- \
     bash -c "head -n 1 preflight-comment.md | grep -qx '<!-- strata-preflight -->' && grep -q '^\*\*OK: ' preflight-comment.md"

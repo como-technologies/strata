@@ -68,8 +68,8 @@ harness for that one thing, and a `just` recipe runs it.
 Each reusable workflow in `.github/workflows/` and each job of
 `examples/ci/gitlab/strata.yml` wraps one script or one command. When that
 script or command gets a new option, `tests/ci_scripts.rs` fails until the
-table `WRAPPERS` says what the workflow does with it: an input and a variable
-that set it, a value that the workflow sets itself, or a reason to leave it out.
+table `WRAPPERS` names it. For each option, the table gives an input and a
+variable, a value that the workflow sets, or the reason to omit it.
 The same test file checks that a script passes the options of `verify` and
 `behind` that a pipeline sets. `tests/workflows.rs` runs the `run` script of
 each such step with a stand-in for the tool, because `act` is not in every

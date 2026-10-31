@@ -4410,7 +4410,7 @@ fn fred_document() -> serde_json::Value {
 }
 
 /// A stage 6 run of validate-packs.sh on the profile `strata-live-release@1.0.0` and the cluster
-/// `fred`, where `strata behind --json` gives `report` for the record of the profile and
+/// `fred`. `strata behind --json` gives `report` for the record of the profile, and
 /// `cluster_report` for the record of the cluster. Gives steps.log.
 fn bump_stage(report: &str, cluster_report: &str) -> (Stage, String) {
     bump_stage_with(report, cluster_report, |_| {})
@@ -5717,8 +5717,8 @@ fn loop_sh_stage_7_asks_the_nightly_job_to_put_the_writer_of_an_edit_in_the_issu
         1,
         "**DRIFT**: published version strata-live-addon@1.0.0 differs\n\nwho: 1 write in the audit log since the record\n\n- 2026-09-26T06:30:00.123Z  John Doe (user)  update\n",
     );
-    // the stage edits the add-on through the API, which this test does not serve, so its first
-    // step fails; the checks of the nightly job do not depend on it
+    // the stage edits the add-on through the API, and this test does not serve that route, so the
+    // first step fails. The checks of the nightly job do not need that step
     let (_, steps) = stage.run("loop.sh", &["7"]);
     passed(&steps, &["nightly-who", "nightly-who-says"]);
     let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();

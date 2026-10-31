@@ -97,10 +97,12 @@ profile export that a person made gives such a variable. Its record has another
 Strata does not read a record that holds `name: null`. `verify`, `compare`,
 `behind`, and `same-release` stop on it with `snapshot-schema` and exit `2`. The
 id stays. Palette requires a name, so only a raw directory that a person made
-gave such a record. In the library, `Snapshot::variables` and
-`Candidate::variables` are `Vec<Variable>` in place of `Vec<Value>`.
-`Leaf::segments` is `Vec<Segment>` in place of `Vec<Value>`. The function
-`diff::group_variables` takes `&[Variable]`.
+gave such a record.
+
+In the library, `Snapshot::variables` and `Candidate::variables` are
+`Vec<Variable>` in place of `Vec<Value>`. `Leaf::segments` is `Vec<Segment>` in
+place of `Vec<Value>`. The function `diff::group_variables` takes
+`&[Variable]`.
 
 After 0.24.0, strata reads the variables of a candidate file by type. Before, it
 changed each value of the wrong type into the default of the field. Four cases
@@ -142,8 +144,9 @@ absent means unknown: `source.consumers`, `rootLive`, `maxImpact`,
 means that strata could not read the notifications, and
 `errors.updatesPending` says why. `repavePending` joined `source.cluster` in
 0.18.0: absent means a record of an older release, or of an object that is not
-a cluster. In 0.7.0
-`source.consumers` became absent on a record that no consumers request
+a cluster.
+
+In 0.7.0 `source.consumers` became absent on a record that no consumers request
 produced, where 0.6.3 wrote `count: 0` and stated a count that nothing counted.
 A reader that takes absent for zero reads such a record wrong, so this page
 names each field that changed this way, with the release that changed it. The

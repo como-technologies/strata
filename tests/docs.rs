@@ -241,8 +241,8 @@ const RELEASE_0_18_0_FIELDS: &[&str] = &[
     "containerRegistryUid",
 ];
 
-/// The page of the compatibility rules named the release of Wave 4 as "after 0.17.0", and it left
-/// most of the fields of that wave out. A reader who holds an older record cannot tell a field
+/// The page of the compatibility rules named the release of Wave 4 as "after 0.17.0". It also did
+/// not name most of the fields of that wave. A reader who holds an older record cannot tell a field
 /// that Palette did not give from a field that the release did not write.
 #[test]
 fn compatibility_names_release_0_18_0_and_what_each_absent_field_of_wave_4_means() {
@@ -547,6 +547,381 @@ fn stop_a_build_shows_the_comment_and_the_watch_of_the_workflow() {
         assert!(
             preflight.contains(heading),
             "preflight.md has no {heading:?}"
+        );
+    }
+}
+
+// ---- the style review of Wave 11 -------------------------------------------------------------
+
+/// The block of `text` that holds the first line with `anchor`. It is a paragraph, a list item
+/// without its nested items, or a table row. The block is one line, without the mark of the list.
+fn block(text: &str, anchor: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.contains(anchor))
+        .unwrap_or_else(|| panic!("no line holds {anchor:?}"));
+    if lines[at].starts_with('|') {
+        return one_line(lines[at]);
+    }
+    let starts_item = |l: &str| l.trim_start().starts_with("- ");
+    let mut from = at;
+    while from > 0 && !starts_item(lines[from]) && !lines[from - 1].trim().is_empty() {
+        from -= 1;
+    }
+    let mut to = at + 1;
+    while to < lines.len() && !lines[to].trim().is_empty() && !starts_item(lines[to]) {
+        to += 1;
+    }
+    one_line(&lines[from..to].join(" "))
+        .trim_start_matches("- ")
+        .to_string()
+}
+
+/// The sentences of `block`. A sentence ends at one of three marks: a full stop, a question mark,
+/// or an exclamation mark. The mark is outside a code span, and a space or the end follows it.
+fn sentences(block: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current = String::new();
+    let mut in_code = false;
+    let mut chars = block.chars().peekable();
+    while let Some(c) = chars.next() {
+        current.push(c);
+        in_code ^= c == '`';
+        let ends = matches!(c, '.' | '?' | '!') && chars.peek().is_none_or(|n| n.is_whitespace());
+        if ends && !in_code {
+            out.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.trim().is_empty() {
+        out.push(current);
+    }
+    out
+}
+
+/// The words of a sentence: each run of characters between spaces that holds a letter or a
+/// digit. The target of a link is not a word.
+fn words(sentence: &str) -> usize {
+    let mut text = String::new();
+    let mut rest = sentence;
+    while let Some(at) = rest.find("](") {
+        text.push_str(&rest[..=at]);
+        rest = rest[at + 2..]
+            .find(')')
+            .map_or("", |end| &rest[at + 2 + end + 1..]);
+    }
+    text.push_str(rest);
+    text.split_whitespace()
+        .filter(|w| w.chars().any(char::is_alphanumeric))
+        .count()
+}
+
+/// The style review of Wave 11 found sentences over the limits of "The style rules". The pages
+/// are in `docs/src/`, and the other files are in the repository. A procedure has 20 words at most,
+/// and a description has 25.
+#[test]
+fn the_sentences_that_the_style_review_of_wave_11_named_keep_to_the_limits() {
+    let sentences_to_check = [
+        (
+            "automation/preflight.md",
+            "installs the two binaries and runs",
+            25,
+        ),
+        ("automation/preflight.md", "markdown to the job summary", 25),
+        (
+            "automation/preflight.md",
+            "reads one variable for each input",
+            25,
+        ),
+        ("development/build-test.md", "names it. For each option", 25),
+        (
+            "reference/documents.md",
+            "`actorType` and `action`, as Palette",
+            25,
+        ),
+        (
+            "automation/gitlab.md",
+            "downloads one release. When `cosign` is on the `PATH`, it",
+            25,
+        ),
+        ("automation/gitlab.md", "To require the check, install", 20),
+        (
+            "automation/pr-comments.md",
+            "The workflow installs the release binary",
+            25,
+        ),
+        (
+            "development/live-runs.md",
+            "makes a checkout of the caller",
+            25,
+        ),
+        (
+            "development/live-runs.md",
+            "#419: with `CLUSTER`, the record of the cluster",
+            25,
+        ),
+        (
+            "development/live-runs.md",
+            "#158: `verify-report.sh --who` puts",
+            25,
+        ),
+        (
+            "automation/library.md",
+            "`with_palette` adds the profiles",
+            25,
+        ),
+        (
+            "use-cases/edited-in-place.md",
+            "Then the issue also lists each write",
+            20,
+        ),
+        (
+            "use-cases/no-digest.md",
+            "Then give `--allow-no-digest`",
+            20,
+        ),
+        ("use-cases/no-digest.md", "Give `--allow no-digest` to", 20),
+    ];
+    for (page, anchor, limit) in sentences_to_check {
+        let text = read(&docs().join(page));
+        let found = sentences(&block(&text, anchor));
+        let sentence = found
+            .iter()
+            .find(|s| s.contains(anchor.split(". ").last().unwrap()))
+            .unwrap_or_else(|| panic!("{page}: no sentence holds {anchor:?}"));
+        assert!(
+            words(sentence) <= limit,
+            "{page}: {} words in a sentence of {limit} at most: {sentence}",
+            words(sentence)
+        );
+    }
+
+    // the cells of the table of the drop-ins: one short sentence for each trigger
+    let table = repo_file("examples/ci/README.md");
+    for row in ["| `github/strata.yml` |", "| `gitlab/strata.yml` |"] {
+        for sentence in sentences(&block(&table, row)) {
+            assert!(
+                words(&sentence) <= 25,
+                "examples/ci/README.md: {} words: {sentence}",
+                words(&sentence)
+            );
+        }
+    }
+}
+
+/// The style review of Wave 11 found paragraphs and list items over six sentences. A nested list
+/// item counts as a block of its own.
+#[test]
+fn the_blocks_that_the_style_review_of_wave_11_named_have_six_sentences_or_fewer() {
+    let blocks = [
+        (
+            "reference/compatibility.md",
+            "After 0.24.0, a record of a cluster holds why",
+        ),
+        (
+            "reference/compatibility.md",
+            "A script that reads `updatesPendingError`",
+        ),
+        (
+            "reference/compatibility.md",
+            "After 0.24.0, the schema states the shape",
+        ),
+        ("reference/compatibility.md", "One case differs."),
+        (
+            "reference/compatibility.md",
+            "Strata does not read a record that holds `name: null`",
+        ),
+        (
+            "reference/compatibility.md",
+            "A field can also become absent",
+        ),
+        ("reference/compatibility.md", "In 0.7.0 `source.consumers`"),
+        (
+            "reference/documents.md",
+            "`tiers`: each tier that the record carries",
+        ),
+        ("reference/documents.md", "`who`, only with `--who`"),
+        ("reference/documents.md", "Each changed value is a leaf"),
+        ("reference/documents.md", "`segments` is the path as a list"),
+        ("reference/documents.md", "`consumers[]`: `kind`"),
+        (
+            "reference/documents.md",
+            "A cluster: `ref`, `name`, `uid`, `state`",
+        ),
+        ("development/build-test.md", "Each reusable workflow in"),
+        ("use-cases/no-digest.md", "Where a pack has none"),
+    ];
+    for (page, anchor) in blocks {
+        let found = sentences(&block(&read(&docs().join(page)), anchor)).len();
+        assert!(
+            found <= 6,
+            "{page}: {found} sentences in the block of {anchor:?}"
+        );
+    }
+}
+
+/// The comment that holds the first comment line with `anchor`. The comment is the lines around it
+/// that start with `//`, up to a blank comment line. The result is one line without the marks.
+fn comment(text: &str, anchor: &str) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let body = |i: usize| {
+        let line = lines[i].trim_start();
+        let marks = line.starts_with("//");
+        let words = line.trim_start_matches('/').trim_start_matches('!').trim();
+        (marks && !words.is_empty()).then_some(words)
+    };
+    let at = (0..lines.len())
+        .find(|&i| body(i).is_some() && lines[i].contains(anchor))
+        .unwrap_or_else(|| panic!("no comment line holds {anchor:?}"));
+    let from = (0..=at).rev().take_while(|&i| body(i).is_some()).last();
+    let to = (at..lines.len()).take_while(|&i| body(i).is_some()).last();
+    let text: Vec<&str> = (from.unwrap_or(at)..=to.unwrap_or(at))
+        .filter_map(body)
+        .collect();
+    text.join(" ")
+}
+
+/// The style review of Wave 11 found comments in the Rust files with a sentence over the limit of
+/// 25 words for a description.
+#[test]
+fn the_rust_comments_that_the_style_review_of_wave_11_named_keep_to_25_words() {
+    let comments = [
+        (
+            "src/snapshot/cluster.rs",
+            "The fields of a record of strata 0.24 and before",
+        ),
+        (
+            "src/snapshot/cluster.rs",
+            "The parts of the cluster in `raw` that strata could not read",
+        ),
+        ("src/snapshot/pack.rs", "The schema of [`Pack::params`]"),
+        (
+            "src/snapshot/variable.rs",
+            "The variable that strata keeps of `v`",
+        ),
+        (
+            "xtask/src/chapters.rs",
+            "the table says repave for a new Kubernetes version",
+        ),
+        (
+            "tests/ci_scripts.rs",
+            "The options of a tool that a wrapper neither sets",
+        ),
+        (
+            "tests/ci_scripts.rs",
+            "A script passes to its command the options",
+        ),
+        (
+            "tests/ci_scripts.rs",
+            "the stand-in runs the real comparison without the option",
+        ),
+        (
+            "tests/ci_scripts.rs",
+            "a pull request with a comparison comment and no preflight",
+        ),
+        (
+            "tests/cli.rs",
+            "a value that Palette has today in one of these fields",
+        ),
+        (
+            "tests/cli.rs",
+            "True when the name of a property is the name of a time field",
+        ),
+        (
+            "tests/live_scripts.rs",
+            "`strata behind --json` gives `report`",
+        ),
+        (
+            "tests/live_scripts.rs",
+            "the stage edits the add-on through the API",
+        ),
+        ("tests/workflows.rs", "`act` is not in every container"),
+        (
+            "tests/workflows.rs",
+            "GitHub fails a call from a caller that grants less",
+        ),
+        (
+            "tests/workflows.rs",
+            "The comment takes the report from the artifact",
+        ),
+        ("tests/docs.rs", "The block of `text` that holds"),
+        ("tests/docs.rs", "The sentences of `block`."),
+        (
+            "tests/docs.rs",
+            "The comment that holds the first comment line",
+        ),
+    ];
+    for (file, anchor) in comments {
+        for sentence in sentences(&comment(&repo_file(file), anchor)) {
+            assert!(
+                words(&sentence) <= 25,
+                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
+                words(&sentence)
+            );
+        }
+    }
+}
+
+/// The review of Wave 11 named phrasal verbs and "would" for a fact. Each file below held one.
+#[test]
+fn the_phrasal_verbs_and_the_would_of_the_wave_11_review_are_gone() {
+    let phrases = [
+        ("docs/src/install.md", "and goes on"),
+        ("docs/src/development/build-test.md", "leave it out"),
+        (
+            "docs/src/development/live-runs.md",
+            "turns the markdown report",
+        ),
+        ("docs/src/development/live-runs.md", "checks out the caller"),
+        ("examples/ci/README.md", "turn it on"),
+        ("examples/ci/github/strata.yml", "turn on the comment"),
+        ("examples/ci/github/strata.yml", "to turn it on"),
+        ("examples/live/loop.sh", "turns the markdown report"),
+        ("examples/library-preflight/src/main.rs", "program would"),
+        ("scripts/ci/pr-comment.sh", "goes on with the table"),
+        ("tests/workflows.rs", "they would run two times"),
+    ];
+    for (file, phrase) in phrases {
+        assert!(
+            !repo_file(file).contains(phrase),
+            "{file} still holds {phrase:?}"
+        );
+    }
+}
+
+/// The checks that the live window of Wave 11 ran have their result in the book. A row that says
+/// "no result yet" for one of them tells a reader that nobody ran the check.
+#[test]
+fn the_rows_of_the_checks_that_the_wave_11_live_window_ran_state_a_result() {
+    let page = read(&docs().join("development/live-runs.md"));
+    for check in [
+        "ask-repave-comment",
+        "preflight-comment",
+        "preflight-key-pair",
+        "nightly-who",
+        "bump-cluster-same",
+        "bump-cluster-asked",
+        "bump-cluster-refused",
+        "cluster-route-doc",
+        "validate",
+    ] {
+        let start = format!("| `{check}`");
+        let row = page
+            .lines()
+            .find(|l| l.starts_with(&start))
+            .unwrap_or_else(|| panic!("live-runs.md has no row for {check}"));
+        assert!(
+            !row.to_lowercase().contains("no result yet"),
+            "the row of {check} says that it has no result: {row}"
+        );
+    }
+
+    // stage 6 needs a cluster two minor versions behind, and a baseline check needs the same
+    let packs = section(&page, "## validate-packs.sh", Some("\n## "));
+    for needle in ["-var k8s_version=1.35.8", "TF_VAR_k8s_version=1.35.8"] {
+        assert!(
+            packs.contains(needle),
+            "the section of validate-packs.sh does not give {needle}"
         );
     }
 }
