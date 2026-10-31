@@ -190,6 +190,83 @@ fn a_probes_file_that_shadows_a_rule_of_the_catalog_is_refused() {
 }
 
 #[test]
+fn a_rule_id_that_is_not_in_the_catalog_is_a_usage_error_that_tells_how_to_list_the_ids() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
+    // the two rules that left the catalog in 0.24.0
+    for id in ["gke-pool-multiple-3", "profile-cloud-mismatch"] {
+        let (code, out, err) = run(
+            &["cluster.json", "--cloud", "eks", "--offline", "--rule", id],
+            dir.path(),
+        );
+        assert_eq!(code, 2, "{id}: {err}");
+        assert!(out.is_empty(), "no report: {out}");
+        assert!(
+            err.contains(&format!("no rule has the id {id}"))
+                && err.contains("strata-preflight --rules"),
+            "{id}: {err}"
+        );
+    }
+    // a known id beside an unknown one: the message names the unknown one only
+    let (code, _, err) = run(
+        &[
+            "cluster.json",
+            "--cloud",
+            "eks",
+            "--offline",
+            "--rule",
+            "eks-one-zone",
+            "--rule",
+            "profile-cloud-mismatch",
+            "--json",
+        ],
+        dir.path(),
+    );
+    assert_eq!(code, 2, "{err}");
+    assert!(
+        err.contains("\"kind\":\"usage\"")
+            && err.contains("no rule has the id profile-cloud-mismatch."),
+        "{err}"
+    );
+    // an id of a rule that exists but does not apply to the cloud is not an error
+    let (code, _, err) = run(
+        &[
+            "cluster.json",
+            "--cloud",
+            "eks",
+            "--offline",
+            "--rule",
+            "gke-api-off",
+        ],
+        dir.path(),
+    );
+    assert_eq!(code, 0, "{err}");
+}
+
+#[test]
+fn a_rule_id_of_a_probes_file_is_known() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
+    std::fs::write(dir.path().join("landing-zone.yaml"), PROBES).unwrap();
+    let (code, out, err) = run(
+        &[
+            "cluster.json",
+            "--cloud",
+            "eks",
+            "--offline",
+            "--probes",
+            "landing-zone.yaml",
+            "--rule",
+            "example-region",
+            "--json",
+        ],
+        dir.path(),
+    );
+    assert_eq!(code, 0, "{err}");
+    assert!(out.contains("example-region"), "{out}");
+}
+
+#[test]
 fn an_entity_with_no_cloud_says_to_give_one_and_a_bad_cloud_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();

@@ -16,7 +16,7 @@ Options:
       --records <FILE>     Records of the profiles, as files or a pattern in quotes; with none, read from Palette
       --probes <FILE>      A file of custom probes, in the format of the rules; give it again for more
       --tier <TIER>        The tiers to run: static, palette, cloud, as a list; default all three
-      --rule <ID>          Only these rules, by id; give it again for more
+      --rule <ID>          Only these rules, by id; give it again for more; an id that is not in the catalog is an error
       --strict             Count a failed probe as a failed check
       --ready <PERCENT>    Exit 1 when the readiness is under this percentage, such as 80
       --offline            Read nothing from Palette: the static tier alone, from the files given

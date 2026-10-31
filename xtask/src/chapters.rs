@@ -3349,6 +3349,13 @@ fn automation(r: &mut Runner) {
         false,
         "strata preflight --rules --cloud aws --json | jq '.rules[] | select(.id == \"worker-cpu-floor\") | {id, tier, level, severity, status, engines, check: .check.kind}'",
     );
+    // a rule that left the catalog is an id that no rule has: a usage error, before any request
+    r.step(
+        "preflight-rule-unknown",
+        2,
+        true,
+        "strata preflight cluster.json --cloud aws --offline --rule gke-pool-multiple-3",
+    );
     // the three rules of the CAPA stack of an AWS account (#365)
     r.step(
         "preflight-capa-rules",

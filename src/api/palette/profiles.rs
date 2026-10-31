@@ -9,8 +9,8 @@ use serde_json::Value;
 
 use super::{
     APP_DEPLOYMENTS, APP_PROFILE_LISTING, APP_PROFILES, EDGE_HOSTS, PROFILE_SEARCH, PROFILES,
-    Palette, SEARCH_PAGE, TIER_CONTAINER_REGISTRY, TIER_INSTALL_ORDER, install_order,
-    listed_versions, no_variables, query_value, route, with_limit,
+    Palette, SEARCH_PAGE, TIER_CONTAINER_REGISTRY, TIER_INSTALL_ORDER, VariablesRead,
+    install_order, listed_versions, no_variables, query_value, route, with_limit,
 };
 use crate::api::{PaletteApi, RawProfile, mask};
 use crate::closed_set::ClosedSet;
@@ -290,18 +290,20 @@ impl<A: PaletteApi> Palette<A> {
     /// document of the object, again. An error of that read returns: the object is gone, and "no
     /// variables" is wrong.
     ///
-    /// The second value is true when the route is missing and `none` is in its place. A caller
-    /// must record that flag. "No variables" and "strata could not read the variables" give the
-    /// same root, and only the flag shows the difference.
+    /// `route_missing` of the result is true when the route is missing and `none` is the answer.
+    /// A caller must record that flag: see [`VariablesRead`].
     pub(super) fn variables_or(
         &self,
         owner: &str,
         none: Value,
         progress: &Progress,
-    ) -> Result<(Value, bool)> {
+    ) -> Result<VariablesRead> {
         let path = format!("{owner}/variables");
         match self.api.get_json(&path) {
-            Ok(v) => Ok((v, false)),
+            Ok(answer) => Ok(VariablesRead {
+                answer,
+                route_missing: false,
+            }),
             Err(e @ Error::Api { status, .. }) if e.is_missing_route() => {
                 if status == 404 {
                     self.api.get_json(owner)?;
@@ -309,7 +311,10 @@ impl<A: PaletteApi> Palette<A> {
                 progress.note(&format!(
                     "note: {path} is unavailable; treating as no variables"
                 ));
-                Ok((none, true))
+                Ok(VariablesRead {
+                    answer: none,
+                    route_missing: true,
+                })
             }
             Err(e) => Err(e),
         }
@@ -331,13 +336,12 @@ impl<A: PaletteApi> Palette<A> {
         let mut manifests = self.profile_pack_manifests(uid)?;
         self.mask_draft(&mut profile, &mut manifests, progress)?;
         let manifest_entities = self.manifest_entities(uid, &profile, progress)?;
-        let (variables, variables_unavailable) =
-            self.variables_or(&route(PROFILES, &[uid]), no_variables(), progress)?;
+        let variables = self.variables_or(&route(PROFILES, &[uid]), no_variables(), progress)?;
         Ok(RawProfile {
             profile,
             manifests,
-            variables,
-            variables_unavailable,
+            variables: variables.answer,
+            variables_unavailable: variables.route_missing,
             project_uid: self.project_uid().map(str::to_string),
             fetched_at: None,
             manifest_entities,

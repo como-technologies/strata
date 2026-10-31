@@ -138,6 +138,20 @@ fn no_variables() -> Value {
     serde_json::json!({"variables": []})
 }
 
+/// The variables of an object, as Palette gives them, and whether the route that gives them is
+/// missing.
+///
+/// "No variables" and "strata could not read the variables" give the same root. Only
+/// `route_missing` shows the difference, so a caller that records the answer must record the
+/// flag too.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VariablesRead {
+    /// The answer of the route. When the route is missing, the empty answer of the object.
+    pub answer: Value,
+    /// True when Palette has no variables route, as an older Palette, and `answer` is empty.
+    pub route_missing: bool,
+}
+
 /// The body of a search that selects each item, with no sort: `{"filter": {}, "sort": []}`.
 fn search_all() -> Value {
     serde_json::json!({"filter": {}, "sort": []})

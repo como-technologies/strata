@@ -33,7 +33,8 @@ pub(crate) use palette::{
     profile_versions, search_condition, search_filter, search_group,
 };
 pub use palette::{
-    Palette, SearchedClusters, cluster_events_path, cluster_summary_path, subject_path,
+    Palette, SearchedClusters, VariablesRead, cluster_events_path, cluster_summary_path,
+    subject_path,
 };
 pub(crate) use raw::recorded_template;
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft, profile_variables};

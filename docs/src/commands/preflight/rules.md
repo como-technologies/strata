@@ -18,6 +18,15 @@ without this book:
 {{#include ../../output/preflight-rules-json.txt}}
 ```
 
+`--rule ID` runs only the rule with that id. Give it again for more rules.
+An id that is not in the catalog is a `usage` error with exit `2`, and strata
+sends no request. The message names the id and tells how to list the ids. A rule
+that left the catalog is such an id. See [the checks that the route answers](../../reference/preflight-rules.md#the-checks-that-the-route-answers).
+
+```text
+{{#include ../../output/preflight-rule-unknown.txt}}
+```
+
 A rule that reads a list has an `each` in its check. The check of Palette makes one
 request for each item of that list. Here the edge host rule reads each host of
 each pool:

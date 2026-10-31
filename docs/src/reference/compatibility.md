@@ -13,14 +13,8 @@ release has the tag `v<version>`. The crate builds with Rust 1.88 or later. The
 crate is not on crates.io, so a dependency names the tag: see
 [The library](../automation/library.md#add-the-dependency).
 
-Release 0.22 moves five public modules under new parents. Each old path stays as
-a `pub use` until release 0.23:
-
-- `strata::color` is now `strata::term::color`.
-- `strata::progress` is now `strata::term::progress`.
-- `strata::layer` is now `strata::content::layer`.
-- `strata::impact` is now `strata::diff::impact`.
-- `strata::version` is now `strata::reference::version`.
+[Release 0.24.0](#release-0240-changes-that-need-action) lists the changes that
+need action, for the command line, the documents, and the two libraries.
 
 ## The documents
 
@@ -181,3 +175,117 @@ file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a
 closed set, such as a new `type` of a layer, fails in the same way. A person
 writes the file, so strata refuses the value and does not guess.
+
+## Release 0.24.0: changes that need action
+
+Release 0.24.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, or code that uses a library. A change that only adds a field or a
+value is in the sections above.
+
+### For a user of the command line or of a document
+
+- **`strata-preflight`: two rules left the catalog.** `gke-pool-multiple-3` and
+  `profile-cloud-mismatch` are gone. The validate route of Palette makes these
+  two checks, and the rule `palette-validate` shows its answer.
+  `palette-validate` is a probe of the `palette` tier. It needs the key, and it
+  changes the exit code only with `--strict`. So a GKE pool with a size that is
+  not a multiple of 3 now gives exit `0`. It gave exit `1`. With `--offline`, no
+  rule checks the size of the pool. To stop a build for this fault, run the
+  `palette` tier with the key and `--strict`.
+- **`--rule` refuses an id that is not in the catalog.** The error is `usage`,
+  the exit code is `2`, and strata sends no request. The message names the id
+  and tells how to list the ids: `strata-preflight --rules`. Before, such an id
+  selected no rule, and the run showed `OK: no check ran` with exit `0`. So
+  remove `gke-pool-multiple-3` and `profile-cloud-mismatch` from your scripts. An
+  id of a rule in the catalog is not an error, also when the rule does not
+  apply to the engine.
+- **`palette-validate`, for a profile of another cloud type.** Palette refuses
+  the body with HTTP `500` and `ClusterProfilesNotSupported`. Strata now reads
+  this refusal as the answer of the route, and does not send the request again.
+  The verdict is `failed`, with the message of Palette. Before, the verdict was
+  `error` and the exit code was `2`. Now the exit code is `0`, or `1` with
+  `--strict`.
+- **`instance-offering` is in the `palette` tier.** It asks Palette with one
+  request. Before, it was in the `cloud` tier and ran the tool of the cloud. A
+  run with `--tier cloud` does not run it now. A run with `--no-exec` and the key
+  runs it.
+- **`ssh-key-pair` applies to `eks` only.** It also runs only for a cluster with
+  a dynamic VPC or with no subnet id. On `aws`, the rule `iaas-pod-identity`
+  sends the key pair to the properties route, which refuses a key pair that the
+  region lacks. A script that reads `ssh-key-pair` in the report of an `aws` run
+  must read `iaas-pod-identity`.
+- **Nine rules send one request for each item.** They are `template-outside`,
+  `dedicated-hosts`, `vsphere-compute-resources`, `edge-host-in-use`,
+  `edge-host-health`, `edge-host-arch`, `edge-host-resources`, `edge-host-nic`,
+  and `edge-agent-version`. Their entries in `checks[]` have `requests[]`, and
+  have no `ran` and no `answer` of their own. A program that reads `.ran` of
+  these entries must read `.requests[]`. These rules now check each profile,
+  pool, or host. Before, they checked the first. So `--strict` can give exit `1`
+  where it gave `0`.
+- **`preflight cluster:<c>` reads the variables of the cluster.** It sends one
+  more request, `GET /v1/spectroclusters/{uid}/variables`. Each profile of the
+  entity has the variables of the cluster. A sensitive value has the mask that
+  Palette gives. `entity.json` of `--out` has the variables. An error of this
+  request stops the run with exit `2`. An answer that the route is not there
+  gives no variables. The key must have permission to read the variables of the
+  cluster.
+- **A change file merges `variables` by name.** A variable of the file replaces
+  the variable with that name. A new name adds a variable. Before, the list of
+  the file replaced the list. A change file cannot remove a variable now.
+- **`snapshot --from-candidate --validate`, with a disabled pack.** The import
+  validate route refuses the candidate with HTTP `500` and
+  `DisabledPacksForbidden`. Strata now reads this as a refusal of Palette. The
+  error kind is `palette-refuses`, with the code. It was `api`. The kind names
+  stay, but this case gives another kind. The exit code stays `2`, and strata
+  writes no record. A program that reads `error.kind` must read
+  `palette-refuses` for this case.
+- **`behind` asks Palette about each pin that is behind.** This applies to a run
+  with no `--no-impact`. Strata sends one request for each record that pins the
+  pack, in the project of the pin. It also reads the document of each cluster
+  record. So a run sends more requests and takes more time. The exit code does
+  not change. The key must have permission to send `POST .../validate/packs`. If
+  it does not, the pin has `paletteValidationError`, and the report shows
+  `palette gave no answer`.
+
+### For a user of the library of strata
+
+- **The five old module paths are gone.** Release 0.22 moved five modules and
+  kept the old paths. Release 0.24.0 removes the old paths. Use the new path:
+  - `strata::color` is now `strata::term::color`.
+  - `strata::progress` is now `strata::term::progress`.
+  - `strata::layer` is now `strata::content::layer`.
+  - `strata::impact` is now `strata::diff::impact`.
+  - `strata::version` is now `strata::reference::version`.
+- `validation::PaletteRefusal` (also `diff::PaletteRefusal`) has the new field
+  `clusters: Vec<String>`. A struct literal must add `clusters: Vec::new()`. A
+  pattern with no `..` must add `clusters`.
+- `ops::Bump` has the new fields `palette_validation:
+  Option<ProfileValidation>` and `palette_validation_error: Option<String>`. A
+  struct literal must add both, with `None`. Or use `Bump::of`, which sets both
+  to `None`.
+- `api::codes::ValidateRoute` has the new variant `ClusterCreate`. A `match`
+  with no wildcard arm must add it.
+- `ops::profile_validation` now gives `DisabledPacksForbidden` of the import
+  validate route in the answer. It gave `Err(Error::Api)`.
+- `Error::class()` now gives `Terminal` for an HTTP `5xx` with
+  `ClusterProfilesNotSupported`. It gave `Transient`.
+
+### For a user of the library of strata-preflight
+
+- `jq::Jq::run`, `jq::Jq::first`, and `jq::Jq::render` have a fourth argument,
+  `item: Option<&Value>`. It is the value of `$item`, for a check with `each`.
+  Give `None` to get the behavior of 0.23.0. With `None`, a program that reads
+  `$item` does not compile.
+- `rule::Check::Palette` has the new field `each: Option<String>`. A struct
+  literal must add `each: None`. A pattern with no `..` must add `each`.
+- `probe::Outcome` has the field `ran: probe::Ran`, in place of `ran:
+  Option<String>` and `answer: Option<String>`. `Ran::Nothing` is a check that
+  ran no call. `Ran::Exec` has the command and its answer. `Ran::Request` has
+  one `probe::Call`, and `Ran::Requests` has one for each item of `each`. A
+  struct literal and each read of `ran` or `answer` must change.
+- `report::CheckResult` has the new field `requests: Vec<Call>`. A struct
+  literal must add `requests: vec![]`. A pattern with no `..` must add the
+  field.
+- `world::World::from_cluster` sends one more request, for the variables of the
+  cluster. A `PaletteApi` of a test that counts the requests sees it.

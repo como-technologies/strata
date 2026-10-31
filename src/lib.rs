@@ -106,17 +106,6 @@ pub mod term;
 pub mod text;
 pub mod validation;
 
-/// The old path of [`content::layer`], until release 0.23.
-pub use content::layer;
-/// The old path of [`diff::impact`](mod@diff::impact), until release 0.23.
-pub use diff::impact;
-/// The old path of [`reference::version`], until release 0.23.
-pub use reference::version;
-/// The old path of [`term::color`], until release 0.23.
-pub use term::color;
-/// The old path of [`term::progress`], until release 0.23.
-pub use term::progress;
-
 pub use error::{Error, Result};
 
 /// The tool's name, used in messages and recorded in every document.
