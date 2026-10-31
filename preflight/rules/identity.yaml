@@ -204,7 +204,7 @@ rules:
     check:
       kind: palette
       method: GET
-      path: /v1/cloudaccounts/{{ .cloud | if . == "eks" then "aws" elif . == "gke" then "gcp" elif . == "aks" then "azure" else . end }}/{{ .entity.spec.cloudAccountUid }}
+      path: /v1/cloudaccounts/{{ .accountKind }}/{{ .entity.spec.cloudAccountUid }}
       expr: |
         if .response.ok then []
         else ["no cloud account \(.entity.spec.cloudAccountUid) of kind \(.cloud) in this project: \(.response.body.code // .response.status)"] end
@@ -776,7 +776,7 @@ rules:
         clean: fixtures/eks/pod-identity-mapusers.json
 
   - id: iaas-pod-identity
-    title: The properties route accepts the cloud account for an AWS cluster
+    title: The properties route accepts the cloud account and the key pair of an AWS cluster
     engines: [aws]
     tier: palette
     severity: fail
@@ -784,9 +784,10 @@ rules:
     when: .entity.spec.cloudAccountUid != null
     what: |
       A Pod Identity cloud account serves EKS alone. `POST /v1/clouds/aws/properties/validate`
-      refuses it for an AWS infrastructure cluster with `FeatureNotSupported`, and checks the SSH
-      key pair of the region on the way. The console calls the route; the create path of the API
-      does not. The world shows the same fact in `.account.spec.credentialType`.
+      refuses it for an AWS infrastructure cluster with `FeatureNotSupported`. The route also
+      refuses an SSH key pair that the account does not hold in the region, with
+      `AwsKeyPairNotFound`. The console calls the route; the create path of the API does not. The
+      world shows the same fact about the account in `.account.spec.credentialType`.
     check:
       kind: palette
       method: POST
@@ -794,30 +795,37 @@ rules:
       body: '{cloudAccountUid: .entity.spec.cloudAccountUid, region: .entity.spec.cloudConfig.region, sshKeyName: (.entity.spec.cloudConfig.sshKeyName // "")}'
       expr: |
         if .response.ok then []
-        else ["Palette refuses the account for an AWS cluster: \(.response.body.code // .response.status): \(.response.body.message // "")"] end
+        else ["Palette refuses the properties of the AWS cluster, the cloud account or the key pair: \(.response.body.code // .response.status): \(.response.body.message // "")"] end
     fix:
       owner: none
       text: The check exists in the properties route; strata-preflight calls it.
     evidence:
       - kind: source
         note: Palette returns FeatureNotSupported, with the message "Pod Identity for AWS infrastructure clusters", when the account is Pod Identity
+      - kind: run
+        ref: "#430"
+        note: the route returns HTTP 500 and AwsKeyPairNotFound for a key pair that the region does not hold
     tests:
       - fault: fixtures/aws/pod-identity-iaas.json
+        clean: fixtures/aws/identity-clean.json
+      - fault: fixtures/aws/key-pair-not-found.json
         clean: fixtures/aws/identity-clean.json
 
   - id: ssh-key-pair
     title: The SSH key pair of the cluster is a key pair of the account in the region
-    engines: [aws, eks]
+    engines: [eks]
     tier: palette
     severity: fail
     status: source
-    when: .entity.spec.cloudAccountUid != null and (.entity.spec.cloudConfig.sshKeyName // "") != ""
+    when: .entity.spec.cloudAccountUid != null and (.entity.spec.cloudConfig.sshKeyName // "") != "" and ((.entity.spec.cloudConfig.vpcId // "") == "" or ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) == 0)
     what: |
-      The nodes take the key pair `sshKeyName` of the region from EC2. A name that the account does
-      not hold in the region fails the build. The properties route of AWS checks the key pair, and
-      the properties route of EKS checks it with a `vpcId` alone. So an EKS cluster with a dynamic
-      VPC reaches no check of the key pair. The key pair route lists `keyNames` of the account in
-      the region, and the check looks for `sshKeyName` in the list.
+      The nodes take the key pair `sshKeyName` of the region from EC2, and a name that the account
+      does not hold fails the build. The property route of EKS checks the key pair only when the
+      body has a `vpcId`. `eks-public-subnet-mapping` sends that route only with a `vpcId` and a
+      subnet id. So an EKS cluster with a dynamic VPC, or with no subnet id, reaches no check of
+      the key pair. The key pair route lists `keyNames` of the account in the region, and the check
+      looks for `sshKeyName` in the list. On AWS, `iaas-pod-identity` sends the key pair to the
+      properties route, which refuses a key pair that does not exist.
     check:
       kind: palette
       method: GET
@@ -837,10 +845,8 @@ rules:
       text: Call the key pair route from the properties route of EKS when the VPC is dynamic.
     evidence:
       - kind: source
-        note: the key pair route of a region lists keyNames for the account; the properties route of EKS checks the key pair with a vpcId alone
+        note: the key pair route of a region lists keyNames for the account; the property route of EKS checks the key pair only when the body has a vpcId
     tests:
-      - fault: fixtures/aws/ssh-key-missing.json
-        clean: fixtures/aws/ssh-key-listed.json
       - fault: fixtures/eks/ssh-key-missing.json
         clean: fixtures/eks/ssh-key-listed.json
 
@@ -1049,7 +1055,7 @@ rules:
         if .response.ok then []
         else ["the key cannot read the resolved pack values of cluster \(.clusterUid): \(.response.body.code // .response.status); a tenant administrator cannot list the system macros that resolve on the cluster"] end
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid }}/packs/resolvedValues\" | jq -r '[.profiles[].resolved | to_entries[] | select(.key | test(\"spectro.macro\")) | \"\\(.key) = \\(.value)\"] | unique[]'"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/packs/resolvedValues\" | jq -r '[.profiles[].resolved | to_entries[] | select(.key | test(\"spectro.macro\")) | \"\\(.key) = \\(.value)\"] | unique[]'"
     fix:
       owner: palette
       text: Read access to the system macros for a tenant administrator, with no write access.
@@ -1083,7 +1089,7 @@ rules:
         | [ ( if $age < 120 then "the cloud account \(.account.metadata.name) was made \($age) s ago (\(.account.metadata.creationTimestamp)): IAM changes propagate for some seconds, and the #89 lab waits 30 s; wait until it is 2 minutes old, or run sts-account-not-assumable first" else empty end ),
             ( if $state != "" and ($state | ascii_downcase) != "active" then "the cloud account \(.account.metadata.name) has status.state \($state), not Active" else empty end ) ]
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudaccounts/{{ .cloud | if . == \"eks\" then \"aws\" elif . == \"gke\" then \"gcp\" elif . == \"aks\" then \"azure\" else . end }}/{{ .entity.spec.cloudAccountUid }}\" | jq '{made: .metadata.creationTimestamp, state: .status.state}'"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudaccounts/{{ .accountKind }}/{{ .entity.spec.cloudAccountUid }}\" | jq '{made: .metadata.creationTimestamp, state: .status.state}'"
     fix:
       owner: palette
       text: Set status.state of a cloud account after its first validate, and show the age in the console.

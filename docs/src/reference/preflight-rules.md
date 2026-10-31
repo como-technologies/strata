@@ -136,21 +136,23 @@ To send one request for several items, group the items in `each`.
 lists the pools of that cluster in the item.
 
 The report keeps each request in `requests[]`. `--verbose` prints one line for
-each request. See
+each request. For a GET, the report adds one `curl` line for each request to its
+`reproduce` lines. A rule with `reproduce` lines of its own for the engine gets no
+such line, so no request has two lines. See
 [The static tier and the live tier](../commands/preflight/tiers.md#a-rule-over-a-list).
 
 ## A check that a validate route answers
 
 A check that a validate route answers is a call of that route. A validate route
-of Palette converts the body of a create with the rules of the create.
+of Palette checks the body of a create with the rules of the create.
 `palette-validate` sends the body to the route of the cloud type, so the route
 reports each check that it answers. The catalog does not copy such a check,
-because a copy goes stale when Palette changes the rule. See
+because a copy becomes wrong when Palette changes the rule. See
 [the rules of the scope](../boundary.md#the-rules-of-the-scope).
 
 A rule leaves the catalog only when the route answers it. A call of the route
-that changes nothing must show the answer, or a live check that exists. A guess
-is not enough. A rule that the route does not answer stays in the catalog. It is
+must show the answer: a call by hand, which changes nothing, or a live check. A
+guess is not enough. A rule that the route does not answer stays in the catalog. It is
 a gap that preflight fills. The call needs the key, so a run with no key does
 not make the checks that the route answers.
 
@@ -163,12 +165,12 @@ not make the checks that the route answers.
 
 ### The checks that wait for a call of the route
 
-Each rule in this table copies a check that the route is expected to answer.
+Each rule in this table copies a check that strata expects the route to answer.
 The rule stays in the catalog until [`validate-route.sh`](../development/live-runs.md#validate-routesh)
 shows that the route refuses the fault. Then the part in the second column
 leaves the rule, and its fixtures leave with it.
 
-| Rule | The part that the route is expected to answer |
+| Rule | The part that strata expects the route to answer |
 | --- | --- |
 | `vsphere-instance-floor` | All of it: the CPU, the memory, the disk, and the missing instance type. |
 | `eks-ami-type` | The AL2 type, and a type that is not known. |
@@ -198,7 +200,8 @@ them, or they need more than the body of the create. They stay in the catalog.
 | `ntp-servers` | The warning when the cluster names no server. |
 | `pack-cloud-support` | All of it. The route takes a body with a pack version that does not list the cloud type, and `palette-validate` passes. Palette refuses the pack at the create. A live run shows that the route takes the body: see [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). |
 | `template-outside`, the `edge-host-*` rules | They read a document of the tenant. No validate route answers them. |
-| `palette-validate`, `pack-dependency`, `ecr-oci-images`, `worker-cpu-floor`, `eks-public-subnet-mapping`, `iaas-pod-identity`, `sts-account-not-assumable` | They call a route, and copy no answer of it. |
+| `instance-offering`, `ssh-key-pair` | They read a list of the cloud account: the instance types of a region, and its key pairs. No route refuses the fault, and Palette owns the rule. For `ssh-key-pair`, the gap is an EKS cluster with a dynamic VPC or with no subnet id. |
+| `palette-validate`, `pack-dependency`, `ecr-oci-images`, `worker-cpu-floor`, `eks-public-subnet-mapping`, `iaas-pod-identity`, `sts-account-not-assumable`, `gcp-properties` | They call a route, and copy no answer of it. |
 
 ## The world document
 
@@ -213,9 +216,17 @@ them, or they need more than the body of the create. They stay in the catalog.
   "profiles":   [ record, ... ],      one strata record for each profile of the entity
   "packs":      { "<packUid>": ... }, GET /v1/packs/{uid} for each layer, when live
   "account":    { ... } | null,       the cloud account, with no secret
-  "clusterUid": "<uid>" | null        for cluster:UID
+  "clusterUid": "<uid>" | null,       for cluster:UID
+  "accountKind": "aws",               the kind of cloud account of the engine
+  "routeCloud": "edge-native"         the cloud type of the engine in a route
 }
 ```
+
+`accountKind` is the kind of the cloud account of the engine. `eks` uses an
+account of kind `aws`, `gke` one of kind `gcp`, and `aks` one of kind `azure`.
+`routeCloud` is the cloud type of the engine in a route of Palette: the engine
+itself, and `edge-native` for `edge`. A rule reads these two fields, and does not
+map the engine itself.
 
 A record is a `strata-snapshot/1` document: `source.{uid, name, version,
 cloudType}` and `packs[].{layer, name, version, tag, packUid, registryUid,

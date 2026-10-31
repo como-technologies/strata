@@ -95,6 +95,31 @@ mod tests {
         assert!(found > 0, "no rule names the default URL");
     }
 
+    /// Nothing sets `PALETTE_HOST`, so a line that reads it asks `curl` for `/v1/...` with no host.
+    /// Each line that calls Palette reads `PALETTE_API` and sends the header `ProjectUid`, as
+    /// `curl_get` of the report does.
+    #[test]
+    fn each_reproduce_line_that_calls_palette_has_one_form() {
+        let mut wrong = Vec::new();
+        let mut calls = 0;
+        for (section, text) in SECTIONS {
+            for (n, line) in text.lines().enumerate() {
+                if !(line.contains("PALETTE_API_KEY") || line.contains("PALETTE_HOST")) {
+                    continue;
+                }
+                calls += 1;
+                if line.contains("PALETTE_HOST")
+                    || !line.contains("${PALETTE_API:-")
+                    || !line.contains("ProjectUid: $PALETTE_PROJECT_UID")
+                {
+                    wrong.push(format!("{section}.yaml:{}: {}", n + 1, line.trim()));
+                }
+            }
+        }
+        assert!(calls > 20, "the test reads the lines that call Palette");
+        assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+    }
+
     #[test]
     fn the_ledger_of_the_binary_parses() {
         crate::confidence::Ledger::parse(LEDGER, Path::new("evidence/runs.yaml")).unwrap();

@@ -20,9 +20,12 @@ use strata::json::{opt_text, strings};
 
 use crate::error::{Error, Result};
 
-/// Read a fixture, with its bases applied.
+/// Read a fixture, with its bases applied. The fixture gets the fields that the engine decides,
+/// as [`crate::world::World::to_value`] gives them to a world of a run.
 pub fn load(path: &Path) -> Result<Value> {
-    load_depth(path, 0)
+    let mut doc = load_depth(path, 0)?;
+    crate::world::add_engine_clouds(&mut doc);
+    Ok(doc)
 }
 
 fn load_depth(path: &Path, depth: u32) -> Result<Value> {
@@ -122,5 +125,10 @@ mod tests {
         assert_eq!(w["account"]["spec"]["credentialType"], "sts");
         assert_eq!(w["_note"], "one zone");
         assert!(w.get("_base").is_none());
+        assert_eq!(
+            w["accountKind"], "aws",
+            "an eks fixture has the account of aws"
+        );
+        assert_eq!(w["routeCloud"], "eks");
     }
 }

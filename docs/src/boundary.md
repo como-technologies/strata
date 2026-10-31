@@ -103,7 +103,7 @@ and of each wave, checks them.
    has four parts:
    - When a route of Palette answers a check before the point where the answer
      matters, strata and `strata-preflight` call that route. They do not copy
-     the rule, because a copy goes stale when Palette changes the rule.
+     the rule, because a copy becomes wrong when Palette changes the rule.
    - When no route answers the check before that point, strata makes the check
      itself. The check names Palette as the owner of the rule.
      [The gaps that strata fills](./internals/palette/profiles.md#the-gaps-that-strata-fills)
@@ -125,8 +125,8 @@ and of each wave, checks them.
    such check, so `strata-preflight` is a product of its own beside strata. It
    follows rule 1: it calls the validate routes of Palette, and adds only the
    checks that the routes do not make. [The gaps that preflight fills](./reference/preflight-rules.md#the-gaps-that-preflight-fills)
-   lists them. `pack-cloud-support` is one gap: `POST /v1/spectroclusters/{cloudType}/validate`
-   takes a body with a pack version that does not list the cloud type, so only
+   lists them. `pack-cloud-support` is one gap. `POST /v1/spectroclusters/{cloudType}/validate`
+   takes a body with a pack version that does not list the cloud type, and only
    the create refuses it. Palette owns that rule. A profile of another cloud
    type is no gap, because the same route refuses it.
 5. **Each item names its question.** An issue names the question of

@@ -73,8 +73,8 @@ These are open:
   the `packValues` of the version gets a repave. No run applies such a version
   to a cluster. See
   [A variable in a field that repaves](profiles.md#a-variable-in-a-field-that-repaves).
-- The GCP answer of the instance type route, and the answer of the key pair
-  route. No run shows them, so the stand-in of the book models them. See
+- The GCP answer of the instance type route. No run shows it, so the stand-in
+  of the book models it. See
   [The list routes](validate-routes.md#the-list-routes).
 
 ## What strata preflight does not check
@@ -207,8 +207,10 @@ makes no claim that depends on them.
   type that the list does not mark can still fail in the cloud.
 - **The key pairs of an account.** `GET /v1/clouds/aws/regions/{region}/keypairs`
   lists `keyNames` of the account in the region. The property route of EKS
-  checks the key pair with a `vpcId` alone, so an EKS cluster with a dynamic VPC
-  reaches no check of it. `ssh-key-pair` reads the list.
+  checks the key pair only when the body has a `vpcId`. So an EKS cluster with a
+  dynamic VPC reaches no check of it. `ssh-key-pair` reads the list for EKS. The
+  property route of AWS refuses a key pair that the region lacks, with HTTP
+  `500` and `AwsKeyPairNotFound`. So the rule does not name AWS.
 - **The cluster limit of the tenant.** The limit holds for a trial tenant alone.
   The cluster validate route refuses a create over the limit with
   `FreemiumActiveClusterLimitExceeded`, so `palette-validate` reports it.

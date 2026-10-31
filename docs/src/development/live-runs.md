@@ -1297,21 +1297,27 @@ this table names the faults.
 |---|---|
 | `gke` | `palette-validate` (a pool of 4), `gke-no-release-channel`, `gke-no-gpu`, `gke-autopilot`, `gcp-name-length`, `account-missing`, `instance-offering` |
 | `eks` | `eks-one-zone`, `eks-worker-needed`, `update-strategy-eks`, `api-endpoint-reach`, `account-missing`, `instance-offering`, `ssh-key-pair` |
-| `aws` | `worker-cpu-floor`, `palette-validate` (one worker of four cores), `api-endpoint-reach`, `account-missing`, `instance-offering`, `ssh-key-pair` |
+| `aws` | `worker-cpu-floor`, `palette-validate` (one worker of four cores), `api-endpoint-reach`, `account-missing`, `instance-offering`, `iaas-pod-identity` (a key pair that the region lacks) |
 | `gcp` | `worker-cpu-floor`, `palette-validate`, `gcp-name-length`, `account-missing`, `instance-offering`, `gcp-properties` |
 
 Three rules of the plan read a list of the cloud account from Palette (#143). For
 `instance-offering`, the plan reads the instance type route. It takes the first
 type with a zone in `nonSupportedZones`, and puts the first pool in that zone.
-The fault of `ssh-key-pair` is a key pair that the account lacks. The fault of
-`gcp-properties` is a project that the account cannot read.
+The fault of `ssh-key-pair` is a key pair that the account lacks, on EKS alone.
+The fault of `gcp-properties` is a project that the account cannot read.
 
 The check `instance-types-shape` expects `instanceTypes[]` with `type`, and
 `nonSupportedZones` as an array or `null`. A run showed that AWS gives `null` for most
 types. The check passes on that answer (no result yet). For GCP, no run has
 shown the shape, and the check shows it (no result yet). The check `key-pairs-shape`
-expects `keyNames[]` with the key pair of the entity. A run that makes a fault puts `caught` in the ledger, and
-the clean entity of the same run puts `passed` (no result yet).
+expects `keyNames[]` with the key pair of the entity (no result yet). A run that makes a fault
+puts `caught` in the ledger, and the clean entity of the same run puts `passed`. The ledger holds
+both results of `instance-offering` and `ssh-key-pair` for AWS.
+
+On AWS, the plan sends the key pair that the region lacks to `iaas-pod-identity`, because the
+properties route of AWS refuses it. The check `properties-key-pair` expects the report of that
+fault to name `AwsKeyPairNotFound` (no result yet). A call of the route by hand answered HTTP 500
+with that code: see [The property routes](../internals/palette/validate-routes.md#the-property-routes).
 
 Part 3 of each run also runs the custom probes of the lab,
 `examples/live/preflight/lab-probes.yaml` (`lab-region`, `lab-name`), beside
