@@ -288,7 +288,7 @@ and the paragraph after it comes from a live run:
 
 A live run shows the refusal. Cluster A (`fred`) ran Kubernetes 1.35.8 from the
 version of the profile. `strata behind` asked the route about the bump to
-1.37.0, two minor versions above, and Palette refused it:
+1.37.0, two minor versions above. Palette refused it:
 
 ```text
 DependencyPackUpgradeNotSupported
@@ -296,8 +296,8 @@ Pack upgrade to '1.37.0' is not compatible with the clusters 'fred'
 ```
 
 In the same run, the route accepted the bumps of the other pins of that
-version: `cni-cilium-oss` 1.20.1 to 1.20.3, and `csi-aws-ebs` 1.65.0 to 1.67.1.
-See [validate-packs.sh](../../development/live-runs.md#validate-packssh).
+version. These are `cni-cilium-oss` 1.20.1 to 1.20.3, and `csi-aws-ebs` 1.65.0
+to 1.67.1. See [validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 No read route gives the dependency. The summary of a pack has no field for it.
 The `packValues[].dependencies` of `GET /v1/packs/{uid}` and of the tags route
