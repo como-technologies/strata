@@ -112,11 +112,12 @@ cluster.
 
 Strata asks in the project of the first record that pins the pack, because
 Palette answers in the project of the connection. It does not ask a record of
-another project. It counts the records of another project that it could ask.
+another project. It counts the records of another project that it can ask.
 The line `palette gave no answer` says how many, as in
-`1 record of project <project> was not asked`. A refusal that Palette gave
-stands, and this line comes under it. A record that gets no request, such as a
-pack record, adds nothing to the count.
+`1 record of project <project> was not asked`.
+
+A refusal that Palette gave stands, and this line comes under it. A record that
+gets no request, such as a pack record, adds nothing to the count.
 [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesuidvalidatepacks)
 states what each route checks.
 

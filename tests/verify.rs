@@ -13762,7 +13762,7 @@ fn behind_does_not_say_that_palette_accepts_when_it_did_not_ask_a_record_of_anot
     );
 
     // the count is for each project, in the order of the project, and a record of the tenant
-    // scope counts too. A pack record in another project could not be asked, so it adds nothing
+    // scope counts too. A pack record in another project gets no request, so it adds nothing
     let prod_cluster = cluster_pinning(&base).with_project(Some("prod"));
     let lab = profile_pinning_in(&base, "pr3", None);
     let pack = snapshot_of(&base, "pack:csi-aws-ebs@1.63.1")

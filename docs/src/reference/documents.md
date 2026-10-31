@@ -567,8 +567,8 @@ is the path as a list: strings for keys, numbers for indexes, and
         project, and no answer holds an error.
       - Strata does not read a document that says `accepts` is `false` and
         gives no error, or that says `true` and gives an error.
-    - `paletteValidationError`, when a request to Palette failed, or strata did
-      not ask a record of another project: the message, such as
+    - `paletteValidationError`: the message, when a request to Palette failed or
+      strata did not ask a record of another project. An example is
       `1 record of project prod was not asked`. The pin stays behind.
   - `arrived[]`, with `--since`: the newer versions that the previous report
     did not know. Absent when the previous report had no pin of the pack in
