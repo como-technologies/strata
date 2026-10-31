@@ -13,8 +13,9 @@
 #
 # --repave asks Palette if the change repaves the cluster, as `strata compare --repave` does, and
 # puts the answer in the comment. One ref must be a cluster, and the other a profile version that
-# Palette holds. For any other pair, the script says why on standard error and goes on without the
-# question. The answer of Palette replaces the table for the levels may-repave and repave:
+# Palette holds. Strata decides this. For any other pair, strata refuses the question and says why
+# on standard error, and the script goes on with the table. The answer of Palette replaces the
+# table for the levels may-repave and repave:
 # "repave" adds the label, and "no repave" removes it, also where the table says otherwise. A threshold
 # below those levels still reads the table when Palette says "no repave". Without an answer, the
 # table decides. The note on standard error says which one decided.
@@ -223,26 +224,16 @@ compare() { # FORMAT OUTPUT [OPTION...]
   [ "$code" -le 1 ] || return 2
 }
 
-# Why Palette cannot answer --repave for this pair, or nothing when it can. Palette answers for a
-# cluster and a profile version that it holds. Strata judges any other pair when asked.
-repave_gap() {
-  jq -rs '
-    if all(.[]; .source.cluster == null) then "neither ref is a cluster"
-    elif any(.[]; .source.cluster == null and (.source.uid // "") == "")
-    then "the profile side has no uid, because Palette does not hold it"
-    else empty end' "${files[@]}" 2>/dev/null || true
-}
-
+# Strata decides which pair --repave applies to, and says why on standard error when it refuses
+# the pair. The same holds for a request to Palette that fails. In both cases the table decides.
+# The markdown goes first: with --format json, strata writes its error as JSON.
 asked=""
 if [ -n "$repave" ]; then
-  gap=$(repave_gap)
-  if [ -n "$gap" ]; then
-    note "--repave does not apply: $gap"
-  elif compare json "$work/report.json" --repave; then
-    compare markdown "$work/report.md" --repave
+  if compare markdown "$work/report.md" --repave; then
+    compare json "$work/report.json" --repave
     asked=1
   else
-    note "--repave got no answer from Palette"
+    note "--repave got no answer, so the table decides"
   fi
 fi
 if [ -z "$asked" ]; then

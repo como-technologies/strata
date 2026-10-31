@@ -124,7 +124,7 @@ while [ $# -gt 0 ]; do
     --dry-run) dry=1; shift ;;
     --no-impact) impact=(--no-impact); shift ;;
     --save) save=$2; shift 2 ;;
-    -h|--help) sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,/^set -euo/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) patterns+=("$1"); shift ;;
   esac
