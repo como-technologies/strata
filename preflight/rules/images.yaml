@@ -89,7 +89,7 @@ rules:
       document, so strata-preflight has no check; `strata packs` shows an empty registry.
     reproduce:
       - "strata packs <pack> --registry <registry>"
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/registries/pack/summary\" | jq '.items[] | {name: .metadata.name, private: .spec.private, sync: .status.sync}'"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/pack/summary\" | jq '.items[] | {name: .metadata.name, private: .spec.private, sync: .status.sync}'"
     fix:
       owner: palette
       text: Sync a private pack registry, or say in the sync status that a private registry lists no pack.
@@ -204,7 +204,7 @@ rules:
     check:
       kind: palette
       method: POST
-      path: /v1/spectroclusters/{{ .cloud | if . == "edge" then "edge-native" else . end }}/validate
+      path: /v1/spectroclusters/{{ .routeCloud }}/validate
       expr: |
         .response as $r
         | if ($r.ok | not) then
@@ -248,7 +248,7 @@ rules:
     check:
       kind: palette
       method: POST
-      path: /v1/spectroclusters/{{ .cloud | if . == "edge" then "edge-native" else . end }}/validate
+      path: /v1/spectroclusters/{{ .routeCloud }}/validate
       expr: |
         .response as $r
         | if $r.ok then []
@@ -393,7 +393,7 @@ rules:
       registry.
     reproduce:
       - "strata packs <chart> --registry <registry>"
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/registries/helm/summary\" | jq '.items[] | {name: .metadata.name, endpoint: .spec.endpoint}'"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/helm/summary\" | jq '.items[] | {name: .metadata.name, endpoint: .spec.endpoint}'"
     fix:
       owner: palette
       text: Refuse an oci:// endpoint at registry create, and name the OCI registry kind.
@@ -417,7 +417,7 @@ rules:
       watch holds no registry, so the row stays a watch row.
     reproduce:
       - "strata packs <pack> --registry <registry> --latest"
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/registries/pack/<uid>/sync/status\""
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/pack/<uid>/sync/status\""
     fix:
       owner: none
       text: Wait for the sync status before a build that pins the new version.
@@ -438,7 +438,7 @@ rules:
       check; the lab waits before the create.
     reproduce:
       - "aws sts get-caller-identity"
-      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/registries/oci/ecr/validate\" -d @registry.json"
+      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/registries/oci/ecr/validate\" -d @registry.json"
     fix:
       owner: lab
       text: Wait for the key to be valid, with a retry of the validate route, before the registry create.

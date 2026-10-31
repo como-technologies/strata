@@ -37,7 +37,7 @@ rules:
           end
     reproduce:
       - "kubectl -n kube-system get pods -l app.kubernetes.io/name=aws-ebs-csi-driver -o wide"
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\" | jq '.status.packs[] | select(.name | test(\"csi\")) | {name, condition}'"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid // \"<cluster uid>\" }}\" | jq '.status.packs[] | select(.name | test(\"csi\")) | {name, condition}'"
     fix:
       owner: palette
       text: Do not report Healthy while a pod of a pack crash-loops.
@@ -151,7 +151,7 @@ rules:
     reproduce:
       - "aws kms describe-key --key-id {{ .entity.spec.cloudConfig.encryptionConfig.provider }} --region {{ .entity.spec.cloudConfig.region }} --query 'KeyMetadata.[KeyState,KeyUsage,KeyManager]' --output text"
       - "aws kms get-key-policy --key-id {{ .entity.spec.cloudConfig.encryptionConfig.provider }} --policy-name default --region {{ .entity.spec.cloudConfig.region }} --output text"
-      - "curl -s -o /dev/null -w '%{http_code}\\n' -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/kmskeys/validate?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&keyArn={{ .entity.spec.cloudConfig.encryptionConfig.provider }}\""
+      - "curl -s -o /dev/null -w '%{http_code}\\n' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/kmskeys/validate?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&keyArn={{ .entity.spec.cloudConfig.encryptionConfig.provider }}\""
     fix:
       owner: palette
       text: Read the state of the key and the kms:CreateGrant permission in the validate route, not only the list of keys, and answer with a 4xx, not 500, when the role has no kms:ListKeys.

@@ -1,0 +1,11 @@
+{
+  "_base": "clean.json",
+  "_note": "a pack that lists no cloud type supports each cloud",
+  "_patch": {
+    "packs": {
+      "pk-cni-gcp": {
+        "cloudTypes": []
+      }
+    }
+  }
+}

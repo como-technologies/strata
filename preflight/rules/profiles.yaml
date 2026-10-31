@@ -152,7 +152,7 @@ rules:
               then "profile \($u)\(if ($r.body.metadata.name // "") != "" then " (\($r.body.metadata.name))" else "" end) is linked to the cluster template \([ $r.body.status.inUseClusterTemplates[] | .name // .uid ] | join(", ")), and the entity names no clusterTemplate: Palette refuses the create with ClusterCreateWithTemplateProfileForbidden"
               else empty end ]
     reproduce:
-      - "for u in {{ [ .entity.spec.profiles[].uid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/clusterprofiles/$u\" | jq '{name: .metadata.name, templates: .status.inUseClusterTemplates}'; done"
+      - "for u in {{ [ .entity.spec.profiles[].uid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/clusterprofiles/$u\" | jq '{name: .metadata.name, templates: .status.inUseClusterTemplates}'; done"
     fix:
       owner: none
       text: Build the cluster from the template, or use a version that no template links.
@@ -192,7 +192,7 @@ rules:
           then ["profile \(.response.body.metadata.name // $u) is in use by \(.response.body.status.inUseClusters | length) cluster(s) (\([ .response.body.status.inUseClusters[] | .name // .uid ] | join(", "))): a change of its variable definitions is refused; make a new version"]
           else [] end
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"$PALETTE_HOST/v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}\" | jq '.status.inUseClusters'"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}\" | jq '.status.inUseClusters'"
     evidence:
       - kind: source
         note: Palette tests the clusters that use the profile version before it updates the variables

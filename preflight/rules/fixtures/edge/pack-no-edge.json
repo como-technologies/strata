@@ -1,0 +1,13 @@
+{
+  "_base": "clean.json",
+  "_note": "the OS pack lists aws and no edge-native, so Palette refuses it on an edge cluster",
+  "_patch": {
+    "packs": {
+      "pk-os-edge": {
+        "cloudTypes": [
+          "aws"
+        ]
+      }
+    }
+  }
+}

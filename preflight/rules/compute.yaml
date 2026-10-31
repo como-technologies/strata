@@ -17,14 +17,14 @@ rules:
       `ZONE_RESOURCE_POOL_EXHAUSTED`, or a node group `CREATE_FAILED`. The instance type route of
       Palette lists each type of the region. The field `type` of an entry names the type, and
       `nonSupportedZones` names the zones that do not offer it, and is `null` when each zone offers
-      the type. One request answers every pool. The check fails for a pool whose type names a zone
-      of the pool there, or whose type the region does not list. A pool with no zone is checked
-      against the list of the region alone. The list is the catalog of Palette, not the cloud, so
-      the reproduce line asks the cloud.
+      the type. One request answers every pool. The check fails for a pool whose type lists a zone
+      of the pool in `nonSupportedZones`, or whose type the region does not list. A pool with no
+      zone is checked against the list of the region alone. The list is the catalog of Palette, not
+      the cloud, so the reproduce line asks the cloud.
     check:
       kind: palette
       method: GET
-      path: '/v1/clouds/{{ .cloud | if . == "gcp" or . == "gke" then "gcp" else "aws" end }}/regions/{{ .entity.spec.cloudConfig.region }}/instancetypes?cloudAccountUid={{ .entity.spec.cloudAccountUid }}'
+      path: '/v1/clouds/{{ .accountKind }}/regions/{{ .entity.spec.cloudConfig.region }}/instancetypes?cloudAccountUid={{ .entity.spec.cloudAccountUid }}'
       expr: |
         def zones: ((.cloudConfig.azs // []) + [ (.cloudConfig.subnets // [])[] | .az // empty ]) | unique;
         .entity.spec.cloudConfig.region as $region

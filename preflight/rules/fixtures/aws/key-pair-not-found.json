@@ -1,0 +1,23 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "the properties route refuses a key pair that the region lacks, with HTTP 500 and AwsKeyPairNotFound",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "sshKeyName": "strata-no-such-key"
+        }
+      }
+    },
+    "_responses": {
+      "POST /v1/clouds/aws/properties/validate": {
+        "ok": false,
+        "status": 500,
+        "body": {
+          "code": "AwsKeyPairNotFound",
+          "message": "Aws KeyPair 'strata-no-such-key' not found for region us-east-2; caused by: InvalidKeyPair.NotFound: The key pair 'strata-no-such-key' does not exist"
+        }
+      }
+    }
+  }
+}

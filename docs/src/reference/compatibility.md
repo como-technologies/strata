@@ -51,6 +51,16 @@ After 0.23.0, a check of Palette in a rule file can have `each`. An entry of
 rule, in place of `ran` and `answer`. Both are new fields, so the ids stay.
 `preflight --schema rules` and `preflight --schema report` list them.
 
+After 0.23.0, the world that a rule reads, and `world.json` of `--out`, have the
+fields `accountKind` and `routeCloud`. A rule or a custom probe can read them in
+place of its own map of the engine. No field changed.
+
+After 0.23.0, a check of Palette with `each` and `reproduce` lines of its own has
+no automatic `curl` line for each request. Before, `reproduce[]` of its entry in
+the report showed each request two times. The `reproduce` lines that call Palette
+read `PALETTE_API`, with the header `ProjectUid`, as the automatic lines do. Some
+read `PALETTE_HOST`, which nothing set.
+
 A field can also become absent, and that keeps the id as well. For most fields
 absent is a value: a field that is false, empty, or zero is left out, and each
 such field says so at its own definition in
