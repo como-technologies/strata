@@ -33,12 +33,12 @@ set -uo pipefail
 script=drift-report
 mode=${1:-}
 from=${2:-1}
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 case "$mode" in
   off) flag=false ;;
   on) flag=true ;;
-  *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) usage; exit 2 ;;
 esac
-. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 reporter=$(cd "$live/../.." && pwd)/scripts/ci/verify-report.sh
 repo=${REPORT_REPO:-$(cd "$live" && gh repo view --json nameWithOwner --jq .nameWithOwner)} \
@@ -53,28 +53,21 @@ else
   off2_on1=2 off1_on0=1 bump_issues=2
   plan_edit_says='spectrocloud_cluster_profile.addon will be updated in-place'
 fi
-edit_from='edited: "no"'
-edit_to='edited: "yes"'
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/drift-report/$mode}
+# the mode names the directory of the run, so the run id is the name two directories above it
+run_id=$(basename "$(dirname "$(dirname "$run")")")
 mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# drift report test, flag $mode"
-    echo
-    echo "Run \`$(basename "$(dirname "$(dirname "$run")")")\` with \`$("$strata" --version)\`. Cluster A \`${C:-}\`, add-on \`${AD1:-}\`,"
-    echo "issues in \`$repo\` labeled \`$label\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "drift report test, flag $mode" ". Cluster A \`${C:-}\`, add-on \`${AD1:-}\`," \
+    "issues in \`$repo\` labeled \`$label\`."
 }
 trap summary EXIT
 
 save() { echo "$1=$2" >> ids.env; }
 [ -f ids.env ] && . ./ids.env
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 records="records-$mode"
 # report: the scheduled report over this run's records
@@ -141,7 +134,7 @@ fi
 
 if stage 2 "edit the add-on version in place and report"; then
   check api-edit 0 "edit the add-on version in place through the API, which Palette accepts whatever the flag" -- \
-    "$live/api.sh" edit "$AD1" "$edit_from" "$edit_to"
+    "$live/api.sh" edit "$AD1" "$addon_from" "$addon_to"
   check report-edit 1 "#25: the report after the edit exits 1" -- report
   check report-edit-opened 0 "#25: it opens one issue, for the add-on record; cluster A's copy is untouched" -- \
     bash -c 'grep -q "3 records: 2 unchanged, 1 drifted, 0 could not be checked; opened #[0-9]* for '"$records"'/addon.json$" report-edit.err'
@@ -157,7 +150,7 @@ if stage 2 "edit the add-on version in place and report"; then
 fi
 
 if stage 3 "undo the edit and report"; then
-  check api-undo 0 "undo the edit through the API" -- "$live/api.sh" edit "$AD1" "$edit_to" "$edit_from"
+  check api-undo 0 "undo the edit through the API" -- "$live/api.sh" edit "$AD1" "$addon_to" "$addon_from"
   check report-undo 0 "#25: the report after the undo exits 0" -- report
   check report-undo-closed 0 "#25: it closes the issue" -- \
     bash -c "grep -q '3 records: 3 unchanged, 0 drifted, 0 could not be checked; closed #$EDIT_ISSUE for $records/addon.json$' report-undo.err"

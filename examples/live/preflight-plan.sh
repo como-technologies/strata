@@ -40,7 +40,6 @@ script=preflight-plan
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata; run just build"
 engine=${1:-}
-usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 case "$engine" in
   aws|eks|gcp|gke) ;;
   -h|--help) usage; exit 0 ;;
@@ -77,19 +76,16 @@ profile_cloud=$(jq -r .source.cloudType release.json)
 [ "$profile_cloud" = "$engine" ] || die "the release profile is of cloud type $profile_cloud, not $engine: apply with -var cloud=$engine"
 
 summary() {
+  write_summary "the test plan of #91: $engine" ", preflight \`$("$strata" preflight --version)\`," \
+    "release profile \`$R\`, Palette release \`${release:-not given}\`."
   {
-    echo "# the test plan of #91: $engine"
-    echo
-    echo "Run \`$run_id\` with \`$("$strata" preflight --version)\`, release profile \`$R\`, Palette release \`${release:-not given}\`."
-    echo
-    summary_table
     echo
     echo "## the ledger entry"
     echo
     echo '```yaml'
     cat ledger-entry.yaml 2> /dev/null
     echo '```'
-  } > summary.md
+  } >> summary.md
 }
 trap summary EXIT
 

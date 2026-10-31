@@ -30,13 +30,7 @@ run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/export}
 mkdir -p "$run" && cd "$run" || exit 2
 
 summary() {
-  {
-    echo "# profile export test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`: \`$profiles\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "profile export test" ": \`$profiles\`."
 }
 trap summary EXIT
 

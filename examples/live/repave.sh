@@ -33,30 +33,20 @@
 set -uo pipefail
 script=repave
 from=${1:-1}
-case "$from" in 1|2|3|4|5|6|7|8) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "$from" in 1|2|3|4|5|6|7|8) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
-addon_from='edited: "no"'
-addon_to='edited: "yes"'
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/repave}
 mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# Palette repave test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster \`${C:-}\`,"
-    echo "release \`${R:-}\`, add-on \`${AD:-}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "Palette repave test" ", cluster \`${C:-}\`," \
+    "release \`${R:-}\`, add-on \`${AD:-}\`."
 }
 trap summary EXIT
-
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 load_outputs
 C=$(out cluster_uid) R=$(out release_profile_uid) AD=$(out addon_profile_uid)
@@ -81,7 +71,7 @@ if stage 2 "a kubeadm command in the Kubernetes pack"; then
   check k8s 1 "#73: compare of the copy with the edited version: CHANGED, and Palette says repave" -- \
     "$strata" compare "cluster:$C/$release" "$R" --repave
   check k8s-says 0 "#73: Palette names the pack, the reason, and the key" -- \
-    grep -q '^palette    repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)$' k8s.out
+    grep -qxF "$kubeadm_repave" k8s.out
   check k8s-agrees 0 "#73: the impact table says may-repave, and there is no disagreement note" -- \
     bash -c "grep -q 'impact: .*may-repave\|impact: .*repave' k8s.out; ! grep -q 'the impact table says' k8s.out"
   check k8s-json 0 "#73: --json carries the reason, with its key" -- \
@@ -89,7 +79,7 @@ if stage 2 "a kubeadm command in the Kubernetes pack"; then
   check k8s-reversed 1 "#73: the two sides in the other order give the same answer" -- \
     "$strata" compare "$R" "cluster:$C/$release" --repave
   check k8s-reversed-says 0 "and the same line" -- \
-    grep -q '^palette    repave: PackValuesUpdated kubernetes' k8s-reversed.out
+    grep -q "^${kubeadm_repave%% (*}" k8s-reversed.out
 fi
 
 if stage 3 "the helper gives the same answer"; then

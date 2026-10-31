@@ -15,6 +15,9 @@
 set -uo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 tfvars=$here/terraform/terraform.tfvars
+# The same read as `var` of lib.sh. This script does not source lib.sh: it is a step of the recovery
+# of a cluster, and lib.sh stops a script when the strata binary is older than the sources. This
+# script uses no strata binary.
 value() { sed -n "s/^$1 *= *\"\\(.*\\)\"/\\1/p" "$tfvars"; }
 region=$(value region)
 profile=$(value aws_profile)

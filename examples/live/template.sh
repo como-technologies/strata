@@ -49,13 +49,7 @@ for v in P AD N PALETTE_PROJECT_UID; do
 done
 
 summary() {
-  {
-    echo "# cluster template test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, release \`$N\` 1.0.0 (\`$P\`)."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "cluster template test" ", release \`$N\` 1.0.0 (\`$P\`)."
 }
 trap summary EXIT
 
@@ -99,11 +93,11 @@ check lock-edit-says 0 "the refusal names the reason" -- \
 check lock-verify 0 "#66: the release version is unchanged" -- "$strata" verify release.json
 check addon-before 0 "a record of the linked add-on version" -- "$strata" snapshot "$AD" -o addon.json
 check lock-manifest-edit 0 "#81: an edit of a manifest of a linked version, through the route of the manifest, is accepted: the lock does not cover that route" -- \
-  "$live/api.sh" edit-manifest "$AD" 'edited: "no"' 'edited: "yes"'
+  "$live/api.sh" edit-manifest "$AD" "$addon_from" "$addon_to"
 check lock-manifest-verify 1 "#81: the record of the linked add-on version reports DRIFT" -- "$strata" verify addon.json
 # put the manifest back, when the edit went through
 "$strata" verify addon.json > /dev/null 2>&1 \
-  || "$live/api.sh" edit-manifest "$AD" 'edited: "yes"' 'edited: "no"' >> steps.log 2>&1
+  || "$live/api.sh" edit-manifest "$AD" "$addon_to" "$addon_from" >> steps.log 2>&1
 check lock-manifest-back 0 "the add-on version holds its content again" -- "$strata" verify addon.json
 
 # ---- 3. a cluster outside the template -----------------------------------------------------------
@@ -138,7 +132,7 @@ check template-route 1 "#276: compare --repave of the same move: CHANGED, and st
 check template-route-names 0 "#276: the first palette line names the template that governs the cluster" -- \
   grep -q "^palette    the cluster template $T governs the cluster: Palette answers for the template, by profile uid\$" template-route.out
 check template-route-says 0 "#276: the route of the template answers repave, for the Kubernetes pack and the kubeadm key" -- \
-  grep -q '^palette    repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)$' template-route.out
+  grep -qxF "$kubeadm_repave" template-route.out
 check template-route-json 0 "#276: --json carries paletteRepave: required true, the key in the reason, and the template" -- \
   bash -c "\"$strata\" compare cluster:$C/$N $N1 --repave --json | jq -e --arg t $T '.paletteRepave | .required == true and .clusterUid == \"$C\" and .clusterTemplate.uid == \$t and (.reasons[0].keys | index(\"kubeadmconfig.postKubeadmCommands\"))'"
 check in-template-undo 0 "the Kubernetes pack of version 1.0.1 back" -- "$live/api.sh" edit "$N1" "$kubeadm_to" "$kubeadm_from"

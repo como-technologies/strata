@@ -7,8 +7,8 @@
 #
 # BODIES is the directory for `validate-route.sh BODIES`. The script makes it when it is not
 # there. It writes the clean body of a create on AWS, from the release profile and the cloud
-# account of terraform.tfvars. It also writes one body for each case. A case body is the clean
-# body with one more profile:
+# account of terraform.tfvars. It also writes one body for each case whose profile Palette takes. A
+# case body is the clean body with one more profile:
 #
 #   aws-clean.json           the body that the route must take
 #   pack-state-disabled      an add-on profile with the pack gloo, which carries the mark disabled
@@ -40,7 +40,6 @@ set -uo pipefail
 script=route-bodies
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
-usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 case "${1:-}" in
   -h | --help) usage; exit 0 ;;
   "") usage >&2; exit 2 ;;
@@ -64,13 +63,7 @@ cleanup() {
 }
 
 summary() {
-  {
-    echo "# case bodies of the cluster validate route"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`: bodies in \`$bodies\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "case bodies of the cluster validate route" ": bodies in \`$bodies\`."
 }
 finish() { cleanup; summary; }
 trap finish EXIT
@@ -117,18 +110,11 @@ case_body() {
 # cloud types hold neither CLOUD nor all. A pack with no cloud type supports each cloud. Exit 1
 # when the listing has none.
 pack_without() {
-  local offset=0 page found count
-  while :; do
-    page=$("$live/api.sh" get "/v1/packs?limit=100&offset=$offset") || return 2
-    found=$(jq -r --arg r "$public_uid" --arg c "$1" '[.items[]?
-        | select(.spec.registryUid == $r and .spec.layer == "addon"
-            and ((.spec.cloudTypes // []) | length > 0 and index("all") == null and index($c) == null))
-        | "\(.spec.name)@\(.spec.version)"][0] // empty' <<<"$page")
-    [ -z "$found" ] || { echo "$found"; return 0; }
-    count=$(jq '.listmeta.count // 0' <<<"$page")
-    offset=$((offset + 100))
-    [ "$offset" -lt "$count" ] || return 1
-  done
+  local pack
+  pack=$("$live/api.sh" packs-where --arg r "$public_uid" --arg c "$1" \
+    '.spec.registryUid == $r and .spec.layer == "addon"
+       and ((.spec.cloudTypes // []) | length > 0 and index("all") == null and index($c) == null)') || return
+  jq -r '"\(.spec.name)@\(.spec.version)"' <<<"$pack"
 }
 
 echo "== the four cases of the profiles (#408)" | tee -a steps.log

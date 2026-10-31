@@ -29,8 +29,8 @@
 set -uo pipefail
 script=loop
 from=${1:-1}
-case "$from" in 1|2|3|4|5|6|7|8|9) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "$from" in 1|2|3|4|5|6|7|8|9) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/loop}
@@ -45,18 +45,10 @@ REL=$(out release_profile_uid)
 NEXT=$(out next_profile_uid)
 AD=$(out addon_profile_uid)
 NAME=$(out profile_name)
-edit_from='edited: "no"'
-edit_to='edited: "yes"'
 
 summary() {
-  {
-    echo "# the everyday loop"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster \`$C\`,"
-    echo "release \`$REL\`, next \`$NEXT\`, add-on \`$AD\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "the everyday loop" ", cluster \`$C\`," \
+    "release \`$REL\`, next \`$NEXT\`, add-on \`$AD\`."
 }
 
 # undo: each change of this script back, when a step before failed
@@ -64,7 +56,7 @@ undo() {
   "$strata" verify repo/runs/a.json > /dev/null 2>&1 \
     || "$live/api.sh" apply "$C" >> steps.log 2>&1
   "$strata" verify repo/releases/addon.json > /dev/null 2>&1 \
-    || "$live/api.sh" edit "$AD" "$edit_to" "$edit_from" >> steps.log 2>&1
+    || "$live/api.sh" edit "$AD" "$addon_to" "$addon_from" >> steps.log 2>&1
 }
 trap 'undo; summary' EXIT
 
@@ -76,9 +68,6 @@ export STRATA_BIN=$strata
 ci=$(cd "$live/../.." && pwd)/scripts/ci
 # in REPO: run a command in the repository of the team, where git and the scripts of CI run
 in_repo() { (cd repo && "$@"); }
-
-# stage N TITLE: print the heading of stage N, and succeed when this run reaches it
-stage() { [ "$from" -le "$1" ] && echo "== $1. $2" | tee -a steps.log; }
 
 if stage 1 "main records the release and the cluster"; then
   require_baseline
@@ -175,7 +164,7 @@ fi
 
 if stage 6 "behind is not different"; then
   check override 0 '#81: a person overrides a value on cluster A, through the API' -- \
-    "$live/api.sh" override "$C" "$edit_from" "$edit_to"
+    "$live/api.sh" override "$C" "$addon_from" "$addon_to"
   check override-record 0 'record cluster A after the override' -- \
     "$strata" snapshot "cluster:$C" -o override.json
   check override-not-behind 0 '#81: Palette says that no update waits for cluster A: an override opens no notification' -- \
@@ -189,7 +178,7 @@ fi
 
 if stage 7 "an edit of a published version in place"; then
   check edit 0 '#81: a person edits the add-on version in place, through the API' -- \
-    "$live/api.sh" edit "$AD" "$edit_from" "$edit_to"
+    "$live/api.sh" edit "$AD" "$addon_from" "$addon_to"
   check nightly-drift 1 '#81: the nightly job would open an issue for the add-on record' -- \
     in_repo "$ci/verify-report.sh" 'releases/*.json' 'runs/*.json' --dry-run
   check nightly-names 0 '#81: the issue is for releases/addon.json' -- \
@@ -201,7 +190,7 @@ if stage 7 "an edit of a published version in place"; then
   check behind-record 0 'record cluster A with the edit waiting' -- "$strata" snapshot "cluster:$C" -o behind.json
   check behind 0 '#81: Palette says that an update waits for cluster A' -- \
     jq -e '.source.cluster.updatesPending == true' behind.json
-  check edit-undo 0 'undo the edit' -- "$live/api.sh" edit "$AD" "$edit_to" "$edit_from"
+  check edit-undo 0 'undo the edit' -- "$live/api.sh" edit "$AD" "$addon_to" "$addon_from"
   check edit-gone 0 'the add-on record verifies again' -- "$strata" verify repo/releases/addon.json
 fi
 

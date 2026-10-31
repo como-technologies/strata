@@ -16,13 +16,11 @@
 # it. Results go under runs/<UTC time>/draft/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail
 script=draft
-case "${1:-}" in "") ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "${1:-}" in "") ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 addon=strata-live-addon
-edit_from='edited: "no"'
-edit_to='edited: "yes"'
 unpublished=strata-live-unpublished
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/draft}
@@ -30,14 +28,8 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# draft test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, add-on"
-    echo "\`$addon@1.0.0\` (\`${AD:-}\`)."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "draft test" ", add-on" \
+    "\`$addon@1.0.0\` (\`${AD:-}\`)."
 }
 trap summary EXIT
 
@@ -49,7 +41,7 @@ echo "AD=$AD" > ids.env
 undo() {
   "$strata" compare addon.json "$AD" > /dev/null 2>&1 && return 0
   "$live/api.sh" publish "$AD" >> steps.log 2>&1
-  "$live/api.sh" edit "$AD" "$edit_to" "$edit_from" >> steps.log 2>&1
+  "$live/api.sh" edit "$AD" "$addon_to" "$addon_from" >> steps.log 2>&1
 }
 
 check record 0 "record $addon@1.0.0" -- "$strata" snapshot "$AD" -o addon.json
@@ -58,16 +50,16 @@ check no-draft 2 '#155: a version with no draft: <uid>@draft exits 2 with no-dra
 check no-draft-says 0 '#155: the error says that the version has no draft' -- \
   grep -q 'has no draft' no-draft.err
 check api-draft 0 "#155: edit the manifest of $addon@1.0.0 through the API, with no publish" -- \
-  "$live/api.sh" draft "$AD" "$edit_from" "$edit_to"
+  "$live/api.sh" draft "$AD" "$addon_from" "$addon_to"
 check list-published 0 '#114: list --packs gives published true for a published version while its draft waits' -- \
   bash -c "\"$strata\" list --packs --json | jq -e --arg u '$AD' '[.profiles[] | select(.uid == \$u)][0].published == true'"
 check version-holds 0 '#155: the version keeps its content while the draft waits: its record verifies' -- \
   "$strata" verify addon.json
 check draft-record 0 '#155: <uid>@draft records the draft' -- "$strata" snapshot "$AD@draft" -o draft.json
 check draft-template 0 '#155: the record says source.template draft, and holds the edit in the manifest' -- \
-  jq -e --arg to "$edit_to" '.source.template == "draft" and ([.packs[].manifests[].content] | any(contains($to)))' draft.json
+  jq -e --arg to "$addon_to" '.source.template == "draft" and ([.packs[].manifests[].content] | any(contains($to)))' draft.json
 check version-record 0 '#155: the record of the version, read while the draft waits, holds the published manifest' -- \
-  bash -c "\"$strata\" snapshot \"$AD\" -o version.json && jq -e --arg from '$edit_from' \
+  bash -c "\"$strata\" snapshot \"$AD\" -o version.json && jq -e --arg from '$addon_from' \
     '.source.template == \"published\" and ([.packs[].manifests[].content] | any(contains(\$from)))' version.json"
 check compare 1 '#155: compare of the version and its draft exits 1' -- \
   "$strata" compare "$AD" "$AD@draft"
@@ -75,14 +67,14 @@ check compare-names 0 '#155: the comparison names the manifest pack that the pub
   grep -q 'AUTHORED' compare.out
 check route-list 0 '#155: packs/manifests gives the published content of the manifest while the draft waits' -- \
   bash -c "\"$live/api.sh\" get \"/v1/clusterprofiles/$AD/packs/manifests\" \
-    | jq -e --arg from '$edit_from' '[.spec.packs[].spec.manifests[]?.content] | any(contains(\$from))'"
+    | jq -e --arg from '$addon_from' '[.spec.packs[].spec.manifests[]?.content] | any(contains(\$from))'"
 check route-entity 0 '#155: the route of one manifest gives the draft content beside the published content' -- \
   bash -c "pack=\$(jq -r '[.spec.draft.packs[] | select((.manifests // []) | length > 0)][0].name' \
       <(\"$live/api.sh\" get \"/v1/clusterprofiles/$AD\")); \
     muid=\$(\"$live/api.sh\" get \"/v1/clusterprofiles/$AD\" | jq -r --arg p \"\$pack\" \
       '.spec.draft.packs[] | select(.name == \$p) | .manifests[0].uid'); \
     \"$live/api.sh\" get \"/v1/clusterprofiles/$AD/packs/\$pack/manifests/\$muid\" \
-      | jq -e --arg to '$edit_to' --arg from '$edit_from' \
+      | jq -e --arg to '$addon_to' --arg from '$addon_from' \
         '(.spec.draft.content | contains(\$to)) and (.spec.published.content | contains(\$from))'"
 check no-has-draft 0 '#155: the profile document gives no status.hasDraft' -- \
   bash -c "\"$live/api.sh\" get \"/v1/clusterprofiles/$AD\" | jq -e '.status | has(\"hasDraft\") | not'"

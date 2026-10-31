@@ -27,12 +27,12 @@ set -uo pipefail
 script=macro-repave
 flag=false
 from=${1:-1}
-case "$from" in 1|2|3|4|5) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "$from" in 1|2|3|4|5) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 macro=strata_probe
-edit_to=$'    - \'chmod 600 /var/lib/kubelet/config.yaml\'\n    - \'echo {{.spectro.macro.strata_probe}}\'\n'
+edit_to=${kubeadm_from}$'    - \'echo {{.spectro.macro.strata_probe}}\'\n'
 stable=${STABLE_MINUTES:-12}
 watch_minutes=${WATCH_MINUTES:-45}
 
@@ -41,20 +41,13 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# macro repave test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster \`${C:-}\`,"
-    echo "release \`${R:-}\`, project macro \`$macro\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "macro repave test" ", cluster \`${C:-}\`," \
+    "release \`${R:-}\`, project macro \`$macro\`."
 }
 trap summary EXIT
 
 save() { echo "$1=$2" >> ids.env; }
 [ -f ids.env ] && . ./ids.env
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 load_outputs
 C=$(out cluster_uid) R=$(out release_profile_uid) P=$(out project_uid)

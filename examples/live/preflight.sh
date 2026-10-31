@@ -21,7 +21,7 @@ cloud=${cloud:-aws}
 while [ $# -gt 0 ]; do
   case "$1" in
     --cloud) cloud=$2; shift 2 ;;
-    -h|--help) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) usage; exit 0 ;;
     *) die "unknown option $1" ;;
   esac
 done
@@ -37,13 +37,7 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# the checks of the lab: $cloud"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cloud \`$cloud\`, region \`$region\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "the checks of the lab: $cloud" ", cloud \`$cloud\`, region \`$region\`."
 }
 trap summary EXIT
 

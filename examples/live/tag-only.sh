@@ -42,20 +42,13 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# tag-only test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`. Cluster A \`${C:-}\`, release 1.0.0 \`${P:-}\`,"
-    echo "1.0.2 (\`$exact\`) \`${EXACT:-}\`, 1.0.3 (\`$floating\`) \`${FLOATING:-}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "tag-only test" ". Cluster A \`${C:-}\`, release 1.0.0 \`${P:-}\`," \
+    "1.0.2 (\`$exact\`) \`${EXACT:-}\`, 1.0.3 (\`$floating\`) \`${FLOATING:-}\`."
 }
 trap summary EXIT
 
 save() { echo "$1=$2" >> ids.env; }
 [ -f ids.env ] && . ./ids.env
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 load_outputs
 if [ "$from" -le 1 ]; then

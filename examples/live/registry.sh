@@ -59,14 +59,8 @@ cluster_var=()
 [ -n "$(out cluster_uid)" ] || cluster_var=(-var cluster=false)
 
 summary() {
-  {
-    echo "# registry test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, registry \`$REG_NAME\`,"
-    echo "pack \`$PACK\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "registry test" ", registry \`$REG_NAME\`," \
+    "pack \`$PACK\`."
 }
 trap '[ -z "${M:-}" ] || "$live/api.sh" delete "$M" > /dev/null 2>&1; summary' EXIT
 

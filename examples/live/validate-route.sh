@@ -17,8 +17,8 @@
 #   pack-state-deleted     a profile with a deleted pack
 #   profile-cloud-mismatch a profile of another cloud type
 #   pack-cloud-support     a pack version that does not list the cloud type
-# Each of the last four runs on AWS, with the engine of its body. route-bodies.sh writes aws-clean.json
-# and those four bodies.
+# Each of the last four runs on AWS, with the engine of its body. route-bodies.sh writes aws-clean.json,
+# and the body of each of the four whose profile Palette takes.
 #
 # Each case has two checks. `<case>` is that the route refuses the body. `<case>-says` is that the
 # refusal names the fault. A case that fails shows that the route does not answer the check, so
@@ -34,7 +34,6 @@ set -uo pipefail
 script=validate-route
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
-usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
 case "${1:-}" in
   -h | --help) usage; exit 0 ;;
   "") usage >&2; exit 2 ;;
@@ -45,13 +44,7 @@ run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/validate-route}
 mkdir -p "$run" && cd "$run" || exit 2
 
 summary() {
-  {
-    echo "# cluster validate route test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`: bodies from \`$bodies\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "cluster validate route test" ": bodies from \`$bodies\`."
 }
 trap summary EXIT
 

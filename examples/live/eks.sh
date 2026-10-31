@@ -27,7 +27,7 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 load_outputs
-[ "$(sed -n 's/^cloud *= *"\(.*\)"/\1/p' "$live/terraform/terraform.tfvars")" = eks ] \
+[ "$(var cloud)" = eks ] \
   || die "set cloud = \"eks\" in terraform/terraform.tfvars, and run just live-up"
 C=$(out cluster_uid)
 [ -n "$C" ] || die "no cluster A; run just live-up"
@@ -36,13 +36,7 @@ R=$(out release_profile_uid)
 NAME=$(out profile_name)
 
 summary() {
-  {
-    echo "# managed engine test: EKS"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster \`$C\`, release \`$R\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "managed engine test: EKS" ", cluster \`$C\`, release \`$R\`."
 }
 trap summary EXIT
 

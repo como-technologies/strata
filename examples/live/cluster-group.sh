@@ -23,8 +23,8 @@
 set -uo pipefail
 script=cluster-group
 from=${1:-1}
-case "$from" in 1|2|3|4) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "$from" in 1|2|3|4) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/cluster-group}
@@ -32,18 +32,10 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# cluster group test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, group \`${G:-}\`,"
-    echo "member \`${M:-}\`, add-on \`${AD:-}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "cluster group test" ", group \`${G:-}\`," \
+    "member \`${M:-}\`, add-on \`${AD:-}\`."
 }
 trap summary EXIT
-
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 load_outputs
 C=$(out cluster_uid) AD=$(out addon_profile_uid) AN=$(out addon_profile_name)
@@ -123,7 +115,7 @@ G=${G:-$(out cluster_group_uid)} M=${M:-$(out member_cluster_uid)}
 
 if stage 2 "an edit in place of the add-on version"; then
   check edit 0 "edit the manifest of the add-on version in place through the API" -- \
-    "$live/api.sh" edit "$AD" 'edited: "no"' 'edited: "yes"'
+    "$live/api.sh" edit "$AD" "$addon_from" "$addon_to"
   sleep 20
   check edit-group-verify 0 '#81: the group keeps its own copy of the manifest: verify of its record passes' -- \
     "$strata" verify group.json
@@ -139,7 +131,7 @@ if stage 2 "an edit in place of the add-on version"; then
   check edit-group-own-uid 0 '#81: that uid is a copy of its own, and not the uid of the manifest of the version' -- \
     bash -c "comm -12 <(jq -r '.spec.clusterProfileTemplates[].packs[].manifests[]?.uid' edit-group-raw.out | sort) \
       <(\"$live/api.sh\" get /v1/clusterprofiles/$AD/packs/manifests | jq -r '.spec.packs[].spec.manifests[]?.uid' | sort) | grep -q . && exit 1 || exit 0"
-  check edit-undo 0 'undo the edit' -- "$live/api.sh" edit "$AD" 'edited: "yes"' 'edited: "no"'
+  check edit-undo 0 'undo the edit' -- "$live/api.sh" edit "$AD" "$addon_to" "$addon_from"
 fi
 
 if stage 3 "the CPU limit of the group"; then

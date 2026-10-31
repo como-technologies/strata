@@ -44,13 +44,7 @@ run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/validate-packs}
 mkdir -p "$run" && cd "$run" || exit 2
 
 summary() {
-  {
-    echo "# profile validate test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`: \`$pack@$version\` in \`$registry\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "profile validate test" ": \`$pack@$version\` in \`$registry\`."
 }
 trap summary EXIT
 

@@ -19,8 +19,8 @@
 set -uo pipefail
 script=app-profile
 from=${1:-1}
-case "$from" in 1|2|3|4) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "$from" in 1|2|3|4) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/app-profile}
@@ -30,18 +30,10 @@ export STRATA_QUIET=1
 N=strata-live-app
 
 summary() {
-  {
-    echo "# app profile test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, app profile"
-    echo "\`$N\` \`${U:-}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "app profile test" ", app profile" \
+    "\`$N\` \`${U:-}\`."
 }
 trap summary EXIT
-
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 load_outputs
 export PALETTE_PROJECT_UID=$(out project_uid)
@@ -66,7 +58,7 @@ U=${U:-$(cat uid 2> /dev/null)}
 
 if stage 2 "a plain update of the manifest"; then
   check edit 0 '#78: update the manifest of the app profile through the API' -- \
-    "$live/api.sh" app-profile-edit "$U" 'edited: "no"' 'edited: "yes"'
+    "$live/api.sh" app-profile-edit "$U" "$addon_from" "$addon_to"
   check edit-same-version 0 '#78: the update keeps the uid and the version: no publish step, and no new version' -- \
     bash -c "\"$live/api.sh\" get /v1/appProfiles/$U | jq -e '.spec.version == \"1.0.0\" and (.spec.versions | length == 1)'"
   check edit-verify 1 '#78: verify of the record reports drift' -- "$strata" verify app.json

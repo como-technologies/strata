@@ -35,11 +35,15 @@ test: stand-in
     cargo test
     cargo test -p strata-preflight
 
+# The rustdoc command of `just lint` and `just api-docs`. The two recipes share one command, so
+# that they share one build. `just lint` adds the package xtask.
+rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight'
+
 # Test the format, the clippy lints, and the rustdoc
 lint:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
-    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight -p xtask
+    {{rustdoc}} -p xtask
 
 # Build and run examples/library, a separate crate that uses strata as a library
 library-example:
@@ -85,11 +89,11 @@ docs:
 docs-serve:
     mdbook serve docs --open
 
-# The flags are those of `just lint`, so the two recipes share one build. Add --open to open the pages.
+# The command is that of `just lint`. Add --open to open the pages.
 
 # Build the rustdoc of strata and strata-preflight into target/doc/, and print the path of the HTML
 api-docs *args:
-    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight {{args}}
+    {{rustdoc}} {{args}}
     @echo "{{justfile_directory()}}/target/doc/strata/index.html"
 
 # xtask runs each command of the book against a local stand-in for Palette. Needs jq, which the
@@ -192,9 +196,9 @@ live-validate-packs: build
 live-validate-route bodies: build
     examples/live/validate-route.sh {{bodies}}
 
-# The four case bodies of live-validate-route on AWS: the clean body, and a profile for each case. It
-# runs validate-route.sh on the bodies, and then deletes the profiles. Needs live-profiles with
-# cloud = aws; no cluster (#408, #413)
+# The case bodies of live-validate-route on AWS: the clean body, and a profile for each case that
+# Palette takes. It runs validate-route.sh on the bodies, and then deletes the profiles. Needs
+# live-profiles with cloud = aws; no cluster (#408, #413)
 live-route-bodies bodies: build
     examples/live/route-bodies.sh {{bodies}}
 

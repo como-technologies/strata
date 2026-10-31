@@ -49,13 +49,7 @@ PINNED=""
 cluster_var=()
 
 summary() {
-  {
-    echo "# registry kinds test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, host \`${H:-}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "registry kinds test" ", host \`${H:-}\`."
 }
 # cleanup: the objects of the API first, then the host and the registries of OpenTofu
 cleanup() {
