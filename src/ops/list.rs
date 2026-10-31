@@ -209,7 +209,7 @@ pub struct ListedCluster {
     pub name: String,
     /// Cluster uid.
     pub uid: String,
-    /// The cluster's `status.state`, for example `Running`.
+    /// The cluster's `status.state`, as Palette gives it in `v1ClusterState`.
     pub state: String,
     /// Cloud type, for example `aws`.
     pub cloud_type: String,

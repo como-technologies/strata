@@ -51,11 +51,12 @@ cluster group. Palette has who and when. The record has what the content was.
 ```
 
 Each line gives the time, the actor, the actor type, and the action, oldest
-first. The actor is the name of a person (`user`), or the name of a Palette
-service (`service`), such as `system`. When Palette logs a summary of the
-change, the line ends with it. When a person added a note to the entry, the
-line ends with `; note: <note>`. When the log holds no write since the record,
-the line is `who: no audit entry since the record`.
+first. The actor is the name of a person, or the name of a Palette service,
+such as `system`. The actor type and the action are as Palette gives them.
+When Palette logs a summary of the change, the line ends with it. When a
+person added a note to the entry, the line ends with `; note: <note>`. When the
+log holds no write since the record, the line is
+`who: no audit entry since the record`.
 
 For a cluster record, strata reads the log by the uid of the cluster alone, with
 no kind. Palette logs the create and the delete of a virtual cluster under the
