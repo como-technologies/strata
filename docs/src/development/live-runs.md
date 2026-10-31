@@ -164,10 +164,10 @@ The same report runs through the reusable workflow
 `.github/workflows/verify.yml`, driven by
 [act](https://github.com/nektos/act) against a scratch caller repository. The
 job checks out the caller and this repository at the release tag, downloads that
-release's binary, checks it against `SHA256SUMS`, and runs the script. At the
-baseline it succeeds and opens nothing; after an edit in place it opens an issue
-with the report and fails with exit 1; after the undo it closes the issue and
-succeeds.
+release's binary, checks the signature of `SHA256SUMS` and then the binary, and
+runs the script. At the baseline it succeeds and opens nothing; after an edit in
+place it opens an issue with the report and fails with exit 1; after the undo it
+closes the issue and succeeds.
 
 ## merge-gate.sh
 

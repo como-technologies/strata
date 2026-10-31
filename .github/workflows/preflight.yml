@@ -73,6 +73,8 @@ jobs:
     steps:
       # the caller's repository, where the entity and the records live
       - uses: actions/checkout@v7
+      # the release workflow of this repository signed SHA256SUMS; cosign 3 reads its bundle
+      - uses: sigstore/cosign-installer@v4.1.2
       - name: install strata and strata-preflight
         env:
           GH_TOKEN: ${{ secrets.strata-token || github.token }}
@@ -81,7 +83,10 @@ jobs:
           mkdir -p .strata/bin && cd .strata/bin
           gh release download "$VERSION" --repo como-technologies/strata \
             --pattern strata-x86_64-unknown-linux-musl --pattern strata-preflight-x86_64-unknown-linux-musl \
-            --pattern SHA256SUMS
+            --pattern SHA256SUMS --pattern SHA256SUMS.sigstore.json
+          cosign verify-blob SHA256SUMS --bundle SHA256SUMS.sigstore.json \
+            --certificate-identity "https://github.com/como-technologies/strata/.github/workflows/release.yml@refs/tags/$VERSION" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
           sha256sum --check --ignore-missing SHA256SUMS
           chmod +x strata-x86_64-unknown-linux-musl strata-preflight-x86_64-unknown-linux-musl
           mv strata-x86_64-unknown-linux-musl strata
