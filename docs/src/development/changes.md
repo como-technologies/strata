@@ -27,7 +27,7 @@ work starts.
    you work in:
 
    ```bash
-   just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs && cargo test -p xtask
+   just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs
    ```
 
 5. Rebase on a fresh `origin/main`. Then push the branch.

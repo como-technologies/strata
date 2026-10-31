@@ -77,9 +77,22 @@ fn the_gate_job_of_ci_needs_the_checks_and_has_no_condition() {
 }
 
 /// The tests of `xtask` hold the routes of the stand-in of Palette, and `cargo test` of the root
-/// package does not run them. So the job `lint and test` runs them by name.
+/// package does not run them. So the `test` recipe runs them by name, and the job `lint and test`
+/// runs the recipe. The job has no step of its own for them: they would run two times. The line
+/// of the recipe has no `-` before it, so a test that fails makes `just test` exit non-zero.
 #[test]
 fn the_lint_and_test_job_runs_the_tests_of_xtask() {
+    let justfile =
+        std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("justfile")).unwrap();
+    let recipe: Vec<&str> = justfile
+        .lines()
+        .skip_while(|line| !line.starts_with("test:"))
+        .skip(1)
+        .take_while(|line| line.starts_with(' '))
+        .map(str::trim)
+        .collect();
+    assert!(recipe.contains(&"cargo test -p xtask"), "{recipe:?}");
+
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/checks.yml");
     let text = std::fs::read_to_string(&path).unwrap();
     let doc: serde_yaml::Value = serde_yaml::from_str(&text).unwrap();
@@ -95,7 +108,8 @@ fn the_lint_and_test_job_runs_the_tests_of_xtask() {
         .iter()
         .filter_map(|step| step["run"].as_str())
         .collect();
-    assert!(runs.contains(&"cargo test -p xtask"), "{runs:?}");
+    assert!(runs.contains(&"just test"), "{runs:?}");
+    assert!(!runs.contains(&"cargo test -p xtask"), "{runs:?}");
 }
 
 /// A workflow that downloads a release makes sure that the release workflow signed `SHA256SUMS`

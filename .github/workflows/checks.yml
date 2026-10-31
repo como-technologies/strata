@@ -28,8 +28,6 @@ jobs:
       - run: just library-example
       # the examples are built, not tracked: this keeps the generator working
       - run: just examples
-      # the stand-in of Palette and the runner of the book have tests of their own
-      - run: cargo test -p xtask
 
   msrv:
     name: the lowest Rust version

@@ -3,7 +3,7 @@
 ```bash
 just build             # target/release/strata and target/release/strata-preflight
 just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings
-just test              # the unit, library, binary, and script tests, of both packages
+just test              # the unit, library, binary, and script tests, and the tests of xtask
 just library-example   # examples/library, a crate that uses strata as a library
 just examples          # examples/ from the tracked registry data
 just docs-check        # docs/src/output/ is the output of this build
@@ -72,6 +72,13 @@ command directly. `cargo xtask` with no command prints its usage and exits `2`. 
 
 ## The tests
 
+`just test` runs three commands, one after the other: `cargo test`,
+`cargo test -p strata-preflight`, and `cargo test -p xtask`. The workspace builds
+only the root package by default. So `cargo test` alone does not run the tests of
+`xtask`, which hold the routes of the stand-in for Palette. When one test fails,
+`just test` stops and exits with a code that is not zero. CI runs `just test`, so
+CI runs the tests of the stand-in with the others.
+
 `cargo test` runs:
 
 - the unit tests
@@ -124,7 +131,7 @@ fails when 50 or fewer of its 2000 cases build a record.
 
 | Job | Runs |
 | --- | --- |
-| lint and test | `just lint`, `just test`, `just library-example`, `just examples`, and `cargo test -p xtask` |
+| lint and test | `just lint`, `just test`, `just library-example`, and `just examples` |
 | docs | `just docs-check`, and `just docs` with `mdbook-lint` |
 | build | the Linux musl binary, with the step that a release uses |
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of `Cargo.toml`, so the number a reader trusts is the number CI builds with |
