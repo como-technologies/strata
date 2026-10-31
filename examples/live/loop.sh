@@ -23,9 +23,9 @@
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
 # git, jq, and the key as verify.sh needs it. Each change is undone, so the script leaves the
-# example at its baseline. Stages 2 to 4 only ask: Palette keeps nothing of the asks and of the
-# body. Results go under runs/<UTC time>/loop/, or OUT; FROM_STAGE resumes a run in OUT. Exit 0
-# only when no check fails.
+# example at its baseline. Stages 2 to 4 only ask Palette: Palette keeps nothing of the questions
+# and of the body. Results go under runs/<UTC time>/loop/, or OUT; FROM_STAGE resumes a run in OUT.
+# Exit 0 only when no check fails.
 set -uo pipefail
 script=loop
 from=${1:-1}
@@ -88,7 +88,7 @@ if stage 2 "a change, in a pull request"; then
   check candidate-record 0 'the candidate as a record, before Palette has it' -- \
     in_repo "$strata" snapshot --from-candidate change.yaml -o candidate.json
   # the name route refuses a name and a version that Palette holds, and it holds the next version
-  # already: the ask goes out under a name that the project lacks
+  # already: the question goes out under a name that the project lacks
   sed "s/^name: .*/name: $NAME-ask/" repo/change.yaml > repo/ask.yaml
   check ask-candidate 0 '#385: Palette accepts the packs of the candidate, and the record holds the answer' -- \
     in_repo bash -c "\"$strata\" snapshot --from-candidate ask.yaml --validate -o ask.json && jq -e '.source.paletteValidation.accepts' ask.json"
@@ -138,10 +138,21 @@ if stage 4 "before a build"; then
   # the release profile alone, so one request
   check preflight-each 0 '#144: the check of the cluster templates asks Palette for each profile of the body' -- \
     bash -c "\"$strata\" preflight build.json --cloud \"$engine\" --tier palette --rule template-outside --json --quiet | jq -e '.checks[0] | .verdict == \"passed\" and (.requests | length) == 1'"
-  # the instance type route lists every type of the region, so the body costs one request for all
-  # its pools, and the type of the release body is offered in its zone
+  # the instance type route lists every type of the region, so one request answers all the pools
+  # of the body. The type of the release body is offered in its zone
   check preflight-offering 0 '#143: the instance type route offers the type of each pool in its zone, in one request' -- \
     bash -c "\"$strata\" preflight build.json --cloud \"$engine\" --tier palette --rule instance-offering --json --quiet | jq -e '.checks[0] | .verdict == \"passed\" and (.ran | contains(\"/instancetypes?cloudAccountUid=\"))'"
+  # the key pair of the body: on aws the properties route of Palette reads it, for iaas-pod-identity.
+  # On eks the key pair route reads it, for ssh-key-pair. A body on gcp or gke has no key pair
+  case "$engine" in
+    aws) key_rule=iaas-pod-identity ;;
+    eks) key_rule=ssh-key-pair ;;
+    *) key_rule= ;;
+  esac
+  if [ -n "$key_rule" ]; then
+    check preflight-key-pair 0 "#433: $key_rule passes: the account of the lab holds the key pair of the body" -- \
+      bash -c "\"$strata\" preflight build.json --cloud \"$engine\" --tier palette --rule $key_rule --json --quiet | jq -e '.checks[0] | .verdict == \"passed\"'"
+  fi
   jq '.spec.cloudAccountUid = "000000000000000000000000"' build.json > build-fault.json
   check preflight-fault 1 '#385: a body with a cloud account that the project lacks fails the gate' -- \
     "$strata" preflight build-fault.json --cloud "$engine" --tier static,palette --no-exec --strict --quiet

@@ -144,3 +144,20 @@ of an EKS cluster names a key pair that the account lacks:
 
 The `reproduce:` line of each rule asks the cloud, because the list is the
 catalog of Palette and not the cloud.
+
+## A rule over the property route of a cloud
+
+`gcp-properties` sends the project, the region, and the zones of the pools to
+`POST /v1/clouds/gcp/properties/validate`. It fails when Palette refuses them.
+The console calls this route on a GCP create, and not on a GKE create. See
+[The property routes](../../internals/palette/validate-routes.md#the-property-routes)
+for what the route reads.
+
+Here the body of a GCP create passes. `--verbose` shows the request:
+
+```text
+{{#include ../../output/preflight-gcp-properties.txt}}
+```
+
+The `reproduce:` lines of a failed rule read the project and the zones with
+`gcloud`.

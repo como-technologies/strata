@@ -13286,10 +13286,10 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
 
 // ---- behind asks Palette about the bump ------------------------------------------------------
 
-/// The uid of the profile version that the records of the ask pin csi-aws-ebs in.
+/// The uid of the profile version that the records of the question pin csi-aws-ebs in.
 const BUMP_PROFILE_UID: &str = "pr1";
 
-/// The name of the cluster that the tests of the ask run.
+/// The name of the cluster that the tests of the question run.
 const BUMP_CLUSTER: &str = "payments";
 
 /// What Palette says about a move of csi-aws-ebs from 1.63.1 to 1.65.0 on the cluster `payments`.
@@ -13412,7 +13412,7 @@ fn behind_prints_the_refusal_of_palette_for_the_bump_of_a_record_of_a_profile_wi
     assert_eq!(
         r.exit_code(),
         1,
-        "the pin is behind, and the ask changes no exit"
+        "the pin is behind, and the question changes no exit"
     );
     assert!(
         json["pins"][0]["bump"]

@@ -67,8 +67,8 @@ record of the candidate:
 ```
 
 [Ask Palette before you publish](./commands/candidate.md#ask-palette-before-you-publish)
-gives the three routes that Palette checks. The job of the pull request compares
-the record with the record of what `dev` runs, and posts the comment:
+gives the three routes that check the candidate. The job of the pull request
+compares the record with the record of what `dev` runs, and posts the comment:
 
 ```text
 {{#include output/loop-review.txt}}
@@ -170,7 +170,11 @@ the body and create nothing. Here Palette refuses the worker pool: one
 
 The live tier also reads the instance types of the region, and sends the key
 pair to the properties route. The type, its zone, and the key pair of this body
-are right, so `instance-offering` and `iaas-pod-identity` pass.
+are correct, so `instance-offering` and `iaas-pod-identity` pass.
+
+A rule over a list, such as `template-outside`, makes one request for each
+profile of the body. This body has one profile, so the rule makes one request.
+See [A rule over a list](./commands/preflight/tiers.md#a-rule-over-a-list).
 
 The fix is a second worker. Change the file, and ask again.
 
@@ -216,16 +220,17 @@ The scheduled verify finds the edit, and keeps one issue open for it:
 ```
 
 The other scheduled job finds the pins that the registry has passed. This is a
-decision for a person, not an error, so it is a separate job:
+decision for a person, not an error, so it is a separate job. It reads the
+records of `dev`, because Palette answers in the project of the connection:
 
 ```text
 {{#include output/loop-upstream.txt}}
 ```
 
-The command passes `--no-impact`, so it makes no request to a validate route.
-Without the option, the job also asks Palette whether it accepts the move to the
-newest version. The bump column of each issue then says `palette accepts`, or
-`palette refuses` with the code and the clusters. See
+The job also asks Palette if it accepts the move of each pin to the newest
+version. The last lines show the bump column of each issue. Here Palette accepts
+each move. When Palette refuses a move, the column says `palette refuses`, with
+the code and the clusters. `--no-impact` skips the question. See
 [Palette accepts the move, or refuses it](./commands/behind.md#palette-accepts-the-move-or-refuses-it).
 
 ### 7. The incident
@@ -266,7 +271,7 @@ record of the cluster shows it. See
 
 The live run of `just live-loop` runs this loop end to end against a tenant,
 with the records in a git repository: the comment, the merge gate, the publish,
-the asks of Palette about a move, `preflight` on the body of a cluster, the
+the questions to Palette about a move, `preflight` on the body of a cluster, the
 nightly jobs, a value overridden on a cluster, an edit in place, an incident,
 and a retire. See
 [What the live example verifies](./development/live-runs.md#loopsh).

@@ -1,0 +1,4 @@
+$ strata preflight gcp-cluster.json --cloud gcp --no-exec --tier palette --rule gcp-properties --strict --quiet | sed -n '4p'
+  PROBE PASS    gcp-properties               The properties route accepts the project and the zones of a…     1 ms
+$ strata preflight gcp-cluster.json --cloud gcp --no-exec --tier palette --rule gcp-properties --verbose --color never 2>&1 > /dev/null | grep 'POST'
+strata: palette: gcp-properties: POST /v1/clouds/gcp/properties/validate -> HTTP 200, 1 ms, PROBE PASS

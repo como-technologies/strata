@@ -20,8 +20,8 @@ command that shows the same thing by hand. See
 [Can Palette build this cluster?](./use-cases/stop-a-build.md).
 
 - [The everyday loop](./loop.md) shows who runs what, and when, with one change
-  from the pull request to the retire. It includes the asks of Palette about a
-  change, and `preflight` before a build.
+  from the pull request to the retire. It includes the questions to Palette
+  about a change, and `preflight` before a build.
 - [Where each part belongs](./boundary.md) says what Palette does, what strata
   adds, and why the record lives in your repository.
 
