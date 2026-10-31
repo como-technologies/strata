@@ -184,8 +184,9 @@ record carries that statement in `source.cluster`:
 - `pendingUpdates[]`: for each change that waits, `profileUid`, `profile`, the
   `message` that Palette gives, such as `Manifest 'x' is updated in the pack
   'x(x)'`, and `since`.
-- `updatesPendingError`: why strata could not read it. `updatesPending` is then
-  absent, and the record is still taken.
+- `errors.updatesPending`: why strata could not read it. `updatesPending` is then
+  absent, and the record is still taken. A tier holds its read errors in its own
+  `errors`, in the same shape: see [The policy tier](#the-policy-tier).
 
 These fields are not part of the root: they are Palette's statement about the
 copy, and the copy is the same with or without them. `compare` and `list
@@ -212,7 +213,7 @@ Strata reads `GET /v1/spectroclusters/{uid}/repave/status` only when a repave
 waits. That answer holds the values of the pack on each side of the change.
 The record keeps the names of the keys, and no value. When Palette answers that
 request with an HTTP error, strata still writes the record.
-`pendingRepaveError` then holds the error in place of `pendingRepave`, and the
+`errors.pendingRepave` then holds the error in place of `pendingRepave`, and the
 note of `compare` and `verify` gives it in place of the reasons.
 
 These fields are not part of the root: the copy that the cluster runs is the

@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value, json};
 
+use super::cluster::unread;
 use crate::api::RawCluster;
 use crate::api::mask::mask_password_keys;
 use crate::content::canon::{canon_yaml_hashed, canonical_json, sha256_hex};
@@ -80,13 +81,10 @@ fn agent_upgrades_forbidden(cluster: &Value) -> Option<&Value> {
 /// These are the role bindings and the namespaces, when Palette answered their route with an
 /// error other than 404.
 pub(crate) fn errors(raw: &RawCluster) -> BTreeMap<String, String> {
-    [
+    unread([
         (RBACS, &raw.errors.rbacs),
         (NAMESPACES, &raw.errors.namespaces),
-    ]
-    .into_iter()
-    .filter_map(|(key, error)| Some((key.to_string(), error.clone()?)))
-    .collect()
+    ])
 }
 
 /// The fields of the policy tier of a cluster group, from its `spec.clustersConfig` in `config`:

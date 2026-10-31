@@ -80,16 +80,22 @@ profile, or pack version.
       `cluster:<cluster>/<profile>` selected, `profiles[]`, and `variables[]`.
     - `updatesPending` is `true` when Palette says that an update of a profile
       of the record waits, `false` when none waits, and absent when strata could
-      not read it. `updatesPendingError` then says why. `pendingUpdates[]` has
+      not read it. `errors.updatesPending` then says why. `pendingUpdates[]` has
       `profileUid`, `profile`, `message`, and `since` for each change that
       waits.
     - `repavePending` is `true` when Palette holds a repave of the cluster for
       approval, and `false` when none waits. It is absent for an edge host, a
       cluster group, and an older record. `pendingRepave`, only when a repave
       waits: `source`, `since`, and `reasons[]` with `code`, `message`, `pack`,
-      and `keys`. `pendingRepaveError` is in its place when strata could not
-      read the repave. See
+      and `keys`. `errors.pendingRepave` says why when strata could not read
+      the repave. See
       [Whether a repave waits](../commands/snapshot/cluster.md#whether-a-repave-waits).
+    - `errors`, only when strata could not read a part of the cluster that is
+      beside the copy: the field and the error. The keys are `updatesPending`
+      and `pendingRepave`. The tiers have `errors` in the same shape. A record
+      of strata 0.24 and before holds `updatesPendingError` and
+      `pendingRepaveError` in place of these two entries. Strata reads them
+      into `errors`.
     - `macroValues`, only with `snapshot --macros`: each user macro that the
       content uses, with a digest. The digest is the `sha256:` of the value
       that Palette gives the macro for this cluster or cluster group. It is

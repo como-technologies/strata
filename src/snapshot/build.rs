@@ -6,8 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::{Value, json};
 
 use super::cluster::{
-    AppliedProfile, ClusterSource, ClusterVariable, PendingUpdate, cluster_tiers, macro_digests,
-    profile_macro_digests,
+    AppliedProfile, ClusterSource, ClusterVariable, PendingUpdate, cluster_errors, cluster_tiers,
+    macro_digests, profile_macro_digests,
 };
 use super::pack::Pack;
 use super::{Consumers, SNAPSHOT_SCHEMA, Snapshot, Source, SubjectKind, Template, Tool, macros_of};
@@ -337,11 +337,10 @@ impl Snapshot {
                         .notifications
                         .as_ref()
                         .map(|_| !pending_updates.is_empty()),
-                    updates_pending_error: raw.errors.notifications.clone(),
                     pending_updates,
                     repave_pending: Some(is_pending(&raw.cluster)),
                     pending_repave: raw.repave.as_ref().map(PendingRepave::read),
-                    pending_repave_error: raw.errors.repave.clone(),
+                    errors: cluster_errors(raw),
                     macro_values: raw
                         .resolved_values
                         .as_ref()
