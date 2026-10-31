@@ -772,7 +772,7 @@ nothing.
 | `bump-cluster-record` | 0 | #166: a record of the cluster `CLUSTER`. |
 | `bump-cluster-same` | 0 | #419: with `CLUSTER`, the record of the cluster and the record of the profile get one bump of `kubernetes`. The two bumps have the same version, impact level, and change flags: the bump to 1.37.0, with the level `repave`. |
 | `bump-cluster-asked` | 0 | #453: `behind` on the record of the cluster asks the route of the profile version that the cluster runs, and the bump holds an answer of Palette in `bump.paletteValidation`. |
-| `bump-cluster-refused` | 0 | #453: the route of the profile version that the cluster runs refuses the same move with `DependencyPackUpgradeNotSupported`, "Pack upgrade to '1.37.0' is not compatible with the clusters '<cluster A>'". Cluster A is in `clusters`. |
+| `bump-cluster-refused` | 0 | #453: the route of the profile version that the cluster runs refuses the same move with `DependencyPackUpgradeNotSupported`, `Pack upgrade to '1.37.0' is not compatible with the clusters '<cluster A>'`. Cluster A is in `clusters`. |
 | `cluster-route-doc`, `cluster-route-tag`, `cluster-route-tag-says` | 0 | #453: the route of the cluster answers HTTP 200 with no error for a body with the tag `9.99.9` for `kubernetes`. No registry has that version, and the profile is one that the cluster runs. So the route does not check the sent tag. The body of a real cluster is longer than one argument can be (128 KiB). So `cluster-route-tag` writes the body to `cluster-route-body.json` and gives `api.sh post-status` the path of that file (#466). |
 
 Each check of stage 6 passes on cluster A, built on Kubernetes 1.35.8. That

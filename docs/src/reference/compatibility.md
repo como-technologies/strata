@@ -97,10 +97,12 @@ profile export that a person made gives such a variable. Its record has another
 Strata does not read a record that holds `name: null`. `verify`, `compare`,
 `behind`, and `same-release` stop on it with `snapshot-schema` and exit `2`. The
 id stays. Palette requires a name, so only a raw directory that a person made
-gave such a record. In the library, `Snapshot::variables` and
-`Candidate::variables` are `Vec<Variable>` in place of `Vec<Value>`.
-`Leaf::segments` is `Vec<Segment>` in place of `Vec<Value>`. The function
-`diff::group_variables` takes `&[Variable]`.
+gave such a record.
+
+In the library, `Snapshot::variables` and `Candidate::variables` are
+`Vec<Variable>` in place of `Vec<Value>`. `Leaf::segments` is `Vec<Segment>` in
+place of `Vec<Value>`. The function `diff::group_variables` takes
+`&[Variable]`.
 
 After 0.24.0, strata reads the variables of a candidate file by type. Before, it
 changed each value of the wrong type into the default of the field. Four cases
