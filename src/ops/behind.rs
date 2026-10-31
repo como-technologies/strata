@@ -205,10 +205,10 @@ pub struct Bump {
     pub flags: Vec<Open<ChangeFlag>>,
     /// Whether Palette accepts the move, with the errors that it gives and the clusters that they
     /// name. Palette checks the move against the packs of the clusters that run the profile of
-    /// each record that pins the pack in the project of the pin. Absent when strata can ask no
-    /// record of the pin. Also absent when a request failed or strata did not ask a record, and no
-    /// answer holds an error. Strata says that Palette accepts only when it asked each record and
-    /// each request answered.
+    /// each record. Strata asks the records that pin the pack in the project of the pin. Absent
+    /// when strata can ask no record of the pin. Also absent when a request failed or strata did
+    /// not ask a record, and no answer holds an error. Strata says that Palette accepts only when
+    /// it asked each record and each request answered.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_validation: Option<ProfileValidation>,
     /// Why a request to Palette failed, when one did. Also the records of another project that
