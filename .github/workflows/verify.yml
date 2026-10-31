@@ -17,6 +17,14 @@ on:
         description: The label of the issues the report keeps
         default: strata-drift
         type: string
+      allow-no-digest:
+        description: Accept a pack with no upstream digest, which some registries do not list; the report still names it. Without it, such a record has an issue
+        default: false
+        type: boolean
+      who:
+        description: Add who changed a record that drifted, and when, from the audit log of Palette, to its issue
+        default: false
+        type: boolean
       palette-api:
         description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
         default: ""
@@ -76,9 +84,11 @@ jobs:
           PALETTE_API: ${{ inputs.palette-api }}
           RECORDS: ${{ inputs.records }}
           LABEL: ${{ inputs.label }}
+          ALLOW_NO_DIGEST: ${{ inputs.allow-no-digest && '--allow-no-digest' || '' }}
+          WHO: ${{ inputs.who && '--who' || '' }}
           REPO: ${{ github.repository }}
         run: |
           # split the records on whitespace and leave each pattern for strata to expand
           set -f
           # shellcheck disable=SC2086
-          .strata/scripts/ci/verify-report.sh $RECORDS --repo "$REPO" --label "$LABEL"
+          .strata/scripts/ci/verify-report.sh $RECORDS --repo "$REPO" --label "$LABEL" $ALLOW_NO_DIGEST $WHO

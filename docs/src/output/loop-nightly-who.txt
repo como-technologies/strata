@@ -1,0 +1,10 @@
+$ scripts/ci/verify-report.sh 'releases/**/*.json' 'fleet/**/*.json' --who --dry-run > issues-who.md
+verify-report: would close the open issue for releases/1.0.0/dev.json, if any
+verify-report: would close the open issue for releases/1.0.0/prod.json, if any
+verify-report: would close the open issue for releases/1.1.0/dev.json, if any
+verify-report: would open or update the issue for releases/1.1.0/prod.json: strata verify: aws-stack@1.1.0 drifted (releases/1.1.0/prod.json)
+verify-report: would close the open issue for fleet/prod/payments.json, if any
+verify-report: 5 records: 4 unchanged, 1 drifted, 0 could not be checked
+$ grep -E '^(who:|- 20)' issues-who.md
+who: 1 write in the audit log since the record
+- 2026-09-18T14:02:11.482Z  John Doe (user)  update

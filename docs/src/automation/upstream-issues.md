@@ -62,7 +62,7 @@ scripts/ci/upstream-report.sh 'releases/**/*.json'
 | `--host github\|gitlab` | The code host. The CI variables choose it when this is absent. |
 | `--label NAME` | The label of the issues. `strata-behind` by default. |
 | `--no-impact` | Do not compare each pin that is behind with the newest version, and do not ask Palette about the move. |
-| `--save FILE` | Keep the report of the run. |
+| `--save FILE` | Keep the report of the run as JSON in `FILE`. |
 | `--dry-run` | Print each issue body and the action for each issue, and call no host. |
 
 | Exit | Meaning |
@@ -81,6 +81,16 @@ The GitHub drop-in `examples/ci/github/strata.yml` runs the job `upstream` on
 the schedule of the drift report, through the reusable workflow
 `.github/workflows/upstream.yml`. The GitLab drop-in
 `examples/ci/gitlab/strata.yml` runs the job `strata-upstream` on a scheduled
-pipeline, with the label `STRATA_BEHIND_LABEL`. The host functions are the ones
-of `verify-report.sh`: see [GitLab CI](./gitlab.md) for the token that the
-issues need.
+pipeline. The host functions are the ones of `verify-report.sh`: see
+[GitLab CI](./gitlab.md) for the token that the issues need.
+
+| Option | GitHub input | GitLab variable |
+| --- | --- | --- |
+| `--label NAME` | `label` | `STRATA_BEHIND_LABEL` |
+| `--no-impact` | `no-impact` | `STRATA_NO_IMPACT`, `true` or `false` |
+| `--save FILE` | `save` | `STRATA_SAVE` |
+
+The other inputs of the workflow are `records`, `strata-version`, and
+`palette-api`. With `save`, the workflow uploads the file as the artifact
+`strata-behind`, also when a pin is behind and the job fails. The GitLab job
+keeps the file `STRATA_SAVE` as an artifact.

@@ -17,6 +17,14 @@ on:
         description: The label of the issues the report keeps
         default: strata-behind
         type: string
+      no-impact:
+        description: Do not compare each pin that is behind with the newest version, and do not ask Palette about the move
+        default: false
+        type: boolean
+      save:
+        description: A file in the checkout that keeps the report of the run as JSON; the artifact strata-behind holds it. Empty keeps none
+        default: ""
+        type: string
       palette-api:
         description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
         default: ""
@@ -76,9 +84,20 @@ jobs:
           PALETTE_API: ${{ inputs.palette-api }}
           RECORDS: ${{ inputs.records }}
           LABEL: ${{ inputs.label }}
+          NO_IMPACT: ${{ inputs.no-impact && '--no-impact' || '' }}
+          SAVE: ${{ inputs.save }}
           REPO: ${{ github.repository }}
         run: |
+          save=()
+          [ -z "$SAVE" ] || save=(--save "$SAVE")
           # split the records on whitespace and leave each pattern for strata to expand
           set -f
           # shellcheck disable=SC2086
-          .strata/scripts/ci/upstream-report.sh $RECORDS --repo "$REPO" --label "$LABEL"
+          .strata/scripts/ci/upstream-report.sh $RECORDS --repo "$REPO" --label "$LABEL" $NO_IMPACT "${save[@]}"
+      # also after a run that found a pack behind, which exits with 1
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && inputs.save != '' }}
+        with:
+          name: strata-behind
+          path: ${{ inputs.save }}
+          if-no-files-found: ignore

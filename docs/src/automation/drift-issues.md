@@ -28,6 +28,23 @@ give.
 {{#include ../output/edited-report.txt}}
 ````
 
+## Name who changed the record
+
+`--who` adds who changed a record that drifted. The script passes the option to
+the check of each record that did not verify. The issue then lists each write in
+the audit log of Palette since the record, with the time and the actor. Here the
+issue of an edited version names the person who edited it:
+
+````text
+{{#include ../output/edited-report-who.txt}}
+````
+
+The first check reads every record and gets no `--who`. Only a record that did
+not verify has an issue. See
+[Who changed it](../commands/verify.md#who-changed-it), and
+[The audit log](../internals/palette/profiles.md#the-audit-log) for what Palette
+logs.
+
 ## Exit status
 
 The script exits like `verify`, after it handles the issues: `0` when each
@@ -63,6 +80,7 @@ opens no issue for it. See
 | `--host github\|gitlab` | from the CI variables | The code host. |
 | `--label NAME` | `strata-drift` | The label of the issues. |
 | `--allow-no-digest` | | Accept a pack with no upstream digest, as `verify --allow-no-digest` does. |
+| `--who` | | Add who changed a record that drifted, and when, to its issue, as `verify --who` does. |
 | `--dry-run` | | Print, and change nothing. |
 
 The script is in this repository, at `scripts/ci/verify-report.sh`. It needs
@@ -105,10 +123,14 @@ jobs:
 | `records` | yes | Files or patterns, separated by spaces or new lines. Strata expands the patterns. |
 | `strata-version` | yes | The strata release, a tag of this repository. |
 | `label` | no | The label of the issues. Default `strata-drift`. |
+| `allow-no-digest` | no | Accept a pack with no upstream digest, for a registry that lists none. Default `false`. |
+| `who` | no | Add who changed a record that drifted. Default `false`. |
 | `palette-api` | no | The address of a self-hosted Palette. |
 
 The secret `palette-api-key` is required. `strata-token` reads this repository
-while it is private. Another scheduler runs the script directly.
+while it is private. Another scheduler runs the script directly. On GitLab, the
+variables `STRATA_ALLOW_NO_DIGEST` and `STRATA_WHO` set the two options: see
+[GitLab CI](./gitlab.md#the-variables).
 
 [Pull request comments](./pr-comments.md#while-this-repository-is-private)
 gives the two steps for a private repository.

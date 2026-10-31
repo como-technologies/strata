@@ -25,7 +25,8 @@ strata preflight clusters/payments.json --cloud eks --tier static \
 
 The markdown is one table for a pull request comment, with the reproduce lines
 in a fold. `--strict` on a pull request stops the merge on a failed probe as
-well; without it, a failed probe is a line to read.
+well; without it, a failed probe is a line to read. [On GitHub and
+GitLab](#on-github-and-gitlab) shows how a job posts the table.
 
 ## The live tier before a build
 
@@ -66,21 +67,68 @@ the watch is the step that says `Running`.
 `.github/workflows/preflight.yml` is a reusable workflow: the caller gives the
 source, the cloud, the tiers, the records, and the release of strata, and the
 job installs the two binaries, runs `strata preflight`, writes the markdown to
-the job summary, and keeps `preflight/` as an artifact. Its exit status is the
-status of strata.
+the job summary, and keeps the directory of `--out` as an artifact. Its exit
+status is the status of strata.
 
 | Input | Meaning |
 | --- | --- |
 | `source` | The body of the create as a file in the checkout, or `cluster:UID`. |
 | `cloud`, `change`, `tier`, `records`, `probes`, `release`, `strict`, `ready` | The options of the command, by the same names. |
+| `no-exec`, `verbose` | `--no-exec` and `--verbose`. |
+| `rule` | `--rule`: the ids of the rules, separated by spaces. Strata runs only these rules. |
+| `watch`, `every`, `limit` | `--watch`, `--every`, and `--limit`. Give `cluster:UID` as `source`. The job needs the key. |
+| `out` | The directory for `report.md` and the other files. Default `preflight`. The artifact `preflight` holds it. |
+| `comment` | `true` posts `report.md` as a comment on the pull request. Default `false`. |
 | `palette-api`, `strata-version` | A self-hosted Palette, and the release of strata. |
 | secrets `palette-api-key`, `palette-project-uid` | For the palette tier and for `cluster:UID`. Without a key the job runs the static tier alone. |
 | secret `strata-token` | Reads this repository while it is private. |
+
+The workflow sets `--format markdown`. It sets `--quiet` too, except when
+`verbose` is `true`: `--quiet` wins over `--verbose`. The options `--rules`,
+`--promotion`, `--ledger`, and `--schema` run no check of a cluster, so the
+workflow has no input for them.
 
 `examples/ci/github/strata.yml` holds a `preflight` job beside the other six,
 and `examples/ci/gitlab/strata.yml` a `strata-preflight` job: both run the
 static tier on each pull request, with the records of the repository. The job
 that builds runs the live tier with the key, and the watch after the create.
+
+### The report as a comment
+
+With `comment: true`, the job posts `report.md` on the pull request, in one
+comment that starts with the marker `<!-- strata-preflight -->`. Each push
+updates that comment. It is a comment of its own, beside the comment of
+[`pr-comment.sh`](./pr-comments.md), which starts with another marker. The job
+posts it also when the check failed, because a person must read a failed report.
+The caller must grant `pull-requests: write`: the workflow asks for it, and
+GitHub fails the call when the caller grants less. A run with no pull request,
+such as a build job on the default branch, posts nothing.
+
+The workflow runs `scripts/ci/pr-comment.sh --preflight out/report.md`. A
+pipeline on another host runs the same command: see
+[Post a preflight report](./pr-comments.md#post-a-preflight-report).
+
+### The watch in the workflow
+
+To watch a build, call the workflow after the create. Give the source
+`cluster:<uid>`, the input `watch: true`, and the secret `palette-api-key`. The
+inputs `every` and `limit` set the seconds between two readings and the longest
+watch.
+The job ends at the first stuck state, at `Running` with each counted rule
+passed, or at the limit. Set the limit under the timeout of the job.
+
+### GitLab
+
+The job `strata-preflight` reads one variable for each input, with the prefix
+`STRATA_PREFLIGHT_`: `SOURCE`, `CLOUD`, `CHANGE`, `TIER`, `RECORDS`, `PROBES`,
+`RELEASE`, `STRICT`, `READY`, `NO_EXEC`, `RULE`, `VERBOSE`, `WATCH`, `EVERY`,
+`LIMIT`, `OUT`, and `COMMENT`. [GitLab CI](./gitlab.md#the-variables) gives the
+default of each one.
+
+The job runs the static tier with `--offline`, also when `PALETTE_API_KEY` is
+set for the other jobs. For the live tier, or for the watch, set
+`STRATA_PREFLIGHT_TIER` to an empty value. The job then reads Palette when the
+key is set.
 
 ## Custom probes of a company
 

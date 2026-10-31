@@ -184,6 +184,14 @@ After 0.22.1, `preflight cluster:<name>` no longer takes a source of 24 hex
 digits as a uid with no check. Strata tries each id as a uid first, and then as
 a name, as `strata snapshot` does. A name costs one more request, a 404.
 
+After 0.24.0, the reusable workflow `preflight.yml` asks for the permission
+`pull-requests: write`, for its input `comment`. GitHub fails the call when the
+caller grants less, also when `comment` is `false`. Add the permission to the
+caller. `examples/ci/github/strata.yml` has it.
+
+After 0.24.0, the input `allow` of `promote-gate.yml` is a list, separated by
+spaces or new lines. A caller that gives one value runs as before.
+
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a

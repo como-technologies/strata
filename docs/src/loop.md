@@ -171,6 +171,16 @@ request can run it:
 {{#include output/loop-preflight-static.txt}}
 ```
 
+The pull request can also show the report. `pr-comment.sh --preflight` posts
+`report.md` as a comment of its own, with the marker `<!-- strata-preflight -->`,
+and updates it on each push. The reusable workflow does the same with
+`comment: true`. See
+[The report as a comment](./automation/preflight.md#the-report-as-a-comment).
+
+```text
+{{#include output/loop-preflight-comment.txt}}
+```
+
 Before the build, the live tier asks the validate routes of Palette. They check
 the body and create nothing. Here Palette refuses the worker pool: one
 `t3.xlarge` has fewer cores than the packs need. `--strict` makes the exit code
@@ -229,6 +239,15 @@ The scheduled verify finds the edit, and keeps one issue open for it:
 
 ```text
 {{#include output/loop-who.txt}}
+```
+
+The scheduled job takes the same option. With `--who`, the issue lists the
+writes, so the person who reads it knows whom to ask. The workflow input is
+`who`, and the GitLab variable is `STRATA_WHO`. See
+[Name who changed the record](./automation/drift-issues.md#name-who-changed-the-record).
+
+```text
+{{#include output/loop-nightly-who.txt}}
 ```
 
 The other scheduled job finds the pins that the registry has passed. This is a

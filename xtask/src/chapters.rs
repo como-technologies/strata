@@ -479,6 +479,13 @@ fn the_loop(r: &mut Runner) {
         false,
         "PALETTE_PROJECT=prod strata preflight cluster.json --cloud aws --tier static --offline --quiet | grep -E '^(OK|FAIL)'",
     );
+    // the pull request gets the same report as a comment of its own
+    r.step(
+        "loop-preflight-comment",
+        0,
+        true,
+        "PALETTE_PROJECT=prod strata preflight cluster.json --cloud aws --tier static --offline --quiet --out preflight > /dev/null && scripts/ci/pr-comment.sh --preflight preflight/report.md --dry-run | sed -n '1,4p'",
+    );
     r.step(
         "loop-preflight-live",
         1,
@@ -528,6 +535,19 @@ fn the_loop(r: &mut Runner) {
         "loop-who",
         "loop-who-full",
         r"^(aws-stack|DRIFT|who:|  \d{4}-)",
+    );
+    // the scheduled job takes the same option: the issue of the edit names its writer
+    r.step(
+        "loop-nightly-who",
+        1,
+        true,
+        "scripts/ci/verify-report.sh 'releases/**/*.json' 'fleet/**/*.json' --who --dry-run > issues-who.md",
+    );
+    r.step(
+        "loop-nightly-who",
+        0,
+        false,
+        "grep -E '^(who:|- 20)' issues-who.md",
     );
     r.step(
         "loop-upstream",
@@ -1617,6 +1637,18 @@ fn use_cases(r: &mut Runner) {
         1,
         true,
         "scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json' --dry-run",
+    );
+    // the same report with --who: the body of the issue names who made the edit, and when
+    r.step(
+        "edited-report-who-full",
+        1,
+        true,
+        "scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json' --who --dry-run",
+    );
+    r.excerpt(
+        "edited-report-who",
+        "edited-report-who-full",
+        r"^(<!-- strata-verify|\*\*DRIFT|who:|- 20)",
     );
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
     r.step(

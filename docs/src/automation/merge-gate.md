@@ -172,6 +172,7 @@ jobs:
 | `strata-version` | yes | The strata release, a tag of this repository. |
 | `verify` | no | `false` leaves the verify check out. Default `true`. |
 | `rollback-label` | no | The label that allows a backwards pin. Default `rollback`. |
+| `allow-no-digest` | no | Accept a pack with no upstream digest, as `verify --allow-no-digest` does. Default `false`. |
 | `base` | no | The branch to merge in, when no event names it. A merge queue run needs it. |
 | `palette-api` | no | A self-hosted Palette address. |
 
@@ -179,8 +180,9 @@ The checkout of a pull request is already the merge result, so the gate finds
 nothing to merge and checks what the button lands.
 
 **GitLab.** Include [the pipeline](./gitlab.md), which runs `strata-merge-gate`
-on each merge request pipeline. In Settings, Merge requests, turn on "Pipelines
-must succeed". Merged results pipelines and merge trains run the pipeline on the
+on each merge request pipeline. The variable `STRATA_ALLOW_NO_DIGEST` set to
+`true` gives the job `--allow-no-digest`. In Settings, Merge requests, turn on
+"Pipelines must succeed". Merged results pipelines and merge trains run the pipeline on the
 merge result, which is what this gate checks anyway.
 
 See [A team pins each environment](../use-cases/fan-out.md) for the whole

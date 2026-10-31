@@ -25,6 +25,10 @@ on:
         description: The label on the pull request that says a backwards pin is a rollback
         default: rollback
         type: string
+      allow-no-digest:
+        description: Accept a pack with no upstream digest, which some registries do not list; the report still names it. Without it, such a record is red
+        default: false
+        type: boolean
       palette-api:
         description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
         default: ""
@@ -87,10 +91,11 @@ jobs:
           NO_VERIFY: ${{ inputs.verify && '' || '--no-verify' }}
           # the label is how a reviewer says that a backwards pin is a rollback
           ROLLBACK: ${{ contains(github.event.pull_request.labels.*.name, inputs.rollback-label) && '--allow-rollback' || '' }}
+          ALLOW_NO_DIGEST: ${{ inputs.allow-no-digest && '--allow-no-digest' || '' }}
         run: |
           git config user.email "strata@github"
           git config user.name "strata merge gate"
           # split the records on whitespace and leave each pattern for git to expand
           set -f
           # shellcheck disable=SC2086
-          .strata/scripts/ci/merge-gate.sh $RECORDS $NO_VERIFY $ROLLBACK
+          .strata/scripts/ci/merge-gate.sh $RECORDS $NO_VERIFY $ROLLBACK $ALLOW_NO_DIGEST

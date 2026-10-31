@@ -4,6 +4,9 @@
 //! colon and a space inside an unquoted description is the fault this found.
 
 use std::path::Path;
+use std::process::Command;
+
+use crate::common::{executable, git, text};
 
 #[test]
 fn every_workflow_file_parses_and_has_on_and_jobs() {
@@ -177,4 +180,276 @@ fn the_release_check_installs_the_published_tag_with_a_required_signature() {
     })
     .expect("the check job installs the tag with --require-signature");
     assert!(cosign < install, "cosign comes before the installer runs");
+}
+
+// ---- the steps of the reusable workflows ---------------------------------------------------------
+//
+// `act` is not in every container, so these tests run the `run` script of a step in bash, as the
+// runner of GitHub does, with a stand-in for each tool the step calls. The expressions of GitHub
+// (`${{ ... }}`) do not run here: a test gives the value that an expression has.
+
+/// A step that ran in a directory of its own, and the calls that its stand-ins logged.
+struct StepRun {
+    dir: tempfile::TempDir,
+    output: std::process::Output,
+}
+
+impl StepRun {
+    /// The calls of the stand-ins, one for each line: the name of the tool and its arguments.
+    fn calls(&self) -> Vec<String> {
+        std::fs::read_to_string(self.dir.path().join("calls.log"))
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// The text that the step appended to the summary of the job.
+    fn summary(&self) -> String {
+        std::fs::read_to_string(self.dir.path().join("summary.md")).unwrap_or_default()
+    }
+}
+
+/// A stand-in that logs its name and its arguments, prints `FAKE_OUT`, and exits with
+/// `FAKE_EXIT`.
+const LOGGING_TOOL: &str = r#"#!/usr/bin/env bash
+echo "$(basename "$0") $*" >> "$FAKE_LOG"
+printf '%s' "${FAKE_OUT-}"
+exit "${FAKE_EXIT:-0}"
+"#;
+
+/// Run the `run` script of the step `step` of the workflow `file` in a fresh directory.
+///
+/// Each variable of the `env` of the step is empty unless `env` gives it a value. `tools` are the
+/// paths, under the directory, of the stand-ins that [`LOGGING_TOOL`] describes.
+fn run_step(file: &str, step: &str, env: &[(&str, &str)], tools: &[&str]) -> StepRun {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(".github/workflows")
+        .join(file);
+    let doc: serde_yaml::Value =
+        serde_yaml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let step = doc["jobs"]
+        .as_mapping()
+        .unwrap()
+        .values()
+        .flat_map(|job| job["steps"].as_sequence().into_iter().flatten())
+        .find(|s| s["name"].as_str() == Some(step))
+        .unwrap_or_else(|| panic!("{file} has no step named {step}"));
+    let dir = tempfile::tempdir().unwrap();
+    git(dir.path(), &["init", "-q"]);
+    for tool in tools {
+        let at = dir.path().join(tool);
+        std::fs::create_dir_all(at.parent().unwrap()).unwrap();
+        executable(&at, LOGGING_TOOL);
+    }
+    let mut command = Command::new("bash");
+    command
+        .args(["--noprofile", "--norc", "-eo", "pipefail", "-c"])
+        .arg(step["run"].as_str().expect("the step runs a script"))
+        .current_dir(dir.path())
+        .env("FAKE_LOG", dir.path().join("calls.log"))
+        .env("GITHUB_STEP_SUMMARY", dir.path().join("summary.md"));
+    for name in step["env"].as_mapping().into_iter().flat_map(|e| e.keys()) {
+        command.env(name.as_str().unwrap(), "");
+    }
+    command.envs(env.iter().copied());
+    let output = command.output().unwrap();
+    StepRun { dir, output }
+}
+
+#[test]
+fn the_preflight_step_passes_the_options_of_a_watch_to_strata() {
+    let run = run_step(
+        "preflight.yml",
+        "preflight",
+        &[
+            ("SOURCE", "cluster:64f0"),
+            ("WATCH", "true"),
+            ("EVERY", "5"),
+            ("LIMIT", "60"),
+            ("NO_EXEC", "true"),
+            ("RULE", "eks-subnets eks-roles"),
+            ("PALETTE_API_KEY", "a-key"),
+            ("OUT", "out"),
+            ("FAKE_OUT", "# the report\n"),
+        ],
+        &[".strata/bin/strata"],
+    );
+    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+    assert_eq!(
+        run.calls(),
+        [
+            "strata preflight cluster:64f0 --every 5 --limit 60 --no-exec --watch --quiet \
+             --rule eks-subnets --rule eks-roles --out out --format markdown"
+        ]
+    );
+    assert_eq!(run.summary(), "# the report\n");
+}
+
+#[test]
+fn the_preflight_step_without_a_key_reads_nothing_and_a_verbose_run_omits_quiet() {
+    let run = run_step(
+        "preflight.yml",
+        "preflight",
+        &[
+            ("SOURCE", "clusters/payments.json"),
+            ("CLOUD", "eks"),
+            ("TIER", "static"),
+            ("RECORDS", "releases/**/*.json other/*.json"),
+            ("VERBOSE", "true"),
+            ("OUT", "preflight"),
+        ],
+        &[".strata/bin/strata"],
+    );
+    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+    assert_eq!(
+        run.calls(),
+        [
+            "strata preflight clusters/payments.json --cloud eks --tier static --verbose \
+             --offline --records releases/**/*.json --records other/*.json \
+             --out preflight --format markdown"
+        ]
+    );
+}
+
+#[test]
+fn the_preflight_step_keeps_the_report_and_the_exit_status_of_a_failed_run() {
+    let run = run_step(
+        "preflight.yml",
+        "preflight",
+        &[
+            ("SOURCE", "clusters/payments.json"),
+            ("OUT", "preflight"),
+            ("FAKE_OUT", "# 1 check failed\n"),
+            ("FAKE_EXIT", "1"),
+        ],
+        &[".strata/bin/strata"],
+    );
+    assert_eq!(run.output.status.code(), Some(1));
+    assert_eq!(run.summary(), "# 1 check failed\n");
+}
+
+#[test]
+fn the_preflight_comment_step_posts_the_report_of_the_out_directory() {
+    let run = run_step(
+        "preflight.yml",
+        "comment on the pull request",
+        &[("OUT", "out"), ("PR", "7"), ("REPO", "o/r")],
+        &[".strata/scripts/ci/pr-comment.sh"],
+    );
+    assert!(run.output.status.success(), "{}", text(&run.output.stderr));
+    assert_eq!(
+        run.calls(),
+        ["pr-comment.sh --preflight out/report.md --pr 7 --repo o/r"]
+    );
+}
+
+#[test]
+fn the_merge_gate_step_passes_allow_no_digest_when_the_input_is_on() {
+    let tools = [".strata/scripts/ci/merge-gate.sh"];
+    let on = run_step(
+        "merge-gate.yml",
+        "check the merge result",
+        &[
+            ("RECORDS", "releases/**/*.json"),
+            ("ALLOW_NO_DIGEST", "--allow-no-digest"),
+        ],
+        &tools,
+    );
+    assert!(on.output.status.success(), "{}", text(&on.output.stderr));
+    assert_eq!(
+        on.calls(),
+        ["merge-gate.sh releases/**/*.json --allow-no-digest"]
+    );
+    let off = run_step(
+        "merge-gate.yml",
+        "check the merge result",
+        &[("RECORDS", "releases/**/*.json")],
+        &tools,
+    );
+    assert_eq!(off.calls(), ["merge-gate.sh releases/**/*.json"]);
+}
+
+#[test]
+fn the_verify_step_passes_allow_no_digest_and_who_when_the_inputs_are_on() {
+    let tools = [".strata/scripts/ci/verify-report.sh"];
+    let env = [
+        ("RECORDS", "releases/*.json"),
+        ("LABEL", "strata-drift"),
+        ("REPO", "o/r"),
+    ];
+    let off = run_step("verify.yml", "verify and report", &env, &tools);
+    assert_eq!(
+        off.calls(),
+        ["verify-report.sh releases/*.json --repo o/r --label strata-drift"]
+    );
+    let mut on_env = env.to_vec();
+    on_env.extend([("ALLOW_NO_DIGEST", "--allow-no-digest"), ("WHO", "--who")]);
+    let on = run_step("verify.yml", "verify and report", &on_env, &tools);
+    assert!(on.output.status.success(), "{}", text(&on.output.stderr));
+    assert_eq!(
+        on.calls(),
+        [
+            "verify-report.sh releases/*.json --repo o/r --label strata-drift --allow-no-digest --who"
+        ]
+    );
+}
+
+#[test]
+fn the_upstream_step_passes_no_impact_and_save_when_the_inputs_are_on() {
+    let tools = [".strata/scripts/ci/upstream-report.sh"];
+    let env = [
+        ("RECORDS", "releases/*.json"),
+        ("LABEL", "strata-behind"),
+        ("REPO", "o/r"),
+    ];
+    let off = run_step("upstream.yml", "check the pins and report", &env, &tools);
+    assert!(off.output.status.success(), "{}", text(&off.output.stderr));
+    assert_eq!(
+        off.calls(),
+        ["upstream-report.sh releases/*.json --repo o/r --label strata-behind"]
+    );
+    let mut on_env = env.to_vec();
+    on_env.extend([("NO_IMPACT", "--no-impact"), ("SAVE", "behind.json")]);
+    let on = run_step("upstream.yml", "check the pins and report", &on_env, &tools);
+    assert_eq!(
+        on.calls(),
+        [
+            "upstream-report.sh releases/*.json --repo o/r --label strata-behind --no-impact --save behind.json"
+        ]
+    );
+}
+
+#[test]
+fn the_promote_gate_step_gives_each_allowed_difference_its_own_option() {
+    let tools = [".strata/bin/strata"];
+    let env = [("RECORDS", "dev.json prod.json")];
+    let none = run_step(
+        "promote-gate.yml",
+        "the records are one release",
+        &env,
+        &tools,
+    );
+    assert!(
+        none.output.status.success(),
+        "{}",
+        text(&none.output.stderr)
+    );
+    assert_eq!(none.calls(), ["strata same-release dev.json prod.json"]);
+
+    // a list that the caller separates by spaces, or by lines
+    for allow in ["registry-move no-digest", "registry-move\nno-digest"] {
+        let mut env = env.to_vec();
+        env.push(("ALLOW", allow));
+        let run = run_step(
+            "promote-gate.yml",
+            "the records are one release",
+            &env,
+            &tools,
+        );
+        assert_eq!(
+            run.calls(),
+            ["strata same-release dev.json prod.json --allow registry-move --allow no-digest"]
+        );
+    }
 }

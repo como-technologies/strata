@@ -1,0 +1,46 @@
+$ scripts/ci/verify-report.sh 'releases/**/*.json' 'runs/*.json' --who --dry-run
+<!-- strata-verify: releases/1.1.1/dev.json -->
+`strata verify releases/1.1.1/dev.json` reports drift, checked 2026-09-17T09:30:00Z.
+
+### aws-stack@1.1.1 → aws-stack@1.1.1
+
+| | A | B |
+|---|---|---|
+| uid | `64e0000000000000000000c3` | `64e0000000000000000000c3` |
+| root | `088136c929bd` | `78a86f401545` |
+| consumers | 1 cluster | 2 clusters |
+| fetched | 2026-09-17T09:30:00Z | 2026-09-17T09:30:00Z |
+
+**Result:** CHANGED · max impact: `cluster-wide` · packs: 1 changed, 0 added, 0 removed, 4 unchanged · variables: unchanged
+
+**Note:** both sides are aws-stack@1.1.1 (uid 64e0000000000000000000c3): the version was edited in place
+
+**Verify:** `DRIFT` for uid `64e0000000000000000000c3`, recorded 2026-09-17T09:30:00Z, checked 2026-09-17T09:30:00Z
+
+| | layer | pack | version | change | impact |
+|---|---|---|---|---|---|
+| ` ` | os | `ubuntu-aws` | 24.04 | unchanged |  |
+| ` ` | k8s | `kubernetes` | 1.36.2 | unchanged |  |
+| ` ` | cni | `cni-cilium-oss` | 1.20.1 | unchanged |  |
+| `~` | csi | `csi-aws-ebs` | 1.65.0 | AUTHORED | cluster-wide infra addon update |
+| ` ` | addon | `cert-manager` | 1.21.1 | unchanged |  |
+
+<details><summary><code>csi-aws-ebs</code> values: 1 changed, 0 added, 0 removed</summary>
+
+```diff
+- charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy: "Delete"
++ charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy: "Retain"
+```
+
+</details>
+
+
+**DRIFT**: published version aws-stack@1.1.1 differs from the copy recorded 2026-09-17T09:30:00Z; Palette last changed it 2026-09-18T14:02:11.482Z
+
+who: 1 write in the audit log since the record
+
+- 2026-09-18T14:02:11.482Z  John Doe (user)  update
+
+verify-report: would open or update the issue for releases/1.1.1/dev.json: strata verify: aws-stack@1.1.1 drifted (releases/1.1.1/dev.json)
+verify-report: would close the open issue for runs/payments.json, if any
+verify-report: 2 records: 1 unchanged, 1 drifted, 0 could not be checked

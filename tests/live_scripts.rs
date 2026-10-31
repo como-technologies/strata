@@ -5590,6 +5590,35 @@ fn loop_sh_stage_5_asks_palette_about_the_bump_of_each_pin_that_the_nightly_job_
 }
 
 #[test]
+fn loop_sh_stage_7_asks_the_nightly_job_to_put_the_writer_of_an_edit_in_the_issue() {
+    let mut stage = lab_stage();
+    stage.strata(
+        "verify --summary --quiet --format json *",
+        1,
+        r#"{"schema":"strata-verify-summary/1","records":[{"path":"releases/addon.json",
+            "status":"drifted","name":"strata-live-addon","version":"1.0.0","uid":"ad-1",
+            "recordedAt":"2026-09-26T06:00:00Z"}]}"#,
+    );
+    // the check of the record, with and without --who: the report is the same for this test
+    stage.strata(
+        "verify releases/addon.json --quiet --format markdown*",
+        1,
+        "**DRIFT**: published version strata-live-addon@1.0.0 differs\n\nwho: 1 write in the audit log since the record\n\n- 2026-09-26T06:30:00.123Z  John Doe (user)  update\n",
+    );
+    // the stage edits the add-on through the API, which this test does not serve, so its first
+    // step fails; the checks of the nightly job do not depend on it
+    let (_, steps) = stage.run("loop.sh", &["7"]);
+    passed(&steps, &["nightly-who", "nightly-who-says"]);
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    assert!(
+        calls
+            .lines()
+            .any(|l| l == "verify releases/addon.json --quiet --format markdown --who"),
+        "{calls}"
+    );
+}
+
+#[test]
 fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_body_of_a_create() {
     let mut stage = lab_stage();
     stage.strata(
@@ -5624,6 +5653,11 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
         "preflight build.json --cloud aws --tier static --offline --quiet",
         0,
         "OK: each counted check passed\n",
+    );
+    stage.strata(
+        "preflight build.json --cloud aws --tier static --offline --quiet --format markdown",
+        0,
+        "## strata-preflight: aws cluster `strata-loop-build`\n\n**OK: each counted check passed** — source `build.json`\n",
     );
     stage.strata(
         "preflight build.json --cloud aws --tier static,palette --no-exec --strict --quiet",
@@ -5663,6 +5697,8 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
             "ask-repave-comment-says",
             "build-body",
             "preflight-static",
+            "preflight-comment",
+            "preflight-comment-says",
             "preflight-live",
             "preflight-each",
             "preflight-offering",
@@ -5677,6 +5713,12 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
     assert!(
         note.contains("max impact: repave; label repave: Palette says no repave; would remove label repave if present"),
         "{note}"
+    );
+    // the pull request gets the report under the marker of its own
+    let report = std::fs::read_to_string(stage.path("out/preflight-comment.md")).unwrap();
+    assert!(
+        report.starts_with("<!-- strata-preflight -->\n## strata-preflight: aws cluster"),
+        "{report}"
     );
     // the body is the create of a cluster on the release in the account of the lab
     let body = read_json(&stage.path("out/build.json"));
