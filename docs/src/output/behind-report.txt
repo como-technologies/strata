@@ -1,44 +1,44 @@
-$ scripts/ci/upstream-report.sh 'releases/*/dev.json' --dry-run --no-impact
+$ scripts/ci/upstream-report.sh 'releases/*/dev.json' --dry-run
 <!-- strata-behind: cni-cilium-oss 5eecc89d0b150045ae661cef -->
-<!-- strata-behind-state: {"generatedAt":"2026-09-17T09:30:00Z","pins":[{"name":"cni-cilium-oss","layer":"cni","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.19.6","tag":"1.19.6","pinnedBy":[{"path":"releases/1.0.0/dev.json","subject":"aws-stack@1.0.0"}],"newer":[{"version":"1.20.1","paletteLatest":true,"listed":"2026-09-11T14:32:11.379Z"},{"version":"1.20.0","listed":"2026-08-07T15:05:36.897Z"}],"behind":true},{"name":"cni-cilium-oss","layer":"cni","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.20.1","tag":"1.20.1","pinnedBy":[{"path":"releases/1.1.1/dev.json","subject":"aws-stack@1.1.1"}],"newer":[],"behind":false}]} -->
+<!-- strata-behind-state: {"generatedAt":"2026-09-17T09:30:00Z","pins":[{"name":"cni-cilium-oss","layer":"cni","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.19.6","tag":"1.19.6","pinnedBy":[{"path":"releases/1.0.0/dev.json","subject":"aws-stack@1.0.0"}],"newer":[{"version":"1.20.1","paletteLatest":true,"listed":"2026-09-11T14:32:11.379Z"},{"version":"1.20.0","listed":"2026-08-07T15:05:36.897Z"}],"behind":true,"bump":{"to":"1.20.1","impact":"cluster-wide","flags":["IDENTITY","UPSTREAM","AUTHORED","IMAGES"],"paletteValidation":{"accepts":true}}},{"name":"cni-cilium-oss","layer":"cni","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.20.1","tag":"1.20.1","pinnedBy":[{"path":"releases/1.1.1/dev.json","subject":"aws-stack@1.1.1"}],"newer":[],"behind":false}]} -->
 `strata behind` finds `cni-cilium-oss` behind in Public Repo, checked 2026-09-17T09:30:00Z.
 
 | pinned | newer | bump | arrived | pinned by |
 |---|---|---|---|---|
-| `1.19.6` | 1.20.1 (listed 2026-09-11), 1.20.0 (listed 2026-08-07) | - | - | `releases/1.0.0/dev.json` (aws-stack@1.0.0) |
+| `1.19.6` | 1.20.1 (listed 2026-09-11), 1.20.0 (listed 2026-08-07) | 1.20.1: cluster-wide IDENTITY UPSTREAM AUTHORED IMAGES<br>palette accepts | - | `releases/1.0.0/dev.json` (aws-stack@1.0.0) |
 | `1.20.1` | current | - | - | `releases/1.1.1/dev.json` (aws-stack@1.1.1) |
 
 No earlier issue holds this pack: this run is the first to find it behind.
 
 <!-- strata-behind: csi-aws-ebs 5eecc89d0b150045ae661cef -->
-<!-- strata-behind-state: {"generatedAt":"2026-09-17T09:30:00Z","pins":[{"name":"csi-aws-ebs","layer":"csi","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.63.1","tag":"1.63.1","pinnedBy":[{"path":"releases/1.0.0/dev.json","subject":"aws-stack@1.0.0"}],"newer":[{"version":"1.65.0","paletteLatest":true,"listed":"2026-09-11T14:32:12.028Z"},{"version":"1.64.0","listed":"2026-09-06T16:00:56.675Z"}],"behind":true},{"name":"csi-aws-ebs","layer":"csi","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.65.0","tag":"1.65.0","pinnedBy":[{"path":"releases/1.1.1/dev.json","subject":"aws-stack@1.1.1"}],"newer":[],"behind":false}]} -->
+<!-- strata-behind-state: {"generatedAt":"2026-09-17T09:30:00Z","pins":[{"name":"csi-aws-ebs","layer":"csi","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.63.1","tag":"1.63.1","pinnedBy":[{"path":"releases/1.0.0/dev.json","subject":"aws-stack@1.0.0"}],"newer":[{"version":"1.65.0","paletteLatest":true,"listed":"2026-09-11T14:32:12.028Z"},{"version":"1.64.0","listed":"2026-09-06T16:00:56.675Z"}],"behind":true,"bump":{"to":"1.65.0","impact":"cluster-wide","flags":["IDENTITY","UPSTREAM","AUTHORED","IMAGES","CHARTS"],"paletteValidation":{"accepts":true}}},{"name":"csi-aws-ebs","layer":"csi","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.65.0","tag":"1.65.0","pinnedBy":[{"path":"releases/1.1.1/dev.json","subject":"aws-stack@1.1.1"}],"newer":[],"behind":false}]} -->
 `strata behind` finds `csi-aws-ebs` behind in Public Repo, checked 2026-09-17T09:30:00Z.
 
 | pinned | newer | bump | arrived | pinned by |
 |---|---|---|---|---|
-| `1.63.1` | 1.65.0 (listed 2026-09-11), 1.64.0 (listed 2026-09-06) | - | - | `releases/1.0.0/dev.json` (aws-stack@1.0.0) |
+| `1.63.1` | 1.65.0 (listed 2026-09-11), 1.64.0 (listed 2026-09-06) | 1.65.0: cluster-wide IDENTITY UPSTREAM AUTHORED IMAGES CHARTS<br>palette accepts | - | `releases/1.0.0/dev.json` (aws-stack@1.0.0) |
 | `1.65.0` | current | - | - | `releases/1.1.1/dev.json` (aws-stack@1.1.1) |
 
 No earlier issue holds this pack: this run is the first to find it behind.
 
 <!-- strata-behind: kubernetes 5eecc89d0b150045ae661cef -->
-<!-- strata-behind-state: {"generatedAt":"2026-09-17T09:30:00Z","pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"path":"releases/1.0.0/dev.json","subject":"aws-stack@1.0.0"}],"newer":[{"version":"1.36.2","paletteLatest":true,"listed":"2026-07-30T22:45:47.109Z","drops":["arm64"]},{"version":"1.35.6","listed":"2026-07-30T22:45:47.372Z"}],"behind":true},{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.36.2","tag":"1.36.2","pinnedBy":[{"path":"releases/1.1.1/dev.json","subject":"aws-stack@1.1.1"}],"newer":[],"behind":false}]} -->
+<!-- strata-behind-state: {"generatedAt":"2026-09-17T09:30:00Z","pins":[{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.35.3","tag":"1.35.3","pinnedBy":[{"path":"releases/1.0.0/dev.json","subject":"aws-stack@1.0.0"}],"newer":[{"version":"1.36.2","paletteLatest":true,"listed":"2026-07-30T22:45:47.109Z","drops":["arm64"]},{"version":"1.35.6","listed":"2026-07-30T22:45:47.372Z"}],"behind":true,"bump":{"to":"1.36.2","impact":"repave","flags":["IDENTITY","UPSTREAM","AUTHORED","IMAGES"],"paletteValidation":{"accepts":true}}},{"name":"kubernetes","layer":"k8s","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"1.36.2","tag":"1.36.2","pinnedBy":[{"path":"releases/1.1.1/dev.json","subject":"aws-stack@1.1.1"}],"newer":[],"behind":false}]} -->
 `strata behind` finds `kubernetes` behind in Public Repo, checked 2026-09-17T09:30:00Z.
 
 | pinned | newer | bump | arrived | pinned by |
 |---|---|---|---|---|
-| `1.35.3` | 1.36.2 (drops arm64, listed 2026-07-30), 1.35.6 (listed 2026-07-30) | - | - | `releases/1.0.0/dev.json` (aws-stack@1.0.0) |
+| `1.35.3` | 1.36.2 (drops arm64, listed 2026-07-30), 1.35.6 (listed 2026-07-30) | 1.36.2: repave IDENTITY UPSTREAM AUTHORED IMAGES<br>palette accepts | - | `releases/1.0.0/dev.json` (aws-stack@1.0.0) |
 | `1.36.2` | current | - | - | `releases/1.1.1/dev.json` (aws-stack@1.1.1) |
 
 No earlier issue holds this pack: this run is the first to find it behind.
 
 <!-- strata-behind: ubuntu-aws 5eecc89d0b150045ae661cef -->
-<!-- strata-behind-state: {"generatedAt":"2026-09-17T09:30:00Z","pins":[{"name":"ubuntu-aws","layer":"os","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"20.04","tag":"LTS__20.4.x","floating":true,"resolved":"20.04","pinnedBy":[{"path":"releases/1.0.0/dev.json","subject":"aws-stack@1.0.0"}],"newer":[{"version":"24.04","paletteLatest":true,"listed":"2025-11-14T15:02:05.428Z"},{"version":"22.04","listed":"2023-01-10T06:19:31.406Z"}],"behind":true},{"name":"ubuntu-aws","layer":"os","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"24.04","tag":"LTS__24.x","floating":true,"resolved":"24.04","pinnedBy":[{"path":"releases/1.1.1/dev.json","subject":"aws-stack@1.1.1"}],"newer":[],"behind":false}]} -->
+<!-- strata-behind-state: {"generatedAt":"2026-09-17T09:30:00Z","pins":[{"name":"ubuntu-aws","layer":"os","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"20.04","tag":"LTS__20.4.x","floating":true,"resolved":"20.04","pinnedBy":[{"path":"releases/1.0.0/dev.json","subject":"aws-stack@1.0.0"}],"newer":[{"version":"24.04","paletteLatest":true,"listed":"2025-11-14T15:02:05.428Z"},{"version":"22.04","listed":"2023-01-10T06:19:31.406Z"}],"behind":true,"bump":{"to":"24.04","impact":"repave","flags":["IDENTITY","UPSTREAM"],"paletteValidation":{"accepts":true}}},{"name":"ubuntu-aws","layer":"os","registry":"Public Repo","registryUid":"5eecc89d0b150045ae661cef","version":"24.04","tag":"LTS__24.x","floating":true,"resolved":"24.04","pinnedBy":[{"path":"releases/1.1.1/dev.json","subject":"aws-stack@1.1.1"}],"newer":[],"behind":false}]} -->
 `strata behind` finds `ubuntu-aws` behind in Public Repo, checked 2026-09-17T09:30:00Z.
 
 | pinned | newer | bump | arrived | pinned by |
 |---|---|---|---|---|
-| `20.04` (floating tag `LTS__20.4.x`) | 24.04 (listed 2025-11-14), 22.04 (listed 2023-01-10) | - | - | `releases/1.0.0/dev.json` (aws-stack@1.0.0) |
+| `20.04` (floating tag `LTS__20.4.x`) | 24.04 (listed 2025-11-14), 22.04 (listed 2023-01-10) | 24.04: repave IDENTITY UPSTREAM<br>palette accepts | - | `releases/1.0.0/dev.json` (aws-stack@1.0.0) |
 | `24.04` (floating tag `LTS__24.x`) | current | - | - | `releases/1.1.1/dev.json` (aws-stack@1.1.1) |
 
 No earlier issue holds this pack: this run is the first to find it behind.

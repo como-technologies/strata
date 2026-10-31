@@ -320,7 +320,7 @@ where
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
     // the pin, and the project of its first record. `holders` names, for each pin, the records
-    // that pin it, as indexes into `loaded`: the ask of Palette about a bump reads them
+    // that pin it, as indexes into `loaded`: the question to Palette about a bump reads them
     let mut pins: BTreeMap<PinKey, (Pin, String)> = BTreeMap::new();
     let mut loaded: Vec<Snapshot> = Vec::with_capacity(records.len());
     let mut holders: BTreeMap<PinKey, Vec<usize>> = BTreeMap::new();
@@ -615,7 +615,7 @@ fn read_bump<A: PaletteApi>(
 
 /// What a move from the pinned version of `pin` to the version `to` does: `compare` of the two
 /// pack versions, which `listings` reads. Also the pack at the version `to`, with the default
-/// values of that version, for the ask of Palette. The bump holds no answer of Palette yet.
+/// values of that version, for the question to Palette. The bump holds no answer of Palette yet.
 fn bump_of<A: PaletteApi>(
     listings: &mut Registries<'_, A>,
     pin: &Pin,

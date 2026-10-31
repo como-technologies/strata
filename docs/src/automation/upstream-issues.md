@@ -31,9 +31,9 @@ first line, and the label `strata-behind`:
 A pack that strata could not check keeps its issue as it is. An issue of a pack
 that no record pins is left alone.
 
-The bump column of an issue gives the impact of the move to the newest version. It
-also says whether Palette accepts the move. It uses the lines that
-`strata behind` shows under the bump:
+The bump column of an issue gives the impact of the move to the newest version,
+as the table above shows. It also says if Palette accepts the move, with the
+lines that `strata behind` shows under the bump:
 
 - `palette accepts`.
 - `palette refuses`, with the code and the clusters. Each error has one line.

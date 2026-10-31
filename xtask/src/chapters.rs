@@ -361,6 +361,8 @@ fn the_loop(r: &mut Runner) {
     // Palette takes the name aws-stack@1.1.0 and the packs of the candidate, which it does not hold
     r.tenant(|t| t.profile_create_checks(DEV, ("aws-stack", "1.1.0"), None, None));
     r.tenant(|t| t.profile_packs_answer(DEV, None, None));
+    // Palette accepts the move of each pin that is behind. Only aws-stack@1.0.0 in dev pins one
+    r.tenant(|t| t.profile_upgrade_answer(DEV, A100, None));
     // the repository of the team: main holds the record of what each project runs
     r.quiet("git init -q -b main . && git remote add origin .");
     r.quiet("strata snapshot aws-stack@1.0.0 -o releases/1.0.0/dev.json &&\n  PALETTE_PROJECT=prod strata snapshot aws-stack@1.0.0 -o releases/1.0.0/prod.json &&\n  git add releases && git commit -qm \"dev and prod run aws-stack@1.0.0\"");
@@ -518,7 +520,13 @@ fn the_loop(r: &mut Runner) {
         "loop-upstream",
         1,
         true,
-        "scripts/ci/upstream-report.sh 'releases/**/*.json' --dry-run --no-impact > upstream.md",
+        "scripts/ci/upstream-report.sh 'releases/**/dev.json' --dry-run > upstream.md",
+    );
+    r.step(
+        "loop-upstream",
+        0,
+        false,
+        "grep '^| `.*palette ' upstream.md | cut -d'|' -f2,4",
     );
 
     // 7. an incident: a pack has a security problem, and a person asks who carries it
@@ -2909,7 +2917,7 @@ fn use_cases(r: &mut Runner) {
         "behind-report",
         1,
         false,
-        "scripts/ci/upstream-report.sh 'releases/*/dev.json' --dry-run --no-impact",
+        "scripts/ci/upstream-report.sh 'releases/*/dev.json' --dry-run",
     );
 
     // A move that Palette refuses on a cluster that runs the profile. The only pin that is behind
@@ -3444,6 +3452,24 @@ fn automation(r: &mut Runner) {
         1,
         false,
         "strata preflight cluster-gcp.json --cloud aws --no-exec --tier palette --rule palette-validate --strict --quiet | sed -n '4,8p'",
+    );
+    // the properties route of GCP reads the project and the zones of a GCP body. The stand-in
+    // gives the answer of a route that accepts them, as it does for the route of AWS
+    r.answer(DEV, "v1/clouds/gcp/properties/validate", &json!({}));
+    r.quiet(
+        r#"jq '.spec.cloudConfig = {"project": "strata-lab", "region": "us-central1"} | .spec.machinepoolconfig[].cloudConfig = {"instanceType": "n1-standard-4", "azs": ["us-central1-a"]}' cluster.json > gcp-cluster.json"#,
+    );
+    r.step(
+        "preflight-gcp-properties",
+        0,
+        false,
+        "strata preflight gcp-cluster.json --cloud gcp --no-exec --tier palette --rule gcp-properties --strict --quiet | sed -n '4p'",
+    );
+    r.step(
+        "preflight-gcp-properties",
+        0,
+        false,
+        "strata preflight gcp-cluster.json --cloud gcp --no-exec --tier palette --rule gcp-properties --verbose --color never 2>&1 > /dev/null | grep 'POST'",
     );
 }
 

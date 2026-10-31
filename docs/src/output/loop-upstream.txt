@@ -1,7 +1,12 @@
-$ scripts/ci/upstream-report.sh 'releases/**/*.json' --dry-run --no-impact > upstream.md
+$ scripts/ci/upstream-report.sh 'releases/**/dev.json' --dry-run > upstream.md
 upstream-report: would close the open issue for cert-manager in Public Repo, if any
 upstream-report: would open or update the issue for cni-cilium-oss in Public Repo: strata behind: cni-cilium-oss 1.19.6 behind 1.20.1 in Public Repo
 upstream-report: would open or update the issue for csi-aws-ebs in Public Repo: strata behind: csi-aws-ebs 1.63.1 behind 1.65.0 in Public Repo
 upstream-report: would open or update the issue for kubernetes in Public Repo: strata behind: kubernetes 1.35.3 behind 1.36.2 in Public Repo
 upstream-report: would open or update the issue for ubuntu-aws in Public Repo: strata behind: ubuntu-aws 20.04 behind 24.04 in Public Repo
 upstream-report: 5 packs: 4 behind, 1 current, 0 could not be checked
+$ grep '^| `.*palette ' upstream.md | cut -d'|' -f2,4
+ `1.19.6` | 1.20.1: cluster-wide IDENTITY UPSTREAM AUTHORED IMAGES<br>palette accepts 
+ `1.63.1` | 1.65.0: cluster-wide IDENTITY UPSTREAM AUTHORED IMAGES CHARTS<br>palette accepts 
+ `1.35.3` | 1.36.2: repave IDENTITY UPSTREAM AUTHORED IMAGES<br>palette accepts 
+ `20.04` (floating tag `LTS__20.4.x`) | 24.04: repave IDENTITY UPSTREAM<br>palette accepts 

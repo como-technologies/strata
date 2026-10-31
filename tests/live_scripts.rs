@@ -5618,6 +5618,11 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
         r#"{"checks":[{"id":"instance-offering","verdict":"passed","ran":"GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-1","answer":"HTTP 200"}]}"#,
     );
     stage.strata(
+        "preflight build.json --cloud aws --tier palette --rule iaas-pod-identity --json --quiet",
+        0,
+        r#"{"checks":[{"id":"iaas-pod-identity","verdict":"passed"}]}"#,
+    );
+    stage.strata(
         "preflight build-fault.json --cloud aws --tier static,palette --no-exec --strict --quiet",
         1,
         "FAIL: 1 check(s) failed: account-missing\n",
@@ -5636,6 +5641,7 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
             "preflight-live",
             "preflight-each",
             "preflight-offering",
+            "preflight-key-pair",
             "preflight-fault",
         ],
     );
@@ -5647,7 +5653,7 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
     assert_eq!(body["spec"]["cloudConfig"]["region"], "us-east-2");
     let fault = read_json(&stage.path("out/build-fault.json"));
     assert_eq!(fault["spec"]["cloudAccountUid"], "000000000000000000000000");
-    // the asks and the preflight write nothing to Palette: the script sent only reads
+    // the questions and the preflight write nothing to Palette: the script sent only reads
     let curl = std::fs::read_to_string(stage.path("curl.log")).unwrap();
     assert!(
         curl.lines().all(|l| l.starts_with("GET ")),

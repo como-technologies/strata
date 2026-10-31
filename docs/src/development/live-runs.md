@@ -1135,9 +1135,9 @@ exits `1` when the order did not change.
 The everyday loop, end to end: [The everyday loop](../loop.md) tells it. The
 records are in a git repository that the script builds, and every script of CI
 runs in it. It changes cluster A and the add-on version through the API, and
-undoes each change. Stages 2 to 4 only ask Palette: the asks and the body of a
-create change nothing in the tenant. `loop.sh N` resumes at stage N. It needs
-the example at its baseline with cluster A.
+undoes each change. Stages 2 to 4 only ask Palette: the questions and the body
+of a create change nothing in the tenant. `loop.sh N` resumes at stage N. It
+needs the example at its baseline with cluster A.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1153,6 +1153,7 @@ the example at its baseline with cluster A.
 | `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request, and in the tier of Palette, which calls the validate routes and creates nothing. |
 | `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it |
 | `preflight-offering` | 0 | #143: `instance-offering` asks the instance type route of the region with the account of the body, one request for all its pools, and passes: the type of the release body is offered in its zone |
+| `preflight-key-pair` | 0 | #433: the rule that reads the key pair of the body passes (no result yet). On AWS it is `iaas-pod-identity`, which sends the key pair to the properties route. On EKS it is `ssh-key-pair`. A body on GCP or GKE has no key pair, and the check does not run. |
 | `preflight-fault` | 1 | #385: a body with a cloud account that the project lacks fails the gate `--strict`. |
 | `nightly` | 0 | #81: `verify-report.sh` finds every record unchanged |
 | `fleet`, `fleet-has-a` | 0 | #81: the fleet of a label holds cluster A |
