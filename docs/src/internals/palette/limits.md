@@ -61,8 +61,8 @@ These are open:
   [Cluster tiers](clusters.md#cluster-tiers). Stage 6 of
   [tiers.sh](../../development/live-runs.md#tierssh) reads `config/rbacs` with
   such a key. Palette answers HTTP 500 with the code `ResourceAccessDenied` and
-  the message `Project '<project uid>' access denied`. `strata record` of the
-  cluster makes no record and exits `2`. See
+  the message `Project '<project uid>' access denied`. `strata snapshot` of the
+  cluster writes no record and exits `2`. See
   [The policy tier](../../commands/snapshot/cluster.md#the-policy-tier).
 - An imported cluster: no run imports one. So no run shows the `clusterType`
   of an import in the listing, or a read-only import with no add-on profile.
@@ -200,17 +200,12 @@ makes no claim that depends on them.
   only in its own log. So `--raw-dir` masks the values before it saves the
   notifications: see
   [The saved answers of Palette](../../commands/snapshot/no-network.md#the-saved-answers-of-palette).
-- **The zones that do not offer an instance type.** The instance type route of a
-  region lists each type in `type`, with `nonSupportedZones`, the zones that do
-  not offer it. The field is `null` for a type that each zone offers. Most types
-  give `null`. `instance-offering` reads it, for AWS, EKS, GCP, and GKE. A
-  type that the list does not mark can still fail in the cloud.
-- **The key pairs of an account.** `GET /v1/clouds/aws/regions/{region}/keypairs`
-  lists `keyNames` of the account in the region. The property route of EKS
-  checks the key pair only when the body has a `vpcId`. So an EKS cluster with a
-  dynamic VPC reaches no check of it. `ssh-key-pair` reads the list for EKS. The
-  property route of AWS refuses a key pair that the region lacks, with HTTP
-  `500` and `AwsKeyPairNotFound`. So the rule does not name AWS.
+- **The zones that do not offer an instance type.** A type that the list does
+  not mark can still fail in the cloud. See
+  [The list routes](validate-routes.md#the-list-routes).
+- **The key pairs of an account.** The property route of EKS checks the key pair
+  only with a `vpcId`, so `ssh-key-pair` reads the list for EKS. See
+  [The list routes](validate-routes.md#the-list-routes).
 - **The cluster limit of the tenant.** The limit holds for a trial tenant alone.
   The cluster validate route refuses a create over the limit with
   `FreemiumActiveClusterLimitExceeded`, so `palette-validate` reports it.

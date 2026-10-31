@@ -39,9 +39,9 @@ The checks, in order:
    edge-native and vSphere, the SSH key.
 4. The profiles: an infrastructure profile is there, no pack is in two
    profiles, the packs and their variables, the state of each pack, and the
-   FIPS mode. The errors go in `profiles[].packs.results[].errors[]`. A profile
-   of another cloud type than the route, and not of `all`, refuses the whole
-   entity: see below.
+   FIPS mode. The errors go in `profiles[].packs.results[].errors[]`. The route
+   refuses the whole entity when a profile is of another cloud type than the
+   route, and not of `all`: see below.
 5. The machines: each pool against the CPU and memory the packs need. The
    errors go in `machinePools.results[].errors[]`: one worker of four cores
    with the packs of the live example is `MachinePoolWithMinCpuRequired`,
@@ -74,10 +74,7 @@ route answers this check before the create, and `pack-cloud-support` is a gap
 that preflight fills: see
 [The gaps that preflight fills](../../reference/preflight-rules.md#the-gaps-that-preflight-fills).
 
-The same run shows two refusals of the create of a profile. A disabled pack gives
-HTTP `500` and `DisabledPacksForbidden`. A deleted pack gives HTTP `500` and
-`ClusterProfileInvalidPackState`. So a body cannot name a new profile that holds
-either pack. See [Pack states](./packs.md#pack-states).
+For a disabled pack and a deleted pack, see [Pack states](./packs.md#pack-states).
 
 **Who calls it.** The console, in its create wizard. The Terraform provider,
 palette-cli, and the SDK for cloud clusters do not. The create path of the API
@@ -94,11 +91,9 @@ pack with the CIDR of the VPC.
 
 A body with no `variables[]` gives the route no value to check. A value of a
 pack that reads `{{.spectro.var.NAME}}` then reaches the checks of the cloud
-config unresolved. `strata preflight cluster:UID` sends the name and the value
-of each variable of the cluster, so `palette-validate` answers for the cluster.
-Palette masks the value of a sensitive variable in its answer, and strata
-sends the mask.
-
+config unresolved. Palette masks the value of a sensitive variable in its
+answer. See [A cluster as Palette holds it](../../commands/preflight/tiers.md#a-cluster-as-palette-holds-it)
+for the variables that `strata preflight cluster:UID` sends.
 
 ## POST /v1/spectroclusters/{uid}/validate/packs
 
@@ -160,14 +155,12 @@ A live run shows that the route accepts the packs of the release version on
 the cluster that runs it, at the baseline. Stage 7 of `repave.sh` asks it on
 cluster A: see [repave.sh](../../development/live-runs.md#repavesh).
 
-`behind` sends this body to ask about the bump of a pin on a record of a
-cluster. The profile that holds the pin has `packValues`: its packs as the
-cluster runs them, and the pin as the newest version of the pack. Palette puts
-the sent values over the copy that the cluster holds. No live run shows yet
-what the route does with the sent tag. It can move the pack to that tag. It can
-also take the pack from the profile as it is now. In that case the route accepts
-the move, because it does not check the newest version. Stage 6 of
-`validate-packs.sh` asks it: see
+`behind` sends this route for a record of a cluster. See
+[Palette accepts the move, or refuses it](../../commands/behind.md#palette-accepts-the-move-or-refuses-it)
+for the body. No live run shows yet what the route does with the sent tag. It
+can move the pack to that tag. It can also take the pack from the profile as it
+is now. In that case the route accepts the move, because it does not check the
+newest version. Stage 6 of `validate-packs.sh` asks it: see
 [validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 ## POST /v1/spectroclusters/{uid}/validate/repave
@@ -286,30 +279,29 @@ and the paragraph after it comes from a live run:
 - The public documentation states the rule for Kubernetes: update to a newer
   version one minor version at a time.
 
-A live run shows the refusal. Cluster A (`fred`) ran Kubernetes 1.35.8 from the
-version of the profile. `strata behind` asked the route about the bump to
-1.37.0, two minor versions above. Palette refused it:
+A live run shows the refusal. Cluster A (`fred`) runs Kubernetes 1.35.8 from the
+version of the profile. For the bump to 1.37.0, two minor versions above,
+Palette refuses the move:
 
 ```text
 DependencyPackUpgradeNotSupported
 Pack upgrade to '1.37.0' is not compatible with the clusters 'fred'
 ```
 
-In the same run, the route accepted the bumps of the other pins of that
-version. These are `cni-cilium-oss` 1.20.1 to 1.20.3, and `csi-aws-ebs` 1.65.0
-to 1.67.1. See [validate-packs.sh](../../development/live-runs.md#validate-packssh).
+The route accepts the bumps of the other pins of that version: `cni-cilium-oss`
+1.20.1 to 1.20.3, and `csi-aws-ebs` 1.65.0 to 1.67.1. See
+[validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 No read route gives the dependency. The summary of a pack has no field for it.
 The `packValues[].dependencies` of `GET /v1/packs/{uid}` and of the tags route
 hold the template dependencies. They are `[]` for `kubernetes` 1.36.2 in the
 Public Repo. So strata cannot derive the limit, and asks the route.
 
-`behind` sends this route for a record of a profile version. The body is the
-body of `snapshot <ref> --validate`. The newest version of the pin, with its
-default values, replaces the pin. A pin of `kubernetes` 1.35.3, with
-1.37.0 in the registry, is a move of two minor versions. Palette refuses it on
-each cluster that runs 1.35. The pin and the registry decide whether a live
-example has such a pair.
+`behind` sends this route for a record of a profile version. See
+[Palette accepts the move, or refuses it](../../commands/behind.md#palette-accepts-the-move-or-refuses-it)
+for the body. A pin of `kubernetes` 1.35.3, with 1.37.0 in the registry, is a
+move of two minor versions. Palette refuses it on each cluster that runs 1.35.
+The pin and the registry decide whether a live example has such a pair.
 
 Stage 6 of `validate-packs.sh` asks the route for a move of Kubernetes by two
 minor versions, on a cluster that runs the profile. It needs a profile version
@@ -461,7 +453,7 @@ Strata reads each list and compares it with the entity.
 `type` of an entry names the instance type. An entry has no `name`.
 `nonSupportedZones` of a type is an array of the zones that do not offer it.
 It is `null` for a type that each zone offers. Most types give `null`. So one
-request answers every pool of the entity: a pool fails when its type names a
+request answers every pool of the entity. A pool fails when its type names a
 zone of the pool, or when the region does not list the type. A type that the
 list does not mark can still fail in the cloud.
 

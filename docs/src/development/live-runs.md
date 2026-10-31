@@ -797,8 +797,8 @@ that the case names can then leave the catalog. A case that fails shows that the
 route does not answer the check, and the rule stays. See
 [A check that a validate route answers](../reference/preflight-rules.md#a-check-that-a-validate-route-answers).
 
-One case is the other way. The route takes the body of `pack-cloud-support`, so its two checks
-expect the verdict `passed` and no message.
+One case expects the opposite result. The route takes the body of `pack-cloud-support`, so its
+two checks expect the verdict `passed` and no message.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -959,7 +959,7 @@ role in the project. It runs only as `tiers.sh 6`. With no key set, it says
 | `limited-control` | 0 | #276: the key of the example reads the role bindings of cluster A |
 | `limited-read`, `limited-status` | 2, 0 | #276: the second key does not read them: Palette answers HTTP 500, and not 403, and `api.sh` exits `2`. |
 | `limited-code`, `limited-code-says`, `limited-message` | ?, 0, 0 | #276: the body holds the code `ResourceAccessDenied` and the message `Project '<project uid>' access denied`. |
-| `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer: a record of cluster A that it reads with the second key, and the `errors` of its policy tier. Live, `strata record` of cluster A with the second key makes no record. It exits `2`, and it prints the answer of Palette: HTTP 500, `ResourceAccessDenied`, `Project '<project uid>' access denied`. So no record holds `errors`, and `limited-record-errors` has no file to read (exit `2`). |
+| `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer: a record of cluster A that it reads with the second key, and the `errors` of its policy tier. Live, `strata snapshot` of cluster A with the second key writes no record. It exits `2`, and it prints the answer of Palette: HTTP 500, `ResourceAccessDenied`, `Project '<project uid>' access denied`. So no record holds `errors`, and `limited-record-errors` has no file to read (exit `2`). |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
