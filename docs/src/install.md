@@ -39,7 +39,7 @@ gh release download --repo como-technologies/strata --pattern install-strata.sh 
 
 | Option | Effect |
 | --- | --- |
-| `--version v0.23.0` | Installs that release. The default is `STRATA_VERSION`, else `latest`, the newest release. |
+| `--version v0.24.0` | Installs that release. The default is `STRATA_VERSION`, else `latest`, the newest release. |
 | `--repo OWNER/REPO` | The repository to read. The default is `STRATA_REPO`, else `como-technologies/strata`. |
 | `--bin-only` | Installs the two binaries alone. The release after `v0.7.1` is the first one with this option. |
 | `--dir DIR` | Where to install. The default is `.strata`. |
@@ -64,7 +64,7 @@ curl -fsSL https://github.com/como-technologies/strata/releases/latest/download/
 ### One file by hand
 
 ```bash
-v=v0.23.0; t=x86_64-unknown-linux-musl
+v=v0.24.0; t=x86_64-unknown-linux-musl
 gh release download $v --repo como-technologies/strata --pattern strata-$t --pattern SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS   # macOS: shasum -a 256 --check --ignore-missing SHA256SUMS
 chmod +x strata-$t && sudo mv strata-$t /usr/local/bin/strata
