@@ -62,8 +62,8 @@ fn read(repo: &Path, path: &Path, bad: &mut Vec<String>) -> Option<String> {
     }
 }
 
-/// A release tag that a reader copies -- an install command, or a workflow ref -- must be this
-/// release. A tag from the release before sends them to the wrong binary, and nothing else
+/// A release tag that a reader copies -- an install command, a workflow ref, or the `tag` of a git
+/// dependency -- must be this release. A tag from the release before sends them to the wrong binary, and nothing else
 /// notices.
 ///
 /// Two files keep older tags on purpose, and are not read here: `development/live-runs.md`
@@ -83,7 +83,7 @@ fn release_tags(repo: &Path) -> Vec<String> {
         return vec!["Cargo.toml has no version line".to_string()];
     };
     let copyable = Regex::new(
-        r"(?:--version|strata-version:|STRATA_VERSION:|v=)\s*(v\d+\.\d+\.\d+)|uses:.*@(v\d+\.\d+\.\d+)",
+        r#"(?:--version|strata-version:|STRATA_VERSION:|v=)\s*(v\d+\.\d+\.\d+)|uses:.*@(v\d+\.\d+\.\d+)|\btag = "(v\d+\.\d+\.\d+)""#,
     )
     .expect("a pattern");
     for page in pages(&repo.join("docs/src")) {
@@ -96,10 +96,12 @@ fn release_tags(repo: &Path) -> Vec<String> {
         };
         for (number, line) in text.lines().enumerate() {
             for found in copyable.captures_iter(line) {
-                // each match fills one of the two groups, so the empty tag does not occur
+                // each match fills one of the three groups, so the empty tag does not occur
                 let tag = found
-                    .get(1)
-                    .or_else(|| found.get(2))
+                    .iter()
+                    .skip(1)
+                    .flatten()
+                    .next()
                     .map(|m| m.as_str())
                     .unwrap_or_default();
                 if tag != version {
@@ -479,6 +481,33 @@ mod tests {
             vec![
                 "page.md shows state 3 of the chapter 'loop' and never names the seed 'loop-3'; \
                  a reader on 'just playground loop' cannot run it"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_git_dependency_that_names_another_release_fails_and_this_release_passes() {
+        let repo = std::env::temp_dir().join(format!("strata-release-tags-{}", std::process::id()));
+        let docs = repo.join("docs/src");
+        std::fs::create_dir_all(&docs).unwrap();
+        std::fs::write(repo.join("Cargo.toml"), "version = \"1.0.0\"\n").unwrap();
+        std::fs::write(
+            docs.join("current.md"),
+            "strata = { git = \"ssh://git@example.com/a.git\", tag = \"v1.0.0\" }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            docs.join("stale.md"),
+            "strata = { git = \"ssh://git@example.com/a.git\", tag = \"v0.9.0\" }\n",
+        )
+        .unwrap();
+        let bad = release_tags(&repo);
+        std::fs::remove_dir_all(&repo).unwrap();
+        assert_eq!(
+            bad,
+            [
+                "docs/src/stale.md:1 names the release v0.9.0, and this crate is v1.0.0; \
+                 a reader copies this line"
             ]
         );
     }

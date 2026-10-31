@@ -28,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The rules, and the runs that prove them, are data that the library carries.
     let catalog = catalog::builtin()?;
     let ledger = Ledger::parse(catalog::LEDGER, Path::new("evidence/runs.yaml"))?;
-    // The entity of a create. The body of a create names no cloud, so the program gives it.
+    // The entity of a create, read from the fixture. The second argument names the cloud.
     let world = World::from_file(&fixture, Some("aws"))?;
 
     let selection = Selection {

@@ -91,14 +91,8 @@ fn every_use_case_is_in_the_navigation_and_the_list_in_one_order() {
 /// drift, so the drift is a test failure instead of a wrong number on the front page.
 #[test]
 fn the_readme_version_badge_is_the_version_in_cargo_toml() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let manifest = read(&root.join("Cargo.toml"));
-    let version = manifest
-        .lines()
-        .find_map(|l| l.strip_prefix("version = \""))
-        .and_then(|l| l.strip_suffix('"'))
-        .expect("Cargo.toml has a version line");
-    let readme = read(&root.join("README.md"));
+    let version = version_of("Cargo.toml");
+    let readme = read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("README.md"));
     let badge = format!("badge/version-{version}-blue");
     assert!(
         readme.contains(&badge),
@@ -126,24 +120,6 @@ fn version_of(manifest: &str) -> String {
         .find_map(|l| l.strip_prefix("version = \"").map(str::to_owned))
         .and_then(|l| l.strip_suffix('"').map(str::to_owned))
         .unwrap_or_else(|| panic!("{manifest} has a version line"))
-}
-
-/// Another repository depends on each library crate by its git address and a release tag. The
-/// page of the library shows both lines, and `just version` moves the tag of each with the
-/// release. A line that names another tag sends a reader to the wrong release.
-#[test]
-fn the_library_page_shows_the_git_dependency_of_each_crate_at_this_release() {
-    let page = read(&docs().join("automation/library.md"));
-    let tag = format!("v{}", version_of("Cargo.toml"));
-    for package in ["strata", "strata-preflight"] {
-        let line = format!(
-            "{package} = {{ git = \"ssh://git@github.com/como-technologies/strata.git\", tag = \"{tag}\" }}"
-        );
-        assert!(
-            page.lines().any(|l| l == line),
-            "automation/library.md has no line {line:?}"
-        );
-    }
 }
 
 #[test]
