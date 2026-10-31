@@ -76,20 +76,21 @@ version. The answer is under the `bump to` line:
   code of a move that the pack does not allow.
 - `palette refuses: <code> <pack>: <message>`: the message names no cluster that
   runs the version, so the line gives the message of Palette.
-- `palette gave no answer: <message>`: a request failed. The pin stays behind,
-  and the exit does not change. Strata prints `palette accepts` only when each
-  request answered.
+- `palette gave no answer: <message>`: a request failed, or strata did not ask
+  a record of another project. The pin stays behind, and the exit does not
+  change. Strata prints `palette accepts` only when it asked each record and
+  each request answered.
 
 `--json` gives the answer in `bump.paletteValidation`: the code, the message of
-Palette, and the clusters of each error. A request that failed is in
-`bump.paletteValidationError`.
+Palette, and the clusters of each error. A request that failed, and a record
+that strata did not ask, are in `bump.paletteValidationError`.
 
 ```text
 {{#include ../output/behind-refused-json.txt}}
 ```
 
-Strata asks once for each record that pins the pack. The answer holds the errors
-of all the records:
+Strata asks once for each record that pins the pack in the project of the pin.
+The answer holds the errors of all the records:
 
 - A record of a profile version that Palette holds goes to
   `POST /v1/clusterprofiles/{uid}/validate/packs`. The body has the packs of the
@@ -109,13 +110,21 @@ the profile document. It keeps the clusters that run the version and that the
 message names. A cluster record needs no such read: the route is the route of its
 cluster.
 
-Strata asks in the project of the first record that pins the pack. It skips the
-records of another project. [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesuidvalidatepacks)
+Strata asks in the project of the first record that pins the pack, because
+Palette answers in the project of the connection. It does not ask a record of
+another project. It counts the records of another project that it can ask.
+The line `palette gave no answer` says how many, as in
+`1 record of project <project> was not asked`.
+
+A refusal that Palette gave stands, and this line comes under it. A record that
+gets no request, such as a pack record, adds nothing to the count.
+[The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesuidvalidatepacks)
 states what each route checks.
 
 `--no-impact` sends none of these requests. Without it, strata sends one request
-for each pin that is behind and each record that it asks about. It reads the
-document of each cluster record one time.
+for each record that it asks about, for each pin that is behind. It reads the
+document of each cluster record one time, and the document of a profile version
+one time when Palette refuses a move.
 
 ## A pin that is current against an older copy
 

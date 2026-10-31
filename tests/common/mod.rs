@@ -198,6 +198,12 @@ pub fn write_record(path: &Path, doc: &Value) {
     fs::write(path, serde_json::to_string_pretty(doc).unwrap()).unwrap();
 }
 
+/// Write `snap`, a record, to the file at `path`: compact JSON when `compact` is true, else
+/// pretty JSON.
+pub fn write_snapshot(path: &Path, snap: &strata::snapshot::Snapshot, compact: bool) {
+    fs::write(path, snap.to_json(compact).unwrap()).unwrap();
+}
+
 /// Write `doc`, a candidate, to the file at `path` as YAML.
 pub fn write_yaml(path: &Path, doc: &Value) {
     fs::write(path, serde_yaml::to_string(doc).unwrap()).unwrap();
@@ -1087,7 +1093,7 @@ pub fn verify_summary_with(
 ) -> strata::ops::VerifySummary {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("record.json");
-    fs::write(&path, record.to_json(true).unwrap()).unwrap();
+    write_snapshot(&path, record, true);
     strata::ops::verify_many(
         &[path],
         None,

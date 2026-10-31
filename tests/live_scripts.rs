@@ -5575,7 +5575,7 @@ fn loop_sh_stage_5_asks_palette_about_the_bump_of_each_pin_that_the_nightly_job_
     let issue = std::fs::read_to_string(stage.path("out/upstream-asks.out")).unwrap();
     assert!(
         issue.contains(&format!(
-            "| 1.37.0 | 1.37.0: repave IDENTITY; palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred | - |"
+            "| 1.37.0 | 1.37.0: repave IDENTITY<br>palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred | - |"
         )),
         "{issue}"
     );

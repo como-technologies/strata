@@ -93,8 +93,9 @@ fn newer_version(n: &crate::ops::Newer) -> String {
 
 /// The answer of Palette about the bump of a pin, one line each: `palette accepts`, or `palette
 /// refuses: DependencyPackUpgradeNotSupported on payments` for each error. An error that names no
-/// cluster gives its pack and its message. When a request failed, a line gives its message:
-/// `palette gave no answer: <message>`. Empty when Palette was not asked.
+/// cluster gives its pack and its message. When a request failed, or strata did not ask a record of
+/// another project, a line gives the message: `palette gave no answer: <message>`. Empty when
+/// Palette was not asked.
 pub(crate) fn palette_lines(pin: &crate::ops::Pin) -> Vec<String> {
     let Some(bump) = pin.bump.as_ref() else {
         return Vec::new();

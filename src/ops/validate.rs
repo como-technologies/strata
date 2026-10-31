@@ -10,6 +10,7 @@ use super::repave::{cluster_and_target, validate_body};
 use crate::api::codes::ValidateRoute;
 use crate::api::{Palette, PaletteApi};
 use crate::error::{Error, Result};
+use crate::json::value_at;
 use crate::registry::{Registries, registry_entry};
 use crate::snapshot::{AppliedProfile, Pack, Snapshot, SubjectKind};
 use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
@@ -155,10 +156,9 @@ pub(super) fn profile_packs_answer<A: PaletteApi>(
     body: &Value,
 ) -> Result<Vec<PaletteRefusal>> {
     match palette.validate_profile_packs(uid, body) {
-        Ok(answer) => Ok(answer
-            .get("packs")
-            .map(PaletteRefusal::from_constraints)
-            .unwrap_or_default()),
+        Ok(answer) => Ok(PaletteRefusal::from_constraints(value_at(
+            &answer, "/packs",
+        ))),
         Err(e) => whole_request_refusal(&e, ValidateRoute::ProfilePacks)
             .map(|refusal| vec![refusal])
             .ok_or(e),
