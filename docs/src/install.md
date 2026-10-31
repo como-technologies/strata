@@ -118,7 +118,7 @@ Seven reusable workflows of this repository install strata: `comment.yml`,
 The installer is the only code that checks a release. It makes sure that the
 release workflow of this repository signed `SHA256SUMS` at that tag, with the
 identity above. Then it checks each binary against the list. The binaries go to
-`.strata/bin`. `preflight.yml` gets `strata` and `strata-preflight` there.
+`.strata/bin`. Each workflow gets `strata` and `strata-preflight` there.
 
 The job fails in each of these cases:
 

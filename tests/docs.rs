@@ -273,3 +273,35 @@ fn compatibility_names_release_0_18_0_and_what_each_absent_field_of_wave_4_means
         "compatibility.md names the release before 0.18.0 in place of 0.18.0"
     );
 }
+
+/// The page of the fan-out showed the installer with no word of the signature check. A reader who
+/// copies the command then installs a binary that nothing proved.
+#[test]
+fn publish_fan_out_runs_the_installer_with_the_signature_check_and_says_what_it_checks() {
+    let page = read(&docs().join("use-cases/publish-fan-out.md"));
+    let commands: Vec<&str> = page
+        .lines()
+        .filter(|l| l.contains("install-strata.sh") && !l.starts_with('#'))
+        .collect();
+    assert!(
+        !commands.is_empty(),
+        "publish-fan-out.md has no install-strata.sh command"
+    );
+    for command in commands {
+        assert!(
+            command.contains("--require-signature"),
+            "publish-fan-out.md runs the installer with no --require-signature: {command}"
+        );
+    }
+
+    // a line break can fall inside a sentence
+    let flat = page.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        flat.contains("signed `SHA256SUMS`"),
+        "publish-fan-out.md does not say that the installer checks the signature of SHA256SUMS"
+    );
+    assert!(
+        flat.contains("(../install.md#check-the-signature)"),
+        "publish-fan-out.md does not link to the identity that the signature must have"
+    );
+}
