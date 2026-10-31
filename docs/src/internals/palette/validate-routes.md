@@ -272,8 +272,8 @@ name.
 ### The upgrade dependency
 
 A pack can declare a dependency of the type `upgrade`. Its `maxVersion`, such as
-`+0.1`, limits the move of a cluster. These facts come from the code of Palette,
-not from a live run:
+`+0.1`, limits the move of a cluster. The list comes from the code of Palette,
+and the paragraph after it comes from a live run:
 
 - The pack validator reads the dependency of each pack of the body. It runs over
   each cluster that runs the version.
@@ -285,6 +285,19 @@ not from a live run:
   clusters, so the names are in the message.
 - The public documentation states the rule for Kubernetes: update to a newer
   version one minor version at a time.
+
+A live run shows the refusal. Cluster A (`fred`) ran Kubernetes 1.35.8 from the
+version of the profile. `strata behind` asked the route about the bump to
+1.37.0, two minor versions above. Palette refused it:
+
+```text
+DependencyPackUpgradeNotSupported
+Pack upgrade to '1.37.0' is not compatible with the clusters 'fred'
+```
+
+In the same run, the route accepted the bumps of the other pins of that
+version. These are `cni-cilium-oss` 1.20.1 to 1.20.3, and `csi-aws-ebs` 1.65.0
+to 1.67.1. See [validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 No read route gives the dependency. The summary of a pack has no field for it.
 The `packValues[].dependencies` of `GET /v1/packs/{uid}` and of the tags route
@@ -298,11 +311,9 @@ default values, replaces the pin. A pin of `kubernetes` 1.35.3, with
 each cluster that runs 1.35. The pin and the registry decide whether a live
 example has such a pair.
 
-No live result yet. Stage 6 of `validate-packs.sh` asks the route for a move of
-Kubernetes by two minor versions, on a cluster that runs the profile. It needs a
-profile version that pins an older Kubernetes than the example does. The stage
-also records the text of the message, to see whether it names the clusters. See
-[validate-packs.sh](../../development/live-runs.md#validate-packssh).
+Stage 6 of `validate-packs.sh` asks the route for a move of Kubernetes by two
+minor versions, on a cluster that runs the profile. It needs a profile version
+that pins an older Kubernetes than the example does.
 
 ## GET /v1/clusterprofiles/validate/name
 
