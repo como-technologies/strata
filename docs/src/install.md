@@ -106,12 +106,13 @@ file.
 
 ### The reusable workflows
 
-Each reusable workflow of this repository installs `cosign` with the action
-`sigstore/cosign-installer`. It checks the signature of `SHA256SUMS` with the
-identity above, at the release in `strata-version`, before it checks the binary
-against the list. If the signature does not verify, the job fails. An
-organization that limits the actions of its repositories must allow
-`sigstore/cosign-installer`.
+Each reusable workflow of this repository that downloads a binary installs
+`cosign` with the action `sigstore/cosign-installer`. It checks the signature of
+`SHA256SUMS` with the identity above, at the release in `strata-version`, before
+it checks the binary against the list. If the signature does not verify, the job
+fails. An organization that limits the actions of its repositories must allow
+`sigstore/cosign-installer`. `preflight-comment.yml` downloads no binary: it
+runs one script from the tag.
 
 ## Build from source
 

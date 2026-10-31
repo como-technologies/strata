@@ -3,10 +3,10 @@ name: strata preflight
 # Reusable workflow. A repository calls it from its own pull request or build workflow to check that
 # Palette can build a cluster before the build: the body of the create, or an existing cluster, against
 # the catalog of strata-preflight; see docs/src/automation/preflight.md. The report goes to the job
-# summary and to an artifact, and the exit status of strata is the status of the job. With the input
-# `comment`, a pull request also gets the report as a comment. It downloads the two release
-# binaries, checks them against SHA256SUMS, and runs `strata preflight`; the comment runs
-# scripts/ci/pr-comment.sh from the same tag. Other CI systems run the binary directly.
+# summary and to an artifact, and the exit status of strata is the status of the job. It downloads
+# the two release binaries, checks them against SHA256SUMS, and runs `strata preflight`. For a
+# comment on the pull request, call preflight-comment.yml in a second job. Other CI systems run
+# the binary directly.
 on:
   workflow_call:
     inputs:
@@ -74,10 +74,6 @@ on:
         description: The directory in the checkout that gets report.md, report.json, report.html, world.json, and entity.json; the artifact holds it
         default: preflight
         type: string
-      comment:
-        description: Also post report.md as one comment on the pull request, updated on each push; the caller must grant pull-requests write
-        default: false
-        type: boolean
       palette-api:
         description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
         default: ""
@@ -99,7 +95,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   preflight:
@@ -107,14 +102,6 @@ jobs:
     steps:
       # the caller's repository, where the entity and the records live
       - uses: actions/checkout@v7
-      # this repository at the requested tag, for the script that posts the comment
-      - uses: actions/checkout@v7
-        if: ${{ inputs.comment }}
-        with:
-          repository: como-technologies/strata
-          ref: ${{ inputs.strata-version }}
-          path: .strata
-          token: ${{ secrets.strata-token || github.token }}
       # the release workflow of this repository signed SHA256SUMS; cosign 3 reads its bundle
       - uses: sigstore/cosign-installer@v4.1.2
       - name: install strata and strata-preflight
@@ -186,16 +173,6 @@ jobs:
           set -e
           cat preflight.md >> "$GITHUB_STEP_SUMMARY"
           exit "$code"
-      # also after a failed preflight: a person must read a failed report
-      - name: comment on the pull request
-        if: ${{ always() && inputs.comment && github.event.pull_request }}
-        env:
-          # the caller's token: it owns the pull request being commented on
-          GH_TOKEN: ${{ github.token }}
-          OUT: ${{ inputs.out }}
-          PR: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-        run: .strata/scripts/ci/pr-comment.sh --preflight "$OUT/report.md" --pr "$PR" --repo "$REPO"
       - uses: actions/upload-artifact@v7
         if: always()
         with:

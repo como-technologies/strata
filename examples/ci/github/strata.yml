@@ -2,8 +2,9 @@
 # report, and the two gates that run on demand.
 #
 # Copy this file to .github/workflows/strata.yml in your own repository and set the refs and the
-# records that your repository holds. It calls seven reusable workflows of the strata repository.
-# A version bump is twelve lines here: each job names the tag twice, once in `uses: ...@TAG` and once
+# records that your repository holds. It calls seven reusable workflows of the strata repository,
+# and an eighth when you turn on the comment of the preflight.
+# A version bump is sixteen lines here: each job names the tag twice, once in `uses: ...@TAG` and once
 # in `strata-version:`. Both must carry the same tag. `uses:` selects the workflow file, and
 # `strata-version:` is what each workflow checks this repository out at and downloads the binary
 # for, so a mismatch runs one release's workflow against another release's scripts.
@@ -65,7 +66,6 @@ jobs:
       cloud: eks
       tier: static
       records: releases/**/*.json
-      # comment: true               # also post the report as a comment on the pull request
       # no-exec: true               # run no command of a cloud tool
       # rule: example-region        # only these rules, by id, separated by spaces
       # verbose: true               # print what each check ran to the log
@@ -77,6 +77,18 @@ jobs:
       strata-version: v0.24.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}
+
+  # the report of the preflight as one comment on the pull request, updated on each push. Remove
+  # the comment marks to turn it on. The condition runs the job also after a failed preflight,
+  # because a person must read a failed report
+  # preflight-comment:
+  #   needs: preflight
+  #   if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+  #   uses: como-technologies/strata/.github/workflows/preflight-comment.yml@v0.24.0
+  #   with:
+  #     strata-version: v0.24.0
+  #   secrets:
+  #     strata-token: ${{ secrets.STRATA_READ_TOKEN }}
 
   # the records of the merge result, against the default branch as it is now
   gate:

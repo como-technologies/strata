@@ -21,12 +21,13 @@ GitLab project needs.
 
 ## What is not here, and why
 
-The GitHub file calls seven **reusable workflows** that live in
+The GitHub file calls eight **reusable workflows** that live in
 `.github/workflows/` of this repository: `comment.yml`, `preflight.yml`,
-`verify.yml`, `upstream.yml`, `merge-gate.yml`, `promote-gate.yml` and
-`retire-gate.yml`. GitHub resolves
-`uses: owner/repo/.github/workflows/x.yml@tag` only under that path, so those
-seven cannot move here. They are published, not
+`preflight-comment.yml`, `verify.yml`, `upstream.yml`, `merge-gate.yml`,
+`promote-gate.yml` and `retire-gate.yml`. The job of `preflight-comment.yml` is
+in a comment of the file: turn it on to get the preflight report as a comment.
+GitHub resolves `uses: owner/repo/.github/workflows/x.yml@tag` only under that
+path, so those eight cannot move here. They are published, not
 examples: your repository calls them and never copies them.
 
 The GitLab file needs no such thing, because an include takes any path. It

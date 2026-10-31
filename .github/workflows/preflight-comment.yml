@@ -1,0 +1,50 @@
+name: strata preflight comment
+
+# Reusable workflow. It posts the report of a preflight as one comment on the pull request; see
+# docs/src/automation/preflight.md. A repository calls it in a second job, with `needs:` on the
+# job that calls preflight.yml. It takes report.md from the artifact `preflight` of that job, and
+# runs scripts/ci/pr-comment.sh --preflight from the same tag. The comment starts with the marker
+# <!-- strata-preflight -->, and each push updates it. Only this workflow asks for
+# pull-requests write, so a caller that wants no comment grants less to preflight.yml. Other CI
+# systems run the script directly.
+on:
+  workflow_call:
+    inputs:
+      strata-version:
+        description: The strata release to use, a tag of this repository
+        required: true
+        type: string
+    secrets:
+      strata-token:
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  comment:
+    # a run with no pull request, such as a build job on the default branch, posts nothing
+    if: ${{ github.event.pull_request }}
+    runs-on: ubuntu-latest
+    steps:
+      # this repository at the requested tag, for the script
+      - uses: actions/checkout@v7
+        with:
+          repository: como-technologies/strata
+          ref: ${{ inputs.strata-version }}
+          path: .strata
+          token: ${{ secrets.strata-token || github.token }}
+      # the report that preflight.yml kept, also after a failed preflight
+      - uses: actions/download-artifact@v8
+        with:
+          name: preflight
+          path: preflight
+      - name: comment on the pull request
+        env:
+          # the caller's token: it owns the pull request being commented on
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: .strata/scripts/ci/pr-comment.sh --preflight preflight/report.md --pr "$PR" --repo "$REPO"

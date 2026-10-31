@@ -173,8 +173,8 @@ request can run it:
 
 The pull request can also show the report. `pr-comment.sh --preflight` posts
 `report.md` as a comment of its own, with the marker `<!-- strata-preflight -->`,
-and updates it on each push. The reusable workflow does the same with
-`comment: true`. See
+and updates it on each push. On GitHub, the reusable workflow
+`preflight-comment.yml` does the same in a second job. See
 [The report as a comment](./automation/preflight.md#the-report-as-a-comment).
 
 ```text

@@ -218,16 +218,21 @@ printf '%s' "${FAKE_OUT-}"
 exit "${FAKE_EXIT:-0}"
 "#;
 
+/// The workflow `file` of `.github/workflows/`, parsed.
+fn workflow(file: &str) -> serde_yaml::Value {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(".github/workflows")
+        .join(file);
+    serde_yaml::from_str(&std::fs::read_to_string(&path).unwrap())
+        .unwrap_or_else(|e| panic!("{file}: not YAML: {e}"))
+}
+
 /// Run the `run` script of the step `step` of the workflow `file` in a fresh directory.
 ///
 /// Each variable of the `env` of the step is empty unless `env` gives it a value. `tools` are the
 /// paths, under the directory, of the stand-ins that [`LOGGING_TOOL`] describes.
 fn run_step(file: &str, step: &str, env: &[(&str, &str)], tools: &[&str]) -> StepRun {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join(".github/workflows")
-        .join(file);
-    let doc: serde_yaml::Value =
-        serde_yaml::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let doc = workflow(file);
     let step = doc["jobs"]
         .as_mapping()
         .unwrap()
@@ -330,17 +335,84 @@ fn the_preflight_step_keeps_the_report_and_the_exit_status_of_a_failed_run() {
 }
 
 #[test]
-fn the_preflight_comment_step_posts_the_report_of_the_out_directory() {
+fn the_preflight_comment_step_posts_the_report_that_the_preflight_kept() {
     let run = run_step(
-        "preflight.yml",
+        "preflight-comment.yml",
         "comment on the pull request",
-        &[("OUT", "out"), ("PR", "7"), ("REPO", "o/r")],
+        &[("PR", "7"), ("REPO", "o/r")],
         &[".strata/scripts/ci/pr-comment.sh"],
     );
     assert!(run.output.status.success(), "{}", text(&run.output.stderr));
     assert_eq!(
         run.calls(),
-        ["pr-comment.sh --preflight out/report.md --pr 7 --repo o/r"]
+        ["pr-comment.sh --preflight preflight/report.md --pr 7 --repo o/r"]
+    );
+}
+
+/// A caller that grants `contents: read` alone calls `preflight.yml`, as it did before the
+/// comment: GitHub fails a call from a caller that grants less than the workflow asks for, also
+/// when the step that needs the permission does not run. So only `preflight-comment.yml` asks for
+/// `pull-requests: write`, and `preflight.yml` has no input that posts a comment.
+#[test]
+fn the_preflight_workflow_asks_for_no_write_permission_and_posts_no_comment() {
+    let preflight = workflow("preflight.yml");
+    let permissions = preflight["permissions"]
+        .as_mapping()
+        .expect("preflight.yml sets its permissions");
+    assert_eq!(
+        permissions.len(),
+        1,
+        "preflight.yml asks for more than it did: {permissions:?}"
+    );
+    assert_eq!(permissions["contents"].as_str(), Some("read"));
+    assert!(
+        preflight["jobs"]["preflight"].get("permissions").is_none(),
+        "the job of preflight.yml sets permissions of its own"
+    );
+    assert!(
+        preflight["on"]["workflow_call"]["inputs"]
+            .get("comment")
+            .is_none(),
+        "preflight.yml has an input `comment`: the comment belongs to preflight-comment.yml"
+    );
+
+    let comment = workflow("preflight-comment.yml");
+    assert_eq!(
+        comment["permissions"]["pull-requests"].as_str(),
+        Some("write")
+    );
+}
+
+/// The comment takes the report from the artifact of the preflight, so the workflow that keeps
+/// it and the workflow that reads it must name the same artifact and the same file.
+#[test]
+fn the_comment_workflow_reads_the_artifact_that_the_preflight_workflow_keeps() {
+    let artifact = |file: &str, action: &str| -> serde_yaml::Value {
+        let doc = workflow(file);
+        let step = doc["jobs"]
+            .as_mapping()
+            .unwrap()
+            .values()
+            .flat_map(|job| job["steps"].as_sequence().into_iter().flatten())
+            .find(|s| s["uses"].as_str().is_some_and(|u| u.starts_with(action)))
+            .unwrap_or_else(|| panic!("{file} has no step that uses {action}"))
+            .clone();
+        step["with"].clone()
+    };
+    let kept = artifact("preflight.yml", "actions/upload-artifact@");
+    let read = artifact("preflight-comment.yml", "actions/download-artifact@");
+    assert_eq!(kept["name"], read["name"]);
+
+    let step = workflow("preflight-comment.yml")["jobs"]["comment"]["steps"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .find_map(|s| s["run"].as_str().map(str::to_string))
+        .expect("the comment workflow runs a script");
+    let dir = read["path"].as_str().unwrap();
+    assert!(
+        step.contains(&format!("--preflight {dir}/report.md")),
+        "the comment does not read report.md from the directory of the download: {step}"
     );
 }
 

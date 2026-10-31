@@ -90,7 +90,10 @@ scripts/ci/pr-comment.sh --preflight preflight/report.md
 The comment starts with the marker `<!-- strata-preflight -->`. It is a comment
 of its own, so it and the comment of a comparison do not replace each other. A
 later run finds the comment by its marker and updates it. The script sets no
-label. [The everyday loop](../loop.md#5-before-a-build) shows the start of one.
+label. On GitHub, the reusable workflow `preflight-comment.yml` runs the script
+in a second job, after `preflight.yml`: see
+[The report as a comment](./preflight.md#the-report-as-a-comment).
+[The everyday loop](../loop.md#5-before-a-build) shows the start of one.
 
 The script exits `2` when `FILE` is missing or empty. Then the preflight wrote
 no report, and the comment of the last push stays as it is.

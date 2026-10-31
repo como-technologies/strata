@@ -78,7 +78,6 @@ status is the status of strata.
 | `rule` | `--rule`: the ids of the rules, separated by spaces. Strata runs only these rules. |
 | `watch`, `every`, `limit` | `--watch`, `--every`, and `--limit`. Give `cluster:UID` as `source`. The job needs the key. |
 | `out` | The directory for `report.md` and the other files. Default `preflight`. The artifact `preflight` holds it. |
-| `comment` | `true` posts `report.md` as a comment on the pull request. Default `false`. |
 | `palette-api`, `strata-version` | A self-hosted Palette, and the release of strata. |
 | secrets `palette-api-key`, `palette-project-uid` | For the palette tier and for `cluster:UID`. Without a key the job runs the static tier alone. |
 | secret `strata-token` | Reads this repository while it is private. |
@@ -92,19 +91,50 @@ workflow has no input for them.
 and `examples/ci/gitlab/strata.yml` a `strata-preflight` job: both run the
 static tier on each pull request, with the records of the repository. The job
 that builds runs the live tier with the key, and the watch after the create.
+The GitHub file also holds the job of the comment, in a comment of the file.
 
 ### The report as a comment
 
-With `comment: true`, the job posts `report.md` on the pull request, in one
-comment that starts with the marker `<!-- strata-preflight -->`. Each push
-updates that comment. It is a comment of its own, beside the comment of
-[`pr-comment.sh`](./pr-comments.md), which starts with another marker. The job
-posts it also when the check failed, because a person must read a failed report.
-The caller must grant `pull-requests: write`: the workflow asks for it, and
-GitHub fails the call when the caller grants less. A run with no pull request,
-such as a build job on the default branch, posts nothing.
+`preflight.yml` posts no comment, and it asks only for `contents: read`. A
+second reusable workflow, `.github/workflows/preflight-comment.yml`, posts the
+report. Call it in a second job, with `needs:` on the job of `preflight.yml`:
 
-The workflow runs `scripts/ci/pr-comment.sh --preflight out/report.md`. A
+```yaml
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  preflight:
+    uses: como-technologies/strata/.github/workflows/preflight.yml@v0.24.0
+    with:
+      source: clusters/payments.json
+      strata-version: v0.24.0
+  preflight-comment:
+    needs: preflight
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    uses: como-technologies/strata/.github/workflows/preflight-comment.yml@v0.24.0
+    with:
+      strata-version: v0.24.0
+```
+
+The second job takes `report.md` from the artifact `preflight` of the first
+job. It posts one comment that starts with the marker
+`<!-- strata-preflight -->`, and each push updates that comment. It is a comment
+of its own, beside the comment of [`pr-comment.sh`](./pr-comments.md), which
+starts with another marker. The condition `!cancelled()` runs the second job
+also when the check failed, because a person must read a failed report.
+
+Only `preflight-comment.yml` asks for `pull-requests: write`. The caller grants
+that permission to the second job. A caller that wants no comment grants less,
+and `preflight.yml` still runs. A run with no pull request, such as a build job
+on the default branch, posts nothing.
+
+| Input or secret | Meaning |
+| --- | --- |
+| `strata-version` | The release of strata. Give the tag that the first job uses. |
+| secret `strata-token` | Reads this repository while it is private. |
+
+The workflow runs `scripts/ci/pr-comment.sh --preflight preflight/report.md`. A
 pipeline on another host runs the same command: see
 [Post a preflight report](./pr-comments.md#post-a-preflight-report).
 

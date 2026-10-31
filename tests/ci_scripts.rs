@@ -53,7 +53,7 @@ fn every_script_a_release_carries_prints_its_help_and_exits_0() {
 /// The files a team copies, and the reusable workflows they call. They name scripts, options and a
 /// release version, and nothing else reads them: a renamed option or a moved script breaks a
 /// drop-in silently.
-const DROP_INS: [&str; 7] = [
+const DROP_INS: [&str; 8] = [
     "examples/ci/github/strata.yml",
     "examples/ci/gitlab/strata.yml",
     ".github/workflows/comment.yml",
@@ -61,6 +61,7 @@ const DROP_INS: [&str; 7] = [
     ".github/workflows/upstream.yml",
     ".github/workflows/merge-gate.yml",
     ".github/workflows/preflight.yml",
+    ".github/workflows/preflight-comment.yml",
 ];
 
 fn repo_file(path: &str) -> String {
@@ -366,7 +367,7 @@ const DRY_RUN: Left = Left {
     why: "it touches no host, so a person tries it at a terminal",
 };
 
-const WRAPPERS: [Wrapper; 7] = [
+const WRAPPERS: [Wrapper; 8] = [
     Wrapper {
         workflow: "comment.yml",
         job: "strata-comment",
@@ -383,7 +384,26 @@ const WRAPPERS: [Wrapper; 7] = [
             DRY_RUN,
             Left {
                 flags: &["--preflight"],
-                why: "preflight.yml posts the report of a preflight",
+                why: "preflight-comment.yml posts the report of a preflight",
+            },
+        ],
+    },
+    Wrapper {
+        workflow: "preflight-comment.yml",
+        // GitLab has no workflow of its own for it: the job of the preflight posts the note
+        job: "strata-preflight",
+        tool: Listed::Script("pr-comment.sh"),
+        reaches: &[
+            reach("--pr", "", ""),
+            reach("--repo", "", ""),
+            reach("--preflight", "", "STRATA_PREFLIGHT_COMMENT"),
+        ],
+        left: &[
+            HOST,
+            DRY_RUN,
+            Left {
+                flags: &["--label", "--threshold", "--repave"],
+                why: "the preflight comment compares nothing and sets no label",
             },
         ],
     },
@@ -482,7 +502,7 @@ const WRAPPERS: [Wrapper; 7] = [
             reach("--every", "every", "STRATA_PREFLIGHT_EVERY"),
             reach("--limit", "limit", "STRATA_PREFLIGHT_LIMIT"),
             reach("--out", "out", "STRATA_PREFLIGHT_OUT"),
-            // set by the wrapper: the markdown goes to the summary and to the comment, and a run
+            // set by the wrapper: the markdown goes to the summary and to the artifact, and a run
             // with no key reads nothing from Palette
             reach("--format", "", ""),
             reach("--quiet", "", ""),
