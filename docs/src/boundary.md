@@ -103,7 +103,7 @@ and of each wave, checks them.
    has four parts:
    - When a route of Palette answers a check before the point where the answer
      matters, strata and `strata-preflight` call that route. They do not copy
-     the rule, because a copy goes stale when Palette changes the rule.
+     the rule, because a copy becomes wrong when Palette changes the rule.
    - When no route answers the check before that point, strata makes the check
      itself. The check names Palette as the owner of the rule.
      [The gaps that strata fills](./internals/palette/profiles.md#the-gaps-that-strata-fills)
