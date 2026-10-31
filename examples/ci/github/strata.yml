@@ -48,6 +48,7 @@ jobs:
     with:
       a: releases/dev.json          # the record the default branch has
       b: candidate.yaml             # what this pull request proposes
+      # repave: true               # a cluster against a version: Palette's answer decides the label
       strata-version: v0.24.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}

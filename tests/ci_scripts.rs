@@ -284,12 +284,30 @@ esac
 
 /// A `strata` that logs every call and answers `snapshot <ref> -o <file>` with a canned snapshot,
 /// so a live ref needs no Palette; everything else goes to the real binary.
+///
+/// `compare --repave` is the one question that needs Palette. The stand-in runs the real
+/// comparison without the option and adds the answer in FAKE_REPAVE_JSON (the `paletteRepave` of
+/// the report) or FAKE_REPAVE_TEXT (the `Palette:` line of the markdown). When FAKE_REPAVE_FAIL is
+/// set, it exits 2 as strata does when Palette gives no answer.
 const FAKE_STRATA: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 echo "$*" >> "$FAKE_STRATA_LOG"
 if [ "$1" = snapshot ]; then
   cp "$FAKE_STRATA_SNAPSHOT" "$4"
   exit 0
+fi
+if [ "$1" = compare ] && [[ " $* " == *" --repave "* ]]; then
+  if [ -n "${FAKE_REPAVE_FAIL:-}" ]; then echo "strata: Palette gave no answer" >&2; exit 2; fi
+  args=()
+  for a in "$@"; do [ "$a" = --repave ] || args+=("$a"); done
+  code=0
+  out=$("$REAL_STRATA" "${args[@]}") || code=$?
+  if [[ " $* " == *" --format json "* ]]; then
+    jq -c --argjson r "$FAKE_REPAVE_JSON" '. + {paletteRepave: $r}' <<<"$out"
+  else
+    printf '%s\n\n**Palette:** %s\n' "$out" "$FAKE_REPAVE_TEXT"
+  fi
+  exit "$code"
 fi
 exec "$REAL_STRATA" "$@"
 "#;
@@ -684,6 +702,321 @@ fn pr_comment_snapshots_a_live_ref_once_and_compares_files_offline() {
     assert!(
         h.saved_body()
             .contains("### lab-profile@1.3.0 → lab-profile@1.2.0")
+    );
+}
+
+const PALETTE_REPAVES: &str = r#"{"required": true, "agrees": true}"#;
+const PALETTE_REPAVES_TEXT: &str =
+    "repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)";
+const PALETTE_KEEPS: &str = r#"{"required": false, "agrees": false}"#;
+const PALETTE_KEEPS_TEXT: &str = "no repave";
+
+impl Host {
+    /// Run the script with the stand-in `strata` of [`FAKE_STRATA`], which answers `compare
+    /// --repave` with `json` (the `paletteRepave` of the report) and `text` (the `Palette:` line).
+    /// `more` is any other variable of the run.
+    fn run_repave(&self, args: &[&str], json: &str, text: &str, more: &[(&str, &str)]) -> Output {
+        let fake = self.bin.join("fake-strata");
+        let log = self.strata_log();
+        std::fs::write(&log, "").unwrap();
+        let mut envs = vec![
+            ("STRATA_BIN", fake.to_str().unwrap()),
+            ("REAL_STRATA", strata_bin().to_str().unwrap()),
+            ("FAKE_STRATA_LOG", log.to_str().unwrap()),
+            ("FAKE_REPAVE_JSON", json),
+            ("FAKE_REPAVE_TEXT", text),
+        ];
+        envs.extend_from_slice(more);
+        self.run_with(args, &envs)
+    }
+
+    fn strata_log(&self) -> PathBuf {
+        self.bin.parent().unwrap().join("strata.log")
+    }
+
+    /// The calls of the stand-in `strata` in the last run of [`Host::run_repave`].
+    fn strata_calls(&self) -> Vec<String> {
+        lines_of(&self.strata_log())
+    }
+
+    /// A copy of the snapshot `file` that records a cluster, as `strata snapshot cluster:payments`
+    /// does, and else the same.
+    fn cluster_of(&self, file: &str) -> String {
+        self.edited("cluster.json", file, |source| {
+            source["cluster"] =
+                serde_json::json!({"uid": "c-1", "name": "payments", "profiles": []});
+        })
+    }
+
+    /// A copy of the snapshot `file` that Palette does not hold, as a candidate: no uid.
+    fn candidate_of(&self, file: &str) -> String {
+        self.edited("candidate.json", file, |source| {
+            source["uid"] = serde_json::json!("");
+            source["template"] = serde_json::json!("candidate");
+        })
+    }
+
+    fn edited(
+        &self,
+        name: &str,
+        file: &str,
+        change: impl FnOnce(&mut serde_json::Value),
+    ) -> String {
+        let mut doc: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(file).unwrap()).unwrap();
+        change(&mut doc["source"]);
+        let out = self._dir.path().join(name);
+        std::fs::write(&out, doc.to_string()).unwrap();
+        out.display().to_string()
+    }
+}
+
+#[test]
+fn pr_comment_repave_sends_the_question_for_a_cluster_and_a_version_and_the_label_follows_the_answer()
+ {
+    let h = host();
+    let cluster = h.cluster_of(&h.a);
+
+    // the table says repave for this pair, and Palette says no: the label is not added
+    let o = h.run_repave(
+        &[&cluster, &h.b, "--repave", "--dry-run"],
+        PALETTE_KEEPS,
+        PALETTE_KEEPS_TEXT,
+        &[],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let calls = h.strata_calls();
+    assert_eq!(calls.len(), 2, "{calls:?}");
+    assert!(
+        calls.iter().all(|c| c.contains(" --repave")),
+        "both renderings carry the question: {calls:?}"
+    );
+    assert!(
+        text(&o.stdout).contains("**Palette:** no repave"),
+        "{}",
+        text(&o.stdout)
+    );
+    let said = text(&o.stderr);
+    assert!(
+        said.contains("max impact: repave;"),
+        "the table is read: {said}"
+    );
+    assert!(
+        said.contains("label repave: Palette says no repave; would remove label repave if present"),
+        "{said}"
+    );
+
+    // the table says nothing for this pair, and Palette says repave: the label is added
+    let o = h.run_repave(
+        &[&cluster, &h.a2, "--repave", "--dry-run"],
+        PALETTE_REPAVES,
+        PALETTE_REPAVES_TEXT,
+        &[],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stdout).contains(&format!("**Palette:** {PALETTE_REPAVES_TEXT}")),
+        "{}",
+        text(&o.stdout)
+    );
+    let said = text(&o.stderr);
+    assert!(said.contains("max impact: none;"), "{said}");
+    assert!(
+        said.contains("label repave: Palette says repave; would add label repave"),
+        "{said}"
+    );
+}
+
+#[test]
+fn pr_comment_repave_changes_the_label_on_the_host_by_the_answer_of_palette() {
+    let h = host();
+    let cluster = h.cluster_of(&h.a);
+    std::fs::write(&h.labels, r#"{"labels": [{"name": "repave"}]}"#).unwrap();
+    let args = [&cluster[..], &h.b, "--pr", "7", "--repo", "o/r", "--repave"];
+
+    let o = h.run_repave(&args, PALETTE_KEEPS, PALETTE_KEEPS_TEXT, &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        h.calls()
+            .contains(&"pr edit 7 --repo o/r --remove-label repave".to_string()),
+        "the label goes where the table says repave: {:?}",
+        h.calls()
+    );
+    assert!(h.saved_body().contains("**Palette:** no repave"));
+    assert!(
+        text(&o.stderr)
+            .contains("label repave: Palette says no repave; comment posted; label repave removed"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    // Palette says repave and the label is there: nothing to change
+    let o = h.run_repave(&args, PALETTE_REPAVES, PALETTE_REPAVES_TEXT, &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        !h.calls().iter().any(|c| c.starts_with("pr edit")),
+        "{:?}",
+        h.calls()
+    );
+    assert!(
+        text(&o.stderr)
+            .contains("label repave: Palette says repave; comment posted; label repave unchanged"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn pr_comment_repave_reads_the_table_below_may_repave_when_palette_says_no_repave() {
+    let h = host();
+    let cluster = h.cluster_of(&h.a);
+    // "no repave" does not answer a label for the level cluster-wide
+    let o = h.run_repave(
+        &[
+            &cluster,
+            &h.b,
+            "--repave",
+            "--dry-run",
+            "--threshold",
+            "cluster-wide",
+        ],
+        PALETTE_KEEPS,
+        PALETTE_KEEPS_TEXT,
+        &[],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains(
+            "label repave: Palette says no repave, and the table decides below may-repave; would add label repave"
+        ),
+        "{}",
+        text(&o.stderr)
+    );
+    // at may-repave, the answer of Palette settles the label
+    let o = h.run_repave(
+        &[
+            &cluster,
+            &h.b,
+            "--repave",
+            "--dry-run",
+            "--threshold",
+            "may-repave",
+        ],
+        PALETTE_KEEPS,
+        PALETTE_KEEPS_TEXT,
+        &[],
+    );
+    assert!(
+        text(&o.stderr)
+            .contains("label repave: Palette says no repave; would remove label repave if present"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn pr_comment_repave_says_why_it_asks_nothing_and_the_table_decides() {
+    let h = host();
+
+    // two profile versions: no cluster
+    let o = h.run_repave(
+        &[&h.a, &h.b, "--repave", "--dry-run"],
+        PALETTE_KEEPS,
+        PALETTE_KEEPS_TEXT,
+        &[],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let said = text(&o.stderr);
+    assert!(
+        said.contains("--repave does not apply: neither ref is a cluster"),
+        "{said}"
+    );
+    assert!(
+        said.contains(
+            "max impact: repave; label repave: the table decides; would add label repave"
+        ),
+        "{said}"
+    );
+    assert!(!text(&o.stdout).contains("Palette:"), "{}", text(&o.stdout));
+    assert!(
+        h.strata_calls().iter().all(|c| !c.contains("--repave")),
+        "Palette is not asked: {:?}",
+        h.strata_calls()
+    );
+
+    // a candidate is not in Palette
+    let cluster = h.cluster_of(&h.a);
+    let candidate = h.candidate_of(&h.b);
+    let o = h.run_repave(
+        &[&cluster, &candidate, "--repave", "--dry-run"],
+        PALETTE_KEEPS,
+        PALETTE_KEEPS_TEXT,
+        &[],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("--repave does not apply: the profile side has no uid"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(
+        h.strata_calls().iter().all(|c| !c.contains("--repave")),
+        "{:?}",
+        h.strata_calls()
+    );
+}
+
+#[test]
+fn pr_comment_repave_goes_on_with_the_table_when_palette_gives_no_answer() {
+    let h = host();
+    let cluster = h.cluster_of(&h.a);
+    let o = h.run_repave(
+        &[&cluster, &h.b, "--repave", "--pr", "7", "--repo", "o/r"],
+        PALETTE_KEEPS,
+        PALETTE_KEEPS_TEXT,
+        &[("FAKE_REPAVE_FAIL", "1")],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let said = text(&o.stderr);
+    assert!(
+        said.contains("--repave got no answer from Palette"),
+        "{said}"
+    );
+    assert!(
+        said.contains("max impact: repave; label repave: the table decides;"),
+        "{said}"
+    );
+    assert!(
+        h.calls()
+            .contains(&"pr edit 7 --repo o/r --add-label repave".to_string()),
+        "the table adds the label: {:?}",
+        h.calls()
+    );
+    assert!(!h.saved_body().contains("Palette:"));
+}
+
+#[test]
+fn pr_comment_without_repave_asks_palette_nothing_and_adds_no_clause_to_the_note() {
+    let h = host();
+    let cluster = h.cluster_of(&h.a);
+    let o = h.run_repave(
+        &[&cluster, &h.b, "--dry-run"],
+        PALETTE_KEEPS,
+        PALETTE_KEEPS_TEXT,
+        &[],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        h.strata_calls().iter().all(|c| !c.contains("--repave")),
+        "{:?}",
+        h.strata_calls()
+    );
+    assert!(
+        text(&o.stderr)
+            .trim_end()
+            .ends_with("max impact: repave; would add label repave"),
+        "{}",
+        text(&o.stderr)
     );
 }
 

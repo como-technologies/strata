@@ -120,6 +120,12 @@ if stage 3 "the publish"; then
     "$strata" compare "cluster:$C/$REL" "$NEXT" --validate --json
   check ask-validate-answer 0 '#385: the report holds the answer of Palette: paletteValidation.accepts' -- \
     jq -e '.paletteValidation | (.accepts | type) == "boolean"' ask-validate.out
+  # the pull request that moves cluster A asks the same question: its comment holds the answer
+  # of Palette, and the label follows it
+  check ask-repave-comment 0 '#157: pr-comment.sh --repave asks Palette about the move of cluster A, in the comment of the pull request' -- \
+    in_repo bash -c "\"$ci/pr-comment.sh\" \"cluster:$C/$REL\" \"$NEXT\" --repave --dry-run > repave-comment.md"
+  check ask-repave-comment-says 0 '#157: the comment holds the line of Palette, and the note says that Palette decided the label' -- \
+    bash -c "grep -Eq '^\*\*Palette:\*\* (no )?repave' repo/repave-comment.md && grep -Eq 'label [^ ]+: Palette says (no )?repave' ask-repave-comment.err"
 fi
 
 if stage 4 "before a build"; then

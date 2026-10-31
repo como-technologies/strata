@@ -9,6 +9,7 @@
 #     STRATA_VERSION: vX.Y.Z          # a release that carries the five scripts
 #     STRATA_A: releases/dev.json      # the record the target branch has
 #     STRATA_B: candidate.yaml         # what this merge request proposes
+#     # STRATA_REPAVE: "true"       # a cluster against a version: Palette's answer decides the label
 #     STRATA_RECORDS: "releases/**/*.json"
 #
 # CI/CD variables to set, masked:
@@ -26,6 +27,7 @@ variables:
   STRATA_REPO: como-technologies/strata
   STRATA_LABEL: repave
   STRATA_THRESHOLD: repave
+  STRATA_REPAVE: "false"
   STRATA_DRIFT_LABEL: strata-drift
   STRATA_BEHIND_LABEL: strata-behind
   STRATA_ROLLBACK_LABEL: rollback
@@ -55,8 +57,12 @@ strata-comment:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
-    - .strata/pr-comment.sh "$STRATA_A" "$STRATA_B"
-        --label "$STRATA_LABEL" --threshold "$STRATA_THRESHOLD"
+    # STRATA_REPAVE "true" asks Palette if the change repaves the cluster, and its answer decides the label
+    - |
+      repave=""
+      if [ "$STRATA_REPAVE" = "true" ]; then repave=--repave; fi
+      .strata/pr-comment.sh "$STRATA_A" "$STRATA_B" \
+        --label "$STRATA_LABEL" --threshold "$STRATA_THRESHOLD" $repave
 
 # Can Palette build the cluster this merge request changes? The static tier, with the records of
 # this repository: no key, milliseconds. The installer puts strata-preflight beside strata, and

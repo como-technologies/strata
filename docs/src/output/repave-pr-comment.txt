@@ -1,0 +1,4 @@
+$ STRATA_QUIET=1 scripts/ci/pr-comment.sh cluster:payments aws-stack@1.1.6 --repave --dry-run > comment.md
+pr-comment: max impact: may-repave; label repave: Palette says repave; would add label repave
+$ grep '^\*\*Palette' comment.md
+**Palette:** repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)

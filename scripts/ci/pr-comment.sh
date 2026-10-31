@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Post a strata comparison as one pull request comment and set a label from its impact.
 #
-#   scripts/ci/pr-comment.sh <A> <B> [--pr N] [--repo OWNER/REPO] [--label NAME] [--threshold LEVEL] [--dry-run]
+#   scripts/ci/pr-comment.sh <A> <B> [--pr N] [--repo OWNER/REPO] [--label NAME] [--threshold LEVEL]
+#                            [--repave] [--dry-run]
 #
 # A and B are refs strata understands: snapshot files, uids, or name@version. A ref that is not a
 # file is snapshotted once, so both renderings read files and Palette is asked once. The comment starts
@@ -9,6 +10,14 @@
 # a pull request carries one strata comment that follows each push. The label (default repave) is
 # added when summary.maxImpact is at or above the threshold (default repave) and removed otherwise.
 # --dry-run prints the comment, says what it would do with the label, and calls no host.
+#
+# --repave asks Palette if the change repaves the cluster, as `strata compare --repave` does, and
+# puts the answer in the comment. One ref must be a cluster, and the other a profile version that
+# Palette holds. For any other pair, the script says why on standard error and goes on without the
+# question. The answer of Palette replaces the table for the levels may-repave and repave:
+# "repave" adds the label, and "no repave" removes it, also where the table says otherwise. A threshold
+# below those levels still reads the table when Palette says "no repave". Without an answer, the
+# table decides. The note on standard error says which one decided.
 #
 # Hosts: GitHub through `gh`, and GitLab through the REST API v4 with `curl`. --host picks one;
 # without it, the CI variables do: GITLAB_CI or CI_PROJECT_ID means GitLab, else GitHub. On GitLab
@@ -90,6 +99,7 @@ pr=""
 repo="${GITHUB_REPOSITORY:-}"
 label="repave"
 threshold="repave"
+repave=""
 dry=""
 host_kind=""
 while [ $# -gt 0 ]; do
@@ -99,13 +109,14 @@ while [ $# -gt 0 ]; do
     --host) host_kind=$2; shift 2 ;;
     --label) label=$2; shift 2 ;;
     --threshold) threshold=$2; shift 2 ;;
+    --repave) repave=1; shift ;;
     --dry-run) dry=1; shift ;;
-    -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,/^set -euo/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) refs+=("$1"); shift ;;
   esac
 done
-[ ${#refs[@]} -eq 2 ] || die "usage: pr-comment.sh <A> <B> [--pr N] [--repo OWNER/REPO] [--host github|gitlab] [--label NAME] [--threshold LEVEL] [--dry-run]"
+[ ${#refs[@]} -eq 2 ] || die "usage: pr-comment.sh <A> <B> [--pr N] [--repo OWNER/REPO] [--host github|gitlab] [--label NAME] [--threshold LEVEL] [--repave] [--dry-run]"
 
 # The CI variables name the host when nothing else does.
 if [ -z "$host_kind" ]; then
@@ -150,24 +161,68 @@ for i in 0 1; do
 done
 
 # Exit 1 is a difference, which is the normal case; 2 means strata could not answer.
-compare() {
-  local code=0
-  "$strata" compare "${files[0]}" "${files[1]}" --format "$1" > "$2" || code=$?
-  [ "$code" -le 1 ] || exit 2
+compare() { # FORMAT OUTPUT [OPTION...]
+  local format=$1 out=$2 code=0
+  shift 2
+  "$strata" compare "${files[0]}" "${files[1]}" --format "$format" "$@" > "$out" || code=$?
+  [ "$code" -le 1 ] || return 2
 }
-compare json "$work/report.json"
-compare markdown "$work/report.md"
+
+# Why Palette cannot answer --repave for this pair, or nothing when it can. Palette answers for a
+# cluster and a profile version that it holds. Strata judges any other pair when asked.
+repave_gap() {
+  jq -rs '
+    if all(.[]; .source.cluster == null) then "neither ref is a cluster"
+    elif any(.[]; .source.cluster == null and (.source.uid // "") == "")
+    then "the profile side has no uid, because Palette does not hold it"
+    else empty end' "${files[@]}" 2>/dev/null || true
+}
+
+asked=""
+if [ -n "$repave" ]; then
+  gap=$(repave_gap)
+  if [ -n "$gap" ]; then
+    note "--repave does not apply: $gap"
+  elif compare json "$work/report.json" --repave; then
+    compare markdown "$work/report.md" --repave
+    asked=1
+  else
+    note "--repave got no answer from Palette"
+  fi
+fi
+if [ -z "$asked" ]; then
+  compare json "$work/report.json"
+  compare markdown "$work/report.md"
+fi
 { echo "<!-- strata -->"; cat "$work/report.md"; } > "$work/comment.md"
 
 max=$(jq -r .summary.maxImpact "$work/report.json")
 if [ "$(rank "$max")" -ge "$threshold_rank" ]; then want_label=1; else want_label=0; fi
 
+# Which one decided the label, for the note: said only when --repave asked for the answer.
+says=""
+if [ -n "$repave" ]; then
+  says="the table decides"
+  answer=$(jq -r 'if .paletteRepave then (.paletteRepave.required | tostring) else "" end' "$work/report.json")
+  case "$answer" in
+    true) want_label=1; says="Palette says repave" ;;
+    false)
+      # "no repave" settles the levels from may-repave up; a lower threshold asks about another level
+      if [ "$threshold_rank" -ge "$(rank may-repave)" ]; then
+        want_label=0; says="Palette says no repave"
+      else
+        says="Palette says no repave, and the table decides below may-repave"
+      fi ;;
+  esac
+fi
+says_note=${says:+; label $label: $says}
+
 if [ -n "$dry" ]; then
   cat "$work/comment.md"
   if [ "$want_label" = 1 ]; then
-    note "max impact: $max; would add label $label"
+    note "max impact: $max$says_note; would add label $label"
   else
-    note "max impact: $max; would remove label $label if present"
+    note "max impact: $max$says_note; would remove label $label if present"
   fi
   exit 0
 fi
@@ -201,4 +256,4 @@ elif [ "$want_label" = 0 ] && [ "$have_label" = 1 ]; then
 else
   label_note="label $label unchanged"
 fi
-note "max impact: $max; $comment_note; $label_note"
+note "max impact: $max$says_note; $comment_note; $label_note"

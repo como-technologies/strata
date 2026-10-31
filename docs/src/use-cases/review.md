@@ -99,6 +99,11 @@ Without `--dry-run`, the script posts the comment and adds the label `repave`.
 A label can require a second approver. See
 [Pull request comments](../automation/pr-comments.md).
 
+A pull request that moves a cluster to a version can ask Palette if the move
+repaves the nodes. Add `--repave`, and the answer of Palette decides the label.
+See
+[Ask Palette if the change repaves](../automation/pr-comments.md#ask-palette-if-the-change-repaves).
+
 ## 5. The publish job proves it is the approved version
 
 **Follow along.** `just playground review-2` is the same tenant after somebody

@@ -23,6 +23,10 @@ on:
         description: The impact level that earns the label (none, sync, in-place, cluster-wide, may-repave, repave)
         default: repave
         type: string
+      repave:
+        description: Ask Palette if the change repaves the cluster, and let its answer decide the label. One ref must be a cluster, and the other a profile version that Palette holds
+        default: false
+        type: boolean
       palette-api:
         description: The Palette API address, for a self-hosted Palette; empty means https://api.spectrocloud.com
         default: ""
@@ -36,10 +40,10 @@ on:
         description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
         required: false
       palette-api-key:
-        description: PALETTE_API_KEY, needed only when a ref is not a snapshot file
+        description: PALETTE_API_KEY, needed only when a ref is not a snapshot file, or when repave is true
         required: false
       palette-project-uid:
-        description: PALETTE_PROJECT_UID for refs that are not snapshot files
+        description: PALETTE_PROJECT_UID for refs that are not snapshot files, and for repave
         required: false
 
 permissions:
@@ -88,8 +92,11 @@ jobs:
           B: ${{ inputs.b }}
           LABEL: ${{ inputs.label }}
           THRESHOLD: ${{ inputs.threshold }}
+          REPAVE: ${{ inputs.repave }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
+          repave=""
+          if [ "$REPAVE" = true ]; then repave=--repave; fi
           .strata/scripts/ci/pr-comment.sh "$A" "$B" --pr "$PR" --repo "$REPO" \
-            --label "$LABEL" --threshold "$THRESHOLD"
+            --label "$LABEL" --threshold "$THRESHOLD" $repave

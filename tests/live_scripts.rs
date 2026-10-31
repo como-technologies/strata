@@ -5597,6 +5597,24 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
         1,
         r#"{"paletteValidation":{"accepts":true,"errors":[]}}"#,
     );
+    // the comment of the pull request snapshots each ref once, and compares the files with the
+    // question for Palette
+    stage.strata(
+        "snapshot cluster:c-a/r-1 -o *",
+        0,
+        r#"{"source":{"uid":"r-1","cluster":{"uid":"c-a"}}}"#,
+    );
+    stage.strata("snapshot n-1 -o *", 0, r#"{"source":{"uid":"n-1"}}"#);
+    stage.strata(
+        "compare */ref0.json */ref1.json --format json --repave",
+        1,
+        r#"{"summary":{"maxImpact":"repave"},"paletteRepave":{"required":false,"agrees":false}}"#,
+    );
+    stage.strata(
+        "compare */ref0.json */ref1.json --format markdown --repave",
+        1,
+        "**Result:** CHANGED\n\n**Palette:** no repave\n",
+    );
     stage.strata(
         "preflight build.json --cloud aws --tier static --offline --quiet",
         0,
@@ -5636,6 +5654,8 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
             "ask-repave-answer",
             "ask-validate",
             "ask-validate-answer",
+            "ask-repave-comment",
+            "ask-repave-comment-says",
             "build-body",
             "preflight-static",
             "preflight-live",
@@ -5644,6 +5664,14 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
             "preflight-key-pair",
             "preflight-fault",
         ],
+    );
+    // the comment holds the answer of Palette, and the note says that Palette decided the label
+    let comment = std::fs::read_to_string(stage.path("out/repo/repave-comment.md")).unwrap();
+    assert!(comment.contains("**Palette:** no repave"), "{comment}");
+    let note = std::fs::read_to_string(stage.path("out/ask-repave-comment.err")).unwrap();
+    assert!(
+        note.contains("max impact: repave; label repave: Palette says no repave; would remove label repave if present"),
+        "{note}"
     );
     // the body is the create of a cluster on the release in the account of the lab
     let body = read_json(&stage.path("out/build.json"));
