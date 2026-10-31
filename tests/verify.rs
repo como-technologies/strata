@@ -140,7 +140,7 @@ fn snapshot_for_resolves_names_and_never_connects_for_files() {
     assert_eq!(by_name.source.reference, "lab-profile@1.2.0");
 
     let file = dir.path().join("a.json");
-    fs::write(&file, by_uid.to_json(true).unwrap()).unwrap();
+    common::write_snapshot(&file, &by_uid, true);
     let from_file = ops::snapshot_for(
         &Ref::Snapshot(file),
         &ops::SnapshotOptions::default(),
@@ -804,7 +804,7 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
     let base = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
     let write = |name: &str, snap: Snapshot| -> PathBuf {
         let p = dir.path().join(name);
-        fs::write(&p, snap.to_json(true).unwrap()).unwrap();
+        common::write_snapshot(&p, &snap, true);
         p
     };
     let rec_p1 = write("p1.json", base.clone().with_project(Some("p1")));
@@ -980,7 +980,7 @@ fn a_record_rebuilt_from_a_raw_directory_is_verified_in_its_own_project() {
         .unwrap();
     let record = dir.path().join("rebuilt.json");
     let rebuilt = ops::snapshot_from_dir(&saved, UID_A, "t1").unwrap();
-    fs::write(&record, rebuilt.to_json(true).unwrap()).unwrap();
+    common::write_snapshot(&record, &rebuilt, true);
 
     // after the edit, p1 serves B's content under the same uid; tenant scope does not see it
     let edited = serve_fixture(MemoryApi::new(), dir.path(), "b", UID_A).in_project("p1");
@@ -2080,7 +2080,7 @@ fn a_policy_tier_from_before_the_bindings_were_read_still_verifies() {
         .tiers
         .insert(Tier::Policy.into(), serde_json::from_value(tier).unwrap());
     let saved = dir.path().join("older.json");
-    fs::write(&saved, older.to_json(true).unwrap()).unwrap();
+    common::write_snapshot(&saved, &older, true);
     let older = Snapshot::load(&saved).unwrap();
 
     let v = ops::verify(&older, &Palette::new(api), "t1", &Progress::silent()).unwrap();
@@ -2395,7 +2395,7 @@ fn a_consumer_with_no_project_is_read_in_the_scope_the_profile_was_read_in() {
         .unwrap()
         .with_project(Some("p1"));
     let path = dir.path().join("record.json");
-    std::fs::write(&path, record.to_json(false).unwrap()).unwrap();
+    common::write_snapshot(&path, &record, false);
 
     let scopes: RefCell<Vec<Option<String>>> = RefCell::new(Vec::new());
     let connect = |scope: Option<&str>| {
@@ -3468,13 +3468,13 @@ fn consumers_takes_a_profile_and_refuses_a_cluster() {
     )
     .unwrap();
     let file = dir.path().join("on-b.json");
-    fs::write(&file, on_b.to_json(true).unwrap()).unwrap();
+    common::write_snapshot(&file, &on_b, true);
     let err = ops::consumers(&Ref::Snapshot(file), never, "t1", &Progress::silent()).unwrap_err();
     assert!(matches!(err, Error::ProfileRefRequired { .. }), "{err}");
 
     let recorded = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
     let file = dir.path().join("a.json");
-    fs::write(&file, recorded.to_json(true).unwrap()).unwrap();
+    common::write_snapshot(&file, &recorded, true);
     let api = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A);
     let r = ops::consumers(
         &Ref::Snapshot(file),
@@ -8677,7 +8677,7 @@ fn each_report_states_the_verdict_of_a_record_in_the_same_words() {
     let base = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
     let write = |name: &str, snap: Snapshot| -> PathBuf {
         let p = dir.path().join(name);
-        fs::write(&p, snap.to_json(true).unwrap()).unwrap();
+        common::write_snapshot(&p, &snap, true);
         p
     };
     let same = write("same.json", base.clone().with_project(Some("p1")));
@@ -12385,7 +12385,7 @@ fn consumers_of_an_app_profile_are_its_app_deployments() {
     let dir = tempfile::tempdir().unwrap();
     let record = common::snapshot_of(&api, "appprofile:shop@1.0.0").unwrap();
     let path = dir.path().join("shop.json");
-    std::fs::write(&path, record.to_json(false).unwrap()).unwrap();
+    common::write_snapshot(&path, &record, false);
     let from_record = consumers(&api, &Ref::Snapshot(path));
     assert_eq!(serde_json::to_value(&from_record).unwrap(), json);
 
@@ -12471,6 +12471,13 @@ fn serve_behind() -> MemoryApi {
     )
 }
 
+/// The options of `behind` that ask Palette about each bump.
+const WITH_IMPACT: ops::BehindOptions = ops::BehindOptions {
+    impact: true,
+    since: None,
+};
+
+/// `behind` on `api` itself and not on a copy, so that a test reads what `behind` posted.
 fn behind_of(
     api: &MemoryApi,
     records: &[std::path::PathBuf],
@@ -12479,7 +12486,7 @@ fn behind_of(
     ops::behind(
         records,
         options,
-        |_| Ok(Palette::new(api.clone())),
+        |_| Ok(Palette::new(api)),
         "2026-09-26T00:00:00Z",
         &Progress::silent(),
     )
@@ -12513,7 +12520,7 @@ fn a_pack_supports_the_cloud(pinned: &[&str], newer: &[&str], cloud: &str) -> [b
     let dir = tempfile::tempdir().unwrap();
     let record = snapshot_of(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
     let path = dir.path().join("pin.json");
-    fs::write(&path, record.to_json(false).unwrap()).unwrap();
+    common::write_snapshot(&path, &record, false);
     let report = behind_of(&api, &[path], &ops::BehindOptions::default());
     let behind = report.pins[0].newer.iter().any(|n| n.version == "1.65.0");
     let file = dir.path().join("c.yaml");
@@ -12672,7 +12679,7 @@ fn behind_current_on(api: &MemoryApi) -> (ops::BehindReport, String) {
     let dir = tempfile::tempdir().unwrap();
     let current = snapshot_of(api, "pack:csi-aws-ebs@1.65.0").unwrap();
     let path = dir.path().join("current.json");
-    fs::write(&path, current.to_json(false).unwrap()).unwrap();
+    common::write_snapshot(&path, &current, false);
     let r = behind_of(api, &[path], &ops::BehindOptions::default());
     let text = common::terminal().render_behind(&r).unwrap();
     (r, text)
@@ -12796,7 +12803,7 @@ fn a_pin_has_no_sync_note_when_the_last_sync_completed_when_palette_gives_no_syn
     let dir = tempfile::tempdir().unwrap();
     let old = snapshot_of(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
     let path = dir.path().join("old.json");
-    fs::write(&path, old.to_json(false).unwrap()).unwrap();
+    common::write_snapshot(&path, &old, false);
     let r = behind_of(&api, &[path], &ops::BehindOptions::default());
     assert!(
         r.pins[0].behind && r.pins[0].registry_sync.is_none(),
@@ -12855,7 +12862,7 @@ fn pack_records(dir: &Path, refs: &[(&str, &str)]) -> Vec<std::path::PathBuf> {
                 .unwrap()
                 .with_project(ops::scope_of(project));
             let path = dir.join(format!("{}.json", pack.replace([':', '@', '/'], "-")));
-            fs::write(&path, record.to_json(false).unwrap()).unwrap();
+            common::write_snapshot(&path, &record, false);
             path
         })
         .collect()
@@ -12877,10 +12884,7 @@ fn behind_and_packs_read_each_registry_listing_one_time_for_two_packs_of_one_reg
     let connects = RefCell::new(0);
     let r = ops::behind(
         &records,
-        &ops::BehindOptions {
-            impact: true,
-            since: None,
-        },
+        &WITH_IMPACT,
         |_| {
             *connects.borrow_mut() += 1;
             Ok(Palette::new(&api))
@@ -12928,13 +12932,9 @@ fn behind_connects_one_time_for_each_project_of_its_pins() {
         scopes.borrow_mut().push(scope.map(str::to_string));
         Ok(Palette::new(&api))
     };
-    let options = ops::BehindOptions {
-        impact: true,
-        since: None,
-    };
     let r = ops::behind(
         &records,
-        &options,
+        &WITH_IMPACT,
         connect,
         "2026-09-26T00:00:00Z",
         &Progress::silent(),
@@ -12964,7 +12964,7 @@ fn behind_connects_one_time_for_each_project_of_its_pins() {
     // a project that strata cannot connect to gives its pins the error. Strata reads the others
     let r = ops::behind(
         &records,
-        &options,
+        &WITH_IMPACT,
         |scope| match scope {
             Some("p2") => Err(Error::Usage {
                 message: "no key for p2".to_string(),
@@ -13001,15 +13001,8 @@ fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("dev.json");
     let old = snapshot_of(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
-    fs::write(&path, old.to_json(false).unwrap()).unwrap();
-    let r = behind_of(
-        &api,
-        &[path],
-        &ops::BehindOptions {
-            impact: true,
-            since: None,
-        },
-    );
+    common::write_snapshot(&path, &old, false);
+    let r = behind_of(&api, &[path], &WITH_IMPACT);
     let pin = &r.pins[0];
     assert_eq!(
         pin.newer
@@ -13057,7 +13050,7 @@ fn behind_says_what_a_move_to_a_newer_version_drops_when_it_supports_fewer_archi
     let write = |name: &str, r: &str| {
         let path = dir.path().join(name);
         let snap = snapshot_of(&api, r).unwrap();
-        fs::write(&path, snap.to_json(false).unwrap()).unwrap();
+        common::write_snapshot(&path, &snap, false);
         path
     };
     let records = vec![
@@ -13127,7 +13120,7 @@ fn in_a_fips_tenant_packs_and_behind_leave_out_a_version_that_palette_does_not_s
     let dir = tempfile::tempdir().unwrap();
     let record = dir.path().join("dev.json");
     let old = snapshot_of(&fips, "pack:csi-aws-ebs@1.63.1").unwrap();
-    fs::write(&record, old.to_json(false).unwrap()).unwrap();
+    common::write_snapshot(&record, &old, false);
     let newer = |api: &MemoryApi| {
         let r = behind_of(
             api,
@@ -13176,7 +13169,7 @@ fn in_a_fips_tenant_packs_and_behind_offer_no_version_of_a_pack_with_no_fips_ver
         "pack:csi-aws-ebs@1.63.1",
     )
     .unwrap();
-    fs::write(&record, old.to_json(false).unwrap()).unwrap();
+    common::write_snapshot(&record, &old, false);
     let report = behind_of(
         &fips,
         std::slice::from_ref(&record),
@@ -13193,7 +13186,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
     let api = serve_behind();
     let write = |name: &str, snap: &Snapshot| {
         let path = dir.path().join(name);
-        fs::write(&path, snap.to_json(false).unwrap()).unwrap();
+        common::write_snapshot(&path, snap, false);
         path
     };
     let old = snapshot_of(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
@@ -13203,14 +13196,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
         write("prod.json", &old),
         write("next.json", &new),
     ];
-    let r = behind_of(
-        &api,
-        &records,
-        &ops::BehindOptions {
-            impact: true,
-            since: None,
-        },
-    );
+    let r = behind_of(&api, &records, &WITH_IMPACT);
     assert_eq!(r.schema, "strata-behind/1");
     assert_eq!(
         (r.summary.pins, r.summary.behind, r.summary.errors),
@@ -13363,31 +13349,6 @@ fn profile_document_running() -> Value {
             {"uid": "c1", "name": BUMP_CLUSTER}, {"uid": "c2", "name": "billing"}]}})
 }
 
-fn write_bump_record(
-    dir: &Path,
-    name: &str,
-    snap: &strata::snapshot::Snapshot,
-) -> std::path::PathBuf {
-    let path = dir.join(name);
-    fs::write(&path, snap.to_json(false).unwrap()).unwrap();
-    path
-}
-
-/// `behind` with the impact, on `api` itself, so that the test reads what `behind` posted.
-fn behind_asking(api: &MemoryApi, records: &[std::path::PathBuf]) -> ops::BehindReport {
-    ops::behind(
-        records,
-        &ops::BehindOptions {
-            impact: true,
-            since: None,
-        },
-        |_| Ok(Palette::new(api)),
-        "2026-09-26T00:00:00Z",
-        &Progress::silent(),
-    )
-    .unwrap()
-}
-
 #[test]
 fn behind_prints_the_refusal_of_palette_for_the_bump_of_a_record_of_a_profile_with_its_cluster() {
     let dir = tempfile::tempdir().unwrap();
@@ -13398,8 +13359,9 @@ fn behind_prints_the_refusal_of_palette_for_the_bump_of_a_record_of_a_profile_wi
     let api = base
         .with(route.clone(), upgrade_refusal(UPGRADE_REFUSAL))
         .with(profile_route(BUMP_PROFILE_UID), profile_document_running());
-    let records = [write_bump_record(dir.path(), "csi.json", &record)];
-    let r = behind_asking(&api, &records);
+    let csi = dir.path().join("csi.json");
+    common::write_snapshot(&csi, &record, false);
+    let r = behind_of(&api, &[csi], &WITH_IMPACT);
 
     // one request to the route of the version, with its packs and the bumped pack in the place of
     // the pin: the version, the tag, the uids, and the values of 1.65.0
@@ -13468,7 +13430,9 @@ fn behind_prints_that_palette_accepts_when_it_gives_no_error_for_the_bump() {
         post(&update_validate_packs_route(BUMP_PROFILE_UID)),
         serde_json::json!({"packs": {"results": []}}),
     );
-    let r = behind_asking(&api, &[write_bump_record(dir.path(), "csi.json", &record)]);
+    let csi = dir.path().join("csi.json");
+    common::write_snapshot(&csi, &record, false);
+    let r = behind_of(&api, &[csi], &WITH_IMPACT);
     let answer = r.pins[0].bump.as_ref().unwrap().palette_validation.as_ref();
     assert!(answer.unwrap().accepts());
     let text = common::terminal().render_behind(&r).unwrap();
@@ -13498,18 +13462,15 @@ fn behind_with_no_impact_makes_no_validate_request() {
             post(&format!("{}/validate/packs", cluster_route("c1"))),
             serde_json::json!({}),
         );
-    let records = [
-        write_bump_record(dir.path(), "csi.json", &record),
-        write_bump_record(dir.path(), "cluster.json", &cluster),
-    ];
-    let r = ops::behind(
-        &records,
+    let csi_file = dir.path().join("csi.json");
+    let cluster_file = dir.path().join("cluster.json");
+    common::write_snapshot(&csi_file, &record, false);
+    common::write_snapshot(&cluster_file, &cluster, false);
+    let r = behind_of(
+        &api,
+        &[csi_file, cluster_file],
         &ops::BehindOptions::default(),
-        |_| Ok(Palette::new(&api)),
-        "2026-09-26T00:00:00Z",
-        &Progress::silent(),
-    )
-    .unwrap();
+    );
     assert!(r.pins[0].behind && r.pins[0].bump.is_none());
     assert!(api.posted().is_empty(), "{:?}", api.posted());
     assert_eq!(api.calls(&cluster_route("c1")), 0);
@@ -13531,10 +13492,9 @@ fn behind_asks_the_route_of_a_cluster_about_the_bump_of_a_record_of_a_cluster() 
     let api = base
         .with(cluster_route("c1"), cluster_document_running(&cluster))
         .with(post(&route), answer);
-    let r = behind_asking(
-        &api,
-        &[write_bump_record(dir.path(), "cluster.json", &cluster)],
-    );
+    let cluster_file = dir.path().join("cluster.json");
+    common::write_snapshot(&cluster_file, &cluster, false);
+    let r = behind_of(&api, std::slice::from_ref(&cluster_file), &WITH_IMPACT);
 
     // the profile with the pin has the pack values: its packs as the cluster runs them, and the
     // pack as 1.65.0. The other profile of the cluster has its uid alone
@@ -13565,10 +13525,7 @@ fn behind_asks_the_route_of_a_cluster_about_the_bump_of_a_record_of_a_cluster() 
 
     // a 200 with no profile: Palette accepts
     let accepting = api.clone().with(post(&route), serde_json::json!({}));
-    let r = behind_asking(
-        &accepting,
-        &[write_bump_record(dir.path(), "cluster.json", &cluster)],
-    );
+    let r = behind_of(&accepting, &[cluster_file], &WITH_IMPACT);
     assert!(
         r.pins[0]
             .bump
@@ -13588,16 +13545,12 @@ fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
     let record = profile_pinning(&base);
     let cluster = cluster_pinning(&base);
     let cluster_route_packs = post(&format!("{}/validate/packs", cluster_route("c1")));
-    let records = [
-        write_bump_record(dir.path(), "csi.json", &record),
-        write_bump_record(dir.path(), "cluster.json", &cluster),
-        // a pack record: no cluster runs it, so it is not asked
-        write_bump_record(
-            dir.path(),
-            "pack.json",
-            &snapshot_of(&base, "pack:csi-aws-ebs@1.63.1").unwrap(),
-        ),
-    ];
+    // a pack record: no cluster runs it, so it is not asked
+    let pack = snapshot_of(&base, "pack:csi-aws-ebs@1.63.1").unwrap();
+    let records = ["csi.json", "cluster.json", "pack.json"].map(|name| dir.path().join(name));
+    for (file, snap) in records.iter().zip([&record, &cluster, &pack]) {
+        common::write_snapshot(file, snap, false);
+    }
     let api = base
         .with(profile_route(BUMP_PROFILE_UID), profile_document_running())
         .with(cluster_route("c1"), cluster_document_running(&cluster));
@@ -13610,7 +13563,7 @@ fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
             upgrade_refusal(UPGRADE_REFUSAL),
         )
         .with(cluster_route_packs.clone(), serde_json::json!({}));
-    let r = behind_asking(&both, &records);
+    let r = behind_of(&both, &records, &WITH_IMPACT);
     assert_eq!(both.posted().len(), 2, "{:?}", both.posted());
     let answer = r.pins[0]
         .bump
@@ -13629,7 +13582,7 @@ fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
             serde_json::json!({}),
         )
         .with(cluster_route_packs.clone(), serde_json::json!({}));
-    let r = behind_asking(&accepting, &records);
+    let r = behind_of(&accepting, &records, &WITH_IMPACT);
     assert!(
         r.pins[0]
             .bump
@@ -13651,7 +13604,7 @@ fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
             "no access",
         )
         .with(cluster_route_packs.clone(), serde_json::json!({}));
-    let r = behind_asking(&failing, &records);
+    let r = behind_of(&failing, &records, &WITH_IMPACT);
     let bump = r.pins[0].bump.as_ref().unwrap();
     assert!(bump.palette_validation.is_none());
     assert!(
@@ -13680,7 +13633,7 @@ fn behind_asks_each_record_of_a_pin_and_gathers_the_errors() {
             serde_json::json!({"profiles": [{"uid": BUMP_PROFILE_UID, "packs":
                 upgrade_refusal(UPGRADE_REFUSAL)["packs"]}]}),
         );
-    let r = behind_asking(&refusing, &records);
+    let r = behind_of(&refusing, &records, &WITH_IMPACT);
     let bump = r.pins[0].bump.as_ref().unwrap();
     assert!(!bump.palette_validation.as_ref().unwrap().accepts());
     assert!(bump.palette_validation_error.is_some());
@@ -13699,7 +13652,9 @@ fn behind_gives_the_message_of_palette_when_an_error_names_no_cluster_that_runs_
             upgrade_refusal(message),
         )
         .with(profile_route(BUMP_PROFILE_UID), profile_document_running());
-    let r = behind_asking(&api, &[write_bump_record(dir.path(), "csi.json", &record)]);
+    let csi = dir.path().join("csi.json");
+    common::write_snapshot(&csi, &record, false);
+    let r = behind_of(&api, std::slice::from_ref(&csi), &WITH_IMPACT);
     let text = common::terminal().render_behind(&r).unwrap();
     assert!(
         text.contains(&format!(
@@ -13710,10 +13665,7 @@ fn behind_gives_the_message_of_palette_when_an_error_names_no_cluster_that_runs_
 
     // the document of the profile is not readable: the refusal stands, with the message
     let unread = api.failing(profile_route(BUMP_PROFILE_UID), 500, "boom");
-    let r = behind_asking(
-        &unread,
-        &[write_bump_record(dir.path(), "csi.json", &record)],
-    );
+    let r = behind_of(&unread, &[csi], &WITH_IMPACT);
     let bump = r.pins[0].bump.as_ref().unwrap();
     assert!(!bump.palette_validation.as_ref().unwrap().accepts());
     assert!(bump.palette_validation_error.is_none());
@@ -13736,12 +13688,16 @@ fn behind_does_not_ask_about_a_record_that_no_cluster_runs() {
     pending.source.cluster.as_mut().unwrap().pending = true;
     let api = base.with(cluster_route("c1"), moved_doc);
     let records = [
-        write_bump_record(dir.path(), "candidate.json", &candidate),
-        write_bump_record(dir.path(), "pack.json", &pack),
-        write_bump_record(dir.path(), "cluster.json", &cluster),
-        write_bump_record(dir.path(), "pending.json", &pending),
-    ];
-    let r = behind_asking(&api, &records);
+        "candidate.json",
+        "pack.json",
+        "cluster.json",
+        "pending.json",
+    ]
+    .map(|name| dir.path().join(name));
+    for (file, snap) in records.iter().zip([&candidate, &pack, &cluster, &pending]) {
+        common::write_snapshot(file, snap, false);
+    }
+    let r = behind_of(&api, &records, &WITH_IMPACT);
     assert!(api.posted().is_empty(), "{:?}", api.posted());
     let bump = r.pins[0].bump.as_ref().unwrap();
     assert!(bump.palette_validation.is_none() && bump.palette_validation_error.is_none());
@@ -13751,6 +13707,130 @@ fn behind_does_not_ask_about_a_record_that_no_cluster_runs() {
     assert!(!text.contains("palette "), "{text}");
 }
 
+/// The record of a profile version `uid` that pins csi-aws-ebs 1.63.1, taken in `project`.
+fn profile_pinning_in(
+    api: &MemoryApi,
+    uid: &str,
+    project: Option<&str>,
+) -> strata::snapshot::Snapshot {
+    let mut snap = profile_pinning(api).with_project(project);
+    snap.source.uid = uid.to_string();
+    snap
+}
+
+#[test]
+fn behind_does_not_say_that_palette_accepts_when_it_did_not_ask_a_record_of_another_project() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind();
+    // dev and prod both record the release, so the pin is in dev: the project of the first record
+    let dev = profile_pinning_in(&base, BUMP_PROFILE_UID, Some("dev"));
+    let prod = profile_pinning_in(&base, "pr2", Some("prod"));
+    let api = base.clone().with(
+        post(&update_validate_packs_route(BUMP_PROFILE_UID)),
+        serde_json::json!({"packs": {"results": []}}),
+    );
+    let files = ["dev.json", "prod.json"].map(|name| dir.path().join(name));
+    common::write_snapshot(&files[0], &dev, false);
+    common::write_snapshot(&files[1], &prod, false);
+    let r = behind_of(&api, &files, &WITH_IMPACT);
+
+    // the request for the record of dev accepts, and strata sent none for the record of prod
+    let posted = api.posted();
+    assert_eq!(posted.len(), 1, "{posted:?}");
+    assert_eq!(posted[0].0, update_validate_packs_route(BUMP_PROFILE_UID));
+    let bump = r.pins[0].bump.as_ref().unwrap();
+    assert!(
+        bump.palette_validation.is_none(),
+        "Palette did not check the record of prod"
+    );
+    assert_eq!(
+        bump.palette_validation_error.as_deref(),
+        Some("1 record of project prod was not asked")
+    );
+    let text = common::terminal().render_behind(&r).unwrap();
+    assert!(
+        text.contains("      palette gave no answer: 1 record of project prod was not asked\n"),
+        "{text}"
+    );
+    assert!(!text.contains("palette accepts"), "{text}");
+    let json = serde_json::to_value(&r).unwrap();
+    assert!(json["pins"][0]["bump"].get("paletteValidation").is_none());
+    assert_eq!(
+        r.exit_code(),
+        1,
+        "the pin stays behind, and the exit stays 1"
+    );
+
+    // the count is for each project, in the order of the project, and a record of the tenant
+    // scope counts too. A pack record in another project could not be asked, so it adds nothing
+    let prod_cluster = cluster_pinning(&base).with_project(Some("prod"));
+    let lab = profile_pinning_in(&base, "pr3", None);
+    let pack = snapshot_of(&base, "pack:csi-aws-ebs@1.63.1")
+        .unwrap()
+        .with_project(Some("stage"));
+    let files = [
+        "dev.json",
+        "prod.json",
+        "cluster.json",
+        "lab.json",
+        "pack.json",
+    ]
+    .map(|name| dir.path().join(name));
+    for (file, snap) in files.iter().zip([&dev, &prod, &prod_cluster, &lab, &pack]) {
+        common::write_snapshot(file, snap, false);
+    }
+    let r = behind_of(&api, &files, &WITH_IMPACT);
+    assert_eq!(
+        r.pins[0]
+            .bump
+            .as_ref()
+            .unwrap()
+            .palette_validation_error
+            .as_deref(),
+        Some(
+            "1 record of the tenant scope was not asked; 2 records of project prod were not asked"
+        )
+    );
+
+    // only a pack record is in another project: Palette checked each record that it can check
+    let files = ["dev.json", "pack.json"].map(|name| dir.path().join(name));
+    let r = behind_of(&api, &files, &WITH_IMPACT);
+    let bump = r.pins[0].bump.as_ref().unwrap();
+    assert!(bump.palette_validation.as_ref().unwrap().accepts());
+    assert!(bump.palette_validation_error.is_none());
+}
+
+#[test]
+fn behind_keeps_the_refusal_of_palette_and_says_that_it_did_not_ask_a_record_of_another_project() {
+    let dir = tempfile::tempdir().unwrap();
+    let base = serve_behind();
+    let dev = profile_pinning_in(&base, BUMP_PROFILE_UID, Some("dev"));
+    let prod = profile_pinning_in(&base, "pr2", Some("prod"));
+    let api = base
+        .with(
+            post(&update_validate_packs_route(BUMP_PROFILE_UID)),
+            upgrade_refusal(UPGRADE_REFUSAL),
+        )
+        .with(profile_route(BUMP_PROFILE_UID), profile_document_running());
+    let files = ["dev.json", "prod.json"].map(|name| dir.path().join(name));
+    common::write_snapshot(&files[0], &dev, false);
+    common::write_snapshot(&files[1], &prod, false);
+    let r = behind_of(&api, &files, &WITH_IMPACT);
+
+    // the refusal stands: it is an error that Palette gave for a record that strata asked
+    let bump = r.pins[0].bump.as_ref().unwrap();
+    let answer = bump.palette_validation.as_ref().unwrap();
+    assert!(!answer.accepts());
+    assert_eq!(answer.errors()[0].clusters, [BUMP_CLUSTER]);
+    assert_eq!(
+        bump.palette_validation_error.as_deref(),
+        Some("1 record of project prod was not asked")
+    );
+    let text = common::terminal().render_behind(&r).unwrap();
+    let refusal = format!("      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on payments\n");
+    let missing = "      palette gave no answer: 1 record of project prod was not asked\n";
+    assert!(text.contains(&format!("{refusal}{missing}")), "{text}");
+}
 #[test]
 fn a_bump_of_a_report_written_before_the_ask_reads_with_no_answer_of_palette() {
     let old = serde_json::json!({"to": "1.65.0", "impact": "cluster-wide", "flags": ["IDENTITY"]});
@@ -13786,7 +13866,7 @@ fn each_report_of_behind_says_since_when_the_newest_version_is_listed_and_what_a
     let api = serve_behind();
     let path = dir.path().join("dev.json");
     let old = snapshot_of(&api, "pack:csi-aws-ebs@1.63.1").unwrap();
-    fs::write(&path, old.to_json(false).unwrap()).unwrap();
+    common::write_snapshot(&path, &old, false);
     let r = behind_of(
         &api,
         &[path],
@@ -13845,7 +13925,7 @@ fn behind_since_takes_a_report_of_its_id_and_refuses_another_version_or_another_
     common::make_fixtures(dir.path());
     let record = dir.path().join("record.json");
     let snap = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
-    fs::write(&record, snap.to_json(true).unwrap()).unwrap();
+    common::write_snapshot(&record, &snap, true);
     let err = ops::BehindReport::load(&record).unwrap_err();
     assert_eq!(err.kind(), "usage");
     assert!(
@@ -13895,7 +13975,7 @@ fn behind_does_not_offer_a_version_with_the_mark_and_says_so_of_a_pinned_one() {
     );
     let write = |name: &str, snap: &Snapshot| {
         let path = dir.path().join(name);
-        fs::write(&path, snap.to_json(false).unwrap()).unwrap();
+        common::write_snapshot(&path, snap, false);
         path
     };
     let records = vec![
@@ -13960,7 +14040,7 @@ fn a_floating_pin_is_behind_the_version_its_tag_names_and_a_pin_that_cannot_be_r
         ("lost.json", &lost),
     ] {
         let path = dir.path().join(name);
-        fs::write(&path, snap.to_json(false).unwrap()).unwrap();
+        common::write_snapshot(&path, snap, false);
         records.push(path);
     }
     let r = behind_of(&api, &records, &ops::BehindOptions::default());
@@ -14396,7 +14476,7 @@ fn snapshot_prod_set(dir: &Path) -> (ops::SetReport, std::path::PathBuf, Snapsho
     fs::create_dir_all(&out).unwrap();
     // a record of a cluster that left the set, and a file that is not a record
     let old = snapshot_cluster(&serve_cluster(MemoryApi::new(), dir, "cluster-a"), None).unwrap();
-    fs::write(out.join("left.json"), old.to_json(false).unwrap()).unwrap();
+    common::write_snapshot(&out.join("left.json"), &old, false);
     fs::write(out.join("notes.json"), "{\"a\": 1}").unwrap();
     let report = ops::snapshot_set(
         &ops::ClusterQuery {

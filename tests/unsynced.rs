@@ -310,7 +310,7 @@ fn packs_and_behind_name_the_registries_that_palette_does_not_sync_when_none_has
     let file = candidate(dir.path(), "charts-auth", json!({}));
     let snap = candidate_snapshot(&file, &api).unwrap();
     let record = dir.path().join("candidate.json");
-    fs::write(&record, snap.to_json(false).unwrap()).unwrap();
+    common::write_snapshot(&record, &snap, false);
     let r = ops::behind(
         &[record],
         &ops::BehindOptions::default(),
