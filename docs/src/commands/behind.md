@@ -58,10 +58,10 @@ comparison costs two pack reads for each pin that is behind.
 
 ## Palette accepts the move, or refuses it
 
-`bump to` says what a move does. It does not say that Palette takes the move. A
-pack can declare how far a cluster can move from the version it runs. Palette
-refuses a move that goes further than that. The public documentation gives the
-rule for Kubernetes: a cluster moves one minor version at a time.
+`bump to` says what a move does. It does not say that Palette takes the move.
+Palette can refuse a move: see
+[The upgrade dependency](../internals/palette/validate-routes.md#the-upgrade-dependency)
+for the rule.
 
 For each pin that is behind, `behind` asks Palette about the move to the newest
 version. The answer is under the `bump to` line:
@@ -104,11 +104,11 @@ The answer holds the errors of all the records:
 - A candidate, a pack record, an edge host, a cluster group, and an app profile
   get no request. The update that waits for a cluster gets none.
 
-Palette gives each error a code and a message, and no field for the clusters.
-The message names them. When Palette refuses a move for a profile, strata reads
-the profile document. It keeps the clusters that run the version and that the
-message names. A cluster record needs no such read: the route is the route of its
-cluster.
+The message of an error names the clusters, and the error has no field for them:
+see [The upgrade dependency](../internals/palette/validate-routes.md#the-upgrade-dependency).
+When Palette refuses a move for a profile, strata reads the profile document. It
+keeps the clusters that run the version and that the message names. A cluster
+record needs no such read: the route is the route of its cluster.
 
 Strata asks in the project of the first record that pins the pack, because
 Palette answers in the project of the connection. It does not ask a record of

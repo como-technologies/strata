@@ -20,7 +20,7 @@ of each response.
 | `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}` | Only for a version with a draft, once for each manifest of its two templates: `spec.published.content` and `spec.draft.content`. While a draft waits, `packs/manifests` gives the content of neither template. See [Drafts](../internals/palette/profiles.md#drafts). |
 | `GET /v1/dashboard/clusterprofiles/metadata` | The listing: `list`, and the uid of `<name>@<version>` and of `<name>@latest`. In a project, it holds the profiles of the project and the profiles of the tenant. |
 | `POST /v1/dashboard/clusterprofiles?limit=50` | The profile search, with the filter `scope`: one item for each profile name of that scope, with the uid of each version in `specSummary.versions[]`. `list` reads it for the scope of each version. In a project, it reads the tenant versions and the system versions. At tenant scope, it reads the system versions. Palette gives 50 names on a page, and strata raises `offset` as for `/v1/packs`. A Palette with no profile search answers HTTP 404 or 405, and the scopes stay unknown. |
-| `POST /v1/clusterprofiles/{uid}/validate/packs` | Whether Palette takes the packs of the version as an update of itself, for `snapshot <ref> --validate`. `behind` also sends it, with the newest version in the place of the pin. Palette checks it against the clusters that run the version. The request changes nothing. |
+| `POST /v1/clusterprofiles/{uid}/validate/packs` | Whether Palette takes the packs of the version as an update of itself, for `snapshot <ref> --validate`. `behind` also sends it: see [behind](../commands/behind.md#palette-accepts-the-move-or-refuses-it). The request changes nothing. |
 
 A missing variables endpoint, HTTP 404 or 405 on an older Palette, counts as no
 variables. The record says so in `source.variablesUnavailable`: see
@@ -36,7 +36,7 @@ reports the version as gone. A cluster does the same with its own document. See
 | --- | --- |
 | `GET /v1/spectroclusters/{uid}` | `spec.clusterProfileTemplates`: one applied profile each, with its packs. The state, in `status.state`. `verify` reads `status.state`, `metadata.isDeleted`, and `metadata.deletionTimestamp`: Palette keeps the document of a deleted cluster. |
 | `GET /v1/spectroclusters/{uid}/profiles/packs/manifests` | The registry digests and manifest contents, one entry for each applied profile. |
-| `GET /v1/spectroclusters/{uid}/variables` | The variable definitions and values, one entry for each applied profile. `strata preflight cluster:UID` reads the name and the value of each variable for the body of the create. It sends a sensitive value as the mask that Palette gives. When the route is missing, the profiles send no variable. |
+| `GET /v1/spectroclusters/{uid}/variables` | The variable definitions and values, one entry for each applied profile. Read by `strata preflight cluster:UID`: see [A cluster as Palette holds it](../commands/preflight/tiers.md#a-cluster-as-palette-holds-it). When the route is missing, the profiles send no variable. |
 | `GET /v1/spectroclusters/{uid}/config/rbacs` | `items[]`: the role bindings of the cluster, each with `spec.bindings[]` of `namespace`, `role`, `subjects`, and `type`. A cluster record and `verify` read it for the `policy` tier. After an HTTP 404 or 405, `rbacs` holds `null`. After another HTTP error, the tier has no `rbacs`, `errors.rbacs` of the tier holds the error, and strata still writes the record. |
 | `GET /v1/spectroclusters/{uid}/config/namespaces` | `items[]`: the namespaces of the cluster, each with `metadata.name`, `spec.isRegex`, and `spec.resourceAllocation`. A cluster record and `verify` read it for the `policy` tier. After an HTTP 404 or 405, `namespaces` holds `null`. After another HTTP error, the tier has no `namespaces`, `errors.namespaces` of the tier holds the error, and strata still writes the record. |
 | `GET /v1/dashboard/spectroclusters/meta` | The listing: `list clusters`, the uid of a cluster name, and the second reading of `consumers` when the search takes no `clusterProfiles`. A cluster name goes out first as `GET /v1/spectroclusters/<name>`; strata reads the listing after that HTTP 404. |
@@ -53,7 +53,7 @@ reports the version as gone. A cluster does the same with its own document. See
 | `GET /v1/cloudconfigs/{cloudType}/{configUid}` | The machine pools and the cloud part of the cluster, for `snapshot --shape`, and `verify` of a record that holds the `shape` tier. |
 | `POST /v1/spectroclusters/{uid}/validate/repave` | Whether a change of the profiles of the cluster replaces its nodes, for `compare --repave`: a move to a profile version, or the update that waits. The request changes nothing. |
 | `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave` | The same answer for a cluster template, for `compare --repave` of a cluster that the template governs. The body names the profiles by uid, with `isUpgradeNow: false`. The request changes nothing. |
-| `POST /v1/spectroclusters/{uid}/validate/packs` | Whether Palette accepts the packs of a change of the profiles of the cluster, for `compare --validate`. It takes the body of `validate/repave`, and changes nothing. `behind` sends it for a record of a cluster. The newest version replaces the pin. |
+| `POST /v1/spectroclusters/{uid}/validate/packs` | Whether Palette accepts the packs of a change of the profiles of the cluster, for `compare --validate`. It takes the body of `validate/repave`, and changes nothing. `behind` sends it for a record of a cluster: see [behind](../commands/behind.md#palette-accepts-the-move-or-refuses-it). |
 
 ## The fleet
 
@@ -143,9 +143,6 @@ include them. `strata preflight --rules --json` lists the request of every rule.
 
 | Request | Read by | Gives |
 | --- | --- | --- |
-| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | `instance-offering` | Each instance type of the region, with `type` and `nonSupportedZones`. The field lists the zones that do not offer the type, and is `null` when each zone offers it. One request answers every pool. |
-| `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `ssh-key-pair` | `keyNames[]`: the key pairs of the account in the region. |
-| `POST /v1/clouds/gcp/properties/validate` | `gcp-properties` | `204` when the account reads the project and each zone of the pools. The body has `cloudAccountUid`, `projectId`, `region`, and `azs[]`. |
-
-See [The list routes](../internals/palette/validate-routes.md#the-list-routes) and
-[The property routes](../internals/palette/validate-routes.md#the-property-routes).
+| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | `instance-offering` | The instance types of the region. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
+| `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `ssh-key-pair` | The key pairs of the account in the region. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
+| `POST /v1/clouds/gcp/properties/validate` | `gcp-properties` | The check of the project and the zones. See [The property routes](../internals/palette/validate-routes.md#the-property-routes). |

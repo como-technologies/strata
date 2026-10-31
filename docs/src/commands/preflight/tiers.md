@@ -48,20 +48,19 @@ fault shows after a full apply. See
 
 ## A profile of another cloud type
 
-The validate route refuses a body with a profile of another cloud type. It
-gives HTTP 500, and not a 4xx. Here the body of an AWS create names a profile of
-the cloud type `gcp`. `palette-validate` reads the refusal as the answer of the
-route, so the check fails with the message of Palette:
+Here the body of an AWS create names a profile of the cloud type `gcp`. The
+validate route refuses it, and `palette-validate` fails with the message of
+Palette:
 
 ```text
 {{#include ../../output/preflight-cloud-mismatch.txt}}
 ```
 
-A profile of the cloud type `all` fits each cloud. The catalog has no rule of
-its own for this check, because the route answers it. A pack version that does
-not list the cloud type is another case. The route takes that body, so the rule
-`pack-cloud-support` stays in the catalog. See
-[A check that a validate route answers](../../reference/preflight-rules.md#a-check-that-a-validate-route-answers).
+The catalog has no rule of its own for this check, because the route answers it.
+See [The validate routes](../../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate)
+for the refusal, and
+[The gaps that preflight fills](../../reference/preflight-rules.md#the-gaps-that-preflight-fills)
+for the rule `pack-cloud-support`.
 
 ## A cluster as Palette holds it
 
@@ -80,10 +79,10 @@ values of the profile. A rule over `.entity.spec.profiles[].variables` reads
 them too. See
 [The validate routes](../../internals/palette/validate-routes.md#the-variables-of-the-body).
 
-Palette masks the value of a sensitive variable in its answer. Strata sends the
-mask as Palette gives it, so the validate route gets a mask and not the secret.
-A change file merges over the variables by name. A variable of the file
-replaces the value of the variable with that name. A new name adds a variable.
+Strata sends the value of a sensitive variable as the mask that Palette gives,
+so the validate route gets a mask and not the secret. A change file merges over
+the variables by name. A variable of the file replaces the value of the variable
+with that name. A new name adds a variable.
 
 ## A rule over a list
 
@@ -112,12 +111,12 @@ states `each`.
 
 ## A rule over the list of an account
 
-Palette lists some facts of a cloud account in one request. The instance type
-route lists each type of a region, and `nonSupportedZones` of a type names the
-zones that do not offer it. The key pair route lists the key pairs of the
-account in a region. The tool of the cloud gives the same answer, but it needs
-the credentials of the cloud on your machine. These rules need the key of
-Palette alone.
+Palette lists some facts of a cloud account in one request: the instance types
+of a region, and its key pairs. The tool of the cloud gives the same answer, but
+it needs the credentials of the cloud on your machine. These rules need the key
+of Palette alone. See
+[The list routes](../../internals/palette/validate-routes.md#the-list-routes)
+for what each route gives.
 
 `instance-offering` fails for each pool whose type names a zone of the pool in
 `nonSupportedZones`. It also fails for a pool whose type the region does not
@@ -128,8 +127,7 @@ marks for `t3.xlarge`:
 {{#include ../../output/preflight-offering.txt}}
 ```
 
-Palette gives `null` in `nonSupportedZones` for a type that each zone offers.
-Most types give `null`. The rule reads `null` as no zone. Here the same pools use
+The rule reads `null` in `nonSupportedZones` as no zone. Here the same pools use
 `t3.large`, and they pass in that zone:
 
 ```text
@@ -137,16 +135,12 @@ Most types give `null`. The rule reads `null` as no zone. Here the same pools us
 ```
 
 `ssh-key-pair` fails when `sshKeyName` of the entity is not in the list of the
-account. The rule applies to EKS. The property route of EKS checks the key pair
-only when the body has a `vpcId`. So an EKS cluster with a dynamic VPC reaches
-no check of it. On AWS, the properties route refuses a key pair that the region
-lacks, and `iaas-pod-identity` sends the key pair to that route. Here the entity
+account. The rule applies to EKS, and the list routes say why. Here the entity
 of an EKS cluster names a key pair that the account lacks:
 
 ```text
 {{#include ../../output/preflight-ssh-key.txt}}
 ```
 
-The lists are the catalog of Palette, not the cloud. A type that the list does
-not mark can still fail, so the `reproduce:` line asks the cloud. See
-[The list routes](../../internals/palette/validate-routes.md#the-list-routes).
+The `reproduce:` line of each rule asks the cloud, because the list is the
+catalog of Palette and not the cloud.

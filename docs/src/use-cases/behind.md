@@ -46,9 +46,10 @@ With last week's run, the report says what arrived since:
 
 ## 3. A move that Palette refuses
 
-A bump can be a move that Palette refuses. A pack can declare how far a cluster
-can move from the version it runs. `aws-stack@1.1.11` pins `csi-aws-ebs` 1.63.1,
-the registry has 1.65.0, and the cluster `payments` runs the profile:
+A bump can be a move that Palette refuses: see
+[The upgrade dependency](../internals/palette/validate-routes.md#the-upgrade-dependency).
+`aws-stack@1.1.11` pins `csi-aws-ebs` 1.63.1, the registry has 1.65.0, and the
+cluster `payments` runs the profile:
 
 ```text
 {{#include ../output/behind-refused.txt}}

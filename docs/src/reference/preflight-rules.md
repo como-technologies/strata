@@ -161,7 +161,7 @@ not make the checks that the route answers.
 | Rule that left the catalog | The check | What the route answers |
 | --- | --- | --- |
 | `gke-pool-multiple-3` | The size of a GKE worker pool is a multiple of 3. | `InvalidParam`, "Node pool size should be multiple of 3". A live run shows it: see [What the preflight runs show](../development/live-runs.md#what-the-preflight-runs-show). |
-| `profile-cloud-mismatch` | Each profile is of the cloud type of the cluster, or of `all`. | HTTP 500, `ClusterProfilesNotSupported`, `Cluster profiles '<name>' are not supported with 'aws' environment`. A live run shows it: see [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). `palette-validate` reports the refusal. |
+| `profile-cloud-mismatch` | Each profile is of the cloud type of the cluster, or of `all`. | HTTP 500 and `ClusterProfilesNotSupported`. `palette-validate` reports the refusal. See [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). |
 
 ### The checks that wait for a call of the route
 
@@ -198,7 +198,7 @@ them, or they need more than the body of the create. They stay in the catalog.
 | `edge-vip-multi-node` | The count of the hosts. |
 | `azure-subnets-in-vnet` | The containment of the subnet CIDRs in the CIDR of the vnet. |
 | `ntp-servers` | The warning when the cluster names no server. |
-| `pack-cloud-support` | All of it. The route takes a body with a pack version that does not list the cloud type, and `palette-validate` passes. Palette refuses the pack at the create. A live run shows that the route takes the body: see [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). |
+| `pack-cloud-support` | All of it. No route refuses the fault: see [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). |
 | `template-outside`, the `edge-host-*` rules | They read a document of the tenant. No validate route answers them. |
 | `instance-offering`, `ssh-key-pair` | They read a list of the cloud account: the instance types of a region, and its key pairs. No route refuses the fault, and Palette owns the rule. For `ssh-key-pair`, the gap is an EKS cluster with a dynamic VPC or with no subnet id. |
 | `palette-validate`, `pack-dependency`, `ecr-oci-images`, `worker-cpu-floor`, `eks-public-subnet-mapping`, `iaas-pod-identity`, `sts-account-not-assumable`, `gcp-properties` | They call a route, and copy no answer of it. |

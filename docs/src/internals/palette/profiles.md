@@ -358,12 +358,11 @@ from the code of Palette, and no live run checks them:
   `template-route-says`, and `template-route-json` show the answer. For the
   same move as the route of the cluster, Palette says repave:
   `PackValuesUpdated` for `kubernetes` and `kubeadmconfig.postKubeadmCommands`.
-  Palette asks the question of one cluster of the template, with the profiles
+- Palette asks the question of one cluster of the template, with the profiles
   of the body as the target. A profile that the cluster runs keeps its copy,
-  and a new uid takes its published packs.
-- Palette takes that cluster from a map, in no fixed order. So two requests
-  can ask two different clusters of the template, and the cluster that
-  `compare` names can be a different one.
+  and a new uid takes its published packs. Palette takes that cluster from a
+  map, in no fixed order. So two requests can ask two different clusters of
+  the template, and the cluster that `compare` names can be a different one.
 - With `isUpgradeNow: true`, Palette uses the profiles of the template, not
   the profiles of the body. It asks one cluster that waits for the update of
   the template, or that failed it.

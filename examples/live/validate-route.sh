@@ -22,8 +22,8 @@
 #
 # Each case has two checks. `<case>` is that the route refuses the body. `<case>-says` is that the
 # refusal names the fault. A case that fails shows that the route does not answer the check, so
-# its rule stays in the catalog. One case is the other way (#415): the route takes the body of
-# pack-cloud-support, so no route answers that check, and its rule is a gap that preflight fills.
+# its rule stays in the catalog. One case expects the opposite result (#415): the route takes the
+# body of pack-cloud-support, so no route answers that check, and its rule is a gap that preflight fills.
 # Its `<case>` is that palette-validate passes, and its `<case>-says` is that the report holds no
 # message of palette-validate.
 #
