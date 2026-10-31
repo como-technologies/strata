@@ -572,15 +572,30 @@ fn palette_takes_a_loose_semantic_version_or_a_text_with_three_numbers_as_the_ve
     );
 }
 
-#[test]
-fn a_variable_with_a_name_and_a_default_loads_with_the_defaults_of_a_record() {
+/// Load `text` as a candidate file.
+fn load_text(text: &str) -> Result<LoadedCandidate> {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("c.yaml");
-    let with = |variables: &str| {
-        std::fs::write(&file, format!("{SAME_CANDIDATE}{variables}")).unwrap();
-        load(&file)
-    };
-    let c = with("- name: tier\n  defaultValue: gold\n")
+    std::fs::write(&file, text).unwrap();
+    load(&file)
+}
+
+/// Load [`SAME_CANDIDATE`] with `variables` after its first variable.
+fn with_variables(variables: &str) -> Result<LoadedCandidate> {
+    load_text(&format!("{SAME_CANDIDATE}{variables}"))
+}
+
+/// The message of the `candidate-invalid` error that the load of `result` gives.
+fn load_refusal(result: Result<LoadedCandidate>) -> String {
+    match result.unwrap_err() {
+        Error::CandidateInvalid { message, .. } => message,
+        other => panic!("not candidate-invalid: {other}"),
+    }
+}
+
+#[test]
+fn a_variable_with_a_name_and_a_default_loads_with_the_defaults_of_a_record() {
+    let c = with_variables("- name: tier\n  defaultValue: gold\n")
         .unwrap()
         .candidate;
     let tier = &c.variables[1];
@@ -594,11 +609,133 @@ fn a_variable_with_a_name_and_a_default_loads_with_the_defaults_of_a_record() {
     );
     assert!(!tier.required && tier.options.is_empty());
     // a variable of Palette keeps the twelve fields, so a field of another name is not kept
-    assert!(with("- name: tier\n  order: 3\n").is_ok());
-    match with("- displayName: no name\n").unwrap_err() {
-        Error::CandidateInvalid { message, .. } => {
-            assert!(message.contains("missing field `name`"), "{message}")
-        }
-        other => panic!("not candidate-invalid: {other}"),
+    assert!(with_variables("- name: tier\n  order: 3\n").is_ok());
+    let message = load_refusal(with_variables("- displayName: no name\n"));
+    assert!(message.contains("missing field `name`"), "{message}");
+}
+
+#[test]
+fn a_null_in_a_variable_is_the_default_of_the_field_as_a_variable_of_palette_has_it() {
+    // each file, and the document of Palette that holds the same value
+    for (field, palette) in [
+        ("description: null", json!({"description": null})),
+        ("description: ~", json!({"description": null})),
+        ("description:", json!({})),
+        ("displayName: ~\n  defaultValue: ~", json!({})),
+        ("format: ~", json!({"format": null})),
+        ("format: 3", json!({"format": 3})),
+        ("inputType: true", json!({"inputType": true})),
+        ("required: ~\n  hidden: null", json!({})),
+        ("options: ~", json!({"options": null})),
+        (
+            "options:\n  - label: ~\n    value: x",
+            json!({"options": [{"value": "x"}]}),
+        ),
+    ] {
+        let c = with_variables(&format!("- name: port\n  {field}\n"))
+            .unwrap_or_else(|e| panic!("{field}: {e}"))
+            .candidate;
+        let mut given = palette;
+        given["name"] = json!("port");
+        assert_eq!(c.variables[1], Variable::from_palette(&given), "{field}");
     }
+    let port = with_variables("- name: port\n  description: ~\n")
+        .unwrap()
+        .candidate
+        .variables
+        .remove(1);
+    assert_eq!(port.description, "", "a null is not the text `~`");
+}
+
+#[test]
+fn a_variable_whose_name_is_null_is_candidate_invalid() {
+    for name in ["~", "null"] {
+        let message = load_refusal(with_variables(&format!("- name: {name}\n")));
+        assert!(message.contains("expected a string"), "{name}: {message}");
+    }
+}
+
+#[test]
+fn a_number_or_a_flag_in_the_default_of_a_variable_keeps_its_text() {
+    // 0.24.0 read each of these as empty text
+    for (written, text) in [
+        ("8080", "8080"),
+        ("true", "true"),
+        ("1.50", "1.50"),
+        ("0x1F", "0x1F"),
+    ] {
+        let c = with_variables(&format!("- name: port\n  defaultValue: {written}\n"))
+            .unwrap()
+            .candidate;
+        assert_eq!(c.variables[1].default_value, text, "{written}");
+    }
+    for field in ["defaultValue", "format"] {
+        let message = load_refusal(with_variables(&format!("- name: port\n  {field}: [a]\n")));
+        assert!(message.contains(field), "{message}");
+    }
+}
+
+#[test]
+fn a_flag_of_a_variable_that_is_not_a_boolean_is_candidate_invalid() {
+    // 0.24.0 loaded each of these as `false`
+    for (field, value) in [
+        ("required", "\"yes\""),
+        ("required", "\"true\""),
+        ("hidden", "yes"),
+    ] {
+        let message = load_refusal(with_variables(&format!(
+            "- name: port\n  {field}: {value}\n"
+        )));
+        assert!(
+            message.contains(&format!("variables[1].{field}: invalid type: string")),
+            "{field}: {message}"
+        );
+        assert!(message.contains("expected a boolean"), "{field}: {message}");
+    }
+}
+
+/// [`SAME_CANDIDATE`] with `params` on its first layer, each line indented by four spaces.
+fn with_params(params: &str) -> Result<LoadedCandidate> {
+    load_text(&SAME_CANDIDATE.replace(
+        "  tag: 1.21.1\n",
+        &format!("  tag: 1.21.1\n  params:\n{params}"),
+    ))
+}
+
+#[test]
+fn a_param_that_is_not_text_is_candidate_invalid_and_names_the_layer_and_the_param() {
+    assert_eq!(
+        load_refusal(with_params("    replicas: 3\n")),
+        "layer 1 (cert-manager): the param replicas is 3, and it must be text"
+    );
+    for (params, name, kind) in [
+        ("    enabled: true\n", "enabled", "text"),
+        ("    list: [a]\n", "list", "text"),
+        ("    gone: ~\n", "gone", "text"),
+        ("    installOrder: \"2\"\n", "installOrder", "an integer"),
+        ("    installOrder: 2.5\n", "installOrder", "an integer"),
+    ] {
+        let message = load_refusal(with_params(params));
+        assert!(
+            message.starts_with("layer 1 (cert-manager): the param "),
+            "{message}"
+        );
+        assert!(
+            message.contains(name) && message.ends_with(kind),
+            "{message}"
+        );
+    }
+}
+
+#[test]
+fn a_param_that_is_text_and_an_install_order_that_is_an_integer_load() {
+    let c = with_params("    replicas: \"3\"\n    installOrder: 2\n")
+        .unwrap()
+        .candidate;
+    assert_eq!(
+        c.layers[0].params,
+        *json!({"replicas": "3", "installOrder": 2})
+            .as_object()
+            .unwrap()
+    );
 }

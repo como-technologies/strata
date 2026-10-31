@@ -19,8 +19,8 @@ use crate::oci_provider::OciProvider;
 use crate::pack_type::PackType;
 
 /// The schema of [`Pack::params`]: an object whose values are text, but for the install order of a
-/// tier of an app profile, which is an integer.
-fn params_schema(_: &mut SchemaGenerator) -> Schema {
+/// tier of an app profile, which is an integer. A layer of a candidate has the same schema.
+pub(crate) fn params_schema(_: &mut SchemaGenerator) -> Schema {
     json_schema!({
         "type": "object",
         "properties": {
@@ -30,6 +30,19 @@ fn params_schema(_: &mut SchemaGenerator) -> Schema {
             },
         },
         "additionalProperties": {"type": "string"},
+    })
+}
+
+/// The first param of `params` that [`params_schema`] refuses, as a clause that names the param.
+/// None when the schema takes each param.
+pub(crate) fn params_problem(params: &Map<String, Value>) -> Option<String> {
+    params.iter().find_map(|(name, value)| {
+        let (fits, kind) = if name == TIER_INSTALL_ORDER {
+            (value.is_i64() || value.is_u64(), "an integer")
+        } else {
+            (value.is_string(), "text")
+        };
+        (!fits).then(|| format!("the param {name} is {value}, and it must be {kind}"))
     })
 }
 

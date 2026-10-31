@@ -38,8 +38,8 @@ the shape of each one, so a validator refuses a value of another shape:
   `name` is required.
 - A segment of the path of a leaf is a string, an integer, or an object with a
   `name`.
-- The `params` of a pack are an object of text. The one exception is
-  `installOrder` of an app tier, which is an integer.
+- The `params` of a pack, and of a layer of a candidate, are an object of text.
+  The one exception is `installOrder` of an app tier, which is an integer.
 - A cluster record lists the keys of each tier by its name. `propertyNames`
   also takes the name of a tier of a later release.
 - An `error` is an object with a `kind` and a `message`, and the fields of the
@@ -53,7 +53,9 @@ the shape of each one, so a validator refuses a value of another shape:
 {{#include ../output/schema-time.txt}}
 ```
 
-A record that an older release wrote still validates, and it keeps its root.
+A record that an older release wrote still validates, and it keeps its root. One
+case differs: a record with a variable that has `name: null`. Strata does not
+read it. See [The documents](../reference/compatibility.md#the-documents).
 
 ## Options
 

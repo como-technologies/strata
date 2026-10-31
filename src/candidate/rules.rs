@@ -8,6 +8,7 @@ use super::{
     Candidate, LayerKind, LoadedCandidate, LoadedLayer, MINTED_LAYER, RegistryRef, export, gaps,
 };
 use crate::error::{Error, Result};
+use crate::snapshot::pack::params_problem;
 
 fn pick_registry(
     uid: &Option<String>,
@@ -114,6 +115,9 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
                 None
             }
         };
+        if let Some(problem) = params_problem(&l.params) {
+            return Err(invalid(format!("{whom}: {problem}")));
+        }
         let values = match (&l.values, &l.values_file) {
             (Some(_), Some(_)) => {
                 return Err(invalid(format!("{whom} sets both values and valuesFile")));

@@ -27,7 +27,7 @@ use pack::masked_paths;
 mod build;
 pub(crate) use build::{manifest_entry, manifest_of};
 mod cluster;
-mod pack;
+pub(crate) mod pack;
 pub(crate) mod policy;
 pub(crate) mod shape;
 mod tier_schema;
