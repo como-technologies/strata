@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -68,15 +68,16 @@ pub struct ClusterSource {
     /// waits, and when strata could not read it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pending_repave: Option<PendingRepave>,
-    /// Why strata could not read a part of the cluster that is beside the copy. The key is the
-    /// field that is then absent: `updatesPending` or `pendingRepave`. The reason is the HTTP
-    /// error of Palette, such as `HTTP 403: forbidden`. The tiers have their own `errors`, in the
-    /// same shape. Outside the root.
+    /// Why strata could not read a part of the cluster that is beside the copy. The key names the
+    /// part, and the field of the cluster is then absent. The reason is the HTTP error of Palette,
+    /// such as `HTTP 403: forbidden`. The tiers have their own `errors`, in the same shape. Outside
+    /// the root.
     ///
     /// A record of strata 0.24 and before holds `updatesPendingError` and `pendingRepaveError`
     /// instead. [`Snapshot::load`](super::Snapshot::load) reads them into this map.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub errors: BTreeMap<String, String>,
+    #[schemars(schema_with = "read_errors_schema")]
+    pub errors: BTreeMap<Open<ClusterRead>, String>,
     /// With `snapshot --macros`: each user macro the recorded content uses, and the `sha256:` of
     /// the value Palette gives it for this cluster, or `unresolved`. A value can be a secret, so
     /// the record holds its digest and not the value. Outside the root; `verify` reads the values
@@ -108,21 +109,42 @@ pub struct ClusterSource {
     pub tiers: BTreeMap<Open<Tier>, ClusterTier>,
 }
 
-/// The key of [`ClusterSource::errors`] for `updatesPending`: why strata could not read the
-/// notifications.
-pub(super) const UPDATES_PENDING: &str = "updatesPending";
+/// A part of a cluster that is beside its copy, and that strata reads with a request of its own.
+///
+/// [`ClusterSource::errors`] names a part that strata could not read by one of these values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ClusterRead {
+    /// The open notifications of an update of a profile that the record covers. The field
+    /// `updatesPending` is then absent.
+    UpdatesPending,
+    /// The repave of the cluster that waits for approval. The field `pendingRepave` is then
+    /// absent.
+    PendingRepave,
+}
 
-/// The key of [`ClusterSource::errors`] for `pendingRepave`: why strata could not read the repave
-/// that waits.
-pub(super) const PENDING_REPAVE: &str = "pendingRepave";
+impl_closed_set!(ClusterRead {
+    UpdatesPending => "updatesPending",
+    PendingRepave => "pendingRepave",
+});
 
 /// The fields of a record of strata 0.24 and before that held a read error of the cluster, with
-/// the key of [`ClusterSource::errors`] that holds it now. Do not change this list: `load` reads
+/// the part of [`ClusterSource::errors`] that holds it now. Do not change this list: `load` reads
 /// an older record through it.
-const OLDER_ERRORS: [(&str, &str); 2] = [
-    ("updatesPendingError", UPDATES_PENDING),
-    ("pendingRepaveError", PENDING_REPAVE),
+const OLDER_ERRORS: [(&str, ClusterRead); 2] = [
+    ("updatesPendingError", ClusterRead::UpdatesPending),
+    ("pendingRepaveError", ClusterRead::PendingRepave),
 ];
+
+/// The schema of [`ClusterSource::errors`]: a map from a part to the error of Palette. A key can
+/// also name a part of a later release.
+fn read_errors_schema(generator: &mut SchemaGenerator) -> Schema {
+    json_schema!({
+        "type": "object",
+        "propertyNames": generator.subschema_for::<Open<ClusterRead>>(),
+        "additionalProperties": {"type": "string"},
+    })
+}
 
 impl ClusterSource {
     /// The tier `tier` of the record, when the record carries it.
@@ -133,13 +155,18 @@ impl ClusterSource {
     /// Why strata could not read the notifications, when `updates_pending` is absent for that
     /// reason.
     pub fn updates_pending_error(&self) -> Option<&str> {
-        self.errors.get(UPDATES_PENDING).map(String::as_str)
+        self.read_error(ClusterRead::UpdatesPending)
     }
 
     /// Why strata could not read the repave that waits, when `pending_repave` is absent for that
     /// reason.
     pub fn pending_repave_error(&self) -> Option<&str> {
-        self.errors.get(PENDING_REPAVE).map(String::as_str)
+        self.read_error(ClusterRead::PendingRepave)
+    }
+
+    /// Why strata could not read the part `read` of the cluster, when it could not.
+    fn read_error(&self, read: ClusterRead) -> Option<&str> {
+        self.errors.get(&read.into()).map(String::as_str)
     }
 }
 
@@ -152,7 +179,7 @@ pub(super) fn read_older_errors(record: &mut Value) {
     else {
         return;
     };
-    for (older, key) in OLDER_ERRORS {
+    for (older, read) in OLDER_ERRORS {
         // an older record can hold null here, which is no error
         let Some(why) = cluster.remove(older).filter(Value::is_string) else {
             continue;
@@ -162,7 +189,7 @@ pub(super) fn read_older_errors(record: &mut Value) {
             .or_insert_with(|| json!({}))
             .as_object_mut()
         {
-            errors.entry(key).or_insert(why);
+            errors.entry(read.as_str()).or_insert(why);
         }
     }
 }
@@ -170,21 +197,24 @@ pub(super) fn read_older_errors(record: &mut Value) {
 /// The part of the cluster in `raw` that strata could not read and that is beside the copy, with
 /// why: the notifications and the repave that waits. The role bindings and the namespaces are in
 /// the `errors` of the tier `policy`.
-pub(crate) fn cluster_errors(raw: &RawCluster) -> BTreeMap<String, String> {
+pub(crate) fn cluster_errors(raw: &RawCluster) -> BTreeMap<Open<ClusterRead>, String> {
     unread([
-        (UPDATES_PENDING, &raw.errors.notifications),
-        (PENDING_REPAVE, &raw.errors.repave),
+        (
+            ClusterRead::UpdatesPending.into(),
+            &raw.errors.notifications,
+        ),
+        (ClusterRead::PendingRepave.into(), &raw.errors.repave),
     ])
 }
 
-/// The entries of `reasons` that hold a reason, as a map from the field to why strata could not
+/// The entries of `reasons` that hold a reason, as a map from the part to why strata could not
 /// read it.
-pub(super) fn unread<const N: usize>(
-    reasons: [(&str, &Option<String>); N],
-) -> BTreeMap<String, String> {
+pub(super) fn unread<K: Ord, const N: usize>(
+    reasons: [(K, &Option<String>); N],
+) -> BTreeMap<K, String> {
     reasons
         .into_iter()
-        .filter_map(|(key, why)| Some((key.to_string(), why.clone()?)))
+        .filter_map(|(key, why)| Some((key, why.clone()?)))
         .collect()
 }
 
@@ -677,15 +707,33 @@ mod tests {
     #[test]
     fn the_errors_of_a_cluster_name_the_field_that_strata_could_not_read() {
         let reasons = [
-            (UPDATES_PENDING, &Some("HTTP 404: not found".to_string())),
-            (PENDING_REPAVE, &None),
+            (
+                Open::Known(ClusterRead::UpdatesPending),
+                &Some("HTTP 404: not found".to_string()),
+            ),
+            (Open::Known(ClusterRead::PendingRepave), &None),
         ];
         assert_eq!(
             unread(reasons),
             BTreeMap::from([(
-                UPDATES_PENDING.to_string(),
+                Open::Known(ClusterRead::UpdatesPending),
                 "HTTP 404: not found".to_string()
             )])
+        );
+    }
+
+    #[test]
+    fn the_errors_of_a_record_keep_a_part_that_a_later_release_names() {
+        let errors: BTreeMap<Open<ClusterRead>, String> = serde_json::from_value(json!({
+            "network": "HTTP 500: later",
+            "pendingRepave": "HTTP 403: forbidden",
+        }))
+        .unwrap();
+        let known: Vec<Option<ClusterRead>> = errors.keys().map(Open::known).collect();
+        assert_eq!(known, [None, Some(ClusterRead::PendingRepave)]);
+        assert_eq!(
+            serde_json::to_value(&errors).unwrap(),
+            json!({"network": "HTTP 500: later", "pendingRepave": "HTTP 403: forbidden"})
         );
     }
 }

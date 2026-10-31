@@ -209,6 +209,27 @@ pub fn write_yaml(path: &Path, doc: &Value) {
     fs::write(path, serde_yaml::to_string(doc).unwrap()).unwrap();
 }
 
+/// The schema of the `fields` of the tier `tier`, in `record_schema`, the schema of a record.
+pub fn tier_fields(record_schema: &Value, tier: strata::snapshot::Tier) -> &Value {
+    use strata::closed_set::ClosedSet;
+    let tiers = &record_schema["$defs"]["ClusterSource"]["properties"]["tiers"];
+    &tiers["properties"][tier.as_str()]["allOf"][1]["properties"]["fields"]
+}
+
+/// True when `schema`, the schema of a text field, accepts the text `value`. It reads only the
+/// parts that strata writes for a text: `anyOf`, `type`, `maxLength`, and `format`.
+pub fn text_matches_schema(schema: &Value, value: &str) -> bool {
+    if let Some(options) = schema["anyOf"].as_array() {
+        return options.iter().any(|o| text_matches_schema(o, value));
+    }
+    let short_enough = schema["maxLength"]
+        .as_u64()
+        .is_none_or(|max| value.chars().count() as u64 <= max);
+    let is_time =
+        schema["format"] != "date-time" || chrono::DateTime::parse_from_rfc3339(value).is_ok();
+    schema["type"] == "string" && short_enough && is_time
+}
+
 /// Assemble a cluster that runs the profile fixtures `profiles`, in order, the way Palette returns
 /// it: applied templates on the cluster, per-profile pack manifests, and per-profile variables
 /// with values: `values` by name, else the default, and SECRET_VALUE for a sensitive variable.

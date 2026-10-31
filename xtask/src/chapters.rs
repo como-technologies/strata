@@ -1055,6 +1055,12 @@ fn commands(r: &mut Runner) {
         r#"strata schema snapshot | jq -c '."$defs".ClusterSource.properties.tiers.properties | keys'"#,
     );
     r.step(
+        "schema-read-errors",
+        0,
+        false,
+        r#"strata schema snapshot | jq -c '."$defs".ClusterRead.oneOf | map(.const)'"#,
+    );
+    r.step(
         "schema-time",
         0,
         false,

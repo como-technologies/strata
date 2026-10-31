@@ -10615,6 +10615,14 @@ fn a_cluster_record_carries_the_tiers_that_palette_gives_and_names_them() {
     );
 }
 
+/// Make sure that each key of the object `written` has a property in `named`, the schema of an
+/// object. `at` names the place, for the message.
+fn assert_keys_named(written: &Value, named: &Value, at: &str) {
+    for key in written.as_object().unwrap().keys() {
+        assert!(named["properties"].get(key).is_some(), "{at} has {key}");
+    }
+}
+
 #[test]
 fn the_schema_of_the_tiers_names_each_key_of_the_fields_that_a_record_holds() {
     let dir = tempfile::tempdir().unwrap();
@@ -10635,30 +10643,49 @@ fn the_schema_of_the_tiers_names_each_key_of_the_fields_that_a_record_holds() {
     );
 
     let schema = serde_json::to_value(schemars::schema_for!(Snapshot)).unwrap();
-    let tiers = &schema["$defs"]["ClusterSource"]["properties"]["tiers"]["properties"];
-    // each key of `written` has a property in `named`
-    let check = |written: &Value, named: &Value, at: &str| {
-        for key in written.as_object().unwrap().keys() {
-            assert!(named["properties"].get(key).is_some(), "{at} has {key}");
-        }
-    };
-    let fields = |tier: Tier| &tiers[tier.as_str()]["allOf"][1]["properties"]["fields"];
+    let fields = |tier: Tier| common::tier_fields(&schema, tier);
     let written = |tier: Tier| &cluster.tier(tier).unwrap().fields;
-    check(written(Tier::Applied), fields(Tier::Applied), "applied");
+    assert_keys_named(written(Tier::Applied), fields(Tier::Applied), "applied");
     for pack in written(Tier::Running).as_array().unwrap() {
-        check(pack, &fields(Tier::Running)["items"], "running");
+        assert_keys_named(pack, &fields(Tier::Running)["items"], "running");
     }
-    check(written(Tier::Policy), fields(Tier::Policy), "policy");
+    assert_keys_named(written(Tier::Policy), fields(Tier::Policy), "policy");
     let shape = written(Tier::Shape);
-    check(shape, fields(Tier::Shape), "shape");
+    assert_keys_named(shape, fields(Tier::Shape), "shape");
     // the keys that only some clouds have, such as the region, stay open
     for pool in shape["pools"].as_array().unwrap() {
-        check(
+        assert_keys_named(
             pool,
             &fields(Tier::Shape)["properties"]["pools"]["items"],
             "shape.pools",
         );
     }
+}
+
+#[test]
+fn the_schema_of_the_policy_tier_names_each_key_of_a_cluster_group() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut doc = group_doc(dir.path());
+    // values that do not parse give the key `valuesParseError`
+    doc["spec"]["clustersConfig"] = clusters_config(6000, "a: [");
+    let api = serve_cluster_group(MemoryApi::new(), dir.path()).with(group_route("g1"), doc);
+    let group = common::snapshot_of(&api, "clustergroup:g1").unwrap();
+    let written = &group
+        .source
+        .cluster
+        .as_ref()
+        .unwrap()
+        .tier(Tier::Policy)
+        .unwrap()
+        .fields;
+    assert!(written["valuesParseError"].is_string(), "{written}");
+    let schema = serde_json::to_value(schemars::schema_for!(Snapshot)).unwrap();
+    assert_keys_named(
+        written,
+        common::tier_fields(&schema, Tier::Policy),
+        "the policy of a group",
+    );
 }
 
 #[test]

@@ -62,20 +62,18 @@ same shape. Release 0.24.0 wrote `updatesPendingError` and `pendingRepaveError`
 for these two. Strata reads an older record into `errors`, so `compare`,
 `verify`, and the notes give the same answer for it. The id stays, because the
 root does not cover these fields. An older strata that reads a new record shows
-no reason, and the record still compares. A script that reads
-`updatesPendingError` or `pendingRepaveError` must read `errors` too. In the
-library, `ClusterSource` has no field `updates_pending_error` or
-`pending_repave_error`. Its methods `updates_pending_error()` and
-`pending_repave_error()` give the same text.
+no reason, and the record still compares.
 
-After 0.24.0, the schema states the shape of each field that it left open. A
-variable has its twelve fields, and `name` is required. A segment of a leaf is
-a key, an integer, or an object with a `name`. The `params` of a pack are an
-object of text, but for `installOrder`, which is an integer. A tier has the
-keys of its `fields`.
+A script that reads `updatesPendingError` or `pendingRepaveError` must read
+`errors` too. In the library, `ClusterSource` has no field
+`updates_pending_error` or `pending_repave_error`. Its methods
+`updates_pending_error()` and `pending_repave_error()` give the same text. The
+keys of `ClusterSource::errors` are `Open<ClusterRead>`, so a key of a later
+release loads too.
 
-An `error` has a `kind` and a `message`. A time has `format: date-time`. A
-record that strata takes from Palette stays the same. So the ids stay, no root
+After 0.24.0, the schema states the shape of each field that it left open. See
+[The shape of each open field](../commands/schema.md#the-shape-of-each-open-field).
+A record that strata takes from Palette stays the same. So the ids stay, no root
 changes, and a variable has its keys in the same order.
 
 One case differs. A variable with no `name` has an empty `name`. Before, its
@@ -189,8 +187,8 @@ fields take a value of a later release:
 
 - `tool.impl` of a record and of `strata-behind/1`.
 - `source.template`, `source.cluster.kind`, the name of each tier in
-  `source.cluster.tiers`, and `upstreamSource` in the `hash` of each pack, in
-  `strata-snapshot/1`.
+  `source.cluster.tiers`, the key of each entry in `source.cluster.errors`, and
+  `upstreamSource` in the `hash` of each pack, in `strata-snapshot/1`.
 - `registryProviderType` of each pack, in `strata-snapshot/1`.
 - `bump.impact` and each value of `bump.flags[]`, in `strata-behind/1`.
 - `pinnedState` of a pin, and `state` of a newer version, in `strata-behind/1`.
