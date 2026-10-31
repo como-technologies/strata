@@ -7,7 +7,7 @@
 //! that cluster. No request changes anything.
 //!
 //! Palette answers in the project of the connection, so strata asks only the records of that
-//! project. It counts each record of another project that it could ask, and says so.
+//! project. It counts each record of another project that it can ask, and says so.
 
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
@@ -46,9 +46,9 @@ enum Asked<'r> {
 }
 
 impl<'r> Asked<'r> {
-    /// What Palette checks in `record`, or `None` for a record that Palette cannot check: a
-    /// candidate, an edge host, a cluster group, an app profile, a pack, or the update that waits
-    /// for a cluster.
+    /// What Palette checks in `record`, or `None` when Palette cannot check it. Palette cannot
+    /// check a candidate, an edge host, a cluster group, an app profile, a pack, or the update
+    /// that waits for a cluster.
     fn of(record: &'r Snapshot) -> Option<Asked<'r>> {
         if record.source.is_profile_version() {
             // a candidate has no uid, and no cluster runs it
@@ -92,7 +92,7 @@ impl<'a, A: PaletteApi> BumpQuestions<'a, A> {
     /// The answer holds the errors of all the records, and it accepts when there is none. A request
     /// that fails does not make the pin fail: the answer gives its message, and does not accept.
     /// It does not ask a record of another project. It counts the records of another project
-    /// that Palette could check, and the answer does not accept.
+    /// that Palette can check, and the answer does not accept.
     pub(super) fn ask(&mut self, holders: &[&Snapshot], pin: &Pin, to: &Pack) -> BumpAnswer {
         let mut errors = Vec::new();
         let mut asked = 0;

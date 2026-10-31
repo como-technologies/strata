@@ -80,9 +80,9 @@ the refusal.
 - Read the bump before you move a pin: `repave` needs a window, and `in-place`
   does not.
 - When Palette refuses a move, pick a closer version in `newer`. `behind` asks
-  about the newest version only. A candidate gets no answer about the move:
-  Palette checks the limit of a move against the clusters that run a version,
-  and no cluster runs a candidate.
+  about the newest version only. A candidate gets no answer about the move.
+  Palette checks the limit of a move against the clusters that run a version.
+  No cluster runs a candidate.
 - Move the pin in a new release version, and not in place. Then `verify` of the
   old records still holds, and `compare` of the two versions says what changed:
   see [What changed between two pack versions](./pack-versions.md).
