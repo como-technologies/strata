@@ -219,6 +219,11 @@ impl World {
     /// merges over it. An object merges key by key; `machinepoolconfig` merges pool by pool, on
     /// the pool name; `profiles` merges profile by profile, on the uid; `variables` merges
     /// variable by variable, on the name; any other list replaces.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] when strata cannot read the file at `path`. [`Error::Input`] when the file is
+    /// neither JSON nor YAML.
     pub fn with_change(mut self, path: &Path) -> Result<World> {
         let text = std::fs::read_to_string(path).map_err(|e| crate::error::io(path, e))?;
         let doc: Value = parse_json_or_yaml(&text).map_err(|m| Error::Input {
@@ -944,15 +949,7 @@ mod tests {
     #[test]
     fn a_cluster_on_a_palette_with_no_variables_route_sends_no_variable() {
         let api = cluster_api(json!([]));
-        let older = strata::api::MemoryApi::new()
-            .with(
-                "/v1/spectroclusters/c1",
-                json!({"metadata": {"uid": "c1", "name": "barney"},
-                    "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"},
-                        "clusterProfileTemplates": [{"uid": "p1", "packs": []}]}}),
-            )
-            .with("/v1/cloudconfigs/aws/cc1", json!({"spec": {}}))
-            .failing("/v1/spectroclusters/c1/variables", 405, "{}");
+        let older = cluster_api(json!([])).failing("/v1/spectroclusters/c1/variables", 405, "{}");
         for api in [api, older] {
             let world = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap();
             assert_eq!(world.entity["spec"]["profiles"][0]["variables"], json!([]));

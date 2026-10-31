@@ -241,14 +241,97 @@ impl Verdict {
     }
 }
 
+/// One line for a request or a command, with its answer when it has one: `GET /v1/x -> HTTP 200`.
+pub(crate) fn ran_line(ran: &str, answer: Option<&str>) -> String {
+    match answer {
+        Some(answer) => format!("{ran} -> {answer}"),
+        None => ran.to_string(),
+    }
+}
+
 /// One request that a check made, with the answer to it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Call {
-    /// The request: the method and the path.
-    pub ran: String,
+    /// The method of the request.
+    pub method: Method,
+    /// The path of the request, with its query.
+    pub path: String,
     /// The answer: `HTTP 200`. None when Palette gave no answer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub answer: Option<String>,
+}
+
+impl Call {
+    /// The request as a person writes it: the method and the path, `GET /v1/x`.
+    pub fn ran(&self) -> String {
+        format!("{} {}", self.method, self.path)
+    }
+
+    /// The request and its answer on one line: `GET /v1/x -> HTTP 200`.
+    pub fn line(&self) -> String {
+        ran_line(&self.ran(), self.answer.as_deref())
+    }
+}
+
+#[cfg(test)]
+impl Call {
+    /// A `GET` request with its answer, for the tests of this crate.
+    pub(crate) fn get(path: &str, answer: Option<&str>) -> Call {
+        Call {
+            method: Method::Get,
+            path: path.into(),
+            answer: answer.map(Into::into),
+        }
+    }
+}
+
+/// What a check ran, with the answer to it.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub enum Ran {
+    /// A static check, a check that did not run, or a check with `each` over an empty list.
+    #[default]
+    Nothing,
+    /// The command of a check that runs a program, as a person runs it by hand. The answer is
+    /// `exit 0`, and none when the command did not start.
+    Exec {
+        /// The command line.
+        line: String,
+        /// The exit code, as `exit 0`.
+        answer: Option<String>,
+    },
+    /// The one request of a check of Palette.
+    Request(Call),
+    /// The requests of a check with `each`, one for each item, in the order of the list.
+    Requests(Vec<Call>),
+}
+
+impl Ran {
+    /// The request or the command of a check that makes one: what a person runs by hand. None for
+    /// a check that made none, or one for each item.
+    pub fn text(&self) -> Option<String> {
+        match self {
+            Ran::Exec { line, .. } => Some(line.clone()),
+            Ran::Request(call) => Some(call.ran()),
+            Ran::Nothing | Ran::Requests(_) => None,
+        }
+    }
+
+    /// The answer to that one request or command: `HTTP 200`, or `exit 0`.
+    pub fn answer(&self) -> Option<&str> {
+        match self {
+            Ran::Exec { answer, .. } => answer.as_deref(),
+            Ran::Request(call) => call.answer.as_deref(),
+            Ran::Nothing | Ran::Requests(_) => None,
+        }
+    }
+
+    /// The requests of a check with `each`, one for each item, in the order of the list.
+    pub fn requests(&self) -> &[Call] {
+        match self {
+            Ran::Requests(calls) => calls,
+            Ran::Nothing | Ran::Exec { .. } | Ran::Request(_) => &[],
+        }
+    }
 }
 
 /// The result of one check.
@@ -261,13 +344,7 @@ pub struct Outcome {
     /// How long the check took.
     pub elapsed: Duration,
     /// The request or the command the check ran, for the report: what a person runs by hand.
-    pub ran: Option<String>,
-    /// The answer of the call: `HTTP 200`, or `exit 0`. None for a static check, or when the
-    /// call gave no answer.
-    pub answer: Option<String>,
-    /// The requests of a check with `each`, one for each item, in the order of the list. Empty for
-    /// a check that makes one request or none: `ran` and `answer` hold that one.
-    pub calls: Vec<Call>,
+    pub ran: Ran,
 }
 
 impl Outcome {
@@ -276,9 +353,7 @@ impl Outcome {
             verdict,
             messages,
             elapsed: started.elapsed(),
-            ran: None,
-            answer: None,
-            calls: vec![],
+            ran: Ran::Nothing,
         }
     }
 
@@ -288,9 +363,7 @@ impl Outcome {
             verdict,
             messages: vec![reason.into()],
             elapsed: Duration::ZERO,
-            ran: None,
-            answer: None,
-            calls: vec![],
+            ran: Ran::Nothing,
         }
     }
 }
@@ -348,16 +421,16 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
                 Ok(a) => a,
                 Err(e) => return Outcome::new(Verdict::Error, vec![e.to_string()], started),
             };
-            let ran = shell_words(&argv);
+            let line = shell_words(&argv);
             if !missing.is_empty() {
                 let mut out = Outcome::not_run(
                     Verdict::NotChecked,
                     format!(
-                        "{} not on this machine; run by hand: {ran}",
+                        "{} not on this machine; run by hand: {line}",
                         missing.join(", ")
                     ),
                 );
-                out.ran = Some(ran);
+                out.ran = Ran::Exec { line, answer: None };
                 return out;
             }
             let limit = Duration::from_secs(timeout.unwrap_or(60));
@@ -366,13 +439,15 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
                     let mut with = world.clone();
                     with["exec"] = serde_json::to_value(&output).unwrap_or(Value::Null);
                     let mut out = judge(rule, expr, &with, jq, started);
-                    out.ran = Some(ran);
-                    out.answer = Some(format!("exit {}", output.exit));
+                    out.ran = Ran::Exec {
+                        line,
+                        answer: Some(format!("exit {}", output.exit)),
+                    };
                     out
                 }
                 Err(e) => {
                     let mut out = Outcome::new(Verdict::Error, vec![e.to_string()], started);
-                    out.ran = Some(ran);
+                    out.ran = Ran::Exec { line, answer: None };
                     out
                 }
             }
@@ -395,8 +470,8 @@ struct PaletteCheck<'a> {
     expr: &'a str,
 }
 
-/// The answer of Palette to the request for one item of a check with `each`: the item, and the
-/// response, in the shape of `.response` for a check with none.
+/// The answer of Palette to the request for one item of a check with `each`. It holds the item,
+/// and the response in the shape of `.response` of a check with no `each`.
 #[derive(Serialize)]
 struct ItemResponse<'a> {
     item: &'a Value,
@@ -437,17 +512,25 @@ fn ask(
         (Method::Post, None) => Some(value_or_null(world, "/entity")),
         (Method::Get, _) => None,
     };
-    let ran = format!("{} {path}", check.method);
-    match backend.palette(check.method, &path, body.as_ref()) {
-        Ok(response) => Ok(Asked {
-            call: Call {
-                ran,
-                answer: Some(format!("HTTP {}", response.status)),
-            },
-            response,
-        }),
+    let method = check.method;
+    match backend.palette(method, &path, body.as_ref()) {
+        Ok(response) => {
+            let answer = Some(format!("HTTP {}", response.status));
+            Ok(Asked {
+                call: Call {
+                    method,
+                    path,
+                    answer,
+                },
+                response,
+            })
+        }
         Err(error) => Err(Box::new(Failed {
-            call: Some(Call { ran, answer: None }),
+            call: Some(Call {
+                method,
+                path,
+                answer: None,
+            }),
             error,
         })),
     }
@@ -475,13 +558,14 @@ fn run_palette(
                 let mut with = world.clone();
                 with["response"] = serde_json::to_value(&response).unwrap_or(Value::Null);
                 let mut out = judge(rule, check.expr, &with, jq, started);
-                out.ran = Some(call.ran);
-                out.answer = call.answer;
+                out.ran = Ran::Request(call);
                 out
             }
             Err(failed) => {
                 let mut out = Outcome::new(Verdict::Error, vec![failed.error.to_string()], started);
-                out.ran = failed.call.map(|c| c.ran);
+                if let Some(call) = failed.call {
+                    out.ran = Ran::Request(call);
+                }
                 out
             }
         };
@@ -511,7 +595,7 @@ fn run_palette(
             Err(failed) => {
                 calls.extend(failed.call);
                 let mut out = Outcome::new(Verdict::Error, vec![failed.error.to_string()], started);
-                out.calls = calls;
+                out.ran = Ran::Requests(calls);
                 return out;
             }
         }
@@ -520,7 +604,7 @@ fn run_palette(
     // a derived `Serialize` of plain data does not fail
     with["responses"] = serde_json::to_value(&responses).unwrap_or(Value::Null);
     let mut out = judge(rule, check.expr, &with, jq, started);
-    out.calls = calls;
+    out.ran = Ran::Requests(calls);
     out
 }
 
@@ -824,7 +908,7 @@ mod tests {
             vec!["Palette: InvalidParam: Node pool size should be multiple of 3"]
         );
         assert_eq!(
-            out.ran.as_deref(),
+            out.ran.text().as_deref(),
             Some("POST /v1/spectroclusters/gke/validate")
         );
     }
@@ -858,19 +942,13 @@ mod tests {
         assert_eq!(out.verdict, Verdict::Failed);
         assert_eq!(out.messages, vec!["p1 200 base", "p2 404 ResourceNotFound"]);
         assert_eq!(
-            out.calls,
-            vec![
-                Call {
-                    ran: "GET /v1/clusterprofiles/p1".into(),
-                    answer: Some("HTTP 200".into())
-                },
-                Call {
-                    ran: "GET /v1/clusterprofiles/p2".into(),
-                    answer: Some("HTTP 404".into())
-                },
-            ]
+            out.ran,
+            Ran::Requests(vec![
+                Call::get("/v1/clusterprofiles/p1", Some("HTTP 200")),
+                Call::get("/v1/clusterprofiles/p2", Some("HTTP 404")),
+            ])
         );
-        assert_eq!((out.ran, out.answer), (None, None));
+        assert_eq!(out.ran.text(), None);
     }
 
     #[test]
@@ -935,7 +1013,7 @@ mod tests {
         );
         let out = run_check(&r, &w, &b, &jq);
         assert_eq!(out.verdict, Verdict::Passed);
-        assert!(out.calls.is_empty());
+        assert_eq!(out.ran, Ran::Requests(vec![]));
     }
 
     #[test]
@@ -973,17 +1051,11 @@ mod tests {
             out.messages
         );
         assert_eq!(
-            out.calls,
-            vec![
-                Call {
-                    ran: "GET /v1/edgehosts/h1".into(),
-                    answer: Some("HTTP 200".into())
-                },
-                Call {
-                    ran: "GET /v1/edgehosts/h2".into(),
-                    answer: None
-                },
-            ]
+            out.ran,
+            Ran::Requests(vec![
+                Call::get("/v1/edgehosts/h1", Some("HTTP 200")),
+                Call::get("/v1/edgehosts/h2", None),
+            ])
         );
     }
 
@@ -1041,8 +1113,11 @@ mod tests {
         assert_eq!(out.verdict, Verdict::Failed);
         assert_eq!(out.messages, vec![r#"one zone: ["us-east-2a"]"#]);
         assert_eq!(
-            out.ran.as_deref(),
-            Some("aws ec2 describe-subnets --region us-east-2")
+            out.ran,
+            Ran::Exec {
+                line: "aws ec2 describe-subnets --region us-east-2".into(),
+                answer: Some("exit 0".into())
+            }
         );
         let missing = rule(Check::Exec {
             argv: vec!["gcloud".into(), "services".into(), "list".into()],

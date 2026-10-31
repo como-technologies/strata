@@ -191,6 +191,13 @@ pub fn page(r: &Report) -> String {
                     h.push_str(&format!("<div class=\"msg\">{}</div>", esc(m)));
                 }
             }
+            // a check with `each` has no answer of its own: each request has one
+            if !c.requests.is_empty() {
+                h.push_str(&format!(
+                    "<details><summary>requests and answers</summary><pre>{}</pre></details>",
+                    esc(&c.ran_lines().join("\n"))
+                ));
+            }
             if matches!(
                 c.verdict,
                 Verdict::Failed | Verdict::NotChecked | Verdict::Error
@@ -232,12 +239,13 @@ pub fn page(r: &Report) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::probe::Call;
     use crate::report::*;
     use crate::rule::{Status, Tier};
     use std::collections::BTreeMap;
 
-    #[test]
-    fn the_page_is_one_file_with_each_result() {
+    /// The report of one probe that failed, with no request.
+    fn report() -> Report {
         let check = CheckResult {
             id: "gke-pool-multiple-3".into(),
             title: "A GKE pool <size>".into(),
@@ -258,7 +266,7 @@ mod tests {
             confidence: None,
             counts_as_failure: false,
         };
-        let mut report = Report {
+        Report {
             schema: REPORT_SCHEMA.into(),
             tool: Tool {
                 name: "strata-preflight".into(),
@@ -316,7 +324,12 @@ mod tests {
                 serde_json::json!({"verdicts": {}, "levels": {}, "tiers": {}, "exit": {}}),
             )
             .unwrap(),
-        };
+        }
+    }
+
+    #[test]
+    fn the_page_is_one_file_with_each_result() {
+        let mut report = report();
         let html = page(&report);
         assert!(html.starts_with("<!DOCTYPE html>"));
         assert!(!html.contains("<script"), "no script");
@@ -338,5 +351,21 @@ mod tests {
         );
         assert!(!html.contains('–'), "one mark for no percent");
         let _ = BTreeMap::<String, String>::new();
+    }
+
+    #[test]
+    fn the_page_lists_each_request_of_a_check_with_each_with_its_answer() {
+        let mut report = report();
+        report.checks[0].requests = vec![
+            Call::get("/v1/edgehosts/h1", Some("HTTP 200")),
+            Call::get("/v1/edgehosts/h2", Some("HTTP 404")),
+        ];
+        let html = page(&report);
+        assert!(
+            html.contains(
+                "GET /v1/edgehosts/h1 -&gt; HTTP 200\nGET /v1/edgehosts/h2 -&gt; HTTP 404"
+            ),
+            "{html}"
+        );
     }
 }

@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::confidence::Confidence;
 use crate::jq::Jq;
-use crate::probe::{Call, Outcome, Verdict};
+use crate::probe::{Call, Outcome, Verdict, ran_line};
 use crate::rule::{Catalog, Evidence, Fix, Level, Rule, Severity, Status, Tier};
 
 mod markdown;
@@ -138,6 +138,16 @@ impl CheckResult {
     /// `PASS`, `FAIL`, `PROBE PASS`, `PROBE FAIL`, `WARN`, `NOTE`, `NOT CHECKED`, `SKIP`, `ERROR`.
     pub fn label(&self) -> String {
         label_for(self.verdict, self.level, self.severity)
+    }
+
+    /// One line for the request or the command of the check, and one for each request of a check
+    /// with `each`, each with its answer: `GET /v1/x -> HTTP 200`.
+    pub fn ran_lines(&self) -> Vec<String> {
+        self.ran
+            .iter()
+            .map(|ran| ran_line(ran, self.answer.as_deref()))
+            .chain(self.requests.iter().map(Call::line))
+            .collect()
     }
 }
 
@@ -409,9 +419,9 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
             verdict: outcome.verdict,
             messages: outcome.messages.clone(),
             elapsed_ms: outcome.elapsed.as_millis() as u64,
-            ran: outcome.ran.clone(),
-            answer: outcome.answer.clone(),
-            requests: outcome.calls.clone(),
+            ran: outcome.ran.text(),
+            answer: outcome.ran.answer().map(str::to_string),
+            requests: outcome.ran.requests().to_vec(),
             reproduce,
             fix: rule.fix.clone(),
             evidence: rule.evidence.clone(),
@@ -504,7 +514,9 @@ pub(crate) fn label_color_for(verdict: Verdict, severity: Severity, level: Level
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::probe::Ran;
     use std::time::Duration;
+    use strata::api::Method;
 
     fn check(
         id: &str,
@@ -697,9 +709,11 @@ rules:
             verdict: Verdict::Failed,
             messages: vec![],
             elapsed: Duration::from_millis(1),
-            ran: Some(format!("POST {path}")),
-            answer: None,
-            calls: vec![],
+            ran: Ran::Request(Call {
+                method: Method::Post,
+                path: path.to_string(),
+                answer: None,
+            }),
         };
         let with_body = c.rule("sts-account-not-assumable").unwrap();
         let lines = auto_reproduce(
@@ -890,9 +904,7 @@ rules:
             verdict: v,
             messages: vec!["pool worker has size 4".into()],
             elapsed: Duration::from_millis(3),
-            ran: None,
-            answer: None,
-            calls: vec![],
+            ran: Ran::Nothing,
         };
         let section = r#"
 section: compute
@@ -974,9 +986,11 @@ rules:
         assert_eq!(json["checks"][0]["verdict"], "failed");
     }
 
-    #[test]
-    fn a_check_with_each_keeps_each_request_and_prints_a_line_and_a_curl_for_each() {
-        let section = r#"
+    /// The report of a run with one rule, `edge-host-in-use`, that gave `outcome`.
+    fn report_of_edge_host_in_use(each: Option<&str>, path: &str, outcome: Outcome) -> Report {
+        let each = each.map_or(String::new(), |each| format!("      each: '{each}'\n"));
+        let section = format!(
+            r#"
 section: compute
 title: Compute and pools
 rules:
@@ -988,31 +1002,19 @@ rules:
     what: w
     check:
       kind: palette
-      each: '[.hosts[]]'
-      path: /v1/edgehosts/{{ $item }}
+{each}      path: {path}
       expr: 'true'
-"#;
+"#
+        );
         let mut catalog = Catalog::default();
         catalog
             .push(
-                Catalog::parse_section(section, std::path::Path::new("c.yaml")).unwrap(),
+                Catalog::parse_section(&section, std::path::Path::new("c.yaml")).unwrap(),
                 std::path::Path::new("c.yaml"),
             )
             .unwrap();
-        let call = |host: &str, answer: &str| crate::probe::Call {
-            ran: format!("GET /v1/edgehosts/{host}"),
-            answer: Some(answer.to_string()),
-        };
-        let outcome = Outcome {
-            verdict: Verdict::Failed,
-            messages: vec!["edge host h2 is in use".into()],
-            elapsed: Duration::from_millis(3),
-            ran: None,
-            answer: None,
-            calls: vec![call("h1", "HTTP 200"), call("h2", "HTTP 404")],
-        };
         let world = serde_json::json!({"cloud": "edge"});
-        let report = assemble(
+        assemble(
             Assembly {
                 catalog: &catalog,
                 outcomes: vec![(catalog.rule("edge-host-in-use").unwrap(), outcome)],
@@ -1029,7 +1031,22 @@ rules:
                 generated_at: "2026-09-30T00:00:00Z".into(),
             },
             &Jq::new(),
-        );
+        )
+    }
+
+    #[test]
+    fn a_check_with_each_keeps_each_request_and_prints_a_line_and_a_curl_for_each() {
+        let outcome = Outcome {
+            verdict: Verdict::Failed,
+            messages: vec!["edge host h2 is in use".into()],
+            elapsed: Duration::from_millis(3),
+            ran: Ran::Requests(vec![
+                Call::get("/v1/edgehosts/h1", Some("HTTP 200")),
+                Call::get("/v1/edgehosts/h2", Some("HTTP 404")),
+            ]),
+        };
+        let report =
+            report_of_edge_host_in_use(Some("[.hosts[]]"), "/v1/edgehosts/{{ $item }}", outcome);
         let check = &report.checks[0];
         assert_eq!(check.ran, None);
         assert_eq!(check.requests.len(), 2);
@@ -1050,8 +1067,30 @@ rules:
             serde_json::from_str(&render(&report, Format::Json, true, false)).unwrap();
         assert_eq!(
             json["checks"][0]["requests"][1],
-            serde_json::json!({"ran": "GET /v1/edgehosts/h2", "answer": "HTTP 404"})
+            serde_json::json!({"method": "GET", "path": "/v1/edgehosts/h2", "answer": "HTTP 404"})
         );
         assert!(json["checks"][0].get("ran").is_none());
+    }
+
+    #[test]
+    fn a_check_with_one_request_keeps_its_ran_and_answer_and_has_no_requests() {
+        let outcome = Outcome {
+            verdict: Verdict::Failed,
+            messages: vec!["edge host h2 is in use".into()],
+            elapsed: Duration::from_millis(3),
+            ran: Ran::Request(Call::get("/v1/edgehosts/h2", Some("HTTP 404"))),
+        };
+        let report = report_of_edge_host_in_use(None, "/v1/edgehosts/h2", outcome);
+        let json: serde_json::Value =
+            serde_json::from_str(&render(&report, Format::Json, true, false)).unwrap();
+        let check = &json["checks"][0];
+        assert_eq!(check["ran"], "GET /v1/edgehosts/h2");
+        assert_eq!(check["answer"], "HTTP 404");
+        assert!(check.get("requests").is_none());
+        let text = render(&report, Format::Terminal, false, false);
+        assert!(
+            text.contains("ran: GET /v1/edgehosts/h2 -> HTTP 404\n"),
+            "{text}"
+        );
     }
 }

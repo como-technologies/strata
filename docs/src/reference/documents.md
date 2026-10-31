@@ -617,8 +617,8 @@ what it answered.
   - `elapsedMs`, and `ran`, the request or the command the check ran, with
     `answer`, its HTTP status or exit code.
   - `requests[]`, for a rule with `each`: one entry for each request, in the
-    order of the list, with `ran` and `answer`. Such a check has no `ran` and no
-    `answer` of its own.
+    order of the list, with `method`, `path`, and `answer`. Such a check has no
+    `ran` and no `answer` of its own.
   - `reproduce[]`: the lines a person runs to see the same thing.
   - `fix` with `owner` and `text`; `evidence[]` with `kind`, `ref`, `note`. An
     entry with an empty reference has no `ref`, and an entry with no note has

@@ -390,3 +390,16 @@ fn the_rules_listing_states_that_palette_checks_the_list_of_kms_keys_only() {
     let fix = rule["fix"]["text"].as_str().unwrap();
     assert!(fix.contains("kms:CreateGrant"), "{fix}");
 }
+
+#[test]
+fn the_report_schema_gives_a_request_a_method_and_a_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let (code, out, err) = run(&["--schema", "report"], dir.path());
+    assert_eq!(code, 0, "{err}");
+    let schema: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let call = &schema["$defs"]["Call"];
+    assert_eq!(call["properties"]["method"]["$ref"], "#/$defs/Method");
+    assert_eq!(call["properties"]["path"]["type"], "string");
+    assert_eq!(call["required"], serde_json::json!(["method", "path"]));
+    assert!(call["properties"].get("ran").is_none());
+}
