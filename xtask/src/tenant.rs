@@ -1890,8 +1890,10 @@ impl Tenant {
     /// The answer of `POST /v1/spectroclusters/{uid}/validate/packs` for a cluster. A
     /// [`PackRefusal`] says that a pack of a profile requires another pack at a minimum version,
     /// and the cluster runs an older one. Palette gives the error, with its code and
-    /// its message, under the profile, and gives no profile when it accepts. The stand-in gives
-    /// one answer for every request; it does not check anything.
+    /// its message, under the profile, and gives no profile when it accepts. With no refusal, the
+    /// answer is also the answer to a move of a tag under a profile that the cluster runs:
+    /// Palette keeps the tag of the copy that the cluster holds, and checks no sent tag. The
+    /// stand-in gives one answer for every request; it does not check anything.
     pub fn packs_answer(&self, project: &str, cluster: &str, refusal: Option<PackRefusal>) {
         let profiles: Vec<Value> = refusal
             .map(|r| {
@@ -1950,24 +1952,6 @@ impl Tenant {
         refusal: Option<(&str, &[&str])>,
     ) {
         self.write_profile_packs(project, Some(profile), upgrade_results(refusal));
-    }
-
-    /// The answer of `POST /v1/spectroclusters/{uid}/validate/packs` for a move that a pack does
-    /// not allow on `clusters`, which include `cluster`. Palette gives the profile `profile` of the
-    /// cluster, with `DependencyPackUpgradeNotSupported` under `packs.results`, and names the
-    /// clusters in the message. With no refusal, Palette gives no profile. The text of the message
-    /// is the stand-in's. The stand-in gives one answer for every request.
-    pub fn cluster_upgrade_answer(
-        &self,
-        project: &str,
-        (cluster, profile): (&str, &str),
-        refusal: Option<(&str, &[&str])>,
-    ) {
-        let profiles: Vec<Value> = refusal
-            .map(|r| json!({"uid": profile, "packs": {"results": upgrade_results(Some(r))}}))
-            .into_iter()
-            .collect();
-        self.write_cluster_packs(project, cluster, profiles);
     }
 
     /// Write the answer of the packs route of a cluster with `profiles` in the body.

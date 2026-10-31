@@ -47,6 +47,24 @@ It costs two requests, the cluster document and one `POST` to
 [The validate routes](../../internals/palette/validate-routes.md#post-v1spectroclustersuidvalidatepacks)
 states what Palette checks.
 
+A profile version that the cluster runs goes to another route. For a profile that
+the cluster runs, the route of the cluster keeps the tag of the copy that the
+cluster holds, and it checks no sent tag: see
+[The sent tag](../../internals/palette/validate-routes.md#the-sent-tag). So
+`--validate` sends the packs of the version to
+`POST /v1/clusterprofiles/<uid>/validate/packs`. Palette checks them as an
+update of the version, against each cluster that runs it. Here the cluster
+runs the version, so the comparison is `IDENTICAL`, and Palette still refuses
+its packs:
+
+```text
+{{#include ../../output/validate-running-lines.txt}}
+```
+
+The answer holds the errors for each cluster that runs the version. The message
+of an error names the clusters. `clusterUid` in `--json` names the cluster that
+you asked about. The cost is the same: the cluster document and one `POST`.
+
 Two profile versions, or two clusters, are a usage error, because Palette
 answers for one cluster. So are an edge host and a cluster group:
 

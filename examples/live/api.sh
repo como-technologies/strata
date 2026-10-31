@@ -116,6 +116,10 @@
 #       POST the body JSON to a search of the API, such as /v1/dashboard/edgehosts/search, or to
 #       a validate route, such as /v1/clusterprofiles/validate/packs, and print the answer. A
 #       POST to another path can create something: use a search path or a validate path only.
+#   api.sh post-status PATH JSON
+#       The request of `post`, for a validate path, that prints the HTTP status as `HTTP <code>` on
+#       the first line and the answer after it. It exits 0 for each status, so that a check can
+#       read a refusal and the status that Palette gives it.
 #   api.sh packs-where [--name NAME] [JQ_OPTION...] JQ_FILTER
 #       Print the first pack of the packs of the project for which JQ_FILTER, a jq condition on the
 #       pack, is true: one line of JSON. The listing is read a page at a time, and the read stops
@@ -165,6 +169,7 @@ API=${API%/}
 PROJECT=${PALETTE_PROJECT_UID:-$(from_env_file PALETTE_PROJECT_UID)}
 
 # call METHOD PATH [BODYFILE] -> the response body on stdout; exit 2 unless the status is 2xx.
+# With SHOW_STATUS set, the first line is `HTTP <code>` and the exit is 0 for each status.
 # An empty KEY sends no ApiKey header, and an empty PROJECT sends no ProjectUid header.
 call() {
   local method=$1 path=$2 body=${3:-} out status
@@ -172,7 +177,9 @@ call() {
   status=$(curl -sS -o "$out" -w '%{http_code}' -X "$method" \
     ${KEY:+-H "ApiKey: $KEY"} -H "Accept: ${ACCEPT:-application/json}" -H 'Content-Type: application/json' \
     ${PROJECT:+-H "ProjectUid: $PROJECT"} ${body:+--data-binary "@$body"} "$API$path")
-  if [ "${status:0:1}" != 2 ]; then
+  if [ -n "${SHOW_STATUS:-}" ]; then
+    echo "HTTP $status"
+  elif [ "${status:0:1}" != 2 ]; then
     echo "api.sh: $method $path answered HTTP $status: $(head -c 300 "$out")" >&2
     rm -f "$out"
     return 2
@@ -759,6 +766,15 @@ post() {
   call POST "$path" "$body" || return 2
 }
 
+# post-status PATH JSON: print `HTTP <code>`, then the answer, for each status
+post_status() {
+  local path=${1:-} json=${2:-} body
+  [ -n "$json" ] || die "usage: api.sh post-status PATH JSON"
+  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
+  jq -e . <<<"$json" > "$body" || die "the body is not JSON: $json"
+  SHOW_STATUS=1 call POST "$path" "$body" || return 2
+}
+
 # macro-set NAME VALUE: POST creates a project macro, PATCH changes one that exists
 macro_set() {
   local name=${1:-} value=${2:-} body
@@ -843,6 +859,7 @@ case "${1:-}" in
   patch) shift; patch "$@" ;;
   put) shift; put "$@" ;;
   post) shift; post "$@" ;;
+  post-status) shift; post_status "$@" ;;
   # The same text as `usage` of lib.sh. This script does not source lib.sh: lib.sh runs this script.
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

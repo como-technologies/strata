@@ -4398,10 +4398,35 @@ fn upgrade_refused() -> serde_json::Value {
         "message": "on the clusters: fred", "clusters": ["fred"]}]})
 }
 
+/// The uid of the cluster `fred`.
+const FRED_UID: &str = "c-fred";
+
+/// The document of the cluster `fred`: the profile `p-infra` holds kubernetes and a CNI pack, and
+/// the profile `p-addon` holds one pack.
+fn fred_document() -> serde_json::Value {
+    serde_json::json!({"spec": {"clusterProfileTemplates": [
+        {"uid": "p-infra", "packs": [
+            {"name": "kubernetes", "tag": "1.35.3", "type": "spectro", "values": "k: 1",
+             "packUid": "pk-1"},
+            {"name": "cni", "tag": "1.0.0", "type": "spectro", "values": "c: 1"}]},
+        {"uid": "p-addon", "packs": [
+            {"name": "csi", "tag": "2.0.0", "type": "spectro", "values": "s: 1"}]}]}})
+}
+
 /// A stage 6 run of validate-packs.sh on the profile `strata-live-release@1.0.0` and the cluster
 /// `fred`, where `strata behind --json` gives `report` for the record of the profile and
 /// `cluster_report` for the record of the cluster. Gives steps.log.
 fn bump_stage(report: &str, cluster_report: &str) -> (Stage, String) {
+    bump_stage_with(report, cluster_report, |_| {})
+}
+
+/// [`bump_stage`], where `arrange` changes the stage before the run, such as the answer of the
+/// route of the cluster.
+fn bump_stage_with(
+    report: &str,
+    cluster_report: &str,
+    arrange: impl FnOnce(&Stage),
+) -> (Stage, String) {
     let mut stage = Stage::new(serde_json::json!({}));
     stage.env("PROFILE", "strata-live-release@1.0.0");
     stage.env("CLUSTER", "fred");
@@ -4410,7 +4435,19 @@ fn bump_stage(report: &str, cluster_report: &str) -> (Stage, String) {
         0,
         "{}",
     );
-    stage.strata("snapshot cluster:fred -o bump-cluster.json", 0, "{}");
+    stage.strata(
+        "snapshot cluster:fred -o bump-cluster.json",
+        0,
+        &serde_json::json!({"source": {"cluster": {"uid": FRED_UID}}}).to_string(),
+    );
+    stage.route(
+        &format!("/v1/spectroclusters/{FRED_UID}"),
+        &fred_document().to_string(),
+    );
+    stage.route(
+        &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
+        r#"{"profiles":[]}"#,
+    );
     stage.strata("behind bump-profile.json --json", 1, report);
     stage.strata("behind bump-cluster.json --json", 1, cluster_report);
     stage.strata(
@@ -4425,6 +4462,7 @@ fn bump_stage(report: &str, cluster_report: &str) -> (Stage, String) {
             "~ [k8s  ] kubernetes  1.35.3  Public Repo  behind: 1.37.0\n      bump to 1.37.0: repave IDENTITY\n      palette refuses: {UPGRADE_NOT_SUPPORTED_CODE} on fred\n"
         ),
     );
+    arrange(&stage);
     let (o, steps) = stage.run("validate-packs.sh", &["6"]);
     assert!(
         steps.contains("== behind asks Palette"),
@@ -4460,6 +4498,60 @@ fn validate_packs_sh_stage_6_asks_behind_about_the_bump_of_kubernetes_for_the_pr
         !steps.contains("== a candidate whose") && !steps.contains("== the name route"),
         "stage 6 runs alone: {steps}"
     );
+}
+
+#[test]
+fn validate_packs_sh_stage_6_sends_the_route_of_the_cluster_a_tag_that_no_registry_has() {
+    let report = kubernetes_bump_report("1.37.0", &upgrade_refused());
+    let (stage, steps) = bump_stage(&report, &report);
+    passed(
+        &steps,
+        &[
+            "cluster-route-doc",
+            "cluster-route-tag",
+            "cluster-route-tag-says",
+        ],
+    );
+    // the profile with kubernetes has its packs as the cluster runs them, with the tag 9.99.9;
+    // the other profile of the cluster has its uid alone
+    let sent = stage.sent(
+        "POST",
+        &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
+    );
+    assert_eq!(
+        sent,
+        [serde_json::json!({"profiles": [
+            {"uid": "p-infra", "packValues": [
+                {"name": "kubernetes", "tag": "9.99.9", "type": "spectro", "values": "k: 1"},
+                {"name": "cni", "tag": "1.0.0", "type": "spectro", "values": "c: 1"}]},
+            {"uid": "p-addon"}]})]
+    );
+}
+
+#[test]
+fn validate_packs_sh_stage_6_fails_when_the_route_of_the_cluster_checks_the_sent_tag() {
+    let report = kubernetes_bump_report("1.37.0", &upgrade_refused());
+    // Palette gives an error for the tag: the check of the tag fails, and the request passed
+    let refusing = r#"{"profiles":[{"uid":"p-infra","packs":{"results":[{"name":"kubernetes",
+        "errors":[{"code":"PackNotFound","message":"Pack 'kubernetes' 9.99.9 is not found"}]}]}}]}"#;
+    let route = format!("/v1/spectroclusters/{FRED_UID}/validate/packs");
+    let (_, steps) = bump_stage_with(&report, &report, |stage| stage.route(&route, refusing));
+    passed(&steps, &["cluster-route-tag"]);
+    failed(&steps, &["cluster-route-tag-says"]);
+
+    // Palette refuses the whole request with a status: the status is not 200
+    let (_, steps) = bump_stage_with(&report, &report, |stage| {
+        stage.route(&route, r#"{"code":"InvalidParam"}"#);
+        std::fs::write(
+            stage
+                .path("routes")
+                .join(format!("{}.status", Stage::route_key(&route))),
+            "400",
+        )
+        .unwrap();
+    });
+    passed(&steps, &["cluster-route-tag"]);
+    failed(&steps, &["cluster-route-tag-says"]);
 }
 
 #[test]
