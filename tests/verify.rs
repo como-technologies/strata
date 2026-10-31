@@ -6095,6 +6095,121 @@ fn a_candidate_of_a_manifest_pack_is_the_published_version_but_for_the_minted_ui
     assert_eq!(chain.pairs[0].minted_uid_only, ["addon/namespace-policy"]);
 }
 
+/// A candidate file of one manifest layer, which asks Palette nothing. `layer` and `variables` are
+/// lines of YAML that go after the name of the layer and after `variables:`.
+fn write_manifest_candidate(dir: &Path, layer: &str, variables: &str) -> std::path::PathBuf {
+    let file = dir.join("c.yaml");
+    fs::write(
+        &file,
+        format!(
+            "name: platform-addons\nversion: 1.0.0\ntype: add-on\ncloudType: all\n\
+             layers:\n- name: namespace-policy\n  version: 1.0.0\n  type: manifest\n{layer}  \
+             manifests:\n  - name: namespace-policy\n    content: 'kind: Namespace'\n\
+             variables:\n{variables}"
+        ),
+    )
+    .unwrap();
+    file
+}
+
+#[test]
+fn a_number_in_the_default_of_a_candidate_variable_is_in_the_record_as_text_and_in_the_root() {
+    let dir = tempfile::tempdir().unwrap();
+    let record = |default: &str| {
+        let file = write_manifest_candidate(
+            dir.path(),
+            "",
+            &format!("- name: port\n  defaultValue: {default}\n"),
+        );
+        candidate_snapshot(&file, &MemoryApi::new()).unwrap()
+    };
+    let (number, text, empty) = (record("8080"), record("'8080'"), record("''"));
+    assert_eq!(number.variables[0].default_value, "8080");
+    assert_eq!(
+        number.root, text.root,
+        "the root is that of the text Palette holds"
+    );
+    assert_ne!(number.root, empty.root, "0.24.0 recorded empty text");
+}
+
+#[test]
+fn a_null_in_a_candidate_variable_is_in_the_record_as_the_default_of_the_field() {
+    let dir = tempfile::tempdir().unwrap();
+    let record = |variables: &str| {
+        let file = write_manifest_candidate(dir.path(), "", variables);
+        candidate_snapshot(&file, &MemoryApi::new()).unwrap()
+    };
+    let plain = record("- name: port\n");
+    for field in [
+        "description: null",
+        "description: ~",
+        "format: 3",
+        "required: ~",
+    ] {
+        let given = record(&format!("- name: port\n  {field}\n"));
+        assert_eq!(given.variables, plain.variables, "{field}");
+        assert_eq!(given.root, plain.root, "{field}");
+    }
+}
+
+#[test]
+fn the_record_of_a_candidate_holds_text_params_and_a_param_that_is_not_text_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let file =
+        write_manifest_candidate(dir.path(), "  params:\n    replicas: '3'\n", "- name: a\n");
+    let snap = candidate_snapshot(&file, &MemoryApi::new()).unwrap();
+    assert_eq!(snap.packs[0].params, serde_json::json!({"replicas": "3"}));
+
+    let file = write_manifest_candidate(dir.path(), "  params:\n    replicas: 3\n", "- name: a\n");
+    let err = ops::snapshot_from_candidate(&file, false, never_connect, "t0", &Progress::silent())
+        .unwrap_err();
+    assert_eq!(err.kind(), "candidate-invalid");
+    assert_eq!(err.exit_code(), 2);
+    assert!(
+        err.to_string()
+            .contains("layer 1 (namespace-policy): the param replicas is 3, and it must be text"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_tier_whose_install_order_is_not_an_integer_has_no_install_order_in_the_record() {
+    let mut tiers = app_tiers(Some(2));
+    tiers["spec"]["appTiers"][0]["spec"]["installOrder"] = serde_json::json!("2");
+    let app = app_record(tiers);
+    for p in &app.packs {
+        assert!(p.params.get("installOrder").is_none(), "{}", p.key);
+    }
+    assert_eq!(
+        app.packs.iter().map(|p| p.key.as_str()).collect::<Vec<_>>(),
+        ["app/web", "app/db-config", "app/cache"],
+        "a tier with no install order keeps its place in the listing"
+    );
+}
+
+#[test]
+fn a_variable_with_no_name_has_an_empty_name_and_a_record_that_holds_a_null_name_does_not_load() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let raw = dir.path().join("a");
+    let mut variables = read_json(&raw.join("variables.json"));
+    variables["variables"] = serde_json::json!([{"displayName": "no name"}]);
+    fs::write(raw.join("variables.json"), variables.to_string()).unwrap();
+    let snap = ops::snapshot_from_dir(&raw, "a", "t0").unwrap();
+    assert_eq!(snap.variables[0].name, "");
+
+    // a record of 0.24.0 holds `null` for this name: the older form of the variable
+    let record = dir.path().join("record.json");
+    let mut doc: Value = serde_json::from_str(&snap.to_json(true).unwrap()).unwrap();
+    assert_eq!(doc["variables"][0]["name"], "");
+    doc["variables"][0]["name"] = Value::Null;
+    write_record(&record, &doc);
+    let err = Snapshot::load(&record).unwrap_err();
+    assert_eq!(err.kind(), "snapshot-schema");
+    assert_eq!(err.exit_code(), 2);
+    assert!(err.to_string().contains("expected a string"), "{err}");
+}
+
 #[test]
 fn a_candidate_in_memory_reproduces_the_root_with_no_file() {
     let dir = tempfile::tempdir().unwrap();

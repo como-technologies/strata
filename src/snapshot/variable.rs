@@ -1,7 +1,8 @@
 //! The profile variables of a record and of a candidate.
 
 use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use serde::de;
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 use crate::content::canon::{canonical_json, sha256_hex};
@@ -21,11 +22,85 @@ fn default_input_type() -> String {
     DEFAULT_INPUT_TYPE.to_string()
 }
 
+/// The text of a field that holds text. A null is the default of the field: empty text. A number
+/// or a flag keeps the text that the file writes, so `defaultValue: 8080` is `8080`.
+fn text_or_null<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    Ok(Option::<String>::deserialize(d)?.unwrap_or_default())
+}
+
+/// The flag of a field that holds a flag. A null is the default of the field: `false`.
+fn flag_or_null<'de, D: Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+    Ok(Option::<bool>::deserialize(d)?.unwrap_or_default())
+}
+
+/// The options of a variable. A null is the default of the field: no option.
+fn options_or_null<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<VariableOption>, D::Error> {
+    Ok(Option::<Vec<VariableOption>>::deserialize(d)?.unwrap_or_default())
+}
+
+/// The name of a variable. A null is an error: a name has no default.
+fn name_not_null<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    Option::<String>::deserialize(d)?
+        .ok_or_else(|| de::Error::invalid_type(de::Unexpected::Unit, &"a string"))
+}
+
+/// Reads a field whose values are a closed set of Palette: its text, or `None` for a null, a
+/// number, or a flag. A list or a map is an error.
+struct SetText;
+
+impl de::Visitor<'_> for SetText {
+    type Value = Option<String>;
+
+    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("text")
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+        Ok(Some(v.to_string()))
+    }
+
+    fn visit_unit<E: de::Error>(self) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_bool<E: de::Error>(self, _: bool) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_i64<E: de::Error>(self, _: i64) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_u64<E: de::Error>(self, _: u64) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+
+    fn visit_f64<E: de::Error>(self, _: f64) -> Result<Self::Value, E> {
+        Ok(None)
+    }
+}
+
+/// The text of a field whose values are a closed set of Palette, or `default` when the value is
+/// not text. [`Variable::from_palette`] reads such a field in the same way.
+fn set_text_or<'de, D: Deserializer<'de>>(d: D, default: &str) -> Result<String, D::Error> {
+    Ok(d.deserialize_any(SetText)?
+        .unwrap_or_else(|| default.to_string()))
+}
+
+/// The `format` of a variable: a value of the closed set `v1VariableFormat`.
+fn format_or_default<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    set_text_or(d, DEFAULT_FORMAT)
+}
+
+/// The `inputType` of a variable: a value of the closed set `v1VariableInputType`.
+fn input_type_or_default<'de, D: Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    set_text_or(d, DEFAULT_INPUT_TYPE)
+}
+
 /// One profile variable: the fields that strata keeps of a variable of Palette.
 ///
-/// Only `name` is required. A field that is not there has the value that [`Variable::from_palette`]
-/// gives it, so a candidate with a `name` and a `defaultValue` loads. A record always holds all
-/// the fields.
+/// Only `name` is required. A field that is not there, or is null, has its default, so a
+/// candidate with a `name` and a `defaultValue` loads. A record always holds all the fields.
 ///
 /// The fields are in the order of their names in the JSON, as a record of an older release holds
 /// them. So a record that strata writes again keeps its text.
@@ -34,41 +109,45 @@ fn default_input_type() -> String {
 #[schemars(inline)]
 pub struct Variable {
     /// The value that the variable has when a cluster gives none.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "text_or_null")]
     pub default_value: String,
     /// What the variable is for.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "text_or_null")]
     pub description: String,
     /// The name of the variable in the form of the UI.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "text_or_null")]
     pub display_name: String,
     /// The format of the value, as Palette gives it in `v1VariableFormat`. Strata writes
     /// `string` when Palette gives none.
-    #[serde(default = "default_format")]
+    #[serde(default = "default_format", deserialize_with = "format_or_default")]
     pub format: String,
     /// True when the UI does not show the variable.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "flag_or_null")]
     pub hidden: bool,
     /// True when the value cannot change after the cluster exists.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "flag_or_null")]
     pub immutable: bool,
     /// How the UI asks for the value, as Palette gives it in `v1VariableInputType`. Strata writes
     /// `text` when Palette gives none.
-    #[serde(default = "default_input_type")]
+    #[serde(
+        default = "default_input_type",
+        deserialize_with = "input_type_or_default"
+    )]
     pub input_type: String,
     /// True when the value is a secret.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "flag_or_null")]
     pub is_sensitive: bool,
     /// The name of the variable, as the macro `{{.spectro.var.NAME}}` names it.
+    #[serde(deserialize_with = "name_not_null")]
     pub name: String,
     /// The values that the UI offers, as Palette gives them in `v1VariableOption`.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "options_or_null")]
     pub options: Vec<VariableOption>,
     /// The pattern that the value must match.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "text_or_null")]
     pub regex: String,
     /// True when a cluster must give a value.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "flag_or_null")]
     pub required: bool,
 }
 
@@ -76,23 +155,25 @@ pub struct Variable {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct VariableOption {
     /// What the UI shows for the value.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "text_or_null")]
     pub description: String,
     /// The text of the option.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "text_or_null")]
     pub label: String,
     /// The value that the option sets.
-    #[serde(default)]
+    #[serde(default, deserialize_with = "text_or_null")]
     pub value: String,
 }
 
 impl Variable {
-    /// The variable that strata keeps of `v`, a variable of Palette: the same fields and the same
-    /// default for each field that Palette does not give, as the bash extraction has them, so that
-    /// the hashes agree across the implementations.
+    /// The variable that strata keeps of `v`, a variable of Palette: the same fields, and the
+    /// default of the field for each one that Palette does not give.
     ///
-    /// A name that is not there is empty text.
-    pub fn from_palette(v: &Value) -> Variable {
+    /// The defaults are those that each record of an older release holds, so its `variablesHash`
+    /// stays. One case differs: a name that is not there. A record of an older release holds
+    /// `null` for it, and strata gives empty text. Palette requires a name, so only a raw
+    /// directory or a profile export that a person made gives such a variable.
+    pub(crate) fn from_palette(v: &Value) -> Variable {
         Variable {
             default_value: text(v, "/defaultValue"),
             description: text(v, "/description"),
@@ -136,7 +217,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_variable_of_palette_gets_the_defaults_of_the_bash_extraction() {
+    fn a_variable_of_palette_gets_the_default_of_each_field_that_it_does_not_give() {
         let v = Variable::from_palette(&json!({"name": "env", "format": 3, "required": true}));
         assert_eq!(
             serde_json::to_value(&v).unwrap(),
@@ -173,6 +254,18 @@ mod tests {
         assert_eq!(v.input_type, "text");
         assert_eq!(v.default_value, "1");
         assert!(serde_json::from_value::<Variable>(json!({"defaultValue": "1"})).is_err());
+    }
+
+    #[test]
+    fn a_null_field_of_a_variable_in_json_is_the_default_of_the_field() {
+        let v: Variable = serde_json::from_value(json!({
+            "name": "a", "description": null, "format": null, "inputType": 4, "hidden": null,
+            "options": null, "defaultValue": null,
+        }))
+        .unwrap();
+        assert_eq!(v, Variable::from_palette(&json!({"name": "a"})));
+        let err = serde_json::from_value::<Variable>(json!({"name": null})).unwrap_err();
+        assert!(err.to_string().contains("expected a string"), "{err}");
     }
 
     #[test]

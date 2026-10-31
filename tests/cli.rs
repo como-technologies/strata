@@ -1113,6 +1113,25 @@ fn the_schema_of_a_leaf_gives_a_segment_a_key_an_index_or_a_named_item() {
 }
 
 #[test]
+fn the_schema_of_a_candidate_layer_types_the_params_as_the_schema_of_a_record_does() {
+    // the record of a candidate keeps the params of its layers, so the two schemas must agree
+    let shape = |v: &serde_json::Value, def: &str| {
+        let params = &v["$defs"][def]["properties"]["params"];
+        (
+            params["type"].clone(),
+            params["properties"]["installOrder"]["type"].clone(),
+            params["additionalProperties"].clone(),
+        )
+    };
+    let (candidate, record) = (
+        shape(&schema("candidate"), "CandidateLayer"),
+        shape(&schema("snapshot"), "Pack"),
+    );
+    assert_eq!(candidate, record);
+    assert_eq!(candidate.2["type"], "string");
+}
+
+#[test]
 fn the_schema_of_a_record_types_the_params_and_the_tiers() {
     let v = schema("snapshot");
     let params = &v["$defs"]["Pack"]["properties"]["params"];

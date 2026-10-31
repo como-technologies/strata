@@ -43,7 +43,7 @@ variables:
 | `cloudType` | no | The cloud of the profile. The default is empty. |
 | `registry` or `registryUid` | no | The registry for each layer that names none. It does not apply to a `manifest` layer. |
 | `layers[]` | yes | One entry for each pack, in profile order. At least one. |
-| `variables[]` | no | The profile variable definitions. A variable needs a `name`. Each other field has the default of a record: see [the variables of a record](documents.md#strata-snapshot1). |
+| `variables[]` | no | The profile variable definitions. A variable needs a `name`. Each other field has the default of a record, also when its value is `null`: see [the variables of a record](documents.md#strata-snapshot1) and [the rules for a variable](#checks-before-any-request). |
 
 A program can also give strata a candidate in memory, as JSON, through the
 library. It then writes no file.
@@ -58,7 +58,7 @@ library. It then writes no file.
 | `values` or `valuesFile` | no | The values, inline or in a file. Not both. With neither, the layer gets the default values of the pack. |
 | `layer` | no | The layer name, as Palette gives it in `v1PackLayer`. The default comes from the registry. Palette takes the layer from the registry, so the layer of a pack from a registry must be its layer in that registry: see [The registry lookups](#the-registry-lookups). A `manifest` layer takes only `addon`: see [A manifest layer](#a-manifest-layer). |
 | `tag` | no | The tag. The default is the tag that equals the version, else the first tag of that version, else the version itself. An explicit tag must be a tag of that version in the registry, or the version itself. A `manifest` layer takes any tag, and its default is the version. A floating tag, such as `1.0.x`, pins the build that the tag names now: see [Tag names](../internals/palette/packs.md#tag-names). |
-| `params` | no | A map that Palette carries on a pack beside its values. Strata puts it in the authored hash, so a change to it is an `AUTHORED` change. |
+| `params` | no | A map that Palette carries on a pack beside its values. Each value is text, as in a record. Strata puts it in the authored hash, so a change to it is an `AUTHORED` change. |
 | `manifests[]` | no; one or more on a `manifest` layer | Each with a `name`, and `content` inline or a `contentFile`. |
 
 > **Set `tag` to the tag that you publish.** Palette stores the tag that a
@@ -85,6 +85,13 @@ Strata reads the whole file before it sends a request:
     line.
   - A layer sets `values` or `valuesFile`, or neither. Not both.
   - A manifest sets `content` or `contentFile`. Not both, and not neither.
+  - A param of a layer is text. `installOrder` is the one param that is an
+    integer. The message names the layer and the param.
+  - A variable has a `name` that is text. A flag (`required`, `hidden`,
+    `immutable`, or `isSensitive`) is a boolean. A field of text is text, a
+    number, or a flag, and keeps its text: `defaultValue: 8080` is `8080`. A
+    list or a map there is refused. A `null` is the default of the field.
+    `format` and `inputType` take the default for a number or a flag.
 
   So strata reports a misspelled field such as `valuesfile`.
 - A values file or a manifest file that strata cannot read is `io`.

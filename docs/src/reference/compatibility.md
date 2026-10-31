@@ -72,16 +72,53 @@ After 0.24.0, the schema states the shape of each field that it left open. A
 variable has its twelve fields, and `name` is required. A segment of a leaf is
 a key, an integer, or an object with a `name`. The `params` of a pack are an
 object of text, but for `installOrder`, which is an integer. A tier has the
-keys of its `fields`. An `error` has a `kind` and a `message`. A time has
-`format: date-time`. A document stays the same, so the ids stay, no root
+keys of its `fields`.
+
+An `error` has a `kind` and a `message`. A time has `format: date-time`. A
+record that strata takes from Palette stays the same. So the ids stay, no root
 changes, and a variable has its keys in the same order.
 
-One case differs. A variable that Palette gives with no `name` has an empty
-`name`. Before, its `name` was `null`. Its record has another `variablesHash`,
-and strata does not read a record that holds `name: null`. In the library,
-`Snapshot::variables` and `Candidate::variables` are `Vec<Variable>` in place
-of `Vec<Value>`. `Leaf::segments` is `Vec<Segment>` in place of `Vec<Value>`.
-The function `diff::group_variables` takes `&[Variable]`.
+One case differs. A variable with no `name` has an empty `name`. Before, its
+`name` was `null`. Palette requires a name, so only a raw directory or a
+profile export that a person made gives such a variable. Its record has another
+`variablesHash`, `root`, and `contentDigest`.
+
+Strata does not read a record that holds `name: null`. `verify`, `compare`,
+`behind`, and `same-release` stop on it with `snapshot-schema` and exit `2`. The
+id stays. Palette requires a name, so only a raw directory that a person made
+gave such a record. In the library, `Snapshot::variables` and
+`Candidate::variables` are `Vec<Variable>` in place of `Vec<Value>`.
+`Leaf::segments` is `Vec<Segment>` in place of `Vec<Value>`. The function
+`diff::group_variables` takes `&[Variable]`.
+
+After 0.24.0, strata reads the variables of a candidate file by type. Before, it
+changed each value of the wrong type into the default of the field. Four cases
+differ:
+
+- A variable with no `name`, or with `name: null`, gives `candidate-invalid`.
+  Before, it loaded with `name: null`.
+- A flag that is not a boolean gives `candidate-invalid`, as in
+  `required: "yes"`. Before, it loaded as `false`.
+- A list or a map in a field of text gives `candidate-invalid`, as in
+  `defaultValue: [a]`. Before, it loaded as empty text.
+- A number or a flag in a field of text keeps its text: `defaultValue: 8080` is
+  `8080`. Before, it was empty text. The record has another `variablesHash` and
+  another root: the root of the text that Palette holds. `--create` and
+  `--validate` send that text.
+
+`format` and `inputType` are the exception to the last case. Each holds a name
+of a set of Palette, so a number or a flag there is the default. A null in a
+field is the default of the field: `null`, `~`, and a field with no value. This
+is as before.
+
+After 0.24.0, a param of a layer of a candidate must be text, and `installOrder`
+must be an integer. Another value gives `candidate-invalid`, which names the
+layer and the param. Before, the candidate took any value.
+
+After 0.24.0, a tier of an app profile whose `installOrder` is not an integer
+has no `installOrder` in its record, and it sorts as a tier at 0. Before, the
+record kept the value, and the tier sorted first. Palette gives an integer, so
+no record changes in practice.
 
 A field can also become absent, and that keeps the id as well. For most fields
 absent is a value: a field that is false, empty, or zero is left out, and each

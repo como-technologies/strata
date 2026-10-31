@@ -128,9 +128,11 @@ fn page_after(path: &str, next: &str) -> String {
     format!("{path}{join}continue={}", query_value(next))
 }
 
-/// The install order of a tier, when Palette gives one.
-fn install_order(tier: &Value) -> Option<&Value> {
+/// The install order of a tier, when Palette gives one. Palette gives an integer, and a record
+/// holds one. A value of another type is no order.
+fn install_order(tier: &Value) -> Option<i64> {
     tier.pointer(&format!("/spec/{TIER_INSTALL_ORDER}"))
+        .and_then(Value::as_i64)
 }
 
 /// The variables document of an object that has no variable: `{"variables": []}`.

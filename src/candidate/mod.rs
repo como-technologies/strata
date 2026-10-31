@@ -225,8 +225,10 @@ pub struct CandidateLayer {
     /// A file with the values YAML, relative to the candidate file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub values_file: Option<String>,
-    /// Pack params.
+    /// Pack params: each name and its value, as text. The record keeps them, so they have the
+    /// schema of the params of a record. `installOrder` is the one integer.
     #[serde(default, skip_serializing_if = "Map::is_empty")]
+    #[schemars(schema_with = "crate::snapshot::pack::params_schema")]
     pub params: Map<String, Value>,
     /// Manifests attached to the pack.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

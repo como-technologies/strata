@@ -231,8 +231,8 @@ impl<A: PaletteApi> Palette<A> {
         // Palette lists the tiers in the display order of the app profile, not in install order.
         let mut ordered: Vec<&Value> = arr(&tiers, "/spec/appTiers").iter().collect();
         // A stable sort: tiers of one order keep the order of the listing. Palette gives no order
-        // for a tier at 0. An order that is not an integer comes first, and the record keeps it.
-        ordered.sort_by_key(|tier| install_order(tier).map_or(Some(0), Value::as_i64));
+        // for a tier at 0.
+        ordered.sort_by_key(|tier| install_order(tier).unwrap_or(0));
         let (mut packs, mut mpacks) = (Vec::new(), Vec::new());
         for tier in ordered {
             let name = text(tier, "/metadata/name");
@@ -241,7 +241,7 @@ impl<A: PaletteApi> Palette<A> {
                 .map(|p| (text(p, "/name"), Value::from(text(p, "/value"))))
                 .collect();
             if let Some(order) = install_order(tier) {
-                params.insert(TIER_INSTALL_ORDER.to_string(), order.clone());
+                params.insert(TIER_INSTALL_ORDER.to_string(), Value::from(order));
             }
             let registry = text(tier, &format!("/spec/{TIER_CONTAINER_REGISTRY}"));
             if !registry.is_empty() {
