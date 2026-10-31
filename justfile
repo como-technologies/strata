@@ -85,6 +85,13 @@ docs:
 docs-serve:
     mdbook serve docs --open
 
+# The flags are those of `just lint`, so the two recipes share one build. Add --open to open the pages.
+
+# Build the rustdoc of strata and strata-preflight into target/doc/, and print the path of the HTML
+api-docs *args:
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight {{args}}
+    @echo "{{justfile_directory()}}/target/doc/strata/index.html"
+
 # xtask runs each command of the book against a local stand-in for Palette. Needs jq, which the
 # book's own commands use.
 

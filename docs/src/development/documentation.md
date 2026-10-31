@@ -7,6 +7,7 @@ just docs-serve        # build the book and open it at http://localhost:3000
 just docs-examples     # run each command of the book again, and write docs/src/output/
 just docs-check        # fail when docs/src/output/ is not current
 just docs-lint         # test each link with mdbook-lint
+just api-docs          # build the rustdoc into target/doc/ and print the path of the HTML
 ```
 
 The book needs `mdbook`, `mdbook-mermaid`, and `mdbook-gruvbox`. `just

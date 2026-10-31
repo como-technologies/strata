@@ -85,7 +85,8 @@ so `cargo add strata` gets the wrong one.
 cargo doc --open
 ```
 
-Each public item has documentation. The build refuses an item without it.
+Each public item has documentation. The build refuses an item without it. In a
+clone of strata, `just api-docs` builds the same pages into `target/doc/strata/`.
 
 The crate documentation starts with an example that runs as a test.
 `examples/library/` is a separate crate that uses strata as a library, with no
