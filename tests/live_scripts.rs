@@ -4529,6 +4529,41 @@ fn validate_packs_sh_stage_6_sends_the_route_of_the_cluster_a_tag_that_no_regist
 }
 
 #[test]
+fn validate_packs_sh_stage_6_sends_the_route_of_the_cluster_a_body_longer_than_one_argument() {
+    // One argument of Linux holds 128 KiB at most: the values of the packs of a real cluster
+    // are longer, and a body passed as an argument fails the check with exit 126 (#466)
+    const LIMIT: usize = 128 * 1024;
+    let report = kubernetes_bump_report("1.37.0", &upgrade_refused());
+    let values = "v: 1\n".repeat(LIMIT / 4);
+    let mut document = fred_document();
+    document["spec"]["clusterProfileTemplates"][0]["packs"][1]["values"] = values.clone().into();
+    let (stage, steps) = bump_stage_with(&report, &report, |stage| {
+        stage.route(
+            &format!("/v1/spectroclusters/{FRED_UID}"),
+            &document.to_string(),
+        );
+    });
+    passed(
+        &steps,
+        &[
+            "cluster-route-doc",
+            "cluster-route-tag",
+            "cluster-route-tag-says",
+        ],
+    );
+    let sent = stage.sent(
+        "POST",
+        &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
+    );
+    assert_eq!(sent.len(), 1, "{steps}");
+    assert!(sent[0].to_string().len() > LIMIT);
+    assert_eq!(
+        sent[0]["profiles"][0]["packValues"][1]["values"].as_str(),
+        Some(values.as_str())
+    );
+}
+
+#[test]
 fn validate_packs_sh_stage_6_fails_when_the_route_of_the_cluster_checks_the_sent_tag() {
     let report = kubernetes_bump_report("1.37.0", &upgrade_refused());
     // Palette gives an error for the tag: the check of the tag fails, and the request passed

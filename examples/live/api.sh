@@ -116,10 +116,11 @@
 #       POST the body JSON to a search of the API, such as /v1/dashboard/edgehosts/search, or to
 #       a validate route, such as /v1/clusterprofiles/validate/packs, and print the answer. A
 #       POST to another path can create something: use a search path or a validate path only.
-#   api.sh post-status PATH JSON
-#       The request of `post`, for a validate path, that prints the HTTP status as `HTTP <code>` on
-#       the first line and the answer after it. It exits 0 for each status, so that a check can
-#       read a refusal and the status that Palette gives it.
+#   api.sh post-status PATH BODY_FILE
+#       The request of `post`, for a validate path, with the body in the file BODY_FILE: the body
+#       for a real cluster is longer than one argument can be. It prints the HTTP status as
+#       `HTTP <code>` on the first line and the answer after it. It exits 0 for each status, so
+#       that a check can read a refusal and the status that Palette gives it.
 #   api.sh packs-where [--name NAME] [JQ_OPTION...] JQ_FILTER
 #       Print the first pack of the packs of the project for which JQ_FILTER, a jq condition on the
 #       pack, is true: one line of JSON. The listing is read a page at a time, and the read stops
@@ -766,12 +767,12 @@ post() {
   call POST "$path" "$body" || return 2
 }
 
-# post-status PATH JSON: print `HTTP <code>`, then the answer, for each status
+# post-status PATH BODY_FILE: print `HTTP <code>`, then the answer, for each status
 post_status() {
-  local path=${1:-} json=${2:-} body
-  [ -n "$json" ] || die "usage: api.sh post-status PATH JSON"
-  body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
-  jq -e . <<<"$json" > "$body" || die "the body is not JSON: $json"
+  local path=${1:-} body=${2:-}
+  [ -n "$body" ] && [ $# -eq 2 ] || die "usage: api.sh post-status PATH BODY_FILE"
+  [ -f "$body" ] || die "no body file: $body"
+  jq -e . "$body" > /dev/null || die "the body is not JSON: $body"
   SHOW_STATUS=1 call POST "$path" "$body" || return 2
 }
 

@@ -297,9 +297,11 @@ if [ "$stage" = 6 ]; then
       cluster_uid=$(jq -r '.source.cluster.uid' bump-cluster.json)
       check cluster-route-doc 0 "#453: the document of cluster $CLUSTER" -- \
         "$live/api.sh" get "/v1/spectroclusters/$cluster_uid"
+      # The body goes in a file, as one argument cannot hold the values of the packs of a real
+      # cluster (#466)
+      jq -c --arg tag "$absent_tag" "$cluster_body" cluster-route-doc.out > cluster-route-body.json
       check cluster-route-tag 0 "#453: the route of the cluster answers a body with the tag $absent_tag for kubernetes" -- \
-        "$live/api.sh" post-status "/v1/spectroclusters/$cluster_uid/validate/packs" \
-        "$(jq -c --arg tag "$absent_tag" "$cluster_body" cluster-route-doc.out)"
+        "$live/api.sh" post-status "/v1/spectroclusters/$cluster_uid/validate/packs" cluster-route-body.json
       check cluster-route-tag-says 0 '#453: the answer is HTTP 200 with no error: the route does not check the sent tag' -- \
         bash -c "head -n 1 cluster-route-tag.out | grep -qx 'HTTP 200' && sed 1d cluster-route-tag.out | jq -e '(.profiles // []) | length == 0'"
     fi

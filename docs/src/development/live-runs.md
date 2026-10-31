@@ -772,7 +772,7 @@ nothing.
 | `bump-cluster-same` | 0 | #419: with `CLUSTER`, the bump of `kubernetes` in the record of the cluster has the version, the impact level, and the change flags of the bump in the record of the profile. No result yet. |
 | `bump-cluster-asked` | 0 | #453: `behind` on the record of the cluster asks the route of the profile version that the cluster runs, and the bump holds an answer of Palette in `bump.paletteValidation`. No result yet. |
 | `bump-cluster-refused` | 0 | #453: the route of the profile version that the cluster runs refuses the same move, and the error names this cluster. No result yet. |
-| `cluster-route-doc`, `cluster-route-tag`, `cluster-route-tag-says` | 0 | #453: the route of the cluster answers HTTP 200 with no error for a body with the tag `9.99.9` for `kubernetes`. No registry has that version, and the profile is one that the cluster runs. Palette keeps the tag of the copy that the cluster holds. No result yet. |
+| `cluster-route-doc`, `cluster-route-tag`, `cluster-route-tag-says` | 0 | #453: the route of the cluster answers HTTP 200 with no error for a body with the tag `9.99.9` for `kubernetes`. No registry has that version, and the profile is one that the cluster runs. Palette keeps the tag of the copy that the cluster holds. The body of a real cluster is longer than one argument can be (128 KiB). So `cluster-route-tag` writes the body to `cluster-route-body.json` and gives `api.sh post-status` the path of that file (#466). No result yet. |
 
 No pack of the Public Repo lists a dependency in its tags route. Only stage 6
 asks for a refusal of a dependency, the upgrade dependency, which no read route
