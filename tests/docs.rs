@@ -5,9 +5,12 @@
 //! other is invisible to a reader who came the other way. That happened to "What changed between
 //! two pack versions", which reached the navigation and never reached the list.
 
+use crate::common;
+
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use common::version_of;
 use strata::api::codes::ValidateRoute;
 
 fn docs() -> PathBuf {
@@ -111,15 +114,6 @@ fn the_preflight_crate_has_the_version_of_strata() {
         preflight, strata,
         "preflight/Cargo.toml is {preflight} and Cargo.toml is {strata}: a release keeps them equal"
     );
-}
-
-/// The version line of a manifest, from the root of the repository.
-fn version_of(manifest: &str) -> String {
-    read(&Path::new(env!("CARGO_MANIFEST_DIR")).join(manifest))
-        .lines()
-        .find_map(|l| l.strip_prefix("version = \"").map(str::to_owned))
-        .and_then(|l| l.strip_suffix('"').map(str::to_owned))
-        .unwrap_or_else(|| panic!("{manifest} has a version line"))
 }
 
 #[test]

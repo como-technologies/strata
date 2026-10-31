@@ -62,9 +62,9 @@ fn read(repo: &Path, path: &Path, bad: &mut Vec<String>) -> Option<String> {
     }
 }
 
-/// A release tag that a reader copies -- an install command, a workflow ref, or the `tag` of a git
-/// dependency -- must be this release. A tag from the release before sends them to the wrong binary, and nothing else
-/// notices.
+/// A release tag that a reader copies -- an install command, a workflow ref, or the `tag` of a
+/// git dependency -- must be this release. A tag from the release before sends them to the wrong
+/// binary, and nothing else notices.
 ///
 /// Two files keep older tags on purpose, and are not read here: `development/live-runs.md`
 /// records what each live run used, and `development/release.md` states that rule. Prose that

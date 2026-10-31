@@ -184,12 +184,7 @@ fn the_ci_drop_ins_pass_only_options_the_scripts_have() {
 
 #[test]
 fn the_ci_drop_ins_name_the_version_this_repository_is_at() {
-    let cargo = repo_file("Cargo.toml");
-    let line = cargo
-        .lines()
-        .find(|l| l.starts_with("version = "))
-        .expect("a version in Cargo.toml");
-    let version = format!("v{}", line.split('"').nth(1).unwrap());
+    let version = format!("v{}", version_of("Cargo.toml"));
     for file in DROP_INS {
         for token in repo_file(file).split(|c: char| c.is_whitespace() || c == '"' || c == '\'') {
             let token = token.trim_end_matches(&[',', ';', ')', '`'][..]);
