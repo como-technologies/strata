@@ -309,5 +309,6 @@ case "${1:-}" in
   diagnose) shift; diagnose "$@" ;;
   repave) shift; repave "$@"; exit $? ;;
   digest) shift; digest "$@" ;;
+  # The same text as `usage` of lib.sh. This script does not source lib.sh: lib.sh runs this script.
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

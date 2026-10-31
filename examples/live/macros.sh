@@ -25,13 +25,12 @@
 set -uo pipefail
 script=macros
 from=${1:-1}
-case "$from" in 1|2|3|4|5) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "$from" in 1|2|3|4|5) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 command -v kubectl > /dev/null || die "kubectl is needed to read the value inside the cluster"
 
 macro=strata_probe
-edit_from='edited: "no"'
 edit_to="edited: \"{{.spectro.macro.$macro}}\""
 minutes=${PROPAGATION_MINUTES:-20}
 
@@ -40,18 +39,10 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# macro test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster \`${C:-}\`,"
-    echo "add-on \`${AD:-}\`, project macro \`$macro\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "macro test" ", cluster \`${C:-}\`," \
+    "add-on \`${AD:-}\`, project macro \`$macro\`."
 }
 trap summary EXIT
-
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 load_outputs
 C=$(out cluster_uid) AD=$(out addon_profile_uid) P=$(out project_uid)
@@ -93,7 +84,7 @@ fi
 if stage 2 "a macro that the add-on reads"; then
   check macro-set 0 "#72: the project macro $macro gets the value one" -- "$live/api.sh" macro-set "$macro" one
   check macro-edit 0 "#72: the manifest of $addon reads the macro, through the API" -- \
-    "$live/api.sh" edit "$AD" "$edit_from" "$edit_to"
+    "$live/api.sh" edit "$AD" "$addon_from" "$edit_to"
   check macro-flag 0 '#72: Palette says the version has user macros now' -- test "$(has_macros)" = true
   check macro-record 0 "record $addon" -- "$strata" snapshot "$AD" -o addon-1.json
   check macro-names 0 '#72: a report of the record names the macro' -- \
@@ -150,7 +141,7 @@ if stage 4 "what the cluster runs"; then
 fi
 
 if stage 5 "undo"; then
-  check undo-edit 0 "the manifest of $addon back" -- "$live/api.sh" edit "$AD" "$edit_to" "$edit_from"
+  check undo-edit 0 "the manifest of $addon back" -- "$live/api.sh" edit "$AD" "$edit_to" "$addon_from"
   check undo-accept 0 'cluster A takes it' -- "$live/api.sh" apply "$C"
   check undo-settled 0 'no update waits for cluster A' -- settled
   check undo-macro 0 "the macro $macro deleted" -- "$live/api.sh" macro-delete "$macro"

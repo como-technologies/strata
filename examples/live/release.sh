@@ -12,20 +12,14 @@
 # go under runs/<UTC time>/release/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail
 script=release
-case "${1:-}" in "") ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "${1:-}" in "") ;; *) usage; exit 2 ;; esac
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/release}
 mkdir -p "$run" && cd "$run" || exit 2
 
 summary() {
-  {
-    echo "# release test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\`: the route \`GET /v1/mgmt/app/version\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "release test" ": the route \`GET /v1/mgmt/app/version\`."
 }
 trap summary EXIT
 

@@ -37,14 +37,8 @@ community_uid=$(registry_uid "$community")
 [ -n "$disabled_uid" ] && [ -n "$community_uid" ] || die "the key cannot see $disabled_reg and $community"
 
 summary() {
-  {
-    echo "# pack state test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`: \`$disabled@$disabled_version\` and"
-    echo "\`$deleted@$deleted_version\` in \`$disabled_reg\`, \`$deprecated@$deprecated_version\` in \`$community\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "pack state test" ": \`$disabled@$disabled_version\` and" \
+    "\`$deleted@$deleted_version\` in \`$disabled_reg\`, \`$deprecated@$deprecated_version\` in \`$community\`."
 }
 trap summary EXIT
 

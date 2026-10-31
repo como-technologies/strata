@@ -25,7 +25,7 @@ main() {
   down=""
   every=30
   limit=5400
-  usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+  . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
   while [ $# -gt 0 ]; do
     case "$1" in
       --build) build=1 ;;
@@ -40,7 +40,6 @@ main() {
     esac
     shift
   done
-  . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
   [ -x "$strata" ] || die "no strata binary at $strata"
 
   run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/watch}

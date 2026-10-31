@@ -34,13 +34,7 @@ export PALETTE_PROJECT_UID=$(out project_uid)
 FILTER=strata-live-prod
 
 summary() {
-  {
-    echo "# fleet test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster \`$C\`, filter \`$FILTER\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "fleet test" ", cluster \`$C\`, filter \`$FILTER\`."
 }
 trap summary EXIT
 

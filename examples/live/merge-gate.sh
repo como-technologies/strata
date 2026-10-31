@@ -39,20 +39,13 @@ export GIT_AUTHOR_NAME=live GIT_AUTHOR_EMAIL=live@example.com
 export GIT_COMMITTER_NAME=live GIT_COMMITTER_EMAIL=live@example.com
 
 summary() {
-  {
-    echo "# merge gate test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, profile"
-    echo "\`$profile\` at \`$older\` and \`$newer\`, add-on \`$addon@1.0.0\` (\`${AD:-}\`)."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "merge gate test" ", profile" \
+    "\`$profile\` at \`$older\` and \`$newer\`, add-on \`$addon@1.0.0\` (\`${AD:-}\`)."
 }
 trap summary EXIT
 
 save() { echo "$1=$2" >> ids.env; }
 [ -f ids.env ] && . ./ids.env
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 work=$run/work
 # gate ID EXPECTED WHAT: run the gate in the work tree against main
@@ -110,7 +103,7 @@ fi
 
 if stage 4 "Palette moves under a record"; then
   check api-edit 0 '#57: edit the add-on version in place through the API' -- \
-    "$live/api.sh" edit "$AD" 'edited: "no"' 'edited: "yes"'
+    "$live/api.sh" edit "$AD" "$addon_from" "$addon_to"
   gate_check drifted 1 '#57: the gate is red on a record Palette no longer matches'
   check drifted-says 0 '#57: the report names the record that does not verify' -- \
     grep -q "DRIFTED: releases/addon.json" drifted.out
@@ -120,7 +113,7 @@ fi
 
 if stage 5 "undo the edit"; then
   check api-undo 0 '#57: undo the edit through the API' -- \
-    "$live/api.sh" edit "$AD" 'edited: "yes"' 'edited: "no"'
+    "$live/api.sh" edit "$AD" "$addon_to" "$addon_from"
   gate_check restored 0 '#57: the gate passes again once Palette matches the record'
 fi
 

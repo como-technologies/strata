@@ -27,7 +27,7 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 load_outputs
-[ "$(sed -n 's/^cloud *= *"\(.*\)"/\1/p' "$live/terraform/terraform.tfvars")" = gke ] \
+[ "$(var cloud)" = gke ] \
   || die "set cloud = \"gke\" in terraform/terraform.tfvars, and run just live-up"
 C=$(out cluster_uid)
 [ -n "$C" ] || die "no cluster A; run just live-up"
@@ -36,18 +36,12 @@ export PALETTE_PROJECT_UID=$(out project_uid)
 wait_running "$C"
 R=$(out release_profile_uid)
 NAME=$(out profile_name)
-gcp_project=$(sed -n 's/^gcp_project *= *"\(.*\)"/\1/p' "$live/terraform/terraform.tfvars")
-gcp_region=$(sed -n 's/^gcp_region *= *"\(.*\)"/\1/p' "$live/terraform/terraform.tfvars")
+gcp_project=$(var gcp_project)
+gcp_region=$(var gcp_region)
 gcp_region=${gcp_region:-us-east1}
 
 summary() {
-  {
-    echo "# managed engine test: GKE"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster \`$C\`, release \`$R\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "managed engine test: GKE" ", cluster \`$C\`, release \`$R\`."
 }
 trap summary EXIT
 

@@ -20,8 +20,8 @@
 set -uo pipefail
 script=edge-host
 from=${1:-1}
-case "$from" in 1|2|3|4) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "$from" in 1|2|3|4) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/edge-host}
@@ -31,18 +31,10 @@ export STRATA_QUIET=1
 E=strata-edge-78 E2=strata-edge-78-release
 
 summary() {
-  {
-    echo "# edge host test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, edge host \`$E\`,"
-    echo "add-on \`${AD:-}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "edge host test" ", edge host \`$E\`," \
+    "add-on \`${AD:-}\`."
 }
 trap summary EXIT
-
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 load_outputs
 AD=$(out addon_profile_uid) R=$(out release_profile_uid)
@@ -83,7 +75,7 @@ fi
 
 if stage 2 "an edit in place of the add-on version"; then
   check edit 0 "edit the manifest of the add-on version in place through the API" -- \
-    "$live/api.sh" edit "$AD" 'edited: "no"' 'edited: "yes"'
+    "$live/api.sh" edit "$AD" "$addon_from" "$addon_to"
   sleep 20
   check edit-host-verify 0 '#81: the edge host keeps its own copy of the manifest: verify of its record passes' -- \
     "$strata" verify host.json
@@ -98,8 +90,8 @@ if stage 2 "an edit in place of the add-on version"; then
     bash -c "comm -12 <(jq -r '.spec.clusterProfileTemplates[].packs[].manifests[]?.uid' edit-host-raw.out | sort) \
       <(\"$live/api.sh\" get /v1/clusterprofiles/$AD/packs/manifests | jq -r '.spec.packs[].spec.manifests[]?.uid' | sort) | grep -q . && exit 1 || exit 0"
   check edit-host-copy 0 '#81: the route of the copy gives the content from before the edit' -- \
-    bash -c "for u in \$(jq -r '.spec.clusterProfileTemplates[].packs[].manifests[]?.uid' edit-host-raw.out); do \"$live/api.sh\" get /v1/edgehosts/$E/pack/manifests/\$u; done | jq -rs 'map(.spec.published.content) | join(\"\")' | grep -q 'edited: \"no\"'"
-  check edit-undo 0 'undo the edit' -- "$live/api.sh" edit "$AD" 'edited: "yes"' 'edited: "no"'
+    bash -c "for u in \$(jq -r '.spec.clusterProfileTemplates[].packs[].manifests[]?.uid' edit-host-raw.out); do \"$live/api.sh\" get /v1/edgehosts/$E/pack/manifests/\$u; done | jq -rs 'map(.spec.published.content) | join(\"\")' | grep -qF '$addon_from'"
+  check edit-undo 0 'undo the edit' -- "$live/api.sh" edit "$AD" "$addon_to" "$addon_from"
 fi
 
 if stage 3 "an edit in place of a value of the release version"; then

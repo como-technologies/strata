@@ -1,6 +1,7 @@
-# Shared by the scripts in examples/live: the strata binary, the OpenTofu outputs, the checks and
-# their summary, the OpenTofu applies, and the baseline. Source it, then set `script` to the
-# script's name and `flag` to the immutable-clusterprofiles setting the script runs with.
+# Shared by the scripts in examples/live: the strata binary, the OpenTofu outputs, the usage and the
+# stages, the checks and their summary, the edits of the lab, the OpenTofu applies, and the baseline.
+# Set `script` to the script's name, `flag` to the immutable-clusterprofiles setting the script runs
+# with, and `from` to the first stage of the run, then source it.
 #
 # The baseline is the state `just live-up` builds: cluster A Running the release and add-on
 # profiles' current content, no cluster B, every profile name holding only the versions
@@ -14,6 +15,15 @@ script=${script:-live}
 flag=${flag:-false}
 
 die() { echo "$script: $*" >&2; exit 2; }
+
+# usage: print the comment at the top of the script: from its second line to the line before
+# `set -uo pipefail`, without the leading `# `. The script sources this file before it checks its
+# arguments.
+usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+
+# stage N TITLE: print the heading of stage N, and succeed when this run reaches it. The script sets
+# `from` to the first stage of the run.
+stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 # A jq older than 1.7 exits with 0 for `jq -e` when its input is empty, as it is when the command
 # before it failed. A check on that output passes. For such a jq, this function exits with 4 when
@@ -72,14 +82,22 @@ instances() {
   done | sort | paste -sd ' ' -
 }
 
-# ---- an edit of the Kubernetes pack ------------------------------------------------------------------
+# ---- the edits of the lab ----------------------------------------------------------------------------
+
+# addon_from: the line of the manifest of the add-on profile that terraform/main.tf writes, and
+# addon_to: the same line after the edit. An edit of addon_from into addon_to changes one manifest
+# of the add-on profile, and no pack value: api.sh edit UID "$addon_from" "$addon_to".
+addon_from='edited: "no"'
+addon_to='edited: "yes"'
 
 # kubeadm_from: the one line of the Kubernetes pack under postKubeadmCommands, with its indentation
 # and its newline; the OS pack has the key too. kubeadm_to: the same line and one command more.
 # An edit of kubeadm_from into kubeadm_to changes a key that Palette says repaves:
-# api.sh edit UID "$kubeadm_from" "$kubeadm_to".
+# api.sh edit UID "$kubeadm_from" "$kubeadm_to". kubeadm_repave: the line that strata compare
+# --repave prints for that edit, which names the pack, the reason, and the key.
 kubeadm_from=$'    - \'chmod 600 /var/lib/kubelet/config.yaml\'\n'
-kubeadm_to=$'    - \'chmod 600 /var/lib/kubelet/config.yaml\'\n    - \'echo strata-repave-test\'\n'
+kubeadm_to=${kubeadm_from}$'    - \'echo strata-repave-test\'\n'
+kubeadm_repave='palette    repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)'
 
 # ---- the body of a create ----------------------------------------------------------------------------
 
@@ -164,6 +182,25 @@ summary_table() {
     what=$(awk -F '\t' -v id="$id" '$1 == id { w = $2 } END { print w }' checks.tsv 2>/dev/null)
     echo "| $verdict | \`$id\` | ${want%,} | $got | $what |"
   done
+}
+
+# write_summary TITLE [NOTE...]: write summary.md, the report of the run: the title, the line
+# "Run `<run id>` with `<strata version>`" followed by the words of NOTE, and summary_table. The
+# first word of NOTE starts with the punctuation that follows the version. The run id is $run_id,
+# or the name of the directory above $run. The line leaves out the version when no strata binary
+# exists. A script calls this function in the `summary` that its EXIT trap runs, so NOTE holds the
+# values that the run found.
+write_summary() {
+  local title=$1 with=""
+  shift
+  [ ! -x "$strata" ] || with=" with \`$("$strata" --version)\`"
+  {
+    echo "# $title"
+    echo
+    echo "Run \`${run_id:-$(basename "$(dirname "$run")")}\`$with$*"
+    echo
+    summary_table
+  } > summary.md
 }
 
 # ---- OpenTofu ----------------------------------------------------------------------------------------
@@ -269,7 +306,7 @@ restore_addon() {
   name=$(out addon_profile_name)
   # 1. the content: undo an in-place edit that is still there
   if ! "$strata" compare "$record" "$uid" >/dev/null 2>&1; then
-    "$live/api.sh" edit "$uid" 'edited: "yes"' 'edited: "no"' | tee -a steps.log || die "cannot undo the edit of $uid"
+    "$live/api.sh" edit "$uid" "$addon_to" "$addon_from" | tee -a steps.log || die "cannot undo the edit of $uid"
   fi
   # 2. OpenTofu manages the uid the cluster runs
   current=$(out addon_profile_uid)

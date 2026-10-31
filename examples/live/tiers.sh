@@ -28,8 +28,8 @@
 set -uo pipefail
 script=tiers
 from=${1:-1}
-case "$from" in 1|2|3|4|5|6) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "$from" in 1|2|3|4|5|6) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/tiers}
@@ -37,18 +37,10 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# cluster tiers test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster A \`${C:-}\`,"
-    echo "cluster B \`${B:-}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "cluster tiers test" ", cluster A \`${C:-}\`," \
+    "cluster B \`${B:-}\`."
 }
 trap summary EXIT
-
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 load_outputs
 C=$(out cluster_uid) R=$(out release_profile_uid)

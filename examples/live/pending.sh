@@ -30,8 +30,8 @@
 set -uo pipefail
 script=pending
 from=${1:-1}
-case "$from" in 1|2|3|4|5|6) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "$from" in 1|2|3|4|5|6) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/pending}
@@ -39,18 +39,10 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# pending update test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster \`${C:-}\`,"
-    echo "release \`${R:-}\`, add-on \`${AD:-}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "pending update test" ", cluster \`${C:-}\`," \
+    "release \`${R:-}\`, add-on \`${AD:-}\`."
 }
 trap summary EXIT
-
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 load_outputs
 C=$(out cluster_uid) R=$(out release_profile_uid) AD=$(out addon_profile_uid)
@@ -91,7 +83,7 @@ fi
 
 if stage 2 "an edit of a manifest of the add-on version"; then
   check addon-edit 0 "#70: edit the manifest of $addon in place through the API" -- \
-    "$live/api.sh" edit "$AD" 'edited: "no"' 'edited: "yes"'
+    "$live/api.sh" edit "$AD" "$addon_from" "$addon_to"
   check addon-pending 0 '#70: a record of cluster A says that an update waits' -- settled true
   check addon-record 0 'record cluster A' -- record addon
   check addon-names 0 '#70: pendingUpdates names the add-on profile, and the manifest that changed' -- \
@@ -132,7 +124,7 @@ if stage 3 "the update accepted on cluster A"; then
   check accept-record 0 'record cluster A' -- record accepted
   check accept-as-pending 0 '#78: the cluster now runs what the pending record held: the same root' -- \
     test "$(jq -r .root accepted.json)" = "$(jq -r .root addon-pending.json)"
-  check accept-undo 0 "undo the edit of $addon" -- "$live/api.sh" edit "$AD" 'edited: "yes"' 'edited: "no"'
+  check accept-undo 0 "undo the edit of $addon" -- "$live/api.sh" edit "$AD" "$addon_to" "$addon_from"
   check accept-undo-pending 0 '#70: the undo is an edit too: an update waits' -- settled true
   check accept-again 0 'accept it, resolving the notification' -- "$live/api.sh" apply "$C"
   check accept-again-none 0 '#70: none waits' -- settled false
@@ -175,7 +167,7 @@ if stage 6 "a kubeadm command in the Kubernetes pack of the release version"; th
   check k8s-repave 1 '#276: compare cluster:<uid> cluster:<uid>@pending --repave: CHANGED' -- \
     "$strata" compare "cluster:$C" "cluster:$C@pending" --repave
   check k8s-repave-says 0 '#276: the palette line holds the answer of Palette: repave, the pack, and the key' -- \
-    grep -q '^palette    repave: PackValuesUpdated kubernetes (kubeadmconfig.postKubeadmCommands)$' k8s-repave.out
+    grep -qxF "$kubeadm_repave" k8s-repave.out
   check k8s-repave-json 0 '#276: --json carries paletteRepave for cluster A: required true, and the key in the reason' -- \
     bash -c "\"$strata\" compare cluster:$C cluster:$C@pending --repave --json | jq -e '.paletteRepave | .required == true and .clusterUid == \"$C\" and (.reasons[0].keys | index(\"kubeadmconfig.postKubeadmCommands\"))'"
   check k8s-undo 0 'put the command back through the API' -- "$live/api.sh" edit "$R" "$kubeadm_to" "$kubeadm_from"

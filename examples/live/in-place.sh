@@ -32,12 +32,12 @@ set -uo pipefail
 script=in-place
 mode=${1:-}
 from=${2:-1}
+. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 case "$mode" in
   off) flag=false ;;
   on) flag=true ;;
-  *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) usage; exit 2 ;;
 esac
-. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 # Expected exits that differ with the flag, and what OpenTofu says about the edit.
@@ -49,30 +49,23 @@ else
   plan_edit_says='spectrocloud_cluster_profile.addon will be updated in-place'
 fi
 
-edit_from='edited: "no"'
-edit_to='edited: "yes"'
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/in-place/$mode}
+# the mode names the directory of the run, so the run id is the name two directories above it
+run_id=$(basename "$(dirname "$(dirname "$run")")")
 mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 # summary.md from steps.log, written on any exit, so a resumed run keeps its earlier stages
 summary() {
-  {
-    echo "# in-place edit test, flag $mode"
-    echo
-    echo "Run \`$(basename "$(dirname "$(dirname "$run")")")\` with \`$("$strata" --version)\`. Cluster A \`${C:-}\`,"
-    echo "cluster B \`${B:-}\`, release \`${P:-}\`, add-on \`${AN:-}\` uids \`${AD1:-}\` and \`${AD2:-}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "in-place edit test, flag $mode" ". Cluster A \`${C:-}\`," \
+    "cluster B \`${B:-}\`, release \`${P:-}\`, add-on \`${AN:-}\` uids \`${AD1:-}\` and \`${AD2:-}\`."
 }
 trap summary EXIT
 
 # ids.env keeps the uids across stages, so a run can resume.
 save() { echo "$1=$2" >> ids.env; }
 [ -f ids.env ] && . ./ids.env
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 load_outputs
 if [ "$from" -le 1 ]; then
@@ -110,7 +103,7 @@ fi
 
 if stage 2 "edit the add-on version in place and create cluster B"; then
   check api-edit 0 "#27: edit the add-on version in place through the API" -- \
-    "$live/api.sh" edit "$AD1" "$edit_from" "$edit_to"
+    "$live/api.sh" edit "$AD1" "$addon_from" "$addon_to"
   # The configuration now matches the edited version, so this creates cluster B and changes no profile.
   apply -var edit_addon_in_place=true -var second_cluster=true
   B=$(out cluster_b_uid)

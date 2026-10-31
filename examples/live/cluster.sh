@@ -34,14 +34,8 @@ for v in C AD AN PALETTE_PROJECT_UID; do
   [ -n "${!v}" ] || die "the tofu output behind $v is empty; run just live-up"
 done
 summary() {
-  {
-    echo "# cluster test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster \`$C\`,"
-    echo "add-on profile \`$AN\` \`$AD\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "cluster test" ", cluster \`$C\`," \
+    "add-on profile \`$AN\` \`$AD\`."
 }
 trap summary EXIT
 

@@ -787,9 +787,10 @@ No cluster, no profile of its own, and no cost. It asks
 the body of a create for each engine, and the cloud accounts that the bodies
 name. A case makes one fault. The fault is one edit of the body of its engine, or
 a body of its own when the fault is in a profile. [`route-bodies.sh`](#route-bodiessh)
-writes four of those bodies on AWS, and runs this script on them. A body of a case
-names a profile, so it is valid only while that profile is in the tenant. A case whose
-body is not in the directory is skipped, and `steps.log` names it.
+writes those bodies on AWS for each case whose profile Palette takes, and runs this
+script on them. A body of a case names a profile, so it is valid only while that
+profile is in the tenant. A case whose body is not in the directory is skipped, and
+`steps.log` names it.
 
 A case that passes shows that the route answers the check. The part of the rule
 that the case names can then leave the catalog. A case that fails shows that the

@@ -30,13 +30,7 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# registry-move check"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`. Move profile 1.0.0 \`${M1:-}\`, 1.0.1 \`${M2:-}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "registry-move check" ". Move profile 1.0.0 \`${M1:-}\`, 1.0.1 \`${M2:-}\`."
 }
 trap summary EXIT
 

@@ -24,8 +24,8 @@ set -uo pipefail
 script=registry-move-nodes
 flag=false
 from=${1:-1}
-case "$from" in 1|2|3|4) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "$from" in 1|2|3|4) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 watch_minutes=${WATCH_MINUTES:-30}
@@ -35,18 +35,10 @@ mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# registry move of a running cluster"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster \`${C:-}\`,"
-    echo "release \`${R:-}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "registry move of a running cluster" ", cluster \`${C:-}\`," \
+    "release \`${R:-}\`."
 }
 trap summary EXIT
-
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 load_outputs
 C=$(out cluster_uid) R=$(out release_profile_uid)

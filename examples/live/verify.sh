@@ -149,13 +149,10 @@ done < <(jq -r '.packs[] | select(.type == "helm" or .type == "oci") | [.type, .
            registries.json 2>/dev/null)
 
 # ---- summary
+run_id=$(basename "$run")
+write_summary "strata live verification" ". Cluster \`$C\`, project \`$PALETTE_PROJECT_UID\`," \
+  "profile \`$N\` versions 1.0.0 (\`$P\`) and 1.0.1 (\`$P2\`), registries profile \`$R\`."
 {
-  echo "# strata live verification"
-  echo
-  echo "Run \`$(basename "$run")\` with \`$("$strata" --version)\`. Cluster \`$C\`, project \`$PALETTE_PROJECT_UID\`,"
-  echo "profile \`$N\` versions 1.0.0 (\`$P\`) and 1.0.1 (\`$P2\`), registries profile \`$R\`."
-  echo
-  summary_table
   echo
   echo "## Pack-ref digests (#2, #3)"
   echo
@@ -182,7 +179,7 @@ done < <(jq -r '.packs[] | select(.type == "helm" or .type == "oci") | [.type, .
   else
     echo "No release or registries record; see snapshot-release.err and snapshot-registries.err."
   fi
-} > summary.md
+} >> summary.md
 
 total=$(command grep -cE '^(PASS|FAIL) ' steps.log)
 echo

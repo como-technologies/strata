@@ -35,14 +35,8 @@ for v in C P R PALETTE_PROJECT_UID; do
   [ -n "${!v}" ] || die "the tofu output behind $v is empty; run just live-up"
 done
 summary() {
-  {
-    echo "# order test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, cluster \`$C\`,"
-    echo "release version \`$P\`, registries version \`$R\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "order test" ", cluster \`$C\`," \
+    "release version \`$P\`, registries version \`$R\`."
 }
 trap summary EXIT
 

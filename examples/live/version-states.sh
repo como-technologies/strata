@@ -32,20 +32,14 @@ load_outputs
 C=$(out cluster_uid)
 [ -n "$C" ] || die "no cluster A; run just live-up"
 export PALETTE_PROJECT_UID=$(out project_uid)
-project=$(sed -n 's/^palette_project *= *"\(.*\)"/\1/p' "$live/terraform/terraform.tfvars")
+project=$(var palette_project)
 [ -n "$project" ] || die "no palette_project in terraform/terraform.tfvars"
 NAME=strata-live-versions
 # tofu in the one-version module; baseline.sh and the other scripts keep the example's module
 vtf() { TF_DIR=$live/terraform-version "$live/tf.sh" "$@"; }
 
 summary() {
-  {
-    echo "# one state per version"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, profile \`$NAME\`, cluster \`$C\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "one state per version" ", profile \`$NAME\`, cluster \`$C\`."
 }
 
 # state VERSION: select the workspace of the version, and make it on first use

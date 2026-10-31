@@ -18,38 +18,29 @@
 set -uo pipefail
 script=who
 from=${1:-1}
-case "$from" in 1|2) ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "$from" in 1|2) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 addon=strata-live-addon
-edit_from='edited: "no"'
-edit_to='edited: "yes"'
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/who}
 mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
 
 summary() {
-  {
-    echo "# audit log test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`, add-on"
-    echo "\`$addon@1.0.0\` (\`${AD:-}\`), cluster \`${C:-none}\`."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "audit log test" ", add-on" \
+    "\`$addon@1.0.0\` (\`${AD:-}\`), cluster \`${C:-none}\`."
 }
 trap summary EXIT
 
 save() { echo "$1=$2" >> ids.env; }
 [ -f ids.env ] && . ./ids.env
-stage() { [ "$from" -le "$1" ] && echo "== stage $1: $2" | tee -a steps.log; }
 
 # undo_edit: put the edit back, when the add-on version differs from its record
 undo_edit() {
   "$strata" compare addon.json "$AD" > /dev/null 2>&1 \
-    || "$live/api.sh" edit "$AD" "$edit_to" "$edit_from" >> steps.log 2>&1
+    || "$live/api.sh" edit "$AD" "$addon_to" "$addon_from" >> steps.log 2>&1
 }
 
 if stage 1 "an edit of a published version through the API"; then
@@ -61,7 +52,7 @@ if stage 1 "an edit of a published version through the API"; then
     "$strata" verify addon.json --who
   check unchanged-no-line 1 '#69: the output has no who line' -- grep -q '^who:' unchanged-who.out
   check api-edit 0 "#69: edit $addon@1.0.0 in place through the API" -- \
-    "$live/api.sh" edit "$AD" "$edit_from" "$edit_to"
+    "$live/api.sh" edit "$AD" "$addon_from" "$addon_to"
   check edit-who 1 '#69: the record reports DRIFT, and --who reads the audit log of the profile' -- \
     "$strata" verify addon.json --who
   check edit-who-says 0 '#69: the output names the writes since the record' -- \
@@ -82,7 +73,7 @@ if stage 1 "an edit of a published version through the API"; then
   check audits-limit 0 '#188: Palette serves at most 100 entries on a page: a limit of 101 answers 500 with InvalidLimit' -- \
     bash -c "\"$live/api.sh\" get '/v1/audits?resourceUid=$AD&limit=101' 2>&1 | grep -q 'HTTP 500: .*InvalidLimit'"
   check api-undo 0 '#69: undo the edit through the API' -- \
-    "$live/api.sh" edit "$AD" "$edit_to" "$edit_from"
+    "$live/api.sh" edit "$AD" "$addon_to" "$addon_from"
   check restored 0 '#69: the record verifies again after the undo' -- "$strata" verify addon.json
 fi
 
@@ -95,7 +86,7 @@ if stage 2 "an update that a cluster accepts"; then
     save C "$C"
     check cluster-record 0 'record cluster A' -- "$strata" snapshot "cluster:$C" -o cluster.json
     check cluster-edit 0 "#69: edit $addon@1.0.0, which cluster A runs, through the API" -- \
-      "$live/api.sh" edit "$AD" "$edit_from" "$edit_to"
+      "$live/api.sh" edit "$AD" "$addon_from" "$addon_to"
     check cluster-apply 0 '#69: accept the update on cluster A through the API' -- \
       "$live/api.sh" apply "$C"
     # the cluster takes the content some time after the request

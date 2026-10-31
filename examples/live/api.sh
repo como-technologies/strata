@@ -116,6 +116,12 @@
 #       POST the body JSON to a search of the API, such as /v1/dashboard/edgehosts/search, or to
 #       a validate route, such as /v1/clusterprofiles/validate/packs, and print the answer. A
 #       POST to another path can create something: use a search path or a validate path only.
+#   api.sh packs-where [--name NAME] [JQ_OPTION...] JQ_FILTER
+#       Print the first pack of the packs of the project for which JQ_FILTER, a jq condition on the
+#       pack, is true: one line of JSON. The listing is read a page at a time, and the read stops
+#       at the first match. NAME limits the listing to the packs of that name. The options go to
+#       jq, such as --arg r REGISTRY_UID. Exit 0 when a pack matches, 1 when none does, and 2
+#       when Palette refuses a page.
 #   api.sh probe-profile NAME REGISTRY_UID VERSION
 #       Ask Palette to create an add-on profile that pins one pack version, with the values the
 #       registry lists for it. When Palette creates it, delete it at once, print `accepted`, and
@@ -420,24 +426,52 @@ delete() {
   esac
 }
 
-probe_profile() {
-  local name=${1:-} registry=${2:-} version=${3:-} row="" offset=0 page count body out status uid
-  [ -n "$version" ] || die "usage: api.sh probe-profile NAME REGISTRY_UID VERSION"
+# The most packs that Palette serves on one page of /v1/packs. PACK_LISTING_PAGE in
+# src/api/palette/mod.rs is the same number.
+PACK_PAGE=100
+
+# packs_where [--name NAME] [JQ_OPTION...] JQ_FILTER: print the first pack of the listing of
+# /v1/packs for which JQ_FILTER, a jq condition on the pack, is true: one line of JSON. The listing
+# is read one page at a time, and the read stops at the first pack that matches. NAME limits the
+# listing to the packs of that name. The options go to jq, such as --arg r UID. Exit 0 when a pack
+# matches, 1 when none does, and 2 when Palette refuses a page.
+packs_where() {
+  local name="" offset=0 filter page found count
+  if [ "${1:-}" = --name ]; then name=${2:-}; shift 2; fi
+  [ $# -gt 0 ] || die "usage: api.sh packs-where [--name NAME] [JQ_OPTION...] JQ_FILTER"
+  filter=${!#}
+  set -- "${@:1:$#-1}"
   while :; do
-    page=$(call GET "/v1/packs?filters=spec.name=$name&limit=100&offset=$offset") || return 2
-    row=$(jq -c --arg r "$registry" --arg v "$version" \
-      '[.items[] | select(.spec.registryUid == $r and .spec.version == $v)][0] // empty' <<<"$page")
+    page=$(call GET "/v1/packs?${name:+filters=spec.name=$name&}limit=$PACK_PAGE&offset=$offset") || return 2
+    found=$(jq -c "$@" "[.items[]? | select($filter)][0] // empty" <<<"$page") || die "not a jq condition: $filter"
+    [ -z "$found" ] || { echo "$found"; return 0; }
     count=$(jq '.listmeta.count // 0' <<<"$page")
-    [ -n "$row" ] && break
-    offset=$((offset + 100))
-    [ "$offset" -lt "$count" ] || die "registry $registry lists no $name@$version"
+    offset=$((offset + PACK_PAGE))
+    [ "$offset" -lt "$count" ] || return 1
   done
+}
+
+# addon_body NAME CLOUD: print the body of the create of the add-on profile NAME@1.0.0 of the cloud
+# type CLOUD. The standard input holds its one pack, a JSON document.
+addon_body() {
+  jq --arg n "$1" --arg c "$2" \
+    '{metadata: {name: $n}, spec: {version: "1.0.0", template: {type: "add-on", cloudType: $c, packs: [.]}}}'
+}
+
+probe_profile() {
+  local name=${1:-} registry=${2:-} version=${3:-} row body out status uid
+  [ -n "$version" ] || die "usage: api.sh probe-profile NAME REGISTRY_UID VERSION"
+  row=$(packs_where --name "$name" --arg r "$registry" --arg v "$version" \
+    '.spec.registryUid == $r and .spec.version == $v')
+  case $? in
+    0) ;;
+    1) die "registry $registry lists no $name@$version" ;;
+    *) return 2 ;;
+  esac
   body=$(mktemp); out=$(mktemp)
-  jq '{metadata: {name: "strata-probe-\(.spec.name)"},
-       spec: {version: "1.0.0", template: {type: "add-on", cloudType: "all",
-         packs: [{name: .spec.name, tag: .spec.version, uid: .metadata.uid,
-                  registryUid: .spec.registryUid, type: .spec.type, layer: .spec.layer,
-                  values: .spec.values}]}}}' <<<"$row" >"$body"
+  jq '{name: .spec.name, tag: .spec.version, uid: .metadata.uid,
+       registryUid: .spec.registryUid, type: .spec.type, layer: .spec.layer,
+       values: .spec.values}' <<<"$row" | addon_body "strata-probe-$(jq -r .spec.name <<<"$row")" all >"$body"
   status=$(curl -sS -o "$out" -w '%{http_code}' -X POST \
     -H "ApiKey: $KEY" -H 'Accept: application/json' -H 'Content-Type: application/json' \
     ${PROJECT:+-H "ProjectUid: $PROJECT"} --data-binary "@$body" "$API/v1/clusterprofiles")
@@ -679,19 +713,18 @@ pack_registry_delete() {
 # Palette needs it for such a registry. Prints the uid of the profile.
 pin_profile() {
   local name=${1:-} registry=${2:-} kind=${3:-} pack=${4:-} version=${5:-} values=${6:-}
-  local layer=${7:-addon} tag=${8:-${5:-}} cloud=${9:-all} body uid pack_uid
+  local layer=${7:-addon} tag=${8:-${5:-}} cloud=${9:-all} body uid pack_uid="" row
   [ -n "$version" ] ||
     die "usage: api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE [LAYER [TAG [CLOUD]]]]"
   body=$(mktemp); trap 'rm -f "${body:-}"' RETURN
   # the pack uid, when the registry lists the pack: a synchronized registry needs it
-  pack_uid=$(call GET "/v1/packs?filters=spec.name=$pack&limit=100&offset=0" \
-    | jq -r --arg r "$registry" --arg v "$version" \
-      '[.items[]? | select(.spec.registryUid == $r and .spec.version == $v) | .metadata.uid][0] // ""')
-  jq -n --arg n "$name" --arg r "$registry" --arg t "$kind" --arg p "$pack" --arg g "$tag" \
-    --arg u "$pack_uid" --arg l "$layer" --arg c "$cloud" --rawfile values "${values:-/dev/null}" \
-    '{metadata: {name: $n}, spec: {version: "1.0.0", template: {type: "add-on", cloudType: $c,
-      packs: [{name: $p, tag: $g, registryUid: $r, type: $t, layer: $l, values: $values}
-        + (if $u == "" then {} else {uid: $u} end)]}}}' > "$body"
+  row=$(packs_where --name "$pack" --arg r "$registry" --arg v "$version" \
+    '.spec.registryUid == $r and .spec.version == $v' 2> /dev/null) &&
+    pack_uid=$(jq -r '.metadata.uid // ""' <<<"$row")
+  jq -n --arg r "$registry" --arg t "$kind" --arg p "$pack" --arg g "$tag" \
+    --arg u "$pack_uid" --arg l "$layer" --rawfile values "${values:-/dev/null}" \
+    '{name: $p, tag: $g, registryUid: $r, type: $t, layer: $l, values: $values}
+      + (if $u == "" then {} else {uid: $u} end)' | addon_body "$name" "$cloud" > "$body"
   uid=$(call POST /v1/clusterprofiles "$body" | jq -r '.uid') || return 2
   call PATCH "/v1/clusterprofiles/$uid/publish" > /dev/null || return 2
   echo "$uid"
@@ -799,6 +832,7 @@ case "${1:-}" in
   pack-registry-delete) shift; pack_registry_delete "$@" ;;
   pin-profile) shift; pin_profile "$@" ;;
   probe-profile) shift; probe_profile "$@" ;;
+  packs-where) shift; packs_where "$@" ;;
   macro-set) shift; macro_set "$@" ;;
   macro-delete) shift; macro_delete "$@" ;;
   get-kubeconfig) shift; get_kubeconfig "$@" ;;
@@ -809,5 +843,6 @@ case "${1:-}" in
   patch) shift; patch "$@" ;;
   put) shift; put "$@" ;;
   post) shift; post "$@" ;;
+  # The same text as `usage` of lib.sh. This script does not source lib.sh: lib.sh runs this script.
   *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
 esac

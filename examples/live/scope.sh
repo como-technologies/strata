@@ -16,8 +16,8 @@
 # under runs/<UTC time>/scope/, or OUT. Exit 0 only when no check fails.
 set -uo pipefail
 script=scope
-case "${1:-}" in "") ;; *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;; esac
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+case "${1:-}" in "") ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 load_outputs
@@ -35,14 +35,8 @@ VERSION=$("$live/api.sh" get "/v1/clusterprofiles/$R" | jq -r '.spec.version')
 T=""
 
 summary() {
-  {
-    echo "# scope test"
-    echo
-    echo "Run \`$(basename "$(dirname "$run")")\` with \`$("$strata" --version)\`: the release"
-    echo "\`$NAME@$VERSION\` (\`$R\`) of the project, and its copy of the tenant (\`${T:-none}\`)."
-    echo
-    summary_table
-  } > summary.md
+  write_summary "scope test" ": the release" \
+    "\`$NAME@$VERSION\` (\`$R\`) of the project, and its copy of the tenant (\`${T:-none}\`)."
 }
 # the tenant profile goes at the end, also when a check stops the script
 cleanup() {
