@@ -8,6 +8,8 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use strata::api::codes::ValidateRoute;
+
 fn docs() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/src")
 }
@@ -175,5 +177,57 @@ fn the_kind_tables_list_every_kind_the_help_names() {
                 "{page} does not list the schema kind {kind}"
             );
         }
+    }
+}
+
+/// The text of `reference/errors.md` that names `route`. The table of its codes follows the first
+/// place that holds this text.
+fn route_anchor(route: ValidateRoute) -> &'static str {
+    match route {
+        ValidateRoute::ClusterPacks => "`POST /v1/spectroclusters/{uid}/validate/packs`",
+        ValidateRoute::ProfilePacks => "`POST /v1/clusterprofiles/validate/packs`",
+        ValidateRoute::ProfileName => "`GET /v1/clusterprofiles/validate/name`",
+        ValidateRoute::ProfileImport => "`POST /v1/clusterprofiles/import/validate`",
+        ValidateRoute::ClusterCreate => "`POST /v1/spectroclusters/{cloudType}/validate`",
+    }
+}
+
+/// The codes of the first table of codes after `anchor`, sorted: the first cell of each row,
+/// without its backticks. A code that the table holds two times is two entries.
+fn codes_after(text: &str, anchor: &str) -> Vec<String> {
+    let at = text
+        .find(anchor)
+        .unwrap_or_else(|| panic!("errors.md does not name {anchor}"));
+    let mut codes: Vec<String> = text[at..]
+        .lines()
+        .skip_while(|line| !line.starts_with("| Code |"))
+        .skip(2) // the header and the line under it
+        .take_while(|line| line.starts_with('|'))
+        .map(|row| {
+            let cell = row.split('|').nth(1).expect("a row has a first cell");
+            cell.trim().trim_matches('`').to_string()
+        })
+        .collect();
+    codes.sort();
+    codes
+}
+
+/// `codes.rs` keeps the codes of each validate route, and `errors.md` copies them by hand. A code
+/// added to one place and not to the other is a wrong answer in the book.
+#[test]
+fn the_code_table_of_each_validate_route_in_the_book_holds_the_codes_of_the_route() {
+    let errors = read(&docs().join("reference/errors.md"));
+    for route in ValidateRoute::ALL {
+        let mut kept: Vec<String> = route.refusal_codes().map(str::to_string).collect();
+        kept.sort();
+        let book = codes_after(&errors, route_anchor(route));
+        assert!(
+            !book.is_empty(),
+            "{route:?}: errors.md has no table of codes"
+        );
+        assert_eq!(
+            book, kept,
+            "{route:?}: the table in errors.md and ValidateRoute::refusal_codes differ"
+        );
     }
 }

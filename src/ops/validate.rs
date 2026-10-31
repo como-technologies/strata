@@ -29,7 +29,7 @@ fn whole_request_refusal(e: &Error, route: ValidateRoute) -> Option<PaletteRefus
     let Error::Api { status, body, .. } = e else {
         return None;
     };
-    PaletteRefusal::from_error_body(body).filter(|r| route.refuses(*status, &r.code))
+    route.refusal(*status, body)
 }
 
 /// The refusal in `answer`, or None when Palette takes the request. An error that is not a
@@ -100,9 +100,9 @@ pub fn profile_import_body(snap: &Snapshot, registries: &[Value]) -> Value {
     })
 }
 
-/// One pack in the body of the profile validate routes, a `v1PackManifestEntity`: the name, the
-/// layer, and the manifests of `p`, with the tag, the uids, the type, and the values of `content`.
-/// `content` is `p` for a pack as the record holds it.
+/// One pack in the body of the profile validate routes, a `v1PackManifestEntity`. It has the name,
+/// the layer, and the manifests of `p`, and the tag, the uids, the type, and the values of
+/// `content`. `content` is `p` for a pack as the record holds it.
 fn pack_entry(p: &Pack, content: &Pack) -> Value {
     json!({
         "name": p.name,

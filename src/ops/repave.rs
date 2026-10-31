@@ -12,7 +12,7 @@ use crate::api::{Palette, PaletteApi};
 use crate::cluster_template::ClusterTemplateRef;
 use crate::diff::{ImpactLevel, PaletteRepave};
 use crate::error::{Error, Result};
-use crate::json::{arr, opt_str, text};
+use crate::json::{arr, opt_str};
 use crate::profile_type::ProfileType;
 use crate::reference::{Ref, name_version};
 use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind};
@@ -23,9 +23,26 @@ fn pack_value(p: &Pack) -> Value {
     json!({"name": p.name, "tag": p.tag, "type": p.kind, "values": p.values})
 }
 
+/// The body of `validate/packs` and `validate/repave`: one profile for each uid of `uids`, in
+/// order. `values_of` gives the `packValues` of a profile. The body names a profile with no
+/// `packValues` by its uid alone.
+fn profiles_body<'a>(
+    uids: impl IntoIterator<Item = &'a str>,
+    values_of: impl Fn(&str) -> Option<Vec<Value>>,
+) -> Value {
+    let profiles: Vec<Value> = uids
+        .into_iter()
+        .map(|uid| match values_of(uid) {
+            Some(packs) => json!({"uid": uid, "packValues": packs}),
+            None => json!({"uid": uid}),
+        })
+        .collect();
+    json!({ "profiles": profiles })
+}
+
 /// The body of `validate/packs` for a move of one pack of the cluster whose document is `doc`.
-/// `is_moved` accepts the pack as the template of its profile holds it, and `to` is the pack
-/// that it moves to, with the tag, the type, and the values of that version.
+/// `is_moved` accepts the pack as the template of its profile holds it. `to` is the pack that it
+/// moves to, with the tag, the type, and the values of that version.
 ///
 /// The profile that holds the pack has `packValues`: its packs as the cluster runs them, and the
 /// moved pack as `to`. The body names each other profile by its uid alone. `None` when no profile
@@ -35,31 +52,32 @@ pub(super) fn moved_pack_body(
     is_moved: impl Fn(&Value) -> bool,
     to: &Pack,
 ) -> Option<Value> {
-    let mut found = false;
-    let profiles: Vec<Value> = AppliedProfile::of_cluster(doc)
-        .iter()
-        .map(|r| {
-            let current =
-                AppliedProfile::template_of(doc, &r.uid).map_or(&[][..], |t| arr(t, "/packs"));
-            if !current.iter().any(&is_moved) {
-                return json!({"uid": r.uid});
-            }
-            found = true;
-            let packs: Vec<Value> = current
-                .iter()
-                .map(|c| {
-                    if is_moved(c) {
-                        pack_value(to)
-                    } else {
-                        json!({"name": text(c, "/name"), "tag": text(c, "/tag"),
-                            "type": text(c, "/type"), "values": text(c, "/values")})
-                    }
-                })
-                .collect();
-            json!({"uid": r.uid, "packValues": packs})
-        })
-        .collect();
-    found.then(|| json!({ "profiles": profiles }))
+    let running = AppliedProfile::of_cluster(doc);
+    let holds_pack = |uid: &str| {
+        AppliedProfile::template_packs(doc, uid)
+            .iter()
+            .any(&is_moved)
+    };
+    if !running.iter().any(|r| holds_pack(&r.uid)) {
+        return None;
+    }
+    Some(profiles_body(
+        running.iter().map(|r| r.uid.as_str()),
+        |uid| {
+            holds_pack(uid).then(|| {
+                AppliedProfile::template_packs(doc, uid)
+                    .iter()
+                    .map(|c| {
+                        if is_moved(c) {
+                            pack_value(to)
+                        } else {
+                            AppliedProfile::template_pack_value(c)
+                        }
+                    })
+                    .collect()
+            })
+        },
+    ))
 }
 
 /// The body of `validate/repave` for a move of `cluster` to `target`. The request names each
@@ -68,42 +86,30 @@ pub(super) fn moved_pack_body(
 /// is not in the target. So `target` replaces the profile it has the name of, or else the one
 /// that builds the cluster when `target` builds one too.
 pub fn validate_body(running: &[AppliedProfile], target: &Snapshot) -> Value {
-    let uid = &target.source.uid;
+    let uid = target.source.uid.as_str();
     let pack_values = || -> Vec<Value> { target.packs.iter().map(pack_value).collect() };
-    let profiles: Vec<Value> = if running.iter().any(|p| &p.uid == uid) {
-        running
-            .iter()
-            .map(|p| {
-                if &p.uid == uid {
-                    json!({"uid": p.uid, "packValues": pack_values()})
-                } else {
-                    json!({"uid": p.uid})
-                }
-            })
-            .collect()
-    } else {
-        let replaced = running
-            .iter()
-            .find(|p| p.name == target.source.name)
-            .or_else(|| {
-                ProfileType::text_builds_cluster(&target.source.kind)
-                    .then(|| {
-                        running
-                            .iter()
-                            .find(|p| ProfileType::text_builds_cluster(&p.kind))
-                    })
-                    .flatten()
-            });
-        std::iter::once(json!({"uid": uid}))
-            .chain(
-                running
-                    .iter()
-                    .filter(|p| Some(p.uid.as_str()) != replaced.map(|r| r.uid.as_str()))
-                    .map(|p| json!({"uid": p.uid})),
-            )
-            .collect()
-    };
-    json!({ "profiles": profiles })
+    if running.iter().any(|p| p.uid == uid) {
+        return profiles_body(running.iter().map(|p| p.uid.as_str()), |running_uid| {
+            (running_uid == uid).then(pack_values)
+        });
+    }
+    let replaced = running
+        .iter()
+        .find(|p| p.name == target.source.name)
+        .or_else(|| {
+            ProfileType::text_builds_cluster(&target.source.kind)
+                .then(|| {
+                    running
+                        .iter()
+                        .find(|p| ProfileType::text_builds_cluster(&p.kind))
+                })
+                .flatten()
+        });
+    let kept = running
+        .iter()
+        .filter(|p| Some(p.uid.as_str()) != replaced.map(|r| r.uid.as_str()))
+        .map(|p| p.uid.as_str());
+    profiles_body(std::iter::once(uid).chain(kept), |_| None)
 }
 
 /// The cluster side and the profile side of a comparison, for the question of `option`. One side
@@ -232,19 +238,18 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
         .iter()
         .filter(|p| !running_names.contains(p.name.as_str()))
         .collect();
-    let profiles: Vec<Value> = running
-        .iter()
-        .map(|r| {
-            let current =
-                AppliedProfile::template_of(doc, &r.uid).map_or(&[][..], |t| arr(t, "/packs"));
-            let covered = source.profiles.iter().any(|p| p.uid == r.uid);
-            match pending_packs(current, &pending.packs, &new_packs) {
-                Some(packs) if covered => json!({"uid": r.uid, "packValues": packs}),
-                _ => json!({"uid": r.uid}),
-            }
-        })
-        .collect();
-    Ok(json!({ "profiles": profiles }))
+    Ok(profiles_body(
+        running.iter().map(|r| r.uid.as_str()),
+        |uid| {
+            let covered = source.profiles.iter().any(|p| p.uid == uid);
+            covered
+                .then(|| {
+                    let current = AppliedProfile::template_packs(doc, uid);
+                    pending_packs(current, &pending.packs, &new_packs)
+                })
+                .flatten()
+        },
+    ))
 }
 
 /// The pack values of one profile in the body of [`pending_body`], or `None` when the update
@@ -337,4 +342,57 @@ pub fn palette_repave<A: PaletteApi>(
         cluster_template: Some(template),
         ..PaletteRepave::from_palette(&cluster.uid, &answer, level)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::json::str_at;
+
+    #[test]
+    fn a_body_names_a_profile_with_no_pack_values_by_its_uid_alone() {
+        let body = profiles_body(["p1", "p2", "p3"], |uid| {
+            (uid == "p2").then(|| vec![json!({"name": "kubernetes"})])
+        });
+        assert_eq!(
+            body,
+            json!({"profiles": [
+                {"uid": "p1"},
+                {"uid": "p2", "packValues": [{"name": "kubernetes"}]},
+                {"uid": "p3"},
+            ]})
+        );
+    }
+
+    #[test]
+    fn a_move_sends_a_pack_with_a_field_that_the_template_lacks_as_empty_text() {
+        // `tag` and `values` are not in the template of the first pack
+        let doc = json!({"spec": {"clusterProfileTemplates": [
+            {"uid": "p1", "type": "add-on", "packs": [
+                {"name": "csi", "type": "spectro"},
+                {"name": "cni", "tag": "1.0", "type": "spectro", "values": "x: 1\n"},
+            ]},
+            {"uid": "p2", "type": "add-on", "packs": [{"name": "other", "tag": "2.0"}]},
+        ]}});
+        let moved = |c: &Value| str_at(c, "/name") == "cni";
+        let to = Pack::from_api(
+            &json!({"name": "cni", "tag": "2.0", "type": "spectro", "values": "x: 2\n"}),
+            &[],
+        );
+        let body = moved_pack_body(&doc, moved, &to).expect("the template p1 holds the pack");
+        assert_eq!(
+            body["profiles"][0]["packValues"][0],
+            json!({"name": "csi", "tag": "", "type": "spectro", "values": ""})
+        );
+        assert_eq!(
+            body["profiles"][0]["packValues"][1],
+            json!({"name": "cni", "tag": "2.0", "type": "spectro", "values": "x: 2\n"}),
+            "the moved pack takes the tag, the type, and the values of the target"
+        );
+        assert_eq!(body["profiles"][1], json!({"uid": "p2"}));
+        assert_eq!(
+            moved_pack_body(&doc, |c| str_at(c, "/name") == "absent", &to),
+            None
+        );
+    }
 }

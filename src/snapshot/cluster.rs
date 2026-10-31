@@ -453,6 +453,26 @@ impl AppliedProfile {
             .find(|t| str_at(t, "/uid") == uid)
     }
 
+    /// The packs of the template of the profile `uid`, as the document holds them. No pack when
+    /// the document does not apply the profile: see [`AppliedProfile::template_of`].
+    pub(crate) fn template_packs<'a>(doc: &'a Value, uid: &str) -> &'a [Value] {
+        Self::template_of(doc, uid).map_or(&[], |t| arr(t, "/packs"))
+    }
+
+    /// The entry of `packValues` for `pack`, a pack of a template: the name, the tag, the type,
+    /// and the values, as the template holds them.
+    ///
+    /// The body of a create and the body of a validate route hold such an entry for each pack. A
+    /// field that the template does not hold is empty text.
+    pub fn template_pack_value(pack: &Value) -> Value {
+        json!({
+            "name": str_at(pack, "/name"),
+            "tag": str_at(pack, "/tag"),
+            "type": str_at(pack, "/type"),
+            "values": str_at(pack, "/values"),
+        })
+    }
+
     /// The profile `uid` as the document of a cluster or a cluster group applies it, with the
     /// version that its template names: see [`AppliedProfile::template_of`].
     pub(crate) fn applied(doc: &Value, uid: &str) -> Option<AppliedProfile> {
@@ -491,6 +511,28 @@ mod tests {
         );
         assert!(AppliedProfile::applied(&doc, "p3").is_none());
         assert!(AppliedProfile::applied(&json!({}), "p1").is_none());
+    }
+
+    #[test]
+    fn a_pack_of_a_template_is_an_entry_of_pack_values_with_empty_text_for_a_missing_field() {
+        let doc = json!({"spec": {"clusterProfileTemplates": [
+            {"uid": "p1", "packs": [
+                {"name": "kubernetes", "tag": "1.32", "type": "spectro", "values": "a: 1\n",
+                 "manifests": [{"name": "m"}]},
+                {"name": "manifest-pack", "type": "manifest"},
+            ]},
+        ]}});
+        let packs = AppliedProfile::template_packs(&doc, "p1");
+        assert_eq!(packs.len(), 2);
+        assert_eq!(
+            AppliedProfile::template_pack_value(&packs[0]),
+            json!({"name": "kubernetes", "tag": "1.32", "type": "spectro", "values": "a: 1\n"})
+        );
+        assert_eq!(
+            AppliedProfile::template_pack_value(&packs[1]),
+            json!({"name": "manifest-pack", "tag": "", "type": "manifest", "values": ""})
+        );
+        assert!(AppliedProfile::template_packs(&doc, "p2").is_empty());
     }
 
     #[test]
