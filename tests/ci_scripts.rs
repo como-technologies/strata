@@ -4062,7 +4062,8 @@ fn preflight_job() -> PreflightJob {
 }
 
 impl PreflightJob {
-    /// Run `preflight.sh` with the variables `envs` and the arguments `args`, and no key.
+    /// Run `preflight.sh` with the variables `envs` and the arguments `args`, and no key. A runner
+    /// sets GITHUB_REPOSITORY, which `pr-comment.sh` reads: the stand-in `gh` must give the repo.
     fn run(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
         let d = self.dir.path();
         std::fs::write(d.join("strata.log"), "").unwrap();
@@ -4076,6 +4077,7 @@ impl PreflightJob {
             .env("FAKE_LOG", d.join("strata.log"))
             .env("FAKE_GH_LOG", d.join("gh.log"))
             .env("FAKE_GH_SAVED_BODY", d.join("saved-body.md"))
+            .env_remove("GITHUB_REPOSITORY")
             .env_remove("PALETTE_API_KEY");
         for (k, v) in envs {
             c.env(k, v);
