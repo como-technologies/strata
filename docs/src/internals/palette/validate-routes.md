@@ -7,12 +7,13 @@ from the code of Palette. Each fact that names a live run comes from that run.
 
 `strata preflight` calls each route that takes the body of a create. One more
 route checks the packs of a cluster before an update of its profiles:
-`compare --validate` calls it. Two routes check the packs of a profile before a
-create or an update: `snapshot --validate` calls them. Two more routes check
-the name, the version, and the names of the packs and the manifests of a new
-profile: `snapshot --from-candidate --validate` calls them too. `behind` calls
-the route of a cluster and the route of an update, to ask about the bump of a
-pin.
+`compare --validate` calls it for a version that the cluster does not run. Two
+routes check the packs of a profile before a create or an update:
+`snapshot --validate` calls them. Two more routes check the name, the version,
+and the names of the packs and the manifests of a new profile:
+`snapshot --from-candidate --validate` calls them too. `behind` calls the route
+of an update, to ask about the bump of a pin. `compare --validate` calls it for
+a version that the cluster runs.
 
 ## POST /v1/spectroclusters/{cloudType}/validate
 
@@ -108,7 +109,8 @@ The checks, in order:
 1. The cluster exists, and the values of each pack of the body are YAML.
 2. For each profile of the body, Palette builds the target. The target is the
    copy that the cluster holds of that uid, or the published profile for a new
-   uid. Palette puts the sent values over it.
+   uid. Palette puts the sent values over it. The tag of a copy stays: see
+   [The sent tag](#the-sent-tag).
 3. The metadata of the packs. Palette checks these items:
    - two dashboard packs that cannot go together,
    - the names of the packs and the manifests,
@@ -152,16 +154,37 @@ One refusal sets another type: `PackValuesOverrideForbidden` is HTTP `403`.
 A cluster that does not exist is HTTP `404`.
 
 A live run shows that the route accepts the packs of the release version on
-the cluster that runs it, at the baseline. Stage 7 of `repave.sh` asks it on
-cluster A: see [repave.sh](../../development/live-runs.md#repavesh).
+the cluster that runs it, at the baseline. Stage 7 of `repave.sh` asks the
+question for cluster A: see [repave.sh](../../development/live-runs.md#repavesh).
+The route of the version answers it: see [The sent tag](#the-sent-tag).
 
-`behind` sends this route for a record of a cluster. See
-[Palette accepts the move, or refuses it](../../commands/behind.md#palette-accepts-the-move-or-refuses-it)
-for the body. No live run shows yet what the route does with the sent tag. It
-can move the pack to that tag. It can also take the pack from the profile as it
-is now. In that case the route accepts the move, because it does not check the
-newest version. Stage 6 of `validate-packs.sh` asks it: see
-[validate-packs.sh](../../development/live-runs.md#validate-packssh).
+### The sent tag
+
+For a profile that the cluster runs, the route checks no sent tag. Palette
+builds the target from the copy that the cluster holds, and puts the sent values
+over it. The tag of the copy stays. For a uid that the cluster does not run, the
+target is the published profile, so its tags count.
+
+A live run shows it. Cluster `fred` runs Kubernetes 1.36.2. The route answers
+HTTP 200 and `profiles: []`, with no error, for three bodies. The bodies differ
+only in the tag of `kubernetes`: `1.36.2` (no move), `1.37.0`, and `9.99.9`. The
+registry does not have 9.99.9.
+
+Another live run shows the same for the move of `fred` from Kubernetes 1.35.8
+to 1.37.0. The route of the cluster accepts it, and the route of the profile
+version refuses it: see [The upgrade dependency](#the-upgrade-dependency).
+
+So the answer of this route says nothing about the move of a pack in a profile
+that the cluster runs. A team reads `palette accepts` as "Palette takes the
+update", and the update can fail. Two commands ask the route of the profile
+version that the cluster runs, in its place:
+
+- `behind` sends the bump of a cluster record to the route of the version.
+- `compare --validate` sends the packs of a profile version to the route of the
+  version, when the cluster runs it. For any other version, it sends this route.
+
+Stage 6 of `validate-packs.sh` sends this route a body with the tag `9.99.9`:
+see [validate-packs.sh](../../development/live-runs.md#validate-packssh).
 
 ## POST /v1/spectroclusters/{uid}/validate/repave
 
@@ -297,7 +320,9 @@ The `packValues[].dependencies` of `GET /v1/packs/{uid}` and of the tags route
 hold the template dependencies. They are `[]` for `kubernetes` 1.36.2 in the
 Public Repo. So strata cannot derive the limit, and asks the route.
 
-`behind` sends this route for a record of a profile version. See
+`behind` sends this route for a record of a profile version. It also sends it for
+a record of a cluster, with the uid of the profile version that the cluster
+runs. See
 [Palette accepts the move, or refuses it](../../commands/behind.md#palette-accepts-the-move-or-refuses-it)
 for the body. A pin of `kubernetes` 1.35.3, with 1.37.0 in the registry, is a
 move of two minor versions. Palette refuses it on each cluster that runs 1.35.

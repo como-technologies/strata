@@ -97,18 +97,26 @@ The answer holds the errors of all the records:
   record, with the newest version of the pack in the place of the pin. That
   version has its default values. Palette checks the body against each cluster
   that runs the version.
-- A record of a cluster goes to `POST /v1/spectroclusters/{uid}/validate/packs`.
-  The body names each profile of the cluster by its uid. The profile that holds
-  the pin has the packs that the cluster runs. The newest version of the pack
-  replaces the pin.
+- A record of a cluster goes to the same route. The uid is the uid of the
+  profile that holds the pin: the profile version that the cluster runs. The
+  body has the packs of that profile as the cluster runs them. The newest
+  version of the pack replaces the pin. Palette checks the body against each
+  cluster that runs the version, this cluster too.
 - A candidate, a pack record, an edge host, a cluster group, and an app profile
   get no request. The update that waits for a cluster gets none.
 
+Strata does not send the bump of a cluster record to the route of the cluster,
+`POST /v1/spectroclusters/{uid}/validate/packs`. For a profile that the cluster
+runs, that route keeps the tag of the copy that the cluster holds, and it checks
+no sent tag. So it accepts each move, also a move to a version that the
+registry does not have. See
+[The validate routes](../internals/palette/validate-routes.md#post-v1spectroclustersuidvalidatepacks).
+
 A record of a cluster and the record of the profile that the cluster runs pin
 the same packs. So `behind` gives them the same bump: the same newest version,
-the same impact level, and the same change flags. Only the route of the question
-differs. This is the record of the cluster `payments`, which runs
-`aws-stack@1.1.11`:
+the same impact level, and the same change flags. They also get the same
+question and the same answer of Palette. This is the record of the cluster
+`payments`, which runs `aws-stack@1.1.11`:
 
 ```text
 {{#include ../output/behind-cluster.txt}}
@@ -117,9 +125,9 @@ differs. This is the record of the cluster `payments`, which runs
 The message of an error names the clusters. See
 [The upgrade dependency](../internals/palette/validate-routes.md#the-upgrade-dependency)
 for the field.
-When Palette refuses a move for a profile, strata reads the profile document. It
-keeps the clusters that run the version and that the message names. A cluster
-record needs no such read: the route is the route of its cluster.
+When Palette refuses a move, strata reads the document of the profile version.
+It keeps the clusters that run the version and that the message names. This
+holds for a record of a cluster too.
 
 Strata asks in the project of the first record that pins the pack, because
 Palette answers in the project of the connection. It does not ask a record of

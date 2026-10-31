@@ -1,8 +1,8 @@
 //! `compare --repave`: ask Palette whether a change replaces the nodes of a cluster.
 //!
 //! The change goes from what the cluster runs to a profile version, or to the update that waits
-//! for the cluster. `compare --validate` sends the same body for a profile version: see the
-//! `validate` module.
+//! for the cluster. `compare --validate` sends the same body for a profile version that the
+//! cluster does not run: see the `validate` module.
 
 use std::collections::BTreeSet;
 
@@ -38,46 +38,6 @@ fn profiles_body<'a>(
         })
         .collect();
     json!({ "profiles": profiles })
-}
-
-/// The body of `validate/packs` for a move of one pack of the cluster whose document is `doc`.
-/// `is_moved` accepts the pack as the template of its profile holds it. `to` is the pack that it
-/// moves to, with the tag, the type, and the values of that version.
-///
-/// The profile that holds the pack has `packValues`: its packs as the cluster runs them, and the
-/// moved pack as `to`. The body names each other profile by its uid alone. `None` when no profile
-/// of the cluster holds the pack.
-pub(super) fn moved_pack_body(
-    doc: &Value,
-    is_moved: impl Fn(&Value) -> bool,
-    to: &Pack,
-) -> Option<Value> {
-    let running = AppliedProfile::of_cluster(doc);
-    let holds_pack = |uid: &str| {
-        AppliedProfile::template_packs(doc, uid)
-            .iter()
-            .any(&is_moved)
-    };
-    if !running.iter().any(|r| holds_pack(&r.uid)) {
-        return None;
-    }
-    Some(profiles_body(
-        running.iter().map(|r| r.uid.as_str()),
-        |uid| {
-            holds_pack(uid).then(|| {
-                AppliedProfile::template_packs(doc, uid)
-                    .iter()
-                    .map(|c| {
-                        if is_moved(c) {
-                            pack_value(to)
-                        } else {
-                            AppliedProfile::template_pack_value(c)
-                        }
-                    })
-                    .collect()
-            })
-        },
-    ))
 }
 
 /// The body of `validate/repave` for a move of `cluster` to `target`. The request names each
@@ -347,7 +307,6 @@ pub fn palette_repave<A: PaletteApi>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::json::str_at;
 
     #[test]
     fn a_body_names_a_profile_with_no_pack_values_by_its_uid_alone() {
@@ -361,38 +320,6 @@ mod tests {
                 {"uid": "p2", "packValues": [{"name": "kubernetes"}]},
                 {"uid": "p3"},
             ]})
-        );
-    }
-
-    #[test]
-    fn a_move_sends_a_pack_with_a_field_that_the_template_lacks_as_empty_text() {
-        // `tag` and `values` are not in the template of the first pack
-        let doc = json!({"spec": {"clusterProfileTemplates": [
-            {"uid": "p1", "type": "add-on", "packs": [
-                {"name": "csi", "type": "spectro"},
-                {"name": "cni", "tag": "1.0", "type": "spectro", "values": "x: 1\n"},
-            ]},
-            {"uid": "p2", "type": "add-on", "packs": [{"name": "other", "tag": "2.0"}]},
-        ]}});
-        let moved = |c: &Value| str_at(c, "/name") == "cni";
-        let to = Pack::from_api(
-            &json!({"name": "cni", "tag": "2.0", "type": "spectro", "values": "x: 2\n"}),
-            &[],
-        );
-        let body = moved_pack_body(&doc, moved, &to).expect("the template p1 holds the pack");
-        assert_eq!(
-            body["profiles"][0]["packValues"][0],
-            json!({"name": "csi", "tag": "", "type": "spectro", "values": ""})
-        );
-        assert_eq!(
-            body["profiles"][0]["packValues"][1],
-            json!({"name": "cni", "tag": "2.0", "type": "spectro", "values": "x: 2\n"}),
-            "the moved pack takes the tag, the type, and the values of the target"
-        );
-        assert_eq!(body["profiles"][1], json!({"uid": "p2"}));
-        assert_eq!(
-            moved_pack_body(&doc, |c| str_at(c, "/name") == "absent", &to),
-            None
         );
     }
 }

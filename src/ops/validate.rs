@@ -8,9 +8,9 @@ use serde_json::{Value, json};
 
 use super::repave::{cluster_and_target, validate_body};
 use crate::api::codes::ValidateRoute;
-use crate::api::{Palette, PaletteApi};
+use crate::api::{Palette, PaletteApi, RawCluster};
 use crate::error::{Error, Result};
-use crate::json::value_at;
+use crate::json::{arr, first_nonempty, str_at, value_at};
 use crate::registry::{Registries, registry_entry};
 use crate::snapshot::{AppliedProfile, Pack, Snapshot, SubjectKind};
 use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
@@ -119,7 +119,12 @@ fn pack_entry(p: &Pack, content: &Pack) -> Value {
 /// The body of the profile validate routes, a `v1ClusterProfileTemplateDraft`: the `cloudType`,
 /// the `type`, and each pack of the record in profile order as a `v1PackManifestEntity`.
 pub fn profile_validate_body(snap: &Snapshot) -> Value {
-    profile_body(snap, |p| pack_entry(p, p))
+    let (cloud_type, kind) = (&snap.source.cloud_type, &snap.source.kind);
+    profile_body(
+        cloud_type,
+        kind,
+        snap.packs.iter().map(|p| pack_entry(p, p)),
+    )
 }
 
 /// [`profile_validate_body`] for the move of the packs that `is_moved` accepts to the pack `to`.
@@ -130,15 +135,55 @@ pub(super) fn moved_profile_body(
     is_moved: impl Fn(&Pack) -> bool,
     to: &Pack,
 ) -> Value {
-    profile_body(snap, |p| pack_entry(p, if is_moved(p) { to } else { p }))
+    let (cloud_type, kind) = (&snap.source.cloud_type, &snap.source.kind);
+    let entries = snap
+        .packs
+        .iter()
+        .map(|p| pack_entry(p, if is_moved(p) { to } else { p }));
+    profile_body(cloud_type, kind, entries)
 }
 
-/// The body of the profile validate routes for `snap`, with `entry` for each pack.
-fn profile_body(snap: &Snapshot, entry: impl Fn(&Pack) -> Value) -> Value {
+/// The uid and the body of the profile validate routes for each profile version that the cluster
+/// document `doc` runs and whose template holds a pack that `is_moved` accepts. The move is to the
+/// pack `to`. The profiles come in the canonical order of [`AppliedProfile::of_cluster`].
+///
+/// The packs are those of the template, as the cluster runs them. A moved pack takes the tag, the
+/// uids, the type, and the values of `to`, as in [`moved_profile_body`]. The body holds no
+/// manifest: the document of a cluster lists the manifests of a pack by name, with no content.
+pub(super) fn moved_template_bodies(
+    doc: &Value,
+    is_moved: impl Fn(&Value) -> bool,
+    to: &Pack,
+) -> Vec<(String, Value)> {
+    AppliedProfile::of_cluster(doc)
+        .into_iter()
+        .filter_map(|applied| {
+            let template = AppliedProfile::template_of(doc, &applied.uid)?;
+            let packs = arr(template, "/packs");
+            if !packs.iter().any(&is_moved) {
+                return None;
+            }
+            let cloud_type =
+                first_nonempty(&[str_at(template, "/cloudType"), RawCluster::cloud_type(doc)]);
+            let entries = packs.iter().map(|raw| {
+                let held = Pack::from_api(raw, &[]);
+                pack_entry(&held, if is_moved(raw) { to } else { &held })
+            });
+            Some((
+                applied.uid,
+                profile_body(&cloud_type, str_at(template, "/type"), entries),
+            ))
+        })
+        .collect()
+}
+
+/// The body of the profile validate routes: the cloud type, the type, and `entries`, the packs in
+/// profile order.
+fn profile_body(cloud_type: &str, kind: &str, entries: impl Iterator<Item = Value>) -> Value {
     json!({
-        "cloudType": snap.source.cloud_type,
-        "type": snap.source.kind,
-        "packs": snap.packs.iter().map(entry).collect::<Vec<Value>>(),
+        "cloudType": cloud_type,
+        "type": kind,
+        "packs": entries.collect::<Vec<Value>>(),
     })
 }
 
@@ -249,6 +294,10 @@ pub(crate) fn profile_validation_in<A: PaletteApi>(
 /// it refuses. It refuses the whole request with an HTTP error and a code of
 /// [`ValidateRoute::ClusterPacks`]. That refusal is an answer too, and the retry does not send it
 /// again. Each other error is an error of strata.
+///
+/// For a profile version that the cluster runs, the route of the cluster checks no sent tag: it
+/// keeps the copy that the cluster holds. So the question goes to the route of that version, with
+/// its packs, and Palette checks it against each cluster that runs it.
 pub fn palette_validation<A: PaletteApi>(
     palette: &Palette<A>,
     a: &Snapshot,
@@ -257,6 +306,11 @@ pub fn palette_validation<A: PaletteApi>(
     let (cluster, target) = cluster_and_target(a, b, "--validate")?;
     let running =
         AppliedProfile::of_cluster(&palette.subject_document(SubjectKind::Cluster, &cluster.uid)?);
+    let uid = &target.source.uid;
+    if running.iter().any(|p| &p.uid == uid) {
+        let errors = profile_packs_answer(palette, Some(uid), &profile_validate_body(target))?;
+        return Ok(PaletteValidation::refused(&cluster.uid, errors));
+    }
     cluster_packs_answer(palette, &cluster.uid, &validate_body(&running, target))
 }
 
@@ -270,5 +324,55 @@ pub fn require_acceptance(snap: &Snapshot) -> Result<()> {
             errors: v.errors().to_vec(),
         }),
         _ => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_move_in_a_cluster_asks_the_route_of_each_profile_whose_template_holds_the_pack() {
+        // `tag` and `values` are not in the template of the first pack of p1
+        let doc = json!({"spec": {"cloudType": "aws", "clusterProfileTemplates": [
+            {"uid": "p1", "name": "a", "type": "add-on", "cloudType": "all", "packs": [
+                {"name": "csi", "layer": "csi", "type": "spectro"},
+                {"name": "cni", "layer": "cni", "tag": "1.0", "type": "spectro",
+                 "packUid": "u1", "registryUid": "r1", "values": "x: 1\n"},
+            ]},
+            {"uid": "p2", "name": "b", "type": "add-on", "packs": [{"name": "other", "tag": "2.0"}]},
+            {"uid": "p3", "name": "c", "type": "infra", "packs": [
+                {"name": "cni", "layer": "cni", "tag": "1.0", "type": "spectro"},
+            ]},
+        ]}});
+        let to = Pack::from_api(
+            &json!({"name": "cni", "tag": "2.0", "type": "spectro", "packUid": "u2",
+                    "registryUid": "r1", "values": "x: 2\n"}),
+            &[],
+        );
+        let asks = moved_template_bodies(&doc, |c| str_at(c, "/name") == "cni", &to);
+
+        // the profiles in canonical order: the infra profile first. p2 holds no such pack
+        let uids: Vec<&str> = asks.iter().map(|(uid, _)| uid.as_str()).collect();
+        assert_eq!(uids, ["p3", "p1"]);
+        let (_, body) = &asks[1];
+        assert_eq!(body["cloudType"], "all");
+        assert_eq!(body["type"], "add-on");
+        let packs = body["packs"].as_array().unwrap();
+        assert_eq!(packs.len(), 2);
+        assert_eq!(packs[0]["name"], "csi");
+        assert_eq!(
+            packs[0]["tag"], "",
+            "a field that the template lacks is empty text"
+        );
+        assert_eq!(
+            packs[1],
+            json!({"name": "cni", "tag": "2.0", "uid": "u2", "registryUid": "r1",
+                   "type": "spectro", "layer": "cni", "values": "x: 2\n", "manifests": []}),
+            "the moved pack takes the tag, the uids, the type, and the values of the target"
+        );
+        // a template with no cloud type takes the cloud type of the cluster
+        assert_eq!(asks[0].1["cloudType"], "aws");
+        assert!(moved_template_bodies(&doc, |c| str_at(c, "/name") == "absent", &to).is_empty());
     }
 }

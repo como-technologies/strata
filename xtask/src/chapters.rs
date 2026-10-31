@@ -2503,6 +2503,26 @@ fn use_cases(r: &mut Runner) {
         true,
         "strata compare aws-stack@1.1.1 aws-stack@1.1.7 --validate",
     );
+    // payments runs aws-stack@1.1.1. The route of the cluster checks no sent tag for a profile that
+    // the cluster runs, so strata asks the route of the version, and the stand-in refuses there
+    r.tenant(|t| {
+        t.profile_packs_answer(
+            DEV,
+            Some(A111),
+            Some(("kubernetes", "cni-cilium-oss", "1.21.0")),
+        )
+    });
+    r.step(
+        "validate-running",
+        0,
+        false,
+        "strata compare cluster:payments aws-stack@1.1.1 --validate",
+    );
+    r.excerpt(
+        "validate-running-lines",
+        "validate-running",
+        r"^(aws-stack|root |palette)",
+    );
 
     // a repave that waits for approval: the cluster record holds it outside the root, and verify
     // names it (#107)
@@ -3053,9 +3073,11 @@ fn use_cases(r: &mut Runner) {
         }],
     );
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A1111], &[]));
+    // the route of the cluster accepts the same move: it checks no sent tag of a profile that the
+    // cluster runs, so only the route of the version refuses
     r.tenant(|t| {
         t.profile_upgrade_answer(DEV, A1111, Some(("csi-aws-ebs", &["payments"])));
-        t.cluster_upgrade_answer(DEV, (PAYMENTS, A1111), Some(("csi-aws-ebs", &["payments"])));
+        t.packs_answer(DEV, PAYMENTS, None);
     });
     r.serve_here(); // state 3: payments runs aws-stack@1.1.11, and Palette refuses the move of its CSI pack
     r.quiet("strata snapshot aws-stack@1.1.11 -o refused/dev.json");

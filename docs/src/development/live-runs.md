@@ -675,7 +675,7 @@ through OpenTofu, and puts it back.
 | `undo-baseline` | 0 | the example is at its baseline |
 | `release-record`, `os-value` | 0, 1 | #81: a new key in the values of the OS pack: Palette says repave. It checks every value of the OS layer, so the table gives `repave` for an OS values change |
 | `csi-value` | 0 | #81: a changed value in the CSI pack: Palette says no repave. Its check reads no CNI or CSI layer, so `cluster-wide` means no repave |
-| `validate`, `validate-says`, `validate-json` | 0 | #134: at the baseline, `compare --validate` prints `palette    accepts`; `--json` gives `accepts` true and no error. |
+| `validate`, `validate-says`, `validate-json` | 0 | #134: at the baseline, `compare --validate` prints `palette    accepts`; `--json` gives `accepts` true and no error. The cluster runs the version, so strata asks the route of the version (#453). No result yet. |
 | `validate-usage`, `validate-usage-says` | 2, 0 | #134: two profile versions and no cluster are a usage error for `--validate`. |
 | `var-record-before`, `var-command` | 0 | #132: the Kubernetes pack of 1.0.1 has the kubeadm command `chmod 600 /var/lib/kubelet/config.yaml` |
 | `var-record`, `var-in-values` | 0 | #132: with `next_variable` and `next_variable_in_values`, 1.0.1 has the profile variable `strata_mode`, default `600`, and the command reads it in place of `600` |
@@ -734,7 +734,8 @@ with that name and version on the name route. Stage 4 makes the profile
 route. Stage 6 runs only when you give its number: `PROFILE=<name>@<version>
 validate-packs.sh 6`. It needs a profile version that a cluster runs and that
 pins Kubernetes two minor versions or more below the newest version. With
-`CLUSTER=<name>`, it also asks the route of the cluster. It asks, and it writes
+`CLUSTER=<name>`, `behind` also asks about the record of the cluster, and the script
+sends the route of the cluster a tag that no registry has. It asks, and it writes
 nothing.
 
 | Check | Expected exit | What it shows |
@@ -769,8 +770,9 @@ nothing.
 | `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. |
 | `bump-cluster-record` | 0 | #166: a record of the cluster `CLUSTER`. |
 | `bump-cluster-same` | 0 | #419: with `CLUSTER`, the bump of `kubernetes` in the record of the cluster has the version, the impact level, and the change flags of the bump in the record of the profile. No result yet. |
-| `bump-cluster-asked` | 0 | #166: `behind` on the record of the cluster asks the route of the cluster, and the bump holds an answer of Palette in `bump.paletteValidation`. |
-| `bump-cluster-refused` | 0 | #166: the route of the cluster refuses the same move, on this cluster. If the route takes the pack of the profile as it is now, it accepts, and this check fails. No result yet. |
+| `bump-cluster-asked` | 0 | #453: `behind` on the record of the cluster asks the route of the profile version that the cluster runs, and the bump holds an answer of Palette in `bump.paletteValidation`. No result yet. |
+| `bump-cluster-refused` | 0 | #453: the route of the profile version that the cluster runs refuses the same move, and the error names this cluster. No result yet. |
+| `cluster-route-doc`, `cluster-route-tag`, `cluster-route-tag-says` | 0 | #453: the route of the cluster answers HTTP 200 with no error for a body with the tag `9.99.9` for `kubernetes`. No registry has that version, and the profile is one that the cluster runs. Palette keeps the tag of the copy that the cluster holds. No result yet. |
 
 No pack of the Public Repo lists a dependency in its tags route. Only stage 6
 asks for a refusal of a dependency, the upgrade dependency, which no read route

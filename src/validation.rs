@@ -174,12 +174,6 @@ impl PaletteRefusal {
         self
     }
 
-    /// The error with `cluster` as the one cluster that it is about: an answer for one cluster.
-    pub(crate) fn on_cluster(mut self, cluster: &str) -> PaletteRefusal {
-        self.clusters = vec![cluster.to_string()];
-        self
-    }
-
     /// The refusal of the whole request in the body of a Palette error: its `code` and its
     /// `message`, with no pack. The code is text, or a number when the check of the body against
     /// the API schema refuses it. `None` when the body is not JSON with a `code`.
@@ -252,11 +246,6 @@ impl ProfileValidation {
     /// Each error that Palette gives, sorted by pack, code, message, and clusters, with no copy.
     pub fn errors(&self) -> &[PaletteRefusal] {
         &self.errors
-    }
-
-    /// The errors of the answer, in the order of [`ProfileValidation::errors`].
-    pub(crate) fn into_errors(self) -> Vec<PaletteRefusal> {
-        self.errors
     }
 }
 
@@ -335,7 +324,10 @@ mod tests {
     fn the_clusters_of_an_error_are_in_the_document_only_when_there_are_some() {
         let plain = serde_json::to_value(refusal()).unwrap();
         assert!(plain.get("clusters").is_none(), "{plain}");
-        let on = refusal().on_cluster("payments");
+        let on = PaletteRefusal {
+            clusters: vec!["payments".to_string()],
+            ..refusal()
+        };
         assert_eq!(on.line(), "PackDependencyNotFound on payments");
         let json = serde_json::to_value(&on).unwrap();
         assert_eq!(json["clusters"], json!(["payments"]));

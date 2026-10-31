@@ -26,7 +26,9 @@
 #      newest version, on a cluster that runs the version. It needs PROFILE=<name>@<version>, a
 #      version that pins kubernetes two minor versions or more below the newest, and a cluster
 #      that runs it, for example the release version of `just live-up` with an older Kubernetes.
-#      With CLUSTER=<name> it asks the route of the cluster for the same move. It asks and
+#      With CLUSTER=<name>, `behind` asks the same route for the record of that cluster, and the
+#      route of the cluster gets a body with a tag that no registry has (#453): Palette keeps the
+#      tag of the copy of the cluster, and checks no sent tag. It asks and
 #      writes nothing. It runs only when you give its number.
 #
 # Results go under runs/<UTC time>/validate-packs/, or OUT. Exit 0 only when no check fails.
@@ -239,6 +241,15 @@ fi
 # The jq filter for the pin of kubernetes that is behind, in a `behind --json` report
 kubernetes_pin='.pins[] | select(.name == "kubernetes" and .behind)'
 
+# A tag that no registry has, and the jq filter for the body of the route of a cluster, from the
+# document of the cluster: each profile by uid, and for the profile that holds kubernetes, its
+# packs as the cluster runs them, with the tag $tag in the place of the tag of kubernetes
+absent_tag=9.99.9
+cluster_body='{profiles: [.spec.clusterProfileTemplates[] | {uid} + (
+  if any(.packs[]?; .name == "kubernetes")
+  then {packValues: [.packs[] | {name, tag: (if .name == "kubernetes" then $tag else .tag end), type, values}]}
+  else {} end)]}'
+
 if [ "$stage" = 6 ]; then
   if [ -z "${PROFILE:-}" ]; then
     echo "== stage 6 skipped: give PROFILE=<name>@<version>" | tee -a steps.log
@@ -264,9 +275,9 @@ if [ "$stage" = 6 ]; then
     check bump-no-impact-says 0 '#166: the report holds no bump, so no answer of Palette' -- \
       jq -e '[.pins[] | select(.bump)] | length == 0' bump-no-impact.out
     if [ -n "${CLUSTER:-}" ]; then
-      echo "== the route of the cluster $CLUSTER for the same move (#166)" | tee -a steps.log
+      echo "== the record of the cluster $CLUSTER, and the route of the cluster (#166, #453)" | tee -a steps.log
       check bump-cluster-record 0 "#166: a record of cluster $CLUSTER" -- "$strata" snapshot "cluster:$CLUSTER" -o bump-cluster.json
-      check bump-cluster '?' '#166: behind asks the route of the cluster about the bump' -- \
+      check bump-cluster '?' '#453: behind asks the route of the version that the cluster runs about the bump' -- \
         "$strata" behind bump-cluster.json --json
       # The pin of the cluster is the pin of the profile, so the bump is the same: the version, the
       # impact, and the flags. An answer that differs is the answer of the route
@@ -274,10 +285,23 @@ if [ "$stage" = 6 ]; then
         jq -e --slurpfile profile bump-behind.out "[$kubernetes_pin | select(.bump != null) | .bump | {to, impact, flags}] == [\$profile[0] | $kubernetes_pin | select(.bump != null) | .bump | {to, impact, flags}]" bump-cluster.out
       check bump-cluster-asked 0 '#166: the bump of kubernetes holds an answer of Palette' -- \
         jq -e "[$kubernetes_pin | select(.bump.paletteValidation != null)] | length == 1" bump-cluster.out
-      # The route takes the tag of the sent pack, or the pack of the profile as it is now. If it
-      # takes the pack of the profile, it accepts the move, and this check fails
-      check bump-cluster-refused 0 '#166: the route of the cluster refuses the move with the code of the profile route, on this cluster' -- \
+      # For a record of a cluster, behind asks the route of the profile version that the cluster
+      # runs, and Palette checks the move on each cluster that runs it, this one too (#453)
+      check bump-cluster-refused 0 '#453: the route of the version that the cluster runs refuses the move, on this cluster' -- \
         jq -e --arg c "$CLUSTER" "$kubernetes_pin | .bump.paletteValidation | .accepts == false and ([.errors[] | (.clusters // [])[]] | index(\$c) != null)" bump-cluster.out
+      # Palette keeps the tag of the copy that the cluster holds, for a profile that the cluster
+      # runs, and checks no sent tag. So the route of the cluster takes a tag that no registry
+      # has, and says nothing about the move above. The body names each profile of the cluster by
+      # uid. The profile that holds kubernetes has its packs as the cluster runs them, with the
+      # tag $absent_tag in the place of the tag of kubernetes
+      cluster_uid=$(jq -r '.source.cluster.uid' bump-cluster.json)
+      check cluster-route-doc 0 "#453: the document of cluster $CLUSTER" -- \
+        "$live/api.sh" get "/v1/spectroclusters/$cluster_uid"
+      check cluster-route-tag 0 "#453: the route of the cluster answers a body with the tag $absent_tag for kubernetes" -- \
+        "$live/api.sh" post-status "/v1/spectroclusters/$cluster_uid/validate/packs" \
+        "$(jq -c --arg tag "$absent_tag" "$cluster_body" cluster-route-doc.out)"
+      check cluster-route-tag-says 0 '#453: the answer is HTTP 200 with no error: the route does not check the sent tag' -- \
+        bash -c "head -n 1 cluster-route-tag.out | grep -qx 'HTTP 200' && sed 1d cluster-route-tag.out | jq -e '(.profiles // []) | length == 0'"
     fi
   fi
 fi

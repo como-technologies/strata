@@ -16,7 +16,8 @@
 #   6  a new value in the OS pack, and a changed value in the CSI pack, asked with tenant.sh and
 #      with no edit of the profile: the answer of Palette for each layer that the impact table
 #      calls may-repave and cluster-wide (#81)
-#   7  `compare --validate` at the baseline: Palette accepts the packs of the release version on
+#   7  `compare --validate` at the baseline: cluster A runs the release version, so strata asks the
+#      route of that version (#453), and Palette accepts the packs of the version on
 #      cluster A, and a side that is not a cluster is a usage error (#134)
 #   8  version 1.0.1, which cluster A does not run, gets the profile variable strata_mode with the
 #      default 600, through OpenTofu, and a kubeadm command of its Kubernetes pack reads it in
@@ -126,7 +127,7 @@ fi
 
 if stage 7 "Palette's check of the packs"; then
   require_baseline
-  check validate 0 "#134: a profile version equal to the copy of cluster A: the comparison is IDENTICAL, and Palette accepts its packs" -- \
+  check validate 0 "#134, #453: a profile version equal to the copy of cluster A: the comparison is IDENTICAL, and the route of that version accepts its packs" -- \
     "$strata" compare "cluster:$C/$release" "$R" --validate
   check validate-says 0 "#134: the output has a palette line: accepts" -- grep -q '^palette    accepts$' validate.out
   check validate-json 0 "#134: --json carries paletteValidation, accepts true, and no error" -- \

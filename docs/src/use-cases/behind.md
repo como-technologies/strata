@@ -64,7 +64,8 @@ of Palette:
 ```
 
 The record of the cluster `payments` pins the same pack. `behind` gives it the
-same bump, and it asks the route of the cluster:
+same bump. It asks the route of the profile version that the cluster runs,
+because the route of the cluster checks no sent tag of such a profile:
 
 ```text
 {{#include ../output/behind-cluster.txt}}

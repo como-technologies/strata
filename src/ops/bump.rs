@@ -4,7 +4,8 @@
 //! clusters. A pack can declare how far a cluster can move from the version it runs, and Palette
 //! refuses a move that goes further. The record of a profile version goes to the route of that
 //! version, which reads each cluster that runs it. The record of a cluster goes to the route of
-//! that cluster. No request changes anything.
+//! the profile version that the cluster runs, because the route of a cluster does not check the
+//! sent tag of a profile that the cluster runs. No request changes anything.
 //!
 //! Palette answers in the project of the connection, so strata asks only the records of that
 //! project. It counts each record of another project that it can ask, and says so.
@@ -16,9 +17,8 @@ use serde_json::Value;
 
 use super::behind::Pin;
 use super::consumer_list::consumer_names;
-use super::repave::moved_pack_body;
 use super::scope_of;
-use super::validate::{cluster_packs_answer, moved_profile_body, profile_packs_answer};
+use super::validate::{moved_profile_body, moved_template_bodies, profile_packs_answer};
 use crate::api::{Palette, PaletteApi};
 use crate::error::Result;
 use crate::snapshot::{ClusterSource, Pack, Snapshot, SubjectKind};
@@ -146,17 +146,51 @@ impl<'a, A: PaletteApi> BumpQuestions<'a, A> {
         }
     }
 
-    /// `POST /v1/clusterprofiles/{uid}/validate/packs` with the packs of the record, and `to` in
-    /// the place of the pin. Palette checks the packs against each cluster that runs the version.
+    /// Ask about the bump of a record of a profile version: see
+    /// [`BumpQuestions::ask_version`]. The body has the packs of the record, and `to` in the place
+    /// of the pin.
     fn ask_profile(
         &mut self,
         record: &Snapshot,
         pin: &Pin,
         to: &Pack,
     ) -> Result<Vec<PaletteRefusal>> {
-        let uid = &record.source.uid;
         let body = moved_profile_body(record, |p| pin.pins(p), to);
-        let errors = profile_packs_answer(self.palette, Some(uid), &body)?;
+        self.ask_version(&record.source.uid, &body)
+    }
+
+    /// Ask about the bump of a record of a cluster, one time for each profile version that the
+    /// cluster runs and whose template holds the pin: see [`BumpQuestions::ask_version`]. The
+    /// body has the packs of the template as the cluster runs them, and `to` in the place of the
+    /// pin. `None` when no profile of the cluster holds the pin now.
+    ///
+    /// The route of the cluster does not check the sent tag of a profile that the cluster runs,
+    /// so it says nothing about the move.
+    fn ask_cluster(
+        &mut self,
+        cluster: &ClusterSource,
+        pin: &Pin,
+        to: &Pack,
+    ) -> Result<Option<Vec<PaletteRefusal>>> {
+        let asks = moved_template_bodies(
+            self.cluster_document(&cluster.uid)?,
+            |c| pin.is_in_template(c),
+            to,
+        );
+        if asks.is_empty() {
+            return Ok(None);
+        }
+        let mut errors = Vec::new();
+        for (uid, body) in &asks {
+            errors.extend(self.ask_version(uid, body)?);
+        }
+        Ok(Some(errors))
+    }
+
+    /// `POST /v1/clusterprofiles/{uid}/validate/packs` with `body`. Palette checks the packs
+    /// against each cluster that runs the version, and names the clusters in each error.
+    fn ask_version(&mut self, uid: &str, body: &Value) -> Result<Vec<PaletteRefusal>> {
+        let errors = profile_packs_answer(self.palette, Some(uid), body)?;
         if errors.is_empty() {
             return Ok(errors);
         }
@@ -164,30 +198,6 @@ impl<'a, A: PaletteApi> BumpQuestions<'a, A> {
         // of Palette, which holds them
         let names = self.clusters_running(uid).unwrap_or_default();
         Ok(errors.into_iter().map(|e| e.naming(names)).collect())
-    }
-
-    /// `POST /v1/spectroclusters/{uid}/validate/packs` with the profiles of the cluster, and `to`
-    /// in the place of the pin. `None` when no profile of the cluster holds the pin now.
-    fn ask_cluster(
-        &mut self,
-        cluster: &ClusterSource,
-        pin: &Pin,
-        to: &Pack,
-    ) -> Result<Option<Vec<PaletteRefusal>>> {
-        let palette = self.palette;
-        let doc = self.cluster_document(&cluster.uid)?;
-        let Some(body) = moved_pack_body(doc, |c| pin.is_in_template(c), to) else {
-            return Ok(None);
-        };
-        let answer = cluster_packs_answer(palette, &cluster.uid, &body)?;
-        Ok(Some(
-            answer
-                .answer
-                .into_errors()
-                .into_iter()
-                .map(|e| e.on_cluster(&cluster.name))
-                .collect(),
-        ))
     }
 
     /// The document of the cluster `uid`, read one time.
