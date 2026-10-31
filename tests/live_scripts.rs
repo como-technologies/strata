@@ -1947,9 +1947,10 @@ fn preflight_plan_keeps_a_result_the_ledger_does_not_know_out_of_the_entry() {
     );
 }
 
-/// Run `offering_edit` of preflight-plan.sh for `engine`, against a `api.sh` that answers every
-/// `get` with the file `answer`. Gives the output, and the path that the function asked for.
-fn offering_edit(engine: &str, region: &str, answer: &str) -> (Output, String) {
+/// Run `offering_edit` of preflight-plan.sh for `engine`, with the `account_kind` that `create_body`
+/// sets, against a `api.sh` that answers every `get` with the file `answer`. Gives the output, and
+/// the path that the function asked for.
+fn offering_edit(engine: &str, account_kind: &str, region: &str, answer: &str) -> (Output, String) {
     let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
     let start = script.find("\noffering_edit() {").unwrap() + 1;
     let end = start + script[start..].find("\n}\n").unwrap() + 3;
@@ -1963,7 +1964,7 @@ fn offering_edit(engine: &str, region: &str, answer: &str) -> (Output, String) {
     let o = Command::new("bash")
         .arg("-c")
         .arg(format!(
-            "live={live}; engine={engine}; region={region}; A=acc-1\n{function}\noffering_edit",
+            "live={live}; engine={engine}; account_kind={account_kind}; region={region}; A=acc-1\n{function}\noffering_edit",
             live = dir.path().display()
         ))
         .current_dir(dir.path())
@@ -1983,24 +1984,16 @@ fn preflight_plan_makes_the_fault_of_instance_offering_from_the_instance_type_ro
         {"type":"c5.large","nonSupportedZones":null},
         {"type":"t3.xlarge","nonSupportedZones":["us-east-2c","us-east-2d"]},
         {"type":"m5.large","nonSupportedZones":["us-east-2a"]}]}"#;
-    for (engine, region, path) in [
-        (
-            "aws",
-            "us-east-2",
-            "get /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-1",
-        ),
-        (
-            "eks",
-            "us-east-2",
-            "get /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-1",
-        ),
-        (
-            "gke",
-            "us-east1",
-            "get /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-1",
-        ),
+    for (engine, account_kind, region) in [
+        ("aws", "aws", "us-east-2"),
+        ("eks", "aws", "us-east-2"),
+        ("gcp", "gcp", "us-east1"),
+        ("gke", "gcp", "us-east1"),
     ] {
-        let (o, asked) = offering_edit(engine, region, answer);
+        let path = format!(
+            "get /v1/clouds/{account_kind}/regions/{region}/instancetypes?cloudAccountUid=acc-1"
+        );
+        let (o, asked) = offering_edit(engine, account_kind, region, answer);
         assert!(o.status.success(), "{engine}: {}", text(&o.stderr));
         assert_eq!(asked, path, "{engine}");
         // the edit puts the first pool of the clean entity in the first zone that the type lacks
@@ -2083,7 +2076,7 @@ fn preflight_plan_makes_no_fault_of_instance_offering_when_the_route_lists_no_zo
         r#"{"instanceTypes":[{"type":"t3.large","nonSupportedZones":[]}]}"#,
         "{}",
     ] {
-        let (o, _) = offering_edit("aws", "us-east-2", answer);
+        let (o, _) = offering_edit("aws", "aws", "us-east-2", answer);
         assert_eq!(o.status.code(), Some(1), "{answer}");
         assert!(
             text(&o.stderr).contains("the route lists no type with a zone in nonSupportedZones"),
@@ -2091,6 +2084,125 @@ fn preflight_plan_makes_no_fault_of_instance_offering_when_the_route_lists_no_zo
             text(&o.stderr)
         );
         assert!(text(&o.stdout).is_empty(), "no edit: {}", text(&o.stdout));
+    }
+}
+
+/// `create_body` of lib.sh is the one place of the scripts that maps an engine to the kind of its
+/// cloud account. It sets `$account_kind`, and `offering_edit` of the plan reads it (#430). The
+/// kind picks the account in the summary, so an EKS cluster takes the account of kind `aws`.
+#[test]
+fn create_body_sets_the_kind_of_the_cloud_account_of_each_engine() {
+    let dir = tempfile::tempdir().unwrap();
+    let strata = dir.path().join("strata");
+    executable(&strata, "#!/usr/bin/env bash\necho 'strata 9.9.9'\n");
+    let live = dir.path().join("live");
+    std::fs::create_dir(&live).unwrap();
+    std::os::unix::fs::symlink(live_script("preflight"), live.join("preflight")).unwrap();
+    executable(
+        &live.join("api.sh"),
+        r#"#!/usr/bin/env bash
+echo '{"items":[
+  {"metadata":{"name":"lab-aws","uid":"acc-aws"},"kind":"aws"},
+  {"metadata":{"name":"strata-live-eks","uid":"acc-eks"},"kind":"aws"},
+  {"metadata":{"name":"lab-gcp","uid":"acc-gcp"},"kind":"gcp"}]}'
+"#,
+    );
+    let tfvars = dir.path().join("terraform.tfvars");
+    std::fs::write(
+        &tfvars,
+        "cloud_account_name = \"lab-aws\"\ngcp_cloud_account_name = \"lab-gcp\"\n",
+    )
+    .unwrap();
+    for (engine, kind, account) in [
+        ("aws", "aws", "acc-aws"),
+        ("eks", "aws", "acc-eks"),
+        ("gcp", "gcp", "acc-gcp"),
+        ("gke", "gcp", "acc-gcp"),
+    ] {
+        let o = Command::new("bash")
+            .arg("-c")
+            .arg(format!(
+                ". '{lib}'\nlive={live}\ncreate_body {engine} p-1 fred body.json || exit 1\necho \"$account_kind $A\"",
+                lib = live_script("lib.sh").display(),
+                live = live.display()
+            ))
+            .current_dir(dir.path())
+            .env("STRATA_BIN", &strata)
+            .env("TFVARS", &tfvars)
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "{engine}: {}", text(&o.stderr));
+        assert_eq!(text(&o.stdout), format!("{kind} {account}\n"), "{engine}");
+        let body = read_json(&dir.path().join("body.json"));
+        assert_eq!(body["spec"]["cloudAccountUid"], account, "{engine}");
+    }
+}
+
+/// The plan puts the fault of the key pair in the check `iaas-pod-identity` on aws, and in
+/// `ssh-key-pair` on eks alone (#430). On aws, the properties route refuses a key pair that the
+/// region lacks, and `iaas-pod-identity` sends it the key pair.
+#[test]
+fn preflight_plan_sends_the_missing_key_pair_to_iaas_pod_identity_on_aws_and_to_ssh_key_pair_on_eks()
+ {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    let lines: Vec<&str> = script.lines().map(str::trim).collect();
+    let edit = r#"'.spec.cloudConfig.sshKeyName = "strata-no-such-key"'"#;
+    let faults: Vec<&&str> = lines
+        .iter()
+        .filter(|l| l.contains("sshKeyName = \"strata-no-such-key\""))
+        .collect();
+    assert_eq!(
+        faults,
+        [
+            &format!("fault iaas-pod-identity {edit}").as_str(),
+            &format!("eks) fault ssh-key-pair {edit} ;;").as_str(),
+        ]
+    );
+    // the edit changes the key pair of the entity of aws, and nothing else
+    for engine in ["aws", "eks"] {
+        let entity = read_json(&live_script("preflight").join(format!("{engine}.json")));
+        assert_eq!(
+            entity["spec"]["cloudConfig"]["sshKeyName"], "__SSH_KEY__",
+            "{engine}"
+        );
+    }
+    // the check passes on a report that names the code of Palette, as a failed rule or as an error
+    let line = lines
+        .iter()
+        .skip_while(|l| !l.contains("check properties-key-pair"))
+        .nth(1)
+        .unwrap();
+    let filter = &line[line.find('\'').unwrap() + 1..line.rfind('\'').unwrap()];
+    let dir = tempfile::tempdir().unwrap();
+    for (report, status) in [
+        (
+            r#"{"checks":[{"id":"iaas-pod-identity","verdict":"failed","messages":["Palette refuses the properties of the AWS cluster: AwsKeyPairNotFound: Aws KeyPair 'strata-no-such-key' not found for region us-east-2"]}]}"#,
+            Some(0),
+        ),
+        (
+            r#"{"checks":[{"id":"iaas-pod-identity","verdict":"error","messages":["POST /v1/clouds/aws/properties/validate failed with HTTP 500: {\"code\":\"AwsKeyPairNotFound\"}"]}]}"#,
+            Some(0),
+        ),
+        (
+            r#"{"checks":[{"id":"iaas-pod-identity","verdict":"failed","messages":["Palette refuses the properties of the AWS cluster: FeatureNotSupported"]}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"checks":[{"id":"iaas-pod-identity","verdict":"passed"}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"checks":[{"id":"ssh-key-pair","verdict":"failed","messages":["AwsKeyPairNotFound"]}]}"#,
+            Some(1),
+        ),
+    ] {
+        std::fs::write(dir.path().join("report.json"), report).unwrap();
+        let o = Command::new("jq")
+            .args(["-e", filter])
+            .arg(dir.path().join("report.json"))
+            .output()
+            .unwrap();
+        assert_eq!(o.status.code(), status, "{report}");
     }
 }
 

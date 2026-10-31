@@ -137,8 +137,11 @@ Most types give `null`. The rule reads `null` as no zone. Here the same pools us
 ```
 
 `ssh-key-pair` fails when `sshKeyName` of the entity is not in the list of the
-account. The property route of EKS does not check a key pair for a cluster
-with a dynamic VPC. Here the entity names a key pair that the account lacks:
+account. The rule applies to EKS. The property route of EKS checks the key pair
+only when the body has a `vpcId`. So an EKS cluster with a dynamic VPC reaches
+no check of it. On AWS, the properties route refuses a key pair that the region
+lacks, and `iaas-pod-identity` sends the key pair to that route. Here the entity
+of an EKS cluster names a key pair that the account lacks:
 
 ```text
 {{#include ../../output/preflight-ssh-key.txt}}

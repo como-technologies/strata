@@ -11,8 +11,13 @@
 //!   "profiles": [ record, ... ],       one strata record for each profile of the entity
 //!   "packs":    { "<packUid>": {...} } the pack of each layer, GET /v1/packs/{uid}, when live
 //!   "account":  { ... } | null         the cloud account, with no secret in it
+//!   "accountKind": "aws",              the kind of cloud account of the engine: eks has aws
+//!   "routeCloud": "edge-native"        the cloud type of the engine in a route: edge has edge-native
 //! }
 //! ```
+//!
+//! `accountKind` and `routeCloud` come from the engine, by [`account_kind`] and [`route_cloud`], so
+//! that no rule writes that mapping again.
 //!
 //! A check adds `response` (Palette), `exec` (a command), or `cluster`, `summary`, `events`,
 //! and `elapsed` (the watch). A fixture of a test is a world with the answers written in, under
@@ -110,7 +115,7 @@ pub struct World {
 impl World {
     /// The document the programs read.
     pub fn to_value(&self) -> Value {
-        json!({
+        let mut world = json!({
             "cloud": self.cloud,
             "release": self.release,
             "source": self.source,
@@ -120,7 +125,9 @@ impl World {
             "packs": self.packs,
             "account": self.account,
             "clusterUid": self.cluster_uid,
-        })
+        });
+        add_engine_clouds(&mut world);
+        world
     }
 
     /// A world from a file: the body of a create, as JSON or YAML. The cloud comes from `cloud`,
@@ -344,6 +351,17 @@ pub fn route_cloud(cloud: &str) -> &str {
     } else {
         cloud
     }
+}
+
+/// Put `accountKind` and `routeCloud` in the world `world`, from its `cloud`. [`World::to_value`]
+/// writes them, and the loader of a fixture, which is a world on disk, adds them here. A world
+/// with no `cloud` stays as it is.
+pub(crate) fn add_engine_clouds(world: &mut Value) {
+    let Some(cloud) = opt_text(world, "/cloud") else {
+        return;
+    };
+    world["accountKind"] = json!(account_kind(&cloud));
+    world["routeCloud"] = json!(route_cloud(&cloud));
 }
 
 /// The engine of the cloud type `text`, which Palette or a file names: [`EDGE`] for
@@ -706,6 +724,22 @@ mod tests {
         }
         assert!(CLOUDS.contains(&EDGE));
         assert!(!CLOUDS.contains(&CLOUD_EDGE_NATIVE));
+    }
+
+    #[test]
+    fn the_world_gives_the_account_kind_and_the_route_cloud_of_each_engine() {
+        for engine in CLOUDS {
+            let world = World {
+                cloud: engine.to_string(),
+                ..World::default()
+            }
+            .to_value();
+            assert_eq!(world["accountKind"], account_kind(engine), "{engine}");
+            assert_eq!(world["routeCloud"], route_cloud(engine), "{engine}");
+        }
+        let mut no_cloud = json!({"entity": {}});
+        add_engine_clouds(&mut no_cloud);
+        assert_eq!(no_cloud, json!({"entity": {}}));
     }
 
     #[test]

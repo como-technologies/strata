@@ -1,9 +1,9 @@
 $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summary, scorecard: [.sections[] | {title, ran, passed, failed, notChecked, readiness}]}'
 {
   "summary": {
-    "rules": 105,
-    "ran": 23,
-    "passed": 20,
+    "rules": 104,
+    "ran": 22,
+    "passed": 19,
     "failed": 0,
     "probeFailed": 2,
     "warned": 1,
@@ -15,18 +15,18 @@ $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summ
     "notChecked": 24,
     "skipped": 41,
     "errors": 0,
-    "readiness": 0.6060606060606061,
+    "readiness": 0.59375,
     "exitCode": 0,
     "verdict": "OK: each counted check passed; 2 probe(s) failed, not counted"
   },
   "scorecard": [
     {
       "title": "Identity and permissions",
-      "ran": 3,
-      "passed": 3,
+      "ran": 2,
+      "passed": 2,
       "failed": 0,
       "notChecked": 0,
-      "readiness": 0.5
+      "readiness": 0.4
     },
     {
       "title": "Cloud services and APIs",

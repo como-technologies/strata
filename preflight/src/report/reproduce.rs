@@ -23,13 +23,14 @@ pub(super) fn auto_reproduce(
             lines.push(format!("jq '{}' {dir}/world.json", one_line(expr)));
         }
         // a request for each item: the lines show each request. A POST body depends on the item,
-        // so a POST rule gets its lines from its own `reproduce`.
+        // so a POST rule gets its lines from its own `reproduce`. A rule with its own lines for
+        // the engine shows those, so that no request has two lines.
         Some(Check::Palette {
             method,
             each: Some(_),
             ..
         }) => {
-            if *method == Method::Get {
+            if *method == Method::Get && rule.reproduce.for_engine(&subject.cloud).is_empty() {
                 for call in outcome.ran.requests() {
                     lines.push(curl_get(&call.path));
                 }

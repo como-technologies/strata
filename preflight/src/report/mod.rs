@@ -1073,6 +1073,36 @@ rules:
     }
 
     #[test]
+    fn a_check_with_each_and_its_own_reproduce_lines_has_no_second_line_for_a_request() {
+        let catalog = crate::catalog::builtin().unwrap();
+        let rule = catalog.rule("edge-host-in-use").unwrap();
+        assert!(
+            !rule.reproduce.for_engine("edge").is_empty(),
+            "the rule writes its own loop"
+        );
+        let outcome = Outcome {
+            verdict: Verdict::Failed,
+            messages: vec![],
+            elapsed: Duration::from_millis(3),
+            ran: Ran::Requests(vec![
+                Call::get("/v1/edgehosts/h1", Some("HTTP 200")),
+                Call::get("/v1/edgehosts/h2", Some("HTTP 200")),
+            ]),
+        };
+        let subject = Subject {
+            cloud: "edge".into(),
+            release: None,
+            source: "c.json".into(),
+            name: "fred".into(),
+            cluster_uid: None,
+        };
+        assert_eq!(
+            auto_reproduce(rule, &outcome, &subject, None),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
     fn a_check_with_one_request_keeps_its_ran_and_answer_and_has_no_requests() {
         let outcome = Outcome {
             verdict: Verdict::Failed,

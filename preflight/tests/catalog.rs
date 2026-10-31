@@ -940,36 +940,131 @@ fn instance_offering_fails_when_palette_refuses_or_gives_no_list_of_types() {
     }
 }
 
-/// The message of `ssh-key-pair` names the key pair and the region, for AWS and for EKS with a
-/// dynamic VPC (#143).
+/// The message of `ssh-key-pair` names the key pair and the region, for EKS with a dynamic VPC
+/// (#143).
 #[test]
-fn ssh_key_pair_names_the_key_pair_and_the_region_for_aws_and_eks() {
+fn ssh_key_pair_names_the_key_pair_and_the_region_for_eks() {
     let catalog = catalog::builtin().unwrap();
     let rule = catalog.rule("ssh-key-pair").unwrap();
+    let fixture = "fixtures/eks/ssh-key-missing.json";
+    let doc = fixture::load(&catalog::rules_dir().join(fixture)).unwrap();
+    assert_eq!(
+        doc["entity"]["spec"]["cloudConfig"]["vpcId"], "",
+        "a dynamic VPC"
+    );
+    let out = outcome_of(rule, doc, &Jq::new());
+    assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+    assert_eq!(
+        out.messages,
+        [
+            "sshKeyName iris-on-palette is not a key pair of the account in region us-east-2; Palette lists 1 key pair(s)"
+        ]
+    );
+}
+
+/// The properties route of AWS refuses a key pair that the region lacks, and `iaas-pod-identity`
+/// sends the key pair to it. So `ssh-key-pair` names EKS alone, and `iaas-pod-identity` names the
+/// properties, not only the account (#430).
+#[test]
+fn ssh_key_pair_leaves_aws_to_the_properties_route_that_iaas_pod_identity_calls() {
+    let catalog = catalog::builtin().unwrap();
+    let key_pair = catalog.rule("ssh-key-pair").unwrap();
+    assert!(key_pair.applies_to("eks"));
+    for engine in [
+        "aws", "gcp", "gke", "azure", "aks", "maas", "edge", "vsphere",
+    ] {
+        assert!(!key_pair.applies_to(engine), "{engine}");
+    }
+    let pod = catalog.rule("iaas-pod-identity").unwrap();
+    assert!(pod.applies_to("aws"));
+    let Some(Check::Palette { body, .. }) = &pod.check else {
+        panic!("iaas-pod-identity calls the properties route");
+    };
+    assert!(body.as_deref().unwrap().contains("sshKeyName"));
+    let path = catalog::rules_dir().join("fixtures/aws/key-pair-not-found.json");
+    let out = outcome_of(pod, fixture::load(&path).unwrap(), &Jq::new());
+    assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+    assert_eq!(
+        out.messages,
+        [
+            "Palette refuses the properties of the AWS cluster, the cloud account or the key pair: AwsKeyPairNotFound: Aws KeyPair 'strata-no-such-key' not found for region us-east-2; caused by: InvalidKeyPair.NotFound: The key pair 'strata-no-such-key' does not exist"
+        ]
+    );
+}
+
+/// `ssh-key-pair` applies where `eks-public-subnet-mapping` does not: the property route of EKS
+/// checks the key pair only when the body has a `vpcId`, and that rule sends the route only with a
+/// `vpcId` and a subnet id (#430). On each body, one of the two rules applies.
+#[test]
+fn ssh_key_pair_applies_where_eks_public_subnet_mapping_does_not() {
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    let path = catalog::rules_dir().join("fixtures/eks/ssh-key-listed.json");
+    let clean = fixture::load(&path).unwrap();
+    let applies = |id: &str, world: &serde_json::Value| {
+        let when = catalog.rule(id).unwrap().when.as_deref().unwrap();
+        jq.first(id, when, world, None).unwrap() == serde_json::Value::Bool(true)
+    };
+    let subnets = serde_json::json!([{"id": "subnet-1", "az": "us-east-2a"}]);
+    for (vpc, with_subnets, key_pair, mapping) in [
+        ("", false, true, false),
+        ("", true, true, false),
+        ("vpc-1", false, true, false),
+        ("vpc-1", true, false, true),
+    ] {
+        let mut world = clean.clone();
+        world["entity"]["spec"]["cloudConfig"]["vpcId"] = vpc.into();
+        world["entity"]["spec"]["machinepoolconfig"][0]["cloudConfig"]["subnets"] = if with_subnets
+        {
+            subnets.clone()
+        } else {
+            serde_json::json!([])
+        };
+        let case = format!("vpcId {vpc:?}, subnets {with_subnets}");
+        assert_eq!(applies("ssh-key-pair", &world), key_pair, "{case}");
+        assert_eq!(
+            applies("eks-public-subnet-mapping", &world),
+            mapping,
+            "{case}"
+        );
+    }
+}
+
+/// `pack-cloud-support` reads the cloud type of Palette, so an edge cluster takes a pack that lists
+/// `edge-native` (#430). A pack with an empty list supports each cloud. A pack that lists another
+/// cloud fails, and the message names the cloud type of the route.
+#[test]
+fn pack_cloud_support_reads_the_cloud_type_of_an_edge_pack_and_an_empty_list() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("pack-cloud-support").unwrap();
+    let jq = Jq::new();
     for fixture in [
-        "fixtures/aws/ssh-key-missing.json",
-        "fixtures/eks/ssh-key-missing.json",
+        "fixtures/edge/clean.json",
+        "fixtures/gcp/pack-no-cloud-types.json",
     ] {
         let path = catalog::rules_dir().join(fixture);
-        let doc = fixture::load(&path).unwrap();
-        assert_eq!(
-            doc["entity"]["spec"]["cloudConfig"]["vpcId"], "",
-            "{fixture}: a dynamic VPC"
-        );
-        let out = outcome_of(rule, doc, &Jq::new());
+        let out = outcome_of(rule, fixture::load(&path).unwrap(), &jq);
         assert_eq!(
             out.verdict,
-            Verdict::Failed,
+            Verdict::Passed,
             "{fixture}: {:?}",
             out.messages
         );
-        assert_eq!(
-            out.messages,
-            [
-                "sshKeyName iris-on-palette is not a key pair of the account in region us-east-2; Palette lists 1 key pair(s)"
-            ],
-            "{fixture}"
-        );
+    }
+    for (fixture, message) in [
+        (
+            "fixtures/edge/pack-no-edge.json",
+            "pack edge-native-byoi@1.0.0 of profile edge-stack supports aws, not edge-native",
+        ),
+        (
+            "fixtures/gcp/pack-no-gcp.json",
+            "pack cni-cilium-oss@1.19.6 of profile gcp-stack supports aws, azure, vsphere, not gcp",
+        ),
+    ] {
+        let path = catalog::rules_dir().join(fixture);
+        let out = outcome_of(rule, fixture::load(&path).unwrap(), &jq);
+        assert_eq!(out.verdict, Verdict::Failed, "{fixture}");
+        assert_eq!(out.messages, [message], "{fixture}");
     }
 }
 
@@ -1003,4 +1098,53 @@ fn kms_fails_a_disabled_key_that_the_list_of_keys_holds() {
             ),
         }
     }
+}
+
+/// The world gives `accountKind` and `routeCloud`, so no rule maps the engine to a cloud itself
+/// (#430). A path or a program that wrote `edge-native`, or `then "aws"`, would be a second copy of
+/// `account_kind` or `route_cloud`.
+#[test]
+fn no_check_maps_the_engine_to_a_cloud_itself() {
+    let catalog = catalog::builtin().unwrap();
+    let mut found = Vec::new();
+    for rule in catalog.rules() {
+        let texts: Vec<&str> = match &rule.check {
+            Some(Check::Static { expr }) | Some(Check::Watch { expr }) => vec![expr],
+            Some(Check::Palette {
+                path,
+                body,
+                each,
+                expr,
+                ..
+            }) => [Some(path), body.as_ref(), each.as_ref(), Some(expr)]
+                .into_iter()
+                .flatten()
+                .map(String::as_str)
+                .collect(),
+            Some(Check::Exec { argv, expr, .. }) => argv
+                .iter()
+                .map(String::as_str)
+                .chain([expr.as_str()])
+                .collect(),
+            None => Vec::new(),
+        };
+        let when = rule.when.as_deref().into_iter();
+        for text in texts.into_iter().chain(when) {
+            for copy in [
+                "edge-native",
+                "then \"aws\"",
+                "then \"gcp\"",
+                "then \"azure\"",
+            ] {
+                if text.contains(copy) {
+                    found.push(format!("{}: {copy}", rule.id));
+                }
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "read `.accountKind` or `.routeCloud` of the world:\n{}",
+        found.join("\n")
+    );
 }

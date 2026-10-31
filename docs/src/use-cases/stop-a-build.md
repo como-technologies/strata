@@ -79,8 +79,8 @@ that item. See
 [A rule over a list](../commands/preflight/tiers.md#a-rule-over-a-list).
 
 A rule can also read a list of the cloud account in one request. `instance-offering`
-fails a pool whose instance type a zone does not offer. `ssh-key-pair` fails a key
-pair that the account lacks. See
+fails a pool whose instance type a zone does not offer. On EKS, `ssh-key-pair`
+fails a key pair that the account lacks. See
 [A rule over the list of an account](../commands/preflight/tiers.md#a-rule-over-the-list-of-an-account).
 
 ### After an upgrade of Palette

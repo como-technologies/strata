@@ -24,7 +24,7 @@ rules:
     check:
       kind: palette
       method: POST
-      path: /v1/spectroclusters/{{ .cloud | if . == "edge" then "edge-native" else . end }}/validate
+      path: /v1/spectroclusters/{{ .routeCloud }}/validate
       # for an existing cluster the route would refuse its own name with ResourceAlreadyExists,
       # so the body of the check carries the name with a suffix; nothing else changes
       body: |
@@ -414,7 +414,7 @@ rules:
               end
           end
     reproduce:
-      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/overlords/{{ .account.metadata.annotations.overlordUid }}\" | jq '{name: .metadata.name, state: .status.state, active: .status.isActive, ready: .status.isReady, health: .status.health.state, system: .spec.isSystem}'"
+      - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/overlords/{{ .account.metadata.annotations.overlordUid }}\" | jq '{name: .metadata.name, state: .status.state, active: .status.isActive, ready: .status.isReady, health: .status.health.state, system: .spec.isSystem}'"
     fix:
       owner: palette
       text: Show the PCG state next to the cloud account in the console, and in the validate route of MAAS.

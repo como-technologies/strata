@@ -272,15 +272,18 @@ rules:
       A pack version that does not list the cloud type, such as `cni-cilium-oss` before 1.19.3 on
       GCP, is refused at create. The cluster validate route takes a body with such a pack, and
       `palette-validate` passes. So no route answers this check, and this rule is a gap that
-      preflight fills. Palette owns the rule.
+      preflight fills. Palette owns the rule. A pack that lists no cloud type supports each cloud.
+      The cloud type of an edge cluster is `edge-native`, so the check reads `routeCloud` and not
+      `cloud`.
     check:
       kind: static
       expr: |
-        .cloud as $c | .packs as $packs
+        .routeCloud as $c | .packs as $packs
         | [ .profiles[] | .source.name as $p | .packs[]
             | select((.packUid // "") != "" and ($packs[.packUid] != null))
-            | select(($packs[.packUid].cloudTypes // ["all"]) as $t | ($t | index("all")) == null and ($t | index($c)) == null)
-            | "pack \(.name)@\(.version) of profile \($p) supports \($packs[.packUid].cloudTypes | join(", ")), not \($c)" ]
+            | ($packs[.packUid].cloudTypes // []) as $t
+            | select(($t | length) > 0 and ($t | index("all")) == null and ($t | index($c)) == null)
+            | "pack \(.name)@\(.version) of profile \($p) supports \($t | join(", ")), not \($c)" ]
     fix:
       owner: palette
       text: Refuse the pack at profile create, not at cluster create.
@@ -294,6 +297,9 @@ rules:
     tests:
       - fault: fixtures/gcp/pack-no-gcp.json
         clean: fixtures/gcp/clean.json
+      - fault: fixtures/edge/pack-no-edge.json
+        clean: fixtures/edge/clean.json
+      - clean: fixtures/gcp/pack-no-cloud-types.json
 
   - id: engine-repave-rules
     title: The repave answer of Palette is the truth on edge, EKS, and GKE
@@ -321,7 +327,7 @@ rules:
           then ["Palette repaves the \($c) cluster for this change, and its answer is the truth on \($c), not the impact table of strata: \(reasons)"]
           else [] end
     reproduce:
-      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H 'Content-Type: application/json' \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
     fix:
       owner: strata
       text: Scope the impact table to the kubeadm engine, and print the answer of Palette on the others.
@@ -364,7 +370,7 @@ rules:
                 else empty end ]
         end
     reproduce:
-      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H 'Content-Type: application/json' \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
     evidence:
       - kind: run
         ref: "#89"
@@ -405,7 +411,7 @@ rules:
                 else empty end ]
         end
     reproduce:
-      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H 'Content-Type: application/json' \"$PALETTE_HOST/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
+      - "curl -s -X POST -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" -H 'Content-Type: application/json' \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/validate/repave\" -d @<(jq '{profiles: .spec.profiles}' entity.json) | jq '{isRepaveRequired, reasons: [.reasons[] | {code, message}]}'"
     evidence:
       - kind: run
         ref: "#90"

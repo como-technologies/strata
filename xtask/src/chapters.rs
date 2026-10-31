@@ -183,9 +183,9 @@ fn preflight_routes(r: &mut Runner, project: &str) {
         &json!({"kind": "aws", "metadata": {"name": "platform-aws", "uid": PLATFORM_AWS},
             "spec": {"credentialType": "secret", "partition": "aws", "policyARNs": []}, "status": {"state": "Active"}}),
     );
-    // the property route of AWS answers 204 with no body; the stand-in serves 200 with an empty
-    // object, which a rule reads the same way (`ok`); the regions of the account, with the query
-    // in the file name as the stand-in maps it
+    // the property route of AWS answers 200 for a key pair that the region holds, and the stand-in
+    // serves an empty object, which a rule reads as `ok`; the regions of the account, with the
+    // query in the file name as the stand-in maps it
     r.answer(project, "v1/clouds/aws/properties/validate", &json!({}));
     r.answer(
         project,
@@ -3373,7 +3373,7 @@ fn automation(r: &mut Runner) {
         "preflight-each",
         1,
         false,
-        "strata preflight cluster-addon.json --cloud aws --no-exec --tier palette --rule template-outside --strict --quiet | sed -n '4,12p'",
+        "strata preflight cluster-addon.json --cloud aws --no-exec --tier palette --rule template-outside --strict --quiet | sed -n '4,9p'",
     );
     r.step(
         "preflight-each-verbose",
@@ -3389,7 +3389,8 @@ fn automation(r: &mut Runner) {
     );
     // two rules that read the account of the entity (#143): the instance type route lists the
     // zones that do not offer a type, and the key pair route lists the key pairs of the region.
-    // The pools move to the zone that the list names, and the key pair is not in the list.
+    // The pools move to the zone that the list names. The key pair is not in the list, on an EKS
+    // body with a dynamic VPC: the AWS properties route checks the key pair of an AWS body.
     r.quiet(
         r#"jq '.spec.machinepoolconfig[].cloudConfig.azs = ["us-east-2c"]' cluster.json > cluster-zone.json"#,
     );
@@ -3409,12 +3410,14 @@ fn automation(r: &mut Runner) {
         false,
         "strata preflight cluster-null.json --cloud aws --no-exec --tier palette --rule instance-offering --strict --quiet | sed -n '4p'",
     );
-    r.quiet(r#"jq '.spec.cloudConfig.sshKeyName = "retired"' cluster.json > cluster-key.json"#);
+    r.quiet(
+        r#"jq '.spec.cloudConfig.sshKeyName = "retired" | .spec.cloudConfig.vpcId = ""' cluster.json > cluster-key.json"#,
+    );
     r.step(
         "preflight-ssh-key",
         1,
         false,
-        "strata preflight cluster-key.json --cloud aws --no-exec --tier palette --rule ssh-key-pair --strict --quiet | sed -n '4,6p'",
+        "strata preflight cluster-key.json --cloud eks --no-exec --tier palette --rule ssh-key-pair --strict --quiet | sed -n '4,6p'",
     );
     // a profile of another cloud type (#415): the validate route refuses the body with HTTP 500 and
     // the code ClusterProfilesNotSupported, and palette-validate reports the refusal as a failure
