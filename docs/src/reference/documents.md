@@ -111,17 +111,18 @@ profile, or pack version.
     - `labels`: the labels of the cluster, as a map. A label whose value is
       not text is not in the map: Palette gives a label as text.
     - `tiers`: each tier that the record carries, by name, each with `hash`
-      and `fields`. `errors`, only when strata could not read a field: the
-      field and the error. `fields` then does not hold the field, so the hash
-      does not cover it. `errors` is not part of the hash either. A record of
-      strata 0.19 holds `null` for the field. The tiers are `applied`,
-      `running`, `policy`, and, with `snapshot --shape`, `shape`. The schema
-      lists the keys of `fields` for each of these four tiers. It also takes
-      the name of a tier of a later release, with any `fields`. See
+      and `fields`. The tiers are `applied`, `running`, `policy`, and, with
+      `snapshot --shape`, `shape`. See
       [More of the cluster than its release](../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
       The `fields` of `shape` are `cloudType`, `cloud`, and `pools[]`, by
       [The shape on each cloud](../commands/snapshot/cluster.md#the-shape-on-each-cloud).
       A record that an older version of strata wrote has no `cloudType`.
+      - `errors`, only when strata could not read a field: the field and the
+        error. `fields` then does not hold the field, so the hash does not
+        cover it. `errors` is not part of the hash either. A record of strata
+        0.19 holds `null` for the field.
+      - The schema lists the keys of `fields` for each of these four tiers. It
+        also takes the name of a tier of a later release, with any `fields`.
     - The `fields` of `policy` are in
       [The policy tier](../commands/snapshot/cluster.md#the-policy-tier). A
       record that an older version of strata wrote holds `resources` and `rbac`
@@ -365,13 +366,15 @@ A comparison of two sides, `a` and `b`.
   - `who`, only with `--who` and for a drifted record that is not a pack
     record: each write to the object of the record that the audit log of
     Palette holds since `recordedAt`, oldest first. For a cluster record, also
-    each write to a profile of `profilesOverwritten`. Each entry has `time`,
-    `actor`, `actorType` (as Palette gives it in `v1AuditActor`), `actorUid`
-    (for a user), `action` (as Palette gives it in `v1AuditActionType`),
-    `summary` (when Palette gives one), `userMsg` (the note of a person, when
-    the entry has one), `resource` (the `kind`, the `name`, and the `uid` of
-    the object of the write, when Palette gives it), and `auditUid`. An empty
-    list means the log holds no write since the record.
+    each write to a profile of `profilesOverwritten`. An empty list means the
+    log holds no write since the record. Each entry has these fields:
+    - `time`, `actor`, `actorUid` (for a user), and `auditUid`.
+    - `actorType` and `action`, as Palette gives them in `v1AuditActor` and
+      `v1AuditActionType`.
+    - `summary`, when Palette gives one, and `userMsg`, the note of a person,
+      when the entry has one.
+    - `resource`, when Palette gives it: the `kind`, the `name`, and the `uid`
+      of the object of the write.
   - `lastModified`: when Palette last changed the object of the record, from
     `metadata.lastModifiedTimestamp` of its document. The document is the
     profile, the app profile, the cluster, the edge host, or the cluster group.
@@ -383,10 +386,11 @@ A comparison of two sides, `a` and `b`.
 Each changed value is a leaf with `op`, `path`, `segments`, `old`, and `new`. A
 leaf is a scalar or an empty container. The path joins keys with a dot. A list
 item is `[i]`. When each item of a list is an object with a unique `name`, the
-item is `[name=<value>]`, so an inserted item shows as one addition. `segments`
-is the path as a list. A key is a string, an index is an integer, and a named
-item is an object `{"name": ...}`. The schema gives each segment an `anyOf`
-of these three types.
+item is `[name=<value>]`, so an inserted item shows as one addition.
+
+`segments` is the path as a list. A key is a string, an index is an integer,
+and a named item is an object `{"name": ...}`. The schema gives each segment an
+`anyOf` of these three types.
 
 ## strata-verify-summary/1
 
@@ -449,11 +453,11 @@ of these three types.
   them when strata could read the project listing. The names and the projects
   come from `status.inUseClusters` of the profile, from
   `status.inUseClusterTemplates` for a cluster template, and from
-  `status.inUseApps` of an app profile. `state` is `status.state` of the
-  cluster, as Palette gives it in `v1ClusterState`. It is `unknown` when strata
-  cannot read the cluster. A cluster template has an empty `state` and an empty
-  `version`. `unlisted`, only when true: the profile did not list the cluster,
-  and the second reading found it.
+  `status.inUseApps` of an app profile. `unlisted`, only when true: the
+  profile did not list the cluster, and the second reading found it.
+  - `state`: `status.state` of the cluster, as Palette gives it in
+    `v1ClusterState`, or `unknown` when strata cannot read the cluster. A
+    cluster template has an empty `state` and an empty `version`.
 - `clustersRead`: the second reading. `resolved`: `search` when strata asked
   the cluster search for the clusters that run a version of the profile, by its
   name, or `listing` when
@@ -506,21 +510,23 @@ of these three types.
     the version reads: the published template when it has packs, else the
     draft.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, `clusterType`, and
-    `projectUid`. `state` is `status.state` of the cluster, as Palette gives
-    it in `v1ClusterState`. `clusterType` is the type as Palette lists it.
-    `PureManage` is a cluster that Palette built. `AlloyMonitor`,
-    `AlloyAssist`, and `AlloyExtend` are clusters that a person imported. It is
-    absent when the listing gave none.
-    `projectName` joins them when strata could read the project listing.
-    `labels`: the labels of the cluster, as a map; a tag with no value has the
-    value `spectro__tag`. `virtual`, for a virtual cluster alone: `clusterGroup`
-    and `hostCluster`, each with `uid` and `name`, as the search names them.
-    `name` is absent when Palette gives none, and `hostCluster` is absent for a
-    group of the system.
-    With `--applied`, also `profiles[]` with the `uid`, `name`, `version`, and
-    `type` of each profile the cluster applies, or `error`, and
-    `updatesPending` and `pendingUpdates[]` as a cluster record gives them.
-    `updatesPending` is absent when strata could not read the notifications.
+    `projectUid`.
+    - `state` is `status.state` of the cluster, as Palette gives it in
+      `v1ClusterState`. `clusterType` is the type as Palette lists it.
+      `PureManage` is a cluster that Palette built. `AlloyMonitor`,
+      `AlloyAssist`, and `AlloyExtend` are clusters that a person imported.
+      `clusterType` is absent when the listing gave none.
+    - `projectName` joins the fields when strata could read the project
+      listing. `labels`: the labels of the cluster, as a map; a tag with no
+      value has the value `spectro__tag`.
+    - `virtual`, for a virtual cluster alone: `clusterGroup` and `hostCluster`,
+      each with `uid` and `name`, as the search names them. `name` is absent
+      when Palette gives none, and `hostCluster` is absent for a group of the
+      system.
+    - With `--applied`, also `profiles[]` with the `uid`, `name`, `version`,
+      and `type` of each profile the cluster applies, or `error`, and
+      `updatesPending` and `pendingUpdates[]` as a cluster record gives them.
+      `updatesPending` is absent when strata could not read the notifications.
   - A project: `name` and `uid`.
   - A saved tag filter: `name`, `uid`, `conjunction` (`and` or `or`), and
     `conditions[]`, each with `key`, `values[]` (empty when the key alone must be

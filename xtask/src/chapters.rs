@@ -2434,7 +2434,7 @@ fn use_cases(r: &mut Runner) {
         r"^(aws-stack|root |note |palette|[ ~] \[k8s|      impact)",
     );
     // the table says repave for a new Kubernetes version, and the stand-in says no, as Palette
-    // answers for an Edge cluster: the label follows the answer, and the comment carries the note
+    // answers for an Edge cluster. The label follows the answer, and the comment carries the note
     // of the disagreement
     r.step(
         "repave-pr-comment-disagree",

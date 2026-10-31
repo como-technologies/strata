@@ -980,7 +980,7 @@ fn the_schema_names_the_model_of_palette_and_copies_no_value_of_a_field_that_pal
         (&list, "ListedCluster", "state", "v1ClusterState"),
         (&consumers, "Consumer", "state", "v1ClusterState"),
     ];
-    // a value that Palette has today in one of these fields: a later release of Palette can
+    // a value that Palette has today in one of these fields. A later release of Palette can
     // change the set, so the description must not copy it
     let copied = [
         "k8s",
@@ -1227,8 +1227,8 @@ fn date_time(property: &serde_json::Value) -> bool {
             .is_some_and(|options| options.iter().any(is_time))
 }
 
-/// True when the name of a property is the name of a time field: one of `names`, or a name that
-/// ends in `At`, `Time`, or `Modified`. The ending finds a new time field with no change here.
+/// True when the name of a property is the name of a time field. Such a name is one of `names`,
+/// or ends in `At`, `Time`, or `Modified`. The ending finds a new time field with no change here.
 fn is_time_name(name: &str, names: &[&str]) -> bool {
     names.contains(&name)
         || ["At", "Time", "Modified"]

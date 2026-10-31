@@ -64,9 +64,9 @@ the watch is the step that says `Running`.
 
 ## On GitHub and GitLab
 
-`.github/workflows/preflight.yml` is a reusable workflow: the caller gives the
-source, the cloud, the tiers, the records, and the release of strata, and the
-job installs the two binaries, runs `scripts/ci/preflight.sh`, writes the
+`.github/workflows/preflight.yml` is a reusable workflow. The caller gives the
+source, the cloud, the tiers, the records, and the release of strata. The job
+installs the two binaries and runs `scripts/ci/preflight.sh`. It writes the
 markdown to the job summary, and keeps the directory of `--out` as an artifact.
 The script builds the options of `strata preflight`, and its exit status is the
 status of strata.

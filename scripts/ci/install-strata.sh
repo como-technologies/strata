@@ -4,10 +4,10 @@
 #   scripts/ci/install-strata.sh [--version vX.Y.Z] [--dir DIR] [--repo OWNER/REPO]
 #                                [--target TARGET] [--bin-only] [--require-signature]
 #
-# Downloads the two binaries for this machine, strata and strata-preflight, SHA256SUMS, and the CI
-# scripts pr-comment.sh, merge-gate.sh, verify-report.sh, upstream-report.sh, and preflight.sh into
-# DIR (default .strata), checks the signature and the checksums, and prints the path of the strata
-# binary. A job then sets STRATA_BIN to that path and runs DIR/<script>. `strata preflight` runs the
+# Downloads into DIR (default .strata) the two binaries for this machine, strata and
+# strata-preflight, and SHA256SUMS. Also downloads the CI scripts pr-comment.sh, merge-gate.sh,
+# verify-report.sh, upstream-report.sh, and preflight.sh. Checks the signature and the checksums,
+# and prints the path of the strata binary. A job then sets STRATA_BIN to that path and runs DIR/<script>. `strata preflight` runs the
 # strata-preflight beside it. A release from before strata-preflight has no such binary, and the
 # installer says so.
 #

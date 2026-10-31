@@ -14,19 +14,20 @@
 # --repave asks Palette if the change repaves the cluster, as `strata compare --repave` does, and
 # puts the answer in the comment. One ref must be a cluster, and the other a profile version that
 # Palette holds. Strata decides this. For any other pair, strata refuses the question and says why
-# on standard error, and the script goes on with the table. The answer of Palette replaces the
-# table for the levels may-repave and repave:
-# "repave" adds the label, and "no repave" removes it, also where the table says otherwise. A threshold
-# below those levels still reads the table when Palette says "no repave". Without an answer, the
-# table decides. The note on standard error says which one decided.
+# on standard error, and the script continues with the table.
+#
+# For the levels may-repave and repave, the answer of Palette replaces the table. "repave" adds
+# the label, and "no repave" removes it, also where the table says otherwise. A threshold below
+# those levels still reads the table when Palette says "no repave". Without an answer, the table
+# decides. The note on standard error says which one decided.
 #
 #   scripts/ci/pr-comment.sh --preflight FILE [--pr N] [--repo OWNER/REPO] [--host github|gitlab]
 #                            [--dry-run]
 #
 # --preflight FILE posts the markdown report of `strata preflight`, such as the report.md of
 # --out, in place of a comparison. It takes no ref, no label, and no threshold. The comment starts
-# with the marker <!-- strata-preflight -->, so it is a comment of its own beside the comparison;
-# a later run finds it by that marker and updates it. A missing or empty FILE is an error: the
+# with the marker <!-- strata-preflight -->, so it is a comment of its own beside the comparison.
+# A later run finds it by that marker and updates it. A missing or empty FILE is an error: the
 # preflight wrote no report, and the comment of the last push stays as it is.
 #
 # Hosts: GitHub through `gh`, and GitLab through the REST API v4 with `curl`. --host picks one;

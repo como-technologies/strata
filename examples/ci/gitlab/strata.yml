@@ -110,8 +110,8 @@ strata-preflight:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   script:
-    # the static tier reads nothing from Palette, so the key of the other jobs does not make this
-    # job connect
+    # the static tier reads nothing from Palette, so this job does not connect, also when the
+    # other jobs have the key
     - |
       offline=""
       if [ "$STRATA_PREFLIGHT_TIER" = static ] && [ "$STRATA_PREFLIGHT_WATCH" != "true" ]; then

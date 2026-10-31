@@ -12,10 +12,11 @@
 # issue labeled NAME (default strata-drift), found by the marker
 # <!-- strata-verify: <path> --> on the first line of its body: opened on the first run that finds
 # it, updated with the latest report on each later run, and closed with a comment on the first run
-# where the record verifies again. Issues of records not given are left alone. --who adds who
-# changed a record that drifted, and when: `strata verify --who` reads the audit log of Palette,
-# and the issue body lists each write since the record. --dry-run prints each issue body and what
-# would happen, and calls no host.
+# where the record verifies again. Issues of records not given are left alone. --dry-run prints
+# each issue body and what would happen, and calls no host.
+#
+# --who adds to the issue who changed a record that drifted, and when. `strata verify --who` reads
+# the audit log of Palette, and the issue body lists each write since the record.
 #
 # Exit 0 when every record verified, 1 when any drifted or is unverified, 2 when any could not be
 # checked or verify checked nothing; the issues are handled first, so a scheduled job shows the

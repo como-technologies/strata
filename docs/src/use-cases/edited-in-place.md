@@ -156,7 +156,7 @@ The script then prints what it would do:
 ```
 
 The issue says that the version drifted. It does not say who edited it. Give the
-script `--who`, as you give it to `verify`, and the issue also lists each write
+script `--who`, as you give it to `verify`. Then the issue also lists each write
 in the audit log since the record:
 
 ```text

@@ -497,8 +497,8 @@ const WRAPPERS: [Wrapper; 7] = [
     },
 ];
 
-/// The options that a tool has and a wrapper neither sets nor omits on purpose, and the
-/// options that the wrapper names for a tool that does not have them.
+/// The options of a tool that a wrapper neither sets nor omits on purpose. Also the options that
+/// the wrapper names and the tool does not have.
 fn unaccounted(options: &BTreeSet<String>, reaches: &[Reach], left: &[Left]) -> Vec<String> {
     let named: BTreeSet<&str> = reaches
         .iter()
@@ -657,8 +657,8 @@ fn the_promote_gate_takes_the_project_of_a_ref_as_the_retire_gate_does() {
     assert!(call["secrets"]["palette-project-uid"].is_mapping());
 }
 
-/// A script passes to its command the options that a pipeline sets, and the script is the only
-/// place that does: the workflow and the job call the script.
+/// A script passes to its command the options that a pipeline sets. Only the script does this:
+/// the workflow and the job call the script.
 struct Passes {
     script: &'static str,
     command: &'static str,
@@ -949,10 +949,10 @@ esac
 /// `compare --repave` is the one question that needs Palette. The real binary decides which pair
 /// the question applies to, and it does so before any request. The stand-in asks it with a Palette
 /// that nothing listens at, and passes on its refusal of the pair as strata prints it. For any
-/// other pair, the stand-in runs the real comparison without the option and adds the answer in
-/// FAKE_REPAVE_JSON (the `paletteRepave` of the report) or FAKE_REPAVE_TEXT (the `Palette:` line
-/// of the markdown). When FAKE_REPAVE_FAIL is set, it exits 2 as strata does when Palette gives
-/// no answer.
+/// other pair, the stand-in runs the real comparison without the option, and adds the answer.
+/// FAKE_REPAVE_JSON gives the `paletteRepave` of the report, and FAKE_REPAVE_TEXT gives the
+/// `Palette:` line of the markdown. When FAKE_REPAVE_FAIL is set, it exits 2 as strata does when
+/// Palette gives no answer.
 const FAKE_STRATA: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 echo "$*" >> "$FAKE_STRATA_LOG"
@@ -1862,8 +1862,8 @@ fn pr_comment_preflight_updates_its_own_comment_and_leaves_the_comparison_commen
         "{calls:?}"
     );
 
-    // a pull request with a comparison comment and no preflight comment gets a second comment, and
-    // the comparison run leaves the preflight comment as it is
+    // a pull request with a comparison comment and no preflight comment gets a second comment.
+    // The comparison run does not change the preflight comment
     std::fs::write(
         &h.comments,
         r#"[{"id": 9, "body": "<!-- strata -->\nthe comparison"}]"#,

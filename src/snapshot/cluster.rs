@@ -128,9 +128,9 @@ impl_closed_set!(ClusterRead {
     PendingRepave => "pendingRepave",
 });
 
-/// The fields of a record of strata 0.24 and before that held a read error of the cluster, with
-/// the part of [`ClusterSource::errors`] that holds it now. Do not change this list: `load` reads
-/// an older record through it.
+/// The fields of a record of strata 0.24 and before that held a read error of the cluster. Each
+/// one has the key of [`ClusterSource::errors`] that holds the error now. Do not change this
+/// list: `load` reads an older record through it.
 const OLDER_ERRORS: [(&str, ClusterRead); 2] = [
     ("updatesPendingError", ClusterRead::UpdatesPending),
     ("pendingRepaveError", ClusterRead::PendingRepave),
@@ -194,9 +194,9 @@ pub(super) fn read_older_errors(record: &mut Value) {
     }
 }
 
-/// The part of the cluster in `raw` that strata could not read and that is beside the copy, with
-/// why: the notifications and the repave that waits. The role bindings and the namespaces are in
-/// the `errors` of the tier `policy`.
+/// The parts of the cluster in `raw` that strata could not read and that are beside the copy: the
+/// notifications and the repave that waits. Each one has the reason. The role bindings and the
+/// namespaces are in the `errors` of the tier `policy`.
 pub(crate) fn cluster_errors(raw: &RawCluster) -> BTreeMap<Open<ClusterRead>, String> {
     unread([
         (

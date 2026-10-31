@@ -80,7 +80,7 @@ One signature of `SHA256SUMS` covers each file that the list names, because the
 installer checks each file against the list.
 
 The installer checks that signature when `cosign` is on the `PATH`. It prints
-`signature verified` and goes on. If the signature does not verify, it stops
+`signature verified` and continues. If the signature does not verify, it stops
 with exit `2` and installs nothing. Without `cosign`, it installs and prints that
 it did not check the signature. Give `--require-signature` to stop in that case.
 

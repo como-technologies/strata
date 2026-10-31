@@ -241,8 +241,8 @@ const RELEASE_0_18_0_FIELDS: &[&str] = &[
     "containerRegistryUid",
 ];
 
-/// The page of the compatibility rules named the release of Wave 4 as "after 0.17.0", and it left
-/// most of the fields of that wave out. A reader who holds an older record cannot tell a field
+/// The page of the compatibility rules named the release of Wave 4 as "after 0.17.0". It also did
+/// not name most of the fields of that wave. A reader who holds an older record cannot tell a field
 /// that Palette did not give from a field that the release did not write.
 #[test]
 fn compatibility_names_release_0_18_0_and_what_each_absent_field_of_wave_4_means() {

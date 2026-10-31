@@ -1,4 +1,4 @@
-//! Uses the strata-preflight library the way another Rust program would: no command line, no
+//! Uses the strata-preflight library as another Rust program does: no command line, no
 //! network, no key. Loads the catalog, reads the entity of a create from a fixture, runs one
 //! static rule over it, and prints the verdict. Exits 1 if the library does not report that the
 //! rule passes.

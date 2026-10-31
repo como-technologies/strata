@@ -18,8 +18,9 @@ use crate::json::{arr, first_nonempty, flag, opt_str, opt_text, str_at, text, va
 use crate::oci_provider::OciProvider;
 use crate::pack_type::PackType;
 
-/// The schema of [`Pack::params`]: an object whose values are text, but for the install order of a
-/// tier of an app profile, which is an integer. A layer of a candidate has the same schema.
+/// The schema of [`Pack::params`]: an object of text values. The one exception is the install
+/// order of a tier of an app profile, which is an integer. A layer of a candidate has the same
+/// schema.
 pub(crate) fn params_schema(_: &mut SchemaGenerator) -> Schema {
     json_schema!({
         "type": "object",

@@ -64,8 +64,9 @@ fn the_gate_job_of_ci_needs_the_checks_and_has_no_condition() {
 
 /// The tests of `xtask` hold the routes of the stand-in of Palette, and `cargo test` of the root
 /// package does not run them. So the `test` recipe runs them by name, and the job `lint and test`
-/// runs the recipe. The job has no step of its own for them: they would run two times. The line
-/// of the recipe has no `-` before it, so a test that fails makes `just test` exit non-zero.
+/// runs the recipe. The job has no step of its own for them, because then they run two times.
+/// The line of the recipe has no `-` before it, so a test that fails makes `just test` exit
+/// non-zero.
 #[test]
 fn the_lint_and_test_job_runs_the_tests_of_xtask() {
     let justfile = repo_file("justfile");
@@ -190,8 +191,8 @@ fn the_release_check_installs_the_published_tag_with_a_required_signature() {
 
 // ---- the steps of the reusable workflows ---------------------------------------------------------
 //
-// `act` is not in every container, so these tests run the `run` script of a step in bash, as the
-// runner of GitHub does, with a stand-in for each tool the step calls. The expressions of GitHub
+// `act` is not in every container. So these tests run the `run` script of a step in bash, as the
+// runner of GitHub does. Each tool that the step calls has a stand-in. The expressions of GitHub
 // (`${{ ... }}`) do not run here: a test gives the value that an expression has.
 
 /// A step that ran in a directory of its own, and the calls that its stand-ins logged.
@@ -293,8 +294,8 @@ fn the_preflight_comment_step_posts_the_report_that_the_preflight_kept() {
 }
 
 /// A caller that grants `contents: read` alone calls `preflight.yml`, as it did before the
-/// comment: GitHub fails a call from a caller that grants less than the workflow asks for, also
-/// when the step that needs the permission does not run. So only `preflight-comment.yml` asks for
+/// comment. GitHub fails a call from a caller that grants less than the workflow asks for. It
+/// fails the call also when the step that needs the permission does not run. So only `preflight-comment.yml` asks for
 /// `pull-requests: write`, and `preflight.yml` has no input that posts a comment.
 #[test]
 fn the_preflight_workflow_asks_for_no_write_permission_and_posts_no_comment() {
@@ -326,8 +327,8 @@ fn the_preflight_workflow_asks_for_no_write_permission_and_posts_no_comment() {
     );
 }
 
-/// The comment takes the report from the artifact of the preflight, so the workflow that keeps
-/// it and the workflow that reads it must name the same artifact and the same file.
+/// The comment takes the report from the artifact of the preflight. So the workflow that keeps
+/// the report and the workflow that reads it must name the same artifact and file.
 #[test]
 fn the_comment_workflow_reads_the_artifact_that_the_preflight_workflow_keeps() {
     let artifact = |file: &str, action: &str| -> serde_yaml::Value {

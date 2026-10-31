@@ -142,8 +142,9 @@ absent means unknown: `source.consumers`, `rootLive`, `maxImpact`,
 means that strata could not read the notifications, and
 `errors.updatesPending` says why. `repavePending` joined `source.cluster` in
 0.18.0: absent means a record of an older release, or of an object that is not
-a cluster. In 0.7.0
-`source.consumers` became absent on a record that no consumers request
+a cluster.
+
+In 0.7.0 `source.consumers` became absent on a record that no consumers request
 produced, where 0.6.3 wrote `count: 0` and stated a count that nothing counted.
 A reader that takes absent for zero reads such a record wrong, so this page
 names each field that changed this way, with the release that changed it. The

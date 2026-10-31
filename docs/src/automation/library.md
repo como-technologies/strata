@@ -106,7 +106,7 @@ A program starts from these items:
 | Item | Function |
 | --- | --- |
 | `world::World::from_file`, `world::World::from_cluster` | The input of a run. `from_file` reads the body of a create from a JSON or YAML file. It takes the cloud, or reads the cloud from the file. `from_cluster` reads a cluster as Palette holds it now, through a `Palette` client. |
-| `World::with_change`, `World::with_records`, `World::with_palette` | What a world adds: a change file, the records of the profiles that the entity names, or the profiles, the packs, and the cloud account that Palette gives. |
+| `World::with_change`, `World::with_records`, `World::with_palette` | What a world adds. `with_change` adds a change file. `with_records` adds the records of the profiles that the entity names. `with_palette` adds the profiles, the packs, and the cloud account that Palette gives. |
 | `catalog::builtin`, `catalog::with_probes`, `rule::Catalog` | The rules of the binary, and the same rules with the files of custom probes after them. `Catalog::rules` lists them. |
 | `run::Selection`, `run::RunInputs`, `run::run` | The tiers and the rule ids to run, the inputs of a run, and the run. `run` gives a `Report`. A rule that finds a fault is a result in the report, not an `Err`. |
 | `probe::Backend`, `probe::LiveBackend` | Where a check gets an answer from outside the world. `LiveBackend` with `palette: None` runs the static tier with no key and no network. |

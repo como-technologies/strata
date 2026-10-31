@@ -163,11 +163,12 @@ checks wait for the listing.
 The same report runs through the reusable workflow
 `.github/workflows/verify.yml`, driven by
 [act](https://github.com/nektos/act) against a scratch caller repository. The
-job checks out the caller and this repository at the release tag. It installs
-the binary of that release with `install-strata.sh`, which checks the signature
-of `SHA256SUMS` and then the binary. Then it runs the script. At the baseline it
-succeeds and opens nothing. After an edit in place it opens an issue with the
-report and fails with exit 1. After the undo it closes the issue and succeeds.
+job makes a checkout of the caller and of this repository at the release tag.
+It installs the binary of that release with `install-strata.sh`, which checks
+the signature of `SHA256SUMS` and then the binary. Then it runs the script. At
+the baseline it succeeds and opens nothing. After an edit in place it opens an
+issue with the report and fails with exit 1. After the undo it closes the issue
+and succeeds.
 
 ## merge-gate.sh
 
@@ -675,7 +676,7 @@ through OpenTofu, and puts it back.
 | `undo-baseline` | 0 | the example is at its baseline |
 | `release-record`, `os-value` | 0, 1 | #81: a new key in the values of the OS pack: Palette says repave. It checks every value of the OS layer, so the table gives `repave` for an OS values change |
 | `csi-value` | 0 | #81: a changed value in the CSI pack: Palette says no repave. Its check reads no CNI or CSI layer, so `cluster-wide` means no repave |
-| `validate`, `validate-says`, `validate-json` | 0 | #134: at the baseline, `compare --validate` prints `palette    accepts`; `--json` gives `accepts` true and no error. The cluster runs the version, so strata asks the route of the version (#453). No result yet. |
+| `validate`, `validate-says`, `validate-json` | 0 | #134: at the baseline, `compare --validate` prints `palette    accepts`; `--json` gives `accepts` true and no error. The cluster runs the version, so strata asks the route of that version (#453), and Palette accepts the packs. |
 | `validate-usage`, `validate-usage-says` | 2, 0 | #134: two profile versions and no cluster are a usage error for `--validate`. |
 | `var-record-before`, `var-command` | 0 | #132: the Kubernetes pack of 1.0.1 has the kubeadm command `chmod 600 /var/lib/kubelet/config.yaml` |
 | `var-record`, `var-in-values` | 0 | #132: with `next_variable` and `next_variable_in_values`, 1.0.1 has the profile variable `strata_mode`, default `600`, and the command reads it in place of `600` |
@@ -769,10 +770,28 @@ nothing.
 | `bump-text-says` | 0 | #166: `behind` prints `palette refuses: DependencyPackUpgradeNotSupported on <clusters>` under the bump. |
 | `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. |
 | `bump-cluster-record` | 0 | #166: a record of the cluster `CLUSTER`. |
-| `bump-cluster-same` | 0 | #419: with `CLUSTER`, the bump of `kubernetes` in the record of the cluster has the version, the impact level, and the change flags of the bump in the record of the profile. No result yet. |
-| `bump-cluster-asked` | 0 | #453: `behind` on the record of the cluster asks the route of the profile version that the cluster runs, and the bump holds an answer of Palette in `bump.paletteValidation`. No result yet. |
-| `bump-cluster-refused` | 0 | #453: the route of the profile version that the cluster runs refuses the same move, and the error names this cluster. No result yet. |
-| `cluster-route-doc`, `cluster-route-tag`, `cluster-route-tag-says` | 0 | #453: the route of the cluster answers HTTP 200 with no error for a body with the tag `9.99.9` for `kubernetes`. No registry has that version, and the profile is one that the cluster runs. Palette keeps the tag of the copy that the cluster holds. The body of a real cluster is longer than one argument can be (128 KiB). So `cluster-route-tag` writes the body to `cluster-route-body.json` and gives `api.sh post-status` the path of that file (#466). No result yet. |
+| `bump-cluster-same` | 0 | #419: with `CLUSTER`, the record of the cluster and the record of the profile get one bump of `kubernetes`. The two bumps have the same version, impact level, and change flags: the bump to 1.37.0, with the level `repave`. |
+| `bump-cluster-asked` | 0 | #453: `behind` on the record of the cluster asks the route of the profile version that the cluster runs, and the bump holds an answer of Palette in `bump.paletteValidation`. |
+| `bump-cluster-refused` | 0 | #453: the route of the profile version that the cluster runs refuses the same move with `DependencyPackUpgradeNotSupported`, "Pack upgrade to '1.37.0' is not compatible with the clusters '<cluster A>'". Cluster A is in `clusters`. |
+| `cluster-route-doc`, `cluster-route-tag`, `cluster-route-tag-says` | 0 | #453: the route of the cluster answers HTTP 200 with no error for a body with the tag `9.99.9` for `kubernetes`. No registry has that version, and the profile is one that the cluster runs. So the route does not check the sent tag. The body of a real cluster is longer than one argument can be (128 KiB). So `cluster-route-tag` writes the body to `cluster-route-body.json` and gives `api.sh post-status` the path of that file (#466). |
+
+Each check of stage 6 passes on cluster A, built on Kubernetes 1.35.8. That
+version is two minor versions under the newest version of the registry, 1.37.0.
+The stage exits `0`.
+
+Stage 6 needs a cluster two minor versions behind. When cluster A runs the
+release version, Kubernetes 1.36.2, the route of the profile version accepts the
+move to 1.37.0. Then the checks `bump-pair`, `bump-refused`, `bump-clusters`,
+and `bump-text-says` fail. Build cluster A on the older version with this
+command:
+
+```bash
+examples/live/tf.sh apply -var k8s_version=1.35.8 \
+  -replace='spectrocloud_cluster_aws.cluster["a"]'
+```
+
+A script that checks the baseline needs `TF_VAR_k8s_version=1.35.8` after that
+build. Then the plan of the baseline has no change.
 
 No pack of the Public Repo lists a dependency in its tags route. Only stage 6
 asks for a refusal of a dependency, the upgrade dependency, which no read route
@@ -1154,12 +1173,12 @@ needs the example at its baseline with cluster A.
 | `record-next`, `same-release`, `commit-publish` | 0 | #81: Palette holds the content that the reviewer read, by the root |
 | `ask-repave`, `ask-repave-answer` | 1, 0 | #385: `compare --repave` asks Palette if the move of cluster A to the next version repaves. The command exits `1` because the roots differ, and the report holds `paletteRepave.required`. |
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
-| `ask-repave-comment`, `ask-repave-comment-says` | 0 | #157: `pr-comment.sh --repave` asks Palette about the same move (no result yet). The comment holds the `Palette:` line, and the note on standard error says that Palette decided the label. |
+| `ask-repave-comment`, `ask-repave-comment-says` | 0 | #157: `pr-comment.sh --repave` asks Palette about the same move. For the move of the CSI pack, Palette answers no repave. The comment holds `**Palette:** no repave`, and the note on standard error says `label repave: Palette says no repave; would remove label repave if present`. |
 | `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request, and in the tier of Palette, which calls the validate routes and creates nothing. |
-| `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` turns the markdown report of the static tier into the comment of the pull request (no result yet). The comment starts with `<!-- strata-preflight -->` and holds the verdict. |
+| `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` posts the markdown report of the static tier as the comment of the pull request. The comment starts with `<!-- strata-preflight -->` and holds the verdict of the static tier, `**OK: each counted check passed**`. |
 | `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it |
 | `preflight-offering` | 0 | #143: `instance-offering` asks the instance type route of the region with the account of the body, one request for all its pools, and passes: the type of the release body is offered in its zone |
-| `preflight-key-pair` | 0 | #433: the rule that reads the key pair of the body passes (no result yet). On AWS it is `iaas-pod-identity`, which sends the key pair to the properties route. On EKS it is `ssh-key-pair`. A body on GCP or GKE has no key pair, and the check does not run. |
+| `preflight-key-pair` | 0 | #433: the rule that reads the key pair of the body passes. On AWS it is `iaas-pod-identity`, which sends the key pair to the properties route. On EKS it is `ssh-key-pair`. A body on GCP or GKE has no key pair, and the check does not run. |
 | `preflight-fault` | 1 | #385: a body with a cloud account that the project lacks fails the gate `--strict`. |
 | `nightly` | 0 | #81: `verify-report.sh` finds every record unchanged |
 | `fleet`, `fleet-has-a` | 0 | #81: the fleet of a label holds cluster A |
@@ -1172,7 +1191,7 @@ needs the example at its baseline with cluster A.
 | `edit` | 0 | #81: a person edits the add-on version in place, through the API |
 | `nightly-drift`, `nightly-names` | 1, 0 | #81: the nightly job opens an issue for the add-on record |
 | `who`, `who-says` | 1, 0 | #81: `--who` names a person who wrote the edit |
-| `nightly-who`, `nightly-who-says` | 1, 0 | #158: `verify-report.sh --who` puts the audit log in the issue of the add-on record, and the body names the last write: an update by a person (no result yet) |
+| `nightly-who`, `nightly-who-says` | 1, 0 | #158: `verify-report.sh --who` puts the audit log in the issue of the add-on record. The body holds `who: 1 write in the audit log since the record`, and names the last write: an update by a user of the tenant. |
 | `cluster-kept`, `behind-record`, `behind` | 0 | #81: cluster A keeps its copy, and Palette says that an update waits for it |
 | `edit-undo`, `edit-gone` | 0 | the edit is undone, and the add-on record verifies again |
 | `incident-list`, `incident-list-has` | 0 | #81: `list --pack` finds the release among the versions that carry the CSI pack |
