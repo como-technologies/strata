@@ -10,7 +10,7 @@ use crate::common;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use common::{repo_file, version_of, walk};
+use common::{INSTALLING_WORKFLOWS, repo_file, schema, version_of, walk};
 use strata::api::codes::ValidateRoute;
 
 fn docs() -> PathBuf {
@@ -53,6 +53,11 @@ fn section<'a>(text: &'a str, from: &str, to: Option<&str>) -> &'a str {
         Some(end) => &rest[..end],
         None => rest,
     }
+}
+
+/// `text` with each run of white space as one space, as a line break can fall inside a sentence.
+fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 #[test]
@@ -142,13 +147,7 @@ fn every_page_the_navigation_names_exists() {
 /// not. One of them sits above the generated help that names it.
 #[test]
 fn the_kind_tables_list_every_kind_the_help_names() {
-    let help = read(&docs().join("output/help-schema.txt"));
-    let at = help
-        .find("possible values: ")
-        .expect("the help lists the kinds");
-    let list = &help[at + "possible values: ".len()..];
-    let list = &list[..list.find(']').expect("the list ends")];
-    let kinds: Vec<&str> = list.split(", ").collect();
+    let kinds = schema_kinds();
     assert!(kinds.len() > 5, "only {} kinds parsed", kinds.len());
 
     for (page, cell) in [
@@ -258,8 +257,7 @@ fn compatibility_names_release_0_18_0_and_what_each_absent_field_of_wave_4_means
         );
     }
 
-    // a line break can fall inside a sentence
-    let flat = page.split_whitespace().collect::<Vec<_>>().join(" ");
+    let flat = one_line(&page);
     assert!(
         flat.contains("`repavePending` joined `source.cluster` in 0.18.0"),
         "compatibility.md does not name the release that added repavePending"
@@ -271,6 +269,172 @@ fn compatibility_names_release_0_18_0_and_what_each_absent_field_of_wave_4_means
     assert!(
         !flat.contains("after 0.17.0"),
         "compatibility.md names the release before 0.18.0 in place of 0.18.0"
+    );
+}
+
+/// The section of release 0.25.0 in the compatibility page, with each run of white space as one
+/// space.
+fn release_0_25_0(page: &str) -> String {
+    one_line(section(
+        page,
+        "## Release 0.25.0: changes that need action",
+        Some("\n## "),
+    ))
+}
+
+/// The changes of Wave 11 were in a few paragraphs, and the page had no section that tells a
+/// reader of the release notes what to do. The section sits above the one of release 0.24.0, and
+/// the opening of the page links to both.
+#[test]
+fn compatibility_has_a_section_for_release_0_25_0_above_release_0_24_0_and_links_to_both() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let newer = page
+        .find("\n## Release 0.25.0: changes that need action\n")
+        .expect("the page has no section for release 0.25.0");
+    let older = page
+        .find("\n## Release 0.24.0: changes that need action\n")
+        .expect("the page has no section for release 0.24.0");
+    assert!(newer < older, "release 0.25.0 comes above release 0.24.0");
+
+    let opening = &page[..page.find("\n## The documents").unwrap()];
+    for anchor in [
+        "(#release-0250-changes-that-need-action)",
+        "(#release-0240-changes-that-need-action)",
+    ] {
+        assert!(opening.contains(anchor), "the opening lacks {anchor}");
+    }
+
+    let release = section(
+        &page,
+        "## Release 0.25.0: changes that need action",
+        Some("\n## "),
+    );
+    for heading in [
+        "### For a user of the command line or of a document\n",
+        "### For a user of the CI drop-ins\n",
+        "### For a user of the library of strata\n",
+        "### For a user of the library of strata-preflight\n",
+    ] {
+        assert!(release.contains(heading), "the section lacks {heading:?}");
+    }
+}
+
+/// Each reusable workflow that installs strata runs the action of `cosign` and checks the
+/// signature. A caller whose organization limits the actions, or whose runner is not on GitHub,
+/// failed at that step with no word of it in the page. The section names each workflow, the
+/// action to allow, and the `strata-version` that has the option which the workflows give.
+#[test]
+fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_and_what_a_caller_does()
+ {
+    let checking: Vec<String> = common::workflow_files()
+        .into_iter()
+        .filter(|file| {
+            let text = common::workflow_text(file);
+            text.contains("workflow_call:") && text.contains("sigstore/cosign-installer@")
+        })
+        .collect();
+    assert_eq!(
+        checking, INSTALLING_WORKFLOWS,
+        "a reusable workflow runs cosign, and the list of the tests lacks it"
+    );
+
+    let release = release_0_25_0(&read(&docs().join("reference/compatibility.md")));
+    for file in INSTALLING_WORKFLOWS {
+        assert!(
+            release.contains(&format!("`{file}`")),
+            "the section of release 0.25.0 does not name {file}"
+        );
+    }
+    for needle in [
+        "installs `cosign` with the action `sigstore/cosign-installer`",
+        "runs the `install-strata.sh` of the tag in `strata-version`, with `--require-signature`",
+        "`cosign verify-blob`",
+        "must permit `sigstore/cosign-installer`",
+        "`retire-gate.yml` also runs `actions/checkout`",
+        "permit `actions/checkout` too",
+        "reach github.com",
+        "**`strata-version` must be v0.25.0 or later.**",
+        "so the job stops with `unknown option`",
+        "It exits `2` and installs nothing.",
+    ] {
+        assert!(
+            release.contains(needle),
+            "the section of release 0.25.0 lacks {needle:?}"
+        );
+    }
+}
+
+/// The kinds that `strata schema` takes, from its generated help.
+fn schema_kinds() -> Vec<String> {
+    let help = read(&docs().join("output/help-schema.txt"));
+    let list = help
+        .split("[possible values: ")
+        .nth(1)
+        .and_then(|rest| rest.split(']').next())
+        .expect("the help of schema lists its kinds");
+    list.split(", ").map(str::to_string).collect()
+}
+
+/// The rename of the two read errors reached `strata-diff/1` and `strata-verify-summary/1`, which
+/// carry the record of a cluster too. The page named only the record. A document that strata
+/// only writes has no older place to read, so the page names each one, with the id rule that
+/// allows the move.
+#[test]
+fn the_page_names_each_document_that_carries_the_record_of_a_cluster_with_the_rename_of_its_errors()
+{
+    let mut carrying = Vec::new();
+    for kind in schema_kinds() {
+        let document = schema(&kind);
+        let cluster = &document["$defs"]["ClusterSource"]["properties"];
+        if !cluster.is_object() {
+            continue;
+        }
+        assert!(cluster["errors"].is_object(), "{kind}: no errors");
+        for older in ["updatesPendingError", "pendingRepaveError"] {
+            assert!(cluster.get(older).is_none(), "{kind} still has {older}");
+        }
+        carrying.push(
+            document["properties"]["schema"]["const"]
+                .as_str()
+                .unwrap_or_else(|| panic!("{kind} has no id"))
+                .to_string(),
+        );
+    }
+    for id in [
+        "strata-snapshot/1",
+        "strata-diff/1",
+        "strata-verify-summary/1",
+    ] {
+        assert!(
+            carrying.iter().any(|c| c == id),
+            "{id} has no cluster: {carrying:?}"
+        );
+    }
+
+    let page = read(&docs().join("reference/compatibility.md"));
+    let release = release_0_25_0(&page);
+    let documents = one_line(section(&page, "## The documents", Some("\n## ")));
+    for id in &carrying {
+        assert!(
+            release.contains(&format!("`{id}`")),
+            "the section of release 0.25.0 does not name {id}"
+        );
+        assert!(
+            documents.contains(&format!("`{id}`")),
+            "the rules of the ids do not name {id}"
+        );
+    }
+    for needle in [
+        "One exception is a field outside the root that only says why another field is absent.",
+        "It can move with no new id.",
+        "Releases 0.8.0 to 0.24.0 wrote `updatesPendingError`",
+        "Strata only writes these two documents",
+    ] {
+        assert!(documents.contains(needle), "the rules lack {needle:?}");
+    }
+    assert!(
+        !documents.contains("Release 0.24.0 wrote"),
+        "only release 0.24.0 is named as the writer of the older fields"
     );
 }
 
@@ -294,8 +458,7 @@ fn publish_fan_out_runs_the_installer_with_the_signature_check_and_says_what_it_
         );
     }
 
-    // a line break can fall inside a sentence
-    let flat = page.split_whitespace().collect::<Vec<_>>().join(" ");
+    let flat = one_line(&page);
     assert!(
         flat.contains("signed `SHA256SUMS`"),
         "publish-fan-out.md does not say that the installer checks the signature of SHA256SUMS"
@@ -367,8 +530,7 @@ fn the_variables_of_the_gitlab_preflight_job_are_described_on_gitlab_md_and_list
 fn stop_a_build_shows_the_comment_and_the_watch_of_the_workflow() {
     let page = read(&docs().join("use-cases/stop-a-build.md"));
     let runs = section(&page, "## Where this runs", None);
-    // a line break can fall inside a sentence
-    let flat = runs.split_whitespace().collect::<Vec<_>>().join(" ");
+    let flat = one_line(runs);
     for needle in [
         "`preflight-comment.yml`, or `pr-comment.sh --preflight` on another host, posts the report as a comment",
         "(../automation/preflight.md#the-report-as-a-comment)",

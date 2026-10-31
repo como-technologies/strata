@@ -776,6 +776,28 @@ pub fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).into_owned()
 }
 
+/// The JSON Schema that `strata schema <kind>` prints.
+pub fn schema(kind: &str) -> Value {
+    let r = Run::of(
+        Command::new(strata_bin())
+            .args(["schema", kind])
+            .env("STRATA_QUIET", "1"),
+    );
+    assert_eq!(r.code, 0, "{}", r.err);
+    serde_json::from_str(&r.out).unwrap()
+}
+
+/// The reusable workflows that install a release of strata, in `.github/workflows/`.
+pub const INSTALLING_WORKFLOWS: [&str; 7] = [
+    "comment.yml",
+    "merge-gate.yml",
+    "preflight.yml",
+    "promote-gate.yml",
+    "retire-gate.yml",
+    "upstream.yml",
+    "verify.yml",
+];
+
 /// Run git in `dir` with no user or global configuration, so signing settings cannot leak in.
 pub fn git(dir: &Path, args: &[&str]) -> std::process::Output {
     let mut c = Command::new("git");
@@ -806,6 +828,19 @@ pub fn repo_file(path: &str) -> String {
 /// The text of the workflow `file` of `.github/workflows/`.
 pub fn workflow_text(file: &str) -> String {
     repo_file(&format!(".github/workflows/{file}"))
+}
+
+/// The file names of the workflows in `.github/workflows/`, in order.
+pub fn workflow_files() -> Vec<String> {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows");
+    let mut files: Vec<String> = fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("{}: {e}", dir.display()))
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().is_some_and(|e| e == "yml" || e == "yaml"))
+        .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    files.sort();
+    files
 }
 
 /// The workflow `file` of `.github/workflows/`, parsed.

@@ -8,7 +8,7 @@ use std::process::Command;
 use strata::snapshot::Tier;
 
 use common::{
-    PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port, read_json,
+    PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port, read_json, schema,
     snapshot_from_raw, strata_bin, write_record,
 };
 
@@ -820,13 +820,6 @@ fn schema_values(schema: &serde_json::Value, def: &str) -> Vec<String> {
         .iter()
         .map(|c| c["const"].as_str().unwrap().to_string())
         .collect()
-}
-
-/// The JSON Schema that `strata schema <kind>` prints.
-fn schema(kind: &str) -> serde_json::Value {
-    let r = run(&["schema", kind]);
-    assert_eq!(r.code, 0, "{}", r.err);
-    serde_json::from_str(&r.out).unwrap()
 }
 
 /// The definition of the closed set that `field` names, for a field of a document that strata
