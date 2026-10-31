@@ -13,8 +13,10 @@ release has the tag `v<version>`. The crate builds with Rust 1.88 or later. The
 crate is not on crates.io, so a dependency names the tag: see
 [The library](../automation/library.md#add-the-dependency).
 
-[Release 0.24.0](#release-0240-changes-that-need-action) lists the changes that
-need action, for the command line, the documents, and the two libraries.
+Two sections list the changes that need action:
+[Release 0.25.0](#release-0250-changes-that-need-action) and
+[Release 0.24.0](#release-0240-changes-that-need-action). They cover the command
+line, the documents, the CI drop-ins, and the two libraries.
 
 ## The documents
 
@@ -23,6 +25,11 @@ only when a reader of the old id reads the document wrong:
 
 - a field is removed, renamed, or gets a new meaning, or
 - a hash is calculated differently.
+
+One exception is a field outside the root that only says why another field is
+absent. It can move with no new id. Strata reads the older place in a record.
+After 0.24.0, the read errors of a cluster moved in this way. A document that
+strata only writes carries the move, and a script that reads it must change.
 
 A new field keeps the id. Strata ignores fields that it does not know, so it
 reads a record of its own id that a later release wrote. `source.projectUid` and
@@ -58,18 +65,24 @@ read `PALETTE_HOST`, which nothing set.
 After 0.24.0, a record of a cluster holds why strata could not read the
 notifications and the repave in `source.cluster.errors`, as `updatesPending`
 and `pendingRepave`. A tier holds its read errors in its own `errors`, in the
-same shape. Release 0.24.0 wrote `updatesPendingError` and `pendingRepaveError`
-for these two. Strata reads an older record into `errors`, so `compare`,
-`verify`, and the notes give the same answer for it. The id stays, because the
-root does not cover these fields. An older strata that reads a new record shows
-no reason, and the record still compares.
+same shape. Releases 0.8.0 to 0.24.0 wrote `updatesPendingError`, and releases
+0.19.0 to 0.24.0 wrote `pendingRepaveError`. Strata reads an older record into
+`errors`, so `compare`, `verify`, and the notes give the same answer for it. The
+id stays, because the root does not cover these fields. An older strata that
+reads a new record shows no reason, and the record still compares.
 
-A script that reads `updatesPendingError` or `pendingRepaveError` must read
-`errors` too. In the library, `ClusterSource` has no field
-`updates_pending_error` or `pending_repave_error`. Its methods
-`updates_pending_error()` and `pending_repave_error()` give the same text. The
-keys of `ClusterSource::errors` are `Open<ClusterRead>`, so a key of a later
-release loads too.
+The record of a cluster is also in `strata-diff/1` and in
+`strata-verify-summary/1`, so both carry the same rename. `compare --format
+json` has it in `a.cluster` and `b.cluster`. `verify --summary --format json`
+has it in `diff.a.cluster` and `diff.b.cluster` of a row of `records[]`. The ids
+stay. Strata only writes these two documents, so it reads no older place there.
+
+A script that reads `updatesPendingError` or `pendingRepaveError` in a record or
+in one of these two documents must read `errors` too. In the library,
+`ClusterSource` has no field `updates_pending_error` or `pending_repave_error`.
+Its methods `updates_pending_error()` and `pending_repave_error()` give the same
+text. The keys of `ClusterSource::errors` are `Open<ClusterRead>`, so a key of a
+later release loads too.
 
 After 0.24.0, the schema states the shape of each field that it left open. See
 [The shape of each open field](../commands/schema.md#the-shape-of-each-open-field).
@@ -125,7 +138,7 @@ such field says so at its own definition in
 absent means unknown: `source.consumers`, `rootLive`, `maxImpact`,
 `packsChanged`, `error`, `updatesPending`, `repavePending`, and the `value`,
 `old`, or `new` of a sensitive variable. `updatesPending` joined
-`source.cluster` in 0.10.0, and `strata-list/1` in the same release: absent
+`source.cluster` in 0.8.0, and `strata-list/1` in the same release: absent
 means that strata could not read the notifications, and
 `errors.updatesPending` says why. `repavePending` joined `source.cluster` in
 0.18.0: absent means a record of an older release, or of an object that is not
@@ -276,6 +289,139 @@ file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a
 closed set, such as a new `type` of a layer, fails in the same way. A person
 writes the file, so strata refuses the value and does not guess.
+
+## Release 0.25.0: changes that need action
+
+Release 0.25.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **A cluster record holds its read errors in `source.cluster.errors`.** The
+  keys are `updatesPending` and `pendingRepave`, and each value is the HTTP
+  error of Palette. The record is `strata-snapshot/1`, and its id stays.
+  Releases 0.8.0 to 0.24.0 wrote `updatesPendingError`, and releases 0.19.0 to
+  0.24.0 wrote `pendingRepaveError`. Strata reads an older record into `errors`,
+  so `compare`, `verify`, and the notes give the same answer. No root changes.
+  A script that reads `updatesPendingError` or `pendingRepaveError` must read
+  `errors.updatesPending` and `errors.pendingRepave`.
+- **`strata-diff/1` and `strata-verify-summary/1` carry the same rename, and
+  their ids stay.** `compare --format json` has the errors in `a.cluster.errors`
+  and `b.cluster.errors`. `verify --summary --format json` has them in
+  `diff.a.cluster.errors` and `diff.b.cluster.errors` of a row of `records[]`.
+  Strata only writes these two documents. A script that reads an older field
+  there gets no value and no error.
+- **Strata does not read a record with a variable that has `name: null`.** Only
+  a raw directory or a profile export that a person made gives such a variable,
+  because Palette requires a name. Strata now gives that variable an empty
+  `name`, so its record has another `variablesHash`, `root`, and
+  `contentDigest`. `compare`, `verify`, `behind`, `same-release`, and the gates
+  stop on an older record with `snapshot-schema` and exit `2`. Take the record
+  again. Do not change `null` to `""` in the file. Its `variablesHash` and `root`
+  stay as they are, so they no longer match the variables.
+- **A variable of a candidate file needs a `name`, and each field needs its
+  type.** `required`, `hidden`, `immutable`, and `isSensitive` are `true` or
+  `false`. `options[]` is a list. A field of text is text, a number, or a flag,
+  but not a list or a map. Before, strata read a field of another type as its
+  default. Now the file gives `candidate-invalid` and exit `2`. The message names
+  the field, such as `variables[0].required: invalid type: string "true",
+  expected a boolean`. A YAML `yes` or `no` is text: write `true` or `false`. See
+  [Checks before any request](./candidate-file.md#checks-before-any-request).
+- **A number or a flag with no quotes in a text field of a candidate file keeps
+  its text.** For example, `defaultValue: 8080` gives the default `8080`.
+  Release 0.24.0 gave empty text, and sent no default to Palette. So the record
+  of such a candidate has another `variablesHash` and root, and `--create` and
+  `--validate` send the default. To get the record of 0.24.0, write
+  `defaultValue: ""`. A `null`, a `~`, or no value gives the default of the
+  field, as before. In `format` and `inputType`, a number or a flag gives the
+  default of the field.
+- **A param of a layer of a candidate file must be text.** `installOrder` is the
+  one exception: it must be an integer. Another value, such as `replicas: 3`,
+  gives `candidate-invalid` and exit `2`. The message names the layer and the
+  param. Before, the candidate took any value. Quote the number: `replicas: "3"`.
+- **The schemas give the shape of each open field.** A validator that reads
+  `strata schema <kind>` now refuses these:
+  - a variable with no `name`
+  - an `error` with no `kind` or no `message`
+  - a segment that is not a key, an index, or an object with a `name`
+  - a param that is not text, but for `installOrder`, which is an integer
+  - a time that is not RFC 3339, when the validator checks `format`
+
+  One time can be empty text: `recordedAt` of a row of `verify --summary` for a
+  file that strata cannot read. Each document that strata writes from Palette
+  has this shape. A record of an older release validates, but for a variable
+  with `name: null`.
+- **`compare --validate` and `behind` ask the route of the profile version for a
+  profile that the cluster runs.** For such a profile, the route of the cluster
+  checks no sent tag, so it accepted each move. Release 0.24.0 sent
+  `POST /v1/spectroclusters/{uid}/validate/packs` for these cases. Now strata
+  sends `POST /v1/clusterprofiles/{uid}/validate/packs`. `compare --validate`
+  does so for a profile version that the cluster runs. `behind` does so for each
+  record of a cluster, one time for each profile whose template holds the pin.
+  So `paletteValidation` can hold a refusal where it held `accepts`. The errors
+  cover each cluster that runs the version, and the message names them. The exit
+  code does not change. See [Ask Palette if it accepts the
+  packs](../commands/compare/validate.md) and
+  [Palette accepts the move, or refuses it](../commands/behind.md#palette-accepts-the-move-or-refuses-it).
+
+### For a user of the CI drop-ins
+
+- **Each reusable workflow that installs strata checks the signature of
+  `SHA256SUMS`.** These are `comment.yml`, `merge-gate.yml`, `preflight.yml`,
+  `promote-gate.yml`, `retire-gate.yml`, `upstream.yml`, and `verify.yml`. Each
+  one installs `cosign` with the action `sigstore/cosign-installer`. Then it runs
+  the `install-strata.sh` of the tag in `strata-version`, with
+  `--require-signature`. The installer runs `cosign verify-blob` with the
+  identity of the release workflow at that tag. If the signature does not
+  verify, the job fails and installs nothing. Release 0.24.0 checked the binary
+  against `SHA256SUMS` only.
+- **An organization that permits only some actions must permit
+  `sigstore/cosign-installer`.** A self-hosted runner must reach github.com for
+  the cosign release, and the trust root of Sigstore. The installer needs `curl`
+  and `jq` on the runner. The permissions of the workflows do not change. See
+  [The reusable workflows](../install.md#the-reusable-workflows).
+- **`strata-version` must be v0.25.0 or later.** A workflow runs the installer of
+  that tag with `--require-signature`. The installer of v0.24.0 and before has no
+  such option, so the job stops with `unknown option`. This happens when the
+  workflow comes from a newer tag or from `main`, and `strata-version` names an
+  older release. Give the same tag to both.
+- **`install-strata.sh` stops when `cosign` is on the `PATH` and the signature
+  does not verify.** It exits `2` and installs nothing. Release 0.24.0 did not
+  check the signature. Without `cosign`, the installer installs as before and
+  says that it did not check the signature. `--require-signature` makes that an
+  error.
+- **The GitLab job `strata-preflight` runs `preflight.sh`.** The release carries
+  that script from 0.25.0. Set `STRATA_VERSION` to v0.25.0 or later.
+
+### For a user of the library of strata
+
+- `snapshot::ClusterSource` has the field `errors:
+  BTreeMap<Open<ClusterRead>, String>` in place of `updates_pending_error:
+  Option<String>` and `pending_repave_error: Option<String>`. `ClusterRead` is a
+  new enum with the values `UpdatesPending` and `PendingRepave`, and
+  `closed_set::Open` keeps a key of a later release. The methods
+  `updates_pending_error()` and `pending_repave_error()` give the same text as
+  `Option<&str>`. A struct literal must set `errors`, or use
+  `..Default::default()`. A pattern with no `..` must name `errors`.
+- Only `Snapshot::load` moves the fields of an older record into `errors`. A
+  program that reads a `Snapshot` or a `ClusterSource` with serde itself gets an
+  empty `errors` for such a record. Use `Snapshot::load`.
+- `snapshot::Snapshot::variables` and `candidate::Candidate::variables` are
+  `Vec<snapshot::Variable>` in place of `Vec<serde_json::Value>`. A read such as
+  `v["isSensitive"]` becomes `v.is_sensitive`. A JSON candidate in memory follows
+  the rules of the candidate file above.
+- `diff::Leaf::segments` is `Vec<diff::Segment>` in place of `Vec<Value>`.
+  `Segment::Key(String)`, `Segment::Index(usize)`, and `Segment::Named { name }`
+  give the same JSON as before.
+- `diff::group_variables` takes `&[Variable]` in place of `&[Value]`.
+
+### For a user of the library of strata-preflight
+
+- The API does not change. `world::World::with_records` gives each record in the
+  shape of 0.25.0, so a cluster record has `source.cluster.errors`. A custom rule
+  that reads `updatesPendingError` must read `errors.updatesPending`.
 
 ## Release 0.24.0: changes that need action
 

@@ -8541,6 +8541,20 @@ fn a_cluster_record_holds_the_error_of_the_route_of_the_repave_and_verify_names_
     );
 }
 
+/// The record `current` as strata 0.24 and before wrote it: the read errors of the cluster are in
+/// `updatesPendingError` and `pendingRepaveError`, and there is no `errors`.
+fn as_written_by_0_24(current: &Snapshot) -> Value {
+    let mut older = serde_json::to_value(current).unwrap();
+    let cluster = older["source"]["cluster"].as_object_mut().unwrap();
+    let errors = cluster.remove("errors").unwrap();
+    cluster.insert(
+        "updatesPendingError".into(),
+        errors["updatesPending"].clone(),
+    );
+    cluster.insert("pendingRepaveError".into(), errors["pendingRepave"].clone());
+    older
+}
+
 /// Strata 0.24 and before wrote why it could not read the notifications and the repave in
 /// `updatesPendingError` and `pendingRepaveError`. A record now holds both in `errors`, as a tier
 /// does, and an older record gives the same answer.
@@ -8555,17 +8569,8 @@ fn an_older_record_with_the_read_errors_of_a_cluster_in_two_fields_loads_into_er
     let c = current.source.cluster.as_ref().unwrap();
     assert!(c.updates_pending_error().is_some() && c.pending_repave_error().is_some());
 
-    // the record as strata 0.24 wrote it
-    let mut older = serde_json::to_value(&current).unwrap();
-    let cluster = older["source"]["cluster"].as_object_mut().unwrap();
-    let errors = cluster.remove("errors").unwrap();
-    cluster.insert(
-        "updatesPendingError".into(),
-        errors["updatesPending"].clone(),
-    );
-    cluster.insert("pendingRepaveError".into(), errors["pendingRepave"].clone());
     let saved = dir.path().join("older.json");
-    write_record(&saved, &older);
+    write_record(&saved, &as_written_by_0_24(&current));
 
     let loaded = Snapshot::load(&saved).unwrap();
     assert_eq!(
@@ -8596,6 +8601,58 @@ fn an_older_record_with_the_read_errors_of_a_cluster_in_two_fields_loads_into_er
         "{text}"
     );
     assert_eq!(text, verified(&current));
+}
+
+/// The record of a cluster is also in `strata-diff/1` and in `strata-verify-summary/1`. Both name
+/// the read errors in `errors`, also when they read an older record. Neither holds the two fields
+/// of strata 0.24, so a script that reads those gets no value and no error.
+#[test]
+fn the_diff_and_the_summary_hold_the_read_errors_of_a_cluster_in_errors_and_not_in_two_fields() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let api = serve_repave(dir.path(), "cluster-merged", "Pending")
+        .failing(repave_route(), 403, "forbidden")
+        .failing(notifications_route(), 404, "not found");
+    let current = snapshot_cluster(&api, None).unwrap();
+    let saved = dir.path().join("older.json");
+    write_record(&saved, &as_written_by_0_24(&current));
+    let older = Snapshot::load(&saved).unwrap();
+
+    let in_errors = |cluster: &Value| {
+        assert_eq!(
+            cluster["errors"],
+            serde_json::json!({
+                "updatesPending": "HTTP 404: not found",
+                "pendingRepave": "HTTP 403: forbidden",
+            }),
+            "{cluster}"
+        );
+        for field in ["updatesPendingError", "pendingRepaveError"] {
+            assert!(cluster.get(field).is_none(), "{field}: {cluster}");
+        }
+    };
+
+    // `compare --format json`: the older record is side a
+    let diff = ops::compare(&older, &current, "t1");
+    let json = render::renderer(Format::Json, Paint::off(), true)
+        .render(&diff, &older, &current, false)
+        .unwrap();
+    let json: Value = serde_json::from_str(&json).unwrap();
+    assert_eq!(json["schema"], "strata-diff/1");
+    in_errors(&json["a"]["cluster"]);
+    in_errors(&json["b"]["cluster"]);
+
+    // `verify --summary --format json`: a record that drifted holds its diff in the row. Palette
+    // now has the cluster on one profile, where the older record has two.
+    let live = serve_repave(dir.path(), "cluster-a", "Pending")
+        .failing(repave_route(), 403, "forbidden")
+        .failing(notifications_route(), 404, "not found");
+    let summary = serde_json::to_value(common::verify_summary(&older, &live)).unwrap();
+    assert_eq!(summary["schema"], "strata-verify-summary/1");
+    let row = &summary["records"][0];
+    assert_eq!(row["status"], "drifted", "{row}");
+    in_errors(&row["diff"]["a"]["cluster"]);
+    in_errors(&row["diff"]["b"]["cluster"]);
 }
 
 /// Palette shows the templates that link a version, and `consumers` reads them live. So a record
