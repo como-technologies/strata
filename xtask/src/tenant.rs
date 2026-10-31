@@ -1907,11 +1907,7 @@ impl Tenant {
             })
             .into_iter()
             .collect();
-        self.write(
-            project,
-            &format!("{}/validate/packs", cluster_route(cluster)),
-            &json!({ "profiles": profiles }),
-        );
+        self.write_cluster_packs(project, cluster, profiles);
     }
 
     /// The answer of `POST /v1/clusterprofiles/{uid}/validate/packs` with `profile`, or of `POST
@@ -1971,11 +1967,13 @@ impl Tenant {
             .map(|r| json!({"uid": profile, "packs": {"results": upgrade_results(Some(r))}}))
             .into_iter()
             .collect();
-        self.write(
-            project,
-            &format!("{}/validate/packs", cluster_route(cluster)),
-            &json!({ "profiles": profiles }),
-        );
+        self.write_cluster_packs(project, cluster, profiles);
+    }
+
+    /// Write the answer of the packs route of a cluster with `profiles` in the body.
+    fn write_cluster_packs(&self, project: &str, cluster: &str, profiles: Vec<Value>) {
+        let path = format!("{}/validate/packs", cluster_route(cluster));
+        self.write(project, &path, &json!({ "profiles": profiles }));
     }
 
     /// Write the answer of the packs route of a profile with `results` under `packs`.
