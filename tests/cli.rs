@@ -820,6 +820,13 @@ fn schema_values(schema: &serde_json::Value, def: &str) -> Vec<String> {
         .collect()
 }
 
+/// The JSON Schema that `strata schema <kind>` prints.
+fn schema(kind: &str) -> serde_json::Value {
+    let r = run(&["schema", kind]);
+    assert_eq!(r.code, 0, "{}", r.err);
+    serde_json::from_str(&r.out).unwrap()
+}
+
 /// The definition of the closed set that `field` names, for a field of a document that strata
 /// writes and reads. Such a field takes each value of the set, or any other text of a later
 /// release.
@@ -830,9 +837,7 @@ fn open_set_ref(field: &serde_json::Value) -> &serde_json::Value {
 
 #[test]
 fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
-    let r = run(&["schema", "snapshot"]);
-    assert_eq!(r.code, 0, "{}", r.err);
-    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    let v = schema("snapshot");
     assert_eq!(
         schema_values(&v, "Template"),
         ["published", "draft", "applied", "candidate", "registry"]
@@ -869,9 +874,7 @@ fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
     assert_eq!(tiers["type"], "object");
     assert_eq!(tiers["additionalProperties"]["$ref"], "#/$defs/ClusterTier");
 
-    let r = run(&["schema", "diff"]);
-    assert_eq!(r.code, 0, "{}", r.err);
-    let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+    let v = schema("diff");
     assert_eq!(
         schema_values(&v, "Tier"),
         ["applied", "labels", "policy", "running", "shape"]
@@ -888,11 +891,6 @@ fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
 
 #[test]
 fn the_schema_names_each_value_of_each_closed_set_of_the_other_documents() {
-    let schema = |kind: &str| -> serde_json::Value {
-        let r = run(&["schema", kind]);
-        assert_eq!(r.code, 0, "{}", r.err);
-        serde_json::from_str(&r.out).unwrap()
-    };
     let v = schema("snapshot");
     assert_eq!(schema_values(&v, "Implementation"), ["rust", "bash"]);
     assert_eq!(
@@ -963,11 +961,6 @@ fn schema_description(schema: &serde_json::Value, def: &str, field: &str) -> Str
 
 #[test]
 fn the_schema_names_the_values_that_strata_writes_in_a_field_that_palette_gives() {
-    let schema = |kind: &str| -> serde_json::Value {
-        let r = run(&["schema", kind]);
-        assert_eq!(r.code, 0, "{}", r.err);
-        serde_json::from_str(&r.out).unwrap()
-    };
     let snapshot = schema("snapshot");
     for (def, field) in [("Source", "type"), ("Pack", "layer")] {
         let text = schema_description(&snapshot, def, field);
@@ -985,11 +978,6 @@ fn the_schema_names_the_values_that_strata_writes_in_a_field_that_palette_gives(
 
 #[test]
 fn the_schema_names_the_model_of_palette_and_copies_no_value_of_a_field_that_palette_owns() {
-    let schema = |kind: &str| -> serde_json::Value {
-        let r = run(&["schema", kind]);
-        assert_eq!(r.code, 0, "{}", r.err);
-        serde_json::from_str(&r.out).unwrap()
-    };
     let (snapshot, candidate, diff) = (schema("snapshot"), schema("candidate"), schema("diff"));
     let (list, consumers) = (schema("list"), schema("consumers"));
     let fields = [
@@ -1051,9 +1039,7 @@ fn schema_subcommand_prints_json_schema() {
         ("set", "strata-set/1"),
         ("candidate", ""),
     ] {
-        let r = run(&["schema", kind]);
-        assert_eq!(r.code, 0, "{}", r.err);
-        let v: serde_json::Value = serde_json::from_str(&r.out).unwrap();
+        let v = schema(kind);
         assert!(v["$schema"].is_string());
         if kind == "candidate" {
             let layer = &v["$defs"]["CandidateLayer"]["properties"];
