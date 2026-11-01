@@ -1,0 +1,3 @@
+$ strata preflight --promotion --release 4.10 | grep -E '^(rule  |gke-no-release-channel)'
+rule                             tier     level      earned     advice   confidence (engine release: catch, clean, older runs)
+gke-no-release-channel           static   preflight  probe      demote   gke 4.10: no runs, older runs 2

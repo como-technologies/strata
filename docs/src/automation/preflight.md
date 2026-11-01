@@ -231,7 +231,9 @@ diff r410.txt r411.txt
 
 A new release that changes the behavior of a rule sets its counts in the ledger
 to zero for that release. The ledger proves a preflight check per engine and per
-release.
+release. `strata preflight --promotion --release 4.11` counts only the runs of
+`4.11`, and it says `demote` for a rule that no run proved on `4.11`. See
+[The runs of one release](../commands/preflight/promotion.md#the-runs-of-one-release).
 
 Run the cloud tier again after each upgrade of Palette, before the first
 create. The first AWS create after an upgrade updates the CAPA stack of the

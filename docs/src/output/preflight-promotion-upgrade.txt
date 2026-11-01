@@ -1,0 +1,6 @@
+$ strata preflight --promotion --release 4.11 --probes landing-zone.yaml --ledger runs-4-11.yaml | grep -E '^(rule  |example-region)'
+rule                             tier     level      earned     advice   confidence (engine release: catch, clean, older runs)
+example-region                   static   preflight  preflight  -        aws 4.11: catch 1/1 (5%), clean 1/1 (5%)
+$ strata preflight --promotion --release 4.12 --probes landing-zone.yaml --ledger runs-4-11.yaml | grep -E '^(rule  |example-region)'
+rule                             tier     level      earned     advice   confidence (engine release: catch, clean, older runs)
+example-region                   static   preflight  probe      demote   aws 4.12: no runs, older runs 1

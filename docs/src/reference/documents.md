@@ -699,8 +699,10 @@ what it answered.
     `kind` is `run`, `source`, `doc`, or `report`. An entry with an empty
     reference has no `ref`, and an entry with no note has no `note`.
   - `confidence`, when the ledger has runs of the rule on this engine: `catch`,
-    `clean`, `bar`, `meetsBar`, and `runs[]`. `catch` and `clean` each have
-    `correct`, `total`, `rate`, and `lowerBound`.
+    `clean`, `bar`, `meetsBar`, `runs[]`, and `olderRuns`. `catch` and `clean` each have
+    `correct`, `total`, `rate`, and `lowerBound`. `olderRuns` is the number of runs
+    of older releases, and of runs with no release, that the counts leave out. It is
+    `0` when the run names no `--release`.
   - `countsAsFailure`: true when this entry makes the exit code `1`.
 - `sections[]`: the scorecard, one line for each section with a row for the
   engine. A line has `rows`, `seen`, `withCheck`, `preflight`, `withRuns`,
@@ -713,3 +715,21 @@ what it answered.
 
 [The rule format](./preflight-rules.md) states the section file, the ledger,
 and the fixtures.
+
+## strata-preflight-promotion/1
+
+The report of `strata preflight --promotion`: the level of each rule against the
+runs of the ledger. See [Confidence and promotion](../commands/preflight/promotion.md).
+
+- `release`, when `--release` is given: the release whose runs count. With no
+  `release`, each run counts.
+- `rules[]`: one entry for each rule with a check. With a `release`, a rule that
+  does not apply to it has no entry.
+  - `id`, `section`, `tier`, `level` (the level of the rule file), and `earned`
+    (the level that the runs give).
+  - `advice`: `promote`, `demote`, or empty when the level and the runs agree.
+  - `confidence[]`: one entry for each engine that has a run of the rule, with
+    `engine`, `release`, `catch`, `clean`, `bar`, `meetsBar`, `runs[]`, and
+    `olderRuns`, as in `strata-preflight/1`. With no `release`, one entry for
+    each engine and release.
+- `disagreements`: the rules with `advice`. The exit code is `1` when it is not `0`.

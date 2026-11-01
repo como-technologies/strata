@@ -807,3 +807,114 @@ fn the_report_schema_gives_a_request_a_method_and_a_path() {
     assert_eq!(call["required"], serde_json::json!(["method", "path"]));
     assert!(call["properties"].get("ran").is_none());
 }
+
+/// The ledger of a company: the runs of the lab have no release, so a run on 4.10 proves the one
+/// preflight check of the catalog on 4.10.
+const RUNS_OF_4_10: &str = r#"
+schema: strata-preflight-ledger/1
+runs:
+  - run: 20261101T120000Z
+    engine: gke
+    release: "4.10.2"
+    results:
+      - {rule: gke-no-release-channel, result: caught}
+      - {rule: gke-no-release-channel, result: passed}
+"#;
+
+#[test]
+fn the_promotion_counts_only_the_runs_of_the_release_it_is_given() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("runs.yaml"), RUNS_OF_4_10).unwrap();
+    let lab_runs = lab_runs_of_the_rule();
+    let level = |args: &[&str]| -> (i32, serde_json::Value) {
+        let mut all = vec!["--promotion", "--json"];
+        all.extend_from_slice(args);
+        let (code, out, err) = run(&all, dir.path());
+        assert!(code <= 1, "{err}");
+        (code, serde_json::from_str(&out).unwrap())
+    };
+    let rule = |doc: &serde_json::Value| -> Option<serde_json::Value> {
+        doc["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["id"] == "gke-no-release-channel")
+            .cloned()
+    };
+
+    // no release: each run counts, and the level agrees with the lab ledger
+    let (code, doc) = level(&[]);
+    assert_eq!((code, doc["disagreements"].as_u64()), (0, Some(0)));
+    assert!(doc.get("release").is_none(), "{doc}");
+
+    // 4.10: the lab runs have no release, so the rule is a probe, and the level demotes
+    let (code, doc) = level(&["--release", "4.10"]);
+    assert_eq!(code, 1, "a level that the runs do not give is exit 1");
+    assert_eq!(doc["release"], "4.10");
+    let r = rule(&doc).expect("the rule applies to 4.10");
+    assert_eq!(
+        (r["earned"].as_str(), r["advice"].as_str()),
+        (Some("probe"), Some("demote"))
+    );
+    assert_eq!(
+        r["confidence"][0]["olderRuns"], lab_runs,
+        "the runs of the lab"
+    );
+
+    // a run on 4.10 with the ledger of a company proves it again, on a patch of 4.10 too
+    let (code, doc) = level(&["--release", "4.10.7", "--ledger", "runs.yaml"]);
+    assert_eq!(code, 0, "{doc}");
+    let r = rule(&doc).unwrap();
+    assert_eq!(
+        (r["earned"].as_str(), r["advice"].as_str()),
+        (Some("preflight"), Some(""))
+    );
+    assert_eq!(r["confidence"][0]["olderRuns"], lab_runs);
+    assert_eq!(
+        r["confidence"][0]["runs"],
+        serde_json::json!(["20261101T120000Z"])
+    );
+
+    // 4.11: the rule ends at 4.11, so the report has no entry for it
+    let (code, doc) = level(&["--release", "4.11", "--ledger", "runs.yaml"]);
+    assert_eq!(code, 0);
+    assert!(
+        rule(&doc).is_none(),
+        "a rule outside the release has no entry"
+    );
+}
+
+#[test]
+fn the_promotion_text_names_the_runs_of_older_releases_for_each_rule() {
+    let dir = tempfile::tempdir().unwrap();
+    let (code, out, err) = run(&["--promotion", "--release", "4.10"], dir.path());
+    assert_eq!(code, 1, "{err}");
+    let line = out
+        .lines()
+        .find(|l| l.starts_with("gke-no-release-channel"))
+        .expect("the rule is in the list");
+    assert!(line.contains("demote"), "{line}");
+    let lab_runs = lab_runs_of_the_rule();
+    assert!(
+        line.contains(&format!("gke 4.10: no runs, older runs {lab_runs}")),
+        "{line}"
+    );
+    let (code, _, err) = run(&["--promotion", "--release", "4.11.x"], dir.path());
+    assert_eq!(
+        code, 2,
+        "a release that is not a version is a usage error: {err}"
+    );
+}
+
+/// How many runs of the ledger in the binary answer `gke-no-release-channel`: they have no release.
+fn lab_runs_of_the_rule() -> usize {
+    let ledger = strata_preflight::confidence::Ledger::parse(
+        strata_preflight::catalog::LEDGER,
+        std::path::Path::new("evidence/runs.yaml"),
+    )
+    .unwrap();
+    ledger
+        .counts_for("gke-no-release-channel", "gke", None)
+        .runs
+        .len()
+}

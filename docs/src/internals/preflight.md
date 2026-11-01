@@ -86,7 +86,8 @@ miss of a fault, goes back to a probe, and the run is its evidence. A new
 Palette release that changes the behavior does the same.
 
 `strata preflight --promotion` compares the level of each rule with the ledger
-and says `promote` or `demote`. It reads the first rule too: a rule whose
+and says `promote` or `demote`. With `--release`, it reads the runs of that release
+alone: see [Confidence](#confidence). It reads the first rule too: a rule whose
 status is `source` or `inferred` stays a probe whatever the runs of the plan
 count, because the plan makes the fault in the entity and does not build; a
 build that shows the fault makes the rule `seen`. A level that disagrees with the ledger is exit
@@ -125,8 +126,13 @@ another estate. The bar is `0.8`, as a field of each rule, so that it can go up.
 A new Palette release sets the counts of a rule to zero for that release. A
 release is its first two numbers, as strata reads a version: `4.10.3` and `4.10`
 are one release, and so are `4` and `4.0`. A release that is not a version, such
-as `dev`, is the same release only as the same text. A run with no release
-counts for each release.
+as `dev`, is the same release only as the same text. When a report names a
+release, only the runs of that release count. A run of an older release counts
+for nothing, and so does a run with no release: the ledger does not say which
+release it proved. The report gives the number of these older runs for each
+rule and engine. A rule that no run proved on the release is a probe until a run
+proves it, so a gate never rests on the behavior of an older release.
+`--promotion` with no `--release` counts each run.
 
 ## The section scorecard
 

@@ -66,7 +66,7 @@ reports and the world, or that no file was written.
 | Option | What it does | Page |
 | --- | --- | --- |
 | `--cloud` | Names the engine of a file. A cluster names its own. | |
-| `--release` | Names the Palette release, such as `4.10` or `4.10.12`. A text that is not a version, such as `4.11.x`, is a `usage` error with exit `2`. A tenant key cannot read the release: the one route that gives it refuses a call with a key. With none, a rule of one release applies. | [The release of Palette](../internals/palette/limits.md#the-release-of-palette) |
+| `--release` | Names the Palette release, such as `4.10` or `4.10.12`. A text that is not a version, such as `4.11.x`, is a `usage` error with exit `2`. A tenant key cannot read the release: the one route that gives it refuses a call with a key. With none, a rule of one release applies. With `--promotion`, only the runs of this release count. | [The release of Palette](../internals/palette/limits.md#the-release-of-palette), [The runs of one release](preflight/promotion.md#the-runs-of-one-release) |
 | `--records` | Gives the records of the profiles as files, for a run with no key. With none, strata records each profile from Palette. | |
 | `--probes` | Adds the rules of a file of custom probes. | [Custom probes](preflight/rules.md#custom-probes) |
 | `--tier` | Selects the tiers: `static`, `palette`, `cloud`, as a list. | [The static tier and the live tier](preflight/tiers.md) |
@@ -78,7 +78,7 @@ reports and the world, or that no file was written.
 | `--watch` | Watches the build of a cluster. | [The watch](preflight/watch.md) |
 | `--every`, `--limit` | Set the watch: the seconds between two readings, and the longest watch. | [The watch](preflight/watch.md) |
 | `--rules` | Lists each rule that applies to an engine, and runs nothing. | [The rules](preflight/rules.md#the-rules) |
-| `--promotion` | Compares the level of each rule with the runs of the ledger. | [Confidence and promotion](preflight/promotion.md) |
+| `--promotion` | Compares the level of each rule with the runs of the ledger. With `--release`, it counts only the runs of that release. | [Confidence and promotion](preflight/promotion.md) |
 | `--ledger` | Adds the runs of a company to the runs of the lab. | [Confidence and promotion](preflight/promotion.md) |
 | `--schema` | Prints the JSON Schema of the report, the rules, the ledger, or the promotion report. | |
 | `--out` | Writes the report in three forms, and the two files that the `reproduce:` lines read, into a directory. | [The report on disk](preflight/report.md#the-report-on-disk) |

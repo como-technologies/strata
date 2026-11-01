@@ -304,4 +304,7 @@ runs:
 
 The binary carries the ledger of the lab. `--ledger FILE` adds the runs of a
 company. `4.10.3` and `4.10` are one release for the counts.
+When a report names a release, only the runs of that release count. A run
+with no release (`release: ""`) is a run of an older release, so it counts for
+no release. See [The runs of one release](../commands/preflight/promotion.md#the-runs-of-one-release).
 `strata preflight --schema ledger` prints the JSON Schema.

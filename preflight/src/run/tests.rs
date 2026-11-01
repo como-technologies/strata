@@ -161,6 +161,71 @@ fn strict_counts_a_failed_probe_and_a_clean_entity_passes() {
 }
 
 #[test]
+fn a_report_counts_only_the_runs_of_its_release_and_names_the_older_runs() {
+    let c = catalog();
+    let (backend, _) = FixtureBackend::split(json!({}));
+    let ledger = Ledger::parse(
+        r#"
+schema: strata-preflight-ledger/1
+runs:
+  - {run: r1, engine: gke, release: "", results: [{rule: gke-pool-multiple-3, result: caught}]}
+  - {run: r2, engine: gke, release: "4.10", results: [{rule: gke-pool-multiple-3, result: passed}]}
+"#,
+        Path::new("runs.yaml"),
+    )
+    .unwrap();
+    let confidence_on = |release: Option<&str>| {
+        let mut w = world(3);
+        w.release = release.map(str::to_string);
+        let report = run(RunInputs {
+            catalog: &c,
+            world: &w,
+            backend: &backend,
+            ledger: &ledger,
+            selection: &Selection::default(),
+            now: "t",
+            out_dir: None,
+            progress: &Progress::silent(),
+            verbose: false,
+            paint: Paint::off(),
+        })
+        .unwrap();
+        let by_id = |id: &str| report.checks.iter().find(|c| c.id == id).unwrap().clone();
+        (by_id("gke-pool-multiple-3"), by_id("gke-api-off"))
+    };
+
+    let (pool, api) = confidence_on(Some("4.10"));
+    let conf = pool
+        .confidence
+        .as_ref()
+        .expect("the rule has a run of 4.10");
+    assert_eq!((conf.catch.total, conf.clean.total), (0, 1));
+    assert_eq!(conf.older_runs, 1, "the run with no release");
+    assert_eq!(
+        pool.confidence_text().as_deref(),
+        Some("catch no runs, clean 1/1 (5%), older runs 1")
+    );
+    assert!(
+        api.confidence.is_none(),
+        "no run of this rule is in the ledger"
+    );
+
+    let (pool, _) = confidence_on(Some("4.11"));
+    assert_eq!(
+        pool.confidence_text().as_deref(),
+        Some("no runs, older runs 2"),
+        "no run of 4.11: the two runs are older"
+    );
+    assert!(!pool.confidence.unwrap().has_runs());
+
+    let (pool, _) = confidence_on(None);
+    assert_eq!(
+        pool.confidence_text().as_deref(),
+        Some("catch 1/1 (5%), clean 1/1 (5%)"),
+        "with no release, each run counts"
+    );
+}
+#[test]
 fn a_tier_not_asked_for_is_not_run_and_ids_select() {
     let c = catalog();
     let (backend, _) = FixtureBackend::split(json!({}));
