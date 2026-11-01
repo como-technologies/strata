@@ -29,9 +29,9 @@ fn is_deleted(doc: &Value) -> bool {
     ClusterState::Deleted.is(str_at(doc, "/status/state")) || flag(doc, "/metadata/isDeleted")
 }
 
-/// The live snapshot of the holder of a cluster record, from its document `doc`: with the update
-/// that waits, the macro values, and the shape, as the record holds them. `kind` is the kind of
-/// the holder that the record names.
+/// The live snapshot of the holder of a cluster record, from its document `doc`. It holds the
+/// update that waits, the macro values, and the shape, as the record holds them. `kind` is the
+/// kind of the holder that the record names.
 fn live_holder<A: PaletteApi>(
     recorded: &Snapshot,
     c: &crate::snapshot::ClusterSource,

@@ -266,8 +266,8 @@ impl Snapshot {
     }
 }
 
-/// The index in `applied` of each profile that a record of the cluster covers: all of them for no
-/// `profile`, else those that `profile` names by name or by uid.
+/// The index in `applied` of each profile that a record of the cluster covers. With no `profile`,
+/// it covers all of them. Else it covers those that `profile` names by name or by uid.
 ///
 /// # Errors
 ///

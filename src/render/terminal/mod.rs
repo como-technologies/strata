@@ -53,8 +53,8 @@ pub struct TerminalRenderer {
     pub paint: Paint,
 }
 
-/// The lines above the variables: the two records, the root, the notes, and the images and the
-/// consumers when the diff has them.
+/// The lines above the variables: the two records, the root, and the notes. The images and the
+/// consumers follow when the diff has them.
 fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     out.push(format!(

@@ -328,8 +328,8 @@ fn renamed_or_overwritten(
     }
 }
 
-/// The writes to the object of `recorded` since the record was taken, oldest first, over the
-/// audit logs of the object and of each profile that `diff` shows as overwritten.
+/// The writes to the object of `recorded` since the record was taken, oldest first. It reads the
+/// audit log of the object, and that of each profile that `diff` shows as overwritten.
 fn who_wrote<A: PaletteApi>(
     recorded: &Snapshot,
     diff: &Diff,

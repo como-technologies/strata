@@ -386,9 +386,9 @@ fn pack_order_changed(a: &Snapshot, b: &Snapshot) -> bool {
     shared_keys(a, b) != shared_keys(b, a)
 }
 
-/// True when no variable moved, the packs keep their order, and each pack is unchanged, or differs
-/// only by a uid that Palette mints or by a renamed tag: the records hold the same content, though
-/// their roots can differ.
+/// True when the records hold the same content, though their roots can differ. No variable moved,
+/// the packs keep their order, and each pack is unchanged. A pack can differ only by a uid that
+/// Palette mints or by a renamed tag.
 fn no_content_moved(variables_changed: bool, order_changed: bool, packs: &[PackDiff]) -> bool {
     !variables_changed
         && !order_changed

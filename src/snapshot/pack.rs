@@ -391,8 +391,8 @@ fn image_id_annotation(pk: &Value) -> BTreeMap<String, String> {
         .collect()
 }
 
-/// The upstream digest of a pack and where it came from: the digest of the pack reference, else
-/// the digest of the registry summary, else none.
+/// The upstream digest of a pack and its source. The digest of the pack reference has priority,
+/// then the digest of the registry summary. Else the pack has none.
 fn upstream_digest(ref_digest: &str, registry_digest: &str) -> (String, UpstreamSource) {
     if !ref_digest.is_empty() {
         (ref_digest.to_string(), UpstreamSource::PackRef)

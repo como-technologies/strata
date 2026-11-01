@@ -159,7 +159,7 @@ where
 /// The record that `candidate` writes from: the profile version that `reference` names, or a record
 /// file.
 ///
-/// A record can hold a profile version too, and [`Candidate::from_snapshot`] says.
+/// A record can hold a profile version too. [`Candidate::from_snapshot`] says.
 ///
 /// [`Candidate::from_snapshot`]: crate::candidate::Candidate::from_snapshot
 ///
