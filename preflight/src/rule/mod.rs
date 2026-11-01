@@ -641,8 +641,8 @@ pub fn release_in_range(release: &str, range: &str) -> bool {
 /// as `4.10` or `4.10.12`.
 ///
 /// A release such as `4.11.x` does not parse, and [`release_in_range`] puts it in each range. So
-/// each rule with `releases` would apply to it, and the run could fail a check that the release
-/// does not have.
+/// each rule with `releases` applies to it, and the run can fail a check that the release does
+/// not have.
 ///
 /// # Errors
 ///

@@ -75,6 +75,8 @@ A `usage` error comes before any request in these cases:
   takes `cluster:<c>` and `cluster:<c>@pending`.
 - `verify` of a record of an object that a later release wrote. The record
   shows its kind, so `verify` needs no key.
+- `strata-preflight --release` with a text that is not a version, such as
+  `4.11.x`. Each rule with `releases` applies to such a release.
 
 A record file shows its side when strata reads the file. That read is no
 request, so these errors come before any request too.
