@@ -66,7 +66,8 @@ fn edited_in_place(r: &mut Runner) {
     edited_in_place_stale(r);
 }
 
-/// The part of the chapter `edited-in-place` for the cluster that runs the version, and the update that waits.
+/// The part of the chapter `edited-in-place` for the cluster that runs the version, and the update
+/// that waits.
 fn edited_in_place_cluster(r: &mut Runner) {
     // the edit waits for payments, which runs the version: the listing says so
     r.step(
@@ -93,7 +94,8 @@ fn edited_in_place_cluster(r: &mut Runner) {
         false,
         "strata verify runs/payments.json",
     );
-    // what the update that waits would change on payments, before anybody accepts it (#78)
+    // The step shows what the update that waits changes on payments, before anybody accepts it
+    // (#78)
     r.step(
         "edited-pending-record",
         0,
@@ -170,10 +172,11 @@ fn edited_in_place_clusters(r: &mut Runner) {
     );
 }
 
-/// The part of the chapter `edited-in-place` for a record of the update that is older than the cluster.
+/// The part of the chapter `edited-in-place` for a record of the update that is older than the
+/// cluster.
 fn edited_in_place_stale(r: &mut Runner) {
-    // a later change moves payments to another profile, so the record of the update that waits is
-    // older than the cluster: the cluster document shows it, and the refusal has its own kind
+    // A later change moves payments to another profile, so the record of the update that waits is
+    // older than the cluster. The cluster document shows it, and the refusal has its own kind
     r.profile(DEV, A112, "1.1.2", "aws-stack@1.1.1", RETAIN);
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A112], &[]));
     r.step(
@@ -315,7 +318,8 @@ fn overwritten(r: &mut Runner) {
     overwritten_consumers(r);
 }
 
-/// The part of the chapter `overwritten` for the writer of the bump, and for what the bump leaves behind.
+/// The part of the chapter `overwritten` for the writer of the bump, and for what the bump leaves
+/// behind.
 fn overwritten_consumers(r: &mut Runner) {
     // the bump is a write to the profile, and not to the cluster: --who reads both logs (#140)
     r.step(

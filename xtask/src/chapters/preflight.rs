@@ -1,4 +1,5 @@
-//! The chapter `preflight`: can Palette build a cluster? The helpers build the body of an AWS create and the
+//! The chapter `preflight`: can Palette build a cluster? The helpers build the body of an AWS
+//! create and the
 //! answers of the routes that the live tier reads.
 
 use super::DEV_ENV;
@@ -7,7 +8,7 @@ use crate::book::Runner;
 use crate::tenant::Edit;
 use serde_json::json;
 
-/// The body of an AWS create named `name`, for the profile `profile`: the cloud account
+/// The body of an AWS create named `name`, for the profile `profile`. It names the cloud account
 /// platform-aws, and two pools of t3.xlarge in one zone, with one worker.
 pub(super) fn preflight_entity(name: &str, profile: &str) -> String {
     let pool = |name: &str, size: u32, control_plane: bool| {
@@ -32,7 +33,7 @@ pub(super) fn preflight_entity(name: &str, profile: &str) -> String {
 /// The route of Palette that checks the body of an AWS create, with nothing created.
 pub(super) const AWS_VALIDATE: &str = "v1/spectroclusters/aws/validate";
 
-/// The answer of the validate route when a pool has too few cores for the packs: the one worker of
+/// The answer of the validate route when a pool has too few cores for the packs. The one worker of
 /// `preflight_entity` has 4 cores, and the packs need 4.1.
 fn cpu_floor_answer() -> serde_json::Value {
     json!({"machinePools": {"results": [{"name": "worker-pool", "displayName": "worker-pool",
@@ -46,8 +47,8 @@ pub(super) fn accepted_answer() -> serde_json::Value {
     json!({"machinePools": {"results": []}, "profiles": []})
 }
 
-/// One entry of the answer of the instance type route, as Palette gives it: the name of the type is
-/// `type`, and an entry has no `name`. `not_offered` is `None` for a type that each zone offers:
+/// One entry of the answer of the instance type route, as Palette gives it. The name of the type
+/// is `type`, and an entry has no `name`. `not_offered` is `None` for a type that each zone offers:
 /// Palette gives `null` for it, as it does for most types.
 fn instance_type(
     name: &str,
@@ -61,7 +62,7 @@ fn instance_type(
         "nonSupportedZones": not_offered, "supportedArchitectures": ["x86_64"]})
 }
 
-/// The answer of the instance type route for `us-east-2`: each zone offers `t3.large`, and
+/// The answer of the instance type route for `us-east-2`. Each zone offers `t3.large`, and
 /// `t3.xlarge` is not offered in the zone `us-east-2c`, which no pool of `preflight_entity` uses.
 fn instance_types_answer() -> serde_json::Value {
     json!({"instanceTypes": [
@@ -71,8 +72,9 @@ fn instance_types_answer() -> serde_json::Value {
 }
 
 /// Write the answers that the live tier of `strata preflight` reads for `preflight_entity` in
-/// `project`: the cloud account, the property route, the regions, the instance types of the region,
-/// the key pairs of the account, and the validate route, which refuses the worker pool for its CPU.
+/// `project`. They are the cloud account, the property route, the regions, the instance types of
+/// the region, and the key pairs of the account. The validate route refuses the worker pool for
+/// its CPU.
 pub(super) fn preflight_routes(r: &mut Runner, project: &str) {
     r.answer(
         project,
@@ -104,9 +106,9 @@ pub(super) fn preflight_routes(r: &mut Runner, project: &str) {
 
 /// The chapter `preflight`: can Palette build this cluster?
 pub(super) fn run(r: &mut Runner) {
-    // preflight: can Palette build this cluster? The entity of an AWS create, with the profile
-    // aws-stack@1.1.1; the stand-in answers the validate route with the CPU floor of the packs,
-    // and holds the cloud account of the entity.
+    // preflight: can Palette build this cluster? The entity is the body of an AWS create, with the
+    // profile aws-stack@1.1.1. The stand-in answers the validate route with the CPU floor of the
+    // packs, and holds the cloud account of the entity.
     r.chapter("preflight", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
@@ -143,12 +145,14 @@ pub(super) fn run(r: &mut Runner) {
     preflight_clouds(r);
 }
 
-/// The part of the chapter `preflight` for a cluster that Palette holds, and a change of its worker pool.
+/// The part of the chapter `preflight` for a cluster that Palette holds, and a change of its worker
+/// pool.
 fn preflight_cluster(r: &mut Runner) {
-    // once Running: the cluster as Palette holds it, a change of its worker pool before the
-    // change is made, and one reading of the watch (the stand-in's cluster is Running, so the
-    // watch ends at once; a real build reads every 30 seconds until Running). The cluster gives
-    // the variable of its profile a value, and the entity of the cluster carries it.
+    // Once Running, the page shows the cluster as Palette holds it. It also shows a change of the
+    // worker pool before the change is made, and one reading of the watch. The cluster of the
+    // stand-in is Running, so the watch ends at once. A real build reads every 30 seconds until
+    // Running. The cluster gives the variable of its profile a value, and the entity of the
+    // cluster carries it.
     r.tenant(|t| {
         t.cluster(
             DEV,
@@ -279,11 +283,11 @@ fn preflight_each(r: &mut Runner) {
 
 /// The part of the chapter `preflight` for the rules that read the account of the entity.
 fn preflight_account(r: &mut Runner) {
-    // two rules that read the account of the entity (#143): the instance type route lists the
-    // zones that do not offer a type, and the key pair route lists the key pairs of the region.
-    // The pools move to the zone that the list names, and the key pair is not in the list. The key
-    // pair step uses an EKS body with a dynamic VPC. The AWS properties route checks the key pair
-    // of an AWS body.
+    // Two rules read the account of the entity (#143). The instance type route lists the zones
+    // that do not offer a type. The key pair route lists the key pairs of the region. The pools
+    // move to the zone that the list names, and the key pair is not in the list. The key pair step
+    // uses an EKS body with a dynamic VPC. The AWS properties route checks the key pair of an AWS
+    // body.
     r.quiet(
         r#"jq '.spec.machinepoolconfig[].cloudConfig.azs = ["us-east-2c"]' cluster.json > cluster-zone.json"#,
     );
@@ -316,7 +320,7 @@ fn preflight_account(r: &mut Runner) {
 
 /// The part of the chapter `preflight` for a profile of another cloud type, and the GCP properties.
 fn preflight_clouds(r: &mut Runner) {
-    // a profile of another cloud type (#415): the validate route refuses the body with HTTP 500 and
+    // A profile of another cloud type (#415). The validate route refuses the body with HTTP 500 and
     // the code ClusterProfilesNotSupported, and palette-validate reports the refusal as a failure
     r.profile(
         DEV,

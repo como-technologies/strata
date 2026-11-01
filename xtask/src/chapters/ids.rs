@@ -48,7 +48,8 @@ pub(super) const A112_PROD: &str = "64e1000000000000000000d4";
 pub(super) const PAYMENTS: &str = "64f1000000000000000000e1";
 // the cloud account platform-aws of the preflight chapter and the loop chapter
 pub(super) const PLATFORM_AWS: &str = "64f3000000000000000000a1";
-// gcp-stack@1.0.0: a profile of the cloud type gcp, which the preflight chapter puts in the body of an
+// gcp-stack@1.0.0: a profile of the cloud type gcp, which the preflight chapter puts in the body of
+// an
 // AWS create
 pub(super) const GCP_STACK: &str = "64f3000000000000000000b1";
 pub(super) const SEARCH: &str = "64f1000000000000000000e2";

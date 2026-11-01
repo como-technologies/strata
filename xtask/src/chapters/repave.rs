@@ -39,8 +39,8 @@ pub(super) fn run(r: &mut Runner) {
         false,
         "strata compare cluster:payments aws-stack@1.1.6 --repave --json | jq .paletteRepave",
     );
-    // the comment of the pull request that moves the cluster: the answer of Palette decides the
-    // label. The table says may-repave for this change, which is below the threshold
+    // The comment of the pull request that moves the cluster: the answer of Palette decides the
+    // label. The table says `may-repave` for this change, which is below the threshold
     r.step(
         "repave-pr-comment",
         0,
@@ -195,7 +195,7 @@ fn repave_validate(r: &mut Runner) {
         "strata compare aws-stack@1.1.1 aws-stack@1.1.7 --validate",
     );
     // payments runs aws-stack@1.1.1. The route of the cluster checks no sent tag for a profile that
-    // the cluster runs, so strata asks the route of the version, and the stand-in refuses there
+    // the cluster runs, so strata asks the route of the version. The stand-in refuses there
     r.tenant(|t| {
         t.profile_packs_answer(
             DEV,
@@ -254,7 +254,7 @@ fn repave_approval(r: &mut Runner) {
 
 /// The part of the chapter `repave` for a cluster that a cluster template governs.
 fn repave_template(r: &mut Runner) {
-    // a cluster that a cluster template governs: on the route of the cluster, Palette compares
+    // A cluster that a cluster template governs. On the route of the cluster, Palette compares
     // nothing and answers no repave, so --repave asks the route of the template (#130)
     r.tenant(|t| t.cluster_in_template(DEV, PAYMENTS, AWS_STANDARD));
     r.tenant(|t| t.template_repave_answer(DEV, AWS_STANDARD, true));

@@ -116,7 +116,8 @@ fn loop_publish(r: &mut Runner) {
         false,
         "strata compare cluster:payments aws-stack@1.1.0 --validate | grep -E '^(aws-stack|root |palette)'",
     );
-    // the pull request that moves the cluster: its comment holds the answer, and the label follows it
+    // the pull request that moves the cluster: its comment holds the answer, and the label follows
+    // it
     r.step(
         "loop-ask-repave-comment",
         0,
@@ -158,8 +159,8 @@ fn loop_promote(r: &mut Runner) {
 
 /// The step 5 of the loop: the check of the body of a create before the build.
 fn loop_preflight(r: &mut Runner) {
-    // 5. before a build: the team writes the body of the create of a cluster that prod builds on
-    // the release, and asks Palette about it, with nothing created
+    // 5. Before a build, the team writes the body of the create of a cluster that prod builds on
+    // the release. The team asks Palette about it, with nothing created
     r.write_file("cluster.json", &preflight_entity("ledger", A110_PROD));
     preflight_routes(r, PROD);
     r.serve_here(); // state 3: both projects run 1.1.0, main records it, and Palette refuses a worker pool

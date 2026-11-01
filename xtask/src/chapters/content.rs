@@ -1,4 +1,4 @@
-//! The chapters of the content that the root covers or leaves out: macros, images, invalid packs,
+//! The chapters of the content that the root covers or omits: macros, images, invalid packs,
 //! missing digests, and masked values.
 
 use super::DEV_ENV;
@@ -10,7 +10,7 @@ use super::ids::{
 use crate::book::Runner;
 use crate::tenant::Edit;
 
-/// Run the chapters of the content that the root covers or leaves out.
+/// Run the chapters of the content that the root covers or omits.
 pub(super) fn run(r: &mut Runner) {
     macros(r);
     os_image(r);
@@ -21,7 +21,7 @@ pub(super) fn run(r: &mut Runner) {
 
 /// The chapter `macros`: a project macro that the values of a pack read.
 fn macros(r: &mut Runner) {
-    // a project macro that the values of a pack read: the root covers its name, and a record
+    // A project macro that the values of a pack read. The root covers its name, and a record
     // with --macros holds the digest of its value. The add-on profile that the cluster group pins
     // reads a second macro in its manifest.
     r.chapter("macros", DEV_ENV);
@@ -138,7 +138,7 @@ fn macros_verify(r: &mut Runner) {
 
 /// The chapter `os-image`: an OS pack that names its machine image.
 fn os_image(r: &mut Runner) {
-    // an OS pack that names its machine image in the annotation imageId: the root does not
+    // An OS pack that names its machine image in the annotation imageId. The root does not
     // cover the annotations, and compare, verify, and same-release name a new image (#189)
     r.chapter("os-image", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV)]));
@@ -354,7 +354,7 @@ fn no_digest_chart(r: &mut Runner) {
 
 /// The chapter `masked-value`: a pack value that Palette serves as a mask.
 fn masked_value(r: &mut Runner) {
-    // a pack value whose schema format is password: Palette serves the mask in place of the
+    // A pack value whose schema format is password. Palette serves the mask in place of the
     // secret, so an equal root does not show an equal secret (#163)
     r.chapter("masked-value", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV), ("prod", PROD)]));

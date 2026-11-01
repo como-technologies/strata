@@ -115,7 +115,7 @@ fn merge_gate(r: &mut Runner) {
     );
 }
 
-/// The chapter `merge-gate-rollback`: a branch that puts back the version that dev ran before.
+/// The chapter `merge-gate-rollback`: a branch that restores the version that dev ran before.
 fn merge_gate_rollback(r: &mut Runner) {
     r.chapter("merge-gate-rollback", GIT);
     r.tenant(|t| t.projects(&[("dev", DEV)]));
@@ -126,7 +126,7 @@ fn merge_gate_rollback(r: &mut Runner) {
     r.quiet("git init -q -b main . && git remote add origin .");
     r.quiet("strata snapshot aws-stack@1.0.0 -o releases/dev.json &&\n  git add releases && git commit -qm \"dev pins aws-stack@1.0.0\"");
     r.quiet("strata snapshot aws-stack@1.1.0 -o releases/dev.json &&\n  git commit -qam \"dev pins aws-stack@1.1.0\"");
-    // 1.1.0 repaved the nodes badly, so a branch off main puts back what dev ran before
+    // 1.1.0 repaved the nodes badly, so a branch off main restores what dev ran before
     r.quiet("git checkout -q -b roll-dev-back &&\n  git show main~1:releases/dev.json > releases/dev.json &&\n  git commit -qam \"pin what dev ran before 1.1.0\"");
     r.step(
         "merge-gate-rollback-red",
@@ -214,7 +214,8 @@ fn promote(r: &mut Runner) {
     promote_macros(r);
 }
 
-/// The part of the chapter `promote` for a release with a macro that each project gives another value.
+/// The part of the chapter `promote` for a release with a macro that each project gives another
+/// value.
 fn promote_macros(r: &mut Runner) {
     // 1.1.4 reached prod by a promotion, and its CSI values read the macro region, which each
     // project gives another value: one release, two configurations (#164)
@@ -466,8 +467,8 @@ fn manifest_pack_versions(r: &mut Runner) {
 
 /// The part of the chapter `manifest-pack` for a manifest pack in a candidate file.
 fn manifest_pack_candidate(r: &mut Runner) {
-    // a manifest pack in a candidate file: a layer of type manifest, with no registry, whose
-    // record differs from the published version by the minted uid alone (#150)
+    // A manifest pack in a candidate file: a layer of type manifest, with no registry. Its record
+    // differs from the published version by the minted uid alone (#150)
     r.step(
         "manifest-candidate",
         0,

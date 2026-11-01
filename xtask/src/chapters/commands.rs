@@ -64,8 +64,8 @@ fn list(r: &mut Runner) {
         false,
         "for v in 1.0.0 1.1.0 1.1.1; do strata consumers aws-stack@$v; done",
     );
-    // the empty uid is the point of the step: a reader who exported one needs it, and the book
-    // must print the command that works for them, not the one that works only here
+    // The empty uid is the point of the step: a reader who exported one needs it. The book must
+    // print the command that works for them, not the one that works only here
     r.step(
         "list-pack-consumers",
         1,
@@ -122,7 +122,8 @@ fn list_edge_cases(r: &mut Runner) {
     );
 }
 
-/// The chapter `scope`: a profile of the tenant that has the name and the version of a profile of a project.
+/// The chapter `scope`: a profile of the tenant that has the name and the version of a profile of a
+/// project.
 fn scope(r: &mut Runner) {
     // a profile of the tenant with the name and the version of a profile of the project
     r.chapter("scope", DEV_ENV);
@@ -267,7 +268,7 @@ fn candidate(r: &mut Runner) {
 
 /// The part of the chapter `candidate` that reads the export of Palette as a candidate.
 fn candidate_export(r: &mut Runner) {
-    // the export of Palette is a candidate too: the export route gives the file to a request that
+    // The export of Palette is a candidate too. The export route gives the file to a request that
     // accepts a file, and its record has the root of the version (#156)
     r.tenant(|t| t.export(DEV, A111));
     r.quiet(&format!(
@@ -334,7 +335,8 @@ fn candidate_validate_names(r: &mut Runner) {
     );
 }
 
-/// The part of the chapter `candidate` where the check of the packs refuses a new version, and then accepts.
+/// The part of the chapter `candidate` where the check of the packs refuses a new version, and then
+/// accepts.
 fn candidate_validate_packs(r: &mut Runner) {
     // a new version: Palette takes the name, and the check of the packs refuses, then accepts
     r.quiet(

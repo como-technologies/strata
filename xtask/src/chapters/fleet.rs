@@ -20,7 +20,8 @@ pub(super) fn run(r: &mut Runner) {
     retire(r);
 }
 
-/// The chapter `behind`: the pins that are behind the registry, and a version that arrives between two runs.
+/// The chapter `behind`: the pins that are behind the registry, and a version that arrives between
+/// two runs.
 fn behind(r: &mut Runner) {
     // The pins that are behind the registry, and a version that arrives between two runs
     r.chapter("behind", DEV_ENV);
@@ -77,7 +78,8 @@ fn behind(r: &mut Runner) {
     behind_refused(r);
 }
 
-/// The part of the chapter `behind` where Palette refuses a move on a cluster that runs the profile.
+/// The part of the chapter `behind` where Palette refuses a move on a cluster that runs the
+/// profile.
 fn behind_refused(r: &mut Runner) {
     // A move that Palette refuses on a cluster that runs the profile. The only pin that is behind
     // is csi-aws-ebs 1.63.1, two minor versions below 1.65.0. The stand-in refuses each request of
@@ -94,7 +96,7 @@ fn behind_refused(r: &mut Runner) {
         }],
     );
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A1111], &[]));
-    // the route of the cluster accepts the same move: it checks no sent tag of a profile that the
+    // The route of the cluster accepts the same move. It checks no sent tag of a profile that the
     // cluster runs, so only the route of the version refuses
     r.tenant(|t| {
         t.profile_upgrade_answer(DEV, A1111, Some(("csi-aws-ebs", &["payments"])));

@@ -178,8 +178,8 @@ fn cluster_tiers_verify(r: &mut Runner) {
 
 /// The part of the chapter `cluster-tiers` where Palette refuses the role bindings.
 fn cluster_tiers_forbidden(r: &mut Runner) {
-    // the key loses the permission to read the role bindings of payments: the record holds the
-    // error in the policy tier and no value for the field, and verify does not compare the field
+    // The key loses the permission to read the role bindings of payments. The record holds the
+    // error in the policy tier and no value for the field. Verify does not compare the field
     // (#251, #274)
     r.tenant(|t| t.forbid(DEV, &rbacs_route(PAYMENTS)));
     r.serve_here(); // state 3: Palette refuses the role bindings of payments
@@ -206,8 +206,8 @@ fn cluster_tiers_forbidden(r: &mut Runner) {
 
 /// The chapter `cluster-shape`: the fields of the cloud type of a vSphere cluster.
 fn cluster_shape(r: &mut Runner) {
-    // The shape tier reads the fields of the cloud type of the cluster. lab runs on vSphere: its
-    // cloud config has the model of the API reference of Palette.
+    // The shape tier reads the fields of the cloud type of the cluster. The cluster lab runs on
+    // vSphere. Its cloud config has the model of the API reference of Palette.
     r.chapter("cluster-shape", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
@@ -275,7 +275,8 @@ fn edge_hosts(r: &mut Runner) {
     );
 }
 
-/// The chapter `cluster-groups`: a cluster group that pins an add-on profile for its virtual clusters.
+/// The chapter `cluster-groups`: a cluster group that pins an add-on profile for its virtual
+/// clusters.
 fn cluster_groups(r: &mut Runner) {
     // A cluster group pins an add-on profile for its virtual clusters
     r.chapter("cluster-groups", DEV_ENV);
@@ -336,7 +337,7 @@ fn cluster_groups_virtual(r: &mut Runner) {
         false,
         "strata consumers platform-addons@1.0.0",
     );
-    // the cluster listing leaves out the virtual cluster, so list asks the search for it (#116)
+    // the cluster listing omits the virtual cluster, so list asks the search for it (#116)
     r.step("group-list", 0, false, "strata list clusters");
     r.step(
         "group-list-json",
