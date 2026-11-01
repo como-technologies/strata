@@ -6,7 +6,7 @@ name: strata retire gate
 # follow. Exit 1 means a cluster does,
 # and the report names each one. A cluster that strata cannot read counts as a consumer, so it also
 # exits 1. Exit 2 means strata could not answer at all. Strata deletes nothing: the delete is the
-# caller's own step, after this one.
+# step of the caller, after this one.
 # It installs the strata release with scripts/ci/install-strata.sh, which checks the signature of
 # SHA256SUMS and the binary. Other CI systems run `strata consumers` directly, which is all this
 # workflow does after the install.
@@ -31,7 +31,7 @@ on:
         type: string
     secrets:
       strata-token:
-        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The token of the caller cannot read another private repository.
         required: false
       palette-api-key:
         description: PALETTE_API_KEY, which consumers needs to read the clusters

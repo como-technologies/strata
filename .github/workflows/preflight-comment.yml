@@ -16,7 +16,7 @@ on:
         type: string
     secrets:
       strata-token:
-        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The token of the caller cannot read another private repository.
         required: false
 
 permissions:
@@ -43,7 +43,7 @@ jobs:
           path: preflight
       - name: comment on the pull request
         env:
-          # the caller's token: it owns the pull request being commented on
+          # the token of the caller: it can write a comment on the pull request
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}

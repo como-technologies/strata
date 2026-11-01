@@ -8,7 +8,8 @@
 #   2  a change: the next version as a candidate on a branch, Palette asked if it accepts the
 #      packs of the candidate, the comment of the pull request, and the merge gate
 #   3  the publish: the published next version is the candidate that the reviewer read, and
-#      Palette is asked if the move of cluster A to it repaves, and if it accepts the packs
+#      Palette is asked if the move of cluster A to it repaves, and if it accepts the packs.
+#      pr-comment.sh --repave puts the answer in the comment of the pull request of the move
 #   4  before a build: strata preflight runs the static tier and the tier of Palette on the body
 #      of a create on the release. The comment of the pull request holds the static report. The
 #      stage creates nothing

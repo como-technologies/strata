@@ -66,8 +66,9 @@ the watch is the step that says `Running`.
 
 `.github/workflows/preflight.yml` is a reusable workflow. The caller gives the
 source, the cloud, the tiers, the records, and the release of strata. The job
-installs the two binaries and runs `scripts/ci/preflight.sh`. It writes the
-markdown to the job summary, and keeps the directory of `--out` as an artifact.
+checks the signature of `SHA256SUMS`, installs the two binaries, and runs
+`scripts/ci/preflight.sh`. It writes the markdown to the job summary, and keeps
+the directory of `--out` as an artifact.
 The script builds the options of `strata preflight`, and its exit status is the
 status of strata.
 
@@ -81,10 +82,10 @@ status of strata.
 | `out` | The directory for `report.md` and the other files. Default `preflight`. The artifact `preflight` holds it. |
 | `palette-api`, `strata-version` | A self-hosted Palette, and the release of strata. |
 | secrets `palette-api-key`, `palette-project-uid` | For the palette tier and for `cluster:UID`. Without a key the job runs the static tier alone. |
-| secret `strata-token` | Reads this repository while it is private. |
+| secret `strata-token` | Reads this repository while it is private. The access setting of this repository must also allow the caller: see [While this repository is private](./pr-comments.md#while-this-repository-is-private). |
 
 The workflow sets `--format markdown`. It sets `--quiet` too, except when
-`verbose` is `true`: `--quiet` wins over `--verbose`. The options `--rules`,
+`verbose` is `true`: `--quiet` has priority over `--verbose`. The options `--rules`,
 `--promotion`, `--ledger`, and `--schema` run no check of a cluster, so the
 workflow has no input for them.
 
@@ -133,7 +134,7 @@ on the default branch, posts nothing.
 | Input or secret | Meaning |
 | --- | --- |
 | `strata-version` | The release of strata. Give the tag that the first job uses. |
-| secret `strata-token` | Reads this repository while it is private. |
+| secret `strata-token` | Reads this repository while it is private. The access setting of this repository must also allow the caller: see [While this repository is private](./pr-comments.md#while-this-repository-is-private). |
 
 The workflow runs `scripts/ci/pr-comment.sh --preflight preflight/report.md`. A
 pipeline on another host runs the same command: see
@@ -154,8 +155,8 @@ The job `strata-preflight` reads one variable for each input, with the prefix
 `STRATA_PREFLIGHT_`. [GitLab CI](./gitlab.md#the-variables) lists them and gives
 the default of each one.
 
-The job runs the static tier with `--offline`, also when `PALETTE_API_KEY` is
-set for the other jobs. For the live tier, or for the watch, set
+The job runs the static tier with `--offline`, also when the other jobs have
+`PALETTE_API_KEY`. For the live tier, or for the watch, set
 `STRATA_PREFLIGHT_TIER` to an empty value. The job then reads Palette when the
 key is set.
 

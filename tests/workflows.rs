@@ -219,6 +219,22 @@ fn no_workflow_copies_the_download_or_the_signature_check_of_a_release() {
     }
 }
 
+/// `sha256sum` reads a name that starts with a dash as an option, and the shell check SC2035 asks
+/// for `./*.sh` in place of `*.sh`. Each name that the release writes is safe today, so this keeps
+/// the check clean. The sums then name a script as `./name`: the installer test of that form is
+/// `install_strata_checks_the_sums_that_name_a_script_with_a_leading_dot_and_slash`.
+#[test]
+fn the_release_writes_the_sums_of_the_scripts_with_a_glob_that_starts_with_dot_and_slash() {
+    let doc = workflow("release.yml");
+    let run = steps(&doc)
+        .filter_map(|step| step["run"].as_str())
+        .find(|run| run.contains("> SHA256SUMS"))
+        .expect("a step writes SHA256SUMS");
+    let line = run.lines().find(|l| l.contains("> SHA256SUMS")).unwrap();
+    assert!(line.contains(" ./*.sh"), "{line}");
+    assert!(!line.contains(" *.sh"), "{line}");
+}
+
 /// The last job of the release workflow installs the tag that it published, as a consumer does.
 /// It fails when the signature of `SHA256SUMS` does not verify, and when `cosign` is not there.
 #[test]
