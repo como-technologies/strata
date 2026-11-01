@@ -30,25 +30,41 @@ build-target target:
       *) cargo build --release --target "{{target}}" -p strata -p strata-preflight ;;
     esac
 
-# Run the tests of strata, of strata-preflight, and of xtask, the stand-in for Palette. No network.
+# Run the tests of strata, strata-preflight, xtask (the stand-in for Palette), and strata-benches (the input of the benchmarks). No network.
 test: stand-in
     cargo test
     cargo test -p strata-preflight
     cargo test -p xtask
+    cargo test -p strata-benches
+
+# The benchmarks are the package strata-benches in benches/. They are not tests. `just test` does
+# not run them, and no recipe fails on a time. See "The benchmarks" in
+# docs/src/development/build-test.md.
+
+# Run the benchmarks and print the time of each. Arguments go to criterion, for example: just bench --save-baseline before
+bench *args:
+    cargo bench -p strata-benches -- {{args}}
+
+# The measure time of this recipe is short, so a run takes minutes. CI runs it. It fails when a
+# benchmark does not build or panics, and never on a time.
+
+# Run each benchmark with a short measure time, as the benchmarks job of CI does
+bench-short:
+    cargo bench -p strata-benches -- --warm-up-time 1 --measurement-time 3
 
 # The rustdoc command of `just lint` and `just api-docs`. The two recipes share one command, so
-# that they share one build. `just lint` adds the package xtask, and runs the command a second
-# time with all items. The build of the public items does not read the comment of a private item.
-# The build of all items does not warn when a public item links to a private item. So `just lint`
-# needs both.
+# that they share one build. `just lint` adds the packages xtask and strata-benches, and runs the
+# command a second time with all items. The build of the public items does not read the comment of
+# a private item. The build of all items does not warn when a public item links to a private item.
+# So `just lint` needs both.
 rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight'
 
 # Test the format, the clippy lints, and the rustdoc of the public items and of all items
 lint:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
-    {{rustdoc}} -p xtask
-    {{rustdoc}} -p xtask --document-private-items
+    {{rustdoc}} -p xtask -p strata-benches
+    {{rustdoc}} -p xtask -p strata-benches --document-private-items
 
 # Build and run examples/library and examples/library-preflight, crates that use strata and strata-preflight as libraries
 library-example:

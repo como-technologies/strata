@@ -52,6 +52,18 @@ jobs:
       # question only, which is whether the oldest compiler the crate claims still compiles it.
       - run: cargo check --workspace --all-targets
 
+  bench:
+    name: benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: extractions/setup-just@v4
+      # A benchmark that does not build or that panics fails the job. No step fails on a time: the
+      # runner is a shared machine, so a time is a number to read in the log and not a limit.
+      - run: just bench-short
+
   docs:
     name: docs
     runs-on: ubuntu-latest

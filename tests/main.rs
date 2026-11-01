@@ -6,6 +6,7 @@
 
 mod common;
 
+mod benches;
 mod ci_scripts;
 mod cli;
 mod closed_set;
