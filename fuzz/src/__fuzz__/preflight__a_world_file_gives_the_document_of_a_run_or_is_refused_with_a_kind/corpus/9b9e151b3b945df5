@@ -1,0 +1,28 @@
+{
+  "_base": "clean.json",
+  "_note": "the system pool is Windows and carries a taint",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "managedPoolConfig": {
+              "osSku": "Windows2022",
+              "osType": "Windows"
+            },
+            "poolConfig": {
+              "name": "system-pool",
+              "taints": [
+                {
+                  "key": "dedicated",
+                  "value": "system",
+                  "effect": "NoSchedule"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

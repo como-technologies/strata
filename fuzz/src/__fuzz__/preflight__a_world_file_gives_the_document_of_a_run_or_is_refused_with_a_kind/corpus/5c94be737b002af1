@@ -1,0 +1,15 @@
+{
+  "_base": "clean.json",
+  "_patch": {
+    "_responses": {
+      "POST /v1/clouds/aws/account/validate": {
+        "ok": false,
+        "status": 400,
+        "body": {
+          "code": "AwsAccountValidationFailed",
+          "message": "AccessDenied: User is not authorized to perform: sts:AssumeRole"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "_base": "watch-running.json",
+  "_note": "a watch reading of a cluster Running for 15 minutes whose agent never reported: health Unknown",
+  "_patch": {
+    "summary": {
+      "status": {
+        "health": {
+          "state": "Unknown"
+        }
+      }
+    },
+    "elapsed": 900
+  }
+}

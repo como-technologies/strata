@@ -63,6 +63,14 @@ calls it. It gives the text that each hash covers. A change to that text moves
 the hashes, so a program must not compare it between releases. Read the hashes
 of a record instead.
 
+After 0.25.0, `json::set_at` is public. It puts a value at the object keys of a
+document, and it never panics. `strata-preflight` calls it.
+
+After 0.25.0, `Ref::parse` reads `cluster:<uid>@pending/` as the ref of
+`cluster:<uid>@pending`. It read the uid `<uid>@pending`, and that ref printed as
+the text of another ref. `Ref::parse` reads `tag:+` and any tag text with no label
+as a uid, as it reads `tag:`. It read a set of clusters with no label.
+
 After 0.25.0, the library of `strata-preflight` changes in these ways:
 
 - `rule::release_in_range` orders a release that names three numbers with
@@ -89,6 +97,15 @@ After 0.25.0, the library of `strata-preflight` changes in these ways:
   `path`, `body`, `each`, and `expr`. `Check::Palette { .. }` becomes
   `Check::Palette(PaletteCheck { .. })` in a literal and in a pattern. The YAML
   of a rule and `preflight --schema rules` do not change.
+- `world::World::to_value` gives a `Result<Value>` in place of a `Value`. It gives
+  `Error::Input` when the world has a `clusterUid`, and its `entity` or the
+  `metadata` of its `entity` is neither an object nor `null`. Before, it
+  panicked. `run::run`
+  and `run::watch` give the same error.
+- `fixture::load` gives `Error::Input` for a fixture, a base, or a `_patch` that
+  is not a JSON object. It gives the same error for a world with a `clusterUid`
+  and a `metadata` that is neither an object nor `null`. Before, each case
+  panicked.
 
 ## The documents
 

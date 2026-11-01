@@ -1,0 +1,13 @@
+{
+  "_base": "image-shared-clean.json",
+  "_note": "Spectro Cloud does not share the image with the project: gcloud gets a 403",
+  "_patch": {
+    "_exec": {
+      "gcloud compute images describe u-2404-0-k-1324-0 --project spectro-image-build --format json": {
+        "exit": 1,
+        "stdout": "",
+        "stderr": "ERROR: (gcloud.compute.images.describe) Could not fetch resource:\n - Required 'compute.images.useReadOnly' permission for 'projects/spectro-image-build/global/images/u-2404-0-k-1324-0'\n"
+      }
+    }
+  }
+}

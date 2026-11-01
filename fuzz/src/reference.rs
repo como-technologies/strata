@@ -15,12 +15,14 @@ fn ref_of(text: &str) -> bool {
         !said.is_empty() || text.is_empty(),
         "{text:?} printed as nothing"
     );
-    // The text of a ref parses as a ref that prints the same text. So a ref in a record, a message,
-    // or a script names the same thing each time that a person or strata reads it.
-    let again = Ref::parse_with(&said, |_| false).to_string();
+    // The text of a ref parses as the same ref. So a ref in a record, a message, or a script names
+    // the same thing each time that a person or strata reads it. A check of the printed text alone
+    // is not enough: `cluster:c1@pending/` is the uid `c1@pending`, which prints as the text of the
+    // update that waits for `c1`.
+    let again = Ref::parse_with(&said, |_| false);
     assert_eq!(
-        again, said,
-        "{text:?} printed as {said:?}, which parses as a ref that prints {again:?}"
+        again, r,
+        "{text:?} is {r:?}, and it printed as {said:?}, which parses as another ref"
     );
     !matches!(r, Ref::Uid(_))
 }

@@ -1,0 +1,368 @@
+{
+  "cloud": "vsphere",
+  "release": "4.10",
+  "source": "fixtures/vsphere/clean.json",
+  "entity": {
+    "metadata": {
+      "name": "fred",
+      "labels": {}
+    },
+    "spec": {
+      "cloudAccountUid": "acc-vsphere-1",
+      "cloudConfig": {
+        "placement": {
+          "uid": "pl-1",
+          "datacenter": "Datacenter",
+          "cluster": "Cluster01",
+          "datastore": "vsanDatastore",
+          "resourcePool": "Resources",
+          "folder": "spectro/strata-lab",
+          "imageTemplateFolder": "spectro-templates",
+          "network": {
+            "networkName": "VM Network",
+            "parentPoolUid": "pool-1",
+            "staticIp": true
+          }
+        },
+        "controlPlaneEndpoint": {
+          "host": "10.10.140.50",
+          "type": "VIP"
+        },
+        "ntpServers": [
+          "10.10.140.1"
+        ],
+        "sshKeys": [
+          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJstrata00000000000000000000000000000000001 ops@lab"
+        ],
+        "staticIp": true
+      },
+      "machinepoolconfig": [
+        {
+          "cloudConfig": {
+            "instanceType": {
+              "numCPUs": 4,
+              "memoryMiB": 8192,
+              "diskGiB": 60
+            },
+            "placements": [
+              {
+                "uid": "pl-1",
+                "datacenter": "Datacenter",
+                "cluster": "Cluster01",
+                "datastore": "vsanDatastore",
+                "resourcePool": "Resources",
+                "folder": "spectro/strata-lab",
+                "imageTemplateFolder": "spectro-templates",
+                "network": {
+                  "networkName": "VM Network",
+                  "parentPoolUid": "pool-1",
+                  "staticIp": true
+                }
+              }
+            ]
+          },
+          "poolConfig": {
+            "name": "cp-pool",
+            "size": 1,
+            "isControlPlane": true,
+            "useControlPlaneAsWorker": false
+          }
+        },
+        {
+          "cloudConfig": {
+            "instanceType": {
+              "numCPUs": 4,
+              "memoryMiB": 8192,
+              "diskGiB": 60
+            },
+            "placements": [
+              {
+                "uid": "pl-1",
+                "datacenter": "Datacenter",
+                "cluster": "Cluster01",
+                "datastore": "vsanDatastore",
+                "resourcePool": "Resources",
+                "folder": "spectro/strata-lab",
+                "imageTemplateFolder": "spectro-templates",
+                "network": {
+                  "networkName": "VM Network",
+                  "parentPoolUid": "pool-1",
+                  "staticIp": true
+                }
+              }
+            ]
+          },
+          "poolConfig": {
+            "name": "worker-pool",
+            "size": 2,
+            "isControlPlane": false,
+            "useControlPlaneAsWorker": false
+          }
+        }
+      ],
+      "profiles": [
+        {
+          "uid": "prof-vsphere-1",
+          "packValues": [
+            {
+              "name": "ubuntu-vsphere",
+              "tag": "22.04",
+              "type": "spectro"
+            },
+            {
+              "name": "kubernetes",
+              "tag": "1.32.3",
+              "type": "spectro"
+            },
+            {
+              "name": "cni-calico",
+              "tag": "3.29.3",
+              "type": "spectro"
+            },
+            {
+              "name": "csi-vsphere-csi",
+              "tag": "3.3.1",
+              "type": "spectro"
+            }
+          ],
+          "variables": []
+        }
+      ],
+      "clusterConfig": {
+        "timezone": "Etc/UTC"
+      }
+    }
+  },
+  "before": null,
+  "profiles": [
+    {
+      "schema": "strata-snapshot/1",
+      "source": {
+        "uid": "prof-vsphere-1",
+        "name": "vsphere-stack",
+        "version": "1.0.0",
+        "cloudType": "vsphere",
+        "type": "cluster"
+      },
+      "packs": [
+        {
+          "key": "os/ubuntu-vsphere",
+          "layer": "os",
+          "name": "ubuntu-vsphere",
+          "version": "22.04",
+          "tag": "22.04",
+          "packUid": "pk-os-vsphere",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "k8s/kubernetes",
+          "layer": "k8s",
+          "name": "kubernetes",
+          "version": "1.32.3",
+          "tag": "1.32.3",
+          "packUid": "pk-k8s-vsphere",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "cni/cni-calico",
+          "layer": "cni",
+          "name": "cni-calico",
+          "version": "3.29.3",
+          "tag": "3.29.3",
+          "packUid": "pk-cni-vsphere",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "csi/csi-vsphere-csi",
+          "layer": "csi",
+          "name": "csi-vsphere-csi",
+          "version": "3.3.1",
+          "tag": "3.3.1",
+          "packUid": "pk-csi-vsphere",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        }
+      ]
+    }
+  ],
+  "packs": {
+    "pk-os-vsphere": {
+      "name": "ubuntu-vsphere",
+      "layer": "os",
+      "cloudTypes": [
+        "vsphere"
+      ]
+    },
+    "pk-k8s-vsphere": {
+      "name": "kubernetes",
+      "layer": "k8s",
+      "cloudTypes": [
+        "vsphere"
+      ]
+    },
+    "pk-cni-vsphere": {
+      "name": "cni-calico",
+      "layer": "cni",
+      "cloudTypes": [
+        "vsphere"
+      ]
+    },
+    "pk-csi-vsphere": {
+      "name": "csi-vsphere-csi",
+      "layer": "csi",
+      "cloudTypes": [
+        "vsphere"
+      ]
+    }
+  },
+  "account": {
+    "metadata": {
+      "name": "como-vsphere",
+      "uid": "acc-vsphere-1",
+      "annotations": {
+        "overlordUid": "ol-vsphere-1"
+      },
+      "creationTimestamp": "2026-09-01T10:00:00.000Z"
+    },
+    "spec": {
+      "vcenterServer": "vcenter.lab.example.com",
+      "username": "palette@vsphere.local",
+      "password": "<redacted>",
+      "insecure": true
+    },
+    "status": {
+      "state": ""
+    }
+  },
+  "clusterUid": null,
+  "_responses": {
+    "POST /v1/spectroclusters/vsphere/validate": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "machinePools": {
+          "results": []
+        },
+        "profiles": []
+      }
+    },
+    "GET /v1/cloudaccounts/vsphere/acc-vsphere-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "como-vsphere",
+          "uid": "acc-vsphere-1"
+        },
+        "kind": "vsphere"
+      }
+    },
+    "GET /v1/overlords/ol-vsphere-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "lab-pcg",
+          "uid": "ol-vsphere-1"
+        },
+        "spec": {
+          "isSystem": false,
+          "isSelfHosted": false,
+          "cloudAccountUid": "acc-vsphere-1",
+          "ipPools": []
+        },
+        "status": {
+          "state": "Running",
+          "isActive": true,
+          "isReady": true,
+          "health": {
+            "state": "Healthy"
+          }
+        }
+      }
+    },
+    "GET /v1/cloudaccounts/vsphere/acc-vsphere-1/properties/datacenters": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "items": [
+          {
+            "datacenter": "Datacenter",
+            "computeclusters": [
+              "Cluster01",
+              "Cluster02"
+            ],
+            "folders": [
+              "spectro-templates",
+              "spectro",
+              "spectro/strata-lab",
+              "Discovered virtual machine"
+            ]
+          }
+        ]
+      }
+    },
+    "GET /v1/cloudaccounts/vsphere/acc-vsphere-1/properties/computecluster/resources?datacenter=Datacenter&computecluster=Cluster01": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "datacenter": "Datacenter",
+        "computecluster": {
+          "name": "Cluster01",
+          "datastores": [
+            "vsanDatastore",
+            "nfs-01"
+          ],
+          "networks": [
+            "VM Network",
+            "pg-storage"
+          ],
+          "resourcePools": [
+            "Resources",
+            "Resources/dev"
+          ]
+        }
+      }
+    },
+    "GET /v1/overlords/vsphere/ol-vsphere-1/pools": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "items": [
+          {
+            "metadata": {
+              "name": "lab-pool",
+              "uid": "pool-1"
+            },
+            "spec": {
+              "pool": {
+                "start": "10.10.140.100",
+                "end": "10.10.140.119",
+                "prefix": 24,
+                "gateway": "10.10.140.1",
+                "subnet": "",
+                "nameserver": {
+                  "addresses": [
+                    "10.10.140.1"
+                  ],
+                  "search": []
+                }
+              },
+              "priavetGatewayUid": "ol-vsphere-1",
+              "restrictToSingleCluster": false
+            },
+            "status": {
+              "allottedIps": [],
+              "associatedClusters": [],
+              "inUse": false,
+              "availableIps": []
+            }
+          }
+        ]
+      }
+    }
+  }
+}

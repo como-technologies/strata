@@ -1,0 +1,16 @@
+{
+  "_base": "clean.json",
+  "_note": "no datacenter and no image template folder",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "cloudConfig": {
+          "placement": {
+            "datacenter": "",
+            "imageTemplateFolder": ""
+          }
+        }
+      }
+    }
+  }
+}

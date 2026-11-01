@@ -1,12 +1,14 @@
-//! The targets of strata-preflight: the rule format, and the jq engine.
+//! The targets of strata-preflight: the rule format, the jq engine, and the world.
 
 use std::path::Path;
 
 use serde_json::Value;
+use strata_preflight::fixture;
 use strata_preflight::jq::Jq;
 use strata_preflight::rule::Catalog;
+use strata_preflight::world::World;
 
-use crate::support::{answer, parts, utf8};
+use crate::support::{answer, parts, scratch, utf8, write};
 
 /// Read the text of `bytes` as a rule file. Return true when the file is a section of rules.
 ///
@@ -72,5 +74,80 @@ pub(crate) fn jq_program(bytes: &[u8]) -> bool {
 fn a_jq_program_compiles_and_runs_or_is_refused_with_a_kind() {
     bolero::check!().for_each(|bytes| {
         jq_program(bytes);
+    });
+}
+
+/// The cluster that a world of an existing cluster names.
+const CLUSTER_UID: &str = "64f1000000000000000000e1";
+
+/// The base that a fixture of an input names with `"_base": "clean.json"`: a small world, so that
+/// the fixtures of the catalog reach the merge.
+const BASE: &str = r#"{"cloud": "eks", "entity": {"metadata": {"name": "base"},
+    "spec": {"machinepoolconfig": [{"poolConfig": {"name": "worker-pool", "size": 2}}]}}}"#;
+
+/// True when `value` has a place for a key: an object, or `null`, which a write makes an object.
+fn holds_keys(value: &Value) -> bool {
+    value.is_null() || value.is_object()
+}
+
+/// The document of a run for `world`, for a new cluster and then for the existing cluster
+/// [`CLUSTER_UID`].
+///
+/// A new cluster sends its entity to the validate route as it is. An existing cluster sends it with
+/// a name of its own, and its world is an error when the entity, or its `metadata`, is a value that
+/// is not an object: the name has no place there, and it must not replace the value.
+fn run_documents(mut world: World) {
+    let new = answer(world.to_value()).expect("a world with no cluster gives its document");
+    assert_eq!(
+        new["validateBody"], new["entity"],
+        "a new cluster sends its entity as it is"
+    );
+    let entity = new["entity"].clone();
+    world.cluster_uid = Some(CLUSTER_UID.to_string());
+    let existing = answer(world.to_value());
+    assert_eq!(
+        existing.is_some(),
+        holds_keys(&entity) && holds_keys(&entity["metadata"]),
+        "an existing cluster has a document exactly when its entity and its metadata hold keys: {entity}"
+    );
+    if let Some(document) = existing {
+        let name = document["validateBody"]["metadata"]["name"]
+            .as_str()
+            .expect("the name of the validate body is text");
+        assert!(name.ends_with("-preflight"), "{name:?}");
+    }
+}
+
+/// Read the text of `bytes` as a world on disk, as the fixture of a test, and as the body of a
+/// create. Return true when the text is either one.
+///
+/// A world on disk gets the fields that the engine decides, and the body of a create is the world
+/// of a run. Both give an error with a kind for a text that is no world. The world of a body gives
+/// its document for a new cluster and for an existing cluster: see `run_documents`.
+pub(crate) fn world_file(bytes: &[u8]) -> bool {
+    let dir = scratch();
+    write(&dir, "clean.json", BASE.as_bytes());
+    write(&dir, "world.json", bytes);
+    let path = dir.join("world.json");
+    let fixture = answer(fixture::load(&path));
+    if let Some(document) = &fixture {
+        assert!(
+            document.get("validateBody").is_some(),
+            "a fixture that loaded has the derived fields: {document}"
+        );
+    }
+    let worlds = [Some("eks"), None]
+        .into_iter()
+        .filter_map(|cloud| answer(World::from_file(&path, cloud)))
+        .collect::<Vec<_>>();
+    let read = !worlds.is_empty();
+    worlds.into_iter().for_each(run_documents);
+    fixture.is_some() || read
+}
+
+#[test]
+fn a_world_file_gives_the_document_of_a_run_or_is_refused_with_a_kind() {
+    bolero::check!().for_each(|bytes| {
+        world_file(bytes);
     });
 }

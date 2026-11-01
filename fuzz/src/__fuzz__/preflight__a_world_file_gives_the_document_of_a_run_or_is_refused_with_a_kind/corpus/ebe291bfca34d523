@@ -1,0 +1,17 @@
+{
+  "_base": "clean.json",
+  "_note": "an arm64 host in an amd64 pool",
+  "_patch": {
+    "_responses": {
+      "GET /v1/edgehosts/edge-host-cp-1": {
+        "body": {
+          "spec": {
+            "device": {
+              "archType": "arm64"
+            }
+          }
+        }
+      }
+    }
+  }
+}

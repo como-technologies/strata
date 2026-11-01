@@ -1,0 +1,376 @@
+{
+  "cloud": "edge",
+  "release": "4.10",
+  "source": "fixtures/edge/clean.json",
+  "entity": {
+    "metadata": {
+      "name": "fred",
+      "labels": {}
+    },
+    "spec": {
+      "cloudConfig": {
+        "controlPlaneEndpoint": {
+          "host": "10.10.100.20",
+          "type": "VIP"
+        },
+        "isTwoNodeCluster": false,
+        "ntpServers": [
+          "10.10.100.1"
+        ],
+        "overlayNetworkConfiguration": {
+          "enable": false,
+          "cidr": ""
+        },
+        "sshKeys": [
+          "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJstrata00000000000000000000000000000000001 ops@lab"
+        ],
+        "staticIp": false
+      },
+      "machinepoolconfig": [
+        {
+          "cloudConfig": {
+            "edgeHosts": [
+              {
+                "hostUid": "edge-host-cp-1",
+                "hostName": "cp-1"
+              }
+            ]
+          },
+          "poolConfig": {
+            "name": "control-plane-pool",
+            "size": 1,
+            "isControlPlane": true,
+            "useControlPlaneAsWorker": false,
+            "labels": [
+              "control-plane"
+            ],
+            "machinePoolProperties": {
+              "archType": "amd64"
+            }
+          }
+        },
+        {
+          "cloudConfig": {
+            "edgeHosts": [
+              {
+                "hostUid": "edge-host-w-1",
+                "hostName": "w-1"
+              },
+              {
+                "hostUid": "edge-host-w-2",
+                "hostName": "w-2"
+              }
+            ]
+          },
+          "poolConfig": {
+            "name": "worker-pool",
+            "size": 2,
+            "isControlPlane": false,
+            "useControlPlaneAsWorker": false,
+            "labels": [
+              "worker"
+            ],
+            "machinePoolProperties": {
+              "archType": "amd64"
+            }
+          }
+        }
+      ],
+      "profiles": [
+        {
+          "uid": "prof-edge-1",
+          "packValues": [
+            {
+              "name": "edge-native-byoi",
+              "tag": "1.0.0",
+              "type": "spectro"
+            },
+            {
+              "name": "edge-k8s",
+              "tag": "1.32.4",
+              "type": "spectro"
+            },
+            {
+              "name": "cni-calico",
+              "tag": "3.29.3",
+              "type": "spectro"
+            },
+            {
+              "name": "csi-rook-ceph",
+              "tag": "1.16.0",
+              "type": "spectro"
+            }
+          ],
+          "variables": []
+        }
+      ],
+      "clusterConfig": {
+        "timezone": "Etc/UTC"
+      }
+    }
+  },
+  "before": null,
+  "profiles": [
+    {
+      "schema": "strata-snapshot/1",
+      "source": {
+        "uid": "prof-edge-1",
+        "name": "edge-stack",
+        "version": "1.0.0",
+        "cloudType": "edge-native",
+        "type": "cluster"
+      },
+      "packs": [
+        {
+          "key": "os/edge-native-byoi",
+          "layer": "os",
+          "name": "edge-native-byoi",
+          "version": "1.0.0",
+          "tag": "1.0.0",
+          "packUid": "pk-os-edge",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "k8s/edge-k8s",
+          "layer": "k8s",
+          "name": "edge-k8s",
+          "version": "1.32.4",
+          "tag": "1.32.4",
+          "packUid": "pk-k8s-edge",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "cni/cni-calico",
+          "layer": "cni",
+          "name": "cni-calico",
+          "version": "3.29.3",
+          "tag": "3.29.3",
+          "packUid": "pk-cni-edge",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        },
+        {
+          "key": "csi/csi-rook-ceph",
+          "layer": "csi",
+          "name": "csi-rook-ceph",
+          "version": "1.16.0",
+          "tag": "1.16.0",
+          "packUid": "pk-csi-edge",
+          "registryUid": "5eecc89d0b150045ae661cef",
+          "valuesCanon": null
+        }
+      ]
+    }
+  ],
+  "packs": {
+    "pk-os-edge": {
+      "name": "edge-native-byoi",
+      "layer": "os",
+      "cloudTypes": [
+        "edge-native"
+      ]
+    },
+    "pk-k8s-edge": {
+      "name": "edge-k8s",
+      "layer": "k8s",
+      "cloudTypes": [
+        "edge-native"
+      ]
+    },
+    "pk-cni-edge": {
+      "name": "cni-calico",
+      "layer": "cni",
+      "cloudTypes": [
+        "edge-native"
+      ]
+    },
+    "pk-csi-edge": {
+      "name": "csi-rook-ceph",
+      "layer": "csi",
+      "cloudTypes": [
+        "edge-native"
+      ]
+    }
+  },
+  "account": null,
+  "clusterUid": null,
+  "_responses": {
+    "POST /v1/spectroclusters/edge-native/validate": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "machinePools": {
+          "results": []
+        },
+        "profiles": []
+      }
+    },
+    "GET /v1/edgehosts/edge-host-cp-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "cp-1",
+          "uid": "edge-host-cp-1"
+        },
+        "spec": {
+          "type": "edge-native",
+          "version": "4.10.4",
+          "device": {
+            "archType": "amd64",
+            "cpu": {
+              "cores": 8
+            },
+            "memory": {
+              "sizeInMB": 32768
+            },
+            "disks": [
+              {
+                "controller": "",
+                "size": 240,
+                "vendor": ""
+              }
+            ],
+            "nics": [
+              {
+                "nicName": "eno1",
+                "ip": "10.10.100.11",
+                "isDefault": true,
+                "macAddr": "52:54:00:aa:bb:01"
+              }
+            ],
+            "os": {
+              "family": "ubuntu",
+              "version": "22.04"
+            }
+          },
+          "host": {
+            "hostAddress": "10.10.100.11",
+            "hostUid": "edge-host-cp-1"
+          }
+        },
+        "status": {
+          "state": "ready",
+          "health": {
+            "state": "healthy",
+            "agentVersion": "4.10.4",
+            "message": ""
+          },
+          "inUseClusters": []
+        }
+      }
+    },
+    "GET /v1/edgehosts/edge-host-w-1": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "w-1",
+          "uid": "edge-host-w-1"
+        },
+        "spec": {
+          "type": "edge-native",
+          "version": "4.10.4",
+          "device": {
+            "archType": "amd64",
+            "cpu": {
+              "cores": 8
+            },
+            "memory": {
+              "sizeInMB": 32768
+            },
+            "disks": [
+              {
+                "controller": "",
+                "size": 240,
+                "vendor": ""
+              }
+            ],
+            "nics": [
+              {
+                "nicName": "eno1",
+                "ip": "10.10.100.21",
+                "isDefault": true,
+                "macAddr": "52:54:00:aa:bb:11"
+              }
+            ],
+            "os": {
+              "family": "ubuntu",
+              "version": "22.04"
+            }
+          },
+          "host": {
+            "hostAddress": "10.10.100.21",
+            "hostUid": "edge-host-w-1"
+          }
+        },
+        "status": {
+          "state": "ready",
+          "health": {
+            "state": "healthy",
+            "agentVersion": "4.10.4",
+            "message": ""
+          },
+          "inUseClusters": []
+        }
+      }
+    },
+    "GET /v1/edgehosts/edge-host-w-2": {
+      "ok": true,
+      "status": 200,
+      "body": {
+        "metadata": {
+          "name": "w-2",
+          "uid": "edge-host-w-2"
+        },
+        "spec": {
+          "type": "edge-native",
+          "version": "4.10.4",
+          "device": {
+            "archType": "amd64",
+            "cpu": {
+              "cores": 8
+            },
+            "memory": {
+              "sizeInMB": 32768
+            },
+            "disks": [
+              {
+                "controller": "",
+                "size": 240,
+                "vendor": ""
+              }
+            ],
+            "nics": [
+              {
+                "nicName": "eno1",
+                "ip": "10.10.100.22",
+                "isDefault": true,
+                "macAddr": "52:54:00:aa:bb:12"
+              }
+            ],
+            "os": {
+              "family": "ubuntu",
+              "version": "22.04"
+            }
+          },
+          "host": {
+            "hostAddress": "10.10.100.22",
+            "hostUid": "edge-host-w-2"
+          }
+        },
+        "status": {
+          "state": "ready",
+          "health": {
+            "state": "healthy",
+            "agentVersion": "4.10.4",
+            "message": ""
+          },
+          "inUseClusters": []
+        }
+      }
+    }
+  }
+}

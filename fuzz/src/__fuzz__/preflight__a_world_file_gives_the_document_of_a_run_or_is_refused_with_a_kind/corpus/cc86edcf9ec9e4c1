@@ -1,0 +1,1 @@
+{"cloudType": "eks", "entity": {"metadata": {"name": "demo"}, "spec": {"cloudConfig": {"region": "us-east-1"}}}}

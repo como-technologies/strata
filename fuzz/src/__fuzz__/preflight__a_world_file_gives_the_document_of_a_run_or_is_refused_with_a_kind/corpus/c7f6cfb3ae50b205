@@ -1,0 +1,13 @@
+{
+  "_base": "hrg-clean.json",
+  "_note": "the hosts of the group have no free slot for the instance type",
+  "_patch": {
+    "_responses": {
+      "POST /v1/clouds/aws/regions/us-east-2/resourceGroups/validateCapacity?hrgArn=arn:aws:resource-groups:us-east-2:123456789012:group/strata-hosts": {
+        "ok": true,
+        "status": 200,
+        "body": { "isValid": false, "availableCapacity": 0, "requiredCapacity": 2, "message": "Insufficient capacity. Available: 0, Required: 2" }
+      }
+    }
+  }
+}

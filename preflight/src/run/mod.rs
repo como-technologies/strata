@@ -187,10 +187,12 @@ pub struct RunInputs<'a> {
 ///
 /// # Errors
 ///
-/// None at present: a check that fails or cannot run is a result in the report, and not an error.
+/// [`Error::Input`] when the world has a `clusterUid`, and its `entity` or the `metadata` of its
+/// `entity` is neither an object nor `null`: see [`World::to_value`]. A check that fails or cannot
+/// run is a result in the report, and not an error.
 pub fn run(inputs: RunInputs<'_>) -> Result<Report> {
     let jq = Jq::new();
-    let world_value = inputs.world.to_value();
+    let world_value = inputs.world.to_value()?;
     let rules = applicable(
         inputs.catalog,
         inputs.world,

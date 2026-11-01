@@ -1,0 +1,15 @@
+{
+  "_base": "clean.json",
+  "_patch": {
+    "_responses": {
+      "GET /v1/cloudaccounts/aws/acc-eks-1": {
+        "ok": false,
+        "status": 404,
+        "body": {
+          "code": "ResourceNotFound",
+          "message": "cloud account not found"
+        }
+      }
+    }
+  }
+}

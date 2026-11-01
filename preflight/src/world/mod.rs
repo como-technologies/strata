@@ -35,7 +35,7 @@ use strata::api::{Palette, PaletteApi, RawCluster, profile_variables};
 use strata::closed_set::ClosedSet;
 use strata::cloud::{CLOUD_EDGE_NATIVE, Cloud};
 use strata::json::{
-    arr, opt_str, opt_text, str_at, text_map, text_or, value_at, value_or_empty_object,
+    arr, opt_str, opt_text, set_at, str_at, text_map, text_or, value_at, value_or_empty_object,
     value_or_null,
 };
 use strata::reference::Ref;
@@ -175,7 +175,13 @@ pub struct World {
 
 impl World {
     /// The document the programs read.
-    pub fn to_value(&self) -> Value {
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Input`] when the world has a `clusterUid`, and its `entity` or the `metadata` of
+    /// its `entity` is neither an object nor `null`. The body of the validate route has no place for
+    /// the name of the cluster then.
+    pub fn to_value(&self) -> Result<Value> {
         let mut world = json!({
             "cloud": self.cloud,
             "release": self.release,
@@ -187,8 +193,8 @@ impl World {
             "account": self.account,
             "clusterUid": self.cluster_uid,
         });
-        add_derived_fields(&mut world);
-        world
+        add_derived_fields(&mut world)?;
+        Ok(world)
     }
 
     /// A world from a file: the body of a create, as JSON or YAML. The cloud comes from `cloud`,
@@ -433,13 +439,19 @@ const VALIDATE_NAME_SUFFIX: &str = "-preflight";
 /// from its `cloud`, then `edgeHosts` and `validateBody` from its `entity`. [`World::to_value`]
 /// writes them, and the loader of a fixture, which is a world on disk, adds them here. A world
 /// with no `cloud` gets no field of the engine.
-pub(crate) fn add_derived_fields(world: &mut Value) {
+///
+/// # Errors
+///
+/// [`Error::Input`] when `world` has a `clusterUid`, and its `entity` or the `metadata` of its
+/// `entity` is neither an object nor `null`: see `validate_body`.
+pub(crate) fn add_derived_fields(world: &mut Value) -> Result<()> {
     if let Some(cloud) = opt_text(world, "/cloud") {
         world["accountKind"] = json!(account_kind(&cloud));
         world["routeCloud"] = json!(route_cloud(&cloud));
     }
     world["edgeHosts"] = edge_hosts(value_at(world, "/entity"));
-    world["validateBody"] = validate_body(world);
+    world["validateBody"] = validate_body(world)?;
+    Ok(())
 }
 
 /// Each edge host of each pool of `entity`, with the pool that holds it: `{pool, host}`, where
@@ -460,13 +472,33 @@ fn edge_hosts(entity: &Value) -> Value {
 /// The body that the checks send to the validate route of the cluster: the entity. A world of an
 /// existing cluster has the name of the cluster with [`VALIDATE_NAME_SUFFIX`]; nothing else
 /// changes. Each check that asks the route sends this one body, so the run sends one request.
-fn validate_body(world: &Value) -> Value {
+///
+/// A world with no `clusterUid` sends its entity as it is, and Palette answers for a body that it
+/// cannot read. A world with one must put the new name in `metadata`. When the entity or its
+/// `metadata` is a value that is not an object, it has no place for the name, and the world is an
+/// error: the name must not replace that value.
+fn validate_body(world: &Value) -> Result<Value> {
     let mut body = value_or_null(world, "/entity");
-    if !value_at(world, "/clusterUid").is_null() {
-        let name = text_or(&body, "/metadata/name", "cluster");
-        body["metadata"]["name"] = json!(format!("{name}{VALIDATE_NAME_SUFFIX}"));
+    if value_at(world, "/clusterUid").is_null() {
+        return Ok(body);
     }
-    body
+    for (field, value) in [
+        ("entity", &body),
+        ("entity.metadata", value_at(&body, "/metadata")),
+    ] {
+        if !(value.is_null() || value.is_object()) {
+            return Err(Error::Input {
+                message: format!(
+                    "{field} is not an object, and the world has a clusterUid: the validate \
+                     body cannot hold the new name of the cluster"
+                ),
+            });
+        }
+    }
+    let name = text_or(&body, "/metadata/name", "cluster");
+    let renamed = json!(format!("{name}{VALIDATE_NAME_SUFFIX}"));
+    set_at(&mut body, &["metadata", "name"], renamed);
+    Ok(body)
 }
 
 /// The engine of the cloud type `text`, which Palette or a file names: [`EDGE`] for
