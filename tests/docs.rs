@@ -273,12 +273,12 @@ fn compatibility_names_release_0_18_0_and_what_each_absent_field_of_wave_4_means
     );
 }
 
-/// The section of release 0.25.0 in the compatibility page, with each run of white space as one
-/// space.
-fn release_0_25_0(page: &str) -> String {
+/// The section of `release` in the compatibility page, such as "0.25.0", with each run of white
+/// space as one space.
+fn release_section(page: &str, release: &str) -> String {
     one_line(section(
         page,
-        "## Release 0.25.0: changes that need action",
+        &format!("## Release {release}: changes that need action"),
         Some("\n## "),
     ))
 }
@@ -339,7 +339,7 @@ fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_a
         "a reusable workflow runs cosign, and the list of the tests lacks it"
     );
 
-    let release = release_0_25_0(&read(&docs().join("reference/compatibility.md")));
+    let release = release_section(&read(&docs().join("reference/compatibility.md")), "0.25.0");
     for file in INSTALLING_WORKFLOWS {
         assert!(
             release.contains(&format!("`{file}`")),
@@ -413,7 +413,7 @@ fn the_page_names_each_document_that_carries_the_record_of_a_cluster_with_the_re
     }
 
     let page = read(&docs().join("reference/compatibility.md"));
-    let release = release_0_25_0(&page);
+    let release = release_section(&page, "0.25.0");
     let documents = one_line(section(&page, "## The documents", Some("\n## ")));
     for id in &carrying {
         assert!(
@@ -1687,16 +1687,6 @@ fn the_block_of_a_numbered_step_does_not_hold_the_next_step() {
 
 // ---- the release notes and the live results at the end of Wave 12 -------------------------------
 
-/// The section of release 0.26.0 in the compatibility page, with each run of white space as one
-/// space.
-fn release_0_26_0(page: &str) -> String {
-    one_line(section(
-        page,
-        "## Release 0.26.0: changes that need action",
-        Some("\n## "),
-    ))
-}
-
 /// The changes of Wave 12 were in paragraphs that start "After 0.25.0", and most gave no action.
 /// The section sits above the one of release 0.25.0, and the opening of the page links to all
 /// three sections.
@@ -1756,7 +1746,7 @@ fn compatibility_has_a_section_for_release_0_26_0_above_release_0_25_0_and_links
 #[test]
 fn the_section_of_release_0_26_0_gives_the_action_for_the_directory_the_root_the_gate_and_the_job()
 {
-    let release = release_0_26_0(&read(&docs().join("reference/compatibility.md")));
+    let release = release_section(&read(&docs().join("reference/compatibility.md")), "0.26.0");
     for needle in [
         // A2: who has such a directory, and what to do
         "**Save each directory of a cluster group again, and search each repository that holds one.**",
@@ -1792,7 +1782,7 @@ fn the_section_of_release_0_26_0_gives_the_action_for_the_directory_the_root_the
 /// the same characters. A change of the set must change the section too.
 #[test]
 fn the_section_of_release_0_26_0_names_the_characters_that_the_canonical_text_escapes() {
-    let release = release_0_26_0(&read(&docs().join("reference/compatibility.md")));
+    let release = release_section(&read(&docs().join("reference/compatibility.md")), "0.26.0");
     assert!(
         release.contains(
             "The characters are DEL, U+0080 to U+009F, U+2028, U+2029, U+FFFE, and U+FFFF."
