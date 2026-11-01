@@ -82,8 +82,8 @@ impl VerifyFleet {
                 "spec": {"packs": []},
             }]});
             let variables = json!([]);
-            // The record of each cluster is the record of the first one with its own name and uid:
-            // the packs are the same, and the root does not cover the cluster.
+            // Each record is the record of the first cluster with its own name and uid. The packs
+            // are the same, and the root does not cover the cluster.
             let record = base.get_or_insert_with(|| {
                 let raw = RawCluster {
                     cluster: document.clone(),

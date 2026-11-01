@@ -23,8 +23,8 @@ fn preflight(c: &mut Criterion) {
         Ledger::parse(catalog::LEDGER, Path::new("evidence/runs.yaml")).expect("the ledger");
     let world = World::from_file(&fixture, Some("aws")).expect("an entity");
     let selection = Selection::default();
-    // no Palette client and no command: a rule of another tier is not run, and the jq engine runs
-    // the `when` of each rule of the catalog and the check of each static rule
+    // There is no Palette client and no command, so a rule of another tier is not run. The jq
+    // engine runs the `when` of each rule of the catalog, and the check of each static rule.
     let backend: LiveBackend<MemoryApi> = LiveBackend::new(None, true);
     let quiet = Progress::silent();
     let run = || {

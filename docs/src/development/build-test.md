@@ -212,13 +212,13 @@ digits:
 
 | Step | Input | Time |
 | --- | --- | --- |
-| The record, with the canonical form and the root | 1 pack | 32 µs |
+| The record, with the canonical form and the root | 1 pack | 34 µs |
 | The record, with the canonical form and the root | 50 packs | 29 ms |
 | The record, with the canonical form and the root | 200 packs | 120 ms |
 | The record, with 200 manifests | 200 packs | 130 ms |
-| The comparison of two records | no change | 85 ms |
+| The comparison of two records | no change | 86 ms |
 | The comparison of two records | one pack changes | 87 ms |
-| The comparison of two records | each pack changes | 180 ms |
+| The comparison of two records | each pack changes | 170 ms |
 
 The time of a record grows with the size of the values, because strata parses and hashes each text.
 The time of a comparison grows with the number of packs that differ. A shared runner is not a

@@ -62,7 +62,7 @@ fn a_profile_has_the_packs_and_the_manifests_of_its_shape_and_each_pack_has_its_
     assert_eq!(
         keys.len(),
         12,
-        "two packs with one key would be one change in a comparison"
+        "two packs with one key are one change in a comparison"
     );
     assert_eq!(
         record.root,

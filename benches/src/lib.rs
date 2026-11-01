@@ -1,9 +1,9 @@
 //! The input of the benchmarks of strata.
 //!
-//! A benchmark needs a profile, a comparison, or a fleet of the size that Palette permits: a
-//! profile holds up to 200 packs and 200 manifests, and a query of a fleet can read many
-//! clusters. This crate makes that input with a generator. It reads the real pack data that is
-//! tracked in `examples/packs/`, and it tracks no large file of its own.
+//! A benchmark needs a profile, a comparison, or a fleet of the size that Palette permits. A
+//! profile holds up to 200 packs and 200 manifests. A query of a fleet can read many clusters.
+//! This crate makes that input with a generator. It reads the real pack data that is tracked in
+//! `examples/packs/`, and it tracks no large file of its own.
 //!
 //! - [`real`] reads the real packs: their values, digests, and uids.
 //! - [`profile`] makes the responses of Palette for a profile of any size, and the record of it.

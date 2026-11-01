@@ -1,8 +1,9 @@
 //! The responses of Palette for a profile of any size, and the record of it.
 //!
 //! The packs are the real packs of [`crate::real`], taken in turn: the OS, Kubernetes, the
-//! network, the storage, and an add-on, and then the next version of each. So the values have
-//! the sizes and the shapes of the real values. A manifest is a config map of a few kilobytes.
+//! network, the storage, and an add-on. After five packs, the next version of each pack follows.
+//! So the values have the sizes and the shapes of the real values. A manifest is a config map
+//! of 40 keys.
 
 use serde_json::{Value, json};
 use strata::api::RawProfile;
@@ -75,8 +76,8 @@ impl Change {
 
 /// A pack of a profile, as `GET /v1/clusterprofiles/{uid}` lists it: the pack ref.
 ///
-/// `name` is the name in the profile: the generator gives each pack a name of its own, so that
-/// the key of each pack is one key.
+/// `name` is the name in the profile. The generator gives each pack a name of its own, so each
+/// pack has one key.
 pub fn pack_ref(real: &Pack, name: &str, manifest: Option<(&str, &str)>) -> Value {
     let manifests: Vec<Value> = manifest
         .map(|(name, uid)| json!({"name": name, "uid": uid}))
@@ -205,7 +206,7 @@ fn variables() -> Value {
 ///
 /// # Panics
 ///
-/// When the record does not build. The responses are the generator's own, so a panic is a bug of
+/// When the record does not build. The responses are the generator's own. So a panic is a bug of
 /// the generator, or a change of the record that the generator must follow.
 pub fn snapshot(shape: Shape, change: Change) -> Snapshot {
     Snapshot::from_raw(&raw_profile(shape, change), "bench-stack@1.0.0", FETCHED_AT)

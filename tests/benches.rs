@@ -20,7 +20,7 @@ fn targets() -> Vec<String> {
 }
 
 /// `autobenches` is off, because `benches/` is a package of its own. So a file that the manifest
-/// does not name never runs, and it never fails: `just bench` and the job of CI would pass
+/// does not name never runs, and it never fails: `just bench` and the job of CI pass
 /// without it. The manifest must name each file, and the file must run criterion.
 #[test]
 fn each_file_of_benches_is_a_bench_target_that_runs_criterion() {
@@ -48,8 +48,8 @@ fn each_file_of_benches_is_a_bench_target_that_runs_criterion() {
     );
 }
 
-/// The root package would build each file of `benches/` as a benchmark of its own, and fail to
-/// find criterion, if it kept `autobenches`.
+/// The root package builds each file of `benches/` as a benchmark of its own, and fails to find
+/// criterion, when it keeps `autobenches`.
 #[test]
 fn the_root_package_leaves_the_benches_directory_to_its_package() {
     assert!(repo_file("Cargo.toml").contains("\nautobenches = false\n"));

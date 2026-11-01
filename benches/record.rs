@@ -1,7 +1,7 @@
 //! The record: the canonical form and the root of a profile, and the build of a record from the
 //! responses of Palette.
 //!
-//! The canonical form, the hashes, and the root are not public items of the library, so each
+//! The canonical form, the hashes, and the root are not public items of the library. So each
 //! benchmark reaches them through `Snapshot::from_raw`, the one function that computes them.
 
 use std::hint::black_box;

@@ -13,7 +13,7 @@ autobenches = false
 name = "strata_benches"
 path = "src/lib.rs"
 # The library holds the generator only. `cargo bench` gives its flags to the criterion targets, and a
-# harness of cargo for the library would refuse them.
+# harness of cargo for the library refuses them.
 bench = false
 
 [[bench]]
