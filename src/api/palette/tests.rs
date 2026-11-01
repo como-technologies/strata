@@ -3,7 +3,7 @@
 use serde_json::json;
 
 use super::*;
-use crate::api::MemoryApi;
+use crate::api::{MemoryApi, RawCluster, ReadErrors};
 use crate::scope::ProfileScope;
 
 fn listing() -> Value {
@@ -598,4 +598,90 @@ fn each_validate_post_of_the_client_goes_to_the_route_that_the_codes_name() {
             Some(ValidateRoute::ProfileImport),
         ]
     );
+}
+
+#[test]
+fn the_copy_of_a_manifest_goes_into_a_pack_whose_spec_is_not_an_object() {
+    let templates = vec![json!({"uid": "p1", "packs": [
+        {"name": "cfg", "manifests": [{"name": "app-config", "uid": "m9"}]}]})];
+    let mut manifests = json!({"profiles": [{"spec": {"packs": [
+        {"metadata": {"name": "cfg"}, "spec": 5}]}}]});
+    let copy = json!({"metadata": {"name": "app-config-copy", "uid": "m9"}});
+    own_manifests(&templates, |_, _, _| Ok(copy.clone()), &mut manifests).unwrap();
+    assert_eq!(
+        manifests["profiles"][0]["spec"]["packs"][0]["spec"]["manifests"][0]["uid"],
+        "m9"
+    );
+}
+
+#[test]
+fn the_update_that_waits_goes_into_a_cluster_whose_spec_is_not_an_object() {
+    let api = MemoryApi::new().with(
+        "/v1/spectroclusters/c1/profileUpdates",
+        json!({"profiles": []}),
+    );
+    let raw = RawCluster {
+        cluster: json!({"metadata": {"uid": "c1"}, "spec": "junk"}),
+        manifests: Value::Null,
+        variables: Value::Null,
+        variables_unavailable: false,
+        project_uid: None,
+        fetched_at: None,
+        notifications: None,
+        repave: None,
+        resolved_values: None,
+        cloud_config: None,
+        rbacs: None,
+        namespaces: None,
+        errors: ReadErrors::default(),
+    };
+    let pending = Palette::new(api).with_pending(raw).unwrap();
+    assert_eq!(
+        pending.cluster["spec"]["clusterProfileTemplates"],
+        json!([])
+    );
+}
+
+#[test]
+fn a_listing_whose_next_page_is_the_page_it_is_ends_there_and_does_not_ask_again() {
+    let palette = Palette::new(MemoryApi::new());
+    let asked = std::cell::Cell::new(0);
+    let page = json!({"items": [{"metadata": {"uid": "a"}}], "listmeta": {"continue": "tok"}});
+    let items = palette
+        .each_continue_page("/v1/things", |_| {
+            asked.set(asked.get() + 1);
+            assert!(asked.get() < 10, "the walk asks for the same page for ever");
+            Ok(page.clone())
+        })
+        .unwrap();
+    assert_eq!(
+        asked.get(),
+        2,
+        "the first page, and the page that the token names"
+    );
+    assert_eq!(items.len(), 2);
+}
+
+#[test]
+fn a_listing_by_offset_ends_at_a_page_that_starts_with_the_item_the_page_before_started_with() {
+    let palette = Palette::new(MemoryApi::new());
+    let asked = std::cell::Cell::new(0);
+    let full = json!({"items": [{"uid": "a"}, {"uid": "b"}], "listmeta": {"count": 1_000_000}});
+    let mut seen = Vec::new();
+    palette
+        .each_offset_page(
+            2,
+            |_| {
+                asked.set(asked.get() + 1);
+                assert!(asked.get() < 10, "the walk asks for the same page for ever");
+                Ok(full.clone())
+            },
+            |item| {
+                seen.push(item);
+                true
+            },
+        )
+        .unwrap();
+    assert_eq!(asked.get(), 2, "the second page repeats the first");
+    assert_eq!(seen.len(), 2, "the repeated page gives no item");
 }

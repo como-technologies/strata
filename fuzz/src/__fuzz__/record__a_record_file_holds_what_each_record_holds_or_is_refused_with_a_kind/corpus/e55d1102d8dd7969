@@ -1,0 +1,85 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "kind: ZarfPackageConfig\nmetadata:\n  name: strata-live-zarf\n  version: 1.0.0\n  description: strata live example, a Zarf package with one manifest and no image\ncomponents:\n  - name: config\n    required: true\n    manifests:\n      - name: config\n        namespace: default\n        files:\n          - configmap.yaml\n",
+      "valuesCanon": {
+        "components": [
+          {
+            "manifests": [
+              {
+                "files": [
+                  "configmap.yaml"
+                ],
+                "name": "config",
+                "namespace": "default"
+              }
+            ],
+            "name": "config",
+            "required": true
+          }
+        ],
+        "kind": "ZarfPackageConfig",
+        "metadata": {
+          "description": "strata live example, a Zarf package with one manifest and no image",
+          "name": "strata-live-zarf",
+          "version": "1.0.0"
+        }
+      },
+      "valuesHash": "bb3b6f0f82701a13ee0e894078d0e87b43d24a681f88d9038b66f40a10e4fc86",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "kind: ZarfPackageConfig\nmetadata:\n  name: strata-live-zarf\n  version: 1.0.0\n  description: strata live example, a Zarf package with one manifest and no image\ncomponents:\n  - name: config\n    required: true\n    manifests:\n      - name: config\n        namespace: default\n        files:\n          - configmap.yaml\n",
+          "contentHash": "bb3b6f0f82701a13ee0e894078d0e87b43d24a681f88d9038b66f40a10e4fc86"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "2ee40e08e5f94076805d08bcf735be8d604d7da5099918314104b3b1e49fa7e0",
+        "node": "d307c1070d95dae9628955597179a2ad23088a7633411cf11c536bfb59663118"
+      }
+    }
+  ],
+  "root": "2234ed5c03ee1f40c89e577f2dc89bc2e0671c1dae00cab754639bcd59556dc2",
+  "contentDigest": "a3432a8ee2d000b6fd99cef8c6f680f2ddef78bbc46505e6088c353df773b92a"
+}

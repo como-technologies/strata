@@ -1,0 +1,68 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "# Palette requires pack.namespace of a Helm pack: the namespace of the release.\npack:\n  namespace: strata-live\npurpose: strata live example\n",
+      "valuesCanon": {
+        "pack": {
+          "namespace": "strata-live"
+        },
+        "purpose": "strata live example"
+      },
+      "valuesHash": "33f7d5a37f2d5ac6f95f47644890aec9202b2e0d4d7fcf94e030a2b20256a19f",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "# Palette requires pack.namespace of a Helm pack: the namespace of the release.\npack:\n  namespace: strata-live\npurpose: strata live example\n",
+          "contentHash": "33f7d5a37f2d5ac6f95f47644890aec9202b2e0d4d7fcf94e030a2b20256a19f"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "4a449b1b5bed0d6677515d700b01ee9477e5943df35da7763a0431572c7bda75",
+        "node": "97dc2de7e6b5bc24a409aaf72f5b21f115ccb66b416bd254885d568d9b70c6a0"
+      }
+    }
+  ],
+  "root": "771d81ff908402f0c10a7bbcefea78e6aee40268427b26f8398d60ce83c82f9c",
+  "contentDigest": "b21928da5aab0185fd3092c36da542c285cd8d92b28260afc1b75fc836a3b944"
+}

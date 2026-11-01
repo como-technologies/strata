@@ -1,0 +1,72 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "a: 1.0\nb: 1e3\nc: .inf\nd: -.inf\ne: .nan\nf: 0x1F\ng: 0o17\nh: 1_000\n",
+      "valuesCanon": {
+        "a": 1.0,
+        "b": 1000.0,
+        "c": ".inf",
+        "d": "-.inf",
+        "e": ".nan",
+        "f": 31,
+        "g": 15,
+        "h": "1_000"
+      },
+      "valuesHash": "77bd028613e02667a2941dc8663f542b97f53b30a885187d2af980295b6bdb00",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "a: 1.0\nb: 1e3\nc: .inf\nd: -.inf\ne: .nan\nf: 0x1F\ng: 0o17\nh: 1_000\n",
+          "contentHash": "77bd028613e02667a2941dc8663f542b97f53b30a885187d2af980295b6bdb00"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "b6b6e82f631ab29d3b36ddfc0af4b740595626c9ef97653f012566c4207a869a",
+        "node": "9233c18815d857c2c908504dba87bbb469a6e1b48b5e5a047cc0d1288a51ed09"
+      }
+    }
+  ],
+  "root": "064a0f1f4dcdb1fa8985df6f9e87214bba1527bf5919084078585169a432783c",
+  "contentDigest": "628c819179fe11c76b5c89b3706e9aa97eb3c7ccb1a8f3499d79d572868d96b1"
+}

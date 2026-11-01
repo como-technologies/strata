@@ -1,0 +1,65 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "? [a, b]\n: c\n",
+      "valuesCanon": null,
+      "valuesHash": "133afc96dcbd46df1b5bfb2b192e06a34961f1da45624d07477904f1525de4dc",
+      "valuesParseError": "found a mapping or sequence used as a mapping key (unquoted template?)",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "? [a, b]\n: c\n",
+          "contentHash": "133afc96dcbd46df1b5bfb2b192e06a34961f1da45624d07477904f1525de4dc",
+          "contentParseError": "found a mapping or sequence used as a mapping key (unquoted template?)"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "a6e6efa5d4a820f1c3e6303a2cf538182384919e75f1fb6b01feb197d2492406",
+        "node": "ed757dd9ef3d29dc5967015a6d27197d890a1e074d3154e147e832f8d7cc9602"
+      }
+    }
+  ],
+  "root": "aca04b80ceac9bd0ba46a2fcaa2f3598fb61fe55bfdf07d76070f3b26f06ed32",
+  "contentDigest": "8ee90677ba76576225089bbd5d8329b0b3bc7562ff411c6c9b12b09d6fc94439"
+}

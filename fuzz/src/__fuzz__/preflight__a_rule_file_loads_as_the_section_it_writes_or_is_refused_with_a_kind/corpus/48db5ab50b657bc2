@@ -1,0 +1,143 @@
+section: cloud-services
+title: Cloud services and APIs
+about: |
+  The APIs and the services of the cloud that a build calls. Palette does not check that one is
+  on before it starts.
+rules:
+- id: azure-resource-providers
+  title: The resource providers of the build are registered in the subscription
+  engines:
+  - azure
+  - aks
+  tier: cloud
+  severity: fail
+  status: inferred
+  what: |
+    An ARM call to a provider the subscription has not registered fails with
+    `MissingSubscriptionRegistration`. A subscription that never made a virtual machine has
+    `Microsoft.Compute`, `Microsoft.Network`, and `Microsoft.Storage` in `NotRegistered`; AKS
+    adds `Microsoft.ContainerService`. The docs name `Microsoft.ContainerService` for a private DNS
+    zone in another subscription, and no other provider. No Palette code registers or reads a
+    provider. The list of four is a reading of what the build calls, not a run.
+  check:
+    kind: exec
+    needs:
+    - az
+    argv:
+    - az
+    - provider
+    - list
+    - --subscription
+    - '{{ .entity.spec.cloudConfig.subscriptionId }}'
+    - --output
+    - json
+    expr: |
+      .entity.spec.cloudConfig.subscriptionId as $sub
+      | (["Microsoft.Compute", "Microsoft.Network", "Microsoft.Storage"] + (if .cloud == "aks" then ["Microsoft.ContainerService"] else [] end)) as $need
+      | if .exec.exit != 0 then ["az provider list failed: \(.exec.stderr | .[:200])"]
+        else (.exec.stdout // []) as $p
+          | [ $need[] | . as $n | ([ $p[] | select(((.namespace // "") | ascii_downcase) == ($n | ascii_downcase)) ] | first) as $hit
+              | if $hit == null then "resource provider \($n) is not in the provider list of subscription \($sub)"
+                elif ($hit.registrationState // "") != "Registered" then "resource provider \($n) is \($hit.registrationState) in subscription \($sub): the first ARM call to it fails with MissingSubscriptionRegistration"
+                else empty end ]
+        end
+  reproduce:
+  - az provider list --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query "[?namespace=='Microsoft.Compute' || namespace=='Microsoft.Network' || namespace=='Microsoft.Storage' || namespace=='Microsoft.ContainerService'].[namespace,registrationState]" --output table
+  - az provider register --namespace Microsoft.Compute --subscription {{ .entity.spec.cloudConfig.subscriptionId }}
+  fix:
+    owner: palette
+    text: Read the registration state of the four providers in the Azure account validate.
+  evidence:
+  - kind: doc
+    ref: https://learn.microsoft.com/en-us/azure/azure-resource-manager/management/resource-providers-and-types
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/aks/
+    note: both subscriptions must have the Microsoft.ContainerService resource provider registered, for a private DNS zone in another subscription
+  - kind: source
+    note: returns nil; no provider is registered or read
+  tests:
+  - fault: fixtures/azure/provider-unregistered.json
+    clean: fixtures/azure/providers-clean.json
+- id: azure-resource-group
+  title: The resource group of the cluster exists in the subscription
+  engines:
+  - azure
+  - aks
+  tier: palette
+  severity: warn
+  status: source
+  when: .entity.spec.cloudAccountUid != null and (.entity.spec.cloudConfig.resourceGroup // "") != ""
+  what: |
+    Palette places the cluster in an existing resource group, and copies the node image into a
+    storage account in it. A group that does not exist fails the first ARM call of the build. The
+    converter and the validate route check nothing about it. `GET /v1/clouds/azure/regions/{region}/subscriptions/{sub}/resourceGroups`
+    lists the groups whose location is the region. So a group in another region is also
+    reported. That group works for a build, and the console does not offer it. The check reads
+    `resourceGroup` and, when set, `vnetResourceGroup`.
+  check:
+    kind: palette
+    method: GET
+    path: /v1/clouds/azure/regions/{{ .entity.spec.cloudConfig.location }}/subscriptions/{{ .entity.spec.cloudConfig.subscriptionId }}/resourceGroups?cloudAccountUid={{ .entity.spec.cloudAccountUid }}
+    expr: |
+      .entity.spec.cloudConfig as $c
+      | if (.response.ok | not) then ["Palette cannot list the resource groups of subscription \($c.subscriptionId): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+        else ([ (.response.body.resourceGroupList // [])[] | .name | ascii_downcase ]) as $names
+          | [ ([$c.resourceGroup] + (if ($c.vnetResourceGroup // "") != "" then [$c.vnetResourceGroup] else [] end))[] | . as $rg
+              | select(($names | index($rg | ascii_downcase)) == null)
+              | "resource group \($rg) is not among the groups of subscription \($c.subscriptionId) in \($c.location): it does not exist, or its location is another region; the build puts the cluster and its storage account in it, and the console offers the groups of the location alone" ]
+        end
+  reproduce:
+  - az group show --name {{ .entity.spec.cloudConfig.resourceGroup }} --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query '[name,location,properties.provisioningState]' --output tsv
+  fix:
+    owner: palette
+    text: Read the resource group in the validate route.
+  evidence:
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/architecture/
+    note: Azure cluster resources are placed within an existing Resource Group
+  - kind: source
+    note: lists every group of the subscription and keeps the ones whose location is the region
+  - kind: source
+    note: the storage account of the image is made in cloudConfig.resourceGroup
+  tests:
+  - fault: fixtures/azure/rg-missing.json
+    clean: fixtures/azure/clean.json
+- id: azure-location
+  title: The location is a region of the subscription
+  engines:
+  - azure
+  - aks
+  tier: palette
+  severity: fail
+  status: source
+  when: .entity.spec.cloudAccountUid != null
+  what: |
+    The create checks `cloudConfig.location` against the regions of the cloud and refuses an
+    unknown one with `CloudRegionInvalid`. The validate route does not run that check. A region
+    the subscription cannot use, such as one that needs a request to Azure, fails at the first
+    ARM call. `GET /v1/clouds/azure/regions` lists the regions the account sees in the
+    subscription; the check looks for the location in it.
+  check:
+    kind: palette
+    method: GET
+    path: /v1/clouds/azure/regions?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&subscriptionId={{ .entity.spec.cloudConfig.subscriptionId }}
+    expr: |
+      .entity.spec.cloudConfig.location as $l | .entity.spec.cloudConfig.subscriptionId as $sub
+      | if (.response.ok | not) then ["Palette cannot list the regions of subscription \($sub): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+        else ([ (.response.body.regions // [])[] | .name ]) as $names
+          | if ($names | index($l)) != null then []
+            else ["location \($l) is not a region of subscription \($sub) for this account (\($names | length) regions listed): the create refuses it with CloudRegionInvalid after the validate route passed"] end
+        end
+  reproduce:
+  - az account list-locations --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query "[?name=='{{ .entity.spec.cloudConfig.location }}'].[name,displayName,metadata.regionType]" --output table
+  fix:
+    owner: palette
+    text: Run the region check in the validate route.
+  evidence:
+  - kind: source
+    note: the create checks the location against the regions of Azure and returns CloudRegionInvalid; the validate route does not
+  - kind: source
+    note: query cloudAccountUid and subscriptionId; the answer is regions[{name, displayName, zones}]
+  tests:
+  - fault: fixtures/azure/location-unknown.json
+    clean: fixtures/azure/clean.json

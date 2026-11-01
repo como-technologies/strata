@@ -1,0 +1,86 @@
+section: teardown
+title: Teardown and leftovers
+about: |
+  What a run before can leave in the cloud and in Palette, and what a force delete leaves behind.
+  The lab checks these with its inventory scripts before a build; a company checks its own estate.
+rules:
+- id: name-prefix
+  title: No pool name is a prefix of another
+  engines:
+  - all
+  - lab
+  tier: static
+  severity: warn
+  status: seen
+  what: |
+    The lab inventory finds resources by a name prefix (`name ~ ^<name>`), so `fred` matches
+    `fred-b` as well, and a count or a delete of one cluster touches the other. The row is about
+    cluster names, and one entity names one cluster. The check applies the same rule to the pool
+    names of the entity: a pool name that starts another pool name is refused. Choose names that
+    share no prefix.
+  check:
+    kind: static
+    expr: |
+      [ .entity.spec.machinepoolconfig[] | .poolConfig.name // "" ] as $names
+      | [ $names[] as $a | $names[] as $b
+          | select($a != "" and $a != $b and ($b | startswith($a)))
+          | "pool \($a) is a prefix of pool \($b); a prefix search matches both" ]
+      | unique
+  fix:
+    owner: lab
+    text: Match names exactly, or give each cluster and pool a name that is no prefix of another.
+  evidence:
+  - kind: source
+    ref: examples/live/gcp-inventory.sh
+    note: the filter `name ~ ^$name` matches every name with the prefix
+  tests:
+  - fault: fixtures/aws/pool-name-prefix.json
+    clean: fixtures/aws/clean.json
+- id: versions-outside-state
+  title: Palette holds no version outside the state
+  engines:
+  - all
+  tier: palette
+  severity: warn
+  status: seen
+  what: |
+    With `skip_destroy`, a bump keeps the replaced version in Palette and drops it from the
+    OpenTofu state. A destroy then removes the current version alone; the older versions of the
+    name stay. The world has no state to compare with, so strata-preflight lists nothing here.
+    List the versions by name, and delete each one the state does not hold.
+  reproduce:
+  - 'strata list profiles --json | jq -r --arg n {{ .profiles[0].source.name // "<profile name>" }} ''.profiles[] | select(.name == $n) | .version''   # every version of the name in Palette'
+  - 'tofu state list | grep spectrocloud_cluster_profile   # the versions the state holds'
+  - 'examples/live/api.sh delete-named {{ .profiles[0].source.name // "<profile name>" }}   # the fix of the lab: every version of the name'
+  fix:
+    owner: lab
+    text: Delete by name after the destroy; `just live-down` runs `api.sh delete-named`.
+  evidence:
+  - kind: source
+    ref: examples/live/api.sh delete-named
+    note: deletes the versions that skip_destroy kept out of the OpenTofu state
+  - kind: source
+    ref: docs/src/development/live-example.md
+    note: skip_destroy keeps the versions that a bump replaced out of the state
+- id: macro-undeletable
+  title: No cluster reads a macro before its delete
+  engines:
+  - all
+  tier: palette
+  severity: warn
+  status: seen
+  what: |
+    Palette refuses to delete a project macro that a cluster reads. A teardown that deletes the
+    macro before the cluster fails at that step. The values and the manifests of the packs name
+    each macro they read as a `.spectro.macro.NAME` template, and `strata snapshot --macros`
+    records them for a cluster. The world has no project uid, so strata-preflight cannot call
+    `GET /v1/projects/{uid}/macros` here; the lab calls it through `api.sh`.
+  reproduce:
+  - 'examples/live/api.sh get /v1/projects/$PALETTE_PROJECT_UID/macros | jq -r ''.macros[].name''   # the macros of the project'
+  - 'strata snapshot cluster:{{ .clusterUid // "<cluster uid>" }} --macros --json | jq ''.macros''   # the macros the cluster reads'
+  fix:
+    owner: none
+  evidence:
+  - kind: run
+    ref: macro-repave lab
+    note: Palette also refuses to delete a macro that a cluster reads (docs/src/internals/palette/profiles.md)

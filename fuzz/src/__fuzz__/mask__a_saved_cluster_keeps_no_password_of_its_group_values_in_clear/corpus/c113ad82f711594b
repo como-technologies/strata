@@ -1,0 +1,2 @@
+dbPassword: "{{ .spectro.var.db_password }}"
+user: fred

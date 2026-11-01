@@ -1,0 +1,50 @@
+# The custom probes of the lab: the landing zone of the live example, in the format of the rules.
+# preflight-plan.sh runs them on the clean entity with --probes, beside the catalog, so a run
+# shows a custom probe on a real tenant. A company writes its own file the same way.
+section: lab
+title: The landing zone of the live example
+about: |
+  What the live example keeps constant: its regions, its cluster names, and the tag that its
+  inventories find the resources by.
+rules:
+  - id: lab-region
+    title: The cluster is in a region of the live example
+    engines: [aws, eks, gcp, gke]
+    tier: static
+    severity: fail
+    status: proposed
+    what: |
+      The live example runs in us-east-2 (AWS) and us-east1 (GCP). A cluster in another region has
+      no cloud account of the example, and its inventory reads nothing.
+    check:
+      kind: static
+      expr: |
+        .entity.spec.cloudConfig.region as $r
+        | if (["us-east-2", "us-east1"] | index($r)) != null then []
+          else ["region \($r) is not one of the live example: us-east-2, us-east1"] end
+    tests:
+      - fault: fixtures/other-region.json
+        clean: fixtures/clean-aws.json
+  - id: lab-name
+    title: The cluster name shares no prefix with the other cluster of the example
+    engines: [all]
+    tier: static
+    severity: warn
+    status: seen
+    what: |
+      The inventories and the listings of the example find a cluster by its name, and a name that
+      is a prefix of another (`fred`, `fred-b`) matches both. The example names its clusters fred
+      and barney for this reason.
+    check:
+      kind: static
+      expr: |
+        (.entity.metadata.name // "") as $n
+        | if ($n | test("^(fred|barney|strata-preflight-[a-z]+)$")) then []
+          else ["cluster name \($n) is not a name of the live example (fred, barney, strata-preflight-<engine>)"] end
+    evidence:
+      - kind: run
+        ref: teardown lab
+        note: a prefix search for fred found fred-b too
+    tests:
+      - fault: fixtures/other-name.json
+        clean: fixtures/clean-aws.json

@@ -1,0 +1,140 @@
+section: storage
+title: Storage and CSI
+about: |
+  The CSI layer, the storage class, the permissions the CSI needs, and what changes cannot apply.
+rules:
+- id: azure-storage-account
+  title: A custom Azure storage account has a valid name and exists in the resource group
+  engines:
+  - azure
+  tier: palette
+  severity: fail
+  status: source
+  when: (.entity.spec.cloudConfig.storageAccountName // "") != "" and .entity.spec.cloudAccountUid != null
+  what: |
+    Palette copies the node image into a storage account. With `storageAccountName` set, the docs
+    say to make the account before the cluster. When the account is not in the resource group,
+    Palette falls back to an account of its own hash name, with no error. The custom account,
+    which a PCG setup restricts to the vnet, is then never used. Azure takes 3 to 24 lower-case
+    letters and digits for the name, and 3 to 63 for a container. Palette checks neither.
+    `GET /v1/clouds/azure/resourceGroups/{rg}/storageAccounts` lists the accounts of the group.
+  check:
+    kind: palette
+    method: GET
+    path: /v1/clouds/azure/resourceGroups/{{ .entity.spec.cloudConfig.resourceGroup }}/storageAccounts?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&subscriptionId={{ .entity.spec.cloudConfig.subscriptionId }}
+    expr: |
+      .entity.spec.cloudConfig as $c | ($c.storageAccountName // "") as $sa | ($c.containerName // "") as $ct
+      | [ ( if ($sa | test("^[a-z0-9]{3,24}$") | not) then "storageAccountName \($sa) is not 3 to 24 lower-case letters and digits: Azure refuses the name, and Palette checks none" else empty end ),
+          ( if $ct != "" and (($ct | test("^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$") | not) or ($ct | test("--"))) then "containerName \($ct) is not 3 to 63 lower-case letters, digits, and single dashes" else empty end ) ]
+        + ( if (.response.ok | not) then ["Palette cannot list the storage accounts of \($c.resourceGroup): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+            else ([ (.response.body.accounts // [])[] | .name ]) as $names
+              | if ($names | index($sa)) != null then []
+                else ["storage account \($sa) is not in resource group \($c.resourceGroup) (it has \($names | join(", "))): the docs say to make it before the cluster; Palette then falls back to an account of its own name with no error, and the custom account is never used"] end
+            end )
+  reproduce:
+  - az storage account show --name {{ .entity.spec.cloudConfig.storageAccountName }} --resource-group {{ .entity.spec.cloudConfig.resourceGroup }} --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query '[name,location,kind,provisioningState]' --output tsv
+  fix:
+    owner: palette
+    text: Fail the build when a named storage account is missing, instead of the fallback.
+  evidence:
+  - kind: source
+    note: Palette looks for the custom storage account. When it finds none, Palette makes an account with a hash name, and gives no error
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/create-azure-cluster/
+    note: to use custom storage accounts or containers, you must create them before you create your cluster
+  - kind: doc
+    ref: https://learn.microsoft.com/en-us/azure/storage/common/storage-account-overview
+    note: a storage account name is 3 to 24 characters, lower-case letters and numbers
+  tests:
+  - fault: fixtures/azure/storage-account-missing.json
+    clean: fixtures/azure/storage-account-clean.json
+  - fault: fixtures/azure/storage-account-bad-name.json
+- id: pvc-lb-leftover
+  title: No EBS volume of the cluster is left unattached
+  engines:
+  - aws
+  tier: cloud
+  severity: warn
+  status: inferred
+  what: |
+    The volumes of the PVCs and the load balancers of the Services carry the tag
+    `kubernetes.io/cluster/<name>`. The in-cluster cleanup deletes them on a cluster delete; when
+    it does not run, they stay and cost money. This check counts the volumes with the tag whose
+    state is `available` (attached to no node). The load balancers need a tag lookup; see
+    reproduce. Before a build, a hit names a leftover of an earlier cluster with the same name.
+  check:
+    kind: exec
+    needs:
+    - aws
+    argv:
+    - aws
+    - ec2
+    - describe-volumes
+    - --filters
+    - Name=tag-key,Values=kubernetes.io/cluster/{{ .entity.metadata.name }}
+    - --region
+    - '{{ .entity.spec.cloudConfig.region }}'
+    - --output
+    - json
+    expr: |
+      .entity.metadata.name as $n
+      | if .exec.exit != 0 then ["aws ec2 describe-volumes failed: \(.exec.stderr | .[:200])"]
+        else ([ (.exec.stdout.Volumes // [])[] | select((.State // "") == "available") ]) as $free
+          | if ($free | length) == 0 then []
+            else ["\($free | length) EBS volume(s) with the tag kubernetes.io/cluster/\($n) are available and attached to no node: the in-cluster cleanup did not run, and each costs money until deleted: \([ $free[] | "\(.VolumeId) (\(.Size // "?") GiB)" ] | join(", "))"]
+            end
+        end
+  reproduce:
+  - aws ec2 describe-volumes --filters Name=tag-key,Values=kubernetes.io/cluster/{{ .entity.metadata.name }} --region {{ .entity.spec.cloudConfig.region }} --query 'Volumes[].[VolumeId,State,Size]' --output table
+  - aws resourcegroupstaggingapi get-resources --tag-filters Key=kubernetes.io/cluster/{{ .entity.metadata.name }} --resource-type-filters elasticloadbalancing:loadbalancer ec2:volume --region {{ .entity.spec.cloudConfig.region }} --query 'ResourceTagMappingList[].ResourceARN' --output text
+  - aws elbv2 describe-load-balancers --region {{ .entity.spec.cloudConfig.region }} --query 'LoadBalancers[].[LoadBalancerName,LoadBalancerArn]' --output table
+  evidence:
+  - kind: doc
+    ref: https://docs.aws.amazon.com/eks/latest/userguide/delete-cluster.html
+    note: AWS says to delete the Services of type LoadBalancer and the PVCs before the cluster
+  tests:
+  - fault: fixtures/aws/volumes-leftover.json
+    clean: fixtures/aws/pvc-lb-leftover-clean.json
+- id: storageclass-immutable
+  title: A change keeps the fields of each StorageClass
+  engines:
+  - all
+  tier: static
+  severity: warn
+  status: seen
+  when: .before != null
+  what: |
+    Kubernetes refuses an update of a field of a StorageClass (`parameters`, `reclaimPolicy`,
+    `volumeBindingMode`, `provisioner`). A change of the `storageClasses` block in the CSI pack
+    values applies the class again, and the API server refuses it. Palette shows the pack as
+    installed with the old class. This check compares the `storageClasses` block of the CSI
+    values of `before` and of the entity, as text: `before` holds the entity, not the records,
+    so `valuesCanon` is not there. A new class, or a removed block, is not a change of a field.
+  check:
+    kind: static
+    expr: |
+      def block: if . == null then null else
+        (split("\n")) as $l
+        | ([ range($l | length) | select($l[.] | test("^storageClasses:")) ] | .[0]) as $s
+        | if $s == null then null else
+            ([ range($s + 1; $l | length) | select($l[.] | test("^[A-Za-z_]")) ] | .[0]) as $e
+            | ($l[$s:(if $e == null then ($l | length) else $e end)] | join("\n"))
+          end end;
+      def csi(e): [ e | (.spec.profiles // [])[] | .uid as $u | (.packValues // [])[] | select((.name // "") | test("csi"; "i")) | {uid: $u, name: .name, values: (.values // null)} ];
+      csi(.before) as $b
+      | [ csi(.entity)[] | .name as $n | .uid as $u | .values as $after
+          | ($b[] | select(.uid == $u and .name == $n)) as $old
+          | ($old.values | block) as $ob | ($after | block) as $ab
+          | select($ob != null and $ab != null and $ob != $ab)
+          | "pack \($n) of profile \($u): the storageClasses block of the values changes; Kubernetes refuses an update of a StorageClass field, so the change cannot apply; add a new class, or delete and re-create the class" ]
+  reproduce:
+  - 'kubectl get storageclass -o yaml | yq ''.items[] | {name: .metadata.name, parameters, reclaimPolicy, volumeBindingMode}'''
+  evidence:
+  - kind: run
+    ref: teardown lab
+    note: a values edit of a StorageClass field left the class as it was
+  - kind: doc
+    ref: https://kubernetes.io/docs/concepts/storage/storage-classes/
+  tests:
+  - fault: fixtures/eks/storageclass-change.json
+    clean: fixtures/eks/storageclass-immutable-clean.json

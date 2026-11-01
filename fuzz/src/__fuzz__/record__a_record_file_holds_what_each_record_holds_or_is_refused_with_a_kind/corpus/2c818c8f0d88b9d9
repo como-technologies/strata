@@ -1,0 +1,71 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "- password: a\n- adminPassword: b\n  rootPassword: ''\n",
+      "valuesCanon": [
+        {
+          "password": "a"
+        },
+        {
+          "adminPassword": "b",
+          "rootPassword": ""
+        }
+      ],
+      "valuesHash": "4b607cb9024168148b0aafa2296ab3f472b71d536644582ebb9f7646e038a65d",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "- password: a\n- adminPassword: b\n  rootPassword: ''\n",
+          "contentHash": "4b607cb9024168148b0aafa2296ab3f472b71d536644582ebb9f7646e038a65d"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "3d659361a93f5df0bddbabc8e15bb6a85411432d50a8c26e4c8495dcfd8f65c0",
+        "node": "6da5f1f56715c7a563ccb73e6bd54c5a9579a3066845a43aabed596d5aca2e79"
+      }
+    }
+  ],
+  "root": "65276bf50aea9fda584d7c46896c96ded960339334d74766876e9baec212c28f",
+  "contentDigest": "51e2e500f2a810afc1ae1082c2c04209a182e0cf2df3f81753ce312a4efd913b"
+}

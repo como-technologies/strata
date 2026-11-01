@@ -1,0 +1,9 @@
+name: demo
+version: 1.0.0
+layers:
+- name: cfg
+  version: 1.0.0
+  type: manifest
+  manifests:
+  - name: cm
+    content: 'kind: ConfigMap'

@@ -1,0 +1,65 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "adminPassword: \"{{ .spectroévar.x }}\"\n",
+      "valuesCanon": {
+        "adminPassword": "{{ .spectroévar.x }}"
+      },
+      "valuesHash": "232359c04ca717d0c206251241a37f0d3e4b7c6d40c28c2a787e2fbde201ce46",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "adminPassword: \"{{ .spectroévar.x }}\"\n",
+          "contentHash": "232359c04ca717d0c206251241a37f0d3e4b7c6d40c28c2a787e2fbde201ce46"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "05ec7fde935a539352b7249badba4d419da642d916a0f13c3b7d9e1da572e676",
+        "node": "7f13c89c7c9af3db1318b34267185619b7a98fab0ee55992a85bccaf9374677b"
+      }
+    }
+  ],
+  "root": "cf0bb96f3c2b65661c98938ad2a866626ec6dffb62b3de230bdc00976a82751b",
+  "contentDigest": "c21dfd5fe70f61852304b09720d33f5ae989e497768e108142d23cee7760894f"
+}

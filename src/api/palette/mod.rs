@@ -7,7 +7,7 @@ use super::PaletteApi;
 use crate::cloud::CLOUD_NESTED;
 use crate::conjunction::Conjunction;
 use crate::error::{Error, Result, unread_reason};
-use crate::json::{arr, items, str_at, take_items, text};
+use crate::json::{arr, items, set_at, str_at, take_items, text};
 use crate::pack_type::PackType;
 use crate::snapshot::{SubjectKind, Template, manifest_of};
 use crate::term::progress::Progress;
@@ -357,7 +357,8 @@ impl<A: PaletteApi> Palette<A> {
     /// Give each item of a listing that Palette pages by `offset` to `each`, every page. `fetch`
     /// reads the page at an offset. `each` returns false to stop the walk. Palette gives at most
     /// `page` items on a page, and `listmeta.count` the number of items. The walk ends at a page
-    /// that is short, or when the offset reaches the count.
+    /// that is short, when the offset reaches the count, or at a page that starts with the item
+    /// that the page before it started with: Palette gave the same page again.
     pub(crate) fn each_offset_page(
         &self,
         page: usize,
@@ -365,6 +366,7 @@ impl<A: PaletteApi> Palette<A> {
         mut each: impl FnMut(Value) -> bool,
     ) -> Result<()> {
         let mut offset = 0;
+        let mut first: Option<Value> = None;
         loop {
             let got = fetch(offset)?;
             let total = got
@@ -373,6 +375,11 @@ impl<A: PaletteApi> Palette<A> {
                 .unwrap_or(0) as usize;
             let items = take_items(got);
             let n = items.len();
+            let repeated = first.is_some() && first.as_ref() == items.first();
+            first = items.first().cloned();
+            if repeated {
+                return Ok(());
+            }
             for it in items {
                 if !each(it) {
                     return Ok(());
@@ -389,7 +396,8 @@ impl<A: PaletteApi> Palette<A> {
     ///
     /// `path` is the first page, with its query when it has one, and `fetch` reads one page at a
     /// path. `listmeta.continue` names the next page, and is empty on the last one. A page with no
-    /// items ends the listing too, and `items: null` is such a page.
+    /// items ends the listing too, and `items: null` is such a page. So does a page that names
+    /// the page that it is: Palette would give it again for ever.
     fn each_continue_page(
         &self,
         path: &str,
@@ -399,10 +407,11 @@ impl<A: PaletteApi> Palette<A> {
         let mut next = String::new();
         loop {
             let page = fetch(&page_after(path, &next))?;
-            next = text(&page, "/listmeta/continue");
+            let after = text(&page, "/listmeta/continue");
             let got = take_items(page);
-            let done = got.is_empty();
+            let done = got.is_empty() || after == next;
             items.extend(got);
+            next = after;
             if next.is_empty() || done {
                 return Ok(items);
             }
@@ -516,7 +525,7 @@ fn own_manifests(
                 .iter_mut()
                 .find(|p| str_at(p, "/spec/name") == name || str_at(p, "/metadata/name") == name)
             {
-                p["spec"]["manifests"] = Value::Array(own);
+                set_at(p, &["spec", "manifests"], Value::Array(own));
             }
         }
     }

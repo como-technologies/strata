@@ -1,0 +1,25 @@
+[package]
+name = "strata-fuzz"
+version = "0.25.0"
+edition = "2024"
+# The same floor as strata: this crate uses the same `if let` chains.
+rust-version = "1.88"
+description = "The fuzz targets and the property tests of strata and strata-preflight, on bolero"
+license = "Apache-2.0"
+repository = "https://github.com/como-technologies/strata"
+publish = false
+
+# A target is a test. On stable Rust, `cargo test -p strata-fuzz` runs each one on its corpus and on
+# random input. On nightly, `cargo bolero` runs the same test under libFuzzer: see `just fuzz`. The
+# crate has no code outside its tests, so each dependency is a dev-dependency.
+[dev-dependencies]
+bolero = "0.13"
+serde = "1"
+serde_json = "1"
+serde_yaml = "0.9"
+strata = { path = ".." }
+strata-preflight = { path = "../preflight" }
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"

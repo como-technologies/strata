@@ -1,0 +1,67 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "p: !!str 12\nq: !!binary aGk=\nr: !custom tagged\n",
+      "valuesCanon": {
+        "p": "12",
+        "q": "aGk=",
+        "r": "tagged"
+      },
+      "valuesHash": "d9ac071040e00da04045d93750dd3b0320789a61453df574e0de62919c9addd3",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "p: !!str 12\nq: !!binary aGk=\nr: !custom tagged\n",
+          "contentHash": "d9ac071040e00da04045d93750dd3b0320789a61453df574e0de62919c9addd3"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "f8ae5803d0b71aac9360b27bdd2c5131a07bbe5fc779da1ce9b416f0871e29fe",
+        "node": "88fedf2d4c5448beb2dd535125882752ed41e32ca487876a8336a7415936128f"
+      }
+    }
+  ],
+  "root": "af6df6138b1fe423a4983cc8b9068b5c1d3d02d5bb340ee65a7b298eec9313d4",
+  "contentDigest": "735a2ca371ebcc95352f78519d3ce9167bbe56ea5c0279ec79ed2093e7d5dcdd"
+}

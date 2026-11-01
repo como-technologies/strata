@@ -186,8 +186,11 @@ fn pack_ref(text: &str) -> Option<Ref> {
         Some((registry, name)) => (Some(registry), name),
         None => (None, left),
     };
-    (!name.is_empty()).then(|| Ref::Pack {
-        registry: registry.filter(|r| !r.is_empty()).map(str::to_string),
+    let registry = registry.filter(|r| !r.is_empty());
+    // A pack ref with no registry prints with no `/` before the version. So a name with a `/` and
+    // no registry is no pack ref: its text would parse as another ref.
+    (!name.is_empty() && (registry.is_some() || !name.contains('/'))).then(|| Ref::Pack {
+        registry: registry.map(str::to_string),
         name: name.to_string(),
         version: version.to_string(),
     })
@@ -530,6 +533,26 @@ mod tests {
             Ref::Uid("pack:csi-aws-ebs".into()),
             "a pack ref needs a version"
         );
+    }
+
+    #[test]
+    fn a_pack_ref_prints_as_the_pack_ref_that_it_is() {
+        let no_files = |_: &Path| false;
+        // an empty registry is none, and a name with a `/` after none would print as a registry
+        for text in ["pack:/x@1", "pack:Public Repo/x@1", "pack:a/b/c@1"] {
+            let read = Ref::parse_with(text, no_files);
+            assert!(matches!(read, Ref::Pack { .. }), "{text}");
+            assert_eq!(Ref::parse_with(&read.to_string(), no_files), read, "{text}");
+        }
+        for text in ["pack://x@1", "pack:/x/y@1"] {
+            let read = Ref::parse_with(text, no_files);
+            assert_eq!(
+                read,
+                Ref::Snapshot(text.into()),
+                "{text}: a path, as the form says"
+            );
+            assert_eq!(read.to_string(), text);
+        }
     }
 
     #[test]

@@ -1,0 +1,132 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "name: aws-stack\nversion: 1.1.1\ntype: cluster\ncloudType: aws\nlayers:\n- name: ubuntu-aws\n  version: '24.04'\n  layer: os\n  tag: LTS__24.x\n  registryUid: 5eecc89d0b150045ae661cef\n  valuesFile: aws-stack/values/ubuntu-aws.yaml\n- name: kubernetes\n  version: 1.36.2\n  layer: k8s\n  tag: 1.36.2\n  registryUid: 5eecc89d0b150045ae661cef\n  valuesFile: aws-stack/values/kubernetes.yaml\n- name: cni-cilium-oss\n  version: 1.20.1\n  layer: cni\n  tag: 1.20.1\n  registryUid: 5eecc89d0b150045ae661cef\n  valuesFile: aws-stack/values/cni-cilium-oss.yaml\n- name: csi-aws-ebs\n  version: 1.65.0\n  layer: csi\n  tag: 1.65.0\n  registryUid: 5eecc89d0b150045ae661cef\n  valuesFile: aws-stack/values/csi-aws-ebs.yaml\n- name: cert-manager\n  version: 1.21.1\n  layer: addon\n  tag: 1.21.1\n  registryUid: 5eecc89d0b150045ae661cef\n  valuesFile: aws-stack/values/cert-manager.yaml\n  manifests:\n  - name: namespace-labels\n    contentFile: aws-stack/manifests/cert-manager/namespace-labels.yaml\nvariables:\n- defaultValue: ''\n  description: ''\n  displayName: Platform owner\n  format: string\n  hidden: false\n  immutable: false\n  inputType: text\n  isSensitive: false\n  name: platform_owner\n  options: []\n  regex: ''\n  required: true\n",
+      "valuesCanon": {
+        "cloudType": "aws",
+        "layers": [
+          {
+            "layer": "os",
+            "name": "ubuntu-aws",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "tag": "LTS__24.x",
+            "valuesFile": "aws-stack/values/ubuntu-aws.yaml",
+            "version": "24.04"
+          },
+          {
+            "layer": "k8s",
+            "name": "kubernetes",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "tag": "1.36.2",
+            "valuesFile": "aws-stack/values/kubernetes.yaml",
+            "version": "1.36.2"
+          },
+          {
+            "layer": "cni",
+            "name": "cni-cilium-oss",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "tag": "1.20.1",
+            "valuesFile": "aws-stack/values/cni-cilium-oss.yaml",
+            "version": "1.20.1"
+          },
+          {
+            "layer": "csi",
+            "name": "csi-aws-ebs",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "tag": "1.65.0",
+            "valuesFile": "aws-stack/values/csi-aws-ebs.yaml",
+            "version": "1.65.0"
+          },
+          {
+            "layer": "addon",
+            "manifests": [
+              {
+                "contentFile": "aws-stack/manifests/cert-manager/namespace-labels.yaml",
+                "name": "namespace-labels"
+              }
+            ],
+            "name": "cert-manager",
+            "registryUid": "5eecc89d0b150045ae661cef",
+            "tag": "1.21.1",
+            "valuesFile": "aws-stack/values/cert-manager.yaml",
+            "version": "1.21.1"
+          }
+        ],
+        "name": "aws-stack",
+        "type": "cluster",
+        "variables": [
+          {
+            "defaultValue": "",
+            "description": "",
+            "displayName": "Platform owner",
+            "format": "string",
+            "hidden": false,
+            "immutable": false,
+            "inputType": "text",
+            "isSensitive": false,
+            "name": "platform_owner",
+            "options": [],
+            "regex": "",
+            "required": true
+          }
+        ],
+        "version": "1.1.1"
+      },
+      "valuesHash": "0c5bc57674eab560e8e7d5947d02611f305c184517b88baf98ae1ec53f338031",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "name: aws-stack\nversion: 1.1.1\ntype: cluster\ncloudType: aws\nlayers:\n- name: ubuntu-aws\n  version: '24.04'\n  layer: os\n  tag: LTS__24.x\n  registryUid: 5eecc89d0b150045ae661cef\n  valuesFile: aws-stack/values/ubuntu-aws.yaml\n- name: kubernetes\n  version: 1.36.2\n  layer: k8s\n  tag: 1.36.2\n  registryUid: 5eecc89d0b150045ae661cef\n  valuesFile: aws-stack/values/kubernetes.yaml\n- name: cni-cilium-oss\n  version: 1.20.1\n  layer: cni\n  tag: 1.20.1\n  registryUid: 5eecc89d0b150045ae661cef\n  valuesFile: aws-stack/values/cni-cilium-oss.yaml\n- name: csi-aws-ebs\n  version: 1.65.0\n  layer: csi\n  tag: 1.65.0\n  registryUid: 5eecc89d0b150045ae661cef\n  valuesFile: aws-stack/values/csi-aws-ebs.yaml\n- name: cert-manager\n  version: 1.21.1\n  layer: addon\n  tag: 1.21.1\n  registryUid: 5eecc89d0b150045ae661cef\n  valuesFile: aws-stack/values/cert-manager.yaml\n  manifests:\n  - name: namespace-labels\n    contentFile: aws-stack/manifests/cert-manager/namespace-labels.yaml\nvariables:\n- defaultValue: ''\n  description: ''\n  displayName: Platform owner\n  format: string\n  hidden: false\n  immutable: false\n  inputType: text\n  isSensitive: false\n  name: platform_owner\n  options: []\n  regex: ''\n  required: true\n",
+          "contentHash": "0c5bc57674eab560e8e7d5947d02611f305c184517b88baf98ae1ec53f338031"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "a26415bdbe1e82239e23ed64239e3244a7fdd9bf1e67f51e27f3f63eccd79eb3",
+        "node": "87772bbf938c1962cc9ffa4cd2af80e0cc174318408a159f6a71e53799305031"
+      }
+    }
+  ],
+  "root": "2a06f6a84299f0050c4f19aef7f835e612c534764dce5b661925d12a50db27f7",
+  "contentDigest": "8bc0e651886807c9741c8b5d7aadb883df08d3134cde67e34dca78eb5405cc56"
+}

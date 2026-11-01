@@ -6,8 +6,8 @@
 use std::process::Command;
 
 use crate::common::{
-    CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, recipe, steps, text, workflow,
-    workflow_files, workflow_text,
+    CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, recipe, repo_file, steps,
+    text, workflow, workflow_files, workflow_text,
 };
 
 #[test]
@@ -568,4 +568,111 @@ fn the_install_step_of_each_workflow_requires_the_signature_of_the_version_it_wa
             "{file}"
         );
     }
+}
+
+/// The fuzz targets are tests of the package `strata-fuzz`, and `cargo test` of the root package
+/// does not run them. So the `test` recipe runs them by name, and the job `lint and test` runs the
+/// recipe. They run on stable Rust, on the corpus and on random bytes.
+#[test]
+fn the_test_recipe_runs_the_fuzz_targets_and_the_property_tests() {
+    assert!(
+        recipe("test").contains(&"cargo test -p strata-fuzz".to_string()),
+        "{:?}",
+        recipe("test")
+    );
+}
+
+/// The run of the targets under libFuzzer needs a nightly toolchain and ten minutes for each
+/// target, so no pull request and no push starts it: a schedule does, and a person. The list of
+/// targets comes from the recipe, so a new target needs no change of the workflow. A crash fails
+/// the job of its target, and the artifact keeps the files that the run added.
+#[test]
+fn the_fuzz_workflow_runs_each_target_on_nightly_on_a_schedule_and_keeps_the_new_files() {
+    let doc = workflow("fuzz.yml");
+    let on = doc["on"].as_mapping().expect("the workflow has triggers");
+    assert!(
+        on.contains_key("schedule") && on.contains_key("workflow_dispatch"),
+        "{on:?}"
+    );
+    for trigger in ["push", "pull_request"] {
+        assert!(
+            !on.contains_key(trigger),
+            "the fuzz workflow starts on {trigger}"
+        );
+    }
+
+    let runs = |job: &str| -> Vec<String> {
+        doc["jobs"][job]["steps"]
+            .as_sequence()
+            .unwrap_or_else(|| panic!("fuzz.yml has no job {job}"))
+            .iter()
+            .filter_map(|step| step["run"].as_str().map(str::to_string))
+            .collect()
+    };
+    assert!(
+        runs("targets").iter().any(|r| r.contains("just fuzz-list")),
+        "the list of targets comes from `just fuzz-list`"
+    );
+    assert_eq!(
+        doc["jobs"]["fuzz"]["strategy"]["matrix"]["target"].as_str(),
+        Some("${{ fromJSON(needs.targets.outputs.targets) }}")
+    );
+    assert!(
+        runs("fuzz")
+            .iter()
+            .any(|r| r.contains(r#"just fuzz "$TARGET" "$FUZZ_TIME""#)),
+        "{:?}",
+        runs("fuzz")
+    );
+    let uses: Vec<&str> = doc["jobs"]["fuzz"]["steps"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .filter_map(|step| step["uses"].as_str())
+        .collect();
+    assert!(uses.contains(&"dtolnay/rust-toolchain@nightly"), "{uses:?}");
+    let upload = doc["jobs"]["fuzz"]["steps"]
+        .as_sequence()
+        .unwrap()
+        .iter()
+        .find(|step| {
+            step["uses"]
+                .as_str()
+                .is_some_and(|u| u.starts_with("actions/upload-artifact@"))
+        })
+        .expect("the job uploads the new files");
+    assert_eq!(
+        upload["if"].as_str(),
+        Some("always()"),
+        "a crash fails the job first"
+    );
+}
+
+/// cargo-bolero and the crate bolero talk with a version of their protocol, and a pair that
+/// differs in the minor version fails with "version mismatch". The workflow and the book name the
+/// version of cargo-bolero, and it matches the minor version of the crate.
+#[test]
+fn the_version_of_cargo_bolero_matches_the_crate_and_the_book() {
+    let manifest = repo_file("fuzz/Cargo.toml");
+    let krate = manifest
+        .lines()
+        .find_map(|line| line.strip_prefix("bolero = \""))
+        .and_then(|rest| rest.strip_suffix('"'))
+        .expect("fuzz/Cargo.toml names the version of bolero");
+    let workflow = workflow_text("fuzz.yml");
+    let tool = workflow
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("CARGO_BOLERO_VERSION: "))
+        .expect("fuzz.yml names the version of cargo-bolero");
+    assert!(
+        tool.starts_with(&format!("{krate}.")),
+        "cargo-bolero {tool} does not match bolero {krate}"
+    );
+    let book = repo_file("docs/src/development/build-test.md");
+    assert!(
+        book.contains(&format!(
+            "cargo install cargo-bolero --version {tool} --locked"
+        )),
+        "the book names another version of cargo-bolero than the workflow"
+    );
 }

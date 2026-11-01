@@ -1,0 +1,109 @@
+section: identity
+title: Identity and permissions
+about: |
+  The cloud account of the cluster, the role or the key behind it, and the permissions the build
+  needs of it. Palette checks that a role can be assumed and that policies exist, not that the role
+  can build the cluster type.
+rules:
+- id: vsphere-account-endpoint
+  title: The vCenter server of the cloud account is a host name with no scheme
+  engines:
+  - vsphere
+  tier: static
+  severity: fail
+  status: source
+  when: .account != null
+  what: |
+    Palette refuses a `vcenterServer` that starts with `http` or `https`: "Vcenter
+    server name should not start with http or https". The account converter refuses a value
+    that is not a server endpoint. The account validate route, `POST /v1/clouds/vsphere/account/validate`,
+    needs the password, and the world holds it redacted, so strata-preflight cannot call it. The
+    route through the PCG, `POST /v1/overlords/vsphere/{uid}/account/validate`, needs it too.
+  check:
+    kind: static
+    expr: |
+      (.account.spec.vcenterServer // "") as $v
+      | if $v == "" then ["the vSphere account \(.account.metadata.name) has no vcenterServer"]
+        elif ($v | test("^https?://")) then ["vcenterServer \($v) starts with a scheme: Palette refuses it with \"Vcenter server name should not start with http or https\""]
+        elif ($v | test("^[A-Za-z0-9.-]+(:[0-9]+)?$") | not) then ["vcenterServer \($v) is not a host name or an address"]
+        else [] end
+  reproduce:
+  - 'curl -sk -o /dev/null -w ''%{http_code}\n'' https://{{ .account.spec.vcenterServer // "<vcenter>" }}/sdk   # from the PCG; vCenter answers on 443'
+  evidence:
+  - kind: source
+    note: refuses a server that starts with http or https, then opens a session
+  - kind: source
+    note: Palette refuses an empty vcenterServer, and a value that is not a server endpoint
+  tests:
+  - fault: fixtures/vsphere/vcenter-https.json
+    clean: fixtures/vsphere/clean.json
+- id: maas-account-endpoint
+  title: The MAAS API endpoint of the cloud account is a URL with the /MAAS path
+  engines:
+  - maas
+  tier: static
+  severity: fail
+  status: source
+  when: .account != null
+  what: |
+    The MAAS account holds `apiEndpoint` and `apiKey`. The docs show the endpoint as
+    `http://10.1.1.1:5240/MAAS`; the API lives under `/MAAS/api/2.0/`. Palette refuses an endpoint
+    it cannot parse. The account validate route, `POST /v1/clouds/maas/account/validate`, needs
+    the key, and the world holds it redacted, so strata-preflight cannot call it. The check reads
+    the shape of the endpoint. The PCG, or Palette, must reach it; the reproduce line asks the
+    version route.
+  check:
+    kind: static
+    expr: |
+      (.account.spec.apiEndpoint // "") as $e
+      | if $e == "" then ["the MAAS account \(.account.metadata.name) has no apiEndpoint"]
+        elif ($e | test("^https?://[^/]+(/MAAS)?/?$") | not) then ["apiEndpoint \($e) is not http(s)://host:port/MAAS: the docs show http://10.1.1.1:5240/MAAS, and Palette refuses an endpoint it cannot parse"]
+        elif ($e | test("/MAAS/?$") | not) then ["apiEndpoint \($e) has no /MAAS path; the MAAS API lives under /MAAS/api/2.0/"]
+        else [] end
+  reproduce:
+  - 'curl -s -o /dev/null -w ''%{http_code}\n'' {{ (.account.spec.apiEndpoint // "http://<maas>:5240/MAAS") | rtrimstr("/") }}/api/2.0/version/   # from the PCG, or from Palette with a direct connection; 200 or 401 means the endpoint answers'
+  fix:
+    owner: palette
+    text: Call the account validate route at cluster create, through the PCG of the account.
+  evidence:
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/pcg/deploy-pcg/maas/
+    note: MAAS Server URL, example http://10.1.1.1:5240/MAAS
+  - kind: source
+    note: Palette checks the endpoint, then checks the credentials through the PCG
+  tests:
+  - fault: fixtures/maas/endpoint-bad.json
+    clean: fixtures/maas/clean.json
+- id: aks-aad-profile
+  title: An AKS AAD profile names an admin group
+  engines:
+  - aks
+  tier: static
+  severity: fail
+  status: source
+  what: |
+    With `cloudConfig.aadProfile` set, the provider reads `managed` and `adminGroupObjectIDs`
+    with no nil check, and the CRD marks both required. The AKS pack refuses an empty group list
+    with "minimum required AdminGroupObjectIDs is 1". With `disableLocalAccounts` in the pack,
+    the service principal of the cloud account must be in one of the groups, or nobody can
+    administer the cluster. The groups cannot change after the create.
+  check:
+    kind: static
+    expr: |
+      (.entity.spec.cloudConfig.aadProfile // null) as $a
+      | if $a == null then []
+        else [ ( if ($a | has("managed") | not) then "aadProfile.managed is not set: the provider reads it with no nil check, and the CRD marks it required" else empty end ),
+               ( if (($a.adminGroupObjectIDs // []) | length) == 0 then "aadProfile.adminGroupObjectIDs is empty: the AKS pack refuses it with \"minimum required AdminGroupObjectIDs is 1\", and the groups cannot change after the create" else empty end ) ]
+        end
+  fix:
+    owner: palette
+    text: Check the AAD profile in the AKS validate route.
+  evidence:
+  - kind: source
+    note: '"minimum required AdminGroupObjectIDs is 1"; the cluster config fields are dereferenced without a nil check'
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/enable-iam-features-aks/enable-microsoft-entra-id-aks/
+    note: adminGroupObjectIDs is required when managed is true; the groups cannot be changed after cluster creation
+  tests:
+  - fault: fixtures/aks/aad-no-groups.json
+    clean: fixtures/aks/aad-clean.json

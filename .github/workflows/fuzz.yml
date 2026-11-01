@@ -1,0 +1,98 @@
+name: fuzz
+
+# Runs each fuzz target of fuzz/ under libFuzzer for a fixed time, once a week and on demand. The
+# targets need a nightly toolchain, so they are not part of the checks that each pull request
+# runs: `just test` runs the same tests on stable Rust, on the corpus alone. See "The fuzzing" in
+# docs/src/development/build-test.md.
+#
+# The list of the targets comes from `just fuzz-list`, so a new target runs with no change here.
+# Each target is a job of its own. A crash fails that job, prints the input, and uploads the
+# files that it added to the directories of the target as the artifact `new-files-<n>`: the crash,
+# and the inputs that reached new code, which a maintainer minimizes and commits.
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      time:
+        description: The time for each target, as cargo-bolero reads it, such as 10m
+        default: 10m
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  FUZZ_TIME: ${{ inputs.time || '10m' }}
+  # The version of cargo-bolero that matches the bolero crate in fuzz/Cargo.toml.
+  CARGO_BOLERO_VERSION: 0.13.5
+
+jobs:
+  targets:
+    name: list the targets
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.list.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fuzz-list
+      - uses: extractions/setup-just@v4
+      - run: cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked
+      - id: list
+        run: |
+          echo "targets=$(just fuzz-list | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+
+  fuzz:
+    name: ${{ matrix.target }}
+    needs: targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.targets) }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: fuzz
+      - uses: extractions/setup-just@v4
+      - run: cargo install cargo-bolero --version "$CARGO_BOLERO_VERSION" --locked
+      - name: fuzz the target
+        run: just fuzz "$TARGET" "$FUZZ_TIME"
+        env:
+          TARGET: ${{ matrix.target }}
+      # A run adds files to the directories of the target: a crash in `crashes`, and the inputs
+      # that reached new code in `corpus`. Git shows them as files that it does not track. The
+      # log has a crash as text, so a reader sees the input with no download, and the artifact
+      # has the file.
+      - name: collect the new files
+        if: always()
+        run: |
+          mkdir -p new/crashes new/corpus
+          git ls-files --others --exclude-standard -- 'fuzz/src/__fuzz__/*/crashes/*' \
+            | xargs -r cp --parents -t new/crashes
+          git ls-files --others --exclude-standard -- 'fuzz/src/__fuzz__/*/corpus/*' \
+            | xargs -r cp --parents -t new/corpus
+          find new/crashes -type f | while read -r file; do
+            echo "::error::$TARGET crashed on ${file#new/crashes/}"
+            {
+              echo "### $TARGET"
+              echo "Put the file in the \`crashes\` directory of the target, and run \`cargo test -p strata-fuzz\`."
+              echo '```'
+              base64 "$file"
+              echo '```'
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+        env:
+          TARGET: ${{ matrix.target }}
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: new-files-${{ strategy.job-index }}
+          path: new/
+          if-no-files-found: ignore
