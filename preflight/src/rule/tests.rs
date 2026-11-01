@@ -266,6 +266,21 @@ fn a_pre_release_is_below_its_version_in_a_release_range() {
 }
 
 #[test]
+fn a_release_that_is_not_a_version_is_refused_and_one_that_is_a_version_is_not() {
+    for release in ["4.10", "4.10.12", "v4.10.0-rc.1", "4.10.3+build.5", "4"] {
+        assert!(require_release(release).is_ok(), "{release}");
+    }
+    for release in ["4.11.x", "", "next", "latest", "4.10.", "4.x", ".5"] {
+        let err = require_release(release).unwrap_err();
+        assert!(matches!(err, Error::Usage { .. }), "{release}: {err}");
+        assert_eq!(
+            err.to_string(),
+            format!("--release {release}: give a release such as 4.10 or 4.10.12")
+        );
+    }
+}
+
+#[test]
 fn release_ranges() {
     assert!(release_in_range("4.10.3", "<4.11"));
     assert!(!release_in_range("4.11.0", "<4.11"));

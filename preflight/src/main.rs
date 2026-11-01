@@ -17,7 +17,7 @@ use strata_preflight::confidence::{self, Ledger};
 use strata_preflight::error::{Error, Result};
 use strata_preflight::probe::LiveBackend;
 use strata_preflight::report::{self, Format, Report};
-use strata_preflight::rule::{Catalog, Tier};
+use strata_preflight::rule::{self, Catalog, Tier};
 use strata_preflight::run::{self, Selection, WatchOptions};
 use strata_preflight::world::World;
 use strata_preflight::{TOOL_NAME, catalog};
@@ -263,6 +263,10 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
     let progress = Progress::new(cli.quiet || (config::quiet_from_env() && !cli.verbose));
     if let Some(kind) = cli.schema {
         return print_schema(kind);
+    }
+    // a release that is not a version is in each range: refuse it before any request
+    if let Some(release) = &cli.release {
+        rule::require_release(release)?;
     }
     let catalog = catalog::with_probes(&cli.probes)?;
     let tiers = tiers_of(&cli)?;

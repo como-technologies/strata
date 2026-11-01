@@ -218,7 +218,8 @@ ledger.
 
 A rule can name the Palette releases it applies to (`releases: "<4.11"`). A run
 with `--release 4.10` skips the rules of other releases. A run without it runs
-every rule, because a tenant key cannot read the release from Palette. See
+every rule, because a tenant key cannot read the release from Palette. A text that
+is not a version, such as `4.11.x`, is a `usage` error with exit `2`. See
 [The release of Palette](../internals/palette/limits.md#the-release-of-palette).
 To see what a release changes:
 

@@ -610,7 +610,8 @@ fn compare_to_bound(release: &str, bound: &str) -> Option<Ordering> {
     Some(version::compare(&line.join("."), bound))
 }
 
-/// True when `release` is in `range`. A release that does not parse is in each range.
+/// True when `release` is in `range`. A release that does not parse is in each range, so the
+/// command refuses it first: see [`require_release`].
 pub fn release_in_range(release: &str, range: &str) -> bool {
     let Some(bounds) = parse_range(range) else {
         return true;
@@ -626,6 +627,25 @@ pub fn release_in_range(release: &str, range: &str) -> bool {
             ">=" => c != Ordering::Less,
             _ => c == Ordering::Equal,
         }
+    })
+}
+
+/// Make sure that `release` is a Palette release that a range can order: one to three numbers, such
+/// as `4.10` or `4.10.12`.
+///
+/// A release such as `4.11.x` does not parse, and [`release_in_range`] puts it in each range. So
+/// each rule with `releases` would apply to it, and the run could fail a check that the release
+/// does not have.
+///
+/// # Errors
+///
+/// [`Error::Usage`] when `release` does not parse as a version.
+pub fn require_release(release: &str) -> Result<()> {
+    if version::numbers(release).is_some() {
+        return Ok(());
+    }
+    Err(Error::Usage {
+        message: format!("--release {release}: give a release such as 4.10 or 4.10.12"),
     })
 }
 

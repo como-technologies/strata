@@ -109,6 +109,9 @@ After 0.25.0, the library of `strata-preflight` changes in these ways:
 - `rule::release_in_range` orders a release that names three numbers with
   `reference::version::compare`, so `1.0.1-g0123456789ab` is below `1.0.1`. A
   bound must start with a number that parses: `>=4.x` is not a range now.
+- `rule::require_release` is new. It gives `Error::Usage` for a release that does
+  not parse. The command calls it for `--release`. `rule::release_in_range` still
+  puts a release that does not parse in each range.
 - `run::RunInputs` and `run::WatchInputs` have the field `paint: Paint` in
   place of `color: bool`. `Paint::off()` replaces `false`.
 - `report::render` and `report::terminal` take `&Paint` in place of `bool`.
@@ -540,6 +543,12 @@ each request, by its method, its path, and its body. The four rules that ask the
 validate route send one request. The six rules that read each edge host send one
 request for each host. `template-outside` reads the profile that the world read.
 A 5xx that is not a refusal is not kept, and the next rule asks again.
+
+After 0.25.0, `strata-preflight` refuses a `--release` that is not a version, such
+as `4.11.x`. The error kind is `usage`, the exit code is `2`, and the command
+sends no request. Release 0.25.0 read the numbers at the start of the text, so
+`4.11.x` was `4.11`. Give `4.11` now. [The order of
+versions](#the-order-of-versions) says which text is a version.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later

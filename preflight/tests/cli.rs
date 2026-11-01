@@ -1,8 +1,11 @@
 //! The binary, end to end: a custom probes file, the static tier offline, the exit codes, and the
 //! JSON document. No network.
 
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_strata-preflight"))
@@ -474,13 +477,9 @@ fn a_cluster_ref_names_the_whole_cluster_and_needs_palette() {
     assert!(err.contains("cluster:UID needs Palette"), "{err}");
 }
 
-#[test]
-fn a_cluster_ref_with_a_profile_is_a_usage_error_with_no_key_and_before_any_request() {
-    use std::io::Write;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    // a server on this machine that counts the requests and refuses each one
+/// A server on this machine that counts the requests and refuses each one. Gives its address and
+/// the count.
+fn refusing_server() -> (String, Arc<AtomicUsize>) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let host = format!("http://{}", listener.local_addr().unwrap());
     let requests = Arc::new(AtomicUsize::new(0));
@@ -493,28 +492,45 @@ fn a_cluster_ref_with_a_profile_is_a_usage_error_with_no_key_and_before_any_requ
                 .write_all(b"HTTP/1.1 500 Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         }
     });
+    (host, requests)
+}
+
+/// Run the binary against the server `host`, with a project name and, when given, a key. A
+/// request goes to the server, and a run with no key stops before it.
+fn run_against(
+    host: &str,
+    key: Option<&str>,
+    args: &[&str],
+    dir: &std::path::Path,
+) -> std::process::Output {
+    let mut command = Command::new(bin());
+    command
+        .args(args)
+        .current_dir(dir)
+        .env("HOME", dir)
+        .env("STRATA_QUIET", "1")
+        .env("STRATA_RETRIES", "0")
+        .env("NO_COLOR", "1")
+        .env("PALETTE_API", host)
+        .env("PALETTE_PROJECT", "payments")
+        .env_remove("PALETTE_PROJECT_UID")
+        .env_remove("SPECTROCLOUD_APIKEY")
+        .env_remove("SPECTROCLOUD_HOST");
+    match key {
+        Some(key) => command.env("PALETTE_API_KEY", key),
+        None => command.env_remove("PALETTE_API_KEY"),
+    };
+    command.output().unwrap()
+}
+
+#[test]
+fn a_cluster_ref_with_a_profile_is_a_usage_error_with_no_key_and_before_any_request() {
+    let (host, requests) = refusing_server();
     let dir = tempfile::tempdir().unwrap();
     for source in ["cluster:barney/addons", "cluster:barney@pending"] {
         // with no key, and with a key and a project name, which makes a project lookup first
         for key in [None, Some("k")] {
-            let mut command = Command::new(bin());
-            command
-                .args([source, "--json"])
-                .current_dir(dir.path())
-                .env("HOME", dir.path())
-                .env("STRATA_QUIET", "1")
-                .env("STRATA_RETRIES", "0")
-                .env("NO_COLOR", "1")
-                .env("PALETTE_API", &host)
-                .env("PALETTE_PROJECT", "payments")
-                .env_remove("PALETTE_PROJECT_UID")
-                .env_remove("SPECTROCLOUD_APIKEY")
-                .env_remove("SPECTROCLOUD_HOST");
-            match key {
-                Some(key) => command.env("PALETTE_API_KEY", key),
-                None => command.env_remove("PALETTE_API_KEY"),
-            };
-            let output = command.output().unwrap();
+            let output = run_against(&host, key, &[source, "--json"], dir.path());
             let err = String::from_utf8_lossy(&output.stderr);
             assert_eq!(output.status.code(), Some(2), "{source} {key:?}: {err}");
             assert!(
@@ -524,6 +540,38 @@ fn a_cluster_ref_with_a_profile_is_a_usage_error_with_no_key_and_before_any_requ
         }
     }
     assert_eq!(requests.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn a_release_that_is_not_a_version_is_a_usage_error_with_no_key_and_before_any_request() {
+    let (host, requests) = refusing_server();
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
+    let runs: [&[&str]; 3] = [
+        &["cluster.json", "--cloud", "aws", "--release", "4.11.x"],
+        &["cluster:barney", "--release", "4.11.x"],
+        &["--rules", "--release", "4.11.x"],
+    ];
+    for args in runs {
+        for key in [None, Some("k")] {
+            let mut args = args.to_vec();
+            args.push("--json");
+            let output = run_against(&host, key, &args, dir.path());
+            let err = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(output.status.code(), Some(2), "{args:?} {key:?}: {err}");
+            assert!(
+                err.contains("\"kind\":\"usage\"")
+                    && err.contains("--release 4.11.x: give a release such as 4.10 or 4.10.12"),
+                "{args:?} {key:?}: {err}"
+            );
+        }
+    }
+    assert_eq!(requests.load(Ordering::SeqCst), 0);
+    // a release with one to three numbers lists the rules
+    for release in ["4", "4.11", "4.11.0", "4.11.0-rc.1"] {
+        let (code, _, err) = run(&["--rules", "--release", release], dir.path());
+        assert_eq!(code, 0, "{release}: {err}");
+    }
 }
 
 #[test]
