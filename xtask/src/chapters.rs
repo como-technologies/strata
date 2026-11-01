@@ -809,8 +809,8 @@ fn commands(r: &mut Runner) {
         false,
         "strata same-release candidate.json published.json",
     );
-    // the export of Palette is a candidate too: the export route gives the file, and its record
-    // has the root of the version (#156)
+    // the export of Palette is a candidate too: the export route gives the file to a request that
+    // accepts a file, and its record has the root of the version (#156)
     r.tenant(|t| t.export(DEV, A111));
     r.quiet(&format!(
         "curl -sS -H 'Accept: application/octet-stream' -H 'ProjectUid: {DEV}' \

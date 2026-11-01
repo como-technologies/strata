@@ -101,7 +101,8 @@ also fails on a state that the chapter does not have.
 
 `xtask` runs each command against a local stand-in for the Palette API, which is
 `xtask/src/palette.rs`. The stand-in serves JSON files, one for each
-request. Each chapter of the runner builds the tenant that one page needs, from
+request. It answers an export request that accepts JSON with `{"Reader":{}}`,
+as Palette does. Each chapter of the runner builds the tenant that one page needs, from
 the real pack data in `examples/`, and changes it between commands as Palette
 changes it.
 
