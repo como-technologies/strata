@@ -145,6 +145,50 @@ fn macros_route(project: &str) -> String {
     format!("v1/projects/{project}/macros")
 }
 
+/// The system macro of the cluster name. Palette gives it an empty value for a profile version.
+const CLUSTER_NAME_MACRO: &str = "{{.spectro.system.cluster.name}}";
+/// The system macro of the profile name.
+const PROFILE_NAME_MACRO: &str = "{{.spectro.system.clusterprofile.name}}";
+
+/// The object whose `packs/resolvedValues` answer lists the profiles that it pins.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Pinner {
+    Cluster,
+    Group,
+}
+
+impl Pinner {
+    /// The document of the object `uid`.
+    fn route(self, uid: &str) -> String {
+        match self {
+            Pinner::Cluster => cluster_route(uid),
+            Pinner::Group => group_route(uid),
+        }
+    }
+}
+
+/// The value of each macro of the object at `route`, `GET {route}/packs/resolvedValues`.
+fn resolved_values_file(route: &str) -> String {
+    format!("{route}/packs/resolvedValues")
+}
+
+/// The last segment of the export route of a profile version.
+const EXPORT: &str = "export";
+
+/// The file of the export of the profile version `uid` as JSON,
+/// `GET /v1/clusterprofiles/{uid}/export?format=json`.
+fn export_file(uid: &str) -> String {
+    format!("{}/{EXPORT}@format=json", profile_route(uid))
+}
+
+/// The profile route of the export route `path`, `v1/clusterprofiles/{uid}/export`:
+/// `v1/clusterprofiles/{uid}`. `None` for any other path.
+pub fn exported_profile(path: &str) -> Option<&str> {
+    let profile = path.strip_suffix(EXPORT)?.strip_suffix('/')?;
+    let uid = profile.strip_prefix(PROFILES)?.strip_prefix('/')?;
+    (!uid.is_empty() && !uid.contains('/')).then_some(profile)
+}
+
 /// The versions of the pack `name` in each registry, as the server names the file of
 /// `GET /v1/packs?filters=spec.name={name}&limit=100&offset=0`: the first page of the listing.
 fn pack_listing(name: &str) -> String {
@@ -780,7 +824,8 @@ impl Tenant {
     }
 
     /// The export of the published profile `uid`, as `GET /v1/clusterprofiles/{uid}/export` gives
-    /// it with `format=json`.
+    /// it with `format=json` to a request that accepts a file. A request that accepts JSON gets
+    /// `{"Reader":{}}`: see `palette.rs`.
     ///
     /// The export holds the name, the description, the labels, the version, the type, and the
     /// cloud. It also holds each pack with its values, its manifests, and the metadata of its
@@ -845,11 +890,7 @@ impl Tenant {
                     "packs": packs},
                 "variables": variables["variables"]},
         });
-        self.write(
-            project,
-            &format!("{}/export@format=json", profile_route(uid)),
-            &export,
-        );
+        self.write(project, &export_file(uid), &export);
     }
 
     /// Publish `platform-addons`, an add-on profile with one manifest pack. Palette gives the
@@ -1293,7 +1334,7 @@ impl Tenant {
             &virtual_clusters_file(uid),
             &json!({"items": items, "listmeta": {"continue": ""}}),
         );
-        self.resolve_group_macros(project, uid);
+        self.resolve_macros(project, Pinner::Group, uid);
     }
 
     /// The app profile `shop@<version>`, `uid`: a helm tier `web` with the property `replicas`,
@@ -1730,7 +1771,7 @@ impl Tenant {
             .collect();
         self.write(project, &cluster_variables_route(uid), &json!(variables));
 
-        self.resolve_macros(project, uid);
+        self.resolve_macros(project, Pinner::Cluster, uid);
         self.write_profile_updates(project, uid);
         // the cluster now holds what each profile holds, so no update waits for it
         let mut items = self.notifications(project, uid);
@@ -2033,13 +2074,13 @@ impl Tenant {
         macros.push(json!({"name": name, "value": value}));
         self.write(project, &path, &doc);
         for uid in self.uids_in(project, CLUSTERS) {
-            self.resolve_macros(project, &uid);
+            self.resolve_macros(project, Pinner::Cluster, &uid);
         }
         for uid in self.uids_in(project, PROFILES) {
             self.resolve_profile_macros(project, &uid);
         }
         for uid in self.uids_in(project, GROUPS) {
-            self.resolve_group_macros(project, &uid);
+            self.resolve_macros(project, Pinner::Group, &uid);
         }
     }
 
@@ -2072,47 +2113,34 @@ impl Tenant {
     /// map with each project macro and the system macro of the profile name. The system macro of
     /// the cluster name has an empty value, as Palette gives it for a profile.
     fn resolve_profile_macros(&self, project: &str, profile: &str) {
-        let doc = self.read(project, &profile_route(profile));
+        let route = profile_route(profile);
+        let doc = self.read(project, &route);
         let mut resolved = self.user_macros(project);
         resolved.insert(
-            "{{.spectro.system.clusterprofile.name}}".to_string(),
+            PROFILE_NAME_MACRO.to_string(),
             doc["metadata"]["name"].clone(),
         );
-        resolved.insert("{{.spectro.system.cluster.name}}".to_string(), json!(""));
+        resolved.insert(CLUSTER_NAME_MACRO.to_string(), json!(""));
         self.write(
             project,
-            &format!("{}/packs/resolvedValues", profile_route(profile)),
+            &resolved_values_file(&route),
             &json!({ "resolved": resolved }),
         );
     }
 
-    /// The `packs/resolvedValues` answer of one cluster group: for each profile it pins, each
-    /// project macro, in the shape of the answer for a cluster.
-    fn resolve_group_macros(&self, project: &str, group: &str) {
-        let doc = self.read(project, &group_route(group));
-        let resolved = self.user_macros(project);
-        let profiles: Vec<Value> = doc["spec"]["clusterProfileTemplates"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .map(|t| json!({"uid": t["uid"], "resolved": resolved}))
-            .collect();
-        self.write(
-            project,
-            &format!("{}/packs/resolvedValues", group_route(group)),
-            &json!({ "profiles": profiles }),
-        );
-    }
-
-    /// The `packs/resolvedValues` answer of one cluster: for each profile it runs, each project
-    /// macro and its value, and the system macro of the cluster name, as Palette gives them.
-    fn resolve_macros(&self, project: &str, cluster: &str) {
-        let doc = self.read(project, &cluster_route(cluster));
+    /// The `packs/resolvedValues` answer of one cluster or one cluster group, `uid`: for each
+    /// profile it pins, each project macro and its value. A cluster adds the system macro of its
+    /// name, as Palette gives them.
+    fn resolve_macros(&self, project: &str, owner: Pinner, uid: &str) {
+        let route = owner.route(uid);
+        let doc = self.read(project, &route);
         let mut resolved = self.user_macros(project);
-        resolved.insert(
-            "{{.spectro.system.cluster.name}}".to_string(),
-            doc["metadata"]["name"].clone(),
-        );
+        if owner == Pinner::Cluster {
+            resolved.insert(
+                CLUSTER_NAME_MACRO.to_string(),
+                doc["metadata"]["name"].clone(),
+            );
+        }
         let profiles: Vec<Value> = doc["spec"]["clusterProfileTemplates"]
             .as_array()
             .into_iter()
@@ -2121,7 +2149,7 @@ impl Tenant {
             .collect();
         self.write(
             project,
-            &format!("{}/packs/resolvedValues", cluster_route(cluster)),
+            &resolved_values_file(&route),
             &json!({"profiles": profiles}),
         );
     }
@@ -2581,6 +2609,52 @@ fn template_of(d: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_export_route_names_the_profile_it_exports() {
+        let export = format!("{}/export", profile_route("u1"));
+        assert_eq!(exported_profile(&export), Some("v1/clusterprofiles/u1"));
+        // the file of the stand-in has the query after an `@`, and is not the route
+        assert_eq!(exported_profile(&export_file("u1")), None);
+        for other in [
+            "v1/clusterprofiles/export",
+            "v1/clusterprofiles//export",
+            "v1/clusterprofiles/u1/packs/export",
+            "v1/clusterprofiles/u1/export/more",
+            "v1/spectroclusters/u1/export",
+            "v1/clusterprofiles/u1",
+        ] {
+            assert_eq!(exported_profile(other), None, "{other}");
+        }
+    }
+
+    /// One function resolves the macros of a cluster and of a cluster group: both list each profile
+    /// they pin with each project macro, and only the cluster adds the system macro of its name.
+    #[test]
+    fn a_macro_resolves_for_a_cluster_with_its_name_and_for_a_group_without_it() {
+        let dir = std::env::temp_dir().join(format!("strata-macros-{}", std::process::id()));
+        let tenant = Tenant::new(&dir, &dir);
+        let owner = |uid: &str, name: &str| {
+            json!({"metadata": {"uid": uid, "name": name},
+                "spec": {"clusterProfileTemplates": [{"uid": "p1"}, {"uid": "p2"}]}})
+        };
+        tenant.put("proj", &cluster_route("c1"), &owner("c1", "fred"));
+        tenant.put("proj", &group_route("g1"), &owner("g1", "edge"));
+        let resolved = |route: String| tenant.read("proj", &resolved_values_file(&route));
+        let region = "{{.spectro.macro.region}}";
+        for value in ["us-east-2", "eu-west-1"] {
+            tenant.set_macro("proj", "region", value);
+            let cluster = json!({"profiles": [
+                {"uid": "p1", "resolved": {region: value, CLUSTER_NAME_MACRO: "fred"}},
+                {"uid": "p2", "resolved": {region: value, CLUSTER_NAME_MACRO: "fred"}}]});
+            let group = json!({"profiles": [
+                {"uid": "p1", "resolved": {region: value}},
+                {"uid": "p2", "resolved": {region: value}}]});
+            assert_eq!(resolved(cluster_route("c1")), cluster);
+            assert_eq!(resolved(group_route("g1")), group);
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn a_version_is_newest_by_number_and_not_by_text() {

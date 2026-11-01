@@ -24,6 +24,10 @@
 //! first. When a profile of the body is of another cloud type, the answer is HTTP 500 with the
 //! code `ClusterProfilesNotSupported`, as Palette gives it: see `profile_cloud_refusal`.
 //!
+//! The export route of a profile, `GET /v1/clusterprofiles/{uid}/export`, reads the `Accept`
+//! header. To `Accept: application/json` the answer is `{"Reader":{}}`, as Palette gives it: see
+//! `export_reader`. Any other `Accept`, or none, gets the file.
+//!
 //! When the file does not exist, the answer is HTTP 404 with the body that Palette gives. The
 //! server reads each file at each request, so the runner can change the tenant between two
 //! commands, and a page can show what Palette does after an edit in place.
@@ -33,7 +37,7 @@ use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::{fs, thread};
 
-use crate::tenant::{AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT};
+use crate::tenant::{AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT, exported_profile};
 
 /// Serve `root` on a free port of 127.0.0.1, write the port to `port_file`, and never return.
 pub fn serve(root: &Path, port_file: &Path) -> std::io::Result<()> {
@@ -90,6 +94,9 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
 
 /// The status and the body that the files of the tenant give for `request`.
 fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
+    if let Some(body) = export_reader(root, request) {
+        return Ok((200, body));
+    }
     let path = file_for(root, request.project.as_deref(), &request.target);
     let refusal = path.as_deref().and_then(refusal_of);
     Ok(match (path, refusal) {
@@ -119,6 +126,29 @@ fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
             .into_bytes(),
         ),
     })
+}
+
+/// The answer of the export route to a request that accepts JSON: `{"Reader":{}}`, and not the
+/// file. Palette sends the file only to a request that accepts a file, such as
+/// `Accept: application/octet-stream`.
+const EXPORT_FOR_JSON: &[u8] = br#"{"Reader":{}}"#;
+
+/// The body of the answer to a request for the export of a profile that exists, when the request
+/// accepts JSON: [`EXPORT_FOR_JSON`], for each `format`. `None` when `request` is another request,
+/// or when it accepts a file: the file answers it.
+fn export_reader(root: &Path, request: &Request) -> Option<Vec<u8>> {
+    let accept = request.accept.as_deref()?;
+    if !accept.trim().eq_ignore_ascii_case("application/json") {
+        return None;
+    }
+    let path = request
+        .target
+        .split_once('?')
+        .map_or(request.target.as_str(), |(path, _)| path);
+    let profile = exported_profile(path.trim_start_matches('/'))?;
+    file_for(root, request.project.as_deref(), profile)?
+        .is_file()
+        .then(|| EXPORT_FOR_JSON.to_vec())
 }
 
 /// The cloud type in `target`, when it is the validate route of a create:
@@ -207,6 +237,8 @@ fn refusal_of(path: &Path) -> Option<u16> {
 struct Request {
     target: String,
     project: Option<String>,
+    /// The `Accept` header, when the request has one.
+    accept: Option<String>,
     body: Vec<u8>,
 }
 
@@ -296,7 +328,8 @@ fn profiles_searched(file: &[u8], body: &[u8]) -> Vec<u8> {
 }
 
 /// The request line, the headers this server reads, and the body: a search is a POST, and its
-/// body selects the clusters. Every other header is skipped.
+/// body selects the clusters. The headers are `ProjectUid`, `Accept`, and `Content-Length`. Every
+/// other header is skipped.
 fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut line = String::new();
@@ -309,6 +342,7 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
     let mut request = Request {
         target: target.to_string(),
         project: None,
+        accept: None,
         body: Vec::new(),
     };
     let mut length = 0usize;
@@ -320,6 +354,8 @@ fn read_request(stream: &mut TcpStream) -> std::io::Result<Option<Request>> {
         if let Some((name, value)) = header.split_once(':') {
             if name.eq_ignore_ascii_case("ProjectUid") {
                 request.project = Some(value.trim().to_string());
+            } else if name.eq_ignore_ascii_case("Accept") {
+                request.accept = Some(value.trim().to_string());
             } else if name.eq_ignore_ascii_case("Content-Length") {
                 length = value.trim().parse().unwrap_or(0);
             }
@@ -518,6 +554,7 @@ mod tests {
             let request = Request {
                 target: target.to_string(),
                 project: Some("p1".to_string()),
+                accept: None,
                 body: serde_json::json!({"spec": {"profiles": profiles}})
                     .to_string()
                     .into_bytes(),
@@ -542,6 +579,58 @@ mod tests {
             refusal("/v1/spectroclusters/aws/validate/packs", &["u-gcp"]),
             None
         );
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The export route gives the file to a request that accepts a file, and `{"Reader":{}}` to a
+    /// request that accepts JSON, as a live run shows (#156). The answer for JSON needs the profile,
+    /// and not the file, and it does not depend on the query.
+    #[test]
+    fn the_export_route_answers_a_request_that_accepts_json_with_a_reader_and_not_the_file() {
+        let dir = std::env::temp_dir().join(format!("strata-export-{}", std::process::id()));
+        let profiles = dir.join("p1/v1/clusterprofiles");
+        fs::create_dir_all(profiles.join("u1")).unwrap();
+        fs::write(profiles.join("u1.json"), "{}").unwrap();
+        fs::write(
+            profiles.join("u1/export@format=json.json"),
+            r#"{"spec":{}}"#,
+        )
+        .unwrap();
+        let answer = |target: &str, accept: Option<&str>| {
+            let request = Request {
+                target: target.to_string(),
+                project: Some("p1".to_string()),
+                accept: accept.map(str::to_string),
+                body: Vec::new(),
+            };
+            let (status, body) = served(&dir, &request).unwrap();
+            (status, String::from_utf8(body).unwrap())
+        };
+        let file = (200, r#"{"spec":{}}"#.to_string());
+        let reader = (200, r#"{"Reader":{}}"#.to_string());
+        let route = "/v1/clusterprofiles/u1/export?format=json";
+        assert_eq!(answer(route, Some("application/json")), reader);
+        assert_eq!(answer(route, Some(" Application/JSON ")), reader);
+        assert_eq!(
+            answer(
+                "/v1/clusterprofiles/u1/export?format=yaml",
+                Some("application/json")
+            ),
+            reader
+        );
+        assert_eq!(answer(route, Some("application/octet-stream")), file);
+        assert_eq!(answer(route, None), file);
+        // another route under the same profile gives its own file, and a profile with no
+        // document has no export
+        assert_eq!(
+            answer("/v1/clusterprofiles/u1", Some("application/json")).1,
+            "{}"
+        );
+        let missing = answer(
+            "/v1/clusterprofiles/u2/export?format=json",
+            Some("application/json"),
+        );
+        assert_eq!(missing.0, 404);
         fs::remove_dir_all(&dir).unwrap();
     }
 
