@@ -10,7 +10,7 @@ use crate::common;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use common::{INSTALLING_WORKFLOWS, repo_file, schema, version_of, walk};
+use common::{INSTALLING_WORKFLOWS, repo_file, schema, script, version_of, walk};
 use strata::api::codes::ValidateRoute;
 
 fn docs() -> PathBuf {
@@ -922,6 +922,224 @@ fn the_rows_of_the_checks_that_the_wave_11_live_window_ran_state_a_result() {
         assert!(
             packs.contains(needle),
             "the section of validate-packs.sh does not give {needle}"
+        );
+    }
+}
+
+// ---- the everyday loop -------------------------------------------------------------------------
+
+/// The text of `docs/src/loop.md`.
+fn the_loop() -> String {
+    read(&docs().join("loop.md"))
+}
+
+/// The cells of each row of the first table in `text`, without the header and the rule line.
+fn table_rows(text: &str) -> Vec<Vec<String>> {
+    text.lines()
+        .filter(|l| l.starts_with('|'))
+        .skip(2)
+        .map(|l| {
+            l.trim_matches('|')
+                .split('|')
+                .map(|c| c.trim().to_string())
+                .collect()
+        })
+        .collect()
+}
+
+/// The code spans of `text`: the text between a pair of backticks.
+fn code_spans(text: &str) -> Vec<&str> {
+    text.split('`').skip(1).step_by(2).collect()
+}
+
+/// The words that start the command of a person: the commands of strata and the scripts of
+/// `scripts/ci/`.
+fn command_words() -> Vec<String> {
+    let mut words = common::command_names();
+    words.extend(
+        std::fs::read_dir(script("ci"))
+            .expect("scripts/ci exists")
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned()),
+    );
+    words
+}
+
+/// Whether `text` shows a command to a person: a code span that starts with a command of strata,
+/// a script, or an option.
+fn names_a_command(text: &str, names: &[String]) -> bool {
+    code_spans(text).iter().any(|span| {
+        let first = span.split_whitespace().next().unwrap_or_default();
+        first.starts_with('-') || first == "strata" || names.iter().any(|n| n == first)
+    })
+}
+
+/// The first two paragraphs name the reason before the contrast. A name alone does not fix the
+/// content of a version, so the record holds the content.
+#[test]
+fn the_everyday_loop_opens_with_the_reason_that_the_record_holds_the_content_and_not_only_the_name()
+{
+    let text = the_loop();
+    let top = section(&text, "# The everyday loop", Some("\n## "));
+    let want = "# The everyday loop \
+        Strata is one loop, and each command is one step of it. A team reviews a change, \
+        and the pipeline publishes it. A record in the repository keeps the content that \
+        the team approved. From then on, each step compares Palette with that record. \
+        Each difference reaches a person as a comment, a gate that fails, or an issue. \
+        The name and the version alone do not fix the content. Palette can update a \
+        published version after its publish, and the name stays. So the record holds the \
+        content, and not only the name. A record in Git, checked against Palette, shows \
+        each change after the approval. \
+        [Where each part belongs](./boundary.md) gives the reasons.";
+    assert_eq!(one_line(top), want);
+}
+
+#[test]
+fn a_day_of_work_gives_each_step_what_you_do_what_strata_tells_you_and_where_it_runs() {
+    let text = the_loop();
+    let part = section(&text, "## A day of work", Some("\n## "));
+    let header = part
+        .lines()
+        .find(|l| l.starts_with('|'))
+        .expect("the section has a table");
+    assert_eq!(
+        header, "| You do this | Strata tells you | Where it runs |",
+        "the table of the day has three columns"
+    );
+
+    let names = command_words();
+    let rows = table_rows(part);
+    assert_eq!(rows.len(), 9, "the table of the day has nine steps");
+    for row in rows {
+        assert_eq!(row.len(), 3, "a row has three cells: {row:?}");
+        for cell in &row {
+            assert!(!cell.is_empty(), "a cell is empty in {row:?}");
+        }
+        for cell in &row[..2] {
+            assert!(
+                !names_a_command(cell, &names) && !cell.contains(".sh"),
+                "the cell {cell:?} names a command"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_chart_of_the_everyday_loop_has_a_lane_for_you_the_pipeline_and_the_night_and_no_box_names_a_command()
+ {
+    let text = the_loop();
+    let part = section(&text, "## A day of work", Some("\n## "));
+    let chart = section(part, "```mermaid", Some("\n```\n"));
+    let names = command_words();
+
+    let mut lanes: Vec<(String, Vec<String>)> = Vec::new();
+    let mut nodes = BTreeSet::new();
+    let mut edges = Vec::new();
+    for line in chart.lines().map(str::trim) {
+        if let Some(rest) = line.strip_prefix("subgraph ") {
+            let title = rest.split('"').nth(1).expect("a lane has a title");
+            lanes.push((title.to_string(), Vec::new()));
+        } else if line.contains("-->") {
+            edges.extend(line.split("-->").map(|id| id.trim().to_string()));
+        } else if let Some((id, label)) = line.split_once("[\"") {
+            let (_, boxes) = lanes.last_mut().expect("a box is inside a lane");
+            boxes.push(label.trim_end_matches("\"]").to_string());
+            nodes.insert(id.to_string());
+        }
+    }
+
+    let titles: Vec<&str> = lanes.iter().map(|(t, _)| t.as_str()).collect();
+    assert_eq!(
+        titles,
+        ["You, in a pull request", "Your pipeline", "Each night"]
+    );
+    for (title, boxes) in &lanes {
+        assert!(!boxes.is_empty(), "the lane {title:?} has no box");
+        for label in boxes {
+            assert!(
+                !names_a_command(label, &names) && !label.contains(".sh") && !label.contains('`'),
+                "the box {label:?} names a command"
+            );
+        }
+    }
+    for id in edges {
+        assert!(
+            nodes.contains(&id),
+            "an arrow starts or ends at {id:?}, which is no box"
+        );
+    }
+}
+
+/// The table of today became "The jobs and their commands", for the person who writes the
+/// pipeline. It keeps each command and each page that the table had.
+#[test]
+fn the_jobs_and_their_commands_keep_each_command_and_each_link_of_the_table_of_today() {
+    let text = the_loop();
+    let part = section(&text, "## The jobs and their commands", Some("\n## "));
+    let header = part
+        .lines()
+        .find(|l| l.starts_with('|'))
+        .expect("the section has a table");
+    assert_eq!(header, "| When | Who | The question | What runs | Page |");
+    assert_eq!(table_rows(part).len(), 11, "the table has eleven jobs");
+
+    let spans = code_spans(part);
+    for command in [
+        "snapshot --from-candidate --validate",
+        "merge-gate.sh",
+        "compare cluster:<name> <version> --repave",
+        "pr-comment.sh --repave",
+        "pr-comment.sh --preflight",
+        "verify-report.sh",
+        "snapshot filter:<name> --dir --prune",
+        "upstream-report.sh",
+        "list --pack",
+        "consumers",
+        "same-release",
+        "verify --who",
+    ] {
+        assert!(
+            spans.iter().any(|s| s.starts_with(command)),
+            "the table does not show `{command}`"
+        );
+    }
+    for link in [
+        "(./use-cases/review.md)",
+        "(./automation/merge-gate.md)",
+        "(./commands/compare/repave.md)",
+        "(./commands/compare/validate.md)",
+        "(./use-cases/promote.md)",
+        "(./use-cases/stop-a-build.md)",
+        "(./automation/drift-issues.md)",
+        "(./use-cases/fleet.md)",
+        "(./automation/upstream-issues.md)",
+        "(./use-cases/find-a-pack.md)",
+        "(./use-cases/retire.md)",
+    ] {
+        assert!(part.contains(link), "the table does not link {link}");
+    }
+}
+
+/// The heading "Who runs what, and when" became two sections. `just docs-check` fails a link to a
+/// heading that a page does not have, so this test needs only the headings and the two new links.
+#[test]
+fn the_everyday_loop_has_the_two_new_sections_and_the_quick_start_and_the_commands_link_them() {
+    let text = the_loop();
+    for heading in ["\n## A day of work\n", "\n## The jobs and their commands\n"] {
+        assert!(text.contains(heading), "loop.md has no heading {heading:?}");
+    }
+    assert!(
+        !text.contains("## Who runs what, and when"),
+        "loop.md still has the old heading"
+    );
+
+    for (page, link) in [
+        ("quickstart.md", "loop.md#a-day-of-work"),
+        ("commands/index.md", "loop.md#the-jobs-and-their-commands"),
+    ] {
+        assert!(
+            read(&docs().join(page)).contains(link),
+            "{page} does not link {link}"
         );
     }
 }
