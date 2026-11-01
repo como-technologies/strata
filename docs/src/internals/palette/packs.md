@@ -531,13 +531,13 @@ version, so a suffix such as `-rc.1` or `-rev1` puts a version below its base.
 The floating tags follow the same order. In `Public Repo`, the tag `1.19.x` of
 `cert-manager` names `1.19.3`, and not the rebuild `1.19.3-rev1`.
 
-Strata orders by the numbers and the text, and puts `1.19.3-rev1` above
-`1.19.3`. So `strata packs` gives the mark of Palette as `paletteLatest`, and
-`strata behind` gives it on each newer version: see
+Strata orders versions by semantic version too, so `1.19.3-rev1` is below
+`1.19.3` for strata as for Palette. `strata packs` gives the mark of Palette as
+`paletteLatest`, and `strata behind` gives it on each newer version: see
 [Which version is the newest](../../commands/packs.md#which-version-is-the-newest).
-On the live tenant, `kubernetes` in `Public Repo` has one marked version, and
-strata calls it the newest too. The live example
-[checks both facts](../../development/live-runs.md#packssh).
+On the live tenant, `kubernetes` in `Public Repo` has one marked version. The
+live example [checks that fact](../../development/live-runs.md#packssh). It also
+checks that the newest version of each pack is the marked version.
 
 ## Pack states
 

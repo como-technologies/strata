@@ -192,12 +192,12 @@ impl Tenant {
         self.write(project, &path, &listing);
     }
 
-    /// Publish a rebuild of one version of a pack in the Public Repo as `<version>-rev1`, as
-    /// Spectro Cloud publishes `1.19.3-rev1` of cert-manager. Palette orders the versions by
-    /// semantic version, so the rebuild sorts below its base. The mark `latestVersion` and the
-    /// floating tags stay on the base, and the rebuild gets only its exact tag.
-    pub fn rebuild_pack_version(&self, project: &str, name: &str, version: &str) {
-        let rebuild = format!("{version}-rev1");
+    /// Publish a copy of one version of a pack in the Public Repo as the version `copy`. The copy
+    /// is a rebuild when its version is `<version>-rev1`, as Spectro Cloud publishes `1.19.3-rev1`
+    /// of cert-manager, or a pre-release such as `1.66.0-rc.1`. Palette orders the versions by
+    /// semantic version, so a pre-release sorts below its version. The mark `latestVersion` and
+    /// the floating tags stay on the base, and the copy gets only its exact tag.
+    pub fn copy_pack_version(&self, project: &str, name: &str, version: &str, copy_version: &str) {
         let path = pack_listing(name);
         let mut listing = self.read(project, &path);
         let Some(items) = listing["items"].as_array_mut() else {
@@ -210,12 +210,12 @@ impl Tenant {
         else {
             return;
         };
-        // a pack uid of Palette is 24 hex digits: the rebuild changes the last one
+        // a pack uid of Palette is 24 hex digits: the copy_version changes the last one
         let base = copy["metadata"]["uid"].as_str().unwrap_or_default();
         let uid = format!("{}f", &base[..base.len().saturating_sub(1)]);
         copy["metadata"]["uid"] = json!(uid);
         copy["metadata"]["annotations"]["latestVersion"] = json!("false");
-        copy["spec"]["version"] = json!(rebuild);
+        copy["spec"]["version"] = json!(copy_version);
         items.push(copy);
         let count = items.len();
         listing["listmeta"]["count"] = json!(count);
@@ -231,8 +231,10 @@ impl Tenant {
             .map(|t| t["parentTags"].clone())
             .unwrap_or(Value::Null);
         if let Some(tags) = entity["tags"].as_array_mut() {
-            tags.push(json!({"packUid": uid, "parentTags": above, "tag": rebuild,
-                             "version": rebuild}));
+            tags.push(
+                json!({"packUid": uid, "parentTags": above, "tag": copy_version,
+                             "version": copy_version}),
+            );
         }
         self.write(project, &path, &entity);
     }

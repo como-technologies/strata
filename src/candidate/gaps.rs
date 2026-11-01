@@ -8,13 +8,14 @@
 
 use std::path::Path;
 
-use super::{Candidate, CandidateLayer, LayerKind, MINTED_LAYER, loose_semver};
+use super::{Candidate, CandidateLayer, LayerKind, MINTED_LAYER};
 use crate::api::codes::CreateRule;
 use crate::closed_set::ClosedSet;
 use crate::cloud::{Cloud, supports};
 use crate::content::layer::Layer;
 use crate::error::Error;
 use crate::profile_type::ProfileType;
+use crate::reference::version;
 use crate::text::and_list;
 
 /// A rule of the create that a candidate breaks: the rule, and the problem in the words of the
@@ -165,7 +166,7 @@ pub(super) fn check_cloud(
 /// version in a loose form (`v1`, `1.2`, `1.2.3-rc.1+b5`), or a text that holds three numbers with
 /// dots between them (`chart-1.2.3`).
 fn palette_pack_tag(tag: &str) -> bool {
-    loose_semver(tag) || has_three_numbers(tag)
+    version::parses(tag) || has_three_numbers(tag)
 }
 
 /// Whether `text` holds three numbers with dots between them, `\d+\.\d+\.\d+`, at any place.

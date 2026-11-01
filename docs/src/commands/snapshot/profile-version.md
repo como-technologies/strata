@@ -41,8 +41,11 @@ gives each macro at the scope of the version. See [Macros](cluster.md#macros).
 {{#include ../../output/snapshot-latest-version.txt}}
 ```
 
-`<name>@latest` is the highest version in natural order: `22.04` is above
-`20.04`, and `1.30.6` is above `1.29.10`.
+`<name>@latest` is the highest version that is not a pre-release: `22.04` is
+above `20.04`, and `1.30.6` is above `1.29.10`. A pre-release is below its
+version, so `1.0.1` is above `1.0.1-g0123456789ab`. A name that has only
+pre-releases gives its highest one. See
+[The order of versions](../../reference/compatibility.md#the-order-of-versions).
 
 ## The cluster templates of a version
 

@@ -81,6 +81,13 @@ where each module goes.
   and `JsonSchema`.
 - Do not put a field of strata into a document of Palette to carry it to
   another function. Return a struct that holds both.
+- A version order follows Semantic Versioning 2.0.0 where the version parses, as
+  Palette orders versions. `src/reference/version.rs` is the one module that
+  parses a version and orders versions. Use `version::compare`, `version::pick`,
+  and `version::is_pre_release`. Do not write a second parse. The natural order
+  of the text is only the fallback for a string that does not parse, such as
+  `LTS__24.x`. No script uses `sort -V` for a version. A script reads the
+  direction of a move from strata, such as `versionMove` in `strata-diff/1`.
 - Give each limit, code, and fixed text of Palette a named `const`, in one
   place. Its comment says what Palette does. It does not cite the code of
   Palette: see [rule 7](./documentation.md#rules).

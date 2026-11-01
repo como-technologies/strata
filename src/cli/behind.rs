@@ -20,6 +20,7 @@ pub(crate) fn cmd_behind(a: &BehindArgs) -> Result<ExitCode> {
         &ops::BehindOptions {
             impact: !a.no_impact,
             since,
+            pre_release: a.pre_release,
         },
         |scope| connect(progress, scope),
         &now_utc(),

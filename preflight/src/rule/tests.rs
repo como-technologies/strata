@@ -226,6 +226,30 @@ fn a_catalog_refuses_one_id_two_times() {
 }
 
 #[test]
+fn a_pre_release_is_below_its_version_in_a_release_range() {
+    // the order is that of strata::reference::version::compare
+    assert!(!release_in_range("1.0.1-g0123456789ab", ">=1.0.1"));
+    assert!(release_in_range("1.0.1-g0123456789ab", "<1.0.1"));
+    assert!(release_in_range("1.0.1", ">=1.0.1"));
+    assert!(release_in_range("1.0.1+2", "=1.0.1"));
+    assert!(release_in_range("1.0.1-rc.2", ">1.0.1-rc.1 <1.0.1"));
+    assert!(!release_in_range("1.0.1-rc.11", "<1.0.1-rc.2"));
+    // a bound that names fewer than three numbers is a release line: only its numbers count
+    assert!(release_in_range("4.10.0-rc.1", "=4.10"));
+    assert!(!release_in_range("4.11.0-rc.1", "<4.11"));
+    // a release that does not parse is in each range
+    assert!(release_in_range("next", ">=1.0.1"));
+
+    let section = GOOD.replace("status: seen", "status: seen\n    releases: '>=1.0.1'");
+    let rule = &Catalog::parse_section(&section, Path::new("x.yaml"))
+        .unwrap()
+        .rules[0];
+    assert!(rule.applies_to_release(Some("1.0.1")));
+    assert!(!rule.applies_to_release(Some("1.0.1-g0123456789ab")));
+    assert!(rule.applies_to_release(None));
+}
+
+#[test]
 fn release_ranges() {
     assert!(release_in_range("4.10.3", "<4.11"));
     assert!(!release_in_range("4.11.0", "<4.11"));

@@ -39,8 +39,21 @@ names each state, and `ClusterState::Running.is(text)` replaces
 `closed_set::impl_closed_set` is the public macro `strata::impl_closed_set`. Its
 table takes an expression for each text, and a literal is one.
 
+After 0.25.0, `reference::version::compare` follows Semantic Versioning 2.0.0
+for two versions that parse: see
+[The order of versions](#the-order-of-versions). `reference::version::is_pre_release`
+and `reference::version::numbers` are new. `ops::BehindOptions` has the field
+`pre_release`. A struct literal must set it, or use `..Default::default()`.
+`diff::Diff` and `diff::PackDiff` have the field
+`version_move: Option<diff::VersionMove>`. A struct literal or a pattern with no
+`..` must name it. `diff::VersionMove` is a new enum with the values `Forward`
+and `Back`.
+
 After 0.25.0, the library of `strata-preflight` changes in these ways:
 
+- `rule::release_in_range` orders a release that names three numbers with
+  `reference::version::compare`, so `1.0.1-g0123456789ab` is below `1.0.1`. A
+  bound must start with a number that parses: `>=4.x` is not a range now.
 - `run::RunInputs` and `run::WatchInputs` have the field `paint: Paint` in
   place of `color: bool`. `Paint::off()` replaces `false`.
 - `report::render` and `report::terminal` take `&Paint` in place of `bool`.
@@ -434,6 +447,42 @@ file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a
 closed set, such as a new `type` of a layer, fails in the same way. A person
 writes the file, so strata refuses the value and does not guess.
+
+### The order of versions
+
+After 0.25.0, strata orders two versions as Palette does, by Semantic Versioning
+2.0.0, when both parse. A version parses when it has one to three numbers. It can
+have a `v` before them, a pre-release after `-`, and build data after `+`. A
+pre-release is below its version: `1.0.1-rc.1`, `1.0.1-mr12.345`, and
+`1.0.1-g0123456789ab` are below `1.0.1`. Build data has no precedence, so `1.0.1+2`
+equals `1.0.1`. Before, strata put a pre-release above its version.
+
+A string that does not parse keeps the natural order of its numbers and its text.
+`22.04`, `1.30.6`, and `LTS__24.x` keep their order. A string that does not parse
+is above each version that parses, and the empty string is the lowest. Three
+results change:
+
+- **`behind` names no pre-release as a newer version of a pin that is not a
+  pre-release.** `1.0.1-g0123456789ab` is no newer version of the pin `1.0.1`.
+  The option `--pre-release` names them. A pin that is a pre-release has its final
+  version and each later version as newer versions. Before, a registry with such a
+  pre-release made `behind` exit `1`. Now it exits `0` when nothing else is newer.
+- **`<name>@latest` is the highest version that is not a pre-release.** A name
+  that has pre-releases only gives its highest pre-release. This holds for a
+  profile, an app profile, and `pack:<name>@latest`. An exact version still names
+  a pre-release.
+- **`strata packs` lists a pre-release below its version.** `latest` marks the
+  highest version by the new order. A live check compares it with the version
+  that Palette marks with `latestVersion`. `paletteLatest` stays in the document.
+  `--latest` adds the version of Palette only when it is not the highest. This
+  can happen for a version that does not parse.
+
+`strata-diff/1` has the new field `versionMove`, in the document and in each
+entry of `packs[]`. It is `forward` when side B has the higher version, and `back`
+when side B has the lower. It is absent when a side has no version, and when the
+two versions have the same precedence. The id stays, because a reader ignores a
+field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
+it does not sort the versions as text now.
 
 ## Release 0.25.0: changes that need action
 
