@@ -24,31 +24,23 @@ use std::process::ExitCode;
 
 use knurl_core::{ContentDigest, InstanceName, Level, UnitName, UnitRef, Verification, Version};
 use knurl_ports::{PlatformRead, PlatformReadExt, PortError};
-use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
+use strata::api::{self, HttpApi, Palette, Retry};
 use strata::config::Config;
+use strata::ops;
 use strata::term::progress::Progress;
 use strata_knurl::{StrataPlatform, definition_of};
 
 /// A client as the `strata` command makes one. `project` is the project of a cluster that
 /// `pinned-by` reads; `None` is the project of the settings.
 fn connect(project: Option<&str>) -> strata::Result<Palette<Retry<HttpApi>>> {
-    let mut config = Config::from_env()?;
     match project {
-        Some(uid) => config.project_uid = Some(uid.to_string()).filter(|uid| !uid.is_empty()),
-        None => {
-            if let (None, Some(name)) = (&config.project_uid, config.project_name.clone()) {
-                let mut tenant = config.clone();
-                tenant.project_uid = None;
-                config.project_uid = Some(client(tenant).project_uid_named(&name)?);
-            }
+        Some(uid) => {
+            let mut config = Config::from_env()?;
+            config.project_uid = ops::scope_of(uid).map(str::to_string);
+            Ok(api::connect_with(config, Progress::silent()))
         }
+        None => api::connect_from_env(Progress::silent()),
     }
-    Ok(client(config))
-}
-
-fn client(config: Config) -> Palette<Retry<HttpApi>> {
-    let policy = RetryPolicy::from_config(&config);
-    Palette::new(Retry::new(HttpApi::new(config), policy, Progress::silent()))
 }
 
 /// Runs a future on a runtime of this thread. The adapter moves each read to a blocking task,

@@ -138,9 +138,9 @@ impl Levels {
 /// `try`, `catch`, `reduce`, `foreach`, `as`, and `label` are operators too. An `if` and a `def`
 /// open a level like a bracket, and `end` and `;` close it.
 ///
-/// The count is not exact. An operator in a name, or a field with the name of a keyword, counts
-/// like code, and a count that is too high only makes the check refuse a program early. A comment
-/// counts for nothing, as in jaq: a closer in a comment must not close a level of the code.
+/// The count is not exact. An operator in a name counts like code, and so does a field with the
+/// name of a keyword. A count that is too high only makes the check refuse a program early. A
+/// comment counts for nothing, as in jaq: a closer in a comment must not close a level of the code.
 pub(super) fn depth(program: &str) -> usize {
     let mut levels = Levels::new();
     let mut chars = program.char_indices().peekable();
@@ -182,9 +182,9 @@ pub(super) fn depth(program: &str) -> usize {
 
 /// The word at `program[start..end]`, when it is a keyword that counts.
 ///
-/// A word that lowers the count must be a keyword for sure: `.end`, `$end`, and `{end: 1}` are a
+/// A word that lowers the count must be a keyword for sure. `.end`, `$end`, and `{end: 1}` are a
 /// field, a variable, and a key, and they close nothing. A word that raises the count is a keyword
-/// for the count even when it is a field, so that the count is never too low.
+/// even when it is a field. So the count is never too low.
 fn keyword(program: &str, start: usize, end: usize) -> Option<Word> {
     let text = &program[start..end];
     let (_, word) = WORDS.iter().find(|(name, _)| *name == text)?;

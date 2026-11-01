@@ -1,5 +1,5 @@
-//! The client that a command line builds from the environment: the key, the host, the retry
-//! policy, and the project, which is a uid or a name.
+//! The client that a command line builds from the environment. It reads the key, the host, the
+//! retry policy, and the project, which is a uid or a name.
 //!
 //! `strata` and `strata-preflight` connect in this one way, so a setting of the environment means
 //! the same in both.
@@ -69,7 +69,7 @@ fn warn_on_scope_conflict(config: &Config, progress: Progress) {
     }
 }
 
-/// The uid of the project named `name`, looked up at tenant scope once per run.
+/// The uid of the project named `name`, found at tenant scope once per run.
 ///
 /// # Errors
 ///

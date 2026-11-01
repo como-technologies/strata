@@ -185,8 +185,8 @@ impl CheckResult {
         !matches!(self.verdict, Verdict::Skipped | Verdict::NotRun)
     }
 
-    /// The lines to run by hand that a form of the report shows: those of a check that failed, is
-    /// not checked, or gave an error. A check that passed or did not run shows none.
+    /// The lines to run by hand are those of a check that failed, is not checked, or gave an
+    /// error. A form of the report shows them. A check that passed or did not run shows none.
     pub(crate) fn shown_reproduce(&self) -> &[String] {
         match self.verdict {
             Verdict::Failed | Verdict::NotChecked | Verdict::Error => &self.reproduce,

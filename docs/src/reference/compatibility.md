@@ -576,10 +576,11 @@ terminal. The JSON report does not change.
 
 After 0.25.0, `strata-preflight --records` gives the error kind `pattern` for a
 pattern that no file matches or that is not valid, as `strata verify` does. It
-gave `usage`. The message is `'<pattern>' matched no files`, and the error has the
-field `pattern`. The exit code `2` stays. `strata-preflight` also looks up
-`PALETTE_PROJECT` as `strata` does when `PALETTE_PROJECT_UID` is set, and it
-warns when the two name two projects. A quiet run does neither.
+gave `usage`, and the exit code `2` stays. The message is
+`'<pattern>' matched no files`, and the error has the field `pattern`.
+`strata-preflight` also finds the uid of `PALETTE_PROJECT` as `strata` does. It
+warns when `PALETTE_PROJECT_UID` is set and the two name two projects. A quiet
+run does neither.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
