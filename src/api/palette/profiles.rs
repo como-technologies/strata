@@ -491,9 +491,9 @@ impl<A: PaletteApi> Palette<A> {
     ///
     /// # Errors
     ///
-    /// The error of the request, such as a 404 for a version that Palette does not have. A refusal
-    /// of the packs is the answer of Palette, which the caller reads: see
-    /// [`crate::api::codes::ValidateRoute`].
+    /// The error of the request, such as a 404 for a version that Palette does not have. Palette
+    /// can refuse the whole request with an HTTP error and a code. That [`Error::Api`] is an
+    /// answer too: see [`crate::api::codes::ValidateRoute`].
     pub fn validate_profile_packs(&self, uid: Option<&str>, body: &Value) -> Result<Value> {
         let path = match uid {
             Some(uid) => route(PROFILES, &[uid, "validate", "packs"]),
