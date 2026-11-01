@@ -5,6 +5,7 @@ use std::path::Path;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use strata::api::MemoryApi;
+use strata::term::color::Paint;
 use strata::term::progress::Progress;
 use strata_preflight::catalog;
 use strata_preflight::confidence::Ledger;
@@ -24,10 +25,7 @@ fn preflight(c: &mut Criterion) {
     let selection = Selection::default();
     // no Palette client and no command: a rule of another tier is not run, and the jq engine runs
     // the `when` of each rule of the catalog and the check of each static rule
-    let backend: LiveBackend<MemoryApi> = LiveBackend {
-        palette: None,
-        no_exec: true,
-    };
+    let backend: LiveBackend<MemoryApi> = LiveBackend::new(None, true);
     let quiet = Progress::silent();
     let run = || {
         run::run(RunInputs {
@@ -40,7 +38,7 @@ fn preflight(c: &mut Criterion) {
             out_dir: None,
             progress: &quiet,
             verbose: false,
-            color: false,
+            paint: Paint::off(),
         })
         .expect("a report")
     };
