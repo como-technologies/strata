@@ -204,6 +204,30 @@ tracks no large file of its own. It makes the same input on each run.
 Each benchmark checks its input before it measures. A change of strata that makes the input fail
 stops the benchmark with a panic, and not with the time of an error path.
 
+### The times on the CI runner
+
+The job `benchmarks` of CI runs `just bench-short` on a runner of GitHub, and prints the times in its
+log. These are the best estimates for a profile of the sizes that Palette permits, rounded to two
+digits:
+
+| Step | Input | Time |
+| --- | --- | --- |
+| The record, with the canonical form and the root | 1 pack | 32 µs |
+| The record, with the canonical form and the root | 50 packs | 29 ms |
+| The record, with the canonical form and the root | 200 packs | 120 ms |
+| The record, with 200 manifests | 200 packs | 130 ms |
+| The comparison of two records | no change | 85 ms |
+| The comparison of two records | one pack changes | 87 ms |
+| The comparison of two records | each pack changes | 180 ms |
+
+The time of a record grows with the size of the values, because strata parses and hashes each text.
+The time of a comparison grows with the number of packs that differ. A shared runner is not a
+quiet machine, so the times change from run to run. Use them to see the order of magnitude, and use
+[a comparison of two commits](#compare-two-commits) to see a change.
+
+When a benchmark is slow, criterion warns that it cannot complete 10 samples in the measure time. The
+warning is not an error. The job fails only when a benchmark does not build or panics.
+
 ### Compare two commits
 
 criterion keeps the results of a run in `target/criterion/`, under the name of a baseline. Save a
