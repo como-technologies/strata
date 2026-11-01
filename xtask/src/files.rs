@@ -28,17 +28,22 @@ pub fn files_with_ext(dir: &Path, ext: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Every markdown page under `dir`, at any depth, in name order.
-pub fn pages(dir: &Path) -> Vec<PathBuf> {
+/// Every file under `dir` with the extension `ext`, at any depth, in name order.
+pub fn files_under(dir: &Path, ext: &str) -> Vec<PathBuf> {
     let mut out = Vec::new();
     for path in entries(dir) {
         if path.is_dir() {
-            out.extend(pages(&path));
-        } else if has_extension(&path, "md") {
+            out.extend(files_under(&path, ext));
+        } else if has_extension(&path, ext) {
             out.push(path);
         }
     }
     out
+}
+
+/// Every markdown page under `dir`, at any depth, in name order.
+pub fn pages(dir: &Path) -> Vec<PathBuf> {
+    files_under(dir, "md")
 }
 
 #[cfg(test)]

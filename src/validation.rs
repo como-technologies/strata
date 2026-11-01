@@ -178,7 +178,12 @@ impl PaletteRefusal {
     /// `message`, with no pack. The code is text, or a number when the check of the body against
     /// the API schema refuses it. `None` when the body is not JSON with a `code`.
     pub(crate) fn from_error_body(body: &str) -> Option<PaletteRefusal> {
-        let error: Value = serde_json::from_str(body).ok()?;
+        PaletteRefusal::from_error(&serde_json::from_str(body).ok()?)
+    }
+
+    /// The refusal of the whole request in `error`, the body of a Palette error that the caller
+    /// parsed already. `None` when `error` has no `code` of text or of a number.
+    pub(crate) fn from_error(error: &Value) -> Option<PaletteRefusal> {
         let code = match error.get("code")? {
             Value::String(code) => code.clone(),
             Value::Number(code) => code.to_string(),
@@ -187,7 +192,7 @@ impl PaletteRefusal {
         Some(PaletteRefusal {
             pack: String::new(),
             code,
-            message: text(&error, "/message"),
+            message: text(error, "/message"),
             clusters: Vec::new(),
         })
     }

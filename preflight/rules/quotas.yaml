@@ -213,12 +213,9 @@ rules:
     check:
       kind: palette
       method: POST
-      path: /v1/spectroclusters/{{ .cloud }}/validate
-      # for an existing cluster the route would refuse its own name with ResourceAlreadyExists,
-      # so the body of the check carries the name with a suffix; nothing else changes
-      body: |
-        . as $w | .entity
-        | if $w.clusterUid != null then .metadata.name = ((.metadata.name // "cluster") + "-preflight") else . end
+      path: /v1/spectroclusters/{{ .routeCloud }}/validate
+      # the world gives the one body that each check of the route sends
+      body: .validateBody
       expr: |
         .response as $r
         | if ($r.ok | not) then [] # a refusal of the whole entity is palette-validate's

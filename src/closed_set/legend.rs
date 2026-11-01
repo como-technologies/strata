@@ -6,14 +6,14 @@ use std::collections::BTreeMap;
 use super::ClosedSet;
 
 /// A closed set of values whose meaning a document carries in its legend.
-pub(crate) trait Described: ClosedSet {
+pub trait Described: ClosedSet {
     /// What the value means, in plain words, for a reader without the book.
     fn describe(self) -> &'static str;
 }
 
 /// The legend of the set `T`: the meaning of each value, by its name in the documents. Each value
 /// of [`ClosedSet::ALL`] has a line, so a new value cannot miss its line.
-pub(crate) fn legend<T: Described>() -> BTreeMap<String, String> {
+pub fn legend<T: Described>() -> BTreeMap<String, String> {
     T::ALL
         .iter()
         .map(|v| (v.as_str().to_string(), v.describe().to_string()))

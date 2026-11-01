@@ -16,7 +16,9 @@ mod clusters;
 mod listings;
 mod profiles;
 
-pub use clusters::{cluster_events_path, cluster_summary_path, subject_path};
+pub use clusters::{
+    cloud_account_path, cloud_config_path, cluster_events_path, cluster_summary_path, subject_path,
+};
 
 const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
 /// The profile search. It pages by `offset`.

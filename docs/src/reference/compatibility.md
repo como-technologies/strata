@@ -26,6 +26,39 @@ match the new variants. `ops::PaletteQuestions` and `ops::check_verifiable` are
 new. `ops::verify_with` makes the same check as `check_verifiable`, so its
 errors do not change.
 
+After 0.25.0, `term::color::Paint::resolve` has a second argument,
+`term::color::Stream`: `Stdout` or `Stderr`. Give `Stream::Stdout` to get the
+behavior of 0.25.0. `api::codes::ValidateRoute::refuses_answer` takes the body
+of the error as `&serde_json::Value`, in place of text. Parse the text one time,
+and give the value.
+
+After 0.25.0, `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE`
+are deprecated. They stay for one minor release. `cluster_state::ClusterState`
+names each state, and `ClusterState::Running.is(text)` replaces
+`text == RUNNING_STATE`. `ClosedSet::parse` reads the text of a state.
+`closed_set::impl_closed_set` is the public macro `strata::impl_closed_set`. Its
+table takes an expression for each text, and a literal is one.
+
+After 0.25.0, the library of `strata-preflight` changes in these ways:
+
+- `run::RunInputs` and `run::WatchInputs` have the field `paint: Paint` in
+  place of `color: bool`. `Paint::off()` replaces `false`.
+- `report::render` and `report::terminal` take `&Paint` in place of `bool`.
+- `probe::LiveBackend` has private fields. `LiveBackend::new(palette, no_exec)`
+  builds it. It keeps the answer of each request, and it is a `PaletteApi`, so
+  `Palette::new(&backend)` reads through it.
+- `report::label_for` is gone. `CheckResult::label` gives the word.
+- `rule::Tier::name`, `Level::name`, `Severity::name`, and `Status::name` are
+  gone. `ClosedSet::as_str` gives the same text, and `Tier::ALL` is the constant
+  of the trait. `Tier::parse` is `Tier::from_input`.
+- `rule::Check::kind` gives a `rule::CheckKind`, in place of text.
+  `rule::Evidence::kind` is a `rule::EvidenceKind`, in place of `String`.
+- `world::CLOUDS` is gone. `world::clouds()` gives the same texts in the same
+  order, and `world::Engine` names each engine.
+- `rule::Catalog::parse_section` compiles each program, and gives `Err` for a
+  program that cannot run. `jq::Jq::check` and `jq::Jq::check_template` do the
+  same compile.
+
 ## The documents
 
 Each JSON document has a schema id, such as `strata-snapshot/1`. The id changes
@@ -348,6 +381,49 @@ A record with no uid, such as the record of a candidate, gives `no-uid`. Before,
 a run with no key gave `missing-credential` for such a record. With several
 records, the row of that record holds the error, and the other rows stay as
 before.
+
+After 0.25.0, `strata-preflight` decides the color as `strata` does. The order
+is in [Colors](./formats.md#colors). An empty `NO_COLOR` no longer removes the
+color: `NO_COLOR` needs a value. `CLICOLOR_FORCE` forces the color, and
+`TERM=dumb` removes it under `--color auto`. The report on standard output and
+the progress lines on standard error each get their own decision. `--no-color`
+and `--color never` work as before.
+
+After 0.25.0, the markdown table of `strata` writes a line break in a cell as a
+space. A line break, such as one in an error message, ended the row. The markdown
+report of `strata-preflight` did this already. That report and the HTML report
+now write `Palette release 4.10`. They wrote `Palette 4.10`.
+
+After 0.25.0, `strata-preflight` compiles each program of a rule file that you
+give with `--probes`, with the variables that the program has when it runs. A
+rule that reads `$item` in `each`, `expr`, `when`, an `argv`, or a `reproduce`
+line gave `ERROR` or `SKIP` in a run. Now the file fails with the kind
+`catalog` and exit `2`. A POST with `each` and no `body` fails in the same way.
+It sent the entity one time for each item. The rules in the binary are as before.
+
+After 0.25.0, `evidence[].kind` of a rule is one of `run`, `source`, `doc`, and
+`report`. A rule file with another kind fails at load. `preflight --schema rules`
+and `preflight --schema report` list the four values. The report holds the same
+values as before, so `strata-preflight/1` stays.
+
+After 0.25.0, the world that a rule reads, and `world.json` of `--out`, have the
+fields `edgeHosts` and `validateBody`. See
+[The world document](./preflight-rules.md#the-world-document). The six rules
+that read each edge host have `each: .edgeHosts`, which `--rules --json`
+shows. The `reproduce` lines of the rules that call the validate route read
+`.validateBody`. A rule or a custom probe can read both fields.
+
+After 0.25.0, `pack-dependency` and `ecr-oci-images` send the body of
+`palette-validate`. They sent the entity with its own name. For `cluster:UID`,
+the route refuses the name of a cluster that Palette holds, and these two rules
+read the refusal as no fault. Now the name has the suffix `-preflight`, and they
+find the fault.
+
+After 0.25.0, a run sends each request one time. The backend keeps the answer of
+each request, by its method, its path, and its body. The four rules that ask the
+validate route send one request. The six rules that read each edge host send one
+request for each host. `template-outside` reads the profile that the world read.
+A 5xx that is not a refusal is not kept, and the next rule asks again.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later

@@ -58,7 +58,7 @@ rules:
 | `check` | see below | The check. A rule with none is a row: `NOT CHECKED` with its `reproduce` lines. |
 | `fix` | `owner`, `text` | The fix for good: `palette`, `provider`, `lab`, `strata`, `operator`, or `none`. |
 | `reproduce` | commands | What a person runs to see the same thing. `{{ jq }}` templates over the world are filled in the report. |
-| `evidence` | `kind`, `ref`, `note` | `run`: an issue or a run id. `source`: the source or the documentation of Palette shows it. `doc`: a page. `report`: a findings report and its finding. A `source` entry has a `note` that states what Palette does. It quotes no code of Palette, and names no file, function, or commit of it. Its `ref` is empty, or a file of this repository. |
+| `evidence` | `kind`, `ref`, `note` | `kind` is one of four values, and the loader refuses another. `run`: an issue or a run id. `source`: the source or the documentation of Palette shows it. `doc`: a page. `report`: a findings report and its finding. A `source` entry has a `note` that states what Palette does. It quotes no code of Palette, and names no file, function, or commit of it. Its `ref` is empty, or a file of this repository. |
 | `promotion` | `bar`, `runs` | For a preflight check: the bar its bounds met, `0.8`, and the run ids of the promotion. |
 | `tests` | `fault`, `clean` | Fixtures the test of the catalog runs the check on: the fault must fail, the clean must pass. |
 
@@ -127,9 +127,15 @@ check:
 
 A check with no `each` makes one request. A list with no item makes no request,
 and `responses` is empty. The verdict is `ERROR` when `each` does not output a
-list, when a template fails, or when Palette does not answer one request. The
-catalog refuses a `path` or a `body` that reads `$item` when the check has no
-`each`.
+list, when a template fails, or when Palette does not answer one request.
+
+`$item` is a variable of `path` and `body` only. The loader compiles each
+program of a rule file that you give with `--probes`, with the variables that
+the program has when it runs. It refuses `$item` in `each`, `expr`, `when`, an
+`argv`, and a `reproduce` line, and in `path` or `body` when the check has no
+`each`. It refuses a POST with `each` and no `body`: with none, the check sends
+the entity one time for each item. The tests compile each program of the
+catalog in the binary.
 
 To send one request for several items, group the items in `each`.
 `vsphere-compute-resources` sends one request for each compute cluster, and
@@ -221,7 +227,9 @@ them, or they need more than the body of the create. They stay in the catalog.
   "account":    { ... } | null,       the cloud account, with no secret
   "clusterUid": "<uid>" | null,       for cluster:UID
   "accountKind": "aws",               the kind of cloud account of the engine
-  "routeCloud": "edge-native"         the cloud type of the engine in a route
+  "routeCloud": "edge-native",        the cloud type of the engine in a route
+  "edgeHosts": [ {pool, host} ],      each edge host of each pool, with the poolConfig of its pool
+  "validateBody": { metadata, spec }  the body that the checks send to the validate route
 }
 ```
 
@@ -230,6 +238,14 @@ account of kind `aws`, `gke` one of kind `gcp`, and `aks` one of kind `azure`.
 `routeCloud` is the cloud type of the engine in a route of Palette: the engine
 itself, and `edge-native` for `edge`. A rule reads these two fields, and does not
 map the engine itself.
+
+`edgeHosts` is the list of the edge hosts of the entity, in the order of the
+pools. Each item has `pool`, the `poolConfig` of the pool, and `host`, the host.
+A rule that reads each host gives `each: .edgeHosts`, and writes no program of
+its own. `validateBody` is the entity, with the suffix `-preflight` on the name
+for `cluster:UID`: the validate route refuses the name of a cluster that Palette
+holds. A rule that asks the validate route gives `body: .validateBody`. A run
+sends the request one time, however many rules give it.
 
 A record is a `strata-snapshot/1` document: `source.{uid, name, version,
 cloudType}` and `packs[].{layer, name, version, tag, packUid, registryUid,

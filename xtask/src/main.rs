@@ -16,6 +16,8 @@ mod chapters;
 mod checks;
 mod files;
 mod palette;
+#[cfg(test)]
+mod size;
 mod tenant;
 
 use std::path::Path;

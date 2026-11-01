@@ -15,7 +15,8 @@ pub(crate) const ENV_FILE: &str = ".palette.env";
 
 /// The variables that hold the API key, the first one preferred.
 pub const KEY_VARS: [&str; 2] = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
-const URL_VARS: [&str; 2] = ["PALETTE_API", "SPECTROCLOUD_HOST"];
+/// The variables that hold the address of Palette, the first one preferred.
+pub const URL_VARS: [&str; 2] = ["PALETTE_API", "SPECTROCLOUD_HOST"];
 /// The variables that hold the uid of the project.
 pub const PROJECT_VARS: [&str; 1] = ["PALETTE_PROJECT_UID"];
 /// The variable that holds the name of the project, below the uid.

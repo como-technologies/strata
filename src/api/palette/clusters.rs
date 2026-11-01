@@ -30,6 +30,17 @@ pub fn cluster_summary_path(uid: &str) -> String {
     route(CLUSTER_SUMMARIES, &[uid])
 }
 
+/// The route of the cloud account `uid` of the cloud type `kind`:
+/// `/v1/cloudaccounts/{kind}/{uid}`.
+pub fn cloud_account_path(kind: &str, uid: &str) -> String {
+    route(CLOUD_ACCOUNTS, &[kind, uid])
+}
+
+/// The route of the cloud config `uid` of the cloud type `kind`: `/v1/cloudconfigs/{kind}/{uid}`.
+pub fn cloud_config_path(kind: &str, uid: &str) -> String {
+    route(CLOUD_CONFIGS, &[kind, uid])
+}
+
 /// The route of the events of a cluster, with the page size that strata reads:
 /// `/v1/events/components/spectrocluster/{uid}?limit=50`.
 pub fn cluster_events_path(uid: &str) -> String {
@@ -364,7 +375,7 @@ impl<A: PaletteApi> Palette<A> {
                 ]),
             });
         }
-        self.api.get_json(&route(CLOUD_CONFIGS, &[kind, uid]))
+        self.api.get_json(&cloud_config_path(kind, uid))
     }
 
     /// The cloud account `uid` of the cloud type `kind`, `GET /v1/cloudaccounts/{kind}/{uid}`.
@@ -377,7 +388,7 @@ impl<A: PaletteApi> Palette<A> {
     /// The error of the request, also [`Error::Api`] with HTTP 404 when Palette has no such
     /// account.
     pub fn cloud_account(&self, kind: &str, uid: &str) -> Result<Value> {
-        self.api.get_json(&route(CLOUD_ACCOUNTS, &[kind, uid]))
+        self.api.get_json(&cloud_account_path(kind, uid))
     }
 
     /// The value Palette gives each macro for the cluster or the cluster group `uid`: `GET

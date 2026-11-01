@@ -25,11 +25,8 @@ rules:
       kind: palette
       method: POST
       path: /v1/spectroclusters/{{ .routeCloud }}/validate
-      # for an existing cluster the route would refuse its own name with ResourceAlreadyExists,
-      # so the body of the check carries the name with a suffix; nothing else changes
-      body: |
-        . as $w | .entity
-        | if $w.clusterUid != null then .metadata.name = ((.metadata.name // "cluster") + "-preflight") else . end
+      # the world gives the one body that each check of the route sends
+      body: .validateBody
       expr: |
         .response as $r
         | if ($r.ok | not) then ["Palette refused the entity: \($r.body.code // $r.status): \($r.body.message // ($r.body | tostring))"]
@@ -451,8 +448,7 @@ rules:
     check:
       kind: palette
       method: GET
-      each: |
-        [ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]
+      each: .edgeHosts
       path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
         def mm: split(".") | .[:2] | map(sub("[^0-9].*$"; "") | if . == "" then 0 else tonumber end);
@@ -466,7 +462,7 @@ rules:
                 end
             end ]
     reproduce:
-      - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -r '[.metadata.uid, .status.health.agentVersion, .spec.version] | @tsv'; done"
+      - "for h in {{ [ .edgeHosts[].host.hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -r '[.metadata.uid, .status.health.agentVersion, .spec.version] | @tsv'; done"
     fix:
       owner: palette
       text: Warn in the validate route when the agent is older than the release, with the matrix as the source.

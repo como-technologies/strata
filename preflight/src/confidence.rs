@@ -23,6 +23,10 @@ use crate::rule::{Catalog, Level, Tier};
 /// The schema id of a ledger file.
 pub const LEDGER_SCHEMA: &str = "strata-preflight-ledger/1";
 
+/// What a form of the report writes where no run of the ledger gives a rate, a bound, or a
+/// confidence.
+pub const NO_RUNS: &str = "no runs";
+
 /// What one check answered in one run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
@@ -217,7 +221,7 @@ impl Rate {
     pub fn text(&self) -> String {
         match self.lower_bound {
             Some(b) => format!("{}/{} ({})", self.correct, self.total, percent(b)),
-            None => "no runs".to_string(),
+            None => NO_RUNS.to_string(),
         }
     }
 }
@@ -457,7 +461,7 @@ pub fn promotion(catalog: &Catalog, ledger: &Ledger) -> PromotionReport {
             // the clouds alone: `lab` marks a check of the lab, and no run records it
             rule.engines
                 .iter()
-                .filter(|e| crate::world::CLOUDS.contains(&e.as_str()))
+                .filter(|e| crate::world::Engine::parse(e).is_some())
                 .cloned()
                 .collect()
         };
@@ -621,7 +625,7 @@ runs:
         };
         assert!(!Confidence::of("gke", "4.10", &c, 0.8).meets_bar);
         let none = Confidence::of("gke", "4.10", &Counts::default(), 0.8);
-        assert_eq!(none.catch.text(), "no runs");
+        assert_eq!(none.catch.text(), NO_RUNS);
         assert_eq!(none.weakest_bound(), None);
     }
 

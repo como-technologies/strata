@@ -12,8 +12,8 @@ that cannot finish stops in minutes, not at the timeout of the client.
 what they gave, each condition that changed, each new event, and one line for
 each rule; and before the first reading, the program of each rule. On a
 terminal the lines carry the colors of the report; `--no-color` or `NO_COLOR`
-turns them off, and a stream to a file has none. `--color always` keeps them
-through a pipe, for a `tee` to a log and a terminal; `--color never` is
-`--no-color`. To see a
+with a value turns them off, and a stream to a file has none. `--color always`
+keeps them through a pipe, for a `tee` to a log and a terminal; `--color never`
+is `--no-color`. [Colors](../../reference/formats.md#colors) gives the order. To see a
 watch on a real build, `just live-watch --build --down` in the live example
 ([The preflight checks](../../development/live-example.md#the-preflight-checks)).

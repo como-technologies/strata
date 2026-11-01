@@ -205,6 +205,8 @@ rules:
       kind: palette
       method: POST
       path: /v1/spectroclusters/{{ .routeCloud }}/validate
+      # the world gives the one body that each check of the route sends
+      body: .validateBody
       expr: |
         .response as $r
         | if ($r.ok | not) then
@@ -249,6 +251,8 @@ rules:
       kind: palette
       method: POST
       path: /v1/spectroclusters/{{ .routeCloud }}/validate
+      # the world gives the one body that each check of the route sends
+      body: .validateBody
       expr: |
         .response as $r
         | if $r.ok then []

@@ -35,6 +35,8 @@ where each module goes.
   one pull request that does both loses the history.
 - When a public module moves under a new parent, keep a `pub use` at the old
   path for one minor release.
+- `cargo test -p xtask` checks the limit of 800 lines for each module file of
+  `xtask`, and the limit of 80 lines for each function of `xtask`.
 
 ## Visibility
 
@@ -53,6 +55,8 @@ where each module goes.
 - Give each closed set its `ALL` and its `as_str` with `impl_closed_set!`, from one table.
   Do not write a list of the values or a `match` of their texts by hand. The test
   `tests/closed_set.rs` makes sure that each text is the one that serde writes.
+  `preflight/` uses the same macro, `strata::impl_closed_set`.
+  `preflight/tests/closed_set.rs` makes the same check there.
 - Do not store a field that comes from another field. Calculate it with a
   method.
 - Palette documents stay `serde_json::Value`, read with the helpers of

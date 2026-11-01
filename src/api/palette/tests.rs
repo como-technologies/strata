@@ -570,3 +570,32 @@ fn the_variables_of_a_cluster_come_with_a_flag_for_a_missing_route() {
         .unwrap_err();
     assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
 }
+
+#[test]
+fn each_validate_post_of_the_client_goes_to_the_route_that_the_codes_name() {
+    use crate::api::Method;
+    use crate::api::codes::ValidateRoute;
+
+    let api = MemoryApi::new();
+    let p = Palette::new(&api);
+    let body = json!({});
+    // the answers are 404: the requests are what the test reads
+    let _ = p.validate_packs("u1", &body);
+    let _ = p.validate_profile_packs(None, &body);
+    let _ = p.validate_profile_packs(Some("u2"), &body);
+    let _ = p.validate_profile_import(&body);
+    let routes: Vec<_> = api
+        .posted()
+        .iter()
+        .map(|(path, _)| ValidateRoute::of(Method::Post, path))
+        .collect();
+    assert_eq!(
+        routes,
+        [
+            Some(ValidateRoute::ClusterPacks),
+            Some(ValidateRoute::ProfilePacks),
+            Some(ValidateRoute::ProfilePacks),
+            Some(ValidateRoute::ProfileImport),
+        ]
+    );
+}

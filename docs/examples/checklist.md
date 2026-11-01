@@ -34,7 +34,7 @@ Do them in order. Item 10 is the only one that writes a commit.
 7. **The excerpts.** Where a claim covers a few lines of a long block, make it
    an `excerpt` so the claim becomes an assertion. Where the page teaches most
    of the block, leave the block whole.
-8. **The exit codes.** The exits the page states are the exits `chapters.rs` asserts.
+8. **The exit codes.** The exits the page states are the exits that the chapters assert.
 9. **The links.** Every link resolves, and a named recipe exists.
 10. **Verify and commit.** `just docs-examples`, `just docs-check`, `just docs`,
     `just test`, `just lint`, each as its own step, then one commit.
@@ -70,5 +70,5 @@ In the order the book teaches them.
 
 `serve_here` stops the playground before the change that the page's later steps
 describe. To walk those steps, make the change against the served tenant the way
-the chapter does, and say so in the notes. `xtask/src/chapters.rs` holds the
+the chapter does, and say so in the notes. `xtask/src/chapters/` holds the
 change: read the chapter.

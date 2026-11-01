@@ -101,7 +101,7 @@ use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-pub(crate) mod legend;
+pub mod legend;
 
 /// A closed set of values that a document names by text: an enum of unit variants.
 ///
@@ -127,8 +127,9 @@ pub trait ClosedSet: Copy + Serialize + DeserializeOwned + JsonSchema + 'static 
 /// The table gives [`ClosedSet::ALL`] and [`ClosedSet::as_str`]. The `match` of `as_str` names each
 /// variant, so a variant that the table does not list is a compile error. `tests/closed_set.rs`
 /// makes sure that each text is the one that serde writes.
+#[macro_export]
 macro_rules! impl_closed_set {
-    ($set:ident { $($variant:ident => $text:literal),+ $(,)? }) => {
+    ($set:ident { $($variant:ident => $text:expr),+ $(,)? }) => {
         impl $crate::closed_set::ClosedSet for $set {
             const ALL: &'static [Self] = &[$(Self::$variant),+];
 
@@ -140,7 +141,7 @@ macro_rules! impl_closed_set {
         }
     };
 }
-pub(crate) use impl_closed_set;
+pub use crate::impl_closed_set;
 
 /// A value of the closed set `T` in a document that strata writes and reads.
 ///

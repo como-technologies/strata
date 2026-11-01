@@ -34,16 +34,6 @@ pub const CONSUMERS_SCHEMA: &str = "strata-consumers/1";
 /// The state a consumer shows when its cluster could not be read.
 pub const UNKNOWN_STATE: &str = "unknown";
 
-/// The state of a cluster that runs, as Palette gives it in `status.state`.
-pub const RUNNING_STATE: &str = "Running";
-
-/// The state of a cluster that failed, as Palette gives it in `status.state`.
-pub const ERROR_STATE: &str = "Error";
-
-/// The state of a deleted cluster, as Palette gives it in `status.state`. Palette keeps the
-/// document of such a cluster.
-pub const DELETED_STATE: &str = "Deleted";
-
 /// The state of an edge host that a cluster uses, as Palette gives it in `status.state`.
 pub(crate) const IN_USE_STATE: &str = "in-use";
 

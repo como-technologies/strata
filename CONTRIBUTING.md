@@ -32,8 +32,8 @@ rules. They include Simplified Technical English (ASD-STE100), which this
 repository writes in the book, in the README, in the help text of a command, in
 the code comments, and in the commit messages.
 
-Never paste the output of strata into a page. Add a step to
-`xtask/src/chapters.rs`, run `just docs-examples`, and include the file that it
+Never paste the output of strata into a page. Add a step to a file of
+`xtask/src/chapters/`, run `just docs-examples`, and include the file that it
 writes under `docs/src/output/`.
 
 ## Commit messages

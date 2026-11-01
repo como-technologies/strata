@@ -2,12 +2,12 @@
 
 use super::notes::marks_invalid;
 use super::verify::record_label;
-use super::{count_of, dash, entry_error, joined_note};
+use super::{count_of, entry_error, joined_note};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::invalid_packs;
 use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
 use crate::snapshot::Snapshot;
-use crate::text::{and_list, name_or_uid};
+use crate::text::{and_list, dash, name_or_uid};
 
 /// `env=prod, team`: the labels of a cluster, with a tag that has no value by its key alone.
 pub(crate) fn labels_text(labels: &std::collections::BTreeMap<String, String>) -> String {
