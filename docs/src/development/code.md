@@ -153,6 +153,12 @@ ASD-STE100.
 - Put a helper that two test files use in `tests/common/mod.rs`. Compare
   against the `const` of the crate, not against a copy of its text.
 - The name of a test is a full sentence that states the behavior.
+- Start a process with `output_locked` or `spawn_locked` of `CommandExt`, never
+  with `output`, `spawn`, or `status` of `Command`. Write a script that a test
+  runs with `executable`. The tests run on many threads, and the two functions
+  share a lock. Without it, a process can start during the write and keep the
+  script open. The run of the script then fails with "Text file busy".
+  `tests/spawn.rs` makes sure of the rule.
 
 ## Before the review
 

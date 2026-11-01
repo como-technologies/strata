@@ -18,6 +18,7 @@ mod fuzz;
 mod live_scripts;
 mod masked;
 mod presets;
+mod spawn;
 mod unsynced;
 mod verify;
 mod workflows;

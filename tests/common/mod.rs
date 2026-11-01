@@ -29,8 +29,10 @@
 //! variable always gets SECRET_VALUE, which no document may contain.
 
 use std::fs;
+use std::io;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Child, Command, Output, Stdio};
+use std::sync::RwLock;
 
 use serde_json::{Value, json};
 
@@ -802,19 +804,38 @@ pub const INSTALLING_WORKFLOWS: [&str; 7] = [
 pub fn git(dir: &Path, args: &[&str]) -> std::process::Output {
     let mut c = Command::new("git");
     c.args(args).current_dir(dir);
-    let o = isolate_git(&mut c).output().unwrap();
+    let o = isolate_git(&mut c).output_locked().unwrap();
     assert!(o.status.success(), "git {args:?}: {}", text(&o.stderr));
     o
 }
 
+/// A test takes this lock for writing while it writes a file that it will run, and for reading
+/// while it starts a process.
+///
+/// A new process keeps a copy of each file that is open in its parent until it runs its program.
+/// When a test runs a file in that time, the system answers "Text file busy". The tests run on
+/// many threads, so a test failed with this answer in some runs.
+static OPEN_FOR_WRITE: RwLock<()> = RwLock::new(());
+
 /// Write a file and make it executable, for a stand-in command on a test's PATH.
 pub fn executable(path: &Path, body: &str) {
-    std::fs::write(path, body).unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    }
+    let made = {
+        // no code panics while it holds the lock, so the lock is never poisoned
+        let _no_start = OPEN_FOR_WRITE.write().unwrap();
+        std::fs::write(path, body).and_then(|()| make_executable(path))
+    };
+    made.unwrap();
+}
+
+#[cfg(unix)]
+fn make_executable(path: &Path) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+}
+
+#[cfg(not(unix))]
+fn make_executable(_: &Path) -> io::Result<()> {
+    Ok(())
 }
 
 // ---- the workflow helpers ----------------------------------------------------------------------
@@ -1268,6 +1289,33 @@ pub fn verify_summary_with(
 
 // ---- the processes -----------------------------------------------------------------------------
 
+/// The two ways to start a process in a test. A test never calls `spawn`, `output`, or `status` of
+/// [`Command`]: while another test writes a script, they can start a process that keeps the script
+/// open. See [`OPEN_FOR_WRITE`]. The tests of `tests/spawn.rs` make sure of this.
+pub trait CommandExt {
+    /// As [`Command::spawn`].
+    fn spawn_locked(&mut self) -> io::Result<Child>;
+
+    /// As [`Command::output`]: no standard input, and the two outputs on pipes.
+    fn output_locked(&mut self) -> io::Result<Output>;
+}
+
+impl CommandExt for Command {
+    fn spawn_locked(&mut self) -> io::Result<Child> {
+        // `spawn` gives its result after the new process runs its program, so it holds no copy
+        // of an open file when the lock ends
+        let _no_write = OPEN_FOR_WRITE.read().unwrap();
+        self.spawn()
+    }
+
+    fn output_locked(&mut self) -> io::Result<Output> {
+        self.stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        self.spawn_locked()?.wait_with_output()
+    }
+}
+
 /// The strata binary that cargo built for the tests.
 pub fn strata_bin() -> &'static Path {
     Path::new(env!("CARGO_BIN_EXE_strata"))
@@ -1373,7 +1421,7 @@ pub struct Run {
 impl Run {
     /// Run `command`, and keep what it gave.
     pub fn of(command: &mut Command) -> Run {
-        let o = command.output().expect("binary runs");
+        let o = command.output_locked().expect("binary runs");
         Run {
             code: o.status.code().unwrap_or(-1),
             out: text(&o.stdout),
@@ -1430,7 +1478,7 @@ pub fn snapshot_from_raw(raw: &Path, name: &str, out: &Path) {
         .arg("-o")
         .arg(out)
         .env("STRATA_QUIET", "1")
-        .output()
+        .output_locked()
         .unwrap();
     assert!(o.status.success(), "snapshot {name}: {}", text(&o.stderr));
 }
