@@ -1,17 +1,65 @@
 # The everyday loop
 
-Strata is one loop, and each command is one step of it. A team approves the
-content of a release, and not only its name. The pipeline publishes it. A record
-in the repository keeps the approved content. From then on, each step compares
-Palette with that record. Each difference reaches a person as a comment, a
-gate that fails, or an issue.
+Strata is one loop, and each command is one step of it. A team reviews a change,
+and the pipeline publishes it. A record in the repository keeps the content that
+the team approved. From then on, each step compares Palette with that record.
+Each difference reaches a person as a comment, a gate that fails, or an issue.
 
-The record holds the approved content. A published version in Palette can be
-updated after its publish, and its name stays. A record in Git, checked against
-Palette, shows each change after the approval.
+The name and the version alone do not fix the content. Palette can update a
+published version after its publish, and the name stays. So the record holds the
+content, and not only the name. A record in Git, checked against Palette, shows
+each change after the approval.
 [Where each part belongs](./boundary.md) gives the reasons.
 
-## Who runs what, and when
+## A day of work
+
+Each row is one step of a day. [The jobs and their commands](#the-jobs-and-their-commands)
+gives the command and the page of each job.
+
+| You do this | Strata tells you | Where it runs |
+| --- | --- | --- |
+| You open a pull request that changes a profile | What changes in each pack, and if the change replaces the nodes. Palette says if it accepts the packs. | the job of the pull request |
+| You merge | When Palette changes after you open the pull request, the merge waits. | the merge gate |
+| The pipeline makes the version in Palette | When Palette holds other content than the content that you reviewed, the job fails. | the job after the merge |
+| You move a cluster to the version | Palette says if the move replaces the nodes, before the move. | the pull request of the move |
+| You copy the release to `prod` | When `prod` holds other content than `dev`, the job fails. | the promotion gate, on demand |
+| You write a new cluster | When Palette cannot build it, the pull request says why, before the build. | preflight |
+| Nobody works | An issue opens when somebody changes a version or a cluster outside a review, or when a pack that you pin has a newer version. | the jobs of the night |
+| A pack has a security fault | Each profile and each cluster that carries the pack, what changed, and who changed it. | a person at a terminal |
+| You delete an old version | When a cluster or a template still uses it, the gate stays closed. | the retire gate, on demand |
+
+The chart puts each step in its lane. An arrow goes from a step to the step that
+it leads to. An issue of the night leads to a pull request.
+
+```mermaid
+flowchart TB
+  subgraph you["You, in a pull request"]
+    pr["Change a profile:<br/>a comment shows what changes"]
+    move["Move a cluster:<br/>Palette says if the nodes change"]
+    newc["Write a new cluster:<br/>can Palette build it?"]
+  end
+  subgraph pipe["Your pipeline"]
+    merge["The merge:<br/>Palette is the same as in the pull request"]
+    make["The version in Palette:<br/>the content that you reviewed"]
+    prod["The copy to prod:<br/>prod holds what dev holds"]
+  end
+  subgraph night["Each night"]
+    drift["A change outside a review:<br/>an issue"]
+    newer["A newer pack version:<br/>an issue"]
+  end
+  pr --> merge --> make --> move
+  make --> prod --> newc
+  make --> drift --> pr
+  make --> newer --> pr
+```
+
+Strata publishes nothing, and it deletes nothing. The pipeline of the team does
+each write, and it decides what to do with each answer.
+
+## The jobs and their commands
+
+This table is for the person who writes the pipeline. Each row gives the command
+of a job and the page that describes it.
 
 | When | Who | The question | What runs | Page |
 | --- | --- | --- | --- | --- |
@@ -26,22 +74,6 @@ Palette, shows each change after the approval.
 | Each night | a scheduled job | Does the registry have newer versions of what we pin? | `upstream-report.sh` | [Upstream issues](./automation/upstream-issues.md) |
 | An incident | a person at a terminal | Who carries this pack, who runs it, what changed, and who changed it? | `list --pack`, `consumers`, `compare`, `verify --who` | [Find the profiles that carry a pack](./use-cases/find-a-pack.md) |
 | The end of a version | a person, on demand | Does anything still use it? | `consumers` | [Retire a version](./use-cases/retire.md) |
-
-```mermaid
-flowchart LR
-  change["a change<br/>validate, pr-comment.sh"] --> merge["the merge<br/>merge-gate.sh"]
-  merge --> publish["the publish<br/>same-release, repave, validate"]
-  publish --> record[("the records<br/>in Git")]
-  publish --> promote["the promotion<br/>same-release"]
-  promote --> build["before a build<br/>preflight"]
-  record --> nightly["each night<br/>verify, fleet, behind"]
-  nightly -- "an issue" --> person["a person<br/>compare, verify --who"]
-  person -- "a new version" --> change
-  record --> retire["the retire<br/>consumers"]
-```
-
-Strata publishes nothing, and it deletes nothing. The pipeline of the team does
-each write, and it decides what to do with each answer.
 
 ## One change, from the pull request to the retire
 
