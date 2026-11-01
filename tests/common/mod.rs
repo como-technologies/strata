@@ -70,57 +70,6 @@ const METRICS_A: &str = "charts:\n  metrics-server:\n    replicas: {{ .spectro.v
 
 const METRICS_B: &str = "charts:\n  metrics-server:\n    replicas: {{ .spectro.var.replicas }}\n    args:\n      - --kubelet-insecure-tls\n      - --metric-resolution=15s";
 
-/// A pack ref on the profile template (V1PackRef).
-fn pack_ref(
-    name: &str,
-    layer: &str,
-    tag: &str,
-    version: &str,
-    uid: &str,
-    digest: &str,
-    values: &str,
-) -> Value {
-    let mut v = json!({
-        "name": name, "layer": layer, "type": "spectro", "tag": tag, "version": version,
-        "packUid": uid, "registryUid": "reg-public", "values": values,
-        "manifests": [], "params": {}, "presets": [],
-    });
-    if !digest.is_empty() {
-        v["digest"] = json!(digest);
-    }
-    v
-}
-
-/// A pack entry from /packs/manifests (V1ClusterProfilePackManifests).
-fn pack_manifests(
-    name: &str,
-    layer: &str,
-    version: &str,
-    uid: &str,
-    digest: &str,
-    values: &str,
-    manifests: Vec<Value>,
-) -> Value {
-    json!({
-        "metadata": {"name": name, "uid": uid},
-        "spec": {"name": name, "layer": layer, "version": version, "digest": digest,
-                 "registryUid": "reg-public", "values": values, "manifests": manifests},
-        "status": {},
-    })
-}
-
-fn manifest(name: &str, uid: &str, digest: &str, content: &str) -> Value {
-    json!({"name": name, "uid": uid, "digest": digest, "content": content})
-}
-
-fn variable(name: &str, display: &str, default: &str, sensitive: bool) -> Value {
-    json!({
-        "name": name, "displayName": display, "defaultValue": default, "format": "string",
-        "inputType": "text", "required": true, "hidden": false, "immutable": false,
-        "isSensitive": sensitive, "options": [],
-    })
-}
-
 fn write_profile(
     dir: &Path,
     uid: &str,
@@ -304,141 +253,134 @@ pub fn rewrite(from: &Path, to: &Path, replacements: &[(&str, &str)]) {
 pub fn make_fixtures(root: &Path) {
     let packs_a = |k8s_values: &str| {
         vec![
-            pack_ref(
-                "ubuntu-aws",
-                "os",
-                "22.04",
-                "22.04",
-                "pk-os-2204",
-                "",
-                OS_VALUES,
-            ),
-            pack_ref(
+            PackFixture::public("ubuntu-aws", "os", "22.04", "pk-os-2204", "", OS_VALUES)
+                .pack_ref(&[]),
+            PackFixture::public(
                 "kubernetes",
                 "k8s",
-                "1.29.4",
                 "1.29.4",
                 "pk-k8s-1294",
                 "sha256:k8s1294",
                 k8s_values,
-            ),
-            pack_ref(
+            )
+            .pack_ref(&[]),
+            PackFixture::public(
                 "cni-cilium-oss",
                 "cni",
-                "1.15.3",
                 "1.15.3",
                 "pk-cni-1153",
                 "sha256:cni-aaaa",
                 CNI_VALUES,
-            ),
-            pack_ref(
+            )
+            .pack_ref(&[]),
+            PackFixture::public(
                 "csi-aws-ebs",
                 "csi",
-                "1.28.0",
                 "1.28.0",
                 "pk-csi-1280",
                 "sha256:csi-1280",
                 CSI_VALUES,
-            ),
-            pack_ref(
+            )
+            .pack_ref(&[]),
+            PackFixture::public(
                 "prometheus-operator",
                 "addon",
-                "55.8.3",
                 "55.8.3",
                 "pk-prom-5583",
                 "sha256:prom-5583",
                 PROM_VALUES,
-            ),
-            pack_ref(
+            )
+            .pack_ref(&[]),
+            PackFixture::public(
                 "external-dns",
                 "addon",
-                "0.14.0",
                 "0.14.0",
                 "pk-edns-0140",
                 "sha256:edns-0140",
                 EXTDNS_VALUES,
-            ),
-            pack_ref(
+            )
+            .pack_ref(&[]),
+            PackFixture::public(
                 "metrics-server",
                 "addon",
-                "0.7.0",
                 "0.7.0",
                 "pk-ms-070",
                 "sha256:ms-070",
                 METRICS_A,
-            ),
+            )
+            .pack_ref(&[]),
         ]
     };
     let manifests_a = |k8s_values: &str| {
         vec![
-            pack_manifests(
+            PackFixture::public(
                 "ubuntu-aws",
                 "os",
                 "22.04",
                 "pk-os-2204",
                 "sha256:os-2204-registry",
                 OS_VALUES,
-                vec![],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![]),
+            PackFixture::public(
                 "kubernetes",
                 "k8s",
                 "1.29.4",
                 "pk-k8s-1294",
                 "sha256:k8s1294",
                 k8s_values,
-                vec![],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![]),
+            PackFixture::public(
                 "cni-cilium-oss",
                 "cni",
                 "1.15.3",
                 "pk-cni-1153",
                 "sha256:cni-aaaa",
                 CNI_VALUES,
-                vec![],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![]),
+            PackFixture::public(
                 "csi-aws-ebs",
                 "csi",
                 "1.28.0",
                 "pk-csi-1280",
                 "sha256:csi-1280",
                 CSI_VALUES,
-                vec![],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![]),
+            PackFixture::public(
                 "prometheus-operator",
                 "addon",
                 "55.8.3",
                 "pk-prom-5583",
                 "sha256:prom-5583",
                 PROM_VALUES,
-                vec![manifest(
-                    "extra-rules",
-                    "m-rules-1",
-                    "sha256:rules-a",
-                    RULES_A,
-                )],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![manifest(
+                "extra-rules",
+                "m-rules-1",
+                "sha256:rules-a",
+                RULES_A,
+            )]),
+            PackFixture::public(
                 "external-dns",
                 "addon",
                 "0.14.0",
                 "pk-edns-0140",
                 "sha256:edns-0140",
                 EXTDNS_VALUES,
-                vec![],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![]),
+            PackFixture::public(
                 "metrics-server",
                 "addon",
                 "0.7.0",
                 "pk-ms-070",
                 "sha256:ms-070",
                 METRICS_A,
-                vec![],
-            ),
+            )
+            .pack_manifests(vec![]),
         ]
     };
     let vars_a = json!({"variables": [
@@ -512,137 +454,129 @@ pub fn make_fixtures(root: &Path) {
     );
 
     let packs_b = vec![
-        pack_ref(
-            "ubuntu-aws",
-            "os",
-            "22.04",
-            "22.04",
-            "pk-os-2204",
-            "",
-            OS_VALUES,
-        ),
-        pack_ref(
+        PackFixture::public("ubuntu-aws", "os", "22.04", "pk-os-2204", "", OS_VALUES).pack_ref(&[]),
+        PackFixture::public(
             "kubernetes",
             "k8s",
-            "1.30.2",
             "1.30.2",
             "pk-k8s-1302",
             "sha256:k8s1302",
             K8S_VALUES_B,
-        ),
-        pack_ref(
+        )
+        .pack_ref(&[]),
+        PackFixture::public(
             "cni-cilium-oss",
             "cni",
-            "1.15.3",
             "1.15.3",
             "pk-cni-1153",
             "sha256:cni-bbbb",
             CNI_VALUES,
-        ),
-        pack_ref(
+        )
+        .pack_ref(&[]),
+        PackFixture::public(
             "csi-aws-ebs",
             "csi",
-            "1.28.0",
             "1.28.0",
             "pk-csi-1280",
             "sha256:csi-1280",
             CSI_VALUES,
-        ),
-        pack_ref(
+        )
+        .pack_ref(&[]),
+        PackFixture::public(
             "prometheus-operator",
             "addon",
-            "55.8.3",
             "55.8.3",
             "pk-prom-5583",
             "sha256:prom-5583",
             PROM_VALUES,
-        ),
-        pack_ref(
+        )
+        .pack_ref(&[]),
+        PackFixture::public(
             "cert-manager",
             "addon",
-            "1.14.0",
             "1.14.0",
             "pk-cm-1140",
             "sha256:cm-1140",
             CERTMGR_VALUES,
-        ),
-        pack_ref(
+        )
+        .pack_ref(&[]),
+        PackFixture::public(
             "metrics-server",
             "addon",
-            "0.7.0",
             "0.7.0",
             "pk-ms-070",
             "sha256:ms-070",
             METRICS_B,
-        ),
+        )
+        .pack_ref(&[]),
     ];
     let manifests_b = vec![
-        pack_manifests(
+        PackFixture::public(
             "ubuntu-aws",
             "os",
             "22.04",
             "pk-os-2204",
             "sha256:os-2204-registry",
             OS_VALUES,
-            vec![],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![]),
+        PackFixture::public(
             "kubernetes",
             "k8s",
             "1.30.2",
             "pk-k8s-1302",
             "sha256:k8s1302",
             K8S_VALUES_B,
-            vec![],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![]),
+        PackFixture::public(
             "cni-cilium-oss",
             "cni",
             "1.15.3",
             "pk-cni-1153",
             "sha256:cni-bbbb",
             CNI_VALUES,
-            vec![],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![]),
+        PackFixture::public(
             "csi-aws-ebs",
             "csi",
             "1.28.0",
             "pk-csi-1280",
             "sha256:csi-1280",
             CSI_VALUES,
-            vec![],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![]),
+        PackFixture::public(
             "prometheus-operator",
             "addon",
             "55.8.3",
             "pk-prom-5583",
             "sha256:prom-5583",
             PROM_VALUES,
-            vec![
-                manifest("extra-rules", "m-rules-2", "sha256:rules-b", RULES_B),
-                manifest("dashboards", "m-dash-1", "sha256:dash-b", DASH_B),
-            ],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![
+            manifest("extra-rules", "m-rules-2", "sha256:rules-b", RULES_B),
+            manifest("dashboards", "m-dash-1", "sha256:dash-b", DASH_B),
+        ]),
+        PackFixture::public(
             "cert-manager",
             "addon",
             "1.14.0",
             "pk-cm-1140",
             "sha256:cm-1140",
             CERTMGR_VALUES,
-            vec![],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![]),
+        PackFixture::public(
             "metrics-server",
             "addon",
             "0.7.0",
             "pk-ms-070",
             "sha256:ms-070",
             METRICS_B,
-            vec![],
-        ),
+        )
+        .pack_manifests(vec![]),
     ];
     let vars_b = json!({"variables": [
         variable("cluster_env", "Environment", "staging", false),
@@ -663,24 +597,28 @@ pub fn make_fixtures(root: &Path) {
         &root.join("addons"),
         UID_ADDONS,
         "2.0.0",
-        vec![pack_ref(
-            "nginx-ingress",
-            "addon",
-            "4.10.0",
-            "4.10.0",
-            "pk-ngx-4100",
-            "sha256:ngx-4100",
-            "charts:\n  ingress-nginx:\n    controller:\n      replicaCount: 2",
-        )],
-        vec![pack_manifests(
-            "nginx-ingress",
-            "addon",
-            "4.10.0",
-            "pk-ngx-4100",
-            "sha256:ngx-4100",
-            "charts:\n  ingress-nginx:\n    controller:\n      replicaCount: 2",
-            vec![],
-        )],
+        vec![
+            PackFixture::public(
+                "nginx-ingress",
+                "addon",
+                "4.10.0",
+                "pk-ngx-4100",
+                "sha256:ngx-4100",
+                "charts:\n  ingress-nginx:\n    controller:\n      replicaCount: 2",
+            )
+            .pack_ref(&[]),
+        ],
+        vec![
+            PackFixture::public(
+                "nginx-ingress",
+                "addon",
+                "4.10.0",
+                "pk-ngx-4100",
+                "sha256:ngx-4100",
+                "charts:\n  ingress-nginx:\n    controller:\n      replicaCount: 2",
+            )
+            .pack_manifests(vec![]),
+        ],
         json!({"variables": [variable("ingress_class", "Ingress class", "nginx", false)]}),
         vec![],
     );

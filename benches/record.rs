@@ -8,12 +8,12 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use strata::snapshot::Snapshot;
-use strata_benches::FETCHED_AT;
 use strata_benches::profile::{Change, Shape, raw_profile, snapshot};
+use strata_benches::{FETCHED_AT, PALETTE_LIMIT};
 
 /// The sizes of a profile for the canonical form and the root: one pack, a usual stack, and the
 /// most that Palette takes.
-const PACKS: [usize; 3] = [1, 50, 200];
+const PACKS: [usize; 3] = [1, 50, PALETTE_LIMIT];
 
 /// The canonical form of the values of each pack, and the hashes up to the root, with no manifest.
 fn canon_and_root(c: &mut Criterion) {
@@ -32,7 +32,7 @@ fn canon_and_root(c: &mut Criterion) {
         );
     }
     // the digest over the packs of a record that exists: the canonical form of the hashes alone
-    let record = snapshot(Shape::packs(200), Change::None);
+    let record = snapshot(Shape::packs(PALETTE_LIMIT), Change::None);
     group.bench_function("content_digest/200_packs", |b| {
         b.iter(|| black_box(&record).content_digest());
     });
@@ -44,14 +44,14 @@ fn canon_and_root(c: &mut Criterion) {
 fn snapshot_largest(c: &mut Criterion) {
     let raw = raw_profile(Shape::largest(), Change::None);
     let record = Snapshot::from_raw(&raw, "bench", FETCHED_AT).expect("a record");
-    assert_eq!(record.packs.len(), 200);
+    assert_eq!(record.packs.len(), PALETTE_LIMIT);
     assert_eq!(
         record
             .packs
             .iter()
             .map(|p| p.manifests.len())
             .sum::<usize>(),
-        200
+        PALETTE_LIMIT
     );
     let mut group = c.benchmark_group("snapshot");
     group.sample_size(10);

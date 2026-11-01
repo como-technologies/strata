@@ -32,7 +32,7 @@ fn stack() -> Vec<Value> {
         .map(|place| {
             let family = &families[place];
             let newest = family.at(family.versions.len() - 1);
-            profile::pack_ref(newest, family.name, None)
+            profile::fixture(newest, family.name).pack_ref(&[])
         })
         .collect()
 }

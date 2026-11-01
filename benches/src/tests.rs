@@ -8,7 +8,7 @@ use strata::term::progress::Progress;
 
 use crate::fleet::{VerifyFleet, consumer_fleet};
 use crate::profile::{Change, PROFILE_UID, Shape, raw_profile, snapshot};
-use crate::{GENERATED_AT, candidate, real};
+use crate::{GENERATED_AT, PALETTE_LIMIT, candidate, real};
 
 #[test]
 fn the_real_packs_are_the_five_packs_of_the_examples_with_values_at_each_version_one_time() {
@@ -96,12 +96,12 @@ fn a_profile_of_the_most_that_palette_takes_has_two_hundred_packs_and_two_hundre
         .profile
         .pointer("/spec/published/packs")
         .and_then(|p| p.as_array());
-    assert_eq!(packs.map(Vec::len), Some(200));
+    assert_eq!(packs.map(Vec::len), Some(PALETTE_LIMIT));
     let entries = raw
         .manifests
         .pointer("/spec/packs")
         .and_then(|p| p.as_array());
-    assert_eq!(entries.map(Vec::len), Some(200));
+    assert_eq!(entries.map(Vec::len), Some(PALETTE_LIMIT));
 }
 
 #[test]

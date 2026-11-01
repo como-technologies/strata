@@ -176,6 +176,118 @@ pub fn profile_document(
     doc
 }
 
+// ---- the pack documents ------------------------------------------------------------------------
+
+/// The registry of a pack when a fixture names none.
+pub const PUBLIC_REGISTRY: &str = "reg-public";
+
+/// A pack as a fixture states it: the fields that its pack ref and its pack manifests share.
+///
+/// The tag of the pack ref is the version.
+#[derive(Debug, Clone, Copy)]
+pub struct PackFixture<'a> {
+    name: &'a str,
+    layer: &'a str,
+    version: &'a str,
+    pack_uid: &'a str,
+    registry_uid: &'a str,
+    digest: &'a str,
+    values: &'a str,
+}
+
+impl<'a> PackFixture<'a> {
+    /// A pack of the registry `registry_uid`.
+    ///
+    /// `name` is the name in the profile. `values` is YAML. An empty `digest` leaves the digest
+    /// out of the pack ref.
+    pub fn new(
+        name: &'a str,
+        layer: &'a str,
+        version: &'a str,
+        pack_uid: &'a str,
+        registry_uid: &'a str,
+        digest: &'a str,
+        values: &'a str,
+    ) -> PackFixture<'a> {
+        PackFixture {
+            name,
+            layer,
+            version,
+            pack_uid,
+            registry_uid,
+            digest,
+            values,
+        }
+    }
+
+    /// A pack of the registry [`PUBLIC_REGISTRY`]: [`PackFixture::new`] with no registry.
+    pub fn public(
+        name: &'a str,
+        layer: &'a str,
+        version: &'a str,
+        pack_uid: &'a str,
+        digest: &'a str,
+        values: &'a str,
+    ) -> PackFixture<'a> {
+        PackFixture::new(
+            name,
+            layer,
+            version,
+            pack_uid,
+            PUBLIC_REGISTRY,
+            digest,
+            values,
+        )
+    }
+
+    /// The pack ref on the template of a profile (V1PackRef). It lists each manifest of
+    /// `manifests` by its name and its uid.
+    pub fn pack_ref(&self, manifests: &[Value]) -> Value {
+        let refs: Vec<Value> = manifests
+            .iter()
+            .map(|m| json!({"name": m["name"], "uid": m["uid"]}))
+            .collect();
+        let mut v = json!({
+            "name": self.name, "layer": self.layer, "type": "spectro", "tag": self.version,
+            "version": self.version, "packUid": self.pack_uid, "registryUid": self.registry_uid,
+            "values": self.values, "manifests": refs, "params": {}, "presets": [],
+        });
+        if !self.digest.is_empty() {
+            v["digest"] = json!(self.digest);
+        }
+        v
+    }
+
+    /// The entry of the pack in `packs/manifests` (V1ClusterProfilePackManifests), with the
+    /// manifests `manifests`.
+    pub fn pack_manifests(&self, manifests: Vec<Value>) -> Value {
+        json!({
+            "metadata": {"name": self.name, "uid": self.pack_uid},
+            "spec": {
+                "name": self.name, "layer": self.layer, "version": self.version,
+                "digest": self.digest, "registryUid": self.registry_uid, "values": self.values,
+                "manifests": manifests,
+            },
+            "status": {},
+        })
+    }
+}
+
+/// A manifest of a pack, as `packs/manifests` lists it.
+pub fn manifest(name: &str, uid: &str, digest: &str, content: &str) -> Value {
+    json!({"name": name, "uid": uid, "digest": digest, "content": content})
+}
+
+/// A variable of a profile, as `variables` lists it. It is required, and neither hidden nor
+/// immutable.
+pub fn variable(name: &str, display: &str, default: &str, sensitive: bool) -> Value {
+    json!({
+        "name": name, "displayName": display, "defaultValue": default, "format": "string",
+        "inputType": "text", "required": true, "hidden": false, "immutable": false,
+        "isSensitive": sensitive, "options": [],
+    })
+}
+
 /// Serve the three documents of the profile version `uid`: its document, its pack manifests,
 /// and its variables.
 pub fn serve_profile(

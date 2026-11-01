@@ -10,7 +10,8 @@ use strata::api::RawProfile;
 use strata::snapshot::Snapshot;
 
 use crate::real::{self, Pack};
-use crate::{FETCHED_AT, routes};
+use crate::routes::{self, PackFixture, manifest, variable};
+use crate::{FETCHED_AT, PALETTE_LIMIT};
 
 /// The uid of the generated profile version.
 pub const PROFILE_UID: &str = "64f0000000000000000000b1";
@@ -20,9 +21,6 @@ pub const PROFILE_NAME: &str = "bench-stack";
 
 /// The version of the generated profile.
 pub const PROFILE_VERSION: &str = "1.0.0";
-
-/// The most packs, and the most manifests, that Palette takes in one profile.
-pub const PALETTE_LIMIT: usize = 200;
 
 /// The size of a profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,21 +72,19 @@ impl Change {
     }
 }
 
-/// A pack of a profile, as `GET /v1/clusterprofiles/{uid}` lists it: the pack ref.
+/// The pack `real` under the name `name` in the profile, as the fixtures state a pack.
 ///
-/// `name` is the name in the profile. The generator gives each pack a name of its own, so each
-/// pack has one key.
-pub fn pack_ref(real: &Pack, name: &str, manifest: Option<(&str, &str)>) -> Value {
-    let manifests: Vec<Value> = manifest
-        .map(|(name, uid)| json!({"name": name, "uid": uid}))
-        .into_iter()
-        .collect();
-    json!({
-        "name": name, "layer": real.layer, "type": "spectro", "tag": real.version,
-        "version": real.version, "packUid": real.pack_uid, "registryUid": real.registry_uid,
-        "digest": real.digest, "values": real.values, "manifests": manifests, "params": {},
-        "presets": [],
-    })
+/// The generator gives each pack a name of its own, so each pack has one key.
+pub fn fixture<'a>(real: &'a Pack, name: &'a str) -> PackFixture<'a> {
+    PackFixture::new(
+        name,
+        &real.layer,
+        &real.version,
+        &real.pack_uid,
+        &real.registry_uid,
+        &real.digest,
+        &real.values,
+    )
 }
 
 /// The config map that a manifest holds. `edited` changes one value of it.
@@ -115,11 +111,14 @@ fn pack_name(real: &Pack, index: usize) -> String {
     format!("{}-{index:03}", real.name)
 }
 
-/// The name and the uid of the manifest of the pack `index`.
-fn manifest_ids(index: usize) -> (String, String) {
-    (
-        format!("manifest-{index:03}"),
-        format!("64f00000000000000000{index:04}"),
+/// The manifest of the pack `index`: its config map, edited or not.
+fn pack_manifest(index: usize, edited: bool) -> Value {
+    let content = manifest_content(index, edited);
+    manifest(
+        &format!("manifest-{index:03}"),
+        &format!("64f00000000000000000{index:04}"),
+        &format!("sha1:{}", content.len()),
+        &content,
     )
 }
 
@@ -139,26 +138,14 @@ pub fn raw_profile(shape: Shape, change: Change) -> RawProfile {
     for index in 0..shape.packs {
         let real = pack_at(shape, change, index);
         let name = pack_name(real, index);
-        let manifest = (index < shape.manifests).then(|| manifest_ids(index));
-        refs.push(pack_ref(
-            real,
-            &name,
-            manifest.as_ref().map(|(n, u)| (n.as_str(), u.as_str())),
-        ));
-        if let Some((manifest_name, uid)) = manifest {
-            let content = manifest_content(index, change.moves(shape, index));
-            entries.push(json!({
-                "metadata": {"name": name, "uid": real.pack_uid},
-                "spec": {
-                    "name": name, "layer": real.layer, "version": real.version,
-                    "digest": real.digest, "registryUid": real.registry_uid,
-                    "manifests": [{
-                        "name": manifest_name, "uid": uid,
-                        "digest": format!("sha1:{}", content.len()), "content": content,
-                    }],
-                },
-                "status": {},
-            }));
+        let pack = fixture(real, &name);
+        let manifests: Vec<Value> = (index < shape.manifests)
+            .then(|| pack_manifest(index, change.moves(shape, index)))
+            .into_iter()
+            .collect();
+        refs.push(pack.pack_ref(&manifests));
+        if !manifests.is_empty() {
+            entries.push(pack.pack_manifests(manifests));
         }
     }
     RawProfile {
@@ -191,12 +178,12 @@ pub fn document(packs: Value) -> Value {
 fn variables() -> Value {
     let definitions: Vec<Value> = (0..10)
         .map(|n| {
-            json!({
-                "name": format!("variable_{n}"), "displayName": format!("Variable {n}"),
-                "defaultValue": format!("default-{n}"), "format": "string", "inputType": "text",
-                "required": true, "hidden": false, "immutable": false, "isSensitive": false,
-                "options": [],
-            })
+            variable(
+                &format!("variable_{n}"),
+                &format!("Variable {n}"),
+                &format!("default-{n}"),
+                false,
+            )
         })
         .collect();
     json!({ "variables": definitions })

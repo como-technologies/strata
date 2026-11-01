@@ -7,13 +7,12 @@ use criterion::{Criterion, criterion_group, criterion_main};
 use strata::api::MemoryApi;
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
+use strata_benches::GENERATED_AT;
 use strata_preflight::catalog;
 use strata_preflight::confidence::Ledger;
 use strata_preflight::probe::{LiveBackend, Verdict};
 use strata_preflight::run::{self, RunInputs, Selection};
 use strata_preflight::world::World;
-
-const AT: &str = "2026-01-02T00:00:00Z";
 
 fn preflight(c: &mut Criterion) {
     let fixture =
@@ -34,7 +33,7 @@ fn preflight(c: &mut Criterion) {
             backend: &backend,
             ledger: &ledger,
             selection: &selection,
-            now: AT,
+            now: GENERATED_AT,
             out_dir: None,
             progress: &quiet,
             verbose: false,

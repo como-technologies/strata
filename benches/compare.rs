@@ -5,8 +5,8 @@ use std::hint::black_box;
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use strata::ops;
-use strata_benches::GENERATED_AT;
 use strata_benches::profile::{Change, Shape, snapshot};
+use strata_benches::{GENERATED_AT, PALETTE_LIMIT};
 
 fn compare(c: &mut Criterion) {
     let shape = Shape::largest();
@@ -17,7 +17,7 @@ fn compare(c: &mut Criterion) {
     for (name, change, changed) in [
         ("identical", Change::None, 0),
         ("one_change", Change::OnePack, 1),
-        ("every_pack", Change::EveryPack, 200),
+        ("every_pack", Change::EveryPack, PALETTE_LIMIT),
     ] {
         let after = snapshot(shape, change);
         let diff = ops::compare(&before, &after, GENERATED_AT);

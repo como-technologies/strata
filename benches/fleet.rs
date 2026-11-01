@@ -8,13 +8,12 @@ use strata::api::Palette;
 use strata::ops::{self, RecordStatus, VerifyOptions};
 use strata::reference::Ref;
 use strata::term::progress::Progress;
+use strata_benches::GENERATED_AT;
 use strata_benches::fleet::{VerifyFleet, consumer_fleet};
 use strata_benches::profile::PROFILE_UID;
 
 /// The sizes of a fleet.
 const CLUSTERS: [usize; 3] = [1, 100, 1000];
-
-const CHECKED_AT: &str = "2026-01-02T00:00:00Z";
 
 /// `verify` of one record for each cluster. The records are files, so the time includes their read.
 fn verify(c: &mut Criterion) {
@@ -28,7 +27,7 @@ fn verify(c: &mut Criterion) {
                 &fleet.records,
                 None,
                 |_| Ok(Palette::new(&fleet.api)),
-                CHECKED_AT,
+                GENERATED_AT,
                 &VerifyOptions::default(),
                 &quiet,
             )
@@ -60,7 +59,7 @@ fn consumers(c: &mut Criterion) {
         let api = consumer_fleet(clusters);
         let reference = Ref::Uid(PROFILE_UID.to_string());
         let run = || {
-            ops::consumers(&reference, |_| Ok(Palette::new(&api)), CHECKED_AT, &quiet)
+            ops::consumers(&reference, |_| Ok(Palette::new(&api)), GENERATED_AT, &quiet)
                 .expect("a report")
         };
         let report = run();
