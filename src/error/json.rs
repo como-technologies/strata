@@ -14,6 +14,10 @@ const KIND: &str = "kind";
 /// The key of the message of an error in its document.
 const MESSAGE: &str = "message";
 
+/// The JSON pointer to [`MESSAGE`] in the document of an error. A reader of such a document uses
+/// it with the helpers of `crate::json`.
+pub(crate) const MESSAGE_AT: &str = "/message";
+
 /// The schema of the document that [`Error::to_json`] gives: an object with `kind` and `message`,
 /// and the fields of the kind.
 ///

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
 
 use super::{SubjectKind, macro_placeholder};
@@ -74,7 +74,7 @@ pub struct ClusterSource {
     /// the root.
     ///
     /// A record of strata 0.24 and before holds `updatesPendingError` and `pendingRepaveError`
-    /// instead. [`Snapshot::load`](super::Snapshot::load) reads them into this map.
+    /// instead. Strata reads them into this map.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[schemars(schema_with = "read_errors_schema")]
     pub errors: BTreeMap<Open<ClusterRead>, String>,
@@ -128,13 +128,54 @@ impl_closed_set!(ClusterRead {
     PendingRepave => "pendingRepave",
 });
 
-/// The fields of a record of strata 0.24 and before that held a read error of the cluster. Each
-/// one has the key of [`ClusterSource::errors`] that holds the error now. Do not change this
-/// list: `load` reads an older record through it.
-const OLDER_ERRORS: [(&str, ClusterRead); 2] = [
-    ("updatesPendingError", ClusterRead::UpdatesPending),
-    ("pendingRepaveError", ClusterRead::PendingRepave),
-];
+/// The cluster of a record of any release. It has the fields of [`ClusterSource`], and the two
+/// fields of strata 0.24 and before that held a read error. Each older field has the key of
+/// [`ClusterSource::errors`] that holds the error now. Do not remove a field: a record of an
+/// older release needs it.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ClusterRecord {
+    #[serde(flatten)]
+    cluster: ClusterSource,
+    updates_pending_error: Option<String>,
+    pending_repave_error: Option<String>,
+}
+
+impl From<ClusterRecord> for ClusterSource {
+    /// The cluster with the older read errors in `errors`. An entry that `errors` holds already
+    /// stays. An older field that holds null is no error.
+    fn from(record: ClusterRecord) -> ClusterSource {
+        let ClusterRecord {
+            mut cluster,
+            updates_pending_error,
+            pending_repave_error,
+        } = record;
+        for (why, read) in [
+            (updates_pending_error, ClusterRead::UpdatesPending),
+            (pending_repave_error, ClusterRead::PendingRepave),
+        ] {
+            if let Some(why) = why {
+                cluster.errors.entry(read.into()).or_insert(why);
+            }
+        }
+        cluster
+    }
+}
+
+/// Read the field `cluster` of [`Source`](super::Source) from a record of any release.
+///
+/// A record of strata 0.24 and before holds the read errors of the cluster in two fields. A later
+/// record holds them in [`ClusterSource::errors`]. This function reads both into `errors`. So a
+/// read of a [`Snapshot`](super::Snapshot) with serde gives the same answer as
+/// [`Snapshot::load`](super::Snapshot::load).
+pub(super) fn deserialize_cluster<'de, D>(
+    deserializer: D,
+) -> Result<Option<ClusterSource>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(Option::<ClusterRecord>::deserialize(deserializer)?.map(ClusterSource::from))
+}
 
 /// The schema of [`ClusterSource::errors`]: a map from a part to the error of Palette. A key can
 /// also name a part of a later release.
@@ -167,30 +208,6 @@ impl ClusterSource {
     /// Why strata could not read the part `read` of the cluster, when it could not.
     fn read_error(&self, read: ClusterRead) -> Option<&str> {
         self.errors.get(&read.into()).map(String::as_str)
-    }
-}
-
-/// Move the read errors of the cluster in the record `record` from the fields of strata 0.24 and
-/// before to `source.cluster.errors`. An entry that `errors` holds already stays.
-pub(super) fn read_older_errors(record: &mut Value) {
-    let Some(cluster) = record
-        .pointer_mut("/source/cluster")
-        .and_then(Value::as_object_mut)
-    else {
-        return;
-    };
-    for (older, read) in OLDER_ERRORS {
-        // an older record can hold null here, which is no error
-        let Some(why) = cluster.remove(older).filter(Value::is_string) else {
-            continue;
-        };
-        if let Some(errors) = cluster
-            .entry("errors")
-            .or_insert_with(|| json!({}))
-            .as_object_mut()
-        {
-            errors.entry(read.as_str()).or_insert(why);
-        }
     }
 }
 
@@ -656,52 +673,83 @@ mod tests {
         assert_eq!(unread.errors, errors);
     }
 
+    /// The field `cluster` of a `Source`, as serde reads it from `record`.
+    fn try_read_cluster(record: Value) -> Result<Option<ClusterSource>, serde_json::Error> {
+        #[derive(Deserialize)]
+        struct Holder {
+            #[serde(deserialize_with = "deserialize_cluster")]
+            cluster: Option<ClusterSource>,
+        }
+        serde_json::from_value::<Holder>(json!({"cluster": record})).map(|h| h.cluster)
+    }
+
+    fn read_cluster(record: Value) -> Option<ClusterSource> {
+        try_read_cluster(record).unwrap()
+    }
+
+    /// A cluster object with the fields that a record must hold, and `more`.
+    fn cluster_object(more: Value) -> Value {
+        let mut cluster = json!({"uid": "c1", "name": "payments", "profiles": []});
+        cluster
+            .as_object_mut()
+            .unwrap()
+            .extend(more.as_object().unwrap().clone());
+        cluster
+    }
+
     #[test]
     fn the_read_errors_of_an_older_record_move_into_errors_and_an_entry_of_errors_stays() {
-        let mut record = json!({"source": {"cluster": {
-            "uid": "c1",
+        let older = read_cluster(cluster_object(json!({
             "updatesPendingError": "HTTP 404: not found",
             "pendingRepaveError": "HTTP 403: forbidden",
-        }}});
-        read_older_errors(&mut record);
+        })))
+        .unwrap();
         assert_eq!(
-            record["source"]["cluster"],
-            json!({"uid": "c1", "errors": {
+            serde_json::to_value(&older.errors).unwrap(),
+            json!({
                 "updatesPending": "HTTP 404: not found",
                 "pendingRepave": "HTTP 403: forbidden",
-            }})
+            })
         );
+        assert_eq!(older.uid, "c1");
 
         // a record that holds both shapes keeps the entry of the new one
-        let mut both = json!({"source": {"cluster": {
+        let both = read_cluster(cluster_object(json!({
             "pendingRepaveError": "HTTP 500: older",
             "errors": {"pendingRepave": "HTTP 403: newer", "updatesPending": "HTTP 404: x"},
-        }}});
-        read_older_errors(&mut both);
+        })))
+        .unwrap();
         assert_eq!(
-            both["source"]["cluster"],
-            json!({"errors": {"pendingRepave": "HTTP 403: newer", "updatesPending": "HTTP 404: x"}})
+            serde_json::to_value(&both.errors).unwrap(),
+            json!({"pendingRepave": "HTTP 403: newer", "updatesPending": "HTTP 404: x"})
         );
     }
 
     #[test]
-    fn a_record_with_no_read_error_or_no_cluster_does_not_change() {
-        for record in [
-            json!({"source": {"cluster": {"uid": "c1", "updatesPending": true}}}),
-            json!({"source": {"uid": "p1"}}),
-            json!({}),
-        ] {
-            let mut read = record.clone();
-            read_older_errors(&mut read);
-            assert_eq!(read, record);
-        }
+    fn a_cluster_that_a_record_writes_now_reads_with_the_errors_it_holds_and_writes_the_same() {
+        let current = cluster_object(json!({
+            "updatesPending": true,
+            "errors": {"network": "HTTP 500: later", "pendingRepave": "HTTP 403: forbidden"},
+        }));
+        let read = read_cluster(current.clone()).unwrap();
+        assert_eq!(read.errors.len(), 2);
+        assert_eq!(serde_json::to_value(&read).unwrap(), current);
+
+        let none = read_cluster(cluster_object(json!({}))).unwrap();
+        assert!(none.errors.is_empty());
+        assert_eq!(read_cluster(Value::Null).map(|c| c.uid), None);
     }
 
     #[test]
     fn an_older_field_that_holds_null_is_no_error() {
-        let mut record = json!({"source": {"cluster": {"updatesPendingError": null}}});
-        read_older_errors(&mut record);
-        assert_eq!(record, json!({"source": {"cluster": {}}}));
+        let read = read_cluster(cluster_object(json!({"updatesPendingError": null}))).unwrap();
+        assert!(read.errors.is_empty());
+    }
+
+    #[test]
+    fn an_older_field_that_is_not_text_is_an_error_of_the_record() {
+        let err = try_read_cluster(cluster_object(json!({"pendingRepaveError": 7}))).unwrap_err();
+        assert!(err.to_string().contains("invalid type: integer"), "{err}");
     }
 
     #[test]

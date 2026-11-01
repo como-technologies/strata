@@ -21,7 +21,6 @@ pub use crate::repave::PendingRepave;
 use crate::text::name_or_uid;
 use crate::timestamp::Rfc3339;
 pub use crate::validation::ProfileValidation;
-use cluster::read_older_errors;
 use pack::masked_paths;
 
 mod build;
@@ -208,7 +207,11 @@ pub struct Source {
     #[schemars(with = "Rfc3339")]
     pub fetched_at: String,
     /// Present when the snapshot records what a cluster runs rather than a published profile.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "cluster::deserialize_cluster"
+    )]
     pub cluster: Option<ClusterSource>,
     /// Present when the snapshot records one pack version from a registry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -539,6 +542,11 @@ impl Snapshot {
 
     /// Read a snapshot file, and check its schema id.
     ///
+    /// A record of strata 0.24 and before holds the read errors of its cluster in two fields,
+    /// `updatesPendingError` and `pendingRepaveError`. A read of a [`Snapshot`] with serde moves
+    /// them into [`ClusterSource::errors`], as this function does. A [`ClusterSource`] that serde
+    /// reads alone has no such move: it drops the two fields.
+    ///
     /// # Errors
     ///
     /// - [`Error::UnsupportedSchema`] for a snapshot of another schema id.
@@ -546,11 +554,9 @@ impl Snapshot {
     /// - [`Error::NotSnapshot`] for a file that is not a snapshot.
     /// - [`Error::Io`] when strata cannot read the file.
     pub fn load(path: &Path) -> Result<Snapshot> {
-        let mut document = read_document(path, SNAPSHOT_SCHEMA, || {
+        let mut snap: Snapshot = load_document(path, SNAPSHOT_SCHEMA, || {
             Error::NotSnapshot(path.to_path_buf())
         })?;
-        read_older_errors(&mut document);
-        let mut snap: Snapshot = parse_document(path, SNAPSHOT_SCHEMA, document)?;
         snap.fill_content();
         Ok(snap)
     }
@@ -617,15 +623,26 @@ fn read_document(
 }
 
 /// Read the fields of `document`, the JSON that [`read_document`] gave for the file at `path`.
+///
+/// An error names the field that does not match, as `variables[0].name`.
 fn parse_document<T: DeserializeOwned>(
     path: &Path,
     schema: &'static str,
     document: Value,
 ) -> Result<T> {
-    serde_json::from_value(document).map_err(|source| Error::SnapshotSchema {
-        path: path.to_path_buf(),
-        schema,
-        source,
+    serde_path_to_error::deserialize(document).map_err(|e| {
+        let at = e.path();
+        let field = if at.iter().next().is_none() {
+            String::new()
+        } else {
+            at.to_string()
+        };
+        Error::SnapshotSchema {
+            path: path.to_path_buf(),
+            schema,
+            field,
+            source: e.into_inner(),
+        }
     })
 }
 

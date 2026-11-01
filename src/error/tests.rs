@@ -182,6 +182,7 @@ fn one_of_each() -> Vec<Error> {
         Error::SnapshotSchema {
             path: "old.json".into(),
             schema: "strata-snapshot/1",
+            field: "variables[0].name".into(),
             source: bad_json(),
         },
         Error::NoUid,
@@ -365,6 +366,33 @@ fn an_empty_list_of_profiles_or_of_registries_reads_none_in_the_message() {
     assert!(
         registry.to_string().ends_with("; registries: none"),
         "{registry}"
+    );
+}
+
+#[test]
+fn a_record_that_does_not_match_names_its_field_and_says_to_take_the_record_again() {
+    let at = |schema: &'static str, field: &str| Error::SnapshotSchema {
+        path: "old.json".into(),
+        schema,
+        field: field.into(),
+        source: serde_json::from_str::<String>("null").unwrap_err(),
+    };
+    assert_eq!(
+        at("strata-snapshot/1", "variables[0].name").to_string(),
+        "'old.json' does not match strata-snapshot/1: variables[0].name: invalid type: null, \
+         expected a string at line 1 column 4. Take the record again."
+    );
+    // a fault of the whole document has no field to name
+    assert_eq!(
+        at("strata-snapshot/1", "").to_string(),
+        "'old.json' does not match strata-snapshot/1: invalid type: null, expected a string at \
+         line 1 column 4. Take the record again."
+    );
+    // the report of `behind` is not a record
+    let report = at("strata-behind/1", "records[2]").to_string();
+    assert!(
+        report.ends_with("Run the command that wrote the report again."),
+        "{report}"
     );
 }
 

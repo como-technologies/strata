@@ -16,7 +16,7 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::diff::Diff;
-use crate::error::Result;
+use crate::error::{MESSAGE_AT, Result};
 use crate::json::opt_str;
 use crate::ops::{Chain, ConsumersReport, Listing, PackListing, SetReport, VerifySummary};
 use crate::snapshot::Snapshot;
@@ -91,7 +91,7 @@ pub(crate) fn count_of(n: usize, singular: &str) -> String {
 
 /// The error message of a listed entry, when it has one.
 pub(crate) fn entry_error(error: Option<&Value>) -> Option<&str> {
-    error.and_then(|e| opt_str(e, "/message"))
+    error.and_then(|e| opt_str(e, MESSAGE_AT))
 }
 
 /// The text with its first letter in upper case.
@@ -235,6 +235,17 @@ mod tests {
         assert_eq!(short_digest(hash), short(hash));
         assert_eq!(short_digest("sha256:cni-a"), "sha256:cni-a");
         assert_eq!(short_digest(""), "-");
+    }
+
+    #[test]
+    fn the_message_of_a_listed_entry_is_the_message_that_the_error_document_writes() {
+        let document = crate::error::Error::NoUid.to_json();
+        assert_eq!(
+            entry_error(Some(&document)),
+            Some("snapshot has no source.uid to verify against")
+        );
+        assert_eq!(entry_error(Some(&serde_json::json!({"kind": "x"}))), None);
+        assert_eq!(entry_error(None), None);
     }
 
     #[test]

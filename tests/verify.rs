@@ -6207,7 +6207,12 @@ fn a_variable_with_no_name_has_an_empty_name_and_a_record_that_holds_a_null_name
     let err = Snapshot::load(&record).unwrap_err();
     assert_eq!(err.kind(), "snapshot-schema");
     assert_eq!(err.exit_code(), 2);
-    assert!(err.to_string().contains("expected a string"), "{err}");
+    assert!(
+        err.to_string().ends_with(
+            "variables[0].name: invalid type: null, expected a string. Take the record again."
+        ),
+        "the message names the field and says what to do: {err}"
+    );
 }
 
 #[test]
@@ -8578,6 +8583,16 @@ fn an_older_record_with_the_read_errors_of_a_cluster_in_two_fields_loads_into_er
         serde_json::to_value(&current).unwrap()["source"]["cluster"],
         "the record is the record that strata writes now"
     );
+
+    // a program that reads the record with serde, and not with `load`, gets the same errors
+    let by_serde: Snapshot = serde_json::from_str(&fs::read_to_string(&saved).unwrap()).unwrap();
+    assert_eq!(
+        serde_json::to_value(&by_serde).unwrap()["source"]["cluster"]["errors"],
+        serde_json::to_value(&current).unwrap()["source"]["cluster"]["errors"],
+    );
+    let c = by_serde.source.cluster.as_ref().unwrap();
+    assert_eq!(c.pending_repave_error(), Some("HTTP 403: forbidden"));
+    assert_eq!(c.updates_pending_error(), Some("HTTP 404: not found"));
     let c = loaded.source.cluster.as_ref().unwrap();
     assert_eq!(c.pending_repave_error(), Some("HTTP 403: forbidden"));
     assert_eq!(c.updates_pending_error(), Some("HTTP 404: not found"));
