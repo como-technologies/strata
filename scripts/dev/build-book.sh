@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Build the book with mdbook, and fail when mdbook prints a warning. mdbook exits 0 on a warning,
-# for example a tag in a table cell that nothing closes, so CI passes the page unless a script
-# reads the log. A note of a preprocessor does not count: only the WARN and ERROR lines of mdbook.
+# Build the book with mdbook, and fail when mdbook prints a warning. mdbook exits with code 0 on
+# a warning, so CI passes a page that it warns about. The script reads the log, and fails on a
+# WARN or ERROR line of mdbook. A note of a preprocessor is not such a line.
 # Usage: build-book.sh [BOOK_DIR]    (default: docs)
 set -euo pipefail
 
