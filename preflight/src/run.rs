@@ -1040,6 +1040,19 @@ rules:
     }
 
     #[test]
+    fn the_rules_document_names_this_tool_as_the_report_does_and_has_its_own_schema_id() {
+        let catalog = crate::catalog::builtin().unwrap();
+        let rules = list_rules(&catalog, Some("eks"), None, &[]);
+        let doc = rules_document(&catalog, Some("eks"), None, &rules);
+        assert_eq!(doc["schema"], RULES_SCHEMA);
+        assert_eq!(doc["tool"], serde_json::to_value(Tool::current()).unwrap());
+        assert_eq!(doc["cloud"], "eks");
+        assert_eq!(doc["release"], Value::Null);
+        assert_eq!(doc["rules"].as_array().unwrap().len(), rules.len());
+        assert_eq!(doc["sections"][0]["section"], catalog.sections[0].section);
+    }
+
+    #[test]
     fn a_reading_has_no_summary_for_a_404_and_stops_at_a_401_or_a_429() {
         let cluster = json!({"metadata": {"uid": "c1"}, "status": {"state": "Provisioning"}});
         let summary = cluster_summary_path("c1");

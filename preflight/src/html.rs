@@ -210,6 +210,7 @@ pub fn page(r: &Report) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::confidence::NO_RUNS;
     use crate::probe::Call;
     use crate::report::*;
     use crate::rule::{Level, Severity, Status, Tier};
@@ -322,6 +323,49 @@ mod tests {
         );
         assert!(!html.contains('–'), "one mark for no percent");
         let _ = BTreeMap::<String, String>::new();
+    }
+
+    #[test]
+    fn the_three_forms_write_the_release_the_tiers_and_the_missing_name_in_one_form() {
+        let mut report = report();
+        report.subject.release = Some("4.10.3".into());
+        report.subject.name = String::new();
+        report.options.tiers = vec![Tier::Static, Tier::Palette];
+        report.options.strict = true;
+        let forms = [
+            (
+                "terminal",
+                terminal(&report, &strata::term::color::Paint::off()),
+            ),
+            ("markdown", markdown(&report)),
+            ("html", page(&report)),
+        ];
+        for (form, text) in &forms {
+            assert!(text.contains("Palette release 4.10.3"), "{form}: {text}");
+            assert!(
+                text.contains("tiers static, palette, strict"),
+                "{form}: {text}"
+            );
+        }
+        // no release: each form says so in the same words
+        report.subject.release = None;
+        for (form, text) in [
+            (
+                "terminal",
+                terminal(&report, &strata::term::color::Paint::off()),
+            ),
+            ("markdown", markdown(&report)),
+            ("html", page(&report)),
+        ] {
+            assert!(text.contains("Palette release not given"), "{form}: {text}");
+        }
+        // no run of the ledger gives a bound: each form says so in the same words
+        for (form, text) in &forms {
+            assert!(text.contains(NO_RUNS), "{form}: {text}");
+        }
+        assert!(forms[0].1.contains("gke cluster - ("), "{}", forms[0].1);
+        assert!(forms[1].1.contains("gke cluster `-`"), "{}", forms[1].1);
+        assert!(forms[2].1.contains("gke · -"), "{}", forms[2].1);
     }
 
     #[test]
