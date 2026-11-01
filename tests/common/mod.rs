@@ -805,7 +805,12 @@ pub fn git(dir: &Path, args: &[&str]) -> std::process::Output {
     let mut c = Command::new("git");
     c.args(args).current_dir(dir);
     let o = isolate_git(&mut c).output_locked().unwrap();
-    assert!(o.status.success(), "git {args:?}: {}", text(&o.stderr));
+    assert!(
+        o.status.success(),
+        "git {args:?}: {}{}",
+        text(&o.stderr),
+        text(&o.stdout)
+    );
     o
 }
 
