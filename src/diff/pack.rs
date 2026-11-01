@@ -157,7 +157,7 @@ pub struct PackDiff {
     /// not show. A manifest pack has no archive, so it is never true for one.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub upstream_unknown: bool,
-    /// The path of each value that Palette masks on either side, sorted: see [`Pack::masked`].
+    /// The path of each value that Palette masks on either side, sorted: see [`Pack::masked_paths`].
     /// The root covers the mask and not the secret, so an equal root does not show an equal
     /// secret.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -225,7 +225,7 @@ impl PackDiff {
     }
 }
 
-/// One pack with a value that Palette masks: see [`Pack::masked`].
+/// One pack with a value that Palette masks: see [`Pack::masked_paths`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MaskedPack {
@@ -432,7 +432,8 @@ pub struct ManifestChange {
 
 /// The masked paths of the two sides of one pack, sorted, each one time.
 pub(super) fn masked_union(x: &Pack, y: &Pack) -> Vec<String> {
-    let mut paths: Vec<String> = x.masked.iter().chain(&y.masked).cloned().collect();
+    let mut paths = x.masked_paths();
+    paths.extend(y.masked_paths());
     paths.sort();
     paths.dedup();
     paths
@@ -555,7 +556,7 @@ pub(super) fn presence_pack_diff(key: &str, pack: &Pack, added: bool) -> PackDif
         values: ValuesDiff::default(),
         manifests: Vec::new(),
         upstream_unknown: pack.upstream_unknown(),
-        masked: pack.masked.clone(),
+        masked: pack.masked_paths(),
         images: false,
         charts: false,
         image_changes: Vec::new(),

@@ -215,12 +215,12 @@ profile, or pack version.
     presets of such an option into the values: see
     [Template options](candidate-file.md#template-options). It is outside the
     root.
-  - `masked`, only when the values hold a mask: the path of each value that
-    is the text `********`, sorted, in the form of the value paths of
+  - No `masked`. A record of 0.25.0 and before holds it, for a pack whose
+    values hold a mask. A new record does not write it, and strata ignores it
+    when it reads a record. Strata finds the paths in `valuesCanon`: each value
+    that is the text `********`, sorted, in the form of the value paths of
     `strata-diff/1`. Palette writes that text over a value whose schema format
-    is `password`, so the root covers the mask and not the secret. It is
-    outside the root: the values are in it. A record written before this field
-    gets it from its values when strata reads it. See
+    is `password`, so the root covers the mask and not the secret. See
     [A secret changes in a pack value](../use-cases/masked-value.md).
   - `hash`: `identity`, `upstream`, `upstreamRaw`, `upstreamSource`,
     `authored`, and `node`. `upstreamSource` is the field that gave `UPSTREAM`:

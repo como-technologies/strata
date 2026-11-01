@@ -1,0 +1,2 @@
+$ jq -c '.packs[] | select(.values | contains("********")) | {key}' releases/1.1.10/dev.json
+{"key":"addon/cert-manager"}

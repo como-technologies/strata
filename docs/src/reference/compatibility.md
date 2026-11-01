@@ -128,6 +128,17 @@ In the library, `Snapshot::variables` and `Candidate::variables` are
 place of `Vec<Value>`. The function `diff::group_variables` takes
 `&[Variable]`.
 
+After 0.25.0, a pack of a record holds no `masked`. Release 0.25.0 and before
+wrote it for a pack whose values hold a mask. Strata finds the paths in the
+values, so `compare`, `verify`, and `same-release` give the same paths as before.
+Strata ignores `masked` when it reads a record of 0.25.0 or before. The id stays,
+because the root does not cover the field. Strata 0.25.0 that loads a new record
+finds the paths in the values too.
+
+A script that reads `packs[].masked` of a record must read `valuesCanon`:
+each value that is the text `********`. In the library, `Pack` has no field
+`masked`. Its method `masked_paths()` gives the same list.
+
 After 0.24.0, strata reads the variables of a candidate file by type. Before, it
 changed each value of the wrong type into the default of the field. Four cases
 differ:
@@ -210,7 +221,7 @@ in the list of eight fields above.
 | `cloudType` of `shape` | A record of 0.17.0 or before. |
 | `policy` of a cluster group | A record of 0.17.0 or before. The group had no `policy` tier. |
 | `invalid` and `invalidReason` of a pack | Palette does not mark the pack invalid. A record of 0.17.0 or before cannot say. |
-| `masked` of a pack | No value of the pack holds the mask. Strata finds `masked` in the values when it reads a record of 0.17.0 or before. |
+| `masked` of a pack | A record of 0.25.0 and before holds it, only when a value of the pack holds the mask. A new record never holds it: strata finds the paths in the values. |
 | `installOrder` and `containerRegistryUid` in the `params` of an app tier | Palette gives the tier none. A record of 0.17.0 or before holds neither, so a tier with an install order has another root. |
 
 `compare` and `verify` read an older record on the fields that it holds, and a

@@ -1,6 +1,6 @@
 //! A published pack value whose schema format is `password`: Palette serves `********` in place
-//! of the secret. A record names each masked value, and `same-release`, `compare`, and `verify`
-//! say that an equal root does not show an equal secret.
+//! of the secret. A pack gives each masked value from its values, and `same-release`, `compare`,
+//! and `verify` say that an equal root does not show an equal secret.
 
 use serde_json::{Value, json};
 
@@ -59,33 +59,78 @@ fn pack<'a>(snap: &'a Snapshot, name: &str) -> &'a strata::snapshot::Pack {
     snap.packs.iter().find(|p| p.name == name).unwrap()
 }
 
-#[test]
-fn a_record_names_each_masked_value_of_each_pack() {
-    let snap = record();
-    assert_eq!(pack(&snap, "grafana").masked, [PATH]);
-    assert!(pack(&snap, "cert-manager").masked.is_empty());
-    let doc: Value = serde_json::from_str(&snap.to_json(false).unwrap()).unwrap();
-    let packs = doc["packs"].as_array().unwrap();
-    let grafana = packs.iter().find(|p| p["name"] == "grafana").unwrap();
-    let certs = packs.iter().find(|p| p["name"] == "cert-manager").unwrap();
-    assert_eq!(grafana["masked"], json!([PATH]));
-    assert!(certs.get("masked").is_none(), "{certs}");
+/// Write `doc`, a record, to a file and read it with `Snapshot::load`.
+fn load(doc: &Value) -> Snapshot {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("record.json");
+    write_record(&path, doc);
+    Snapshot::load(&path).unwrap()
 }
 
 #[test]
-fn the_root_does_not_cover_the_masked_paths() {
+fn a_pack_gives_the_masked_paths_of_its_values_and_a_new_record_holds_no_masked_field() {
+    let snap = record();
+    assert_eq!(pack(&snap, "grafana").masked_paths(), [PATH]);
+    assert!(pack(&snap, "cert-manager").masked_paths().is_empty());
+    let doc: Value = serde_json::from_str(&snap.to_json(false).unwrap()).unwrap();
+    for p in doc["packs"].as_array().unwrap() {
+        assert!(p.get("masked").is_none(), "{p}");
+    }
+    let grafana = doc["packs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == "grafana")
+        .unwrap();
+    assert!(grafana["values"].as_str().unwrap().contains("********"));
+}
+
+#[test]
+fn a_record_of_release_0_25_0_with_masked_reads_and_gives_the_paths_of_its_values() {
     let snap = record();
     let mut doc: Value = serde_json::from_str(&snap.to_json(false).unwrap()).unwrap();
     for p in doc["packs"].as_array_mut().unwrap() {
-        p.as_object_mut().unwrap().remove("masked");
+        // release 0.25.0 wrote the list only for a pack with a mask
+        if p["name"] == "grafana" {
+            p["masked"] = json!([PATH]);
+        }
     }
-    let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("older.json");
-    write_record(&path, &doc);
-    // a record written before the field gets it from its values when it is read
-    let older = Snapshot::load(&path).unwrap();
-    assert_eq!(pack(&older, "grafana").masked, [PATH]);
+    let older = load(&doc);
+    assert_eq!(pack(&older, "grafana").masked_paths(), [PATH]);
+    assert!(pack(&older, "cert-manager").masked_paths().is_empty());
     assert_eq!(older.root, snap.root);
+    let again: Value = serde_json::from_str(&older.to_json(false).unwrap()).unwrap();
+    for p in again["packs"].as_array().unwrap() {
+        assert!(p.get("masked").is_none(), "{p}");
+    }
+}
+
+#[test]
+fn the_values_decide_the_masked_paths_and_not_the_masked_field_of_an_older_record() {
+    let snap = record();
+    let mut doc: Value = serde_json::from_str(&snap.to_json(false).unwrap()).unwrap();
+    for p in doc["packs"].as_array_mut().unwrap() {
+        p["masked"] = json!(["not.in.the.values"]);
+    }
+    let older = load(&doc);
+    assert_eq!(pack(&older, "grafana").masked_paths(), [PATH]);
+    assert!(pack(&older, "cert-manager").masked_paths().is_empty());
+}
+
+#[test]
+fn compare_of_a_record_of_release_0_25_0_and_a_new_record_gives_the_same_masked_paths() {
+    let new = record();
+    let mut doc: Value = serde_json::from_str(&new.to_json(false).unwrap()).unwrap();
+    for p in doc["packs"].as_array_mut().unwrap() {
+        if p["name"] == "grafana" {
+            p["masked"] = json!([PATH]);
+        }
+    }
+    let older = load(&doc);
+    let d = diff::compute(&older, &new, "t1", None);
+    assert!(d.same);
+    let grafana = d.packs.iter().find(|p| p.name == "grafana").unwrap();
+    assert_eq!(grafana.masked, [PATH]);
 }
 
 #[test]
