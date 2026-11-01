@@ -1,6 +1,11 @@
 use super::*;
 use crate::probe::FixtureBackend;
+use crate::report::Tool;
+use serde_json::json;
 use std::path::Path;
+use std::time::Duration;
+use strata::api::{Palette, cluster_events_path, cluster_summary_path, subject_path};
+use strata::snapshot::SubjectKind;
 
 const SECTION: &str = r#"
 section: compute
