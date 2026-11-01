@@ -35,6 +35,8 @@ where each module goes.
   one pull request that does both loses the history.
 - When a public module moves under a new parent, keep a `pub use` at the old
   path for one minor release.
+- `cargo test -p xtask` checks the limit of 800 lines for each module file of
+  `xtask`, and the limit of 80 lines for each function of `xtask`.
 
 ## Visibility
 
