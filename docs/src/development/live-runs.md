@@ -732,9 +732,9 @@ Palette takes the version on the route of an update. It refuses a candidate
 with that name and version on the name route. Stage 4 makes the profile
 `strata-live-layer` and deletes it. It runs only when you give its number:
 `validate-packs.sh 4`. Stage 5 asks the name route and the import validate
-route. Stage 6 runs only when you give its number: `PROFILE=<name>@<version>
-validate-packs.sh 6`. It needs a profile version that a cluster runs and that
-pins Kubernetes two minor versions or more below the newest version. With
+route. Stage 6 runs only when you give its number:
+`PROFILE=<name>@<version> validate-packs.sh 6`. It needs a profile version that a
+cluster runs and that pins Kubernetes two minor versions or more below the newest version. With
 `CLUSTER=<name>`, `behind` also asks about the record of the cluster, and the script
 sends the route of the cluster a tag that no registry has. It asks, and it writes
 nothing.
@@ -747,7 +747,7 @@ nothing.
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
 | `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`: `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`, of the whole request. The import validate route gives it with HTTP 500. Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
-| `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`, "Cluster Profile with name '<name>' and version '<version>' already exists". Strata prints `palette    refuses`, exits `2`, and writes no record |
+| `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`, `Cluster Profile with name '<name>' and version '<version>' already exists`. Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
 | `layer-refused`, `layer-refused-says` | 2, 0 | #210: strata refuses a candidate that gives `cert-manager` the layer `csi`. The message names the layer, `csi`, `addon`, and the rule of Palette |
 | `layer-validate`, `layer-validate-says` | 0 | #254: the validate route takes the pack with the layer `csi`. It answers `{"packs":{"results":[]}}`, with no result for the pack |

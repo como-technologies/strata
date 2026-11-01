@@ -68,6 +68,73 @@ fn tag_release_tags_the_cargo_version_once_and_only_on_a_clean_tree() {
     );
 }
 
+// ---- the build of the book -----------------------------------------------------------------
+
+/// Run `build-book.sh` with a stand-in `mdbook` that prints `log` and exits with `exit`. Gives the
+/// output of the script, and the arguments that the stand-in got.
+fn build_book(args: &[&str], log: &str, exit: &str) -> (Output, String) {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = fake_bin(dir.path(), &[("mdbook", LOGGING_TOOL)]);
+    let calls = dir.path().join("calls.log");
+    let o = Command::new("bash")
+        .arg(script("dev/build-book.sh"))
+        .args(args)
+        .env("PATH", path_with(&bin))
+        .env("FAKE_LOG", &calls)
+        .env("FAKE_OUT", log)
+        .env("FAKE_EXIT", exit)
+        .output()
+        .unwrap();
+    (o, std::fs::read_to_string(calls).unwrap_or_default())
+}
+
+#[test]
+fn build_book_fails_when_mdbook_prints_a_warning_and_exits_0() {
+    let log = " INFO Book building has started\n WARN unclosed HTML tag `<name>` found in `a.md` while exiting TableCell\nHTML tags must be closed before exiting a markdown element.\n INFO HTML book written to `book`\n";
+    let (o, calls) = build_book(&["docs"], log, "0");
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let stderr = text(&o.stderr);
+    assert!(
+        stderr.contains("unclosed HTML tag `<name>`"),
+        "the script shows the warning of mdbook:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("build-book: mdbook printed a warning"),
+        "{stderr}"
+    );
+    assert_eq!(
+        calls, "mdbook build docs\n",
+        "the script builds the book it was given"
+    );
+}
+
+#[test]
+fn build_book_fails_on_a_warning_that_mdbook_colors() {
+    let log = " INFO Book building has started\n\x1b[33m WARN\x1b[0m a page is wrong\n";
+    let (o, _) = build_book(&[], log, "0");
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+}
+
+#[test]
+fn build_book_passes_a_log_with_no_warning_of_mdbook_and_builds_docs_by_default() {
+    // The note of mdbook-mermaid is not a log line of mdbook: a new mdbook-mermaid fixes it.
+    let log = " INFO Book building has started\nWarning: The mdbook-mermaid preprocessor was built against version 0.5.0 of mdbook, but we're being called from version 0.5.4\n INFO Running the html backend\n INFO a WARN in the text of an INFO line\n INFO HTML book written to `book`\n";
+    let (o, calls) = build_book(&[], log, "0");
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(calls, "mdbook build docs\n");
+    assert!(
+        text(&o.stderr).contains("HTML book written"),
+        "the script shows the log of mdbook"
+    );
+}
+
+#[test]
+fn build_book_gives_the_exit_code_of_a_build_that_fails() {
+    let (o, _) = build_book(&["docs"], "ERROR the book has no SUMMARY.md\n", "3");
+    assert_eq!(o.status.code(), Some(3), "{}", text(&o.stderr));
+    assert!(text(&o.stderr).contains("ERROR the book has no SUMMARY.md"));
+}
+
 // ---- xtask playground ----------------------------------------------------------------------
 
 /// The playground: `xtask playground CHAPTER` builds the tenant of one chapter, serves it, and

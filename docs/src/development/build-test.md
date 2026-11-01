@@ -2,14 +2,27 @@
 
 ```bash
 just build             # target/release/strata and target/release/strata-preflight
-just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings
+just lint              # cargo fmt --check, clippy with -D warnings, rustdoc with -D warnings of the public and of all items
 just test              # the unit, library, binary, and script tests, and the tests of xtask
 just library-example   # examples/library and examples/library-preflight, crates that use the libraries
 just examples          # examples/ from the tracked registry data
 just docs-check        # docs/src/output/ is the output of this build
+just docs-lint         # each link of the book resolves
+just docs              # the book builds, and mdbook prints no warning
 ```
 
 `just --list` shows each recipe.
+
+`just lint` builds the rustdoc of `strata`, `strata-preflight`, and `xtask` two
+times. It fails on a warning of each build. The first build documents the
+public items, and it warns when a public item links to a private item. The
+second build documents all items, so it reads the comments of the private items
+too.
+
+`just docs` runs `scripts/dev/build-book.sh`. mdbook exits with code `0` when
+it prints a warning, so the script reads the log. It fails on a line that
+starts with `WARN` or `ERROR`. A note of a preprocessor is not such a line. The
+version note of `mdbook-mermaid` is an example, and it does not fail the build.
 
 The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 `Cargo.toml` says so, and the `msrv` job of CI builds with that version.
@@ -58,7 +71,7 @@ is content: see [What the root does not cover](../internals/hashes.md#what-the-r
 | Who runs it | Directory | Examples |
 | --- | --- | --- |
 | A user, in a pipeline | `scripts/ci/` | `install-strata.sh`, `merge-gate.sh`, `verify-report.sh` |
-| A maintainer, for the repository | `scripts/dev/` | `set-version.sh`, `tag-release.sh` |
+| A maintainer, for the repository | `scripts/dev/` | `build-book.sh`, `set-version.sh`, `tag-release.sh` |
 | A maintainer, for one crate or one example | beside that crate or example | `examples/live/`, `adapter/scripts/` |
 
 A script in `scripts/ci/` is a product: a page under Automation documents it, and
@@ -142,7 +155,7 @@ fails when 50 or fewer of its 2000 cases build a record.
 | Job | Runs |
 | --- | --- |
 | lint and test | `just lint`, `just test`, `just library-example`, and `just examples` |
-| docs | `just docs-check`, and `just docs` with `mdbook-lint` |
+| docs | `just docs-check`, `just docs-lint`, and `just docs`, which fails when mdbook prints a warning |
 | build | the Linux musl binary, with the step that a release uses |
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of `Cargo.toml`, so the number a reader trusts is the number CI builds with |
 
@@ -167,7 +180,7 @@ tracked can hide a failure:
 
 ```bash
 git worktree add --detach ../strata-check HEAD
-cd ../strata-check && just lint && just test && just library-example && just examples && just docs-check
+cd ../strata-check && just lint && just test && just library-example && just examples && just docs-check && just docs-lint && just docs
 ```
 
 ## A change to how strata reads Palette
