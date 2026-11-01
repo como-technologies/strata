@@ -46,9 +46,14 @@ pub(crate) fn canon_is_idempotent(values: &str) -> bool {
     // the canonical text is JSON, and JSON is YAML: the text must be values that mean the same
     let written = canonical_json(&pack.values_canon);
     let second = record(&written, "").expect("the canonical form of values builds a record");
+    let second = self::pack(&second);
+    // text that is not YAML has the hash of its own text, which is the hash of the first pack
     assert_eq!(
-        pack.values_hash,
-        self::pack(&second).values_hash,
+        second.values_parse_error, None,
+        "the canonical form of {values:?} is not YAML: {written}"
+    );
+    assert_eq!(
+        pack.values_hash, second.values_hash,
         "the canonical form of {values:?} is not its own canonical form: {written}"
     );
     true
