@@ -18,9 +18,9 @@
 # CI/CD variables to set, masked:
 #   GITLAB_TOKEN      a project or group access token with the api scope. The job token cannot
 #                     write notes, labels or issues, so the jobs need this one.
-#   PALETTE_API_KEY   needed to read Palette: for a ref that is not a snapshot file, for
-#                     STRATA_REPAVE, for the verify in the merge gate, and for the drift and
-#                     upstream reports.
+#   PALETTE_API_KEY   needed to read Palette. A job needs it for a ref that is not a
+#                     snapshot file, for STRATA_REPAVE, and for the verify of the merge
+#                     gate. The drift and upstream reports need it too.
 #   STRATA_TOKEN      a token that can read the strata releases, while that repository is private.
 #
 # The jobs run on a merge request pipeline. Turn on "Pipelines must succeed" in the project's

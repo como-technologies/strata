@@ -1,7 +1,8 @@
 //! The diff document (schema strata-diff/1): two snapshots compared.
 //!
-//! The document describes itself. Every enum is spelled out, a legend explains the flags and the
-//! impact levels, and a summary block answers the common questions without a walk of the packs.
+//! The document describes itself. It names each value of each enum in full. A legend explains the
+//! flags and the impact levels. A summary block answers the common questions without a walk of the
+//! packs.
 
 use std::collections::{BTreeMap, BTreeSet};
 

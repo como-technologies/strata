@@ -6,12 +6,12 @@ A ref names the thing that a command reads.
 | --- | --- | --- |
 | `<uid>` | the profile version with this uid | `64e0000000000000000000c3` |
 | `<name>@<version>` | the profile version with this name and version in the scope | `aws-stack@1.1.1` |
-| `<name>@latest` | the highest version of the name in the scope | `aws-stack@latest` |
+| `<name>@latest` | the highest version of the name in the scope that is not a pre-release | `aws-stack@latest` |
 | `<name>@<version>@draft` | the draft of the profile version: what its publish gives | `aws-stack@1.1.1@draft` |
 | `<uid>@draft` | the draft of the profile version with this uid | `64e0000000000000000000c3@draft` |
 | `pack:<name>@<version>` | one pack version, when one registry has that name and version | `pack:kubernetes@1.36.2` |
 | `pack:<registry>/<name>@<version>` | the same, from the registry of that name or uid | `pack:Public Repo/csi-aws-ebs@1.65.0` |
-| `pack:<name>@latest` | the highest version of the pack in the registry | `pack:kubernetes@latest` |
+| `pack:<name>@latest` | the highest version of the pack in the registry that is not a pre-release | `pack:kubernetes@latest` |
 | `cluster:<cluster>` | each profile that the cluster runs | `cluster:payments` |
 | `cluster:<cluster>/<profile>` | one profile that the cluster runs, by its name or uid | `cluster:payments/aws-stack` |
 | `cluster:<cluster>/<profile>+<profile>` | some of the profiles that the cluster runs | `cluster:payments/aws-stack+platform-addons` |
@@ -121,6 +121,6 @@ Strata asks Palette nothing:
 | `consumers` | yes | no | no | no | a profile record |
 | `behind` | no | no | no | no | yes: a record of each kind |
 
-`snapshot --raw-dir` takes a profile or a cluster. A record read back from the
-directory does not say `@pending`, `@draft`, edge host, cluster group, or app
-profile.
+`snapshot --raw-dir` takes a profile or a cluster. A record that strata builds
+again from the directory does not say `@pending`, `@draft`, edge host, cluster
+group, or app profile.

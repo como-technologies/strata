@@ -17,8 +17,8 @@ pub fn sha256_hex(s: &str) -> String {
 ///
 /// The rule: an object writes its keys in sorted order, and the text holds no whitespace. A string
 /// has the escapes of JSON. It also has `\uXXXX` for each character that a YAML parser does not
-/// read back as itself: DEL, U+0080 to U+009F, U+2028, U+2029, U+FFFE, and U+FFFF. So the text is
-/// YAML that means the same value. Strata sorts the keys here, so the result does not depend on
+/// read again as itself. These are DEL, U+0080 to U+009F, U+2028, U+2029, U+FFFE, and U+FFFF. So
+/// the text is YAML that means the same value. Strata sorts the keys here, so the result does not depend on
 /// the map ordering feature of `serde_json`. A change to this rule moves the root of each record
 /// that holds such a value.
 pub fn canonical_json(v: &Value) -> String {
@@ -135,7 +135,7 @@ pub fn hash_yaml(text: &str) -> (String, Option<String>) {
 ///
 /// 1. Parse the text with [`canon_yaml`]: one document is itself, several are an array, and empty
 ///    text is null. A key of a map becomes text.
-/// 2. Write the value with [`canonical_json`], so a comment, the whitespace, the order of the keys,
+/// 2. Write the value with [`canonical_json`]. A comment, the whitespace, the order of the keys,
 ///    and the style of the YAML do not change the hash.
 /// 3. Hash that text with SHA-256.
 ///

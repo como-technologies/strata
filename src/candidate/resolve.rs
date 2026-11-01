@@ -367,13 +367,15 @@ fn manifest_layer(
 
 /// Look each layer's pack up in its registry and build the three documents of a published profile.
 ///
-/// The documents are those that a published profile with this content returns:
-/// `GET /v1/registries/metadata` for registry names,
-/// `GET /v1/packs?filters=spec.name=<name>` for the pack uid, digest, layer, type, and default
-/// values, and `GET /v1/packs/<name>/registries/<uid>` for the tags. A `manifest` layer needs
-/// none of these. When the listing does not have the version, and the registry is one that
-/// Palette does not sync, the pack is the one that Palette makes at the create: no pack uid, no
-/// digest, the layer `addon`, and the tag as the version.
+/// The documents are those that a published profile with this content returns.
+/// `GET /v1/registries/metadata` gives the registry names.
+/// `GET /v1/packs?filters=spec.name=<name>` gives the pack uid, digest, layer, type, and default
+/// values. `GET /v1/packs/<name>/registries/<uid>` gives the tags. A `manifest` layer needs none
+/// of these.
+///
+/// When the listing does not have the version, and Palette does not sync the registry, the pack is
+/// what Palette makes at the create. It has no pack uid and no digest. Its layer is `addon`, and
+/// its tag is the version.
 ///
 /// The documents hold only what Palette gives. What strata reads beside them, the options of the
 /// pack template that the values of each pack select, is a field of the result.
@@ -386,8 +388,8 @@ fn manifest_layer(
 /// 3. When the listing has the version, refuse it if Spectro Cloud retired it. Check that the pack
 ///    supports the cloud of the profile, read its tags and its default values, and pick the tag.
 ///    The layer is the one that the registry gives.
-/// 4. When the listing has no such version, and the registry is one that Palette does not sync,
-///    make the pack as Palette does at the create. Else the registry does not have the version.
+/// 4. When the listing has no such version, and Palette does not sync the registry, make the pack
+///    as Palette does at the create. Else the registry does not have the version.
 ///
 /// At the end, check the layers of the whole profile against the layers that the packs got.
 ///

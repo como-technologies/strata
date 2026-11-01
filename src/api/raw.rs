@@ -15,7 +15,7 @@ use crate::snapshot::Template;
 ///
 /// It holds the three responses and the project that they came from. `--raw-dir` saves them as
 /// `profile.json`, `manifests.json`, `variables.json`, and `scope.json`, and `--from-raw` reads
-/// them back.
+/// them again.
 #[derive(Debug, Clone)]
 pub struct RawProfile {
     /// `GET /v1/clusterprofiles/{uid}`
@@ -293,7 +293,7 @@ impl RawProfile {
 ///
 /// It holds the three responses and the project that they came from. `--raw-dir` saves them as
 /// `cluster.json`, `manifests.json`, `variables.json`, and `scope.json`, and `--from-raw` reads
-/// them back.
+/// them again.
 #[derive(Debug, Clone)]
 pub struct RawCluster {
     /// `GET /v1/spectroclusters/{uid}`: the applied profile templates are in

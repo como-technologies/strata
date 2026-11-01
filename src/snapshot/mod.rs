@@ -569,8 +569,8 @@ impl Snapshot {
         Ok(snap)
     }
 
-    /// Give each pack the images and the charts of its values, when the record holds none: a
-    /// record written before those fields has the values, and so the lists.
+    /// Give each pack the images and the charts of its values, when the record holds none. A
+    /// record written before those fields has the values, so strata can build the lists.
     pub fn fill_content(&mut self) {
         for p in &mut self.packs {
             if p.images.is_empty() && p.charts.is_empty() {

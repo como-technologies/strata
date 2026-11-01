@@ -107,7 +107,7 @@ as Palette does. Each chapter of the runner builds the tenant that one page need
 the real pack data in `examples/`. It changes the tenant between commands as
 Palette does.
 
-1. Find the chapter of the page in `xtask/src/chapters/`, or add one with
+1. Find the chapter of the page in `xtask/src/chapters/`. To add one, put
    `r.chapter("name", env)` in the file of its group of pages.
 2. Build the tenant with `projects`, `profile`, `profile_own_copy`, `addons`,
    `cluster`, and `registries`. Change it with `edit`, `on_cluster_reclaim`,

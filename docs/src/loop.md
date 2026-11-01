@@ -5,7 +5,7 @@ and the pipeline publishes it. A record in the repository keeps the content that
 the team approved. From then on, each step compares Palette with that record.
 Each difference reaches a person as a comment, a gate that fails, or an issue.
 
-The name and the version alone do not fix the content. Palette can update a
+A name and a version do not tell you the content. Palette can update a
 published version after its publish, and the name stays. So the record holds the
 content, and not only the name. A record in Git, checked against Palette, shows
 each change after the approval.
@@ -19,11 +19,11 @@ gives the command and the page of each job.
 | You do this | Strata tells you | Where it runs |
 | --- | --- | --- |
 | You open a pull request that changes a profile | What changes in each pack, and if the change replaces the nodes. Palette says if it accepts the packs. | the job of the pull request |
-| You merge | When Palette changes after you open the pull request, the merge waits. | the merge gate |
+| You merge | When Palette changed after the review, or the merge moves a pin back, the gate fails, and the merge stops. | the merge gate |
 | The pipeline makes the version in Palette | When Palette holds other content than the content that you reviewed, the job fails. | the job after the merge |
 | You move a cluster to the version | Palette says if the move replaces the nodes, before the move. | the pull request of the move |
 | You copy the release to `prod` | When `prod` holds other content than `dev`, the job fails. | the promotion gate, on demand |
-| You write a new cluster | When Palette cannot build it, the pull request says why, before the build. | preflight |
+| You write a new cluster | When Palette cannot build it, the pull request says why, before the build. | the job of the pull request, and the pipeline before the build |
 | Nobody works | An issue opens when somebody changes a version or a cluster outside a review, or when a pack that you pin has a newer version. | the jobs of the night |
 | A pack has a security fault | Each profile and each cluster that carries the pack, what changed, and who changed it. | a person at a terminal |
 | You delete an old version | When a cluster or a template still uses it, the gate stays closed. | the retire gate, on demand |
