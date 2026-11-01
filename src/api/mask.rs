@@ -185,10 +185,11 @@ fn holds_secret(v: &impl ScalarText) -> bool {
         .is_some_and(|text| !text.is_empty() && !holds_variable(&text))
 }
 
-/// True when the key of a value of a cluster group names a secret. Such a key ends with
-/// `password`, in capitals or not: `password` or `adminPassword`.
-fn is_password_key(key: &str) -> bool {
-    key.to_ascii_lowercase().ends_with("password")
+/// True when the mask of a cluster group covers `value` under `key`. The key names a secret when
+/// it ends with `password`, in capitals or not: `password` or `adminPassword`. The value is a
+/// scalar that [`holds_secret`] covers.
+fn is_group_secret(key: &str, value: &impl ScalarText) -> bool {
+    key.to_ascii_lowercase().ends_with("password") && holds_secret(value)
 }
 
 /// A document that the mask of a cluster group walks: the canonical values of a record
@@ -237,7 +238,7 @@ impl Tree for Yaml {
 /// secret too, so the walk goes into it.
 pub(crate) fn mask_password_keys<T: Tree>(values: &mut T) {
     values.each_child(&mut |key, child| {
-        if key.is_some_and(is_password_key) && holds_secret(&*child) {
+        if key.is_some_and(|k| is_group_secret(k, &*child)) {
             *child = T::masked();
         } else {
             mask_password_keys(child);
@@ -422,7 +423,7 @@ fn masked_password_line(line: &str) -> Option<String> {
     let value = serde_yaml::from_str::<Yaml>(rest.trim())
         .ok()
         .map(untagged)?;
-    if !is_password_key(key) || !holds_secret(&value) {
+    if !is_group_secret(key, &value) {
         return None;
     }
     let end = if line.ends_with('\r') { "\r" } else { "" };
