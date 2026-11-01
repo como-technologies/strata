@@ -800,7 +800,7 @@ fn the_rust_comments_that_the_style_review_of_wave_11_named_keep_to_25_words() {
             "The variable that strata keeps of `v`",
         ),
         (
-            "xtask/src/chapters.rs",
+            "xtask/src/chapters/repave.rs",
             "the table says repave for a new Kubernetes version",
         ),
         (

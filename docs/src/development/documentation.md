@@ -90,7 +90,7 @@ playground does not make it. Put `serve_here` before an `edit`, a second publish
 under one name, or any other line that a step of the page is written to cause.
 
 The playground takes each chapter that `r.chapter(...)` starts in
-`xtask/src/chapters.rs`. No second list of the chapters exists, so a new chapter
+`xtask/src/chapters/`. No second list of the chapters exists, so a new chapter
 needs no other change. Two chapters with one name stop the runner.
 `just playground CHAPTER-N` serves state `N` of the chapter. A chapter has one
 state more than its calls of `serve_here`. `just docs-check` fails on a page
@@ -106,8 +106,8 @@ as Palette does. Each chapter of the runner builds the tenant that one page need
 the real pack data in `examples/`, and changes it between commands as Palette
 changes it.
 
-1. Find the chapter of the page in `xtask/src/chapters.rs`, or add one with
-   `r.chapter("name", env)`.
+1. Find the chapter of the page in `xtask/src/chapters/`, or add one with
+   `r.chapter("name", env)` in the file of its group of pages.
 2. Build the tenant with `projects`, `profile`, `profile_own_copy`, `addons`,
    `cluster`, and `registries`. Change it with `edit`, `on_cluster_reclaim`,
    and `set_value`.
