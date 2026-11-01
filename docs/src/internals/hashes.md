@@ -88,10 +88,12 @@ with sorted keys, before it calculates a hash.
 
 The JSON is also YAML that means the same value. Strata writes each string as
 JSON does. It also writes `\uXXXX` for each character that a YAML parser does
-not read again as itself. These are DEL, U+0080 to U+009F, U+2028, U+2029,
-U+FFFE, and U+FFFF. A parser reads U+0085, U+2028, and U+2029 as a line break,
-and refuses the other characters. One case stays: a key of more than 1024
-characters. YAML limits a key of one line to that length.
+not read again as itself.
+
+These are DEL, U+0080 to U+009F, U+2028, U+2029, U+FFFE, and U+FFFF. A parser
+reads U+0085, U+2028, and U+2029 as a line break, and refuses the other
+characters. One case stays: a key of more than 1024 characters. YAML limits a
+key of one line to that length.
 
 A value that is not valid YAML, such as an unquoted Go template, gets another
 treatment. Strata hashes the trimmed text, and the report says so. `--full`

@@ -290,7 +290,7 @@ pub enum Error {
         message: String,
     },
     /// The record of the update that waits for a cluster holds a profile that the cluster does not
-    /// run now: the record is older than the cluster. Only the document of the cluster shows it,
+    /// run now. The record is older than the cluster. Only the document of the cluster shows it,
     /// so the refusal comes after the first request. The command is correct. The record must
     /// change.
     #[error(

@@ -662,7 +662,7 @@ fn the_seeds_of_each_target_reach_its_code_and_the_regression_cases_pass() {
 }
 
 /// The book names each test that calls `bolero::check!`: each target and each property. A test
-/// that the book leaves out is a test that a reader cannot find. The check reads the source of the
+/// that the book omits is a test that a reader cannot find. The check reads the source of the
 /// modules, and the page "The fuzzing" of the book.
 #[test]
 fn the_book_names_each_target_and_each_property() {

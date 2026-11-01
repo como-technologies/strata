@@ -48,8 +48,8 @@ the same way, and follows the same promotion. Strata ships no custom probe and
 assumes no topology.
 
 Strata reads the file before the first request. A file with a program that
-cannot run fails with the kind `catalog` and exit `2`: a program that does not
-compile, one that reads `$item` where the check has no item, or one that nests
-more than 64 levels. A level is a bracket, or an operator in a chain such as
-`a | b | c`. The programs of the catalog have fewer than 32 levels. See
+cannot run fails with the kind `catalog` and exit `2`. Such a program does not
+compile, reads `$item` where the check has no item, or nests more than 64
+levels. A level is a bracket, or an operator in a chain such as `a | b | c`. The
+programs of the catalog have fewer than 32 levels. See
 [A request for each item](../../reference/preflight-rules.md#a-request-for-each-item).

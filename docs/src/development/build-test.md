@@ -14,11 +14,11 @@ just bench             # the benchmarks of benches/, with the time of each
 
 `just --list` shows each recipe.
 
-`just lint` builds the rustdoc of `strata`, `strata-preflight`, and `xtask` two
-times. It fails on a warning of each build. The first build documents the
-public items, and it warns when a public item links to a private item. The
-second build documents all items, so it reads the comments of the private items
-too.
+`just lint` builds the rustdoc of `strata`, `strata-preflight`, `xtask`, and
+`strata-benches` two times. It fails on a warning of each build. The first build
+documents the public items, and it warns when a public item links to a private
+item. The second build documents all items, so it reads the comments of the
+private items too.
 
 `just docs` runs `scripts/dev/build-book.sh`. mdbook exits with code `0` when
 it prints a warning, so the script reads the log. It fails on a line that
@@ -201,7 +201,7 @@ not a fault. A panic is the only fault.
 | `candidate::a_candidate_file_loads_as_the_candidate_it_writes_or_is_refused_with_a_kind` | A candidate file | The parse and the check give a candidate or an error with a kind. The YAML of a candidate that loads loads as the same candidate. |
 | `canon::any_text_has_a_stable_canonical_form_as_values_and_as_a_manifest` | YAML text | The text is the values and the manifest of a pack. The record is the same each time. The canonical text of the values is YAML, and it gives the same hash when strata reads it again. A key of more than 1024 characters is the exception: YAML cannot read it again. |
 | `mask::a_draft_pack_keeps_no_secret_in_clear_and_nothing_else_changes` | YAML text | The read of a draft masks the text. Each secret that a schema names has the mask, and no other value changes. A second mask changes nothing. |
-| `mask::a_saved_cluster_keeps_no_password_of_its_group_values_in_clear` | YAML text, or JSON | The save of a cluster with `--raw-dir` masks each password of the group values, also under a key that is not text. The directory loads again, and a second save changes nothing. |
+| `mask::a_saved_cluster_keeps_no_password_of_its_group_values_in_clear` | YAML text, or JSON | `RawCluster::save_dir` masks each password in the values of a cluster group, also under a key that is not text. The directory loads again, and a second save changes nothing. |
 | `reference::the_text_of_a_ref_parses_as_a_ref_that_prints_the_same_text` | A ref | The text of a ref parses as a ref, and the text that the ref prints parses as the same ref. |
 | `reference::the_version_order_is_a_total_preorder` | Three versions, apart by a NUL byte | The version order is reflexive, reverses with its arguments, and is transitive. |
 | `record::a_record_file_holds_what_each_record_holds_or_is_refused_with_a_kind` | A record file | The read gives a record or an error with a kind. A record compares equal to itself in each renderer, and it writes and reads again with the same root. |
@@ -222,7 +222,7 @@ always valid, and the same bytes give the same document.
 | The root does not change when the order of the keys changes. | `properties::the_root_does_not_change_when_the_order_of_the_keys_changes` |
 | The comparison of a record with itself is empty. | `properties::the_comparison_of_a_record_with_itself_is_empty` |
 | The canonical form and the mask are idempotent. | `properties::the_canonical_form_is_idempotent` and `properties::the_mask_is_idempotent_and_leaves_no_secret_in_clear` |
-| The version order is a total order. | `properties::the_version_order_is_a_total_order` |
+| The version order is a total preorder. | `properties::the_version_order_is_a_total_preorder` |
 | A record written and read again gives the same root. | `properties::a_record_written_and_read_again_has_the_same_root` |
 
 The version order is a total preorder: two spellings of one version, such as

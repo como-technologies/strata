@@ -10,7 +10,7 @@ use crate::common;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use common::{INSTALLING_WORKFLOWS, repo_file, schema, script, version_of, walk};
+use common::{INSTALLING_WORKFLOWS, recipe, repo_file, schema, script, version_of, walk};
 use strata::api::codes::ValidateRoute;
 
 fn docs() -> PathBuf {
@@ -553,29 +553,67 @@ fn stop_a_build_shows_the_comment_and_the_watch_of_the_workflow() {
 
 // ---- the style review of Wave 11 -------------------------------------------------------------
 
-/// The block of `text` that holds the first line with `anchor`. It is a paragraph, a list item
-/// without its nested items, or a table row. The block is one line, without the mark of the list.
+/// The length of the mark of a list item at the start of `line`: `- `, `* `, or a number and `. `.
+/// It is 0 when `line` starts no item.
+fn list_marker(line: &str) -> usize {
+    if line.starts_with("- ") || line.starts_with("* ") {
+        return 2;
+    }
+    let digits = line.chars().take_while(char::is_ascii_digit).count();
+    if digits > 0 && line[digits..].starts_with(". ") {
+        return digits + 2;
+    }
+    0
+}
+
+/// The blocks of `text`: each paragraph, each list item without its nested items, and each table
+/// row. A heading and a fenced block are no block. A block is one line, without the mark of the
+/// list.
+fn blocks_of(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current: Option<String> = None;
+    let mut fenced = false;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with("```") || line.starts_with("~~~") {
+            out.extend(current.take());
+            fenced = !fenced;
+            continue;
+        }
+        let ends_block = line.is_empty() || line.starts_with('#') || line.starts_with('|');
+        let marker = list_marker(line);
+        if fenced || ends_block || marker > 0 {
+            out.extend(current.take());
+        }
+        if fenced || line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with('|') {
+            out.push(line.to_string());
+            continue;
+        }
+        let line = line[marker..].trim_start_matches('>').trim();
+        if line.starts_with("{{#") {
+            continue;
+        }
+        match current.as_mut() {
+            Some(text) => {
+                text.push(' ');
+                text.push_str(line);
+            }
+            None => current = Some(line.to_string()),
+        }
+    }
+    out.extend(current);
+    out
+}
+
+/// The block of `text` that holds `anchor`. It is the first block of [`blocks_of`] with the text.
 fn block(text: &str, anchor: &str) -> String {
-    let lines: Vec<&str> = text.lines().collect();
-    let at = lines
-        .iter()
-        .position(|l| l.contains(anchor))
-        .unwrap_or_else(|| panic!("no line holds {anchor:?}"));
-    if lines[at].starts_with('|') {
-        return one_line(lines[at]);
-    }
-    let starts_item = |l: &str| l.trim_start().starts_with("- ");
-    let mut from = at;
-    while from > 0 && !starts_item(lines[from]) && !lines[from - 1].trim().is_empty() {
-        from -= 1;
-    }
-    let mut to = at + 1;
-    while to < lines.len() && !lines[to].trim().is_empty() && !starts_item(lines[to]) {
-        to += 1;
-    }
-    one_line(&lines[from..to].join(" "))
-        .trim_start_matches("- ")
-        .to_string()
+    blocks_of(text)
+        .into_iter()
+        .find(|block| block.contains(anchor))
+        .unwrap_or_else(|| panic!("no block holds {anchor:?}"))
 }
 
 /// The sentences of `block`. A sentence ends at one of three marks: a full stop, a question mark,
@@ -891,61 +929,6 @@ fn the_phrasal_verbs_and_the_would_of_the_wave_11_review_are_gone() {
 
 // ---- the style sweep of Wave 12 ----------------------------------------------------------------
 
-/// The length of the mark of a list item at the start of `line`: `- `, `* `, or a number and `. `.
-/// It is 0 when `line` starts no item.
-fn list_marker(line: &str) -> usize {
-    if line.starts_with("- ") || line.starts_with("* ") {
-        return 2;
-    }
-    let digits = line.chars().take_while(char::is_ascii_digit).count();
-    if digits > 0 && line[digits..].starts_with(". ") {
-        return digits + 2;
-    }
-    0
-}
-
-/// The blocks of `text`: each paragraph, each list item without its nested items, and each table
-/// row. A heading and a fenced block are no block. A block is one line, without the mark of the
-/// list.
-fn blocks_of(text: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut current: Option<String> = None;
-    let mut fenced = false;
-    for line in text.lines() {
-        let line = line.trim();
-        if line.starts_with("```") || line.starts_with("~~~") {
-            out.extend(current.take());
-            fenced = !fenced;
-            continue;
-        }
-        let ends_block = line.is_empty() || line.starts_with('#') || line.starts_with('|');
-        let marker = list_marker(line);
-        if fenced || ends_block || marker > 0 {
-            out.extend(current.take());
-        }
-        if fenced || line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if line.starts_with('|') {
-            out.push(line.to_string());
-            continue;
-        }
-        let line = line[marker..].trim_start_matches('>').trim();
-        if line.starts_with("{{#") {
-            continue;
-        }
-        match current.as_mut() {
-            Some(text) => {
-                text.push(' ');
-                text.push_str(line);
-            }
-            None => current = Some(line.to_string()),
-        }
-    }
-    out.extend(current);
-    out
-}
-
 /// The sentences of a block. A table row has the sentences of each cell.
 fn block_sentences(block: &str) -> Vec<String> {
     if block.starts_with('|') {
@@ -1113,6 +1096,7 @@ fn no_file_of_the_tree_uses_the_phrasal_verb_leave_out() {
         "deploy",
         "docs/src",
         "examples",
+        "fuzz",
         "preflight",
         "scripts",
         "src",
@@ -1251,7 +1235,7 @@ fn the_everyday_loop_opens_with_the_reason_that_the_record_holds_the_content_and
         and the pipeline publishes it. A record in the repository keeps the content that \
         the team approved. From then on, each step compares Palette with that record. \
         Each difference reaches a person as a comment, a gate that fails, or an issue. \
-        The name and the version alone do not fix the content. Palette can update a \
+        A name and a version do not tell you the content. Palette can update a \
         published version after its publish, and the name stays. So the record holds the \
         content, and not only the name. A record in Git, checked against Palette, shows \
         each change after the approval. \
@@ -1407,4 +1391,295 @@ fn the_everyday_loop_has_the_two_new_sections_and_the_quick_start_and_the_comman
             "{page} does not link {link}"
         );
     }
+}
+
+// ---- the text review at the end of Wave 12 -----------------------------------------------------
+
+/// The blocks of the book that the review at the end of Wave 12 found over the limits. A sentence
+/// has the limit of its entry, and a block has six sentences at most.
+#[test]
+fn the_blocks_that_the_review_at_the_end_of_wave_12_named_keep_to_the_limits() {
+    let blocks = [
+        (
+            "commands/preflight/rules.md",
+            "A file with a program that cannot run",
+            25,
+        ),
+        (
+            "commands/preflight/watch.md",
+            "`--watch cluster:UID` reads",
+            25,
+        ),
+        ("commands/preflight/watch.md", "`--verbose` prints", 25),
+        (
+            "commands/preflight/watch.md",
+            "To see a watch on a real build",
+            25,
+        ),
+        (
+            "commands/preflight/tiers.md",
+            "A run sends each request one time",
+            25,
+        ),
+        ("commands/preflight/tiers.md", "So `palette-validate`", 25),
+        ("internals/hashes.md", "The JSON is also YAML", 25),
+        ("internals/hashes.md", "These are DEL", 25),
+        (
+            "development/documentation.md",
+            "Find the chapter of the page",
+            20,
+        ),
+        (
+            "reference/refs.md",
+            "`snapshot --raw-dir` takes a profile or a cluster",
+            25,
+        ),
+    ];
+    for (page, anchor, limit) in blocks {
+        let found = sentences(&block(&read(&docs().join(page)), anchor));
+        assert!(
+            found.len() <= 6,
+            "{page}: {} sentences in the block of {anchor:?}",
+            found.len()
+        );
+        for sentence in found {
+            assert!(
+                words(&sentence) <= limit,
+                "{page}: {} words in a sentence of {limit} at most: {sentence}",
+                words(&sentence)
+            );
+        }
+    }
+}
+
+/// The phrasal verbs that the review at the end of Wave 12 named in the book. Each file below held
+/// one, and a line break can fall inside the phrase.
+#[test]
+fn the_phrasal_verbs_of_the_review_at_the_end_of_wave_12_are_gone_from_the_book() {
+    for (page, phrase) in [
+        ("commands/preflight/watch.md", "turns them off"),
+        ("reference/refs.md", "read back"),
+    ] {
+        assert!(
+            !one_line(&read(&docs().join(page))).contains(phrase),
+            "{page} still holds {phrase:?}"
+        );
+    }
+}
+
+/// The comment blocks of a YAML file: each run of lines that start with `#`. A block is one line,
+/// without the marks.
+fn yaml_comments(text: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut run: Vec<&str> = Vec::new();
+    for line in text.lines().map(str::trim_start) {
+        match line.strip_prefix('#').map(str::trim) {
+            Some(words) if !words.is_empty() => run.push(words),
+            _ if !run.is_empty() => blocks.push(std::mem::take(&mut run).join(" ")),
+            _ => {}
+        }
+    }
+    blocks.extend((!run.is_empty()).then(|| run.join(" ")));
+    blocks
+}
+
+/// A user copies the drop-ins of the CI systems, so their comments are user text. The review at the
+/// end of Wave 12 named three comments that are over the limit: each sentence of them has 25 words
+/// at most.
+#[test]
+fn the_comments_of_the_ci_drop_ins_that_the_review_named_keep_to_25_words() {
+    let comments = [
+        ("examples/ci/github/strata.yml", "needed to read Palette"),
+        (
+            "examples/ci/github/strata.yml",
+            "A token does not give access",
+        ),
+        ("examples/ci/gitlab/strata.yml", "needed to read Palette"),
+    ];
+    for (file, anchor) in comments {
+        let block = yaml_comments(&repo_file(file))
+            .into_iter()
+            .find(|block| block.contains(anchor))
+            .unwrap_or_else(|| panic!("{file}: no comment holds {anchor:?}"));
+        for sentence in sentences(&block) {
+            assert!(
+                words(&sentence) <= 25,
+                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
+                words(&sentence)
+            );
+        }
+    }
+}
+
+/// Each place that says which version `@latest` picks says that a pre-release is not the pick.
+#[test]
+fn each_place_that_says_what_latest_picks_says_that_a_pre_release_is_not_the_pick() {
+    for (page, anchor) in [
+        ("use-cases/pack-versions.md", "`pack:<name>@latest` takes"),
+        ("use-cases/pack-versions.md", "For `@latest`, strata takes"),
+        ("commands/index.md", "| The highest version of a name"),
+        ("reference/refs.md", "| `<name>@latest` |"),
+        ("reference/refs.md", "| `pack:<name>@latest` |"),
+    ] {
+        let found = block(&read(&docs().join(page)), anchor);
+        assert!(
+            found.contains("not a pre-release"),
+            "{page}: the block of {anchor:?} does not say that a pre-release is not the pick: {found}"
+        );
+    }
+}
+
+/// A gate that fails does not wait, and the last cell of a row names a place, not a command.
+#[test]
+fn the_merge_step_of_a_day_of_work_says_that_the_gate_fails_and_each_step_names_a_place() {
+    let text = the_loop();
+    let part = section(&text, "## A day of work", Some("\n## "));
+    let names = command_words();
+    for row in table_rows(part) {
+        let place = &row[2];
+        assert!(
+            !names.contains(place) && place != "preflight",
+            "the place {place:?} is the name of a command"
+        );
+        if row[0] == "You merge" {
+            assert!(
+                row[1].contains("the gate fails") && !row[1].contains("waits"),
+                "the merge step does not say that the gate fails: {}",
+                row[1]
+            );
+        }
+    }
+}
+
+/// The packages of the rustdoc builds of `just lint`, in the order of the recipe, as the list
+/// that a sentence gives: "`a`, `b`, and `c`".
+fn rustdoc_packages() -> String {
+    let mut packages: Vec<String> = Vec::new();
+    for line in recipe("lint").iter().filter(|l| l.contains("cargo doc")) {
+        let words: Vec<&str> = line.split_whitespace().collect();
+        for pair in words.windows(2).filter(|pair| pair[0] == "-p") {
+            if !packages.iter().any(|package| package == pair[1]) {
+                packages.push(pair[1].to_string());
+            }
+        }
+    }
+    let (last, first) = packages.split_last().expect("the recipe builds a rustdoc");
+    let first: Vec<String> = first.iter().map(|p| format!("`{p}`")).collect();
+    format!("{}, and `{last}`", first.join(", "))
+}
+
+/// The book states what the code does: the rustdoc of `just lint`, the property of the version
+/// order, and the save of the group values of a cluster.
+#[test]
+fn build_test_states_the_rustdoc_packages_the_version_order_and_the_save_of_a_cluster() {
+    let page = one_line(&read(&docs().join("development/build-test.md")));
+    let want = format!(
+        "`just lint` builds the rustdoc of {} two times",
+        rustdoc_packages()
+    );
+    assert!(page.contains(&want), "build-test.md lacks {want:?}");
+    assert!(
+        page.contains("| The version order is a total preorder. |")
+            && page.contains("`properties::the_version_order_is_a_total_preorder`")
+            && !page.contains("a total order"),
+        "build-test.md does not call the version order a total preorder"
+    );
+    assert!(
+        page.contains(
+            "`RawCluster::save_dir` masks each password in the values of a cluster group"
+        ) && !page.contains("The save of a cluster with `--raw-dir`"),
+        "build-test.md does not name the function that masks the group values"
+    );
+}
+
+/// The public items show their comments to each user of the library, so each sentence of the
+/// comments that the review at the end of Wave 12 named has 25 words at most, and none has a
+/// phrasal verb that the review named.
+#[test]
+fn the_public_rustdoc_that_the_review_at_the_end_of_wave_12_named_keeps_to_25_words() {
+    let comments = [
+        (
+            "src/reference/version.rs",
+            "Palette orders by semantic version.",
+        ),
+        (
+            "src/reference/version.rs",
+            "A string that does not parse keeps",
+        ),
+        ("src/candidate/resolve.rs", "The documents are those that"),
+        (
+            "src/candidate/resolve.rs",
+            "When the listing does not have the version",
+        ),
+        (
+            "src/candidate/resolve.rs",
+            "4. When the listing has no such version",
+        ),
+        (
+            "src/content/canon.rs",
+            "The rule: an object writes its keys",
+        ),
+        ("src/content/canon.rs", "2. Write the value with"),
+        (
+            "src/snapshot/mod.rs",
+            "Give each pack the images and the charts",
+        ),
+        ("src/term/color.rs", "Each stream has its own color"),
+        (
+            "src/error/mod.rs",
+            "The record of the update that waits for a cluster holds",
+        ),
+        ("src/diff/mod.rs", "The document describes itself"),
+        ("preflight/src/html.rs", "The page shows the readiness"),
+        (
+            "src/api/raw.rs",
+            "The raw API responses that a profile snapshot",
+        ),
+        (
+            "src/api/raw.rs",
+            "The raw API responses that a cluster snapshot",
+        ),
+    ];
+    for (file, anchor) in comments {
+        let text = comment(&repo_file(file), anchor);
+        for sentence in sentences(&text) {
+            assert!(
+                words(&sentence) <= 25,
+                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
+                words(&sentence)
+            );
+        }
+        for phrase in ["read back", "them back", "spelled out"] {
+            assert!(
+                !text.contains(phrase),
+                "{file}: the comment of {anchor:?} holds {phrase:?}"
+            );
+        }
+    }
+}
+
+/// A block is one item of a list, whatever the mark of the item is, and a quote has no mark.
+/// Before Wave 12 ended, `block` knew only the mark `- `, so it joined the items of a numbered
+/// list into one block.
+#[test]
+fn a_block_is_one_item_of_a_numbered_list_a_star_list_or_a_quote_and_one_paragraph() {
+    let text = "Intro.\n\n1. First item.\n   Same item.\n2. Second item.\n\n* Star one.\n* Star two.\n\n> Quoted\n> text.\n\n```text\nA fence.\n```\n\n| Row | Cell |\n";
+    assert_eq!(block(text, "First"), "First item. Same item.");
+    assert_eq!(block(text, "Second"), "Second item.");
+    assert_eq!(block(text, "Star two"), "Star two.");
+    assert_eq!(block(text, "Quoted"), "Quoted text.");
+    assert_eq!(block(text, "Row"), "| Row | Cell |");
+}
+
+/// The book has numbered items that the old reader joined into one block. The item of the
+/// setting of the access has its own block, and it holds the two sentences of the step.
+#[test]
+fn the_block_of_a_numbered_step_does_not_hold_the_next_step() {
+    let page = read(&docs().join("automation/pr-comments.md"));
+    let step = block(&page, "Accessible from repositories in the organization");
+    assert!(
+        step.starts_with("In this repository, open Settings"),
+        "{step}"
+    );
+    assert!(!step.contains("strata-token"), "{step}");
 }

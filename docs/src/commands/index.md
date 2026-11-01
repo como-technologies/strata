@@ -61,7 +61,7 @@ details.
 | --- | --- |
 | A profile uid | `64e0000000000000000000c3` |
 | A name and a version | `aws-stack@1.1.1` |
-| The highest version of a name | `aws-stack@latest` |
+| The highest version of a name that is not a pre-release | `aws-stack@latest` |
 | All profiles that a cluster runs | `cluster:payments` |
 | One profile that a cluster runs | `cluster:payments/aws-stack` |
 | A pack version in a registry | `pack:csi-aws-ebs@1.65.0` |
