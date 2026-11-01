@@ -1,0 +1,131 @@
+section: compute
+title: Compute and pools
+about: |
+  The machine pools of the cluster: their size, their instance types, and what each engine needs
+  of them before Palette can build the pool.
+rules:
+- id: vsphere-instance-floor
+  title: Each vSphere pool has one CPU, 1024 MiB, and a 20 GiB disk or more
+  engines:
+  - vsphere
+  tier: static
+  severity: fail
+  status: source
+  what: |
+    The converter refuses `numCPUs` under 1, `memoryMiB` under 1024, and `diskGiB` under 20, and
+    dereferences a missing `instanceType`. The docs give no floor for a workload node. The
+    tutorials use 4 CPUs, 8 GiB, and 60 GiB. The PCG needs 4 CPUs, 4 GiB, and 60 GiB.
+    `worker-cpu-floor` reads the CPU the packs need across the workers.
+  check:
+    kind: static
+    expr: |
+      [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | (.cloudConfig.instanceType // null) as $i
+        | if $i == null then "pool \($p) has no instanceType: the converter dereferences it, and the create fails"
+          else ( if ($i.numCPUs // 0) < 1 then "pool \($p) has \($i.numCPUs // 0) CPU(s); the converter needs 1 or more, and the tutorials use 4" else empty end ),
+               ( if ($i.memoryMiB // 0) < 1024 then "pool \($p) has \($i.memoryMiB // 0) MiB; the converter needs 1024 or more, and the tutorials use 8192" else empty end ),
+               ( if ($i.diskGiB // 0) < 20 then "pool \($p) has a \($i.diskGiB // 0) GiB disk; the converter needs 20 or more, and the tutorials use 60" else empty end ) end ]
+  fix:
+    owner: none
+    text: The check exists in the converter; strata-preflight runs it before the request.
+  evidence:
+  - kind: source
+    note: '"equal or greater than 1", "equal or greater than 1024 MiB", "equal or greater than 20 GiB"'
+  - kind: doc
+    ref: https://docs.spectrocloud.com/tutorials/getting-started/palette/vmware/deploy-k8s-cluster/
+    note: CPU 4 cores, memory 8 GB, disk 60 GB
+  tests:
+  - fault: fixtures/vsphere/small-instance.json
+    clean: fixtures/vsphere/clean.json
+- id: vsphere-compute-resources
+  title: The datastore, the network, and the resource pool exist in the compute cluster
+  engines:
+  - vsphere
+  tier: palette
+  severity: fail
+  status: source
+  when: .entity.spec.cloudAccountUid != null
+  what: |
+    `GET /v1/cloudaccounts/vsphere/{uid}/properties/computecluster/resources` lists, through the
+    PCG, the datastores, the networks, and the resource pools of one compute cluster. A name
+    that is not there fails the build in vCenter. The check reads the placement of each pool, with
+    one request for each compute cluster that the pools name.
+  check:
+    kind: palette
+    method: GET
+    each: |
+      (.entity.spec.cloudConfig.placement // {}) as $cp
+      | [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $pool
+          | ((.cloudConfig.placements // []) | if length == 0 then [{}] else . end)[]
+          | { pool: $pool, cluster: (.cluster // $cp.cluster // ""), datastore: (.datastore // $cp.datastore // ""), network: (.network.networkName // $cp.network.networkName // ""), resourcePool: (.resourcePool // $cp.resourcePool // "") }
+          | select(.cluster != "") ]
+      | group_by(.cluster)
+      | map({ cluster: .[0].cluster, wants: . })
+    path: /v1/cloudaccounts/vsphere/{{ .entity.spec.cloudAccountUid }}/properties/computecluster/resources?datacenter={{ .entity.spec.cloudConfig.placement.datacenter }}&computecluster={{ $item.cluster }}
+    expr: |
+      [ .responses[] | .item as $i | .response as $r
+        | if ($r.ok | not) then "Palette cannot list the resources of compute cluster \($i.cluster): \($r.body.code // $r.status): \($r.body.message // ""); the route goes through the PCG of the account"
+          else ($r.body.computecluster // {}) as $cc
+            | $i.wants[] | . as $w
+            | ( if $w.datastore != "" and (($cc.datastores // []) | index($w.datastore)) == null then "pool \($w.pool): datastore \($w.datastore) is not in compute cluster \($i.cluster) (\(($cc.datastores // []) | join(", ")))" else empty end ),
+              ( if $w.network != "" and (($cc.networks // []) | index($w.network)) == null then "pool \($w.pool): network \($w.network) is not in compute cluster \($i.cluster) (\(($cc.networks // []) | join(", ")))" else empty end ),
+              ( if $w.resourcePool != "" and $w.resourcePool != "Resources" and (($cc.resourcePools // []) | index($w.resourcePool)) == null then "pool \($w.pool): resource pool \($w.resourcePool) is not in compute cluster \($i.cluster) (\(($cc.resourcePools // []) | join(", ")))" else empty end )
+          end ]
+  reproduce:
+  - 'for c in {{ [ .entity.spec.cloudConfig.placement.cluster // empty, (.entity.spec.machinepoolconfig[] | (.cloudConfig.placements // [])[] | .cluster // empty) ] | unique | join(" ") }}; do curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/cloudaccounts/vsphere/{{ .entity.spec.cloudAccountUid }}/properties/computecluster/resources?datacenter={{ .entity.spec.cloudConfig.placement.datacenter }}&computecluster=$c" | jq .computecluster; done'
+  fix:
+    owner: palette
+    text: Read the resources of each placement in the validate route.
+  evidence:
+  - kind: source
+    note: the PCG answers computecluster{datastores, networks, resourcePools} for a datacenter and a compute cluster
+  - kind: source
+    note: the API of Palette gives the datastores, the networks, and the resource pools of each compute cluster
+  tests:
+  - fault: fixtures/vsphere/datastore-missing.json
+    clean: fixtures/vsphere/clean.json
+  - fault: fixtures/vsphere/datastore-missing-second-pool.json
+  - fault: fixtures/vsphere/datastore-missing-second-cluster.json
+- id: vsphere-datacenter
+  title: The datacenter, the compute clusters, and the template folder exist in vCenter
+  engines:
+  - vsphere
+  tier: palette
+  severity: fail
+  status: source
+  when: .entity.spec.cloudAccountUid != null
+  what: |
+    `GET /v1/cloudaccounts/vsphere/{uid}/properties/datacenters` lists, through the PCG of the
+    account, each datacenter with its compute clusters and its VM folders. The check looks for
+    the placement datacenter, the compute cluster of each pool, and the image template folder.
+    The docs say to make that folder in advance, with the Spectro role. The deployment folder is made
+    by the build when it is missing (connected installs), so the check does not need it.
+  check:
+    kind: palette
+    method: GET
+    path: /v1/cloudaccounts/vsphere/{{ .entity.spec.cloudAccountUid }}/properties/datacenters
+    expr: |
+      (.entity.spec.cloudConfig.placement // {}) as $cp
+      | if (.response.ok | not) then ["Palette cannot list the datacenters of the vSphere account: \(.response.body.code // .response.status): \(.response.body.message // ""); the route goes through the PCG of the account"]
+        else ([ (.response.body.items // [])[] | select(.datacenter == $cp.datacenter) ] | first) as $dc
+          | if $dc == null then ["datacenter \($cp.datacenter) is not in vCenter (it has \([ (.response.body.items // [])[] | .datacenter ] | join(", ")))"]
+            else ([ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | ((.cloudConfig.placements // []) | if length == 0 then [$cp] else . end)[] | ((.cluster // $cp.cluster) // "") | select(. != "")
+                    | select(. as $c | (($dc.computeclusters // []) | index($c)) == null)
+                    | "compute cluster \(.) of pool \($p) is not in datacenter \($cp.datacenter) (\(($dc.computeclusters // []) | join(", ")))" ] | unique)
+              + (if ($cp.imageTemplateFolder // "") != "" and ((($dc.folders // []) | index($cp.imageTemplateFolder)) == null) then ["imageTemplateFolder \($cp.imageTemplateFolder) is not a VM folder of \($cp.datacenter) (\(($dc.folders // []) | join(", "))): the docs say to make it in advance with the Spectro role, and the PCG imports the OVA template into it"] else [] end)
+            end
+        end
+  reproduce:
+  - GOVC_URL=https://{{ .account.spec.vcenterServer // "<vcenter>" }} GOVC_USERNAME={{ .account.spec.username // "<user>" }} GOVC_PASSWORD=<password> GOVC_INSECURE=1 govc ls /{{ .entity.spec.cloudConfig.placement.datacenter }}/host /{{ .entity.spec.cloudConfig.placement.datacenter }}/vm/{{ .entity.spec.cloudConfig.placement.imageTemplateFolder }}
+  fix:
+    owner: palette
+    text: Read the datacenter and the folders in the validate route.
+  evidence:
+  - kind: source
+    note: the PCG answers items[{datacenter, computeclusters, folders}]
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/data-center/vmware/permissions/
+    note: the spectro-templates folder must be manually created in advance; the target VM folder is created automatically for connected installs
+  tests:
+  - fault: fixtures/vsphere/datacenter-unknown.json
+    clean: fixtures/vsphere/clean.json
+  - fault: fixtures/vsphere/template-folder-missing.json

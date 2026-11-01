@@ -65,6 +65,12 @@ impl Jq {
         {
             return Ok(f);
         }
+        if depth(program) > MAX_DEPTH {
+            return Err(Error::Jq {
+                rule: rule.to_string(),
+                message: format!("the program nests more than {MAX_DEPTH} levels"),
+            });
+        }
         let funs = jaq_core::funs()
             .chain(jaq_std::funs())
             .chain(jaq_json::funs());
@@ -217,6 +223,68 @@ impl Jq {
     }
 }
 
+/// The most levels of nesting that a program can have. jaq reads each level with a call of its
+/// own, so a program of some hundreds of levels overflows the stack of the thread. The deepest
+/// program of the catalog has fewer than half of this number.
+const MAX_DEPTH: usize = 64;
+
+/// A part of a program that [`depth`] has open.
+enum Open {
+    /// A bracket, or the expression in a `\( )` of a string, with the operators met inside it.
+    Code(usize),
+    /// A string.
+    Text,
+}
+
+/// The depth of `program`: how many calls jaq makes to read one part of it inside another.
+///
+/// A bracket opens a level. So does each operator of a chain such as `a | b | c`, because jaq
+/// reads the rest of the chain inside the call that read the operator. The count is not exact. A
+/// `#` comment or an operator in a name counts like code, and a count that is too high only makes
+/// the check refuse a program early.
+fn depth(program: &str) -> usize {
+    let mut open = vec![Open::Code(0)];
+    // the levels of the open parts: one for each bracket, and one for each operator in them
+    let (mut level, mut deepest) = (0, 0);
+    let mut chars = program.chars();
+    while let Some(c) = chars.next() {
+        if matches!(open.last(), Some(Open::Text)) {
+            match c {
+                '"' => {
+                    open.pop();
+                }
+                '\\' if chars.next() == Some('(') => {
+                    open.push(Open::Code(0));
+                    level += 1;
+                }
+                _ => {}
+            }
+        } else {
+            match c {
+                '"' => open.push(Open::Text),
+                '(' | '[' | '{' => {
+                    open.push(Open::Code(0));
+                    level += 1;
+                }
+                ')' | ']' | '}' if open.len() > 1 => {
+                    if let Some(Open::Code(operators)) = open.pop() {
+                        level -= 1 + operators;
+                    }
+                }
+                '|' | '+' | '-' | '*' | '/' | '%' | ',' | '=' | '<' | '>' => {
+                    if let Some(Open::Code(operators)) = open.last_mut() {
+                        *operators += 1;
+                        level += 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        deepest = deepest.max(level);
+    }
+    deepest
+}
+
 /// One part of a template: text that stays as it is, or a program between `{{` and `}}`.
 enum Part<'a> {
     Text(&'a str),
@@ -295,6 +363,75 @@ fn to_json(v: &Val) -> Value {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// A program of `levels` levels in the shape `shape`: brackets, a chain of pipes, or a chain of
+    /// sums.
+    fn nested(shape: &str, levels: usize) -> String {
+        match shape {
+            "parens" => format!("{}1{}", "(".repeat(levels), ")".repeat(levels)),
+            "arrays" => format!("{}1{}", "[".repeat(levels), "]".repeat(levels)),
+            "objects" => format!("{}1{}", "{a:".repeat(levels), "}".repeat(levels)),
+            "pipes" => format!("{}.", ".|".repeat(levels)),
+            "sums" => format!("{}1", "1+".repeat(levels)),
+            "strings" => format!("{}1{}", "\"\\(".repeat(levels), ")\"".repeat(levels)),
+            _ => unreachable!("{shape}"),
+        }
+    }
+
+    #[test]
+    fn a_program_that_nests_deeper_than_the_limit_is_refused_and_never_overflows_the_stack() {
+        let jq = Jq::new();
+        for shape in ["parens", "arrays", "objects", "pipes", "sums", "strings"] {
+            // far past the depth that overflows the stack of a test thread
+            let program = nested(shape, 5000);
+            let err = jq.check("deep", &program, false).unwrap_err();
+            assert!(
+                err.to_string().contains("nests more than"),
+                "{shape}: {err}"
+            );
+            assert!(
+                jq.check("deep", &nested(shape, 20), false).is_ok(),
+                "{shape}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_depth_of_a_program_counts_brackets_and_chains_and_not_the_text_of_a_string() {
+        assert_eq!(depth("."), 0);
+        assert_eq!(depth(".a.b.c"), 0, "a path is not a chain of operators");
+        assert_eq!(depth("(.a)"), 1);
+        assert_eq!(depth(".a | .b | .c"), 2);
+        assert_eq!(depth("[.[] | select(.x == 1)]"), 5);
+        assert_eq!(depth(r#""((((((((((""#), 0, "brackets in a string are text");
+        assert_eq!(
+            depth(r#""a\"((((""#),
+            0,
+            "an escaped quote does not end the string"
+        );
+        assert_eq!(
+            depth(r#""\(.a + 1)""#),
+            2,
+            "the expression in a string is code"
+        );
+        assert_eq!(depth(")))"), 0, "a bracket that closes nothing is no level");
+        assert_eq!(depth(&nested("parens", 10)), 10);
+    }
+
+    #[test]
+    fn the_programs_of_the_catalog_are_far_from_the_limit_of_depth() {
+        let catalog = crate::catalog::builtin().unwrap();
+        let deepest = catalog
+            .rules()
+            .flat_map(|r| r.check.iter().map(|c| c.expr()).chain(r.when.as_deref()))
+            .map(depth)
+            .max()
+            .unwrap();
+        assert!(
+            deepest * 2 < MAX_DEPTH,
+            "the deepest program has depth {deepest}"
+        );
+    }
 
     #[test]
     fn a_program_runs_on_a_document() {

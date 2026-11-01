@@ -1,0 +1,3 @@
+p: !!str 12
+q: !!binary aGk=
+r: !custom tagged

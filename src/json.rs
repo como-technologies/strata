@@ -152,6 +152,22 @@ pub(crate) fn first_nonempty(candidates: &[&str]) -> String {
         .map_or_else(String::new, |c| (*c).to_string())
 }
 
+/// Put `value` at the object keys `keys` of `doc`. A value on the way that is not an object becomes
+/// one, as a null does for the index of `serde_json`. That index panics for any other value, and
+/// Palette can answer a document whose `spec` is a number.
+pub(crate) fn set_at(doc: &mut Value, keys: &[&str], value: Value) {
+    let Some((first, rest)) = keys.split_first() else {
+        *doc = value;
+        return;
+    };
+    if !doc.is_object() {
+        *doc = Value::Object(serde_json::Map::new());
+    }
+    if let Value::Object(map) = doc {
+        set_at(map.entry(*first).or_insert(Value::Null), rest, value);
+    }
+}
+
 /// True for zero, for `skip_serializing_if` on a count.
 pub(crate) fn is_zero(n: &usize) -> bool {
     *n == 0
@@ -304,6 +320,31 @@ mod tests {
         assert_eq!(first_nonempty(&["a", "b"]), "a");
         assert_eq!(first_nonempty(&["", ""]), "");
         assert_eq!(first_nonempty(&[]), "");
+    }
+
+    #[test]
+    fn set_at_puts_a_value_at_the_keys_and_makes_an_object_of_each_value_on_the_way_that_is_not_one()
+     {
+        let mut v = json!({"spec": {"keep": 1}});
+        set_at(&mut v, &["spec", "packs"], json!([1]));
+        assert_eq!(v, json!({"spec": {"keep": 1, "packs": [1]}}));
+        for junk in [
+            json!(5),
+            json!("text"),
+            json!([1]),
+            json!(true),
+            Value::Null,
+        ] {
+            let mut v = junk.clone();
+            set_at(&mut v, &["spec", "packs"], json!([]));
+            assert_eq!(v, json!({"spec": {"packs": []}}), "{junk}");
+            let mut v = json!({"spec": junk});
+            set_at(&mut v, &["spec", "packs"], json!([]));
+            assert_eq!(v, json!({"spec": {"packs": []}}));
+        }
+        let mut v = json!(1);
+        set_at(&mut v, &[], json!(2));
+        assert_eq!(v, json!(2));
     }
 
     #[test]

@@ -1,0 +1,3 @@
+adminPassword: "{{ .spectroévar.x }}"
+sync:
+  password: "{{ .spectroévar.y }}"

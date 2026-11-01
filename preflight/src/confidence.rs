@@ -291,9 +291,10 @@ impl Confidence {
     }
 }
 
-/// The one-sided Clopper-Pearson lower bound of a rate at `confidence`: the `p` at which
-/// `P(X >= correct | n, p) = 1 - confidence`. With every run correct it is
-/// `(1 - confidence)^(1/n)`. None with no run.
+/// The one-sided Clopper-Pearson lower bound of a rate at `confidence`.
+///
+/// It is the `p` at which `P(X >= correct | n, p) = 1 - confidence`. With every run correct it
+/// is `(1 - confidence)^(1/n)`. None with no run.
 pub fn lower_bound(correct: u32, total: u32, confidence: f64) -> Option<f64> {
     if total == 0 {
         return None;

@@ -1,0 +1,7 @@
+name: demo
+version: 1.0.0
+registry: a
+registryUid: b
+layers:
+- name: x
+  version: '1'

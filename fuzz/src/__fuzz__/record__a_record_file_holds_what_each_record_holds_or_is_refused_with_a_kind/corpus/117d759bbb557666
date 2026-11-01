@@ -1,0 +1,66 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "dbPassword: \"{{ .spectro.var.db_password }}\"\nuser: fred\n",
+      "valuesCanon": {
+        "dbPassword": "{{ .spectro.var.db_password }}",
+        "user": "fred"
+      },
+      "valuesHash": "7d72827ad935806761536f7825445966541e4d4a92e75341145be2e31d435c26",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "dbPassword: \"{{ .spectro.var.db_password }}\"\nuser: fred\n",
+          "contentHash": "7d72827ad935806761536f7825445966541e4d4a92e75341145be2e31d435c26"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "a505ac00b48296f8af39e74a3786b12ee0fa6270ffb4cf005442ac3a7c2217c3",
+        "node": "b381c973bd519996ea5a2ac895ada15b3f3b864cfef356d24327b3de4f0a8dc1"
+      }
+    }
+  ],
+  "root": "b6ad0a65427f769e54b8cac576001365173c0c7a295c7aa634d98bdb8f6d8239",
+  "contentDigest": "65c9323d2ecc775572783791a30a5e0d0c6f7eba719d26e260e2b91881a5e491"
+}

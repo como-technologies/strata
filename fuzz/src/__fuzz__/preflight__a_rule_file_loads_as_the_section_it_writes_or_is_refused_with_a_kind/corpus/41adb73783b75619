@@ -1,0 +1,113 @@
+section: compute
+title: Compute and pools
+about: |
+  The machine pools of the cluster: their size, their instance types, and what each engine needs
+  of them before Palette can build the pool.
+rules:
+- id: instance-offering
+  title: The instance type is offered in each zone of the pool
+  engines:
+  - aws
+  - eks
+  - gcp
+  - gke
+  tier: palette
+  severity: fail
+  status: source
+  when: .entity.spec.cloudAccountUid != null
+  what: |
+    An instance type that a zone does not offer fails during the build: `Unsupported`,
+    `ZONE_RESOURCE_POOL_EXHAUSTED`, or a node group `CREATE_FAILED`. The instance type route of
+    Palette lists each type of the region. The field `type` of an entry names the type, and
+    `nonSupportedZones` names the zones that do not offer it, and is `null` when each zone offers
+    the type. One request answers every pool. The check fails for a pool whose type lists a zone
+    of the pool in `nonSupportedZones`, or whose type the region does not list. A pool with no
+    zone is checked against the list of the region alone. The list is the catalog of Palette, not
+    the cloud, so the reproduce line asks the cloud.
+  check:
+    kind: palette
+    method: GET
+    path: /v1/clouds/{{ .accountKind }}/regions/{{ .entity.spec.cloudConfig.region }}/instancetypes?cloudAccountUid={{ .entity.spec.cloudAccountUid }}
+    expr: |
+      def zones: ((.cloudConfig.azs // []) + [ (.cloudConfig.subnets // [])[] | .az // empty ]) | unique;
+      .entity.spec.cloudConfig.region as $region
+      | if (.response.ok | not) then ["Palette cannot list the instance types of region \($region): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+        elif ((.response.body.instanceTypes | type) != "array") then ["Palette gave no list of instance types for region \($region)"]
+        else .response.body.instanceTypes as $types
+          | [ .entity.spec.machinepoolconfig[]
+              | .poolConfig.name as $pool | (.cloudConfig.instanceType // "") as $t | select($t != "")
+              | ([ $types[] | select(.type == $t) ] | .[0]) as $have
+              | if $have == null then "pool \($pool): the type \($t) is not in the list of region \($region)"
+                else (($have.nonSupportedZones // []) as $no | zones | map(select(. as $z | ($no | index($z)) != null)) | .[] | "pool \($pool): the type \($t) is not offered in the zone \(.)")
+                end ]
+        end
+  reproduce:
+    aws:
+    - 'aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --region {{ .entity.spec.cloudConfig.region }} --query ''InstanceTypeOfferings[].Location'' --output text   # each zone of the pools must be in the list'
+    eks:
+    - 'aws ec2 describe-instance-type-offerings --location-type availability-zone --filters Name=instance-type,Values={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --region {{ .entity.spec.cloudConfig.region }} --query ''InstanceTypeOfferings[].Location'' --output text   # each zone of the pools must be in the list'
+    gcp:
+    - gcloud compute machine-types describe {{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --zone {{ .entity.spec.machinepoolconfig[0].cloudConfig.azs[0] // "<zone>" }} --project {{ .entity.spec.cloudConfig.project }} --format 'value(name,zone)'
+    gke:
+    - 'gcloud compute machine-types list --filter ''name={{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }}'' --project {{ .entity.spec.cloudConfig.project }} --format ''value(zone)'' | grep {{ .entity.spec.cloudConfig.region }}   # each zone of the region that offers the type'
+  fix:
+    owner: palette
+    text: Refuse a pool whose zone is in nonSupportedZones of its type in the validate route.
+  evidence:
+  - kind: source
+    note: the instance type route lists nonSupportedZones, the zones that do not offer the type, for each type of a region
+  - kind: run
+    ref: '#404'
+    note: the route of AWS names the type of an entry in `type`, and an entry has no `name`
+  - kind: run
+    ref: '#411'
+    note: the route of AWS gives `null` in `nonSupportedZones` for most types, and an array for the others
+  tests:
+  - fault: fixtures/aws/instance-zone-not-offered.json
+    clean: fixtures/aws/instance-zone-offered.json
+  - fault: fixtures/aws/instance-type-not-listed.json
+  - fault: fixtures/gcp/instance-zone-not-offered.json
+    clean: fixtures/gcp/instance-zone-offered.json
+  - clean: fixtures/aws/instance-zone-null.json
+  - clean: fixtures/gcp/instance-zone-null.json
+- id: spot-capacity
+  title: Spot capacity is short
+  engines:
+  - aws
+  - eks
+  tier: race
+  severity: warn
+  status: source
+  what: |
+    A pool of capacity type spot can find no capacity at the moment of the build. No check before
+    the build answers it; the watch sees the capacity events.
+  evidence:
+  - kind: doc
+    ref: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/spot-interruptions.html
+- id: eks-worker-needed
+  title: An EKS cluster needs one worker pool that is not Fargate
+  engines:
+  - eks
+  tier: static
+  severity: fail
+  status: source
+  what: |
+    The Palette agent cannot run on the EKS control plane. With no worker node, the cluster is
+    never `Running`. One node group with a size of 1 or more is needed.
+  check:
+    kind: static
+    expr: |
+      if ([ .entity.spec.machinepoolconfig[]
+            | select((.poolConfig.isControlPlane // false) | not)
+            | select((.poolConfig.size // 0) >= 1) ] | length) == 0
+      then ["no worker pool with a size of 1 or more; the Palette agent needs a node group"]
+      else [] end
+  fix:
+    owner: palette
+    text: Refuse an EKS create with no worker pool in the validate route.
+  evidence:
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
+  tests:
+  - fault: fixtures/eks/no-worker.json
+    clean: fixtures/eks/clean.json

@@ -1,0 +1,112 @@
+section: storage
+title: Storage and CSI
+about: |
+  The CSI layer, the storage class, the permissions the CSI needs, and what changes cannot apply.
+rules:
+- id: csi-crash-after-running
+  title: The CSI pods run when Palette says Running and Healthy
+  engines:
+  - aws
+  - eks
+  tier: watch
+  severity: warn
+  status: seen
+  what: |
+    A CSI pod crash-loops while Palette says the cluster is `Running` and its health is
+    `Healthy`. On EKS, `csi-attacher` did this on one build in three; the cause is not known.
+    A volume then attaches to no node. The pack condition of the cluster document names it:
+    `status.packs[].condition` of type `Healthy` with status `False`, or the reason
+    `InstallFailed`, `Degraded`, or `ProbeError`. A warning event with `CrashLoopBackOff` names
+    it too. This rule reads both, 5 minutes after the cluster is `Running`.
+  check:
+    kind: watch
+    expr: |
+      ((.cluster.status.state // "") == "Running") as $running
+      | ((.elapsed // 0) > 300) as $settled
+      | (.summary.status.health.state // "?") as $health
+      | if ($running and $settled) | not then []
+        else
+          [ (.cluster.status.packs // [])[]
+            | select((.name // "") | test("csi"; "i"))
+            | select(((.condition.status // "") == "False") or ((.condition.reason // "") | test("^(InstallFailed|Degraded|ProbeError)$")))
+            | "the cluster is Running and its health is \($health), and the CSI pack \(.name) is \(.condition.reason // .condition.status): \(.condition.message // "" | .[:200])" ]
+          + ([ (.events // [])[]
+              | select((.severity // "") == "Warning")
+              | select((.message // "") | test("CrashLoopBackOff|BackOff"))
+              | select(((.message // "") + (.involvedObject.name // "") + (.relatedObject.name // "")) | test("csi"; "i"))
+              | "event \(.reason) at \(.metadata.creationTimestamp): \(.message | .[:240])" ]
+             | unique | .[:3])
+        end
+  reproduce:
+  - kubectl -n kube-system get pods -l app.kubernetes.io/name=aws-ebs-csi-driver -o wide
+  - 'curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid // "<cluster uid>" }}" | jq ''.status.packs[] | select(.name | test("csi")) | {name, condition}'''
+  fix:
+    owner: palette
+    text: Do not report Healthy while a pod of a pack crash-loops.
+  evidence:
+  - kind: run
+    ref: '#89'
+    note: csi-attacher in CrashLoopBackOff on one EKS build in three, with the cluster Running and Healthy
+  - kind: source
+    note: the pack condition Healthy carries the reason InstallFailed, Degraded, ProbeError, WorkloadsReady, InstallSuccess
+  tests:
+  - fault: fixtures/eks/csi-crash.json
+    clean: fixtures/eks/csi-crash-after-running-clean.json
+- id: eks-default-storageclass
+  title: An EKS profile has a CSI layer
+  engines:
+  - eks
+  tier: static
+  severity: fail
+  status: source
+  when: (.profiles | length) > 0
+  what: |
+    Palette deletes the `gp2` storage class of EKS, and the CSI pack gives the default class.
+    With no CSI layer, a PVC stays `Pending`.
+  check:
+    kind: static
+    expr: |
+      if ([ .profiles[] | .packs[] | select(.layer == "csi") ] | length) == 0
+      then ["no profile has a CSI layer; Palette deletes gp2, so a PVC stays Pending"]
+      else [] end
+  fix:
+    owner: palette
+    text: Refuse an EKS create with no CSI layer.
+  tests:
+  - fault: fixtures/eks/no-csi.json
+    clean: fixtures/eks/clean.json
+- id: eks-csi-iam
+  title: The EBS CSI has IAM permissions on EKS
+  engines:
+  - eks
+  tier: static
+  severity: fail
+  status: source
+  when: ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s" or .layer == "csi") ] | length) > 0
+  what: |
+    The EBS CSI controller needs `AmazonEBSCSIDriverPolicy`. The Palette docs give two ways, both
+    in the values of the `kubernetes-eks` pack. One is `managedControlPlane.irsaRoles` with the
+    policy and a service account annotation on the CSI pack. The other is
+    `managedMachinePool.roleAdditionalPolicies` on the node role. With an AL2023 node (IMDSv2, hop limit 1) a CSI pod cannot reach the node
+    role through IMDS. Without one of the two, a PVC stays `Pending`. The #91 row puts the values
+    in the CSI pack; the docs put them in the Kubernetes pack, so this check reads both layers.
+  check:
+    kind: static
+    expr: |
+      def text: ((.values // "") | tostring) + ((.valuesCanon // {}) | tostring);
+      if ([ (.profiles // [])[] | .packs[] | select(.layer == "k8s" or .layer == "csi")
+            | text | select(test("AmazonEBSCSIDriverPolicy|(irsaRoles|roleAdditionalPolicies)[\\s\\S]{0,400}arn:")) ] | length) == 0
+      then ["no pack of the profile grants the EBS CSI its IAM: set managedControlPlane.irsaRoles with AmazonEBSCSIDriverPolicy, or managedMachinePool.roleAdditionalPolicies, in the kubernetes-eks values; without it a PVC stays Pending"]
+      else [] end
+  fix:
+    owner: palette
+    text: Check the CSI IAM in the EKS validate route, and refuse a profile with none.
+  evidence:
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/eks/
+    note: Configure IRSA for Amazon EBS CSI; irsaRoles and roleAdditionalPolicies in the Kubernetes layer
+  - kind: doc
+    ref: https://docs.spectrocloud.com/integrations/kubernetes-eks/
+  tests:
+  - fault: fixtures/eks/csi-no-iam.json
+    clean: fixtures/eks/eks-csi-iam-clean.json

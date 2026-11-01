@@ -1,0 +1,4 @@
+# Palette requires pack.namespace of a Helm pack: the namespace of the release.
+pack:
+  namespace: strata-live
+purpose: strata live example

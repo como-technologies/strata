@@ -1,0 +1,1 @@
+{"metadata": {"name": "exported"}, "spec": {"version": "1.0.0", "template": {"type": "cluster", "cloudType": "aws", "packs": [{"name": "kubernetes", "type": "spectro", "layer": "k8s", "version": "1.36.2", "tag": "1.36.2", "values": "a: 1", "registry": {"metadata": {"name": "Public Repo", "uid": "r1"}}}]}, "variables": []}}

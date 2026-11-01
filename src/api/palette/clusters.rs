@@ -14,7 +14,7 @@ use super::{
 };
 use crate::api::{PaletteApi, RawCluster, ReadErrors};
 use crate::error::{Error, Result, found};
-use crate::json::{arr, first_nonempty, str_at, take_items, text};
+use crate::json::{arr, first_nonempty, set_at, str_at, take_items, text};
 use crate::reference::one_named;
 use crate::snapshot::SubjectKind;
 use crate::term::progress::Progress;
@@ -261,7 +261,11 @@ impl<A: PaletteApi> Palette<A> {
             .get_json(&route(CLUSTERS, &[&uid, "profileUpdates"]))?;
         let profiles = arr(&updates, "/profiles").to_vec();
         raw.manifests = self.profile_manifests(&profiles)?;
-        raw.cluster["spec"]["clusterProfileTemplates"] = Value::Array(profiles);
+        set_at(
+            &mut raw.cluster,
+            &["spec", "clusterProfileTemplates"],
+            Value::Array(profiles),
+        );
         Ok(raw)
     }
 

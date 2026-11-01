@@ -30,12 +30,16 @@ build-target target:
       *) cargo build --release --target "{{target}}" -p strata -p strata-preflight ;;
     esac
 
-# Run the tests of strata, strata-preflight, xtask (the stand-in for Palette), and strata-benches (the input of the benchmarks). No network.
+# strata-fuzz holds the fuzz targets and the property tests. It runs each target on its corpus and
+# on random input.
+
+# Run the tests of strata, strata-preflight, xtask (the stand-in for Palette), strata-benches (the input of the benchmarks), and strata-fuzz. No network.
 test: stand-in
     cargo test
     cargo test -p strata-preflight
     cargo test -p xtask
     cargo test -p strata-benches
+    cargo test -p strata-fuzz
 
 # The benchmarks are the package strata-benches in benches/. They are not tests. `just test` does
 # not run them, and no recipe fails on a time. See "The benchmarks" in
@@ -98,6 +102,26 @@ examples: build
 # Fetch the packs from the Public Repo again and build examples/. Needs PALETTE_API_KEY.
 examples-fetch: build
     STRATA_BIN=target/release/strata examples/fetch-examples.sh
+
+# ---- fuzzing --------------------------------------------------------------------------------
+# The fuzz targets are the tests of fuzz/, in the package strata-fuzz. `just test` runs each one on
+# its corpus and on random input, on stable Rust. The recipes here run a target under libFuzzer,
+# which needs a nightly toolchain and cargo-bolero. See "The fuzzing" in
+# docs/src/development/build-test.md.
+
+# Name each fuzz target and each property test. Needs cargo-bolero.
+fuzz-list:
+    scripts/dev/fuzz.sh list
+
+# Run one fuzz target under libFuzzer, for a time such as 10m. The target is a name of fuzz-list, or the start of one. Needs a nightly toolchain and cargo-bolero.
+fuzz target time="60s":
+    scripts/dev/fuzz.sh run "{{target}}" "{{time}}"
+
+# The seeds come from examples/, the catalog of strata-preflight, and the output of the book.
+
+# Write the seed corpus of each fuzz target into fuzz/src/__fuzz__/
+fuzz-seed: examples
+    cargo test -p strata-fuzz -- --ignored write_the_seed_corpus
 
 # ---- documentation --------------------------------------------------------------------------
 # The book is docs/src/. It needs mdbook, mdbook-mermaid, and mdbook-gruvbox. docs/book/ is the

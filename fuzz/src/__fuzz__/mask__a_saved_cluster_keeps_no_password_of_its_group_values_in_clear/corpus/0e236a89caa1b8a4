@@ -1,0 +1,8 @@
+a: 1.0
+b: 1e3
+c: .inf
+d: -.inf
+e: .nan
+f: 0x1F
+g: 0o17
+h: 1_000

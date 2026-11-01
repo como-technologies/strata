@@ -1,0 +1,15 @@
+name: aws-stack
+version: 1.1.0
+cloudType: aws
+registry: Public Repo
+layers:
+  - name: ubuntu-aws
+    version: "24.04"
+  - name: kubernetes
+    version: 1.36.2
+  - name: cni-cilium-oss
+    version: 1.20.1
+  - name: csi-aws-ebs
+    version: 1.65.0
+  - name: cert-manager
+    version: 1.21.1

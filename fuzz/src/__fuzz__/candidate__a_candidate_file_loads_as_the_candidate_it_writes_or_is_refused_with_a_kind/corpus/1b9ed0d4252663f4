@@ -1,0 +1,18 @@
+name: demo
+version: 1.0.0
+cloudType: aws
+registry: Public Repo
+layers:
+- name: kubernetes
+  version: 1.36.2
+  layer: k8s
+  tag: 1.36.2
+  values: |
+    pack:
+      k8sHardening: true
+- name: app
+  version: 1.0.0
+  manifests:
+  - name: cm
+    content: |
+      kind: ConfigMap

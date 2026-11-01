@@ -1,0 +1,6 @@
+name: demo
+version: 1.0.0
+unknownField: true
+layers:
+- name: x
+  version: '1'

@@ -1,0 +1,21 @@
+charts:
+  app:
+    adminPassword: pw
+    db:
+      pakind:  manifest and no image
+co?mpjnents:
+  - nam-e: config
+    required: truE
+    manifests:
+      - name: config
+        namespace: default
+        files:
+          - configmap.y dzmbco?mpjnents:
+  - nam-e: config
+    required: truE
+    manifests:
+      - name: config
+    ?   namespace: default
+        files:
+          - configmap.y dzmbl
+

@@ -1,0 +1,78 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "a: &x [1, 2]\nb: *x\nc: &y {k: v}\nd: *y\n",
+      "valuesCanon": {
+        "a": [
+          1,
+          2
+        ],
+        "b": [
+          1,
+          2
+        ],
+        "c": {
+          "k": "v"
+        },
+        "d": {
+          "k": "v"
+        }
+      },
+      "valuesHash": "18701273ef4469ba278a9963d7045a1f0d8d6e3a1cc79f8ae6458e2d5090f107",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "a: &x [1, 2]\nb: *x\nc: &y {k: v}\nd: *y\n",
+          "contentHash": "18701273ef4469ba278a9963d7045a1f0d8d6e3a1cc79f8ae6458e2d5090f107"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "30018043f8beb5786b0685dd9396303fb4b32a0800ef65007577531ed74c24dd",
+        "node": "524857ed3d27c44b886b26413d88b6ce5ac6f3e0005248361d55d159d17e7f69"
+      }
+    }
+  ],
+  "root": "a4c6950398cf9c8f2ff706a37ac3ae3558c456521b1646bf11a1447a23399858",
+  "contentDigest": "d21020d42ebb2e1019c3e0c8f526fb21923ab7bba31b84d3e2d7540e11a7d9a9"
+}

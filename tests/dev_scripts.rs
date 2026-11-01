@@ -135,6 +135,123 @@ fn build_book_gives_the_exit_code_of_a_build_that_fails() {
     assert!(text(&o.stderr).contains("ERROR the book has no SUMMARY.md"));
 }
 
+// ---- the fuzz targets -----------------------------------------------------------------------
+
+/// The output of `cargo bolero list` for the targets `names`: a line of JSON for each one, with a
+/// blank line after it.
+fn bolero_list(names: &[&str]) -> String {
+    names
+        .iter()
+        .map(|name| format!("{{\"package\":\"strata-fuzz\",\"test\":\"{name}\"}}\n\n"))
+        .collect()
+}
+
+/// Run `fuzz.sh` with a stand-in `cargo` that prints the list of `targets` and logs its calls.
+/// Gives the output of the script, and the calls of the stand-in.
+fn fuzz(args: &[&str], targets: &[&str], toolchain: Option<&str>) -> (Output, String) {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = fake_bin(dir.path(), &[("cargo", LOGGING_TOOL)]);
+    let calls = dir.path().join("calls.log");
+    let mut c = Command::new("bash");
+    c.arg(script("dev/fuzz.sh"))
+        .args(args)
+        .env("PATH", path_with(&bin))
+        .env("FAKE_LOG", &calls)
+        .env("FAKE_OUT", bolero_list(targets))
+        .env_remove("FUZZ_TOOLCHAIN");
+    if let Some(toolchain) = toolchain {
+        c.env("FUZZ_TOOLCHAIN", toolchain);
+    }
+    let o = c.output_locked().unwrap();
+    (o, std::fs::read_to_string(calls).unwrap_or_default())
+}
+
+const FUZZ_TARGETS: [&str; 4] = [
+    "mask::a_draft_pack_keeps_no_secret",
+    "mask::a_saved_cluster_keeps_no_password",
+    "reference::a_ref",
+    "reference::a_ref_prints_as_the_ref_it_is",
+];
+
+#[test]
+fn fuzz_list_names_each_target_of_the_fuzz_package_in_order_and_nothing_else() {
+    // cargo-bolero lists the targets in the order that the test threads finish
+    let mut shuffled = FUZZ_TARGETS;
+    shuffled.reverse();
+    let (o, calls) = fuzz(&["list"], &shuffled, None);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(text(&o.stdout), FUZZ_TARGETS.join("\n") + "\n");
+    assert_eq!(calls, "cargo bolero list -p strata-fuzz\n");
+}
+
+#[test]
+fn fuzz_runs_the_one_target_that_a_start_of_its_name_names_on_nightly_for_the_time_given() {
+    let (o, calls) = fuzz(&["run", "mask::a_saved", "10m"], &FUZZ_TARGETS, None);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(
+        calls,
+        "cargo bolero list -p strata-fuzz\n\
+         cargo bolero test mask::a_saved_cluster_keeps_no_password -p strata-fuzz \
+         --toolchain nightly -T 10m -l 65536\n"
+    );
+}
+
+#[test]
+fn fuzz_runs_for_a_minute_by_default_and_on_the_toolchain_that_the_variable_names() {
+    let (o, calls) = fuzz(
+        &["run", "reference::a_ref_prints"],
+        &FUZZ_TARGETS,
+        Some("nightly-2026-09-01"),
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        calls.ends_with(
+            "reference::a_ref_prints_as_the_ref_it_is -p strata-fuzz --toolchain nightly-2026-09-01 -T 60s -l 65536\n"
+        ),
+        "{calls}"
+    );
+}
+
+#[test]
+fn fuzz_runs_the_whole_name_that_is_also_the_start_of_another_name() {
+    let (o, calls) = fuzz(&["run", "reference::a_ref"], &FUZZ_TARGETS, None);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        calls.contains("bolero test reference::a_ref -p strata-fuzz"),
+        "{calls}"
+    );
+}
+
+#[test]
+fn fuzz_refuses_a_start_of_a_name_that_two_targets_have_and_runs_nothing() {
+    let (o, calls) = fuzz(&["run", "mask::"], &FUZZ_TARGETS, None);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    let stderr = text(&o.stderr);
+    assert!(
+        stderr.contains("more than one target starts with 'mask::'"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("mask::a_saved_cluster_keeps_no_password"),
+        "{stderr}"
+    );
+    assert!(!calls.contains("bolero test"), "{calls}");
+}
+
+#[test]
+fn fuzz_refuses_a_name_that_no_target_has_and_a_call_with_no_name() {
+    let (o, calls) = fuzz(&["run", "nothing::here"], &FUZZ_TARGETS, None);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert!(text(&o.stderr).contains("no target starts with 'nothing::here'"));
+    assert!(!calls.contains("bolero test"), "{calls}");
+
+    for args in [&["run"][..], &[][..], &["start"][..]] {
+        let (o, calls) = fuzz(args, &FUZZ_TARGETS, None);
+        assert_eq!(o.status.code(), Some(2), "{args:?}: {}", text(&o.stderr));
+        assert!(!calls.contains("bolero test"), "{args:?}: {calls}");
+    }
+}
+
 // ---- xtask playground ----------------------------------------------------------------------
 
 /// The playground: `xtask playground CHAPTER` builds the tenant of one chapter, serves it, and

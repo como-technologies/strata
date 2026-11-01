@@ -1,0 +1,6 @@
+charts:
+  app:
+    adminPassword: pw
+    db:
+      password: hunter2
+      host: db

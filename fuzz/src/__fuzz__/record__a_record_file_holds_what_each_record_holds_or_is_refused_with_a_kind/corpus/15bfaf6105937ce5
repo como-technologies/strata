@@ -1,0 +1,73 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "charts:\n  app:\n    adminPassword: pw\n    db:\n      password: hunter2\n      host: db\n",
+      "valuesCanon": {
+        "charts": {
+          "app": {
+            "adminPassword": "pw",
+            "db": {
+              "host": "db",
+              "password": "hunter2"
+            }
+          }
+        }
+      },
+      "valuesHash": "0b58c46b973466b431ac7e1ea14587382826f8475bd311a64e0084a566d72762",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "charts:\n  app:\n    adminPassword: pw\n    db:\n      password: hunter2\n      host: db\n",
+          "contentHash": "0b58c46b973466b431ac7e1ea14587382826f8475bd311a64e0084a566d72762"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "fe89fb381b06dfe9c87673d69be1d8d41a34270f4901c80d29c4e6ff4ae6a014",
+        "node": "58c46074508ebaa44c0c7e716f6dafd5c49debd9fcccb2cfc344658c09d5f937"
+      }
+    }
+  ],
+  "root": "c3974e22e06121ed9481226a2bf0b4a711e2eba5678180de51a0ee127838ca5a",
+  "contentDigest": "564a3036d5dc4182bdf0437019e3992e77326d57500722c13d09e20c2287b449"
+}

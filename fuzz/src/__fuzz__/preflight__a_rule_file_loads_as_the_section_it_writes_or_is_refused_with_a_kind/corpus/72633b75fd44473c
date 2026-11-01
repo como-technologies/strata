@@ -1,0 +1,120 @@
+section: images
+title: Images and registries
+about: |
+  The pack registries, the digests, the tags, and the images that the nodes pull.
+rules:
+- id: vsphere-ova-template
+  title: The OVA template of the OS and Kubernetes pair is in the image template folder
+  engines:
+  - vsphere
+  tier: cloud
+  severity: fail
+  status: source
+  what: |
+    Palette names the node template `r_<os_version>-<os_spectro_version>-<k8s_version>-<k8s_spectro_version>`,
+    such as `r_u-2204-0-k-1294-0`, in the image template folder (`spectro-templates` by default).
+    When it is not there, the PCG downloads the OVA from the image host of the Palette instance
+    and imports it as a template. So the PCG needs egress to `s3.amazonaws.com` on 443. The docs
+    name `vmwaregoldenimage-console.s3.amazonaws.com`, and a system setting of Palette holds
+    the host. Palette only logs a warning when the URL does not answer. No CLI on this machine reaches vCenter with the account
+    of the world, so the rule has no check; the reproduce lines use `govc` with the vCenter
+    credentials.
+  reproduce:
+  - 'GOVC_URL=https://{{ .account.spec.vcenterServer // "<vcenter>" }} GOVC_USERNAME={{ .account.spec.username // "<user>" }} GOVC_PASSWORD=<password> GOVC_INSECURE=1 govc ls /{{ .entity.spec.cloudConfig.placement.datacenter }}/vm/{{ .entity.spec.cloudConfig.placement.imageTemplateFolder }}   # r_<os>-<k8s> must be listed, such as r_u-2204-0-k-1294-0'
+  - 'curl -sI https://vmwaregoldenimage-console.s3.amazonaws.com/<os_version>-<os_spectro_version>-<k8s_version>-<k8s_spectro_version>.ova | head -1   # from the PCG; the four values are annotations of the OS and Kubernetes packs'
+  fix:
+    owner: palette
+    text: Check the template, or the URL of the OVA, in the validate route, and fail on a URL that does not answer.
+  evidence:
+  - kind: source
+    note: templateName r_<name>; the folder defaults to spectro-templates; the OVA streams from the URL through the PCG
+  - kind: source
+    note: <imagesHostEndpoint>/<name>.ova; a URL that does not exist logs a warning
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/data-center/vmware/create-manage-vmware-clusters/
+    note: the Kubernetes OVA in vSphere, an r_ prefix, converted to a template in the spectro-templates folder
+  - kind: doc
+    ref: https://docs.spectrocloud.com/architecture/palette-public-ips/
+    note: vmwaregoldenimage-console.s3.amazonaws.com on 443
+- id: maas-os-image
+  title: The OS pack of a MAAS profile maps to a MAAS image
+  engines:
+  - maas
+  tier: static
+  severity: fail
+  status: source
+  when: (.profiles | length) > 0
+  what: |
+    Palette uploads its own image into MAAS. For `ubuntu-maas` it maps the pack version to a base
+    image, `ubuntu/bionic` for 18.04 through `ubuntu/noble` for 24.04, and refuses another
+    version with "unsupported image". The base image must be `Synced` in MAAS, or the upload
+    fails with "base image missing or not synced". The `generic-byoi` pack needs
+    `pack.osImageOverride`, `pack.osName`, and `pack.osVersion`. The upload needs egress from the
+    PCG to the image host; the reproduce lines read the boot resources of MAAS.
+  check:
+    kind: static
+    expr: |
+      def series: {"18.04": "bionic", "20.04": "focal", "22.04": "jammy", "24.04": "noble"};
+      [ .profiles[] | .source.name as $prof | .packs[] | select(.layer == "os")
+        | if (.name | startswith("ubuntu-maas")) then
+            ((.version // .tag // "") | split(".") | .[:2] | join(".")) as $v
+            | if (series | has($v)) then empty else "OS pack \(.name)@\(.version) of profile \($prof): Palette maps Ubuntu 18.04, 20.04, 22.04, and 24.04 to a MAAS base image, and refuses \($v) with \"unsupported image\"" end
+          elif .name == "generic-byoi" then
+            ((.valuesCanon.pack // {}) as $s | [ ("osImageOverride", "osName", "osVersion") | select(($s[.] // "") == "") ]) as $missing
+            | if ($missing | length) > 0 then "OS pack generic-byoi of profile \($prof) lacks pack.\($missing | join(", pack.")): Palette refuses it with \"generic-byoi pack requires osImageOverride, osName, osVersion\"" else empty end
+          else empty end ]
+  reproduce:
+  - 'maas $PROFILE boot-resources read | jq -r ''.[] | select(.name | startswith("ubuntu/")) | [.name, .type, .architecture] | @tsv''   # the base image of the pack version must be Synced, such as ubuntu/jammy for 22.04'
+  - 'curl -sI https://maasgoldenimage-console.s3.amazonaws.com/<os_version>-<os_spectro_version>-<k8s_version>-<k8s_spectro_version>.tar.gz | head -1   # from the PCG; the four values are annotations of the OS and Kubernetes packs'
+  fix:
+    owner: palette
+    text: Read the boot resources of MAAS in the validate route, through the PCG.
+  evidence:
+  - kind: source
+    note: The packs u-1804, u-2004, u-2204, and u-2404 give bionic, focal, jammy, and noble. The base image must have the type Synced. The BYOS values are pack.osImageOverride, pack.osName, and pack.osVersion
+  - kind: doc
+    ref: https://docs.spectrocloud.com/integrations/generic-byoi/
+    note: osImageOverride, osName, and osVersion for MAAS; with no match and no URL, the provisioning fails
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/data-center/maas/create-manage-maas-clusters/
+    note: verify that the OS images of the cluster profiles are downloaded and available in MAAS
+  tests:
+  - fault: fixtures/maas/os-unsupported.json
+    clean: fixtures/maas/clean.json
+  - fault: fixtures/maas/byoi-no-override.json
+    clean: fixtures/maas/byoi-clean.json
+- id: ambiguous-pack-ref
+  title: One pack name and version comes from one registry
+  engines:
+  - all
+  tier: static
+  severity: warn
+  status: seen
+  when: (.profiles | length) > 0
+  what: |
+    Two registries can offer one pack version, and two products can share one name. A reference
+    by name and version alone then names two packs, and a retired version in one registry is
+    served by another. This check finds one name and version from two registry uids across the
+    profiles of the entity; a reference must name the registry. The record has no registry name,
+    so a name shared by two products is not found here.
+  check:
+    kind: static
+    expr: |
+      [ [ .profiles[] | .source.name as $p | .packs[]
+          | select((.registryUid // "") != "")
+          | {name, version, registryUid, profile: $p} ]
+        | group_by([.name, .version])[]
+        | select((map(.registryUid) | unique | length) > 1)
+        | "pack \(.[0].name)@\(.[0].version) comes from \(map(.registryUid) | unique | length) registries across the profiles \(map(.profile) | unique | join(", ")); a reference by name and version is ambiguous" ]
+  reproduce:
+  - strata packs <pack>
+  fix:
+    owner: none
+    text: Name the registry in each pack reference.
+  evidence:
+  - kind: run
+    ref: '#68'
+    note: nginx is disabled in Public Repo and in Palette Registry, and Bitnami serves it
+  tests:
+  - fault: fixtures/eks/two-registries.json
+    clean: fixtures/eks/addon-profile.json

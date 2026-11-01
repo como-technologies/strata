@@ -1,0 +1,13 @@
+kind: ZarfPackageConfig
+metadata:
+  name: strata-live-zarf
+  version: 1.0.0
+  description: strata live example, a Zarf package with one manifest and no image
+components:
+  - name: config
+    required: true
+    manifests:
+      - name: config
+        namespace: default
+        files:
+          - configmap.yaml

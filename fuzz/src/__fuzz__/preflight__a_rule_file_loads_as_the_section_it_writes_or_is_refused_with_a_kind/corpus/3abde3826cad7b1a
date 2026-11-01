@@ -1,0 +1,79 @@
+section: lifecycle
+title: 'Lifecycle: update, repave, delete'
+about: |
+  What a change of a running cluster does, and what a delete needs. A rule on a change applies
+  with `cluster:UID CHANGE.json`.
+rules:
+- id: push-without-resolve
+  title: A push closes the update it makes
+  engines:
+  - all
+  tier: race
+  severity: note
+  status: seen
+  what: |
+    A `PUT` of the content of a profile without `resolveNotification` still closes the events
+    of values and manifests that the push takes. The copy of the cluster takes the edit within
+    3 minutes. An event of a version, an added pack, or a removed pack stays until the
+    cluster takes it.
+  evidence:
+  - kind: run
+    ref: '#70'
+    note: 'the checks accept and accept-none: a push without resolveNotification closes the update all the same'
+- id: override-silent
+  title: A value overridden on a cluster opens a notification
+  engines:
+  - all
+  tier: race
+  severity: warn
+  status: seen
+  what: |
+    A pack value overridden on the copy of a cluster opens no notification: Palette says that
+    no update waits. The records of the profile versions still verify, since the profiles did
+    not change. The record of the cluster reports the drift, and `strata compare` of the
+    version against the cluster names the value. No check before a change finds it.
+  reproduce:
+  - 'strata compare <name>@<version> cluster:{{ .clusterUid // "<cluster uid>" }}   # exit 1 names the overridden value'
+  - 'strata verify <cluster record>                              # DRIFT on the cluster record; OK on the version'
+  evidence:
+  - kind: run
+    ref: '#81'
+    note: the checks override, override-record, override-not-behind, and override-drift
+- id: delete-blockers
+  title: Nothing of the cluster holds its delete
+  engines:
+  - aws
+  - eks
+  tier: palette
+  severity: fail
+  status: source
+  when: .clusterUid != null
+  what: |
+    A delete waits on what the cluster still holds. Palette shows the virtual clusters of a host
+    cluster and the app deployments in `status.virtual` of the cluster document. AWS holds the
+    rest: the ENIs of the VPC CNI in the state `available`, the security groups of the load
+    balancers, and the Pod Identity associations. The check reads the cluster document; the AWS
+    half is a reproduce line, since a Palette-made VPC has no id in the entity.
+  check:
+    kind: palette
+    method: GET
+    path: /v1/spectroclusters/{{ .clusterUid }}
+    expr: |
+      if (.response.ok | not) then ["cannot read the cluster \(.clusterUid): \(.response.body.code // .response.status)"]
+      else .response.body.status as $s
+        | [ ($s.virtual.virtualClusters // [])[] | "virtual cluster \(.name // .uid) runs on this host cluster: delete it first, or the delete waits" ]
+        + [ ($s.virtual.appDeployments // [])[] | "app deployment \(.name // .uid) is on the cluster: delete it first" ]
+      end
+  reproduce:
+  - 'aws ec2 describe-network-interfaces --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} Name=status,Values=available --query ''NetworkInterfaces[].[NetworkInterfaceId,Description]'' --output table   # an available ENI of the VPC CNI holds the subnet delete'
+  - 'aws ec2 describe-security-groups --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} Name=tag-key,Values=kubernetes.io/cluster/{{ .entity.metadata.name }} --query ''SecurityGroups[].[GroupId,GroupName]'' --output table   # the security groups of the load balancers'
+  - aws eks list-pod-identity-associations --region {{ .entity.spec.cloudConfig.region }} --cluster-name {{ .entity.metadata.name }} --output table
+  evidence:
+  - kind: source
+    note: appDeployments, clusterGroup, hostCluster, virtualClusters
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/cluster-management/remove-clusters/
+    note: the AWS list of lingering resources names the elastic network interfaces and the load balancers
+  tests:
+  - fault: fixtures/eks/delete-blockers.json
+    clean: fixtures/eks/cluster-running.json

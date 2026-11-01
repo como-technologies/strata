@@ -1,0 +1,69 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "a.b: 1\na:\n  b: 2\n  c.d: 3\n",
+      "valuesCanon": {
+        "a": {
+          "b": 2,
+          "c.d": 3
+        },
+        "a.b": 1
+      },
+      "valuesHash": "38efcdff32e5f3f26c9275a7815b889a2c40ed396209d5b3ef65c31b263ebb7f",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "a.b: 1\na:\n  b: 2\n  c.d: 3\n",
+          "contentHash": "38efcdff32e5f3f26c9275a7815b889a2c40ed396209d5b3ef65c31b263ebb7f"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "bb9eb304dda60c6f8474313dd9a073e13979f2d892fdc3911ca992f81f75f344",
+        "node": "4ef3e6a9f3b8002700f68f30b733ff5fb5bdab3b866d4c9518c3460e3b60b6f6"
+      }
+    }
+  ],
+  "root": "787a4e1ca9194b6a50043d60c3089332a9ae7c34cbd3d7eeb299e3149e46f0b7",
+  "contentDigest": "9cdf6d4acbd7800f5c7c248fd44d2981f43acd2aaacd98b9d3e0888047d6577a"
+}

@@ -1,0 +1,135 @@
+section: quotas
+title: Quotas and limits
+about: |
+  The quotas of the cloud and the floors of Palette: what a build asks for, against what the
+  account can give.
+rules:
+- id: azure-vcpu-quota
+  title: The regional vCPU quota covers the pools
+  engines:
+  - azure
+  - aks
+  tier: cloud
+  severity: fail
+  status: inferred
+  what: |
+    Azure refuses a virtual machine over the regional vCPU quota, or over the quota of the VM
+    family, with `OperationNotAllowed`. Palette checks no Azure quota; the docs leave the capacity
+    to the operator. The check sums the vCPUs of the pools and compares them with the free
+    `cores` of `az vm list-usage`. The world holds no vCPU count for a type, so the check reads
+    the number in the type name: `Standard_D4s_v3` is 4, `Standard_DS1_v2` is 1. That reading is
+    right for the common families and is not a catalog. On AKS the control plane pool has no
+    node. The family quota can be lower than the regional one; the reproduce line prints it.
+  check:
+    kind: exec
+    needs:
+    - az
+    argv:
+    - az
+    - vm
+    - list-usage
+    - --location
+    - '{{ .entity.spec.cloudConfig.location }}'
+    - --subscription
+    - '{{ .entity.spec.cloudConfig.subscriptionId }}'
+    - --output
+    - json
+    expr: |
+      def vcpus: sub("^(Standard_|Basic_)?[A-Za-z]+"; "") | sub("[^0-9].*$"; "") | if . == "" then 0 else tonumber end;
+      .cloud as $cloud | .entity.spec.cloudConfig.location as $loc
+      | ([ .entity.spec.machinepoolconfig[] | select(($cloud == "aks" and (.poolConfig.isControlPlane // false)) | not)
+           | ((.cloudConfig.instanceType // "") | vcpus) * (.poolConfig.size // 0) ] | add // 0) as $need
+      | if .exec.exit != 0 then ["az vm list-usage failed: \(.exec.stderr | .[:200])"]
+        else ([ (.exec.stdout // [])[] | select(.name.value == "cores") ] | first) as $cores
+          | if $cores == null then ["az vm list-usage gave no cores row for \($loc)"]
+            else (($cores.limit // 0) - ($cores.currentValue // 0)) as $free
+              | if $need > $free then ["the pools ask for \($need) vCPUs in \($loc) (from the type names), and the regional quota has \($free) free of \($cores.limit) (\($cores.currentValue) in use): Azure refuses the machines with OperationNotAllowed; the family quota of each type can be lower still"] else [] end
+            end
+        end
+  reproduce:
+  - az vm list-usage --location {{ .entity.spec.cloudConfig.location }} --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query "[?name.value=='cores' || contains(name.localizedValue, 'Family vCPUs')].[name.localizedValue,currentValue,limit]" --output table
+  - az vm list-skus --location {{ .entity.spec.cloudConfig.location }} --size {{ .entity.spec.machinepoolconfig[0].cloudConfig.instanceType }} --query '[].[name,family,capabilities[?name==`vCPUs`].value|[0]]' --output table
+  fix:
+    owner: palette
+    text: Read the usage of the region and the family in the validate route, with the vCPU count of the catalog.
+  evidence:
+  - kind: doc
+    ref: https://learn.microsoft.com/en-us/azure/quotas/per-vm-quota-requests
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/public-cloud/azure/create-azure-cluster/
+    note: ensure there is sufficient capacity in the preferred Azure region for vCPUs, VNets, and public IP addresses
+  - kind: source
+    note: name, reserved tags, instance type lookup, and profiles; no quota
+  tests:
+  - fault: fixtures/azure/vcpu-quota-low.json
+    clean: fixtures/azure/vcpu-quota-clean.json
+- id: vcluster-min
+  title: A virtual cluster has 3 cores or more
+  engines:
+  - all
+  tier: static
+  severity: fail
+  status: seen
+  what: |
+    Scope: cluster groups and the virtual clusters in them. Palette refuses a CPU limit under 3
+    cores, and a memory limit under 3 GiB, in the limit config of a cluster group. A virtual
+    cluster asks its size with `instanceType.maxCPU` of its pool. A virtual cluster is not a cloud
+    type of strata-preflight, so there is no check here; the reproduce lines read the two sizes.
+  reproduce:
+  - 'jq ''.spec.machinepoolconfig[].cloudConfig.instanceType'' virtual-cluster.json   # maxCPU must be 3 or more'
+  - 'curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>" | jq .spec.clustersConfig.limitConfig'
+  fix:
+    owner: none
+  evidence:
+  - kind: run
+    ref: teardown lab
+  - kind: source
+    note: Palette refuses a CPU limit under 3 cores, and a memory limit under 3 GiB or over 100000 GiB
+- id: worker-cpu-floor
+  title: The workers have the CPU the packs need
+  engines:
+  - aws
+  - gcp
+  - gke
+  - azure
+  - aks
+  - maas
+  - vsphere
+  tier: palette
+  severity: fail
+  status: seen
+  what: |
+    The packs of the profiles need a minimum of CPU across the worker nodes: 4.1 cores with the
+    lab packs, 5.3 with a monitoring stack. Palette refuses the create with "A minimum allocation
+    of '4.1' CPU cores is required across all worker nodes". The validate route answers it in
+    seconds, with the machine pools that fall short. On EKS the route reports no CPU floor for a
+    managed node group. One `t3.xlarge` worker got `200` with no error; the aws route answers
+    `MachinePoolWithMinCpuRequired` for the same pool. No run shows whether the EKS create fails
+    later, so on EKS a pass is not a proof. `palette-validate` calls the same route and reports
+    every error of it; this rule reads the CPU and memory errors of the pools alone.
+  check:
+    kind: palette
+    method: POST
+    path: /v1/spectroclusters/{{ .routeCloud }}/validate
+    body: .validateBody
+    expr: |
+      .response as $r
+      | if ($r.ok | not) then [] # a refusal of the whole entity is palette-validate's
+        else [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[]
+               | select((.message // "") | test("CPU|memory|cores"; "i"))
+               | "pool \($n): \(.message)" ]
+        end
+  fix:
+    owner: provider
+    text: Call the validate route at plan time.
+  evidence:
+  - kind: run
+    ref: teardown lab
+  - kind: run
+    ref: preflight-plan eks 20260929T042910Z
+    note: the EKS route answered 200 with no pool error for one t3.xlarge worker; the aws route answers MachinePoolWithMinCpuRequired for the same pool
+  - kind: source
+    note: Palette checks the resources of the machines against what the packs need
+  tests:
+  - fault: fixtures/eks/validate-cpu.json
+    clean: fixtures/eks/clean.json

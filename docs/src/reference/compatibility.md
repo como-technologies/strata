@@ -8,7 +8,7 @@ The crate follows semantic versioning over the public API that `cargo doc` shows
 under `strata::`. While the version is 0.x, a minor release, such as 0.4 to
 0.5, can change that API. A patch release, such as 0.4.0 to 0.4.1, can add to
 it. A patch release removes nothing from it, and changes nothing in it. Code
-inside the crate, such as the canonical form, is not part of the API.
+inside the crate, such as the mask of a secret, is not part of the API.
 
 Each release has the tag `v<version>`. The crate builds with Rust 1.88 or later.
 The crate is not on crates.io, so a dependency names the tag: see
@@ -57,6 +57,11 @@ After 0.25.0, `diff::Diff` and `diff::PackDiff` have the field
 `version_move: Option<diff::VersionMove>`. A struct literal or a pattern with no
 `..` must name it. `diff::VersionMove` is a new enum with the values `Forward`
 and `Back`.
+
+After 0.25.0, `content::canonical_json` is public. The fuzz package of strata
+calls it. It gives the text that each hash covers. A change to that text moves
+the hashes, so a program must not compare it between releases. Read the hashes
+of a record instead.
 
 After 0.25.0, the library of `strata-preflight` changes in these ways:
 
@@ -263,6 +268,25 @@ holds the install order of each tier, and lists the tiers in that order. See
 So when the tiers of an app profile have an install order, its root differs
 from the root that 0.17.0 gives. `verify` of such an older record shows a
 change. An app profile whose tiers have no install order keeps its root.
+
+One root changes after 0.25.0 with no new id. The canonical text of a string
+now writes `\uXXXX` for these characters: DEL, U+0080 to U+009F, U+2028,
+U+2029, U+FFFE, and U+FFFF. A YAML parser does not read them again as
+themselves: see [The canonical form](../internals/hashes.md#the-canonical-form).
+Each hash that covers such a character changes: `valuesHash`, `contentHash`,
+`variablesHash`, and so the `root`. `verify` of an older record that holds such
+a character shows a change. A record with none of them keeps each hash.
+
+One saved directory changes after 0.25.0, with no new id. Some values of a
+cluster group have no canonical form, because a key is a map or a list. An
+example is a template with no quotes. `RawCluster::save_dir` now writes
+`********` over each password in such values. A directory that an older version
+saved holds such a password in clear. The new `save_dir` gives `serialize` for
+values that it cannot mask.
+
+The tier of a cluster group is not part of the root, so no root changes. The
+`valuesHash` of such values covers the text. So a record of a new directory has
+another `valuesHash` than a record of an old directory.
 
 Roots are comparable only within one snapshot schema id. Strata refuses a
 snapshot of another id with `unsupported-schema`, which names both ids. A file

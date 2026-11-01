@@ -14,7 +14,9 @@ use crate::api::mask::MASKED;
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
 use crate::content::layer::Layer;
-use crate::json::{arr, first_nonempty, flag, opt_set, opt_str, opt_text, str_at, text, value_at};
+use crate::json::{
+    arr, first_nonempty, flag, opt_set, opt_str, opt_text, set_at, str_at, text, value_at,
+};
 use crate::oci_provider::OciProvider;
 use crate::pack_type::PackType;
 
@@ -373,10 +375,7 @@ fn manifests_entry(name: &str, manifests_packs: &[Value], given: Option<Vec<Valu
         .cloned()
         .unwrap_or(Value::Null);
     if let Some(given) = given {
-        if !entry.is_object() {
-            entry = json!({});
-        }
-        entry["spec"]["manifests"] = Value::Array(given);
+        set_at(&mut entry, &["spec", "manifests"], Value::Array(given));
     }
     entry
 }
@@ -455,6 +454,15 @@ mod tests {
     /// Whether `params_problem` refuses the one param `name` with `value`.
     fn refused(name: &str, value: Value) -> bool {
         params_problem(&Map::from_iter([(name.to_string(), value)])).is_some()
+    }
+
+    #[test]
+    fn the_manifests_of_a_pack_go_into_an_entry_whose_spec_is_not_an_object() {
+        let entry = json!({"metadata": {"name": "cfg"}, "spec": 5});
+        let given = vec![json!({"name": "m", "uid": "u1", "digest": "d", "content": "a: 1"})];
+        let pack = Pack::from_api_with(&json!({"name": "cfg"}), &[entry], Some(given));
+        assert_eq!(pack.manifests.len(), 1);
+        assert_eq!(pack.manifests[0].uid, "u1");
     }
 
     #[test]

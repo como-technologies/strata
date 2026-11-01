@@ -1,0 +1,66 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "adminPassword: s3cr3t\nreplicas: 3\n",
+      "valuesCanon": {
+        "adminPassword": "s3cr3t",
+        "replicas": 3
+      },
+      "valuesHash": "c43e316b36820cbee1e7740cc170f7122a75b7ec454cd31b73779b4e9c6ec41d",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "adminPassword: s3cr3t\nreplicas: 3\n",
+          "contentHash": "c43e316b36820cbee1e7740cc170f7122a75b7ec454cd31b73779b4e9c6ec41d"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "7d906d1f45dc2c2450242b851a9f57482aad2c4fd1e98e714d046024bd4af1a5",
+        "node": "2a90c958fabc339a3cceb6d0ae54bf255398c794c62e123fa0ef26c48f92e126"
+      }
+    }
+  ],
+  "root": "599d365836aecd69cff43b8053e76d869feb4ae189f85205b0781d62379a8ee6",
+  "contentDigest": "dd063a545b9e1158a69743e6fa79ee18216553a7cb0769542fdc85f9779f04d2"
+}

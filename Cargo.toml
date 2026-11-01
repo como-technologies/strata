@@ -1,11 +1,11 @@
 [workspace]
-members = [".", "xtask", "preflight", "benches"]
+members = [".", "xtask", "preflight", "fuzz", "benches"]
 # `cargo build` and `cargo test` at the root stay about strata alone. The development tooling in
 # xtask/ builds when a recipe asks for it, and it never reaches a release. The preflight tool in
 # preflight/ is a package of its own, `strata-preflight`: the release carries it as a second
-# binary, `just build` builds it, and another repository can depend on it by name. The benchmarks
-# in benches/ are the package `strata-benches`: `just bench` builds them, and no release carries
-# them.
+# binary, `just build` builds it, and another repository can depend on it by name. The fuzz targets
+# in fuzz/ are tests of both, and `just test` runs them. The benchmarks in benches/ are the package
+# `strata-benches`: `just bench` builds them, and no release carries them.
 default-members = ["."]
 
 [package]
@@ -83,3 +83,12 @@ doc_markdown = "deny"
 [profile.release]
 strip = true
 lto = "thin"
+
+# The profile that `cargo bolero` builds the fuzz targets with. It is the profile that the tool
+# expects: optimized, and one unit of code generation for each crate, so the coverage counters of
+# libFuzzer cover the whole crate. See `just fuzz`.
+[profile.fuzz]
+inherits = "dev"
+opt-level = 3
+incremental = false
+codegen-units = 1

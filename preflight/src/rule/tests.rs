@@ -101,6 +101,22 @@ fn the_format_refuses_what_it_cannot_run() {
 }
 
 #[test]
+fn a_rule_file_with_a_program_that_nests_too_deep_is_refused_with_the_catalog_kind() {
+    let deep = format!("{}true{}", "(".repeat(5000), ")".repeat(5000));
+    let text = GOOD.replace(
+        "expr: '[.entity.spec.machinepoolconfig[] | select(.poolConfig.size % 3 != 0) | .poolConfig.name]'",
+        &format!("expr: '{deep}'"),
+    );
+    let err = Catalog::parse_section(&text, Path::new("x.yaml")).unwrap_err();
+    assert_eq!(err.kind(), "catalog");
+    assert!(
+        err.to_string()
+            .contains("`expr`: the program nests more than 64 levels"),
+        "{err}"
+    );
+}
+
+#[test]
 fn a_check_of_palette_with_each_reads_item_and_a_check_without_it_refuses_item() {
     let palette = |extra: &str, path: &str| {
         GOOD.replace("tier: static", "tier: palette").replace(

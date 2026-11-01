@@ -41,9 +41,9 @@ where each module goes.
 - When a public module moves under a new parent, keep a `pub use` at the old
   path for one minor release.
 - `cargo test -p xtask` checks the limit of 800 lines for each module file of
-  `src/`, `xtask`, and `preflight/src/`. It checks the limit of 80 lines for each
-  function of the three, with the unit tests out of the count. A file named
-  `tests.rs` holds only tests, so it has no limit.
+  `src/`, `xtask`, `preflight/src/`, and `fuzz/src/`. It checks the limit of 80
+  lines for each function of the four, with the unit tests out of the count. A
+  file named `tests.rs` holds only tests, so it has no limit.
 
 ## Visibility
 
@@ -80,6 +80,8 @@ where each module goes.
   `text_map`, `flag`, `opt_flag`, `value_at`, `value_or_null`, and
   `value_or_empty_object` are public for them. Make another helper public when a
   package outside this crate needs it, not before.
+- Write a field with `set_at`. The index of `serde_json` panics for a value that
+  is not an object.
 - The records of strata are typed structs. Give each one
   `#[serde(rename_all = "camelCase")]`, `skip_serializing_if` for an empty
   field, `#[serde(default)]` for a field that an older record does not have,
@@ -178,6 +180,9 @@ ASD-STE100.
 
 - Each bug fix has a test that fails without the fix.
 - Each panic that input can cause has a case in `tests/fuzz.rs` or a unit test.
+  A panic that a fuzz target finds also keeps its input in the `crashes`
+  directory of that target: see [The fuzzing](./build-test.md#the-fuzzing).
+- Each parser of text from a user or from Palette has a fuzz target in `fuzz/`.
 - Put a helper that two test files use in `tests/common/mod.rs`. Compare
   against the `const` of the crate, not against a copy of its text.
 - The name of a test is a full sentence that states the behavior.

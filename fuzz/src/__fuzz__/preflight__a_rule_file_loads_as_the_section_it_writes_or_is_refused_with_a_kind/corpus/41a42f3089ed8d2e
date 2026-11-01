@@ -1,0 +1,126 @@
+section: platform
+title: The Palette platform
+about: |
+  What Palette itself does with a build: the validate routes it has and does not call, the
+  states that hide an error, the webhook of the pivot, and the answers of its API.
+rules:
+- id: edge-agent-version
+  title: The Palette agent of each edge host is as new as the Palette release
+  engines:
+  - edge
+  tier: palette
+  severity: warn
+  status: inferred
+  when: .release != null
+  what: |
+    The compatibility matrix pairs each Palette release with an agent (Stylus) release, such as
+    4.10.16 with 4.10.4. Palette sets no floor on the agent version at create. A host with an
+    agent from an older minor release misses the features that the profile and the release
+    expect. The docs gate some features on the agent version. The check compares the
+    major.minor of `status.health.agentVersion` with the release given; it is a reading of the
+    matrix, not a run. It reads each host of each pool, one request for each.
+  check:
+    kind: palette
+    method: GET
+    each: .edgeHosts
+    path: /v1/edgehosts/{{ $item.host.hostUid }}
+    expr: |
+      def mm: split(".") | .[:2] | map(sub("[^0-9].*$"; "") | if . == "" then 0 else tonumber end);
+      .release as $rel
+      | [ .responses[] | .item.host.hostUid as $u | .response as $r
+        | if ($r.ok | not) then "Palette cannot read edge host \($u): \($r.body.code // $r.status): \($r.body.message // "")"
+          else ($r.body.status.health.agentVersion // $r.body.spec.version // "") as $a
+            | if $a == "" then "edge host \($u) reports no agent version"
+              else ($a | mm) as $av | ($rel | mm) as $rv
+                | if ($av[0] < $rv[0]) or ($av[0] == $rv[0] and ($av[1] // 0) < ($rv[1] // 0)) then "edge host \($u) runs agent \($a), and Palette is \($rel): the compatibility matrix pairs each Palette release with an agent release, and an older agent misses the features of the profile; upgrade the host first" else empty end
+              end
+          end ]
+  reproduce:
+  - 'for h in {{ [ .edgeHosts[].host.hostUid ] | join(" ") }}; do curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h" | jq -r ''[.metadata.uid, .status.health.agentVersion, .spec.version] | @tsv''; done'
+  fix:
+    owner: palette
+    text: Warn in the validate route when the agent is older than the release, with the matrix as the source.
+  evidence:
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/edge/edge-compatibility-matrix/
+    note: Palette release to agent release, such as 4.10.16 to 4.10.4
+  - kind: source
+    note: status.health.agentVersion
+  tests:
+  - fault: fixtures/edge/agent-old.json
+    clean: fixtures/edge/clean.json
+  - fault: fixtures/edge/agent-old-second-pool.json
+- id: pcg-running
+  title: The PCG of the cloud account is Running and active
+  engines:
+  - maas
+  - vsphere
+  tier: palette
+  severity: fail
+  status: source
+  when: ((.account.metadata.annotations.overlordUid // "") != "") and ((.account.metadata.annotations.overlordType // "") != "system")
+  what: |
+    A MAAS or vSphere cloud account links to its private cloud gateway (PCG) through the
+    annotation `overlordUid`. The create refuses a PCG that is not `Running`: "Unable to deploy
+    the cluster as the gateway is in ... state". The vSphere validate route refuses an unhealthy
+    one too. The account validate and the property routes need `isActive`. A system gateway of a
+    self-hosted Palette skips the check. `GET /v1/overlords/{uid}` gives the state, `isActive`,
+    and the health.
+  check:
+    kind: palette
+    method: GET
+    path: /v1/overlords/{{ .account.metadata.annotations.overlordUid }}
+    expr: |
+      .account.metadata.annotations.overlordUid as $ol | .account.metadata.name as $acc
+      | if (.response.ok | not) then ["the PCG \($ol) of cloud account \($acc) is not there: \(.response.body.code // .response.status): \(.response.body.message // ""); Palette refuses the create with ClusterDeploymentFailureForMissingOverlord"]
+        else (.response.body.status // {}) as $s | (.response.body.spec // {}) as $sp | (.response.body.metadata.name // $ol) as $name
+          | if ($sp.isSystem // false) then []
+            else [ ( if ($s.state // "") != "Running" then "the PCG \($name) is \($s.state // "in no state"), not Running: Palette refuses the create (\"should be in Running state\")" else empty end ),
+                   ( if (($s.isActive // false) | not) then "the PCG \($name) is not active: the account validate and the property routes need an active PCG" else empty end ),
+                   ( if (($s.health.state // "Healthy") | ascii_downcase) != "healthy" then "the PCG \($name) health is \($s.health.state): the vSphere validate route refuses an unhealthy PCG (OverlordClusterUnHealthyState)" else empty end ) ]
+            end
+        end
+  reproduce:
+  - 'curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/overlords/{{ .account.metadata.annotations.overlordUid }}" | jq ''{name: .metadata.name, state: .status.state, active: .status.isActive, ready: .status.isReady, health: .status.health.state, system: .spec.isSystem}'''
+  fix:
+    owner: palette
+    text: Show the PCG state next to the cloud account in the console, and in the validate route of MAAS.
+  evidence:
+  - kind: source
+    note: Palette refuses a PCG that is not Running, unless the PCG is a system gateway
+  - kind: source
+    note: OverlordClusterNotReady and OverlordClusterUnHealthyState in the vSphere validate route
+  - kind: source
+    note: the cloud account carries the PCG uid in metadata.annotations.overlordUid; overlordType system marks the system gateway
+  - kind: doc
+    ref: https://docs.spectrocloud.com/clusters/pcg/architecture/
+    note: all Palette deployed clusters use the PCG during the creation and deletion phase
+  tests:
+  - fault: fixtures/vsphere/pcg-pending.json
+    clean: fixtures/vsphere/clean.json
+  - fault: fixtures/vsphere/pcg-missing.json
+    clean: fixtures/maas/clean.json
+- id: auto-cleanup-never
+  title: A delete that makes no progress moves to the cleanup path
+  engines:
+  - all
+  tier: race
+  severity: fail
+  status: source
+  what: |
+    Palette gives a delete to the pilot only while `DeProvisionDone` is absent. After that, the
+    agent in the cluster runs the delete. Palette moves a delete to the cleanup cluster only
+    when it cannot reach the target cluster for 10 minutes. A
+    deleting cluster with a live agent that makes no progress stays where it is; no step of the
+    source moves it. In one run a second delete request moved it, by a path that is not in the
+    source. No check before a build finds it; the watch sees the state.
+  fix:
+    owner: palette
+    text: Move a delete that makes no progress for a limit to the cleanup path.
+  evidence:
+  - kind: source
+    note: the cleanup cluster waits 10 minutes for the target cluster, then makes the objects again from Palette
+  - kind: source
+    note: a delete goes to the pilot only while DeProvisionDone is absent
+  - kind: report
+    ref: palette-pivot-webhook-delete-stuck-findings-2026-09-26 B2

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: strata-live-pack
+  namespace: strata-live
+data:
+  purpose: strata live example

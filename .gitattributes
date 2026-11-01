@@ -1,0 +1,3 @@
+# An input of a fuzz target is bytes, and a byte must stay as it is. A seed with a CRLF is a test of
+# the CR, and a git setting such as core.autocrlf must not turn it into an LF.
+fuzz/src/__fuzz__/** -text

@@ -1,0 +1,10 @@
+name: charts-probe
+version: 1.0.0
+type: add-on
+cloudType: all
+layers:
+  - name: podinfo
+    version: 6.7.1
+    registry: charts-auth
+    values: |
+      replicaCount: 2

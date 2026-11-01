@@ -388,9 +388,10 @@ pub struct Assembly<'a> {
     pub generated_at: String,
 }
 
-/// A failure that counts: a failed rule of severity `fail` at the preflight level, or any failed
-/// probe of that severity with `--strict`. It is exit `1`, and it ends a watch. A warning or a
-/// note never counts.
+/// True when a failed verdict is a failure that counts.
+///
+/// It counts when the rule has severity `fail` and has the preflight level, or when `--strict` is
+/// on. It is exit `1`, and it ends a watch. A warning or a note never counts.
 pub fn counts_as_failure(rule: &Rule, verdict: Verdict, strict: bool) -> bool {
     verdict == Verdict::Failed
         && rule.severity == Severity::Fail

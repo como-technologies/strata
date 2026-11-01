@@ -1,0 +1,73 @@
+{
+  "schema": "strata-snapshot/1",
+  "tool": {
+    "name": "strata",
+    "version": "0.25.0",
+    "impl": "rust"
+  },
+  "source": {
+    "ref": "seed",
+    "uid": "64f0000000000000000000a1",
+    "projectUid": "",
+    "name": "demo",
+    "version": "1.0.0",
+    "cloudType": "aws",
+    "type": "add-on",
+    "template": "published",
+    "tags": {},
+    "consumers": {
+      "clusters": [],
+      "count": 0
+    },
+    "fetchedAt": "2026-09-17T09:30:00Z"
+  },
+  "variables": [],
+  "variablesHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "packs": [
+    {
+      "key": "addon/pack",
+      "layer": "addon",
+      "name": "pack",
+      "type": "spectro",
+      "tag": "1.0.0",
+      "version": "1.0.0",
+      "packUid": "p1",
+      "registryUid": "r1",
+      "refDigest": "sha256:0123",
+      "registryDigest": "",
+      "params": {},
+      "values": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: strata-live-pack\n  namespace: strata-live\ndata:\n  purpose: strata live example\n",
+      "valuesCanon": {
+        "apiVersion": "v1",
+        "data": {
+          "purpose": "strata live example"
+        },
+        "kind": "ConfigMap",
+        "metadata": {
+          "name": "strata-live-pack",
+          "namespace": "strata-live"
+        }
+      },
+      "valuesHash": "eebed7bf9ca3d4047100d57ab75b6a7918799e55f051abea2343f3f3d100006b",
+      "manifests": [
+        {
+          "name": "m",
+          "uid": "m1",
+          "digest": "d",
+          "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: strata-live-pack\n  namespace: strata-live\ndata:\n  purpose: strata live example\n",
+          "contentHash": "eebed7bf9ca3d4047100d57ab75b6a7918799e55f051abea2343f3f3d100006b"
+        }
+      ],
+      "hash": {
+        "identity": "ab0cf3586b4e6144ea1c699aa5ed7b81893815a5d6651ce76882ee3b38696ee3",
+        "upstream": "e88869a38f28b0cae0822c86d31346990e58b58e2f118b87c002b3ab4f842a71",
+        "upstreamRaw": "sha256:0123",
+        "upstreamSource": "packRef.digest",
+        "authored": "a531f4066cd6b986916b2b95f03b8817596ce7c4fa3282ef9deca98be4f309f7",
+        "node": "26641708b6b4e0417a93bd00d1e62d37bebf71bfa90a1fca0cc2f9f2c930092f"
+      }
+    }
+  ],
+  "root": "6e2d5809ae47c36487ce808081eb58790f804bf4e2b6644c528430d516a44bb8",
+  "contentDigest": "c4cb3b84177d4214f240d07113c7cf02b2609cb857ef0e9ea51113fa130d09fc"
+}
