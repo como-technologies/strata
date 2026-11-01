@@ -952,30 +952,17 @@ fn code_spans(text: &str) -> Vec<&str> {
     text.split('`').skip(1).step_by(2).collect()
 }
 
-/// The words that start the command of a person: the commands of strata, from its generated help,
-/// and the scripts of `scripts/ci/`.
-fn command_names() -> Vec<String> {
-    let help = read(&docs().join("output/help.txt"));
-    let list = section(&help, "Commands:", Some("\n\n"));
-    let mut names: Vec<String> = list
-        .lines()
-        .skip(1)
-        .filter_map(|l| l.split_whitespace().next())
-        .filter(|n| *n != "help")
-        .map(str::to_string)
-        .collect();
-    names.extend(
+/// The words that start the command of a person: the commands of strata and the scripts of
+/// `scripts/ci/`.
+fn command_words() -> Vec<String> {
+    let mut words = common::command_names();
+    words.extend(
         std::fs::read_dir(script("ci"))
             .expect("scripts/ci exists")
             .flatten()
             .map(|e| e.file_name().to_string_lossy().into_owned()),
     );
-    assert!(
-        names.len() > 12,
-        "only {} command names parsed",
-        names.len()
-    );
-    names
+    words
 }
 
 /// Whether `text` shows a command to a person: a code span that starts with a command of strata,
@@ -985,37 +972,6 @@ fn names_a_command(text: &str, names: &[String]) -> bool {
         let first = span.split_whitespace().next().unwrap_or_default();
         first.starts_with('-') || first == "strata" || names.iter().any(|n| n == first)
     })
-}
-
-/// The anchor that mdBook makes from a heading: lower case, a hyphen for each space, and no
-/// mark other than a hyphen or an underscore.
-fn anchor_of(heading: &str) -> String {
-    heading
-        .trim_start_matches('#')
-        .trim()
-        .to_lowercase()
-        .chars()
-        .filter_map(|c| match c {
-            ' ' => Some('-'),
-            '-' | '_' => Some(c),
-            c if c.is_alphanumeric() => Some(c),
-            _ => None,
-        })
-        .collect()
-}
-
-/// The anchors of the headings of a page, outside its code blocks.
-fn anchors(text: &str) -> Vec<String> {
-    let mut fenced = false;
-    let mut out = Vec::new();
-    for line in text.lines() {
-        if line.starts_with("```") {
-            fenced = !fenced;
-        } else if !fenced && line.starts_with('#') {
-            out.push(anchor_of(line));
-        }
-    }
-    out
 }
 
 /// The first two paragraphs name the reason before the contrast. A name alone does not fix the
@@ -1051,7 +1007,7 @@ fn a_day_of_work_gives_each_step_what_you_do_what_strata_tells_you_and_where_it_
         "the table of the day has three columns"
     );
 
-    let names = command_names();
+    let names = command_words();
     let rows = table_rows(part);
     assert_eq!(rows.len(), 9, "the table of the day has nine steps");
     for row in rows {
@@ -1074,7 +1030,7 @@ fn the_chart_of_the_everyday_loop_has_a_lane_for_you_the_pipeline_and_the_night_
     let text = the_loop();
     let part = section(&text, "## A day of work", Some("\n## "));
     let chart = section(part, "```mermaid", Some("\n```\n"));
-    let names = command_names();
+    let names = command_words();
 
     let mut lanes: Vec<(String, Vec<String>)> = Vec::new();
     let mut nodes = BTreeSet::new();
@@ -1164,42 +1120,26 @@ fn the_jobs_and_their_commands_keep_each_command_and_each_link_of_the_table_of_t
     }
 }
 
-/// The heading "Who runs what, and when" became two sections. A link to a section of the page
-/// that the page does not have leads a reader to the top.
+/// The heading "Who runs what, and when" became two sections. `just docs-check` fails a link to a
+/// heading that a page does not have, so this test needs only the headings and the two new links.
 #[test]
-fn each_link_to_a_section_of_the_everyday_loop_names_a_section_that_the_page_has() {
-    let have = anchors(&the_loop());
-    assert!(have.contains(&"a-day-of-work".to_string()));
-    assert!(have.contains(&"the-jobs-and-their-commands".to_string()));
-    assert!(!have.contains(&"who-runs-what-and-when".to_string()));
-
-    let mut pages: Vec<(String, String)> = walk(&docs())
-        .iter()
-        .filter(|p| p.extension().is_some_and(|e| e == "md"))
-        .map(|p| (p.display().to_string(), read(p)))
-        .collect();
-    pages.push(("README.md".to_string(), repo_file("README.md")));
-    for (page, text) in &pages {
-        for (at, _) in text.match_indices("loop.md#") {
-            let anchor = text[at + "loop.md#".len()..]
-                .split(')')
-                .next()
-                .unwrap_or_default();
-            assert!(
-                have.iter().any(|h| h == anchor),
-                "{} links loop.md#{anchor}, and the page has no such section",
-                page
-            );
-        }
+fn the_everyday_loop_has_the_two_new_sections_and_the_quick_start_and_the_commands_link_them() {
+    let text = the_loop();
+    for heading in ["\n## A day of work\n", "\n## The jobs and their commands\n"] {
+        assert!(text.contains(heading), "loop.md has no heading {heading:?}");
     }
+    assert!(
+        !text.contains("## Who runs what, and when"),
+        "loop.md still has the old heading"
+    );
 
-    for (page, anchor) in [
+    for (page, link) in [
         ("quickstart.md", "loop.md#a-day-of-work"),
         ("commands/index.md", "loop.md#the-jobs-and-their-commands"),
     ] {
         assert!(
-            read(&docs().join(page)).contains(anchor),
-            "{page} does not link {anchor}"
+            read(&docs().join(page)).contains(link),
+            "{page} does not link {link}"
         );
     }
 }
