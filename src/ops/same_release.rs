@@ -1,6 +1,6 @@
 //! `same-release`: whether records in promotion order are one release.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -263,8 +263,7 @@ fn pair_reasons(
     b: &Snapshot,
     policy: Policy,
 ) -> (Vec<String>, usize, usize) {
-    let pa: HashMap<&str, &Pack> = a.packs.iter().map(|p| (p.key.as_str(), p)).collect();
-    let pb: HashMap<&str, &Pack> = b.packs.iter().map(|p| (p.key.as_str(), p)).collect();
+    let (pa, pb) = (a.packs_by_key(), b.packs_by_key());
     let mut reasons = Vec::new();
     let mut repinned = 0;
     let mut retagged = 0;

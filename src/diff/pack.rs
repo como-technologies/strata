@@ -1,7 +1,6 @@
 //! The comparison of two packs: the status, the change flags, the params, the images and the
 //! charts, the values, and the manifests.
 
-use std::collections::BTreeMap;
 use std::fmt;
 
 use schemars::JsonSchema;
@@ -532,7 +531,7 @@ pub(super) fn manifests_diff(x: &Pack, y: &Pack) -> Vec<ManifestChange> {
 /// The diff of each pack of two records, one for each key of either side. The diffs are in the
 /// order of the layers, then by name.
 pub(super) fn pack_diffs(a: &Snapshot, b: &Snapshot) -> Vec<PackDiff> {
-    let mut packs: Vec<PackDiff> = zip_by_key(packs_by_key(a), packs_by_key(b))
+    let mut packs: Vec<PackDiff> = zip_by_key(a.packs_by_key(), b.packs_by_key())
         .map(|(key, x, y)| match (x, y) {
             (None, Some(y)) => presence_pack_diff(key, y, true),
             (Some(x), None) => presence_pack_diff(key, x, false),
@@ -544,11 +543,6 @@ pub(super) fn pack_diffs(a: &Snapshot, b: &Snapshot) -> Vec<PackDiff> {
         (Layer::parse(&p.layer).rank(), &p.name).cmp(&(Layer::parse(&q.layer).rank(), &q.name))
     });
     packs
-}
-
-/// The packs of a record by key.
-fn packs_by_key(s: &Snapshot) -> BTreeMap<&str, &Pack> {
-    s.packs.iter().map(|p| (p.key.as_str(), p)).collect()
 }
 
 /// The diff of a pack that both sides hold: its status, its flags, its impact, and its changes.

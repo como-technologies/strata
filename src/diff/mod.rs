@@ -400,7 +400,7 @@ fn no_content_moved(variables_changed: bool, order_changed: bool, packs: &[PackD
 }
 
 /// The names of the macros that either record uses, sorted, one time each.
-fn macro_names(a: &Snapshot, b: &Snapshot) -> Vec<String> {
+fn macros_of_both(a: &Snapshot, b: &Snapshot) -> Vec<String> {
     let mut names = a.macros();
     names.extend(b.macros());
     names.sort();
@@ -448,7 +448,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
         same_content: same || no_content_moved(variables.changed, order_changed, &packs),
         edited_in_place: edited_in_place(a, b),
         overwritten_in_place: overwritten_in_place(a, b),
-        macros: macro_names(a, b),
+        macros: macros_of_both(a, b),
         macros_changed: macros_changed(a, b),
         image_ids_changed: image_ids_changed(a, b),
         palette_repave: None,
