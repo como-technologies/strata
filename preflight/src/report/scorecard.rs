@@ -135,12 +135,44 @@ pub(super) fn summarize(
     let skipped = count(&|c| c.verdict == Verdict::Skipped);
     let errors = count(&|c| c.verdict == Verdict::Error);
     let readiness = readiness_of(passed, ran + not_run);
-    let under_ready = match (options.ready, readiness) {
+    let mut summary = Summary {
+        rules: checks.len() as u32,
+        ran,
+        passed,
+        failed,
+        probe_failed,
+        warned,
+        noted,
+        not_run,
+        not_run_reasons,
+        not_checked,
+        skipped,
+        errors,
+        readiness,
+        exit_code: 0,
+        verdict: String::new(),
+    };
+    (summary.exit_code, summary.verdict) = exit_and_verdict(checks, &summary, options.ready);
+    summary
+}
+
+/// The exit code and the verdict line of a run, from its counts. `ready` is the readiness that the
+/// run needs.
+fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64>) -> (u8, String) {
+    let Summary {
+        ran,
+        failed,
+        probe_failed,
+        errors,
+        readiness,
+        ..
+    } = *summary;
+    let under_ready = match (ready, readiness) {
         (Some(want), Some(have)) => have < want,
         (Some(_), None) => true,
         _ => false,
     };
-    let (exit_code, verdict) = if failed > 0 {
+    if failed > 0 {
         let ids: Vec<&str> = checks
             .iter()
             .filter(|c| c.counts_as_failure)
@@ -156,7 +188,7 @@ pub(super) fn summarize(
             format!(
                 "NOT READY: readiness {} is under {}",
                 readiness.map_or_else(|| "none".to_string(), percent),
-                percent(options.ready.unwrap_or(0.0))
+                percent(ready.unwrap_or(0.0))
             ),
         )
     } else if errors > 0 {
@@ -181,23 +213,6 @@ pub(super) fn summarize(
             String::new()
         };
         (0, format!("OK: each counted check passed{probes}"))
-    };
-    Summary {
-        rules: checks.len() as u32,
-        ran,
-        passed,
-        failed,
-        probe_failed,
-        warned,
-        noted,
-        not_run,
-        not_run_reasons,
-        not_checked,
-        skipped,
-        errors,
-        readiness,
-        exit_code,
-        verdict,
     }
 }
 

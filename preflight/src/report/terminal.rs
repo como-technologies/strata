@@ -36,6 +36,14 @@ pub fn terminal(r: &Report, paint: &Paint) -> String {
             out.push_str(&result_lines(c, paint));
         }
     }
+    out.push_str(&scorecard_lines(r, paint));
+    out.push_str(&summary_lines(r, paint));
+    out
+}
+
+/// The table of the scorecard: one row for each section, then its legend.
+fn scorecard_lines(r: &Report, paint: &Paint) -> String {
+    let mut out = String::new();
     out.push_str(&format!("\n{}\n", paint.bold("Section scorecard")));
     out.push_str(&format!(
         "  {:<28} {:>4} {:>4} {:>5} {:>9} {:>4} {:>7} {:>4} {:>4} {:>4} {:>7} {:>11} {:>5}\n",
@@ -72,6 +80,13 @@ pub fn terminal(r: &Report, paint: &Paint) -> String {
         ));
     }
     out.push_str(&format!("{}\n", paint.dim(&scorecard_legend(&r.sections))));
+    out
+}
+
+/// The totals of the run, the reason for the checks that did not run, where the files went, and
+/// the verdict.
+fn summary_lines(r: &Report, paint: &Paint) -> String {
+    let mut out = String::new();
     let s = &r.summary;
     out.push_str(&format!(
         "\n{} rules apply; {} ran: {} passed, {} failed, {} probe(s) failed, {} warning(s), {} note(s); {} did not run, {} not checked, {} do not apply, {} error(s); readiness {}: {} of {} checks passed\n",

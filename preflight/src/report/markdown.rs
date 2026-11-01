@@ -3,7 +3,7 @@
 use strata::text::markdown_cell;
 
 use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
-use super::{CheckResult, Report, pct};
+use super::{CheckResult, Report, SectionScore, pct};
 use crate::confidence::NO_RUNS;
 use crate::probe::Verdict;
 
@@ -28,39 +28,59 @@ pub fn markdown(r: &Report) -> String {
         "| result | rule | tier | what | time | confidence |\n|---|---|---|---|---|---|\n",
     );
     for c in r.checks.iter().filter(|c| c.is_listed()) {
-        let what = if c.verdict == Verdict::Passed {
-            c.title.clone()
-        } else {
-            let mut t = c.title.clone();
-            if !c.messages.is_empty() {
-                t.push_str("<br>");
-                t.push_str(
-                    &c.messages
-                        .iter()
-                        .map(|m| markdown_cell(m))
-                        .collect::<Vec<_>>()
-                        .join("<br>"),
-                );
-            }
-            t
-        };
-        let conf = c
-            .confidence
-            .as_ref()
-            .map(|k| format!("catch {}, clean {}", k.catch.text(), k.clean.text()))
-            .unwrap_or_else(|| NO_RUNS.to_string());
-        out.push_str(&format!(
-            "| {} | `{}` | {} | {} | {} ms | {} |\n",
-            c.label(),
-            c.id,
-            c.tier.letter(),
-            what,
-            c.elapsed_ms,
-            conf
-        ));
+        out.push_str(&check_row(c));
     }
-    let repro: Vec<&CheckResult> = r
-        .checks
+    out.push_str(&reproduce_section(&r.checks));
+    if s.not_run > 0 {
+        out.push_str(&format!("\n{}\n", not_run_text(&s.not_run_reasons)));
+    }
+    out.push_str(&format!(
+        "\n{}\n",
+        written_text(r.options.out_dir.as_deref())
+    ));
+    out.push_str(&scorecard_table(&r.sections));
+    out
+}
+
+/// The row of one check in the table: its result, rule, tier, title with the messages of a check
+/// that did not pass, time, and confidence.
+fn check_row(c: &CheckResult) -> String {
+    let what = if c.verdict == Verdict::Passed {
+        c.title.clone()
+    } else {
+        let mut t = c.title.clone();
+        if !c.messages.is_empty() {
+            t.push_str("<br>");
+            t.push_str(
+                &c.messages
+                    .iter()
+                    .map(|m| markdown_cell(m))
+                    .collect::<Vec<_>>()
+                    .join("<br>"),
+            );
+        }
+        t
+    };
+    let conf = c
+        .confidence
+        .as_ref()
+        .map(|k| format!("catch {}, clean {}", k.catch.text(), k.clean.text()))
+        .unwrap_or_else(|| NO_RUNS.to_string());
+    format!(
+        "| {} | `{}` | {} | {} | {} ms | {} |\n",
+        c.label(),
+        c.id,
+        c.tier.letter(),
+        what,
+        c.elapsed_ms,
+        conf
+    )
+}
+
+/// The lines to run by hand for each check that failed, did not run a check, or gave an error,
+/// with the fix of a failure. Empty when no check has such lines.
+fn reproduce_section(checks: &[CheckResult]) -> String {
+    let repro: Vec<&CheckResult> = checks
         .iter()
         .filter(|c| {
             matches!(
@@ -69,32 +89,33 @@ pub fn markdown(r: &Report) -> String {
             ) && !c.reproduce.is_empty()
         })
         .collect();
-    if !repro.is_empty() {
-        out.push_str("\n<details><summary>Reproduce by hand</summary>\n\n");
-        for c in repro {
-            out.push_str(&format!(
-                "**`{}`** — {}\n\n```bash\n{}\n```\n\n",
-                c.id,
-                c.title,
-                c.reproduce.join("\n")
-            ));
-            if let Some(fix) = &c.fix
-                && !fix.text.is_empty()
-            {
-                out.push_str(&format!("Fix ({}): {}\n\n", fix.owner, fix.text));
-            }
+    if repro.is_empty() {
+        return String::new();
+    }
+    let mut out = String::from("\n<details><summary>Reproduce by hand</summary>\n\n");
+    for c in repro {
+        out.push_str(&format!(
+            "**`{}`** — {}\n\n```bash\n{}\n```\n\n",
+            c.id,
+            c.title,
+            c.reproduce.join("\n")
+        ));
+        if let Some(fix) = &c.fix
+            && !fix.text.is_empty()
+        {
+            out.push_str(&format!("Fix ({}): {}\n\n", fix.owner, fix.text));
         }
-        out.push_str("</details>\n");
     }
-    if s.not_run > 0 {
-        out.push_str(&format!("\n{}\n", not_run_text(&s.not_run_reasons)));
-    }
-    out.push_str(&format!(
-        "\n{}\n",
-        written_text(r.options.out_dir.as_deref())
-    ));
-    out.push_str("\n### Section scorecard\n\n| section | rows | seen | with a check | preflight | with runs | weakest bound | ran | passed | failed | did not run | not checked | readiness |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|\n");
-    for sc in &r.sections {
+    out.push_str("</details>\n");
+    out
+}
+
+/// The section scorecard: a table with one row for each section, then its legend.
+fn scorecard_table(sections: &[SectionScore]) -> String {
+    let mut out = String::from(
+        "\n### Section scorecard\n\n| section | rows | seen | with a check | preflight | with runs | weakest bound | ran | passed | failed | did not run | not checked | readiness |\n|---|---|---|---|---|---|---|---|---|---|---|---|---|\n",
+    );
+    for sc in sections {
         out.push_str(&format!(
             "| {} | {} | {} ({}) | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |\n",
             sc.title,
@@ -113,6 +134,6 @@ pub fn markdown(r: &Report) -> String {
             pct(sc.readiness)
         ));
     }
-    out.push_str(&format!("\n{}\n", scorecard_legend(&r.sections)));
+    out.push_str(&format!("\n{}\n", scorecard_legend(sections)));
     out
 }
