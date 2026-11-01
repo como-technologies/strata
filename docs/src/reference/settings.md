@@ -18,7 +18,7 @@ line.
 | `STRATA_RETRIES` | `3` | The number of retries after HTTP 5xx, HTTP 429, or a transport error. Strata sends no other request again, and no 5xx that is a [refusal of Palette](./errors.md#refusals-that-strata-does-not-send-again). |
 | `STRATA_MAX_RETRY_AFTER` | `300` | The longest `Retry-After` wait, in seconds. A longer one is the error `retry-after-too-long`, while a retry remains. On the last attempt, the error is `api`. |
 | `STRATA_QUIET` | not set | Any value stops the progress messages, as `--quiet` does. Environment only. |
-| `NO_COLOR` | not set | A value removes the color of the terminal report under `--color auto`, the default. Environment only. |
+| `NO_COLOR` | not set | A value removes the color of the terminal report under `--color auto`, the default. `strata-preflight` reads it too. Environment only. |
 | `CLICOLOR_FORCE` | not set | A value forces the color under `--color auto`, the default, also for a pipe. `NO_COLOR` has priority. Environment only. See [Report formats](./formats.md#colors). |
 | `STRATA_BIN` | `strata` on `PATH` | The binary that the scripts in `scripts/ci/` run. The live example and `examples/fetch-examples.sh` read it too. Their default is the build under `target/`. |
 

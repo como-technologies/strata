@@ -10,7 +10,7 @@ use crate::closed_set::{ClosedSet, impl_closed_set};
 
 /// A state of a cluster that strata acts on.
 ///
-/// Palette can give another state. [`ClosedSet::parse`](crate::closed_set::ClosedSet::parse) gives
+/// Palette can give another state. [`ClosedSet::parse`] gives
 /// `None` for the text of such a state, and the caller decides what to do with it. The text is
 /// the one that Palette writes, with a capital letter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

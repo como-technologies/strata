@@ -107,7 +107,7 @@ struct Cli {
     /// No color
     #[arg(long)]
     no_color: bool,
-    /// When to color the report and the progress lines: auto (a terminal, and NO_COLOR not set), always, or never
+    /// When to color the report and the progress lines: auto (a terminal; NO_COLOR, CLICOLOR_FORCE, and TERM=dumb decide), always, or never
     #[arg(long, value_enum, default_value = "auto", value_name = "WHEN")]
     color: ColorMode,
     /// No progress messages

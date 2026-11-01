@@ -13,8 +13,9 @@ release has the tag `v<version>`. The crate builds with Rust 1.88 or later. The
 crate is not on crates.io, so a dependency names the tag: see
 [The library](../automation/library.md#add-the-dependency).
 
-Two sections list the changes that need action:
-[Release 0.25.0](#release-0250-changes-that-need-action) and
+Three sections list the changes that need action:
+[Release 0.26.0](#release-0260-changes-that-need-action),
+[Release 0.25.0](#release-0250-changes-that-need-action), and
 [Release 0.24.0](#release-0240-changes-that-need-action). They cover the command
 line, the documents, the CI drop-ins, and the two libraries.
 
@@ -343,6 +344,88 @@ file rejects fields that it does not know. So a file with a field from a later
 release fails on an older strata with `candidate-invalid`. A new value of a
 closed set, such as a new `type` of a layer, fails in the same way. A person
 writes the file, so strata refuses the value and does not guess.
+
+## Release 0.26.0: changes that need action
+
+Release 0.26.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a rule file, or code that uses a library. A change that only adds a
+field, a value, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **`strata-preflight` decides the color as `strata` does.** The order is in
+  [Colors](./formats.md#colors). An empty `NO_COLOR` no longer removes the
+  color: `NO_COLOR` needs a value. `CLICOLOR_FORCE` forces the color, and
+  `TERM=dumb` removes it under `--color auto`. The report on standard output
+  and the progress lines on standard error each get their own decision.
+  `--no-color` and `--color never` work as before.
+- **The markdown table of `strata` writes a line break as a space.** A line
+  break in a cell, such as one in an error message, ended the row. The markdown
+  report of `strata-preflight` did this already.
+- **The markdown report and the HTML report of `strata-preflight` write
+  `Palette release 4.10`.** They wrote `Palette 4.10`. The terminal report is as
+  before. The text forms can change in any release.
+- **A rule file that you give with `--probes` fails at load when a program of it
+  cannot run.** `strata-preflight` compiles each program with the variables that
+  it has when it runs. A rule that reads `$item` in `each`, `expr`, `when`, an
+  `argv`, or a `reproduce` line gave `ERROR` or `SKIP` in a run. Now the file
+  fails with the kind `catalog` and exit `2`. A POST with `each` and no `body`
+  fails in the same way. It sent the entity one time for each item. The rules in
+  the binary are as before.
+- **`evidence[].kind` is one of `run`, `source`, `doc`, and `report`.** A rule
+  file with another kind fails at load. `preflight --schema rules` and
+  `preflight --schema report` list the four values. The report holds the same
+  values as before, so `strata-preflight/1` stays.
+- **The world has the new fields `edgeHosts` and `validateBody`.** `world.json`
+  of `--out` holds both. See
+  [The world document](./preflight-rules.md#the-world-document). The six rules
+  that read each edge host have `each: .edgeHosts`, which `--rules --json`
+  shows. The `reproduce` lines of the rules that call the validate route read
+  `.validateBody`. A rule file or a custom probe can read both fields.
+- **`pack-dependency` and `ecr-oci-images` send the body of `palette-validate`.**
+  They sent the entity with its own name. For `cluster:UID`, the route refuses
+  the name of a cluster that Palette holds, and these two rules read the refusal
+  as no fault. Now the name has the suffix `-preflight`, and they find the fault.
+- **A run sends each request one time.** The backend of a run keeps the answer
+  of each request, by its method, its path, and its body. The four rules that
+  ask the validate route send one request. The six rules that read each edge host
+  send one request for each host. `template-outside` reads the profile that the
+  world read. A 5xx that is not a refusal is not kept, and the next rule asks
+  again.
+
+### For a user of the library of strata
+
+- `term::color::Paint::resolve` has a second argument, `term::color::Stream`:
+  `Stdout` or `Stderr`. Give `Stream::Stdout` to get the behavior of 0.25.0.
+- `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE` are gone.
+  `cluster_state::ClusterState` names each state, and `ClusterState::Running.is(text)`
+  replaces `text == RUNNING_STATE`. `ClosedSet::parse` reads the text of a state.
+- `api::codes::ValidateRoute::refuses_answer` takes the body of the error as
+  `&serde_json::Value`, in place of text. Parse the text one time, and give the
+  value.
+- `closed_set::impl_closed_set` is the macro `strata::impl_closed_set`. Its
+  table takes an expression for each text, and a literal is one.
+
+### For a user of the library of strata-preflight
+
+- `run::RunInputs` and `run::WatchInputs` have the field `paint: Paint` in
+  place of `color: bool`. `Paint::off()` replaces `false`.
+- `report::render` and `report::terminal` take `&Paint` in place of `bool`.
+- `probe::LiveBackend` has private fields. `LiveBackend::new(palette, no_exec)`
+  builds it. It keeps the answer of each request, and it is a `PaletteApi`, so
+  `Palette::new(&backend)` reads through it.
+- `report::label_for` is gone. `CheckResult::label` gives the word.
+- `rule::Tier::name`, `Level::name`, `Severity::name`, and `Status::name` are
+  gone. `ClosedSet::as_str` gives the same text, and `Tier::ALL` is the constant
+  of the trait. `Tier::parse` is `Tier::from_input`.
+- `rule::Check::kind` gives a `rule::CheckKind`, in place of text.
+  `rule::Evidence::kind` is a `rule::EvidenceKind`, in place of `String`.
+- `world::CLOUDS` is gone. `world::clouds()` gives the same texts in the same
+  order, and `world::Engine` names each engine.
+- `rule::Catalog::parse_section` compiles each program, and gives `Err` for a
+  program that cannot run. `jq::Jq::check` and `jq::Jq::check_template` do the
+  same compile.
 
 ## Release 0.25.0: changes that need action
 

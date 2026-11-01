@@ -65,6 +65,11 @@ removes it. `--color=always`, or `--color` with no value, forces it. Then
 also when `TERM` is `dumb`. Then `TERM=dumb` removes it. Then a terminal on
 standard output gets it. The diffs of `--full` use the same colors.
 
+`strata-preflight` uses the same order for each stream. The report goes to
+standard output, and the progress lines go to standard error, so each stream
+gets its own decision. `strata-preflight` takes `--color` with a value: `auto`,
+`always`, or `never`.
+
 ## The markdown comment
 
 ```text
