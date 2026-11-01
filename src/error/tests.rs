@@ -83,6 +83,18 @@ fn one_of_each() -> Vec<Error> {
             version: "1.1.1".into(),
             uid: "64e0000000000000000000c3".into(),
         },
+        Error::StaleRecord {
+            cluster: "payments".into(),
+            profile: "aws-stack@1.1.1".into(),
+        },
+        Error::ClusterTemplateGoverns {
+            cluster: "64f1000000000000000000e1".into(),
+            template: "64f8000000000000000000a1".into(),
+            asked: "aws-stack@1.1.1: the cluster payments runs it".into(),
+        },
+        Error::NoCloudConfig {
+            cluster: "64f1000000000000000000e1".into(),
+        },
         Error::PaletteRefuses {
             reference: "aws-stack.yaml".into(),
             errors: vec![crate::validation::PaletteRefusal {
@@ -397,6 +409,39 @@ fn a_record_that_does_not_match_names_its_field_and_says_to_take_the_record_agai
 }
 
 #[test]
+fn a_refusal_that_a_record_or_a_cluster_causes_has_a_kind_of_its_own_and_stays_terminal() {
+    let stale = Error::StaleRecord {
+        cluster: "payments".into(),
+        profile: "aws-stack@1.1.1".into(),
+    };
+    assert_eq!(
+        stale.to_string(),
+        "the record of the update that waits holds aws-stack@1.1.1, and the cluster payments \
+         does not run it now. Record cluster:payments@pending again"
+    );
+    let governed = Error::ClusterTemplateGoverns {
+        cluster: "c1".into(),
+        template: "t1".into(),
+        asked: "aws-stack@1.1.1: the cluster payments runs it".into(),
+    };
+    assert!(
+        governed.to_string().starts_with(
+            "--repave cannot ask about aws-stack@1.1.1: the cluster payments runs it, and the \
+             cluster template t1 governs the cluster."
+        ),
+        "{governed}"
+    );
+    let no_config = Error::NoCloudConfig {
+        cluster: "c1".into(),
+    };
+    for e in [&stale, &governed, &no_config] {
+        assert_ne!(e.kind(), "usage");
+        assert_eq!(e.class(), FailureClass::Terminal, "{e}");
+        assert_eq!(e.exit_code(), 2);
+    }
+}
+
+#[test]
 fn every_variant_has_a_distinct_kind() {
     let all = one_of_each();
     let mut kinds: Vec<&str> = all.iter().map(Error::kind).collect();
@@ -475,6 +520,23 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
     );
     assert_eq!(cp["applied"], serde_json::json!(["infra", "addons"]));
     assert_eq!(by_kind("profile-ref-required")["reference"], "cluster:c1");
+    let stale = by_kind("stale-record");
+    assert_eq!(
+        (stale["cluster"].clone(), stale["profile"].clone()),
+        ("payments".into(), "aws-stack@1.1.1".into())
+    );
+    let governed = by_kind("cluster-template-governs");
+    assert_eq!(
+        (governed["cluster"].clone(), governed["template"].clone()),
+        (
+            "64f1000000000000000000e1".into(),
+            "64f8000000000000000000a1".into()
+        )
+    );
+    assert_eq!(
+        by_kind("no-cloud-config")["cluster"],
+        "64f1000000000000000000e1"
+    );
     assert_eq!(by_kind("candidate-invalid")["path"], "profile.yaml");
     assert_eq!(
         by_kind("candidate-invalid")["code"],

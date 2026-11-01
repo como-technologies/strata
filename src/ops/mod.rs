@@ -118,6 +118,17 @@ impl SnapshotOptions {
     }
 }
 
+/// The refusal of a command that reads one object, for a ref that names a set of clusters.
+fn names_a_set(reference: &Ref) -> Error {
+    Error::Usage {
+        message: format!(
+            "{reference} names a set of clusters, and this command reads one: \
+             `strata snapshot {reference} --dir DIR` records each cluster, and \
+             `strata list clusters` lists them"
+        ),
+    }
+}
+
 /// Turn a ref into a snapshot.
 ///
 /// Strata loads a snapshot file, and reads each other ref through the [`Palette`] that `connect`
@@ -148,13 +159,7 @@ where
     };
     match reference {
         Ref::Snapshot(path) => Snapshot::load(path),
-        Ref::ClusterSet { .. } => Err(Error::Usage {
-            message: format!(
-                "{reference} names a set of clusters, and this command reads one: \
-                 `strata snapshot {reference} --dir DIR` records each cluster, and \
-                 `strata list clusters` lists them"
-            ),
-        }),
+        Ref::ClusterSet { .. } => Err(names_a_set(reference)),
         Ref::NameVersion { name, version } => live(&|palette| {
             let uid = palette.resolve(name, version)?;
             profile_snapshot(palette, &uid, options, &text, fetched_at, progress)

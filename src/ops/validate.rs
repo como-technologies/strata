@@ -6,7 +6,7 @@
 
 use serde_json::{Value, json};
 
-use super::repave::{cluster_and_target, validate_body};
+use super::repave::{Question, cluster_and_target, validate_body};
 use crate::api::codes::ValidateRoute;
 use crate::api::{Palette, PaletteApi, RawCluster};
 use crate::error::{Error, Result};
@@ -303,7 +303,7 @@ pub fn palette_validation<A: PaletteApi>(
     a: &Snapshot,
     b: &Snapshot,
 ) -> Result<PaletteValidation> {
-    let (cluster, target) = cluster_and_target(a, b, "--validate")?;
+    let (cluster, target) = cluster_and_target(a, b, Question::Validate)?;
     let running =
         AppliedProfile::of_cluster(&palette.subject_document(SubjectKind::Cluster, &cluster.uid)?);
     let uid = &target.source.uid;

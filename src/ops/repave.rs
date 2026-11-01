@@ -9,8 +9,9 @@ use std::collections::BTreeSet;
 use serde_json::{Value, json};
 
 use crate::api::{Palette, PaletteApi};
+use crate::closed_set::Open;
 use crate::cluster_template::ClusterTemplateRef;
-use crate::diff::{ImpactLevel, PaletteRepave};
+use crate::diff::{ImpactLevel, PaletteRepave, Side};
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_str};
 use crate::profile_type::ProfileType;
@@ -72,47 +73,265 @@ pub fn validate_body(running: &[AppliedProfile], target: &Snapshot) -> Value {
     profiles_body(std::iter::once(uid).chain(kept), |_| None)
 }
 
-/// The cluster side and the profile side of a comparison, for the question of `option`. One side
-/// must be a cluster, and the other a profile version with a uid, in either order. Any other pair
-/// is a usage error.
-pub(super) fn cluster_and_target<'a>(
-    a: &'a Snapshot,
-    b: &'a Snapshot,
-    option: &str,
-) -> Result<(&'a ClusterSource, &'a Snapshot)> {
-    let (cluster, target) = match (&a.source.cluster, &b.source.cluster) {
-        (Some(c), None) => (c, b),
-        (None, Some(c)) => (c, a),
-        _ => {
-            return Err(Error::Usage {
-                message: format!(
-                    "{option} needs one side that is a cluster and one that is a profile version"
-                ),
-            });
+/// A question of `compare` that Palette answers about a cluster.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Question {
+    /// `--repave`: does the change replace the nodes of the cluster?
+    Repave,
+    /// `--validate`: does Palette accept the packs of the change on the cluster?
+    Validate,
+}
+
+impl Question {
+    /// The option of `compare` that asks the question.
+    fn option(self) -> &'static str {
+        match self {
+            Question::Repave => "--repave",
+            Question::Validate => "--validate",
         }
+    }
+
+    /// The refusal for a pair of sides that has no cluster, or has two.
+    fn needs_a_pair(self) -> Error {
+        Error::Usage {
+            message: format!(
+                "{} needs one side that is a cluster and one that is a profile version",
+                self.option()
+            ),
+        }
+    }
+}
+
+/// What `compare` asks Palette about its cluster side, beyond the comparison of the two sides.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PaletteQuestions {
+    /// `--repave`: see [`palette_repave`].
+    pub repave: bool,
+    /// `--validate`: see [`palette_validation`](super::palette_validation).
+    pub validate: bool,
+}
+
+impl PaletteQuestions {
+    /// The questions that are on, in the order of the options.
+    fn asked(&self) -> Vec<Question> {
+        [
+            (self.repave, Question::Repave),
+            (self.validate, Question::Validate),
+        ]
+        .into_iter()
+        .filter_map(|(on, question)| on.then_some(question))
+        .collect()
+    }
+
+    /// Refuse a pair of refs that a question cannot ask about, before any request.
+    ///
+    /// A ref shows what its side is: `cluster:<c>` is a cluster, and `aws-stack@1.1.1` is a
+    /// profile version. A ref to a record file shows it after strata reads the file, which makes
+    /// no request. [`palette_repave`] and [`palette_validation`](super::palette_validation) keep
+    /// the same rules for the records they get. A fault that only the reads show comes from them.
+    ///
+    /// # Errors
+    ///
+    /// - [`Error::Usage`] for a pair that a question cannot ask about, and for a set of clusters.
+    /// - The error of the read of a record file.
+    pub fn check(&self, a: &Ref, b: &Ref) -> Result<()> {
+        let asked = self.asked();
+        if asked.is_empty() {
+            return Ok(());
+        }
+        if let Some(set) = [a, b]
+            .into_iter()
+            .find(|r| matches!(r, Ref::ClusterSet { .. }))
+        {
+            return Err(super::names_a_set(set));
+        }
+        let record_of = |r: &Ref| match r {
+            Ref::Snapshot(path) => Snapshot::load(path).map(Some),
+            _ => Ok(None),
+        };
+        let (record_a, record_b) = (record_of(a)?, record_of(b)?);
+        let (role_a, role_b) = (
+            Role::of_ref(a, record_a.as_ref()),
+            Role::of_ref(b, record_b.as_ref()),
+        );
+        asked
+            .into_iter()
+            .try_for_each(|question| plan(&role_a, &role_b, question).map(drop))
+    }
+}
+
+/// An object that holds profiles: a cluster, an edge host, or a cluster group, or the update that
+/// waits for a cluster.
+struct Holder<'a> {
+    kind: Open<SubjectKind>,
+    /// True for the update that waits for the object.
+    pending: bool,
+    /// The uid of the object. A ref can name it by its name, so a ref gives none.
+    uid: Option<&'a str>,
+}
+
+/// What one side of a comparison is to a question of Palette. A ref shows it, and so does a
+/// record.
+enum Role<'a> {
+    Holder(Holder<'a>),
+    /// A profile version that Palette holds, with its uid.
+    Profile,
+    /// Any other object: a candidate, a pack, or an app profile.
+    Other,
+}
+
+impl<'a> Role<'a> {
+    /// The role of a record.
+    fn of_record(record: &'a Snapshot) -> Self {
+        match &record.source.cluster {
+            Some(c) => Role::Holder(Holder {
+                kind: c.kind.clone(),
+                pending: c.pending,
+                uid: Some(&c.uid),
+            }),
+            None if record.source.is_profile_version() && !record.source.uid.is_empty() => {
+                Role::Profile
+            }
+            None => Role::Other,
+        }
+    }
+
+    /// The role of a ref. `record` is the record that a ref to a file names.
+    fn of_ref(reference: &Ref, record: Option<&'a Snapshot>) -> Self {
+        let holder = |kind: SubjectKind, pending: bool| {
+            Role::Holder(Holder {
+                kind: kind.into(),
+                pending,
+                uid: None,
+            })
+        };
+        match (record, reference) {
+            (Some(record), _) => Role::of_record(record),
+            (None, Ref::Cluster { pending, .. }) => holder(SubjectKind::Cluster, *pending),
+            (None, Ref::EdgeHost { .. }) => holder(SubjectKind::EdgeHost, false),
+            (None, Ref::ClusterGroup { .. }) => holder(SubjectKind::ClusterGroup, false),
+            (None, r) if r.is_profile_version() => Role::Profile,
+            (None, _) => Role::Other,
+        }
+    }
+
+    fn holder(&self) -> Option<&Holder<'a>> {
+        match self {
+            Role::Holder(h) => Some(h),
+            _ => None,
+        }
+    }
+}
+
+/// What a pair of sides asks of Palette. The side is the cluster, or the update that waits for it.
+enum Plan {
+    /// A move of the cluster to the profile version on the other side.
+    Move(Side),
+    /// A move of the cluster to the update that waits, which is the record on the side.
+    Pending(Side),
+}
+
+/// The plan of a question for two sides, or the usage error for a pair that the question cannot
+/// ask about. `--repave` also takes a cluster and the update that waits for it.
+fn plan(a: &Role<'_>, b: &Role<'_>, question: Question) -> Result<Plan> {
+    match (a.holder(), b.holder()) {
+        (Some(x), Some(y)) if question == Question::Repave => pending_plan(x, y),
+        _ => move_plan(a, b, question).map(Plan::Move),
+    }
+}
+
+/// The side that is the cluster, for the question of `question`. One side must be a cluster, and
+/// the other a profile version with a uid, in either order. Any other pair is a usage error.
+fn move_plan(a: &Role<'_>, b: &Role<'_>, question: Question) -> Result<Side> {
+    let (side, holder, target) = match (a.holder(), b.holder()) {
+        (Some(h), None) => (Side::A, h, b),
+        (None, Some(h)) => (Side::B, h, a),
+        _ => return Err(question.needs_a_pair()),
     };
-    if !cluster.kind.is_cluster() {
+    if !holder.kind.is_cluster() {
         return Err(Error::Usage {
             message: format!(
-                "{option} needs a cluster: Palette answers it for a cluster, and not for {} {}",
-                if cluster.kind == SubjectKind::EdgeHost {
+                "{} needs a cluster: Palette answers it for a cluster, and not for {} {}",
+                question.option(),
+                if holder.kind == SubjectKind::EdgeHost {
                     "an"
                 } else {
                     "a"
                 },
-                cluster.kind.noun()
+                holder.kind.noun()
             ),
         });
     }
-    if !target.source.is_profile_version() || target.source.uid.is_empty() {
+    if !matches!(target, Role::Profile) {
         return Err(Error::Usage {
             message: format!(
-                "{option} needs the profile side to be a profile version that Palette holds, \
-                 with its uid"
+                "{} needs the profile side to be a profile version that Palette holds, with its \
+                 uid",
+                question.option()
             ),
         });
     }
-    Ok((cluster, target))
+    Ok(side)
+}
+
+/// The plan for two holders: a cluster, and the update that waits for the same cluster.
+fn pending_plan(a: &Holder<'_>, b: &Holder<'_>) -> Result<Plan> {
+    // a name and a uid can name one cluster, so only two uids show two clusters
+    let one_cluster = a.uid.zip(b.uid).is_none_or(|(x, y)| x == y);
+    match (a.pending, b.pending) {
+        (false, true) if one_cluster && a.kind.is_cluster() => Ok(Plan::Pending(Side::B)),
+        (true, false) if one_cluster && b.kind.is_cluster() => Ok(Plan::Pending(Side::A)),
+        _ => Err(Error::Usage {
+            message: "--repave needs one side that is a cluster and one that is a profile \
+                      version, or a cluster and the update that waits for it: \
+                      cluster:<c> cluster:<c>@pending"
+                .to_string(),
+        }),
+    }
+}
+
+/// The record on `side`, and the record on the other side.
+fn pick<'a>(side: Side, a: &'a Snapshot, b: &'a Snapshot) -> (&'a Snapshot, &'a Snapshot) {
+    match side {
+        Side::A => (a, b),
+        Side::B => (b, a),
+    }
+}
+
+/// The cluster source of a record that a plan chose as a holder.
+fn cluster_of(record: &Snapshot, question: Question) -> Result<&ClusterSource> {
+    // the plan read the role from this field, so the guard gives the error of the plan
+    record
+        .source
+        .cluster
+        .as_ref()
+        .ok_or_else(|| question.needs_a_pair())
+}
+
+/// The cluster side and the profile side of a comparison, for the question of `question`: see
+/// [`move_plan`].
+pub(super) fn cluster_and_target<'a>(
+    a: &'a Snapshot,
+    b: &'a Snapshot,
+    question: Question,
+) -> Result<(&'a ClusterSource, &'a Snapshot)> {
+    moved(
+        move_plan(&Role::of_record(a), &Role::of_record(b), question)?,
+        a,
+        b,
+        question,
+    )
+}
+
+/// The cluster source and the profile side of two records, when `side` holds the cluster.
+fn moved<'a>(
+    side: Side,
+    a: &'a Snapshot,
+    b: &'a Snapshot,
+    question: Question,
+) -> Result<(&'a ClusterSource, &'a Snapshot)> {
+    let (cluster, target) = pick(side, a, b);
+    Ok((cluster_of(cluster, question)?, target))
 }
 
 /// The body of the template route of `validate/repave`: the profile uids of `body`, the body of
@@ -124,32 +343,6 @@ fn template_body(body: &Value) -> Value {
         .map(|p| json!({"uid": p["uid"]}))
         .collect();
     json!({"profiles": profiles, "isUpgradeNow": false})
-}
-
-/// The record of the update that waits, and its cluster source, when each side of a comparison is
-/// a record of a cluster. `None` when one side is not.
-///
-/// # Errors
-///
-/// [`Error::Usage`] for two records of clusters that are not one cluster and the update that
-/// waits for it, `cluster:<c>` and `cluster:<c>@pending`.
-fn cluster_and_pending<'a>(
-    a: &'a Snapshot,
-    b: &'a Snapshot,
-) -> Result<Option<(&'a ClusterSource, &'a Snapshot)>> {
-    let (Some(ca), Some(cb)) = (&a.source.cluster, &b.source.cluster) else {
-        return Ok(None);
-    };
-    match (ca.pending, cb.pending) {
-        (false, true) if ca.uid == cb.uid && ca.kind.is_cluster() => Ok(Some((cb, b))),
-        (true, false) if ca.uid == cb.uid && cb.kind.is_cluster() => Ok(Some((ca, a))),
-        _ => Err(Error::Usage {
-            message: "--repave needs one side that is a cluster and one that is a profile \
-                      version, or a cluster and the update that waits for it: \
-                      cluster:<c> cluster:<c>@pending"
-                .to_string(),
-        }),
-    }
 }
 
 /// The body of `validate/repave` for a move of the cluster of `doc` to the update that waits for
@@ -164,8 +357,8 @@ fn cluster_and_pending<'a>(
 ///
 /// # Errors
 ///
-/// [`Error::Usage`] when the record holds a profile that the cluster does not run now: the record
-/// is older than the cluster.
+/// [`Error::StaleRecord`] when the record holds a profile that the cluster does not run now: the
+/// record is older than the cluster.
 fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Result<Value> {
     let running = AppliedProfile::of_cluster(doc);
     if let Some(old) = source
@@ -173,18 +366,9 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
         .iter()
         .find(|p| !running.iter().any(|r| r.uid == p.uid))
     {
-        return Err(Error::Usage {
-            message: format!(
-                "the record of the update that waits holds {}, and the cluster {} does not run \
-                 it now. Record {} again",
-                name_version(&old.name, &old.version),
-                source.name,
-                Ref::Cluster {
-                    uid: source.name.clone(),
-                    profile: None,
-                    pending: true,
-                }
-            ),
+        return Err(Error::StaleRecord {
+            cluster: source.name.clone(),
+            profile: name_version(&old.name, &old.version),
         });
     }
     let templates = arr(doc, "/spec/clusterProfileTemplates");
@@ -246,19 +430,30 @@ fn pending_packs(current: &[Value], pending: &[Pack], new: &[&Pack]) -> Option<V
 ///
 /// # Errors
 ///
-/// [`Error::Usage`] for any other pair. Also for a record of the update that waits that holds a
-/// profile that the cluster does not run now. Also for a cluster in a template, when the body
-/// gives pack values to a profile that the cluster runs. This is a target version that the
-/// cluster runs, or an update that changes a profile. The route of the template takes no pack
-/// values, so it compares nothing for that profile. An error of a request.
+/// - [`Error::Usage`] for any other pair, before any request. This includes a cluster and the
+///   update that waits for another cluster: the uids of the two records show it.
+/// - [`Error::StaleRecord`] for a record of the update that waits that holds a profile that the
+///   cluster does not run now.
+/// - [`Error::ClusterTemplateGoverns`] for a cluster in a template, when the body gives pack
+///   values to a profile that the cluster runs. This is a target version that the cluster runs,
+///   or an update that changes a profile. The route of the template takes no pack values, so it
+///   compares nothing for that profile.
+/// - The error of a request.
 pub fn palette_repave<A: PaletteApi>(
     palette: &Palette<A>,
     a: &Snapshot,
     b: &Snapshot,
     level: ImpactLevel,
 ) -> Result<PaletteRepave> {
-    let (cluster, doc, body, asked) = match cluster_and_pending(a, b)? {
-        Some((source, pending)) => {
+    let question = Question::Repave;
+    let (cluster, doc, body, asked) = match plan(
+        &Role::of_record(a),
+        &Role::of_record(b),
+        question,
+    )? {
+        Plan::Pending(side) => {
+            let (pending, _) = pick(side, a, b);
+            let source = cluster_of(pending, question)?;
             let doc = palette.subject_document(SubjectKind::Cluster, &source.uid)?;
             let body = pending_body(&doc, pending, source)?;
             let asked = format!(
@@ -268,8 +463,8 @@ pub fn palette_repave<A: PaletteApi>(
             );
             (source, doc, body, asked)
         }
-        None => {
-            let (cluster, target) = cluster_and_target(a, b, "--repave")?;
+        Plan::Move(side) => {
+            let (cluster, target) = moved(side, a, b, question)?;
             let doc = palette.subject_document(SubjectKind::Cluster, &cluster.uid)?;
             let body = validate_body(&AppliedProfile::of_cluster(&doc), target);
             let asked = format!(
@@ -288,13 +483,10 @@ pub fn palette_repave<A: PaletteApi>(
         .iter()
         .any(|p| p.get("packValues").is_some());
     if has_pack_values {
-        return Err(Error::Usage {
-            message: format!(
-                "--repave cannot ask about {asked}, and the cluster template {} governs the \
-                 cluster. Palette answers for the template by profile uid, with no pack values, \
-                 so it compares nothing for a version that the cluster runs",
-                template.uid
-            ),
+        return Err(Error::ClusterTemplateGoverns {
+            cluster: cluster.uid.clone(),
+            template: template.uid,
+            asked,
         });
     }
     let answer = palette.validate_template_repave(&template.uid, &template_body(&body))?;
@@ -321,5 +513,140 @@ mod tests {
                 {"uid": "p3"},
             ]})
         );
+    }
+
+    fn refs(a: &str, b: &str) -> (Ref, Ref) {
+        let no_files = |_: &std::path::Path| false;
+        (Ref::parse_with(a, no_files), Ref::parse_with(b, no_files))
+    }
+
+    fn checked(a: &str, b: &str, questions: PaletteQuestions) -> Result<()> {
+        let (a, b) = refs(a, b);
+        questions.check(&a, &b)
+    }
+
+    const REPAVE: PaletteQuestions = PaletteQuestions {
+        repave: true,
+        validate: false,
+    };
+    const VALIDATE: PaletteQuestions = PaletteQuestions {
+        repave: false,
+        validate: true,
+    };
+
+    #[test]
+    fn a_pair_of_refs_that_a_question_takes_passes_in_either_order() {
+        for (a, b) in [
+            ("cluster:payments", "aws-stack@1.1.1"),
+            ("aws-stack@1.1.1", "cluster:payments"),
+            ("cluster:payments/addons", "64e0000000000000000000c3"),
+            ("cluster:payments", "aws-stack@1.1.1@draft"),
+            ("cluster:payments@pending", "aws-stack@1.1.1"),
+        ] {
+            for questions in [REPAVE, VALIDATE] {
+                assert!(checked(a, b, questions).is_ok(), "{a} {b} {questions:?}");
+            }
+        }
+        // only --repave takes a cluster and the update that waits for it, in either order. A
+        // name and a uid can name one cluster, so only the reads show that two refs name two
+        for (a, b) in [
+            ("cluster:payments", "cluster:payments@pending"),
+            ("cluster:payments@pending", "cluster:payments"),
+            (
+                "cluster:payments",
+                "cluster:64f1000000000000000000e1@pending",
+            ),
+        ] {
+            assert!(checked(a, b, REPAVE).is_ok(), "{a} {b}");
+            let err = checked(a, b, VALIDATE).unwrap_err();
+            assert_eq!(
+                err.to_string(),
+                "--validate needs one side that is a cluster and one that is a profile version"
+            );
+        }
+    }
+
+    #[test]
+    fn a_pair_of_refs_that_a_question_refuses_gives_usage_with_no_read() {
+        let pair = "--repave needs one side that is a cluster and one that is a profile version";
+        let pending = "--repave needs one side that is a cluster and one that is a profile \
+                       version, or a cluster and the update that waits for it: \
+                       cluster:<c> cluster:<c>@pending";
+        let profile_side = "needs the profile side to be a profile version that Palette holds, \
+                            with its uid";
+        let cases = [
+            ("aws-stack@1.1.1", "aws-stack@1.1.6", REPAVE, pair),
+            ("cluster:payments", "cluster:search", REPAVE, pending),
+            ("cluster:a@pending", "cluster:b@pending", REPAVE, pending),
+            (
+                "edgehost:e1",
+                "aws-stack@1.1.1",
+                REPAVE,
+                "--repave needs a cluster: Palette answers it for a cluster, and not for an edge \
+                 host",
+            ),
+            (
+                "aws-stack@1.1.1",
+                "clustergroup:g1",
+                VALIDATE,
+                "--validate needs a cluster: Palette answers it for a cluster, and not for a \
+                 cluster group",
+            ),
+            ("cluster:payments", "clustergroup:g1", REPAVE, pending),
+            (
+                "cluster:payments",
+                "pack:kubernetes@1.30.0",
+                REPAVE,
+                "--repave needs the profile side to be a profile version that Palette holds, \
+                 with its uid",
+            ),
+            (
+                "appprofile:shop@1.0.0",
+                "cluster:payments",
+                VALIDATE,
+                profile_side,
+            ),
+            (
+                "aws-stack@1.1.1",
+                "aws-stack@1.1.6",
+                VALIDATE,
+                "--validate needs one side that is a cluster and one that is a profile version",
+            ),
+        ];
+        for (a, b, questions, message) in cases {
+            let err = checked(a, b, questions).unwrap_err();
+            assert!(matches!(err, Error::Usage { .. }), "{a} {b}: {err}");
+            assert!(err.to_string().contains(message), "{a} {b}: {err}");
+        }
+    }
+
+    #[test]
+    fn a_set_of_clusters_is_refused_with_the_message_that_snapshot_gives() {
+        let err = checked("tag:env=dev", "cluster:payments", REPAVE).unwrap_err();
+        assert!(
+            err.to_string()
+                .starts_with("tag:env=dev names a set of clusters, and this command reads one"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn the_check_asks_nothing_when_no_question_is_on() {
+        // not even the read of a record file
+        let questions = PaletteQuestions::default();
+        let file = Ref::Snapshot("no/such/record.json".into());
+        assert!(questions.check(&file, &file).is_ok());
+        let err = REPAVE.check(&file, &file).unwrap_err();
+        assert_eq!(err.kind(), "io", "{err}");
+    }
+
+    #[test]
+    fn both_questions_are_checked_and_the_stricter_one_refuses() {
+        let both = PaletteQuestions {
+            repave: true,
+            validate: true,
+        };
+        let err = checked("cluster:payments", "cluster:payments@pending", both).unwrap_err();
+        assert!(err.to_string().starts_with("--validate needs"), "{err}");
     }
 }

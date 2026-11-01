@@ -9690,6 +9690,99 @@ fn compare_asks_palette_and_names_a_disagreement_with_the_impact_table() {
 }
 
 #[test]
+fn the_check_of_the_questions_reads_each_record_file_and_refuses_the_pair_it_shows_with_no_request()
+{
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let cluster_api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let cluster = snapshot_cluster(&cluster_api, None).unwrap();
+    let a = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    let b = ops::snapshot_from_dir(&dir.path().join("b"), "b", "t0").unwrap();
+    let file = |name: &str, snap: &strata::snapshot::Snapshot| {
+        let path = dir.path().join(format!("{name}.json"));
+        common::write_snapshot(&path, snap, false);
+        Ref::Snapshot(path)
+    };
+    let repave = ops::PaletteQuestions {
+        repave: true,
+        validate: false,
+    };
+    let validate = ops::PaletteQuestions {
+        repave: false,
+        validate: true,
+    };
+    let refused = |questions: ops::PaletteQuestions, x: &Ref, y: &Ref| {
+        let err = questions.check(x, y).unwrap_err();
+        assert!(matches!(err, Error::Usage { .. }), "{err}");
+        err.to_string()
+    };
+
+    let (cluster_file, a_file, b_file) = (file("cluster", &cluster), file("a", &a), file("b", &b));
+    // a cluster record and a profile record: either order, and a ref that is not a file
+    for questions in [repave, validate] {
+        assert!(questions.check(&cluster_file, &a_file).is_ok());
+        assert!(questions.check(&b_file, &cluster_file).is_ok());
+        assert!(
+            questions
+                .check(&cluster_file, &Ref::parse("aws-stack@1.1.1"))
+                .is_ok()
+        );
+    }
+    // two profile records: the records show no cluster, and the other side is a ref
+    assert!(
+        refused(repave, &a_file, &b_file).starts_with("--repave needs one side that is a cluster")
+    );
+    assert!(
+        refused(validate, &a_file, &Ref::parse("aws-stack@1.1.6"))
+            .starts_with("--validate needs one side that is a cluster")
+    );
+    // a record of an edge host is no cluster, and a record with no uid is no profile that
+    // Palette holds
+    let mut host = cluster.clone();
+    host.source.cluster.as_mut().unwrap().kind = strata::snapshot::SubjectKind::EdgeHost.into();
+    let host_file = file("host", &host);
+    assert!(
+        refused(repave, &host_file, &a_file).contains("not for an edge host"),
+        "an edge host is not a cluster"
+    );
+    let mut candidate = b.clone();
+    candidate.source.uid.clear();
+    let candidate_file = file("candidate", &candidate);
+    assert!(
+        refused(validate, &cluster_file, &candidate_file)
+            .contains("a profile version that Palette holds")
+    );
+    // a record of the update that waits: the same cluster, or two uids that show two clusters
+    let mut waiting = cluster.clone();
+    waiting.source.cluster.as_mut().unwrap().pending = true;
+    let waiting_file = file("waiting", &waiting);
+    assert!(repave.check(&cluster_file, &waiting_file).is_ok());
+    assert!(repave.check(&waiting_file, &cluster_file).is_ok());
+    assert!(
+        refused(validate, &cluster_file, &waiting_file).starts_with("--validate needs one side")
+    );
+    waiting.source.cluster.as_mut().unwrap().uid = "another-cluster".into();
+    let other_file = file("other", &waiting);
+    assert!(
+        refused(repave, &cluster_file, &other_file).contains("cluster:<c> cluster:<c>@pending")
+    );
+    // a live ref names a cluster by a name or by a uid, so it can name the same cluster
+    assert!(
+        repave
+            .check(&cluster_file, &Ref::parse("cluster:lab-cluster@pending"))
+            .is_ok()
+    );
+    // a record file that is missing is the error of the read
+    let missing = Ref::Snapshot(dir.path().join("nothing.json"));
+    assert_eq!(repave.check(&missing, &a_file).unwrap_err().kind(), "io");
+    assert_eq!(
+        cluster_api.calls(&cluster_route(CLUSTER_UID)),
+        1,
+        "only the record of the cluster read the document; the check sent nothing"
+    );
+}
+
+#[test]
 fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
@@ -9768,7 +9861,12 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     let running_version = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
     let err = ops::palette_repave(&palette, &cluster, &running_version, d.summary.max_impact)
         .unwrap_err();
-    assert!(matches!(err, Error::Usage { .. }), "{err}");
+    assert!(
+        matches!(&err, Error::ClusterTemplateGoverns { cluster, template, .. }
+            if cluster == CLUSTER_UID && template == "tmpl-1"),
+        "{err}"
+    );
+    assert_eq!(err.kind(), "cluster-template-governs");
     assert!(err.to_string().contains("cluster template tmpl-1"), "{err}");
     assert_eq!(api.posted().len(), 1);
 }
@@ -9924,26 +10022,39 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
             .all(|(_, packs)| packs.is_none())
     );
 
-    // a record of a profile that the cluster no longer runs is older than the cluster
+    // a record of a profile that the cluster no longer runs is older than the cluster. The
+    // document of the cluster shows it, so the command is correct and the record has its own kind
     let moved = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
     let err = ask(&moved, &cluster, &pending).unwrap_err();
     assert!(
-        matches!(&err, Error::Usage { message } if message.contains("Record cluster:lab-cluster@pending again")),
+        matches!(&err, Error::StaleRecord { cluster, .. } if cluster == "lab-cluster"),
         "{err}"
     );
+    assert_eq!(err.kind(), "stale-record");
+    assert!(
+        err.to_string()
+            .ends_with("Record cluster:lab-cluster@pending again"),
+        "{err}"
+    );
+    assert!(moved.posted().is_empty(), "no POST goes out for the record");
 
     // a cluster in a template: the route of the template takes no pack values. So an update that
-    // changes a profile is a usage error before the POST, and an update that changes nothing asks
-    // the route of the template by profile uid
+    // changes a profile is refused before the POST, and an update that changes nothing asks the
+    // route of the template by profile uid
     let mut doc = read_json(&dir.path().join("cluster-merged").join("cluster.json"));
     doc["spec"]["clusterTemplate"] = serde_json::json!({"uid": "tmpl-1", "projectUid": "p1"});
     let governed = running.clone().with(cluster_route(CLUSTER_UID), doc);
     let err = ask(&governed, &cluster, &pending).unwrap_err();
     assert!(
-        matches!(&err, Error::Usage { message }
-            if message.contains("the update that waits for the cluster lab-cluster")
-                && message.contains("cluster template tmpl-1")),
+        matches!(&err, Error::ClusterTemplateGoverns { template, asked, .. }
+            if template == "tmpl-1"
+                && asked.contains("the update that waits for the cluster lab-cluster")),
         "{err}"
+    );
+    assert_eq!(err.kind(), "cluster-template-governs");
+    assert!(
+        governed.posted().is_empty(),
+        "no POST goes out for the template"
     );
     let api = serve_pending(governed, dir.path(), "cluster-merged", |_| {}).with(
         "POST /v1/spectroclusters/clusterTemplates/tmpl-1/validate/repave",
@@ -11048,6 +11159,34 @@ fn shape_on(kind: &str, cloud_config: Value) -> Value {
         .unwrap()
         .fields
         .clone()
+}
+
+#[test]
+fn shape_of_a_cluster_that_names_no_cloud_config_gives_its_own_kind_and_not_usage() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // the document of the fixture names no cloud config
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let shape = ops::SnapshotOptions {
+        shape: true,
+        ..ops::SnapshotOptions::default()
+    };
+    let err = ops::snapshot_for(
+        &cluster_ref(CLUSTER_UID, None, false),
+        &shape,
+        || Ok(Palette::new(&api)),
+        "t0",
+        &Progress::silent(),
+    )
+    .unwrap_err();
+    assert!(
+        matches!(&err, Error::NoCloudConfig { cluster } if cluster == CLUSTER_UID),
+        "{err}"
+    );
+    assert_eq!(err.kind(), "no-cloud-config");
+    assert_eq!(err.to_json()["cluster"], CLUSTER_UID);
+    // the document is the only request: the cloud config route is not asked
+    assert_eq!(api.calls(&cluster_route(CLUSTER_UID)), 1);
 }
 
 #[test]
@@ -16250,6 +16389,80 @@ fn a_cluster_record_of_a_later_kind_compares_by_its_text_and_verify_refuses_it_w
         "{err}"
     );
     assert_eq!(api.calls(&cluster_route(CLUSTER_UID)), before);
+}
+
+#[test]
+fn verify_refuses_a_record_that_it_cannot_check_before_it_needs_a_key() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_, snap) = cluster_record_with_tiers(dir.path());
+    let mut later = serde_json::to_value(&snap).unwrap();
+    later["source"]["cluster"]["kind"] = Value::from("virtualMachine");
+    let mut no_uid = serde_json::to_value(&snap).unwrap();
+    no_uid["source"]["cluster"]["uid"] = Value::from("");
+    let (later_path, no_uid_path) = (dir.path().join("later.json"), dir.path().join("none.json"));
+    write_record(&later_path, &later);
+    write_record(&no_uid_path, &no_uid);
+    let valid_path = dir.path().join("valid.json");
+    write_record(&valid_path, &serde_json::to_value(&snap).unwrap());
+
+    // the run has no key, so a request would give missing-credential
+    let home = tempfile::tempdir().unwrap();
+    let run = |args: &[&Path]| {
+        let mut c = std::process::Command::new(strata_bin());
+        c.args(["verify", "--json"])
+            .args(args)
+            .env("STRATA_QUIET", "1")
+            .env("HOME", home.path())
+            .env_remove("PALETTE_API_KEY")
+            .env_remove("SPECTROCLOUD_APIKEY");
+        common::Run::of(&mut c)
+    };
+    let kind_of = |text: &str| -> Value { serde_json::from_str(text).unwrap() };
+    for (path, kind) in [(&later_path, "usage"), (&no_uid_path, "no-uid")] {
+        // one record: the error of the command
+        let one = run(&[path]);
+        assert_eq!(one.code, 2, "{}", one.err);
+        assert_eq!(
+            kind_of(one.err.trim())["error"]["kind"],
+            kind,
+            "{}",
+            one.err
+        );
+        // several records: the error of the row, and the other record still shows its own
+        let many = run(&[path, &valid_path]);
+        assert_eq!(many.code, 2, "{}", many.err);
+        let rows = kind_of(&many.out);
+        assert_eq!(rows["records"][0]["error"]["kind"], kind, "{}", many.out);
+        assert_eq!(
+            rows["records"][1]["error"]["kind"], "missing-credential",
+            "the record that strata can check needs the key: {}",
+            many.out
+        );
+    }
+}
+
+#[test]
+fn the_check_of_a_record_wants_a_uid_of_a_profile_record_and_none_of_a_pack_record() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let mut pack = ops::snapshot_from_dir(&dir.path().join("a"), "a", "t0").unwrap();
+    pack.source.uid.clear();
+    assert_eq!(
+        ops::check_verifiable(&pack).unwrap_err().kind(),
+        "no-uid",
+        "a profile record with no uid"
+    );
+    pack.source.pack = Some(strata::snapshot::PackSource {
+        registry_uid: "r1".into(),
+        registry_name: "Public Repo".into(),
+        pack_uid: String::new(),
+        name: "kubernetes".into(),
+        version: "1.30.0".into(),
+    });
+    assert!(
+        ops::check_verifiable(&pack).is_ok(),
+        "a pack record names a registry pack, and verify reads the registry"
+    );
 }
 
 #[test]

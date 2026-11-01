@@ -127,6 +127,20 @@ impl Error {
                 m.insert("profile".into(), Value::from(profile.as_str()));
                 m.insert("applied".into(), Value::from(applied.clone()));
             }
+            Error::StaleRecord { cluster, profile } => {
+                m.insert("cluster".into(), Value::from(cluster.as_str()));
+                m.insert("profile".into(), Value::from(profile.as_str()));
+            }
+            // `asked` is a part of the message, and no field adds to that
+            Error::ClusterTemplateGoverns {
+                cluster, template, ..
+            } => {
+                m.insert("cluster".into(), Value::from(cluster.as_str()));
+                m.insert("template".into(), Value::from(template.as_str()));
+            }
+            Error::NoCloudConfig { cluster } => {
+                m.insert("cluster".into(), Value::from(cluster.as_str()));
+            }
             Error::CandidateInvalid { path: p, rule, .. } => {
                 path(&mut m, p);
                 if let Some(rule) = rule {

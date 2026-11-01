@@ -18,6 +18,14 @@ Two sections list the changes that need action:
 [Release 0.24.0](#release-0240-changes-that-need-action). They cover the command
 line, the documents, the CI drop-ins, and the two libraries.
 
+After 0.25.0, `error::Error` has three new variants: `StaleRecord`,
+`ClusterTemplateGoverns`, and `NoCloudConfig`. A `match` on `Error` with no
+wildcard arm must name them. `ops::palette_repave` and `api::Palette::cloud_config`
+gave `Error::Usage` for these cases, and a caller that matched `Usage` must
+match the new variants. `ops::PaletteQuestions` and `ops::check_verifiable` are
+new. `ops::verify_with` makes the same check as `check_verifiable`, so its
+errors do not change.
+
 ## The documents
 
 Each JSON document has a schema id, such as `strata-snapshot/1`. The id changes
@@ -235,7 +243,7 @@ The commands do this with such a value:
   variables, so two records of a new `kind` do not.
 - `verify` refuses a record whose `source.cluster.kind` it does not know, with
   `usage` and exit `2`. Strata cannot read such an object from Palette, so it
-  sends no request.
+  sends no request, and the run needs no key.
 - `verify` does not compare a tier that it does not know, because Palette gives
   strata no such tier. A note in the report names the tier.
 - A record with a new `template` is not a draft. A pack with a new
@@ -302,6 +310,33 @@ report as a comment, in a second job. Only that workflow asks for
 
 After 0.24.0, the input `allow` of `promote-gate.yml` is a list, separated by
 spaces or new lines. A caller that gives one value runs as before.
+
+After 0.25.0, three refusals have a kind of their own. Before, each gave
+`usage`. The exit code `2` and the message stay. A script that reads
+`error.kind` must read the new kinds. The fields are in
+[Errors](./errors.md#the-refusals-that-a-record-or-a-cluster-causes):
+
+- `stale-record`: `compare --repave` of a record `cluster:<c>@pending` that
+  holds a profile that the cluster does not run now.
+- `cluster-template-governs`: `compare --repave` of a cluster in a cluster
+  template, when the change gives pack values to a profile that the cluster
+  runs.
+- `no-cloud-config`: `snapshot --shape` of a cluster whose document names no
+  cloud config.
+
+After 0.25.0, `compare --repave` and `compare --validate` refuse a pair that
+the refs show to be wrong before any request. Strata reads a record file first,
+and that read is no request. Before, strata refused after the reads of both
+sides, so a run with no key gave `missing-credential`. The kind is `usage` and
+the message stays. One case stays after the reads: `cluster:<a>` and
+`cluster:<b>@pending` that name two clusters.
+
+After 0.25.0, `verify` gives the error of a record that it cannot check before
+it needs a key. A record of an object that a later release wrote gives `usage`.
+A record with no uid, such as the record of a candidate, gives `no-uid`. Before,
+a run with no key gave `missing-credential` for such a record. With several
+records, the row of that record holds the error, and the other rows stay as
+before.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later

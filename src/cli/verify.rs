@@ -31,6 +31,7 @@ pub(crate) fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
         return Ok(ExitCode::from(s.exit_code()));
     }
     let recorded = Snapshot::load(&paths[0])?;
+    ops::check_verifiable(&recorded)?;
     let scope = project
         .as_deref()
         .or(ops::scope_of(&recorded.source.project_uid));

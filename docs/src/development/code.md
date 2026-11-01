@@ -84,7 +84,16 @@ where each module goes.
 - Do not discard an error. `unwrap_or_default()`, `.ok()`, and `let _ =` are
   correct only when the empty value is the correct answer. A comment says why.
   An error must never become an empty value that strata records or hashes.
-- A wrong use of the flags is `Error::Usage`, before any request.
+- A wrong use of the flags or the refs is `Error::Usage`. When the refs and the
+  flags show it, `ops/` refuses it before the first request. A record file is
+  read first, because a read of a file is no request.
+- A fault that only an answer shows is `Usage` too, when the person must change
+  the command. Two refs that name two clusters are such a fault.
+- A refusal that a record or an answer of Palette causes, and not the command,
+  has an error kind of its own, such as `StaleRecord`. Do not give it `Usage`.
+  Add the kind to `errors.md` and to `compatibility.md`.
+- Check what a ref or a record shows before `connect`. A record that strata
+  cannot use then gives its own error, and not `missing-credential`.
 
 ## Ownership
 

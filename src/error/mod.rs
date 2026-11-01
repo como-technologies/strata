@@ -279,11 +279,51 @@ pub enum Error {
         /// The profile uid.
         uid: String,
     },
-    /// The command was called in a way that cannot work, and no request was made.
+    /// The command was called in a way that cannot work. Strata makes no request when the refs and
+    /// the flags show it. One fault shows only after the reads: `cluster:<a>` and
+    /// `cluster:<b>@pending` name two clusters. A name and a uid can name one cluster.
     #[error("{message}")]
     Usage {
         /// What the caller must do instead.
         message: String,
+    },
+    /// The record of the update that waits for a cluster holds a profile that the cluster does not
+    /// run now: the record is older than the cluster. Only the document of the cluster shows it,
+    /// so the refusal comes after the first request. The command is correct. The record must
+    /// change.
+    #[error(
+        "the record of the update that waits holds {profile}, and the cluster {cluster} does not run it now. Record {} again",
+        pending_ref(cluster)
+    )]
+    StaleRecord {
+        /// The name of the cluster.
+        cluster: String,
+        /// The first profile of the record that the cluster does not run, as `name@version`.
+        profile: String,
+    },
+    /// A cluster template governs the cluster, and `compare --repave` asks about a change that
+    /// gives pack values to a profile that the cluster runs. The route of the template takes no
+    /// pack values, so Palette compares nothing for that profile. Only the document of the
+    /// cluster names the template, so the refusal comes after the first request.
+    #[error(
+        "--repave cannot ask about {asked}, and the cluster template {template} governs the cluster. Palette answers for the template by profile uid, with no pack values, so it compares nothing for a version that the cluster runs"
+    )]
+    ClusterTemplateGoverns {
+        /// The uid of the cluster.
+        cluster: String,
+        /// The uid of the cluster template.
+        template: String,
+        /// The change that the request asks about, in the words of the message.
+        asked: String,
+    },
+    /// `snapshot --shape` reads the cloud config of a cluster, and the document of the cluster
+    /// names none.
+    #[error(
+        "the cluster {cluster} names no cloud config, so --shape has no machine pools or cloud part to read"
+    )]
+    NoCloudConfig {
+        /// The uid of the cluster, or its name when the document gives no uid.
+        cluster: String,
     },
     /// `snapshot` was given a record file. Every other command reads one; `snapshot` writes one.
     #[error(
@@ -552,6 +592,16 @@ fn profile_not_found_hint(name: &str, tenant_scope: bool) -> String {
     }
 }
 
+/// `cluster:<cluster>@pending`: the ref of the update that waits for `cluster`.
+fn pending_ref(cluster: &str) -> String {
+    crate::reference::Ref::Cluster {
+        uid: cluster.to_string(),
+        profile: None,
+        pending: true,
+    }
+    .to_string()
+}
+
 /// ` at version '1.2.3'`, or nothing when the ref and the flags give no version.
 fn at_version(version: &str) -> String {
     if version.is_empty() {
@@ -626,6 +676,9 @@ impl Error {
             Error::RecordNotASource { .. } => "record-not-a-source",
             Error::PaletteRefuses { .. } => "palette-refuses",
             Error::Usage { .. } => "usage",
+            Error::StaleRecord { .. } => "stale-record",
+            Error::ClusterTemplateGoverns { .. } => "cluster-template-governs",
+            Error::NoCloudConfig { .. } => "no-cloud-config",
             Error::CandidateInvalid { .. } => "candidate-invalid",
             Error::PackNotFound { .. } => "pack-not-found",
             Error::PackNameNotFound { .. } => "pack-name-not-found",

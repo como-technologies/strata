@@ -84,8 +84,13 @@ profile, strata sends only the uid. See
 [what Palette builds from the request](../../internals/palette/validate-routes.md#post-v1spectroclustersuidvalidaterepave).
 
 When the record of the update holds a profile that the cluster does not run
-now, the record is older than the cluster. Strata stops with `usage` before the
-`POST`. Record the update again.
+now, the record is older than the cluster. The command is correct, so the error
+is `stale-record` and not `usage`. Strata stops before the `POST`. Record the
+update again:
+
+```text
+{{#include ../../output/edited-stale-record.txt}}
+```
 
 ## A cluster in a cluster template
 
@@ -110,10 +115,11 @@ The request names the profiles by uid, with no pack values, and sends
 
 The route of the template takes no pack values. For a version that the cluster
 runs now, Palette compares the copy of the cluster with itself, and the answer
-says nothing. So strata stops with a usage error, before the `POST`:
+says nothing. So strata stops before the `POST` with the error
+`cluster-template-governs`:
 
 ```text
-{{#include ../../output/repave-template-usage.txt}}
+{{#include ../../output/repave-template-governs.txt}}
 ```
 
 The same applies to an update that waits and changes a profile: the update
@@ -128,9 +134,15 @@ gives the rule of Palette.
 Two profile versions are a usage error, because Palette answers for one
 cluster. So are two clusters, other than a cluster and the update that waits
 for it. So are an edge host and a cluster group: Palette answers for a
-cluster, and not for them:
+cluster, and not for them. Strata reads the refs alone and refuses the pair
+before any request, so the run needs no key. A record file shows its side when
+strata reads the file, and that read is no request:
 
 ```text
 {{#include ../../output/repave-usage.txt}}
 {{#include ../../output/edited-repave-usage.txt}}
 ```
+
+A cluster and an update that waits, `cluster:<a>` and `cluster:<b>@pending`,
+can name two clusters. A name and a uid can name one cluster, so only the reads
+show it. Strata then gives the same `usage` error after the reads.

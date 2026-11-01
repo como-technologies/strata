@@ -14,7 +14,7 @@ use super::{
 };
 use crate::api::{PaletteApi, RawCluster, ReadErrors};
 use crate::error::{Error, Result, found};
-use crate::json::{arr, str_at, take_items, text};
+use crate::json::{arr, first_nonempty, str_at, take_items, text};
 use crate::reference::one_named;
 use crate::snapshot::SubjectKind;
 use crate::term::progress::Progress;
@@ -351,14 +351,17 @@ impl<A: PaletteApi> Palette<A> {
     ///
     /// # Errors
     ///
-    /// [`Error::Usage`] when the cluster document names no cloud config. The error of the first
-    /// request that fails.
+    /// [`Error::NoCloudConfig`] when the cluster document names no cloud config. The error of the
+    /// first request that fails.
     pub fn cloud_config(&self, cluster: &Value) -> Result<Value> {
         let kind = RawCluster::cloud_type(cluster);
         let uid = str_at(cluster, "/spec/cloudConfigRef/uid");
         if kind.is_empty() || uid.is_empty() {
-            return Err(Error::Usage {
-                message: "the cluster document names no cloud config".to_string(),
+            return Err(Error::NoCloudConfig {
+                cluster: first_nonempty(&[
+                    str_at(cluster, "/metadata/uid"),
+                    str_at(cluster, "/metadata/name"),
+                ]),
             });
         }
         self.api.get_json(&route(CLOUD_CONFIGS, &[kind, uid]))

@@ -482,6 +482,90 @@ fn bad_inputs_exit_two() {
 }
 
 #[test]
+fn compare_refuses_a_pair_that_a_question_to_palette_cannot_take_before_it_needs_a_key() {
+    let fx = fixtures();
+    let home = tempfile::tempdir().unwrap();
+    let no_key = [("HOME", home.path().to_str().unwrap())];
+    let clear = ["PALETTE_API_KEY", "SPECTROCLOUD_APIKEY"];
+    let ask = |args: &[&str]| {
+        let mut all = vec!["compare", "--json"];
+        all.extend_from_slice(args);
+        let r = run_in(&all, &no_key, &clear);
+        let e: serde_json::Value = serde_json::from_str(r.err.trim()).unwrap();
+        (r.code, e["error"].clone())
+    };
+    // the refs show the fault, so the run needs no key and sends no request
+    for (args, said) in [
+        (
+            &["aws-stack@1.1.1", "aws-stack@1.1.6", "--repave"][..],
+            "--repave needs one side that is a cluster and one that is a profile version",
+        ),
+        (
+            &["cluster:payments", "cluster:search", "--repave"][..],
+            "--repave needs one side that is a cluster and one that is a profile version, or a \
+             cluster and the update that waits for it",
+        ),
+        (
+            &["aws-stack@1.1.1", "aws-stack@1.1.7", "--validate"][..],
+            "--validate needs one side that is a cluster and one that is a profile version",
+        ),
+        (
+            &["edgehost:e1", "aws-stack@1.1.1", "--repave"][..],
+            "--repave needs a cluster: Palette answers it for a cluster, and not for an edge host",
+        ),
+        (
+            &["cluster:payments", "pack:kubernetes@1.30.0", "--validate"][..],
+            "--validate needs the profile side to be a profile version that Palette holds",
+        ),
+        (
+            &["tag:env=dev", "cluster:payments", "--repave"][..],
+            "tag:env=dev names a set of clusters",
+        ),
+        // a record file shows its side after the read of the file, which sends no request
+        (
+            &[fx.a.as_str(), fx.b.as_str(), "--repave"][..],
+            "--repave needs one side that is a cluster and one that is a profile version",
+        ),
+        (
+            &[fx.a.as_str(), "aws-stack@1.1.1", "--validate"][..],
+            "--validate needs one side that is a cluster and one that is a profile version",
+        ),
+    ] {
+        let (code, error) = ask(args);
+        assert_eq!(
+            (code, error["kind"].as_str()),
+            (2, Some("usage")),
+            "{args:?}: {error}"
+        );
+        assert!(
+            error["message"].as_str().unwrap().contains(said),
+            "{args:?}: {error}"
+        );
+    }
+    // a pair that the questions take needs the key: only then strata connects
+    for args in [
+        &["cluster:payments", "aws-stack@1.1.1", "--repave"][..],
+        &["cluster:payments", "cluster:payments@pending", "--repave"][..],
+        &[
+            "aws-stack@1.1.1",
+            "cluster:payments",
+            "--validate",
+            "--repave",
+        ][..],
+    ] {
+        let (code, error) = ask(args);
+        assert_eq!(
+            (code, error["kind"].as_str()),
+            (2, Some("missing-credential")),
+            "{args:?}: {error}"
+        );
+    }
+    // with no question, the refs are not checked: two profile versions compare
+    let r = run_in(&["compare", "--json", &fx.a, &fx.b], &no_key, &clear);
+    assert_eq!((r.code, r.err.as_str()), (1, ""), "{}", r.err);
+}
+
+#[test]
 fn verify_over_many_records_prints_one_line_each_and_a_summary_document() {
     let fx = fixtures();
     let home = tempfile::tempdir().unwrap();

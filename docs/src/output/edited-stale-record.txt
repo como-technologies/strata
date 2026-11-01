@@ -1,0 +1,5 @@
+$ strata compare cluster:payments review/payments-pending.json --repave
+strata: looking up project dev
+strata: fetching cluster payments
+strata: cluster 'payments' is 64f1000000000000000000e1
+strata: the record of the update that waits holds aws-stack@1.1.1, and the cluster payments does not run it now. Record cluster:payments@pending again

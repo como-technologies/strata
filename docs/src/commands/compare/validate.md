@@ -66,7 +66,8 @@ of an error names the clusters. `clusterUid` in `--json` names the cluster that
 you asked about. The cost is the same: the cluster document and one `POST`.
 
 Two profile versions, or two clusters, are a usage error, because Palette
-answers for one cluster. So are an edge host and a cluster group:
+answers for one cluster. So are an edge host and a cluster group. Strata refuses
+the pair before any request, as `--repave` does:
 
 ```text
 {{#include ../../output/validate-usage.txt}}

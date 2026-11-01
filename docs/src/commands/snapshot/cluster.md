@@ -137,6 +137,9 @@ machine pool holds its `name`, `isControlPlane`, `useControlPlaneAsWorker`,
 architecture of the nodes, `amd64` or `arm64`. The cloud part holds
 `overrideClusterAPIConfig`.
 
+When the document of the cluster names no cloud config, `--shape` has nothing
+to read. It stops with the error `no-cloud-config`, and writes no record.
+
 Each cloud type adds these fields. A field that a cloud does not give is not
 in the tier.
 

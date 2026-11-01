@@ -317,8 +317,9 @@ helm tier is `UNVERIFIED` unless `--allow-no-digest` accepts it. See
 [An app profile is updated in place](../use-cases/app-profiles.md).
 
 A later release can record an object of a new kind. `verify` cannot read such
-an object from Palette, so it refuses the record with `usage`, and sends no
-request.
+an object from Palette, so it refuses the record with `usage`. It sends no
+request, and it needs no key. A record with no uid, such as the record of a
+candidate, gets `no-uid` in the same way.
 
 ## Run it on a schedule
 

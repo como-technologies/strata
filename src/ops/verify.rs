@@ -168,6 +168,28 @@ fn known_kind(c: &crate::snapshot::ClusterSource) -> Result<SubjectKind> {
     })
 }
 
+/// Make sure from the record alone that strata can verify it. The check makes no request and needs
+/// no connection. A caller checks the record before it connects, so that a record that strata
+/// cannot verify gives its own error, and not [`Error::MissingCredential`].
+/// [`verify_with`] makes the same check.
+///
+/// # Errors
+///
+/// - [`Error::NoUid`] for a record with no uid, such as the record of a candidate.
+/// - [`Error::Usage`] for a record of a cluster of a kind that a later release wrote.
+pub fn check_verifiable(recorded: &Snapshot) -> Result<()> {
+    // a pack record names a registry pack, and Palette has no uid for it
+    if recorded.source.pack.is_none() {
+        if recorded.source.shown_uid().is_empty() {
+            return Err(Error::NoUid);
+        }
+        if let Some(c) = &recorded.source.cluster {
+            known_kind(c)?;
+        }
+    }
+    Ok(())
+}
+
 /// The kind of the object of a record in the audit log of Palette, or `None` for a cluster.
 /// strata reads the log of a cluster by its uid alone. Palette logs the create and the delete of
 /// a virtual cluster under `virtualCluster`, not under `spectrocluster`.
@@ -229,6 +251,7 @@ pub fn verify_with<A: PaletteApi>(
     options: &VerifyOptions,
     progress: &Progress,
 ) -> Result<Verification> {
+    check_verifiable(recorded)?;
     // a pack record names a registry pack, not a profile or a cluster
     if let Some(p) = &recorded.source.pack {
         if options.who {
@@ -277,9 +300,6 @@ pub fn verify_with<A: PaletteApi>(
         });
     }
     let uid = recorded.source.shown_uid();
-    if uid.is_empty() {
-        return Err(Error::NoUid);
-    }
     progress.note(&format!(
         "verifying {} (uid {uid}) against live; recorded {}",
         recorded.source.title(),
@@ -656,6 +676,10 @@ where
                 continue;
             }
         };
+        if let Err(e) = check_verifiable(&recorded) {
+            records.push(VerifiedRecord::failed(path, Some(&recorded), e));
+            continue;
+        }
         let scope = project.or_else(|| scope_of(&recorded.source.project_uid));
         let palette = match connected(&mut clients, scope, &mut connect) {
             Ok(p) => p,

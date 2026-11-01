@@ -1680,6 +1680,22 @@ fn use_cases(r: &mut Runner) {
         "edited-report-who-full",
         r"^(<!-- strata-verify|\*\*DRIFT|who:|- 20)",
     );
+    // a later change moves payments to another profile, so the record of the update that waits is
+    // older than the cluster: the cluster document shows it, and the refusal has its own kind
+    r.profile(DEV, A112, "1.1.2", "aws-stack@1.1.1", RETAIN);
+    r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A112], &[]));
+    r.step(
+        "edited-stale-record",
+        2,
+        true,
+        "strata compare cluster:payments review/payments-pending.json --repave",
+    );
+    r.step(
+        "edited-stale-record-json",
+        2,
+        true,
+        "strata compare cluster:payments review/payments-pending.json --repave --json --quiet",
+    );
     r.tenant(|t| t.cluster(DEV, PAYMENTS, "payments", &[A111], &[]));
     r.step(
         "edited-cluster-updated",
@@ -2586,7 +2602,7 @@ fn use_cases(r: &mut Runner) {
         "strata compare cluster:payments aws-stack@1.1.6 --repave --json | jq .paletteRepave",
     );
     r.step(
-        "repave-template-usage",
+        "repave-template-governs",
         2,
         true,
         "strata compare cluster:payments aws-stack@1.1.1 --repave",
