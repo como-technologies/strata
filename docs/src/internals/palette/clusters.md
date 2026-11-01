@@ -75,6 +75,16 @@ example sets no override on a machine pool. So no pool of its cloud config holds
 `overrideKubeadmConfiguration`. Its `spec.clusterConfig` holds `hybridConfig`,
 `region`, and `sshKeyName`.
 
+The API reference of Palette gives `overrideClusterAPIConfig` and
+`overrideHealthCheckConfiguration` to each machine pool. A pool of the create
+body holds them in `poolConfig`. Each pool of `spec.machinePoolConfig` of the
+cloud config holds them as fields of the pool. The cloud config of an AWS
+cluster also holds `overrideClusterAPIConfig` for the whole cluster, in
+`spec.clusterConfig`. So the `shape` tier keeps the override of the cluster in
+its cloud part, and the override of a pool in the pool. Stage 7 of
+[tiers.sh](../../development/live-runs.md#tierssh) sets both overrides on a pool
+of the live cluster, and shows where the cloud config holds each one.
+
 On a managed engine, the `spec.clusterConfig` of the cloud config also holds
 the control plane that the cloud runs. On EKS it holds `endpointAccess` and
 `addons`. On GKE it holds `managedClusterConfig`, with the `location`, and

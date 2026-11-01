@@ -34,7 +34,7 @@ profiles, in tiers. Each tier has its own hash, and none is part of the root:
 | `applied` | `spcHash` and `spcInfraHash`: the hashes that Palette computes of the spec it applied to the cluster. `spcHash` is its own for each cluster, so between two clusters `compare` reads `spcInfraHash` alone | the cluster document |
 | `running` | each pack that the cluster reconciled, with its version and profile uid | the cluster document, `status.packs` |
 | `policy` | the OS patch policy, the lifecycle, the machine health, the timezone, and the FIPS mode. Also the role bindings, the namespaces, and how the cluster takes an update. See [The policy tier](#the-policy-tier) | the cluster document, and two more requests: the role bindings and the namespaces |
-| `shape` | the cloud type; each machine pool, with its instance type, size, zones, labels, taints, and architecture; and the cloud part that a person chooses. See [The shape on each cloud](#the-shape-on-each-cloud) | the cloud config: one more request, with `--shape` |
+| `shape` | the cloud type; each machine pool, with its instance type, size, zones, labels, taints, architecture, and overrides; and the cloud part that a person chooses. See [The shape on each cloud](#the-shape-on-each-cloud) | the cloud config: one more request, with `--shape` |
 
 A record of a cluster group carries a `policy` tier of its own: the config
 that the group gives each virtual cluster. See
@@ -132,10 +132,20 @@ fields of the cloud type of the cluster, and `cloudType` names that type. Each
 machine pool holds its `name`, `isControlPlane`, `useControlPlaneAsWorker`,
 `instanceType`, `size`, `minSize`, `maxSize`, `azs`, `labels`, `taints`,
 `additionalLabels`, `additionalAnnotations`, `additionalTags`,
-`nodeRepaveInterval`, `updateStrategy`, `skipK8sUpgrade`, and
-`overrideKubeadmConfiguration`. `machinePoolProperties.archType` gives the
-architecture of the nodes, `amd64` or `arm64`. The cloud part holds
-`overrideClusterAPIConfig`.
+`nodeRepaveInterval`, `updateStrategy`, `skipK8sUpgrade`,
+`overrideKubeadmConfiguration`, `overrideClusterAPIConfig`, and
+`overrideHealthCheckConfiguration`. A pool that sets an override holds its key.
+A pool that sets none holds no key for it.
+
+`machinePoolProperties.archType` gives the architecture of the nodes, `amd64`
+or `arm64`. The cloud part holds `overrideClusterAPIConfig`, the override of the
+cluster. Where Palette holds each override is in
+[Cluster tiers](../../internals/palette/clusters.md#cluster-tiers).
+
+A change of an override on a pool shows in `compare` as a change of the shape
+tier. It names the field, such as
+`shape.pools[name=worker-pool].overrideHealthCheckConfiguration`. It changes no
+root.
 
 When the document of the cluster names no cloud config, `--shape` has nothing
 to read. It stops with the error `no-cloud-config`, and writes no record.

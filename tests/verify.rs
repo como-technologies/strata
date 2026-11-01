@@ -10937,6 +10937,64 @@ fn a_cluster_record_without_tiers_still_verifies() {
 }
 
 #[test]
+fn compare_names_the_override_that_a_person_sets_on_a_pool_and_the_root_stays() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    with_cluster_status(dir.path());
+    let api = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
+    let palette = Palette::new(
+        api.clone()
+            .with("/v1/cloudconfigs/aws/cc1", cloud_config(2)),
+    );
+    let mut raw = palette
+        .fetch_subject(SubjectKind::Cluster, CLUSTER_UID, &Progress::silent())
+        .unwrap();
+    raw.cloud_config = Some(palette.cloud_config(&raw.cluster).unwrap());
+    let before = Snapshot::from_cluster(&raw, None, "before", "t0").unwrap();
+
+    // the worker pool gets an override: Palette gives the field flat, in the pool
+    let pool = &mut raw.cloud_config.as_mut().unwrap()["spec"]["machinePoolConfig"][0];
+    assert_eq!(pool["name"], "worker-pool");
+    pool["overrideHealthCheckConfiguration"] = Value::from("machineHealthCheck: {}\n");
+    let after = Snapshot::from_cluster(&raw, None, "after", "t0").unwrap();
+
+    let shape = |s: &Snapshot| {
+        s.source
+            .cluster
+            .as_ref()
+            .unwrap()
+            .tier(Tier::Shape)
+            .unwrap()
+            .clone()
+    };
+    assert_eq!(
+        shape(&after).fields["pools"][1]["overrideHealthCheckConfiguration"],
+        "machineHealthCheck: {}\n"
+    );
+    assert_ne!(shape(&before).hash, shape(&after).hash);
+
+    let d = strata::diff::compute(&before, &after, "t1", None);
+    assert!(d.same, "a tier is outside the root");
+    let tier = d
+        .cluster_tiers
+        .iter()
+        .find(|t| t.tier == Tier::Shape)
+        .unwrap();
+    assert!(!tier.same);
+    assert_eq!(
+        tier.diff[0].path,
+        "pools[name=worker-pool].overrideHealthCheckConfiguration"
+    );
+    let text = common::terminal()
+        .render(&d, &before, &after, false)
+        .unwrap();
+    assert!(
+        text.contains("+ shape.pools[name=worker-pool].overrideHealthCheckConfiguration:"),
+        "{text}"
+    );
+}
+
+#[test]
 fn compare_names_the_tier_and_the_field_that_differ_and_a_pack_behind_its_profile() {
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());

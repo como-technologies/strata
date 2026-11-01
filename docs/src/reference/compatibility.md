@@ -358,6 +358,20 @@ The tier of a cluster group is not part of the root, so no root changes. The
 `valuesHash` of such values covers the text. So a record of a new directory has
 another `valuesHash` than a record of an old directory.
 
+After 0.26.0, each pool of the tier `shape` keeps `overrideClusterAPIConfig` and
+`overrideHealthCheckConfiguration` when the pool sets them. Before, the tier
+kept neither, so a change of one on a pool did not show. `strata schema` lists
+both keys in `pools[]`. A pool that sets neither gives the same tier and the
+same hash as before. The tiers are not part of the root, so no root changes and
+the ids stay.
+
+A cluster with a pool that sets an override has another hash of the tier
+`shape` than its record from 0.18.0 to 0.26.0. `compare` of that record with
+the cluster names the override in the tier `shape`. The exit stays the same,
+because a tier difference does not change it. Record the cluster again to keep
+the override. A record of 0.17.0 or before has no `cloudType`, so `compare`
+reads the older fields alone and shows no change.
+
 Roots are comparable only within one snapshot schema id. Strata refuses a
 snapshot of another id with `unsupported-schema`, which names both ids. A file
 whose id names another document, or no document, is not a snapshot. The report

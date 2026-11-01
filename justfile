@@ -391,6 +391,10 @@ live-tiers: build
 live-tiers-limited: build
     examples/live/tiers.sh 6
 
+# The pool override test: an override on a machine pool of cluster A, the shape tier of a new record, and compare of a record from before (#515). Needs live-up; sets both overrides on the worker pool through the API, and puts the pool back.
+live-tiers-pool: build
+    examples/live/tiers.sh 7
+
 # What clusters A and B still have in the cloud that terraform.tfvars names; 0 on every line after live-down
 live-inventory:
     examples/live/inventory.sh

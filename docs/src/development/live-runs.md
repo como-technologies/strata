@@ -976,6 +976,9 @@ API, and removes it. It needs the example at its baseline with cluster A.
 - Stage 6 only reads. It needs a second key in `STRATA_LIVE_LIMITED_KEY`, the
   key of an active user with no role in the project. It runs only as
   `tiers.sh 6`. With no key set, it says `could not check` and exits `2`.
+- Stage 7 sets both overrides on the worker pool of cluster A through the API,
+  and puts the pool back. Each override is a YAML comment, so no machine
+  changes. It needs no cluster B. It runs only as `tiers.sh 7`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -999,6 +1002,15 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `limited-read`, `limited-status` | 0, 0 | #276: the second key does not read them: Palette answers HTTP 500, and not 403. `api.sh get-status` prints the status and the body, and exits `0`. No result yet for this form of the check: the earlier form used `api.sh get`, which exits `2`. |
 | `limited-code`, `limited-code-says`, `limited-message` | ?, 0, 0 | #276: the body holds the code `ResourceAccessDenied` and the message `Project '<project uid>' access denied`. The checks read the body that `limited-read` printed after its status line. |
 | `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer. This is a record of cluster A that it reads with the second key, and the `errors` of its policy tier. Live, `strata snapshot` of cluster A with the second key writes no record. It exits `2`, and it prints the answer of Palette: HTTP 500, `ResourceAccessDenied`, `Project '<project uid>' access denied`. So no record holds `errors`, and `limited-record-errors` has no file to read (exit `2`). |
+| `pool-route`, `pool-before`, `pool-before-none` | 0 | #515: the route of the cloud config of cluster A, and a record of cluster A before the stage. The worker pool holds neither override, because Palette omits a field with no value. No result yet. |
+| `pool-world`, `pool-entity`, `pool-body` | ?, 0, 0 | #515: `strata preflight` with the static tier writes `entity.json` of cluster A. `pool-world` records its exit and judges none. The worker pool in it is the body of the PUT, with both overrides added to its `poolConfig`. No result yet. |
+| `pool-set`, `pool-read`, `pool-in-cloud-config` | 0 | #515: the PUT of the worker pool to `/v1/cloudconfigs/<cloud type>/<config uid>/machinePools/worker-pool` takes both overrides. The cloud config then holds each as a field of the pool in `spec.machinePoolConfig`. No result yet. |
+| `pool-cluster-level` | ? | #515: the values of `overrideClusterAPIConfig` and `overrideHealthCheckConfiguration` in `spec.clusterConfig` after the PUT. The check judges none. No result yet. |
+| `pool-record`, `pool-in-record` | 0 | #515: the `shape` tier of a new record keeps both overrides on the worker pool. It keeps them on no other pool and not in the cloud part. No result yet. |
+| `pool-compare`, `pool-compare-json`, `pool-compare-shape`, `pool-compare-says` | 0 | #515: `compare` of the record from before with the new record exits `0`. The `shape` tier differs at both overrides of the worker pool, and the report names `+ shape.pools[name=worker-pool].overrideHealthCheckConfiguration`. No result yet. |
+| `pool-verify`, `pool-verify-says` | 0 | #515: `verify` of the record from before exits `0` and names `shape CHANGED`. No result yet. |
+| `pool-undo`, `pool-after-read`, `pool-undone` | 0 | #515: the PUT of the worker pool as before the stage. The cloud config then holds neither override. No result yet. |
+| `pool-restored`, `pool-restored-says` | 0 | #515: `compare` of the record from before with cluster A exits `0` and names no change of the `shape` tier. No result yet. |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
