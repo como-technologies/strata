@@ -10,21 +10,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
-use crate::candidate::pack::pack_snapshot_in;
 use crate::closed_set::Open;
 use crate::cloud::supports;
 use crate::diff::{ChangeFlag, Diff, ImpactLevel, RegistrySync};
 use crate::error::{Error, ErrorDocument, Result};
-use crate::json::first_nonempty;
 use crate::pack_state::PackState;
-use crate::reference::{Ref, version};
+use crate::reference::version;
 use crate::registry::{Registries, RegistrySyncNote};
 use crate::snapshot::{Pack, Snapshot, Tool, load_document};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
 use crate::validation::ProfileValidation;
 
-use self::bump::BumpQuestions;
+use self::bump::{BumpQuestions, read_bump};
 use super::packs::{Architectures, PackBuild, PackOptions, registry_packs_in};
 use super::scope_of;
 
@@ -730,91 +728,4 @@ fn dropped(pinned: &[String], newer: &[String]) -> Vec<String> {
         .filter(|a| !newer.contains(a))
         .cloned()
         .collect()
-}
-
-/// Give `pin` its bump: what a move to the newest version does, and the answer of Palette for
-/// the records `holding` that pin it. A comparison that fails is the error of `pin`. A pin with no
-/// newer version has no bump.
-fn read_bump<A: PaletteApi>(
-    pin: &mut Pin,
-    holding: &[&Snapshot],
-    listings: &mut Registries<'_, A>,
-    questions: &mut BumpQuestions<'_, A>,
-    at: &str,
-    progress: &Progress,
-) {
-    let Some(newest) = pin.newer.first() else {
-        return;
-    };
-    let to = newest.version.clone();
-    progress.note(&format!("comparing {} {} with {to}", pin.name, pin.version));
-    match bump_of(listings, pin, &to, at, progress) {
-        Ok((mut bump, target)) => {
-            progress.note(&format!(
-                "asking Palette about {} {} to {to}",
-                pin.name, pin.version
-            ));
-            let asked = questions.ask(holding, pin, &target);
-            bump.palette_validation = asked.validation;
-            bump.palette_validation_error = asked.error;
-            pin.bump = Some(bump);
-        }
-        Err(e) => pin.error = Some(e.to_json()),
-    }
-}
-
-/// What a move from the pinned version of `pin` to the version `to` does: `compare` of the two
-/// pack versions, which `listings` reads. Also the pack at the version `to`, with the default
-/// values of that version, for the question to Palette. The bump holds no answer of Palette yet.
-fn bump_of<A: PaletteApi>(
-    listings: &mut Registries<'_, A>,
-    pin: &Pin,
-    to: &str,
-    at: &str,
-    progress: &Progress,
-) -> Result<(Bump, Pack)> {
-    let mut take = |version: &str| {
-        pack_snapshot_in(
-            listings,
-            Some(&pin.registry_uid),
-            &pin.name,
-            version,
-            &Ref::Pack {
-                registry: None,
-                name: pin.name.clone(),
-                version: version.to_string(),
-            }
-            .to_string(),
-            at,
-            progress,
-        )
-    };
-    let (a, b) = (take(&pin.version)?, take(to)?);
-    let d = super::compare(&a, &b, at);
-    bump_and_target(pin, to, &d, b)
-}
-
-/// The bump of a move of `pin` to the version `to`, from `d`, the comparison of the two pack
-/// versions. Also the pack at `to`, from `b`, the record of that version.
-///
-/// # Errors
-///
-/// [`Error::PackNotFound`] when `d` or `b` holds no pack with the name of the pin. The reads of
-/// the registry gave an answer with no such pack, so the fault is in the answer, and not in the
-/// command.
-fn bump_and_target(pin: &Pin, to: &str, d: &Diff, b: Snapshot) -> Result<(Bump, Pack)> {
-    let no_pack = || Error::PackNotFound {
-        name: pin.name.clone(),
-        version: to.to_string(),
-        tag: None,
-        registry: first_nonempty(&[&pin.registry, &pin.registry_uid]),
-        unsynced: Vec::new(),
-    };
-    let bump = Bump::of(to, d, &pin.name).ok_or_else(no_pack)?;
-    let target = b
-        .packs
-        .into_iter()
-        .find(|p| p.name == pin.name)
-        .ok_or_else(no_pack)?;
-    Ok((bump, target))
 }
