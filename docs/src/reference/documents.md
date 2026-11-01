@@ -701,7 +701,7 @@ what it answered.
   - `confidence`, when the ledger has runs of the rule on this engine: `catch`,
     `clean`, `bar`, `meetsBar`, `runs[]`, and `olderRuns`. `catch` and `clean` each have
     `correct`, `total`, `rate`, and `lowerBound`. `olderRuns` is the number of runs
-    of older releases, and of runs with no release, that the counts leave out. It is
+    of older releases, and of runs with no release, that the counts omit. It is
     `0` when the run names no `--release`.
   - `countsAsFailure`: true when this entry makes the exit code `1`.
 - `sections[]`: the scorecard, one line for each section with a row for the
@@ -728,7 +728,7 @@ runs of the ledger. See [Confidence and promotion](../commands/preflight/promoti
   - `id`, `section`, `tier`, `level` (the level of the rule file), and `earned`
     (the level that the runs give).
   - `advice`: `promote`, `demote`, or empty when the level and the runs agree.
-  - `confidence[]`: one entry for each engine that has a run of the rule, with
+  - `confidence[]`: one entry for each engine that has a run of the rule. An entry has
     `engine`, `release`, `catch`, `clean`, `bar`, `meetsBar`, `runs[]`, and
     `olderRuns`, as in `strata-preflight/1`. With no `release`, one entry for
     each engine and release.

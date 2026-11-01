@@ -198,7 +198,7 @@ empty text. The labels are outside the root, so no root changes.
 
 After 0.26.0, two documents have new fields, and both keep their ids.
 `confidence` of a check in `strata-preflight/1` has `olderRuns`, the number of runs
-of older releases that the counts leave out. `strata-preflight-promotion/1` has
+of older releases that the counts omit. `strata-preflight-promotion/1` has
 `release`, and `olderRuns` in each entry of `confidence`. `olderRuns` is `0` when
 the run names no `--release`. A reader that ignores unknown fields reads both.
 

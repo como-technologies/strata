@@ -12,7 +12,7 @@ Arguments:
 
 Options:
       --cloud <CLOUD>      The engine of a file: aws, eks, gcp, gke, azure, aks, maas, edge, vsphere; a cluster names its own
-      --release <RELEASE>  The Palette release, such as 4.10; with none, a rule of one release applies; --promotion counts only its runs
+      --release <RELEASE>  The Palette release, such as 4.10; with none, a rule of one release applies; --promotion counts only the runs of this release
       --records <FILE>     Records of the profiles, as files or a pattern in quotes; with none, read from Palette
       --probes <FILE>      A file of custom probes, in the format of the rules; give it again for more
       --tier <TIER>        The tiers to run: static, palette, cloud, as a list; default all three

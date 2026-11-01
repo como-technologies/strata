@@ -231,7 +231,7 @@ pub struct Counts {
     /// The run ids.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runs: Vec<String>,
-    /// The ids of the runs that the counts leave out because their release is older than the
+    /// The ids of the runs that the counts omit because their release is older than the
     /// release asked, or because they have no release. Empty when no release is asked.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub older: Vec<String>,
@@ -290,7 +290,7 @@ pub struct Confidence {
     /// The run ids behind the counts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runs: Vec<String>,
-    /// The runs of older releases, and the runs with no release, that the counts leave out. It is
+    /// The runs of older releases, and the runs with no release, that the counts omit. It is
     /// `0` when no release is asked.
     #[serde(default)]
     pub older_runs: u32,
