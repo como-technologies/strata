@@ -519,7 +519,7 @@ fn unaccounted(options: &BTreeSet<String>, reaches: &[Reach], left: &[Left]) -> 
     wrong.extend(
         left.iter()
             .filter(|l| l.why.is_empty())
-            .map(|l| format!("{:?} is left out with no reason", l.flags)),
+            .map(|l| format!("{:?} is omitted with no reason", l.flags)),
     );
     wrong
 }
@@ -3118,7 +3118,7 @@ fn merge_gate_says_when_it_does_not_verify_and_finds_the_key_where_strata_does()
         text(&o.stderr)
     );
 
-    // no key anywhere: the gate leaves verify out, and the last line says so
+    // no key anywhere: the gate omits verify, and the last line says so
     let o = g.run(&["releases/*.json", "--base", "main"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert!(

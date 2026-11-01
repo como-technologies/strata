@@ -71,7 +71,7 @@ jq -e '.summary.packsAdded == 0 and .summary.packsRemoved == 0' report.json
 
 With `--json --quiet`, an error is one JSON line on standard error, and the exit
 status is `2`. `--quiet` is what keeps the progress notes off standard error; a
-script that leaves it out gets the notes and the JSON line together:
+script that omits it gets the notes and the JSON line together:
 
 ```text
 {{#include ../output/auto-error.txt}}

@@ -1,11 +1,16 @@
-//! Strata records, compares, and verifies what Spectro Cloud Palette holds: a cluster profile
-//! version as an immutable, layered release, the copy that a cluster runs, and a pack version in
-//! a registry.
+//! Strata records, compares, and verifies what Spectro Cloud Palette holds. It reads a cluster
+//! profile version, an immutable and layered release, the copy that a cluster runs, and a pack
+//! version in a registry.
 //!
-//! A profile is a stack of layers (packs). Every layer gets three hashes so a report can name the
-//! kind of change: identity (which pack build the layer references), upstream (the digest Palette
-//! stamps on the pack ref), and authored (values, manifests, params). A snapshot is the record of
-//! one published version; a diff reads two records; verify checks a record against the live profile.
+//! A profile is a stack of layers (packs). Every layer gets three hashes, so a report can name the
+//! kind of change:
+//!
+//! - identity: which pack build the layer references.
+//! - upstream: the digest that Palette stamps on the pack ref.
+//! - authored: the values, the manifests, and the params.
+//!
+//! A snapshot is the record of one published version. A diff reads two records. `verify` checks a
+//! record against the live profile.
 //!
 //! The crate is a library with a thin CLI on top. The pieces:
 //!

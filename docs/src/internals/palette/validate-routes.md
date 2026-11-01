@@ -288,8 +288,9 @@ name.
 ### The upgrade dependency
 
 A pack can declare a dependency of the type `upgrade`. Its `maxVersion`, such as
-`+0.1`, limits the move of a cluster. The list comes from the code of Palette,
-and the paragraph after it comes from a live run:
+`+0.1`, limits the move of a cluster. The first three items come from the code of
+Palette, and the last one from the public documentation. The paragraphs after
+the list come from a live run:
 
 - The pack validator reads the dependency of each pack of the body. It runs over
   each cluster that runs the version.

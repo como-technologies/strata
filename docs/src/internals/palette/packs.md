@@ -4,8 +4,8 @@
 
 On a published profile, the `digest` that Palette puts on each pack reference is
 the digest that Palette lists for that pack version. For a pack in an OCI pack
-registry, and for a chart in an OCI Helm registry, that digest is the manifest
-digest of the push.
+registry, that digest is the manifest digest of the push. It is the same for a
+chart in an OCI Helm registry.
 
 | Pack | Type, registry | Version | Pack-ref digest | What the digest is |
 | --- | --- | --- | --- | --- |
@@ -24,11 +24,11 @@ registry of its own for a published profile: the profile document carries what
 it needs.**
 
 - A Helm digest is bare hex, with no `sha256:` prefix.
-- A chart in an OCI Helm registry that Palette reads itself, the example's own
-  in ECR, is a pack of type `oci`, and its digest is the manifest digest of the
-  first `helm push` Palette read, as for a pack in an OCI pack registry. It is
-  not the sha256 of the chart archive, and a push again does not move it: see
-  [A pack version pushed again](#a-pack-version-pushed-again).
+- A chart in an OCI Helm registry that Palette reads itself is a pack of type
+  `oci`. The example's own chart is in ECR. Its digest is the manifest digest of
+  the first `helm push` that Palette read, as for a pack in an OCI pack
+  registry. It is not the sha256 of the chart archive. A push again does not
+  move it: see [A pack version pushed again](#a-pack-version-pushed-again).
 - Palette takes the digest from its own copy of the registry, which a sync
   refreshes. `@latest` is the newest version of that copy.
 - Palette gives the last sync of each registry: see
@@ -84,10 +84,11 @@ with `type: required` and a least version
 ([Pack constraints](https://docs.spectrocloud.com/registries-and-packs/pack-constraints/)).
 In the example's own OCI pack registry, `strata-live-pack` 1.1.0 requires
 `strata-live-dep` 1.0.0 or newer. A profile that holds the requiring pack and
-not the required one is refused at creation:
-`ClusterProfileCreationValidationFailure`, "Pack 'strata-live-dep' is required
-with minimum compatible version '1.0.0'". A profile that holds both is
-accepted, and its record lists the two packs in the order authored.
+not the required one is refused at creation. The code is
+`ClusterProfileCreationValidationFailure`. The message is "Pack
+'strata-live-dep' is required with minimum compatible version '1.0.0'". A
+profile that holds both is accepted, and its record lists the two packs in the
+order authored.
 
 So a required dependency between two add-on packs is met inside the profile. An
 add-on profile is not checked for a dependency on a pack of an infrastructure
@@ -160,9 +161,10 @@ an edit of the CSI values in place on the moved version, the check fails and nam
 `charts.aws-ebs-csi-driver.storageClasses[name=spectro-storage-class].reclaimPolicy`.
 
 A running cluster takes such a move of its OS pack with no repave. In a live
-run, the OS pack `ubuntu-aws` 24.04 of the release version moves in place from
-a Spectro pack registry (type `spectro`) to an OCI registry (type `oci`). The
-version and the values stay. The registry uid and the pack uid change.
+run, the OS pack `ubuntu-aws` 24.04 of the release version moves in place. It
+moves from a Spectro pack registry (type `spectro`) to an OCI registry (type
+`oci`). The version and the values stay. The registry uid and the pack uid
+change.
 
 | Question | Answer |
 | --- | --- |
@@ -171,7 +173,7 @@ version and the values stay. The registry uid and the pack uid change.
 | What happens to the nodes when the cluster takes the update? | The same three EC2 instances for 33 minutes. The cluster stays `Running`, and no repave waits for approval. |
 | What does the cluster run after the update? | The OS pack from the OCI registry: a record of the cluster holds its registry uid. |
 
-So the check of Palette and the nodes agree: a move of the OS pack to another
+So the check of Palette and the nodes agree. A move of the OS pack to another
 registry, at one version and with the same values, replaces no node.
 [registry-move-nodes.sh](../../development/live-runs.md#registry-move-nodessh)
 gives the result: `examples/live/registry-move-nodes.sh`.
@@ -188,13 +190,15 @@ OCI pack registry of the example's own, after Palette reads the registry again:
 | A published profile that pins the version with the values of the pack | Follows the push, about 5 minutes after the sync: its pack reference carries the new digest and the new values. The audit log gives an `update` by the Palette service `system`, and no person. A record from before reports `DRIFT`. |
 | A published profile that pins the version with values of its own | Keeps the digest it was pinned with. Its record verifies. |
 
-So a published version follows the registry, with no request from a person: a
-push to the registry is enough, when the profile keeps the values of the pack.
-The version keeps its uid and its number. `verify` on the record of the profile
-is what finds it, and `--who` names the service. The code of Palette gives
-the rule: a profile follows a new push of a pinned version unless a person
-changed its values from those of the pack, and it always follows a change that
-touches only the schema, the presets, or the system annotations of the pack.
+So a published version follows the registry with no request from a person. When
+the profile keeps the values of the pack, a push to the registry is enough. The
+version keeps its uid and its number. `verify` on the record of the profile
+is what finds it, and `--who` names the service.
+
+The code of Palette gives the rule. A profile follows a new push of a pinned
+version, unless a person changed its values from those of the pack. It always
+follows a change that touches only the schema, the presets, or the system
+annotations of the pack.
 
 A new version pushed beside the pinned one, `1.0.1` beside `1.0.0`, does not
 move a profile pinned to `1.0.0`. A profile pinned under a floating tag
@@ -203,13 +207,15 @@ is the other case, when it keeps the values of the pack: see
 
 An OCI Helm registry of the example's own answers the same push differently.
 The first time Palette reads a chart version, it lists the manifest digest of
-the push, and a profile that pins the chart carries it. A push again under the
-same version, with other bytes, and a sync after it, change nothing: Palette
-keeps the digest it listed first, and a record of the chart from before the
-push verifies. A sync does read a new version: `1.0.1` pushed
-beside `1.0.0` is listed, newest first. So for a chart in an OCI Helm registry,
-`verify` on a record of the chart says what Palette lists, and not what the
-registry serves now. A pack in an OCI pack registry follows each push.
+the push. A profile that pins the chart carries that digest. A push again under
+the same version, with other bytes, and a sync after it, change nothing.
+Palette keeps the digest it listed first, and a record of the chart from before
+the push verifies.
+
+A sync does read a new version. When `1.0.1` is pushed beside `1.0.0`, Palette
+lists it, newest first. So for a chart in an OCI Helm registry, `verify` on a
+record of the chart says what Palette lists. It does not say what the registry
+serves now. A pack in an OCI pack registry follows each push.
 
 ## A tag that a registry deletes
 
@@ -251,8 +257,8 @@ again, with other bytes, syncs again, and records the pack again:
 | Spectro pack registry, not private | the digest of the push | Palette gives the digest of the new push, and its values. A record from before reports `DRIFT`. |
 
 A record of a pack from an OCI registry names the provider type of the
-registry, `registryProviderType`: Palette gives the three types one pack type,
-`oci`, and they differ here. A record of a pack reads it from
+registry, `registryProviderType`. Palette gives the three types one pack type,
+`oci`, but they differ here. A record of a pack reads it from
 `GET /v1/registries/oci/summary`, and a record of a profile from the
 annotations of the pack reference.
 
@@ -291,18 +297,18 @@ sequenceDiagram
 ```
 
 A cluster installs a chart from a Helm repository, or from an OCI registry with
-the provider type `helm`, by its name and version, from what the registry
-serves at that time. The controller on the cluster does not use the digest. It
-upgrades a Helm pack when its version changes or its values change, and not
-when the chart bytes change under one version. A pack from an OCI
-registry with the provider type `pack`, and a pack from a Spectro pack registry,
-are upgraded when the digest changes.
+the provider type `helm`. It installs the chart by its name and version, from
+what the registry serves at that time. The controller on the cluster does not
+use the digest. It upgrades a Helm pack when its version changes or its values
+change. It does not upgrade the pack when the chart bytes change under one
+version. A pack from an OCI registry with the provider type `pack`, and a pack
+from a Spectro pack registry, are upgraded when the digest changes.
 
 So when a chart version is pushed again with other bytes, a cluster that runs
-it keeps the first bytes, and a cluster that installs it later gets the new
-bytes. Palette keeps the first digest for the chart (see the table above), so
-the listing, the profile, the copy on each cluster, and a record of each show no
-change: `verify` reports `OK`. See
+it keeps the first bytes. A cluster that installs it later gets the new bytes.
+Palette keeps the first digest for the chart (see the table above). So the
+listing, the profile, the copy on each cluster, and a record of each show no
+change. `verify` reports `OK`. See
 [A chart pushed again, on a cluster](../../development/live-runs.md#a-chart-pushed-again-on-a-cluster).
 
 For a Helm pack, the digest in a record says what Palette listed, and not the
@@ -335,22 +341,24 @@ that check; a change of the values is.**
 A floating tag moves a published profile that keeps the values of the pack. In
 an OCI pack registry of the example's own, Palette lists `1.0.x` and `1.x`
 beside the version `1.0.1`. A profile pins the pack under `1.0.x`. Then `1.0.2`
-is pushed, and the tag names it. Within ten minutes of the sync, the published
-profile moves: `verify` on a record of the profile from before reports `DRIFT`
-with `IDENTITY UPSTREAM`. The move follows the tag, with no request from a
-person and no publish. A profile pinned to the exact version `1.0.0` does not
-move when `1.0.1` arrives.
+is pushed, and the tag names it.
+
+Within ten minutes of the sync, the published profile moves. `verify` on a
+record of the profile from before reports `DRIFT` with `IDENTITY UPSTREAM`. The
+move follows the tag, with no request from a person and no publish. A profile
+pinned to the exact version `1.0.0` does not move when `1.0.1` arrives.
 
 A profile with values of its own does not move with the tag. Palette shows the
 **Updates** button on the profile, and a person applies the update
 ([Update a cluster profile](https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/update-cluster-profile/#accept-updates-to-a-cluster-profile)).
 This is the rule of a push again too: see
-[A pack version pushed again](#a-pack-version-pushed-again). Step 4b of
-`registry.sh` shows it. A second profile pins 1.0.1 under `1.0.x` with values
-of its own. After the push of 1.0.2 and the sync, the first profile moves, and
-the second stays on 1.0.1. Until a person applies the update, a record of the
-profile verifies. [`strata behind`](../../commands/behind.md) says that the
-pin is behind 1.0.2, the version that the tag names now.
+[A pack version pushed again](#a-pack-version-pushed-again).
+
+Step 4b of `registry.sh` shows this rule. A second profile pins 1.0.1 under
+`1.0.x` with values of its own. After the push of 1.0.2 and the sync, the first
+profile moves. The second stays on 1.0.1. Until a person applies the update, a
+record of the profile verifies. [`strata behind`](../../commands/behind.md) says
+that the pin is behind 1.0.2, the version that the tag names now.
 
 ## The layer of a pack
 
@@ -359,9 +367,10 @@ registry. It drops the layer that the profile gives, with no error. The manifest
 pack of a profile gets the layer `addon` from the manifest pack of Palette. A
 pack that Palette makes at the create also gets `addon`: see
 [A pack that Palette makes at the create](#a-pack-that-palette-makes-at-the-create).
+
 Stage 4 of
-[validate-packs.sh](../../development/live-runs.md#validate-packssh) shows it.
-Palette makes and publishes a profile that gives `cert-manager` the layer
+[validate-packs.sh](../../development/live-runs.md#validate-packssh) shows the
+rule. Palette makes and publishes a profile that gives `cert-manager` the layer
 `csi`, with no error. The published pack has the layer `addon` of its
 registry. A record of the version holds the pack as `addon/cert-manager`, and
 has the root of the candidate that gives no layer.
@@ -387,7 +396,7 @@ clone included. A publish keeps the uid, and a clone mints one. A pack from a
 registry keeps the uid of the registry.
 
 So two profiles built from one configuration can hold one manifest under two
-pack uids, and their roots then differ although the content is the same. This is
+pack uids. Their roots then differ, although the content is the same. This is
 why [`same-release`](../../commands/same-release.md) passes such a pair and the
 equality of roots does not: see
 [One manifest in two profiles](../../use-cases/manifest-pack.md).
@@ -439,9 +448,9 @@ holds for one pack, in one request:
 | `tags[]` | one row per tag: `tag`, `version`, `packUid`, and `parentTags` |
 | `packValues[]` | one row per build: `packUid`, `values`, `schema`, `presets`, `readme`, `annotations`, `dependencies` |
 
-A version carries its exact tag and the floating tags above it, each as its own
-row, with one pack uid for the build behind them. `parentTags` names the tags
-above that one
+A version carries its exact tag and the floating tags above it. Each tag is its
+own row, with one pack uid for the build behind them. `parentTags` names the
+tags above that one
 ([Palette API reference](https://docs.spectrocloud.com/api/v1/)):
 
 ```text
@@ -450,8 +459,8 @@ above that one
 {"packUid":"<uid>","parentTags":["1.65.x","1.x"],     "tag":"1.65.0", "version":"1.65.0"}
 ```
 
-So the newest version of a line is the version that the floating tag names, and
-one request gives every version, every tag, and no repeats. The paged listing
+So the newest version of a line is the version that the floating tag names. One
+request gives every version and every tag, with no repeats. The paged listing
 `/v1/packs?filters=spec.name=<name>` holds the digest of each build, which this
 answer does not, and it repeats a version across pages. It gives an entry for
 each version in each registry that holds the pack, and 100 entries on a page.
@@ -475,7 +484,7 @@ record.
 
 The listing can name a registry that then answers 404 for the pack. It does so
 for a pack that Spectro Cloud disabled or deleted: see
-[Pack states](#pack-states). In a FIPS tenant, the answer also leaves out each
+[Pack states](#pack-states). In a FIPS tenant, the answer also omits each
 version that is not FIPS compliant: see [The FIPS rule](#the-fips-rule).
 
 ## A pack that supports a cloud
@@ -515,7 +524,7 @@ have `amd64`, and 0.91.1 has `amd64,arm64` again. `headlamp` 0.42.0 and
 
 The documentation of Palette lists the architectures on the page of each pack,
 so `strata packs` does not repeat them. `strata behind` reads them for its own
-answer: a newer version that supports fewer architectures than the pinned
+answer. A newer version that supports fewer architectures than the pinned
 version says what a move drops, as `3.6.7 (drops arm64)`. See
 [strata behind](../../commands/behind.md#the-pins-that-are-behind). The live
 example [checks it](../../development/live-runs.md#packssh).
@@ -555,8 +564,8 @@ state in `spec.annotations.system_state`, with the time in
 
 With no query, Palette answers 404 with `ResourceNotFound` when the answer has
 no version. So a 404 for a pack that the listing names is a fact about
-one registry, and not about the pack: `nginx` is disabled in `Public Repo` and
-in `Palette Registry`, and `Bitnami` serves it.
+one registry, and not about the pack. For example, `nginx` is disabled in
+`Public Repo` and in `Palette Registry`, and `Bitnami` serves it.
 
 The `states` query gives only the versions in the states that it names. With
 it, `nginx` in `Public Repo` gives the tags of its 30 disabled versions, for
@@ -568,12 +577,13 @@ Spectro Cloud also marks a version that a profile must not hold. The listing
 gives it the annotation `disabled: "true"`, and no `system_state`. In
 `Public Repo`, `gloo` 1.2.18 carries the mark. Palette serves such a version:
 the registry route gives its tags and its values with no query, and the
-`states` query does not include it. `strata packs` lists `gloo` 1.2.18 with
-its tags, and says `disabled` in the heading and in the row: see
+`states` query does not include it.
+
+`strata packs` lists `gloo` 1.2.18 with its tags, and says `disabled` in the
+heading and in the row: see
 [pack-states.sh](../../development/live-runs.md#pack-statessh). Palette
-refuses a profile that holds it,
-at the create and on the validate routes: HTTP 500,
-`DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`. See
+refuses a profile that holds it, at the create and on the validate routes:
+HTTP 500, `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`. See
 [the packs route](validate-routes.md#post-v1clusterprofilesvalidatepacks),
 [the import validate route](validate-routes.md#post-v1clusterprofilesimportvalidate),
 and [validate-packs.sh](../../development/live-runs.md#validate-packssh).
@@ -630,7 +640,7 @@ whose annotation `fips` is `true` or `unknown`:
 | A new profile that pins another version | Palette refuses it with `PackForbidden` |
 
 Strata uses the registry answer, and does not copy the rule. `strata packs` and
-`strata behind` leave out a listed version that has no tag in the registry
+`strata behind` omit a listed version that has no tag in the registry
 answer. A version that Spectro Cloud retired as `disabled` or `deleted` stays.
 A 404 is an answer with no version, so a pack with no FIPS compliant version
 has no version to offer. Then `behind` says that the pinned version is absent.

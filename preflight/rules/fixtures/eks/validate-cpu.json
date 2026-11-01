@@ -13,7 +13,7 @@
                 "displayName": "worker-pool",
                 "errors": [
                   {
-                    "code": "MachinePoolResourcesInsufficient",
+                    "code": "MachinePoolWithMinCpuRequired",
                     "message": "A minimum allocation of '4.1' CPU cores is required across all worker nodes"
                   }
                 ]

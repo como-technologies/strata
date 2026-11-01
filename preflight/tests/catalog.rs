@@ -962,7 +962,7 @@ fn ssh_key_pair_names_the_key_pair_and_the_region_for_eks() {
     );
 }
 
-/// The properties route of AWS refuses a key pair that the region lacks, and `iaas-pod-identity`
+/// The property route of AWS refuses a key pair that the region lacks, and `iaas-pod-identity`
 /// sends the key pair to it. So `ssh-key-pair` names EKS alone, and `iaas-pod-identity` names the
 /// properties, not only the account (#430).
 #[test]
@@ -978,7 +978,7 @@ fn ssh_key_pair_leaves_aws_to_the_properties_route_that_iaas_pod_identity_calls(
     let pod = catalog.rule("iaas-pod-identity").unwrap();
     assert!(pod.applies_to("aws"));
     let Some(Check::Palette(PaletteCheck { body, .. })) = &pod.check else {
-        panic!("iaas-pod-identity calls the properties route");
+        panic!("iaas-pod-identity calls the property route");
     };
     assert!(body.as_deref().unwrap().contains("sshKeyName"));
     let path = catalog::rules_dir().join("fixtures/aws/key-pair-not-found.json");

@@ -1,8 +1,8 @@
 # strata snapshot
 
 Record a profile version, a cluster, an edge host, a cluster group, an app
-profile, or a pack version in a snapshot file, or each cluster of a set in a
-directory. `compare`, `same-release`, `verify`, and `behind` read the file
+profile, or a pack version in a snapshot file. You can also record each cluster
+of a set in a directory. `compare`, `same-release`, `verify`, and `behind` read the file
 later.
 
 The examples use the project `dev`, which holds `aws-stack@1.1.0` and

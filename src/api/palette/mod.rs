@@ -320,7 +320,7 @@ pub struct SearchedClusters {
     /// `includes_virtual`.
     pub items: Vec<Value>,
     /// True when the search takes `environment`, so `items` holds the virtual clusters too. False
-    /// on a Palette whose search does not take it: the search then leaves each one out, and no
+    /// on a Palette whose search does not take it: the search then omits each one, and no
     /// condition can ask for them.
     pub includes_virtual: bool,
 }

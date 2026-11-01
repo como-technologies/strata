@@ -236,7 +236,7 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
         }
     }
 
-    /// The strata record of a unit: all that the observation leaves out. A root is a terminal
+    /// The strata record of a unit: all that the observation omits. A root is a terminal
     /// failure, because Palette holds no root.
     pub fn snapshot(&self, unit: &UnitRef) -> Result<Snapshot> {
         self.snapshot_at(unit, &now().text)

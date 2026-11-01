@@ -95,7 +95,7 @@ rules:
         clean: fixtures/gke/clean.json
 
   - id: gcp-properties
-    title: The properties route accepts the project and the zones of a GCP cluster
+    title: The property route accepts the project and the zones of a GCP cluster
     engines: [gcp]
     tier: palette
     severity: fail
@@ -124,10 +124,10 @@ rules:
       - "gcloud compute zones list --project {{ .entity.spec.cloudConfig.project }} --filter 'region:{{ .entity.spec.cloudConfig.region }}' --format 'value(name,status)'"
     fix:
       owner: palette
-      text: Call the properties route of GCP from the cluster validate route.
+      text: Call the property route of GCP from the cluster validate route.
     evidence:
       - kind: source
-        note: the properties route of GCP reads the project with Cloud Resource Manager and each zone with Compute
+        note: the property route of GCP reads the project with Cloud Resource Manager and each zone with Compute
     tests:
       - fault: fixtures/gcp/properties-refused.json
         clean: fixtures/gcp/properties-accepted.json

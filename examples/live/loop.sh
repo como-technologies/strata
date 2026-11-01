@@ -155,7 +155,7 @@ if stage 4 "before a build"; then
   # of the body. The type of the release body is offered in its zone
   check preflight-offering 0 '#143: the instance type route offers the type of each pool in its zone, in one request' -- \
     bash -c "\"$strata\" preflight build.json --cloud \"$engine\" --tier palette --rule instance-offering --json --quiet | jq -e '.checks[0] | .verdict == \"passed\" and (.ran | contains(\"/instancetypes?cloudAccountUid=\"))'"
-  # the key pair of the body: on aws the properties route of Palette reads it, for iaas-pod-identity.
+  # the key pair of the body: on aws the property route of Palette reads it, for iaas-pod-identity.
   # On eks the key pair route reads it, for ssh-key-pair. A body on gcp or gke has no key pair
   case "$engine" in
     aws) key_rule=iaas-pod-identity ;;

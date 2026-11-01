@@ -7,7 +7,7 @@ use super::ids::{
     PRODUCTION, SEARCH,
 };
 use crate::book::Runner;
-use crate::tenant::Edit;
+use crate::tenant::{Edit, UpgradeRefusal};
 use serde_json::json;
 
 /// Run the chapters of the fleet, the registries, and the retire of a version.
@@ -100,7 +100,15 @@ fn behind_refused(r: &mut Runner) {
     // The route of the cluster accepts the same move. It checks no sent tag of a profile that the
     // cluster runs, so only the route of the version refuses
     r.tenant(|t| {
-        t.profile_upgrade_answer(DEV, A1111, Some(("csi-aws-ebs", &["payments"])));
+        t.profile_upgrade_answer(
+            DEV,
+            A1111,
+            Some(UpgradeRefusal {
+                pack: "csi-aws-ebs",
+                to: "1.65.0",
+                clusters: &["payments"],
+            }),
+        );
         t.packs_answer(DEV, PAYMENTS, None);
     });
     r.serve_here(); // state 3: payments runs aws-stack@1.1.11, and Palette refuses the move of its CSI pack

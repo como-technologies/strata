@@ -208,8 +208,8 @@ pub struct PackFixture<'a> {
 impl<'a> PackFixture<'a> {
     /// A pack of the registry `registry_uid`.
     ///
-    /// `name` is the name in the profile. `values` is YAML. An empty `digest` leaves the digest
-    /// out of the pack ref.
+    /// `name` is the name in the profile. `values` is YAML. An empty `digest` omits the digest
+    /// from the pack ref.
     pub fn new(
         name: &'a str,
         layer: &'a str,

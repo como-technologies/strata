@@ -92,7 +92,7 @@ reading, and reads no edge host. The two last lines say why. See
 
 ## A cluster that the list does not name
 
-The consumer list of Palette can leave out a cluster that runs the version.
+The consumer list of Palette can omit a cluster that runs the version.
 Here the virtual cluster `tenant-b` runs `platform-addons@1.0.0`, and the list
 names `tenant-a` alone:
 
@@ -116,19 +116,25 @@ a reading of the listing cannot find `tenant-b`.
 
 The search does not name a virtual cluster that runs the version through its
 cluster group either: here `tenant-b` runs `platform-addons` because `dev-group`
-pins it. So strata also lists the cluster groups, keeps each group that pins the
-version, and reads each of its virtual clusters that the list and the search do
-not name. That is how strata finds `tenant-b`. See
+pins it. So strata also lists the cluster groups and keeps each group that pins
+the version. Then it reads each of the virtual clusters of those groups that the
+list and the search do not name. That is how strata finds `tenant-b`. See
 [What the cluster listing answers](../internals/palette/clusters.md#what-the-cluster-listing-answers).
 
 ## The list of Palette alone
 
 `--list-only` reads the consumer list that Palette computes, and no other
-cluster. It costs one request for each consumer. The second reading costs one
-request for each 50 clusters that the search names, one for each cluster that
-the list does not name, two for the listings of the cluster groups, one for each
-cluster group, and one for each 50 virtual clusters of a group that pins the
-version. When the search of Palette takes no
+cluster. It costs one request for each consumer.
+
+The second reading costs these requests:
+
+- One for each 50 clusters that the search names.
+- One for each cluster that the list does not name.
+- Two for the listings of the cluster groups.
+- One for each cluster group.
+- One for each 50 virtual clusters of a group that pins the version.
+
+When the search of Palette takes no
 `clusterProfiles`, the second reading costs one request for each cluster of the
 fleet:
 
@@ -172,20 +178,24 @@ version bump or a rename overwrote the version that the cluster runs. See
 - Palette computes `status.inUseClusters` when it is asked, in the projects the
   key can read. So strata does a second reading. It asks the cluster search, in
   the scope of the profile, for the clusters that run a version of the profile
-  by its name, the virtual clusters too. Then it lists the cluster groups of
-  the tenant and of the scope of the key, and keeps each group that pins the
-  version: the search does not name a virtual cluster that runs the version
-  through its group. It reads each cluster that the search or such a group
-  names and the list does not. A cluster that applies the version and is not
-  in the list joins the answer, marked `not in the consumer list of the profile`.
-- When the search of Palette takes no `clusterProfiles`, or Palette has no
-  search, strata reads each cluster of the cluster listing for the profiles it
-  applies. The listing names no virtual cluster.
-- The last line says how far the second reading got:
-  `second reading: the cluster search names 1 other cluster with the profile, 1 read`
-  from the search, with `; 1 cluster group pins the version, 1 other virtual cluster, 1 read`
-  when a group pins it, `second reading: 3 of 3 clusters read` from the listing, or
-  `second reading: not done` with the reason.
+  by its name. It asks for the virtual clusters too.
+- The second reading then lists the cluster groups of the tenant and of the
+  scope of the key. It keeps each group that pins the version, because the
+  search does not name a virtual cluster that runs the version through its
+  group. It reads each cluster that the search or such a group names and the
+  list does not. A cluster that applies the version and is not in the list
+  joins the answer, marked `not in the consumer list of the profile`.
+- When Palette has no search, or its search takes no `clusterProfiles`, strata
+  reads each cluster of the cluster listing for the profiles it applies. The
+  listing names no virtual cluster.
+- The last line says how far the second reading got. It has one of these forms:
+  - From the search:
+    `second reading: the cluster search names 1 other cluster with the profile, 1 read`.
+    When a group pins the version, the line adds
+    `; 1 cluster group pins the version, 1 other virtual cluster, 1 read`.
+  - From the listing: `second reading: 3 of 3 clusters read`.
+  - When the second reading did not run: `second reading: not done` with the
+    reason.
 - Strata then searches the edge hosts, at tenant scope, and at the scope of
   the key when it cannot read the tenant. An edge host that the version is
   bound to joins the answer with `kind: edgehost`. The line

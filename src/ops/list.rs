@@ -307,7 +307,7 @@ pub struct Listing {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clusters: Option<Vec<ListedCluster>>,
     /// With clusters: whether `clusters` holds the virtual clusters. The listing and the search
-    /// of Palette leave them out, so strata asks the search for them. False when Palette has no
+    /// of Palette omit them, so strata asks the search for them. False when Palette has no
     /// search, or its search takes no `environment`: the list then holds no virtual cluster.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub includes_virtual: Option<bool>,
@@ -341,7 +341,7 @@ impl Listing {
 ///
 /// Profiles and clusters are read through `connect(options.project)`, where `None` is the
 /// configured scope. Projects are read through `connect(Some(TENANT_SCOPE))`, because in a
-/// project Palette lists only that project. The cluster listing leaves out each virtual cluster,
+/// project Palette lists only that project. The cluster listing omits each virtual cluster,
 /// so the clusters also come from [`Palette::virtual_clusters`], when the search takes
 /// `environment`. With `packs` or `pack`, each profile document is read as well; a profile that
 /// cannot be read stays in the list with its error. `generated_at` is the time of the listing, in
@@ -450,7 +450,7 @@ where
     let mut section = ClusterSection::default();
     let mut clusters = if options.query.is_empty() {
         let listing = home.cluster_listing()?;
-        // the listing leaves out each virtual cluster, so strata asks the search for them
+        // the listing omits each virtual cluster, so strata asks the search for them
         let properties = home.cluster_search_properties()?;
         let nested = home.virtual_clusters(&properties, &Value::Null, || {
             progress.note("searching the virtual clusters")

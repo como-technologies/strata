@@ -29,7 +29,7 @@ itself. A cluster on AWS gives these fields:
 - `status.spcApply`: `spcHash` and `spcInfraHash`, two digests of 128 hex digits
   that Palette computes of the spec it applied, with `actionType`,
   `lastModifiedTime`, and `patchAppliedTime`. The field `crdDigest` is
-  empty, and left out, for a cluster of a built-in cloud; only a custom cloud
+  empty, and omitted, for a cluster of a built-in cloud; only a custom cloud
   type sets it.
 - `status.packs[]`: each pack that the cluster reconciled, with `name`,
   `version`, `profileUid`, and a `condition` such as `InstallSuccess` or
@@ -85,7 +85,7 @@ API, changes its `spcHash`. The other tiers of the two clusters are the same:
 
 Strata records these as tiers: see
 [More of the cluster than its release](../../commands/snapshot/cluster.md#more-of-the-cluster-than-its-release).
-It leaves out the times and the conditions, which change with no change of the
+It omits the times and the conditions, which change with no change of the
 cluster. Between two clusters, the `applied` tier compares `spcInfraHash` alone.
 
 ## Cluster copies
@@ -259,9 +259,9 @@ cannot compute it, the list comes back empty, with no error in the answer. So
 `consumers` asks the cluster search as well, and names a cluster that applies
 the version and is not in the list.
 
-**The listing leaves out each virtual cluster.** A virtual cluster has the cloud
+**The listing omits each virtual cluster.** A virtual cluster has the cloud
 type `nested`, and the listing has no cluster of that cloud type. The search
-leaves them out too, unless a condition asks for the environment `nested`. Then
+omits them too, unless a condition asks for the environment `nested`. Then
 it gives them, with the cluster group and the host cluster of each in
 `status.virtual`.
 

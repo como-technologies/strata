@@ -11,7 +11,7 @@
 //! GET <path>?<query>    ...                 ->  <root>/.../<path>@<query>.json
 //! ```
 //!
-//! The query leaves out `startTime` and `endTime`: see `without_time`.
+//! The query omits `startTime` and `endTime`: see `without_time`.
 //!
 //! When the file `<name>.json` is empty, the answer is HTTP 204 with no body, as Palette answers
 //! some validate routes.
@@ -248,7 +248,7 @@ struct Request {
 /// name of a profile of the cluster, since Palette changes each name into the uids of the profiles
 /// with that name and a uid matches no name (#181); on `environment` when a value is its cloud
 /// type. The search
-/// leaves out each virtual cluster, of the cloud type `nested`, unless a condition asks for it.
+/// omits each virtual cluster, of the cloud type `nested`, unless a condition asks for it.
 fn searched(file: &[u8], body: &[u8]) -> Vec<u8> {
     let Ok(mut doc) = serde_json::from_slice::<serde_json::Value>(file) else {
         return file.to_vec();
@@ -518,7 +518,7 @@ mod tests {
         );
     }
 
-    /// The time in a query is the real time, so the file name leaves it out.
+    /// The time in a query is the real time, so the file name omits it.
     #[test]
     fn a_query_leaves_out_the_time() {
         let got = file_for(

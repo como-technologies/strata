@@ -59,11 +59,17 @@ does change it.
 | green | new values, and the `+` of an added line |
 | dim | `sync`, `none`, unchanged packs, uids, and roots |
 
-Strata decides the color in this order. `--color=never` or `--no-color`
-removes it. `--color=always`, or `--color` with no value, forces it. Then
-`NO_COLOR` removes it. Then `CLICOLOR_FORCE` forces it, also for a pipe and
-also when `TERM` is `dumb`. Then `TERM=dumb` removes it. Then a terminal on
-standard output gets it. The diffs of `--full` use the same colors.
+Strata decides the color in this order:
+
+- `--color=never` or `--no-color` removes it.
+- `--color=always`, or `--color` with no value, forces it.
+- Then `NO_COLOR` removes it.
+- Then `CLICOLOR_FORCE` forces it, also for a pipe and also when `TERM` is
+  `dumb`.
+- Then `TERM=dumb` removes it.
+- Then a terminal on standard output gets it.
+
+The diffs of `--full` use the same colors.
 
 `strata-preflight` uses the same order for each stream. The report goes to
 standard output, and the progress lines go to standard error, so each stream

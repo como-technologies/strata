@@ -1,6 +1,6 @@
 {
   "_base": "identity-clean.json",
-  "_note": "the properties route refuses a key pair that the region lacks, with HTTP 500 and AwsKeyPairNotFound",
+  "_note": "the property route refuses a key pair that the region lacks, with HTTP 500 and AwsKeyPairNotFound",
   "_patch": {
     "entity": {
       "spec": {

@@ -45,7 +45,7 @@ fn profiles_body<'a>(
 ///
 /// The request names each profile that the cluster runs after the move, by uid. A profile it runs
 /// now keeps its packs, or takes the pack values of `target` when it is the same uid. A profile
-/// the request leaves out is not in the target. So `target` replaces the profile it has the name
+/// the request omits is not in the target. So `target` replaces the profile it has the name
 /// of, or else the one that builds the cluster when `target` builds one too.
 pub fn validate_body(running: &[AppliedProfile], target: &Snapshot) -> Value {
     let uid = target.source.uid.as_str();

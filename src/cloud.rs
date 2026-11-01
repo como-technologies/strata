@@ -25,7 +25,7 @@ pub const CLOUD_CUSTOM: &str = "custom";
 /// The cloud type of an edge cluster. The engine `edge` of `strata-preflight` is this cloud type.
 pub const CLOUD_EDGE_NATIVE: &str = "edge-native";
 
-/// The cloud type of a virtual cluster. The cluster listing leaves out each cluster of this
+/// The cloud type of a virtual cluster. The cluster listing omits each cluster of this
 /// cloud type, and the search does too, unless a condition on `environment` asks for it.
 pub(crate) const CLOUD_NESTED: &str = "nested";
 

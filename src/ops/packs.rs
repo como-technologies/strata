@@ -191,7 +191,7 @@ fn merged_tags(answers: &[Value]) -> Vec<Value> {
 ///
 /// Reads the paged listing for the versions, their digests, and their types. Then it reads the
 /// answer of each registry for the tags that point at a version. Palette does not serve a version
-/// that has no tag in that answer. So the listing of strata leaves it out, unless Spectro Cloud
+/// that has no tag in that answer. So the listing of strata omits it, unless Spectro Cloud
 /// retired it as disabled or deleted. A registry with no version left is not in the listing.
 ///
 /// `name` is the name of the pack. `connect` gives a client for a project uid, with `None` for the
@@ -329,7 +329,7 @@ fn pack_registry<A: PaletteApi>(
     let tags = merged_tags(&answers);
     // Palette applies the FIPS rule of the tenant to its registry route, and not to the
     // listing. So a version with no tag in the answer is a version that Palette does not
-    // serve. Leave it out, unless Spectro Cloud retired it as disabled or deleted. A 404 is
+    // serve. Omit it, unless Spectro Cloud retired it as disabled or deleted. A 404 is
     // the same answer: the route serves no version, for example when no version of the pack
     // is FIPS compliant
     let mine: Vec<&Value> = mine

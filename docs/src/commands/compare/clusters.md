@@ -51,7 +51,7 @@ question is whether the member runs the pin, and not what else it runs:
 {{#include ../../output/group-compare.txt}}
 ```
 
-`tenant-a` runs one more profile of its own, and the comparison leaves it out.
+`tenant-a` runs one more profile of its own, and the comparison omits it.
 A `cluster:<cluster>/<profile>` ref is not narrowed. See
 [A cluster group pins a profile](../../use-cases/cluster-groups.md).
 

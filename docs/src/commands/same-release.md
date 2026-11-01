@@ -22,9 +22,9 @@ order, for example `dev.json test.json prod.json`.
 ```
 
 Exit `1`. Each reason names the pack. For an `AUTHORED` change, the reason also
-names the first changed value, or the first changed manifest, in the words of
-`compare`: `manifest extra-rules changed`, or `values changed (not parseable as
-YAML on one side)`. See
+names the first changed value, or the first changed manifest. It uses the words
+of `compare`, for example `manifest extra-rules changed` or `values changed (not
+parseable as YAML on one side)`. See
 [Promote a release to another project](../use-cases/promote.md).
 
 ## Which pairs pass
@@ -35,7 +35,7 @@ YAML on one side)`. See
 | `SAME CONTENT` | The roots differ only by the tag name of a pack build, or by a pack uid that Palette mints. Palette mints the uid of each manifest pack, and the uid of a pack from a registry that it does not sync. A candidate does not have these uids. `mintedUidOnly` in the JSON names each such pack. | yes |
 | `REGISTRY MOVE` | The roots differ only by packs from another registry, with the same tag, version, values, manifests, and params. The digest of each moved pack can differ. | only with `--allow registry-move` |
 | `DIFFERENT` | Any other difference. | no |
-| `NO DIGEST` | The pair passes on its roots, and a pack from a registry has no upstream digest on one side, so an equal root does not show an equal archive. | only with `--allow no-digest` |
+| `NO DIGEST` | The pair passes on its roots. A pack from a registry has no upstream digest on one side, so an equal root does not show an equal archive. | only with `--allow no-digest` |
 
 ```text
 {{#include ../output/tag-same.txt}}
@@ -107,9 +107,9 @@ See
 
 ## A masked value
 
-A pack whose values hold `********` gets a line under its pair: `pack <key> has
-a masked value at <path>: an equal root does not show an equal secret`. The line
-does not change the result, and `pairs[].masked` in the JSON gives the same
+A pack whose values hold `********` gets a line under its pair. The line is
+`pack <key> has a masked value at <path>: an equal root does not show an equal secret`.
+It does not change the result, and `pairs[].masked` in the JSON gives the same
 fact. See [A secret changes in a pack value](../use-cases/masked-value.md).
 
 ## Refs

@@ -14,10 +14,12 @@ The examples use the project `dev`, whose records hold `aws-stack@1.0.0` and
 ```
 
 Exit `1`: a pin is behind. Each line is one pack version that the records pin
-from one registry. A pin that is behind names the newer versions, newest first,
-and `bump to` names what a move to the newest version does: the impact level and
+from one registry. A pin that is behind names the newer versions, newest first.
+`bump to` names what a move to the newest version does: the impact level and
 the change flags of `compare pack:<name>@<pinned> pack:<name>@<newest>`. See
-[Change flags and impact](../reference/impact.md). When Palette calls a
+[Change flags and impact](../reference/impact.md).
+
+When Palette calls a
 different newer version the latest, the line ends with
 `; Palette calls <version> the latest`: see
 [Which version is the newest](./packs.md#which-version-is-the-newest). The lines
@@ -189,7 +191,7 @@ and its line names the sync:
   sync of the registry started <time>`: a sync runs now. The copy is the copy
   of the last complete sync until the sync that runs completes.
 - `; the last complete sync of the registry started <time>; the last sync of
-  the registry failed: <message>`: the last sync failed, and the message is
+  the registry failed: <message>`: the last sync failed. The message is
   from Palette. The copy is the copy of the last complete sync.
 - `; the recovery of the sync is <state>: <message>`: a sync stopped before
   its end, and Palette recovers it. This note can follow each of the notes
@@ -199,6 +201,7 @@ A sync can stay in progress for a long time: see
 [The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry).
 A live run shows the note with the Bitnami registry of the tenant, whose sync
 stays in progress: see [packs.sh](../development/live-runs.md#packssh).
+
 A pin whose registry completed its last sync has no note. Palette shows the
 sync of each registry, and the copy is the copy of the last run. A pin that is
 behind has no note either: a newer version in the copy is a newer version in
@@ -264,9 +267,9 @@ A scheduled job that keeps one issue open for each pack that is behind is
 | `2` | Strata could not check a pin, or could not read a record. |
 
 - The records are record files, or quoted patterns such as
-  `'releases/**/*.json'`: strata expands them. A record of a profile, a cluster,
-  an edge host, a cluster group, an app profile, or a pack each gives the pins of
-  its packs.
+  `'releases/**/*.json'`: strata expands them. A record gives the pins of its
+  packs. The record can be of a profile, a cluster, an edge host, a cluster
+  group, an app profile, or a pack.
 - Strata connects one time for each project of the pins. A pin is in the
   project of the first record that pins it. For each project, strata reads each
   listing of the registries one time.

@@ -36,7 +36,7 @@ mod profiles;
 mod registries;
 mod routes;
 
-pub use answers::PackRefusal;
+pub use answers::{PackRefusal, UpgradeRefusal};
 pub use edit::Edit;
 pub use routes::{
     AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, PROJECT_LISTING, exported_profile,

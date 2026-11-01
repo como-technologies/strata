@@ -1,6 +1,6 @@
 {
   "_base": "clean.json",
-  "_note": "the clean world of the identity rules: the properties route accepts the account, and the nodes role holds the EBS CSI policy",
+  "_note": "the clean world of the identity rules: the property route accepts the account, and the nodes role holds the EBS CSI policy",
   "_patch": {
     "_responses": {
       "POST /v1/clouds/aws/properties/validate": {
