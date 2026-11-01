@@ -164,8 +164,9 @@ where
 }
 
 /// The clusters that can run a version of the profile `name`, and how strata found them. The
-/// search names them, and the listing of the clusters does when the search takes no profile. The
-/// arguments are those of [`second_reading`].
+/// cluster search names them. The cluster listing does when the search takes no profile.
+///
+/// `project`, `wide`, and `home` are the scopes of [`second_reading`].
 fn candidate_clusters<A, F>(
     name: &str,
     project: &str,

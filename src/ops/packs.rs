@@ -392,11 +392,10 @@ fn common_state(mine: &[&Value]) -> Option<Open<PackState>> {
     }
 }
 
-/// The versions of one registry's copy, newest first, and the architectures of each one that the
-/// flags of `options` did not drop for their cloud.
+/// The versions of one registry's copy, newest first, and their architectures.
 ///
-/// `--latest` cuts the versions after the architectures are read, so `behind` still sees what a
-/// version drops.
+/// `--cloud` drops a version before strata reads its architectures. `--latest` cuts the list
+/// after that, so `behind` still sees what a version drops.
 fn pack_builds(
     mine: &[&Value],
     tags: &[Value],

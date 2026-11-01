@@ -267,8 +267,8 @@ struct PairReasons {
 }
 
 impl PairReasons {
-    /// Add what the pack `pd` says, from its two sides `x` and `y`, a changed pack in the two
-    /// records.
+    /// Add the reasons and the counts for the changed pack `pd`. `x` and `y` are the pack in the
+    /// first record and in the second record.
     fn changed_pack(&mut self, pd: &PackDiff, x: &Pack, y: &Pack, policy: Policy) {
         // a packUid that Palette mints is not part of the release
         let minted = diff::pack::minted_uid_pair(x, y);
