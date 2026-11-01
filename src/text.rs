@@ -1,6 +1,10 @@
-//! The texts that a message builds: a phrase from a list of names, the name of an object, a long
-//! text cut to a length, a mark for an empty text, and a text in the cell of a markdown table.
-//! `strata-preflight` calls the public ones, so both tools write each of these texts in one way.
+//! The texts that a message builds:
+//!
+//! - A phrase from a list of names, and the name of an object.
+//! - A long text cut to a length.
+//! - A mark for an empty text, and a text in a cell of a markdown table.
+//!
+//! `strata-preflight` calls the public ones, so both tools write each of these in one way.
 
 /// The name of an object, or its uid when Palette gives no name.
 pub fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {

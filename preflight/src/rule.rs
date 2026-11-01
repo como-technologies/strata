@@ -605,7 +605,8 @@ impl Catalog {
     /// # Errors
     ///
     /// [`Error::Catalog`] when the file does not parse, breaks a rule of the format, or holds a
-    /// program that cannot run: it does not compile, or it reads `$item` where a check has none.
+    /// program that cannot run. Such a program does not compile, or it reads `$item` where a
+    /// check has none.
     pub fn parse_section(text: &str, path: &Path) -> Result<Section> {
         let section = Self::parse_embedded(text, path)?;
         check_section_programs(&section, path)?;
@@ -614,9 +615,9 @@ impl Catalog {
 
     /// Parse one section file as [`Catalog::parse_section`] does, but compile no program.
     ///
-    /// The binary reads its own rule files with this: the compile of every program costs about
-    /// a tenth of a second at each start, and the tests of this crate compile every program of
-    /// every file of the binary. A file that a person gives is read by `parse_section`.
+    /// The binary reads its own rule files with this. The compile of every program costs about a
+    /// tenth of a second at each start. The tests of this crate compile every program of every
+    /// file of the binary. A file that a person gives is read by `parse_section`.
     pub(crate) fn parse_embedded(text: &str, path: &Path) -> Result<Section> {
         let mut section: Section = serde_yaml::from_str(text).map_err(|e| Error::Catalog {
             path: path.to_path_buf(),
@@ -808,9 +809,9 @@ fn check_section_programs(section: &Section, path: &Path) -> Result<()> {
 /// Make sure that every program of `rule` compiles, with the variables that it has when it runs.
 ///
 /// A program of a check with `each` reads `$item` in its `path` and in its `body`, and in no other
-/// place: `each`, `expr`, `when`, an `argv`, and a `reproduce` line run with no item. So a rule
+/// place. `each`, `expr`, `when`, an `argv`, and a `reproduce` line run with no item. So a rule
 /// that reads `$item` there cannot run, and the loader refuses it with the place and the reason.
-/// A POST with `each` and no `body` is refused too: it would send the entity one time for each
+/// A POST with `each` and no `body` is refused too: it sends the entity one time for each
 /// item.
 fn check_programs(rule: &Rule, jq: &Jq) -> std::result::Result<(), String> {
     let id = rule.id.as_str();

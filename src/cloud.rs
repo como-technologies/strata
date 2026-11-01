@@ -103,7 +103,7 @@ impl Cloud {
     }
 
     /// The cloud whose account this cloud uses. A managed cluster uses the account of its
-    /// cloud: an `eks` cluster uses an `aws` account, a `gke` cluster a `gcp` account, and an
+    /// cloud. An `eks` cluster uses an `aws` account, a `gke` cluster a `gcp` account, and an
     /// `aks` cluster an `azure` account. Each other cloud uses its own.
     pub fn account(self) -> Cloud {
         match self {

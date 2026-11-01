@@ -86,8 +86,8 @@ pub(crate) fn not_run_reasons<'a>(
     out
 }
 
-/// The lowest bound of a section as the forms of the report show it: a whole percent, or `no runs`
-/// when no row of the section has a run.
+/// The lowest bound of a section as the forms of the report show it. It is a whole percent, or
+/// `no runs` when no row of the section has a run.
 pub(crate) fn bound_text(bound: Option<f64>) -> String {
     bound.map_or_else(|| NO_RUNS.to_string(), percent)
 }

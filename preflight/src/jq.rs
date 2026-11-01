@@ -27,8 +27,8 @@ pub(crate) const ITEM: &str = "$item";
 /// Compiles and runs jq programs, and keeps each compiled program for the next input.
 pub struct Jq {
     /// The definitions of the standard library of jq, read one time: each program starts from a
-    /// copy. A load of the catalog compiles every program, so reading the library for each one
-    /// would cost most of the time of the load.
+    /// copy. A load of the catalog compiles every program, so a read of the library for each one
+    /// costs most of the time of the load.
     library: Vec<Def>,
     /// Each program, compiled without `$item` (slot 0) and with it as a variable (slot 1). The key
     /// is the program alone, so a lookup borrows the text of the program.

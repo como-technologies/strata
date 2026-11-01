@@ -106,7 +106,7 @@ pub struct Options {
 
 impl Options {
     /// The tiers that ran, as each form of the report writes them after `tiers`: `static,
-    /// palette`, with `, strict` after them when a failed probe counts as a failed check.
+    /// palette`. `, strict` follows them when a failed probe counts as a failed check.
     pub fn tiers_text(&self) -> String {
         let tiers: Vec<&str> = self.tiers.iter().map(|t| t.as_str()).collect();
         let strict = if self.strict { ", strict" } else { "" };

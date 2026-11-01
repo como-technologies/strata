@@ -330,8 +330,8 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
     }
     let live = !cli.offline;
     let palette = if live { Some(connect(progress)?) } else { None };
-    // the world and the checks read through one backend, which keeps each answer for the run: a
-    // request that the world made, and that a rule makes again, goes out one time
+    // the world and the checks read through one backend, which keeps each answer for the run. So
+    // a request that the world made, and that a rule makes again, goes out one time
     let backend = LiveBackend::new(palette.as_ref().map(Palette::api), cli.no_exec);
     let reads = palette.as_ref().map(|_| Palette::new(&backend));
 

@@ -41,6 +41,18 @@ impl_closed_set!(ClusterState {
     Error => "Error",
 });
 
+/// The text of the state [`ClusterState::Running`]. Release 0.25.0 had it as `ops::RUNNING_STATE`.
+#[deprecated(since = "0.26.0", note = "use `ClusterState::Running`")]
+pub const RUNNING_STATE: &str = "Running";
+
+/// The text of the state [`ClusterState::Error`]. Release 0.25.0 had it as `ops::ERROR_STATE`.
+#[deprecated(since = "0.26.0", note = "use `ClusterState::Error`")]
+pub const ERROR_STATE: &str = "Error";
+
+/// The text of the state [`ClusterState::Deleted`]. Release 0.25.0 had it as `ops::DELETED_STATE`.
+#[deprecated(since = "0.26.0", note = "use `ClusterState::Deleted`")]
+pub const DELETED_STATE: &str = "Deleted";
+
 impl ClusterState {
     /// True when `text`, such as the `status.state` of a document, names this state.
     pub fn is(self, text: &str) -> bool {
@@ -51,6 +63,15 @@ impl ClusterState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[allow(deprecated)]
+    fn the_constants_of_release_0_25_0_keep_the_text_of_their_state_for_one_minor_release() {
+        assert_eq!(RUNNING_STATE, ClusterState::Running.as_str());
+        assert_eq!(ERROR_STATE, ClusterState::Error.as_str());
+        assert_eq!(DELETED_STATE, ClusterState::Deleted.as_str());
+        assert!(ClusterState::Deleted.is(DELETED_STATE));
+    }
 
     #[test]
     fn a_state_reads_from_the_text_that_palette_writes_and_a_later_state_is_none() {

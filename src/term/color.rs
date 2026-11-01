@@ -93,13 +93,13 @@ impl Paint {
         Paint { on: false }
     }
 
-    /// Resolve a policy for `stream`: auto is on when the stream is a terminal, unless
-    /// `NO_COLOR` is set or `TERM` is `dumb`; `CLICOLOR_FORCE` turns it on for pipes;
+    /// Resolve a policy for `stream`. Auto is on when the stream is a terminal, unless
+    /// `NO_COLOR` is set or `TERM` is `dumb`. `CLICOLOR_FORCE` turns it on for pipes, and
     /// `NO_COLOR` wins over `CLICOLOR_FORCE`.
     ///
-    /// Both tools use this one rule: `strata` for its report on standard output, and
-    /// `strata-preflight` for its report on standard output and its progress lines on standard
-    /// error.
+    /// Both tools use this one rule. `strata` colors its report on standard output.
+    /// `strata-preflight` colors its report on standard output and its progress lines on
+    /// standard error.
     pub fn resolve(mode: ColorMode, stream: Stream) -> Self {
         let on = match mode {
             ColorMode::Always => true,

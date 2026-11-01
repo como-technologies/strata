@@ -78,8 +78,8 @@ impl LabelKind {
         }
     }
 
-    /// `text` in the color of the label: green for a pass, red for a counted failure, magenta
-    /// for a failed probe, yellow for a warning, cyan for a note, dim for what did not run.
+    /// `text` in the color of the label. A pass is green, a counted failure is red, and a failed
+    /// probe is magenta. A warning is yellow, a note is cyan, and what did not run is dim.
     pub(crate) fn paint(self, paint: &Paint, text: &str) -> String {
         match self {
             LabelKind::Pass | LabelKind::ProbePass => paint.green(text),

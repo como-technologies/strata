@@ -398,9 +398,11 @@ field, a value, or an option is in the sections above.
 
 - `term::color::Paint::resolve` has a second argument, `term::color::Stream`:
   `Stdout` or `Stderr`. Give `Stream::Stdout` to get the behavior of 0.25.0.
-- `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE` are gone.
-  `cluster_state::ClusterState` names each state, and `ClusterState::Running.is(text)`
-  replaces `text == RUNNING_STATE`. `ClosedSet::parse` reads the text of a state.
+- `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE` are
+  deprecated. They stay in this release and go in the next minor release.
+  `cluster_state::ClusterState` names each state, and
+  `ClusterState::Running.is(text)` replaces `text == RUNNING_STATE`.
+  `ClosedSet::parse` reads the text of a state.
 - `api::codes::ValidateRoute::refuses_answer` takes the body of the error as
   `&serde_json::Value`, in place of text. Parse the text one time, and give the
   value.

@@ -97,7 +97,7 @@ pub fn terminal(r: &Report, paint: &Paint) -> String {
 }
 
 /// The lines of one result: its row, then its messages, what it ran, its reproduce lines, and its
-/// fix, as far as its verdict shows them.
+/// fix. The verdict decides which of them show.
 fn result_lines(c: &CheckResult, paint: &Paint) -> String {
     let mut out = String::new();
     let label = format!("{:<12}", c.label());

@@ -50,7 +50,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/registry.rs` | The registries of Palette: the listings, read one time for each command. The registry that a name or a uid names, the last sync of a registry, and the state that the listing gives a pack version. |
 | `src/json.rs` | The reads of a document of Palette: text, arrays, flags, values, the items of a listing, and the first text that is not empty. Each module reads a document with them. The helpers that `preflight/` and `adapter/` use are public, so that those packages write no read of their own. |
 | `src/file.rs` | The read and the write of a file, with the path in each error. Each layer reads and writes its files with them. |
-| `src/text.rs` | The texts that a message builds: a list of names, such as `a, b, and c`, a text cut to a length, `-` for an empty text, and a text in the cell of a markdown table. `strata-preflight` calls the public ones. |
+| `src/text.rs` | The texts that a message builds. A list of names, such as `a, b, and c`. A text cut to a length. `-` for an empty text. A text in the cell of a markdown table. `strata-preflight` calls the public ones. |
 | `src/config.rs`, `src/error/` | The settings, and the error kinds with their exit codes. `error/class.rs` holds the class of a failure for a retry, and `error/json.rs` the JSON of an error. |
 | `src/term/` | The terminal: the color decision for a stream in `color.rs`, and the progress notes on standard error in `progress.rs`. `strata-preflight` uses the same decision. |
 | `src/content/` | The content that the hashes read. `canon.rs` holds the canonical form, and `layer.rs` the layers of Palette. `hash.rs` holds the content digest and the root of a record. |

@@ -19,9 +19,9 @@
 //! ```
 //!
 //! `accountKind` and `routeCloud` come from the engine, by [`account_kind`] and [`route_cloud`], so
-//! that no rule writes that mapping again. `edgeHosts` and `validateBody` come from the entity, so
-//! that the rules that read each host, and the rules that ask the validate route, share one
-//! program.
+//! that no rule writes that mapping again. `edgeHosts` and `validateBody` come from the entity.
+//! The rules that read each host share one program, and so do the rules that ask the validate
+//! route.
 //!
 //! A check adds `response` (Palette), `exec` (a command), or `cluster`, `summary`, `events`,
 //! and `elapsed` (the watch). A fixture of a test is a world with the answers written in, under
@@ -404,7 +404,7 @@ pub fn route_cloud(cloud: &str) -> &str {
     Engine::parse(cloud).map_or(cloud, |engine| engine.cloud().as_str())
 }
 
-/// The suffix that the body of the validate route gives to the name of an existing cluster: the
+/// The suffix that the body of the validate route gives to the name of an existing cluster. The
 /// route refuses a name that Palette holds already, with `ResourceAlreadyExists`, and the cluster
 /// holds its own.
 const VALIDATE_NAME_SUFFIX: &str = "-preflight";

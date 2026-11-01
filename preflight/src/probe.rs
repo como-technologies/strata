@@ -76,13 +76,13 @@ pub fn is_answer(status: u16) -> bool {
 enum Kept {
     /// A 2xx: the body, as JSON. A 204 has a `null` body.
     Value(Value),
-    /// An HTTP error that is an answer: a 4xx that a check reads, or the refusal of a validate
-    /// route, such as a profile of another cloud type with HTTP 500.
+    /// An HTTP error that is an answer. It is a 4xx that a check reads. It is also the refusal of
+    /// a validate route, such as a profile of another cloud type with HTTP 500.
     Answer {
         status: u16,
         /// The body as Palette sent it.
         text: String,
-        /// The body as an object, so a program reads `.body.message` either way: a body that is
+        /// The body as an object, so a program reads `.body.message` either way. A body that is
         /// not JSON, such as a plain-text 404 of the gateway, is an object with the text as its
         /// message.
         body: Value,
@@ -133,7 +133,8 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
 
     /// The answer to a request: the one that the run kept when it sent the same request, else
     /// the one that Palette gives now.
-    fn ask(&self, api: &A, method: Method, path: &str, body: Option<&Value>) -> Result<Kept> {
+    fn ask(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Kept> {
+        let api = self.client()?;
         let key = format!(
             "{method} {path} {}",
             body.map(Value::to_string).unwrap_or_default()
@@ -195,8 +196,7 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
 
 impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
     fn palette(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Response> {
-        let kept = self.ask(self.client()?, method, path, body)?;
-        Ok(kept.response())
+        Ok(self.ask(method, path, body)?.response())
     }
 
     fn has_tool(&self, name: &str) -> bool {
@@ -234,10 +234,7 @@ impl<A: PaletteApi> LiveBackend<'_, A> {
     /// A request of the world, in the terms of the library: an answer that is an HTTP error is
     /// the error that Palette gave.
     fn send(&self, method: Method, path: &str, body: Option<&Value>) -> strata::Result<Value> {
-        let kept = match self
-            .client()
-            .and_then(|api| self.ask(api, method, path, body))
-        {
+        let kept = match self.ask(method, path, body) {
             Ok(kept) => kept,
             Err(Error::Palette(e)) => return Err(e),
             Err(other) => {

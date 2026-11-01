@@ -1,6 +1,6 @@
 //! The text of each value of each closed set of the rule format and of the report. A rule file and
-//! a report name these values by text, so a release that renames or removes a value breaks the
-//! files of the users. These tests hold the values of each set, and make sure that serde, the JSON
+//! a report name these values by text. A release that renames or removes a value breaks the files
+//! of the users. These tests hold the values of each set. They make sure that serde, the JSON
 //! Schema, and `ClosedSet::as_str` give one text for each value.
 
 use std::path::{Path, PathBuf};
