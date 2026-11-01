@@ -458,6 +458,36 @@ pub struct VerifyCounts {
     pub status: RecordStatus,
 }
 
+impl VerifyCounts {
+    /// The counts of `records`, and the status that decides the exit code.
+    fn of(records: &[VerifiedRecord]) -> VerifyCounts {
+        let count = |s: RecordStatus| records.iter().filter(|r| r.status == s).count();
+        let (unchanged, drifted, unverified, errors) = (
+            count(RecordStatus::Unchanged),
+            count(RecordStatus::Drifted),
+            count(RecordStatus::Unverified),
+            count(RecordStatus::Error),
+        );
+        let status = if errors > 0 {
+            RecordStatus::Error
+        } else if drifted > 0 {
+            RecordStatus::Drifted
+        } else if unverified > 0 {
+            RecordStatus::Unverified
+        } else {
+            RecordStatus::Unchanged
+        };
+        VerifyCounts {
+            records: records.len(),
+            unchanged,
+            drifted,
+            errors,
+            unverified,
+            status,
+        }
+    }
+}
+
 /// One record checked against its live profile.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -540,6 +570,42 @@ impl VerifiedRecord {
             error: Some(e.to_json()),
         }
     }
+
+    /// The row of the record `recorded` that `v` checked in `scope`.
+    fn checked(
+        path: &Path,
+        recorded: &Snapshot,
+        scope: Option<&str>,
+        v: Verification,
+    ) -> VerifiedRecord {
+        VerifiedRecord {
+            path: path.display().to_string(),
+            status: RecordStatus::from(v.status),
+            name: recorded.source.name.clone(),
+            version: recorded.source.version.clone(),
+            uid: recorded.source.uid.clone(),
+            // no scope is the scope of the key, and the row names no project
+            project_uid: scope.unwrap_or_default().to_string(),
+            recorded_at: recorded.source.fetched_at.clone(),
+            root_recorded: recorded.root.clone(),
+            root_live: Some(v.live.root.clone()),
+            max_impact: (!v.unchanged).then_some(v.diff.summary.max_impact),
+            packs_changed: (!v.unchanged).then_some(v.diff.summary.packs_changed),
+            cluster_variables: v.diff.cluster_variables.clone().filter(|c| c.changed),
+            state: v.diff.verify.as_ref().and_then(|x| x.state.clone()),
+            last_modified: v.diff.verify.as_ref().and_then(|x| x.last_modified.clone()),
+            // verify_with gives each diff its verify part, so the default does not show
+            invalid_packs: v
+                .diff
+                .verify
+                .as_ref()
+                .map(|x| x.invalid_packs.clone())
+                .unwrap_or_default(),
+            // an unverified record keeps its diff too: it names the packs
+            diff: (v.status != VerifyStatus::Unchanged).then_some(v.diff),
+            error: None,
+        }
+    }
 }
 
 /// The document `verify` writes for several records: `strata-verify-summary/1`.
@@ -590,76 +656,20 @@ where
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
     let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
-    let mut records = Vec::with_capacity(paths.len());
-    for path in paths {
-        let recorded = match Snapshot::load(path) {
-            Ok(s) => s,
-            Err(e) => {
-                records.push(VerifiedRecord::failed(path, None, e));
-                continue;
-            }
-        };
-        if let Err(e) = check_verifiable(&recorded) {
-            records.push(VerifiedRecord::failed(path, Some(&recorded), e));
-            continue;
-        }
-        let scope = project.or_else(|| scope_of(&recorded.source.project_uid));
-        let palette = match connected(&mut clients, scope, &mut connect) {
-            Ok(p) => p,
-            Err(e) => {
-                records.push(VerifiedRecord::failed(path, Some(&recorded), e));
-                continue;
-            }
-        };
-        records.push(
-            match verify_with(&recorded, palette, checked_at, options, progress) {
-                Ok(v) => VerifiedRecord {
-                    path: path.display().to_string(),
-                    status: RecordStatus::from(v.status),
-                    name: recorded.source.name.clone(),
-                    version: recorded.source.version.clone(),
-                    uid: recorded.source.uid.clone(),
-                    // no scope is the scope of the key, and the row names no project
-                    project_uid: scope.unwrap_or_default().to_string(),
-                    recorded_at: recorded.source.fetched_at.clone(),
-                    root_recorded: recorded.root.clone(),
-                    root_live: Some(v.live.root.clone()),
-                    max_impact: (!v.unchanged).then_some(v.diff.summary.max_impact),
-                    packs_changed: (!v.unchanged).then_some(v.diff.summary.packs_changed),
-                    cluster_variables: v.diff.cluster_variables.clone().filter(|c| c.changed),
-                    state: v.diff.verify.as_ref().and_then(|x| x.state.clone()),
-                    last_modified: v.diff.verify.as_ref().and_then(|x| x.last_modified.clone()),
-                    // verify_with gives each diff its verify part, so the default does not show
-                    invalid_packs: v
-                        .diff
-                        .verify
-                        .as_ref()
-                        .map(|x| x.invalid_packs.clone())
-                        .unwrap_or_default(),
-                    // an unverified record keeps its diff too: it names the packs
-                    diff: (v.status != VerifyStatus::Unchanged).then_some(v.diff),
-                    error: None,
-                },
-                Err(e) => VerifiedRecord::failed(path, Some(&recorded), e),
-            },
-        );
-    }
-    let count = |s: RecordStatus| records.iter().filter(|r| r.status == s).count();
-    let (unchanged, drifted, unverified, errors) = (
-        count(RecordStatus::Unchanged),
-        count(RecordStatus::Drifted),
-        count(RecordStatus::Unverified),
-        count(RecordStatus::Error),
-    );
-    let status = if errors > 0 {
-        RecordStatus::Error
-    } else if drifted > 0 {
-        RecordStatus::Drifted
-    } else if unverified > 0 {
-        RecordStatus::Unverified
-    } else {
-        RecordStatus::Unchanged
-    };
+    let records: Vec<VerifiedRecord> = paths
+        .iter()
+        .map(|path| {
+            verify_one(
+                path,
+                project,
+                &mut clients,
+                &mut connect,
+                checked_at,
+                options,
+                progress,
+            )
+        })
+        .collect();
     VerifySummary {
         schema: VERIFY_SUMMARY_SCHEMA.to_string(),
         tool: Tool::current(),
@@ -667,14 +677,40 @@ where
         legend: VerifyLegend {
             status: legend::<RecordStatus>(),
         },
-        summary: VerifyCounts {
-            records: records.len(),
-            unchanged,
-            drifted,
-            errors,
-            unverified,
-            status,
-        },
+        summary: VerifyCounts::of(&records),
         records,
+    }
+}
+
+/// The row of the record file `path`. The record is checked in `project` when given, else in the
+/// project that it names. A record that strata cannot read or check is an `error` row.
+fn verify_one<A, F>(
+    path: &Path,
+    project: Option<&str>,
+    clients: &mut HashMap<Option<String>, Palette<A>>,
+    connect: &mut F,
+    checked_at: &str,
+    options: &VerifyOptions,
+    progress: &Progress,
+) -> VerifiedRecord
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let recorded = match Snapshot::load(path) {
+        Ok(s) => s,
+        Err(e) => return VerifiedRecord::failed(path, None, e),
+    };
+    if let Err(e) = check_verifiable(&recorded) {
+        return VerifiedRecord::failed(path, Some(&recorded), e);
+    }
+    let scope = project.or_else(|| scope_of(&recorded.source.project_uid));
+    let palette = match connected(clients, scope, connect) {
+        Ok(p) => p,
+        Err(e) => return VerifiedRecord::failed(path, Some(&recorded), e),
+    };
+    match verify_with(&recorded, palette, checked_at, options, progress) {
+        Ok(v) => VerifiedRecord::checked(path, &recorded, scope, v),
+        Err(e) => VerifiedRecord::failed(path, Some(&recorded), e),
     }
 }

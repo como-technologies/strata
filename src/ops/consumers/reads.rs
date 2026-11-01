@@ -128,27 +128,8 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    progress.note("searching the clusters that run the version");
-    let searched = {
-        let own = if project.is_empty() {
-            Ok(wide)
-        } else {
-            client_for(clients, home, project, connect)
-        };
-        match own {
-            Ok(own) => wide_else_home(own, home, |p| searched_consumers(p, name)),
-            Err(_) => searched_consumers(home, name),
-        }
-    };
-    let (candidates, resolved) = match searched {
-        Ok(Some(found)) => (Ok(found), Resolved::Search),
-        Ok(None) => {
-            progress.note("reading each cluster for the profiles it applies");
-            let listing = wide_else_home(wide, home, Palette::cluster_listing);
-            (listing.map(|l| list_clusters(items(&l))), Resolved::Listing)
-        }
-        Err(e) => (Err(e), Resolved::Search),
-    };
+    let (candidates, resolved) =
+        candidate_clusters(name, project, wide, home, clients, connect, progress);
     let candidates = match candidates {
         Ok(candidates) => candidates,
         Err(e) => {
@@ -166,31 +147,96 @@ where
     // the virtual clusters of each cluster group that pins the version (#184)
     progress.note("reading the virtual clusters of the cluster groups that pin the version");
     let members = group_members(wide, home, uid, &mut clusters_read);
-    let mut seen: HashSet<String> = HashSet::new();
     let tagged = candidates
         .into_iter()
         .map(|c| (c, false))
         .chain(members.into_iter().map(|c| (c, true)));
+    join_applying(
+        list,
+        uid,
+        tagged,
+        home,
+        clients,
+        connect,
+        &mut clusters_read,
+    );
+    clusters_read
+}
+
+/// The clusters that can run a version of the profile `name`, and how strata found them. The
+/// search names them, and the listing of the clusters does when the search takes no profile. The
+/// arguments are those of [`second_reading`].
+fn candidate_clusters<A, F>(
+    name: &str,
+    project: &str,
+    wide: &Palette<A>,
+    home: &Palette<A>,
+    clients: &mut HashMap<Option<String>, Palette<A>>,
+    connect: &mut F,
+    progress: &Progress,
+) -> (Result<Vec<ListedCluster>>, Resolved)
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    progress.note("searching the clusters that run the version");
+    let searched = {
+        let own = if project.is_empty() {
+            Ok(wide)
+        } else {
+            client_for(clients, home, project, connect)
+        };
+        match own {
+            Ok(own) => wide_else_home(own, home, |p| searched_consumers(p, name)),
+            Err(_) => searched_consumers(home, name),
+        }
+    };
+    match searched {
+        Ok(Some(found)) => (Ok(found), Resolved::Search),
+        Ok(None) => {
+            progress.note("reading each cluster for the profiles it applies");
+            let listing = wide_else_home(wide, home, Palette::cluster_listing);
+            (listing.map(|l| list_clusters(items(&l))), Resolved::Listing)
+        }
+        Err(e) => (Err(e), Resolved::Search),
+    }
+}
+
+/// Read each cluster of `tagged`, and add the ones that apply the profile `uid` to `list`. The
+/// flag of a cluster is true when it is a member of a cluster group. The counts go into `read`.
+fn join_applying<A, F>(
+    list: &mut Vec<Consumer>,
+    uid: &str,
+    tagged: impl Iterator<Item = (ListedCluster, bool)>,
+    home: &Palette<A>,
+    clients: &mut HashMap<Option<String>, Palette<A>>,
+    connect: &mut F,
+    read: &mut ClustersRead,
+) where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let mut seen: HashSet<String> = HashSet::new();
     for (listed, of_group) in tagged {
         if list.iter().any(|c| c.uid == listed.uid) || !seen.insert(listed.uid.clone()) {
             continue;
         }
         if of_group {
-            clusters_read.members += 1;
+            read.members += 1;
         }
         let doc = client_for(clients, home, &listed.project_uid, connect)
             .and_then(|p| p.subject_document(SubjectKind::Cluster, &listed.uid));
         let doc = match doc {
             Ok(doc) => doc,
             Err(_) => {
-                clusters_read.unread += 1;
+                read.unread += 1;
                 if of_group {
-                    clusters_read.members_unread += 1;
+                    read.members_unread += 1;
                 }
                 continue;
             }
         };
-        clusters_read.read += 1;
+        read.read += 1;
         if let Some(copy) = AppliedProfile::applied(&doc, uid) {
             let mut c = Consumer {
                 state: listed.state,
@@ -207,7 +253,6 @@ where
             list.push(c);
         }
     }
-    clusters_read
 }
 
 /// The virtual clusters of each cluster group that pins `uid`, for the second reading (#184). The

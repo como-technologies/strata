@@ -385,94 +385,27 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    let refused = || Error::ProfileRefRequired {
-        reference: reference.to_string(),
-    };
-    let (profile_scope, uid_hint) = match reference {
-        Ref::Cluster { .. }
-        | Ref::EdgeHost { .. }
-        | Ref::ClusterGroup { .. }
-        | Ref::ClusterSet { .. }
-        | Ref::Pack { .. } => {
-            return Err(refused());
-        }
-        Ref::AppProfile { id, version } => {
+    let (profile_scope, uid_hint) = match target_of(reference)? {
+        Target::App { scope, id, version } => {
             return app_consumers(
-                None,
-                id,
+                scope.as_deref(),
+                &id,
                 version.as_deref(),
                 connect,
                 generated_at,
                 progress,
             );
         }
-        Ref::Snapshot(path) => {
-            let recorded = Snapshot::load(path)?;
-            // a record of a cluster or of a pack has no consumers. Refuse it here: the NoUid below
-            // names `verify`, a command that does not run. An app profile has its app deployments
-            if !(recorded.source.is_profile_version() || recorded.source.is_app()) {
-                return Err(refused());
-            }
-            if recorded.source.uid.is_empty() {
-                return Err(Error::NoUid);
-            }
-            let scope = scope_of(&recorded.source.project_uid).map(str::to_string);
-            if recorded.source.is_app() {
-                return app_consumers(
-                    scope.as_deref(),
-                    &recorded.source.uid,
-                    None,
-                    connect,
-                    generated_at,
-                    progress,
-                );
-            }
-            (scope, Some(recorded.source.uid))
-        }
-        Ref::Uid(uid) => (None, Some(uid.clone())),
-        // a draft has the consumers of its version: a cluster runs a published template
-        Ref::NameVersion { .. } | Ref::Draft { .. } => (None, None),
+        Target::Profile { scope, uid } => (scope, uid),
     };
 
     let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
     let home = connect(profile_scope.as_deref())?;
-    let uid = match (uid_hint, reference) {
-        (Some(uid), _) => uid,
-        (None, Ref::NameVersion { name, version }) => home.resolve(name, version)?,
-        (None, Ref::Draft { id, version }) => home.profile_uid(id, version.as_deref())?,
-        (None, _) => unreachable!("every other ref carries a uid"),
-    };
+    let uid = profile_uid(reference, uid_hint, &home)?;
     progress.note(&format!("listing consumers of profile {uid}"));
     let doc = home.profile_document(&uid)?;
 
-    let named = arr(&doc, "/status/inUseClusters").to_vec();
-    let uids = consumer_uids(&doc);
-
-    let mut list = Vec::with_capacity(uids.len());
-    for cluster in uids {
-        let known = named.iter().find(|n| text(n, "/uid") == cluster);
-        // a uid that `inUseClusters` does not name has no name and no project here: the read of
-        // its document gives them
-        let mut c = Consumer::unread(
-            ConsumerKind::Cluster,
-            cluster,
-            known.map(|n| text(n, "/name")).unwrap_or_default(),
-            known.map(|n| text(n, "/projectUid")).unwrap_or_default(),
-        );
-        c.read(
-            &mut clients,
-            &home,
-            &mut connect,
-            |p, cluster| p.subject_document(SubjectKind::Cluster, cluster),
-            // a cluster that does not run the profile now has no version of it
-            |d| {
-                AppliedProfile::applied(d, &uid)
-                    .map(|p| p.version)
-                    .unwrap_or_default()
-            },
-        );
-        list.push(c);
-    }
+    let mut list = listed_consumers(&doc, &uid, &home, &mut clients, &mut connect);
     // Palette computes the list above when it is asked, in the projects the key can read, and
     // gives an empty list on an error too. So the cluster search names the clusters that run a
     // version of the profile (#149, #181), or each cluster the key can list is read for the
@@ -489,13 +422,7 @@ where
             ..ClustersRead::default()
         }
     } else {
-        // the search takes the name of the profile, in the scope of the profile (#181)
-        let name = text(&doc, "/metadata/name");
-        let project = if ProfileScope::of_document(&doc) == Some(ProfileScope::Tenant) {
-            String::new()
-        } else {
-            text(&doc, "/metadata/annotations/projectUid")
-        };
+        let (name, project) = search_scope(&doc);
         second_reading(
             &mut list,
             &uid,
@@ -511,17 +438,7 @@ where
     // the consumer list names no edge host, and the search of the edge hosts is one request a
     // page, so it is done also with --list-only
     let edge_hosts_read = edge_hosts_bound(&mut list, &uid, wide, &home, progress);
-    // Palette refuses the delete of a version that a cluster template links, in any project, and
-    // the profile document names each such template, so they cost no request (#147)
-    linked_templates(&mut list, &doc);
-    // a uid names no project to a reader, so give each row the project's name as well
-    name_projects_of(
-        &mut list,
-        |c| &c.project_uid,
-        |c| &mut c.project_name,
-        &home,
-        &mut ProjectListings::default(),
-    );
+    link_and_name(&mut list, &doc, &home);
 
     Ok(report(
         &doc,
@@ -531,6 +448,162 @@ where
         edge_hosts_read,
         generated_at,
     ))
+}
+
+/// The uid of the profile that `reference` names. `hint` is the uid that the ref holds, when it
+/// holds one. The other refs name the profile by name and version, which `home` resolves.
+fn profile_uid<A: PaletteApi>(
+    reference: &Ref,
+    hint: Option<String>,
+    home: &Palette<A>,
+) -> Result<String> {
+    match (hint, reference) {
+        (Some(uid), _) => Ok(uid),
+        (None, Ref::NameVersion { name, version }) => home.resolve(name, version),
+        (None, Ref::Draft { id, version }) => home.profile_uid(id, version.as_deref()),
+        (None, _) => unreachable!("every other ref carries a uid"),
+    }
+}
+
+/// Mark the consumers that link a cluster template, and give each one the name of its project.
+fn link_and_name<A: PaletteApi>(list: &mut Vec<Consumer>, doc: &Value, home: &Palette<A>) {
+    // Palette refuses the delete of a version that a cluster template links, in any project, and
+    // the profile document names each such template, so they cost no request (#147)
+    linked_templates(list, doc);
+    // a uid names no project to a reader, so give each row the project's name as well
+    name_projects_of(
+        list,
+        |c| &c.project_uid,
+        |c| &mut c.project_name,
+        home,
+        &mut ProjectListings::default(),
+    );
+}
+
+/// What a ref names for `consumers`.
+enum Target {
+    /// A profile version. `scope` is the scope of its record, when the ref is a record. `uid` is
+    /// its uid, when the ref holds one.
+    Profile {
+        scope: Option<String>,
+        uid: Option<String>,
+    },
+    /// An app profile, in the scope of its record when the ref is a record.
+    App {
+        scope: Option<String>,
+        id: String,
+        version: Option<String>,
+    },
+}
+
+/// What `reference` names, and the scope to read it in.
+///
+/// # Errors
+///
+/// [`Error::ProfileRefRequired`] for a ref that names no profile, and for a record of a cluster
+/// or of a pack. [`Error::NoUid`] for a record with no uid. Each error of the read of a record.
+fn target_of(reference: &Ref) -> Result<Target> {
+    let refused = || Error::ProfileRefRequired {
+        reference: reference.to_string(),
+    };
+    match reference {
+        Ref::Cluster { .. }
+        | Ref::EdgeHost { .. }
+        | Ref::ClusterGroup { .. }
+        | Ref::ClusterSet { .. }
+        | Ref::Pack { .. } => Err(refused()),
+        Ref::AppProfile { id, version } => Ok(Target::App {
+            scope: None,
+            id: id.clone(),
+            version: version.clone(),
+        }),
+        Ref::Snapshot(path) => {
+            let recorded = Snapshot::load(path)?;
+            // a record of a cluster or of a pack has no consumers. Refuse it here: the NoUid below
+            // names `verify`, a command that does not run. An app profile has its app deployments
+            if !(recorded.source.is_profile_version() || recorded.source.is_app()) {
+                return Err(refused());
+            }
+            if recorded.source.uid.is_empty() {
+                return Err(Error::NoUid);
+            }
+            let scope = scope_of(&recorded.source.project_uid).map(str::to_string);
+            if recorded.source.is_app() {
+                return Ok(Target::App {
+                    scope,
+                    id: recorded.source.uid,
+                    version: None,
+                });
+            }
+            Ok(Target::Profile {
+                scope,
+                uid: Some(recorded.source.uid),
+            })
+        }
+        Ref::Uid(uid) => Ok(Target::Profile {
+            scope: None,
+            uid: Some(uid.clone()),
+        }),
+        // a draft has the consumers of its version: a cluster runs a published template
+        Ref::NameVersion { .. } | Ref::Draft { .. } => Ok(Target::Profile {
+            scope: None,
+            uid: None,
+        }),
+    }
+}
+
+/// The clusters that the profile document `doc` names as users of the profile `uid`, each one
+/// read in its own project for its state and the version that it runs.
+fn listed_consumers<A, F>(
+    doc: &Value,
+    uid: &str,
+    home: &Palette<A>,
+    clients: &mut HashMap<Option<String>, Palette<A>>,
+    connect: &mut F,
+) -> Vec<Consumer>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let named = arr(doc, "/status/inUseClusters");
+    let uids = consumer_uids(doc);
+    let mut list = Vec::with_capacity(uids.len());
+    for cluster in uids {
+        let known = named.iter().find(|n| text(n, "/uid") == cluster);
+        // a uid that `inUseClusters` does not name has no name and no project here: the read of
+        // its document gives them
+        let mut c = Consumer::unread(
+            ConsumerKind::Cluster,
+            cluster,
+            known.map(|n| text(n, "/name")).unwrap_or_default(),
+            known.map(|n| text(n, "/projectUid")).unwrap_or_default(),
+        );
+        c.read(
+            clients,
+            home,
+            connect,
+            |p, cluster| p.subject_document(SubjectKind::Cluster, cluster),
+            // a cluster that does not run the profile now has no version of it
+            |d| {
+                AppliedProfile::applied(d, uid)
+                    .map(|p| p.version)
+                    .unwrap_or_default()
+            },
+        );
+        list.push(c);
+    }
+    list
+}
+
+/// The name of the profile in `doc`, and the project to search for the clusters that run it: the
+/// scope of the profile (#181). The project is empty for a profile of the tenant.
+fn search_scope(doc: &Value) -> (String, String) {
+    let project = if ProfileScope::of_document(doc) == Some(ProfileScope::Tenant) {
+        String::new()
+    } else {
+        text(doc, "/metadata/annotations/projectUid")
+    };
+    (text(doc, "/metadata/name"), project)
 }
 
 /// The document of `consumers` for the profile `doc`, with the consumers `consumers`.
