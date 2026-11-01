@@ -21,7 +21,6 @@ pub use crate::repave::PendingRepave;
 use crate::text::name_or_uid;
 use crate::timestamp::Rfc3339;
 pub use crate::validation::ProfileValidation;
-use pack::masked_paths;
 
 mod build;
 pub(crate) use build::{manifest_entry, manifest_of};
@@ -561,15 +560,12 @@ impl Snapshot {
         Ok(snap)
     }
 
-    /// Give each pack the images, the charts, and the masked paths of its values, when the record
-    /// holds none: a record written before those fields has the values, and so the lists.
+    /// Give each pack the images and the charts of its values, when the record holds none: a
+    /// record written before those fields has the values, and so the lists.
     pub fn fill_content(&mut self) {
         for p in &mut self.packs {
             if p.images.is_empty() && p.charts.is_empty() {
                 (p.images, p.charts) = pack_content(&p.values_canon);
-            }
-            if p.masked.is_empty() {
-                p.masked = masked_paths(&p.values_canon);
             }
         }
     }

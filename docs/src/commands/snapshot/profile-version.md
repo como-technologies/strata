@@ -109,7 +109,7 @@ A record holds each pack's values, params, and manifests in full. Palette
 writes `********` over each value whose schema format is `password`, and
 strata does the same for a profile with a draft: see
 [Secrets in the values](../../internals/palette/profiles.md#secrets-in-the-values).
-`packs[].masked` names each masked value: see
+`same-release`, `compare`, and `verify` name each masked value: see
 [A secret changes in a pack value](../../use-cases/masked-value.md).
 A record does not hold the value of a sensitive profile variable. Each other
 secret stays: a secret in a value that the schema does not mark, or in a

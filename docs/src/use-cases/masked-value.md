@@ -19,15 +19,16 @@ job. The job is [Drift issues](../automation/drift-issues.md).
 **Follow along.** `just playground masked-value` serves this tenant on this
 machine, with no key and no cost.
 
-## 1. The record names each masked value
+## 1. The record holds the mask
 
 ```text
 {{#include ../output/masked-record.txt}}
-{{#include ../output/masked-paths.txt}}
+{{#include ../output/masked-values.txt}}
 ```
 
-`packs[].masked` gives the path of each value that holds `********`. The root
-does not cover the list: the values are in the root already, with the mask.
+The values of the pack hold `********`. The record holds no list of the masked
+paths: the values give them. `same-release`, `compare`, and `verify` find each
+path in the values.
 
 ## 2. same-release passes the pair, and names the pack
 
@@ -67,8 +68,9 @@ secret in Palette does not change this verdict.
 - Keep the secret out of the pack values. Give the pack the name of a
   Kubernetes Secret, and give each new secret a new name. Then a change of the
   secret is a change of the name, and the root shows it.
-- Read `packs[].masked` before you keep a record in a repository. A masked value
-  holds no secret, but each other value of the pack is in clear.
+- Read the masked paths that `compare` gives before you keep a record in a
+  repository. A masked value holds no secret, but each other value of the pack
+  is in clear.
 
 ## Palette behavior
 

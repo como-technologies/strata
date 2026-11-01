@@ -124,12 +124,6 @@ pub struct Pack {
     /// root: the values are in it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub preset_options: Vec<PresetOption>,
-    /// The path of each value that Palette masks, sorted: each value that is the text
-    /// `********`. Palette writes that text over a value whose schema format is `password`, so
-    /// the root covers the mask and not the secret. Outside the root: the values are in it. A
-    /// record written before this field gets it from its values when it is read.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub masked: Vec<String>,
     /// The three sub-hashes and the node hash.
     pub hash: PackHash,
 }
@@ -184,12 +178,6 @@ pub fn pack_content(values: &Value) -> (Vec<String>, Vec<PackChart>) {
     charts.sort();
     charts.dedup();
     (images, charts)
-}
-
-/// The path of each value of parsed `values` that Palette masks, sorted, in the form of
-/// [`crate::diff::leaf_diff`]: each value that is the text `********`.
-pub(super) fn masked_paths(values: &Value) -> Vec<String> {
-    crate::diff::leaf::paths_of_text(values, MASKED)
 }
 
 /// A manifest attached to a pack on the profile.
@@ -274,6 +262,17 @@ impl Pack {
     /// True for a manifest pack: the manifests of a layer, from no registry.
     pub(crate) fn is_manifest(&self) -> bool {
         self.pack_type() == Some(PackType::Manifest)
+    }
+
+    /// The path of each value that Palette masks, sorted, in the form of
+    /// [`crate::diff::leaf_diff`]: each value of [`Pack::values_canon`] that is the text
+    /// `********`.
+    ///
+    /// Palette writes that text over a value whose schema format is `password`, so the root
+    /// covers the mask and not the secret. A record holds no list of the paths, because the
+    /// values give them. A record of strata 0.25 and before holds `masked`, and strata ignores it.
+    pub fn masked_paths(&self) -> Vec<String> {
+        crate::diff::leaf::paths_of_text(&self.values_canon, MASKED)
     }
 
     /// The machine image that the pack names in its annotation `imageId`, when it names one.
@@ -379,7 +378,6 @@ impl Pack {
         let node = sha256_hex(&format!("{identity}{upstream}{authored}"));
 
         let (images, charts) = pack_content(&values_canon);
-        let masked = masked_paths(&values_canon);
         Pack {
             key: format!("{layer}/{name}"),
             layer,
@@ -405,7 +403,6 @@ impl Pack {
             charts,
             // no document of Palette gives a selection: the resolve of a candidate sets it
             preset_options: Vec::new(),
-            masked,
             hash: PackHash {
                 identity,
                 upstream,

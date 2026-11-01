@@ -1,2 +1,0 @@
-$ jq -c '.packs[] | select(.masked) | {key, masked}' releases/1.1.10/dev.json
-{"key":"addon/cert-manager","masked":["registryPassword"]}

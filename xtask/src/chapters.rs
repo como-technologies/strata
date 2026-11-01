@@ -2298,10 +2298,10 @@ fn use_cases(r: &mut Runner) {
         "strata snapshot aws-stack@1.1.10 -o releases/1.1.10/dev.json",
     );
     r.step(
-        "masked-paths",
+        "masked-values",
         0,
         false,
-        r#"jq -c '.packs[] | select(.masked) | {key, masked}' releases/1.1.10/dev.json"#,
+        r#"jq -c '.packs[] | select(.values | contains("********")) | {key}' releases/1.1.10/dev.json"#,
     );
     r.quiet("PALETTE_PROJECT=prod strata snapshot aws-stack@1.1.10 -o releases/1.1.10/prod.json");
     r.serve_here(); // state 1: the two records are taken, and each one holds the mask
