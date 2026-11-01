@@ -98,11 +98,18 @@ where each module goes.
 - A version order follows Semantic Versioning 2.0.0 where the version parses, as
   Palette orders versions. `src/reference/version.rs` is the one module that
   parses a version and orders versions. Use `version::compare`, `version::pick`,
-  and `version::is_pre_release`. Do not write a second parse.
+  `version::numbers`, and `version::is_pre_release`. `xtask/` and
+  `strata-preflight` use them too. Do not write a second parse.
 - The natural order of the text is only the fallback for a string that does not
   parse, such as `LTS__24.x`. No script uses `sort -V` for a version. A script
   reads the direction of a move from strata, such as `versionMove` in
   `strata-diff/1`.
+- One order of a version lives outside strata: `oldest_first` in
+  `examples/fetch-examples.sh`. The script runs offline, so it cannot ask
+  strata. It keeps only a version of plain numbers and orders it by the
+  numbers. The test `the_examples_fetch_orders_plain_versions_as_strata_does`
+  fails when this order differs from `version::compare`. Add no other
+  exception.
 - Give each limit, code, and fixed text of Palette a named `const`, in one
   place. Its comment says what Palette does. It does not cite the code of
   Palette: see [rule 7](./documentation.md#rules).

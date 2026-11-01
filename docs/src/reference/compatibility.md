@@ -49,9 +49,10 @@ table takes an expression for each text, and a literal is one.
 
 After 0.25.0, `reference::version::compare` follows Semantic Versioning 2.0.0
 for two versions that parse: see
-[The order of versions](#the-order-of-versions). `reference::version::is_pre_release`
-and `reference::version::numbers` are new. `ops::BehindOptions` has the field
-`pre_release`. A struct literal must set it, or use `..Default::default()`.
+[The order of versions](#the-order-of-versions). `reference::version::is_pre_release`,
+`reference::version::numbers`, and `reference::version::pick` are new.
+`ops::BehindOptions` has the field `pre_release`. A struct literal must set it,
+or use `..Default::default()`.
 
 After 0.25.0, `diff::Diff` and `diff::PackDiff` have the field
 `version_move: Option<diff::VersionMove>`. A struct literal or a pattern with no

@@ -16,6 +16,7 @@ use std::path::Path;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use strata::model::cloud::CLOUD_ALL;
+use strata::reference::version;
 
 use crate::error::{Error, Result};
 use crate::report::percent;
@@ -169,21 +170,18 @@ impl Ledger {
     }
 }
 
-/// `4.10.3` and `4.10` are one release for the counts: a patch does not reset them.
+/// True when `a` and `b` are one release for the counts: a patch does not reset them.
+///
+/// A version that parses names a release by its first two numbers, so `4.10.3` and `4.10` are one
+/// release, and so are `4` and `4.0`. A text that does not parse is the same release only as the
+/// same text.
 fn same_minor(a: &str, b: &str) -> bool {
-    let minor = |s: &str| {
-        s.trim_start_matches('v')
-            .split('.')
-            .take(2)
-            .map(|p| {
-                p.chars()
-                    .take_while(|c| c.is_ascii_digit())
-                    .collect::<String>()
-            })
-            .collect::<Vec<_>>()
-            .join(".")
-    };
-    minor(a) == minor(b)
+    let line = |numbers: &[u64]| [0, 1].map(|i| numbers.get(i).copied().unwrap_or(0));
+    match (version::numbers(a), version::numbers(b)) {
+        (Some(x), Some(y)) => line(&x) == line(&y),
+        (None, None) => a == b,
+        _ => false,
+    }
 }
 
 /// The counts of one rule.
@@ -614,6 +612,48 @@ runs:
         assert_eq!(c.caught + c.passed, 0, "another release has no run");
         let c = l.counts_for("gke-pool-multiple-3", "eks", None);
         assert_eq!(c.caught + c.passed, 0, "another engine has no run");
+    }
+
+    #[test]
+    fn a_release_is_its_first_two_numbers_as_version_reads_them() {
+        for (a, b) in [
+            ("4.10.3", "4.10"),
+            ("4", "4.0"),
+            ("4.01", "4.1"),
+            ("v4.10", "4.10.0"),
+            ("4.10.3-rc.1", "4.10"),
+        ] {
+            assert!(same_minor(a, b), "{a} is the release {b}");
+            assert!(same_minor(b, a), "{b} is the release {a}");
+        }
+        for (a, b) in [("4.10", "4.1"), ("4.10.3", "4.11"), ("4", "4.1")] {
+            assert!(!same_minor(a, b), "{a} is not the release {b}");
+        }
+    }
+
+    #[test]
+    fn a_text_that_is_no_version_is_the_release_of_the_same_text_only() {
+        assert!(same_minor("dev", "dev"));
+        assert!(!same_minor("beta", "dev"));
+        assert!(!same_minor("dev", "4.10"));
+        assert!(!same_minor("4.10", "dev"));
+        assert!(!same_minor("4.10.3.1", "4.10"));
+    }
+
+    #[test]
+    fn a_run_of_another_release_text_does_not_count() {
+        let l = ledger(
+            r#"
+schema: strata-preflight-ledger/1
+runs:
+  - {run: r1, engine: gke, release: beta, results: [{rule: gke-api-off, result: caught}]}
+  - {run: r2, engine: gke, release: "4", results: [{rule: gke-api-off, result: caught}]}
+"#,
+        );
+        let c = l.counts_for("gke-api-off", "gke", Some("dev"));
+        assert_eq!(c.caught, 0, "a run at beta is no run at dev");
+        let c = l.counts_for("gke-api-off", "gke", Some("4.0"));
+        assert_eq!(c.runs, vec!["r2"], "the release 4 is the release 4.0");
     }
 
     #[test]

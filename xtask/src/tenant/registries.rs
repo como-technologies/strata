@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
+use strata::reference::{LATEST, version};
 
 use super::Tenant;
 use super::routes::{
@@ -280,21 +281,18 @@ fn read_json(path: &Path) -> Value {
     serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
 }
 
-/// A version is newest by number, and not by text: 1.9.0 is older than 1.10.0.
-fn version_key(version: &str) -> Vec<u64> {
-    version
-        .split('.')
-        .map(|p| p.parse::<u64>().unwrap_or(0))
-        .collect()
-}
-
 /// The newest csi-aws-ebs version, copied into the OCI registry with its own uid and digest.
+///
+/// The newest is the one that `name@latest` picks. 1.9.0 is older than 1.10.0. A pre-release is
+/// newest only when no item has another version.
 fn add_csi_to_oci(listing: &mut Value) {
     let items = listing["items"].as_array().cloned().unwrap_or_default();
-    let newest = items
-        .iter()
-        .filter(|i| !i["spec"]["values"].is_null())
-        .max_by_key(|i| version_key(i["spec"]["version"].as_str().unwrap_or_default()));
+    let with_values = items.iter().filter(|i| !i["spec"]["values"].is_null());
+    let newest = version::pick(
+        with_values,
+        |i| i["spec"]["version"].as_str().unwrap_or_default(),
+        LATEST,
+    );
     let Some(newest) = newest else { return };
     let mut copy = newest.clone();
     copy["metadata"]["uid"] = json!(OCI_CSI_PACK);
@@ -308,16 +306,14 @@ fn add_csi_to_oci(listing: &mut Value) {
 }
 
 /// The OCI copy holds the newest version, under its exact tag. A tag row carries its version, as
-/// run 20260918T020941Z found, and the newest is newest by number, not by text.
+/// run 20260918T020941Z found, and the newest is the one that `name@latest` picks.
 fn csi_entity_in_oci(entity: &Value) -> Value {
     let tags = entity["tags"].as_array().cloned().unwrap_or_default();
-    let newest = tags
-        .iter()
-        .filter(|t| {
-            let tag = t["tag"].as_str().unwrap_or_default();
-            tag.split('.').count() == 3 && tag.split('.').all(|p| p.parse::<u64>().is_ok())
-        })
-        .max_by_key(|t| version_key(t["version"].as_str().unwrap_or_default()));
+    let exact = tags.iter().filter(|t| {
+        let tag = t["tag"].as_str().unwrap_or_default();
+        tag.split('.').count() == 3 && tag.split('.').all(|p| p.parse::<u64>().is_ok())
+    });
+    let newest = version::pick(exact, |t| t["version"].as_str().unwrap_or_default(), LATEST);
     let mut out = entity.clone();
     out["tags"] = match newest {
         Some(t) => json!([{"tag": t["tag"], "version": t["version"], "packUid": OCI_CSI_PACK}]),
@@ -330,10 +326,78 @@ fn csi_entity_in_oci(entity: &Value) -> Value {
 mod tests {
     use super::*;
 
+    /// A listing item of csi-aws-ebs with `values` when `kept`, as the stand-in keeps the content
+    /// of a few versions only.
+    fn item(version: &str, kept: bool) -> Value {
+        let values = if kept { json!("values") } else { Value::Null };
+        json!({"metadata": {"uid": version}, "spec": {"version": version, "values": values}})
+    }
+
+    /// The version of the copy that `add_csi_to_oci` adds to a listing of `versions`.
+    fn oci_copy(versions: &[&str]) -> Option<String> {
+        let mut listing =
+            json!({"items": versions.iter().map(|v| item(v, true)).collect::<Vec<_>>()});
+        add_csi_to_oci(&mut listing);
+        let items = listing["items"].as_array().expect("an array");
+        let copy = items.get(versions.len())?;
+        assert_eq!(copy["metadata"]["uid"], OCI_CSI_PACK);
+        Some(copy["spec"]["version"].as_str()?.to_string())
+    }
+
+    /// The version that `csi_entity_in_oci` keeps from tags of `(tag, version)`.
+    fn oci_tag(tags: &[(&str, &str)]) -> Vec<Value> {
+        let rows: Vec<Value> = tags
+            .iter()
+            .map(|(tag, version)| json!({"tag": tag, "version": version}))
+            .collect();
+        let out = csi_entity_in_oci(&json!({"tags": rows}));
+        out["tags"].as_array().cloned().unwrap_or_default()
+    }
+
     #[test]
     fn a_version_is_newest_by_number_and_not_by_text() {
-        let mut got = vec!["1.9.0", "1.10.0", "1.63.1"];
-        got.sort_by_key(|v| version_key(v));
-        assert_eq!(got, ["1.9.0", "1.10.0", "1.63.1"]);
+        assert_eq!(
+            oci_copy(&["1.9.0", "1.63.1", "1.10.0"]).as_deref(),
+            Some("1.63.1")
+        );
+        assert_eq!(oci_copy(&["1.9.0", "1.10.0"]).as_deref(), Some("1.10.0"));
+    }
+
+    #[test]
+    fn a_pre_release_is_newest_only_when_no_other_version_exists() {
+        assert_eq!(
+            oci_copy(&["1.65.0", "1.66.0-rc.1", "1.64.0"]).as_deref(),
+            Some("1.65.0")
+        );
+        assert_eq!(
+            oci_copy(&["1.66.0-rc.1", "1.66.0-rc.2"]).as_deref(),
+            Some("1.66.0-rc.2")
+        );
+    }
+
+    #[test]
+    fn a_version_with_a_prefix_is_ordered_by_its_numbers() {
+        assert_eq!(oci_copy(&["1.65.0", "v1.66.0"]).as_deref(), Some("v1.66.0"));
+    }
+
+    #[test]
+    fn a_version_without_content_gets_no_copy() {
+        let mut listing = json!({"items": [item("1.65.0", false)]});
+        add_csi_to_oci(&mut listing);
+        assert_eq!(listing["items"].as_array().map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn the_oci_tag_is_the_newest_exact_tag() {
+        let kept = oci_tag(&[
+            ("1.x", "1.66.0"),
+            ("1.9.0", "1.9.0"),
+            ("1.10.0", "1.10.0"),
+            ("1.66.0-rc.1", "1.66.0-rc.1"),
+        ]);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0]["tag"], "1.10.0");
+        assert_eq!(kept[0]["packUid"], OCI_CSI_PACK);
+        assert!(oci_tag(&[("1.x", "1.66.0")]).is_empty());
     }
 }
