@@ -36,7 +36,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/lib.rs` | The library and its modules. |
 | `src/api/` | Palette. `mod.rs` is the `PaletteApi` trait; `http.rs` sends it over HTTP, `retry.rs` tries it again, and `memory.rs` answers it from canned responses in tests. `raw.rs` holds the responses a snapshot is built from, and their directory on disk. `mask.rs` writes the mask over a secret value. `codes.rs` holds the codes of the answers of Palette that strata reads. `audit.rs` names the kinds of object in the audit log. |
 | `src/api/palette/` | The reads of Palette. `profiles.rs` reads the profiles and the app profiles. `clusters.rs` reads the clusters, their events, the cloud accounts, the cluster groups, and the edge hosts. `listings.rs` reads the listings, the searches, and the audit log. `mod.rs` builds the routes and reads each page. |
-| `src/ops/` | One module for each command: `verify.rs`, `same_release.rs`, `consumers/`, `behind.rs`, `list.rs`, and `packs.rs`. `behind/bump.rs` is a child of `behind.rs`, and `packs/tests.rs` holds the tests of `packs.rs`. `consumers/app.rs` reads the consumers of an app profile, and `consumers/reads.rs` the reads beside the consumer list. `consumer_list.rs` reads the consumer list of a profile document. `fleet.rs` finds the clusters of a query of labels and writes a record of each; `repave.rs` asks Palette if a change repaves, and `validate.rs` asks Palette if it takes the packs. `behind/bump.rs` asks the same routes about the bump of a pin. `live.rs` reads the object of a record as Palette holds it now, for `verify`. `source.rs` chooses what `snapshot` and `candidate` read from their refs and flags, before any request. None is a command of its own. `mod.rs` takes a snapshot and compares two. |
+| `src/ops/` | One module for each command: `verify.rs`, `same_release.rs`, `consumers/`, `behind.rs`, `list.rs`, and `packs.rs`. `behind/bump.rs` is a child of `behind.rs`, and `packs/tests.rs` holds the tests of `packs.rs`. `consumers/app.rs` reads the consumers of an app profile, and `consumers/reads.rs` the reads beside the consumer list. `consumer_list.rs` reads the consumer list of a profile document. `fleet.rs` finds the clusters of a query of labels and writes a record of each. `repave.rs` asks Palette if a change repaves. `validate.rs` asks Palette if it takes the packs. `behind/bump.rs` asks the validate routes about the bump of a pin, for `behind`. `live.rs` reads the object of a record as Palette holds it now, for `verify`. `source.rs` chooses what `snapshot` and `candidate` read from their refs and flags, before any request. None is a command of its own. `mod.rs` takes a snapshot and compares two. |
 | `src/snapshot/` | A record: the document in `mod.rs`, the pack in `pack.rs`, the record of a cluster in `cluster.rs`, and the build from the responses in `build.rs`. `shape.rs` and `policy.rs` hold the fields of the `shape` tier and the `policy` tier of a cluster record. |
 | `src/cloud.rs` | The cloud types of Palette as the closed set `Cloud`, and the rule for a pack that supports a cloud. |
 | `src/cluster_state.rs` | The states of a cluster in `status.state`, as the closed set `ClusterState`. |
@@ -60,7 +60,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `tests/` | The tests of the crate, in one crate: `main.rs` names each file as a module, and `common/mod.rs` holds each helper that two files use. `common/palette.rs` names the routes of Palette and builds the documents of a profile: the pack ref, the pack manifests, and the variables. The generator of `benches/` includes that file too, so the routes and the documents have one source. `cargo test verify::` runs the tests of `verify.rs`. |
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
-| `preflight/` | `strata-preflight`, a package of its own in the workspace: see [How preflight works](../internals/preflight.md). `rule/` holds the rule format: `mod.rs` holds the rule and the catalog, `check.rs` the four kinds of check, and `validate.rs` the checks of the loader. `catalog.rs` and `rules/*.yaml` hold the catalog, and `jq.rs` holds the jq engine. `world/` holds the world. `probe/` holds the checks: `mod.rs` runs a check, `backend.rs` holds the backends, `palette.rs` and `exec.rs` run a check of Palette and of a command, and `outcome.rs` holds the answer. `run/` holds the run: `mod.rs` holds the run, `watch.rs` the watch, `verbose.rs` the lines of `--verbose`, and `rules.rs` the listing of the rules. `confidence.rs` and `evidence/runs.yaml` hold the confidence and the ledger, and `fixture.rs` and `rules/fixtures/` the fixtures of the tests. `report/` holds the report, and `html.rs` the page. In `report/`, `mod.rs` holds the document, `scorecard.rs` the counts, `label.rs` the word, the color, and the class of a label, `terminal.rs` and `markdown.rs` the text forms, and `reproduce.rs` the lines to run by hand. `tests/closed_set.rs` of the package makes sure that each closed set of the rule format gives the text that serde writes. |
+| `preflight/` | `strata-preflight`, a package of its own in the workspace: see [How preflight works](../internals/preflight.md). `rule/` holds the rule format: `mod.rs` holds the rule and the catalog, `check.rs` the four kinds of check, and `validate.rs` the checks of the loader. `catalog.rs` and `rules/*.yaml` hold the catalog, and `jq.rs` holds the jq engine. `world/` holds the world. `probe/` holds the checks. `mod.rs` runs a check, and `backend.rs` holds the backends. `palette.rs` and `exec.rs` run a check of Palette and of a command. `outcome.rs` holds the answer. `run/` holds the run: `mod.rs` holds the run, `watch.rs` the watch, `verbose.rs` the lines of `--verbose`, and `rules.rs` the listing of the rules. `confidence.rs` and `evidence/runs.yaml` hold the confidence and the ledger, and `fixture.rs` and `rules/fixtures/` the fixtures of the tests. `report/` holds the report, and `html.rs` the page. In `report/`, `mod.rs` holds the document, `scorecard.rs` the counts, and `label.rs` the word, the color, and the class of a label. `terminal.rs` and `markdown.rs` hold the text forms, and `reproduce.rs` holds the lines to run by hand. `tests/closed_set.rs` of the package makes sure that each closed set of the rule format gives the text that serde writes. |
 | `fuzz/` | `strata-fuzz`, a package of its own in the workspace: the fuzz targets and the property tests of `strata` and `strata-preflight`, see [The fuzzing](#the-fuzzing). `src/` holds one module for each part, such as `mask.rs`, and `support.rs` holds what the targets share. `seed.rs` holds the table of the targets and their seed corpus. `src/__fuzz__/<module>__<test>/` holds the corpus and the crashes of one target. The package has no code outside its tests. |
 
 `api/palette/tests.rs`, `candidate/tests.rs`, and `error/tests.rs` hold the unit
@@ -105,10 +105,10 @@ command directly. `cargo xtask` with no command prints its usage and exits `2`. 
 `cargo test -p strata-benches`, and `cargo test -p strata-fuzz`. The workspace
 builds only the root package by default. So `cargo test` alone does not run the
 tests of `xtask`, which hold the routes of the stand-in for Palette. It does not
-run the tests of the generator of the benchmarks, or the fuzz targets, either.
+run the tests of the generator of the benchmarks or the fuzz targets either.
 When one test fails, `just test` stops and exits with a code that is not zero.
 CI runs `just test`, so CI runs the tests of the stand-in, of the benchmarks, and
-the fuzz targets with the others.
+of the fuzz targets with the others.
 
 `cargo test` runs:
 
@@ -350,7 +350,7 @@ one to read.
 
 | File | Benchmark | What it measures |
 | --- | --- | --- |
-| `benches/record.rs` | `canon_root/build/1_packs`, `50_packs`, `200_packs` | The record of a profile of that many packs with no manifest, from the responses of Palette: the canonical form of the values of each pack, the hashes, and the root. |
+| `benches/record.rs` | `canon_root/build/1_packs`, `50_packs`, `200_packs` | The record of a profile of that many packs with no manifest, from the responses of Palette. It covers the canonical form of the values of each pack, the hashes, and the root. |
 | `benches/record.rs` | `canon_root/content_digest/200_packs` | The content digest of a record of 200 packs. |
 | `benches/record.rs` | `snapshot/from_raw/200_packs_200_manifests` | The record of the largest profile that Palette takes, from the responses of Palette. |
 | `benches/compare.rs` | `compare/identical`, `compare/one_change`, `compare/every_pack` | The comparison of two records of 200 packs and 200 manifests. The records are the same, or one pack moves to the next version, or each pack moves and each manifest changes. |
@@ -425,7 +425,7 @@ another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to bo
 ## Continuous integration
 
 `.github/workflows/checks.yml` holds every check. The `ci` workflow runs it on each push to
-`main` and on each pull request, and the release workflow runs it before it builds a binary:
+`main` and on each pull request. The release workflow runs it before it builds a binary:
 
 | Job | Runs |
 | --- | --- |
@@ -448,7 +448,7 @@ builds it twice.
 
 The checks are a workflow of their own because a caller cannot grant a called
 workflow more than it has itself. `publish the book` needs `pages: write`, which
-a release does not have, and a release that called a workflow asking for it
+a release does not have. A release that called a workflow asking for it
 failed before it started.
 
 Run the same recipes in a clean checkout before you push. A file that is not

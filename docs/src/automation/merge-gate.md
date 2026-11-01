@@ -1,9 +1,9 @@
 # The merge gate
 
 `scripts/ci/merge-gate.sh` answers one question: **what do the records look like
-after the merge button?** It merges the target branch into the checkout first,
-so every answer is about the merge result, not about the branch as it was when
-somebody opened it.
+after the merge button?** It merges the target branch into the checkout first.
+So every answer is about the merge result. It is not about the branch as it was
+when somebody opened it.
 
 ```bash
 scripts/ci/merge-gate.sh "releases/*.json" --base main
@@ -11,8 +11,8 @@ scripts/ci/merge-gate.sh "releases/*.json" --base main
 
 A branch that sat for a day is the problem. Another merge request moved the
 record. The version that the record names changed in Palette. The comment on
-the branch still shows yesterday's comparison, the merge is clean, and the
-cluster build gets content from outside the review of the team.
+the branch still shows yesterday's comparison. The merge is clean. The cluster
+build gets content from outside the review of the team.
 
 ## The three checks
 
@@ -82,18 +82,18 @@ The gate reads the declaration, and passes:
 
 The line names the record and the release that the merge result pins, so a
 declaration covers that rollback and no other change. A team that works in the
-merge request puts the label `rollback` on it, and the job runs with
-`--allow-rollback`; both ways are reported, and both pass.
+merge request puts the label `rollback` on it. Then the job runs with
+`--allow-rollback`. The report shows both ways, and both pass.
 
 Read the evidence as evidence, not as proof. A rebase replays an old change on
 the new base. Then "the branch wrote this record after the target branch moved"
 is true of a branch that never read what it replaces. The declaration
-is the part that makes it a decision, and it stays in the history of the
+is the part that makes it a decision. It stays in the history of the
 repository, where the next person can read why.
 
 ### A record that the published version no longer matches
 
-The merge is clean and no pin moves back, and the gate is still red: the
+The merge is clean and no pin moves back, but the gate is still red. The
 profile that the record names was edited in place after the record was written.
 See [A published version is edited in place](../use-cases/edited-in-place.md).
 
@@ -102,7 +102,7 @@ See [A published version is edited in place](../use-cases/edited-in-place.md).
 ```
 
 `--no-verify`, or no API key where strata looks for one (`PALETTE_API_KEY`,
-`SPECTROCLOUD_APIKEY`, or `~/.palette.env`), leaves this check out. Then the
+`SPECTROCLOUD_APIKEY`, or `~/.palette.env`), omits this check. Then the
 last line says `not verified` and why, in place of the count of records that
 did not verify. See [Settings](../reference/settings.md).
 
@@ -116,7 +116,7 @@ cluster.
 | --- | --- | --- |
 | `--base BRANCH` | `CI_MERGE_REQUEST_TARGET_BRANCH_NAME`, or `GITHUB_BASE_REF` | The target branch. |
 | `--remote NAME` | `STRATA_REMOTE`, or `origin` | The remote to fetch the target branch from. |
-| `--no-verify` | | Leave the verify check out. |
+| `--no-verify` | | Omit the verify check. |
 | `--allow-rollback` | | Accept a backwards pin, as the `rollback` label does. |
 | `--allow-no-digest` | | Accept a pack with no upstream digest, as `verify --allow-no-digest` does. Without it, the gate names the record `UNVERIFIED`. |
 
@@ -131,7 +131,7 @@ needs the history, so a job that clones with a depth gives it `GIT_DEPTH: 0` or
 | --- | --- |
 | `0` | The merge result is clear. |
 | `1` | The gate is red. The job fails, and the merge button waits. |
-| `2` | The script could not run: no target branch, no git checkout, no branch of that name on the remote, no record matches, or strata could not read a record. |
+| `2` | The script could not run. It found no target branch, no git checkout, or no branch of that name on the remote. It also stops when no record matches or when strata could not read a record. |
 
 A record that strata could not check is red, and not `2`. The report marks it
 `ERROR`.
@@ -146,16 +146,17 @@ where the host holds the button.
 `examples/ci/github/strata.yml` and `examples/ci/gitlab/strata.yml` hold this
 gate and the other four jobs, ready to copy.
 
-**GitHub.** Call the reusable workflow on `pull_request`, then make the job a
-required status check in the branch protection rule of the default branch. Turn
-on "Require branches to be up to date before merging". After a push to the
+**GitHub.** Call the reusable workflow on `pull_request`. Then make the job a
+required status check in the branch protection rule of the default branch.
+Enable "Require branches to be up to date before merging". After a push to the
 default branch, that setting blocks the merge until the pull request takes the
-push, and the update of the pull request runs the check again. No setting re-runs
-the check on a push to the default branch itself. A merge queue is the strongest
-form: it runs the gate on the merge result of the queue. A queue run needs two
-things. Add `merge_group:` to the events of the caller. Give the workflow the
-`base` input as well, because the queue names the base as a full ref, which the
-script does not read: `base: main`.
+push. The update of the pull request runs the check again. No setting re-runs
+the check on a push to the default branch itself.
+
+A merge queue is the strongest form. It runs the gate on the merge result of the
+queue. A queue run needs two things. Add `merge_group:` to the events of the
+caller. Give the workflow the `base` input as well, for example `base: main`.
+The queue names the base as a full ref, and the script does not read a full ref.
 
 ```yaml
 on:
@@ -179,7 +180,7 @@ jobs:
 | --- | --- | --- |
 | `records` | yes | The records, or patterns, in the checkout of the caller. |
 | `strata-version` | yes | The strata release, a tag of this repository. |
-| `verify` | no | `false` leaves the verify check out. Default `true`. |
+| `verify` | no | `false` omits the verify check. Default `true`. |
 | `rollback-label` | no | The label that allows a backwards pin. Default `rollback`. |
 | `allow-no-digest` | no | Accept a pack with no upstream digest, as `verify --allow-no-digest` does. Default `false`. |
 | `base` | no | The branch to merge in, when no event names it. A merge queue run needs it. |

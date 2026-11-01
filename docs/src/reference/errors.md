@@ -128,9 +128,9 @@ sent.
 | `InvalidLimit` | A listing with a `limit` above the maximum. |
 
 `POST /v1/spectroclusters/{uid}/validate/packs` refuses the whole request with
-HTTP `500` and one of these codes. Strata does not send it again, and
+HTTP `500` and one of these codes. Strata does not send it again.
 `compare --validate` prints the refusal as the answer of Palette, with exit
-`0` or `1` from the comparison:
+`0` or `1` from the comparison. See
 [Ask Palette if it accepts the packs](../commands/compare/validate.md).
 
 | Code | Palette refuses |
@@ -147,16 +147,16 @@ HTTP `500` and one of these codes. Strata does not send it again, and
 | `ClusterProfileOidcNotConfigured` | An integration pack that needs an OIDC identity provider, when neither the Kubernetes pack nor the organization gives one. |
 | `DisabledPacksForbidden` | A pack that is disabled. |
 
-The same route refuses one more case with HTTP `403`, and not `500`:
-`PackValuesOverrideForbidden`, a pack that an integration pack names as a
+The same route refuses one more case with HTTP `403`, and not `500`. The code is
+`PackValuesOverrideForbidden`, for a pack that an integration pack names as a
 read-only dependency, with values other than its defaults. `compare --validate`
 prints it as the answer of Palette too. Each other `403` is an error of strata.
 
 `POST /v1/clusterprofiles/validate/packs` and
 `POST /v1/clusterprofiles/{uid}/validate/packs` refuse the whole request with
-HTTP `500` and one of these codes. Strata does not send it again, and
+HTTP `500` and one of these codes. Strata does not send it again.
 `snapshot --validate` prints the refusal as the answer of Palette, with exit
-`2` and the error `palette-refuses`:
+`2` and the error `palette-refuses`. See
 [Ask Palette before you publish](../commands/candidate.md#ask-palette-before-you-publish).
 
 | Code | Palette refuses |
@@ -175,7 +175,7 @@ Palette too.
 `behind` reads the refusals of the cluster route and of the route of an update as
 the answer too. It prints them under `bump to`, and its exit does not change.
 Each other error of a request is a `palette gave no answer` line there, and the
-pin stays behind: see
+pin stays behind. See
 [Palette accepts the move, or refuses it](../commands/behind.md#palette-accepts-the-move-or-refuses-it).
 
 For a candidate, `snapshot --validate` also asks

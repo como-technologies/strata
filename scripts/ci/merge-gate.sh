@@ -30,7 +30,7 @@
 #      that holds a pack with no upstream digest is unverified, and red too: a change of the
 #      archive of that pack does not show. --allow-no-digest accepts it, as verify does.
 #      --no-verify, or no Palette key where strata looks for one (PALETTE_API_KEY,
-#      SPECTROCLOUD_APIKEY, or ~/.palette.env), leaves this check out, and the last line says so.
+#      SPECTROCLOUD_APIKEY, or ~/.palette.env), omits this check, and the last line says so.
 #
 # Exit 0 when the merge result is clear, 1 when the gate is red, and 2 when the script could not
 # run at all. A record that strata could not check is red, not 2: the gate fails closed.

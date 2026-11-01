@@ -35,11 +35,16 @@ strata preflight clusters/payments.json --cloud eks --strict --out preflight || 
 terraform apply
 ```
 
-With a key, strata records each profile from Palette, reads the cloud account
-and the packs, calls the validate routes, and runs the checks of the cloud tier
-with the tools on the machine: `aws`, `gcloud`. A tool that is not there makes
-its rules `NOT CHECKED`, with the command to run by hand. `--no-exec` runs no
-tool at all.
+With a key, strata does these steps:
+
+- It records each profile from Palette.
+- It reads the cloud account and the packs.
+- It calls the validate routes.
+- It runs the checks of the cloud tier with the tools on the machine (`aws`,
+  `gcloud`).
+
+A tool that is not there makes its rules `NOT CHECKED`, with the command to run
+by hand. `--no-exec` runs no tool at all.
 
 `--out preflight` writes `report.md`, `report.json`, `report.html`,
 `world.json`, and `entity.json`. Keep the directory as an artifact of the job:
@@ -54,13 +59,14 @@ strata preflight --watch "cluster:$uid" --every 30 --limit 3600
 
 The watch reads the cluster, its summary, and its events every 30 seconds. Each
 4xx but 401 and 429 gives a reading with no summary or no events. A 401 or a 429
-stops the watch with its error, as a read of the world does. It ends at the first
-known stuck state with the event that shows it, or when the
-cluster is `Running` with each counted rule passed, or at the limit; a warning
-is in the report, and the watch reads on. The provider gives
+stops the watch with its error, as a read of the world does.
+
+The watch ends at the first known stuck state, with the event that shows it. It
+also ends when the cluster is `Running` with each counted rule passed, or at the
+limit. A warning is in the report, and the watch continues. The provider gives
 exit `0` at its create timeout while the cluster still builds
-([Client tools](../internals/palette/limits.md#what-strata-preflight-does-not-check));
-the watch is the step that says `Running`.
+([Client tools](../internals/palette/limits.md#what-strata-preflight-does-not-check)).
+The watch is the step that says `Running`.
 
 ## On GitHub and GitLab
 
@@ -89,8 +95,8 @@ The workflow sets `--format markdown`. It sets `--quiet` too, except when
 `--promotion`, `--ledger`, and `--schema` run no check of a cluster, so the
 workflow has no input for them.
 
-`examples/ci/github/strata.yml` holds a `preflight` job beside the other six,
-and `examples/ci/gitlab/strata.yml` a `strata-preflight` job: both run the
+`examples/ci/github/strata.yml` holds a `preflight` job beside the other six.
+`examples/ci/gitlab/strata.yml` holds a `strata-preflight` job. Both run the
 static tier on each pull request, with the records of the repository. The job
 that builds runs the live tier with the key, and the watch after the create.
 The GitHub file also holds the job of the comment, in a comment of the file.
@@ -203,16 +209,16 @@ rules:
 strata preflight cluster.json --cloud eks --probes landing-zone.yaml
 ```
 
-A custom probe follows the same promotion: the company keeps its own ledger of
-runs (`--ledger runs.yaml`), and `--promotion` says when a probe meets the bar.
+A custom probe follows the same promotion. The company keeps its own ledger of
+runs (`--ledger runs.yaml`). `--promotion` says when a probe meets the bar.
 [The rule format](../reference/preflight-rules.md) states the format and the
 ledger.
 
 ## A rule set for each Palette release
 
 A rule can name the Palette releases it applies to (`releases: "<4.11"`). A run
-with `--release 4.10` skips the rules of other releases; a run without it runs
-every rule, because a tenant key cannot read the release from Palette: see
+with `--release 4.10` skips the rules of other releases. A run without it runs
+every rule, because a tenant key cannot read the release from Palette. See
 [The release of Palette](../internals/palette/limits.md#the-release-of-palette).
 To see what a release changes:
 
@@ -223,13 +229,13 @@ diff r410.txt r411.txt
 ```
 
 A new release that changes the behavior of a rule sets its counts in the ledger
-to zero for that release: a preflight check is proven per engine and per
+to zero for that release. The ledger proves a preflight check per engine and per
 release.
 
 Run the cloud tier again after each upgrade of Palette, before the first
 create. The first AWS create after an upgrade updates the CAPA stack of the
-account, and an update that the role cannot apply stops each AWS create of the
-account. Give the release with its patch (`--release 4.10.12`): a patch release
+account. An update that the role cannot apply stops each AWS create of the
+account. Give the release with its patch (`--release 4.10.12`). A patch release
 can change the stack too. See
 [After an upgrade of Palette](../use-cases/stop-a-build.md#after-an-upgrade-of-palette).
 
@@ -243,9 +249,14 @@ the items to start from, and an example crate.
 ## The lab
 
 The live example of this repository runs the same three tiers around each
-build of each cloud: `examples/live/preflight.sh` first, with the checks of the
-lab itself (the tools, the auth of the cloud CLIs, the ECR login, the leftovers
-of a run before), then `examples/live/preflight-plan.sh` with the test plan of
-#91, which makes each fault on purpose and checks that strata finds it, and
-appends the run to the ledger. See
+build of each cloud. It runs two scripts in this order:
+
+- `examples/live/preflight.sh` runs first. It runs the checks of the lab itself
+  (the tools, the auth of the cloud CLIs, the ECR login, the leftovers of a run
+  before).
+- `examples/live/preflight-plan.sh` runs second. It runs the test plan of #91.
+  The plan makes each fault on purpose and checks that strata finds it. The
+  script also appends the run to the ledger.
+
+See
 [The live example](../development/live-example.md#the-preflight-checks).

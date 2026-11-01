@@ -232,13 +232,14 @@ pub(super) fn cluster_packs_answer<A: PaletteApi>(
 
 /// Ask Palette whether it takes the name, the version, and the packs of a profile record.
 ///
-/// A record with no uid, of a candidate, goes to the three routes that check a create. `GET
-/// /v1/clusterprofiles/validate/name` checks the name and the version. `POST
-/// /v1/clusterprofiles/import/validate` checks the names of the packs and the manifests, and a
-/// repeat of each, and a disabled pack. `POST /v1/clusterprofiles/validate/packs` checks the packs. A record of a
-/// version that Palette holds goes to `POST /v1/clusterprofiles/{uid}/validate/packs`, the check
-/// of an update of that version. That check also reads the clusters that run the version. The
-/// answer holds the refusals of each route. No request changes anything.
+/// A record with no uid, of a candidate, goes to the three routes that check a create.
+/// `GET /v1/clusterprofiles/validate/name` checks the name and the version.
+/// `POST /v1/clusterprofiles/import/validate` checks the names of the packs and the manifests, a
+/// repeat of each, and a disabled pack. `POST /v1/clusterprofiles/validate/packs` checks the
+/// packs. A record of a version that Palette holds goes to
+/// `POST /v1/clusterprofiles/{uid}/validate/packs`, the check of an update of that version. That
+/// check also reads the clusters that run the version. The answer holds the refusals of each
+/// route. No request changes anything.
 ///
 /// Palette answers `200` with an error for each pack that it refuses. It refuses the whole request
 /// with the HTTP 422 of the API schema, or with an HTTP error and a code of the route. The routes

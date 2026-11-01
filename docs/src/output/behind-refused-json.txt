@@ -1,2 +1,2 @@
 $ strata behind refused/dev.json --json | jq -c '.pins[] | select(.behind) | .bump.paletteValidation'
-{"accepts":false,"errors":[{"pack":"csi-aws-ebs","code":"DependencyPackUpgradeNotSupported","message":"Pack 'csi-aws-ebs' cannot move to this version on the clusters: payments","clusters":["payments"]}]}
+{"accepts":false,"errors":[{"pack":"csi-aws-ebs","code":"DependencyPackUpgradeNotSupported","message":"Pack upgrade to '1.65.0' is not compatible with the clusters 'payments'","clusters":["payments"]}]}

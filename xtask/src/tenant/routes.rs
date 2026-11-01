@@ -146,7 +146,7 @@ pub(super) fn pack_entity_route(name: &str, registry: &str) -> String {
 /// The audit log of the resource `uid` of the kind `kind`, as the server names the file of
 /// `GET /v1/audits?resourceKind={kind}&resourceUid={uid}&limit=100`.
 ///
-/// The server leaves the time out of the query.
+/// The server omits the time from the query.
 pub(super) fn audit_log_file(kind: &str, uid: &str) -> String {
     format!("{AUDITS}@resourceKind={kind}&resourceUid={uid}&limit=100")
 }

@@ -14,9 +14,13 @@
 
 ## Download a release
 
-Each release has two binaries for each platform, `strata` and
-`strata-preflight`, the CI scripts, the installer, a `SHA256SUMS` file over all
-of them, and a Sigstore signature for each file.
+Each release has these files:
+
+- Two binaries for each platform, `strata` and `strata-preflight`.
+- The CI scripts.
+- The installer.
+- A `SHA256SUMS` file over all of them.
+- A Sigstore signature for each file.
 
 | Target | Platform |
 | --- | --- |
@@ -49,10 +53,12 @@ gh release download --repo como-technologies/strata --pattern install-strata.sh 
 
 The repository is private, so an anonymous download fails. The installer reads a
 token from `STRATA_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN`, in that order. The
-token must read this repository. `gh release download` uses your GitHub login to
+token must read this repository.
+
+`gh release download` uses your GitHub login to
 get the installer. A piped shell does not inherit that login, so `GH_TOKEN`
 gives the token to the installer. The token of a job in another repository
-cannot read this one, so a pipeline sets a token of its own: the drop-in passes
+cannot read this one, so a pipeline sets a token of its own. The drop-in passes
 it as `STRATA_READ_TOKEN` on GitHub and as `STRATA_TOKEN` on GitLab.
 
 On GitHub, a token does not open the reusable workflows of a private repository.
@@ -86,7 +92,9 @@ installer checks each file against the list.
 
 The installer checks that signature when `cosign` 3 or later is on the `PATH`. It
 prints `signature verified` and continues. If the signature does not verify, it
-stops with exit `2` and installs nothing. Without `cosign`, it installs and
+stops with exit `2` and installs nothing.
+
+Without `cosign`, it installs and
 prints that it did not check the signature. A `cosign` older than 3 gives the
 same result, because the bundles of a release are in the format of `cosign` 3.
 The installer prints `signature not verified: cosign older than 3`. Give

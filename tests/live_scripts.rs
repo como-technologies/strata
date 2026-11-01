@@ -1023,7 +1023,7 @@ fn lib_sh_prints_the_usage_and_the_heading_of_a_stage_and_writes_the_summary_of_
         std::fs::read_to_string(dir.path().join("runs/20260101T000000Z/demo/steps.log")).unwrap();
     assert!(steps.contains("== stage 2: second\n"), "{steps}");
 
-    // a script that sets run_id names its own run, and a missing binary leaves out the version
+    // a script that sets run_id names its own run, and a missing binary omits the version
     let o = lib_demo(dir.path(), "/no/such/strata", &["1", "custom-run"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert!(
@@ -2173,7 +2173,7 @@ echo '{"items":[
 }
 
 /// The plan puts the fault of the key pair in the check `iaas-pod-identity` on aws, and in
-/// `ssh-key-pair` on eks alone (#430). On aws, the properties route refuses a key pair that the
+/// `ssh-key-pair` on eks alone (#430). On aws, the property route refuses a key pair that the
 /// region lacks, and `iaas-pod-identity` sends it the key pair.
 #[test]
 fn preflight_plan_sends_the_missing_key_pair_to_iaas_pod_identity_on_aws_and_to_ssh_key_pair_on_eks()
@@ -2934,7 +2934,7 @@ fn cluster_group_sh_stage_1_lists_the_virtual_cluster_and_resolves_its_name() {
         "the name of the member, from its record: {calls:?}"
     );
 
-    // a list that leaves out the virtual cluster, as before #116, fails the check
+    // a list that omits the virtual cluster, as before #116, fails the check
     let mut stage = cluster_group_stage_1();
     stage.strata(
         "list clusters --json",

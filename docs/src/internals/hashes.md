@@ -129,7 +129,7 @@ The input is a JSON object with sorted keys and no whitespace: `digest`,
 `content/2`. A test holds the digest of one fixture, so such a change is a
 decision and not an accident.
 
-It leaves out the tag, the pack uid, the registry uid, and the pack type. It
+It omits the tag, the pack uid, the registry uid, and the pack type. It
 keeps `upstream`. So a pack that a team copies to another registry by digest
 keeps its content digest. A pack with other bytes under the same version does
 not.

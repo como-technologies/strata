@@ -130,7 +130,7 @@ pub(super) fn summarize(
     let warned = count(&|c| c.verdict == Verdict::Failed && c.severity == Severity::Warn);
     let noted = count(&|c| c.verdict == Verdict::Failed && c.severity == Severity::Note);
     let not_checked = count(&|c| c.verdict == Verdict::NotChecked);
-    // a note is outside the readiness whether it ran or not, as `ran` leaves it out
+    // a note is outside the readiness whether it ran or not, as `ran` omits it
     let not_run = count(&|c| c.verdict == Verdict::NotRun && c.severity != Severity::Note);
     let not_run_reasons = not_run_reasons(checks.iter());
     let skipped = count(&|c| c.verdict == Verdict::Skipped);

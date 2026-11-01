@@ -47,10 +47,14 @@ logs.
 
 ## Exit status
 
-The script exits like `verify`, after it handles the issues: `0` when each
-record is unchanged, `1` when a record drifted or is unverified, `2` when a
-record could not be checked. An unverified record holds a pack with no upstream
-digest: its issue says that `--allow-no-digest` accepts it. See
+The script handles the issues, then exits like `verify`:
+
+- `0` when each record is unchanged.
+- `1` when a record drifted or is unverified.
+- `2` when a record could not be checked.
+
+An unverified record holds a pack with no upstream digest. Its issue says that
+`--allow-no-digest` accepts it. See
 [verify](../commands/verify.md#the-verdicts).
 
 When `verify` checks nothing, for example when no pattern matches a file, the

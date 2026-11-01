@@ -46,7 +46,7 @@ pub(crate) fn parses(v: &str) -> bool {
 /// The numbers of `v` as it writes them: one to three. None when `v` does not parse.
 ///
 /// `4.10.3-rc.1` gives `[4, 10, 3]`, and `4.10` gives `[4, 10]`. A range of releases reads the
-/// numbers that a bound names, and leaves out the others.
+/// numbers that a bound names, and omits the others.
 pub fn numbers(v: &str) -> Option<Vec<u64>> {
     Semver::parse(v).map(|s| s.numbers[..s.count].to_vec())
 }
@@ -83,7 +83,7 @@ pub(crate) fn pick<T>(
 
 /// A version that parses as Palette parses a version.
 struct Semver<'a> {
-    /// The three numbers. A number that the version leaves out is `0`.
+    /// The three numbers. A number that the version omits is `0`.
     numbers: [u64; 3],
     /// How many numbers the version writes, from one to three.
     count: usize,

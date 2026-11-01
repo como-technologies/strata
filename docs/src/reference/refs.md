@@ -43,11 +43,12 @@ A ref names the thing that a command reads.
   template. A person who edits a published version and does not publish makes
   a draft. The record holds the values and the manifests of the draft, and
   `source.template` is `draft`. A version with no draft is the error
-  `no-draft`. `@latest@draft` reads the draft of the highest version. Put it
-  last. `verify` of the record compares it with the published version, so it
-  verifies after the publish. See
-  [Review a draft before its publish](../use-cases/draft.md) and
-  [Drafts](../internals/palette/profiles.md#drafts).
+  `no-draft`.
+  - `@latest@draft` reads the draft of the highest version. Put `@draft` last.
+  - `verify` of the record compares it with the published version, so it
+    verifies after the publish.
+  - See [Review a draft before its publish](../use-cases/draft.md) and
+    [Drafts](../internals/palette/profiles.md#drafts).
 - **`pack:`.** A pack version, read from the registry, not from a profile. Its
   snapshot holds that one pack with the values that the registry ships, and no
   manifests or params: those belong to a profile. Comparing two of them says
@@ -89,14 +90,17 @@ A ref names the thing that a command reads.
   lists the app profiles. A name and version that two app profiles have is
   `app-profile-name-ambiguous`, which lists their uids. See
   [An app profile is updated in place](../use-cases/app-profiles.md).
-- **A file.** Strata checks for a file first: a ref that names a file that
+- **A file.** Strata checks for a file first. A ref that names a file that
   exists is a file. A file that is not a strata snapshot is `not-snapshot`.
-  A ref that is shaped like a path is a file too, whether or not the file is
-  there. A path holds a `/` or a `\`. A path starts with `.`, `..`, or `~`. A
-  path ends with `.json`, `.yaml`, or `.yml`. A `pack:`, `cluster:`,
-  `edgehost:`, `tag:`, or `filter:` ref can hold a `/`, and each one stays what
-  its prefix names. A uid, a name,
-  and a `name@version` hold none of these shapes, so they reach Palette.
+  - A ref that is shaped like a path is a file too, whether or not the file is
+    there. A path has one of these shapes:
+    - It holds a `/` or a `\`.
+    - It starts with `.`, `..`, or `~`.
+    - It ends with `.json`, `.yaml`, or `.yml`.
+  - A `pack:`, `cluster:`, `edgehost:`, `tag:`, or `filter:` ref can hold a
+    `/`, and each one stays what its prefix names.
+  - A uid, a name, and a `name@version` hold none of these shapes, so they
+    reach Palette.
 
 A record that is missing or misspelled is the error `io`, which names the file.
 Strata asks Palette nothing:
@@ -117,6 +121,6 @@ Strata asks Palette nothing:
 | `consumers` | yes | no | no | no | a profile record |
 | `behind` | no | no | no | no | yes: a record of each kind |
 
-`snapshot --raw-dir` takes a profile or a cluster: a record read back from the
+`snapshot --raw-dir` takes a profile or a cluster. A record read back from the
 directory does not say `@pending`, `@draft`, edge host, cluster group, or app
 profile.

@@ -97,7 +97,7 @@ fn a_version_keeps_the_architectures_of_the_listing_sorted_and_the_document_does
     let of = |version: &str| &architectures["reg-own"][version];
     assert_eq!(of("2.0.0"), &["amd64", "arm64"]);
     assert!(of("1.0.0").is_empty(), "the listing names none");
-    // `packs` is not a catalog: the document leaves the architectures out
+    // `packs` is not a catalog: the document omits the architectures
     let json = serde_json::to_value(&listing).unwrap();
     assert!(
         json["registries"][0]["versions"][0]

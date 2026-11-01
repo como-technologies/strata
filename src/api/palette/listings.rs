@@ -63,8 +63,8 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The uid of the one cluster named `name` in the scope.
     ///
-    /// It reads [`Palette::cluster_listing`] and [`Palette::virtual_clusters`]. The listing leaves
-    /// out each virtual cluster, so the search gives them, when it takes `environment`.
+    /// It reads [`Palette::cluster_listing`] and [`Palette::virtual_clusters`]. The listing omits
+    /// each virtual cluster, so the search gives them, when it takes `environment`.
     ///
     /// # Errors
     ///
@@ -153,8 +153,8 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// The virtual clusters that a search filter selects: [`Palette::cluster_search`] with the
-    /// condition `environment eq nested` added to `filter` as one more group. The search leaves
-    /// out each virtual cluster unless a condition asks for that environment, the cloud type of
+    /// condition `environment eq nested` added to `filter` as one more group. The search omits
+    /// each virtual cluster unless a condition asks for that environment, the cloud type of
     /// a virtual cluster. `filter` joins its groups with `and`, and `Null` has no condition, so
     /// the answer then holds each virtual cluster in the scope. Each item names the host cluster
     /// and the cluster group of the virtual cluster in `status.virtual`.
@@ -171,7 +171,7 @@ impl<A: PaletteApi> Palette<A> {
     /// It is [`Palette::virtual_cluster_search`] behind the one check of that property.
     /// `properties` is the answer of [`Palette::cluster_search_properties`]. `None` when the
     /// search does not take `environment`: no condition can then ask for a virtual cluster, and
-    /// the search leaves each one out. `on_search` runs before the search, when there is one, so
+    /// the search omits each one. `on_search` runs before the search, when there is one, so
     /// that a caller can note it.
     ///
     /// # Errors

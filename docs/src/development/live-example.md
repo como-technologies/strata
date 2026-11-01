@@ -559,8 +559,8 @@ just live-knurl                                                                #
 just live-who                                                                  # #69, stage 2 needs just live-up
 just live-draft                                                                # #155, needs just live-profiles
 just live-release                                                              # #146, needs only the key
-just live-validate-route BODIES                                                   # #243, needs the key and a directory of bodies; no cluster
-just live-route-bodies BODIES                                                     # #408, #413, needs just live-profiles on AWS; tries four add-on profiles, runs validate-route.sh on those that Palette takes, deletes them
+just live-validate-route BODIES                                                # #243, needs the key and a directory of bodies; no cluster
+just live-route-bodies BODIES                                                  # #408, #413, needs just live-profiles on AWS; tries four add-on profiles, runs validate-route.sh on those that Palette takes, deletes them
 just live-pending                                                              # #70, #276, needs just live-up
 just live-macros                                                               # #72, needs just live-up
 just live-macro-repave                                                         # #72, needs just live-up; leaves a repave that waits, so live-down follows

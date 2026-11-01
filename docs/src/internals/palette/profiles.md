@@ -9,31 +9,33 @@ appears. A pack can also be pushed again under one version, with
 `spectro pack push --force`
 ([Spectro CLI reference](https://docs.spectrocloud.com/registries-and-packs/spectro-cli-reference/))
 or `oras push`. A published profile that pins the version with the values of
-the pack follows such a push at the next sync of the registry, with no request
-from a person: see
+the pack follows such a push at the next sync of the registry. It needs no
+request from a person. See
 [A pack version pushed again](packs.md#a-pack-version-pushed-again).
 
 This is why [`strata verify`](../../commands/verify.md) exists. A record of a
-version from before a person's edit, from before a push that the version followed, or from before a floating tag moved, exits
-`1` with `DRIFT`, and names the change. A record of a cluster's copy from before
-the cluster accepted an update does the same. `DRIFT` says that the object
-changed. The audit log of Palette says who changed it, and when: see
+version from before one of these changes exits `1` with `DRIFT`, and names the
+change. The changes are a person's edit, a push that the version followed, and a
+move of a floating tag. A record of a cluster's copy from before the cluster
+accepted an update does the same. `DRIFT` says that the object changed. The
+audit log of Palette says who changed it, and when: see
 [The audit log](#the-audit-log).
 
 An edit through the API keeps the uid of each manifest. The live example sends
 each uid back, and a cluster copy still names it.
 
 The variables are the exception. Palette refuses a change of the variable
-definitions of a version that a cluster uses: "you must create a new version of
-your cluster profile before you can modify the variables"
+definitions of a version that a cluster uses. It says "you must create a new
+version of your cluster profile before you can modify the variables"
 ([Modify cluster profile variables](https://docs.spectrocloud.com/profiles/cluster-profiles/create-cluster-profiles/define-profile-variables/modify-cluster-profile-variables/)).
 The packs, the values, and the manifests have no such rule.
 
 A reorder is an edit in place too. A `PUT` of a published version with the same
-packs, values, and manifests in the other order is accepted, stored in the new
-order, and audited as an update of the profile. Palette accepts it for the four
-infrastructure layers of a version a cluster runs as well: the CSI layer first
-and the OS layer last. `verify` on a record from before reports `DRIFT` and
+packs, values, and manifests in the other order is accepted. Palette stores it
+in the new order, and audits it as an update of the profile. It accepts the
+reorder for the four infrastructure layers of a version a cluster runs as well.
+In that reorder, the CSI layer is first and the OS layer is last. `verify` on a
+record from before reports `DRIFT` and
 `note: pack order changed between the two profiles`.
 
 ## Secrets in the values
@@ -48,16 +50,19 @@ variable, `{{.spectro.var.NAME}}`. A record of a published version holds
 The export of a profile masks the values too. The code of Palette also masks the
 copies of the profiles in the document of a cluster. No live run shows it: see
 [What the source of Palette says](limits.md#what-the-source-of-palette-says).
-So a profile record and a cluster record hold
-the same mask. The root covers the mask and not the secret: two versions that
-differ in a secret alone have one root. `same-release`, `compare`, and `verify`
-name the pack and the path of each masked value. See
+So a profile record and a cluster record hold the same mask.
+
+The root covers the mask and not the secret: two versions that differ in a
+secret alone have one root. `same-release`, `compare`, and `verify` name the
+pack and the path of each masked value. See
 [A secret changes in a pack value](../../use-cases/masked-value.md).
 
 Palette does not do this for the packs of a draft. A draft is the content of a
 `PUT` with no publish. A profile that was never published has only a draft.
 `GET /v1/clusterprofiles/{uid}` gives `spec.draft.packs` with each secret in
-clear. When the profile has a draft,
+clear.
+
+When the profile has a draft,
 `GET /v1/clusterprofiles/{uid}/packs/manifests` serves the packs of the draft.
 These facts come from the code of Palette. No live run checks them: see
 [What the source of Palette says](limits.md#what-the-source-of-palette-says).
@@ -127,15 +132,21 @@ the writes to one resource since a time, newest first, at most 100 on a page.
 `listmeta.continue` names the next page, and is empty on the last one. Each
 kind of object has its own kind in the log: `clusterprofile`, `appprofile`,
 `spectrocluster`, `edgehost`, and `clustergroup`. A query with the uid of an
-object and another kind finds no entry. Each entry gives the time, the action
-(`create`, `update`, `delete`, `activity`, or `action`), the actor (a user,
-with a name and a uid, or a Palette service, with a name), and `resource`: the
-kind, the name, and the uid of the object. Some entries also give `contentMsg`,
-a summary of the change, and `userMsg`, a note that a person adds with
-`PATCH /v1/audits/{uid}/userMsg`. The API gives each entry a uid, and no
-request id. [`verify --who`](../../commands/verify.md#who-changed-it) reads
-this log. The log is also a page of the console, a CSV download, and a stream to
-an external store
+object and another kind finds no entry.
+
+Each entry gives these fields:
+
+- The time.
+- The action: `create`, `update`, `delete`, `activity`, or `action`.
+- The actor: a user, with a name and a uid, or a Palette service, with a name.
+- `resource`: the kind, the name, and the uid of the object.
+
+Some entries also give `contentMsg`, a summary of the change, and `userMsg`, a
+note that a person adds with `PATCH /v1/audits/{uid}/userMsg`. The API gives
+each entry a uid, and no request id.
+[`verify --who`](../../commands/verify.md#who-changed-it) reads this log. The
+log is also a page of the console, a CSV download, and a stream to an external
+store
 ([Audit logs](https://docs.spectrocloud.com/audit-logs/),
 [the API](https://docs.spectrocloud.com/api/v1/v-1-audits-list/)).
 
@@ -146,9 +157,9 @@ finds the entries of each kind. The API reference gives 50 as the largest
 `limit`, but Palette serves 100. A `limit` above 100 answers `500` with the
 code `InvalidLimit`.
 
-An edit in place through the API, a `PUT` of the version and then its publish,
-is one entry: an `update` by the user who owns the key, with a summary that
-names the manifest that changed.
+An edit in place through the API is a `PUT` of the version and then its
+publish. It gives one entry. The entry is an `update` by the user who owns the
+key, with a summary that names the manifest that changed.
 
 The API does not return the content of the change. A summary names what
 changed, such as the packs whose values changed, and not the values. The record
@@ -156,18 +167,23 @@ holds the content.
 
 A floating tag that moves is logged too. When a profile pins a pack under
 `1.0.x` and the registry gets `1.0.2`, the sync that reads it gives the profile
-two entries: an `update` by the Palette service `system` with no summary, and
-one whose summary names the pack and both versions, such as `version is updated
-1.0.1 > 1.0.2`. No person is in either entry.
+two entries:
 
-A published version that follows a push again of a pack gets one entry: an
-`update` by the Palette service `system`, whose summary names the pack, its
-version, and its layer, such as `strata-live-pack 1.0.0 layer is updated`.
+- An `update` by the Palette service `system` with no summary.
+- An entry whose summary names the pack and both versions, such as
+  `version is updated 1.0.1 > 1.0.2`.
 
-A cluster that accepts an update through the API gives the cluster one entry:
-an `update` by the user who sent the `PUT`, with a summary that names the uid
-of the profile and the manifest that changed. The entry names who accepted the
-update. The edit of the profile before it is an entry of the profile.
+No person is in either entry.
+
+A published version that follows a push again of a pack gets one entry. The
+entry is an `update` by the Palette service `system`. Its summary names the
+pack, its version, and its layer, such as
+`strata-live-pack 1.0.0 layer is updated`.
+
+A cluster that accepts an update through the API gets one entry. The entry is an
+`update` by the user who sent the `PUT`. Its summary names the uid of the
+profile and the manifest that changed. The entry names who accepted the update.
+The edit of the profile before it is an entry of the profile.
 
 A version bump that overwrites the version that a cluster runs is a write to
 the profile, and not to the cluster. The log of the cluster does not name it.
@@ -189,31 +205,35 @@ A version bump behaves differently with the provider's
 | `verify` of the old record | Reports it overwritten by the new version. | Reports the edit in place, and nothing overwritten. |
 | The clusters | Keep their copies, which name the old version, and stay consumers of the uid. | Keep their copies, which match what the old uid holds, and stay consumers of the old uid. |
 
-The clone carries the content over exactly: the values, the manifests, and the
+The clone copies the content exactly. The values, the manifests, and the
 variables of a flag-on bump equal those of a flag-off bump from the same
 configuration.
 
 A version is a semantic version. The public documentation says that the
-console writes a short form and a lowercase `v` prefix as the full version,
-`1.2` as `1.2.0` and `v1.2.3` as `1.2.3`
+console writes a short form and a lowercase `v` prefix as the full version.
+For example, `1.2` becomes `1.2.0`, and `v1.2.3` becomes `1.2.3`
 ([Version a cluster profile](https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/version-cluster-profile/)).
+
 A version published through the API, as the provider does, keeps the string
-that the request sent: `1.2` is listed as `1.2`, and `v1.2.3` as `v1.2.3`. So
-two versions can name one number in two ways. A ref names the string that
+that the request sent. Palette lists `1.2` as `1.2`, and `v1.2.3` as `v1.2.3`.
+So two versions can name one number in two ways. A ref names the string that
 Palette lists.
 
 With the flag on, set `skip_destroy` on each profile **before** the first bump.
-A flag-on bump replaces the profile resource, and the provider deletes the
-replaced version with the `skip_destroy` value already in its state, not the new
-value (provider 0.30.1). Without it, the bump asks Palette to delete the version that a cluster runs.
+A flag-on bump replaces the profile resource. The provider deletes the replaced
+version with the `skip_destroy` value already in its state, not the new value
+(provider 0.30.1). Without it, the bump asks Palette to delete the version that
+a cluster runs.
 
 Each version in a state of its own is the other way to keep a version, with no
 flag. A new version is a new resource with a uid of its own, and the state of
 the version before it plans no change. A change of the content in the state of
 an old version, at the same number, plans an update in place of the published
-version. A destroy of that state asks Palette to delete the version, and
-Palette refuses it while a cluster uses the version: the provider reports the
-refusal, and the version stays. See
+version.
+
+A destroy of that state asks Palette to delete the version. Palette refuses it
+while a cluster uses the version. The provider reports the refusal, and the
+version stays. See
 [A version bump overwrites a version](../../use-cases/overwritten.md#what-to-do).
 
 ## Drafts
@@ -331,13 +351,15 @@ what the lock covers:
 
 So the lock belongs to the template, and it covers the route of the whole
 version: the `PUT` of the whole version checks it. In the code of Palette,
-the routes of one pack and of one manifest do not check it, and the live run
+the routes of one pack and of one manifest do not check it. The live run
 changes a linked version through the route of one manifest. `verify` finds an
-edit through such a route. The lock holds against a new cluster: it keeps every
-cluster outside the template away from a linked version. A cluster that runs a
-linked version is a cluster the template applies. A record of a linked version
-keeps no template, and has the root from before the link. Palette shows the
-templates, and `strata consumers` counts them. See
+edit through such a route.
+
+The lock holds against a new cluster. Palette refuses each cluster outside the
+template that uses a linked version. A cluster that runs a linked version is a
+cluster the template applies. A record of a linked version keeps no template,
+and has the root from before the link. Palette shows the templates, and
+`strata consumers` counts them. See
 [The cluster templates of a version](../../commands/snapshot/profile-version.md#the-cluster-templates-of-a-version).
 
 The template also takes the repave question of its clusters. A live run shows
@@ -388,16 +410,21 @@ when the cluster has no time zone.
 ## What the create of a version checks
 
 Palette refuses a profile version at the create when it breaks a rule. Some
-rules are on the values and the packs. These are the YAML of the values and the
-manifests, the limit of 200 packs and 200 manifests, a disabled pack, and the
-dependencies of each pack. `POST /v1/clusterprofiles/validate/packs` checks
-these rules and writes nothing:
+rules are on the values and the packs:
+
+- the YAML of the values and the manifests,
+- the limit of 200 packs and 200 manifests,
+- a disabled pack,
+- the dependencies of each pack.
+
+`POST /v1/clusterprofiles/validate/packs` checks these rules and writes nothing:
 see [The validate routes](./validate-routes.md#post-v1clusterprofilesvalidatepacks).
 
 Two more routes check rules of the create and write nothing.
 `GET /v1/clusterprofiles/validate/name` checks the name and the version.
 `POST /v1/clusterprofiles/import/validate` checks the names of the packs and
-the manifests, a repeat of each, and a disabled pack. A live run shows each refusal: see
+the manifests, a repeat of each, and a disabled pack. A live run shows each
+refusal: see
 [The validate routes](./validate-routes.md#get-v1clusterprofilesvalidatename).
 `snapshot --from-candidate --validate` asks the three routes.
 
@@ -421,15 +448,15 @@ Palette checks these rules only at the create of a profile version. No route
 that takes a candidate checks them, so a team learns of a fault only at the
 create. Strata checks the type and layer rules before any request. The cloud
 and tag rules need the registry, so strata checks them after the registry
-reads. The refusal is `candidate-invalid`. Its message and its field `code` give the code that
-Palette gives at the create:
+reads. The refusal is `candidate-invalid`. Its message and its field `code`
+give the code that Palette gives at the create:
 
 | Rule | Code |
 | --- | --- |
 | The type of the profile takes the layer of each pack. An `infra` profile takes `os`, `k8s`, `cni`, and `csi`. A `cluster` profile takes each layer. Each other type takes `addon`, `cni`, and `csi`. | `ClusterProfilePackNotAllowed` |
 | A `cluster` or `infra` profile has an `os`, a `k8s`, a `cni`, and a `csi` layer. On the cloud `edge-native`, it needs no `csi` layer. | `ErrPackCoreLayersMissing` |
 | Each pack supports the cloud of the profile: see [A pack that supports a cloud](./packs.md#a-pack-that-supports-a-cloud). | `PackNotSupported` |
-| The tag of a pack that Palette makes for a registry that it does not sync is a semantic version, or holds three numbers with dots between them. | `InvalidPackVersion` |
+| Palette makes a pack for a registry that it does not sync. The tag of that pack is a semantic version, or holds three numbers with dots between them. | `InvalidPackVersion` |
 
 The layer of a pack comes from the pack in its registry, and not from the
 profile: see [The layer of a pack](./packs.md#the-layer-of-a-pack). So the
@@ -440,11 +467,12 @@ cloud type.
 
 Palette is the owner of each rule. When a route of Palette answers a rule
 before the create, strata removes its check and asks that route. The review at
-the end of each wave reads this list. The name route and the import validate
-route answer four rules of the create. These are the version, a pack twice, the
-name of a manifest, and a manifest twice. So strata does not check them, and
-`--validate` asks Palette. With no `--validate`, a candidate that breaks one of them gives a
-record.
+the end of each wave reads this list.
+
+The name route and the import validate route answer four rules of the create.
+These are the version, a pack twice, the name of a manifest, and a manifest
+twice. So strata does not check them, and `--validate` asks Palette. With no
+`--validate`, a candidate that breaks one of them gives a record.
 
 Strata does not copy the rules that the validate route checks: see
 [Checks before any request](../../reference/candidate-file.md#checks-before-any-request).
@@ -536,9 +564,9 @@ A profile whose manifest reads a user macro, `{{.spectro.macro.<name>}}`, has
 
 `GET /v1/spectroclusters/<uid>/packs/resolvedValues` gives, for each profile a
 cluster runs, a map from each placeholder to the value Palette gives it now.
-The map holds every macro Palette can resolve for the profile, the system ones
-too, such as the cluster name and the region, and not only the ones the profile
-reads. It gives a new macro value at once.
+The map holds every macro that Palette can resolve for the profile, and not only
+the macros that the profile reads. The system macros are in it too, such as the
+cluster name and the region. It gives a new macro value at once.
 
 `GET /v1/clusterprofiles/<uid>/packs/resolvedValues` resolves the macros of a
 profile version with no cluster. It gives one `resolved` map, and not one map
@@ -558,7 +586,7 @@ When a macro gets another value:
   holds no entry for it.
 
 The cluster still gets the new value. Palette writes it into the running
-cluster on its own, with no update to accept: a live run read it inside the
+cluster on its own, with no update to accept. A live run read it inside the
 cluster 11 minutes after the change, and a run before it 13 minutes after. So a
 cluster runs the new value, and its record, its copy, its notifications, and
 its audit log stay as they were. The digests of `snapshot --macros` show it:
@@ -586,26 +614,29 @@ flowchart TD
   pending --> approve
 ```
 
-When a macro is in a field that repaves a cluster, such as
-`kubeadmconfig.postKubeadmCommands` in the Kubernetes pack, a change of its
-value does not replace the nodes. At the next read of the agent, Palette puts
-the cluster in a repave that waits for approval (`status.repave.state:
-Pending`), one agent poll after the change. It opens no notification for it.
-`GET /v1/spectroclusters/<uid>/repave/status` gives the record: the source is
-`hubble`, and not a person. The one reason is `PackValuesUpdated`, `Pack
-'kubernetes' values are updated`, with the key that differs and the resolved
-values on each side. It names no macro, so nothing in the record says that a
-macro caused it. While the repave waits, Palette
-refuses an update of the cluster profiles: `Cluster update failure as cluster
-repave is pending for approval`. Palette also refuses to delete a macro that a
-cluster reads.
+When a macro is in a field that repaves a cluster, a change of its value does
+not replace the nodes. An example of such a field is
+`kubeadmconfig.postKubeadmCommands` in the Kubernetes pack. At the next read of
+the agent, Palette puts the cluster in a repave that waits for approval
+(`status.repave.state: Pending`). This is one agent poll after the change. It
+opens no notification for it.
+
+`GET /v1/spectroclusters/<uid>/repave/status` gives the record. The source is
+`hubble`, and not a person. The one reason is `PackValuesUpdated`,
+`Pack 'kubernetes' values are updated`, with the key that differs and the
+resolved values on each side. It names no macro, so nothing in the record says
+that a macro caused it.
+
+While the repave waits, Palette refuses an update of the cluster profiles:
+`Cluster update failure as cluster repave is pending for approval`. Palette also
+refuses to delete a macro that a cluster reads.
 
 A repave that waits for approval also holds a delete of the cluster. The delete
 puts the cluster in `Deleting`, and the agent removes nothing while the repave
-waits: in a live run, the cluster stayed in `Deleting` for 37 minutes, its EC2
-instances kept running, and `tofu destroy` failed with `context deadline
-exceeded`. After an approval of the repave, the instances were gone in four
-minutes. The approval writes no audit entry.
+waits. In a live run, the cluster stayed in `Deleting` for 37 minutes. Its EC2
+instances kept running, and `tofu destroy` failed with
+`context deadline exceeded`. After an approval of the repave, the instances were
+gone in four minutes. The approval writes no audit entry.
 
 A cluster record holds the repave that waits, with the reasons of Palette, and
 `compare` and `verify` name it.

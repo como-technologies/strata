@@ -109,11 +109,12 @@ different question:
 | An object store, beside the state of the pipeline | Every job that publishes already writes there, and nothing new needs a token that pushes. | The history is the store's, not the repository's. |
 
 A record holds each pack's values, params, and manifests in full. Palette
-writes `********` over each value whose schema format is `password`, and
-strata does the same for a profile with a draft: see
+writes `********` over each value whose schema format is `password`. Strata
+does the same for a profile with a draft. See
 [Secrets in the values](../../internals/palette/profiles.md#secrets-in-the-values).
-`same-release`, `compare`, and `verify` name each masked value: see
+`same-release`, `compare`, and `verify` name each masked value. See
 [A secret changes in a pack value](../../use-cases/masked-value.md).
+
 A record does not hold the value of a sensitive profile variable. Each other
 secret stays: a secret in a value that the schema does not mark, or in a
 manifest. So a record of a profile whose pack values or manifests hold such a

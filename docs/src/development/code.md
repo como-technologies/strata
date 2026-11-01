@@ -69,18 +69,20 @@ where each module goes.
   `match` of its texts by hand, once to read them and once to write them.
 - Do not store a field that comes from another field. Calculate it with a
   method.
-- Palette documents stay `serde_json::Value`, read with the helpers of
-  `src/json.rs`: `text`, `str_at`, `text_or`, `opt_text`, `opt_str`, `arr`,
-  `strings`, `text_map`, `items`, `take_items`, `first_nonempty`, `flag`,
+- Palette documents stay `serde_json::Value`. Read them with the helpers of
+  `src/json.rs`. They are `text`, `str_at`, `text_or`, `opt_text`, `opt_str`,
+  `arr`, `strings`, `text_map`, `items`, `take_items`, `first_nonempty`, `flag`,
   `opt_flag`, `opt_set`, `object_at`, `value_at`, `value_or_null`, and
-  `value_or_empty_object`. Do not write a pointer read of
-  text, of an array, of an object, of a flag, or of a value of your own in a module. Write a
-  field with `set_at`: the index of `serde_json` panics for a value that is not
-  an object. The rule holds for `preflight/` and `adapter/` too. `text`, `str_at`, `text_or`,
-  `opt_text`, `opt_str`, `arr`, `strings`, `text_map`, `flag`, `opt_flag`,
-  `value_at`, `value_or_null`, and `value_or_empty_object` are public for them. Make another
-  helper public when a package outside this crate needs it, not before.
-  The records of strata are typed structs with
+  `value_or_empty_object`.
+- Do not write a pointer read of text, of an array, of an object, of a flag, or
+  of a value in a module. The rule holds for `preflight/` and `adapter/` too.
+  `text`, `str_at`, `text_or`, `opt_text`, `opt_str`, `arr`, `strings`,
+  `text_map`, `flag`, `opt_flag`, `value_at`, `value_or_null`, and
+  `value_or_empty_object` are public for them. Make another helper public when a
+  package outside this crate needs it, not before.
+- Write a field with `set_at`. The index of `serde_json` panics for a value that
+  is not an object.
+- The records of strata are typed structs. Give each one
   `#[serde(rename_all = "camelCase")]`, `skip_serializing_if` for an empty
   field, `#[serde(default)]` for a field that an older record does not have,
   and `JsonSchema`.
@@ -89,10 +91,11 @@ where each module goes.
 - A version order follows Semantic Versioning 2.0.0 where the version parses, as
   Palette orders versions. `src/reference/version.rs` is the one module that
   parses a version and orders versions. Use `version::compare`, `version::pick`,
-  and `version::is_pre_release`. Do not write a second parse. The natural order
-  of the text is only the fallback for a string that does not parse, such as
-  `LTS__24.x`. No script uses `sort -V` for a version. A script reads the
-  direction of a move from strata, such as `versionMove` in `strata-diff/1`.
+  and `version::is_pre_release`. Do not write a second parse.
+- The natural order of the text is only the fallback for a string that does not
+  parse, such as `LTS__24.x`. No script uses `sort -V` for a version. A script
+  reads the direction of a move from strata, such as `versionMove` in
+  `strata-diff/1`.
 - Give each limit, code, and fixed text of Palette a named `const`, in one
   place. Its comment says what Palette does. It does not cite the code of
   Palette: see [rule 7](./documentation.md#rules).
@@ -130,8 +133,8 @@ where each module goes.
 
 ## Functions and repetition
 
-- A function does one thing. When a function has more than about 80 lines, or
-  has branches that build the same document, divide it into one function for
+- A function does one thing. Divide a function that has more than about 80
+  lines, or has branches that build the same document. Write one function for
   each branch and one function for the shared part.
 - Write a rule once. When two commands parse the same answer, or two functions
   sort and filter the same list, make one function and call it from both.
@@ -142,12 +145,13 @@ where each module goes.
 The comments follow the conventions of the Rust standard library, in
 ASD-STE100.
 
-- The first line of a doc comment is one sentence that says what the item does.
-  Rustdoc shows it in the index of the module. Put the details in the next
-  paragraph. The first paragraph has 200 characters or fewer.
-- Name each argument whose role its name and type do not show, in the prose and
-  in backticks: "`fetched_at` is the time that the record states, in RFC 3339".
-  Do not write a list of each argument.
+- The first paragraph of a doc comment says what the item does. Its first
+  sentence is the summary. Rustdoc shows the paragraph in the index of the
+  module, so it has 200 characters or fewer: `too_long_first_doc_paragraph`
+  fails on a longer one. Put the details in the next paragraph.
+- Name each argument whose role its name and type do not show. Write it in the
+  prose and in backticks: "`fetched_at` is the time that the record states, in
+  RFC 3339". Do not write a list of each argument.
 - A public function that returns `Result` has a `# Errors` section: the error
   kinds that it gives, and when.
 - A function that can panic has a `# Panics` section. A panic on input from a

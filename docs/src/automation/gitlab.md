@@ -111,13 +111,15 @@ The reports, the exit codes, and the markers are the same on both hosts.
 [The comment](./pr-comments.md) and [the issues](./drift-issues.md) name the two
 markers.
 
-The scripts create the label before they add it, with a description that says
-what it means, so a project that does not have it yet gets it.
+The scripts create the label before they add it. The label has a description
+that says what it means. So a project that does not have the label yet gets it.
 
-One thing differs. On GitLab the scripts read the first 100 open issues with the
-label, the first 100 labels, and the first 100 notes of a merge request; on
-GitHub they read the first 1000 issues, the first 1000 labels, and every page of
-the comments.
+One thing differs. The scripts read these items:
+
+- On GitLab: the first 100 open issues with the label, the first 100 labels, and
+  the first 100 notes of a merge request.
+- On GitHub: the first 1000 issues, the first 1000 labels, and every page of the
+  comments.
 
 A dry run calls no host. So `pr-comment.sh --dry-run`, `verify-report.sh --dry-run`,
 and `upstream-report.sh --dry-run` need no `GITLAB_TOKEN`.

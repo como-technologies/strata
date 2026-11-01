@@ -190,7 +190,7 @@ summary_table() {
 # write_summary TITLE [NOTE...]: write summary.md, the report of the run: the title, the line
 # "Run `<run id>` with `<strata version>`" followed by the words of NOTE, and summary_table. The
 # first word of NOTE starts with the punctuation that follows the version. The run id is $run_id,
-# or the name of the directory above $run. The line leaves out the version when no strata binary
+# or the name of the directory above $run. The line omits the version when no strata binary
 # exists. A script calls this function in the `summary` that its EXIT trap runs, so NOTE holds the
 # values that the run found.
 write_summary() {

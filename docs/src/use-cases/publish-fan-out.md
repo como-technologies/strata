@@ -9,8 +9,8 @@ profile version, and that publish opens a bump on each cluster that pins the
 profile. Nobody types a version number: the chain does.
 
 This is the same problem as [A team pins each environment](./fan-out.md), one
-level up. Many pull requests are open at once, most of them opened by a job,
-and each one was written against a level below that keeps moving. GitLab calls
+level up. Many pull requests are open at once, and a job opened most of them.
+Each one was written against a level below that keeps moving. GitLab calls
 a pull request a merge request; this page says pull request for both.
 
 **Who runs this.** Jobs at every level. A person merges, and a job publishes,
@@ -24,9 +24,14 @@ because the publish itself is yours.
 
 **Follow along.** This page takes its blocks from the pages it links, so no one
 page serves all of it. Each block below runs on the seed that its own page
-names: `just playground packs`, `just playground list`,
-`just playground cluster-release`, and `just playground edited-in-place-2` for
-the night verify. The merge gate reads a git repository, which the playground
+names:
+
+- `just playground packs`
+- `just playground list`
+- `just playground cluster-release`
+- `just playground edited-in-place-2`, for the night verify
+
+The merge gate reads a git repository, which the playground
 does not build.
 
 ## What each level holds, and what it records
@@ -74,13 +79,13 @@ comparison is:
 {{#include ../output/pack-compare.txt}}
 ```
 
-The two lines a reviewer needs are the first two: the root changed, and the
+A reviewer needs the first two lines. The root changed, and the
 pack is `IDENTITY UPSTREAM AUTHORED`, so the build, its digest and its values
 all moved. The value lines below them say which.
 
 Put it in the pull request with
-[`pr-comment.sh`](../automation/pr-comments.md), which posts one comment on
-GitHub or one note on GitLab, and labels the pull request when the impact
+[`pr-comment.sh`](../automation/pr-comments.md). The script posts one comment on
+GitHub or one note on GitLab. It labels the pull request when the impact
 reaches `repave`. The reviewer reads what the bump does to a node, not a
 version string.
 
@@ -97,8 +102,9 @@ the target branch in first, and reads the result:
 {{#include ../output/merge-gate-behind.txt}}
 ```
 
-A job that lowers a pin on purpose — a pack version is withdrawn, so the bump
-pins the one before it — writes the declaration in the commit it makes:
+A job can lower a pin on purpose. For example, a pack version is withdrawn, so
+the bump pins the one before it. The job writes the declaration in the commit it
+makes:
 
 ```text
 Rollback: releases/1.1.1/dev.json to aws-stack@1.1.0
@@ -140,7 +146,7 @@ strata verify "releases/**/*.json"
 .strata/merge-gate.sh "releases/**/*.json" --base main
 ```
 
-The gate writes to no host and needs no token: it fetches the target branch,
+The gate writes to no host and needs no token. It fetches the target branch,
 merges it into the checkout, and prints the same report the pipeline prints.
 A developer sees the `BEHIND` record before a reviewer does, and the pipeline
 then confirms it.
@@ -178,9 +184,9 @@ the profile it selected, `payments/aws-stack`, because `payments` runs two
 profiles.
 
 Record each cluster after its apply, and the scheduled verify covers the
-clusters as well as the profiles. A cluster that drifts from its own record,
-and a version that changed under the cluster, are different findings:
-see [A cluster does not run its release](./cluster-release.md) and
+clusters as well as the profiles. A cluster that drifts from its own record
+and a version that changed under the cluster are different findings.
+See [A cluster does not run its release](./cluster-release.md) and
 [A published version is edited in place](./edited-in-place.md).
 
 ## The checks at each level
