@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 use common::{INSTALLING_WORKFLOWS, recipe, repo_file, schema, script, version_of, walk};
 use strata::api::codes::ValidateRoute;
+use strata::content::canonical_json;
 
 fn docs() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/src")
@@ -1787,8 +1788,8 @@ fn the_section_of_release_0_26_0_gives_the_action_for_the_directory_the_root_the
     }
 }
 
-/// Each command that the section names for the root change runs on the characters of the
-/// canonical text. A change of the set must change the section too.
+/// The section lists the characters that the canonical text escapes, and the search command covers
+/// the same characters. A change of the set must change the section too.
 #[test]
 fn the_section_of_release_0_26_0_names_the_characters_that_the_canonical_text_escapes() {
     let release = release_0_26_0(&read(&docs().join("reference/compatibility.md")));
@@ -1802,13 +1803,16 @@ fn the_section_of_release_0_26_0_names_the_characters_that_the_canonical_text_es
         release.contains("'[\\x{7f}-\\x{9f}\\x{2028}\\x{2029}\\x{fffe}\\x{ffff}]'"),
         "the search command does not cover the same characters"
     );
-    let canon = repo_file("src/content/canon.rs");
-    assert!(
-        canon.contains(
-            "'\\u{7f}'..='\\u{9f}' | '\\u{2028}' | '\\u{2029}' | '\\u{fffe}' | '\\u{ffff}'"
-        ),
-        "the characters of canon.rs changed, and the section of release 0.26.0 lists the old set"
-    );
+    // the book lists the characters that the canonical text escapes, and no others
+    let canon = |c: char| canonical_json(&serde_json::Value::String(c.to_string()));
+    for c in [
+        '\u{7f}', '\u{80}', '\u{85}', '\u{9f}', '\u{2028}', '\u{2029}', '\u{fffe}', '\u{ffff}',
+    ] {
+        assert_eq!(canon(c), format!("\"\\u{:04x}\"", c as u32), "{c:?}");
+    }
+    for c in ['\u{7e}', '\u{a0}', '\u{2027}', '\u{202a}', '\u{fffd}'] {
+        assert_eq!(canon(c), format!("\"{c}\""), "{c:?} is escaped");
+    }
 }
 
 /// The GitLab job that keeps the artifact is the job that the section names, and the job
