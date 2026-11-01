@@ -86,6 +86,42 @@ fn no_function_of_xtask_has_more_than_80_lines() {
     assert!(long.is_empty(), "divide these functions: {long:?}");
 }
 
+/// The functions of `src/` that the review of Wave 4 found over the limit, each with its file.
+/// Each one divided into one function for each part.
+const DIVIDED_FUNCTIONS: [(&str, &str); 9] = [
+    ("cli/snapshot.rs", "cmd_snapshot"),
+    ("ops/verify.rs", "verify_with"),
+    ("diff/mod.rs", "compute"),
+    ("render/markdown.rs", "render"),
+    ("render/terminal/mod.rs", "render"),
+    ("snapshot/build.rs", "from_cluster"),
+    ("snapshot/pack.rs", "from_api_with"),
+    ("ops/fleet.rs", "snapshot_set"),
+    ("ops/same_release.rs", "same_release_with"),
+];
+
+#[test]
+fn each_function_that_the_review_of_wave_4_found_too_long_has_at_most_80_lines() {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../src");
+    for (file, name) in DIVIDED_FUNCTIONS {
+        let path = src.join(file);
+        let text =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let lengths: Vec<usize> = function_lengths(&text)
+            .into_iter()
+            .filter(|(found, _)| found == name)
+            .map(|(_, lines)| lines)
+            .collect();
+        assert!(!lengths.is_empty(), "{file} has no function {name}");
+        for lines in lengths {
+            assert!(
+                lines <= FUNCTION_LINES,
+                "{file}: {name} has {lines} lines, and the limit is {FUNCTION_LINES}"
+            );
+        }
+    }
+}
+
 #[test]
 fn a_function_counts_from_its_fn_line_to_its_closing_brace() {
     let text = "\

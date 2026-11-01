@@ -154,6 +154,15 @@ mod tests {
     }
 
     #[test]
+    fn main_rs_makes_no_request_and_names_no_layer_below_the_command_line() {
+        let source = include_str!("main.rs");
+        let code = source.split("#[cfg(test)]").next().unwrap_or(source);
+        for layer in ["strata::api", "strata::ops", "strata::snapshot", "connect"] {
+            assert!(!code.contains(layer), "main.rs names {layer}");
+        }
+    }
+
+    #[test]
     fn the_help_screen_is_the_one_a_terminal_expects() {
         let mut built = command();
         built.build();
