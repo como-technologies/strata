@@ -291,6 +291,6 @@ impl<A: PaletteApi> Palette<A> {
     /// also has its provider type in `spec.providerType`.
     pub(crate) fn registry_summary(&self, kind: RegistryKind) -> Result<Value> {
         self.api
-            .get_json(&route(REGISTRIES, &[kind.route(), "summary"]))
+            .get_json(&route(REGISTRIES, &[kind.as_str(), "summary"]))
     }
 }

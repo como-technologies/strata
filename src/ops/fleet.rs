@@ -18,7 +18,9 @@ use crate::snapshot::{Snapshot, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
 
-use super::list::{ListedCluster, ProjectListings, TENANT_SCOPE, list_clusters, name_projects_of};
+use super::list::{
+    ListedCluster, ProjectListings, TENANT_SCOPE, list_clusters, name_cluster_projects,
+};
 use crate::json::{arr, first_nonempty, flag, items, str_at, strings, text};
 
 use super::scope_of;
@@ -342,13 +344,7 @@ pub(super) fn select_in<A: PaletteApi>(
         (all, Resolved::Listing, false)
     };
     // the search gives each project by name too; the listing does not
-    name_projects_of(
-        &mut clusters,
-        |c| &c.project_uid,
-        |c| &mut c.project_name,
-        tenant,
-        listings,
-    );
+    name_cluster_projects(&mut clusters, tenant, listings);
     Ok(Selection {
         clusters,
         resolved,

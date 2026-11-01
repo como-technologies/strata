@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde_json::{Map, Value};
 
 use crate::content::canon::{Canon, canon_yaml};
-use crate::json::{arr, opt_text};
+use crate::json::{arr, object_at, opt_text};
 use crate::snapshot::{PresetOption, Snapshot};
 use crate::term::progress::Progress;
 
@@ -33,7 +33,7 @@ pub(crate) fn preset_options(summary: &Value, values: &str) -> Vec<PresetOption>
         let (Some(name), Some(key), Some(options)) = (
             opt_text(p, "/name"),
             opt_text(p, "/targetKey"),
-            p.get("options").and_then(Value::as_object),
+            object_at(p, "/options"),
         ) else {
             continue;
         };

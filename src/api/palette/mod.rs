@@ -4,6 +4,7 @@
 use serde_json::Value;
 
 use super::PaletteApi;
+use crate::closed_set::impl_texts;
 use crate::cloud::CLOUD_NESTED;
 use crate::conjunction::Conjunction;
 use crate::error::{Error, Result, unread_reason};
@@ -281,6 +282,14 @@ pub(crate) enum RegistryKind {
     Oci,
 }
 
+// The segment of the kind in a route: `pack`, `helm`, or `oci`. The metadata listing names the
+// kind with the same word.
+impl_texts!(pub(crate) RegistryKind {
+    Pack => "pack",
+    Helm => "helm",
+    Oci => "oci",
+});
+
 impl RegistryKind {
     /// The kind of the registry that holds a pack of the type `pack_type`: a pack registry holds
     /// the type `spectro`. None for a manifest pack, which no registry holds.
@@ -293,14 +302,6 @@ impl RegistryKind {
         }
     }
 
-    /// The kind of a registry as the metadata listing names it in `kind`: `pack`, `helm`, or
-    /// `oci`, the words of the routes. None for another word.
-    pub(crate) fn of_kind(kind: &str) -> Option<Self> {
-        [Self::Pack, Self::Helm, Self::Oci]
-            .into_iter()
-            .find(|k| k.route() == kind)
-    }
-
     /// The type of a pack of a registry of the kind: `spectro` for a pack registry, else the
     /// word of the kind.
     pub(crate) fn pack_type(self) -> PackType {
@@ -308,15 +309,6 @@ impl RegistryKind {
             Self::Pack => PackType::Spectro,
             Self::Helm => PackType::Helm,
             Self::Oci => PackType::Oci,
-        }
-    }
-
-    /// The segment of the kind in a route: `pack`, `helm`, or `oci`.
-    fn route(self) -> &'static str {
-        match self {
-            Self::Pack => "pack",
-            Self::Helm => "helm",
-            Self::Oci => "oci",
         }
     }
 }

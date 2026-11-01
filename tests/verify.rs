@@ -3693,7 +3693,7 @@ fn list_with_a_pack_reads_each_profile_and_keeps_those_that_carry_it() {
     assert!(denied.packs.is_none());
     let b = &profiles[1];
     assert_eq!(
-        (b.profile_type.as_deref(), b.consumers),
+        (b.profile_type.as_ref().map(Open::as_str), b.consumers),
         (Some("cluster"), Some(2))
     );
     let packs = b.packs.as_ref().unwrap();
@@ -3777,7 +3777,10 @@ fn list_and_a_record_read_the_type_of_a_version_with_no_pack_from_one_template()
     let record = snapshot_of(&api, "u-e1").unwrap();
     assert_eq!(record.source.kind, "add-on");
     assert_eq!(
-        l.profiles.unwrap()[0].profile_type.as_deref(),
+        l.profiles.unwrap()[0]
+            .profile_type
+            .as_ref()
+            .map(Open::as_str),
         Some(record.source.kind.as_str())
     );
 }
@@ -11596,6 +11599,14 @@ fn compare_of_two_pack_versions_names_the_images_and_the_charts_that_moved() {
     );
     assert!(
         text.contains("images     3 images, 1 chart changed in 1 pack"),
+        "{text}"
+    );
+    // zero reads `no charts` here, as it does in each other line of a report
+    let mut no_chart = d.clone();
+    no_chart.summary.charts_changed = 0;
+    let text = common::terminal().render(&no_chart, &a, &b, false).unwrap();
+    assert!(
+        text.contains("images     3 images, no charts changed in 1 pack"),
         "{text}"
     );
 }

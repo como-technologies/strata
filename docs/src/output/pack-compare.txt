@@ -1,7 +1,7 @@
 $ strata compare 'pack:Public Repo/kubernetes@1.35.3' 'pack:Public Repo/kubernetes@1.36.2'
 pack kubernetes@1.35.3 (uid 69f778872d19e4c57df8f630)  ->  pack kubernetes@1.36.2 (uid 6a6bd41b16c3cbf9999ad3be)
 root       f466249ad0ae -> 9e8881b1e813   CHANGED
-images     8 images, 0 charts changed in 1 pack
+images     8 images, no charts changed in 1 pack
 
 ~ [k8s  ] kubernetes                 1.35.3 -> 1.36.2   IDENTITY UPSTREAM AUTHORED IMAGES
       upstream digest: sha256:ff3df77ebc9c -> sha256:c4f7f20f40c7 (packRef.digest)

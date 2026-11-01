@@ -26,6 +26,13 @@ match the new variants. `ops::PaletteQuestions` and `ops::check_verifiable` are
 new. `ops::verify_with` makes the same check as `check_verifiable`, so its
 errors do not change.
 
+After 0.25.0, `error::Error::PackUnavailable` holds its `state` as a
+`pack_state::PackState`, not as text. Its message and its JSON stay the same.
+`ops::ListedProfile::profile_type` is an `Option<Open<ProfileType>>`, not an
+`Option<String>`. `Open::as_str` gives the text. `text::plural` is public, and
+it takes any type, so it picks a verb or an ending as well as a noun.
+`text::schema_json` and `json::value_or_empty_object` are new.
+
 After 0.25.0, `term::color::Paint::resolve` has a second argument,
 `term::color::Stream`: `Stdout` or `Stderr`. Give `Stream::Stdout` to get the
 behavior of 0.25.0. `api::codes::ValidateRoute::refuses_answer` takes the body
@@ -156,6 +163,15 @@ changes, and a variable has its keys in the same order.
 After 0.25.0, two descriptions of the tier `shape` and the description of
 `source.cluster.errors` have new words in `strata schema`. No key, type, or id
 changes.
+
+After 0.25.0, `strata schema` and `strata-preflight --schema` write a link of a
+doc comment as a plain code span in each description. The description of the
+method `GET` read ``[`PaletteApi::get_json`]``, and now reads
+`` `PaletteApi::get_json` ``. No key, type, or id changes.
+
+After 0.25.0, `type` of a profile in `strata-list/1` takes each profile type or
+any other text, as `registryProviderType` does. `strata schema list` says so
+with `anyOf`. The text in a document stays the same, and the id stays.
 
 One case differs. A variable with no `name` has an empty `name`. Before, its
 `name` was `null`. Palette requires a name, so only a raw directory or a
@@ -321,11 +337,12 @@ strata reads each value of them:
 - the `status` of a sync
 
 Strata only writes its other documents, such as `strata-packs/1` and
-`strata-diff/1`, and does not read them. So their closed sets stay closed. The
-`state` of a version and of a registry in `strata-packs/1` is an exception: it
-takes any text. A program can read such a document with the types of the
-library, such as `ops::PackBuild`. Then a value of a later release gives an
-error, except in that `state`.
+`strata-diff/1`, and does not read them. So their closed sets stay closed. Two
+fields are exceptions, and take any text: the `state` of a version and of a
+registry in `strata-packs/1`, and the `type` of a profile in `strata-list/1`. A
+program can read such a document with the types of the library, such as
+`ops::PackBuild`. Then a value of a later release gives an error, except in
+those two fields.
 
 ## The command line
 
@@ -405,6 +422,10 @@ color: `NO_COLOR` needs a value. `CLICOLOR_FORCE` forces the color, and
 `TERM=dumb` removes it under `--color auto`. The report on standard output and
 the progress lines on standard error each get their own decision. `--no-color`
 and `--color never` work as before.
+
+After 0.25.0, the line `images` of `compare` writes `no charts`, not `0 charts`,
+and `no images`, not `0 images`. The markdown form of the line changes in the
+same way.
 
 After 0.25.0, the markdown table of `strata` writes a line break in a cell as a
 space. A line break, such as one in an error message, ended the row. The markdown

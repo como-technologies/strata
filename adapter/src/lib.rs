@@ -38,6 +38,7 @@
 //! means. With no digest, two archives are a terminal failure that names each one.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
 use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
@@ -150,9 +151,10 @@ fn health_of(summary: &Value) -> Health {
     }
 }
 
-/// `name version`: how a failure names a unit.
-fn label(unit: &UnitRef) -> String {
-    format!("{} {}", unit.name, unit.version)
+/// `name version`: how a failure names a unit. A [`UnitRef`] and a [`UnitDefinition`] each have a
+/// name and a version, so the caller gives both.
+fn label(name: &impl Display, version: &impl Display) -> String {
+    format!("{name} {version}")
 }
 
 /// The strata ref of an intermediate: a profile version.
@@ -247,18 +249,23 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
             Level::Root => {
                 return Err(refused(format!(
                     "Palette holds no root unit, so it cannot give {}",
-                    label(unit)
+                    label(&unit.name, &unit.version)
                 )));
             }
         };
+        self.read_snapshot(&reference, at).map_err(port_error)
+    }
+
+    /// The record of `reference` at the time `at`, with the options that every read of the
+    /// adapter uses, and no progress message.
+    fn read_snapshot(&self, reference: &Ref, at: &str) -> strata::Result<Snapshot> {
         ops::snapshot_for(
-            &reference,
+            reference,
             &ops::SnapshotOptions::default(),
             || (self.connect)(None),
             at,
             &Progress::silent(),
         )
-        .map_err(port_error)
     }
 
     /// The two digests of a leaf. An address has no registry, and a real tenant has a pack in
@@ -267,17 +274,8 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
     /// one name and version. Then the digest of the address chooses one. With no digest, the
     /// failure names each registry and its archive.
     fn leaf(&self, unit: &UnitRef, at: &str) -> Result<(ExactDigest, ContentDigest)> {
-        let of = label(unit);
-        let read = |registry: Option<String>| {
-            let reference = pack_ref(unit, registry);
-            ops::snapshot_for(
-                &reference,
-                &ops::SnapshotOptions::default(),
-                || (self.connect)(None),
-                at,
-                &Progress::silent(),
-            )
-        };
+        let of = label(&unit.name, &unit.version);
+        let read = |registry: Option<String>| self.read_snapshot(&pack_ref(unit, registry), at);
         // A registry that Palette does not sync lists no digest for a pack. Then there is no
         // content to pin by, and the leaf is refused (knurl D52).
         let archive = |snapshot: &Snapshot| match snapshot.packs.first() {
@@ -361,7 +359,7 @@ impl<A: PaletteApi, F: Connect<A>> StrataPlatform<A, F> {
             };
             pins.insert(unit_name(&pin.name)?, held);
         }
-        let (exact, content) = digests(&snapshot, &label(unit))?;
+        let (exact, content) = digests(&snapshot, &label(&unit.name, &unit.version))?;
         Ok((exact, content, pins))
     }
 }
@@ -396,8 +394,8 @@ pub fn definition_of(snapshot: &Snapshot) -> Result<UnitDefinition> {
 fn candidate_of(unit: &UnitDefinition) -> Result<Candidate> {
     let bad = |why: String| {
         refused(format!(
-            "the definition of {} {}: {why}",
-            unit.name, unit.version
+            "the definition of {}: {why}",
+            label(&unit.name, &unit.version)
         ))
     };
     let text = unit
@@ -555,7 +553,7 @@ impl<A: PaletteApi + 'static, F: Connect<A> + 'static> StrataPlatform<A, F> {
         .map_err(port_error)?;
         digest(
             &snapshot.content_digest(),
-            &format!("{} {}", unit.name, unit.version),
+            &label(&unit.name, &unit.version),
         )
     }
 }

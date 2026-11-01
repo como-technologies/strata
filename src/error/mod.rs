@@ -5,9 +5,11 @@ use std::path::PathBuf;
 
 use crate::api::Method;
 use crate::api::codes::CreateRule;
+use crate::closed_set::ClosedSet;
 use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR, PROJECT_NAME_VAR};
+use crate::pack_state::PackState;
 use crate::snapshot::SNAPSHOT_SCHEMA;
-use crate::text::{and_list, cut};
+use crate::text::{and_list, cut, plural};
 
 mod class;
 mod json;
@@ -375,7 +377,8 @@ pub enum Error {
     /// The registry lists a pack version that Spectro Cloud disabled or deleted. Palette serves no
     /// such pack, and refuses a profile that pins one.
     #[error(
-        "pack '{name}' at version '{version}' is {state} in registry '{registry}': Palette does not serve it, and refuses a profile that pins it; `strata packs {name}` lists the versions and their states"
+        "pack '{name}' at version '{version}' is {} in registry '{registry}': Palette does not serve it, and refuses a profile that pins it; `strata packs {name}` lists the versions and their states",
+        state.as_str()
     )]
     PackUnavailable {
         /// Pack name.
@@ -385,7 +388,7 @@ pub enum Error {
         /// The registry, as the ref or the candidate names it.
         registry: String,
         /// The state that the registry listing gives: `disabled` or `deleted`.
-        state: String,
+        state: PackState,
     },
     /// `packs <name>` found the name in no visible registry. It asked for every version, so no
     /// version and no registry was ever in play, and `PackNotFound` would state both as blanks.
@@ -627,11 +630,10 @@ pub const UNSYNCED_LISTS: &str =
 /// while a profile pins the pack`. Nothing when there is no such registry.
 fn unsynced_sentence(registries: &[String]) -> String {
     let quoted: Vec<String> = registries.iter().map(|r| format!("'{r}'")).collect();
-    let noun = match quoted.len() {
-        0 => return String::new(),
-        1 => "registry",
-        _ => "registries",
-    };
+    if quoted.is_empty() {
+        return String::new();
+    }
+    let noun = plural(quoted.len(), "registry", "registries");
     format!(
         "; Palette does not sync the {noun} {}, and {UNSYNCED_LISTS}",
         and_list(&quoted)

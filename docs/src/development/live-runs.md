@@ -980,8 +980,8 @@ role in the project. It runs only as `tiers.sh 6`. With no key set, it says
 | `rbac-verify`, `rbac-verify-says` | 0 | #106: `verify` of the record exits `0`, and names `policy CHANGED` |
 | `rbac-undo`, `rbac-after-read`, `rbac-after` | 0 | the role bindings of cluster A are as before the stage |
 | `limited-control` | 0 | #276: the key of the example reads the role bindings of cluster A |
-| `limited-read`, `limited-status` | 2, 0 | #276: the second key does not read them: Palette answers HTTP 500, and not 403, and `api.sh` exits `2`. |
-| `limited-code`, `limited-code-says`, `limited-message` | ?, 0, 0 | #276: the body holds the code `ResourceAccessDenied` and the message `Project '<project uid>' access denied`. |
+| `limited-read`, `limited-status` | 0, 0 | #276: the second key does not read them: Palette answers HTTP 500, and not 403. `api.sh get-status` prints the status and the body, and exits `0`. No result yet for this form of the check: the earlier form used `api.sh get`, which exits `2`. |
+| `limited-code`, `limited-code-says`, `limited-message` | ?, 0, 0 | #276: the body holds the code `ResourceAccessDenied` and the message `Project '<project uid>' access denied`. The checks read the body that `limited-read` printed after its status line. |
 | `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer: a record of cluster A that it reads with the second key, and the `errors` of its policy tier. Live, `strata snapshot` of cluster A with the second key writes no record. It exits `2`, and it prints the answer of Palette: HTTP 500, `ResourceAccessDenied`, `Project '<project uid>' access denied`. So no record holds `errors`, and `limited-record-errors` has no file to read (exit `2`). |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`

@@ -283,7 +283,7 @@ fn print_schema(kind: SchemaKind) -> Result<ExitCode> {
         SchemaKind::Ledger => schemars::schema_for!(Ledger),
         SchemaKind::Promotion => schemars::schema_for!(confidence::PromotionReport),
     };
-    emit(&format!("{}\n", serde_json::to_string_pretty(&schema)?));
+    emit(&format!("{}\n", strata::text::schema_json(&schema)?));
     Ok(ExitCode::SUCCESS)
 }
 

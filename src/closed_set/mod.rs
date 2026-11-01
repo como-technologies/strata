@@ -143,6 +143,34 @@ macro_rules! impl_closed_set {
 }
 pub use crate::impl_closed_set;
 
+/// Implement `ALL`, `as_str`, and `from_text` for an enum of unit variants that is no
+/// [`ClosedSet`], from one table.
+///
+/// A [`ClosedSet`] is an enum that a document holds as text, so it needs serde and a schema. An
+/// enum that only names a word of Palette, such as the segment of a route, needs neither. The
+/// table is the one place that lists its values and their texts. No `match` repeats them.
+macro_rules! impl_texts {
+    ($vis:vis $set:ident { $($variant:ident => $text:expr),+ $(,)? }) => {
+        impl $set {
+            /// Each value of the enum, in the order of the type.
+            $vis const ALL: &'static [Self] = &[$(Self::$variant),+];
+
+            /// The text of the value.
+            $vis fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $text),+
+                }
+            }
+
+            /// The value that has the text `text`, or `None` for another text.
+            $vis fn from_text(text: &str) -> Option<Self> {
+                Self::ALL.iter().copied().find(|v| v.as_str() == text)
+            }
+        }
+    };
+}
+pub(crate) use impl_texts;
+
 /// A value of the closed set `T` in a document that strata writes and reads.
 ///
 /// This release reads a value that a later release adds to `T` as [`Open::Unknown`], with its
@@ -281,6 +309,29 @@ mod tests {
         Red => "red",
         DarkBlue => "darkBlue",
     });
+
+    /// An enum that names a word and is no document value, so it has no serde.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Segment {
+        Pack,
+        Helm,
+    }
+
+    impl_texts!(Segment {
+        Pack => "pack",
+        Helm => "helm",
+    });
+
+    #[test]
+    fn a_text_table_lists_each_value_and_reads_the_text_of_each_one() {
+        assert_eq!(Segment::ALL, [Segment::Pack, Segment::Helm]);
+        assert_eq!(Segment::Helm.as_str(), "helm");
+        for &segment in Segment::ALL {
+            assert_eq!(Segment::from_text(segment.as_str()), Some(segment));
+        }
+        assert_eq!(Segment::from_text("Pack"), None);
+        assert_eq!(Segment::from_text(""), None);
+    }
 
     #[test]
     fn a_set_lists_each_value_and_parses_the_text_of_each_one() {

@@ -12,7 +12,7 @@ use std::process::{Child, Command, Stdio};
 use regex::Regex;
 
 use crate::checks::OutputState;
-use crate::files::files_with_ext;
+use crate::files::{files_with_ext, output_dir};
 use crate::tenant::{Edit, PROJECT_LISTING, TENANT, Tenant};
 
 /// What the run is for.
@@ -505,7 +505,7 @@ impl Runner {
             }
             std::process::exit(1);
         }
-        let dest = self.repo.join("docs/src/output");
+        let dest = output_dir(&self.repo);
         let files = sorted_files(&self.out);
         if self.mode == Mode::Check {
             let current = sorted_files(&dest);

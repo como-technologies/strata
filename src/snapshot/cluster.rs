@@ -12,7 +12,7 @@ use super::{SubjectKind, macro_placeholder};
 use crate::api::{RawCluster, profile_variables};
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canonical_json, sha256_hex};
-use crate::json::{arr, flag, str_at, text};
+use crate::json::{arr, flag, object_at, str_at, text};
 use crate::profile_type::ProfileType;
 use crate::repave::PendingRepave;
 use crate::timestamp::Rfc3339OrEmpty;
@@ -448,7 +448,7 @@ impl PendingUpdate {
             if !open {
                 continue;
             }
-            let events = n.pointer("/action/events").and_then(Value::as_object);
+            let events = object_at(n, "/action/events");
             for e in events.into_iter().flat_map(|m| m.values()) {
                 let uid = text(e, "/profileUid");
                 let Some(p) = covered.iter().find(|p| p.uid == uid) else {

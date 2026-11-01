@@ -64,18 +64,22 @@ where each module goes.
   `tests/closed_set.rs` makes sure that each text is the one that serde writes.
   `preflight/` uses the same macro, `strata::impl_closed_set`.
   `preflight/tests/closed_set.rs` makes the same check there.
+- An enum that no document holds, such as a segment of a route or a layer, has no serde. Give
+  it `ALL`, `as_str`, and `from_text` with `impl_texts!`, from one table. Do not write a
+  `match` of its texts by hand, once to read them and once to write them.
 - Do not store a field that comes from another field. Calculate it with a
   method.
 - Palette documents stay `serde_json::Value`, read with the helpers of
   `src/json.rs`: `text`, `str_at`, `text_or`, `opt_text`, `opt_str`, `arr`,
   `strings`, `text_map`, `items`, `take_items`, `first_nonempty`, `flag`,
-  `opt_flag`, `value_at`, and `value_or_null`. Do not write a pointer read of
-  text, of an array, of a flag, or of a value of your own in a module. Write a
+  `opt_flag`, `opt_set`, `object_at`, `value_at`, `value_or_null`, and
+  `value_or_empty_object`. Do not write a pointer read of
+  text, of an array, of an object, of a flag, or of a value of your own in a module. Write a
   field with `set_at`: the index of `serde_json` panics for a value that is not
   an object. The rule holds for `preflight/` and `adapter/` too. `text`, `str_at`, `text_or`,
   `opt_text`, `opt_str`, `arr`, `strings`, `text_map`, `flag`, `opt_flag`,
-  `value_at`, and `value_or_null` are public for them. Make another helper public when a
-  package outside this crate needs it, not before.
+  `value_at`, `value_or_null`, and `value_or_empty_object` are public for them. Make another
+  helper public when a package outside this crate needs it, not before.
   The records of strata are typed structs with
   `#[serde(rename_all = "camelCase")]`, `skip_serializing_if` for an empty
   field, `#[serde(default)]` for a field that an older record does not have,

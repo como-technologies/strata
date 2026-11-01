@@ -44,10 +44,7 @@ mod tests {
     use crate::closed_set::ClosedSet;
 
     #[test]
-    fn a_pack_type_parses_and_prints_as_the_documents_name_it() {
-        for kind in PackType::ALL {
-            assert_eq!(PackType::parse(kind.as_str()), Some(*kind));
-        }
+    fn a_text_that_is_no_pack_type_reads_as_none() {
         assert_eq!(PackType::parse("container"), None);
         assert_eq!(PackType::parse(""), None);
     }

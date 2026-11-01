@@ -115,6 +115,14 @@ pub(crate) struct OutputArgs {
     pub(crate) quiet: QuietArgs,
 }
 
+/// `-o` and `--output`, for each command that writes its record to a file.
+#[derive(Args)]
+pub(crate) struct OutputFileArgs {
+    /// Write to this file, not to standard output
+    #[arg(short, long)]
+    pub(crate) output: Option<PathBuf>,
+}
+
 /// `--compact`, for each command that writes JSON.
 #[derive(Args)]
 pub(crate) struct CompactArgs {
@@ -198,9 +206,8 @@ pub(crate) struct CompareArgs {
 pub(crate) struct SnapshotArgs {
     /// What to record: a ref, or the source with --from-raw
     pub(crate) r#ref: Option<String>,
-    /// Write to this file, not to standard output
-    #[arg(short, long)]
-    pub(crate) output: Option<PathBuf>,
+    #[command(flatten)]
+    pub(crate) file: OutputFileArgs,
     /// Also save the raw API answers in this directory
     #[arg(long)]
     pub(crate) raw_dir: Option<PathBuf>,
@@ -301,9 +308,8 @@ impl SnapshotArgs {
 pub(crate) struct CandidateArgs {
     /// A profile version, by ref or by record
     pub(crate) r#ref: String,
-    /// Write to this file, not to standard output
-    #[arg(short, long)]
-    pub(crate) output: Option<PathBuf>,
+    #[command(flatten)]
+    pub(crate) file: OutputFileArgs,
     /// Write the values and the manifests to files in this directory
     #[arg(long, requires = "output")]
     pub(crate) files_dir: Option<PathBuf>,

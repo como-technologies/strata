@@ -8,7 +8,7 @@ use crate::diff::{Diff, ImageIdChange, InvalidPack, PackDiff, Side};
 use crate::reference::name_version;
 use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{PendingUpdate, Source, Tier};
-use crate::text::{and_list, dash};
+use crate::text::{and_list, dash, plural};
 
 /// True when the two sides are releases of each other: two profile-shaped sides, or two versions
 /// of one pack. A pack against a profile, or one pack against another pack, is a comparison a
@@ -169,11 +169,16 @@ pub(crate) fn tag_rename(pd: &PackDiff) -> Option<String> {
 /// The note is `the content uses macro region: the root covers its name and not its value, so an
 /// edit of the macro does not show`. None when the content uses no macro.
 fn macros_note(d: &Diff) -> Option<String> {
-    let (noun, pron) = match d.macros.len() {
-        0 => return None,
-        1 => ("macro", "its name and not its value"),
-        _ => ("macros", "their names and not their values"),
-    };
+    let n = d.macros.len();
+    if n == 0 {
+        return None;
+    }
+    let noun = plural(n, "macro", "macros");
+    let pron = plural(
+        n,
+        "its name and not its value",
+        "their names and not their values",
+    );
     Some(format!(
         "the content uses {noun} {}: the root covers {pron}, so an edit of a macro does not show",
         d.macros.join(", ")
@@ -347,11 +352,8 @@ fn upstream_unknown_note(d: &Diff) -> Option<String> {
 ///
 /// Each sentence about the packs whose archive a root cannot show starts with it.
 pub(crate) fn no_upstream_digest(packs: &[String]) -> String {
-    let (noun, verb) = if packs.len() == 1 {
-        ("pack", "has")
-    } else {
-        ("packs", "have")
-    };
+    let noun = plural(packs.len(), "pack", "packs");
+    let verb = plural(packs.len(), "has", "have");
     format!("{noun} {} {verb} no upstream digest", packs.join(", "))
 }
 
