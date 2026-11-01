@@ -461,7 +461,7 @@ pub fn promotion(catalog: &Catalog, ledger: &Ledger) -> PromotionReport {
             // the clouds alone: `lab` marks a check of the lab, and no run records it
             rule.engines
                 .iter()
-                .filter(|e| crate::world::CLOUDS.contains(&e.as_str()))
+                .filter(|e| crate::world::Engine::parse(e).is_some())
                 .cloned()
                 .collect()
         };

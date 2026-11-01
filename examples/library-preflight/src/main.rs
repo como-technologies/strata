@@ -6,6 +6,7 @@
 use std::path::Path;
 
 use strata::api::MemoryApi;
+use strata::term::color::Paint;
 use strata::term::progress::Progress;
 use strata_preflight::catalog;
 use strata_preflight::confidence::Ledger;
@@ -39,10 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     selection.require_known(&catalog)?;
 
     // There is no Palette client, so a rule of another tier is NOT RUN. A static rule needs none.
-    let backend: LiveBackend<MemoryApi> = LiveBackend {
-        palette: None,
-        no_exec: true,
-    };
+    let backend: LiveBackend<MemoryApi> = LiveBackend::new(None, true);
     let report = run::run(RunInputs {
         catalog: &catalog,
         world: &world,
@@ -53,7 +51,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         out_dir: None,
         progress: &Progress::silent(),
         verbose: false,
-        color: false,
+        paint: Paint::off(),
     })?;
 
     for check in &report.checks {

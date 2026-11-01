@@ -2,7 +2,8 @@
 //! are in the entity, and the validate route of Palette gets them.
 
 use serde_json::json;
-use strata::api::{MemoryApi, Palette};
+use strata::api::{MemoryApi, Palette, cloud_config_path, subject_path};
+use strata::snapshot::SubjectKind;
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
 use strata_preflight::catalog;
@@ -17,12 +18,12 @@ use strata_preflight::world::World;
 fn api() -> MemoryApi {
     MemoryApi::new()
         .with(
-            "/v1/spectroclusters/c1",
+            subject_path(SubjectKind::Cluster, "c1"),
             json!({"metadata": {"uid": "c1", "name": "barney"},
                 "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"},
                     "clusterProfileTemplates": [{"uid": "p1", "packs": []}]}}),
         )
-        .with("/v1/cloudconfigs/aws/cc1", json!({"spec": {}}))
+        .with(cloud_config_path("aws", "cc1"), json!({"spec": {}}))
         .with(
             "/v1/spectroclusters/c1/variables",
             json!([{"profileUid": "p1", "variables": [{"name": "pod_cidr", "value": "10.244.0.0/16"}]}]),
@@ -66,10 +67,7 @@ fn palette_validate(api: &MemoryApi) -> CheckResult {
     let palette = Palette::new(api);
     let world = World::from_cluster(&palette, "c1", &Progress::silent()).unwrap();
     let catalog = catalog::builtin().unwrap();
-    let backend = LiveBackend {
-        palette: Some(api),
-        no_exec: true,
-    };
+    let backend = LiveBackend::new(Some(api), true);
     let mut report = run::run(RunInputs {
         catalog: &catalog,
         world: &world,

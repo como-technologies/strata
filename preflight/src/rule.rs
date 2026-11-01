@@ -53,17 +53,17 @@ use strata::cloud::CLOUD_ALL;
 
 use crate::error::{Error, Result};
 use crate::jq::ITEM;
-use crate::world::CLOUDS;
+use crate::world::clouds;
 
 /// The engine `lab`: it marks a check of the lab. No run of the plan records it, so a promotion
 /// counts the clouds alone.
 const ENGINE_LAB: &str = "lab";
 
 /// The engines a rule can name: `all`, which stands for every engine, then each cloud of
-/// [`CLOUDS`], then `lab`.
+/// [`clouds`], then `lab`.
 pub fn engines() -> impl Iterator<Item = &'static str> {
     std::iter::once(CLOUD_ALL)
-        .chain(CLOUDS.iter().copied())
+        .chain(clouds())
         .chain(std::iter::once(ENGINE_LAB))
 }
 
@@ -900,7 +900,7 @@ rules:
         let names: Vec<&str> = engines().collect();
         assert_eq!(names.first(), Some(&CLOUD_ALL));
         assert_eq!(names.last(), Some(&ENGINE_LAB));
-        assert_eq!(&names[1..names.len() - 1], CLOUDS);
+        assert_eq!(names[1..names.len() - 1], clouds().collect::<Vec<_>>());
         assert_eq!(
             engine_list(),
             "all, aws, eks, gcp, gke, azure, aks, maas, edge, vsphere, lab"
@@ -990,6 +990,22 @@ rules:
             palette("", "/v1/clusterprofiles/{{ $item.uid }}"),
             "reads $item, and the check has no `each`",
         );
+    }
+
+    #[test]
+    fn an_evidence_entry_names_a_kind_of_the_set_and_the_loader_refuses_another() {
+        let with = |kind: &str| {
+            GOOD.replace(
+                "status: seen",
+                &format!("status: seen\n    evidence:\n      - kind: {kind}\n        ref: x"),
+            )
+        };
+        for kind in EvidenceKind::ALL {
+            let section = Catalog::parse_section(&with(kind.as_str()), Path::new("x.yaml"));
+            assert_eq!(section.unwrap().rules[0].evidence[0].kind, *kind);
+        }
+        let err = Catalog::parse_section(&with("blog"), Path::new("x.yaml")).unwrap_err();
+        assert!(err.to_string().contains("unknown variant `blog`"), "{err}");
     }
 
     #[test]

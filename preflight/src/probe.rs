@@ -5,6 +5,7 @@
 //! code on a fixture: [`FixtureBackend`] reads the answers from the world document itself, and
 //! [`LiveBackend`] asks Palette and runs the command.
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -63,64 +64,139 @@ pub trait Backend {
     }
 }
 
-/// The backend of a run: Palette over HTTP, and the commands of this machine.
-pub struct LiveBackend<'a, A: PaletteApi> {
-    /// The Palette client, or none when no key is there.
-    pub palette: Option<&'a A>,
-    /// Run no command. Every exec check is then `NOT RUN`.
-    pub no_exec: bool,
-}
-
 /// A 4xx that is the answer of a check: the route read the request and refused what it says. A
 /// 401 or a 403 is the key, and a 429 is the rate: the check did not run, and the error names it.
 pub fn is_answer(status: u16) -> bool {
     (400..500).contains(&status) && !matches!(status, 401 | 403 | 429)
 }
 
-/// A refusal of the cluster validate route that Palette gives with HTTP 500, such as a profile of
-/// another cloud type. The route read the body and refused it, so the refusal is an answer, like a
-/// 4xx. Another 5xx is a fault of Palette, and the check did not run.
-fn is_refusal(status: u16, body: &str) -> bool {
-    ValidateRoute::ClusterCreate.refuses_answer(status, body)
+/// What the backend keeps of the answer to one request. An answer is the same for the rest of
+/// the run, because a run changes nothing in Palette.
+#[derive(Debug, Clone)]
+enum Kept {
+    /// A 2xx: the body, as JSON. A 204 has a `null` body.
+    Value(Value),
+    /// An HTTP error that is an answer: a 4xx that a check reads, or the refusal of a validate
+    /// route, such as a profile of another cloud type with HTTP 500.
+    Answer {
+        status: u16,
+        /// The body as Palette sent it.
+        text: String,
+        /// The body as an object, so a program reads `.body.message` either way: a body that is
+        /// not JSON, such as a plain-text 404 of the gateway, is an object with the text as its
+        /// message.
+        body: Value,
+    },
 }
 
-impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
-    fn palette(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Response> {
-        let api = self.palette.ok_or_else(|| Error::Usage {
-            message: format!(
-                "a Palette check needs a key: set {}, or run with --tier static",
-                KEY_VARS[0]
-            ),
-        })?;
+impl Kept {
+    fn response(&self) -> Response {
+        match self {
+            Kept::Value(body) => Response {
+                ok: true,
+                status: if body.is_null() { 204 } else { 200 },
+                body: body.clone(),
+            },
+            Kept::Answer { status, body, .. } => Response {
+                ok: false,
+                status: *status,
+                body: body.clone(),
+            },
+        }
+    }
+}
+
+/// The backend of a run: Palette over HTTP, and the commands of this machine.
+///
+/// The backend keeps the answer of each request, by its method, its path, and its body, for the
+/// run. So a rule that asks what another rule asked, or what the world read, costs no request.
+/// An error that no check can read is not kept: the next request tries again.
+///
+/// The backend is a [`PaletteApi`] too. The world of a run reads through it, and shares its
+/// answers with the checks.
+pub struct LiveBackend<'a, A: PaletteApi> {
+    palette: Option<&'a A>,
+    no_exec: bool,
+    kept: RefCell<BTreeMap<String, Kept>>,
+}
+
+impl<'a, A: PaletteApi> LiveBackend<'a, A> {
+    /// A backend over the Palette client `palette`, or over none when no key is there. With
+    /// `no_exec`, every exec check is `NOT RUN`.
+    pub fn new(palette: Option<&'a A>, no_exec: bool) -> Self {
+        LiveBackend {
+            palette,
+            no_exec,
+            kept: RefCell::new(BTreeMap::new()),
+        }
+    }
+
+    /// The answer to a request: the one that the run kept when it sent the same request, else
+    /// the one that Palette gives now.
+    fn ask(&self, api: &A, method: Method, path: &str, body: Option<&Value>) -> Result<Kept> {
+        let key = format!(
+            "{method} {path} {}",
+            body.map(Value::to_string).unwrap_or_default()
+        );
+        if let Some(kept) = self.kept.borrow().get(&key) {
+            return Ok(kept.clone());
+        }
         let answer = match method {
             Method::Get => api.get_json(path),
             Method::Post => api.post_json(path, body.unwrap_or(&Value::Null)),
         };
-        match answer {
-            Ok(body) => Ok(Response {
-                ok: true,
-                status: if body.is_null() { 204 } else { 200 },
-                body,
-            }),
-            // a 4xx is what a validate route answers when the entity is wrong: it is the result.
-            // The route also refuses with a 500 and a code that it names.
-            Err(strata::Error::Api { status, body, .. })
-                if is_answer(status) || is_refusal(status, &body) =>
-            {
-                // a body that is not JSON, such as a plain-text 404 of the gateway, is an object
-                // with the text as its message, so a program reads `.body.message` either way
-                let body = serde_json::from_str(&body)
-                    .ok()
+        let kept = match answer {
+            Ok(value) => Kept::Value(value),
+            Err(strata::Error::Api {
+                method,
+                path,
+                status,
+                body: text,
+                retry_after,
+            }) => {
+                // the body is parsed one time, for the refusal and for the answer
+                let parsed = serde_json::from_str::<Value>(&text).ok();
+                // a 4xx is what a validate route answers when the entity is wrong: it is the
+                // result. The route also refuses with a 500 and a code that it names.
+                let refusal = parsed
+                    .as_ref()
+                    .is_some_and(|b| ValidateRoute::refuses_request(method, &path, status, b));
+                if !is_answer(status) && !refusal {
+                    return Err(strata::Error::Api {
+                        method,
+                        path,
+                        status,
+                        body: text,
+                        retry_after,
+                    }
+                    .into());
+                }
+                let body = parsed
                     .filter(Value::is_object)
-                    .unwrap_or_else(|| serde_json::json!({ "message": body }));
-                Ok(Response {
-                    ok: false,
-                    status,
-                    body,
-                })
+                    .unwrap_or_else(|| serde_json::json!({ "message": text }));
+                Kept::Answer { status, text, body }
             }
-            Err(e) => Err(e.into()),
-        }
+            Err(e) => return Err(e.into()),
+        };
+        self.kept.borrow_mut().insert(key, kept.clone());
+        Ok(kept)
+    }
+
+    /// The Palette client, or the error that says a key is missing.
+    fn client(&self) -> Result<&'a A> {
+        self.palette.ok_or_else(|| Error::Usage {
+            message: format!(
+                "a Palette check needs a key: set {}, or run with --tier static",
+                KEY_VARS[0]
+            ),
+        })
+    }
+}
+
+impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
+    fn palette(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Response> {
+        let kept = self.ask(self.client()?, method, path, body)?;
+        Ok(kept.response())
     }
 
     fn has_tool(&self, name: &str) -> bool {
@@ -137,6 +213,49 @@ impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
 
     fn exec_off(&self) -> bool {
         self.no_exec
+    }
+}
+
+impl<A: PaletteApi> PaletteApi for LiveBackend<'_, A> {
+    fn get_json(&self, path: &str) -> strata::Result<Value> {
+        self.send(Method::Get, path, None)
+    }
+
+    fn post_json(&self, path: &str, body: &Value) -> strata::Result<Value> {
+        self.send(Method::Post, path, Some(body))
+    }
+
+    fn project_uid(&self) -> Option<&str> {
+        self.palette.and_then(PaletteApi::project_uid)
+    }
+}
+
+impl<A: PaletteApi> LiveBackend<'_, A> {
+    /// A request of the world, in the terms of the library: an answer that is an HTTP error is
+    /// the error that Palette gave.
+    fn send(&self, method: Method, path: &str, body: Option<&Value>) -> strata::Result<Value> {
+        let kept = match self
+            .client()
+            .and_then(|api| self.ask(api, method, path, body))
+        {
+            Ok(kept) => kept,
+            Err(Error::Palette(e)) => return Err(e),
+            Err(other) => {
+                return Err(strata::Error::Usage {
+                    message: other.to_string(),
+                });
+            }
+        };
+        match kept {
+            Kept::Value(value) => Ok(value),
+            Kept::Answer { status, text, .. } => Err(strata::Error::Api {
+                method,
+                path: path.to_string(),
+                status,
+                body: text,
+                retry_after: None,
+            }),
+        }
     }
 }
 
@@ -1091,10 +1210,7 @@ mod tests {
     fn a_401_a_403_and_a_429_are_errors_of_the_check_and_a_404_is_its_answer() {
         for status in [401u16, 403, 429] {
             let api = strata::api::MemoryApi::new().failing("/v1/x", status, "{}");
-            let b = LiveBackend {
-                palette: Some(&api),
-                no_exec: false,
-            };
+            let b = LiveBackend::new(Some(&api), false);
             let err = b
                 .palette(Method::Get, "/v1/x", None)
                 .unwrap_err()
@@ -1102,14 +1218,108 @@ mod tests {
             assert!(err.contains(&format!("HTTP {status}")), "{status}: {err}");
         }
         let api = strata::api::MemoryApi::new().failing("/v1/x", 404, r#"{"code": "NotFound"}"#);
-        let b = LiveBackend {
-            palette: Some(&api),
-            no_exec: false,
-        };
+        let b = LiveBackend::new(Some(&api), false);
         let r = b.palette(Method::Get, "/v1/x", None).unwrap();
         assert!(!r.ok);
         assert_eq!(r.status, 404);
         assert_eq!(r.body["code"], "NotFound");
+    }
+
+    #[test]
+    fn the_backend_sends_a_request_one_time_and_gives_the_same_answer_to_the_rule_that_asks_again()
+    {
+        let api = strata::api::MemoryApi::new()
+            .with("/v1/edgehosts/h1", json!({"metadata": {"uid": "h1"}}))
+            .failing("/v1/edgehosts/h2", 404, r#"{"code": "NotFound"}"#);
+        let b = LiveBackend::new(Some(&api), false);
+        for _ in 0..6 {
+            let found = b.palette(Method::Get, "/v1/edgehosts/h1", None).unwrap();
+            assert_eq!((found.ok, found.status), (true, 200));
+            let gone = b.palette(Method::Get, "/v1/edgehosts/h2", None).unwrap();
+            assert_eq!((gone.ok, gone.status), (false, 404));
+        }
+        assert_eq!(api.calls("/v1/edgehosts/h1"), 1, "an answer");
+        assert_eq!(api.calls("/v1/edgehosts/h2"), 1, "a 4xx is an answer too");
+    }
+
+    #[test]
+    fn the_backend_tells_two_posts_with_two_bodies_apart_and_sends_each_body_one_time() {
+        let api = strata::api::MemoryApi::new().with("POST /v1/x", json!({"ok": true}));
+        let b = LiveBackend::new(Some(&api), false);
+        let (one, two) = (json!({"name": "a"}), json!({"name": "b"}));
+        for _ in 0..3 {
+            b.palette(Method::Post, "/v1/x", Some(&one)).unwrap();
+            b.palette(Method::Post, "/v1/x", Some(&two)).unwrap();
+        }
+        assert_eq!(
+            api.posted(),
+            vec![("/v1/x".to_string(), one), ("/v1/x".to_string(), two)]
+        );
+    }
+
+    #[test]
+    fn the_backend_does_not_keep_an_error_that_no_check_can_read() {
+        for status in [500u16, 503, 401] {
+            let api = strata::api::MemoryApi::new().failing("/v1/x", status, "{}");
+            let b = LiveBackend::new(Some(&api), false);
+            assert!(b.palette(Method::Get, "/v1/x", None).is_err());
+            assert!(b.palette(Method::Get, "/v1/x", None).is_err());
+            assert_eq!(api.calls("/v1/x"), 2, "HTTP {status} is asked again");
+        }
+    }
+
+    #[test]
+    fn the_world_and_the_checks_share_the_answers_of_the_backend() {
+        let api = strata::api::MemoryApi::new()
+            .with("/v1/clusterprofiles/p1", json!({"metadata": {"uid": "p1"}}));
+        let b = LiveBackend::new(Some(&api), false);
+        // the world reads through the backend as a client of the library
+        let read = strata::api::Palette::new(&b);
+        assert_eq!(
+            read.api().get_json("/v1/clusterprofiles/p1").unwrap()["metadata"]["uid"],
+            "p1"
+        );
+        let again = b
+            .palette(Method::Get, "/v1/clusterprofiles/p1", None)
+            .unwrap();
+        assert!(again.ok);
+        assert_eq!(api.calls("/v1/clusterprofiles/p1"), 1);
+        // an answer that is an HTTP error is the error that Palette gave, with its body as it was
+        let api = strata::api::MemoryApi::new().failing("/v1/gone", 404, "not json");
+        let b = LiveBackend::new(Some(&api), false);
+        let err = b.get_json("/v1/gone").unwrap_err();
+        assert!(
+            matches!(&err, strata::Error::Api { status: 404, body, .. } if body == "not json"),
+            "{err}"
+        );
+        assert_eq!(
+            b.palette(Method::Get, "/v1/gone", None).unwrap().body["message"],
+            "not json"
+        );
+    }
+
+    #[test]
+    fn only_the_cluster_validate_route_has_its_refusal_with_http_500_as_an_answer() {
+        let refusal = r#"{"code":"ClusterProfilesNotSupported","message":"not supported"}"#;
+        let api = strata::api::MemoryApi::new()
+            .failing("POST /v1/spectroclusters/aws/validate", 500, refusal)
+            .failing("POST /v1/clouds/aws/account/validate", 500, refusal);
+        let b = LiveBackend::new(Some(&api), false);
+        let body = json!({});
+        let answer = b
+            .palette(
+                Method::Post,
+                "/v1/spectroclusters/aws/validate",
+                Some(&body),
+            )
+            .unwrap();
+        assert_eq!((answer.ok, answer.status), (false, 500));
+        assert_eq!(answer.body["code"], "ClusterProfilesNotSupported");
+        // the same body from another route is an error of Palette, not an answer
+        assert!(
+            b.palette(Method::Post, "/v1/clouds/aws/account/validate", Some(&body))
+                .is_err()
+        );
     }
 
     #[test]

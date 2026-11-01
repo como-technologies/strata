@@ -330,15 +330,19 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
     }
     let live = !cli.offline;
     let palette = if live { Some(connect(progress)?) } else { None };
+    // the world and the checks read through one backend, which keeps each answer for the run: a
+    // request that the world made, and that a rule makes again, goes out one time
+    let backend = LiveBackend::new(palette.as_ref().map(Palette::api), cli.no_exec);
+    let reads = palette.as_ref().map(|_| Palette::new(&backend));
 
     // the world: the entity, and what the static rules need beside it
     let mut world = match reference {
         Ref::Cluster { uid, .. } => {
-            let palette = palette.as_ref().ok_or_else(|| Error::Usage {
+            let reads = reads.as_ref().ok_or_else(|| Error::Usage {
                 message: "cluster:UID needs Palette: drop --offline, or give the entity as a file"
                     .to_string(),
             })?;
-            World::from_cluster(palette, &uid, &progress)?
+            World::from_cluster(reads, &uid, &progress)?
         }
         _ => World::from_file(std::path::Path::new(&source), cli.cloud.as_deref())?,
     };
@@ -349,8 +353,8 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
     if !cli.records.is_empty() {
         world = world.with_records(&expand(&cli.records)?)?;
     }
-    if let Some(p) = &palette {
-        world = world.with_palette(p, &now, &progress)?;
+    if let Some(reads) = &reads {
+        world = world.with_palette(reads, &now, &progress)?;
     }
 
     let out_dir = cli.out.as_ref().map(|d| d.display().to_string());
@@ -382,10 +386,6 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             report
         })?
     } else {
-        let backend = LiveBackend {
-            palette: palette.as_ref().map(Palette::api),
-            no_exec: cli.no_exec,
-        };
         run::run(run::RunInputs {
             catalog: &catalog,
             world: &world,
@@ -522,6 +522,10 @@ mod tests {
     #[test]
     fn the_help_screen_fits_a_terminal_and_names_the_forms() {
         let help = Cli::command().render_help().to_string();
+        assert!(
+            help.contains(&strata_preflight::world::cloud_list()),
+            "{help}"
+        );
         assert!(help.contains("--watch cluster:UID"), "{help}");
         assert!(help.contains("--rules"), "{help}");
         assert!(help.contains("--probes"), "{help}");

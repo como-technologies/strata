@@ -28,7 +28,8 @@ use std::path::Path;
 
 use serde_json::{Map, Value, json};
 use strata::api::{Palette, PaletteApi, RawCluster, profile_variables};
-use strata::cloud::CLOUD_EDGE_NATIVE;
+use strata::closed_set::ClosedSet;
+use strata::cloud::{CLOUD_EDGE_NATIVE, Cloud};
 use strata::json::{arr, opt_str, opt_text, str_at, text_map, value_at, value_or_null};
 use strata::reference::Ref;
 use strata::snapshot::{AppliedProfile, Snapshot, SubjectKind};
@@ -36,14 +37,67 @@ use strata::term::progress::Progress;
 
 use crate::error::{Error, Result};
 
-/// The engines a cluster can be built on. Each is a cloud type of Palette, except `edge`, which
-/// Palette names [`CLOUD_EDGE_NATIVE`]. OpenStack is not one: Palette removed it in 2026, and the
-/// API has no route for it.
+/// An engine: the kind of cluster that a run checks.
+///
+/// Each engine is a cloud type of Palette, except `edge`, which Palette names
+/// [`CLOUD_EDGE_NATIVE`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Engine {
+    /// A cloud type of Palette: the engine has its text.
+    Cloud(Cloud),
+    /// An edge cluster. Its engine is `edge`.
+    Edge,
+}
+
+impl Engine {
+    /// The text of the engine, as a person and a rule file write it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Engine::Cloud(cloud) => cloud.as_str(),
+            Engine::Edge => EDGE,
+        }
+    }
+
+    /// The engine that `text` names, or none.
+    pub fn parse(text: &str) -> Option<Engine> {
+        ENGINES.into_iter().find(|e| e.as_str() == text)
+    }
+
+    /// The cloud type that a route of Palette names for the engine: `edge` is
+    /// [`CLOUD_EDGE_NATIVE`].
+    pub fn cloud(self) -> Cloud {
+        match self {
+            Engine::Cloud(cloud) => cloud,
+            Engine::Edge => Cloud::EdgeNative,
+        }
+    }
+}
+
+/// The engines a cluster can be built on, in the order of the help screen. OpenStack is not one:
+/// Palette removed it in 2026, and the API has no route for it.
 ///
 /// A rule names an engine too: see [`crate::rule::engines`].
-pub const CLOUDS: &[&str] = &[
-    "aws", "eks", "gcp", "gke", "azure", "aks", "maas", EDGE, "vsphere",
+pub const ENGINES: [Engine; 9] = [
+    Engine::Cloud(Cloud::Aws),
+    Engine::Cloud(Cloud::Eks),
+    Engine::Cloud(Cloud::Gcp),
+    Engine::Cloud(Cloud::Gke),
+    Engine::Cloud(Cloud::Azure),
+    Engine::Cloud(Cloud::Aks),
+    Engine::Cloud(Cloud::Maas),
+    Engine::Edge,
+    Engine::Cloud(Cloud::Vsphere),
 ];
+
+/// The text of each engine: `aws`, `eks`, and so on, then `edge` and `vsphere` in their place.
+pub fn clouds() -> impl Iterator<Item = &'static str> {
+    ENGINES.into_iter().map(Engine::as_str)
+}
+
+/// The text of each engine, as a list for a message.
+pub fn cloud_list() -> String {
+    clouds().collect::<Vec<_>>().join(", ")
+}
 
 /// The engine of an edge cluster. Palette names its cloud type [`CLOUD_EDGE_NATIVE`].
 const EDGE: &str = "edge";
@@ -145,15 +199,15 @@ impl World {
                 message: format!(
                     "{}: the entity names no cloud, and its shape fits more than one; give --cloud, one of {}",
                     path.display(),
-                    CLOUDS.join(", ")
+                    cloud_list()
                 ),
             })?,
         };
-        if !CLOUDS.contains(&cloud.as_str()) {
+        if Engine::parse(&cloud).is_none() {
             return Err(Error::Input {
                 message: format!(
                     "'{cloud}' is not a cloud strata-preflight knows: {}",
-                    CLOUDS.join(", ")
+                    cloud_list()
                 ),
             });
         }
@@ -334,23 +388,16 @@ pub(crate) fn unreadable(status: u16) -> bool {
     (400..500).contains(&status) && !matches!(status, 401 | 429)
 }
 
-/// The cloud account kind of a cloud: a managed engine uses the account of its cloud.
+/// The cloud account kind of an engine: a managed engine uses the account of its cloud. Text that
+/// names no engine stays as it is.
 pub fn account_kind(cloud: &str) -> &str {
-    match cloud {
-        "eks" => "aws",
-        "gke" => "gcp",
-        "aks" => "azure",
-        other => route_cloud(other),
-    }
+    Engine::parse(cloud).map_or(cloud, |engine| engine.cloud().account().as_str())
 }
 
-/// The name Palette gives a cloud in a route: `edge` is [`CLOUD_EDGE_NATIVE`].
+/// The name Palette gives an engine in a route: `edge` is [`CLOUD_EDGE_NATIVE`]. Text that names
+/// no engine stays as it is.
 pub fn route_cloud(cloud: &str) -> &str {
-    if cloud == EDGE {
-        CLOUD_EDGE_NATIVE
-    } else {
-        cloud
-    }
+    Engine::parse(cloud).map_or(cloud, |engine| engine.cloud().as_str())
 }
 
 /// Put `accountKind` and `routeCloud` in the world `world`, from its `cloud`. [`World::to_value`]
@@ -394,6 +441,11 @@ fn unwrap_envelope(doc: Value) -> (Option<String>, Value) {
 
 /// The cloud that the shape of `spec.cloudConfig` fits, when it fits one alone.
 pub fn infer_cloud(entity: &Value) -> Option<String> {
+    infer_engine(entity).map(|engine| engine.as_str().to_string())
+}
+
+/// The engine that the shape of `spec.cloudConfig` fits, when it fits one alone.
+fn infer_engine(entity: &Value) -> Option<Engine> {
     let spec = entity.get("spec")?;
     let cc = spec.get("cloudConfig");
     let has = |k: &str| cc.and_then(|c| c.get(k)).is_some_and(|v| !v.is_null());
@@ -403,27 +455,26 @@ pub fn infer_cloud(entity: &Value) -> Option<String> {
             .any(|p| p.pointer(&format!("/cloudConfig/{k}")).is_some())
     };
     if has("managedClusterConfig") {
-        return Some("gke".into());
+        return Some(Engine::Cloud(Cloud::Gke));
     }
     if has("project") {
-        return Some("gcp".into());
+        return Some(Engine::Cloud(Cloud::Gcp));
     }
     if has("subscriptionId") || has("location") && has("resourceGroup") {
-        return Some(
+        return Some(Engine::Cloud(
             if pool_has("isSystemNodePool")
                 || spec
                     .pointer("/machinepoolconfig/0/managedPoolConfig")
                     .is_some()
             {
-                "aks"
+                Cloud::Aks
             } else {
-                "azure"
-            }
-            .into(),
-        );
+                Cloud::Azure
+            },
+        ));
     }
     if has("domain") || pool_has("resourcePool") {
-        return Some("maas".into());
+        return Some(Engine::Cloud(Cloud::Maas));
     }
     if pool_has("edgeHosts")
         || has("controlPlaneEndpoint")
@@ -431,10 +482,10 @@ pub fn infer_cloud(entity: &Value) -> Option<String> {
             && cc.and_then(|c| c.get("ntpServers")).is_some()
             && spec.get("cloudAccountUid").is_none()
     {
-        return Some("edge".into());
+        return Some(Engine::Edge);
     }
     if has("placement") || pool_has("placements") {
-        return Some("vsphere".into());
+        return Some(Engine::Cloud(Cloud::Vsphere));
     }
     if has("endpointAccess")
         || has("encryptionConfig")
@@ -443,7 +494,7 @@ pub fn infer_cloud(entity: &Value) -> Option<String> {
         || pool_has("amiType")
         || pool_has("awsLaunchTemplate")
     {
-        return Some("eks".into());
+        return Some(Engine::Cloud(Cloud::Eks));
     }
     // a plain AWS entity and a plain EKS entity share a shape: region, vpcId, sshKeyName
     None
@@ -636,21 +687,22 @@ fn redact_fields(doc: &mut Value, fields: &[&str]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use strata::api::{cloud_account_path, cloud_config_path, subject_path};
 
     #[test]
     fn a_world_of_a_cluster_reads_its_cloud_type_as_the_route_of_its_cloud_config_does() {
         // the document names its cloud config, and no spec.cloudType
         let api = strata::api::MemoryApi::new()
             .with(
-                "/v1/spectroclusters/c1",
+                subject_path(SubjectKind::Cluster, "c1"),
                 json!({"metadata": {"uid": "c1", "name": "barney"},
                     "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"}}}),
             )
-            .with("/v1/cloudconfigs/aws/cc1", json!({"spec": {}}));
+            .with(cloud_config_path("aws", "cc1"), json!({"spec": {}}));
         let world = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap();
         assert_eq!(world.cloud, "aws");
         let none = strata::api::MemoryApi::new().with(
-            "/v1/spectroclusters/c1",
+            subject_path(SubjectKind::Cluster, "c1"),
             json!({"metadata": {"uid": "c1"}, "spec": {}}),
         );
         let err = World::from_cluster(&Palette::new(none), "c1", &Progress::silent()).unwrap_err();
@@ -665,11 +717,11 @@ mod tests {
                 json!([{"metadata": {"name": "barney", "uid": "c1"}}]),
             )
             .with(
-                "/v1/spectroclusters/c1",
+                subject_path(SubjectKind::Cluster, "c1"),
                 json!({"metadata": {"uid": "c1", "name": "barney"},
                     "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"}}}),
             )
-            .with("/v1/cloudconfigs/aws/cc1", json!({"spec": {}}));
+            .with(cloud_config_path("aws", "cc1"), json!({"spec": {}}));
         let world = World::from_cluster(&Palette::new(api), "barney", &Progress::silent()).unwrap();
         assert_eq!(world.cluster_uid.as_deref(), Some("c1"));
         assert_eq!(world.source, "cluster:c1");
@@ -686,12 +738,12 @@ mod tests {
         let config = json!({"spec": {}});
         // the id is a uid: one request for the document, and no listing
         let by_uid = strata::api::MemoryApi::new()
-            .with(format!("/v1/spectroclusters/{id}"), document(id))
+            .with(subject_path(SubjectKind::Cluster, id), document(id))
             .with(format!("/v1/spectroclusters/{id}/variables"), json!([]))
-            .with("/v1/cloudconfigs/aws/cc1", config.clone());
+            .with(cloud_config_path("aws", "cc1"), config.clone());
         let world = World::from_cluster(&Palette::new(&by_uid), id, &Progress::silent()).unwrap();
         assert_eq!(world.cluster_uid.as_deref(), Some(id));
-        assert_eq!(by_uid.calls(&format!("/v1/spectroclusters/{id}")), 1);
+        assert_eq!(by_uid.calls(&subject_path(SubjectKind::Cluster, id)), 1);
         assert_eq!(by_uid.calls("/v1/dashboard/spectroclusters/meta"), 0);
         // the id is a name: the uid route answers 404, and the listing gives the uid
         let by_name = strata::api::MemoryApi::new()
@@ -699,12 +751,12 @@ mod tests {
                 "/v1/dashboard/spectroclusters/meta",
                 json!([{"metadata": {"name": id, "uid": "c1"}}]),
             )
-            .with("/v1/spectroclusters/c1", document("c1"))
+            .with(subject_path(SubjectKind::Cluster, "c1"), document("c1"))
             .with("/v1/spectroclusters/c1/variables", json!([]))
-            .with("/v1/cloudconfigs/aws/cc1", config);
+            .with(cloud_config_path("aws", "cc1"), config);
         let world = World::from_cluster(&Palette::new(&by_name), id, &Progress::silent()).unwrap();
         assert_eq!(world.cluster_uid.as_deref(), Some("c1"));
-        assert_eq!(by_name.calls(&format!("/v1/spectroclusters/{id}")), 1);
+        assert_eq!(by_name.calls(&subject_path(SubjectKind::Cluster, id)), 1);
         assert_eq!(by_name.calls("/v1/dashboard/spectroclusters/meta"), 1);
     }
 
@@ -723,13 +775,30 @@ mod tests {
             assert_eq!(account_kind(engine), account, "{engine}");
             assert_eq!(route_cloud(engine), engine, "{engine}");
         }
-        assert!(CLOUDS.contains(&EDGE));
-        assert!(!CLOUDS.contains(&CLOUD_EDGE_NATIVE));
+        assert!(clouds().any(|c| c == EDGE));
+        assert!(!clouds().any(|c| c == CLOUD_EDGE_NATIVE));
+    }
+
+    #[test]
+    fn each_engine_has_the_text_of_a_cloud_of_palette_except_edge_and_its_text_parses_back() {
+        for engine in ENGINES {
+            assert_eq!(Engine::parse(engine.as_str()), Some(engine));
+            match engine {
+                Engine::Cloud(cloud) => assert_eq!(Cloud::of(engine.as_str()), cloud),
+                Engine::Edge => assert_eq!(engine.cloud(), Cloud::EdgeNative),
+            }
+        }
+        assert_eq!(Engine::parse("openstack"), None);
+        assert_eq!(Engine::parse(CLOUD_EDGE_NATIVE), None);
+        assert_eq!(
+            cloud_list(),
+            "aws, eks, gcp, gke, azure, aks, maas, edge, vsphere"
+        );
     }
 
     #[test]
     fn the_world_gives_the_account_kind_and_the_route_cloud_of_each_engine() {
-        for engine in CLOUDS {
+        for engine in clouds() {
             let world = World {
                 cloud: engine.to_string(),
                 ..World::default()
@@ -803,12 +872,12 @@ mod tests {
     fn the_entity_of_a_cluster_keeps_the_labels_and_the_annotations_that_are_text() {
         let api = strata::api::MemoryApi::new()
             .with(
-                "/v1/spectroclusters/c1",
+                subject_path(SubjectKind::Cluster, "c1"),
                 json!({"metadata": {"uid": "c1", "name": "barney",
                     "labels": {"env": "dev", "n": 1}, "annotations": {"owner": "ops"}},
                     "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"}}}),
             )
-            .with("/v1/cloudconfigs/aws/cc1", json!({"spec": {}}));
+            .with(cloud_config_path("aws", "cc1"), json!({"spec": {}}));
         let world = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap();
         assert_eq!(
             world.entity["metadata"]["labels"],
@@ -821,11 +890,11 @@ mod tests {
         );
         let bare = strata::api::MemoryApi::new()
             .with(
-                "/v1/spectroclusters/c2",
+                subject_path(SubjectKind::Cluster, "c2"),
                 json!({"metadata": {"uid": "c2", "name": "wilma"},
                     "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc2"}}}),
             )
-            .with("/v1/cloudconfigs/aws/cc2", json!({"spec": {}}));
+            .with(cloud_config_path("aws", "cc2"), json!({"spec": {}}));
         let world = World::from_cluster(&Palette::new(bare), "c2", &Progress::silent()).unwrap();
         assert_eq!(world.entity["metadata"]["labels"], json!({}));
         assert_eq!(world.entity["metadata"]["annotations"], json!({}));
@@ -901,16 +970,22 @@ mod tests {
             ..World::default()
         };
         for status in [403u16, 404] {
-            let api =
-                strata::api::MemoryApi::new().failing("/v1/cloudaccounts/aws/acc1", status, "{}");
+            let api = strata::api::MemoryApi::new().failing(
+                cloud_account_path("aws", "acc1"),
+                status,
+                "{}",
+            );
             let w = base()
                 .with_palette(&Palette::new(&api), "t", &Progress::silent())
                 .unwrap();
             assert!(w.account.is_none(), "{status}: the world says null");
         }
         for status in [401u16, 429] {
-            let api =
-                strata::api::MemoryApi::new().failing("/v1/cloudaccounts/aws/acc1", status, "{}");
+            let api = strata::api::MemoryApi::new().failing(
+                cloud_account_path("aws", "acc1"),
+                status,
+                "{}",
+            );
             let err = base()
                 .with_palette(&Palette::new(&api), "t", &Progress::silent())
                 .unwrap_err()
@@ -970,12 +1045,12 @@ mod tests {
     fn cluster_api(variables: serde_json::Value) -> strata::api::MemoryApi {
         strata::api::MemoryApi::new()
             .with(
-                "/v1/spectroclusters/c1",
+                subject_path(SubjectKind::Cluster, "c1"),
                 json!({"metadata": {"uid": "c1", "name": "barney"},
                     "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"},
                         "clusterProfileTemplates": [{"uid": "p1", "packs": []}, {"uid": "p2", "packs": []}]}}),
             )
-            .with("/v1/cloudconfigs/aws/cc1", json!({"spec": {}}))
+            .with(cloud_config_path("aws", "cc1"), json!({"spec": {}}))
             .with("/v1/spectroclusters/c1/variables", variables)
     }
 
