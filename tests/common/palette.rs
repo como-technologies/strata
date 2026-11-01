@@ -250,7 +250,7 @@ impl<'a> PackFixture<'a> {
         )
     }
 
-    /// The pack ref on the template of a profile (V1PackRef). It lists each manifest of
+    /// The pack ref on the template of a profile (`V1PackRef`). It lists each manifest of
     /// `manifests` by its name and its uid.
     pub fn pack_ref(&self, manifests: &[Value]) -> Value {
         let refs: Vec<Value> = manifests
@@ -268,7 +268,7 @@ impl<'a> PackFixture<'a> {
         v
     }
 
-    /// The entry of the pack in `packs/manifests` (V1ClusterProfilePackManifests), with the
+    /// The entry of the pack in `packs/manifests` (`V1ClusterProfilePackManifests`), with the
     /// manifests `manifests`.
     pub fn pack_manifests(&self, manifests: Vec<Value>) -> Value {
         json!({

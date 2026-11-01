@@ -105,13 +105,24 @@ fn searched_consumers<A: PaletteApi>(
     Ok(Some(list_clusters(&found.items)))
 }
 
-/// The second reading of `consumers`. Strata asks the cluster search for the clusters that run a
-/// version of the profile `name`, and reads the cluster listing when the search takes no profile.
-/// The search goes to the scope of the profile: its project `project`, where each cluster that can
-/// run it is, or `wide` for a tenant profile. Then `home` when that
-/// scope cannot answer. The listing is read through `wide`, and through `home` when `wide` cannot
-/// read it. A cluster the consumer list named is not read again. A cluster that applies `uid`
-/// joins `list`, marked `unlisted`, with what its document and the search or the listing say of it.
+/// The second reading of `consumers`: find the clusters that run the profile `uid`, and add the
+/// ones that the consumer list of Palette omits.
+///
+/// Palette computes that list when it is asked, and gives an empty list on an error too. So the
+/// list cannot show a cluster that it omits. The steps:
+///
+/// 1. Ask the cluster search for the clusters that run a version of the profile `name`. The search
+///    goes to the scope of the profile: its project `project`, where each cluster that can run it
+///    is, or `wide` for a tenant profile. It goes to `home` when that scope cannot answer. When
+///    the search takes no profile, read the cluster listing instead, through `wide` and then
+///    `home`.
+/// 2. Add the virtual clusters of each cluster group that pins the version.
+/// 3. Read the document of each cluster that the consumer list did not name.
+/// 4. A cluster that applies `uid` joins `list`, marked `unlisted`, with what its document and the
+///    search or the listing say of it.
+///
+/// The returned [`ClustersRead`] counts what the steps read, and holds the error of a step that
+/// failed.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn second_reading<A, F>(
     list: &mut Vec<Consumer>,

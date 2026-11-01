@@ -8,9 +8,11 @@ use serde_json::Value;
 use super::{Method, PaletteApi};
 use crate::error::{Error, Result};
 
-/// Canned responses keyed by path. Paths not registered answer 404. A POST answers from the key
-/// `POST <path> <body>` when [`MemoryApi::with_post`] registered that body, else from the key
-/// `POST <path>`, and the body it was sent is kept for [`MemoryApi::posted`].
+/// Canned responses keyed by path. A path that nobody registered answers 404.
+///
+/// A POST answers from the key `POST <path> <body>` when [`MemoryApi::with_post`] registered that
+/// body, else from the key `POST <path>`. The body that it was sent is kept for
+/// [`MemoryApi::posted`].
 #[derive(Debug, Default, Clone)]
 pub struct MemoryApi {
     ok: HashMap<String, Value>,

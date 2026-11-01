@@ -229,9 +229,11 @@ fn rule_impact(layer: Layer, flags: Flags) -> Impact {
         })
 }
 
-/// The impact of a pack that only one side has. A pack key is `<layer>/<name>`, so a profile that
-/// exchanges one pack for a pack of another name gives one removed pack and one added pack, and no
-/// identity change. The level therefore follows the layer, as an identity change does.
+/// The impact of a pack that only one side has.
+///
+/// A pack key is `<layer>/<name>`, so a profile that exchanges one pack for a pack of another name
+/// gives one removed pack and one added pack, and no identity change. The level therefore follows
+/// the layer, as an identity change does. `added` is true for a pack that only side B has.
 pub fn presence_impact(layer: &str, added: bool) -> Impact {
     let level = impact(
         Layer::parse(layer),

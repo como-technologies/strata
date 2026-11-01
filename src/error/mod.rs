@@ -619,9 +619,11 @@ fn with_tag(tag: Option<&str>) -> String {
     tag.map(|t| format!(" with tag '{t}'")).unwrap_or_default()
 }
 
-/// Why a registry that Palette does not sync has no pack, in the message of
-/// [`Error::PackNotFound`] and [`Error::PackNameNotFound`]. Palette makes the pack of such a
-/// registry when it creates the profile, so its listing has the pack for that profile only.
+/// Why a registry that Palette does not sync has no pack, in the message of an error.
+///
+/// The message of [`Error::PackNotFound`] and [`Error::PackNameNotFound`] gives it. Palette makes
+/// the pack of such a registry when it creates the profile, so its listing has the pack for that
+/// profile only.
 pub const UNSYNCED_LISTS: &str =
     "lists a pack of such a registry only while a profile pins the pack";
 

@@ -48,3 +48,10 @@ tempfile = "3"
 [lints.rust]
 unsafe_code = "forbid"
 missing_docs = "deny"
+
+# The same four lints as the root package: see "Comments" in docs/src/development/code.md.
+[lints.clippy]
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+too_long_first_doc_paragraph = "deny"
+doc_markdown = "deny"

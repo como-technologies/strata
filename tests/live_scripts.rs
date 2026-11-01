@@ -102,7 +102,8 @@ fn tf_sh_passes_the_key_and_a_self_hosted_address_to_tofu() {
     );
 }
 
-/// A `curl` that answers from files: the status in $FAKE_CURL_STATUS, the body in $FAKE_CURL_BODY.
+/// A `curl` that answers from files: the status in `$FAKE_CURL_STATUS`, the body in
+/// `$FAKE_CURL_BODY`.
 /// It honors `-o <file>` and `-w '%{http_code}'`, the two options tenant.sh relies on, and logs
 /// each URL.
 const FAKE_CURL: &str = r#"#!/usr/bin/env bash
@@ -247,18 +248,18 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
     assert_eq!(o.status.code(), Some(2));
 }
 
-/// A `curl` that answers by path: the body of `<api path with / as _>` under $FAKE_ROUTES, with
+/// A `curl` that answers by path: the body of `<api path with / as _>` under `$FAKE_ROUTES`, with
 /// status 200, or 404 when there is no such file.
 ///
 /// A `<key>.status` file overrides the status. A `<key>.keyed.status` file overrides it again for
-/// a request with an ApiKey header. A `<key>.as-<ApiKey>.status` file overrides it for a request
-/// whose ApiKey header holds that value, and the file `<key>.as-<ApiKey>` is the body of that
-/// answer. When an executable $FAKE_ROUTES/<route key>.sh
+/// a request with an `ApiKey` header. A `<key>.as-<ApiKey>.status` file overrides it for a request
+/// whose `ApiKey` header holds that value, and the file `<key>.as-<ApiKey>` is the body of that
+/// answer. When an executable `$FAKE_ROUTES/<route key>.sh`
 /// exists, its output is the body of each answer. It logs each request as `METHOD path` to
-/// $FAKE_LOG. It keeps each request body as $FAKE_ROUTES/sent/<METHOD>_<route key>. It adds the
-/// body to $FAKE_ROUTES/sent/<METHOD>_<route key>.all, in the order of the requests. It keeps
-/// the query and the headers as $FAKE_ROUTES/sent/<METHOD>_<route key>.request. The line of the
-/// ApiKey header holds `(hidden)` in place of the key.
+/// `$FAKE_LOG`. It keeps each request body as `$FAKE_ROUTES/sent/<METHOD>_<route key>`. It adds the
+/// body to `$FAKE_ROUTES/sent/<METHOD>_<route key>.all`, in the order of the requests. It keeps
+/// the query and the headers as `$FAKE_ROUTES/sent/<METHOD>_<route key>.request`. The line of the
+/// `ApiKey` header holds `(hidden)` in place of the key.
 const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
 out=""; write=""; url=""; method=GET; sent=""; headers=""
 while [ $# -gt 0 ]; do
@@ -295,8 +296,8 @@ exit 0
 
 /// A `helm` whose `pull ... -d DIR` writes DIR/<name>-<version>.tgz with "chart archive\n".
 ///
-/// It fails when $FAKE_HELM_FAIL has a value. It logs its arguments and the Helm home that it
-/// gets to $FAKE_TOOL_LOG.
+/// It fails when `$FAKE_HELM_FAIL` has a value. It logs its arguments and the Helm home that it
+/// gets to `$FAKE_TOOL_LOG`.
 const FAKE_HELM: &str = r#"#!/usr/bin/env bash
 echo "$* HELM_CONFIG_HOME=$HELM_CONFIG_HOME" >> "$FAKE_TOOL_LOG"
 [ -z "${FAKE_HELM_FAIL:-}" ] || { echo "Error: chart not found" >&2; exit 1; }
@@ -315,7 +316,7 @@ printf 'chart archive\n' > "$dest/$name-$version.tgz"
 
 /// A `crane` whose `digest REF` prints a fixed digest.
 ///
-/// It fails when $FAKE_CRANE_FAIL has a value, and logs its arguments to $FAKE_TOOL_LOG.
+/// It fails when `$FAKE_CRANE_FAIL` has a value, and logs its arguments to `$FAKE_TOOL_LOG`.
 const FAKE_CRANE: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_TOOL_LOG"
 [ -z "${FAKE_CRANE_FAIL:-}" ] || { echo "UNAUTHORIZED: authentication required" >&2; exit 1; }
@@ -512,7 +513,7 @@ fn tenant_sh_digest_exits_2_when_the_registry_cannot_be_read() {
     expect_2(&tenant_digest(&["git", "r", "n", "1"], &[], &[]), "usage");
 }
 
-/// The sync route of `reg-1` for FAKE_API_CURL: Palette refuses the first $SYNC_REFUSALS
+/// The sync route of `reg-1` for `FAKE_API_CURL`: Palette refuses the first `$SYNC_REFUSALS`
 /// requests with HTTP 500 and `OciSyncInProgress`, and takes each request after them.
 const FAKE_SYNC_ROUTE: &str = r#"#!/usr/bin/env bash
 key=v1_registries_oci_reg-1_ecr_sync
@@ -1033,7 +1034,7 @@ fn lib_sh_prints_the_usage_and_the_heading_of_a_stage_and_writes_the_summary_of_
 }
 
 /// The route that gives the release, as Palette answers it: the release to a call with no key,
-/// and HTTP 500 to a call with an ApiKey header.
+/// and HTTP 500 to a call with an `ApiKey` header.
 fn release_route(routes: &Path) {
     std::fs::create_dir_all(routes).unwrap();
     std::fs::write(
@@ -1373,7 +1374,7 @@ fn diagnose_sh_saves_diagnostics_for_every_cluster_in_the_tofu_state() {
 }
 
 /// A `tofu` for baseline.sh: outputs for cluster A `c-a` and four profile versions, a plan
-/// that exits $FAKE_PLAN_EXIT, and a state that manages r-1, r-2, g-1, and ad-1.
+/// that exits `$FAKE_PLAN_EXIT`, and a state that manages r-1, r-2, g-1, and ad-1.
 const FAKE_TOFU_BASELINE: &str = r#"#!/usr/bin/env bash
 case "$*" in
   *"output -json"*) cat <<'JSON'
@@ -1403,7 +1404,7 @@ esac
 "#;
 
 /// A `strata` for baseline.sh: listings from the test's environment, and a compare that exits
-/// $FAKE_COMPARE_EXIT.
+/// `$FAKE_COMPARE_EXIT`.
 const FAKE_STRATA_BASELINE: &str = r#"#!/usr/bin/env bash
 case "$*" in
   "list clusters --json") echo "{\"clusters\":[{\"name\":\"fred\",\"uid\":\"c-a\"}${FAKE_CLUSTER_B:+,{\"name\":\"barney\",\"uid\":\"c-b\"\}}]}" ;;
@@ -1489,7 +1490,7 @@ fn baseline_sh_passes_only_when_every_condition_holds_and_names_each_that_does_n
 }
 
 /// An `aws` for aws-inventory.sh: it logs each call and answers `<service> <operation>` with the
-/// ids in $FAKE_AWS/<operation>, or nothing when that file is absent.
+/// ids in `$FAKE_AWS/<operation>`, or nothing when that file is absent.
 const FAKE_AWS: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_AWS/calls.log"
 [ -f "$FAKE_AWS/$2" ] && cat "$FAKE_AWS/$2"
@@ -2257,8 +2258,8 @@ fn aws_cleanup_deletes_nothing_without_yes_and_names_what_it_would() {
 
 // ---- the stages of the live checks -----------------------------------------------------------------
 
-/// A `tofu` for a stage: `output -json` prints $FAKE_OUTPUTS, a plan changes nothing, and each
-/// other command passes. It logs each command to $FAKE_TOFU_LOG.
+/// A `tofu` for a stage: `output -json` prints `$FAKE_OUTPUTS`, a plan changes nothing, and each
+/// other command passes. It logs each command to `$FAKE_TOFU_LOG`.
 const FAKE_TOFU_STAGE: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_TOFU_LOG"
 case "$*" in
@@ -2269,8 +2270,8 @@ case "$*" in
 esac
 "#;
 
-/// A `strata` for a stage. It logs its arguments to $FAKE_STRATA/calls, and answers from
-/// $FAKE_STRATA/rules: the first line `GLOB<TAB>EXIT<TAB>FILE` whose GLOB matches the arguments
+/// A `strata` for a stage. It logs its arguments to `$FAKE_STRATA/calls`, and answers from
+/// `$FAKE_STRATA/rules`: the first line `GLOB<TAB>EXIT<TAB>FILE` whose GLOB matches the arguments
 /// prints FILE, or writes it to the file of `-o`, and exits EXIT. A fourth field `err` prints FILE
 /// to standard error and writes no file. With no match it exits 0.
 const FAKE_STRATA_STAGE: &str = r#"#!/usr/bin/env bash
@@ -2343,7 +2344,7 @@ impl Stage {
         .unwrap();
     }
 
-    /// Palette answers `path` with `status` and `body` to a request whose ApiKey is `key`.
+    /// Palette answers `path` with `status` and `body` to a request whose `ApiKey` is `key`.
     fn route_as(&self, path: &str, key: &str, status: u16, body: &str) {
         let route = self.root.path().join("routes");
         let name = format!("{}.as-{key}", Self::route_key(path));
@@ -3005,7 +3006,7 @@ fn cluster_group_sh_stage_3_changes_the_cpu_limit_of_the_group_and_puts_it_back(
     );
 }
 
-/// An `oras` that logs its arguments to $FAKE_AWS/oras.log, and prints a digest for a push.
+/// An `oras` that logs its arguments to `$FAKE_AWS/oras.log`, and prints a digest for a push.
 const FAKE_ORAS: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_AWS/oras.log"
 [ "$1" = push ] && echo "Digest: sha256:$(printf '%s' "$*" | sha256sum | cut -c1-64)"
@@ -3693,8 +3694,9 @@ fn pending_sh_stage_6_asks_palette_about_a_kubeadm_command_that_waits_and_closes
     );
 }
 
-/// A `tofu` for template.sh. `output -json` prints $FAKE_OUTPUTS. An apply with `cluster=false`
-/// copies $FAKE_OUTPUTS.none over it, and each other apply copies $FAKE_OUTPUTS.cluster over it.
+/// A `tofu` for template.sh. `output -json` prints `$FAKE_OUTPUTS`. An apply with `cluster=false`
+/// copies `$FAKE_OUTPUTS.none` over it, and each other apply copies `$FAKE_OUTPUTS.cluster` over
+/// it.
 /// The apply of a cluster outside the template fails, as Palette refuses it.
 const FAKE_TOFU_TEMPLATE: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_TOFU_LOG"

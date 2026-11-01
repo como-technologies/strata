@@ -143,6 +143,11 @@ impl<'a> Semver<'a> {
         })
     }
 
+    /// The order of two pre-releases, item 11.4 of Semantic Versioning 2.0.0.
+    ///
+    /// Compare the identifiers from the left, and the first pair that differs decides. A number is
+    /// below a text. Two numbers compare as numbers, and two texts as bytes. When one list is the
+    /// start of the other, the longer list is higher.
     fn pre_cmp(&self, other: &Self) -> Ordering {
         for (x, y) in self.pre.iter().zip(&other.pre) {
             let ord = match (is_digits(x), is_digits(y)) {
@@ -160,6 +165,14 @@ impl<'a> Semver<'a> {
 }
 
 /// The natural order of two strings: see [`compare`].
+///
+/// The steps:
+///
+/// 1. Split each string into runs of digits and runs of other characters.
+/// 2. Compare the runs from the left. Two digit runs compare as numbers. Any other pair compares
+///    as text.
+/// 3. The first pair of runs that differs decides.
+/// 4. When all pairs are equal, the string with more runs is higher.
 fn natural(a: &str, b: &str) -> Ordering {
     let (ra, rb) = (runs(a), runs(b));
     for (x, y) in ra.iter().zip(rb.iter()) {

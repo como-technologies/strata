@@ -144,7 +144,7 @@ ASD-STE100.
 
 - The first line of a doc comment is one sentence that says what the item does.
   Rustdoc shows it in the index of the module. Put the details in the next
-  paragraph.
+  paragraph. The first paragraph has 200 characters or fewer.
 - Name each argument whose role its name and type do not show, in the prose and
   in backticks: "`fetched_at` is the time that the record states, in RFC 3339".
   Do not write a list of each argument.
@@ -153,7 +153,14 @@ ASD-STE100.
 - A function that can panic has a `# Panics` section. A panic on input from a
   user or from Palette is a bug: see [Errors](#errors).
 - A main entry point of the library has an `# Examples` section. The example
-  runs as a test.
+  runs as a test. `ops::snapshot_for`, `ops::compare`, `ops::verify`,
+  `ops::snapshot_from_candidate`, and `candidate::resolve` have one.
+- `Cargo.toml` of `strata` and of `strata-preflight` turns on four lints of
+  clippy: `missing_errors_doc`, `missing_panics_doc`,
+  `too_long_first_doc_paragraph`, and `doc_markdown`. They enforce the four
+  rules above, so `just lint` fails on a comment that breaks one. Do not add an
+  `allow` for them. Put a code item in backticks. Put a name that is no code
+  item, such as `OpenTofu`, in `doc-valid-idents` of `clippy.toml`.
 - Link each type, function, and module that a comment names, as
   `` [`Snapshot`] ``. `just lint` refuses a broken link, also in the comment of
   a private item.

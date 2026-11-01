@@ -63,6 +63,13 @@ pub(crate) fn manifest_entry(name: &str, uid: &str, digest: &str, content: &str)
 impl Snapshot {
     /// Build a snapshot from the raw API responses of one profile: of its published template, or
     /// of its draft when it has no published template.
+    ///
+    /// `reference` is the text of the ref that the record names as its source. `fetched_at` is the
+    /// time of the read, in RFC 3339.
+    ///
+    /// # Errors
+    ///
+    /// None at present: the build reads only `raw`, and a field that is not there is empty.
     pub fn from_raw(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
         let template = crate::api::recorded_template(&raw.profile);
         Self::from_raw_template(raw, reference, fetched_at, template)
@@ -82,6 +89,10 @@ impl Snapshot {
 
     /// Build a snapshot of the draft template of one profile: what the next publish makes the
     /// version. A profile with no draft is the error [`Error::NoDraft`].
+    ///
+    /// # Errors
+    ///
+    /// [`Error::NoDraft`] for a profile with no draft.
     pub fn from_raw_draft(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
         let prof = &raw.profile;
         if !crate::api::has_draft(prof) {
@@ -185,6 +196,10 @@ impl Snapshot {
     /// A snapshot for each profile that a cluster applies, from one read of the cluster, in the
     /// canonical order of [`AppliedProfile::of_cluster`]. Each one is the snapshot that
     /// `cluster:<cluster>/<profile>` gives.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Snapshot::from_cluster`].
     pub fn each_from_cluster(
         raw: &RawCluster,
         reference: &str,
@@ -207,6 +222,12 @@ impl Snapshot {
     /// hashed as the profile itself would be, so a cluster that runs a recorded version has the
     /// root of that record. With `profile`, only the applied profile of that name (or uid) is
     /// covered; without, every applied profile in order, packs concatenated and variables merged.
+    /// `reference` and `fetched_at` are as for [`Snapshot::from_raw`].
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ClusterProfileNotFound`] when `profile` names none of the applied profiles of the
+    /// cluster.
     pub fn from_cluster(
         raw: &RawCluster,
         profile: Option<&str>,

@@ -22,9 +22,10 @@ impl ColorMode {
     }
 }
 
-/// The stream that a text with color goes to. Each stream has its own color: with
-/// `strata-preflight ... | less`, the progress lines on standard error can have color, and the
-/// report on standard output has none.
+/// The stream that a text with color goes to.
+///
+/// Each stream has its own color: with `strata-preflight ... | less`, the progress lines on
+/// standard error can have color, and the report on standard output has none.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stream {
     /// Standard output: the report.

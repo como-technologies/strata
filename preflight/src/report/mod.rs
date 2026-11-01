@@ -1,6 +1,8 @@
 //! The report of a run: the document `strata-preflight/1`, and its terminal, markdown, and JSON
-//! forms. [`crate::html`] gives the HTML form. A script reads the exit status and the JSON; the
-//! text forms can change in any release.
+//! forms.
+//!
+//! [`crate::html`] gives the HTML form. A script reads the exit status and the JSON; the text
+//! forms can change in any release.
 
 use std::collections::BTreeMap;
 

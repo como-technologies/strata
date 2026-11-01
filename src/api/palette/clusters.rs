@@ -172,6 +172,11 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The raw documents of a cluster, an edge host, or a cluster group, from the document that
     /// [`Palette::subject_document`] gives: the rest of what [`Palette::fetch_subject`] reads.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails. A missing variables route is no error: see
+    /// [`Palette::fetch_subject`].
     pub fn subject_raw(
         &self,
         kind: SubjectKind,
@@ -245,6 +250,10 @@ impl<A: PaletteApi> Palette<A> {
     /// template in the shape of `spec.clusterProfileTemplates`, and they take the place of the
     /// templates of the cluster. The manifests of each come from its profile, `GET
     /// /v1/clusterprofiles/{uid}/packs/manifests`, since the cluster holds no copy of them yet.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails.
     pub fn with_pending(&self, mut raw: RawCluster) -> Result<RawCluster> {
         let uid = text(&raw.cluster, "/metadata/uid");
         let updates = self
@@ -275,6 +284,10 @@ impl<A: PaletteApi> Palette<A> {
     /// The virtual clusters of a cluster group, `POST
     /// /v1/dashboard/clustergroups/{uid}/virtualClusters`, every page: the clusters that run the
     /// profiles that the group pins.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails.
     pub fn cluster_group_members(&self, uid: &str) -> Result<Vec<Value>> {
         self.searched(
             &with_limit(&route(CLUSTER_GROUP_DASHBOARD, &[uid, "virtualClusters"])),
@@ -418,6 +431,10 @@ impl<A: PaletteApi> Palette<A> {
 
     /// Palette's answer to whether a change of the profiles of a cluster replaces its nodes:
     /// `POST /v1/spectroclusters/{uid}/validate/repave`. The request changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, such as a 404 for a cluster that Palette does not have.
     pub fn validate_repave(&self, uid: &str, body: &Value) -> Result<Value> {
         self.api
             .post_json(&route(CLUSTERS, &[uid, "validate", "repave"]), body)
@@ -440,6 +457,10 @@ impl<A: PaletteApi> Palette<A> {
     /// Palette's answer to whether it accepts the packs of a change of the profiles of a cluster:
     /// `POST /v1/spectroclusters/{uid}/validate/packs`, with the body of `validate/repave`. The
     /// request changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, such as a 404 for a cluster that Palette does not have.
     pub fn validate_packs(&self, uid: &str, body: &Value) -> Result<Value> {
         self.api
             .post_json(&route(CLUSTERS, &[uid, "validate", "packs"]), body)
@@ -485,6 +506,10 @@ impl<A: PaletteApi> Palette<A> {
     /// The notifications of one cluster, `GET /v1/notifications/spectrocluster/{uid}`, every page,
     /// newest first. Palette gives `items: null` when there are none, and at most 50 on a page;
     /// `listmeta.continue` names the next page, and is empty on the last one.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails.
     pub fn cluster_notifications(&self, uid: &str) -> Result<Vec<Value>> {
         self.listed(&route(CLUSTER_NOTIFICATIONS, &[uid]))
     }

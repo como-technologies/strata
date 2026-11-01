@@ -19,14 +19,14 @@
 //! Clusters, written as the cluster.json, manifests.json and variables.json that a cluster
 //! snapshot reads, each assembled from the profile fixtures it runs:
 //!
-//!   cluster-a          lab-cluster (CLUSTER_UID) running a
-//!   cluster-a-staging  cluster-a, with the value "staging" for cluster_env
-//!   cluster-b          lab-cluster (CLUSTER_UID) running b
-//!   cluster-merged     lab-cluster (CLUSTER_UID) running b and addons
+//!   cluster-a          lab-cluster (`CLUSTER_UID`) running a
+//!   cluster-a-staging  cluster-a, with the value "staging" for `cluster_env`
+//!   cluster-b          lab-cluster (`CLUSTER_UID`) running b
+//!   cluster-merged     lab-cluster (`CLUSTER_UID`) running b and addons
 //!   cluster-merged-reversed  the same, with the two templates listed the other way round
 //!
 //! A cluster gives each variable its default value, or the value in its `values`; a sensitive
-//! variable always gets SECRET_VALUE, which no document may contain.
+//! variable always gets `SECRET_VALUE`. No document must contain it.
 
 use std::fs;
 use std::io;
@@ -187,7 +187,7 @@ pub fn text_matches_schema(schema: &Value, value: &str) -> bool {
 
 /// Assemble a cluster that runs the profile fixtures `profiles`, in order, the way Palette returns
 /// it: applied templates on the cluster, per-profile pack manifests, and per-profile variables
-/// with values: `values` by name, else the default, and SECRET_VALUE for a sensitive variable.
+/// with values: `values` by name, else the default, and `SECRET_VALUE` for a sensitive variable.
 fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &str)]) {
     let out = root.join(dir);
     fs::create_dir_all(&out).unwrap();

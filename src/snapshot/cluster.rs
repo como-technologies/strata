@@ -377,9 +377,10 @@ fn running_tier(cluster: &Value, covered: &[AppliedProfile]) -> ClusterTier {
     ClusterTier::of(Value::Array(running))
 }
 
-/// The digest of each macro in `names` that `resolved` gives for one of `profiles`:
-/// `sha256:<hex>` of the value, or `unresolved` when no profile has it. `resolved` is the answer
-/// for a cluster or a cluster group, with one map for each profile.
+/// The digest of each macro in `names` that `resolved` gives for one of `profiles`.
+///
+/// A digest is `sha256:<hex>` of the value, or `unresolved` when no profile has it. `resolved` is
+/// the answer for a cluster or a cluster group, with one map for each profile.
 pub fn macro_digests(
     resolved: &Value,
     profiles: &[AppliedProfile],

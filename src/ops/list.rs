@@ -337,13 +337,20 @@ impl Listing {
 }
 
 /// List what a ref can name: profile versions and clusters in one scope, and the projects the
-/// key can see. Profiles and clusters are read through `connect(options.project)`, where `None`
-/// is the configured scope. Projects are read through `connect(Some(TENANT_SCOPE))`, because in a
+/// key can see.
+///
+/// Profiles and clusters are read through `connect(options.project)`, where `None` is the
+/// configured scope. Projects are read through `connect(Some(TENANT_SCOPE))`, because in a
 /// project Palette lists only that project. The cluster listing leaves out each virtual cluster,
 /// so the clusters also come from [`Palette::virtual_clusters`], when the search takes
 /// `environment`. With `packs` or `pack`, each profile document is read as well; a profile that
-/// cannot be read stays in the list with its error, and a listing that cannot be read is an
-/// error.
+/// cannot be read stays in the list with its error. `generated_at` is the time of the listing, in
+/// RFC 3339.
+///
+/// # Errors
+///
+/// The error of `connect`, and the error of a listing that strata cannot read. The errors of
+/// [`select`](super::select) for a query of tags.
 pub fn list<A, F>(
     options: &ListOptions,
     mut connect: F,

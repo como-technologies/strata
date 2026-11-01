@@ -102,7 +102,8 @@ fn as_text(v: &Value) -> String {
     }
 }
 
-/// Warn once for each option of a pack template that the values of a pack of `snap` select:
+/// Warn once for each option of a pack template that the values of a pack of `snap` select.
+///
 /// Palette can write the presets of that option into the values when it publishes the version,
 /// and the root of `snap` does not have them.
 pub fn warn_preset_options(snap: &Snapshot, progress: &Progress) {

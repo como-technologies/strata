@@ -41,11 +41,12 @@ fn profiles_body<'a>(
     json!({ "profiles": profiles })
 }
 
-/// The body of `validate/repave` for a move of `cluster` to `target`. The request names each
-/// profile the target cluster would run, by uid. A profile the cluster runs now keeps its packs,
-/// or takes the pack values of `target` when it is the same uid. A profile the request leaves out
-/// is not in the target. So `target` replaces the profile it has the name of, or else the one
-/// that builds the cluster when `target` builds one too.
+/// The body of `validate/repave` for a move of the cluster that runs `running` to `target`.
+///
+/// The request names each profile that the cluster runs after the move, by uid. A profile it runs
+/// now keeps its packs, or takes the pack values of `target` when it is the same uid. A profile
+/// the request leaves out is not in the target. So `target` replaces the profile it has the name
+/// of, or else the one that builds the cluster when `target` builds one too.
 pub fn validate_body(running: &[AppliedProfile], target: &Snapshot) -> Value {
     let uid = target.source.uid.as_str();
     let pack_values = || -> Vec<Value> { target.packs.iter().map(pack_value).collect() };
@@ -419,10 +420,13 @@ fn pending_packs(current: &[Value], pending: &[Pack], new: &[&Pack]) -> Option<V
 }
 
 /// Ask Palette whether a move of the cluster side of a comparison to its other side repaves the
-/// cluster. One side must be a cluster. The other is a profile version with a uid, or the record
-/// of the update that waits for that cluster, `cluster:<c>@pending`, in either order. It reads the
+/// cluster.
+///
+/// One side must be a cluster. The other is a profile version with a uid, or the record of the
+/// update that waits for that cluster, `cluster:<c>@pending`, in either order. It reads the
 /// cluster document for the profiles it runs now, and sends one POST, which changes nothing.
-/// `level` is the most severe level of the impact table, for `agrees`.
+/// `a` and `b` are the two sides of the comparison. `level` is the most severe level of the impact
+/// table, for `agrees`.
 ///
 /// On the route of a cluster that a cluster template governs, Palette compares nothing and
 /// answers no repave. So the cluster document, and not the answer, tells strata to send the POST

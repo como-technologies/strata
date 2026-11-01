@@ -194,6 +194,12 @@ impl World {
     /// A world from a file: the body of a create, as JSON or YAML. The cloud comes from `cloud`,
     /// else from an envelope `{cloudType|cloud, entity|spec}`, else from the shape of
     /// `spec.cloudConfig`. A file that names no cloud is an error that says to give `--cloud`.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] when strata-preflight cannot read the file. [`Error::Input`] when the file is
+    /// not JSON or YAML, has no `spec`, or names a cloud that strata-preflight does not know. Also
+    /// when no cloud is given or found.
     pub fn from_file(path: &Path, cloud: Option<&str>) -> Result<World> {
         let text = std::fs::read_to_string(path).map_err(|e| crate::error::io(path, e))?;
         let doc: Value = parse_json_or_yaml(&text).map_err(|m| Error::Input {
@@ -318,6 +324,11 @@ impl World {
     /// Add the records of the profiles from files: each file is a strata record, matched to a
     /// profile of the entity by its uid. A record that matches no profile is kept out, and a
     /// profile with no record is reported by the rules that need one.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Palette`], with the error of [`Snapshot::load`], when a file cannot be read or is
+    /// not a record of strata. [`Error::Serialize`] when a record cannot be written as JSON.
     pub fn with_records(mut self, paths: &[std::path::PathBuf]) -> Result<World> {
         let mut records = Vec::new();
         for path in paths {
@@ -334,6 +345,12 @@ impl World {
 
     /// Read from Palette what the static rules need beside the entity: a record of each profile,
     /// the pack of each layer, and the cloud account with no secret.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Palette`] with the error of the first request that fails. A 4xx answer for a pack
+    /// or for the cloud account is no error, except 401 and 429: a rule that needs it says so.
+    /// [`Error::Serialize`] when a record cannot be written as JSON.
     pub fn with_palette<A: PaletteApi>(
         mut self,
         palette: &Palette<A>,

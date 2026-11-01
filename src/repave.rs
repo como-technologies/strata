@@ -63,9 +63,10 @@ impl PaletteRepaveReason {
     }
 }
 
-/// A repave of a cluster that waits for approval. Palette replaces the nodes only after a person
-/// approves it. While it waits, Palette refuses an update of the profiles of the cluster, and
-/// holds a delete of the cluster in `Deleting`.
+/// A repave of a cluster that waits for approval.
+///
+/// Palette replaces the nodes only after a person approves it. While it waits, Palette refuses an
+/// update of the profiles of the cluster, and holds a delete of the cluster in `Deleting`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingRepave {

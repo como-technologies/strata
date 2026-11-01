@@ -1,7 +1,9 @@
-//! The rule format. A rule is data: one thing that can stop or break a cluster build, where a
-//! check can find it, how much to trust the check, and the check itself as a jq program. The
-//! catalog that the binary carries and a file of custom probes (`--probes FILE`) are the same
-//! format, so a company reads and writes rules the way strata does.
+//! The rule format.
+//!
+//! A rule is data: one thing that can stop or break a cluster build, where a check can find it,
+//! how much to trust the check, and the check itself as a jq program. The catalog that the binary
+//! carries and a file of custom probes (`--probes FILE`) are the same format, so a company reads
+//! and writes rules the way strata does.
 //!
 //! One file holds one section:
 //!
@@ -360,9 +362,10 @@ fn default_bar() -> f64 {
     0.8
 }
 
-/// A pair of fixtures: one that holds the fault, and one that is clean. The test of the catalog
-/// runs the check on each, and the rule fails its test when the fault passes or the clean one
-/// fails. Paths are relative to the rule file.
+/// A pair of fixtures: one that holds the fault, and one that is clean.
+///
+/// The test of the catalog runs the check on each, and the rule fails its test when the fault
+/// passes or the clean one fails. Paths are relative to the rule file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct RuleTest {
     /// A world document with the fault. The check must fail on it.
@@ -518,6 +521,11 @@ impl Catalog {
     }
 
     /// Read one section file from disk.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] when strata-preflight cannot read the file, and the errors of
+    /// [`Catalog::parse_section`].
     pub fn load_section(path: &Path) -> Result<Section> {
         let text = std::fs::read_to_string(path).map_err(|e| crate::error::io(path, e))?;
         Self::parse_section(&text, path)
@@ -525,6 +533,11 @@ impl Catalog {
 
     /// Add a section. A rule id that a section already has is an error, so a probes file cannot
     /// shadow a rule of the catalog by mistake.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Catalog`] when `section` has a rule id that the catalog has already. `path` names
+    /// the file of `section` in the message.
     pub fn push(&mut self, section: Section, path: &Path) -> Result<()> {
         let known: BTreeSet<&str> = self.rules().map(|r| r.id.as_str()).collect();
         for rule in &section.rules {

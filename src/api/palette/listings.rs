@@ -21,12 +21,20 @@ impl<A: PaletteApi> Palette<A> {
     /// The profile listing, `GET /v1/dashboard/clusterprofiles/metadata`: `items[]` with each
     /// version's name, uid, version, and cloud type. In a project it holds that project's
     /// profiles; at tenant scope, the tenant's own.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request.
     pub fn profile_listing(&self) -> Result<Value> {
         self.api.get_json(PROFILE_LISTING)
     }
 
     /// The cluster listing, `GET /v1/dashboard/spectroclusters/meta`: an array with each cluster's
     /// name, uid, cloud type, and state. At tenant scope it holds the clusters of every project.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request.
     pub fn cluster_listing(&self) -> Result<Value> {
         self.api.get_json(CLUSTER_LISTING)
     }
@@ -86,6 +94,10 @@ impl<A: PaletteApi> Palette<A> {
     /// The project listing, `GET /v1/dashboard/projects/metadata`: `items[]` with each project's
     /// name and uid. At tenant scope it holds every project the key can see; in a project, only
     /// that project.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request.
     pub fn project_listing(&self) -> Result<Value> {
         self.api.get_json(PROJECT_LISTING)
     }
@@ -115,6 +127,10 @@ impl<A: PaletteApi> Palette<A> {
     /// Every edge host the scope can list, `POST /v1/dashboard/edgehosts/search`, every page.
     /// Each item names the profiles bound to the host in `spec.clusterProfileTemplates`, as a
     /// summary: uid, name, and version.
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails.
     pub fn edge_hosts(&self) -> Result<Vec<Value>> {
         self.searched(&with_limit(EDGE_HOST_SEARCH), &search_all())
     }
@@ -125,6 +141,10 @@ impl<A: PaletteApi> Palette<A> {
     /// the key can read, each with its labels and its project. It holds no virtual cluster,
     /// unless a condition asks for the environment `nested`: see
     /// [`Palette::virtual_cluster_search`].
+    ///
+    /// # Errors
+    ///
+    /// The error of the first request that fails.
     pub fn cluster_search(&self, filter: &Value) -> Result<Vec<Value>> {
         self.searched(
             &with_limit(CLUSTER_SEARCH),
@@ -138,6 +158,10 @@ impl<A: PaletteApi> Palette<A> {
     /// a virtual cluster. `filter` joins its groups with `and`, and `Null` has no condition, so
     /// the answer then holds each virtual cluster in the scope. Each item names the host cluster
     /// and the cluster group of the virtual cluster in `status.virtual`.
+    ///
+    /// # Errors
+    ///
+    /// Each error of the search: see [`Palette::cluster_search`].
     pub fn virtual_cluster_search(&self, filter: &Value) -> Result<Vec<Value>> {
         self.cluster_search(&with_nested(filter))
     }
@@ -194,6 +218,11 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The properties that the cluster search takes, `GET
     /// /v1/dashboard/spectroclusters/search/schema`: `schema.properties[]` with `name` and `type`.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, also [`Error::Api`] with HTTP 404 or 405 when Palette has no
+    /// search.
     pub fn cluster_search_schema(&self) -> Result<Value> {
         self.api.get_json(CLUSTER_SEARCH_SCHEMA)
     }
@@ -218,18 +247,30 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The saved tag filters, `GET /v1/filters/metadata?filterType=tag`: the uid and the name of
     /// each. A tag filter belongs to the tenant.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request.
     pub fn tag_filters(&self) -> Result<Value> {
         self.api.get_json(TAG_FILTER_LISTING)
     }
 
     /// One saved tag filter, `GET /v1/filters/tag/{uid}`: `spec.filterGroup` holds its
     /// conjunction and its conditions.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, such as a 404 for a filter that Palette does not have.
     pub fn tag_filter(&self, uid: &str) -> Result<Value> {
         self.api.get_json(&route(TAG_FILTERS, &[uid]))
     }
 
     /// The name and the uid of each cluster group in the scope, from `GET
     /// /v1/clustergroups/hostCluster/metadata`.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request.
     pub fn cluster_groups(&self) -> Result<Vec<(String, String)>> {
         let listing = self.api.get_json(CLUSTER_GROUP_LISTING)?;
         Ok(items(&listing)

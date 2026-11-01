@@ -417,13 +417,19 @@ fn build_pair(
 
 /// Compare consecutive records, in the order given, and decide whether they are one release
 /// under `policy`. Fewer than two records is an empty chain that passes.
+///
+/// Each of `records` is the path of a record, as the report names it, and the record itself.
+/// `generated_at` is the time of the report, in RFC 3339.
 pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at: &str) -> Chain {
     same_release_with(records, policy, false, generated_at)
 }
 
-/// [`same_release`], and with `allow_no_digest`, a pair that holds a pack with no upstream digest
-/// can pass. Without it, such a pair is `unknown-upstream`: a move from a registry that gives a
-/// digest to one that gives none is a loss of what the root can show.
+/// [`same_release`] with the choice for a pack that has no upstream digest.
+///
+/// With `allow_no_digest`, a pair that holds a pack with no upstream digest can pass. Without it,
+/// such a pair is `unknown-upstream`: a move from a registry that gives a digest to one that gives
+/// none is a loss of what the root can show. `generated_at` is the time of the report, in
+/// RFC 3339.
 pub fn same_release_with(
     records: &[(String, Snapshot)],
     policy: Policy,

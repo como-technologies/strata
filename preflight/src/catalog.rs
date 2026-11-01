@@ -1,6 +1,7 @@
-//! The rules the binary carries: one file for each section under `preflight/rules/`, in the
-//! order of the report. The files are data, and the binary embeds them, so a run needs no file
-//! beside it and a pipeline reads the same list with `--rules --json`.
+//! The rules the binary carries: one file for each section under `preflight/rules/`.
+//!
+//! The sections are in the order of the report. The files are data, and the binary embeds them, so
+//! a run needs no file beside it and a pipeline reads the same list with `--rules --json`.
 
 use std::path::{Path, PathBuf};
 
@@ -36,6 +37,12 @@ pub fn rules_dir() -> PathBuf {
 }
 
 /// The catalog of the binary.
+///
+/// # Errors
+///
+/// [`Error::Catalog`](crate::error::Error::Catalog) when a rule file of the binary does not
+/// parse, or its section is not the section that the catalog lists. A binary that passes its
+/// tests gives no error.
 pub fn builtin() -> Result<Catalog> {
     let mut catalog = Catalog::default();
     let dir = rules_dir();
@@ -57,6 +64,11 @@ pub fn builtin() -> Result<Catalog> {
 }
 
 /// The catalog of the binary, with each probes file after it.
+///
+/// # Errors
+///
+/// The errors of [`builtin`], and the errors of [`Catalog::load_section`] and [`Catalog::push`]
+/// for each file of `probes`.
 pub fn with_probes(probes: &[PathBuf]) -> Result<Catalog> {
     let mut catalog = builtin()?;
     for path in probes {
