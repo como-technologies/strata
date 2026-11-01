@@ -274,7 +274,7 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
             name: l.name.clone(),
             version: l.version.clone(),
             registry,
-            state: state.as_str().to_string(),
+            state,
         })
     }
 

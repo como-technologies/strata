@@ -57,7 +57,7 @@ fn record_object(
         progress.warn(&warning);
     }
     let text = snap.to_json(a.compact.compact)?;
-    match &a.output {
+    match &a.file.output {
         Some(path) => {
             ops::write_file(path, &text)?;
             progress.note(&format!(

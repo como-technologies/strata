@@ -9,6 +9,12 @@ use crate::ops::{Listing, PackListing, Resolved, SetRecord, SetReport};
 use crate::snapshot::Snapshot;
 use crate::text::{and_list, dash, name_or_uid};
 
+/// The profile type of a listed profile as a cell of a report: `cluster` or `add-on`, and `-`
+/// when the listing has no type.
+pub(crate) fn profile_type_cell(pr: &crate::ops::ListedProfile) -> &str {
+    dash(pr.profile_type.as_ref().map_or("", Open::as_str))
+}
+
 /// `env=prod, team`: the labels of a cluster, with a tag that has no value by its key alone.
 pub(crate) fn labels_text(labels: &std::collections::BTreeMap<String, String>) -> String {
     labels

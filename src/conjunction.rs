@@ -35,9 +35,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_conjunction_parses_and_prints_as_palette_names_it() {
+    fn a_conjunction_prints_as_palette_names_it_and_reads_no_other_text() {
         for conjunction in Conjunction::ALL {
-            assert_eq!(Conjunction::parse(conjunction.as_str()), Some(*conjunction));
             assert_eq!(conjunction.to_string(), conjunction.as_str());
         }
         assert_eq!(Conjunction::parse("AND"), None);

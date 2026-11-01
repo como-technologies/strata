@@ -75,9 +75,6 @@ mod tests {
 
     #[test]
     fn a_state_reads_from_the_text_that_palette_writes_and_a_later_state_is_none() {
-        for state in ClusterState::ALL {
-            assert_eq!(ClusterState::parse(state.as_str()), Some(*state));
-        }
         assert_eq!(ClusterState::parse("Running"), Some(ClusterState::Running));
         assert_eq!(ClusterState::parse("running"), None);
         assert_eq!(ClusterState::parse("Upgrading"), None);

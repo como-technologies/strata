@@ -4,12 +4,11 @@ use std::collections::HashMap;
 
 use super::{
     APP_NO_EDGE_HOSTS, APP_NO_SECOND_READING, ClustersRead, Consumer, ConsumerKind,
-    ConsumersReport, EdgeHostsRead, report,
+    ConsumersReport, EdgeHostsRead, name_consumer_projects, report,
 };
 use crate::api::{Palette, PaletteApi};
 use crate::error::Result;
 use crate::json::{arr, text};
-use crate::ops::list::{ProjectListings, name_projects_of};
 use crate::profile_type::ProfileType;
 use crate::term::progress::Progress;
 
@@ -58,13 +57,7 @@ where
         );
         list.push(c);
     }
-    name_projects_of(
-        &mut list,
-        |c| &c.project_uid,
-        |c| &mut c.project_name,
-        &home,
-        &mut ProjectListings::default(),
-    );
+    name_consumer_projects(&mut list, &home);
     Ok(report(
         &doc,
         Some(ProfileType::App),

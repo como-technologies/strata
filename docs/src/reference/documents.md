@@ -514,7 +514,7 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
     when it is `false`, nobody published it, and `packs[]` holds the packs of
     its draft. `type` and `packs[]` come from the template that a record of
     the version reads: the published template when it has packs, else the
-    draft.
+    draft. `type` is a profile type, or the text of a type of a later release.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, `clusterType`, and
     `projectUid`.
     - `state` is `status.state` of the cluster, as Palette gives it in

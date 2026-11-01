@@ -2,6 +2,22 @@
 
 use std::path::{Path, PathBuf};
 
+/// The book, from the root of the repository.
+const BOOK: &str = "docs/src";
+
+/// The directory under the book that `just docs-examples` writes.
+const OUTPUT: &str = "output";
+
+/// The directory of the book, in the repository at `repo`.
+pub fn book(repo: &Path) -> PathBuf {
+    repo.join(BOOK)
+}
+
+/// The directory of the outputs that the book includes, in the repository at `repo`.
+pub fn output_dir(repo: &Path) -> PathBuf {
+    book(repo).join(OUTPUT)
+}
+
 /// The entries of `dir` in name order. A directory that cannot be read has none.
 fn entries(dir: &Path) -> Vec<PathBuf> {
     let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)

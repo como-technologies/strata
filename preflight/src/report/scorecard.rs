@@ -7,6 +7,7 @@ use super::{CheckResult, Options, SectionScore, Summary, percent};
 use crate::confidence::{Confidence, NO_RUNS};
 use crate::probe::Verdict;
 use crate::rule::{Catalog, Level, Severity, Status};
+use strata::text::plural;
 
 /// The scorecard: one line for each section that has a row for this engine.
 pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore> {
@@ -98,7 +99,7 @@ pub(crate) fn not_run_text(reasons: &BTreeMap<String, u32>) -> String {
     let why: Vec<String> = reasons.iter().map(|(r, c)| format!("{r} ({c})")).collect();
     format!(
         "{n} check{} did not run: {}",
-        if n == 1 { "" } else { "s" },
+        plural(n as usize, "", "s"),
         why.join("; ")
     )
 }

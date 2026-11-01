@@ -13,7 +13,7 @@ pub(crate) fn cmd_candidate(a: &CandidateArgs) -> Result<ExitCode> {
     let snap =
         ops::snapshot_for_candidate(&a.r#ref, || connect(progress, None), &now_utc(), &progress)?;
     let c = candidate::Candidate::from_snapshot(&snap)?;
-    match &a.output {
+    match &a.file.output {
         Some(path) => {
             candidate::write(&c, path, a.files_dir.as_deref())?;
             // the root is the published version's, which the candidate was written from. The

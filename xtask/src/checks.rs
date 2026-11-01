@@ -8,10 +8,10 @@ use std::path::Path;
 
 use regex::Regex;
 
-use crate::files::pages;
+use crate::files::{book, output_dir, pages};
 
 /// The use cases of the book, from the root of the repository.
-const USE_CASES: &str = "docs/src/use-cases";
+const USE_CASES: &str = "use-cases";
 
 /// An output that a step wrote, with the chapter that wrote it and the state of that chapter then.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -86,7 +86,7 @@ fn release_tags(repo: &Path) -> Vec<String> {
         r#"(?:--version|strata-version:|STRATA_VERSION:|v=)\s*(v\d+\.\d+\.\d+)|uses:.*@(v\d+\.\d+\.\d+)|\btag = "(v\d+\.\d+\.\d+)""#,
     )
     .expect("a pattern");
-    for page in pages(&repo.join("docs/src")) {
+    for page in pages(&book(repo)) {
         let name = shown(repo, &page);
         if name.ends_with("development/live-runs.md") || name.ends_with("development/release.md") {
             continue;
@@ -122,7 +122,7 @@ fn release_tags(repo: &Path) -> Vec<String> {
 fn links_resolve(repo: &Path) -> Vec<String> {
     let link = Regex::new(r"\]\(([^)\s#]+\.md)#([a-z0-9-]+)\)").expect("a pattern");
     let mut bad = Vec::new();
-    for page in pages(&repo.join("docs/src")) {
+    for page in pages(&book(repo)) {
         let Some(text) = read(repo, &page, &mut bad) else {
             continue;
         };
@@ -177,7 +177,7 @@ fn anchors(text: &str) -> BTreeSet<String> {
 /// before the first command, or the first thing the page asks for is a server it has not named.
 fn follow_along_first(repo: &Path) -> Vec<String> {
     let mut bad = Vec::new();
-    for page in pages(&repo.join(USE_CASES)) {
+    for page in pages(&book(repo).join(USE_CASES)) {
         let Some(text) = read(repo, &page, &mut bad) else {
             continue;
         };
@@ -209,7 +209,7 @@ fn follow_along_first(repo: &Path) -> Vec<String> {
 fn command_flags(repo: &Path) -> Vec<String> {
     let mut bad = Vec::new();
     let flag = Regex::new(r"--[a-z][a-z0-9-]*").expect("the flag pattern");
-    let dir = repo.join("docs/src/commands");
+    let dir = book(repo).join("commands");
     let command_pages = pages(&dir)
         .into_iter()
         .filter(|page| page.parent() == Some(dir.as_path()));
@@ -231,7 +231,7 @@ fn command_flags(repo: &Path) -> Vec<String> {
             ));
             continue;
         }
-        let help_file = repo.join(format!("docs/src/output/help-{command}.txt"));
+        let help_file = output_dir(repo).join(format!("help-{command}.txt"));
         let Some(help) = read(repo, &help_file, &mut bad) else {
             continue;
         };
@@ -266,7 +266,7 @@ fn command_flags(repo: &Path) -> Vec<String> {
 /// Each `just playground NAME` of the book and the README names a chapter of the runner, and a
 /// state that the chapter has. A reader who copies a wrong name gets an error and no tenant.
 fn playgrounds(repo: &Path, chapters: &BTreeMap<String, u32>) -> Vec<String> {
-    let mut files = pages(&repo.join("docs/src"));
+    let mut files = pages(&book(repo));
     files.push(repo.join("README.md"));
     let mut bad = Vec::new();
     for page in &files {
@@ -304,13 +304,18 @@ fn playground_faults(name: &str, text: &str, chapters: &BTreeMap<String, u32>) -
     bad
 }
 
+/// The pattern of an include of an output in a page. Its group is the name of the output.
+fn include_pattern() -> Regex {
+    Regex::new(r"\{\{#include \.\./output/([a-z0-9-]+)\.txt").expect("a pattern")
+}
+
 /// A page that includes an output from past the first `serve_here` of its chapter must name the
 /// seed that reaches it. `just playground CHAPTER` serves state 1, so a page that shows a later
 /// state and says only `CHAPTER` sends the reader to a tenant where its blocks cannot run.
 fn seeds(repo: &Path, states: &BTreeSet<OutputState>) -> Vec<String> {
-    let include = Regex::new(r"\{\{#include \.\./output/([a-z0-9-]+)\.txt").expect("a pattern");
+    let include = include_pattern();
     let mut bad = Vec::new();
-    for page in pages(&repo.join(USE_CASES)) {
+    for page in pages(&book(repo).join(USE_CASES)) {
         if let Some(text) = read(repo, &page, &mut bad) {
             bad.extend(seed_faults(&shown(repo, &page), &text, &include, states));
         }
@@ -357,7 +362,7 @@ fn seed_faults(
 /// tells them nothing about what strata does now.
 fn cited_run_ids(repo: &Path) -> Vec<String> {
     let mut bad = Vec::new();
-    for page in pages(&repo.join("docs/src")) {
+    for page in pages(&book(repo)) {
         if let Some(text) = read(repo, &page, &mut bad) {
             let name = shown(repo, &page);
             bad.extend(run_ids(&text).into_iter().map(|id| {
@@ -384,19 +389,20 @@ mod tests {
     #[test]
     fn each_check_reports_a_page_that_it_cannot_read() {
         let repo = std::env::temp_dir().join(format!("strata-checks-{}", std::process::id()));
-        let use_cases = repo.join(USE_CASES);
+        let use_cases = book(&repo).join(USE_CASES);
         std::fs::create_dir_all(&use_cases).unwrap();
         std::fs::write(repo.join("Cargo.toml"), "version = \"1.0.0\"\n").unwrap();
         std::fs::write(repo.join("README.md"), "strata\n").unwrap();
         // bytes that are not UTF-8, so the read of the page fails
-        std::fs::write(use_cases.join("broken.md"), [0xff, 0xfe]).unwrap();
+        let broken = use_cases.join("broken.md");
+        std::fs::write(&broken, [0xff, 0xfe]).unwrap();
         let bad = check(&repo, &chapters(), &BTreeSet::new());
         std::fs::remove_dir_all(&repo).unwrap();
         // release_tags, links_resolve, follow_along_first, playgrounds, seeds, and cited_run_ids each
         // read the page
         let unread = bad
             .iter()
-            .filter(|m| m.starts_with(&format!("{USE_CASES}/broken.md: cannot read the file")))
+            .filter(|m| m.starts_with(&format!("{}: cannot read the file", shown(&repo, &broken))))
             .count();
         assert_eq!(unread, 6, "{bad:?}");
     }
@@ -451,15 +457,11 @@ mod tests {
         BTreeSet::from([output("o1", 3), output("o2", 1)])
     }
 
-    fn include() -> Regex {
-        Regex::new(r"\{\{#include \.\./output/([a-z0-9-]+)\.txt").unwrap()
-    }
-
     #[test]
     fn a_page_that_shows_a_later_state_and_names_its_seed_passes() {
         let text = "just playground loop-3\n{{#include ../output/o1.txt}}\n";
         assert_eq!(
-            seed_faults("page.md", text, &include(), &states()),
+            seed_faults("page.md", text, &include_pattern(), &states()),
             Vec::<String>::new()
         );
     }
@@ -468,7 +470,7 @@ mod tests {
     fn a_page_that_shows_the_first_state_needs_no_seed() {
         let text = "just playground loop\n{{#include ../output/o2.txt}}\n";
         assert_eq!(
-            seed_faults("page.md", text, &include(), &states()),
+            seed_faults("page.md", text, &include_pattern(), &states()),
             Vec::<String>::new()
         );
     }
@@ -477,7 +479,7 @@ mod tests {
     fn a_page_that_shows_a_later_state_and_names_no_seed_fails() {
         let text = "just playground loop\n{{#include ../output/o1.txt}}\n";
         assert_eq!(
-            seed_faults("page.md", text, &include(), &states()),
+            seed_faults("page.md", text, &include_pattern(), &states()),
             vec![
                 "page.md shows state 3 of the chapter 'loop' and never names the seed 'loop-3'; \
                  a reader on 'just playground loop' cannot run it"
@@ -488,7 +490,7 @@ mod tests {
     #[test]
     fn a_git_dependency_that_names_another_release_fails_and_this_release_passes() {
         let repo = std::env::temp_dir().join(format!("strata-release-tags-{}", std::process::id()));
-        let docs = repo.join("docs/src");
+        let docs = book(&repo);
         std::fs::create_dir_all(&docs).unwrap();
         std::fs::write(repo.join("Cargo.toml"), "version = \"1.0.0\"\n").unwrap();
         std::fs::write(
@@ -515,7 +517,7 @@ mod tests {
     #[test]
     fn a_page_that_cites_a_run_id_fails_and_a_page_with_none_passes() {
         let repo = std::env::temp_dir().join(format!("strata-run-ids-{}", std::process::id()));
-        let docs = repo.join("docs/src");
+        let docs = book(&repo);
         std::fs::create_dir_all(docs.join("sub")).unwrap();
         std::fs::write(docs.join("clean.md"), "A date is 2026-09-30.\n").unwrap();
         std::fs::write(
@@ -544,7 +546,7 @@ mod tests {
     #[test]
     fn a_page_that_cites_a_run_id_of_2027_fails() {
         let repo = std::env::temp_dir().join(format!("strata-run-ids-2027-{}", std::process::id()));
-        let docs = repo.join("docs/src");
+        let docs = book(&repo);
         std::fs::create_dir_all(&docs).unwrap();
         std::fs::write(docs.join("later.md"), "Run 20270105T083000Z shows it.\n").unwrap();
         let bad = cited_run_ids(&repo);

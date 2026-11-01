@@ -111,7 +111,7 @@ its end.
 | `registry-move.sh` | The registry move test (#24). |
 | `tag-only.sh` | The tag name test (#19). |
 | `drift-report.sh` | The drift report test (#25). It opens and closes issues in this repository with the label `strata-live-drift`. |
-| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, the delete of a cluster, a probe profile that it deletes at once, an edge host with no device, and an app profile. `api.sh post` sends a search that Palette takes as a `POST`, or a question to a validate route. `api.sh export` reads the export of a profile version. `api.sh packs-where` reads the pack listing one page at a time, and prints the first pack that a `jq` condition accepts. |
+| `api.sh` | The writes outside OpenTofu: an edit in place, a push of a profile to a cluster, the delete of profile versions, the delete of a cluster, a probe profile that it deletes at once, an edge host with no device, and an app profile. `api.sh post` sends a search that Palette takes as a `POST`, or a question to a validate route. `api.sh export` reads the export of a profile version. `api.sh packs-where` reads the pack listing one page at a time, and prints the first pack that a `jq` condition accepts. `api.sh get-status` prints the status of an answer and its body, and exits `0` for a refusal. |
 | `packs.sh` | The pack ref test (#55). |
 | `pack-states.sh` | The pack state test (#68). |
 | `validate-packs.sh` | The profile validate test (#152). |
