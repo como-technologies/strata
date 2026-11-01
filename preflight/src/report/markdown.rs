@@ -1,7 +1,10 @@
 //! The markdown form of a report: a pull request comment.
 
-use super::scorecard::{not_run_text, scorecard_legend, written_text};
-use super::{CheckResult, Report, pct, percent};
+use strata::text::markdown_cell;
+
+use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
+use super::{CheckResult, Report, pct};
+use crate::confidence::NO_RUNS;
 use crate::probe::Verdict;
 
 /// The markdown form: a pull request comment.
@@ -14,22 +17,17 @@ pub fn markdown(r: &Report) -> String {
         r.subject.name_or_dash()
     ));
     out.push_str(&format!(
-        "**{}** — source `{}`, Palette {}, tiers {}{}. {} ran: {} passed, {} failed, {} probe(s) failed; {} did not run, {} not checked; readiness **{}** ({} of {} checks passed).\n\n",
+        "**{}** — source `{}`, Palette {}, tiers {}. {} ran: {} passed, {} failed, {} probe(s) failed; {} did not run, {} not checked; readiness **{}** ({} of {} checks passed).\n\n",
         s.verdict,
         r.subject.source,
-        r.subject.release.as_deref().unwrap_or("release not given"),
-        r.options.tiers.iter().map(|t| t.name()).collect::<Vec<_>>().join(", "),
-        if r.options.strict { ", strict" } else { "" },
+        r.subject.release_text(),
+        r.options.tiers_text(),
         s.ran, s.passed, s.failed, s.probe_failed, s.not_run, s.not_checked, pct(s.readiness), s.passed, s.ran + s.not_run
     ));
     out.push_str(
         "| result | rule | tier | what | time | confidence |\n|---|---|---|---|---|---|\n",
     );
-    for c in r
-        .checks
-        .iter()
-        .filter(|c| !matches!(c.verdict, Verdict::Skipped | Verdict::NotRun))
-    {
+    for c in r.checks.iter().filter(|c| c.is_listed()) {
         let what = if c.verdict == Verdict::Passed {
             c.title.clone()
         } else {
@@ -39,7 +37,7 @@ pub fn markdown(r: &Report) -> String {
                 t.push_str(
                     &c.messages
                         .iter()
-                        .map(|m| md_escape(m))
+                        .map(|m| markdown_cell(m))
                         .collect::<Vec<_>>()
                         .join("<br>"),
                 );
@@ -50,7 +48,7 @@ pub fn markdown(r: &Report) -> String {
             .confidence
             .as_ref()
             .map(|k| format!("catch {}, clean {}", k.catch.text(), k.clean.text()))
-            .unwrap_or_else(|| "no runs".to_string());
+            .unwrap_or_else(|| NO_RUNS.to_string());
         out.push_str(&format!(
             "| {} | `{}` | {} | {} | {} ms | {} |\n",
             c.label(),
@@ -106,8 +104,7 @@ pub fn markdown(r: &Report) -> String {
             sc.with_check,
             sc.preflight,
             sc.with_runs,
-            sc.weakest_bound
-                .map_or_else(|| "no runs".to_string(), percent),
+            bound_text(sc.weakest_bound),
             sc.ran,
             sc.passed,
             sc.failed,
@@ -118,8 +115,4 @@ pub fn markdown(r: &Report) -> String {
     }
     out.push_str(&format!("\n{}\n", scorecard_legend(&r.sections)));
     out
-}
-
-fn md_escape(s: &str) -> String {
-    s.replace('|', "\\|").replace('\n', " ")
 }

@@ -47,6 +47,8 @@ use std::path::{Path, PathBuf};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use strata::api::Method;
+use strata::closed_set::legend::Described;
+use strata::closed_set::{ClosedSet, impl_closed_set};
 use strata::cloud::CLOUD_ALL;
 
 use crate::error::{Error, Result};
@@ -110,33 +112,34 @@ impl Tier {
         }
     }
 
-    /// The name, as the rule files spell it.
-    pub fn name(self) -> &'static str {
-        match self {
-            Tier::Static => "static",
-            Tier::Palette => "palette",
-            Tier::Cloud => "cloud",
-            Tier::Watch => "watch",
-            Tier::Race => "race",
-            Tier::Tool => "tool",
-        }
-    }
-
-    /// Every tier, in the order of the report.
-    pub const ALL: [Tier; 6] = [
-        Tier::Static,
-        Tier::Palette,
-        Tier::Cloud,
-        Tier::Watch,
-        Tier::Race,
-        Tier::Tool,
-    ];
-
-    /// Parse the name a person types.
-    pub fn parse(text: &str) -> Option<Tier> {
+    /// The tier that a person types: its name, or its letter in either case.
+    pub fn from_input(text: &str) -> Option<Tier> {
         Tier::ALL
-            .into_iter()
-            .find(|t| t.name() == text || t.letter().eq_ignore_ascii_case(text))
+            .iter()
+            .copied()
+            .find(|t| t.as_str() == text || t.letter().eq_ignore_ascii_case(text))
+    }
+}
+
+impl_closed_set!(Tier {
+    Static => "static",
+    Palette => "palette",
+    Cloud => "cloud",
+    Watch => "watch",
+    Race => "race",
+    Tool => "tool",
+});
+
+impl Described for Tier {
+    fn describe(self) -> &'static str {
+        match self {
+            Tier::Static => "the entity and the records alone; no key, no network",
+            Tier::Palette => "a call to Palette",
+            Tier::Cloud => "a call to the cloud with its tool",
+            Tier::Watch => "the conditions and the events of the cluster during the build",
+            Tier::Race => "no check before the build finds it; the watch finds its effect",
+            Tier::Tool => "a rule of the tool that makes the entity, out of scope here",
+        }
     }
 }
 
@@ -166,12 +169,18 @@ pub enum Level {
     Preflight,
 }
 
-impl Level {
-    /// The word of the report.
-    pub fn name(self) -> &'static str {
+impl_closed_set!(Level {
+    Probe => "probe",
+    Preflight => "preflight",
+});
+
+impl Described for Level {
+    fn describe(self) -> &'static str {
         match self {
-            Level::Probe => "probe",
-            Level::Preflight => "preflight",
+            Level::Probe => {
+                "the runs do not yet prove the check; a failure does not change the exit code without --strict"
+            }
+            Level::Preflight => "the runs prove the check on this engine; a failure is exit 1",
         }
     }
 }
@@ -202,16 +211,11 @@ pub enum Severity {
     Note,
 }
 
-impl Severity {
-    /// The word of the report.
-    pub fn name(self) -> &'static str {
-        match self {
-            Severity::Fail => "fail",
-            Severity::Warn => "warn",
-            Severity::Note => "note",
-        }
-    }
-}
+impl_closed_set!(Severity {
+    Fail => "fail",
+    Warn => "warn",
+    Note => "note",
+});
 
 /// Where the knowledge of the fault comes from.
 #[derive(
@@ -229,17 +233,12 @@ pub enum Status {
     Proposed,
 }
 
-impl Status {
-    /// The word of the report.
-    pub fn name(self) -> &'static str {
-        match self {
-            Status::Seen => "seen",
-            Status::Source => "source",
-            Status::Inferred => "inferred",
-            Status::Proposed => "proposed",
-        }
-    }
-}
+impl_closed_set!(Status {
+    Seen => "seen",
+    Source => "source",
+    Inferred => "inferred",
+    Proposed => "proposed",
+});
 
 /// Who fixes the fault for good, and how.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -251,6 +250,29 @@ pub struct Fix {
     pub text: String,
 }
 
+/// What a piece of evidence is.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum EvidenceKind {
+    /// A live run: its id, or the issue that holds it.
+    Run,
+    /// The source or the documentation of Palette shows it, and no run.
+    Source,
+    /// A public page.
+    Doc,
+    /// A findings report and its finding.
+    Report,
+}
+
+impl_closed_set!(EvidenceKind {
+    Run => "run",
+    Source => "source",
+    Doc => "doc",
+    Report => "report",
+});
+
 /// One piece of evidence: a live run, the source of Palette, a public page, or a findings report.
 ///
 /// An entry of the kind `source` quotes no code of Palette, and names no file, function, or
@@ -258,8 +280,8 @@ pub struct Fix {
 /// empty, or a file of this repository.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Evidence {
-    /// `run`, `source`, `doc`, or `report`.
-    pub kind: String,
+    /// What the evidence is.
+    pub kind: EvidenceKind,
     /// The run id or issue, a file of this repository, the page, or the report and its finding.
     #[serde(rename = "ref", default, skip_serializing_if = "String::is_empty")]
     pub reference: String,
@@ -402,25 +424,55 @@ pub enum Check {
     },
 }
 
-impl Check {
-    /// The kind, as the rule files spell it.
-    pub fn kind(&self) -> &'static str {
+/// The kind of a check, as the rule files spell it in `kind`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum CheckKind {
+    /// A jq program over the world alone.
+    Static,
+    /// One request to Palette, or one for each item.
+    Palette,
+    /// One command on this machine.
+    Exec,
+    /// The conditions and the events of the cluster during the build.
+    Watch,
+}
+
+impl_closed_set!(CheckKind {
+    Static => "static",
+    Palette => "palette",
+    Exec => "exec",
+    Watch => "watch",
+});
+
+impl CheckKind {
+    /// The tier that a check of this kind belongs to.
+    pub fn tier(self) -> Tier {
         match self {
-            Check::Static { .. } => "static",
-            Check::Palette { .. } => "palette",
-            Check::Exec { .. } => "exec",
-            Check::Watch { .. } => "watch",
+            CheckKind::Static => Tier::Static,
+            CheckKind::Palette => Tier::Palette,
+            CheckKind::Exec => Tier::Cloud,
+            CheckKind::Watch => Tier::Watch,
+        }
+    }
+}
+
+impl Check {
+    /// The kind of the check.
+    pub fn kind(&self) -> CheckKind {
+        match self {
+            Check::Static { .. } => CheckKind::Static,
+            Check::Palette { .. } => CheckKind::Palette,
+            Check::Exec { .. } => CheckKind::Exec,
+            Check::Watch { .. } => CheckKind::Watch,
         }
     }
 
     /// The tier a check of this kind belongs to.
     pub fn tier(&self) -> Tier {
-        match self {
-            Check::Static { .. } => Tier::Static,
-            Check::Palette { .. } => Tier::Palette,
-            Check::Exec { .. } => Tier::Cloud,
-            Check::Watch { .. } => Tier::Watch,
-        }
+        self.kind().tier()
     }
 
     /// The main program of the check.
@@ -647,9 +699,9 @@ fn check_section(section: &Section, path: &Path) -> Result<()> {
             if check.tier() != rule.tier {
                 return Err(at(format!(
                     "the check is of kind {}, which is tier {}, and the rule says tier {}",
-                    check.kind(),
-                    check.tier().name(),
-                    rule.tier.name()
+                    check.kind().as_str(),
+                    check.tier().as_str(),
+                    rule.tier.as_str()
                 )));
             }
             if check.expr().trim().is_empty() {

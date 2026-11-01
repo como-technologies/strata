@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use strata::api::codes::ValidateRoute;
 use strata::api::{Method, PaletteApi};
+use strata::closed_set::impl_closed_set;
+use strata::closed_set::legend::Described;
 use strata::config::KEY_VARS;
 use strata::json::{flag, opt_flag, str_at, text_or, value_or_null};
 
@@ -225,6 +227,32 @@ pub enum Verdict {
     /// The check could not answer: Palette did not answer, the command did not start, or the
     /// program failed. The exit code is `2`.
     Error,
+}
+
+impl_closed_set!(Verdict {
+    Passed => "passed",
+    Failed => "failed",
+    NotChecked => "not-checked",
+    NotRun => "not-run",
+    Skipped => "skipped",
+    Error => "error",
+});
+
+impl Described for Verdict {
+    fn describe(self) -> &'static str {
+        match self {
+            Verdict::Passed => "the check ran and found no fault",
+            Verdict::Failed => "the check ran and found the fault; the messages say what",
+            Verdict::NotChecked => {
+                "strata-preflight has no check it can run here; the reproduce lines say what to run by hand"
+            }
+            Verdict::NotRun => {
+                "the check applies here and did not run: a tier not asked for, no key, or --no-exec; it counts against the readiness"
+            }
+            Verdict::Skipped => "the rule does not apply to this run",
+            Verdict::Error => "the check could not answer",
+        }
+    }
 }
 
 impl Verdict {

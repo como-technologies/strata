@@ -11,6 +11,8 @@ use crate::common::walk;
 use serde_json::Value;
 use strata::api::Method;
 use strata::closed_set::ClosedSet;
+use strata::cloud::Cloud;
+use strata::cluster_state::ClusterState;
 use strata::conjunction::Conjunction;
 use strata::diff::{ChangeFlag, ImpactLevel, Op, Status};
 use strata::oci_provider::OciProvider;
@@ -53,7 +55,7 @@ fn set<T: ClosedSet>(released: &'static [&'static str]) -> Set {
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value and keep the schema id, because a record of
 /// an earlier release then reads the value as unknown.
-fn sets() -> [Set; 20] {
+fn sets() -> [Set; 22] {
     [
         set::<Method>(&["GET", "POST"]),
         set::<Implementation>(&["rust", "bash"]),
@@ -88,6 +90,33 @@ fn sets() -> [Set; 20] {
         set::<ProfileType>(&["cluster", "infra", "add-on", "system", "app", "pack"]),
         set::<ProfileScope>(&["project", "tenant", "system"]),
         set::<Conjunction>(&["and", "or"]),
+        set::<Cloud>(&[
+            "all",
+            "aws",
+            "eks",
+            "gcp",
+            "gke",
+            "azure",
+            "aks",
+            "vsphere",
+            "edge-native",
+            "maas",
+            "apache-cloudstack",
+            "baremetal",
+            "nested",
+            "generic",
+            "openstack",
+            "custom",
+        ]),
+        set::<ClusterState>(&[
+            "Running",
+            "Provisioning",
+            "Pending",
+            "Importing",
+            "Deleting",
+            "Deleted",
+            "Error",
+        ]),
     ]
 }
 

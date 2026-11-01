@@ -3,6 +3,7 @@
 
 use serde_json::json;
 use strata::api::{MemoryApi, Palette};
+use strata::term::color::Paint;
 use strata::term::progress::Progress;
 use strata_preflight::catalog;
 use strata_preflight::confidence::Ledger;
@@ -83,7 +84,7 @@ fn palette_validate(api: &MemoryApi) -> CheckResult {
         out_dir: None,
         progress: &Progress::silent(),
         verbose: false,
-        color: false,
+        paint: Paint::off(),
     })
     .unwrap();
     assert_eq!(report.checks.len(), 1, "{:?}", report.checks);

@@ -2,30 +2,18 @@
 //! each section as a bar, each result with its messages and its reproduce lines, and the
 //! confidence of each rule. A person opens it from the run directory, or a job attaches it.
 
+use strata::closed_set::ClosedSet;
+
+use crate::confidence::NO_RUNS;
 use crate::probe::Verdict;
-use crate::report::scorecard::{not_run_reasons, not_run_text, scorecard_legend, written_text};
-use crate::report::{CheckResult, Report, pct, percent};
-use crate::rule::{Level, Severity};
+use crate::report::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
+use crate::report::{Report, pct, percent};
 
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
-}
-
-fn class_of(c: &CheckResult) -> &'static str {
-    match (c.verdict, c.severity, c.level) {
-        (Verdict::Passed, _, _) => "pass",
-        (Verdict::Failed, Severity::Note, _) => "note",
-        (Verdict::Failed, Severity::Warn, _) => "warn",
-        (Verdict::Failed, _, Level::Preflight) => "fail",
-        (Verdict::Failed, _, Level::Probe) => "probe-fail",
-        (Verdict::NotChecked, _, _) => "not-checked",
-        (Verdict::NotRun, _, _) => "skip",
-        (Verdict::Skipped, _, _) => "skip",
-        (Verdict::Error, _, _) => "error",
-    }
 }
 
 const STYLE: &str = r#"
@@ -79,16 +67,10 @@ pub fn page(r: &Report) -> String {
         esc(r.subject.name_or_dash())
     ));
     h.push_str(&format!(
-        "<p class=\"sub\">source <code>{}</code> · Palette {} · tiers {}{} · {} · {} {}</p>",
+        "<p class=\"sub\">source <code>{}</code> · Palette {} · tiers {} · {} · {} {}</p>",
         esc(&r.subject.source),
-        esc(r.subject.release.as_deref().unwrap_or("release not given")),
-        r.options
-            .tiers
-            .iter()
-            .map(|t| t.name())
-            .collect::<Vec<_>>()
-            .join(", "),
-        if r.options.strict { ", strict" } else { "" },
+        esc(&r.subject.release_text()),
+        esc(&r.options.tiers_text()),
         esc(&r.generated_at),
         esc(&r.tool.name),
         esc(&r.tool.version)
@@ -129,7 +111,7 @@ pub fn page(r: &Report) -> String {
             gate * 100.0,
             pct(sc.readiness),
             sc.ran, sc.passed, sc.failed, sc.not_run, sc.not_checked, sc.rows, sc.seen, sc.with_check, sc.preflight, sc.with_runs,
-            sc.weakest_bound.map_or_else(|| "no runs".to_string(), percent)
+            bound_text(sc.weakest_bound)
         ));
     }
     h.push_str("</tbody></table>");
@@ -151,35 +133,24 @@ pub fn page(r: &Report) -> String {
 
     h.push_str("<h2>Results</h2>");
     for sc in &r.sections {
-        let rows: Vec<&CheckResult> = r
-            .checks
-            .iter()
-            .filter(|c| c.section == sc.section)
-            .collect();
-        let visible: Vec<&CheckResult> = rows
-            .iter()
-            .copied()
-            .filter(|c| !matches!(c.verdict, Verdict::Skipped | Verdict::NotRun))
-            .collect();
-        if visible.is_empty() && sc.not_run == 0 {
+        let Some(section) = r.section_rows(sc) else {
             continue;
-        }
+        };
         h.push_str(&format!("<h3>{}</h3><table><tbody>", esc(&sc.title)));
         if sc.not_run > 0 {
             h.push_str(&format!(
-                "<tr class=\"skip\"><td style=\"white-space:nowrap\"><span class=\"label\">NOT RUN</span></td><td>{}</td><td class=\"conf\"></td></tr>",
-                esc(&not_run_text(&not_run_reasons(
-                    rows.iter().copied().filter(|c| c.severity != Severity::Note)
-                )))
+                "<tr class=\"skip\"><td style=\"white-space:nowrap\"><span class=\"label\">{}</span></td><td>{}</td><td class=\"conf\"></td></tr>",
+                Verdict::NotRun.name(),
+                esc(&section.not_run_text())
             ));
         }
-        for c in visible {
-            h.push_str(&format!("<tr class=\"{}\"><td style=\"white-space:nowrap\"><span class=\"label\">{}</span></td><td>", class_of(c), esc(&c.label())));
+        for c in section.listed {
+            h.push_str(&format!("<tr class=\"{}\"><td style=\"white-space:nowrap\"><span class=\"label\">{}</span></td><td>", c.label_kind().class(), esc(&c.label())));
             h.push_str(&format!(
                 "<code>{}</code> — {} <span class=\"conf\">· {} · {} ms{}</span>",
                 esc(&c.id),
                 esc(&c.title),
-                c.tier.name(),
+                c.tier.as_str(),
                 c.elapsed_ms,
                 c.answer
                     .as_ref()
@@ -225,7 +196,7 @@ pub fn page(r: &Report) -> String {
                     esc(&k.catch.text()),
                     esc(&k.clean.text())
                 )),
-                None => h.push_str("no runs"),
+                None => h.push_str(NO_RUNS),
             }
             h.push_str("</td></tr>");
         }
@@ -241,7 +212,7 @@ mod tests {
     use super::*;
     use crate::probe::Call;
     use crate::report::*;
-    use crate::rule::{Status, Tier};
+    use crate::rule::{Level, Severity, Status, Tier};
     use std::collections::BTreeMap;
 
     /// The report of one probe that failed, with no request.

@@ -26,7 +26,7 @@ use crate::closed_set::{ClosedSet, impl_closed_set};
 use crate::error::{Error, Result};
 
 pub use audit::AuditKind;
-pub use http::HttpApi;
+pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
 pub use memory::MemoryApi;
 pub(crate) use palette::{
     PACK_LISTING_PAGE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER,

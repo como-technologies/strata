@@ -22,6 +22,7 @@
 //! - [`validation`]: the answers of Palette when strata asks whether it takes the packs.
 //! - [`repave`]: the reasons of Palette for a repave, and a repave that waits for approval.
 //! - [`cloud`]: the cloud types of Palette, and the rule for a pack that supports a cloud.
+//! - [`cluster_state`]: the state of a cluster, as Palette gives it in `status.state`.
 //! - [`cluster_template`]: the cluster templates of Palette.
 //! - [`conjunction`]: how the conditions of a search of Palette join.
 //! - [`pack_type`] and [`profile_type`]: the type of a pack, and the type of a profile.
@@ -83,6 +84,7 @@ pub mod api;
 pub mod candidate;
 pub mod closed_set;
 pub mod cloud;
+pub mod cluster_state;
 pub mod cluster_template;
 pub mod config;
 pub mod conjunction;

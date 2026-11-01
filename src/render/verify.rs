@@ -7,10 +7,9 @@ use super::notes::{
 use super::same_release::record_word;
 use super::{count_of, entry_error, registry_sync_suffix};
 use crate::closed_set::ClosedSet;
+use crate::cluster_state::ClusterState;
 use crate::diff::{Diff, ImpactLevel, Verify, VerifyStatus};
-use crate::ops::{
-    ACTIVE_STATE, IN_USE_STATE, RUNNING_STATE, RecordStatus, VerifiedRecord, VerifySummary,
-};
+use crate::ops::{ACTIVE_STATE, IN_USE_STATE, RecordStatus, VerifiedRecord, VerifySummary};
 use crate::reference::name_version;
 use crate::snapshot::{Naming, Source};
 use crate::text::name_or_uid;
@@ -419,7 +418,7 @@ fn unverified_sentence(packs: &[String]) -> String {
 
 /// The state that a cluster, an edge host, or a cluster group has when it runs what it holds.
 fn normal_state(state: &str) -> bool {
-    matches!(state, RUNNING_STATE | IN_USE_STATE | ACTIVE_STATE)
+    ClusterState::Running.is(state) || matches!(state, IN_USE_STATE | ACTIVE_STATE)
 }
 
 /// `; the cluster is Deleting`: the state of the object of a record, when it is not the state of

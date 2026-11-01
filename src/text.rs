@@ -1,5 +1,6 @@
-//! The texts that a message builds: a phrase from a list of names, the name of an object, and a
-//! long text cut to a length.
+//! The texts that a message builds: a phrase from a list of names, the name of an object, a long
+//! text cut to a length, a mark for an empty text, and a text in the cell of a markdown table.
+//! `strata-preflight` calls the public ones, so both tools write each of these texts in one way.
 
 /// The name of an object, or its uid when Palette gives no name.
 pub fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
@@ -44,6 +45,21 @@ pub fn cut(s: &str, n: usize) -> String {
     part
 }
 
+/// `s`, or `-` when `s` is empty.
+///
+/// Each report that shows a field with no value shows this one mark.
+pub fn dash(s: &str) -> &str {
+    if s.is_empty() { "-" } else { s }
+}
+
+/// `s` as the text of one cell of a markdown table.
+///
+/// A `|` ends a cell, and a line break ends the row. So the text escapes each `|`, and writes a
+/// line break as a space.
+pub fn markdown_cell(s: &str) -> String {
+    s.replace('|', "\\|").replace('\n', " ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,6 +88,19 @@ mod tests {
         assert_eq!(cut("abcd", 1), "…");
         assert_eq!(cut("abcd", 0), "");
         assert_eq!(cut("", 0), "");
+    }
+
+    #[test]
+    fn an_empty_text_shows_a_dash_and_another_text_shows_as_it_is() {
+        assert_eq!(dash(""), "-");
+        assert_eq!(dash("lab"), "lab");
+    }
+
+    #[test]
+    fn a_cell_of_a_markdown_table_holds_no_bar_and_no_line_break() {
+        assert_eq!(markdown_cell("a|b"), "a\\|b");
+        assert_eq!(markdown_cell("first\nsecond"), "first second");
+        assert_eq!(markdown_cell("plain"), "plain");
     }
 
     #[test]

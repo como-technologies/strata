@@ -23,6 +23,10 @@ use crate::rule::{Catalog, Level, Tier};
 /// The schema id of a ledger file.
 pub const LEDGER_SCHEMA: &str = "strata-preflight-ledger/1";
 
+/// What a form of the report writes where no run of the ledger gives a rate, a bound, or a
+/// confidence.
+pub const NO_RUNS: &str = "no runs";
+
 /// What one check answered in one run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
@@ -217,7 +221,7 @@ impl Rate {
     pub fn text(&self) -> String {
         match self.lower_bound {
             Some(b) => format!("{}/{} ({})", self.correct, self.total, percent(b)),
-            None => "no runs".to_string(),
+            None => NO_RUNS.to_string(),
         }
     }
 }

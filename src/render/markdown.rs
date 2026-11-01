@@ -23,7 +23,7 @@ use super::same_release::{
 use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
 };
-use super::{Renderer, capitalized, count_of, dash, entry_error, short};
+use super::{Renderer, capitalized, count_of, entry_error, short};
 use crate::closed_set::ClosedSet;
 use crate::diff::{Diff, Leaf, Op, Status};
 use crate::error::Result;
@@ -33,13 +33,10 @@ use crate::ops::{
 use crate::profile_type::ProfileType;
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
+use crate::text::{dash, markdown_cell};
 
 /// Renders markdown for a pull request comment.
 pub struct MarkdownRenderer;
-
-fn escape(s: &str) -> String {
-    s.replace('|', "\\|")
-}
 
 /// The text in a code span: `` `--full` ``.
 fn code(text: &str) -> String {
@@ -120,7 +117,7 @@ impl Renderer for MarkdownRenderer {
             o.push_str(&match note {
                 DiffNote::Warn(text) | DiffNote::Good(text) => format!("**Note:** {text}\n\n"),
                 DiffNote::Palette(lines) => {
-                    format!("**Palette:** {}\n\n", escape(&lines.join("; ")))
+                    format!("**Palette:** {}\n\n", markdown_cell(&lines.join("; ")))
                 }
             });
         }
@@ -141,16 +138,16 @@ impl Renderer for MarkdownRenderer {
                 status => status_word(status).to_string(),
             };
             let change = match invalid_mark(pd) {
-                Some(m) => format!("{change} **{}**", escape(&m)),
+                Some(m) => format!("{change} **{}**", markdown_cell(&m)),
                 None => change,
             };
             o.push_str(&format!(
                 "| `{mark}` | {} | `{}` | {} | {} | {} |\n",
                 pd.layer,
-                escape(&pd.name),
-                escape(&version_display(pd).replace("->", "→")),
+                markdown_cell(&pd.name),
+                markdown_cell(&version_display(pd).replace("->", "→")),
                 change,
-                escape(&pd.impact.text)
+                markdown_cell(&pd.impact.text)
             ));
         }
         o.push('\n');
@@ -235,7 +232,7 @@ impl Renderer for MarkdownRenderer {
             };
             o.push_str(&format!(
                 "<details><summary><code>{}</code> {}</summary>\n\n{}\n</details>\n\n",
-                escape(&pd.name),
+                markdown_cell(&pd.name),
                 what,
                 body
             ));
@@ -254,14 +251,14 @@ impl Renderer for MarkdownRenderer {
         let parts = verdict_parts(v, d.same, &d.a, code);
         let mut line = format!("\n**{}**: {}", parts.word(), parts.line(&d.a));
         for sentence in invalid_pack_sentences(&v.invalid_packs) {
-            line.push_str(&format!("\n\n**INVALID**: {}", escape(&sentence)));
+            line.push_str(&format!("\n\n**INVALID**: {}", markdown_cell(&sentence)));
         }
         if let Some(heading) = who_heading(v) {
             line.push_str("\n\n");
             line.push_str(&heading);
             line.push('\n');
             for e in v.who.iter().flatten() {
-                line.push_str(&format!("\n- {}", escape(&who_entry(e, &v.uid))));
+                line.push_str(&format!("\n- {}", markdown_cell(&who_entry(e, &v.uid))));
             }
         }
         Some(line)
@@ -274,9 +271,9 @@ impl Renderer for MarkdownRenderer {
             o.push_str(&format!(
                 "| {} | `{}` | `{}` | {} |\n",
                 record_word(r.status),
-                escape(&r.path),
+                markdown_cell(&r.path),
                 record_label(&r.name, &r.version),
-                escape(&record_detail(r))
+                markdown_cell(&record_detail(r))
             ));
         }
         o.push('\n');
@@ -287,20 +284,20 @@ impl Renderer for MarkdownRenderer {
         let mut o = format!("### same release: {}\n\n", chain_verdict(c));
         o.push_str("| status | from | to | detail |\n|---|---|---|---|\n");
         for p in &c.pairs {
-            let mut detail = escape(&pair_detail(p));
+            let mut detail = markdown_cell(&pair_detail(p));
             for r in &p.reasons {
                 detail.push_str("<br>");
-                detail.push_str(&escape(r));
+                detail.push_str(&markdown_cell(r));
             }
             for note in pair_notes(p) {
                 detail.push_str("<br>");
-                detail.push_str(&escape(&note));
+                detail.push_str(&markdown_cell(&note));
             }
             o.push_str(&format!(
                 "| {} | `{}` | `{}` | {} |\n",
                 pair_word(p.status),
-                escape(&p.a),
-                escape(&p.b),
+                markdown_cell(&p.a),
+                markdown_cell(&p.b),
                 detail
             ));
         }
@@ -309,26 +306,32 @@ impl Renderer for MarkdownRenderer {
     }
 
     fn render_set(&self, r: &crate::ops::SetReport) -> Result<String> {
-        let mut o = format!("### snapshot: {}\n\n", escape(&super::set_counts_line(r)));
+        let mut o = format!(
+            "### snapshot: {}\n\n",
+            markdown_cell(&super::set_counts_line(r))
+        );
         if !r.records.is_empty() {
             o.push_str("| cluster | uid | file | root |\n|---|---|---|---|\n");
         }
         for rec in &r.records {
             let root = match &rec.root {
                 Some(root) => format!("`{}`", short(root)),
-                None => format!("error: {}", escape(super::list::set_error(rec))),
+                None => format!("error: {}", markdown_cell(super::list::set_error(rec))),
             };
             o.push_str(&format!(
                 "| {} | `{}` | `{}` | {root} |\n",
-                escape(dash(&rec.cluster.name)),
-                escape(&rec.cluster.uid),
-                escape(&rec.path.display().to_string())
+                markdown_cell(dash(&rec.cluster.name)),
+                markdown_cell(&rec.cluster.uid),
+                markdown_cell(&rec.path.display().to_string())
             ));
         }
         if !r.removed.is_empty() {
             o.push_str("\nRemoved:\n\n");
             for path in &r.removed {
-                o.push_str(&format!("- `{}`\n", escape(&path.display().to_string())));
+                o.push_str(&format!(
+                    "- `{}`\n",
+                    markdown_cell(&path.display().to_string())
+                ));
             }
         }
         o.push('\n');
@@ -338,7 +341,7 @@ impl Renderer for MarkdownRenderer {
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {
         let mut o = format!(
             "### behind: {}\n\n",
-            escape(&super::behind::behind_heading(r))
+            markdown_cell(&super::behind::behind_heading(r))
         );
         if r.pins.is_empty() {
             return Ok(o);
@@ -363,19 +366,25 @@ impl Renderer for MarkdownRenderer {
             let by: Vec<String> = pin
                 .pinned_by
                 .iter()
-                .map(|b| format!("`{}` ({})", escape(&b.path), escape(&b.subject)))
+                .map(|b| {
+                    format!(
+                        "`{}` ({})",
+                        markdown_cell(&b.path),
+                        markdown_cell(&b.subject)
+                    )
+                })
                 .collect();
             let bump: Vec<String> = super::behind::bump_line(pin)
                 .into_iter()
                 .chain(super::behind::palette_lines(pin))
-                .map(|l| escape(&l))
+                .map(|l| markdown_cell(&l))
                 .collect();
             o.push_str(&format!(
                 "| `{}` | `{}` | {} | {} | {} | {} |\n",
-                escape(&pin.name),
-                escape(&pin.version),
-                escape(dash(&pin.registry)),
-                escape(&status),
+                markdown_cell(&pin.name),
+                markdown_cell(&pin.version),
+                markdown_cell(dash(&pin.registry)),
+                markdown_cell(&status),
                 if bump.is_empty() {
                     "-".to_string()
                 } else {
@@ -391,7 +400,7 @@ impl Renderer for MarkdownRenderer {
         let mut o = format!("### consumers: {}\n\n", consumers_heading(r));
         let second = format!(
             "{}.",
-            capitalized(&escape(&second_reading_line(&r.clusters_read, code)))
+            capitalized(&markdown_cell(&second_reading_line(&r.clusters_read, code)))
         );
         let edge = format!("{}.", capitalized(&edge_hosts_line(r)));
         if r.consumers.is_empty() {
@@ -413,17 +422,17 @@ impl Renderer for MarkdownRenderer {
             // a cluster template keeps no copy of the version, so its cell names the kind alone
             let version = if c.kind == ConsumerKind::Template {
                 format!("({})", c.kind.noun())
-            } else if let Some(runs) = consumer_runs(c, r, |t| code(&escape(t))) {
+            } else if let Some(runs) = consumer_runs(c, r, |t| code(&markdown_cell(t))) {
                 runs
             } else if c.version.is_empty() {
                 String::new()
             } else {
-                code(&escape(&c.version))
+                code(&markdown_cell(&c.version))
             };
             // an empty version means two things: the cluster named none, or strata could not read
             // the cluster at all. `-` states the first, so the error takes the place of the dash
-            let error =
-                entry_error(c.error.as_ref()).map(|msg| format!("not read: {}", escape(msg)));
+            let error = entry_error(c.error.as_ref())
+                .map(|msg| format!("not read: {}", markdown_cell(msg)));
             let mut runs = match (version.is_empty(), error) {
                 (true, None) => "-".to_string(),
                 (true, Some(error)) => error,
@@ -438,10 +447,10 @@ impl Renderer for MarkdownRenderer {
             }
             o.push_str(&format!(
                 "| `{}` | `{}` | `{}` | {} | {runs} |\n",
-                escape(dash(&c.name)),
-                escape(&c.uid),
-                escape(&project_label(&c.project_uid, &c.project_name)),
-                escape(dash(&c.state))
+                markdown_cell(dash(&c.name)),
+                markdown_cell(&c.uid),
+                markdown_cell(&project_label(&c.project_uid, &c.project_name)),
+                markdown_cell(dash(&c.state))
             ));
         }
         o.push('\n');
@@ -493,10 +502,10 @@ impl Renderer for MarkdownRenderer {
     }
 
     fn render_list(&self, l: &Listing) -> Result<String> {
-        let mut o = format!("### list: {}\n\n", escape(&list_scope(l)));
+        let mut o = format!("### list: {}\n\n", markdown_cell(&list_scope(l)));
         if let Some(profiles) = &l.profiles {
             let count = list_count(profiles.len(), "profile", l.pack.as_deref());
-            o.push_str(&format!("**{}**\n\n", escape(&count)));
+            o.push_str(&format!("**{}**\n\n", markdown_cell(&count)));
             let with_packs = profiles
                 .iter()
                 .any(|p| p.packs.is_some() || p.error.is_some());
@@ -513,9 +522,9 @@ impl Renderer for MarkdownRenderer {
                     .unwrap_or_default();
                 o.push_str(&format!(
                     "| `{}`{mark} | `{}` | {} |",
-                    escape(&pr.reference),
-                    escape(&pr.uid),
-                    escape(dash(&pr.cloud_type))
+                    markdown_cell(&pr.reference),
+                    markdown_cell(&pr.uid),
+                    markdown_cell(dash(&pr.cloud_type))
                 ));
                 if with_packs {
                     let packs = match entry_error(pr.error.as_ref()) {
@@ -530,11 +539,11 @@ impl Renderer for MarkdownRenderer {
                     };
                     o.push_str(&format!(
                         " {} | {} | {} |",
-                        escape(dash(pr.profile_type.as_deref().unwrap_or(""))),
+                        markdown_cell(dash(pr.profile_type.as_deref().unwrap_or(""))),
                         pr.consumers
                             .map(consumer_count)
                             .unwrap_or_else(|| "-".into()),
-                        escape(dash(&packs))
+                        markdown_cell(dash(&packs))
                     ));
                 }
                 o.push('\n');
@@ -544,13 +553,16 @@ impl Renderer for MarkdownRenderer {
         if let Some(clusters) = &l.clusters {
             o.push_str(&format!(
                 "**{}**\n\n",
-                escape(&cluster_count(clusters.len(), l.cluster.as_deref()))
+                markdown_cell(&cluster_count(clusters.len(), l.cluster.as_deref()))
             ));
             for line in super::list::query_line(l)
                 .into_iter()
                 .chain(virtual_line(l))
             {
-                o.push_str(&format!("{}.\n\n", escape(&super::capitalized(&line))));
+                o.push_str(&format!(
+                    "{}.\n\n",
+                    markdown_cell(&super::capitalized(&line))
+                ));
             }
             let labels = if l.query.is_some() { " labels |" } else { "" };
             let elsewhere = clusters.iter().any(|c| c.project_uid != l.project_uid);
@@ -575,21 +587,21 @@ impl Renderer for MarkdownRenderer {
             for c in clusters {
                 o.push_str(&format!(
                     "| `{}` | {} | {} | {} |",
-                    escape(&c.reference),
-                    escape(dash(&c.name)),
-                    escape(dash(&c.state)),
-                    escape(dash(&c.cloud_type))
+                    markdown_cell(&c.reference),
+                    markdown_cell(dash(&c.name)),
+                    markdown_cell(dash(&c.state)),
+                    markdown_cell(dash(&c.cloud_type))
                 ));
                 if elsewhere {
                     o.push_str(&format!(
                         " {} |",
-                        escape(&project_label(&c.project_uid, &c.project_name))
+                        markdown_cell(&project_label(&c.project_uid, &c.project_name))
                     ));
                 }
                 if l.query.is_some() {
                     o.push_str(&format!(
                         " {} |",
-                        escape(dash(&super::list::labels_text(&c.labels)))
+                        markdown_cell(dash(&super::list::labels_text(&c.labels)))
                     ));
                 }
                 if with_virtual {
@@ -600,7 +612,7 @@ impl Renderer for MarkdownRenderer {
                         .map(|v| virtual_group(v).unwrap_or_else(|| "yes".to_string()));
                     o.push_str(&format!(
                         " {} |",
-                        escape(dash(cell.as_deref().unwrap_or("")))
+                        markdown_cell(dash(cell.as_deref().unwrap_or("")))
                     ));
                 }
                 if with_applied {
@@ -616,13 +628,13 @@ impl Renderer for MarkdownRenderer {
                             .collect::<Vec<_>>()
                             .join("<br>")
                     };
-                    o.push_str(&format!(" {} |", escape(dash(&profiles))));
+                    o.push_str(&format!(" {} |", markdown_cell(dash(&profiles))));
                     let behind = match c.updates_pending {
                         Some(true) => format!("yes: {}", pending_profile_names(&c.pending_updates)),
                         Some(false) => "no".to_string(),
                         None => "-".to_string(),
                     };
-                    o.push_str(&format!(" {} |", escape(&behind)));
+                    o.push_str(&format!(" {} |", markdown_cell(&behind)));
                 }
                 o.push('\n');
             }
@@ -636,8 +648,8 @@ impl Renderer for MarkdownRenderer {
             for pr in projects {
                 o.push_str(&format!(
                     "| {} | `{}` |\n",
-                    escape(dash(&pr.name)),
-                    escape(&pr.uid)
+                    markdown_cell(dash(&pr.name)),
+                    markdown_cell(&pr.uid)
                 ));
             }
             o.push('\n');
@@ -653,9 +665,9 @@ impl Renderer for MarkdownRenderer {
             for f in filters {
                 o.push_str(&format!(
                     "| `{}` | `{}` | {} |\n",
-                    escape(&f.reference()),
-                    escape(&f.uid),
-                    escape(&f.expression())
+                    markdown_cell(&f.reference()),
+                    markdown_cell(&f.uid),
+                    markdown_cell(&f.expression())
                 ));
             }
             o.push('\n');

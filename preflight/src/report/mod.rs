@@ -7,12 +7,17 @@ use std::collections::BTreeMap;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use strata::closed_set::ClosedSet;
+use strata::closed_set::legend::legend;
+use strata::term::color::Paint;
+use strata::text::dash;
 
 use crate::confidence::Confidence;
 use crate::jq::Jq;
 use crate::probe::{Call, Outcome, Verdict, ran_line};
 use crate::rule::{Catalog, Evidence, Fix, Level, Rule, Severity, Status, Tier};
 
+pub(crate) mod label;
 mod markdown;
 mod reproduce;
 pub(crate) mod scorecard;
@@ -22,6 +27,7 @@ pub use markdown::markdown;
 pub use scorecard::scorecard;
 pub use terminal::terminal;
 
+use label::LabelKind;
 use reproduce::auto_reproduce;
 use scorecard::summarize;
 
@@ -35,6 +41,16 @@ pub struct Tool {
     pub name: String,
     /// The crate version.
     pub version: String,
+}
+
+impl Tool {
+    /// This tool, at this version. Each document that this tool writes names it so.
+    pub fn current() -> Tool {
+        Tool {
+            name: crate::TOOL_NAME.to_string(),
+            version: crate::TOOL_VERSION.to_string(),
+        }
+    }
 }
 
 /// What the run checked.
@@ -59,11 +75,16 @@ pub struct Subject {
 impl Subject {
     /// The name of the cluster, or `-` when the entity has none.
     pub fn name_or_dash(&self) -> &str {
-        if self.name.is_empty() {
-            "-"
-        } else {
-            &self.name
-        }
+        dash(&self.name)
+    }
+
+    /// The Palette release as each form of the report writes it after `Palette`: `release 4.10.3`,
+    /// or `release not given`.
+    pub fn release_text(&self) -> String {
+        self.release.as_deref().map_or_else(
+            || "release not given".to_string(),
+            |x| format!("release {x}"),
+        )
     }
 }
 
@@ -81,6 +102,16 @@ pub struct Options {
     /// The directory `--out` wrote the reports and the world into, when it was given.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub out_dir: Option<String>,
+}
+
+impl Options {
+    /// The tiers that ran, as each form of the report writes them after `tiers`: `static,
+    /// palette`, with `, strict` after them when a failed probe counts as a failed check.
+    pub fn tiers_text(&self) -> String {
+        let tiers: Vec<&str> = self.tiers.iter().map(|t| t.as_str()).collect();
+        let strict = if self.strict { ", strict" } else { "" };
+        format!("{}{strict}", tiers.join(", "))
+    }
 }
 
 /// One rule in the report.
@@ -137,7 +168,18 @@ pub struct CheckResult {
 impl CheckResult {
     /// `PASS`, `FAIL`, `PROBE PASS`, `PROBE FAIL`, `WARN`, `NOTE`, `NOT CHECKED`, `SKIP`, `ERROR`.
     pub fn label(&self) -> String {
-        label_for(self.verdict, self.level, self.severity)
+        self.label_kind().word()
+    }
+
+    /// What the label of the result is. It gives the word, the color, and the CSS class.
+    pub(crate) fn label_kind(&self) -> LabelKind {
+        LabelKind::of(self.verdict, self.level, self.severity)
+    }
+
+    /// True when a form of the report lists the result in its section. A rule that does not
+    /// apply, and a check that did not run, have no line of their own there.
+    pub(crate) fn is_listed(&self) -> bool {
+        !matches!(self.verdict, Verdict::Skipped | Verdict::NotRun)
     }
 
     /// One line for the request or the command of the check, and one for each request of a check
@@ -148,19 +190,6 @@ impl CheckResult {
             .map(|ran| ran_line(ran, self.answer.as_deref()))
             .chain(self.requests.iter().map(Call::line))
             .collect()
-    }
-}
-
-/// The word of a result: `PASS`, `FAIL`, `PROBE PASS`, `PROBE FAIL`, `WARN`, `NOTE`,
-/// `NOT CHECKED`, `NOT RUN`, `SKIP`, `ERROR`.
-pub fn label_for(verdict: Verdict, level: Level, severity: Severity) -> String {
-    match (verdict, level, severity) {
-        (Verdict::Failed, _, Severity::Note) => "NOTE".to_string(),
-        (Verdict::Failed, _, Severity::Warn) => "WARN".to_string(),
-        (Verdict::Passed | Verdict::Failed, Level::Probe, _) => {
-            format!("PROBE {}", verdict.name())
-        }
-        _ => verdict.name().to_string(),
     }
 }
 
@@ -255,68 +284,21 @@ pub struct Legend {
 
 impl Legend {
     fn new() -> Legend {
-        let m = |pairs: &[(&str, &str)]| {
-            pairs
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect()
-        };
         Legend {
-            verdicts: m(&[
-                ("passed", "the check ran and found no fault"),
-                (
-                    "failed",
-                    "the check ran and found the fault; the messages say what",
-                ),
-                (
-                    "not-checked",
-                    "strata-preflight has no check it can run here; the reproduce lines say what to run by hand",
-                ),
-                (
-                    "not-run",
-                    "the check applies here and did not run: a tier not asked for, no key, or --no-exec; it counts against the readiness",
-                ),
-                ("skipped", "the rule does not apply to this run"),
-                ("error", "the check could not answer"),
-            ]),
-            levels: m(&[
-                (
-                    "probe",
-                    "the runs do not yet prove the check; a failure does not change the exit code without --strict",
-                ),
-                (
-                    "preflight",
-                    "the runs prove the check on this engine; a failure is exit 1",
-                ),
-            ]),
-            tiers: m(&[
-                (
-                    "static",
-                    "the entity and the records alone; no key, no network",
-                ),
-                ("palette", "a call to Palette"),
-                ("cloud", "a call to the cloud with its tool"),
-                (
-                    "watch",
-                    "the conditions and the events of the cluster during the build",
-                ),
-                (
-                    "race",
-                    "no check before the build finds it; the watch finds its effect",
-                ),
-                (
-                    "tool",
-                    "a rule of the tool that makes the entity, out of scope here",
-                ),
-            ]),
-            exit: m(&[
+            verdicts: legend::<Verdict>(),
+            levels: legend::<Level>(),
+            tiers: legend::<Tier>(),
+            exit: [
                 ("0", "each counted check passed"),
                 (
                     "1",
                     "a counted check failed, or the readiness is under --ready",
                 ),
                 ("2", "strata-preflight could not answer"),
-            ]),
+            ]
+            .into_iter()
+            .map(|(code, meaning)| (code.to_string(), meaning.to_string()))
+            .collect(),
         }
     }
 }
@@ -355,6 +337,33 @@ impl Report {
     /// The failures that count, by id.
     pub fn counted_failures(&self) -> Vec<&CheckResult> {
         self.checks.iter().filter(|c| c.counts_as_failure).collect()
+    }
+
+    /// The results of one section, for a form that lists them by section. None when the form
+    /// shows nothing for the section: no result to list and no check that did not run.
+    pub(crate) fn section_rows(&self, section: &SectionScore) -> Option<SectionRows<'_>> {
+        let rows: Vec<&CheckResult> = self
+            .checks
+            .iter()
+            .filter(|c| c.section == section.section)
+            .collect();
+        let listed: Vec<&CheckResult> = rows.iter().copied().filter(|c| c.is_listed()).collect();
+        (!listed.is_empty() || section.not_run > 0).then_some(SectionRows { rows, listed })
+    }
+}
+
+/// The results of one section of a report.
+pub(crate) struct SectionRows<'a> {
+    /// Each result of the section.
+    pub(crate) rows: Vec<&'a CheckResult>,
+    /// The results that a form lists: see [`CheckResult::is_listed`].
+    pub(crate) listed: Vec<&'a CheckResult>,
+}
+
+impl SectionRows<'_> {
+    /// One line for the checks of the section that did not run, with the reason of each count.
+    pub(crate) fn not_run_text(&self) -> String {
+        scorecard::not_run_text(&scorecard::not_run_reasons(self.rows.iter().copied()))
     }
 }
 
@@ -433,10 +442,7 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
     let summary = summarize(&checks, &sections, &a.options);
     Report {
         schema: REPORT_SCHEMA.to_string(),
-        tool: Tool {
-            name: crate::TOOL_NAME.to_string(),
-            version: crate::TOOL_VERSION.to_string(),
-        },
+        tool: Tool::current(),
         generated_at: a.generated_at,
         subject: a.subject,
         options: a.options,
@@ -460,10 +466,10 @@ pub enum Format {
     Html,
 }
 
-/// Render a report.
-pub fn render(report: &Report, format: Format, compact: bool, color: bool) -> String {
+/// Render a report. `paint` colors the terminal form alone.
+pub fn render(report: &Report, format: Format, compact: bool, paint: &Paint) -> String {
     match format {
-        Format::Terminal => terminal(report, color),
+        Format::Terminal => terminal(report, paint),
         Format::Markdown => markdown(report),
         Format::Json => {
             if compact {
@@ -486,35 +492,11 @@ pub(crate) fn pct(v: Option<f64>) -> String {
     v.map_or_else(|| "-".to_string(), percent)
 }
 
-/// `text` in the ANSI color `code` when `color` is on, else as it is.
-pub(crate) fn paint(color: bool, code: &str, text: &str) -> String {
-    if color {
-        format!("\x1b[{code}m{text}\x1b[0m")
-    } else {
-        text.to_string()
-    }
-}
-
-/// The ANSI color of a label: green for a pass, red for a counted failure, magenta for a failed
-/// probe, yellow for a warning, cyan for a note, dim for what did not run.
-pub(crate) fn label_color_for(verdict: Verdict, severity: Severity, level: Level) -> &'static str {
-    match (verdict, severity, level) {
-        (Verdict::Passed, _, _) => "32",
-        (Verdict::Failed, Severity::Note, _) => "36",
-        (Verdict::Failed, Severity::Warn, _) => "33",
-        (Verdict::Failed, _, Level::Preflight) => "31",
-        (Verdict::Failed, _, Level::Probe) => "35",
-        (Verdict::NotChecked, _, _) => "33",
-        (Verdict::NotRun, _, _) => "2",
-        (Verdict::Skipped, _, _) => "2",
-        (Verdict::Error, _, _) => "31",
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::probe::Ran;
+    use crate::rule::EvidenceKind;
     use std::time::Duration;
     use strata::api::Method;
 
@@ -597,12 +579,12 @@ mod tests {
         let mut entry = check("a", Verdict::Passed, Level::Probe, Severity::Fail, false);
         entry.evidence = vec![
             Evidence {
-                kind: "source".into(),
+                kind: EvidenceKind::Source,
                 reference: String::new(),
                 note: "Palette refuses the create.".into(),
             },
             Evidence {
-                kind: "run".into(),
+                kind: EvidenceKind::Run,
                 reference: "20260929T042910Z".into(),
                 note: String::new(),
             },
@@ -969,7 +951,7 @@ rules:
         );
         assert_eq!(report.summary.exit_code, 0, "a probe");
         assert_eq!(report.sections[0].not_checked, 1);
-        let text = terminal(&report, false);
+        let text = terminal(&report, &Paint::off());
         assert!(text.contains("PROBE FAIL    gke-pool-multiple-3"), "{text}");
         assert!(text.contains("pool worker has size 4"), "{text}");
         assert!(text.contains("NOT CHECKED   gke-no-gpu"), "{text}");
@@ -981,7 +963,7 @@ rules:
         );
         assert!(md.contains("Reproduce by hand"), "{md}");
         let json: Value =
-            serde_json::from_str(&render(&report, Format::Json, true, false)).unwrap();
+            serde_json::from_str(&render(&report, Format::Json, true, &Paint::off())).unwrap();
         assert_eq!(json["schema"], REPORT_SCHEMA);
         assert_eq!(json["checks"][0]["verdict"], "failed");
     }
@@ -1057,14 +1039,14 @@ rules:
             .collect();
         assert_eq!(curls.len(), 2, "{:?}", check.reproduce);
         assert!(curls[1].ends_with("/v1/edgehosts/h2\""), "{}", curls[1]);
-        let text = render(&report, Format::Terminal, false, false);
+        let text = render(&report, Format::Terminal, false, &Paint::off());
         assert!(
             text.contains("ran: GET /v1/edgehosts/h1 -> HTTP 200\n")
                 && text.contains("ran: GET /v1/edgehosts/h2 -> HTTP 404\n"),
             "{text}"
         );
         let json: serde_json::Value =
-            serde_json::from_str(&render(&report, Format::Json, true, false)).unwrap();
+            serde_json::from_str(&render(&report, Format::Json, true, &Paint::off())).unwrap();
         assert_eq!(
             json["checks"][0]["requests"][1],
             serde_json::json!({"method": "GET", "path": "/v1/edgehosts/h2", "answer": "HTTP 404"})
@@ -1112,12 +1094,12 @@ rules:
         };
         let report = report_of_edge_host_in_use(None, "/v1/edgehosts/h2", outcome);
         let json: serde_json::Value =
-            serde_json::from_str(&render(&report, Format::Json, true, false)).unwrap();
+            serde_json::from_str(&render(&report, Format::Json, true, &Paint::off())).unwrap();
         let check = &json["checks"][0];
         assert_eq!(check["ran"], "GET /v1/edgehosts/h2");
         assert_eq!(check["answer"], "HTTP 404");
         assert!(check.get("requests").is_none());
-        let text = render(&report, Format::Terminal, false, false);
+        let text = render(&report, Format::Terminal, false, &Paint::off());
         assert!(
             text.contains("ran: GET /v1/edgehosts/h2 -> HTTP 404\n"),
             "{text}"

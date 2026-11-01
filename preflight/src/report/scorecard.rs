@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use super::{CheckResult, Options, SectionScore, Summary, percent};
-use crate::confidence::Confidence;
+use crate::confidence::{Confidence, NO_RUNS};
 use crate::probe::Verdict;
 use crate::rule::{Catalog, Level, Severity, Status};
 
@@ -73,16 +73,23 @@ pub(super) fn readiness_of(passed: u32, apply: u32) -> Option<f64> {
     (apply > 0).then(|| f64::from(passed) / f64::from(apply))
 }
 
-/// Why the checks did not run, with the count of each reason.
+/// Why the checks did not run, with the count of each reason. A note is outside the count, as it
+/// is outside the readiness.
 pub(crate) fn not_run_reasons<'a>(
     checks: impl Iterator<Item = &'a CheckResult>,
 ) -> BTreeMap<String, u32> {
     let mut out = BTreeMap::new();
-    for c in checks.filter(|c| c.verdict == Verdict::NotRun) {
+    for c in checks.filter(|c| c.verdict == Verdict::NotRun && c.severity != Severity::Note) {
         let why = c.messages.first().cloned().unwrap_or_default();
         *out.entry(why).or_insert(0) += 1;
     }
     out
+}
+
+/// The lowest bound of a section as the forms of the report show it: a whole percent, or `no runs`
+/// when no row of the section has a run.
+pub(crate) fn bound_text(bound: Option<f64>) -> String {
+    bound.map_or_else(|| NO_RUNS.to_string(), percent)
 }
 
 /// `N check(s) did not run: reason (count); reason (count)`.
@@ -124,7 +131,7 @@ pub(super) fn summarize(
     let not_checked = count(&|c| c.verdict == Verdict::NotChecked);
     // a note is outside the readiness whether it ran or not, as `ran` leaves it out
     let not_run = count(&|c| c.verdict == Verdict::NotRun && c.severity != Severity::Note);
-    let not_run_reasons = not_run_reasons(checks.iter().filter(|c| c.severity != Severity::Note));
+    let not_run_reasons = not_run_reasons(checks.iter());
     let skipped = count(&|c| c.verdict == Verdict::Skipped);
     let errors = count(&|c| c.verdict == Verdict::Error);
     let readiness = readiness_of(passed, ran + not_run);
