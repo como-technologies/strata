@@ -1,6 +1,5 @@
 //! The chapter `preflight`: can Palette build a cluster? The helpers build the body of an AWS
-//! create and the
-//! answers of the routes that the live tier reads.
+//! create, and the answers of the routes that the live tier reads.
 
 use super::DEV_ENV;
 use super::ids::{A110, A111, AWS_STANDARD, DEV, GCP_STACK, PAYMENTS, PLATFORM_AWS, PROD};

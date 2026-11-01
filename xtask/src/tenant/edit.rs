@@ -198,6 +198,7 @@ fn packs_named<'a>(doc: &'a mut Value, name: &'a str) -> impl Iterator<Item = &'
     packs_mut(doc).filter(move |pack| pack["name"] == name)
 }
 
+/// Each pack of the published template.
 fn packs_mut(doc: &mut Value) -> impl Iterator<Item = &mut Value> {
     doc["spec"]["published"]["packs"]
         .as_array_mut()
