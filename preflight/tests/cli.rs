@@ -163,6 +163,48 @@ rules:
 }
 
 #[test]
+fn a_probes_file_with_a_program_that_nests_in_keywords_or_comments_is_refused_with_exit_2() {
+    let dir = tempfile::tempdir().unwrap();
+    // each program is far past the depth that overflows the stack of the thread of the binary
+    let programs = [
+        ("try", format!("{}[]", "try ".repeat(8000))),
+        ("and", format!("{}true", "true and ".repeat(20000))),
+        (
+            "if",
+            format!(
+                "{}1{}",
+                "if . then ".repeat(5000),
+                " else 2 end".repeat(5000)
+            ),
+        ),
+        (
+            "def",
+            format!("{}.{}", "def f: ".repeat(5000), "; f".repeat(5000)),
+        ),
+        (
+            "comment",
+            format!("{}1{}", "(# )\n".repeat(8000), ")".repeat(8000)),
+        ),
+    ];
+    for (shape, program) in programs {
+        let probes = format!(
+            "section: deep\ntitle: Deep\nrules:\n  - id: deep-{shape}\n    title: A deep program\n    engines: [aws]\n    tier: static\n    status: proposed\n    what: The program nests too deep.\n    check:\n      kind: static\n      expr: {}\n",
+            serde_json::to_string(&program).unwrap()
+        );
+        std::fs::write(dir.path().join("deep.yaml"), probes).unwrap();
+        let (code, out, err) = run(&["--rules", "--probes", "deep.yaml"], dir.path());
+        assert_eq!(code, 2, "{shape}: {err}");
+        assert!(out.is_empty(), "{shape}: {out}");
+        assert!(
+            err.contains(&format!(
+                "rule deep-{shape}: `expr`: the program nests more than 64 levels"
+            )),
+            "{shape}: {err}"
+        );
+    }
+}
+
+#[test]
 fn verbose_names_what_each_check_ran_and_wins_over_the_quiet_variable() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();

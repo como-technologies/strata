@@ -123,6 +123,10 @@ fn regressions() -> Vec<(&'static str, &'static str, Vec<u8>)> {
     let world = "preflight::a_world_file_gives_the_document_of_a_run_or_is_refused_with_a_kind";
     // a program of 3000 levels: jaq reads each level with a call, and the stack ends first
     let deep = format!("{}1{}", "(".repeat(3000), ")".repeat(3000));
+    // the same, with a keyword or a comment for each level, and no bracket that the guard counts
+    let levels = |open: &str, middle: &str, close: &str| {
+        format!("{}{middle}{}", open.repeat(3000), close.repeat(3000)).into_bytes()
+    };
     vec![
         // The mask of a draft cut the values of a user at a byte that is not a `char` boundary,
         // for text that has a multi-byte letter where a variable of the profile has a dot.
@@ -156,6 +160,11 @@ fn regressions() -> Vec<(&'static str, &'static str, Vec<u8>)> {
         // A tag ref with no label was a set of clusters, and it printed as `tag:`, which is a uid.
         (a_ref, "tag-ref-with-no-label", b"tag:+".to_vec()),
         (jq, "a-program-of-3000-levels", deep.into_bytes()),
+        (jq, "a-program-of-3000-tries", levels("try ", "[]", "")),
+        (jq, "a-program-of-3000-ands", levels("true and ", "true", "")),
+        (jq, "a-program-of-3000-ifs", levels("if . then ", "1", " else 2 end")),
+        (jq, "a-program-of-3000-defs", levels("def f: ", ".", "; f")),
+        (jq, "a-program-of-3000-comments", levels("(# )\n", "1", ")")),
         // The validate body of an existing cluster wrote its name into a `metadata` that is a number,
         // and the index of `serde_json` panicked.
         (
