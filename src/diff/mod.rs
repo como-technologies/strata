@@ -2,7 +2,7 @@
 //! purpose: every enum is spelled out, a legend explains the flags and impact levels, and a summary
 //! block answers the common questions without walking the packs.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -10,20 +10,14 @@ use serde_json::Value;
 
 use crate::closed_set::legend::legend;
 use crate::cluster_template::ClusterTemplateRef;
-use crate::content::canon::canonical_json;
-use crate::content::layer::Layer;
 use crate::json::flag;
 pub use crate::repave::PaletteRepaveReason;
-use crate::snapshot::{Pack, Snapshot, Source, Tool};
+use crate::snapshot::{Snapshot, Source, Tool};
 use crate::timestamp::Rfc3339;
 pub use crate::validation::{PaletteRefusal, PaletteValidation};
 use cluster::{cluster_values_diff, overwritten_in_place, running_behind, tiers_diff};
 pub use impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
-use pack::{
-    artifact_changes, chart_pairs, image_pairs, manifests_diff, masked_union, minted_uid_pair,
-    param_changes, presence_pack_diff, side, values_diff,
-};
-use variables::by_name;
+use pack::pack_diffs;
 
 mod cluster;
 pub mod impact;
@@ -351,138 +345,98 @@ fn zip_by_key<K: Ord, V>(
     sides.into_iter().map(|(k, (x, y))| (k, x, y))
 }
 
+impl Summary {
+    /// The counts of `packs`, with the answer of the comparison of the variables.
+    fn of(packs: &[PackDiff], variables_changed: bool) -> Summary {
+        let count = |keep: &dyn Fn(&PackDiff) -> bool| packs.iter().filter(|p| keep(p)).count();
+        let with_status = |status: Status| count(&|p| p.status == status);
+        Summary {
+            packs_added: with_status(Status::Added),
+            packs_removed: with_status(Status::Removed),
+            packs_changed: with_status(Status::Changed),
+            packs_unchanged: with_status(Status::Unchanged),
+            identity_changes: count(&|p| p.identity),
+            upstream_changes: count(&|p| p.upstream),
+            authored_changes: count(&|p| p.authored),
+            variables_changed,
+            images_changed: packs.iter().map(|p| p.image_changes.len()).sum(),
+            charts_changed: packs.iter().map(|p| p.chart_changes.len()).sum(),
+            packs_invalid: count(&|p| p.invalid_sides().is_some()),
+            max_impact: packs
+                .iter()
+                .map(|p| p.impact.level)
+                .max()
+                .unwrap_or_default(),
+        }
+    }
+}
+
+/// The key of each pack of `own` that `other` holds too, in the order of `own`.
+fn shared_keys<'a>(own: &'a Snapshot, other: &Snapshot) -> Vec<&'a str> {
+    let held: BTreeSet<&str> = other.packs.iter().map(|p| p.key.as_str()).collect();
+    own.packs
+        .iter()
+        .map(|p| p.key.as_str())
+        .filter(|k| held.contains(k))
+        .collect()
+}
+
+/// True when the packs that both records hold are in another order on side B.
+fn pack_order_changed(a: &Snapshot, b: &Snapshot) -> bool {
+    shared_keys(a, b) != shared_keys(b, a)
+}
+
+/// True when the records hold the same content, though their roots can differ. No variable moved,
+/// the packs keep their order, and each pack is unchanged. A pack can differ only by a uid that
+/// Palette mints or by a renamed tag.
+fn no_content_moved(variables_changed: bool, order_changed: bool, packs: &[PackDiff]) -> bool {
+    !variables_changed
+        && !order_changed
+        && packs.iter().all(|p| {
+            p.status == Status::Unchanged
+                || p.minted_uid_only
+                || (p.tag_renamed && !p.upstream && !p.authored)
+        })
+}
+
+/// The names of the macros that either record uses, sorted, one time each.
+fn macros_of_both(a: &Snapshot, b: &Snapshot) -> Vec<String> {
+    let mut names = a.macros();
+    names.extend(b.macros());
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// True when the two records are one profile version whose content changed in place: same uid,
+/// same version, same kind of template.
+///
+/// A version and its draft differ by what the publish changes, and not by an edit in place.
+fn edited_in_place(a: &Snapshot, b: &Snapshot) -> bool {
+    a.root != b.root
+        && !a.source.uid.is_empty()
+        && a.source.uid == b.source.uid
+        && a.source.version == b.source.version
+        && a.source.is_draft() == b.source.is_draft()
+}
+
+/// The comparison of the values of two clusters. An edge host and a cluster group give no values,
+/// so only two clusters compare.
+fn cluster_values_between(a: &Snapshot, b: &Snapshot) -> Option<ClusterVariablesDiff> {
+    match (&a.source.cluster, &b.source.cluster) {
+        (Some(x), Some(y)) if x.kind.is_cluster() && y.kind.is_cluster() => {
+            Some(cluster_values_diff(&x.variables, &y.variables))
+        }
+        _ => None,
+    }
+}
+
 /// Compare two snapshots. `verify` is attached when this is the second half of a verification.
 pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Verify>) -> Diff {
-    let pa: BTreeMap<&str, &Pack> = a.packs.iter().map(|p| (p.key.as_str(), p)).collect();
-    let pb: BTreeMap<&str, &Pack> = b.packs.iter().map(|p| (p.key.as_str(), p)).collect();
-    let order_a: Vec<&str> = a
-        .packs
-        .iter()
-        .map(|p| p.key.as_str())
-        .filter(|k| pb.contains_key(k))
-        .collect();
-    let order_b: Vec<&str> = b
-        .packs
-        .iter()
-        .map(|p| p.key.as_str())
-        .filter(|k| pa.contains_key(k))
-        .collect();
-
-    let mut summary = Summary::default();
-    let sides = zip_by_key(pa, pb);
-    let mut packs = Vec::with_capacity(sides.len());
-    for (k, x, y) in sides {
-        let pd = match (x, y) {
-            (None, Some(y)) => {
-                summary.packs_added += 1;
-                presence_pack_diff(k, y, true)
-            }
-            (Some(x), None) => {
-                summary.packs_removed += 1;
-                presence_pack_diff(k, x, false)
-            }
-            (Some(x), Some(y)) => {
-                let identity = x.hash.identity != y.hash.identity;
-                let upstream = x.hash.upstream != y.hash.upstream;
-                let authored = x.hash.authored != y.hash.authored;
-                let status = if x.hash.node == y.hash.node {
-                    Status::Unchanged
-                } else {
-                    Status::Changed
-                };
-                match status {
-                    Status::Changed => summary.packs_changed += 1,
-                    _ => summary.packs_unchanged += 1,
-                }
-                summary.identity_changes += usize::from(identity);
-                summary.upstream_changes += usize::from(upstream);
-                summary.authored_changes += usize::from(authored);
-                let tag_renamed = identity
-                    && x.tag != y.tag
-                    && (
-                        &x.name,
-                        &x.layer,
-                        &x.kind,
-                        &x.version,
-                        &x.pack_uid,
-                        &x.registry_uid,
-                    ) == (
-                        &y.name,
-                        &y.layer,
-                        &y.kind,
-                        &y.version,
-                        &y.pack_uid,
-                        &y.registry_uid,
-                    );
-                let mut imp = impact(
-                    Layer::parse(&x.layer),
-                    Flags {
-                        identity: identity && !tag_renamed,
-                        version: x.version != y.version,
-                        upstream,
-                        authored,
-                    },
-                );
-                if tag_renamed && imp.level == ImpactLevel::None {
-                    imp.text = "none (tag renamed, same pack build)".to_string();
-                }
-                let image_changes = artifact_changes(
-                    &image_pairs(&x.images, &x.version),
-                    &image_pairs(&y.images, &y.version),
-                );
-                let chart_changes =
-                    artifact_changes(&chart_pairs(&x.charts), &chart_pairs(&y.charts));
-                summary.images_changed += image_changes.len();
-                summary.charts_changed += chart_changes.len();
-                PackDiff {
-                    key: k.to_string(),
-                    layer: x.layer.clone(),
-                    name: x.name.clone(),
-                    status,
-                    a: Some(side(x)),
-                    b: Some(side(y)),
-                    identity,
-                    upstream,
-                    authored,
-                    params_changed: canonical_json(&x.params) != canonical_json(&y.params),
-                    minted_uid_only: identity && !upstream && !authored && minted_uid_pair(x, y),
-                    tag_renamed,
-                    impact: imp,
-                    values: values_diff(x, y),
-                    manifests: manifests_diff(x, y),
-                    upstream_unknown: x.upstream_unknown() || y.upstream_unknown(),
-                    masked: masked_union(x, y),
-                    images: !image_changes.is_empty(),
-                    charts: !chart_changes.is_empty(),
-                    image_changes,
-                    chart_changes,
-                    param_changes: param_changes(&x.params, &y.params),
-                }
-            }
-            (None, None) => unreachable!("a key comes from one of the sides"),
-        };
-        if pd.impact.level > summary.max_impact {
-            summary.max_impact = pd.impact.level;
-        }
-        summary.packs_invalid += usize::from(pd.invalid_sides().is_some());
-        packs.push(pd);
-    }
-    packs.sort_by(|p, q| {
-        (Layer::parse(&p.layer).rank(), &p.name).cmp(&(Layer::parse(&q.layer).rank(), &q.name))
-    });
-
-    let variables_changed = a.variables_hash != b.variables_hash;
-    summary.variables_changed = variables_changed;
-    let order_changed = order_a != order_b;
-    let same_content = a.root == b.root
-        || (!variables_changed
-            && !order_changed
-            && packs.iter().all(|p| {
-                p.status == Status::Unchanged
-                    || p.minted_uid_only
-                    || (p.tag_renamed && !p.upstream && !p.authored)
-            }));
-
+    let packs = pack_diffs(a, b);
+    let variables = VariablesDiff::between(a, b);
+    let order_changed = pack_order_changed(a, b);
+    let same = a.root == b.root;
     Diff {
         schema: DIFF_SCHEMA.to_string(),
         tool: Tool::current(),
@@ -490,22 +444,11 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
         legend: Legend::standard(),
         a: a.source.clone(),
         b: b.source.clone(),
-        same: a.root == b.root,
-        same_content,
-        // a version and its draft differ by what the publish changes, and not by an edit in place
-        edited_in_place: a.root != b.root
-            && !a.source.uid.is_empty()
-            && a.source.uid == b.source.uid
-            && a.source.version == b.source.version
-            && a.source.is_draft() == b.source.is_draft(),
+        same,
+        same_content: same || no_content_moved(variables.changed, order_changed, &packs),
+        edited_in_place: edited_in_place(a, b),
         overwritten_in_place: overwritten_in_place(a, b),
-        macros: {
-            let mut names = a.macros();
-            names.extend(b.macros());
-            names.sort();
-            names.dedup();
-            names
-        },
+        macros: macros_of_both(a, b),
         macros_changed: macros_changed(a, b),
         image_ids_changed: image_ids_changed(a, b),
         palette_repave: None,
@@ -517,29 +460,9 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
             .collect(),
         root_a: a.root.clone(),
         root_b: b.root.clone(),
-        summary,
-        variables: VariablesDiff {
-            changed: variables_changed,
-            hash_a: a.variables_hash.clone(),
-            hash_b: b.variables_hash.clone(),
-            diff: if variables_changed {
-                leaf_diff(&by_name(&a.variables), &by_name(&b.variables))
-            } else {
-                Vec::new()
-            },
-            by_name: if variables_changed {
-                group_variables(&a.variables, &b.variables)
-            } else {
-                VariablesByName::default()
-            },
-        },
-        cluster_variables: match (&a.source.cluster, &b.source.cluster) {
-            // an edge host and a cluster group give no values, so only two clusters compare
-            (Some(x), Some(y)) if x.kind.is_cluster() && y.kind.is_cluster() => {
-                Some(cluster_values_diff(&x.variables, &y.variables))
-            }
-            _ => None,
-        },
+        summary: Summary::of(&packs, variables.changed),
+        variables,
+        cluster_variables: cluster_values_between(a, b),
         cluster_tiers: tiers_diff(a, b),
         running_behind: {
             let mut v = running_behind(Side::A, a);

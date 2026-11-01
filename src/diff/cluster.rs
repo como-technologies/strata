@@ -3,6 +3,8 @@
 //! It compares the tiers, the profiles that run behind, the profiles that Palette overwrites in
 //! place, and the values of the cluster variables.
 
+use std::borrow::Cow;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -63,10 +65,13 @@ pub struct RunningBehind {
 
 /// `fields` less each field that strata could not read in the tier `a` or `b`.
 ///
-/// An error of Palette is not a change of the cluster.
-fn read_fields(mut fields: Value, a: &ClusterTier, b: &ClusterTier) -> Value {
-    if let Some(map) = fields.as_object_mut() {
-        for key in a.errors.keys().chain(b.errors.keys()) {
+/// An error of Palette is not a change of the cluster. `fields` is copied only when it holds such a
+/// field.
+fn read_fields<'v>(mut fields: Cow<'v, Value>, a: &ClusterTier, b: &ClusterTier) -> Cow<'v, Value> {
+    for key in a.errors.keys().chain(b.errors.keys()) {
+        if fields.get(key.as_str()).is_some()
+            && let Some(map) = fields.to_mut().as_object_mut()
+        {
             map.remove(key);
         }
     }
@@ -90,17 +95,17 @@ pub(super) fn tiers_diff(a: &Snapshot, b: &Snapshot) -> Vec<TierDiff> {
             let u = y.tiers.get(name)?;
             // Palette's spcHash is its own for each cluster, and equal for no two: between two
             // clusters, applied compares spcInfraHash alone
-            let (f, g) = match name.known() {
+            let (f, g): (Cow<Value>, Cow<Value>) = match name.known() {
                 Some(Tier::Applied) if x.uid != y.uid => {
                     let infra = |v: &Value| json!({"spcInfraHash": v.get("spcInfraHash")});
-                    (infra(&t.fields), infra(&u.fields))
+                    (Cow::Owned(infra(&t.fields)), Cow::Owned(infra(&u.fields)))
                 }
                 // a record from before strata read the shape by cloud type holds fewer fields
                 Some(Tier::Shape) => crate::snapshot::shape::comparable(&t.fields, &u.fields),
                 // and one from before strata read the role bindings holds their references
                 Some(Tier::Policy) => crate::snapshot::policy::comparable(&t.fields, &u.fields),
                 // a tier that a later release wrote compares its fields, as each other tier does
-                _ => (t.fields.clone(), u.fields.clone()),
+                _ => (Cow::Borrowed(&t.fields), Cow::Borrowed(&u.fields)),
             };
             let (f, g) = (read_fields(f, t, u), read_fields(g, t, u));
             let same = f == g;
@@ -262,5 +267,38 @@ pub(super) fn cluster_values_diff(
     ClusterVariablesDiff {
         changed: !values.is_empty(),
         values,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+
+    fn tier(errors: &[&str]) -> ClusterTier {
+        ClusterTier {
+            hash: String::new(),
+            fields: json!({}),
+            errors: errors
+                .iter()
+                .map(|key| (key.to_string(), "HTTP 403".to_string()))
+                .collect::<BTreeMap<_, _>>(),
+        }
+    }
+
+    #[test]
+    fn the_fields_of_a_tier_are_copied_only_when_a_field_that_strata_could_not_read_leaves_them() {
+        let fields = json!({"timezone": "Etc/UTC", "rbacs": []});
+        let read = read_fields(Cow::Borrowed(&fields), &tier(&[]), &tier(&[]));
+        assert!(matches!(read, Cow::Borrowed(_)), "no error, no copy");
+        let read = read_fields(Cow::Borrowed(&fields), &tier(&["namespaces"]), &tier(&[]));
+        assert!(
+            matches!(read, Cow::Borrowed(_)),
+            "an error for a field that is not there"
+        );
+        let read = read_fields(Cow::Borrowed(&fields), &tier(&[]), &tier(&["rbacs"]));
+        assert_eq!(*read, json!({"timezone": "Etc/UTC"}));
+        assert!(matches!(read, Cow::Owned(_)));
     }
 }

@@ -83,8 +83,8 @@ impact on running clusters.
 
 ## Next
 
-- [The everyday loop](./loop.md): the steps of the life of a release, and who runs
-  each one. It adds the questions to Palette about a change, and `preflight`
-  before a build.
+- [The everyday loop](./loop.md#a-day-of-work): what you do in a day of work, what
+  strata tells you, and where each step runs. It adds the questions to Palette
+  about a change, and `preflight` before a build.
 - [Use cases](./use-cases/index.md): a problem, the commands, and the fix.
 - [Commands](./commands/index.md): each command, its output, and its options.
