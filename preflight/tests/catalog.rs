@@ -10,7 +10,7 @@ use strata_preflight::catalog;
 use strata_preflight::fixture;
 use strata_preflight::jq::Jq;
 use strata_preflight::probe::{self, Call, FixtureBackend, Outcome, Verdict};
-use strata_preflight::rule::{Check, Evidence, EvidenceKind, Rule};
+use strata_preflight::rule::{Check, Evidence, EvidenceKind, PaletteCheck, Rule};
 
 /// Run the check of `rule` on the fixture `doc`. The test fails when `when` does not hold on the
 /// fixture: a guard that hides the check passes every test.
@@ -977,7 +977,7 @@ fn ssh_key_pair_leaves_aws_to_the_properties_route_that_iaas_pod_identity_calls(
     }
     let pod = catalog.rule("iaas-pod-identity").unwrap();
     assert!(pod.applies_to("aws"));
-    let Some(Check::Palette { body, .. }) = &pod.check else {
+    let Some(Check::Palette(PaletteCheck { body, .. })) = &pod.check else {
         panic!("iaas-pod-identity calls the properties route");
     };
     assert!(body.as_deref().unwrap().contains("sshKeyName"));
@@ -1110,13 +1110,13 @@ fn no_check_maps_the_engine_to_a_cloud_itself() {
     for rule in catalog.rules() {
         let texts: Vec<&str> = match &rule.check {
             Some(Check::Static { expr }) | Some(Check::Watch { expr }) => vec![expr],
-            Some(Check::Palette {
+            Some(Check::Palette(PaletteCheck {
                 path,
                 body,
                 each,
                 expr,
                 ..
-            }) => [Some(path), body.as_ref(), each.as_ref(), Some(expr)]
+            })) => [Some(path), body.as_ref(), each.as_ref(), Some(expr)]
                 .into_iter()
                 .flatten()
                 .map(String::as_str)

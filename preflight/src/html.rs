@@ -7,7 +7,7 @@ use strata::closed_set::ClosedSet;
 use crate::confidence::NO_RUNS;
 use crate::probe::Verdict;
 use crate::report::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
-use crate::report::{Report, pct, percent};
+use crate::report::{CheckResult, Report, SectionScore, Summary, pct, percent};
 
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -46,9 +46,25 @@ details summary { cursor: pointer; color: var(--muted); font-size: 13px; margin-
 .legend { color: var(--muted); font-size: 13px; margin-top: 24px; }
 @media (max-width: 700px) { .hide-sm { display: none; } }
 "#;
-
 /// The page.
 pub fn page(r: &Report) -> String {
+    let mut h = head(r);
+    h.push_str(&tiles(&r.summary));
+    h.push_str(&scorecard_section(r));
+    h.push_str("<h2>Results</h2>");
+    for sc in &r.sections {
+        h.push_str(&section_results(r, sc));
+    }
+    h.push_str(KEY);
+    h.push_str("</main></body></html>\n");
+    h
+}
+
+/// What the labels of the results mean.
+const KEY: &str = "<p class=\"legend\">PASS and FAIL are preflight checks: the runs prove them, and a FAIL is exit 1. PROBE PASS and PROBE FAIL are probes: the fault is known, the runs do not yet prove the check, and a failure does not change the exit code without <code>--strict</code>. NOT CHECKED rows say what to run by hand. NOT RUN is a check that applies here and did not run: a tier not asked for, no key, or <code>--no-exec</code>. Confidence is a count of runs: <code>14/14 (81%)</code> is 14 correct runs of 14, and 81% is the 95% lower bound of the rate.</p>";
+
+/// The start of the page: the head, the title, the line of the subject, and the verdict.
+fn head(r: &Report) -> String {
     let s = &r.summary;
     let mut h = String::new();
     h.push_str("<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
@@ -80,7 +96,12 @@ pub fn page(r: &Report) -> String {
         if s.exit_code == 0 { "ok" } else { "bad" },
         esc(&s.verdict)
     ));
-    h.push_str("<div class=\"tiles\">");
+    h
+}
+
+/// The tiles of the totals.
+fn tiles(s: &Summary) -> String {
+    let mut h = String::from("<div class=\"tiles\">");
     for (n, what) in [
         (pct(s.readiness), "readiness"),
         (s.passed.to_string(), "passed"),
@@ -96,8 +117,15 @@ pub fn page(r: &Report) -> String {
         ));
     }
     h.push_str("</div>");
+    h
+}
 
-    h.push_str("<h2>Section scorecard</h2><table><thead><tr><th>section</th><th>readiness</th><th class=\"num\">ran</th><th class=\"num\">passed</th><th class=\"num\">failed</th><th class=\"num\">did not run</th><th class=\"num\">not checked</th><th class=\"num hide-sm\">rows</th><th class=\"num hide-sm\">seen</th><th class=\"num hide-sm\">with a check</th><th class=\"num hide-sm\">preflight</th><th class=\"num hide-sm\">with runs</th><th class=\"hide-sm\">weakest bound</th></tr></thead><tbody>");
+/// The section scorecard: a bar and the counts for each section, then the legends.
+fn scorecard_section(r: &Report) -> String {
+    let s = &r.summary;
+    let mut h = String::from(
+        "<h2>Section scorecard</h2><table><thead><tr><th>section</th><th>readiness</th><th class=\"num\">ran</th><th class=\"num\">passed</th><th class=\"num\">failed</th><th class=\"num\">did not run</th><th class=\"num\">not checked</th><th class=\"num hide-sm\">rows</th><th class=\"num hide-sm\">seen</th><th class=\"num hide-sm\">with a check</th><th class=\"num hide-sm\">preflight</th><th class=\"num hide-sm\">with runs</th><th class=\"hide-sm\">weakest bound</th></tr></thead><tbody>",
+    );
     let gate = r.options.ready.unwrap_or(0.8);
     for sc in &r.sections {
         let (width, class) = match sc.readiness {
@@ -130,80 +158,90 @@ pub fn page(r: &Report) -> String {
         "<p class=\"legend\">{}</p>",
         esc(&written_text(r.options.out_dir.as_deref()))
     ));
+    h
+}
 
-    h.push_str("<h2>Results</h2>");
-    for sc in &r.sections {
-        let Some(section) = r.section_rows(sc) else {
-            continue;
-        };
-        h.push_str(&format!("<h3>{}</h3><table><tbody>", esc(&sc.title)));
-        if sc.not_run > 0 {
-            h.push_str(&format!(
-                "<tr class=\"skip\"><td style=\"white-space:nowrap\"><span class=\"label\">{}</span></td><td>{}</td><td class=\"conf\"></td></tr>",
-                Verdict::NotRun.name(),
-                esc(&section.not_run_text())
-            ));
-        }
-        for c in section.listed {
-            h.push_str(&format!("<tr class=\"{}\"><td style=\"white-space:nowrap\"><span class=\"label\">{}</span></td><td>", c.label_kind().class(), esc(&c.label())));
-            h.push_str(&format!(
-                "<code>{}</code> — {} <span class=\"conf\">· {} · {} ms{}</span>",
-                esc(&c.id),
-                esc(&c.title),
-                c.tier.as_str(),
-                c.elapsed_ms,
-                c.answer
-                    .as_ref()
-                    .map(|a| format!(" · {}", esc(a)))
-                    .unwrap_or_default()
-            ));
-            if c.verdict != Verdict::Passed {
-                for m in &c.messages {
-                    h.push_str(&format!("<div class=\"msg\">{}</div>", esc(m)));
-                }
-            }
-            // a check with `each` has no answer of its own: each request has one
-            if !c.requests.is_empty() {
-                h.push_str(&format!(
-                    "<details><summary>requests and answers</summary><pre>{}</pre></details>",
-                    esc(&c.ran_lines().join("\n"))
-                ));
-            }
-            if matches!(
-                c.verdict,
-                Verdict::Failed | Verdict::NotChecked | Verdict::Error
-            ) {
-                if let Some(fix) = &c.fix
-                    && !fix.text.is_empty()
-                {
-                    h.push_str(&format!(
-                        "<div class=\"fix\">fix ({}): {}</div>",
-                        esc(&fix.owner),
-                        esc(&fix.text)
-                    ));
-                }
-                if !c.reproduce.is_empty() {
-                    h.push_str(&format!(
-                        "<details><summary>reproduce by hand</summary><pre>{}</pre></details>",
-                        esc(&c.reproduce.join("\n"))
-                    ));
-                }
-            }
-            h.push_str("</td><td class=\"conf\">");
-            match &c.confidence {
-                Some(k) => h.push_str(&format!(
-                    "catch {}<br>clean {}",
-                    esc(&k.catch.text()),
-                    esc(&k.clean.text())
-                )),
-                None => h.push_str(NO_RUNS),
-            }
-            h.push_str("</td></tr>");
-        }
-        h.push_str("</tbody></table>");
+/// The table of the results of one section. Empty when the section lists no result.
+fn section_results(r: &Report, sc: &SectionScore) -> String {
+    let Some(section) = r.section_rows(sc) else {
+        return String::new();
+    };
+    let mut h = format!("<h3>{}</h3><table><tbody>", esc(&sc.title));
+    if sc.not_run > 0 {
+        h.push_str(&format!(
+            "<tr class=\"skip\"><td style=\"white-space:nowrap\"><span class=\"label\">{}</span></td><td>{}</td><td class=\"conf\"></td></tr>",
+            Verdict::NotRun.name(),
+            esc(&section.not_run_text())
+        ));
     }
-    h.push_str("<p class=\"legend\">PASS and FAIL are preflight checks: the runs prove them, and a FAIL is exit 1. PROBE PASS and PROBE FAIL are probes: the fault is known, the runs do not yet prove the check, and a failure does not change the exit code without <code>--strict</code>. NOT CHECKED rows say what to run by hand. NOT RUN is a check that applies here and did not run: a tier not asked for, no key, or <code>--no-exec</code>. Confidence is a count of runs: <code>14/14 (81%)</code> is 14 correct runs of 14, and 81% is the 95% lower bound of the rate.</p>");
-    h.push_str("</main></body></html>\n");
+    for c in section.listed {
+        h.push_str(&result_row(c));
+    }
+    h.push_str("</tbody></table>");
+    h
+}
+
+/// The row of one result: its label, its title and messages, its requests, its fix and reproduce
+/// lines, and its confidence.
+fn result_row(c: &CheckResult) -> String {
+    let mut h = format!(
+        "<tr class=\"{}\"><td style=\"white-space:nowrap\"><span class=\"label\">{}</span></td><td>",
+        c.label_kind().class(),
+        esc(&c.label())
+    );
+    h.push_str(&format!(
+        "<code>{}</code> — {} <span class=\"conf\">· {} · {} ms{}</span>",
+        esc(&c.id),
+        esc(&c.title),
+        c.tier.as_str(),
+        c.elapsed_ms,
+        c.answer
+            .as_ref()
+            .map(|a| format!(" · {}", esc(a)))
+            .unwrap_or_default()
+    ));
+    if c.verdict != Verdict::Passed {
+        for m in &c.messages {
+            h.push_str(&format!("<div class=\"msg\">{}</div>", esc(m)));
+        }
+    }
+    // a check with `each` has no answer of its own: each request has one
+    if !c.requests.is_empty() {
+        h.push_str(&format!(
+            "<details><summary>requests and answers</summary><pre>{}</pre></details>",
+            esc(&c.ran_lines().join("\n"))
+        ));
+    }
+    if matches!(
+        c.verdict,
+        Verdict::Failed | Verdict::NotChecked | Verdict::Error
+    ) {
+        if let Some(fix) = &c.fix
+            && !fix.text.is_empty()
+        {
+            h.push_str(&format!(
+                "<div class=\"fix\">fix ({}): {}</div>",
+                esc(&fix.owner),
+                esc(&fix.text)
+            ));
+        }
+        if !c.reproduce.is_empty() {
+            h.push_str(&format!(
+                "<details><summary>reproduce by hand</summary><pre>{}</pre></details>",
+                esc(&c.reproduce.join("\n"))
+            ));
+        }
+    }
+    h.push_str("</td><td class=\"conf\">");
+    match &c.confidence {
+        Some(k) => h.push_str(&format!(
+            "catch {}<br>clean {}",
+            esc(&k.catch.text()),
+            esc(&k.clean.text())
+        )),
+        None => h.push_str(NO_RUNS),
+    }
+    h.push_str("</td></tr>");
     h
 }
 

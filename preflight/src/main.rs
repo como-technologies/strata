@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
-use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
+use strata::api::{HttpApi, Palette, PaletteApi, Retry, RetryPolicy};
 use strata::closed_set::ClosedSet;
 use strata::config::{self, Config};
 use strata::reference::Ref;
@@ -17,7 +17,7 @@ use strata_preflight::confidence::{self, Ledger};
 use strata_preflight::error::{Error, Result};
 use strata_preflight::probe::LiveBackend;
 use strata_preflight::report::{self, Format, Report};
-use strata_preflight::rule::Tier;
+use strata_preflight::rule::{Catalog, Tier};
 use strata_preflight::run::{self, Selection, WatchOptions};
 use strata_preflight::world::World;
 use strata_preflight::{TOOL_NAME, catalog};
@@ -262,101 +262,98 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
     // --verbose asks for the lines, so it wins over STRATA_QUIET; --quiet wins over both
     let progress = Progress::new(cli.quiet || (config::quiet_from_env() && !cli.verbose));
     if let Some(kind) = cli.schema {
-        let schema = match kind {
-            SchemaKind::Report => schemars::schema_for!(Report),
-            SchemaKind::Rules => schemars::schema_for!(strata_preflight::rule::Section),
-            SchemaKind::Ledger => schemars::schema_for!(Ledger),
-            SchemaKind::Promotion => schemars::schema_for!(confidence::PromotionReport),
-        };
-        emit(&format!("{}\n", serde_json::to_string_pretty(&schema)?));
-        return Ok(ExitCode::SUCCESS);
+        return print_schema(kind);
     }
     let catalog = catalog::with_probes(&cli.probes)?;
     let tiers = tiers_of(&cli)?;
     if cli.rules {
-        let rules = run::list_rules(
-            &catalog,
-            cli.cloud.as_deref(),
-            cli.release.as_deref(),
-            if cli.tier.is_empty() { &[] } else { &tiers },
-        );
-        if format_of(&cli) == Format::Json {
-            let doc = run::rules_document(
-                &catalog,
-                cli.cloud.as_deref(),
-                cli.release.as_deref(),
-                &rules,
-            );
-            print_json(&doc, cli.compact)?;
-        } else {
-            emit(&run::rules_text(&catalog, &rules));
-        }
-        return Ok(ExitCode::SUCCESS);
+        return print_rules(&cli, &catalog, &tiers);
     }
     if cli.promotion {
-        let ledger = ledger_of(&cli)?;
-        let report = confidence::promotion(&catalog, &ledger);
-        if format_of(&cli) == Format::Json {
-            print_json(&serde_json::to_value(&report)?, cli.compact)?;
-        } else {
-            emit(&promotion_text(&report));
-        }
-        return Ok(ExitCode::from(report.exit_code()));
+        return print_promotion(&cli, &catalog);
     }
+    check_cluster(&cli, &catalog, tiers, progress)
+}
+
+/// Print the JSON Schema of one document of strata-preflight.
+fn print_schema(kind: SchemaKind) -> Result<ExitCode> {
+    let schema = match kind {
+        SchemaKind::Report => schemars::schema_for!(Report),
+        SchemaKind::Rules => schemars::schema_for!(strata_preflight::rule::Section),
+        SchemaKind::Ledger => schemars::schema_for!(Ledger),
+        SchemaKind::Promotion => schemars::schema_for!(confidence::PromotionReport),
+    };
+    emit(&format!("{}\n", serde_json::to_string_pretty(&schema)?));
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Print the rules of the catalog (`--rules`), as text or as a document.
+fn print_rules(cli: &Cli, catalog: &Catalog, tiers: &[Tier]) -> Result<ExitCode> {
+    let rules = run::list_rules(
+        catalog,
+        cli.cloud.as_deref(),
+        cli.release.as_deref(),
+        if cli.tier.is_empty() { &[] } else { tiers },
+    );
+    if format_of(cli) == Format::Json {
+        let doc = run::rules_document(
+            catalog,
+            cli.cloud.as_deref(),
+            cli.release.as_deref(),
+            &rules,
+        );
+        print_json(&doc, cli.compact)?;
+    } else {
+        emit(&run::rules_text(catalog, &rules));
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Print the promotion report (`--promotion`). Its exit code is `1` when a level disagrees with
+/// the ledger.
+fn print_promotion(cli: &Cli, catalog: &Catalog) -> Result<ExitCode> {
+    let ledger = ledger_of(cli)?;
+    let report = confidence::promotion(catalog, &ledger);
+    if format_of(cli) == Format::Json {
+        print_json(&serde_json::to_value(&report)?, cli.compact)?;
+    } else {
+        emit(&promotion_text(&report));
+    }
+    Ok(ExitCode::from(report.exit_code()))
+}
+
+/// Run the checks of one entity, or watch one cluster, and print the report.
+fn check_cluster(
+    cli: &Cli,
+    catalog: &Catalog,
+    tiers: Vec<Tier>,
+    progress: Progress,
+) -> Result<ExitCode> {
     let source = cli.source.clone().ok_or_else(|| Error::Usage {
         message: "give the body of a create as a file, or cluster:UID; --rules lists the rules, and --help the options".to_string(),
     })?;
     let selection = Selection {
-        tiers: tiers.clone(),
+        tiers,
         ids: cli.rule.clone(),
         strict: cli.strict,
         ready: cli.ready.map(|p| p / 100.0),
     };
     // a wrong id is a usage error, so it comes before the first request
-    selection.require_known(&catalog)?;
+    selection.require_known(catalog)?;
     let now = now_utc();
-    let ledger = ledger_of(&cli)?;
+    let ledger = ledger_of(cli)?;
     let reference = Ref::parse(&source);
-    // a wrong use of the source is a usage error, so it comes before the first request
-    if let Ref::Cluster {
-        profile, pending, ..
-    } = &reference
-        && (profile.is_some() || *pending)
-    {
-        return Err(Error::Usage {
-            message: "the checks read the whole cluster: give cluster:UID with no profile and no @pending"
-                .to_string(),
-        });
-    }
-    let live = !cli.offline;
-    let palette = if live { Some(connect(progress)?) } else { None };
+    refuse_a_profile_of_a_cluster(&reference)?;
+    let palette = if cli.offline {
+        None
+    } else {
+        Some(connect(progress)?)
+    };
     // the world and the checks read through one backend, which keeps each answer for the run. So
     // a request that the world made, and that a rule makes again, goes out one time
     let backend = LiveBackend::new(palette.as_ref().map(Palette::api), cli.no_exec);
     let reads = palette.as_ref().map(|_| Palette::new(&backend));
-
-    // the world: the entity, and what the static rules need beside it
-    let mut world = match reference {
-        Ref::Cluster { uid, .. } => {
-            let reads = reads.as_ref().ok_or_else(|| Error::Usage {
-                message: "cluster:UID needs Palette: drop --offline, or give the entity as a file"
-                    .to_string(),
-            })?;
-            World::from_cluster(reads, &uid, &progress)?
-        }
-        _ => World::from_file(std::path::Path::new(&source), cli.cloud.as_deref())?,
-    };
-    world.release = cli.release.clone();
-    if let Some(change) = &cli.change {
-        world = world.with_change(change)?;
-    }
-    if !cli.records.is_empty() {
-        world = world.with_records(&expand(&cli.records)?)?;
-    }
-    if let Some(reads) = &reads {
-        world = world.with_palette(reads, &now, &progress)?;
-    }
-
+    let world = world_of(cli, &source, reference, reads.as_ref(), &now, &progress)?;
     let out_dir = cli.out.as_ref().map(|d| d.display().to_string());
     let mut reading: Option<serde_json::Value> = None;
     let report = if cli.watch {
@@ -364,7 +361,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             message: "--watch needs Palette: drop --offline".to_string(),
         })?;
         run::watch(run::WatchInputs {
-            catalog: &catalog,
+            catalog,
             world: &world,
             palette,
             ledger: &ledger,
@@ -379,7 +376,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             sleep: &std::thread::sleep,
             out_dir: out_dir.as_deref(),
             verbose: cli.verbose,
-            paint: paint_of(&cli, Stream::Stderr),
+            paint: paint_of(cli, Stream::Stderr),
         })
         .map(|(report, world)| {
             reading = Some(world);
@@ -387,7 +384,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
         })?
     } else {
         run::run(run::RunInputs {
-            catalog: &catalog,
+            catalog,
             world: &world,
             backend: &backend,
             ledger: &ledger,
@@ -396,23 +393,84 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             out_dir: out_dir.as_deref(),
             progress: &progress,
             verbose: cli.verbose,
-            paint: paint_of(&cli, Stream::Stderr),
+            paint: paint_of(cli, Stream::Stderr),
         })?
     };
+    print_report(cli, &report, &world, reading.as_ref(), &progress)?;
+    Ok(ExitCode::from(report.exit_code()))
+}
+
+/// A wrong use of the source is a usage error, so it comes before the first request: the checks
+/// read the whole cluster.
+fn refuse_a_profile_of_a_cluster(reference: &Ref) -> Result<()> {
+    if let Ref::Cluster {
+        profile, pending, ..
+    } = reference
+        && (profile.is_some() || *pending)
+    {
+        return Err(Error::Usage {
+            message: "the checks read the whole cluster: give cluster:UID with no profile and no @pending"
+                .to_string(),
+        });
+    }
+    Ok(())
+}
+
+/// The world of the run: the entity, and what the static rules need beside it. `reads` is none
+/// with `--offline`.
+fn world_of<A: PaletteApi>(
+    cli: &Cli,
+    source: &str,
+    reference: Ref,
+    reads: Option<&Palette<A>>,
+    now: &str,
+    progress: &Progress,
+) -> Result<World> {
+    let mut world = match reference {
+        Ref::Cluster { uid, .. } => {
+            let reads = reads.ok_or_else(|| Error::Usage {
+                message: "cluster:UID needs Palette: drop --offline, or give the entity as a file"
+                    .to_string(),
+            })?;
+            World::from_cluster(reads, &uid, progress)?
+        }
+        _ => World::from_file(std::path::Path::new(source), cli.cloud.as_deref())?,
+    };
+    world.release = cli.release.clone();
+    if let Some(change) = &cli.change {
+        world = world.with_change(change)?;
+    }
+    if !cli.records.is_empty() {
+        world = world.with_records(&expand(&cli.records)?)?;
+    }
+    if let Some(reads) = reads {
+        world = world.with_palette(reads, now, progress)?;
+    }
+    Ok(world)
+}
+
+/// Write the files of `--out`, then print the report.
+fn print_report(
+    cli: &Cli,
+    report: &Report,
+    world: &World,
+    reading: Option<&serde_json::Value>,
+    progress: &Progress,
+) -> Result<()> {
     if let Some(dir) = &cli.out {
-        write_out(dir, &report, &world, reading.as_ref())?;
+        write_out(dir, report, world, reading)?;
         progress.note(&format!(
             "wrote {}/report.md, report.json, report.html, world.json, entity.json",
             dir.display()
         ));
     }
     emit(&report::render(
-        &report,
-        format_of(&cli),
+        report,
+        format_of(cli),
         cli.compact,
-        &paint_of(&cli, Stream::Stdout),
+        &paint_of(cli, Stream::Stdout),
     ));
-    Ok(ExitCode::from(report.exit_code()))
+    Ok(())
 }
 
 /// Write to stdout. A reader that closes the pipe early (`| head`) is not an error of strata,
