@@ -676,3 +676,35 @@ fn the_version_of_cargo_bolero_matches_the_crate_and_the_book() {
         "the book names another version of cargo-bolero than the workflow"
     );
 }
+
+/// The benchmarks run in CI with a short measure time (#214). A benchmark that does not build, or
+/// that panics, fails the job. No step reads a time, so no time fails it. The recipe `test` does
+/// not run them: they take minutes, and the job `lint and test` is the one every change waits for.
+#[test]
+fn the_benchmarks_job_runs_the_short_recipe_and_the_tests_do_not_run_the_benchmarks() {
+    assert_eq!(runs_of_job("benchmarks"), ["just bench-short"]);
+
+    let short = recipe("bench-short");
+    assert_eq!(short.len(), 1, "{short:?}");
+    let words: Vec<&str> = short[0].split_whitespace().collect();
+    assert_eq!(
+        &words[..5],
+        ["cargo", "bench", "-p", "strata-benches", "--"],
+        "{short:?}"
+    );
+    for flag in ["--warm-up-time", "--measurement-time"] {
+        assert!(
+            words.contains(&flag),
+            "{flag} keeps the run to minutes: {short:?}"
+        );
+    }
+
+    // `just bench` hands its arguments to criterion, for a baseline or for one benchmark
+    assert_eq!(
+        recipe("bench *args"),
+        ["cargo bench -p strata-benches -- {{args}}"]
+    );
+    for line in recipe("test").iter().chain(&recipe("lint")) {
+        assert!(!line.contains("cargo bench"), "{line}");
+    }
+}

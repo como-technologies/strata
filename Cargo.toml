@@ -1,10 +1,11 @@
 [workspace]
-members = [".", "xtask", "preflight", "fuzz"]
+members = [".", "xtask", "preflight", "fuzz", "benches"]
 # `cargo build` and `cargo test` at the root stay about strata alone. The development tooling in
 # xtask/ builds when a recipe asks for it, and it never reaches a release. The preflight tool in
 # preflight/ is a package of its own, `strata-preflight`: the release carries it as a second
 # binary, `just build` builds it, and another repository can depend on it by name. The fuzz targets
-# in fuzz/ are tests of both, and `just test` runs them.
+# in fuzz/ are tests of both, and `just test` runs them. The benchmarks in benches/ are the package
+# `strata-benches`: `just bench` builds them, and no release carries them.
 default-members = ["."]
 
 [package]
@@ -33,6 +34,9 @@ publish = false
 # tests/common/mod.rs with no caller in any test warns as dead code. 14 crates with a copy of the
 # module each could not show that.
 autotests = false
+# benches/ is the package strata-benches, with a Cargo.toml of its own. Without this line, cargo
+# would also build each file of benches/ as a benchmark of this package.
+autobenches = false
 
 [lib]
 name = "strata"
