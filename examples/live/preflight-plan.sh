@@ -15,7 +15,7 @@
 #      cloud account from Palette (#143): instance-offering, ssh-key-pair on eks, and
 #      gcp-properties on gcp. The fault of instance-offering is a type that the instance type route
 #      lists with a zone in nonSupportedZones (null for a type that each zone offers), read from the
-#      route itself. On aws, the properties route refuses a key pair that the region lacks, and
+#      route itself. On aws, the property route refuses a key pair that the region lacks, and
 #      iaas-pod-identity sends the key pair to it (#430)
 #   3  the clean entity: every tier, and each rule of severity fail that ran must PASS. The ledger
 #      gets `passed`, or `false-fail`
@@ -194,12 +194,12 @@ case "$engine" in
     "$live/api.sh" get "/v1/clouds/aws/regions/$region/keypairs?cloudAccountUid=$A" > keypairs.json 2> keypairs.err
     check key-pairs-shape 0 "the key pair route lists keyNames[] for $region, and the key $ssh_key of the entity is in it" -- \
       jq -e --arg k "$ssh_key" '(.keyNames | index($k)) != null' keypairs.json
-    # ssh-key-pair names eks alone. The properties route of aws refuses a key pair that the region
+    # ssh-key-pair names eks alone. The property route of aws refuses a key pair that the region
     # lacks (HTTP 500, AwsKeyPairNotFound). iaas-pod-identity sends it the key pair (#430)
     case "$engine" in
       aws)
         fault iaas-pod-identity '.spec.cloudConfig.sshKeyName = "strata-no-such-key"'
-        check properties-key-pair 0 "the properties route of aws refuses a key pair that the region lacks, and the report of iaas-pod-identity names AwsKeyPairNotFound" -- \
+        check properties-key-pair 0 "the property route of aws refuses a key pair that the region lacks, and the report of iaas-pod-identity names AwsKeyPairNotFound" -- \
           jq -e '[.checks[] | select(.id == "iaas-pod-identity") | (.messages // [])[]] | any(.[]; test("AwsKeyPairNotFound"))' fault-iaas-pod-identity.report.json
         ;;
       eks) fault ssh-key-pair '.spec.cloudConfig.sshKeyName = "strata-no-such-key"' ;;

@@ -62,7 +62,7 @@ A command page ends with the `--help` of its command, from
 `docs/src/output/help-<command>.txt`, so its options are those of the binary.
 Its text also names each option of that help, with what the option does or a
 link to the page that says. `just docs-check` fails on a command page that
-leaves the help out, or that has no sentence for an option.
+omits the help, or that has no sentence for an option.
 
 A long command page splits by what the command reads. The command page keeps
 what the command does, a table of its pages, what to expect, and its options,

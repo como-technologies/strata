@@ -2918,7 +2918,7 @@ fn search_of(groups: Vec<Value>) -> Value {
 }
 
 /// The body of the search of the virtual clusters that `groups` select: the condition
-/// `environment eq nested` as one more group, since the search leaves out each virtual cluster
+/// `environment eq nested` as one more group, since the search omits each virtual cluster
 /// unless a condition asks for it.
 fn virtual_search(mut groups: Vec<Value>) -> Value {
     groups.push(serde_json::json!({"conjunction": "and",
@@ -4649,7 +4649,7 @@ fn clusters_listing(api: &MemoryApi, query: ops::ClusterQuery) -> ops::Listing {
 
 #[test]
 fn list_clusters_names_a_virtual_cluster_with_its_cluster_group_from_the_search() {
-    // The listing leaves out each virtual cluster, so strata asks the search for them, with the
+    // The listing omits each virtual cluster, so strata asks the search for them, with the
     // one condition environment eq nested, in the scope of the listing (#116).
     let api = two_clusters_with_search(&["clusterName", "tags", "environment"]).with_post(
         CLUSTER_SEARCH,
@@ -4792,7 +4792,7 @@ fn list_clusters_says_that_it_holds_no_virtual_cluster_when_the_search_takes_no_
 
 #[test]
 fn a_cluster_name_resolves_a_virtual_cluster_through_the_search() {
-    // cluster:<name> reads the listing, which leaves out each virtual cluster, and the search
+    // cluster:<name> reads the listing, which omits each virtual cluster, and the search
     // with environment eq nested too (#116)
     let dir = tempfile::tempdir().unwrap();
     common::make_fixtures(dir.path());
@@ -5471,7 +5471,7 @@ fn a_candidate_carries_values_and_manifests_inline_or_from_files_next_to_it() {
         json["source"]
     );
 
-    // a layer that leaves values out gets the registry defaults, which differ from b's
+    // a layer that omits values gets the registry defaults, which differ from b's
     let mut doc: Value = serde_yaml::from_str(&fs::read_to_string(&file).unwrap()).unwrap();
     doc["layers"][4].as_object_mut().unwrap().remove("values");
     let defaults = cand.join("defaults.yaml");
@@ -13152,7 +13152,7 @@ fn a_cluster_record_reads_the_cloud_type_of_the_document_from_its_cloud_config()
     assert_eq!(snap.source.cloud_type, "eks");
 }
 
-/// A label of Palette is text. So the record of a cluster leaves out a label of another type,
+/// A label of Palette is text. So the record of a cluster omits a label of another type,
 /// as `list clusters` does, and `--tag` matches the same labels in both.
 #[test]
 fn a_cluster_record_leaves_out_a_label_whose_value_is_not_text() {
@@ -13748,7 +13748,7 @@ fn in_a_fips_tenant_packs_and_behind_leave_out_a_version_that_palette_does_not_s
     assert_eq!(
         versions(&fips),
         (vec!["1.65.0".to_string(), "1.63.1".to_string()], 2),
-        "packs leaves out the version that the registry route does not serve"
+        "packs omits the version that the registry route does not serve"
     );
     assert_eq!(versions(&open).0[0], "1.68.0", "another tenant offers it");
 
@@ -14937,7 +14937,7 @@ fn list_clusters_with_a_tag_searches_palette_and_names_the_project_of_each() {
 
 #[test]
 fn list_clusters_with_a_tag_names_a_virtual_cluster_that_carries_the_label() {
-    // The search leaves out each virtual cluster unless a condition asks for it, so a query
+    // The search omits each virtual cluster unless a condition asks for it, so a query
     // searches a second time with environment eq nested added to its groups (#116).
     let payments = fleet_row(
         "c-pay",

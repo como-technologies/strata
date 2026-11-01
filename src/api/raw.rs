@@ -490,7 +490,7 @@ impl RawCluster {
     /// One applied template as the three documents of a profile, so a cluster's profile is hashed
     /// exactly as the profile itself: the template's packs as the published packs, the cluster's
     /// manifests entry for that profile, and that profile's variable definitions. Variable values
-    /// are left out; they are run-time input, not part of the release.
+    /// are omitted; they are run-time input, not part of the release.
     pub fn template_raw(&self, template: &Value) -> RawProfile {
         let field = |ptr: &str| value_or_null(template, ptr);
         let uid = str_at(template, "/uid");

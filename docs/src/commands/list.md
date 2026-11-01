@@ -73,8 +73,8 @@ lists no virtual cluster unless a condition asks for it: see
 
 ## The virtual clusters
 
-The cluster listing of Palette leaves out each virtual cluster. Its search
-leaves them out too, unless a condition asks for the environment `nested`, the
+The cluster listing of Palette omits each virtual cluster. Its search
+omits them too, unless a condition asks for the environment `nested`, the
 cloud type of a virtual cluster. So strata asks the search for them, in the
 scope of the listing. The row of a virtual cluster ends with its cluster group:
 
@@ -267,7 +267,7 @@ consumers. It also searches the edge hosts:
 
 `list --packs` costs one request for each version. It reads no edge host, and
 it does no second reading. So an edge host that the version is bound to, and a
-cluster that the list of Palette leaves out, are not in the count.
+cluster that the list of Palette omits, are not in the count.
 `strata consumers` finds them: see [Edge hosts](./consumers.md#edge-hosts) and
 [A cluster that the list does not name](./consumers.md#a-cluster-that-the-list-does-not-name).
 

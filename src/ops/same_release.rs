@@ -50,8 +50,8 @@ impl Described for Policy {
 pub enum PairStatus {
     /// Equal roots, and no pack names another machine image.
     Identical,
-    /// Roots differ only by the `packUid`s that Palette mints, and by the tag name of a pack for
-    /// the same build: the same content, under either policy.
+    /// The roots differ only by the `packUid`s that Palette mints, or by the tag name of a pack for
+    /// the same build. The content is the same under either policy.
     SameContent,
     /// Roots differ only because packs were re-pinned from another registry; accepted by policy.
     RegistryMove,
@@ -87,9 +87,11 @@ impl Described for PairStatus {
                 "The roots differ only by the packUid that Palette mints, or by the tag name of a pack for the same build. Palette mints the packUid of a manifest pack and of a pack from a registry that it does not sync. The content is the same, so the release is the same under either policy."
             }
             Self::RegistryMove => {
-                "The roots differ only because packs were re-pinned from another registry with the same tag, version, values, and manifests; accepted by the registry-move policy."
+                "The roots differ only because a pack is pinned to another registry, with the same tag, version, values, and manifests. The registry-move policy accepts this."
             }
-            Self::Different => "Not the same release; reasons lists each difference.",
+            Self::Different => {
+                "This is not the same release. The field reasons lists each difference."
+            }
             Self::UnknownUpstream => {
                 "The roots pass, and a pack on either side has no upstream digest, so an equal root does not show an equal archive. --allow no-digest accepts it."
             }
@@ -140,9 +142,9 @@ pub struct Pair {
     /// The key of each pack, on either side, with no upstream digest; also when it is allowed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub upstream_unknown: Vec<String>,
-    /// The key of each pack whose only difference is a `packUid` that Palette mints: for a
-    /// manifest pack, and for a pack from a registry that Palette does not sync. `compare` marks
-    /// it as `packs[].mintedUidOnly`.
+    /// The key of each pack whose only difference is a `packUid` that Palette mints. That is a
+    /// manifest pack, or a pack from a registry that Palette does not sync. `compare` marks it as
+    /// `packs[].mintedUidOnly`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub minted_uid_only: Vec<String>,
     /// Each pack, on either side, with a value that Palette masks. The root covers the mask and
@@ -323,8 +325,8 @@ impl PairReasons {
     }
 }
 
-/// The differences between the records `a` and `b` that `policy` does not accept, plus the number
-/// of clean registry re-pins and of packs pinned under another tag name with nothing else
+/// The differences between the records `a` and `b` that `policy` does not accept. It also counts
+/// the clean registry re-pins and the packs pinned under another tag name with nothing else
 /// changed. `d` is their comparison.
 fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> PairReasons {
     let (pa, pb) = (a.packs_by_key(), b.packs_by_key());
@@ -427,9 +429,8 @@ pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at
 /// [`same_release`] with the choice for a pack that has no upstream digest.
 ///
 /// With `allow_no_digest`, a pair that holds a pack with no upstream digest can pass. Without it,
-/// such a pair is `unknown-upstream`: a move from a registry that gives a digest to one that gives
-/// none is a loss of what the root can show. `generated_at` is the time of the report, in
-/// RFC 3339.
+/// such a pair is `unknown-upstream`. A move from a registry that gives a digest to one that gives
+/// none loses what the root can show. `generated_at` is the time of the report, in RFC 3339.
 pub fn same_release_with(
     records: &[(String, Snapshot)],
     policy: Policy,

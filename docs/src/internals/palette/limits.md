@@ -206,10 +206,8 @@ makes no claim that depends on them.
 - **The key pairs of an account.** The property route of EKS checks the key pair
   only with a `vpcId`, so `ssh-key-pair` reads the list for EKS. See
   [The list routes](validate-routes.md#the-list-routes).
-- **The cluster limit of the tenant.** The limit holds for a trial tenant alone.
-  The cluster validate route refuses a create over the limit with
-  `FreemiumActiveClusterLimitExceeded`, so `palette-validate` reports it.
-  `GET /v1/tenants/{tenantUid}/freemiumUsage` gives the usage. See
+- **The cluster limit of the tenant.** A trial tenant has a limit, and
+  `palette-validate` reports the refusal: see
   [The checks of the route](validate-routes.md#post-v1spectroclusterscloudtypevalidate).
 
 ## Where these answers come from

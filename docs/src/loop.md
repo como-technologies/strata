@@ -185,7 +185,7 @@ hold one release:
 ### 5. Before a build
 
 **Follow along.** `just playground loop-3` is the tenant after the promotion.
-It also holds the cloud account of `prod` and the validate route of Palette.
+It also holds the cloud account of `prod`, and it answers the validate routes of Palette.
 
 `prod` builds a new cluster, `ledger`, on the release that the promotion gave
 it. The team writes the body of the create in `cluster.json`, as in
@@ -226,7 +226,7 @@ the body and create nothing. Here Palette refuses the worker pool: one
 ```
 
 The live tier also reads the instance types of the region, and sends the key
-pair to the properties route. The type, its zone, and the key pair of this body
+pair to the property route. The type, its zone, and the key pair of this body
 are correct, so `instance-offering` and `iaas-pod-identity` pass.
 
 A rule over a list, such as `template-outside`, makes one request for each

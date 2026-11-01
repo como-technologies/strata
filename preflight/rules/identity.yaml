@@ -776,7 +776,7 @@ rules:
         clean: fixtures/eks/pod-identity-mapusers.json
 
   - id: iaas-pod-identity
-    title: The properties route accepts the cloud account and the key pair of an AWS cluster
+    title: The property route accepts the cloud account and the key pair of an AWS cluster
     engines: [aws]
     tier: palette
     severity: fail
@@ -798,7 +798,7 @@ rules:
         else ["Palette refuses the properties of the AWS cluster, the cloud account or the key pair: \(.response.body.code // .response.status): \(.response.body.message // "")"] end
     fix:
       owner: none
-      text: The check exists in the properties route; strata-preflight calls it.
+      text: The check exists in the property route; strata-preflight calls it.
     evidence:
       - kind: source
         note: Palette returns FeatureNotSupported, with the message "Pod Identity for AWS infrastructure clusters", when the account is Pod Identity
@@ -825,7 +825,7 @@ rules:
       subnet id. So an EKS cluster with a dynamic VPC, or with no subnet id, reaches no check of
       the key pair. The key pair route lists `keyNames` of the account in the region, and the check
       looks for `sshKeyName` in the list. On AWS, `iaas-pod-identity` sends the key pair to the
-      properties route, which refuses a key pair that does not exist.
+      property route, which refuses a key pair that does not exist.
     check:
       kind: palette
       method: GET
@@ -842,7 +842,7 @@ rules:
       - "aws ec2 describe-key-pairs --region {{ .entity.spec.cloudConfig.region }} --key-names {{ .entity.spec.cloudConfig.sshKeyName }} --query 'KeyPairs[].KeyName' --output text"
     fix:
       owner: palette
-      text: Call the key pair route from the properties route of EKS when the VPC is dynamic.
+      text: Call the key pair route from the property route of EKS when the VPC is dynamic.
     evidence:
       - kind: source
         note: the key pair route of a region lists keyNames for the account; the property route of EKS checks the key pair only when the body has a vpcId

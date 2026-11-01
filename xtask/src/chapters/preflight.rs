@@ -36,7 +36,7 @@ pub(super) const AWS_VALIDATE: &str = "v1/spectroclusters/aws/validate";
 /// `preflight_entity` has 4 cores, and the packs need 4.1.
 fn cpu_floor_answer() -> serde_json::Value {
     json!({"machinePools": {"results": [{"name": "worker-pool", "displayName": "worker-pool",
-        "errors": [{"code": "MachinePoolResourcesInsufficient",
+        "errors": [{"code": "MachinePoolWithMinCpuRequired",
             "message": "A minimum allocation of '4.1' CPU cores is required across all worker nodes"}]}]},
         "profiles": []})
 }
@@ -285,7 +285,7 @@ fn preflight_account(r: &mut Runner) {
     // Two rules read the account of the entity (#143). The instance type route lists the zones
     // that do not offer a type. The key pair route lists the key pairs of the region. The pools
     // move to the zone that the list names, and the key pair is not in the list. The key pair step
-    // uses an EKS body with a dynamic VPC. The AWS properties route checks the key pair of an AWS
+    // uses an EKS body with a dynamic VPC. The AWS property route checks the key pair of an AWS
     // body.
     r.quiet(
         r#"jq '.spec.machinepoolconfig[].cloudConfig.azs = ["us-east-2c"]' cluster.json > cluster-zone.json"#,
@@ -337,7 +337,7 @@ fn preflight_clouds(r: &mut Runner) {
         false,
         "strata preflight cluster-gcp.json --cloud aws --no-exec --tier palette --rule palette-validate --strict --quiet | sed -n '4,8p'",
     );
-    // the properties route of GCP reads the project and the zones of a GCP body. The stand-in
+    // the property route of GCP reads the project and the zones of a GCP body. The stand-in
     // gives the answer of a route that accepts them, as it does for the route of AWS
     r.answer(DEV, "v1/clouds/gcp/properties/validate", &json!({}));
     r.quiet(

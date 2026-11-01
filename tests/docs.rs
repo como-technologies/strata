@@ -157,7 +157,7 @@ fn the_kind_tables_list_every_kind_the_help_names() {
         let text = read(&docs().join(page));
         for kind in &kinds {
             if *kind == "candidate" && page == "reference/documents.md" {
-                continue; // the candidate file has no schema id, so that table leaves it out
+                continue; // the candidate file has no schema id, so that table omits it
             }
             let row = cell.replace("{}", kind);
             assert!(
@@ -524,7 +524,7 @@ fn the_variables_of_the_gitlab_preflight_job_are_described_on_gitlab_md_and_list
     assert!(preflight.contains("(./gitlab.md#the-variables)"));
 }
 
-/// The use case gave the fix for a team and left out two steps of the workflow: the report as a
+/// The use case gave the fix for a team and omitted two steps of the workflow: the report as a
 /// comment, and the watch. A reader who follows the use case then builds the old job.
 #[test]
 fn stop_a_build_shows_the_comment_and_the_watch_of_the_workflow() {

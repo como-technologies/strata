@@ -31,7 +31,7 @@ INFRA="ubuntu-aws kubernetes cni-cilium-oss csi-aws-ebs"   # varied between prof
 
 # oldest_first: the versions on the standard input, one on each line, from the lowest to the highest.
 # Only a version of plain numbers counts, such as 1.30.6 or 22.04. A pre-release is below its
-# version, which a text order of the shell does not know, so the examples leave it out. Strata
+# version, which a text order of the shell does not know, so the examples omit it. Strata
 # orders the versions by the numbers first, in src/reference/version.rs.
 oldest_first() {
   jq -R -s -r '[split("\n")[] | select(test("^[0-9]+(\\.[0-9]+){0,2}$"))] | unique

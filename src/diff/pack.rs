@@ -179,8 +179,8 @@ pub struct PackDiff {
     /// True when `IDENTITY` moved only because the tag name differs: the same name, layer, type,
     /// version, `packUid`, and `registryUid`, pinned under another of the registry's names for
     /// that version, exact (`LTS__24.04`) or floating (`LTS__24.x`). Palette pins the `packUid`
-    /// when the profile is saved, so a cluster runs the same build, and the impact leaves the
-    /// rename out. `AUTHORED` and `UPSTREAM` still count.
+    /// when the profile is saved, so a cluster runs the same build, and the impact omits the
+    /// rename. `AUTHORED` and `UPSTREAM` still count.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tag_renamed: bool,
     /// Which way the version of the pack moves from side A to side B. Absent when a side has no

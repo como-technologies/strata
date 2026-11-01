@@ -92,7 +92,7 @@ reading, and reads no edge host. The two last lines say why. See
 
 ## A cluster that the list does not name
 
-The consumer list of Palette can leave out a cluster that runs the version.
+The consumer list of Palette can omit a cluster that runs the version.
 Here the virtual cluster `tenant-b` runs `platform-addons@1.0.0`, and the list
 names `tenant-a` alone:
 

@@ -105,7 +105,7 @@ and `consumersByKind` joined it with the count of each kind.
 Two values changed after 0.21.0 with no new id. In `strata-packs/1`, a version
 that the listing gives no type has the `type` `spectro`, where 0.21.0 wrote
 empty text. The schema now gives the field the pack types. A record of a
-cluster leaves out a label whose value is not text, where 0.21.0 kept it with
+cluster omits a label whose value is not text, where 0.21.0 kept it with
 empty text. The labels are outside the root, so no root changes.
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
@@ -235,7 +235,7 @@ record kept the value, and the tier sorted first. Palette gives an integer, so
 no record changes in practice.
 
 A field can also become absent, and that keeps the id as well. For most fields
-absent is a value: a field that is false, empty, or zero is left out, and each
+absent is a value: a field that is false, empty, or zero is omitted, and each
 such field says so at its own definition in
 [JSON documents](./documents.md). Eight fields are different, and for these
 absent means unknown: `source.consumers`, `rootLive`, `maxImpact`,
@@ -677,7 +677,7 @@ value is in the sections above.
   runs it.
 - **`ssh-key-pair` applies to `eks` only.** It also runs only for a cluster with
   a dynamic VPC or with no subnet id. On `aws`, the rule `iaas-pod-identity`
-  sends the key pair to the properties route, which refuses a key pair that the
+  sends the key pair to the property route, which refuses a key pair that the
   region lacks. A script that reads `ssh-key-pair` in the report of an `aws` run
   must read `iaas-pod-identity`.
 - **Nine rules send one request for each item.** They are `template-outside`,

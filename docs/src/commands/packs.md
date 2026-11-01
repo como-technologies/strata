@@ -36,7 +36,7 @@ Palette marks:
 ```
 
 The JSON gives `paletteLatest: true` on the version that Palette marks. Strata
-leaves out the field on each other version:
+omits the field on each other version:
 
 ```text
 {{#include ../output/packs-palette-latest-json.txt}}
@@ -144,11 +144,11 @@ live example
 Palette applies the FIPS rule of the tenant to the answer of the registry, and
 not to the listing. So in a FIPS tenant, the listing holds a version that
 Palette refuses in a profile, and the registry gives that version no tag.
-Strata leaves out each version that has no tag in the answer of the registry,
+Strata omits each version that has no tag in the answer of the registry,
 unless Spectro Cloud retired it as `disabled` or `deleted`. When no version
 of the pack is FIPS compliant, the registry answers 404, and strata shows no
 version of that registry. The count of versions in the heading does not
-include a version that strata leaves out. See
+include a version that strata omits. See
 [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
 
 | Exit | Meaning |

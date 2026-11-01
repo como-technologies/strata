@@ -221,7 +221,7 @@ pub struct CandidateLayer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layer: Option<String>,
     /// `manifest` for a layer of manifests from no registry: it names no registry, and it needs
-    /// one manifest or more. Leave it out for a pack from a registry: the registry gives the type.
+    /// one manifest or more. Omit it for a pack from a registry: the registry gives the type.
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
     pub kind: Option<LayerKind>,
     /// The tag to pin: one of the registry's tags for the version, or the version itself. Defaults
@@ -235,7 +235,7 @@ pub struct CandidateLayer {
     /// The registry, by uid; overrides the top-level registry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub registry_uid: Option<String>,
-    /// The values YAML. Leave out both this and `valuesFile` for the pack's default values.
+    /// The values YAML. Omit both this and `valuesFile` for the pack's default values.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub values: Option<String>,
     /// A file with the values YAML, relative to the candidate file.

@@ -1,6 +1,6 @@
 {
   "_base": "identity-clean.json",
-  "_note": "a Pod Identity account for an AWS infrastructure cluster: the properties route refuses it",
+  "_note": "a Pod Identity account for an AWS infrastructure cluster: the property route refuses it",
   "_patch": {
     "account": {
       "spec": {

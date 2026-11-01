@@ -475,7 +475,7 @@ record.
 
 The listing can name a registry that then answers 404 for the pack. It does so
 for a pack that Spectro Cloud disabled or deleted: see
-[Pack states](#pack-states). In a FIPS tenant, the answer also leaves out each
+[Pack states](#pack-states). In a FIPS tenant, the answer also omits each
 version that is not FIPS compliant: see [The FIPS rule](#the-fips-rule).
 
 ## A pack that supports a cloud
@@ -630,7 +630,7 @@ whose annotation `fips` is `true` or `unknown`:
 | A new profile that pins another version | Palette refuses it with `PackForbidden` |
 
 Strata uses the registry answer, and does not copy the rule. `strata packs` and
-`strata behind` leave out a listed version that has no tag in the registry
+`strata behind` omit a listed version that has no tag in the registry
 answer. A version that Spectro Cloud retired as `disabled` or `deleted` stays.
 A 404 is an answer with no version, so a pack with no FIPS compliant version
 has no version to offer. Then `behind` says that the pinned version is absent.

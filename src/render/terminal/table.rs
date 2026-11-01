@@ -2,8 +2,8 @@
 
 use crate::term::color::Paint;
 
-/// The width of each column: its widest cell, leaving out the last cell of each row, which is
-/// never padded.
+/// The width of each column: its widest cell. The last cell of each row does not count, as strata
+/// never pads it.
 pub(super) fn column_widths(rows: &[Vec<String>]) -> Vec<usize> {
     let mut widths = Vec::new();
     for row in rows {

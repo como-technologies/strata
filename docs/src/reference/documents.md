@@ -557,7 +557,7 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
     the registry holds. `state` is `deprecated`,
     `disabled`, or `deleted` from `system_state` of the listing, or `disabled`
     for a version with the mark of Spectro Cloud. See
-    [Pack states](../internals/palette/packs.md#pack-states). Strata leaves out
+    [Pack states](../internals/palette/packs.md#pack-states). Strata omits
     the field when the listing gives none. `digest` is empty when the registry
     gives none. `paletteLatest`, only when true: the version that Palette calls
     the latest, from `metadata.annotations.latestVersion` of the listing.
@@ -569,12 +569,12 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
   - `tagsUnavailable`: `true` when Palette lists the pack under the registry and
     then answers 404 for its tags, also with the `states` query. Only the
     versions that Spectro Cloud retired as `disabled` or `deleted` come from
-    the listing, with no tags. When it is `false`, strata leaves out the field.
+    the listing, with no tags. When it is `false`, strata omits the field.
   - `state`: the state that every version in the registry has, when they all
-    have the same one. Strata leaves out the field otherwise.
+    have the same one. Strata omits the field otherwise.
   - `noDigests`: `true` when the registry gives no digest for each version of
     the pack, before `--latest` or `--cloud` cut the list. When it is `false`,
-    strata leaves out the field.
+    strata omits the field.
 
 ## strata-behind/1
 

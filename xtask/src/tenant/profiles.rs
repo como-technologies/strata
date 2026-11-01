@@ -288,7 +288,7 @@ impl Tenant {
     }
 
     /// Add one entry to the audit log of a resource: an update by the person of the examples.
-    /// The server leaves the time out of the query, so one file holds the log of the resource,
+    /// The server omits the time from the query, so one file holds the log of the resource,
     /// newest first, as Palette lists it. Each entry is one minute after the one before it. It
     /// gives the time of the entry.
     fn log_write(&self, project: &str, kind: &str, uid: &str, doc: &Value) -> String {

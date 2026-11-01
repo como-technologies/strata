@@ -102,7 +102,7 @@ See [A published version is edited in place](../use-cases/edited-in-place.md).
 ```
 
 `--no-verify`, or no API key where strata looks for one (`PALETTE_API_KEY`,
-`SPECTROCLOUD_APIKEY`, or `~/.palette.env`), leaves this check out. Then the
+`SPECTROCLOUD_APIKEY`, or `~/.palette.env`), omits this check. Then the
 last line says `not verified` and why, in place of the count of records that
 did not verify. See [Settings](../reference/settings.md).
 
@@ -116,7 +116,7 @@ cluster.
 | --- | --- | --- |
 | `--base BRANCH` | `CI_MERGE_REQUEST_TARGET_BRANCH_NAME`, or `GITHUB_BASE_REF` | The target branch. |
 | `--remote NAME` | `STRATA_REMOTE`, or `origin` | The remote to fetch the target branch from. |
-| `--no-verify` | | Leave the verify check out. |
+| `--no-verify` | | Omit the verify check. |
 | `--allow-rollback` | | Accept a backwards pin, as the `rollback` label does. |
 | `--allow-no-digest` | | Accept a pack with no upstream digest, as `verify --allow-no-digest` does. Without it, the gate names the record `UNVERIFIED`. |
 
@@ -179,7 +179,7 @@ jobs:
 | --- | --- | --- |
 | `records` | yes | The records, or patterns, in the checkout of the caller. |
 | `strata-version` | yes | The strata release, a tag of this repository. |
-| `verify` | no | `false` leaves the verify check out. Default `true`. |
+| `verify` | no | `false` omits the verify check. Default `true`. |
 | `rollback-label` | no | The label that allows a backwards pin. Default `rollback`. |
 | `allow-no-digest` | no | Accept a pack with no upstream digest, as `verify --allow-no-digest` does. Default `false`. |
 | `base` | no | The branch to merge in, when no event names it. A merge queue run needs it. |

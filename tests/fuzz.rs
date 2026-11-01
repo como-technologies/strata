@@ -496,7 +496,7 @@ fn the_fuzz_run_gives_junk_to_each_command_that_clap_names() {
     assert!(names.iter().any(|name| name == "compare"), "{names:?}");
     let commands = fuzz_commands();
     for name in names.iter().filter(|name| *name != "preflight") {
-        assert!(commands.contains(name), "the fuzz run leaves out {name}");
+        assert!(commands.contains(name), "the fuzz run omits {name}");
     }
     assert!(!commands.iter().any(|name| name == "preflight"));
 }

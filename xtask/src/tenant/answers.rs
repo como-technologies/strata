@@ -15,16 +15,16 @@ fn pack_result(pack: &str, code: &str, message: &str) -> Value {
     })
 }
 
-/// The entries of `packs.results` for a move that the pack `pack` does not allow on `clusters`:
-/// one error, `DependencyPackUpgradeNotSupported`. Empty when there is no refusal.
-fn upgrade_results(refusal: Option<(&str, &[&str])>) -> Vec<Value> {
+/// The entries of `packs.results` for a move that a pack does not allow on the clusters of the
+/// refusal: one error, `DependencyPackUpgradeNotSupported`. Empty when there is no refusal.
+fn upgrade_results(refusal: Option<UpgradeRefusal>) -> Vec<Value> {
     refusal
-        .map(|(pack, clusters)| {
+        .map(|UpgradeRefusal { pack, to, clusters }| {
             pack_result(
                 pack,
                 "DependencyPackUpgradeNotSupported",
                 &format!(
-                    "Pack '{pack}' cannot move to this version on the clusters: {}",
+                    "Pack upgrade to '{to}' is not compatible with the clusters '{}'",
                     clusters.join(", ")
                 ),
             )
@@ -67,6 +67,18 @@ pub struct PackRefusal<'a> {
     pub required: &'a str,
     /// The minimum version of the required pack.
     pub version: &'a str,
+}
+
+/// A refusal in the answer of `validate/packs` for a profile version: the pack `pack` cannot move
+/// to the version `to` on `clusters`, which run the version of the profile.
+#[derive(Debug, Clone, Copy)]
+pub struct UpgradeRefusal<'a> {
+    /// The name of the pack that does not move.
+    pub pack: &'a str,
+    /// The version that the pack moves to.
+    pub to: &'a str,
+    /// The names of the clusters that run the version of the profile.
+    pub clusters: &'a [&'a str],
 }
 
 /// An answer of a `validate/repave` route. It holds a repave for a kubeadm command when
@@ -218,15 +230,16 @@ impl Tenant {
     }
 
     /// The answer of `POST /v1/clusterprofiles/{uid}/validate/packs` for a move that a pack does
-    /// not allow on `clusters`, which run the version `profile`. Palette gives
+    /// not allow on the clusters of `refusal`, which run the version `profile`. Palette gives
     /// `DependencyPackUpgradeNotSupported` under `packs.results`, and names the clusters in the
-    /// message. With no refusal, Palette accepts. The text of the message is the stand-in's: a
-    /// live check records the text of Palette. The stand-in gives one answer for every request.
+    /// message. With no refusal, Palette accepts. The text of the message is the text of a live run
+    /// for one cluster. The join of several names is the stand-in's, and no run shows it. The
+    /// stand-in gives one answer for every request.
     pub fn profile_upgrade_answer(
         &self,
         project: &str,
         profile: &str,
-        refusal: Option<(&str, &[&str])>,
+        refusal: Option<UpgradeRefusal>,
     ) {
         self.write_profile_packs(project, Some(profile), upgrade_results(refusal));
     }
@@ -298,15 +311,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_upgrade_refusal_names_the_pack_and_the_clusters_in_the_message() {
-        let results = upgrade_results(Some(("csi-aws-ebs", &["payments", "billing"])));
+    fn the_upgrade_refusal_has_the_message_of_a_live_run_for_one_cluster() {
+        let refusal = |clusters| UpgradeRefusal {
+            pack: "kubernetes",
+            to: "1.37.0",
+            clusters,
+        };
+        let results = upgrade_results(Some(refusal(&["fred"])));
         assert_eq!(results.len(), 1);
-        assert_eq!(results[0]["name"], "csi-aws-ebs");
+        assert_eq!(results[0]["name"], "kubernetes");
         let error = &results[0]["errors"][0];
         assert_eq!(error["code"], "DependencyPackUpgradeNotSupported");
-        let message = error["message"].as_str().unwrap();
-        assert!(message.ends_with("payments, billing"), "{message}");
+        assert_eq!(
+            error["message"],
+            "Pack upgrade to '1.37.0' is not compatible with the clusters 'fred'"
+        );
         assert!(upgrade_results(None).is_empty());
+    }
+
+    #[test]
+    fn the_upgrade_refusal_joins_the_names_of_several_clusters() {
+        let refusal = UpgradeRefusal {
+            pack: "csi-aws-ebs",
+            to: "1.65.0",
+            clusters: &["payments", "billing"],
+        };
+        let results = upgrade_results(Some(refusal));
+        let message = results[0]["errors"][0]["message"].as_str().unwrap();
+        assert!(message.ends_with("'payments, billing'"), "{message}");
     }
 
     #[test]

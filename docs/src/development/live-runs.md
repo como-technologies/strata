@@ -1178,7 +1178,7 @@ needs the example at its baseline with cluster A.
 | `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` posts the markdown report of the static tier as the comment of the pull request. The comment starts with `<!-- strata-preflight -->` and holds the verdict of the static tier, `**OK: each counted check passed**`. |
 | `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it |
 | `preflight-offering` | 0 | #143: `instance-offering` asks the instance type route of the region with the account of the body, one request for all its pools, and passes: the type of the release body is offered in its zone |
-| `preflight-key-pair` | 0 | #433: the rule that reads the key pair of the body passes. On AWS it is `iaas-pod-identity`, which sends the key pair to the properties route. On EKS it is `ssh-key-pair`. A body on GCP or GKE has no key pair, and the check does not run. |
+| `preflight-key-pair` | 0 | #433: the rule that reads the key pair of the body passes. On AWS it is `iaas-pod-identity`, which sends the key pair to the property route. On EKS it is `ssh-key-pair`. A body on GCP or GKE has no key pair, and the check does not run. |
 | `preflight-fault` | 1 | #385: a body with a cloud account that the project lacks fails the gate `--strict`. |
 | `nightly` | 0 | #81: `verify-report.sh` finds every record unchanged |
 | `fleet`, `fleet-has-a` | 0 | #81: the fleet of a label holds cluster A |
@@ -1342,7 +1342,7 @@ puts `caught` in the ledger, and the clean entity of the same run puts `passed`.
 both results of `instance-offering` and `ssh-key-pair` for AWS.
 
 On AWS, the plan sends the key pair that the region lacks to `iaas-pod-identity`, because the
-properties route of AWS refuses it. The check `properties-key-pair` expects the report of that
+property route of AWS refuses it. The check `properties-key-pair` expects the report of that
 fault to name `AwsKeyPairNotFound` (no result yet). A call of the route by hand answered HTTP 500
 with that code: see [The property routes](../internals/palette/validate-routes.md#the-property-routes).
 
