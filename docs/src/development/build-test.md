@@ -74,7 +74,7 @@ is content: see [What the root does not cover](../internals/hashes.md#what-the-r
 | Who runs it | Directory | Examples |
 | --- | --- | --- |
 | A user, in a pipeline | `scripts/ci/` | `install-strata.sh`, `merge-gate.sh`, `verify-report.sh` |
-| A maintainer, for the repository | `scripts/dev/` | `build-book.sh`, `set-version.sh`, `tag-release.sh` |
+| A maintainer, for the repository | `scripts/dev/` | `build-book.sh`, `fuzz.sh`, `set-version.sh`, `tag-release.sh` |
 | A maintainer, for one crate or one example | beside that crate or example | `examples/live/`, `adapter/scripts/` |
 
 A script in `scripts/ci/` is a product: a page under Automation documents it, and
