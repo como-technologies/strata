@@ -2,12 +2,15 @@
 //! Palette that answers each request with one document, and the files of one input.
 
 use std::cell::{Cell, RefCell};
+use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use strata::Result;
-use strata::api::{PaletteApi, RawProfile};
+use strata::api::{PaletteApi, RawCluster, RawProfile, ReadErrors};
 use tempfile::TempDir;
 
 /// The uid of the profile that the targets build.
@@ -41,15 +44,57 @@ pub(crate) fn utf8(bytes: &[u8]) -> Option<&str> {
     std::str::from_utf8(bytes).ok()
 }
 
-/// The value of an answer of strata. An error is an answer when it has a kind, a JSON form with
-/// that kind, and the exit code `2`: the person can read it. A panic is not an answer.
+/// An error that a target checks, of strata or of strata-preflight.
+pub(crate) trait Refusal: Display {
+    /// The kind of the error.
+    fn kind(&self) -> &'static str;
+
+    /// The JSON form of the error.
+    fn to_json(&self) -> Value;
+
+    /// The exit code of the error, or `None` when the program gives no code for it.
+    fn exit_code(&self) -> Option<u8>;
+}
+
+impl Refusal for strata::Error {
+    fn kind(&self) -> &'static str {
+        strata::Error::kind(self)
+    }
+
+    fn to_json(&self) -> Value {
+        strata::Error::to_json(self)
+    }
+
+    fn exit_code(&self) -> Option<u8> {
+        Some(strata::Error::exit_code(self))
+    }
+}
+
+impl Refusal for strata_preflight::Error {
+    fn kind(&self) -> &'static str {
+        strata_preflight::Error::kind(self)
+    }
+
+    fn to_json(&self) -> Value {
+        strata_preflight::Error::to_json(self)
+    }
+
+    fn exit_code(&self) -> Option<u8> {
+        None
+    }
+}
+
+/// The value of an answer. An error is an answer when it has a kind, a JSON form with that kind,
+/// and the exit code `2` when it has a code: the person can read it. A panic is not an answer.
 #[track_caller]
-pub(crate) fn answer<T>(result: Result<T>) -> Option<T> {
+pub(crate) fn answer<T, E: Refusal>(result: std::result::Result<T, E>) -> Option<T> {
     match result {
         Ok(value) => Some(value),
         Err(e) => {
             assert!(!e.kind().is_empty(), "an error has a kind: {e}");
-            assert_eq!(e.exit_code(), 2, "an error exits with 2: {e}");
+            if let Some(code) = e.exit_code() {
+                assert_eq!(code, 2, "an error exits with 2: {e}");
+            }
             assert_eq!(
                 e.to_json()["kind"],
                 e.kind(),
@@ -85,7 +130,7 @@ pub(crate) fn raw_profile(values: &str, manifest: &str) -> RawProfile {
     }
 }
 
-/// The most requests that one document may cause. A read of a listing sends one request for each
+/// The most requests that one document can cause. A read of a listing sends one request for each
 /// page, and a read of a document of thousands of items sends a few for each item. A loop that
 /// does not stop sends more: with this limit it is a panic that a fuzzer reports, and not a run
 /// that never ends.
@@ -164,10 +209,74 @@ pub(crate) fn parts(bytes: &[u8]) -> impl Iterator<Item = &[u8]> {
     bytes.split(|&b| b == 0)
 }
 
-/// The FNV-1a hash of `bytes`: a fixed rule that does not change with the Rust version, for the
-/// name of a corpus file and for the choice of the fields of a mask.
-pub(crate) fn fnv1a(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| {
-        (hash ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+/// The first eight bytes of the SHA-256 digest of `bytes`, as a number: a fixed rule that does not
+/// change with the Rust version, for the name of a corpus file and for the choice of the fields of
+/// a mask.
+pub(crate) fn fingerprint(bytes: &[u8]) -> u64 {
+    let digest = Sha256::digest(bytes);
+    let head = <[u8; 8]>::try_from(&digest[..8]).expect("a SHA-256 digest has 32 bytes");
+    u64::from_be_bytes(head)
+}
+
+/// The names of the files that `save_dir` writes into an empty directory, sorted.
+fn saved_files(save: impl FnOnce(&Path)) -> Vec<String> {
+    let dir = TempDir::new().expect("a temporary directory");
+    save(dir.path());
+    let mut names: Vec<String> = fs::read_dir(dir.path())
+        .expect("the directory of a raw directory reads")
+        .map(|entry| {
+            entry
+                .expect("an entry reads")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    names.sort();
+    names
+}
+
+/// The files of a raw directory of a profile, in the order of the parts of an input. They are the
+/// files that `save_dir` writes for a profile that holds each document, so a file that a later
+/// version of strata adds is a part of each input.
+pub(crate) fn profile_files() -> &'static [String] {
+    static FILES: OnceLock<Vec<String>> = OnceLock::new();
+    FILES.get_or_init(|| {
+        let full = RawProfile {
+            manifest_entities: Some(json!([])),
+            resolved_values: Some(json!([])),
+            ..raw_profile("", "")
+        };
+        saved_files(|dir| full.save_dir(dir, AT).expect("a raw directory saves"))
+    })
+}
+
+/// The files of a raw directory of a cluster, in the order of the parts of an input. They are the
+/// files that `save_dir` writes for a cluster that holds each document and each read error.
+pub(crate) fn cluster_files() -> &'static [String] {
+    static FILES: OnceLock<Vec<String>> = OnceLock::new();
+    FILES.get_or_init(|| {
+        let why = Some("refused".to_string());
+        let full = RawCluster {
+            cluster: json!({}),
+            manifests: json!([]),
+            variables: json!([]),
+            variables_unavailable: false,
+            project_uid: None,
+            fetched_at: None,
+            notifications: Some(json!([])),
+            repave: Some(json!({})),
+            resolved_values: Some(json!([])),
+            cloud_config: Some(json!({})),
+            rbacs: Some(json!([])),
+            namespaces: Some(json!([])),
+            errors: ReadErrors {
+                notifications: why.clone(),
+                repave: why.clone(),
+                rbacs: why.clone(),
+                namespaces: why,
+            },
+        };
+        saved_files(|dir| full.save_dir(dir, AT).expect("a raw directory saves"))
     })
 }

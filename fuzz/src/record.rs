@@ -7,28 +7,7 @@ use strata::render::{Format, renderer};
 use strata::snapshot::Snapshot;
 use strata::term::color::Paint;
 
-use crate::support::{AT, answer, parts, scratch, write};
-
-/// The files of a raw directory of a profile, in the order of the parts of an input.
-const PROFILE_FILES: [&str; 6] = [
-    "profile.json",
-    "manifests.json",
-    "variables.json",
-    "scope.json",
-    "manifest-entities.json",
-    "resolved-values.json",
-];
-
-/// The files of a raw directory of a cluster, in the order of the parts of an input.
-const CLUSTER_FILES: [&str; 7] = [
-    RawCluster::MARKER,
-    "manifests.json",
-    "variables.json",
-    "scope.json",
-    RawCluster::NOTIFICATIONS,
-    "repave.json",
-    "errors.json",
-];
+use crate::support::{AT, answer, cluster_files, parts, profile_files, scratch, write};
 
 /// Make sure that `record` compares equal to itself: the comparison says it is the same, nothing
 /// differs, and each renderer shows it.
@@ -122,7 +101,7 @@ fn a_comparison_writes_the_document_it_reads() {
 /// Write the parts of `bytes` as the files `names` of a directory, and give the directory. An
 /// empty part is a file that the directory does not have: a raw directory of an older build has
 /// no file for a document that a newer build adds.
-fn raw_dir(bytes: &[u8], names: &[&str]) -> std::path::PathBuf {
+fn raw_dir(bytes: &[u8], names: &[String]) -> std::path::PathBuf {
     let dir = scratch();
     for (name, part) in names
         .iter()
@@ -137,7 +116,7 @@ fn raw_dir(bytes: &[u8], names: &[&str]) -> std::path::PathBuf {
 /// Read the parts of `bytes` as the files of a raw directory of a profile. Return true when the
 /// directory holds a record.
 pub(crate) fn profile_dir(bytes: &[u8]) -> bool {
-    let dir = raw_dir(bytes, &PROFILE_FILES);
+    let dir = raw_dir(bytes, profile_files());
     let Some(raw) = answer(RawProfile::load_dir(&dir)) else {
         return false;
     };
@@ -158,7 +137,7 @@ fn a_raw_directory_of_a_profile_builds_a_record_or_is_refused_with_a_kind() {
 /// Read the parts of `bytes` as the files of a raw directory of a cluster. Return true when the
 /// directory holds a record.
 pub(crate) fn cluster_dir(bytes: &[u8]) -> bool {
-    let dir = raw_dir(bytes, &CLUSTER_FILES);
+    let dir = raw_dir(bytes, cluster_files());
     let Some(raw) = answer(RawCluster::load_dir(&dir)) else {
         return false;
     };

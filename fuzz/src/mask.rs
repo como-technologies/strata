@@ -16,7 +16,7 @@ use strata::api::{MemoryApi, Palette, RawCluster, ReadErrors};
 use strata::term::progress::Progress;
 
 use crate::support::{
-    AT, UID, answer, fnv1a, manifests_route, pack_route, profile_route, scratch, utf8,
+    AT, UID, answer, fingerprint, manifests_route, pack_route, profile_route, scratch, utf8,
     variables_route,
 };
 
@@ -183,7 +183,7 @@ pub(crate) fn fields_of(values: &str) -> Vec<String> {
                 .last()
                 .is_some_and(|key| key.to_ascii_lowercase().contains("password"));
             // a fixed rule, so that a corpus file always chooses the same fields
-            if named || !fnv1a(field.as_bytes()).is_multiple_of(3) {
+            if named || !fingerprint(field.as_bytes()).is_multiple_of(3) {
                 fields.push(field);
             }
         }

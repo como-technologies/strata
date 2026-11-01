@@ -190,7 +190,7 @@ fn pack_ref(text: &str) -> Option<Ref> {
     };
     let registry = registry.filter(|r| !r.is_empty());
     // A pack ref with no registry prints with no `/` before the version. So a name with a `/` and
-    // no registry is no pack ref: its text would parse as another ref.
+    // no registry is no pack ref: its text parses as another ref.
     (!name.is_empty() && (registry.is_some() || !name.contains('/'))).then(|| Ref::Pack {
         registry: registry.map(str::to_string),
         name: name.to_string(),
@@ -540,7 +540,7 @@ mod tests {
     #[test]
     fn a_pack_ref_prints_as_the_pack_ref_that_it_is() {
         let no_files = |_: &Path| false;
-        // an empty registry is none, and a name with a `/` after none would print as a registry
+        // an empty registry is none, and a name with a `/` after none prints as a registry
         for text in ["pack:/x@1", "pack:Public Repo/x@1", "pack:a/b/c@1"] {
             let read = Ref::parse_with(text, no_files);
             assert!(matches!(read, Ref::Pack { .. }), "{text}");

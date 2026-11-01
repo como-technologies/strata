@@ -3,7 +3,7 @@
 //! `just fuzz-seed` writes the seeds into `src/__fuzz__/<module>__<test>/corpus/`, where bolero
 //! reads them. Each seed is a real input of the target: a file of `examples/`, a file of the
 //! catalog of strata-preflight, a file or an output of the book, or a document that the library
-//! builds from them. A file has the name `fnv1a` gives its bytes, so a second run changes no file.
+//! builds from them. A file has the name `fingerprint` gives its bytes, so a second run changes no file.
 //!
 //! A seed makes a fuzzer start in the code, and not at the first byte that a parser refuses. The
 //! check at the end of this file fails when the seeds of a target stop reaching its code, for
@@ -19,7 +19,7 @@ use strata::ops;
 use strata::snapshot::Snapshot;
 use strata_preflight::catalog;
 
-use crate::support::{AT, fnv1a, raw_profile, scratch, utf8};
+use crate::support::{AT, cluster_files, fingerprint, profile_files, raw_profile, scratch, utf8};
 use crate::{candidate, canon, mask, palette, preflight, record, reference};
 
 /// The most bytes of a seed that a file gives. A longer file is a poor start for a fuzzer: each
@@ -199,7 +199,7 @@ const YAML_CASES: [&str; 22] = [
     "a: 1.0\nb: 1e3\nc: .inf\nd: -.inf\ne: .nan\nf: 0x1F\ng: 0o17\nh: 1_000\n",
 ];
 
-/// The files of the repository that hold YAML that a pack could hold: values, manifests, and the
+/// The files of the repository that hold YAML that a pack can hold: values, manifests, and the
 /// files of a workflow.
 const YAML_FILES: [&str; 8] = [
     "examples/live/chart/strata-live-chart/values.yaml",
@@ -473,7 +473,7 @@ fn comparisons() -> Vec<Vec<u8>> {
 
 /// The parts of a raw directory that `save` wrote, in the order of `names`, with a NUL byte
 /// between them: the input of the target of that directory.
-fn directory_input(names: &[&str], save: impl FnOnce(&Path)) -> Vec<u8> {
+fn directory_input(names: &[String], save: impl FnOnce(&Path)) -> Vec<u8> {
     let dir = scratch().join("seed");
     save(&dir);
     let mut input = Vec::new();
@@ -488,14 +488,6 @@ fn directory_input(names: &[&str], save: impl FnOnce(&Path)) -> Vec<u8> {
 
 /// The seeds of the raw directory of a profile.
 fn profile_dirs() -> Vec<Vec<u8>> {
-    let names = [
-        "profile.json",
-        "manifests.json",
-        "variables.json",
-        "scope.json",
-        "manifest-entities.json",
-        "resolved-values.json",
-    ];
     let mut raws = real_profiles();
     raws.extend(
         yaml_texts()
@@ -507,7 +499,7 @@ fn profile_dirs() -> Vec<Vec<u8>> {
     );
     raws.iter()
         .map(|raw| {
-            directory_input(&names, |dir| {
+            directory_input(profile_files(), |dir| {
                 raw.save_dir(dir, AT).expect("a raw directory saves")
             })
         })
@@ -516,17 +508,8 @@ fn profile_dirs() -> Vec<Vec<u8>> {
 
 /// The seeds of the raw directory of a cluster.
 fn cluster_dirs() -> Vec<Vec<u8>> {
-    let names = [
-        RawCluster::MARKER,
-        "manifests.json",
-        "variables.json",
-        "scope.json",
-        RawCluster::NOTIFICATIONS,
-        "repave.json",
-        "errors.json",
-    ];
     let raw = real_cluster();
-    vec![directory_input(&names, |dir| {
+    vec![directory_input(cluster_files(), |dir| {
         raw.save_dir(dir, AT).expect("a raw directory saves")
     })]
 }
@@ -657,7 +640,7 @@ fn write_the_seed_corpus() {
         let dir = directory(target.test, "corpus");
         for seed in (target.seeds)() {
             if seed.len() <= SEED_LIMIT * 4 {
-                put(&dir, &format!("{:016x}", fnv1a(&seed)), &seed);
+                put(&dir, &format!("{:016x}", fingerprint(&seed)), &seed);
             }
         }
     }
@@ -667,7 +650,7 @@ fn write_the_seed_corpus() {
 }
 
 /// The modules of the targets are the files of this crate, and each target is a test of its module.
-/// A name in `TARGETS` that no test has would send its seeds to a directory that no test reads.
+/// A name in `TARGETS` that no test has sends its seeds to a directory that no test reads.
 #[test]
 fn each_target_names_a_test_of_its_module() {
     for target in &TARGETS {

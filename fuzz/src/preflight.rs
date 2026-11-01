@@ -3,29 +3,10 @@
 use std::path::Path;
 
 use serde_json::Value;
-use strata_preflight::Result;
 use strata_preflight::jq::Jq;
 use strata_preflight::rule::Catalog;
 
-use crate::support::{parts, utf8};
-
-/// The value of an answer of strata-preflight. An error is an answer when it has a kind and a JSON
-/// form with that kind. A panic is not an answer.
-#[track_caller]
-fn answer<T>(result: Result<T>) -> Option<T> {
-    match result {
-        Ok(value) => Some(value),
-        Err(e) => {
-            assert!(!e.kind().is_empty(), "an error has a kind: {e}");
-            assert_eq!(
-                e.to_json()["kind"],
-                e.kind(),
-                "the JSON form names the kind: {e}"
-            );
-            None
-        }
-    }
-}
+use crate::support::{answer, parts, utf8};
 
 /// Read the text of `bytes` as a rule file. Return true when the file is a section of rules.
 ///

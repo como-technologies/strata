@@ -389,7 +389,7 @@ impl<A: PaletteApi> Palette<A> {
     /// `path` is the first page, with its query when it has one, and `fetch` reads one page at a
     /// path. `listmeta.continue` names the next page, and is empty on the last one. A page with no
     /// items ends the listing too, and `items: null` is such a page. So does a page that names
-    /// the page that it is: Palette would give it again for ever.
+    /// the page that it is: Palette gives it again, and the listing never ends.
     fn each_continue_page(
         &self,
         path: &str,
