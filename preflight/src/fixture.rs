@@ -27,10 +27,12 @@ use crate::error::{Error, Result};
 /// # Errors
 ///
 /// [`Error::Io`] when strata-preflight cannot read a fixture or a base. [`Error::Input`] when a
-/// fixture is not JSON, or when its chain of `_base` is longer than 8.
+/// fixture is not a JSON object, or its `_patch` is not one, or its chain of `_base` is longer than
+/// 8. Also when the fixture has a `clusterUid`, and its `entity` or the `metadata` of its `entity`
+/// is neither an object nor `null`.
 pub fn load(path: &Path) -> Result<Value> {
     let mut doc = load_depth(path, 0)?;
-    crate::world::add_derived_fields(&mut doc);
+    crate::world::add_derived_fields(&mut doc)?;
     Ok(doc)
 }
 
@@ -45,11 +47,18 @@ fn load_depth(path: &Path, depth: u32) -> Result<Value> {
         message: format!("{}: not JSON: {e}", path.display()),
     })?;
     let Some(base) = opt_text(&doc, "/_base") else {
-        return Ok(doc);
+        return if doc.is_object() {
+            Ok(doc)
+        } else {
+            Err(not_an_object(path, "the fixture"))
+        };
     };
     let base_path = path.parent().unwrap_or(Path::new(".")).join(&base);
     let mut out = load_depth(&base_path, depth + 1)?;
     if let Some(patch) = doc.get("_patch") {
+        if !patch.is_object() {
+            return Err(not_an_object(path, "_patch"));
+        }
         crate::world::merge(&mut out, patch);
     }
     for pointer in strings(&doc, "/_delete") {
@@ -65,6 +74,14 @@ fn load_depth(path: &Path, depth: u32) -> Result<Value> {
         }
     }
     Ok(out)
+}
+
+/// The error for a `what` of the file `path` that is not a JSON object. The world is an object: the
+/// loader writes the derived fields into it.
+fn not_an_object(path: &Path, what: &str) -> Error {
+    Error::Input {
+        message: format!("{}: {what} is not a JSON object", path.display()),
+    }
 }
 
 /// Remove the value at a JSON pointer, when it is there.
@@ -136,5 +153,59 @@ mod tests {
             "an eks fixture has the account of aws"
         );
         assert_eq!(w["routeCloud"], "eks");
+    }
+
+    #[test]
+    fn a_fixture_with_a_cluster_uid_and_a_metadata_that_is_not_an_object_is_an_input_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("world.json");
+        let write = |doc: Value| std::fs::write(&path, doc.to_string()).unwrap();
+        write(json!({"clusterUid": "c1", "entity": {"metadata": 5, "spec": {}}}));
+        let err = load(&path).unwrap_err();
+        assert_eq!(err.kind(), "input");
+        assert!(
+            err.to_string()
+                .starts_with("entity.metadata is not an object"),
+            "{err}"
+        );
+        write(json!({"clusterUid": "c1", "entity": [1]}));
+        assert_eq!(load(&path).unwrap_err().kind(), "input");
+        write(json!({"clusterUid": "c1", "entity": {"metadata": {"name": "a"}, "spec": {}}}));
+        assert_eq!(
+            load(&path).unwrap()["validateBody"]["metadata"]["name"],
+            "a-preflight"
+        );
+    }
+
+    #[test]
+    fn a_fixture_or_a_patch_that_is_not_a_json_object_is_an_input_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("world.json");
+        let write = |doc: &str| std::fs::write(&path, doc).unwrap();
+        for doc in ["5", "[]", "\"world\"", "null"] {
+            write(doc);
+            let err = load(&path).unwrap_err();
+            assert_eq!(err.kind(), "input", "{doc}");
+            assert!(
+                err.to_string()
+                    .ends_with("the fixture is not a JSON object"),
+                "{err}"
+            );
+        }
+        std::fs::write(dir.path().join("clean.json"), "{}").unwrap();
+        write(r#"{"_base": "clean.json", "_patch": 5, "_note": "n"}"#);
+        let err = load(&path).unwrap_err();
+        assert_eq!(err.kind(), "input");
+        assert!(
+            err.to_string().ends_with("_patch is not a JSON object"),
+            "{err}"
+        );
+        std::fs::write(dir.path().join("clean.json"), "5").unwrap();
+        write(r#"{"_base": "clean.json", "_note": "n"}"#);
+        assert_eq!(
+            load(&path).unwrap_err().kind(),
+            "input",
+            "a base is a fixture too"
+        );
     }
 }

@@ -1,0 +1,1 @@
+{"_base": "clean.json", "_note": "one pool", "_patch": {"entity": {"spec": {"machinepoolconfig": [{"poolConfig": {"name": "worker-pool", "size": 0}}]}}}, "_delete": ["/entity/metadata/name"]}

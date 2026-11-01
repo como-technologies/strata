@@ -1,0 +1,20 @@
+{
+  "_base": "clean.json",
+  "_note": "no pool has managedPoolConfig.isSystemNodePool",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          {
+            "managedPoolConfig": {
+              "isSystemNodePool": false
+            },
+            "poolConfig": {
+              "name": "system-pool"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

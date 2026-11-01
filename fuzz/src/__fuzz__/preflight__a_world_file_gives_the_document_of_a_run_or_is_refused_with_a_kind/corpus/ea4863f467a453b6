@@ -1,0 +1,20 @@
+{
+  "_base": "clean.json",
+  "_note": "the second host of the worker pool runs a 4.7 agent on a 4.10 Palette",
+  "_patch": {
+    "_responses": {
+      "GET /v1/edgehosts/edge-host-w-2": {
+        "body": {
+          "spec": {
+            "version": "4.7.16"
+          },
+          "status": {
+            "health": {
+              "agentVersion": "4.7.16"
+            }
+          }
+        }
+      }
+    }
+  }
+}

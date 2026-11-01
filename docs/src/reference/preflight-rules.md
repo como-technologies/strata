@@ -247,6 +247,11 @@ for `cluster:UID`: the validate route refuses the name of a cluster that Palette
 holds. A rule that asks the validate route gives `body: .validateBody`. A run
 sends the request one time, however many rules give it.
 
+A world with a `clusterUid` must put the new name in `metadata`. If its
+`entity`, or the `metadata` of its `entity`, is neither an object nor `null`, the
+world is an `input` error. The name must not replace that value. A world with no
+`clusterUid` sends its entity as it is, and the validate route answers for it.
+
 A record is a `strata-snapshot/1` document: `source.{uid, name, version,
 cloudType}` and `packs[].{layer, name, version, tag, packUid, registryUid,
 values, valuesCanon, hash}`. `valuesCanon` is the values YAML as JSON, so a
@@ -274,6 +279,10 @@ by its name, a profile by its uid, a variable by its name; another list
 replaces. A `_responses` beside `_base` replaces the answers of the base, so put
 it in `_patch` to add to them. `_delete` removes each JSON pointer. The test of
 the catalog runs every fixture, and refuses a fixture that no rule names.
+
+A fixture, its base, and its `_patch` are JSON objects. If one is not, the load
+gives an `input` error. The same error comes for a fixture with a `clusterUid` and
+an `entity`, or a `metadata`, that is neither an object nor `null`.
 
 ## The ledger
 

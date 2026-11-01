@@ -152,10 +152,12 @@ pub(crate) fn first_nonempty(candidates: &[&str]) -> String {
         .map_or_else(String::new, |c| (*c).to_string())
 }
 
-/// Put `value` at the object keys `keys` of `doc`. A value on the way that is not an object becomes
-/// one, as a null does for the index of `serde_json`. That index panics for any other value, and
-/// Palette can answer a document whose `spec` is a number.
-pub(crate) fn set_at(doc: &mut Value, keys: &[&str], value: Value) {
+/// Put `value` at the object keys `keys` of `doc`.
+///
+/// A value on the way that is not an object becomes one, as a null does for the index of
+/// `serde_json`. That index panics for any other value, and Palette can answer a document whose
+/// `spec` is a number. So a caller that must keep such a value checks it before the call.
+pub fn set_at(doc: &mut Value, keys: &[&str], value: Value) {
     let Some((first, rest)) = keys.split_first() else {
         *doc = value;
         return;

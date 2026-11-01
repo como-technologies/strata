@@ -115,12 +115,13 @@ fn the_world_gives_the_account_kind_and_the_route_cloud_of_each_engine() {
             cloud: engine.to_string(),
             ..World::default()
         }
-        .to_value();
+        .to_value()
+        .unwrap();
         assert_eq!(world["accountKind"], account_kind(engine), "{engine}");
         assert_eq!(world["routeCloud"], route_cloud(engine), "{engine}");
     }
     let mut no_cloud = json!({"entity": {}});
-    add_derived_fields(&mut no_cloud);
+    add_derived_fields(&mut no_cloud).unwrap();
     assert_eq!(
         no_cloud["accountKind"],
         Value::Null,
@@ -142,7 +143,8 @@ fn the_edge_hosts_of_the_world_are_the_hosts_of_each_pool_with_the_pool_in_order
         entity,
         ..World::default()
     }
-    .to_value();
+    .to_value()
+    .unwrap();
     assert_eq!(
         world["edgeHosts"],
         json!([
@@ -151,7 +153,7 @@ fn the_edge_hosts_of_the_world_are_the_hosts_of_each_pool_with_the_pool_in_order
             {"pool": {"name": "worker"}, "host": {"hostUid": "h3"}},
         ])
     );
-    assert_eq!(World::default().to_value()["edgeHosts"], json!([]));
+    assert_eq!(World::default().to_value().unwrap()["edgeHosts"], json!([]));
 }
 
 #[test]
@@ -162,7 +164,8 @@ fn the_validate_body_is_the_entity_and_for_an_existing_cluster_it_has_a_name_of_
         entity: entity.clone(),
         ..World::default()
     }
-    .to_value();
+    .to_value()
+    .unwrap();
     assert_eq!(file["validateBody"], entity);
     let cluster = World {
         cloud: "aws".to_string(),
@@ -170,7 +173,8 @@ fn the_validate_body_is_the_entity_and_for_an_existing_cluster_it_has_a_name_of_
         cluster_uid: Some("c1".to_string()),
         ..World::default()
     }
-    .to_value();
+    .to_value()
+    .unwrap();
     assert_eq!(
         cluster["validateBody"]["metadata"]["name"],
         "barney-preflight"
@@ -188,7 +192,8 @@ fn the_validate_body_is_the_entity_and_for_an_existing_cluster_it_has_a_name_of_
         cluster_uid: Some("c1".to_string()),
         ..World::default()
     }
-    .to_value();
+    .to_value()
+    .unwrap();
     assert_eq!(
         unnamed["validateBody"]["metadata"]["name"],
         "cluster-preflight"
@@ -320,7 +325,7 @@ fn a_world_of_a_file_needs_a_cloud_it_can_name() {
     let w = World::from_file(&p, Some("eks")).unwrap();
     assert_eq!(w.cloud, "eks");
     assert_eq!(
-        w.to_value()["entity"]["spec"]["cloudConfig"]["region"],
+        w.to_value().unwrap()["entity"]["spec"]["cloudConfig"]["region"],
         "us-east-2"
     );
     let err = World::from_file(&p, Some("mars")).unwrap_err();
@@ -486,5 +491,67 @@ fn a_change_merges_the_variables_of_a_profile_by_name_and_keeps_the_rest() {
             {"name": "region", "value": "eu-west-3"}
         ]),
         "a variable of the change replaces its value, a new name is added, the rest stays"
+    );
+}
+
+#[test]
+fn a_world_of_an_existing_cluster_whose_entity_or_metadata_is_not_an_object_is_an_input_error() {
+    let existing = |entity: Value| World {
+        cloud: "aws".to_string(),
+        entity,
+        cluster_uid: Some("c1".to_string()),
+        ..World::default()
+    };
+    for metadata in [json!(5), json!("barney"), json!([1]), json!(true)] {
+        let err = existing(json!({"metadata": metadata, "spec": {}}))
+            .to_value()
+            .unwrap_err();
+        assert_eq!(err.kind(), "input", "{metadata}");
+        assert!(
+            err.to_string()
+                .starts_with("entity.metadata is not an object"),
+            "{err}"
+        );
+    }
+    for entity in [json!(5), json!("barney"), json!([{"spec": {}}])] {
+        let err = existing(entity.clone()).to_value().unwrap_err();
+        assert_eq!(err.kind(), "input", "{entity}");
+        assert!(
+            err.to_string().starts_with("entity is not an object"),
+            "{err}"
+        );
+    }
+}
+
+#[test]
+fn a_world_of_an_existing_cluster_names_the_validate_body_when_the_metadata_or_the_entity_is_null()
+{
+    for entity in [Value::Null, json!({"metadata": null, "spec": {}})] {
+        let world = World {
+            entity,
+            cluster_uid: Some("c1".to_string()),
+            ..World::default()
+        }
+        .to_value()
+        .unwrap();
+        assert_eq!(
+            world["validateBody"]["metadata"]["name"],
+            "cluster-preflight"
+        );
+    }
+}
+
+#[test]
+fn a_world_with_no_cluster_sends_a_metadata_that_is_not_an_object_as_it_is() {
+    let entity = json!({"metadata": "barney", "spec": {}});
+    let world = World {
+        entity: entity.clone(),
+        ..World::default()
+    }
+    .to_value()
+    .unwrap();
+    assert_eq!(
+        world["validateBody"], entity,
+        "Palette answers for a body that it cannot read"
     );
 }

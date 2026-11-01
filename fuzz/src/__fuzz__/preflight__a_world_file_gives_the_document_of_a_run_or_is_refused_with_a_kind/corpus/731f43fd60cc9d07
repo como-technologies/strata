@@ -1,0 +1,6 @@
+metadata:
+  name: demo
+spec:
+  cloudConfig:
+    region: us-east-1
+    vpcId: vpc-1

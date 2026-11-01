@@ -17,10 +17,11 @@ use serde_json::{Value, json};
 use strata::api::{RawCluster, RawProfile};
 use strata::ops;
 use strata::snapshot::Snapshot;
-use strata_preflight::catalog;
 
 use crate::support::{AT, cluster_files, fingerprint, profile_files, raw_profile, scratch, utf8};
 use crate::{candidate, canon, mask, palette, preflight, record, reference};
+
+mod catalog;
 
 /// The most bytes of a seed that a file gives. A longer file is a poor start for a fuzzer: each
 /// input of it costs more, and libFuzzer keeps its inputs short.
@@ -37,7 +38,7 @@ struct Target {
 }
 
 /// Each target that reads bytes. The property tests of `properties.rs` build their input.
-const TARGETS: [Target; 13] = [
+const TARGETS: [Target; 14] = [
     Target {
         test: "candidate::a_candidate_file_loads_as_the_candidate_it_writes_or_is_refused_with_a_kind",
         run: candidate::file,
@@ -96,12 +97,17 @@ const TARGETS: [Target; 13] = [
     Target {
         test: "preflight::a_rule_file_loads_as_the_section_it_writes_or_is_refused_with_a_kind",
         run: preflight::rule_file,
-        seeds: rule_files,
+        seeds: catalog::rule_files,
     },
     Target {
         test: "preflight::a_jq_program_compiles_and_runs_or_is_refused_with_a_kind",
         run: preflight::jq_program,
-        seeds: jq_programs,
+        seeds: catalog::jq_programs,
+    },
+    Target {
+        test: "preflight::a_world_file_gives_the_document_of_a_run_or_is_refused_with_a_kind",
+        run: preflight::world_file,
+        seeds: catalog::world_files,
     },
 ];
 
@@ -114,6 +120,7 @@ fn regressions() -> Vec<(&'static str, &'static str, Vec<u8>)> {
         "palette::an_answer_of_palette_of_any_shape_gives_a_record_or_an_error_with_a_kind";
     let a_ref = "reference::the_text_of_a_ref_parses_as_a_ref_that_prints_the_same_text";
     let jq = "preflight::a_jq_program_compiles_and_runs_or_is_refused_with_a_kind";
+    let world = "preflight::a_world_file_gives_the_document_of_a_run_or_is_refused_with_a_kind";
     // a program of 3000 levels: jaq reads each level with a call, and the stack ends first
     let deep = format!("{}1{}", "(".repeat(3000), ")".repeat(3000));
     vec![
@@ -143,7 +150,19 @@ fn regressions() -> Vec<(&'static str, &'static str, Vec<u8>)> {
         // A ref that prints as the text of another ref: no registry, and a `/` in the name.
         (a_ref, "pack-ref-with-no-registry-and-a-slash", b"pack://x@1".to_vec()),
         (a_ref, "pack-ref-with-a-slash-in-the-name", b"pack:/xergroup:a/b@1".to_vec()),
+        // A cluster ref with a slash after `@pending` was the uid `c1@pending`, and it printed as the
+        // text of the update that waits for `c1`.
+        (a_ref, "cluster-ref-with-a-slash-after-pending", b"cluster:c1@pending/".to_vec()),
+        // A tag ref with no label was a set of clusters, and it printed as `tag:`, which is a uid.
+        (a_ref, "tag-ref-with-no-label", b"tag:+".to_vec()),
         (jq, "a-program-of-3000-levels", deep.into_bytes()),
+        // The validate body of an existing cluster wrote its name into a `metadata` that is a number,
+        // and the index of `serde_json` panicked.
+        (
+            world,
+            "a-cluster-uid-and-a-metadata-that-is-a-number",
+            br#"{"clusterUid": "c1", "entity": {"metadata": 5, "spec": {}}}"#.to_vec(),
+        ),
     ]
 }
 
@@ -261,7 +280,7 @@ fn candidate_files() -> Vec<Vec<u8>> {
 // ---- refs and versions ----------------------------------------------------------------------
 
 /// One ref of each shape that `Ref::parse` knows, and the texts that sit near a shape.
-const REF_CASES: [&str; 40] = [
+const REF_CASES: [&str; 42] = [
     "aws-stack@1.1.1",
     "aws-stack@latest",
     "64e2000000000000000000a1",
@@ -271,6 +290,7 @@ const REF_CASES: [&str; 40] = [
     "cluster:64f1000000000000000000e1/aws-stack",
     "cluster:64f1000000000000000000e1@pending",
     "cluster:64f1000000000000000000e1/aws-stack@pending",
+    "cluster:64f1000000000000000000e1@pending/",
     "cluster:",
     "cluster:/aws-stack",
     "edgehost:64f1000000000000000000e1/aws-stack",
@@ -286,6 +306,7 @@ const REF_CASES: [&str; 40] = [
     "pack:/x@1",
     "tag:env=prod",
     "tag:env=prod+team=a",
+    "tag:+",
     "tag:",
     "filter:prod-clusters",
     "filter:",
@@ -545,62 +566,6 @@ fn answers() -> Vec<Vec<u8>> {
         .iter()
         .map(|d| serde_json::to_vec(d).expect("a document is JSON"))
         .collect()
-}
-
-// ---- strata-preflight -----------------------------------------------------------------------
-
-/// The seeds of the rule file: the first and the last three rules of each file of the catalog,
-/// each as a section of its own.
-fn rule_files() -> Vec<Vec<u8>> {
-    let mut seeds = Vec::new();
-    for entry in fs::read_dir(catalog::rules_dir())
-        .expect("the rules are there")
-        .flatten()
-    {
-        let path = entry.path();
-        if path.extension().is_none_or(|e| e != "yaml") {
-            continue;
-        }
-        let section: serde_yaml::Value =
-            serde_yaml::from_slice(&fs::read(&path).expect("a rule file reads")).expect("YAML");
-        let rules = section["rules"].as_sequence().cloned().unwrap_or_default();
-        let first: Vec<_> = rules.iter().take(3).cloned().collect();
-        let last: Vec<_> = rules.iter().rev().take(3).cloned().collect();
-        for chunk in [first, last] {
-            let mut part = section.clone();
-            part["rules"] = serde_yaml::Value::Sequence(chunk);
-            seeds.push(serde_yaml::to_string(&part).expect("YAML").into_bytes());
-        }
-    }
-    seeds
-}
-
-/// The seeds of the jq engine: the program of the check of each rule of the catalog, with the
-/// fixture of its test when it is short.
-fn jq_programs() -> Vec<Vec<u8>> {
-    let catalog = catalog::builtin().expect("the catalog loads");
-    let mut seeds = Vec::new();
-    for rule in catalog.rules() {
-        let fixture = rule
-            .tests
-            .iter()
-            .filter_map(|t| t.fault.as_ref().or(t.clean.as_ref()))
-            .find_map(|path| fs::read(path).ok())
-            .filter(|bytes| bytes.len() <= 4096)
-            .unwrap_or_else(|| b"{}".to_vec());
-        for program in rule
-            .check
-            .iter()
-            .map(|c| c.expr())
-            .chain(rule.when.as_deref())
-        {
-            let mut input = program.as_bytes().to_vec();
-            input.push(0);
-            input.extend(&fixture);
-            seeds.push(input);
-        }
-    }
-    seeds
 }
 
 // ---- the files of the corpus ----------------------------------------------------------------

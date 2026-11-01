@@ -545,3 +545,31 @@ rules:
         lines[2]
     );
 }
+
+#[test]
+fn a_run_of_an_existing_cluster_whose_metadata_is_not_an_object_is_an_input_error() {
+    let c = catalog();
+    let (backend, _) = FixtureBackend::split(json!({}));
+    let mut existing = world(4);
+    existing.cluster_uid = Some("c1".into());
+    existing.entity["metadata"] = json!("fred");
+    let err = run(RunInputs {
+        catalog: &c,
+        world: &existing,
+        backend: &backend,
+        ledger: &Ledger::default(),
+        selection: &Selection::default(),
+        now: "2026-09-30T00:00:00Z",
+        out_dir: None,
+        progress: &Progress::silent(),
+        verbose: false,
+        paint: Paint::off(),
+    })
+    .unwrap_err();
+    assert_eq!(err.kind(), "input");
+    assert!(
+        err.to_string()
+            .starts_with("entity.metadata is not an object"),
+        "{err}"
+    );
+}

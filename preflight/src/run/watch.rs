@@ -121,8 +121,9 @@ struct Ended {
 ///
 /// # Errors
 ///
-/// [`Error::Usage`] when the world names no cluster. The error of the first reading that fails:
-/// see [`Error::Palette`].
+/// [`Error::Usage`] when the world names no cluster. [`Error::Input`] when the world cannot give its
+/// document: see [`World::to_value`]. The error of the first reading that fails: see
+/// [`Error::Palette`].
 pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value)> {
     let uid =
         inputs.world.cluster_uid.clone().ok_or_else(|| {
@@ -133,7 +134,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
     }
         })?;
     let jq = Jq::new();
-    let base = inputs.world.to_value();
+    let base = inputs.world.to_value()?;
     let rules = watch_rules(&inputs, &jq, &base);
     let started = Instant::now();
     if inputs.verbose {

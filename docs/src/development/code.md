@@ -78,10 +78,13 @@ where each module goes.
   of a value in a module. The rule holds for `preflight/` and `adapter/` too.
   `text`, `str_at`, `text_or`, `opt_text`, `opt_str`, `arr`, `strings`,
   `text_map`, `flag`, `opt_flag`, `value_at`, `value_or_null`, and
-  `value_or_empty_object` are public for them. Make another helper public when a
-  package outside this crate needs it, not before.
+  `value_or_empty_object` are public for them. `set_at` is public too, for the
+  write below. Make another helper public when a package outside this crate
+  needs it, not before.
 - Write a field with `set_at`. The index of `serde_json` panics for a value that
-  is not an object.
+  is not an object. `set_at` makes an object of that value. When the value must
+  stay, check it first. An entity whose `metadata` is a number is an error, and
+  the name must not replace it.
 - The records of strata are typed structs. Give each one
   `#[serde(rename_all = "camelCase")]`, `skip_serializing_if` for an empty
   field, `#[serde(default)]` for a field that an older record does not have,

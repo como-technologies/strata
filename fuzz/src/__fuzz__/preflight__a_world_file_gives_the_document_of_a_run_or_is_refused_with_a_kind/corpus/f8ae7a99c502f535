@@ -1,0 +1,22 @@
+{
+  "_base": "cpu-quota-clean.json",
+  "_note": "the region has 4 free CPUs (limit 24, usage 20), and the pool asks for 12",
+  "_patch": {
+    "_exec": {
+      "gcloud compute regions describe us-east1 --project strata-lab --format json": {
+        "exit": 0,
+        "stdout": {
+          "name": "us-east1",
+          "status": "UP",
+          "quotas": [
+            { "metric": "CPUS", "limit": 24.0, "usage": 20.0 },
+            { "metric": "IN_USE_ADDRESSES", "limit": 8.0, "usage": 0.0 },
+            { "metric": "SSD_TOTAL_GB", "limit": 500.0, "usage": 0.0 },
+            { "metric": "INSTANCE_GROUPS", "limit": 100.0, "usage": 0.0 }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

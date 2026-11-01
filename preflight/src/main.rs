@@ -517,7 +517,10 @@ fn write_out(
         "report.html",
         report::render(report, Format::Html, false, &off),
     )?;
-    let mut world_value = reading.cloned().unwrap_or_else(|| world.to_value());
+    let mut world_value = match reading {
+        Some(read) => read.clone(),
+        None => world.to_value()?,
+    };
     strata_preflight::world::redact_for_output(&mut world_value);
     write(
         "world.json",

@@ -1,0 +1,11 @@
+{
+  "_base": "clean.json",
+  "_note": "an API endpoint with no scheme and no /MAAS path",
+  "_patch": {
+    "account": {
+      "spec": {
+        "apiEndpoint": "10.10.128.10:5240"
+      }
+    }
+  }
+}

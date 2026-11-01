@@ -1,0 +1,30 @@
+{
+  "_base": "eks-addon-version-clean.json",
+  "_note": "no version of eks-pod-identity-agent is the default for 1.32",
+  "_patch": {
+    "_exec": {
+      "aws eks describe-addon-versions --kubernetes-version 1.32 --addon-name eks-pod-identity-agent --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "addons": [
+            {
+              "addonName": "eks-pod-identity-agent",
+              "type": "security",
+              "addonVersions": [
+                {
+                  "addonVersion": "v1.4.0-eksbuild.2",
+                  "compatibilities": [ { "clusterVersion": "1.32", "platformVersions": ["*"], "defaultVersion": false } ]
+                },
+                {
+                  "addonVersion": "v1.4.0-eksbuild.1",
+                  "compatibilities": [ { "clusterVersion": "1.32", "platformVersions": ["*"], "defaultVersion": false } ]
+                }
+              ]
+            }
+          ]
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

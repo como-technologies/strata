@@ -1,0 +1,20 @@
+{
+  "_base": "clean.json",
+  "_note": "a bring-your-own-image OS pack names its AMI, whose snapshot is 20 GB; the pools ask for 60 GB",
+  "_patch": {
+    "packs": {
+      "pk-os-aws": {
+        "packValues": [
+          { "packUid": "pk-os-aws", "annotations": { "imageId": "ami-0abcdef1234567890", "imageOwner": "123456789012", "cloudRegion": "us-east-2", "osName": "ubuntu", "os_spectro_version": "0", "sshUsername": "ubuntu" } }
+        ]
+      }
+    },
+    "_responses": {
+      "GET /v1/clouds/aws/imageIds/ami-0abcdef1234567890/volumeSize?region=us-east-2&cloudAccountUid=acc-aws-1": {
+        "ok": true,
+        "status": 200,
+        "body": { "sizeGB": 20 }
+      }
+    }
+  }
+}
