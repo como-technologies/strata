@@ -121,6 +121,48 @@ fn a_custom_probes_file_runs_beside_the_catalog_and_strict_counts_it() {
 }
 
 #[test]
+fn a_probes_file_with_a_program_that_cannot_run_is_refused_before_the_first_request() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
+    // the program over the responses runs with no item, so `$item` is not a variable of it
+    let probes = r#"
+section: landing-zone
+title: The landing zone of Example Corp
+rules:
+  - id: example-items
+    title: Each profile is known
+    engines: [aws]
+    tier: palette
+    status: proposed
+    what: Palette knows each profile of the entity.
+    check:
+      kind: palette
+      path: /v1/clusterprofiles/{{ $item.uid }}
+      each: .entity.spec.profiles
+      expr: '[.responses[] | select(.response.ok | not) | "profile \($item.uid) is unknown"]'
+"#;
+    std::fs::write(dir.path().join("items.yaml"), probes).unwrap();
+    let (code, out, err) = run(
+        &[
+            "cluster.json",
+            "--cloud",
+            "aws",
+            "--offline",
+            "--probes",
+            "items.yaml",
+        ],
+        dir.path(),
+    );
+    assert_eq!(code, 2, "{out}");
+    assert!(
+        err.contains(
+            "rule example-items: `expr`: the program does not compile: undefined variable $item"
+        ),
+        "{err}"
+    );
+}
+
+#[test]
 fn verbose_names_what_each_check_ran_and_wins_over_the_quiet_variable() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();

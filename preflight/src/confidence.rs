@@ -625,7 +625,7 @@ runs:
         };
         assert!(!Confidence::of("gke", "4.10", &c, 0.8).meets_bar);
         let none = Confidence::of("gke", "4.10", &Counts::default(), 0.8);
-        assert_eq!(none.catch.text(), "no runs");
+        assert_eq!(none.catch.text(), NO_RUNS);
         assert_eq!(none.weakest_bound(), None);
     }
 

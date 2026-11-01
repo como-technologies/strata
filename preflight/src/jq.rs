@@ -18,15 +18,33 @@ use crate::error::{Error, Result};
 
 type Filter = jaq_core::Filter<data::JustLut<Val>>;
 
+/// A definition of the standard library of jq.
+type Def = jaq_core::load::parse::Def<&'static str>;
+
 /// The variable that holds the item of a check with `each`.
 pub(crate) const ITEM: &str = "$item";
 
 /// Compiles and runs jq programs, and keeps each compiled program for the next input.
-#[derive(Default)]
 pub struct Jq {
+    /// The definitions of the standard library of jq, read one time: each program starts from a
+    /// copy. A load of the catalog compiles every program, so reading the library for each one
+    /// would cost most of the time of the load.
+    library: Vec<Def>,
     /// Each program, compiled without `$item` (slot 0) and with it as a variable (slot 1). The key
     /// is the program alone, so a lookup borrows the text of the program.
     compiled: RefCell<HashMap<String, [Option<Rc<Filter>>; 2]>>,
+}
+
+impl Default for Jq {
+    fn default() -> Self {
+        Jq {
+            library: jaq_core::defs()
+                .chain(jaq_std::defs())
+                .chain(jaq_json::defs())
+                .collect(),
+            compiled: RefCell::default(),
+        }
+    }
 }
 
 impl Jq {
@@ -45,13 +63,10 @@ impl Jq {
         {
             return Ok(f);
         }
-        let defs = jaq_core::defs()
-            .chain(jaq_std::defs())
-            .chain(jaq_json::defs());
         let funs = jaq_core::funs()
             .chain(jaq_std::funs())
             .chain(jaq_json::funs());
-        let loader = Loader::new(defs);
+        let loader = Loader::new(self.library.iter().cloned());
         let arena = Arena::default();
         let modules = loader
             .load(
@@ -141,6 +156,35 @@ impl Jq {
             .unwrap_or(Value::Null))
     }
 
+    /// Make sure that `program` compiles, with `$item` when `with_item` is true and without it
+    /// when not. The program does not run.
+    ///
+    /// A rule file calls this when it loads, with the variables that the program has when it
+    /// runs. So a program that cannot run is an error of the file, and not an error of a run.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Jq`] when the program does not parse, or does not compile: a program that reads
+    /// `$item` does not compile when `with_item` is false.
+    pub fn check(&self, rule: &str, program: &str, with_item: bool) -> Result<()> {
+        self.compile(rule, program, with_item).map(drop)
+    }
+
+    /// Make sure that each program of `template` compiles, as [`Jq::check`] does.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Jq`] when `template` has a `{{` with no `}}`, and the errors of [`Jq::check`]
+    /// for each program of the template.
+    pub fn check_template(&self, rule: &str, template: &str, with_item: bool) -> Result<()> {
+        for part in parts(rule, template)? {
+            if let Part::Program(program) = part {
+                self.check(rule, program, with_item)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Fill each `{{ jq }}` of `template` with the first output of that program on `input`, as
     /// text: a string stays as it is, and another value is its JSON. `item` is the value of
     /// `$item` in each program.
@@ -157,28 +201,44 @@ impl Jq {
         item: Option<&Value>,
     ) -> Result<String> {
         let mut out = String::with_capacity(template.len());
-        let mut rest = template;
-        while let Some(start) = rest.find("{{") {
-            out.push_str(&rest[..start]);
-            let after = &rest[start + 2..];
-            let Some(end) = after.find("}}") else {
-                return Err(Error::Jq {
-                    rule: rule.to_string(),
-                    message: format!("the template has a `{{{{` with no `}}}}`: {template}"),
-                });
-            };
-            let program = after[..end].trim();
-            let value = self.first(rule, program, input, item)?;
-            match value {
-                Value::String(s) => out.push_str(&s),
-                Value::Null => {}
-                other => out.push_str(&other.to_string()),
+        for part in parts(rule, template)? {
+            match part {
+                Part::Text(text) => out.push_str(text),
+                Part::Program(program) => match self.first(rule, program, input, item)? {
+                    Value::String(s) => out.push_str(&s),
+                    Value::Null => {}
+                    other => out.push_str(&other.to_string()),
+                },
             }
-            rest = &after[end + 2..];
         }
-        out.push_str(rest);
         Ok(out)
     }
+}
+
+/// One part of a template: text that stays as it is, or a program between `{{` and `}}`.
+enum Part<'a> {
+    Text(&'a str),
+    Program(&'a str),
+}
+
+/// The parts of `template`, in order.
+fn parts<'a>(rule: &str, template: &'a str) -> Result<Vec<Part<'a>>> {
+    let mut out = Vec::new();
+    let mut rest = template;
+    while let Some(start) = rest.find("{{") {
+        out.push(Part::Text(&rest[..start]));
+        let after = &rest[start + 2..];
+        let Some(end) = after.find("}}") else {
+            return Err(Error::Jq {
+                rule: rule.to_string(),
+                message: format!("the template has a `{{{{` with no `}}}}`: {template}"),
+            });
+        };
+        out.push(Part::Program(after[..end].trim()));
+        rest = &after[end + 2..];
+    }
+    out.push(Part::Text(rest));
+    Ok(out)
 }
 
 fn load_errors<P>(errs: &jaq_core::load::Errors<&str, P>) -> String {

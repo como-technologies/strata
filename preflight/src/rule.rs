@@ -52,7 +52,7 @@ use strata::closed_set::{ClosedSet, impl_closed_set};
 use strata::cloud::CLOUD_ALL;
 
 use crate::error::{Error, Result};
-use crate::jq::ITEM;
+use crate::jq::{ITEM, Jq};
 use crate::world::clouds;
 
 /// The engine `lab`: it marks a check of the lab. No run of the plan records it, so a promotion
@@ -313,6 +313,15 @@ impl Reproduce {
             Reproduce::Lines(l) => l.is_empty(),
             Reproduce::ByEngine(m) => m.values().all(Vec::is_empty),
         }
+    }
+
+    /// Each line of the rule, for every engine.
+    pub fn lines(&self) -> impl Iterator<Item = &str> {
+        let lines: Box<dyn Iterator<Item = &String> + '_> = match self {
+            Reproduce::Lines(l) => Box::new(l.iter()),
+            Reproduce::ByEngine(m) => Box::new(m.values().flatten()),
+        };
+        lines.map(String::as_str)
     }
 
     /// The lines for one engine.
@@ -590,8 +599,25 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    /// Parse one section file. `path` names the file in messages, and roots the fixture paths.
+    /// Parse one section file, and compile each program of it with the variables that it has
+    /// when it runs. `path` names the file in messages, and roots the fixture paths.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Catalog`] when the file does not parse, breaks a rule of the format, or holds a
+    /// program that cannot run: it does not compile, or it reads `$item` where a check has none.
     pub fn parse_section(text: &str, path: &Path) -> Result<Section> {
+        let section = Self::parse_embedded(text, path)?;
+        check_section_programs(&section, path)?;
+        Ok(section)
+    }
+
+    /// Parse one section file as [`Catalog::parse_section`] does, but compile no program.
+    ///
+    /// The binary reads its own rule files with this: the compile of every program costs about
+    /// a tenth of a second at each start, and the tests of this crate compile every program of
+    /// every file of the binary. A file that a person gives is read by `parse_section`.
+    pub(crate) fn parse_embedded(text: &str, path: &Path) -> Result<Section> {
         let mut section: Section = serde_yaml::from_str(text).map_err(|e| Error::Catalog {
             path: path.to_path_buf(),
             message: e.to_string(),
@@ -712,23 +738,12 @@ fn check_section(section: &Section, path: &Path) -> Result<()> {
             {
                 return Err(at("an exec check needs an argv".into()));
             }
-            if let Check::Palette {
-                path, body, each, ..
-            } = check
+            if let Check::Palette { each, .. } = check
+                && each
+                    .as_deref()
+                    .is_some_and(|program| program.trim().is_empty())
             {
-                match each {
-                    Some(program) if program.trim().is_empty() => {
-                        return Err(at("`each` is empty; drop it, or give a program".into()));
-                    }
-                    None if path.contains(ITEM)
-                        || body.as_deref().is_some_and(|b| b.contains(ITEM)) =>
-                    {
-                        return Err(at(format!(
-                            "`path` or `body` reads {ITEM}, and the check has no `each`"
-                        )));
-                    }
-                    _ => {}
-                }
+                return Err(at("`each` is empty; drop it, or give a program".into()));
             }
         }
         if rule.level == Level::Preflight {
@@ -774,6 +789,84 @@ fn check_section(section: &Section, path: &Path) -> Result<()> {
                 return Err(at("a test needs a check".into()));
             }
         }
+    }
+    Ok(())
+}
+
+/// Make sure that every program of every rule of `section` can run: see [`check_programs`].
+fn check_section_programs(section: &Section, path: &Path) -> Result<()> {
+    let jq = Jq::new();
+    for rule in &section.rules {
+        check_programs(rule, &jq).map_err(|message| Error::Catalog {
+            path: path.to_path_buf(),
+            message: format!("rule {}: {message}", rule.id),
+        })?;
+    }
+    Ok(())
+}
+
+/// Make sure that every program of `rule` compiles, with the variables that it has when it runs.
+///
+/// A program of a check with `each` reads `$item` in its `path` and in its `body`, and in no other
+/// place: `each`, `expr`, `when`, an `argv`, and a `reproduce` line run with no item. So a rule
+/// that reads `$item` there cannot run, and the loader refuses it with the place and the reason.
+/// A POST with `each` and no `body` is refused too: it would send the entity one time for each
+/// item.
+fn check_programs(rule: &Rule, jq: &Jq) -> std::result::Result<(), String> {
+    let id = rule.id.as_str();
+    let describe = |place: &str, e: Error| {
+        let reason = match e {
+            Error::Jq { message, .. } => message,
+            other => other.to_string(),
+        };
+        format!("{place}: {reason}")
+    };
+    let program = |place: &str, text: &str, item: bool| {
+        jq.check(id, text, item).map_err(|e| describe(place, e))
+    };
+    let template = |place: &str, text: &str, item: bool| {
+        jq.check_template(id, text, item)
+            .map_err(|e| describe(place, e))
+    };
+    if let Some(when) = &rule.when {
+        program("`when`", when, false)?;
+    }
+    match &rule.check {
+        Some(Check::Static { expr } | Check::Watch { expr }) => {
+            program("`expr`", expr, false)?;
+        }
+        Some(Check::Palette {
+            method,
+            path,
+            body,
+            each,
+            expr,
+        }) => {
+            let item = each.is_some();
+            if let Some(each) = each {
+                program("`each`", each, false)?;
+            }
+            template("`path`", path, item)?;
+            if let Some(body) = body {
+                program("`body`", body, item)?;
+            }
+            if *method == Method::Post && item && body.is_none() {
+                return Err(format!(
+                    "`body`: a POST with `each` needs a `body` that reads {ITEM}; with none, it sends the entity one time for each item"
+                ));
+            }
+            program("`expr`", expr, false)?;
+        }
+        Some(Check::Exec { argv, expr, .. }) => {
+            for arg in argv {
+                template("`argv`", arg, false)?;
+            }
+            program("`expr`", expr, false)?;
+        }
+        None => {}
+    }
+    for line in rule.reproduce.lines() {
+        template("`reproduce`", line, false)?;
     }
     Ok(())
 }
@@ -988,8 +1081,76 @@ rules:
         bad(palette("      each: ' '\n", "/v1/x"), "`each` is empty");
         bad(
             palette("", "/v1/clusterprofiles/{{ $item.uid }}"),
-            "reads $item, and the check has no `each`",
+            "`path`: the program does not compile: undefined variable $item",
         );
+    }
+
+    #[test]
+    fn a_program_that_runs_with_no_item_cannot_read_item_in_any_place() {
+        let each = "      each: '[.entity.spec.profiles[]]'\n";
+        let palette = |extra: &str, expr: &str| {
+            GOOD.replace("tier: static", "tier: palette").replace(
+                "check:\n      kind: static\n      expr: '[.entity.spec.machinepoolconfig[] | select(.poolConfig.size % 3 != 0) | .poolConfig.name]'",
+                &format!("check:\n      kind: palette\n      path: /v1/clusterprofiles/{{{{ $item.uid }}}}\n{each}{extra}      expr: '{expr}'"),
+            )
+        };
+        let bad = |text: String, needle: &str| {
+            let err = Catalog::parse_section(&text, Path::new("x.yaml")).unwrap_err();
+            assert!(err.to_string().contains(needle), "{err}");
+        };
+        // the program over the responses runs once over the world, with no item
+        bad(
+            palette("", "[$item]"),
+            "`expr`: the program does not compile: undefined variable $item",
+        );
+        bad(
+            palette("", "true").replace(
+                "      each: '[.entity.spec.profiles[]]'",
+                "      each: '[$item]'",
+            ),
+            "`each`: the program does not compile: undefined variable $item",
+        );
+        bad(
+            palette("", "true").replace("status: seen", "status: seen\n    when: '$item != null'"),
+            "`when`: the program does not compile: undefined variable $item",
+        );
+        bad(
+            palette("", "true").replace(
+                "    tests:",
+                "    reproduce:\n      - \"echo {{ $item }}\"\n    tests:",
+            ),
+            "`reproduce`: the program does not compile: undefined variable $item",
+        );
+        // a variable with a name that begins as $item is not $item
+        bad(
+            palette("", "true").replace("{{ $item.uid }}", "{{ $items.uid }}"),
+            "`path`: the program does not compile: undefined variable $items",
+        );
+        // a program that does not parse is refused in the same way
+        bad(palette("", "[.a"), "`expr`: the program does not parse");
+    }
+
+    #[test]
+    fn a_post_with_each_needs_a_body_that_reads_item() {
+        let post = |body: &str| {
+            GOOD.replace("tier: static", "tier: palette").replace(
+                "check:\n      kind: static\n      expr: '[.entity.spec.machinepoolconfig[] | select(.poolConfig.size % 3 != 0) | .poolConfig.name]'",
+                &format!("check:\n      kind: palette\n      method: POST\n      path: /v1/x\n      each: '[.entity.spec.profiles[]]'\n{body}      expr: 'true'"),
+            )
+        };
+        let err = Catalog::parse_section(&post(""), Path::new("x.yaml")).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("a POST with `each` needs a `body`"),
+            "{err}"
+        );
+        let ok = post("      body: '{profile: $item}'\n");
+        assert!(Catalog::parse_section(&ok, Path::new("x.yaml")).is_ok());
+        // a GET has no body to send
+        let get = ok
+            .replace("method: POST", "method: GET")
+            .replace("      body: '{profile: $item}'\n", "");
+        assert!(Catalog::parse_section(&get, Path::new("x.yaml")).is_ok());
     }
 
     #[test]

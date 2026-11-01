@@ -12,12 +12,16 @@
 //!   "packs":    { "<packUid>": {...} } the pack of each layer, GET /v1/packs/{uid}, when live
 //!   "account":  { ... } | null         the cloud account, with no secret in it
 //!   "accountKind": "aws",              the kind of cloud account of the engine: eks has aws
-//!   "routeCloud": "edge-native"        the cloud type of the engine in a route: edge has edge-native
+//!   "routeCloud": "edge-native",       the cloud type of the engine in a route: edge has edge-native
+//!   "edgeHosts": [ {pool, host} ],     each edge host of each pool, with the poolConfig of its pool
+//!   "validateBody": { metadata, spec } the body that the checks send to the validate route
 //! }
 //! ```
 //!
 //! `accountKind` and `routeCloud` come from the engine, by [`account_kind`] and [`route_cloud`], so
-//! that no rule writes that mapping again.
+//! that no rule writes that mapping again. `edgeHosts` and `validateBody` come from the entity, so
+//! that the rules that read each host, and the rules that ask the validate route, share one
+//! program.
 //!
 //! A check adds `response` (Palette), `exec` (a command), or `cluster`, `summary`, `events`,
 //! and `elapsed` (the watch). A fixture of a test is a world with the answers written in, under
@@ -30,7 +34,7 @@ use serde_json::{Map, Value, json};
 use strata::api::{Palette, PaletteApi, RawCluster, profile_variables};
 use strata::closed_set::ClosedSet;
 use strata::cloud::{CLOUD_EDGE_NATIVE, Cloud};
-use strata::json::{arr, opt_str, opt_text, str_at, text_map, value_at, value_or_null};
+use strata::json::{arr, opt_str, opt_text, str_at, text_map, text_or, value_at, value_or_null};
 use strata::reference::Ref;
 use strata::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use strata::term::progress::Progress;
@@ -180,7 +184,7 @@ impl World {
             "account": self.account,
             "clusterUid": self.cluster_uid,
         });
-        add_engine_clouds(&mut world);
+        add_derived_fields(&mut world);
         world
     }
 
@@ -400,15 +404,49 @@ pub fn route_cloud(cloud: &str) -> &str {
     Engine::parse(cloud).map_or(cloud, |engine| engine.cloud().as_str())
 }
 
-/// Put `accountKind` and `routeCloud` in the world `world`, from its `cloud`. [`World::to_value`]
+/// The suffix that the body of the validate route gives to the name of an existing cluster: the
+/// route refuses a name that Palette holds already, with `ResourceAlreadyExists`, and the cluster
+/// holds its own.
+const VALIDATE_NAME_SUFFIX: &str = "-preflight";
+
+/// Put the fields that the world derives in the world `world`: `accountKind` and `routeCloud`
+/// from its `cloud`, then `edgeHosts` and `validateBody` from its `entity`. [`World::to_value`]
 /// writes them, and the loader of a fixture, which is a world on disk, adds them here. A world
-/// with no `cloud` stays as it is.
-pub(crate) fn add_engine_clouds(world: &mut Value) {
-    let Some(cloud) = opt_text(world, "/cloud") else {
-        return;
-    };
-    world["accountKind"] = json!(account_kind(&cloud));
-    world["routeCloud"] = json!(route_cloud(&cloud));
+/// with no `cloud` gets no field of the engine.
+pub(crate) fn add_derived_fields(world: &mut Value) {
+    if let Some(cloud) = opt_text(world, "/cloud") {
+        world["accountKind"] = json!(account_kind(&cloud));
+        world["routeCloud"] = json!(route_cloud(&cloud));
+    }
+    world["edgeHosts"] = edge_hosts(value_at(world, "/entity"));
+    world["validateBody"] = validate_body(world);
+}
+
+/// Each edge host of each pool of `entity`, with the pool that holds it: `{pool, host}`, where
+/// `pool` is the `poolConfig` of the pool. The order is that of the entity. The rules that read
+/// each host of the cluster read this one list.
+fn edge_hosts(entity: &Value) -> Value {
+    arr(entity, "/spec/machinepoolconfig")
+        .iter()
+        .flat_map(|pool| {
+            let config = value_or_null(pool, "/poolConfig");
+            arr(pool, "/cloudConfig/edgeHosts")
+                .iter()
+                .map(move |host| json!({"pool": config, "host": host}))
+        })
+        .collect()
+}
+
+/// The body that the checks send to the validate route of the cluster: the entity. A world of an
+/// existing cluster has the name of the cluster with [`VALIDATE_NAME_SUFFIX`]; nothing else
+/// changes. Each check that asks the route sends this one body, so the run sends one request.
+fn validate_body(world: &Value) -> Value {
+    let mut body = value_or_null(world, "/entity");
+    if !value_at(world, "/clusterUid").is_null() {
+        let name = text_or(&body, "/metadata/name", "cluster");
+        body["metadata"]["name"] = json!(format!("{name}{VALIDATE_NAME_SUFFIX}"));
+    }
+    body
 }
 
 /// The engine of the cloud type `text`, which Palette or a file names: [`EDGE`] for
@@ -808,8 +846,79 @@ mod tests {
             assert_eq!(world["routeCloud"], route_cloud(engine), "{engine}");
         }
         let mut no_cloud = json!({"entity": {}});
-        add_engine_clouds(&mut no_cloud);
-        assert_eq!(no_cloud, json!({"entity": {}}));
+        add_derived_fields(&mut no_cloud);
+        assert_eq!(
+            no_cloud["accountKind"],
+            Value::Null,
+            "no cloud, no field of the engine"
+        );
+        assert_eq!(no_cloud["routeCloud"], Value::Null);
+        assert_eq!(no_cloud["edgeHosts"], json!([]));
+    }
+
+    #[test]
+    fn the_edge_hosts_of_the_world_are_the_hosts_of_each_pool_with_the_pool_in_order() {
+        let entity = json!({"spec": {"machinepoolconfig": [
+            {"poolConfig": {"name": "cp"}, "cloudConfig": {"edgeHosts": [{"hostUid": "h1"}, {"hostUid": "h2"}]}},
+            {"poolConfig": {"name": "none"}, "cloudConfig": {}},
+            {"poolConfig": {"name": "worker"}, "cloudConfig": {"edgeHosts": [{"hostUid": "h3"}]}},
+        ]}});
+        let world = World {
+            cloud: EDGE.to_string(),
+            entity,
+            ..World::default()
+        }
+        .to_value();
+        assert_eq!(
+            world["edgeHosts"],
+            json!([
+                {"pool": {"name": "cp"}, "host": {"hostUid": "h1"}},
+                {"pool": {"name": "cp"}, "host": {"hostUid": "h2"}},
+                {"pool": {"name": "worker"}, "host": {"hostUid": "h3"}},
+            ])
+        );
+        assert_eq!(World::default().to_value()["edgeHosts"], json!([]));
+    }
+
+    #[test]
+    fn the_validate_body_is_the_entity_and_for_an_existing_cluster_it_has_a_name_of_its_own() {
+        let entity = json!({"metadata": {"name": "barney", "labels": {"a": "b"}}, "spec": {}});
+        let file = World {
+            cloud: "aws".to_string(),
+            entity: entity.clone(),
+            ..World::default()
+        }
+        .to_value();
+        assert_eq!(file["validateBody"], entity);
+        let cluster = World {
+            cloud: "aws".to_string(),
+            entity: entity.clone(),
+            cluster_uid: Some("c1".to_string()),
+            ..World::default()
+        }
+        .to_value();
+        assert_eq!(
+            cluster["validateBody"]["metadata"]["name"],
+            "barney-preflight"
+        );
+        assert_eq!(
+            cluster["validateBody"]["metadata"]["labels"],
+            entity["metadata"]["labels"]
+        );
+        assert_eq!(
+            cluster["entity"], entity,
+            "the entity itself keeps its name"
+        );
+        let unnamed = World {
+            entity: json!({"spec": {}}),
+            cluster_uid: Some("c1".to_string()),
+            ..World::default()
+        }
+        .to_value();
+        assert_eq!(
+            unnamed["validateBody"]["metadata"]["name"],
+            "cluster-preflight"
+        );
     }
 
     #[test]

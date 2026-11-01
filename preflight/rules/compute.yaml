@@ -777,8 +777,7 @@ rules:
     check:
       kind: palette
       method: GET
-      each: |
-        [ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]
+      each: .edgeHosts
       path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
         [ .responses[] | .item.host.hostUid as $u | .response as $r
@@ -787,7 +786,7 @@ rules:
               | if ($used | length) > 0 then "edge host \($u) (\($r.body.metadata.name // "")) is \($s.state // "?") and part of cluster(s) \($used | join(", ")): Palette refuses it with EdgeHostDeviceAlreadyInUse" else empty end
             end ]
     reproduce:
-      - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, name: .metadata.name, state: .status.state, health: .status.health.state, inUse: [.status.inUseClusters[]?.name]}'; done"
+      - "for h in {{ [ .edgeHosts[].host.hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, name: .metadata.name, state: .status.state, health: .status.health.state, inUse: [.status.inUseClusters[]?.name]}'; done"
     fix:
       owner: palette
       text: Read each host in the validate route.
@@ -818,8 +817,7 @@ rules:
     check:
       kind: palette
       method: GET
-      each: |
-        [ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]
+      each: .edgeHosts
       path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
         [ .responses[] | .item.host.hostUid as $u | .response as $r
@@ -857,8 +855,7 @@ rules:
     check:
       kind: palette
       method: GET
-      each: |
-        [ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]
+      each: .edgeHosts
       path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
         [ .responses[] | .item.pool as $pool | .item.host.hostUid as $u | .response as $r
@@ -868,7 +865,7 @@ rules:
               | if $have != $want then "edge host \($u) is \($have), and pool \($pool.name) is \($want): Palette refuses the create with EdgeHostDoesNotBelongToArchType; an empty architecture counts as amd64" else empty end
             end ]
     reproduce:
-      - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -r '[.metadata.uid, .spec.device.archType] | @tsv'; done"
+      - "for h in {{ [ .edgeHosts[].host.hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -r '[.metadata.uid, .spec.device.archType] | @tsv'; done"
     fix:
       owner: palette
       text: Run the architecture check of the create in the validate route.
@@ -895,8 +892,7 @@ rules:
     check:
       kind: palette
       method: GET
-      each: |
-        [ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]
+      each: .edgeHosts
       path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
         [ .responses[] | .item.host.hostUid as $u | .response as $r
@@ -907,7 +903,7 @@ rules:
                 ( if $disk < 150 then "edge host \($u) has a \($disk) GB main disk; the hardware page needs 150 GB on an SSD, and the architecture page says 100 GB" else empty end )
             end ]
     reproduce:
-      - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, cores: .spec.device.cpu.cores, memMB: .spec.device.memory.sizeInMB, disksGB: [.spec.device.disks[].size]}'; done"
+      - "for h in {{ [ .edgeHosts[].host.hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, cores: .spec.device.cpu.cores, memMB: .spec.device.memory.sizeInMB, disksGB: [.spec.device.disks[].size]}'; done"
     fix:
       owner: palette
       text: Compare the device with the floors of the docs in the validate route, and make the two pages agree.

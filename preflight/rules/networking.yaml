@@ -1196,8 +1196,7 @@ rules:
     check:
       kind: palette
       method: GET
-      each: |
-        [ .entity.spec.machinepoolconfig[] | .poolConfig as $pool | (.cloudConfig.edgeHosts // [])[] | { pool: $pool, host: . } ]
+      each: .edgeHosts
       path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
         (.entity.spec.cloudConfig.overlayNetworkConfiguration.enable // false) as $overlay
@@ -1209,7 +1208,7 @@ rules:
                 ( if ($nics | length) > 1 and $ip == "" and ($overlay | not) then "host \($h.hostUid) has \($nics | length) NICs (\($names | join(", "))), no static IP, and no overlay network: the docs say DHCP is not supported on a host with more than one NIC" else empty end )
             end ]
     reproduce:
-      - "for h in {{ [ .entity.spec.machinepoolconfig[] | (.cloudConfig.edgeHosts // [])[] | .hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, nics: [.spec.device.nics[] | {nicName, ip, isDefault}]}'; done"
+      - "for h in {{ [ .edgeHosts[].host.hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, nics: [.spec.device.nics[] | {nicName, ip, isDefault}]}'; done"
     fix:
       owner: palette
       text: Run the NIC check in the validate route, and refuse DHCP on a host with two NICs.
