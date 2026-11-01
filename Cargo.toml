@@ -72,6 +72,14 @@ tempfile = "3"
 unsafe_code = "forbid"
 missing_docs = "deny"
 
+# These lints are in no default group of clippy. They keep the rules of "Comments" in
+# docs/src/development/code.md: `just lint` fails on a comment that breaks one.
+[lints.clippy]
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+too_long_first_doc_paragraph = "deny"
+doc_markdown = "deny"
+
 [profile.release]
 strip = true
 lto = "thin"

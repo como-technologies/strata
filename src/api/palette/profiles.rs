@@ -416,6 +416,10 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The profile document alone, `GET /v1/clusterprofiles/{uid}`: metadata, versions, and the
     /// clusters that use it in `status`.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, such as a 404 for a profile that Palette does not have.
     pub fn profile_document(&self, uid: &str) -> Result<Value> {
         self.api.get_json(&route(PROFILES, &[uid]))
     }
@@ -447,6 +451,10 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The app profile document alone, `GET /v1/appProfiles/{uid}`: metadata, version, and the
     /// app deployments that use it in `status.inUseApps`.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, such as a 404 for an app profile that Palette does not have.
     pub fn app_profile_document(&self, uid: &str) -> Result<Value> {
         self.api.get_json(&route(APP_PROFILES, &[uid]))
     }
@@ -454,6 +462,10 @@ impl<A: PaletteApi> Palette<A> {
     /// One app deployment, `GET /v1/appDeployments/{uid}`: its name, its project in the
     /// `projectUid` annotation, the app profile version its copy names in
     /// `spec.profile.metadata.version`, and its state in `status.state`.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, such as a 404 for a deployment that Palette does not have.
     pub fn app_deployment_document(&self, uid: &str) -> Result<Value> {
         self.api.get_json(&route(APP_DEPLOYMENTS, &[uid]))
     }
@@ -476,6 +488,12 @@ impl<A: PaletteApi> Palette<A> {
     /// /v1/clusterprofiles/validate/packs` for a profile that Palette does not hold, or `POST
     /// /v1/clusterprofiles/{uid}/validate/packs` for an update of the version `uid`. The body is
     /// a `v1ClusterProfileTemplateDraft`. The request changes nothing.
+    ///
+    /// # Errors
+    ///
+    /// The error of the request, such as a 404 for a version that Palette does not have. A refusal
+    /// of the packs is the answer of Palette, which the caller reads: see
+    /// [`crate::api::codes::ValidateRoute`].
     pub fn validate_profile_packs(&self, uid: Option<&str>, body: &Value) -> Result<Value> {
         let path = match uid {
             Some(uid) => route(PROFILES, &[uid, "validate", "packs"]),

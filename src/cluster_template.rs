@@ -1,7 +1,8 @@
-//! The cluster templates of Palette. A cluster template links profile versions and a maintenance
-//! policy, and applies them to each cluster that it governs. `consumers` counts each
-//! [`ClusterTemplateRef`] that links a version. `compare --repave` asks Palette about the
-//! template that governs a cluster.
+//! The cluster templates of Palette.
+//!
+//! A cluster template links profile versions and a maintenance policy, and applies them to each
+//! cluster that it governs. `consumers` counts each [`ClusterTemplateRef`] that links a version.
+//! `compare --repave` asks Palette about the template that governs a cluster.
 
 use std::collections::BTreeSet;
 

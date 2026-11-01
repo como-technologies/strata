@@ -188,11 +188,12 @@ impl Consumer {
     }
 }
 
-/// The second reading of `consumers`: the clusters that run the version, from the cluster search
-/// of Palette, or each cluster the key can list, each read for the profiles it applies. Palette
-/// computes the consumer list of a profile when it is asked, in the projects the key can read,
-/// and gives an empty list on an error too. The second reading finds a consumer that the list
-/// omits.
+/// The second reading of `consumers`: the clusters that run the version.
+///
+/// They come from the cluster search of Palette, or from each cluster the key can list, each read
+/// for the profiles it applies. Palette computes the consumer list of a profile when it is asked,
+/// in the projects the key can read, and gives an empty list on an error too. The second reading
+/// finds a consumer that the list omits.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ClustersRead {
@@ -340,14 +341,22 @@ impl ConsumersReport {
     }
 }
 
-/// List the clusters that use a profile version, with each cluster's name, project, and state,
-/// then the edge hosts bound to it and the cluster templates that link it.
-/// The profile comes from a uid, `<name>@<version>`, or a profile record (whose uid and project
-/// are used; the list is always fetched live). Names and projects come from the profile's
+/// List the clusters that use a profile version, with each cluster's name, project, and state.
+///
+/// The report also holds the edge hosts bound to the version and the cluster templates that link
+/// it. The profile comes from a uid, `<name>@<version>`, or a profile record (whose uid and
+/// project are used; the list is always fetched live). Names and projects come from the profile's
 /// `status.inUseClusters`; each cluster is then read in its own project for its state, with one
 /// client per project from `connect`. A cluster that cannot be read is listed with state
 /// `unknown` and its error; it still counts. Then each cluster the key can list is read for the
 /// profiles it applies: see [`consumers_with`] to read the list alone.
+///
+/// `connect` gives a client for a project uid, with `None` for the configured scope.
+/// `generated_at` is the time of the report, in RFC 3339.
+///
+/// # Errors
+///
+/// The errors of [`consumers_with`].
 pub fn consumers<A, F>(
     reference: &Ref,
     connect: F,
@@ -367,13 +376,23 @@ where
     )
 }
 
-/// [`consumers`] with options: `list_only` reads the consumer list that Palette computes, and
-/// no other cluster. It costs one request per consumer, where the second reading costs one per
-/// 50 clusters that the cluster search names and one per cluster that the list omits (one per
-/// cluster of the fleet when the search takes no profile), but it does not find a consumer that
-/// the list omits.
+/// [`consumers`] with options.
+///
+/// `list_only` reads the consumer list that Palette computes, and no other cluster. It costs one
+/// request per consumer, where the second reading costs one per 50 clusters that the cluster
+/// search names and one per cluster that the list omits (one per cluster of the fleet when the
+/// search takes no profile), but it does not find a consumer that the list omits.
 ///
 /// An app profile, by ref or by record, gives its app deployments: see [`app_consumers`].
+///
+/// # Errors
+///
+/// [`Error::ProfileRefRequired`] for a ref that names no profile, and for a record of a cluster
+/// or of a pack. [`Error::NoUid`] for a record with no uid. The error of `connect` for the scope
+/// of the profile, and the error of the read of the profile: [`Error::ProfileNotFound`] and
+/// [`Error::ProfileNameAmbiguous`] for a name. A cluster that cannot be read stays in the report
+/// with its error. A tenant client that `connect` cannot give is no error: the second reading then
+/// uses the client of the profile.
 pub fn consumers_with<A, F>(
     reference: &Ref,
     options: &ConsumersOptions,
@@ -406,11 +425,8 @@ where
     let doc = home.profile_document(&uid)?;
 
     let mut list = listed_consumers(&doc, &uid, &home, &mut clients, &mut connect);
-    // Palette computes the list above when it is asked, in the projects the key can read, and
-    // gives an empty list on an error too. So the cluster search names the clusters that run a
-    // version of the profile (#149, #181), or each cluster the key can list is read for the
-    // profiles it applies, and a cluster that applies the version joins the list (#66).
-    // the second reading and the edge hosts read at tenant scope. So they find a cluster or a
+    // The list above can omit a cluster: see `second_reading`, which adds it.
+    // The second reading and the edge hosts read at tenant scope. So they find a cluster or a
     // host in each project that the key can read. A key that cannot read the tenant reads
     // `home`, the scope of the profile, and not the configured scope as `tenant_of` does. A
     // cluster that runs a profile of a project is in that project

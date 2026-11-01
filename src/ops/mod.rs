@@ -142,10 +142,57 @@ fn names_a_set(reference: &Ref) -> Error {
 /// returns, with `options`. So a comparison of two files needs no credentials. The record names
 /// the ref as it displays: the text as typed, with no empty part after a separator.
 ///
+/// `connect` runs only when the ref needs Palette. `fetched_at` is the time of the read, in
+/// RFC 3339: the record states it in `source.fetchedAt`.
+///
 /// # Errors
 ///
 /// `Usage` for an option that does not fit the ref, and for a set of clusters, before any
 /// request. Then the error of a request, such as a 404 for a uid that Palette does not have.
+///
+/// # Examples
+///
+/// Record a published profile version, read from an in-memory Palette:
+///
+/// ```
+/// # use serde_json::json;
+/// use strata::api::{MemoryApi, Palette};
+/// use strata::ops::{self, SnapshotOptions};
+/// use strata::reference::Ref;
+/// use strata::term::progress::Progress;
+///
+/// # let uid = "64f0000000000000000000a1";
+/// # let pack = json!({
+/// #     "name": "cert-manager", "layer": "addon", "type": "spectro", "tag": "1.21.1",
+/// #     "version": "1.21.1", "packUid": "p1", "registryUid": "r1", "digest": "sha256:0123",
+/// #     "values": "installCRDs: true",
+/// # });
+/// # let api = MemoryApi::new()
+/// #     .with(
+/// #         format!("/v1/clusterprofiles/{uid}"),
+/// #         json!({
+/// #             "metadata": {"uid": uid, "name": "demo"},
+/// #             "spec": {"version": "1.0.0", "published": {
+/// #                 "cloudType": "aws", "type": "add-on", "packs": [pack],
+/// #             }},
+/// #         }),
+/// #     )
+/// #     .with(
+/// #         format!("/v1/clusterprofiles/{uid}/packs/manifests"),
+/// #         json!({"spec": {"packs": []}}),
+/// #     )
+/// #     .with(format!("/v1/clusterprofiles/{uid}/variables"), json!({"variables": []}));
+/// let record = ops::snapshot_for(
+///     &Ref::Uid(uid.to_string()),
+///     &SnapshotOptions::default(),
+///     || Ok(Palette::new(api)),
+///     "2026-09-16T00:00:00Z",
+///     &Progress::silent(),
+/// )?;
+/// assert_eq!(record.source.name, "demo");
+/// assert_eq!(record.packs[0].key, "addon/cert-manager");
+/// # Ok::<(), strata::Error>(())
+/// ```
 pub fn snapshot_for<A, F>(
     reference: &Ref,
     options: &SnapshotOptions,
@@ -341,6 +388,15 @@ fn holder_snapshot<A: PaletteApi>(
 
 /// A record of an app profile, by uid, or by name at `version`. Its consumers are app
 /// deployments, and not clusters, so the record counts none.
+///
+/// `reference` is the text of the ref that the record names as its source. `fetched_at` is the
+/// time of the read, in RFC 3339.
+///
+/// # Errors
+///
+/// [`Error::AppProfileNotFound`] or [`Error::AppProfileNameAmbiguous`] when a name and `version`
+/// name no app profile, or several. The error of a request, such as a 404 for a uid that Palette
+/// does not have.
 pub fn app_profile_snapshot<A: PaletteApi>(
     palette: &Palette<A>,
     id: &str,
@@ -360,6 +416,9 @@ pub fn app_profile_snapshot<A: PaletteApi>(
 /// A record of a cluster group: the profiles that it pins, and its virtual clusters. With
 /// `macros`, also the digest of the value Palette gives each macro that the pins use, for the
 /// group.
+///
+/// `group` is the uid or the name of the cluster group. `reference` is the text of the ref that
+/// the record names as its source, and `fetched_at` is the time of the read, in RFC 3339.
 ///
 /// # Errors
 ///
@@ -424,10 +483,17 @@ fn held_snapshot<A: PaletteApi>(
     holder_snapshot(palette, kind, raw, uid, reads, reference, fetched_at)
 }
 
-/// The two sides of a comparison. When one side is a cluster group, and the other is a cluster ref
-/// that selects no profile, the cluster side holds only the profiles that the group pins: the
-/// question is whether the member runs the pin, and not what else it runs. So the other side is
-/// taken first.
+/// The two sides of a comparison, each as [`snapshot_for`] reads it.
+///
+/// When one side is a cluster group, and the other is a cluster ref that selects no profile, the
+/// cluster side holds only the profiles that the group pins: the question is whether the member
+/// runs the pin, and not what else it runs. So the other side is taken first. `connect` gives the
+/// [`Palette`] for each side that a request answers, and `fetched_at` is the time of the read, in
+/// RFC 3339.
+///
+/// # Errors
+///
+/// The errors of [`snapshot_for`] for the first side that fails.
 pub fn snapshot_pair<A, F>(
     a: &Ref,
     b: &Ref,
@@ -489,9 +555,16 @@ fn narrowed(r: &Ref, other: &Snapshot) -> Ref {
     }
 }
 
-/// Build a snapshot of the draft of a profile version, for `<ref>@draft`. `id` is a uid when
-/// there is no `version`, and else a name at `version`. The snapshot has no project: the caller
-/// sets it.
+/// Build a snapshot of the draft of a profile version, for `<ref>@draft`.
+///
+/// `id` is a uid when there is no `version`, and else a name at `version`. The snapshot has no
+/// project: the caller sets it. `reference` is the text of the ref that the record names as its
+/// source, and `fetched_at` is the time of the read, in RFC 3339.
+///
+/// # Errors
+///
+/// [`Error::ProfileNotFound`] or [`Error::ProfileNameAmbiguous`] when a name and `version` name no
+/// profile, or several. [`Error::NoDraft`] for a profile with no draft. The error of a request.
 pub fn draft_snapshot<A: PaletteApi>(
     palette: &Palette<A>,
     id: &str,
@@ -505,11 +578,59 @@ pub fn draft_snapshot<A: PaletteApi>(
     Snapshot::from_raw_draft(&raw, reference, fetched_at)
 }
 
-/// Build a snapshot of a candidate file: read and check it (no network), then resolve its packs
-/// through the [`Palette`] that `connect` returns. The snapshot has `source.template` `candidate`
-/// and no uid. With `validate`, strata then asks Palette whether it takes the packs of the
-/// candidate, as [`profile_validation`] does. `source.paletteValidation` of the record holds the
-/// answer: the caller decides what a refusal does.
+/// Build a snapshot of a candidate file.
+///
+/// Strata reads and checks the file (no network), then resolves its packs through the [`Palette`]
+/// that `connect` returns. The snapshot has `source.template` `candidate` and no uid. With
+/// `validate`, strata then asks Palette whether it takes the packs of the candidate, as
+/// [`profile_validation`] does. `source.paletteValidation` of the record holds the answer: the
+/// caller decides what a refusal does. `fetched_at` is the time of the read, in RFC 3339.
+///
+/// # Errors
+///
+/// The errors of [`candidate::load`](crate::candidate::load), before `connect` runs. Then the
+/// error of `connect`, and the errors of [`candidate::resolve`](fn@crate::candidate::resolve). With
+/// `validate`, the errors of [`profile_validation`].
+///
+/// # Examples
+///
+/// A candidate with one `manifest` layer needs no registry, so Palette gets no request:
+///
+/// ```
+/// use strata::api::{MemoryApi, Palette};
+/// use strata::ops;
+/// use strata::term::progress::Progress;
+///
+/// let dir = tempfile::tempdir()?;
+/// let path = dir.path().join("candidate.yaml");
+/// std::fs::write(
+///     &path,
+///     r#"
+/// name: demo
+/// version: 1.0.0
+/// type: add-on
+/// layers:
+///   - name: policy
+///     version: 1.0.0
+///     type: manifest
+///     manifests:
+///       - name: policy
+///         content: "kind: Namespace"
+/// "#,
+/// )?;
+///
+/// let record = ops::snapshot_from_candidate(
+///     &path,
+///     false,
+///     || Ok(Palette::new(MemoryApi::new())),
+///     "2026-09-16T00:00:00Z",
+///     &Progress::silent(),
+/// )?;
+/// assert_eq!(record.source.name, "demo");
+/// assert!(record.source.uid.is_empty(), "Palette holds no candidate");
+/// assert_eq!(record.packs[0].key, "addon/policy");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn snapshot_from_candidate<A, F>(
     path: &Path,
     validate: bool,
@@ -533,10 +654,17 @@ where
     Ok(snap)
 }
 
-/// Build a snapshot of a candidate that is checked and in memory: resolve its packs through the
-/// [`Palette`] that `connect` returns. [`snapshot_from_candidate`] reads a file and then does
-/// this; a caller with a [`Candidate`](crate::candidate::Candidate) value gives it to
-/// [`candidate::check`](crate::candidate::check) and starts here.
+/// Build a snapshot of a candidate that is checked and in memory.
+///
+/// Strata resolves its packs through the [`Palette`] that `connect` returns.
+/// [`snapshot_from_candidate`] reads a file and then does this; a caller with a
+/// [`Candidate`](crate::candidate::Candidate) value gives it to
+/// [`candidate::check`](crate::candidate::check) and starts here. `fetched_at` is the time of the
+/// read, in RFC 3339.
+///
+/// # Errors
+///
+/// The error of `connect`, and the errors of [`candidate::resolve`](fn@crate::candidate::resolve).
 pub fn snapshot_from_loaded<A, F>(
     loaded: &LoadedCandidate,
     connect: F,
@@ -571,9 +699,16 @@ fn candidate_snapshot<A: PaletteApi>(
     Ok(snap.with_project(palette.project_uid()))
 }
 
-/// Build a snapshot from raw API responses saved on disk, in the project they were fetched in. A
-/// directory with `cluster.json` is a cluster's; a `reference` of the form
-/// `cluster:<uid>/<profile>` then selects the profile.
+/// Build a snapshot from raw API responses saved on disk, in the project they were fetched in.
+///
+/// A directory with `cluster.json` is a cluster's; a `reference` of the form
+/// `cluster:<uid>/<profile>` then selects the profile. `fetched_at` is the time of this read, in
+/// RFC 3339. The record states the time in `scope.json` when the directory has one.
+///
+/// # Errors
+///
+/// The errors of [`RawProfile::load_dir`] or [`RawCluster::load_dir`], and the errors of
+/// [`Snapshot::from_raw`] or [`Snapshot::from_cluster`].
 pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Result<Snapshot> {
     if dir.join(RawCluster::MARKER).is_file() {
         let profile = match Ref::parse_with(reference, |_| false) {
@@ -600,6 +735,56 @@ pub fn snapshot_from_dir(dir: &Path, reference: &str, fetched_at: &str) -> Resul
 }
 
 /// Compare two snapshots.
+///
+/// `a` is the base side and `b` is the candidate side: the diff reads a move from `a` to `b`.
+/// `generated_at` is the time of the diff, in RFC 3339. The comparison reads nothing from Palette.
+///
+/// # Examples
+///
+/// Two records of one profile version have one root, so the diff says that nothing changed:
+///
+/// ```
+/// # use serde_json::json;
+/// use strata::api::{MemoryApi, Palette};
+/// use strata::ops::{self, SnapshotOptions};
+/// use strata::reference::Ref;
+/// use strata::term::progress::Progress;
+///
+/// # let uid = "64f0000000000000000000a1";
+/// # let pack = json!({
+/// #     "name": "cert-manager", "layer": "addon", "type": "spectro", "tag": "1.21.1",
+/// #     "version": "1.21.1", "packUid": "p1", "registryUid": "r1", "digest": "sha256:0123",
+/// #     "values": "installCRDs: true",
+/// # });
+/// # let api = MemoryApi::new()
+/// #     .with(
+/// #         format!("/v1/clusterprofiles/{uid}"),
+/// #         json!({
+/// #             "metadata": {"uid": uid, "name": "demo"},
+/// #             "spec": {"version": "1.0.0", "published": {
+/// #                 "cloudType": "aws", "type": "add-on", "packs": [pack],
+/// #             }},
+/// #         }),
+/// #     )
+/// #     .with(
+/// #         format!("/v1/clusterprofiles/{uid}/packs/manifests"),
+/// #         json!({"spec": {"packs": []}}),
+/// #     )
+/// #     .with(format!("/v1/clusterprofiles/{uid}/variables"), json!({"variables": []}));
+/// # let record = |at: &str| {
+/// #     ops::snapshot_for(
+/// #         &Ref::Uid(uid.to_string()),
+/// #         &SnapshotOptions::default(),
+/// #         || Ok(Palette::new(api.clone())),
+/// #         at,
+/// #         &Progress::silent(),
+/// #     )
+/// # };
+/// let (a, b) = (record("2026-09-16T00:00:00Z")?, record("2026-09-17T00:00:00Z")?);
+/// let diff = ops::compare(&a, &b, "2026-09-17T00:00:00Z");
+/// assert!(diff.same, "the roots are equal");
+/// # Ok::<(), strata::Error>(())
+/// ```
 pub fn compare(a: &Snapshot, b: &Snapshot, generated_at: &str) -> Diff {
     diff::compute(a, b, generated_at, None)
 }

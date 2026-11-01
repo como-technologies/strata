@@ -64,11 +64,20 @@ impl fmt::Display for Method {
 /// One GET of a JSON document from Palette. Implementations add authentication and scoping.
 pub trait PaletteApi {
     /// GET `path` (for example `/v1/clusterprofiles/{uid}`) and parse the body as JSON.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Api`] when Palette answers with a status that is not 2xx. [`Error::Transport`] when
+    /// the request does not complete, and [`Error::NotJson`] when a 2xx answer is not JSON.
     fn get_json(&self, path: &str) -> Result<Value>;
 
     /// POST `body` to `path` and parse the answer as JSON. Strata sends a POST only to ask
     /// Palette a question that changes nothing, such as `validate/repave`. An API that cannot
     /// POST says so.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`PaletteApi::get_json`]. An API that cannot POST gives [`Error::Transport`].
     fn post_json(&self, path: &str, _body: &Value) -> Result<Value> {
         Err(Error::Transport {
             method: Method::Post,

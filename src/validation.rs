@@ -1,7 +1,8 @@
-//! The answers of Palette to the validate routes: `compare --validate` records a
-//! [`PaletteValidation`] in the diff, and `snapshot --validate` records a [`ProfileValidation`] in
-//! the snapshot. Each answer is a [`ProfileValidation`]: the [`PaletteRefusal`] errors that
-//! Palette gives, and it accepts when there is none.
+//! The answers of Palette to the validate routes.
+//!
+//! `compare --validate` records a [`PaletteValidation`] in the diff, and `snapshot --validate`
+//! records a [`ProfileValidation`] in the snapshot. Each answer is a [`ProfileValidation`]: the
+//! [`PaletteRefusal`] errors that Palette gives, and it accepts when there is none.
 
 use std::borrow::Cow;
 
@@ -12,9 +13,10 @@ use serde_json::Value;
 use crate::json::{arr, text};
 use crate::text::and_list;
 
-/// Palette's answer to `POST /v1/spectroclusters/{uid}/validate/packs`, for a change from what a
-/// cluster runs to a profile version: the cluster, and the answer. The document holds the fields
-/// of the answer beside `clusterUid`.
+/// Palette's answer to `POST /v1/spectroclusters/{uid}/validate/packs`, for one cluster.
+///
+/// The change is from what the cluster runs to a profile version. The document holds the cluster,
+/// and the fields of the answer beside `clusterUid`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaletteValidation {

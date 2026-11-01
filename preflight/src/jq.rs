@@ -1,6 +1,8 @@
-//! The jq programs of the rules, run by jaq. A program compiles one time and runs on many
-//! inputs. A template such as `/v1/spectroclusters/{{ .cloud }}/validate` fills each `{{ jq }}`
-//! with the first output of that program, as text.
+//! The jq programs of the rules, run by jaq.
+//!
+//! A program compiles one time and runs on many inputs. A template such as
+//! `/v1/spectroclusters/{{ .cloud }}/validate` fills each `{{ jq }}` with the first output of that
+//! program, as text.
 //!
 //! A program can read `$item`, the item of a check with `each`: the caller gives the item with
 //! the input. A program that the caller runs with no item does not compile when it reads `$item`.

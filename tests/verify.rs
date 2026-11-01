@@ -1574,7 +1574,7 @@ fn an_authored_change_during_a_registry_move_fails_and_names_the_pack_and_the_le
 
 // ---- clusters --------------------------------------------------------------------------------
 
-/// An API that serves the cluster fixture `dir` under CLUSTER_UID.
+/// An API that serves the cluster fixture `dir` under `CLUSTER_UID`.
 fn serve_cluster(api: MemoryApi, raw_root: &Path, dir: &str) -> MemoryApi {
     let d = raw_root.join(dir);
     // the profile documents of the profiles the cluster runs, as they are published: verify of a
@@ -1607,12 +1607,13 @@ fn serve_cluster(api: MemoryApi, raw_root: &Path, dir: &str) -> MemoryApi {
     )
 }
 
-/// The record of the cluster under CLUSTER_UID, or of its profile `profile` when the test names one.
+/// The record of the cluster under `CLUSTER_UID`, or of its profile `profile` when the test names
+/// one.
 fn snapshot_cluster(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
     snapshot_of_ref(api, &cluster_ref(CLUSTER_UID, profile, false), "t0")
 }
 
-/// The record of the update that waits for the cluster under CLUSTER_UID, or of its profile
+/// The record of the update that waits for the cluster under `CLUSTER_UID`, or of its profile
 /// `profile` when the test names one.
 fn snapshot_pending(api: &MemoryApi, profile: Option<&str>) -> strata::Result<Snapshot> {
     snapshot_of_ref(api, &cluster_ref(CLUSTER_UID, profile, true), "t0")
@@ -7570,7 +7571,7 @@ fn profile_audits(since: &str) -> String {
     )
 }
 
-/// The audit log of the cluster under CLUSTER_UID from the time `since`.
+/// The audit log of the cluster under `CLUSTER_UID` from the time `since`.
 fn cluster_audits(since: &str) -> String {
     format!("/v1/audits?resourceUid={CLUSTER_UID}&startTime={since}&limit=100")
 }
@@ -9919,7 +9920,7 @@ fn compare_asks_the_template_route_for_a_cluster_that_a_cluster_template_governs
     assert_eq!(api.posted().len(), 1);
 }
 
-/// The update that waits for the cluster under CLUSTER_UID.
+/// The update that waits for the cluster under `CLUSTER_UID`.
 ///
 /// `edit` changes the templates of the cluster fixture `fixture`. The pack manifests of each
 /// profile come from the same fixture.

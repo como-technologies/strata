@@ -49,9 +49,10 @@ fn manifests_body(p: &Pack) -> Vec<Value> {
         .collect()
 }
 
-/// The body of `POST /v1/clusterprofiles/import/validate`, a `v1ClusterProfileImportEntity`:
-/// the name, the version, the variables, the type, the cloud, and each pack of the record in
-/// profile order. Palette finds each pack by its name, its `version`, and its registry, so the
+/// The body of `POST /v1/clusterprofiles/import/validate`, a `v1ClusterProfileImportEntity`.
+///
+/// It holds the name, the version, the variables, the type, the cloud, and each pack of the record
+/// in profile order. Palette finds each pack by its name, its `version`, and its registry, so the
 /// body holds no pack uid. `registries` are the entries of `GET /v1/registries/metadata`: they
 /// give the name, the kind, and `isPrivate` of the registry of each pack. A manifest pack has no
 /// registry.
@@ -288,16 +289,24 @@ pub(crate) fn profile_validation_in<A: PaletteApi>(
     Ok(ProfileValidation::refused(errors))
 }
 
-/// Ask Palette whether it accepts the packs of the profile side on the cluster side: `POST
-/// validate/packs` with the body of `--repave`, which changes nothing. The sides follow the rules
-/// of [`palette_repave`](super::palette_repave). Palette answers `200` with an error for each pack
-/// it refuses. It refuses the whole request with an HTTP error and a code of
-/// [`ValidateRoute::ClusterPacks`]. That refusal is an answer too, and the retry does not send it
-/// again. Each other error is an error of strata.
+/// Ask Palette whether it accepts the packs of the profile side on the cluster side.
+///
+/// The question is `POST validate/packs` with the body of `--repave`, which changes nothing. `a`
+/// and `b` are the two sides, and they follow the rules of
+/// [`palette_repave`](super::palette_repave). Palette answers `200` with
+/// an error for each pack it refuses. It refuses the whole request with an HTTP error and a code
+/// of [`ValidateRoute::ClusterPacks`]. That refusal is an answer too, and the retry does not send
+/// it again. Each other error is an error of strata.
 ///
 /// For a profile version that the cluster runs, the route of the cluster checks no sent tag: it
 /// keeps the copy that the cluster holds. So the question goes to the route of that version, with
 /// its packs, and Palette checks it against each cluster that runs it.
+///
+/// # Errors
+///
+/// [`Error::Usage`] for a pair that is not a cluster and a profile version, before any request:
+/// see [`palette_repave`](super::palette_repave). The error of a request that is not a refusal of
+/// Palette.
 pub fn palette_validation<A: PaletteApi>(
     palette: &Palette<A>,
     a: &Snapshot,
@@ -314,9 +323,12 @@ pub fn palette_validation<A: PaletteApi>(
     cluster_packs_answer(palette, &cluster.uid, &validate_body(&running, target))
 }
 
-/// The error of `snapshot --validate` when Palette refuses the record:
-/// [`Error::PaletteRefuses`] with each error. `Ok` when the record has no answer of Palette, or
-/// when Palette accepts it.
+/// The error of `snapshot --validate` when Palette refuses the record.
+///
+/// # Errors
+///
+/// [`Error::PaletteRefuses`] with each error of Palette. `Ok` when the record has no answer of
+/// Palette, or when Palette accepts it.
 pub fn require_acceptance(snap: &Snapshot) -> Result<()> {
     match &snap.source.palette_validation {
         Some(v) if !v.accepts() => Err(Error::PaletteRefuses {

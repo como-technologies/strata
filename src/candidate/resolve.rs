@@ -365,8 +365,10 @@ fn manifest_layer(
     }
 }
 
-/// Look each layer's pack up in its registry and build the three documents a published profile
-/// with this content returns: `GET /v1/registries/metadata` for registry names,
+/// Look each layer's pack up in its registry and build the three documents of a published profile.
+///
+/// The documents are those that a published profile with this content returns:
+/// `GET /v1/registries/metadata` for registry names,
 /// `GET /v1/packs?filters=spec.name=<name>` for the pack uid, digest, layer, type, and default
 /// values, and `GET /v1/packs/<name>/registries/<uid>` for the tags. A `manifest` layer needs
 /// none of these. When the listing does not have the version, and the registry is one that
@@ -376,10 +378,54 @@ fn manifest_layer(
 /// The documents hold only what Palette gives. What strata reads beside them, the options of the
 /// pack template that the values of each pack select, is a field of the result.
 ///
+/// The steps for each layer, in the order of the file:
+///
+/// 1. A `manifest` layer has no registry. Its manifests are its pack, and strata sends no request.
+/// 2. Find the uid of the registry of the layer, and the entry of the version in the listing of
+///    the pack.
+/// 3. When the listing has the version, refuse it if Spectro Cloud retired it. Check that the pack
+///    supports the cloud of the profile, read its tags and its default values, and pick the tag.
+///    The layer is the one that the registry gives.
+/// 4. When the listing has no such version, and the registry is one that Palette does not sync,
+///    make the pack as Palette does at the create. Else the registry does not have the version.
+///
+/// At the end, check the layers of the whole profile against the layers that the packs got.
+///
 /// # Errors
 ///
 /// `CandidateInvalid` for a layer that breaks a rule of Palette at the create. `PackNotFound` and
 /// `PackUnavailable` for a version that the registry does not give. Each error of a request.
+///
+/// # Examples
+///
+/// A candidate with one `manifest` layer needs no registry, so Palette gets no request:
+///
+/// ```
+/// use strata::api::{MemoryApi, Palette};
+/// use strata::candidate::{Candidate, check, resolve};
+/// use strata::term::progress::Progress;
+///
+/// let candidate: Candidate = serde_yaml::from_str(
+///     r#"
+/// name: demo
+/// version: 1.0.0
+/// type: add-on
+/// layers:
+///   - name: policy
+///     version: 1.0.0
+///     type: manifest
+///     manifests:
+///       - name: policy
+///         content: "kind: Namespace"
+/// "#,
+/// )?;
+/// let loaded = check(candidate, std::path::Path::new("candidate.yaml"))?;
+///
+/// let resolved = resolve(&loaded, &Palette::new(MemoryApi::new()), &Progress::silent())?;
+/// let packs = resolved.into_snapshot("candidate.yaml", "2026-09-16T00:00:00Z")?.packs;
+/// assert_eq!(packs[0].name, "policy");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub fn resolve<A: PaletteApi>(
     loaded: &LoadedCandidate,
     palette: &Palette<A>,

@@ -359,6 +359,9 @@ struct Check<'a> {
 
 /// Report the pack versions that `records` pin, and the newer versions that the registries offer.
 ///
+/// `records` are the paths of the record files. `generated_at` is the time of the report, in
+/// RFC 3339.
+///
 /// Strata reads each pin in the project of the first record that pins it. It calls `connect` one
 /// time for each project, and keeps one cache of the registry listings for each project. It reads
 /// each pack of a registry one time. A pin in a project that `connect` cannot reach has the error

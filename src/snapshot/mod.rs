@@ -1,6 +1,7 @@
-//! The snapshot document (schema strata-snapshot/1): one profile version with its root,
-//! per-pack hashes, canonical values and raw contents. Byte-compatible with the snapshots
-//! written by the bash reference implementation.
+//! The snapshot document (schema strata-snapshot/1): one profile version with its root.
+//!
+//! It holds the per-pack hashes, the canonical values, and the raw contents. It is
+//! byte-compatible with the snapshots written by the bash reference implementation.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -73,9 +74,11 @@ impl fmt::Display for Template {
     }
 }
 
-/// The version of the content digest encoding. It is in the input of the digest, so a change to
-/// what the digest covers is a change of this tag, and a digest of one version is never equal to
-/// a digest of another. A tool that pins a version by content digest depends on this tag.
+/// The version of the content digest encoding.
+///
+/// It is in the input of the digest, so a change to what the digest covers is a change of this
+/// tag, and a digest of one version is never equal to a digest of another. A tool that pins a
+/// version by content digest depends on this tag.
 pub const CONTENT_DIGEST: &str = "content/1";
 
 /// The annotation of a pack ref that names the machine image of an OS pack, such as an AMI. A
@@ -431,10 +434,11 @@ fn macro_placeholder(name: &str) -> String {
     format!("{{{{{MACRO_PREFIX}{name}}}}}")
 }
 
-/// The names of the user macros that `text` uses: each `{{.spectro.macro.NAME}}`, with spaces
-/// after `{{` allowed. A name holds letters, digits, `_`, `-`, and `.`. A system macro,
-/// `{{.spectro.system.NAME}}`, is not a user macro: Palette gives it from the cluster, and no
-/// person edits it.
+/// The names of the user macros that `text` uses.
+///
+/// Each is `{{.spectro.macro.NAME}}`, with spaces after `{{` allowed. A name holds letters,
+/// digits, `_`, `-`, and `.`. A system macro, `{{.spectro.system.NAME}}`, is not a user macro:
+/// Palette gives it from the cluster, and no person edits it.
 pub fn macro_names(text: &str) -> std::collections::BTreeSet<String> {
     let mut names = std::collections::BTreeSet::new();
     let mut rest = text;
@@ -577,6 +581,10 @@ impl Snapshot {
 
     /// Serialize, pretty-printed unless `compact`, with a trailing newline: the document of the
     /// record, as [`JsonRenderer`](crate::render::JsonRenderer) writes each document.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Serialize`] when serde cannot write the document.
     pub fn to_json(&self, compact: bool) -> Result<String> {
         crate::render::JsonRenderer { compact }.document(self)
     }

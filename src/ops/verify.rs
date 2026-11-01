@@ -103,10 +103,11 @@ fn profiles_overwritten<A: PaletteApi>(
     Ok(out)
 }
 
-/// Make sure from the record alone that strata can verify it. The check makes no request and needs
-/// no connection. A caller checks the record before it connects, so that a record that strata
-/// cannot verify gives its own error, and not [`Error::MissingCredential`].
-/// [`verify_with`] makes the same check.
+/// Make sure from the record alone that strata can verify it.
+///
+/// The check makes no request and needs no connection. A caller checks the record before it
+/// connects, so that a record that strata cannot verify gives its own error, and not
+/// [`Error::MissingCredential`]. [`verify_with`] makes the same check.
 ///
 /// # Errors
 ///
@@ -163,6 +164,62 @@ fn writes<A: PaletteApi>(
 
 /// Re-fetch what a snapshot was taken from and compare: the profile, or for a cluster snapshot
 /// the cluster, with the same profile selection.
+///
+/// `recorded` is the snapshot to check. `checked_at` is the time of the check, in RFC 3339.
+///
+/// # Errors
+///
+/// The errors of [`check_verifiable`]. [`Error::ProfileNotFound`] and the like are no error for an
+/// object that is gone: the verdict then says `gone`. Each other error of the read of the live
+/// object, and of the read of the profiles of a cluster.
+///
+/// # Examples
+///
+/// Record a profile version, then verify the record against the same Palette:
+///
+/// ```
+/// # use serde_json::json;
+/// use strata::api::{MemoryApi, Palette};
+/// use strata::diff::VerifyStatus;
+/// use strata::ops::{self, SnapshotOptions};
+/// use strata::reference::Ref;
+/// use strata::term::progress::Progress;
+///
+/// # let uid = "64f0000000000000000000a1";
+/// # let pack = json!({
+/// #     "name": "cert-manager", "layer": "addon", "type": "spectro", "tag": "1.21.1",
+/// #     "version": "1.21.1", "packUid": "p1", "registryUid": "r1", "digest": "sha256:0123",
+/// #     "values": "installCRDs: true",
+/// # });
+/// # let api = MemoryApi::new()
+/// #     .with(
+/// #         format!("/v1/clusterprofiles/{uid}"),
+/// #         json!({
+/// #             "metadata": {"uid": uid, "name": "demo"},
+/// #             "spec": {"version": "1.0.0", "published": {
+/// #                 "cloudType": "aws", "type": "add-on", "packs": [pack],
+/// #             }},
+/// #         }),
+/// #     )
+/// #     .with(
+/// #         format!("/v1/clusterprofiles/{uid}/packs/manifests"),
+/// #         json!({"spec": {"packs": []}}),
+/// #     )
+/// #     .with(format!("/v1/clusterprofiles/{uid}/variables"), json!({"variables": []}));
+/// let quiet = Progress::silent();
+/// let record = ops::snapshot_for(
+///     &Ref::Uid(uid.to_string()),
+///     &SnapshotOptions::default(),
+///     || Ok(Palette::new(api.clone())),
+///     "2026-09-16T00:00:00Z",
+///     &quiet,
+/// )?;
+///
+/// let verdict = ops::verify(&record, &Palette::new(api), "2026-09-17T00:00:00Z", &quiet)?;
+/// assert!(verdict.unchanged);
+/// assert_eq!(verdict.status, VerifyStatus::Unchanged);
+/// # Ok::<(), strata::Error>(())
+/// ```
 pub fn verify<A: PaletteApi>(
     recorded: &Snapshot,
     palette: &Palette<A>,
@@ -179,6 +236,10 @@ pub fn verify<A: PaletteApi>(
 }
 
 /// [`verify`], with the checks that `options` adds.
+///
+/// # Errors
+///
+/// The errors of [`verify`].
 pub fn verify_with<A: PaletteApi>(
     recorded: &Snapshot,
     palette: &Palette<A>,
@@ -639,10 +700,12 @@ impl VerifySummary {
     }
 }
 
-/// Verify several records. Each record is checked in the project it was taken in, or in
-/// `project` when given; `connect` is called once per distinct scope. A record that cannot be
-/// read or checked is an `error` entry, and the other records are still checked. `options` is as
-/// in [`verify_with`].
+/// Verify several records.
+///
+/// Each record is checked in the project it was taken in, or in `project` when given; `connect` is
+/// called once per distinct scope. A record that cannot be read or checked is an `error` entry,
+/// and the other records are still checked. `paths` are the paths of the record files. `options`
+/// is as in [`verify_with`]. `checked_at` is the time of the check, in RFC 3339.
 pub fn verify_many<A, F>(
     paths: &[PathBuf],
     project: Option<&str>,

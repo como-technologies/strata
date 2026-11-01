@@ -46,12 +46,22 @@ pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Re
 }
 
 /// Record one pack version as a snapshot of a single layer, with the values the registry ships.
+///
 /// Its pack hashes the same way as that pack inside a profile, so comparing two of these says
 /// what changed between two versions of a pack: the version and uid in `IDENTITY`, the content
 /// digest in `UPSTREAM`, and the default values in `AUTHORED`.
 ///
-/// Without `registry`, strata uses the registry that has the pack version, and refuses when
-/// several do. `version` may be [`LATEST`].
+/// `registry` is the name or the uid of the registry. Without it, strata uses the registry that
+/// has the pack version, and refuses when several do. `version` can be [`LATEST`]. `reference` is
+/// the ref that the record gives as its source, and `fetched_at` is the time of the read, in
+/// RFC 3339.
+///
+/// # Errors
+///
+/// [`Error::PackNotFound`] when the registry does not have the pack version, and
+/// [`Error::PackInSeveralRegistries`] when no `registry` is set and more than one has it.
+/// [`Error::RegistryNotFound`] and [`Error::RegistryNameAmbiguous`] when `registry` names no
+/// registry or several. Each error of [`resolve`](fn@super::resolve), and each error of a request.
 pub fn pack_snapshot<A: PaletteApi>(
     palette: &Palette<A>,
     registry: Option<&str>,

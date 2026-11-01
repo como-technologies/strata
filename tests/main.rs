@@ -12,6 +12,7 @@ mod cli;
 mod closed_set;
 mod content;
 mod dev_scripts;
+mod doc_lints;
 mod docs;
 mod draft;
 mod draft_secret;

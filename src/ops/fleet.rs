@@ -197,6 +197,10 @@ pub struct Selection {
 
 /// Every saved tag filter of the tenant, with its conditions: one request for the list, and one
 /// for each filter.
+///
+/// # Errors
+///
+/// The error of the first request that fails.
 pub fn saved_filters<A: PaletteApi>(tenant: &Palette<A>) -> Result<Vec<SavedFilter>> {
     let listing = tenant.tag_filters()?;
     let entries: Vec<(String, String)> = items(&listing)
@@ -287,12 +291,19 @@ fn meets(groups: &[(Conjunction, Vec<TagCondition>)], labels: &BTreeMap<String, 
         })
 }
 
-/// The clusters that `query` selects. Strata reads the search schema of the tenant: when the
-/// search takes the property `tags`, the search of Palette selects the clusters, at tenant scope.
-/// The search leaves out each virtual cluster unless a condition asks for them. So strata sends
-/// it a second time with that condition, when the search takes `environment`. Else strata reads
-/// the cluster listing and matches the labels itself. `tenant` reads at tenant scope: see
-/// [`tenant_of`].
+/// The clusters that `query` selects.
+///
+/// Strata reads the search schema of the tenant: when the search takes the property `tags`, the
+/// search of Palette selects the clusters, at tenant scope. The search leaves out each virtual
+/// cluster unless a condition asks for them. So strata sends it a second time with that
+/// condition, when the search takes `environment`. Else strata reads the cluster listing and
+/// matches the labels itself. `tenant` reads at tenant scope: see [`tenant_of`].
+///
+/// # Errors
+///
+/// [`Error::FilterNotFound`] when the saved filter of the query is not in the tenant, and
+/// [`Error::FilterNameAmbiguous`] when two or more have its name. The error of the first request
+/// that fails.
 pub fn select<A: PaletteApi>(
     query: &ClusterQuery,
     tenant: &Palette<A>,
@@ -357,6 +368,10 @@ pub(super) fn select_in<A: PaletteApi>(
 ///
 /// `consumers` falls back to the scope of its profile, and not to the configured scope. A
 /// cluster that runs a profile of a project is in that project. A fleet has no such scope.
+///
+/// # Errors
+///
+/// The error of `connect` for the configured scope, when `connect` gives no tenant client either.
 pub fn tenant_of<A, F>(connect: &mut F) -> Result<Palette<A>>
 where
     A: PaletteApi,
@@ -448,9 +463,17 @@ fn file_names(clusters: &[ListedCluster]) -> Vec<String> {
 }
 
 /// Write a record of each cluster that `query` selects into `dir`, each read in its own project.
+///
 /// With `prune`, remove each cluster record of `dir` that is not one of them: the set is the
 /// query, and a cluster that no longer meets it leaves the directory. A file that is not a
-/// cluster record stays.
+/// cluster record stays. `connect` gives a client for a project uid, with `None` for the configured
+/// scope. `fetched_at` is the time of the read, in RFC 3339.
+///
+/// # Errors
+///
+/// The errors of [`select`], and the error of `connect` for the tenant. [`Error::Io`] when strata
+/// cannot make `dir` or remove a stale record. A cluster that strata cannot record is no error: its
+/// entry in the report holds the error, and the set goes on.
 pub fn snapshot_set<A, F>(
     query: &ClusterQuery,
     dir: &Path,
