@@ -8,7 +8,7 @@ use std::collections::hash_map::Entry;
 use std::path::{Path, PathBuf};
 
 use crate::api::{Palette, PaletteApi, RawCluster, RawProfile};
-use crate::candidate::LoadedCandidate;
+use crate::candidate::{LoadedCandidate, pack_snapshot};
 use crate::diff::{self, Diff};
 use crate::error::{Error, Result};
 use crate::json::{first_nonempty, str_at, text};
@@ -18,7 +18,6 @@ use crate::snapshot::{GroupMember, Snapshot, SubjectKind};
 use crate::term::progress::Progress;
 
 mod behind;
-mod bump;
 mod consumer_list;
 mod consumers;
 mod fleet;
@@ -183,7 +182,7 @@ where
             name,
             version,
         } => live(&|palette| {
-            crate::candidate::pack_snapshot(
+            pack_snapshot(
                 palette,
                 registry.as_deref(),
                 name,
@@ -198,24 +197,8 @@ where
             profile,
             pending,
         } => live(&|palette| {
-            let raw = palette.fetch_subject(SubjectKind::Cluster, uid, progress)?;
-            let reads = HolderReads {
-                profile: profile.as_deref(),
-                pending: *pending,
-                macros: options.macros,
-                shape: options.shape,
-                members: false,
-                raw_dir: options.raw_dir.as_deref(),
-            };
-            holder_snapshot(
-                palette,
-                SubjectKind::Cluster,
-                raw,
-                uid,
-                &reads,
-                &text,
-                fetched_at,
-            )
+            let reads = HolderReads::cluster(profile.as_deref(), *pending, options);
+            cluster_snapshot(palette, uid, &reads, &text, fetched_at, progress)
         }),
         Ref::AppProfile { id, version } => live(&|palette| {
             app_profile_snapshot(palette, id, version.as_deref(), &text, fetched_at, progress)
@@ -224,19 +207,18 @@ where
             cluster_group_snapshot(palette, uid, options.macros, &text, fetched_at, progress)
         }),
         Ref::EdgeHost { uid, profile } => live(&|palette| {
-            let raw = palette.fetch_subject(SubjectKind::EdgeHost, uid, progress)?;
             let reads = HolderReads {
                 profile: profile.as_deref(),
                 ..HolderReads::default()
             };
-            holder_snapshot(
+            held_snapshot(
                 palette,
                 SubjectKind::EdgeHost,
-                raw,
                 uid,
                 &reads,
                 &text,
                 fetched_at,
+                progress,
             )
         }),
     }
@@ -286,6 +268,21 @@ struct HolderReads<'a> {
     members: bool,
     /// Save the raw answers of Palette in this directory.
     raw_dir: Option<&'a Path>,
+}
+
+impl<'a> HolderReads<'a> {
+    /// What `snapshot` reads of a cluster: the `profile` and the `pending` update of its ref, and
+    /// what `options` ask for.
+    fn cluster(profile: Option<&'a str>, pending: bool, options: &'a SnapshotOptions) -> Self {
+        HolderReads {
+            profile,
+            pending,
+            macros: options.macros,
+            shape: options.shape,
+            members: false,
+            raw_dir: options.raw_dir.as_deref(),
+        }
+    }
 }
 
 /// The record of a holder, from its raw documents `raw`, with what `reads` adds.
@@ -375,21 +372,56 @@ pub fn cluster_group_snapshot<A: PaletteApi>(
     fetched_at: &str,
     progress: &Progress,
 ) -> Result<Snapshot> {
-    let raw = palette.fetch_subject(SubjectKind::ClusterGroup, group, progress)?;
     let reads = HolderReads {
         macros,
         members: true,
         ..HolderReads::default()
     };
-    holder_snapshot(
+    held_snapshot(
         palette,
         SubjectKind::ClusterGroup,
-        raw,
         group,
         &reads,
         reference,
         fetched_at,
+        progress,
     )
+}
+
+/// A record of the cluster `uid`, from the document that Palette gives for it, with what `reads`
+/// ask for.
+fn cluster_snapshot<A: PaletteApi>(
+    palette: &Palette<A>,
+    uid: &str,
+    reads: &HolderReads<'_>,
+    reference: &str,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    held_snapshot(
+        palette,
+        SubjectKind::Cluster,
+        uid,
+        reads,
+        reference,
+        fetched_at,
+        progress,
+    )
+}
+
+/// A record of the holder `uid` of `kind`, from the document that Palette gives for it, with what
+/// `reads` ask for.
+fn held_snapshot<A: PaletteApi>(
+    palette: &Palette<A>,
+    kind: SubjectKind,
+    uid: &str,
+    reads: &HolderReads<'_>,
+    reference: &str,
+    fetched_at: &str,
+    progress: &Progress,
+) -> Result<Snapshot> {
+    let raw = palette.fetch_subject(kind, uid, progress)?;
+    holder_snapshot(palette, kind, raw, uid, reads, reference, fetched_at)
 }
 
 /// The two sides of a comparison. When one side is a cluster group, and the other is a cluster ref

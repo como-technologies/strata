@@ -1,4 +1,4 @@
-//! The size limits of `docs/src/development/code.md` for the Rust files of xtask and of
+//! The size limits of `docs/src/development/code.md` for the Rust files of strata, xtask, and
 //! strata-preflight: a module file has at most 800 lines, and a function has at most 80 lines.
 
 use std::path::{Path, PathBuf};
@@ -86,6 +86,11 @@ fn long_functions(src: &Path) -> Vec<String> {
         .collect()
 }
 
+/// The directory of the source files of strata.
+fn strata_src() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../src")
+}
+
 /// The directory of the source files of xtask.
 fn xtask_src() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
@@ -94,6 +99,18 @@ fn xtask_src() -> PathBuf {
 /// The directory of the source files of strata-preflight.
 fn preflight_src() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../preflight/src")
+}
+
+#[test]
+fn no_module_file_of_strata_has_more_than_800_lines() {
+    let long = long_modules(&strata_src());
+    assert!(long.is_empty(), "divide these module files: {long:?}");
+}
+
+#[test]
+fn no_function_of_strata_has_more_than_80_lines() {
+    let long = long_functions(&strata_src());
+    assert!(long.is_empty(), "divide these functions: {long:?}");
 }
 
 #[test]
@@ -118,42 +135,6 @@ fn no_module_file_of_strata_preflight_has_more_than_800_lines() {
 fn no_function_of_strata_preflight_has_more_than_80_lines() {
     let long = long_functions(&preflight_src());
     assert!(long.is_empty(), "divide these functions: {long:?}");
-}
-
-/// The functions of `src/` that the review of Wave 4 found over the limit, each with its file.
-/// Each one divided into one function for each part.
-const DIVIDED_FUNCTIONS: [(&str, &str); 9] = [
-    ("cli/snapshot.rs", "cmd_snapshot"),
-    ("ops/verify.rs", "verify_with"),
-    ("diff/mod.rs", "compute"),
-    ("render/markdown.rs", "render"),
-    ("render/terminal/mod.rs", "render"),
-    ("snapshot/build.rs", "from_cluster"),
-    ("snapshot/pack.rs", "from_api_with"),
-    ("ops/fleet.rs", "snapshot_set"),
-    ("ops/same_release.rs", "same_release_with"),
-];
-
-#[test]
-fn each_function_that_the_review_of_wave_4_found_too_long_has_at_most_80_lines() {
-    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("../src");
-    for (file, name) in DIVIDED_FUNCTIONS {
-        let path = src.join(file);
-        let text =
-            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        let lengths: Vec<usize> = function_lengths(&text)
-            .into_iter()
-            .filter(|(found, _)| found == name)
-            .map(|(_, lines)| lines)
-            .collect();
-        assert!(!lengths.is_empty(), "{file} has no function {name}");
-        for lines in lengths {
-            assert!(
-                lines <= FUNCTION_LINES,
-                "{file}: {name} has {lines} lines, and the limit is {FUNCTION_LINES}"
-            );
-        }
-    }
 }
 
 #[test]

@@ -28,7 +28,8 @@ use crate::closed_set::ClosedSet;
 use crate::diff::{Diff, Leaf, Op, PackDiff, Status};
 use crate::error::Result;
 use crate::ops::{
-    Chain, ConsumerKind, ConsumersReport, Listing, PackListing, RecordStatus, VerifySummary,
+    Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject, Listing,
+    PackListing, RecordStatus, SavedFilter, VerifySummary,
 };
 use crate::profile_type::ProfileType;
 use crate::snapshot::Snapshot;
@@ -548,174 +549,235 @@ impl Renderer for MarkdownRenderer {
     fn render_list(&self, l: &Listing) -> Result<String> {
         let mut o = format!("### list: {}\n\n", markdown_cell(&list_scope(l)));
         if let Some(profiles) = &l.profiles {
-            let count = list_count(profiles.len(), "profile", l.pack.as_deref());
-            o.push_str(&format!("**{}**\n\n", markdown_cell(&count)));
-            let with_packs = profiles
-                .iter()
-                .any(|p| p.packs.is_some() || p.error.is_some());
-            if with_packs && !profiles.is_empty() {
-                o.push_str(
-                    "| ref | uid | cloud | type | consumers | packs |\n|---|---|---|---|---|---|\n",
-                );
-            } else if !profiles.is_empty() {
-                o.push_str("| ref | uid | cloud |\n|---|---|---|\n");
-            }
-            for pr in profiles {
-                let mark = profile_marks(pr, l)
-                    .map(|m| format!(" {m}"))
-                    .unwrap_or_default();
-                o.push_str(&format!(
-                    "| `{}`{mark} | `{}` | {} |",
-                    markdown_cell(&pr.reference),
-                    markdown_cell(&pr.uid),
-                    markdown_cell(dash(&pr.cloud_type))
-                ));
-                if with_packs {
-                    let packs = match entry_error(pr.error.as_ref()) {
-                        Some(msg) => format!("error: {msg}"),
-                        None => pr
-                            .packs
-                            .iter()
-                            .flatten()
-                            .map(|pk| format!("{}/{} {}", pk.layer, pk.name, pack_version(pk)))
-                            .collect::<Vec<_>>()
-                            .join("<br>"),
-                    };
-                    o.push_str(&format!(
-                        " {} | {} | {} |",
-                        markdown_cell(dash(pr.profile_type.as_deref().unwrap_or(""))),
-                        pr.consumers
-                            .map(consumer_count)
-                            .unwrap_or_else(|| "-".into()),
-                        markdown_cell(dash(&packs))
-                    ));
-                }
-                o.push('\n');
-            }
-            o.push('\n');
+            list_profiles(&mut o, l, profiles);
         }
         if let Some(clusters) = &l.clusters {
-            o.push_str(&format!(
-                "**{}**\n\n",
-                markdown_cell(&cluster_count(clusters.len(), l.cluster.as_deref()))
-            ));
-            for line in super::list::query_line(l)
-                .into_iter()
-                .chain(virtual_line(l))
-            {
-                o.push_str(&format!(
-                    "{}.\n\n",
-                    markdown_cell(&super::capitalized(&line))
-                ));
-            }
-            let labels = if l.query.is_some() { " labels |" } else { "" };
-            let elsewhere = clusters.iter().any(|c| c.project_uid != l.project_uid);
-            let with_virtual = clusters.iter().any(|c| c.virtual_cluster.is_some());
-            let with_applied = clusters
-                .iter()
-                .any(|c| c.profiles.is_some() || c.error.is_some());
-            let project = if elsewhere { " project |" } else { "" };
-            let virtual_column = if with_virtual { " virtual |" } else { "" };
-            let applied = if with_applied {
-                " profiles | behind |"
-            } else {
-                ""
-            };
-            if !clusters.is_empty() {
-                let head = format!(
-                    "| ref | name | state | cloud |{project}{labels}{virtual_column}{applied}"
-                );
-                let rule: String = head.matches('|').skip(1).map(|_| "---|").collect();
-                o.push_str(&format!("{head}\n|{rule}\n"));
-            }
-            for c in clusters {
-                o.push_str(&format!(
-                    "| `{}` | {} | {} | {} |",
-                    markdown_cell(&c.reference),
-                    markdown_cell(dash(&c.name)),
-                    markdown_cell(dash(&c.state)),
-                    markdown_cell(dash(&c.cloud_type))
-                ));
-                if elsewhere {
-                    o.push_str(&format!(
-                        " {} |",
-                        markdown_cell(&project_label(&c.project_uid, &c.project_name))
-                    ));
-                }
-                if l.query.is_some() {
-                    o.push_str(&format!(
-                        " {} |",
-                        markdown_cell(dash(&super::list::labels_text(&c.labels)))
-                    ));
-                }
-                if with_virtual {
-                    // a virtual cluster whose group Palette does not name is still virtual
-                    let cell = c
-                        .virtual_cluster
-                        .as_ref()
-                        .map(|v| virtual_group(v).unwrap_or_else(|| "yes".to_string()));
-                    o.push_str(&format!(
-                        " {} |",
-                        markdown_cell(dash(cell.as_deref().unwrap_or("")))
-                    ));
-                }
-                if with_applied {
-                    let profiles = if let Some(msg) = entry_error(c.error.as_ref()) {
-                        format!("error: {msg}")
-                    } else if let Some(note) = super::list::imported_note(c) {
-                        note.to_string()
-                    } else {
-                        c.profiles
-                            .iter()
-                            .flatten()
-                            .map(|a| format!("{} ({})", applied_ref(a), dash(&a.kind)))
-                            .collect::<Vec<_>>()
-                            .join("<br>")
-                    };
-                    o.push_str(&format!(" {} |", markdown_cell(dash(&profiles))));
-                    let behind = match c.updates_pending {
-                        Some(true) => format!("yes: {}", pending_profile_names(&c.pending_updates)),
-                        Some(false) => "no".to_string(),
-                        None => "-".to_string(),
-                    };
-                    o.push_str(&format!(" {} |", markdown_cell(&behind)));
-                }
-                o.push('\n');
-            }
-            o.push('\n');
+            list_clusters(&mut o, l, clusters);
         }
         if let Some(projects) = &l.projects {
-            o.push_str(&format!("**{}**\n\n", count_of(projects.len(), "project")));
-            if !projects.is_empty() {
-                o.push_str("| name | uid |\n|---|---|\n");
-            }
-            for pr in projects {
-                o.push_str(&format!(
-                    "| {} | `{}` |\n",
-                    markdown_cell(dash(&pr.name)),
-                    markdown_cell(&pr.uid)
-                ));
-            }
-            o.push('\n');
+            list_projects(&mut o, projects);
         }
         if let Some(filters) = &l.filters {
-            o.push_str(&format!(
-                "**{}**\n\n",
-                count_of(filters.len(), "saved tag filter")
-            ));
-            if !filters.is_empty() {
-                o.push_str("| ref | uid | selects |\n|---|---|---|\n");
-            }
-            for f in filters {
-                o.push_str(&format!(
-                    "| `{}` | `{}` | {} |\n",
-                    markdown_cell(&f.reference()),
-                    markdown_cell(&f.uid),
-                    markdown_cell(&f.expression())
-                ));
-            }
-            o.push('\n');
+            list_filters(&mut o, filters);
         }
         Ok(o)
     }
+}
+
+/// The table of the profile versions of a listing, with its count.
+fn list_profiles(o: &mut String, l: &Listing, profiles: &[ListedProfile]) {
+    let count = list_count(profiles.len(), "profile", l.pack.as_deref());
+    o.push_str(&format!("**{}**\n\n", markdown_cell(&count)));
+    let with_packs = profiles
+        .iter()
+        .any(|p| p.packs.is_some() || p.error.is_some());
+    if with_packs && !profiles.is_empty() {
+        o.push_str("| ref | uid | cloud | type | consumers | packs |\n|---|---|---|---|---|---|\n");
+    } else if !profiles.is_empty() {
+        o.push_str("| ref | uid | cloud |\n|---|---|---|\n");
+    }
+    for pr in profiles {
+        o.push_str(&profile_row(l, pr, with_packs));
+    }
+    o.push('\n');
+}
+
+/// The row of a profile version. `with_packs` adds the columns of its type, consumers, and packs.
+fn profile_row(l: &Listing, pr: &ListedProfile, with_packs: bool) -> String {
+    let mark = profile_marks(pr, l)
+        .map(|m| format!(" {m}"))
+        .unwrap_or_default();
+    let mut row = format!(
+        "| `{}`{mark} | `{}` | {} |",
+        markdown_cell(&pr.reference),
+        markdown_cell(&pr.uid),
+        markdown_cell(dash(&pr.cloud_type))
+    );
+    if with_packs {
+        let packs = match entry_error(pr.error.as_ref()) {
+            Some(msg) => format!("error: {msg}"),
+            None => pr
+                .packs
+                .iter()
+                .flatten()
+                .map(|pk| format!("{}/{} {}", pk.layer, pk.name, pack_version(pk)))
+                .collect::<Vec<_>>()
+                .join("<br>"),
+        };
+        row.push_str(&format!(
+            " {} | {} | {} |",
+            markdown_cell(dash(pr.profile_type.as_deref().unwrap_or(""))),
+            pr.consumers
+                .map(consumer_count)
+                .unwrap_or_else(|| "-".into()),
+            markdown_cell(dash(&packs))
+        ));
+    }
+    row.push('\n');
+    row
+}
+
+/// The columns of the table of clusters that a listing shows only when a cluster needs them.
+struct ClusterColumns {
+    project: bool,
+    labels: bool,
+    virtual_group: bool,
+    applied: bool,
+}
+
+impl ClusterColumns {
+    fn of(l: &Listing, clusters: &[ListedCluster]) -> Self {
+        Self {
+            project: clusters.iter().any(|c| c.project_uid != l.project_uid),
+            // a query is a question about labels, so its rows show them
+            labels: l.query.is_some(),
+            virtual_group: clusters.iter().any(|c| c.virtual_cluster.is_some()),
+            applied: clusters
+                .iter()
+                .any(|c| c.profiles.is_some() || c.error.is_some()),
+        }
+    }
+
+    /// The heading of the table, and the rule under it.
+    fn head(&self) -> String {
+        let optional: String = [
+            (self.project, " project |"),
+            (self.labels, " labels |"),
+            (self.virtual_group, " virtual |"),
+            (self.applied, " profiles | behind |"),
+        ]
+        .into_iter()
+        .filter(|(shown, _)| *shown)
+        .map(|(_, text)| text)
+        .collect();
+        let head = format!("| ref | name | state | cloud |{optional}");
+        let rule: String = head.matches('|').skip(1).map(|_| "---|").collect();
+        format!("{head}\n|{rule}\n")
+    }
+}
+
+/// The table of the clusters of a listing, with its count and the lines of its query.
+fn list_clusters(o: &mut String, l: &Listing, clusters: &[ListedCluster]) {
+    o.push_str(&format!(
+        "**{}**\n\n",
+        markdown_cell(&cluster_count(clusters.len(), l.cluster.as_deref()))
+    ));
+    for line in super::list::query_line(l)
+        .into_iter()
+        .chain(virtual_line(l))
+    {
+        o.push_str(&format!(
+            "{}.\n\n",
+            markdown_cell(&super::capitalized(&line))
+        ));
+    }
+    let columns = ClusterColumns::of(l, clusters);
+    if !clusters.is_empty() {
+        o.push_str(&columns.head());
+    }
+    for c in clusters {
+        o.push_str(&cluster_row(c, &columns));
+    }
+    o.push('\n');
+}
+
+/// The row of a cluster, with the columns that `columns` shows.
+fn cluster_row(c: &ListedCluster, columns: &ClusterColumns) -> String {
+    let mut row = format!(
+        "| `{}` | {} | {} | {} |",
+        markdown_cell(&c.reference),
+        markdown_cell(dash(&c.name)),
+        markdown_cell(dash(&c.state)),
+        markdown_cell(dash(&c.cloud_type))
+    );
+    if columns.project {
+        row.push_str(&format!(
+            " {} |",
+            markdown_cell(&project_label(&c.project_uid, &c.project_name))
+        ));
+    }
+    if columns.labels {
+        row.push_str(&format!(
+            " {} |",
+            markdown_cell(dash(&super::list::labels_text(&c.labels)))
+        ));
+    }
+    if columns.virtual_group {
+        // a virtual cluster whose group Palette does not name is still virtual
+        let cell = c
+            .virtual_cluster
+            .as_ref()
+            .map(|v| virtual_group(v).unwrap_or_else(|| "yes".to_string()));
+        row.push_str(&format!(
+            " {} |",
+            markdown_cell(dash(cell.as_deref().unwrap_or("")))
+        ));
+    }
+    if columns.applied {
+        row.push_str(&applied_cells(c));
+    }
+    row.push('\n');
+    row
+}
+
+/// The cells of the profiles that a cluster runs, and of the updates that wait for it.
+fn applied_cells(c: &ListedCluster) -> String {
+    let profiles = if let Some(msg) = entry_error(c.error.as_ref()) {
+        format!("error: {msg}")
+    } else if let Some(note) = super::list::imported_note(c) {
+        note.to_string()
+    } else {
+        c.profiles
+            .iter()
+            .flatten()
+            .map(|a| format!("{} ({})", applied_ref(a), dash(&a.kind)))
+            .collect::<Vec<_>>()
+            .join("<br>")
+    };
+    let behind = match c.updates_pending {
+        Some(true) => format!("yes: {}", pending_profile_names(&c.pending_updates)),
+        Some(false) => "no".to_string(),
+        None => "-".to_string(),
+    };
+    format!(
+        " {} | {} |",
+        markdown_cell(dash(&profiles)),
+        markdown_cell(&behind)
+    )
+}
+
+/// The table of the projects of a listing, with its count.
+fn list_projects(o: &mut String, projects: &[ListedProject]) {
+    o.push_str(&format!("**{}**\n\n", count_of(projects.len(), "project")));
+    if !projects.is_empty() {
+        o.push_str("| name | uid |\n|---|---|\n");
+    }
+    for pr in projects {
+        o.push_str(&format!(
+            "| {} | `{}` |\n",
+            markdown_cell(dash(&pr.name)),
+            markdown_cell(&pr.uid)
+        ));
+    }
+    o.push('\n');
+}
+
+/// The table of the saved tag filters of a listing, with its count.
+fn list_filters(o: &mut String, filters: &[SavedFilter]) {
+    o.push_str(&format!(
+        "**{}**\n\n",
+        count_of(filters.len(), "saved tag filter")
+    ));
+    if !filters.is_empty() {
+        o.push_str("| ref | uid | selects |\n|---|---|---|\n");
+    }
+    for f in filters {
+        o.push_str(&format!(
+            "| `{}` | `{}` | {} |\n",
+            markdown_cell(&f.reference()),
+            markdown_cell(&f.uid),
+            markdown_cell(&f.expression())
+        ));
+    }
+    o.push('\n');
 }

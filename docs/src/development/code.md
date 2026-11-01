@@ -33,11 +33,17 @@ where each module goes.
 - Move a file with `git mv`, so that `git log --follow` keeps its history. Move
   the file whole in one pull request, and divide it in the next. The squash of
   one pull request that does both loses the history.
+- To divide a file in the same pull request, leave it as `name.rs` and put the
+  new files in `name/`, such as `packs.rs` and `packs/tests.rs`. The file keeps its
+  path and its history. A later pull request can move it to `name/mod.rs` whole.
+- Put the unit tests of a module in `tests.rs` in its directory when they make the
+  module file too long.
 - When a public module moves under a new parent, keep a `pub use` at the old
   path for one minor release.
 - `cargo test -p xtask` checks the limit of 800 lines for each module file of
-  `xtask` and of `preflight/src/`. It checks the limit of 80 lines for each
-  function of the two, with the unit tests out of the count.
+  `src/`, `xtask`, and `preflight/src/`. It checks the limit of 80 lines for each
+  function of the three, with the unit tests out of the count. A file named
+  `tests.rs` holds only tests, so it has no limit.
 
 ## Visibility
 

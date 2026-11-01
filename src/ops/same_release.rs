@@ -255,89 +255,102 @@ fn identity_detail(x: &Pack, y: &Pack) -> String {
     "identity hash differs".to_string()
 }
 
-/// The differences between two records that the policy does not accept, plus the number of
-/// clean registry re-pins and of packs pinned under another tag name with nothing else changed.
-fn pair_reasons(
-    d: &Diff,
-    a: &Snapshot,
-    b: &Snapshot,
-    policy: Policy,
-) -> (Vec<String>, usize, usize) {
+/// What the difference between two records says about their release.
+#[derive(Default)]
+struct PairReasons {
+    /// The differences that the policy does not accept.
+    reasons: Vec<String>,
+    /// The packs that a clean registry re-pin moved.
+    repinned: usize,
+    /// The packs pinned under another tag name with nothing else changed.
+    retagged: usize,
+}
+
+impl PairReasons {
+    /// Add the reasons and the counts for the changed pack `pd`. `x` and `y` are the pack in the
+    /// first record and in the second record.
+    fn changed_pack(&mut self, pd: &PackDiff, x: &Pack, y: &Pack, policy: Policy) {
+        // a packUid that Palette mints is not part of the release
+        let minted = diff::pack::minted_uid_pair(x, y);
+        // The type follows the registry (spectro, helm, oci), so a move may change it; a
+        // pack from no registry, a manifest, did not move.
+        let moved = !x.registry_uid.is_empty()
+            && !y.registry_uid.is_empty()
+            && x.registry_uid != y.registry_uid
+            && x.tag == y.tag
+            && x.version == y.version;
+        // the same build under another of the registry's names for its version
+        if pd.tag_renamed && !pd.upstream && !pd.authored {
+            self.retagged += 1;
+        }
+        if pd.identity && !minted && !pd.tag_renamed {
+            if moved {
+                if !pd.authored {
+                    self.repinned += 1;
+                }
+                if policy == Policy::Exact {
+                    self.reasons.push(format!(
+                        "pack {} moved registry {} -> {}",
+                        pd.key, x.registry_uid, y.registry_uid
+                    ));
+                }
+            } else {
+                self.reasons.push(format!(
+                    "pack {} {}: {}",
+                    pd.key,
+                    ChangeFlag::Identity,
+                    identity_detail(x, y)
+                ));
+            }
+        }
+        if pd.authored {
+            self.reasons.push(format!(
+                "pack {} {}: {}",
+                pd.key,
+                ChangeFlag::Authored,
+                authored_detail(pd)
+            ));
+        }
+        if pd.upstream && (!pd.identity || pd.tag_renamed) {
+            self.reasons.push(format!(
+                "pack {} {} in the same registry: {} -> {}",
+                pd.key,
+                ChangeFlag::Upstream,
+                x.hash.upstream_raw,
+                y.hash.upstream_raw
+            ));
+        }
+    }
+}
+
+/// The differences between the records `a` and `b` that `policy` does not accept, plus the number
+/// of clean registry re-pins and of packs pinned under another tag name with nothing else
+/// changed. `d` is their comparison.
+fn pair_reasons(d: &Diff, a: &Snapshot, b: &Snapshot, policy: Policy) -> PairReasons {
     let (pa, pb) = (a.packs_by_key(), b.packs_by_key());
-    let mut reasons = Vec::new();
-    let mut repinned = 0;
-    let mut retagged = 0;
+    let mut out = PairReasons::default();
     if d.variables.changed {
-        reasons.push("variables changed".to_string());
+        out.reasons.push("variables changed".to_string());
     }
     for pd in &d.packs {
         match pd.status {
             Status::Unchanged => {}
-            Status::Added => reasons.push(format!("pack {} added", pd.key)),
-            Status::Removed => reasons.push(format!("pack {} removed", pd.key)),
+            Status::Added => out.reasons.push(format!("pack {} added", pd.key)),
+            Status::Removed => out.reasons.push(format!("pack {} removed", pd.key)),
             Status::Changed => {
-                let (x, y) = (pa[pd.key.as_str()], pb[pd.key.as_str()]);
-                // a packUid that Palette mints is not part of the release
-                let minted = diff::pack::minted_uid_pair(x, y);
-                // The type follows the registry (spectro, helm, oci), so a move may change it; a
-                // pack from no registry, a manifest, did not move.
-                let moved = !x.registry_uid.is_empty()
-                    && !y.registry_uid.is_empty()
-                    && x.registry_uid != y.registry_uid
-                    && x.tag == y.tag
-                    && x.version == y.version;
-                // the same build under another of the registry's names for its version
-                if pd.tag_renamed && !pd.upstream && !pd.authored {
-                    retagged += 1;
-                }
-                if pd.identity && !minted && !pd.tag_renamed {
-                    if moved {
-                        if !pd.authored {
-                            repinned += 1;
-                        }
-                        if policy == Policy::Exact {
-                            reasons.push(format!(
-                                "pack {} moved registry {} -> {}",
-                                pd.key, x.registry_uid, y.registry_uid
-                            ));
-                        }
-                    } else {
-                        reasons.push(format!(
-                            "pack {} {}: {}",
-                            pd.key,
-                            ChangeFlag::Identity,
-                            identity_detail(x, y)
-                        ));
-                    }
-                }
-                if pd.authored {
-                    reasons.push(format!(
-                        "pack {} {}: {}",
-                        pd.key,
-                        ChangeFlag::Authored,
-                        authored_detail(pd)
-                    ));
-                }
-                if pd.upstream && (!pd.identity || pd.tag_renamed) {
-                    reasons.push(format!(
-                        "pack {} {} in the same registry: {} -> {}",
-                        pd.key,
-                        ChangeFlag::Upstream,
-                        x.hash.upstream_raw,
-                        y.hash.upstream_raw
-                    ));
-                }
+                out.changed_pack(pd, pa[pd.key.as_str()], pb[pd.key.as_str()], policy);
             }
         }
     }
     if d.order_changed {
-        reasons.push("pack order changed".to_string());
+        out.reasons.push("pack order changed".to_string());
     }
-    reasons.extend(d.image_ids_changed.iter().map(ImageIdChange::sentence));
-    if reasons.is_empty() && !d.same_content && policy == Policy::Exact {
-        reasons.push("roots differ".to_string());
+    out.reasons
+        .extend(d.image_ids_changed.iter().map(ImageIdChange::sentence));
+    if out.reasons.is_empty() && !d.same_content && policy == Policy::Exact {
+        out.reasons.push("roots differ".to_string());
     }
-    (reasons, repinned, retagged)
+    out
 }
 
 /// The verdict on two consecutive records `(label, record)`, under `policy`.
@@ -349,7 +362,11 @@ fn build_pair(
     generated_at: &str,
 ) -> Pair {
     let d = diff::compute(a, b, generated_at, None);
-    let (mut reasons, packs_repinned, packs_retagged) = pair_reasons(&d, a, b, policy);
+    let PairReasons {
+        mut reasons,
+        repinned: packs_repinned,
+        retagged: packs_retagged,
+    } = pair_reasons(&d, a, b, policy);
     // The root does not cover the annotations, so two records with one root can boot their nodes
     // from two machine images.
     let mut status = if !d.image_ids_changed.is_empty() {

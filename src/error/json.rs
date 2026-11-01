@@ -55,98 +55,192 @@ impl Error {
     /// The page "Errors" of the book gives the fields of each kind.
     pub fn to_json(&self) -> Value {
         let mut m = Map::new();
-        m.insert(KIND.into(), Value::from(self.kind()));
-        m.insert(MESSAGE.into(), Value::from(self.to_string()));
-        let path = |m: &mut Map<String, Value>, p: &std::path::Path| {
-            m.insert("path".into(), Value::from(p.display().to_string()));
-        };
+        put(&mut m, KIND, self.kind());
+        put(&mut m, MESSAGE, self.to_string());
+        // each function writes the fields of its own variants and no other
+        self.put_setting_fields(&mut m);
+        self.put_request_fields(&mut m);
+        self.put_file_fields(&mut m);
+        self.put_profile_fields(&mut m);
+        self.put_cluster_fields(&mut m);
+        self.put_pack_fields(&mut m);
+        self.put_lookup_fields(&mut m);
+        Value::Object(m)
+    }
+
+    /// Put the fields of a variant that a setting, a reference, or a refusal of Palette causes.
+    fn put_setting_fields(&self, m: &mut Map<String, Value>) {
         match self {
             Error::MissingCredential { primary, alternate } => {
-                m.insert("variable".into(), Value::from(*primary));
-                m.insert("alternate".into(), Value::from(*alternate));
-            }
-            Error::RecordNotASource { path: p } => {
-                m.insert("path".into(), Value::from(p.as_str()));
-            }
-            Error::PaletteRefuses { reference, errors } => {
-                m.insert("reference".into(), Value::from(reference.as_str()));
-                m.insert(
-                    "errors".into(),
-                    serde_json::to_value(errors).unwrap_or_default(),
-                );
-            }
-            // the message carries the whole of it, and no field adds to that
-            Error::Usage { .. } => {}
-            Error::Api {
-                method,
-                path: p,
-                status,
-                ..
-            } => {
-                m.insert("method".into(), Value::from(method.as_str()));
-                m.insert("path".into(), Value::from(p.as_str()));
-                m.insert("status".into(), Value::from(*status));
-            }
-            Error::RetryAfterTooLong {
-                method,
-                path: p,
-                status,
-                retry_after,
-                limit,
-            } => {
-                m.insert("method".into(), Value::from(method.as_str()));
-                m.insert("path".into(), Value::from(p.as_str()));
-                m.insert("status".into(), Value::from(*status));
-                m.insert("retryAfter".into(), Value::from(*retry_after));
-                m.insert("limit".into(), Value::from(*limit));
-            }
-            Error::Pattern { pattern, .. } => {
-                m.insert("pattern".into(), Value::from(pattern.as_str()));
+                put(m, "variable", *primary);
+                put(m, "alternate", *alternate);
             }
             Error::InvalidSetting {
                 variable, value, ..
             } => {
-                m.insert("variable".into(), Value::from(*variable));
-                m.insert("value".into(), Value::from(value.as_str()));
+                put(m, "variable", *variable);
+                put(m, "value", value.as_str());
             }
-            Error::Transport {
-                method, path: p, ..
+            Error::Pattern { pattern, .. } => put(m, "pattern", pattern.as_str()),
+            Error::PaletteRefuses { reference, errors } => {
+                put(m, "reference", reference.as_str());
+                put(
+                    m,
+                    "errors",
+                    serde_json::to_value(errors).unwrap_or_default(),
+                );
             }
-            | Error::NotJson {
-                method, path: p, ..
+            Error::ProfileRefRequired { reference } => put(m, "reference", reference.as_str()),
+            // the message carries the whole of it, and no field adds to that
+            _ => {}
+        }
+    }
+
+    /// Put the fields of a variant that a request to Palette causes.
+    fn put_request_fields(&self, m: &mut Map<String, Value>) {
+        match self {
+            Error::Api {
+                method,
+                path,
+                status,
+                ..
             } => {
-                m.insert("method".into(), Value::from(method.as_str()));
-                m.insert("path".into(), Value::from(p.as_str()));
+                put_request(m, method.as_str(), path);
+                put(m, "status", *status);
             }
+            Error::RetryAfterTooLong {
+                method,
+                path,
+                status,
+                retry_after,
+                limit,
+            } => {
+                put_request(m, method.as_str(), path);
+                put(m, "status", *status);
+                put(m, "retryAfter", *retry_after);
+                put(m, "limit", *limit);
+            }
+            Error::Transport { method, path, .. } | Error::NotJson { method, path, .. } => {
+                put_request(m, method.as_str(), path);
+            }
+            _ => {}
+        }
+    }
+
+    /// Put the fields of a variant that a file causes: a record, a candidate, or a file of any
+    /// other kind.
+    fn put_file_fields(&self, m: &mut Map<String, Value>) {
+        match self {
+            Error::RecordNotASource { path } => put(m, "path", path.as_str()),
+            Error::CandidateInvalid { path, rule, .. } => {
+                put_path(m, path);
+                if let Some(rule) = rule {
+                    put(m, "code", rule.code());
+                }
+            }
+            Error::NotSnapshot(path)
+            | Error::EmptyFile(path)
+            | Error::Io { path, .. }
+            | Error::FileNotJson { path, .. } => put_path(m, path),
+            Error::UnsupportedSchema {
+                path,
+                found,
+                supported,
+            } => {
+                put_path(m, path);
+                put(m, "found", found.as_str());
+                put(m, "supported", *supported);
+            }
+            Error::SnapshotSchema { path, schema, .. } => {
+                put_path(m, path);
+                put(m, "schema", *schema);
+            }
+            _ => {}
+        }
+    }
+
+    /// Put the fields of a variant that a profile causes.
+    fn put_profile_fields(&self, m: &mut Map<String, Value>) {
+        match self {
             Error::ClusterProfileNotFound {
                 cluster,
                 profile,
                 applied,
             } => {
-                m.insert("cluster".into(), Value::from(cluster.as_str()));
-                m.insert("profile".into(), Value::from(profile.as_str()));
-                m.insert("applied".into(), Value::from(applied.clone()));
+                put(m, "cluster", cluster.as_str());
+                put(m, "profile", profile.as_str());
+                put(m, "applied", applied.clone());
             }
+            Error::NoDraft { name, version, uid } => {
+                put_name_version(m, name, version);
+                put(m, "uid", uid.as_str());
+            }
+            Error::ProfileNotFound {
+                name,
+                version,
+                tenant_scope,
+            } => {
+                put_name_version(m, name, version);
+                put(m, "tenantScope", *tenant_scope);
+            }
+            Error::ProfileNameAmbiguous {
+                name,
+                version,
+                profiles,
+            } => {
+                put_name_version(m, name, version);
+                put(
+                    m,
+                    "profiles",
+                    serde_json::to_value(profiles).unwrap_or_default(),
+                );
+            }
+            Error::AppProfileNameAmbiguous {
+                name,
+                version,
+                uids,
+            } => {
+                put_name_version(m, name, version);
+                put(m, "uids", uids.clone());
+            }
+            Error::AppProfileNotFound {
+                name,
+                version,
+                available,
+            } => {
+                put_name_version(m, name, version);
+                put(m, "available", available.clone());
+            }
+            _ => {}
+        }
+    }
+
+    /// Put the fields of a variant that a cluster causes.
+    fn put_cluster_fields(&self, m: &mut Map<String, Value>) {
+        match self {
             Error::StaleRecord { cluster, profile } => {
-                m.insert("cluster".into(), Value::from(cluster.as_str()));
-                m.insert("profile".into(), Value::from(profile.as_str()));
+                put(m, "cluster", cluster.as_str());
+                put(m, "profile", profile.as_str());
             }
             // `asked` is a part of the message, and no field adds to that
             Error::ClusterTemplateGoverns {
                 cluster, template, ..
             } => {
-                m.insert("cluster".into(), Value::from(cluster.as_str()));
-                m.insert("template".into(), Value::from(template.as_str()));
+                put(m, "cluster", cluster.as_str());
+                put(m, "template", template.as_str());
             }
-            Error::NoCloudConfig { cluster } => {
-                m.insert("cluster".into(), Value::from(cluster.as_str()));
+            Error::NoCloudConfig { cluster } => put(m, "cluster", cluster.as_str()),
+            Error::ClusterNotFound { cluster, available } => {
+                put(m, "cluster", cluster.as_str());
+                put(m, "available", available.clone());
             }
-            Error::CandidateInvalid { path: p, rule, .. } => {
-                path(&mut m, p);
-                if let Some(rule) = rule {
-                    m.insert("code".into(), Value::from(rule.code()));
-                }
-            }
+            _ => {}
+        }
+    }
+
+    /// Put the fields of a variant that a pack or a registry causes.
+    fn put_pack_fields(&self, m: &mut Map<String, Value>) {
+        match self {
             Error::PackNotFound {
                 name,
                 version,
@@ -154,13 +248,12 @@ impl Error {
                 registry,
                 unsynced,
             } => {
-                m.insert("name".into(), Value::from(name.as_str()));
-                m.insert("version".into(), Value::from(version.as_str()));
+                put_name_version(m, name, version);
                 if let Some(t) = tag {
-                    m.insert("tag".into(), Value::from(t.as_str()));
+                    put(m, "tag", t.as_str());
                 }
-                m.insert("registry".into(), Value::from(registry.as_str()));
-                put_unsynced(&mut m, unsynced);
+                put(m, "registry", registry.as_str());
+                put_unsynced(m, unsynced);
             }
             Error::PackUnavailable {
                 name,
@@ -168,140 +261,99 @@ impl Error {
                 registry,
                 state,
             } => {
-                m.insert("name".into(), Value::from(name.as_str()));
-                m.insert("version".into(), Value::from(version.as_str()));
-                m.insert("registry".into(), Value::from(registry.as_str()));
-                m.insert("state".into(), Value::from(state.as_str()));
+                put_name_version(m, name, version);
+                put(m, "registry", registry.as_str());
+                put(m, "state", state.as_str());
             }
             // no version and no registry was asked for, so the document names neither
             Error::PackNameNotFound { name, unsynced } => {
-                m.insert("name".into(), Value::from(name.as_str()));
-                put_unsynced(&mut m, unsynced);
+                put(m, "name", name.as_str());
+                put_unsynced(m, unsynced);
             }
             Error::PackInSeveralRegistries {
                 name,
                 version,
                 registries,
             } => {
-                m.insert("name".into(), Value::from(name.as_str()));
-                m.insert("version".into(), Value::from(version.as_str()));
-                m.insert("registries".into(), Value::from(registries.clone()));
+                put_name_version(m, name, version);
+                put(m, "registries", registries.clone());
             }
             Error::RegistryNotFound {
                 registry,
                 available,
             } => {
-                m.insert("registry".into(), Value::from(registry.as_str()));
-                m.insert("available".into(), Value::from(available.clone()));
+                put(m, "registry", registry.as_str());
+                put(m, "available", available.clone());
             }
-            Error::ProfileRefRequired { reference } => {
-                m.insert("reference".into(), Value::from(reference.as_str()));
-            }
-            Error::NoDraft { name, version, uid } => {
-                m.insert("name".into(), Value::from(name.as_str()));
-                m.insert("version".into(), Value::from(version.as_str()));
-                m.insert("uid".into(), Value::from(uid.as_str()));
-            }
-            Error::ProfileNotFound {
-                name,
-                version,
-                tenant_scope,
-            } => {
-                m.insert("name".into(), Value::from(name.as_str()));
-                m.insert("version".into(), Value::from(version.as_str()));
-                m.insert("tenantScope".into(), Value::from(*tenant_scope));
-            }
-            Error::ProfileNameAmbiguous {
-                name,
-                version,
-                profiles,
-            } => {
-                m.insert("name".into(), Value::from(name.as_str()));
-                m.insert("version".into(), Value::from(version.as_str()));
-                m.insert(
-                    "profiles".into(),
-                    serde_json::to_value(profiles).unwrap_or_default(),
-                );
-            }
-            Error::NotSnapshot(p) | Error::EmptyFile(p) => path(&mut m, p),
-            Error::UnsupportedSchema {
-                path: p,
-                found,
-                supported,
-            } => {
-                path(&mut m, p);
-                m.insert("found".into(), Value::from(found.as_str()));
-                m.insert("supported".into(), Value::from(*supported));
-            }
-            Error::SnapshotSchema {
-                path: p, schema, ..
-            } => {
-                path(&mut m, p);
-                m.insert("schema".into(), Value::from(*schema));
-            }
-            Error::Io { path: p, .. } | Error::FileNotJson { path: p, .. } => path(&mut m, p),
+            _ => {}
+        }
+    }
+
+    /// Put the fields of a variant that a name or a uid of the scope causes: no match, or more
+    /// than one.
+    fn put_lookup_fields(&self, m: &mut Map<String, Value>) {
+        match self {
             Error::ProjectNotFound { name, available } => {
-                m.insert("name".into(), Value::from(name.as_str()));
-                m.insert("available".into(), Value::from(available.clone()));
-            }
-            Error::ClusterNotFound { cluster, available } => {
-                m.insert("cluster".into(), Value::from(cluster.as_str()));
-                m.insert("available".into(), Value::from(available.clone()));
+                put(m, "name", name.as_str());
+                put(m, "available", available.clone());
             }
             Error::ClusterNameAmbiguous { name, uids }
             | Error::EdgeHostNameAmbiguous { name, uids }
             | Error::ClusterGroupNameAmbiguous { name, uids }
             | Error::FilterNameAmbiguous { name, uids }
             | Error::RegistryNameAmbiguous { name, uids } => {
-                m.insert("name".into(), Value::from(name.as_str()));
-                m.insert("uids".into(), Value::from(uids.clone()));
-            }
-            Error::AppProfileNameAmbiguous {
-                name,
-                version,
-                uids,
-            } => {
-                m.insert("name".into(), Value::from(name.as_str()));
-                m.insert("version".into(), Value::from(version.as_str()));
-                m.insert("uids".into(), Value::from(uids.clone()));
+                put(m, "name", name.as_str());
+                put(m, "uids", uids.clone());
             }
             Error::EdgeHostNotFound {
                 edge_host,
                 available,
             } => {
-                m.insert("edgeHost".into(), Value::from(edge_host.as_str()));
-                m.insert("available".into(), Value::from(available.clone()));
+                put(m, "edgeHost", edge_host.as_str());
+                put(m, "available", available.clone());
             }
             Error::FilterNotFound { filter, available } => {
-                m.insert("filter".into(), Value::from(filter.as_str()));
-                m.insert("available".into(), Value::from(available.clone()));
-            }
-            Error::AppProfileNotFound {
-                name,
-                version,
-                available,
-            } => {
-                m.insert("name".into(), Value::from(name.as_str()));
-                m.insert("version".into(), Value::from(version.as_str()));
-                m.insert("available".into(), Value::from(available.clone()));
+                put(m, "filter", filter.as_str());
+                put(m, "available", available.clone());
             }
             Error::ClusterGroupNotFound {
                 cluster_group,
                 available,
             } => {
-                m.insert("clusterGroup".into(), Value::from(cluster_group.as_str()));
-                m.insert("available".into(), Value::from(available.clone()));
+                put(m, "clusterGroup", cluster_group.as_str());
+                put(m, "available", available.clone());
             }
-            Error::NoUid | Error::Serialize(_) => {}
+            _ => {}
         }
-        Value::Object(m)
     }
+}
+
+/// Put one field into the document of an error.
+fn put(m: &mut Map<String, Value>, key: &str, value: impl Into<Value>) {
+    m.insert(key.into(), value.into());
+}
+
+/// Put the `method` and the `path` of a request into the document of an error.
+fn put_request(m: &mut Map<String, Value>, method: &str, path: &str) {
+    put(m, "method", method);
+    put(m, "path", path);
+}
+
+/// Put a `path` that is a file into the document of an error.
+fn put_path(m: &mut Map<String, Value>, path: &std::path::Path) {
+    put(m, "path", path.display().to_string());
+}
+
+/// Put the `name` and the `version` of a profile or a pack into the document of an error.
+fn put_name_version(m: &mut Map<String, Value>, name: &str, version: &str) {
+    put(m, "name", name);
+    put(m, "version", version);
 }
 
 /// Put the registries that Palette does not sync into the document of an error, when there are
 /// any.
-fn put_unsynced(m: &mut serde_json::Map<String, Value>, unsynced: &[String]) {
+fn put_unsynced(m: &mut Map<String, Value>, unsynced: &[String]) {
     if !unsynced.is_empty() {
-        m.insert("unsynced".into(), Value::from(unsynced.to_vec()));
+        put(m, "unsynced", unsynced.to_vec());
     }
 }

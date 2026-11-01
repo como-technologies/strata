@@ -203,55 +203,14 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
         let c = &self.loaded.candidate;
         let l = &c.layers[i];
         let loaded_layer = &self.loaded.layers[i];
-        // Palette serves no disabled or deleted pack: the registry answers 404 for it, and a
-        // profile that pins one is refused. Say so before that read.
-        if let Some(state) = retired_state(summary) {
-            // a `pack:` ref comes here with the uid of the registry; the error gives its name
-            let registry = match registry_ref {
-                RegistryRef::Name(n) => n.clone(),
-                RegistryRef::Uid(u) => {
-                    name_or_uid(&self.registries.name_of(u)?.unwrap_or_default(), u).to_string()
-                }
-            };
-            return Err(Error::PackUnavailable {
-                name: l.name.clone(),
-                version: l.version.clone(),
-                registry,
-                state: state.as_str().to_string(),
-            });
-        }
+        self.check_served(l, registry_ref, summary)?;
         // only the create checks that the pack supports the cloud of the profile
         let clouds = strings(summary, "/spec/cloudTypes");
         gaps::check_cloud(&c.cloud_type, i, l, &clouds)
             .map_err(|broken| broken.at(&self.loaded.path))?;
         let pack_uid = text(summary, "/metadata/uid");
         let entity = self.palette.pack_tags(&l.name, registry, None)?;
-        let tags: Vec<String> = arr(&entity, "/tags")
-            .iter()
-            .filter(|t| str_at(t, "/packUid") == pack_uid)
-            .filter_map(|t| opt_text(t, "/tag"))
-            .collect();
-        // Palette stores the tag a profile was authored with, which can be the version itself
-        // rather than one of the registry's tag names (a Terraform-built profile pins `24.04`
-        // where the registry says `LTS__24.x`). Accept both; anything else is a typo.
-        let tag = match &l.tag {
-            Some(t) if tags.contains(t) || *t == l.version => t.clone(),
-            Some(t) => {
-                return Err(Error::PackNotFound {
-                    name: l.name.clone(),
-                    version: l.version.clone(),
-                    tag: Some(t.clone()),
-                    registry: registry_ref.text().to_string(),
-                    unsynced: Vec::new(),
-                });
-            }
-            None => tags
-                .iter()
-                .find(|t| **t == l.version)
-                .or_else(|| tags.first())
-                .cloned()
-                .unwrap_or_else(|| l.version.clone()),
-        };
+        let tag = layer_tag(l, &tags_of(&entity, &pack_uid), registry_ref)?;
         // the default values of the version: the listing, and the tags route when the listing
         // gives none. The file keeps `values: ""` as empty values, so this rule does not read it
         let pack_values = arr(&entity, "/packValues")
@@ -264,21 +223,7 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
             .or_else(|| opt_text(summary, "/spec/values"))
             .or(pack_values)
             .unwrap_or_default();
-        // Palette gives the pack the layer of the registry and drops the layer of the request with
-        // no error. So another layer in the file gives a root that the published version does not
-        // have.
-        let theirs = registry_layer(summary, std::slice::from_ref(&entity));
-        if let (Some(given), Some(theirs)) = (l.layer.as_deref(), theirs.as_deref())
-            && given != theirs
-        {
-            return Err(self.invalid(format!(
-                "layer {} ({}) has the layer {given}, and its registry gives the layer {theirs}; \
-                 Palette takes the layer from the registry, so remove layer or set it to {theirs}",
-                i + 1,
-                l.name
-            )));
-        }
-        let layer = theirs.or_else(|| l.layer.clone()).unwrap_or_default();
+        let layer = self.registry_layer_name(i, summary, &entity)?;
         let kind = pack_type_of(summary);
         let digest = text(summary, "/spec/digest");
         let fields = PackFields {
@@ -304,6 +249,93 @@ impl<A: PaletteApi> Resolver<'_, '_, A> {
             entry,
             preset_options: preset_options(summary, &values),
         })
+    }
+
+    /// Refuse a pack version that Spectro Cloud retired: `summary`, its entry in the listing,
+    /// holds the state `disabled` or `deleted`. Palette serves no such pack: the registry answers
+    /// 404 for it, and a profile that pins one is refused. Say so before that read.
+    fn check_served(
+        &mut self,
+        l: &CandidateLayer,
+        registry_ref: &RegistryRef,
+        summary: &Value,
+    ) -> Result<()> {
+        let Some(state) = retired_state(summary) else {
+            return Ok(());
+        };
+        // a `pack:` ref comes here with the uid of the registry; the error gives its name
+        let registry = match registry_ref {
+            RegistryRef::Name(n) => n.clone(),
+            RegistryRef::Uid(u) => {
+                name_or_uid(&self.registries.name_of(u)?.unwrap_or_default(), u).to_string()
+            }
+        };
+        Err(Error::PackUnavailable {
+            name: l.name.clone(),
+            version: l.version.clone(),
+            registry,
+            state: state.as_str().to_string(),
+        })
+    }
+
+    /// The layer of the pack at the layer `i`, as the registry gives it, or as the file gives it
+    /// when the registry names none. `summary` is the entry of the version in the listing, and
+    /// `entity` the answer of the tags route.
+    ///
+    /// Palette gives the pack the layer of the registry and drops the layer of the request with
+    /// no error. So another layer in the file gives a root that the published version does not
+    /// have. That is a `CandidateInvalid` error.
+    fn registry_layer_name(&self, i: usize, summary: &Value, entity: &Value) -> Result<String> {
+        let l = &self.loaded.candidate.layers[i];
+        let theirs = registry_layer(summary, std::slice::from_ref(entity));
+        if let (Some(given), Some(theirs)) = (l.layer.as_deref(), theirs.as_deref())
+            && given != theirs
+        {
+            return Err(self.invalid(format!(
+                "layer {} ({}) has the layer {given}, and its registry gives the layer {theirs}; \
+                 Palette takes the layer from the registry, so remove layer or set it to {theirs}",
+                i + 1,
+                l.name
+            )));
+        }
+        Ok(theirs.or_else(|| l.layer.clone()).unwrap_or_default())
+    }
+}
+
+/// The tags of the pack `pack_uid` in the answer `entity` of the tags route.
+fn tags_of(entity: &Value, pack_uid: &str) -> Vec<String> {
+    arr(entity, "/tags")
+        .iter()
+        .filter(|t| str_at(t, "/packUid") == pack_uid)
+        .filter_map(|t| opt_text(t, "/tag"))
+        .collect()
+}
+
+/// The tag of the layer `l`, from the `tags` that the registry gives for its pack.
+///
+/// Palette stores the tag a profile was authored with, which can be the version itself rather
+/// than one of the registry's tag names (a Terraform-built profile pins `24.04` where the
+/// registry says `LTS__24.x`). Accept both; anything else is a typo.
+///
+/// # Errors
+///
+/// [`Error::PackNotFound`] for a tag of the file that is neither the version nor one of `tags`.
+fn layer_tag(l: &CandidateLayer, tags: &[String], registry_ref: &RegistryRef) -> Result<String> {
+    match &l.tag {
+        Some(t) if tags.contains(t) || *t == l.version => Ok(t.clone()),
+        Some(t) => Err(Error::PackNotFound {
+            name: l.name.clone(),
+            version: l.version.clone(),
+            tag: Some(t.clone()),
+            registry: registry_ref.text().to_string(),
+            unsynced: Vec::new(),
+        }),
+        None => Ok(tags
+            .iter()
+            .find(|t| **t == l.version)
+            .or_else(|| tags.first())
+            .cloned()
+            .unwrap_or_else(|| l.version.clone())),
     }
 }
 

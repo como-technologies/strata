@@ -568,6 +568,23 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
     assert_eq!(app["uids"], serde_json::json!(["a1", "a2"]));
 }
 
+/// `to_json` writes the fields of a variant in one function for each family, and each of them
+/// has a wildcard arm. So a variant that no function names gets `kind` and `message` only.
+#[test]
+fn to_json_writes_a_field_of_the_variant_for_each_kind_but_three() {
+    let without_fields = ["no-uid", "serialize", "usage"];
+    for e in one_of_each() {
+        let j = e.to_json();
+        let fields = j.as_object().unwrap().len() - 2;
+        assert_eq!(
+            fields == 0,
+            without_fields.contains(&e.kind()),
+            "{}: {j}",
+            e.kind()
+        );
+    }
+}
+
 #[test]
 fn the_schema_of_an_error_document_names_the_keys_that_to_json_writes_for_every_kind() {
     let schema = serde_json::to_value(schemars::schema_for!(ErrorDocument)).unwrap();
