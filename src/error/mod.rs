@@ -6,12 +6,13 @@ use std::path::PathBuf;
 use crate::api::Method;
 use crate::api::codes::CreateRule;
 use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR, PROJECT_NAME_VAR};
+use crate::snapshot::SNAPSHOT_SCHEMA;
 use crate::text::{and_list, cut};
 
 mod class;
 mod json;
 
-pub(crate) use json::ErrorDocument;
+pub(crate) use json::{ErrorDocument, MESSAGE_AT};
 
 pub use class::FailureClass;
 
@@ -403,12 +404,19 @@ pub enum Error {
         supported: &'static str,
     },
     /// The file claims the snapshot schema but does not match it.
-    #[error("'{path}' does not match {schema}: {source}")]
+    #[error(
+        "'{path}' does not match {schema}: {}{source}. {}",
+        at_field(field),
+        take_again(schema)
+    )]
     SnapshotSchema {
         /// File path.
         path: PathBuf,
         /// The schema id expected.
         schema: &'static str,
+        /// The path of the field that does not match, such as `variables[0].name`. Empty when the
+        /// document as a whole does not match.
+        field: String,
         /// The deserialization error.
         source: serde_json::Error,
     },
@@ -469,6 +477,26 @@ fn rule_sentence(rule: Option<CreateRule>) -> String {
     rule.map_or_else(String::new, |rule| {
         format!(" ({}). {CREATE_GAP}", rule.code())
     })
+}
+
+/// `variables[0].name: `, or nothing when `field` is empty: the start of the reason in the message
+/// of [`Error::SnapshotSchema`].
+fn at_field(field: &str) -> String {
+    if field.is_empty() {
+        String::new()
+    } else {
+        format!("{field}: ")
+    }
+}
+
+/// What to do with a file that does not match `schema`: write it again. A record and the report of
+/// `behind` have each their own words.
+fn take_again(schema: &str) -> &'static str {
+    if schema == SNAPSHOT_SCHEMA {
+        "Take the record again."
+    } else {
+        "Run the command that wrote the report again."
+    }
 }
 
 /// The reason that a record keeps for an answer of Palette that is an error:

@@ -49,7 +49,7 @@ the kind.
 | `app-profile-name-ambiguous` | Two or more app profiles in the scope have this name and version. Palette refuses a second one only in one scope. Give the uid in place of the name. | `name`, `version`, `uids` |
 | `not-snapshot` | The file is not a strata snapshot. | `path` |
 | `unsupported-schema` | The file is a record, or a report for `behind --since`, of a schema id that this strata does not read. | `path`, `found`, `supported` |
-| `snapshot-schema` | The record, or the report for `behind --since`, does not match its schema. | `path`, `schema` |
+| `snapshot-schema` | The record, or the report for `behind --since`, does not match its schema. The message names the field that does not match, such as `variables[0].name`, and says to take the file again. | `path`, `schema` |
 | `no-uid` | The record has no uid, for example a candidate record. | |
 | `io` | Strata cannot read or write the file. | `path` |
 | `empty-file` | A file in a `--from-raw` directory is empty. | `path` |

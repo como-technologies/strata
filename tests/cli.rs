@@ -155,6 +155,32 @@ fn a_command_name_that_is_not_first_says_so_instead_of_failing_as_a_compare() {
 }
 
 #[test]
+fn each_command_that_reads_a_record_with_a_null_variable_name_names_the_field_and_exits_two() {
+    let fx = fixtures();
+    let mut record = read_json(Path::new(&fx.a));
+    record["variables"][0]["name"] = serde_json::Value::Null;
+    let bad = Path::new(&fx.a).with_file_name("null-name.json");
+    write_record(&bad, &record);
+    let bad = bad.to_str().unwrap();
+    for args in [
+        vec!["compare", bad, fx.a.as_str()],
+        vec!["verify", bad],
+        vec!["same-release", bad, fx.a.as_str()],
+        vec!["behind", bad],
+    ] {
+        let r = run(&args);
+        assert_eq!(r.code, 2, "{args:?}: {}{}", r.out, r.err);
+        assert!(
+            r.err.contains(
+                "variables[0].name: invalid type: null, expected a string. Take the record again."
+            ),
+            "{args:?}: {}",
+            r.err
+        );
+    }
+}
+
+#[test]
 fn identical_profiles_exit_zero() {
     let fx = fixtures();
     let r = run(&["compare", &fx.a, &fx.a2]);

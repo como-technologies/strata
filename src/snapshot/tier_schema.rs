@@ -9,7 +9,8 @@ use schemars::{Schema, SchemaGenerator, json_schema};
 use serde_json::{Map, Value, json};
 
 use super::cluster::{ClusterTier, Tier};
-use super::{policy, shape};
+use super::policy::{self, FieldType, PolicyKey};
+use super::shape;
 use crate::closed_set::{ClosedSet, Open};
 
 /// The schema of [`ClusterSource::tiers`](super::ClusterSource::tiers).
@@ -81,152 +82,37 @@ fn running() -> Value {
 }
 
 /// The fields of the tier `policy`: those of a cluster, those of a cluster group, and those of
-/// a record of an older release.
+/// a record of an older release. [`policy::all_keys`] lists the keys.
 fn policy_fields() -> Value {
-    let list_or_null =
-        |description: &str| json!({"description": description, "type": ["array", "null"]});
-    let mut properties = Map::new();
-    for (key, field) in [
-        (
-            "osPatch",
-            open("The OS patch policy of the cluster, as Palette gives it, or null."),
-        ),
-        (
-            "lifecycle",
-            open("Whether a person paused the cluster, as Palette gives it, or null."),
-        ),
-        (
-            "machineHealth",
-            open("The machine health checks of the cluster, as Palette gives them, or null."),
-        ),
-        (
-            "timezone",
-            typed(
-                "The timezone of the scheduled tasks of the cluster.",
-                "string",
-            ),
-        ),
-        ("fips", typed("The FIPS mode of the cluster.", "string")),
-        (
-            policy::RBACS,
-            list_or_null("Each role binding of the cluster. Null when strata did not read them."),
-        ),
-        (
-            policy::NAMESPACES,
-            list_or_null("Each namespace of the cluster. Null when strata did not read them."),
-        ),
-        (
-            "updateWorkerPoolsInParallel",
-            typed(
-                "True when Palette updates all the worker pools at one time.",
-                "boolean",
-            ),
-        ),
-        (
-            "controlPlaneHealthCheckTimeout",
-            typed(
-                "How long Palette waits for a new control plane node to become ready.",
-                "string",
-            ),
-        ),
-        (
-            "clusterMetaAttribute",
-            typed(
-                "The text that a person adds to the cluster as more data.",
-                "string",
-            ),
-        ),
-        (
-            "applySetting",
-            typed(
-                "When the cluster applies an update, as Palette gives it.",
-                "string",
-            ),
-        ),
-        (
-            policy::AGENT_UPGRADES_FORBIDDEN,
-            open(
-                "The value of the annotation, as Palette gives it. A cluster that has no such annotation has no such field.",
-            ),
-        ),
-        // the config that a cluster group gives each virtual cluster
-        (
-            "endpointType",
-            typed(
-                "The endpoint type of the virtual clusters of a cluster group.",
-                "string",
-            ),
-        ),
-        (
-            "kubernetesDistroType",
-            typed(
-                "The Kubernetes distribution of the virtual clusters of a cluster group.",
-                "string",
-            ),
-        ),
-        (
-            "limitConfig",
-            open(
-                "The resource limits of the virtual clusters of a cluster group, as Palette gives them, or null.",
-            ),
-        ),
-        (
-            "values",
-            open(
-                "The values that a cluster group applies to each virtual cluster, as JSON with sorted keys, or null when they do not parse.",
-            ),
-        ),
-        (
-            "valuesHash",
-            typed(
-                "The hash of the values of a cluster group, after the mask of the passwords.",
-                "string",
-            ),
-        ),
-        (
-            "valuesParseError",
-            typed("Why the values of a cluster group did not parse.", "string"),
-        ),
-        (
-            "hostClusters",
-            json!({
-                "description": "The host clusters of a cluster group, sorted by uid.",
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "uid": typed("The uid of the host cluster.", "string"),
-                        "endpointConfig": open("The endpoint config for the host cluster, as Palette gives it, or null."),
-                    },
-                },
-            }),
-        ),
-        // the fields of a record of an older release
-        (
-            policy::LEGACY_RESOURCES,
-            open(
-                "A record of an older release: the references to the bindings and the namespaces.",
-            ),
-        ),
-        (
-            "rbac",
-            open("A record of an older release: the role bindings."),
-        ),
-        (
-            policy::LEGACY_AGENT_UPGRADES,
-            typed(
-                "A record of strata 0.18: `allowed` or `paused`, from the annotation that pauses the upgrades.",
-                "string",
-            ),
-        ),
-    ] {
-        properties.insert(key.to_string(), field);
-    }
+    let properties: Map<String, Value> = policy::all_keys()
+        .map(|key| (key.key.to_string(), policy_key(key)))
+        .collect();
     json!({
         "description": "The settings of the cluster, or the config that a cluster group gives each virtual cluster.",
         "type": "object",
         "properties": properties,
     })
+}
+
+/// The schema of the key `key` of the policy fields.
+fn policy_key(key: &PolicyKey) -> Value {
+    match key.field_type {
+        FieldType::Text => typed(key.about, "string"),
+        FieldType::Flag => typed(key.about, "boolean"),
+        FieldType::Any => open(key.about),
+        FieldType::ListOrNull => json!({"description": key.about, "type": ["array", "null"]}),
+        FieldType::HostClusters => json!({
+            "description": key.about,
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "uid": typed("The uid of the host cluster.", "string"),
+                    "endpointConfig": open("The endpoint config for the host cluster, as Palette gives it, or null."),
+                },
+            },
+        }),
+    }
 }
 
 /// The fields of the tier `shape`: the keys that a pool and the cloud part have on each cloud.
@@ -244,12 +130,12 @@ fn shape_fields() -> Value {
         "properties": {
             shape::CLOUD_TYPE: typed("The cloud type of the cluster. A record of an older release has none.", "string"),
             "cloud": {
-                "description": "The fields of the cloud part that a person chooses. The keys here are those of each cloud. Each cloud adds its own keys.",
+                "description": "The fields of the cloud part that a person chooses. The keys here are those that every cloud has. Each cloud adds its own keys.",
                 "type": "object",
                 "properties": keys(shape::CLOUD_FIELDS),
             },
             "pools": {
-                "description": "The machine pools, in name order. The keys here are those of each cloud. Each cloud adds its own keys.",
+                "description": "The machine pools, in name order. The keys here are those that every cloud has. Each cloud adds its own keys.",
                 "type": "array",
                 "items": {
                     "type": "object",
@@ -258,4 +144,57 @@ fn shape_fields() -> Value {
             },
         },
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_schema_of_the_policy_tier_names_each_key_of_the_tables_and_describes_it() {
+        let schema = policy_fields();
+        let properties = schema["properties"].as_object().unwrap();
+        let named: Vec<&str> = properties.keys().map(String::as_str).collect();
+        let mut table: Vec<&str> = policy::all_keys().map(|k| k.key).collect();
+        table.sort_unstable();
+        assert_eq!(named, table);
+        for (key, property) in properties {
+            let about = property["description"].as_str().unwrap_or_default();
+            assert!(about.ends_with('.') && about.len() > 10, "{key}: {about}");
+        }
+    }
+
+    #[test]
+    fn a_key_has_the_type_of_its_table_row() {
+        let schema = policy_fields();
+        for key in policy::all_keys() {
+            let property = &schema["properties"][key.key];
+            match key.field_type {
+                FieldType::Text => assert_eq!(property["type"], "string", "{}", key.key),
+                FieldType::Flag => assert_eq!(property["type"], "boolean", "{}", key.key),
+                FieldType::ListOrNull => {
+                    assert_eq!(property["type"], json!(["array", "null"]), "{}", key.key);
+                }
+                FieldType::HostClusters => {
+                    assert_eq!(property["items"]["type"], "object", "{}", key.key);
+                }
+                // a key of any type has no `type`
+                FieldType::Any => assert!(property.get("type").is_none(), "{}", key.key),
+            }
+        }
+    }
+
+    #[test]
+    fn the_descriptions_of_the_shape_tier_say_the_keys_that_every_cloud_has() {
+        let schema = shape_fields();
+        for part in ["cloud", "pools"] {
+            let about = schema["properties"][part]["description"].as_str().unwrap();
+            assert!(
+                about.contains(
+                    "The keys here are those that every cloud has. Each cloud adds its own keys."
+                ),
+                "{part}: {about}"
+            );
+        }
+    }
 }

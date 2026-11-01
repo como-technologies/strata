@@ -788,7 +788,7 @@ fn the_rust_comments_that_the_style_review_of_wave_11_named_keep_to_25_words() {
     let comments = [
         (
             "src/snapshot/cluster.rs",
-            "The fields of a record of strata 0.24 and before",
+            "The cluster of a record of any release",
         ),
         (
             "src/snapshot/cluster.rs",

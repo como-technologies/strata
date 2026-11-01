@@ -71,6 +71,12 @@ same shape. Releases 0.8.0 to 0.24.0 wrote `updatesPendingError`, and releases
 id stays, because the root does not cover these fields. An older strata that
 reads a new record shows no reason, and the record still compares.
 
+After 0.25.0, a read of a `Snapshot` with serde moves the two older fields into
+`errors`. So `serde_json::from_str::<Snapshot>` of a record of 0.24.0 gives the
+same `errors` as `Snapshot::load`. Release 0.25.0 moved them in
+`Snapshot::load` alone. A `ClusterSource` that serde reads alone does not move
+them, because it is not a record.
+
 The record of a cluster is also in `strata-diff/1` and in
 `strata-verify-summary/1`, so both carry the same rename. `compare --format
 json` has it in `a.cluster` and `b.cluster`. `verify --summary --format json`
@@ -89,6 +95,10 @@ After 0.24.0, the schema states the shape of each field that it left open. See
 A record that strata takes from Palette stays the same. So the ids stay, no root
 changes, and a variable has its keys in the same order.
 
+After 0.25.0, two descriptions of the tier `shape` and the description of
+`source.cluster.errors` have new words in `strata schema`. No key, type, or id
+changes.
+
 One case differs. A variable with no `name` has an empty `name`. Before, its
 `name` was `null`. Palette requires a name, so only a raw directory or a
 profile export that a person made gives such a variable. Its record has another
@@ -98,6 +108,12 @@ Strata does not read a record that holds `name: null`. `verify`, `compare`,
 `behind`, and `same-release` stop on it with `snapshot-schema` and exit `2`. The
 id stays. Palette requires a name, so only a raw directory that a person made
 gave such a record.
+
+After 0.25.0, the message of `snapshot-schema` names the field that does not
+match, such as `variables[0].name`, and says to take the record again.
+Before, it gave the serde error alone. In the library, `Error::SnapshotSchema`
+has the new field `field`. It holds the path of the field, and it is empty when
+the whole document does not match. A `match` with no `..` must name it.
 
 In the library, `Snapshot::variables` and `Candidate::variables` are
 `Vec<Variable>` in place of `Vec<Value>`. `Leaf::segments` is `Vec<Segment>` in
@@ -410,9 +426,10 @@ field, a value, an input, or an option is in the sections above.
   `updates_pending_error()` and `pending_repave_error()` give the same text as
   `Option<&str>`. A struct literal must set `errors`, or use
   `..Default::default()`. A pattern with no `..` must name `errors`.
-- Only `Snapshot::load` moves the fields of an older record into `errors`. A
-  program that reads a `Snapshot` or a `ClusterSource` with serde itself gets an
-  empty `errors` for such a record. Use `Snapshot::load`.
+- In release 0.25.0, only `Snapshot::load` moves the fields of an older record
+  into `errors`. A program that reads a `Snapshot` or a `ClusterSource` with
+  serde itself gets an empty `errors` for such a record. Use `Snapshot::load`.
+  Later releases move them in a serde read of a `Snapshot` too.
 - `snapshot::Snapshot::variables` and `candidate::Candidate::variables` are
   `Vec<snapshot::Variable>` in place of `Vec<serde_json::Value>`. A read such as
   `v["isSensitive"]` becomes `v.is_sensitive`. A JSON candidate in memory follows
