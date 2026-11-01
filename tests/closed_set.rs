@@ -11,16 +11,16 @@ use crate::common::{schema_values, walk};
 use serde_json::Value;
 use strata::api::Method;
 use strata::closed_set::ClosedSet;
-use strata::cloud::Cloud;
-use strata::cluster_state::ClusterState;
-use strata::conjunction::Conjunction;
 use strata::diff::{ChangeFlag, ImpactLevel, Op, Status, VersionMove};
-use strata::oci_provider::OciProvider;
+use strata::model::cloud::Cloud;
+use strata::model::cluster_state::ClusterState;
+use strata::model::conjunction::Conjunction;
+use strata::model::oci_provider::OciProvider;
+use strata::model::pack_state::PackState;
+use strata::model::pack_type::PackType;
+use strata::model::profile_type::ProfileType;
+use strata::model::scope::ProfileScope;
 use strata::ops::{PairStatus, Policy, RecordStatus};
-use strata::pack_state::PackState;
-use strata::pack_type::PackType;
-use strata::profile_type::ProfileType;
-use strata::scope::ProfileScope;
 use strata::snapshot::{ClusterRead, Implementation, SubjectKind, Template, Tier, UpstreamSource};
 
 /// One closed set with no type parameter, so that one list holds each set.

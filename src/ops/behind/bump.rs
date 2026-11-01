@@ -16,20 +16,20 @@ use std::collections::btree_map::Entry;
 use serde_json::Value;
 
 use super::{Bump, Pin, PinKey};
+use crate::api::registry::Registries;
 use crate::api::{Palette, PaletteApi};
 use crate::candidate::pack::pack_snapshot_in;
 use crate::diff::Diff;
 use crate::error::{Error, Result};
 use crate::json::{first_nonempty, str_at};
+use crate::model::validation::{PaletteRefusal, ProfileValidation};
 use crate::ops::consumer_list::consumer_names;
 use crate::ops::scope_of;
 use crate::ops::validate::{moved_profile_body, moved_template_bodies, profile_packs_answer};
 use crate::reference::Ref;
-use crate::registry::Registries;
 use crate::snapshot::{ClusterSource, Pack, Snapshot, SubjectKind};
 use crate::term::progress::Progress;
 use crate::text::plural;
-use crate::validation::{PaletteRefusal, ProfileValidation};
 
 /// What Palette answers about the bump of a pin, and why it gave no answer.
 #[derive(Debug, Default)]

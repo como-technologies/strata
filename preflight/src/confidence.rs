@@ -15,7 +15,7 @@ use std::path::Path;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use strata::cloud::CLOUD_ALL;
+use strata::model::cloud::CLOUD_ALL;
 
 use crate::error::{Error, Result};
 use crate::report::percent;

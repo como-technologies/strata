@@ -2,7 +2,7 @@
 
 use super::Error;
 use crate::api::codes::{PROFILE_IMPORT_MATCH_CODES, REFUSAL_CODES, ValidateRoute};
-use crate::validation::PaletteRefusal;
+use crate::model::validation::PaletteRefusal;
 
 /// The class of a failure, for a caller that decides to try again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -13,7 +13,7 @@ pub enum FailureClass {
     /// It stays while the inputs stay.
     ///
     /// - Another HTTP 4xx.
-    /// - A 5xx with a code of [`REFUSAL_CODES`] or of a check of a [`ValidateRoute`].
+    /// - A 5xx with the code of a refusal of Palette, or of a check of a [`ValidateRoute`].
     /// - A 5xx of the import validate route when it matches no pack of the body to a registry.
     /// - A thing that is not there, or a file or a setting that is not valid.
     Terminal,

@@ -6,8 +6,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use strata::api::{Palette, PaletteApi};
-use strata::cluster_state::ClusterState;
 use strata::json::text_or;
+use strata::model::cluster_state::ClusterState;
 use strata::snapshot::SubjectKind;
 use strata::term::color::Paint;
 use strata::term::progress::Progress;

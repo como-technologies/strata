@@ -13,7 +13,7 @@
 use serde_json::Value;
 
 use crate::api::Method;
-use crate::validation::PaletteRefusal;
+use crate::model::validation::PaletteRefusal;
 
 /// The codes of the refusals that Palette answers with HTTP 500 on a route that is not a validate
 /// route.
@@ -21,7 +21,7 @@ use crate::validation::PaletteRefusal;
 /// The routes are the delete of an object, an operation on an object, the update of a profile, and
 /// a listing. Palette gives these errors the response type of a server fault, so a refusal by
 /// design arrives as a 5xx. A retry gets the same refusal.
-pub const REFUSAL_CODES: [&str; 6] = [
+pub(crate) const REFUSAL_CODES: [&str; 6] = [
     "DeletionResourceInUseError",
     "ResOperationForbidden",
     "OperationForbidden",

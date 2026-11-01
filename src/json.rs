@@ -253,7 +253,7 @@ mod tests {
 
     #[test]
     fn opt_set_reads_a_value_of_a_set_and_keeps_the_text_of_a_value_that_is_not_in_it() {
-        use crate::oci_provider::OciProvider;
+        use crate::model::oci_provider::OciProvider;
         let v = json!({"spec": {"providerType": "zarf", "later": "oras", "empty": ""}});
         let zarf: Option<Open<OciProvider>> = opt_set(&v, "/spec/providerType");
         assert_eq!(zarf, Some(Open::Known(OciProvider::Zarf)));

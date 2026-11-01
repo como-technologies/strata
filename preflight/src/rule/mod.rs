@@ -51,7 +51,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use strata::closed_set::legend::Described;
 use strata::closed_set::{ClosedSet, impl_closed_set};
-use strata::cloud::CLOUD_ALL;
+use strata::model::cloud::CLOUD_ALL;
 use strata::reference::version;
 
 use crate::error::{Error, Result};

@@ -14,13 +14,13 @@ use super::{
 };
 use crate::api::{PaletteApi, RawProfile, mask};
 use crate::closed_set::ClosedSet;
-use crate::cloud::CLOUD_ALL;
-use crate::content::layer::Layer;
 use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, text};
-use crate::profile_type::ProfileType;
+use crate::model::cloud::CLOUD_ALL;
+use crate::model::layer::Layer;
+use crate::model::profile_type::ProfileType;
+use crate::model::scope::{ProfileScope, ScopedUid};
 use crate::reference::{LATEST, name_version, one_named, version};
-use crate::scope::{ProfileScope, ScopedUid};
 use crate::snapshot::{Template, manifest_of};
 use crate::term::progress::Progress;
 

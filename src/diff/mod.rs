@@ -10,12 +10,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::closed_set::legend::legend;
-use crate::cluster_template::ClusterTemplateRef;
 use crate::json::flag;
-pub use crate::repave::PaletteRepaveReason;
+use crate::model::cluster_template::ClusterTemplateRef;
+pub use crate::model::repave::PaletteRepaveReason;
+pub use crate::model::validation::{PaletteRefusal, PaletteValidation};
 use crate::snapshot::{Snapshot, Source, Tool};
 use crate::timestamp::Rfc3339;
-pub use crate::validation::{PaletteRefusal, PaletteValidation};
 use cluster::{cluster_values_diff, overwritten_in_place, running_behind, tiers_diff};
 pub use impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
 use pack::pack_diffs;

@@ -10,7 +10,7 @@ use serde_json::{Map, Value};
 use super::{Candidate, CandidateLayer, CandidateManifest, LayerKind, default_type};
 use crate::closed_set::ClosedSet;
 use crate::json::arr;
-use crate::pack_type::PackType;
+use crate::model::pack_type::PackType;
 use crate::snapshot::Variable;
 
 /// The packs of an export. A file that has an array here is an export.

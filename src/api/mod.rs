@@ -14,6 +14,7 @@ pub(crate) mod mask;
 mod memory;
 mod palette;
 mod raw;
+pub(crate) mod registry;
 mod retry;
 
 use std::fmt;
@@ -33,8 +34,8 @@ pub(crate) use palette::{
     named_entries, profile_versions, search_condition, search_filter, search_group,
 };
 pub use palette::{
-    Palette, SearchedClusters, VariablesRead, cloud_account_path, cloud_config_path,
-    cluster_events_path, cluster_summary_path, subject_path,
+    Palette, VariablesRead, cloud_account_path, cloud_config_path, cluster_events_path,
+    cluster_summary_path, subject_path,
 };
 pub(crate) use raw::recorded_template;
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft, profile_variables};

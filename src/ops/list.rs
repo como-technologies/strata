@@ -10,11 +10,11 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, named_entries, profile_versions, recorded_template};
 use crate::closed_set::Open;
-use crate::cloud::Cloud;
 use crate::error::{ErrorDocument, Result, served};
-use crate::profile_type::ProfileType;
+use crate::model::cloud::Cloud;
+use crate::model::profile_type::ProfileType;
+use crate::model::scope::ProfileScope;
 use crate::reference::{Ref, name_version, version};
-use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
@@ -342,7 +342,7 @@ impl Listing {
 /// Profiles and clusters are read through `connect(options.project)`, where `None` is the
 /// configured scope. Projects are read through `connect(Some(TENANT_SCOPE))`, because in a
 /// project Palette lists only that project. The cluster listing omits each virtual cluster,
-/// so the clusters also come from [`Palette::virtual_clusters`], when the search takes
+/// so the clusters also come from [`Palette::virtual_cluster_search`], when the search takes
 /// `environment`. With `packs` or `pack`, each profile document is read as well; a profile that
 /// cannot be read stays in the list with its error. `generated_at` is the time of the listing, in
 /// RFC 3339.

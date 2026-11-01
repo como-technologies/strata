@@ -63,7 +63,7 @@ impl<A: PaletteApi> Palette<A> {
 
     /// The uid of the one cluster named `name` in the scope.
     ///
-    /// It reads [`Palette::cluster_listing`] and [`Palette::virtual_clusters`]. The listing omits
+    /// It reads [`Palette::cluster_listing`] and [`Palette::virtual_cluster_search`]. The listing omits
     /// each virtual cluster, so the search gives them, when it takes `environment`.
     ///
     /// # Errors
@@ -177,7 +177,7 @@ impl<A: PaletteApi> Palette<A> {
     /// # Errors
     ///
     /// Each error of the search.
-    pub fn virtual_clusters(
+    pub(crate) fn virtual_clusters(
         &self,
         properties: &BTreeSet<String>,
         filter: &Value,
@@ -200,7 +200,7 @@ impl<A: PaletteApi> Palette<A> {
     /// # Errors
     ///
     /// Each error of the search of the clusters, or of the search of the virtual clusters.
-    pub fn cluster_search_with_virtual(
+    pub(crate) fn cluster_search_with_virtual(
         &self,
         properties: &BTreeSet<String>,
         filter: &Value,

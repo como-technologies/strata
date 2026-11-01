@@ -14,14 +14,14 @@ use std::collections::btree_map::Entry;
 
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi, RegistryKind};
+use super::{Palette, PaletteApi, RegistryKind};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::{RegistrySync, SyncRecovery};
 use crate::error::{Error, Result, served, unread_reason};
 use crate::json::{flag, opt_set, opt_text, str_at, take_items, text};
-use crate::oci_provider::OciProvider;
-use crate::pack_state::PackState;
-use crate::pack_type::PackType;
+use crate::model::oci_provider::OciProvider;
+use crate::model::pack_state::PackState;
+use crate::model::pack_type::PackType;
 use crate::reference::one_named;
 use crate::term::progress::Progress;
 

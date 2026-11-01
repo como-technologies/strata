@@ -9,18 +9,18 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::api::registry::{Registries, RegistrySyncNote};
 use crate::api::{Palette, PaletteApi};
 use crate::closed_set::Open;
-use crate::cloud::supports;
 use crate::diff::{ChangeFlag, Diff, ImpactLevel, RegistrySync};
 use crate::error::{Error, ErrorDocument, Result};
-use crate::pack_state::PackState;
+use crate::model::cloud::supports;
+use crate::model::pack_state::PackState;
+use crate::model::validation::ProfileValidation;
 use crate::reference::version;
-use crate::registry::{Registries, RegistrySyncNote};
 use crate::snapshot::{Pack, Snapshot, Tool, load_document};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
-use crate::validation::ProfileValidation;
 
 use self::bump::{BumpQuestions, read_bump};
 use super::packs::{Architectures, PackBuild, PackOptions, registry_packs_in};

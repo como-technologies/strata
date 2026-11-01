@@ -8,7 +8,7 @@ use std::collections::hash_map::Entry;
 use std::path::{Path, PathBuf};
 
 use crate::api::{Palette, PaletteApi, RawCluster};
-use crate::candidate::pack_snapshot;
+use crate::candidate::pack::pack_snapshot;
 use crate::diff::{self, Diff};
 use crate::error::{Error, Result};
 use crate::json::{first_nonempty, str_at, text};
@@ -47,7 +47,7 @@ pub use crate::file::write_file;
 // the states of a cluster were constants of `ops` in release 0.25.0: they stay for one minor
 // release, and `cluster_state::ClusterState` replaces them
 #[allow(deprecated)]
-pub use crate::cluster_state::{DELETED_STATE, ERROR_STATE, RUNNING_STATE};
+pub use crate::model::cluster_state::{DELETED_STATE, ERROR_STATE, RUNNING_STATE};
 
 /// What `snapshot` records beyond the content of a ref, and what it asks Palette about it.
 ///

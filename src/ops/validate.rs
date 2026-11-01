@@ -8,12 +8,12 @@ use serde_json::{Value, json};
 
 use super::repave::{Question, cluster_and_target, validate_body};
 use crate::api::codes::ValidateRoute;
+use crate::api::registry::{Registries, registry_entry};
 use crate::api::{Palette, PaletteApi, RawCluster};
 use crate::error::{Error, Result};
 use crate::json::{arr, first_nonempty, str_at, value_at};
-use crate::registry::{Registries, registry_entry};
+use crate::model::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
 use crate::snapshot::{AppliedProfile, Pack, Snapshot, SubjectKind};
-use crate::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
 
 /// The refusal of `--validate` for a ref or a record that is not one version of a cluster
 /// profile.

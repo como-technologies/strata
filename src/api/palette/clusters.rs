@@ -211,7 +211,7 @@ impl<A: PaletteApi> Palette<A> {
             progress,
         )?;
         // the cluster document gives only the state of a repave; its own route gives the reasons
-        let (repave, repave_error) = if crate::repave::is_pending(&cluster) {
+        let (repave, repave_error) = if crate::model::repave::is_pending(&cluster) {
             or_unread(
                 self.cluster_repave(uid),
                 &format!("reasons of the repave of cluster {uid}"),

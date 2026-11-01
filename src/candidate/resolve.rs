@@ -10,14 +10,14 @@ use super::{
     CandidateLayer, LoadedCandidate, LoadedLayer, MINTED_LAYER, RegistryRef, ResolvedCandidate,
     gaps,
 };
+use crate::api::registry::{Registries, pack_type_of, registry_layer, retired_state};
 use crate::api::{Palette, PaletteApi, RawProfile};
 use crate::closed_set::{ClosedSet, Open};
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_str, opt_text, str_at, strings, text};
-use crate::oci_provider::OciProvider;
-use crate::pack_type::PackType;
+use crate::model::oci_provider::OciProvider;
+use crate::model::pack_type::PackType;
 use crate::reference::name_version;
-use crate::registry::{Registries, pack_type_of, registry_layer, retired_state};
 use crate::snapshot::{PROVIDER_TYPE_ANNOTATION, PresetOption, manifest_entry};
 use crate::term::progress::Progress;
 use crate::text::name_or_uid;

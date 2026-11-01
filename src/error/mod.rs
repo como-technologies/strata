@@ -7,7 +7,7 @@ use crate::api::Method;
 use crate::api::codes::CreateRule;
 use crate::closed_set::ClosedSet;
 use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR, PROJECT_NAME_VAR};
-use crate::pack_state::PackState;
+use crate::model::pack_state::PackState;
 use crate::snapshot::SNAPSHOT_SCHEMA;
 use crate::text::{and_list, cut, plural};
 
@@ -129,7 +129,7 @@ pub enum Error {
         /// The version that matched: the version of the ref, or the highest version for `latest`.
         version: String,
         /// Each version with that name and version, by uid, with its scope.
-        profiles: Vec<crate::scope::ScopedUid>,
+        profiles: Vec<crate::model::scope::ScopedUid>,
     },
     /// `cluster:<uid>/<profile>` named a profile the cluster does not run.
     #[error(
@@ -343,7 +343,7 @@ pub enum Error {
         /// The ref or the candidate file, as given.
         reference: String,
         /// Each error that Palette gave, sorted.
-        errors: Vec<crate::validation::PaletteRefusal>,
+        errors: Vec<crate::model::validation::PaletteRefusal>,
     },
     /// A candidate file does not parse, breaks a rule of the format, or breaks a rule that only
     /// the create of Palette checks. For such a rule, the message ends with the code of Palette

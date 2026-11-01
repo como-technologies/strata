@@ -1,8 +1,8 @@
 //! The lines of `behind`: the heading, the state of each pin, and its bump.
 
 use super::{count_of, registry_sync_suffix};
+use crate::model::validation::answer_lines;
 use crate::text::and_list;
-use crate::validation::answer_lines;
 
 /// `4 pins from 2 records: 1 behind`, with the floating pins, the pins not checked, and the
 /// versions that arrived when there are any.

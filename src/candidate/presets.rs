@@ -106,7 +106,7 @@ fn as_text(v: &Value) -> String {
 ///
 /// Palette can write the presets of that option into the values when it publishes the version,
 /// and the root of `snap` does not have them.
-pub fn warn_preset_options(snap: &Snapshot, progress: &Progress) {
+pub(crate) fn warn_preset_options(snap: &Snapshot, progress: &Progress) {
     for p in &snap.packs {
         for o in &p.preset_options {
             progress.warn(&format!(

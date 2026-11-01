@@ -4,9 +4,9 @@
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
-use crate::cluster_state::ClusterState;
 use crate::error::{Error, Result, found};
 use crate::json::{flag, opt_flag, opt_text, str_at};
+use crate::model::cluster_state::ClusterState;
 use crate::snapshot::{ClusterSource, Snapshot, SubjectKind, Tier};
 use crate::term::progress::Progress;
 

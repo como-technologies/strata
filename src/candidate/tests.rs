@@ -5,7 +5,7 @@ use serde_json::json;
 use super::*;
 use crate::api::codes::CreateRule;
 use crate::api::{MemoryApi, Palette};
-use crate::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
+use crate::model::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use crate::term::progress::Progress;
 
 /// The profile `platform-addons` as the export of Palette writes it: a pack from the Public

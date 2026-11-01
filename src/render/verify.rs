@@ -7,8 +7,8 @@ use super::notes::{
 use super::same_release::record_word;
 use super::{count_of, entry_error, registry_sync_suffix};
 use crate::closed_set::ClosedSet;
-use crate::cluster_state::ClusterState;
 use crate::diff::{Diff, ImpactLevel, Verify, VerifyStatus};
+use crate::model::cluster_state::ClusterState;
 use crate::ops::{ACTIVE_STATE, IN_USE_STATE, RecordStatus, VerifiedRecord, VerifySummary};
 use crate::reference::name_version;
 use crate::snapshot::{Naming, Source};

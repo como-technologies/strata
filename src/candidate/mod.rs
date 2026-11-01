@@ -15,22 +15,20 @@ use serde_json::{Map, Value};
 
 use crate::api::RawProfile;
 use crate::closed_set::ClosedSet;
-use crate::content::layer::Layer;
 use crate::error::{Error, Result};
-use crate::pack_type::PackType;
-use crate::profile_type::ProfileType;
+use crate::model::layer::Layer;
+use crate::model::pack_type::PackType;
+use crate::model::profile_type::ProfileType;
 use crate::snapshot::{PresetOption, Snapshot, Variable};
 use rules::invalid_at;
 
 mod export;
 mod gaps;
 pub(crate) mod pack;
-mod presets;
+pub(crate) mod presets;
 pub(crate) mod resolve;
 mod rules;
 
-pub use pack::pack_snapshot;
-pub use presets::warn_preset_options;
 pub use resolve::resolve;
 pub use rules::{check, load};
 

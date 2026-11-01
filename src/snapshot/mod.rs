@@ -16,12 +16,12 @@ use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::hash::content_of;
 use crate::error::{Error, Result};
 use crate::json::str_at;
-use crate::profile_type::ProfileType;
+use crate::model::profile_type::ProfileType;
+pub use crate::model::repave::PendingRepave;
+pub use crate::model::validation::ProfileValidation;
 use crate::reference::name_version;
-pub use crate::repave::PendingRepave;
 use crate::text::name_or_uid;
 use crate::timestamp::Rfc3339;
-pub use crate::validation::ProfileValidation;
 
 mod build;
 pub(crate) use build::{manifest_entry, manifest_of};

@@ -33,11 +33,11 @@ use std::path::Path;
 use serde_json::{Map, Value, json};
 use strata::api::{Palette, PaletteApi, RawCluster, profile_variables};
 use strata::closed_set::ClosedSet;
-use strata::cloud::{CLOUD_EDGE_NATIVE, Cloud};
 use strata::json::{
     arr, opt_str, opt_text, set_at, str_at, text_map, text_or, value_at, value_or_empty_object,
     value_or_null,
 };
+use strata::model::cloud::{CLOUD_EDGE_NATIVE, Cloud};
 use strata::reference::Ref;
 use strata::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use strata::term::progress::Progress;

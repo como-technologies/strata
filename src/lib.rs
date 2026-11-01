@@ -19,20 +19,13 @@
 //! - [`reference`](mod@reference): what a user-supplied ref means: a snapshot file,
 //!   `name@version`, a uid, or `cluster:<uid>`.
 //! - [`reference::version`]: the order of version strings, by Semantic Versioning, behind `name@latest`.
+//! - [`model`]: the types of Palette: the cloud types, the layers, the answers to the validate
+//!   routes, the reasons for a repave, and the closed sets that Palette names.
 //! - [`candidate`]: a profile version described by a file, before it exists in Palette.
 //! - [`snapshot`]: the `strata-snapshot/1` document and how it is built from raw API responses.
 //! - [`closed_set`]: a value of a closed set in a document that strata writes and reads, also
 //!   when a later release adds the value.
 //! - [`diff`]: the `strata-diff/1` document, the leaf diff, and the impact rules.
-//! - [`validation`]: the answers of Palette when strata asks whether it takes the packs.
-//! - [`repave`]: the reasons of Palette for a repave, and a repave that waits for approval.
-//! - [`cloud`]: the cloud types of Palette, and the rule for a pack that supports a cloud.
-//! - [`cluster_state`]: the state of a cluster, as Palette gives it in `status.state`.
-//! - [`cluster_template`]: the cluster templates of Palette.
-//! - [`conjunction`]: how the conditions of a search of Palette join.
-//! - [`pack_type`] and [`profile_type`]: the type of a pack, and the type of a profile.
-//! - [`pack_state`] and [`oci_provider`]: the state of a pack version in a registry, and the
-//!   provider type of an OCI registry.
 //! - [`text`]: the texts that a message builds.
 //! - [`json`]: the reads of a document of Palette, such as the text at a pointer.
 //!   Each read gives a fixed value for a field that is not there.
@@ -40,8 +33,6 @@
 //! - [`ops`]: the operations the CLI exposes, free of argument parsing and exit codes.
 //! - [`error`]: the error type, with its exit codes and its machine-readable form.
 //! - [`term::progress`] and [`term::color`]: the progress notes on stderr, and the color policy.
-//! - [`content::layer`]: the layers of Palette.
-//! - [`scope`]: the scope of a profile version.
 //!
 //! # Example
 //!
@@ -88,31 +79,41 @@
 pub mod api;
 pub mod candidate;
 pub mod closed_set;
-pub mod cloud;
-pub mod cluster_state;
-pub mod cluster_template;
 pub mod config;
-pub mod conjunction;
 pub mod content;
 pub mod diff;
 pub mod error;
 pub(crate) mod file;
 pub mod json;
-pub mod oci_provider;
+pub mod model;
 pub mod ops;
-pub mod pack_state;
-pub mod pack_type;
-pub mod profile_type;
 pub mod reference;
-pub(crate) mod registry;
 pub mod render;
-pub mod repave;
-pub mod scope;
 pub mod snapshot;
 pub mod term;
 pub mod text;
 pub(crate) mod timestamp;
-pub mod validation;
+
+/// The old path of [`model::cloud`]. It goes in release 0.27.
+pub use model::cloud;
+/// The old path of [`model::cluster_template`]. It goes in release 0.27.
+pub use model::cluster_template;
+/// The old path of [`model::conjunction`]. It goes in release 0.27.
+pub use model::conjunction;
+/// The old path of [`model::oci_provider`]. It goes in release 0.27.
+pub use model::oci_provider;
+/// The old path of [`model::pack_state`]. It goes in release 0.27.
+pub use model::pack_state;
+/// The old path of [`model::pack_type`]. It goes in release 0.27.
+pub use model::pack_type;
+/// The old path of [`model::profile_type`]. It goes in release 0.27.
+pub use model::profile_type;
+/// The old path of [`model::repave`]. It goes in release 0.27.
+pub use model::repave;
+/// The old path of [`model::scope`]. It goes in release 0.27.
+pub use model::scope;
+/// The old path of [`model::validation`]. It goes in release 0.27.
+pub use model::validation;
 
 pub use error::{Error, Result};
 
