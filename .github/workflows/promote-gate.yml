@@ -11,11 +11,11 @@ on:
   workflow_call:
     inputs:
       records:
-        description: The records to check, in promotion order, separated by spaces or newlines. A record is a snapshot file in the caller's checkout, or a ref such as name@version.
+        description: The records to check, in promotion order, separated by spaces or new lines. A record is a snapshot file in the checkout of the caller, or a ref such as name@version.
         required: true
         type: string
       allow:
-        description: 'The differences to accept, as a list separated by spaces or newlines: registry-move, for a promotion that moves packs to another registry, and no-digest. Empty accepts none.'
+        description: 'The differences to accept, as a list separated by spaces or new lines: registry-move, for a promotion that moves packs to another registry, and no-digest. Empty accepts none.'
         default: ""
         type: string
       project:
@@ -32,13 +32,13 @@ on:
         type: string
     secrets:
       strata-token:
-        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The token of the caller cannot read another private repository.
         required: false
       palette-api-key:
         description: PALETTE_API_KEY. Records are files and need no key; a ref does.
         required: false
       palette-project-uid:
-        description: PALETTE_PROJECT_UID, the project of a ref by its uid. It wins over project.
+        description: PALETTE_PROJECT_UID, the project of a ref by its uid. It has priority over project.
         required: false
 
 permissions:
@@ -48,7 +48,7 @@ jobs:
   promote-gate:
     runs-on: ubuntu-latest
     steps:
-      # the caller's repository, where the records live
+      # the repository of the caller, where the records live
       - uses: actions/checkout@v7
       # this repository at the requested tag, for the installer
       - uses: actions/checkout@v7

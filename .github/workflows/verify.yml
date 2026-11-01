@@ -10,7 +10,7 @@ on:
   workflow_call:
     inputs:
       records:
-        description: The records to verify in the caller's checkout, snapshot files or patterns such as releases/**/*.json, separated by spaces or newlines. Strata expands the patterns.
+        description: The records to verify in the checkout of the caller, snapshot files or patterns such as releases/**/*.json, separated by spaces or new lines. Strata expands the patterns.
         required: true
         type: string
       label:
@@ -35,7 +35,7 @@ on:
         type: string
     secrets:
       strata-token:
-        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The token of the caller cannot read another private repository.
         required: false
       palette-api-key:
         description: PALETTE_API_KEY, which verify needs to read each record's profile or cluster
@@ -49,7 +49,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      # the caller's repository, where the records live
+      # the repository of the caller, where the records live
       - uses: actions/checkout@v7
       # this repository at the requested tag, for the installer and the script
       - uses: actions/checkout@v7
@@ -69,7 +69,7 @@ jobs:
             --require-signature
       - name: verify and report
         env:
-          # the caller's token: it owns the issues
+          # the token of the caller: it owns the issues
           GH_TOKEN: ${{ github.token }}
           STRATA_BIN: ${{ github.workspace }}/.strata/bin/strata
           PALETTE_API_KEY: ${{ secrets.palette-api-key }}

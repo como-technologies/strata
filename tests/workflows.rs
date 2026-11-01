@@ -6,7 +6,7 @@
 use std::process::Command;
 
 use crate::common::{
-    INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, repo_file, steps, text, workflow,
+    INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, recipe, steps, text, workflow,
     workflow_files, workflow_text,
 };
 
@@ -62,6 +62,23 @@ fn the_gate_job_of_ci_needs_the_checks_and_has_no_condition() {
     );
 }
 
+/// The `run` lines of the steps of the job `name` of `checks.yml`.
+fn runs_of_job(name: &str) -> Vec<String> {
+    let doc = workflow("checks.yml");
+    let job = doc["jobs"]
+        .as_mapping()
+        .expect("checks.yml has jobs")
+        .values()
+        .find(|job| job["name"].as_str() == Some(name))
+        .unwrap_or_else(|| panic!("checks.yml has no job named {name}"));
+    job["steps"]
+        .as_sequence()
+        .expect("the job has steps")
+        .iter()
+        .filter_map(|step| step["run"].as_str().map(str::to_string))
+        .collect()
+}
+
 /// The tests of `xtask` hold the routes of the stand-in of Palette, and `cargo test` of the root
 /// package does not run them. So the `test` recipe runs them by name, and the job `lint and test`
 /// runs the recipe. The job has no step of its own for them, because then they run two times.
@@ -69,31 +86,68 @@ fn the_gate_job_of_ci_needs_the_checks_and_has_no_condition() {
 /// non-zero.
 #[test]
 fn the_lint_and_test_job_runs_the_tests_of_xtask() {
-    let justfile = repo_file("justfile");
-    let recipe: Vec<&str> = justfile
-        .lines()
-        .skip_while(|line| !line.starts_with("test:"))
-        .skip(1)
-        .take_while(|line| line.starts_with(' '))
-        .map(str::trim)
-        .collect();
-    assert!(recipe.contains(&"cargo test -p xtask"), "{recipe:?}");
+    let test = recipe("test");
+    assert!(
+        test.contains(&"cargo test -p xtask".to_string()),
+        "{test:?}"
+    );
 
-    let doc = workflow("checks.yml");
-    let job = doc["jobs"]
-        .as_mapping()
-        .expect("checks.yml has jobs")
-        .values()
-        .find(|job| job["name"].as_str() == Some("lint and test"))
-        .expect("checks.yml has a job named lint and test");
-    let runs: Vec<&str> = job["steps"]
-        .as_sequence()
-        .expect("the job has steps")
+    let runs = runs_of_job("lint and test");
+    assert!(runs.contains(&"just test".to_string()), "{runs:?}");
+    assert!(
+        !runs.contains(&"cargo test -p xtask".to_string()),
+        "{runs:?}"
+    );
+}
+
+/// The build of the public items does not read the comment of a private item, and a code span that
+/// breaks over a line in such a comment failed `cargo doc --document-private-items` with no check
+/// of CI to see it. So `just lint` builds the rustdoc of each package a second time with all items.
+/// It keeps the build of the public items too: only that build warns when a public item links to a
+/// private item.
+#[test]
+fn just_lint_builds_the_rustdoc_of_each_package_with_the_public_items_and_with_all_items() {
+    let lint = recipe("lint");
+    let docs: Vec<&String> = lint
         .iter()
-        .filter_map(|step| step["run"].as_str())
+        .filter(|line| line.contains("cargo doc"))
         .collect();
-    assert!(runs.contains(&"just test"), "{runs:?}");
-    assert!(!runs.contains(&"cargo test -p xtask"), "{runs:?}");
+    assert_eq!(docs.len(), 2, "{lint:?}");
+    for line in &docs {
+        assert!(line.contains(r#"RUSTDOCFLAGS="-D warnings""#), "{line}");
+        let words: Vec<&str> = line.split_whitespace().collect();
+        for package in ["strata", "strata-preflight", "xtask"] {
+            assert!(
+                words.windows(2).any(|pair| pair == ["-p", package]),
+                "{line}"
+            );
+        }
+    }
+    let all_items = docs
+        .iter()
+        .filter(|line| line.contains("--document-private-items"))
+        .count();
+    assert_eq!(
+        all_items, 1,
+        "one build of all items, one of the public items: {lint:?}"
+    );
+
+    assert!(
+        runs_of_job("lint and test").contains(&"just lint".to_string()),
+        "the job lint and test runs the recipe"
+    );
+}
+
+/// mdbook exits with code 0 on a warning, so `mdbook build docs` alone passes a page that it
+/// warns about. The recipe `docs` runs the script that reads the log, and the job `docs` runs the
+/// recipe.
+#[test]
+fn just_docs_builds_the_book_with_the_script_that_fails_on_a_warning_and_the_docs_job_runs_it() {
+    assert_eq!(recipe("docs"), ["scripts/dev/build-book.sh docs"]);
+    assert!(
+        runs_of_job("docs").contains(&"just docs".to_string()),
+        "the job docs runs the recipe"
+    );
 }
 
 /// A workflow that installs a release runs `install-strata.sh` from this repository at the tag
@@ -163,6 +217,22 @@ fn no_workflow_copies_the_download_or_the_signature_check_of_a_release() {
             );
         }
     }
+}
+
+/// `sha256sum` reads a name that starts with a dash as an option, and the shell check SC2035 asks
+/// for `./*.sh` in place of `*.sh`. Each name that the release writes is safe today, so this keeps
+/// the check clean. The sums then name a script as `./name`: the installer test of that form is
+/// `install_strata_checks_the_sums_that_name_a_script_with_a_leading_dot_and_slash`.
+#[test]
+fn the_release_writes_the_sums_of_the_scripts_with_a_glob_that_starts_with_dot_and_slash() {
+    let doc = workflow("release.yml");
+    let run = steps(&doc)
+        .filter_map(|step| step["run"].as_str())
+        .find(|run| run.contains("> SHA256SUMS"))
+        .expect("a step writes SHA256SUMS");
+    let line = run.lines().find(|l| l.contains("> SHA256SUMS")).unwrap();
+    assert!(line.contains(" ./*.sh"), "{line}");
+    assert!(!line.contains(" *.sh"), "{line}");
 }
 
 /// The last job of the release workflow installs the tag that it published, as a consumer does.

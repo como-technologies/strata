@@ -12,7 +12,7 @@ on:
   workflow_call:
     inputs:
       source:
-        description: The body of the create as a file in the caller's checkout, or cluster:UID for a cluster as Palette holds it
+        description: The body of the create as a file in the checkout of the caller, or cluster:UID for a cluster as Palette holds it
         required: true
         type: string
       cloud:
@@ -28,11 +28,11 @@ on:
         default: ""
         type: string
       records:
-        description: Records of the profiles in the caller's checkout, snapshot files or patterns such as releases/**/*.json, separated by spaces. With none, strata records each profile from Palette
+        description: Records of the profiles in the checkout of the caller, snapshot files or patterns such as releases/**/*.json, separated by spaces. With none, strata records each profile from Palette
         default: ""
         type: string
       probes:
-        description: A file of custom probes in the caller's checkout, in the format of the rules
+        description: A file of custom probes in the checkout of the caller, in the format of the rules
         default: ""
         type: string
       release:
@@ -85,7 +85,7 @@ on:
         type: string
     secrets:
       strata-token:
-        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The token of the caller cannot read another private repository.
         required: false
       palette-api-key:
         description: PALETTE_API_KEY, needed for the palette tier and for cluster:UID; the static tier runs without it
@@ -101,7 +101,7 @@ jobs:
   preflight:
     runs-on: ubuntu-latest
     steps:
-      # the caller's repository, where the entity and the records live
+      # the repository of the caller, where the entity and the records live
       - uses: actions/checkout@v7
       # this repository at the requested tag, for the installer
       - uses: actions/checkout@v7

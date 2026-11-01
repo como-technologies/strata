@@ -28,9 +28,10 @@ of them, and a Sigstore signature for each file.
 ### One command
 
 `install-strata.sh` is in every release. It reads the release and finds the
-binary for this machine. It checks the signature of `SHA256SUMS` when `cosign`
-is on the `PATH`. It checks each file against `SHA256SUMS`. It puts the binary and
-the CI scripts in the directory. Then it prints the path of the binary:
+binary for this machine. It checks the signature of `SHA256SUMS` when `cosign` 3 or
+later is on the `PATH`. It checks each file against `SHA256SUMS`. It puts the two
+binaries and the five CI scripts in the directory. Then it prints the path of
+the strata binary:
 
 ```bash
 gh release download --repo como-technologies/strata --pattern install-strata.sh -O - \
@@ -44,7 +45,7 @@ gh release download --repo como-technologies/strata --pattern install-strata.sh 
 | `--bin-only` | Installs the two binaries alone. The release after `v0.7.1` is the first one with this option. |
 | `--dir DIR` | Where to install. The default is `.strata`. |
 | `--target TARGET` | Overrides the target this machine detects. |
-| `--require-signature` | Stops with exit `2` before any download when `cosign` is not on the `PATH`. Also stops when the release has no signature. |
+| `--require-signature` | Stops with exit `2` before any download when `cosign` 3 or later is not on the `PATH`. Also stops when the release has no signature. |
 
 The repository is private, so an anonymous download fails. The installer reads a
 token from `STRATA_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN`, in that order. The
@@ -53,6 +54,10 @@ get the installer. A piped shell does not inherit that login, so `GH_TOKEN`
 gives the token to the installer. The token of a job in another repository
 cannot read this one, so a pipeline sets a token of its own: the drop-in passes
 it as `STRATA_READ_TOKEN` on GitHub and as `STRATA_TOKEN` on GitLab.
+
+On GitHub, a token does not open the reusable workflows of a private repository.
+The access setting does: see
+[While this repository is private](./automation/pr-comments.md#while-this-repository-is-private).
 
 When the repository becomes public, the same script needs no token. `curl` then
 gets it directly:
@@ -79,10 +84,13 @@ shows that the release workflow of this repository, at that tag, made the list.
 One signature of `SHA256SUMS` covers each file that the list names, because the
 installer checks each file against the list.
 
-The installer checks that signature when `cosign` is on the `PATH`. It prints
-`signature verified` and continues. If the signature does not verify, it stops
-with exit `2` and installs nothing. Without `cosign`, it installs and prints that
-it did not check the signature. Give `--require-signature` to stop in that case.
+The installer checks that signature when `cosign` 3 or later is on the `PATH`. It
+prints `signature verified` and continues. If the signature does not verify, it
+stops with exit `2` and installs nothing. Without `cosign`, it installs and
+prints that it did not check the signature. A `cosign` older than 3 gives the
+same result, because the bundles of a release are in the format of `cosign` 3.
+The installer prints `signature not verified: cosign older than 3`. Give
+`--require-signature` to stop in these cases.
 
 The identity to expect is the release workflow at the tag of the release, and
 the issuer is the OIDC service of GitHub Actions:

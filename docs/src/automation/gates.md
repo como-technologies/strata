@@ -49,10 +49,12 @@ or the version as the input:
 | `palette-api` | both | A self-hosted Palette; empty is `https://api.spectrocloud.com`. |
 | `strata-version` | both | The strata release, a tag of this repository. |
 
+While this repository is private, the caller needs the access setting as well as `strata-token`: see [While this repository is private](./pr-comments.md#while-this-repository-is-private).
+
 The promotion gate reads records, which are files, so it needs
 `palette-api-key` only when a record is a ref. A ref such as `name@version`
 resolves in one project. The promotion gate takes `project`, or the secret
-`palette-project-uid`, which names the project by its uid and wins over
+`palette-project-uid`, which names the project by its uid and has priority over
 `project`. The retire gate reads the clusters, so it always needs the key.
 
 The workflow gives each difference of `allow` its own `--allow`, so

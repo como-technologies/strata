@@ -90,7 +90,7 @@ jobs:
           cp ../scripts/ci/pr-comment.sh ../scripts/ci/merge-gate.sh ../scripts/ci/verify-report.sh \
             ../scripts/ci/upstream-report.sh ../scripts/ci/preflight.sh \
             ../scripts/ci/install-strata.sh .
-          sha256sum strata-* *.sh > SHA256SUMS
+          sha256sum strata-* ./*.sh > SHA256SUMS
           files=(strata-* *.sh SHA256SUMS)
           for f in "${files[@]}"; do
             cosign sign-blob --yes "$f" --bundle "$f.sigstore.json"

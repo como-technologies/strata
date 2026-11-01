@@ -4,10 +4,11 @@ The book is the documentation. `README.md` is the entry point, not a second copy
 
 ```bash
 just docs-serve        # build the book and open it at http://localhost:3000
+just docs              # build the book, and fail when mdbook prints a warning
 just docs-examples     # run each command of the book again, and write docs/src/output/
 just docs-check        # fail when docs/src/output/ is not current
 just docs-lint         # test each link with mdbook-lint
-just api-docs          # build the rustdoc into target/doc/ and print the path of the HTML
+just api-docs          # build the rustdoc of the public items into target/doc/ and print the path of the HTML
 ```
 
 The book needs `mdbook`, `mdbook-mermaid`, and `mdbook-gruvbox`. `just
@@ -155,6 +156,8 @@ heading, and their own knowledge do not? If not, delete it.
 - Do not use a verb form in "-ing" where a noun or a clause can do the work.
 - Do not use a contraction, an idiom, or a figure of speech.
 - Use American spelling.
+- Put a placeholder such as `<name>` in a code span. In other text, mdBook reads
+  it as an HTML tag that nothing closes, and `just docs` fails on the warning.
 - Put a short fact in a comment on the command line, not in a sentence above it.
 - Start a warning with the instruction. Put it in a block quote with bold text.
 

@@ -918,6 +918,114 @@ fn the_gitlab_preflight_job_gives_the_script_offline_for_the_static_tier_without
     assert_eq!(run("palette", "false"), "preflight.sh");
 }
 
+/// The names of the variables that a path of the GitLab file reads, as `$NAME` or `${NAME}`.
+fn variables_in(path: &str) -> Vec<&str> {
+    path.split('$')
+        .skip(1)
+        .map(|rest| rest.trim_start_matches('{'))
+        .map(|rest| rest.split(|c: char| !c.is_ascii_alphanumeric() && c != '_'))
+        .filter_map(|mut name| name.next())
+        .filter(|name| !name.is_empty())
+        .collect()
+}
+
+#[test]
+fn a_variable_in_a_path_is_found_with_or_without_braces() {
+    assert_eq!(variables_in("$STRATA_SAVE"), ["STRATA_SAVE"]);
+    assert_eq!(variables_in("${OUT}/$NAME.json"), ["OUT", "NAME"]);
+    assert!(variables_in("preflight/").is_empty());
+}
+
+/// A path of `artifacts` that a variable names is empty when the variable is empty. A GitLab
+/// runner then gets an empty path on each run, and it is not sure that this is safe. So a job
+/// with such a path has one of two things: the drop-in gives the variable a value that is not
+/// empty, or each rule of the job selects the job only when the variable is set.
+#[test]
+fn no_gitlab_job_keeps_an_artifact_at_the_path_that_an_empty_variable_names() {
+    let gitlab: serde_yaml::Value =
+        serde_yaml::from_str(&repo_file("examples/ci/gitlab/strata.yml")).unwrap();
+    let mut paths = 0;
+    for (job, body) in gitlab.as_mapping().unwrap() {
+        let job = job.as_str().unwrap();
+        for path in body["artifacts"]["paths"]
+            .as_sequence()
+            .into_iter()
+            .flatten()
+            .map(|p| p.as_str().unwrap())
+        {
+            paths += 1;
+            assert!(
+                !path.is_empty(),
+                "{job} keeps an artifact with an empty path"
+            );
+            for name in variables_in(path) {
+                let default = gitlab["variables"][name].as_str().unwrap_or("");
+                let selected_by_it = body["rules"].as_sequence().is_some_and(|rules| {
+                    !rules.is_empty()
+                        && rules.iter().all(|rule| {
+                            rule["when"].as_str() != Some("never")
+                                && reads_variable(rule["if"].as_str().unwrap_or(""), name)
+                        })
+                });
+                assert!(
+                    !default.is_empty() || selected_by_it,
+                    "{job} keeps the path {path}, and {name} is empty by default"
+                );
+            }
+        }
+    }
+    assert!(
+        paths >= 2,
+        "the drop-in keeps the artifact of two jobs at least"
+    );
+}
+
+/// The upstream job has two forms. The job without an artifact runs when `STRATA_SAVE` is empty,
+/// which is the default. The job with the artifact runs when `STRATA_SAVE` names a file, and it
+/// is the same job otherwise.
+#[test]
+fn the_gitlab_job_of_the_upstream_report_keeps_an_artifact_only_when_it_saves_a_file() {
+    let gitlab: serde_yaml::Value =
+        serde_yaml::from_str(&repo_file("examples/ci/gitlab/strata.yml")).unwrap();
+    assert_eq!(
+        gitlab["variables"]["STRATA_SAVE"].as_str(),
+        Some(""),
+        "the default saves no file"
+    );
+    let plain = &gitlab["strata-upstream"];
+    let saving = &gitlab["strata-upstream-save"];
+    assert!(
+        plain["artifacts"].is_null(),
+        "the job that saves nothing keeps no artifact"
+    );
+    assert_eq!(
+        saving["artifacts"]["paths"][0].as_str(),
+        Some("$STRATA_SAVE")
+    );
+    assert_eq!(saving["extends"].as_str(), Some("strata-upstream"));
+    assert!(
+        saving["script"].is_null(),
+        "the job that saves has the script of the other job, and no copy of it"
+    );
+
+    // the job that saves nothing steps aside when the variable has a value, and not otherwise
+    let first = &plain["rules"][0];
+    assert_eq!(first["if"].as_str(), Some("$STRATA_SAVE"));
+    assert_eq!(first["when"].as_str(), Some("never"));
+    assert!(
+        plain["rules"][1]["if"]
+            .as_str()
+            .is_some_and(|rule| rule.contains(r#"$CI_PIPELINE_SOURCE == "schedule""#))
+    );
+    let rule = saving["rules"][0]["if"].as_str().unwrap();
+    assert!(
+        rule.contains(r#"$CI_PIPELINE_SOURCE == "schedule""#)
+            && reads_variable(rule, "STRATA_SAVE"),
+        "{rule}"
+    );
+    assert_eq!(saving["rules"].as_sequence().unwrap().len(), 1);
+}
+
 // ---- pr-comment.sh ---------------------------------------------------------------------------
 
 /// A `gh` that records every invocation, saves any comment body it is handed, and answers the
@@ -2288,10 +2396,16 @@ fn install_strata_says_which_file_a_release_does_not_have() {
 }
 
 /// A `cosign` that checks a bundle the way a real one checks a signature: the bundle must name the
-/// digest of the file. It records its arguments, so a test sees the identity and the issuer.
+/// digest of the file. It records its arguments, so a test sees the identity and the issuer. Its
+/// `version` prints the line `GitVersion:` as a real `cosign version` does, with the text
+/// `@VERSION@` replaced.
 const FAKE_COSIGN: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 echo "$*" >> "$FAKE_REL/cosign.log"
+if [ "$1" = version ]; then
+  printf 'GitVersion:    @VERSION@\nGitCommit:     0000\n'
+  exit 0
+fi
 [ "$1" = verify-blob ] || { echo "no such command: $1" >&2; exit 64; }
 blob=$2
 shift 2
@@ -2307,10 +2421,15 @@ digest=$(sha256sum "$blob")
 echo "Verified OK" >&2
 "#;
 
-/// The installer, with a stand-in `cosign` in front of the tools, and the arguments of the
-/// release `v9.9.9` of `o/r`.
+/// The installer, with a stand-in `cosign` of version 3 in front of the tools, and the arguments
+/// of the release `v9.9.9` of `o/r`.
 fn install_signed(d: &Path, extra: &[&str]) -> Output {
-    fake_bin(d, &[("cosign", FAKE_COSIGN)]);
+    install_signed_by(d, "v3.1.4", extra)
+}
+
+/// The same, with a stand-in `cosign` that prints `version` as its version.
+fn install_signed_by(d: &Path, version: &str, extra: &[&str]) -> Output {
+    fake_bin(d, &[("cosign", &FAKE_COSIGN.replace("@VERSION@", version))]);
     let mut args = vec![
         "--version",
         "v9.9.9",
@@ -2426,6 +2545,116 @@ fn install_strata_requires_cosign_before_any_download_when_asked_to() {
     );
     assert!(!d.join("curl.log").exists(), "no request went out");
     assert!(!d.join("here").exists(), "nothing is installed");
+}
+
+/// The release writes the sums of its scripts with `./*.sh`, so `SHA256SUMS` names a script as
+/// `./name`. `sha256sum --check` opens that path, and finds the file in the directory of the
+/// installer.
+#[test]
+fn install_strata_checks_the_sums_that_name_a_script_with_a_leading_dot_and_slash() {
+    let r = release();
+    let d = r.path();
+    let sums = std::fs::read_to_string(d.join("assets/5")).unwrap();
+    let dotted: String = sums
+        .lines()
+        .map(|l| match l.split_once("  ") {
+            Some((sum, name)) if name.ends_with(".sh") => format!("{sum}  ./{name}\n"),
+            _ => format!("{l}\n"),
+        })
+        .collect();
+    assert!(dotted.contains("  ./pr-comment.sh\n"), "{dotted}");
+    std::fs::write(d.join("assets/5"), dotted).unwrap();
+    // the signature covers the new sums
+    std::fs::write(
+        d.join("assets/9"),
+        format!("signed {}", sha256_of(&d.join("assets/5"))),
+    )
+    .unwrap();
+    let o = install_signed(d, &["--require-signature"]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        d.join("here/pr-comment.sh").exists(),
+        "the script is installed"
+    );
+
+    // a script that does not match its line still stops the install
+    std::fs::write(d.join("assets/2"), "#!/bin/sh\necho another comment\n").unwrap();
+    let o = install(
+        d,
+        &[
+            "--version",
+            "v9.9.9",
+            "--dir",
+            "again",
+            "--target",
+            "x86_64-unknown-linux-musl",
+        ],
+    );
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("do not match SHA256SUMS"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+/// The bundles of a release are in the format of cosign 3. A cosign 2 probably cannot read them,
+/// so the installer does not call it, and installs as it does without cosign.
+#[test]
+fn install_strata_with_a_cosign_older_than_3_installs_and_says_that_it_did_not_check() {
+    let r = release();
+    let d = r.path();
+    let o = install_signed_by(d, "v2.4.1", &[]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("signature not verified: cosign older than 3"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(d.join("here/strata").exists(), "the binary is installed");
+    let log = std::fs::read_to_string(d.join("cosign.log")).unwrap();
+    assert!(
+        !log.contains("verify-blob"),
+        "a cosign older than 3 checks nothing: {log}"
+    );
+    let calls = std::fs::read_to_string(d.join("curl.log")).unwrap();
+    assert!(
+        !calls.contains("/releases/assets/9"),
+        "no bundle comes down when nothing reads it: {calls}"
+    );
+}
+
+#[test]
+fn install_strata_requires_cosign_3_before_any_download_when_asked_to() {
+    let r = release();
+    let d = r.path();
+    let o = install_signed_by(d, "v2.4.1", &["--require-signature"]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("--require-signature needs cosign 3 or later"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(!d.join("curl.log").exists(), "no request went out");
+    assert!(!d.join("here").exists(), "nothing is installed");
+}
+
+/// A version that the installer cannot read does not stop a cosign that works. It runs the check,
+/// and the check decides.
+#[test]
+fn install_strata_tries_a_cosign_that_prints_no_version_number() {
+    let r = release();
+    let d = r.path();
+    let o = install_signed_by(d, "devel", &["--require-signature"]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("signature verified"),
+        "{}",
+        text(&o.stderr)
+    );
+    // a cosign with two digits in its major version is newer than 3
+    let o = install_signed_by(d, "v10.0.0", &["--require-signature"]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
 }
 
 #[test]
@@ -3968,6 +4197,95 @@ fn upstream_report_dry_run_prints_each_issue_and_calls_no_host() {
     );
 }
 
+/// A dry run calls no host, so it needs no token. The three scripts that have a host agree on
+/// this on GitLab too, where the token is the only credential.
+#[test]
+fn a_dry_run_on_gitlab_needs_no_token_in_each_script_that_has_a_host() {
+    let no_token = [("GITLAB_TOKEN", "")];
+    let not_asked = |o: &Output| {
+        assert!(
+            !text(&o.stderr).contains("set GITLAB_TOKEN"),
+            "{}",
+            text(&o.stderr)
+        );
+    };
+
+    let h = host();
+    let o = h.run_gitlab(&[&h.a, &h.b, "--dry-run"], &no_token);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    not_asked(&o);
+    assert!(text(&o.stdout).starts_with("<!-- strata -->\n"));
+    assert!(h.gl_calls().is_empty(), "a dry run calls no host");
+
+    let report = preflight_report(&h);
+    let o = h.run_gitlab(&["--preflight", &report, "--dry-run"], &no_token);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(text(&o.stdout).starts_with("<!-- strata-preflight -->\n"));
+    assert!(h.gl_calls().is_empty(), "a dry run calls no host");
+
+    for report in [Report::verify(), Report::upstream()] {
+        report.summary(
+            0,
+            &[("releases/a.json", "unchanged", "lab-profile", "1.2.0")],
+        );
+        report.report(0, &[], None);
+        let dir = report.dir.path().display().to_string();
+        let mut job = gitlab_job(&dir);
+        job.extend_from_slice(&no_token);
+        let o = report.run_with(&["releases/*.json", "--dry-run"], &job);
+        assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+        not_asked(&o);
+        assert!(report.log("curl.log").is_empty(), "a dry run calls no host");
+    }
+
+    // the same job without the option writes to the host, and so it asks for the token
+    let o = h.run_gitlab(&[&h.a, &h.b], &no_token);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(text(&o.stderr).contains("set GITLAB_TOKEN"));
+}
+
+/// The host layer of `verify-report.sh` is the host layer of `upstream-report.sh`, line for line:
+/// each script stays one download that stands alone, so the copy is on purpose, and a change to
+/// one copy must reach the other. Only the label, its description, the variables of the options,
+/// the options, and the line of usage differ.
+#[test]
+fn the_host_layer_of_the_two_report_scripts_differs_only_in_the_lines_of_their_options() {
+    const OWN: [&str; 11] = [
+        "label=",
+        "label_description=",
+        "allow=(",
+        "who=(",
+        "impact=(",
+        "save=\"\"",
+        "--allow-no-digest)",
+        "--who)",
+        "--no-impact)",
+        "--save)",
+        "[ ${#patterns[@]} -gt 0 ]",
+    ];
+    // from the first function of the layer to the line where the check starts
+    let layer = |name: &str| -> Vec<String> {
+        let text = repo_file(&format!("scripts/ci/{name}"));
+        text.lines()
+            .skip_while(|l| !l.starts_with("die() {"))
+            .take_while(|l| !l.starts_with("strata=${STRATA_BIN"))
+            .filter(|l| !OWN.iter().any(|own| l.trim_start().starts_with(own)))
+            .map(String::from)
+            .collect()
+    };
+    let verify = layer("verify-report.sh");
+    let upstream = layer("upstream-report.sh");
+    assert!(
+        verify.len() > 80 && verify.iter().any(|l| l.starts_with("gitlab_api()")),
+        "the layer is not found: {} lines",
+        verify.len()
+    );
+    for (i, (v, u)) in verify.iter().zip(&upstream).enumerate() {
+        assert_eq!(v, u, "the layers differ at line {} of the layer", i + 1);
+    }
+    assert_eq!(verify.len(), upstream.len(), "one layer is longer");
+}
+
 #[test]
 fn upstream_report_keeps_the_report_of_the_run_in_the_file_that_save_names() {
     let u = Report::upstream();
@@ -4018,19 +4336,6 @@ fn upstream_report_touches_no_issue_when_behind_checks_nothing() {
             }
         }
     }
-}
-
-/// The scripts that open issues ship one by one, so each holds its own copy of the host
-/// functions. The copies must not drift apart.
-#[test]
-fn the_issue_scripts_hold_the_same_host_functions() {
-    let section = |name: &str| {
-        let s = repo_file(&format!("scripts/ci/{name}"));
-        let start = s.find("# ---- the hosts").unwrap();
-        let end = s.find("host() { local what").unwrap();
-        s[start..end].to_string()
-    };
-    assert_eq!(section("verify-report.sh"), section("upstream-report.sh"));
 }
 
 // ---- preflight.sh ------------------------------------------------------------------------------

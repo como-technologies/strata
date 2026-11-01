@@ -176,6 +176,8 @@ jobs:
 | `base` | no | The branch to merge in, when no event names it. A merge queue run needs it. |
 | `palette-api` | no | A self-hosted Palette address. |
 
+While this repository is private, the caller needs the access setting as well as `strata-token`: see [While this repository is private](./pr-comments.md#while-this-repository-is-private).
+
 The checkout of a pull request is already the merge result, so the gate finds
 nothing to merge and checks what the button lands.
 

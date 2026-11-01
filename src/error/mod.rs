@@ -499,8 +499,9 @@ fn take_again(schema: &str) -> &'static str {
     }
 }
 
-/// The reason that a record keeps for an answer of Palette that is an error: `HTTP <status>:
-/// <body>`. Palette ends a body with a newline, so the body comes with no blank at its ends.
+/// The reason that a record keeps for an answer of Palette that is an error:
+/// `HTTP <status>: <body>`. Palette ends a body with a newline, so the body comes with no blank
+/// at its ends.
 pub(crate) fn unread_reason(status: u16, body: &str) -> String {
     format!("HTTP {status}: {}", body.trim())
 }

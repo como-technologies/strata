@@ -258,7 +258,7 @@ pub fn profile_validation<A: PaletteApi>(
 }
 
 /// [`profile_validation`] with the registry listings of the command, so that a candidate that
-/// [`resolve`](crate::candidate::resolve) read sends no second read of them.
+/// [`resolve`](crate::candidate::resolve()) read sends no second read of them.
 pub(crate) fn profile_validation_in<A: PaletteApi>(
     registries: &mut Registries<'_, A>,
     snap: &Snapshot,

@@ -76,8 +76,8 @@ the script says that the table decides:
 ```
 
 `--repave` needs the key of Palette, because Palette answers for a cluster. The
-script asks once for each rendering of the report, so Palette gets the question
-twice. The question changes nothing in Palette.
+script asks once for each of the two reports that it writes, so Palette gets the
+question twice. The question changes nothing in Palette.
 
 ## Post a preflight report
 
@@ -110,7 +110,7 @@ no report, and the comment of the last push stays as it is.
 | `--host github\|gitlab` | from the CI variables | The code host. |
 | `--label NAME` | `repave` | The label. |
 | `--threshold LEVEL` | `repave` | The lowest [impact](../reference/impact.md) that adds the label. |
-| `--repave` | | Ask Palette if the change repaves the cluster, and let its answer decide the label. |
+| `--repave` | | Ask Palette if the change repaves the cluster, and use its answer for the label. |
 | `--preflight FILE` | | Post the markdown report of `strata preflight` in `FILE`, in place of a comparison. Give no ref and none of the three options above. |
 | `--dry-run` | | Print, and change nothing. |
 
@@ -182,3 +182,18 @@ A workflow of another repository can call this workflow only after two steps:
 2. Give `strata-token`: a fine-grained token or a GitHub App token that can read
    the contents of this repository. The token of the caller cannot read another
    private repository, so without it the checkout and the download fail.
+
+A token does not give access to a reusable workflow of a private repository. The
+access setting of that repository does. So `strata-token` and the setting are
+two different steps, and the call needs both. Without the setting, no other
+repository can call the workflows, also when it has a token.
+
+To see the setting, ask GitHub. The answer `{"access_level":"none"}` means that
+no other repository can call the workflows:
+
+```bash
+gh api repos/como-technologies/strata/actions/permissions/access
+```
+
+The GitHub page "Sharing actions and workflows from your private repository"
+describes the setting.
