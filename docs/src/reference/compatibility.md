@@ -701,7 +701,7 @@ field, a value, an input, or an option is in the sections above.
   - `same-release` of the two gives `NOT THE SAME RELEASE` and exit `1`.
   - Take each such record again with 0.26.0. Take the two records of a pair
     with one release.
-  - To find such a record, run this in a UTF-8 locale:
+  - To find such a record, run this with GNU `grep` in a UTF-8 locale:
     `jq -r '.. | strings' RECORD | grep -c -P '[\x{7f}-\x{9f}\x{2028}\x{2029}\x{fffe}\x{ffff}]'`.
     A number above `0` shows such a character. A record holds no manifest
     text, so also check each manifest where you keep it.
