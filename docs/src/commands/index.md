@@ -9,7 +9,7 @@ options of one:
 
 ## The commands in a release cycle
 
-[The everyday loop](../loop.md) says who runs each command, and when.
+[The everyday loop](../loop.md#the-jobs-and-their-commands) says who runs each command, and when.
 
 ```mermaid
 flowchart LR
