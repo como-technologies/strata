@@ -401,7 +401,7 @@ where
 
     let mut clients: HashMap<Option<String>, Palette<A>> = HashMap::new();
     let home = connect(profile_scope.as_deref())?;
-    let uid = profile_uid(reference, uid_hint, &home)?;
+    let uid = uid_of_ref(reference, uid_hint, &home)?;
     progress.note(&format!("listing consumers of profile {uid}"));
     let doc = home.profile_document(&uid)?;
 
@@ -452,7 +452,7 @@ where
 
 /// The uid of the profile that `reference` names. `hint` is the uid that the ref holds, when it
 /// holds one. The other refs name the profile by name and version, which `home` resolves.
-fn profile_uid<A: PaletteApi>(
+fn uid_of_ref<A: PaletteApi>(
     reference: &Ref,
     hint: Option<String>,
     home: &Palette<A>,
