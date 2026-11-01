@@ -118,11 +118,15 @@ one side), never the rate alone. With no wrong result in n runs, the bound is
 | 30 of 30 | 90% |
 
 One miss costs many runs: 13 of 14 is 70%, and 19 of 20 is 78%, both under the
-bar. A rule with no runs shows `no runs`, and no percentage. A new Palette
-release sets the counts of a rule to zero for that release; `4.10.3` and `4.10`
-are one release. The runs are of the lab: one account, one region, one set of
-packs. They are not a sample of another estate. The bar is `0.8`, as a field of
-each rule, so that it can go up.
+bar. A rule with no runs shows `no runs`, and no percentage. The runs are of the
+lab: one account, one region, one set of packs. They are not a sample of
+another estate. The bar is `0.8`, as a field of each rule, so that it can go up.
+
+A new Palette release sets the counts of a rule to zero for that release. A
+release is its first two numbers, as strata reads a version: `4.10.3` and `4.10`
+are one release, and so are `4` and `4.0`. A release that is not a version, such
+as `dev`, is the same release only as the same text. A run with no release
+counts for each release.
 
 ## The section scorecard
 

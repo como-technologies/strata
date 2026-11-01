@@ -1,4 +1,4 @@
-//! The scripts under scripts/dev/, which only this repository runs.
+//! The scripts under scripts/dev/, and examples/fetch-examples.sh, which only this repository runs.
 //! No network: every host and every command outside this repository is a recording stand-in.
 
 use crate::common;
@@ -331,4 +331,53 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
         !printed.contains("api.spectrocloud.com"),
         "nothing points at a real tenant:\n{printed}"
     );
+}
+
+// ---- the fetch of the examples -------------------------------------------------------------
+
+/// The versions that `oldest_first` of `examples/fetch-examples.sh` gives for `versions`. The test
+/// reads the function from the script and runs it alone, so the script itself fetches nothing.
+fn oldest_first(versions: &[&str]) -> Vec<String> {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = std::fs::read_to_string(repo.join("examples/fetch-examples.sh")).unwrap();
+    let start = source.find("\noldest_first() {").expect("the function") + 1;
+    let function = &source[start..start + source[start..].find("\n}\n").expect("its end") + 3];
+    let o = Command::new("bash")
+        .args([
+            "-c",
+            &format!("{function}\nprintf '%s\\n' \"$VERSIONS\" | oldest_first"),
+        ])
+        .env("VERSIONS", versions.join("\n"))
+        .output_locked()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    text(&o.stdout).lines().map(str::to_string).collect()
+}
+
+#[test]
+fn the_examples_fetch_orders_plain_versions_as_strata_does() {
+    let plain = [
+        "1.9.0", "1.10.0", "1.63.1", "1.30", "1.30.0", "22.04", "22.4", "1.2.10", "1.2.3", "10",
+        "9", "0.1", "1.65.0",
+    ];
+    let got = oldest_first(&plain);
+    assert_eq!(got.len(), plain.len(), "no plain version is lost: {got:?}");
+    for pair in got.windows(2) {
+        assert!(
+            strata::reference::version::compare(&pair[0], &pair[1]).is_le(),
+            "{} comes before {}: {got:?}",
+            pair[0],
+            pair[1]
+        );
+    }
+    // the examples omit a version that is not plain numbers, as the comment of the function says
+    let mixed = [
+        "1.0.1-rc.1",
+        "v1.20.0",
+        "LTS__24.x",
+        "1.2.3.4",
+        "1.0.1",
+        "1.0.0",
+    ];
+    assert_eq!(oldest_first(&mixed), ["1.0.0", "1.0.1"]);
 }
