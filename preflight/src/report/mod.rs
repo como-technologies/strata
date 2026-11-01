@@ -14,7 +14,7 @@ use strata::closed_set::legend::legend;
 use strata::term::color::Paint;
 use strata::text::dash;
 
-use crate::confidence::Confidence;
+use crate::confidence::{Confidence, NO_RUNS};
 use crate::jq::Jq;
 use crate::probe::outcome::ran_line;
 use crate::probe::{Call, Outcome, Verdict};
@@ -183,6 +183,36 @@ impl CheckResult {
     /// apply, and a check that did not run, have no line of their own there.
     pub(crate) fn is_listed(&self) -> bool {
         !matches!(self.verdict, Verdict::Skipped | Verdict::NotRun)
+    }
+
+    /// The lines to run by hand that a form of the report shows: those of a check that failed, is
+    /// not checked, or gave an error. A check that passed or did not run shows none.
+    pub(crate) fn shown_reproduce(&self) -> &[String] {
+        match self.verdict {
+            Verdict::Failed | Verdict::NotChecked | Verdict::Error => &self.reproduce,
+            _ => &[],
+        }
+    }
+
+    /// The fix that a form of the report shows: the fix of a check that failed, when it has text. A
+    /// check that is not checked or gave an error found no fault, so it shows no fix.
+    pub(crate) fn shown_fix(&self) -> Option<&Fix> {
+        self.fix
+            .as_ref()
+            .filter(|fix| self.verdict == Verdict::Failed && !fix.text.is_empty())
+    }
+
+    /// The confidence of the check as one text, such as `catch 7/7 (65%), clean 9/9 (72%)`. A check
+    /// with no confidence has none.
+    pub(crate) fn confidence_text(&self) -> Option<String> {
+        self.confidence.as_ref().map(Confidence::text)
+    }
+
+    /// The confidence in the cell of a table: [`CheckResult::confidence_text`], or `no runs` for a
+    /// check that has none.
+    pub(crate) fn confidence_cell(&self) -> String {
+        self.confidence_text()
+            .unwrap_or_else(|| NO_RUNS.to_string())
     }
 
     /// One line for the request or the command of the check, and one for each request of a check

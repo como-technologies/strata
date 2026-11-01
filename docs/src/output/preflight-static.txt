@@ -24,8 +24,8 @@ Quotas and limits
                 reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>" | jq .spec.clustersConfig.limitConfig
 
 Networking
-  PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs clean 9/9 (72%)
-  PROBE PASS    api-endpoint-reach           The pilot can reach the API server of the cluster                1 ms  catch 7/7 (65%) clean 9/9 (72%)
+  PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs, clean 9/9 (72%)
+  PROBE PASS    api-endpoint-reach           The pilot can reach the API server of the cluster                1 ms  catch 7/7 (65%), clean 9/9 (72%)
   NOT CHECKED   registry-https               A registry name answers over HTTPS before Palette takes it       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: curl -s -o /dev/null -w '%{http_code}\n' https://<registry host>/v2/

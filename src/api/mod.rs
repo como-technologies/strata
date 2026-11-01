@@ -6,9 +6,11 @@
 //! tests. [`Palette`] holds the operations over any of them, and [`RawProfile`] and [`RawCluster`]
 //! are the responses a snapshot is built from. [`codes`] holds the codes of the answers of
 //! Palette: the refusals of each validate route, and the rules of the create.
+//! [`connect_from_env`] builds the client that a command line uses.
 
 mod audit;
 pub mod codes;
+mod connect;
 mod http;
 pub(crate) mod mask;
 mod memory;
@@ -27,6 +29,7 @@ use crate::closed_set::{ClosedSet, impl_closed_set};
 use crate::error::{Error, Result};
 
 pub use audit::AuditKind;
+pub use connect::{connect_from_env, connect_with, project_uid_named};
 pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
 pub use memory::MemoryApi;
 pub(crate) use palette::{

@@ -96,10 +96,11 @@ impl Levels {
 
     /// Close the last part when it is `part`. A closer that closes nothing is no level.
     fn close(&mut self, part: Part) {
-        if self.open.len() > 1 && self.open.last().is_some_and(|&(last, _)| last == part) {
-            if let Some((_, operators)) = self.open.pop() {
-                self.level -= Self::weight(part) + operators;
-            }
+        if self.open.len() > 1
+            && self.open.last().is_some_and(|&(last, _)| last == part)
+            && let Some((_, operators)) = self.open.pop()
+        {
+            self.level -= Self::weight(part) + operators;
         }
     }
 

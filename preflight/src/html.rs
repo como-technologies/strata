@@ -6,7 +6,6 @@
 
 use strata::closed_set::ClosedSet;
 
-use crate::confidence::NO_RUNS;
 use crate::probe::Verdict;
 use crate::report::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
 use crate::report::{CheckResult, Report, SectionScore, Summary, pct, percent};
@@ -214,46 +213,32 @@ fn result_row(c: &CheckResult) -> String {
             esc(&c.ran_lines().join("\n"))
         ));
     }
-    if matches!(
-        c.verdict,
-        Verdict::Failed | Verdict::NotChecked | Verdict::Error
-    ) {
-        if let Some(fix) = &c.fix
-            && !fix.text.is_empty()
-        {
-            h.push_str(&format!(
-                "<div class=\"fix\">fix ({}): {}</div>",
-                esc(&fix.owner),
-                esc(&fix.text)
-            ));
-        }
-        if !c.reproduce.is_empty() {
-            h.push_str(&format!(
-                "<details><summary>reproduce by hand</summary><pre>{}</pre></details>",
-                esc(&c.reproduce.join("\n"))
-            ));
-        }
+    if let Some(fix) = c.shown_fix() {
+        h.push_str(&format!(
+            "<div class=\"fix\">fix: {}</div>",
+            esc(&fix.line())
+        ));
     }
-    h.push_str("</td><td class=\"conf\">");
-    match &c.confidence {
-        Some(k) => h.push_str(&format!(
-            "catch {}<br>clean {}",
-            esc(&k.catch.text()),
-            esc(&k.clean.text())
-        )),
-        None => h.push_str(NO_RUNS),
+    if !c.shown_reproduce().is_empty() {
+        h.push_str(&format!(
+            "<details><summary>reproduce by hand</summary><pre>{}</pre></details>",
+            esc(&c.shown_reproduce().join("\n"))
+        ));
     }
-    h.push_str("</td></tr>");
+    h.push_str(&format!(
+        "</td><td class=\"conf\">{}</td></tr>",
+        esc(&c.confidence_cell())
+    ));
     h
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::confidence::NO_RUNS;
+    use crate::confidence::{Confidence, Counts, NO_RUNS};
     use crate::probe::Call;
     use crate::report::*;
-    use crate::rule::{Level, Severity, Status, Tier};
+    use crate::rule::{Fix, Level, Severity, Status, Tier};
     use std::collections::BTreeMap;
 
     /// The report of one probe that failed, with no request.
@@ -406,6 +391,77 @@ mod tests {
         assert!(forms[0].1.contains("gke cluster - ("), "{}", forms[0].1);
         assert!(forms[1].1.contains("gke cluster `-`"), "{}", forms[1].1);
         assert!(forms[2].1.contains("gke · -"), "{}", forms[2].1);
+    }
+
+    #[test]
+    fn the_three_forms_show_the_fix_and_the_confidence_of_a_check_by_one_rule() {
+        let counts = Counts {
+            caught: 7,
+            missed: 0,
+            passed: 9,
+            false_fail: 0,
+            runs: vec![],
+        };
+        let mut report = report();
+        let mut failed = report.checks[0].clone();
+        failed.fix = Some(Fix {
+            owner: "palette".into(),
+            text: "Check the zones.".into(),
+        });
+        failed.confidence = Some(Confidence::of("gke", "4.10", &counts, 0.7));
+        // a failed check shows its fix with no line to run by hand too
+        let mut bare = failed.clone();
+        bare.id = "bare".into();
+        bare.reproduce = vec![];
+        bare.fix.as_mut().unwrap().text = "Name the zones.".into();
+        // a check that found no fault shows no fix, and no confidence shows as no runs
+        let mut others = Vec::new();
+        for (id, verdict) in [
+            ("not-checked", Verdict::NotChecked),
+            ("error", Verdict::Error),
+            ("passed", Verdict::Passed),
+        ] {
+            let mut c = failed.clone();
+            c.id = id.into();
+            c.verdict = verdict;
+            c.confidence = None;
+            c.fix.as_mut().unwrap().text = format!("The fix of {id}.");
+            others.push(c);
+        }
+        report.checks = vec![failed, bare];
+        report.checks.extend(others);
+        let forms = [
+            (
+                "terminal",
+                terminal(&report, &strata::term::color::Paint::off()),
+                "fix:",
+            ),
+            ("markdown", markdown(&report), "Fix:"),
+            ("html", page(&report), "fix:"),
+        ];
+        for (form, text, label) in &forms {
+            for fix in ["Check the zones. (palette)", "Name the zones. (palette)"] {
+                assert!(text.contains(&format!("{label} {fix}")), "{form}: {text}");
+            }
+            for id in ["not-checked", "error", "passed"] {
+                assert!(
+                    !text.contains(&format!("The fix of {id}.")),
+                    "{form} shows the fix of a check that found no fault: {text}"
+                );
+            }
+            assert!(
+                text.contains("catch 7/7 (65%), clean 9/9 (72%)"),
+                "{form}: {text}"
+            );
+            assert_eq!(text.matches("catch 7/7").count(), 2, "{form}: {text}");
+        }
+        // a table cell says that a check has no runs, and a line of the terminal says nothing
+        assert!(forms[1].1.contains("| no runs |"), "{}", forms[1].1);
+        assert!(
+            forms[2].1.contains("<td class=\"conf\">no runs</td>"),
+            "{}",
+            forms[2].1
+        );
     }
 
     #[test]

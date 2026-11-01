@@ -3,11 +3,11 @@ strata-preflight: aws cluster payments (cluster.json), Palette release not given
 
 Identity and permissions
   NOT RUN       3 checks did not run: --no-exec: the command did not run (3)
-  PROBE PASS    account-missing              The cloud account of the entity exists, and is of the cloud…     1 ms  catch 7/7 (65%) clean 9/9 (72%)
-  PROBE PASS    iaas-pod-identity            The property route accepts the cloud account and the key pa…     1 ms  catch no runs clean 9/9 (72%)
+  PROBE PASS    account-missing              The cloud account of the entity exists, and is of the cloud…     1 ms  catch 7/7 (65%), clean 9/9 (72%)
+  PROBE PASS    iaas-pod-identity            The property route accepts the cloud account and the key pa…     1 ms  catch no runs, clean 9/9 (72%)
 
 Cloud services and APIs
-  PROBE PASS    aws-region-not-enabled       The region of the cluster is enabled for the AWS account         1 ms  catch no runs clean 9/9 (72%)
+  PROBE PASS    aws-region-not-enabled       The region of the cluster is enabled for the AWS account         1 ms  catch no runs, clean 9/9 (72%)
   NOT CHECKED   aws-s3-irsa-bucket           The IRSA bucket of an AWS cluster can be made                    1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: kubectl get awscluster -A -o jsonpath='{.items[*].spec.s3Bucket.name}'   # on the management cluster, during the build: the bucket CAPA asks for
@@ -20,7 +20,7 @@ Quotas and limits
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: aws service-quotas get-service-quota --service-code vpc --quota-code L-E79EC296 --region us-east-2 --query Quota.Value
                 reproduce: aws ec2 describe-security-groups --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/role --query 'SecurityGroups[].[GroupId,GroupName,length(IpPermissions),length(IpPermissionsEgress)]' --output table   # the groups CAPA made, during or after the build
-  PROBE FAIL    worker-cpu-floor             The workers have the CPU the packs need                          1 ms  catch 7/7 (65%) clean 9/9 (72%)
+  PROBE FAIL    worker-cpu-floor             The workers have the CPU the packs need                          1 ms  catch 7/7 (65%), clean 9/9 (72%)
                 pool worker-pool: A minimum allocation of '4.1' CPU cores is required across all worker nodes
                 ran: POST /v1/spectroclusters/aws/validate -> HTTP 200
                 reproduce: jq '.validateBody' $OUT/world.json > request.json
@@ -33,16 +33,16 @@ Quotas and limits
                 reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>" | jq .spec.clustersConfig.limitConfig
 
 Networking
-  PROBE PASS    aws-dynamic-cidr-overlap     The pod and service CIDRs stay outside the VPC of dynamic p…     1 ms  catch no runs clean 9/9 (72%)
-  PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs clean 9/9 (72%)
-  PROBE PASS    api-endpoint-reach           The pilot can reach the API server of the cluster                1 ms  catch 7/7 (65%) clean 9/9 (72%)
-  PROBE PASS    proxy-no-proxy               NO_PROXY holds the CIDRs of the cluster                          1 ms  catch no runs clean 9/9 (72%)
+  PROBE PASS    aws-dynamic-cidr-overlap     The pod and service CIDRs stay outside the VPC of dynamic p…     1 ms  catch no runs, clean 9/9 (72%)
+  PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs, clean 9/9 (72%)
+  PROBE PASS    api-endpoint-reach           The pilot can reach the API server of the cluster                1 ms  catch 7/7 (65%), clean 9/9 (72%)
+  PROBE PASS    proxy-no-proxy               NO_PROXY holds the CIDRs of the cluster                          1 ms  catch no runs, clean 9/9 (72%)
   NOT CHECKED   registry-https               A registry name answers over HTTPS before Palette takes it       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: curl -s -o /dev/null -w '%{http_code}\n' https://<registry host>/v2/
 
 Compute and pools
-  PROBE PASS    instance-offering            The instance type is offered in each zone of the pool            1 ms  catch 3/3 (37%) clean 2/3 (14%)
+  PROBE PASS    instance-offering            The instance type is offered in each zone of the pool            1 ms  catch 3/3 (37%), clean 2/3 (14%)
   NOT CHECKED   spot-capacity                Spot capacity is short                                           1 ms
                 a race: no check before the build finds it; the watch finds its effect
   NOTE          bastion-cost                 CAPA makes a bastion for each AWS cluster                        1 ms
@@ -69,7 +69,7 @@ Images and registries
   WARN          floating-tag                 No profile pins a pack under a floating tag                      1 ms
                 profile aws-stack: pack ubuntu-aws is pinned under the floating tag LTS__24.x
                 reproduce: jq '[ .profiles[] | .source.name as $p | .packs[] | select((.tag // "") | test("\\.x$|^x$")) | "profile \($p): pack \(.name) is pinned under the floating tag \(.tag)" ]' $OUT/world.json
-  PROBE PASS    pack-dependency              Each pack of the profiles finds the packs it requires            1 ms  catch no runs clean 9/9 (72%)
+  PROBE PASS    pack-dependency              Each pack of the profiles finds the packs it requires            1 ms  catch no runs, clean 9/9 (72%)
   NOT CHECKED   image-tag-not-digest         An image of a pack is named by a digest                          1 ms
                 a race: no check before the build finds it; the watch finds its effect
                 reproduce: crane digest <image>
@@ -101,7 +101,7 @@ Profiles and packs
   NOT CHECKED   template-lock-route          The lock of a cluster template covers each route of an edit      1 ms
                 a race: no check before the build finds it; the watch finds its effect
                 reproduce: strata verify <record.json> --who
-  PROBE PASS    template-outside             No profile of the entity is linked to a cluster template         1 ms  catch no runs clean 9/9 (72%)
+  PROBE PASS    template-outside             No profile of the entity is linked to a cluster template         1 ms  catch no runs, clean 9/9 (72%)
   PROBE PASS    variables-in-use             The variable definitions of a version in use stay as they a…     1 ms
   PROBE PASS    version-string               Each profile version is MAJOR.MINOR.PATCH                        1 ms
   PROBE PASS    macro-flag-scope             The content of a profile reads no macro                          1 ms
@@ -117,7 +117,7 @@ Lifecycle: update, repave, delete
                 a race: no check before the build finds it; the watch finds its effect
 
 The Palette platform
-  PROBE FAIL    palette-validate             The validate route of Palette for the cloud type passes          1 ms  catch 7/7 (65%) clean 9/9 (72%)
+  PROBE FAIL    palette-validate             The validate route of Palette for the cloud type passes          1 ms  catch 7/7 (65%), clean 9/9 (72%)
                 pool worker-pool: MachinePoolWithMinCpuRequired: A minimum allocation of '4.1' CPU cores is required across all worker nodes
                 ran: POST /v1/spectroclusters/aws/validate -> HTTP 200
                 reproduce: jq '.validateBody' $OUT/world.json > request.json

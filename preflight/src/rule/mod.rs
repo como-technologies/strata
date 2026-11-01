@@ -259,6 +259,13 @@ pub struct Fix {
     pub text: String,
 }
 
+impl Fix {
+    /// The fix as a report shows it: the change, then the owner in brackets.
+    pub fn line(&self) -> String {
+        format!("{} ({})", self.text, self.owner)
+    }
+}
+
 /// What a piece of evidence is.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,

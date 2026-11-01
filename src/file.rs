@@ -1,8 +1,11 @@
 //! The reads and the writes of a file, with the path in each error.
 //!
 //! Each layer reads and writes its files here, so no layer below [`crate::ops`] calls `ops`.
+//!
+//! It also names the record files that a command line gives: a path, or a pattern that strata
+//! expands itself.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
 
@@ -37,4 +40,105 @@ pub(crate) fn read_file(path: &Path) -> Result<String> {
         path: path.to_path_buf(),
         source,
     })
+}
+
+/// True when `arg` is a file pattern: it holds `*`, `?`, or `[`.
+pub fn is_pattern(arg: &str) -> bool {
+    arg.contains(['*', '?', '['])
+}
+
+/// The record files that the arguments `args` name, in the order given.
+///
+/// A path stays as it is. A pattern is expanded by strata, so that a quoted pattern works from any
+/// shell or scheduler: `releases/**/*.json` names the files at every depth, and the ones directly
+/// under `releases/` too. The files of one pattern come in the order of their names.
+///
+/// # Errors
+///
+/// `Pattern` when an argument is a pattern that is not valid, or one that no file matches.
+pub fn expand_records(args: &[String]) -> Result<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    for arg in args {
+        if !is_pattern(arg) {
+            out.push(PathBuf::from(arg));
+            continue;
+        }
+        let matches: Vec<PathBuf> = glob::glob(arg)
+            .map_err(|e| Error::Pattern {
+                pattern: arg.clone(),
+                message: format!("is not a valid pattern: {}", e.msg),
+            })?
+            .filter_map(std::result::Result::ok)
+            .filter(|p| p.is_file())
+            .collect();
+        if matches.is_empty() {
+            return Err(Error::Pattern {
+                pattern: arg.clone(),
+                message: "matched no files".to_string(),
+            });
+        }
+        out.extend(matches);
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pattern_matches_at_every_depth_and_a_plain_path_stays() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        for f in [
+            "releases/x.json",
+            "releases/aws/a.json",
+            "releases/aws/2026/b.json",
+        ] {
+            let path = dir.join(f);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, "{}").unwrap();
+        }
+        let pattern = dir.join("releases/**/*.json").display().to_string();
+        let found = expand_records(&[pattern]).unwrap();
+        let names: Vec<String> = found
+            .iter()
+            .map(|p| p.strip_prefix(dir).unwrap().display().to_string())
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                "releases/aws/2026/b.json",
+                "releases/aws/a.json",
+                "releases/x.json"
+            ],
+            "`**` matches zero directories as well as many"
+        );
+        let plain = dir.join("releases/x.json").display().to_string();
+        assert_eq!(
+            expand_records(std::slice::from_ref(&plain)).unwrap(),
+            vec![PathBuf::from(plain)]
+        );
+    }
+
+    #[test]
+    fn a_pattern_that_matches_no_file_or_is_not_valid_is_a_pattern_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let none = tmp.path().join("*.yaml").display().to_string();
+        let err = expand_records(std::slice::from_ref(&none)).unwrap_err();
+        assert_eq!(err.kind(), "pattern");
+        assert_eq!(err.to_string(), format!("'{none}' matched no files"));
+        let invalid = "releases/[".to_string();
+        let err = expand_records(std::slice::from_ref(&invalid)).unwrap_err();
+        assert_eq!(err.kind(), "pattern");
+        assert!(err.to_string().contains("is not a valid pattern"), "{err}");
+    }
+
+    #[test]
+    fn a_text_is_a_pattern_when_it_holds_a_star_a_mark_or_a_bracket() {
+        for arg in ["*.json", "a?.json", "a[12].json", "releases/**/*.json"] {
+            assert!(is_pattern(arg), "{arg}");
+        }
+        assert!(!is_pattern("releases/1.1.1/dev.json"));
+    }
 }
