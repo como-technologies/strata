@@ -215,7 +215,7 @@ always valid, and the same bytes give the same document.
 | A record written and read again gives the same root. | `properties::a_record_written_and_read_again_has_the_same_root` |
 
 The version order is a total preorder: two spellings of one version, such as
-`1.0` and `1.00`, compare equal.
+`1.0.1` and `1.0.1+2`, compare equal.
 
 #### Run a target
 
