@@ -12,13 +12,9 @@ use super::{connect, exit_for, now_utc};
 pub(crate) fn cmd_compare(a: &CompareArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
     let now = now_utc();
-    let (sa, sb) = ops::snapshot_pair(
-        &Ref::parse(&a.a),
-        &Ref::parse(&a.b),
-        || connect(progress, None),
-        &now,
-        &progress,
-    )?;
+    let (ra, rb) = (Ref::parse(&a.a), Ref::parse(&a.b));
+    a.questions().check(&ra, &rb)?;
+    let (sa, sb) = ops::snapshot_pair(&ra, &rb, || connect(progress, None), &now, &progress)?;
     let mut d = ops::compare(&sa, &sb, &now);
     if a.repave || a.validate {
         // the cluster side names its project; the questions go to that project

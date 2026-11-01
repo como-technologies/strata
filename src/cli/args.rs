@@ -259,6 +259,16 @@ pub(crate) struct SnapshotArgs {
     pub(crate) quiet: QuietArgs,
 }
 
+impl CompareArgs {
+    /// What strata asks Palette about the cluster side.
+    pub(crate) fn questions(&self) -> ops::PaletteQuestions {
+        ops::PaletteQuestions {
+            repave: self.repave,
+            validate: self.validate,
+        }
+    }
+}
+
 impl SnapshotArgs {
     /// The format of the report of a set. A record is always JSON.
     pub(crate) fn format(&self) -> Format {

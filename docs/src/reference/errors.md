@@ -29,6 +29,9 @@ the kind.
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
 | `palette-refuses` | `snapshot --validate` asked Palette whether it takes the version, and Palette refused its name, its version, or its packs. Strata prints each error as a `palette    refuses:` line first, and writes no record. | `reference`, `errors[]` of `pack`, `code`, and `message` |
 | `usage` | The command line cannot work as given. See [The usage errors](#the-usage-errors). | |
+| `stale-record` | The record of the update that waits for a cluster holds a profile that the cluster does not run now. The record is older than the cluster. See [The refusals that a record or a cluster causes](#the-refusals-that-a-record-or-a-cluster-causes). | `cluster`, `profile` |
+| `cluster-template-governs` | A cluster template governs the cluster, and `compare --repave` asks about a change that gives pack values to a profile that the cluster runs. The route of the template takes no pack values. | `cluster`, `template` |
+| `no-cloud-config` | The document of the cluster names no cloud config, so `snapshot --shape` has nothing to read. | `cluster` |
 | `candidate-invalid` | The candidate file has a problem, or it gives a value that Palette changes at the create. A rule that only the create of Palette checks also gives this kind. Then the message names the code of Palette, and `code` holds it. For the rules of the validate route, `snapshot --validate` asks Palette. See [Checks before any request](candidate-file.md#checks-before-any-request). | `path`, `code` for a rule of the create |
 | `pack-not-found` | The registry has no such pack version or tag. `unsynced` names the registries that Palette does not sync, among the ones that strata asked. Palette lists a pack of such a registry only while a profile pins the pack. | `name`, `version`, `registry`, `tag` when given, `unsynced` when it is not empty |
 | `pack-name-not-found` | No visible registry offers a pack of that name. `unsynced` names the visible registries that Palette does not sync. | `name`, `unsynced` when it is not empty |
@@ -66,18 +69,44 @@ A `usage` error comes before any request in these cases:
 - `snapshot --raw-dir` of a ref that is not a profile or a cluster.
 - `snapshot --validate` with `--from-raw`, a cluster ref, or an `@draft` ref.
 - `behind --since` with a file that is not a `strata-behind/1` document.
-
-`compare --repave` and `compare --validate` read both sides first. Then they
-give `usage` in these cases:
-
-- One side is an edge host or a cluster group.
-- The pair is not a cluster and a profile version. `compare --repave` also
+- `compare --repave` or `compare --validate` with a pair that the refs show to
+  be wrong. One side is an edge host, a cluster group, or a set of clusters.
+  Or the pair is not a cluster and a profile version. `compare --repave` also
   takes `cluster:<c>` and `cluster:<c>@pending`.
-- `compare --repave` has a stale `@pending` record, or pack values to a cluster
-  in a cluster template.
+- `verify` of a record of an object that a later release wrote. The record
+  shows its kind, so `verify` needs no key.
+
+A record file shows its side when strata reads the file. That read is no
+request, so these errors come before any request too.
+
+One `usage` error can come after a request. `compare --repave cluster:<a>
+cluster:<b>@pending` gives it when `a` and `b` name two clusters. A name and a
+uid can name one cluster, so only the reads show that they name two.
 
 `snapshot` takes `--json` only with `--dir`. Without `--dir`, a `usage` error
 of `snapshot` prints as a `strata:` line.
+
+## The refusals that a record or a cluster causes
+
+The command is correct in these cases, but a record or a cluster stops it.
+Each case has a kind of its own, and not `usage`. Each comes after the first
+request, because only the document of the cluster shows it:
+
+- `stale-record`: the record of the update that waits for a cluster holds a
+  profile that the cluster does not run now. Record the update again with
+  `cluster:<c>@pending`.
+- `cluster-template-governs`: a cluster template governs the cluster, and
+  `compare --repave` asks about a change that gives pack values to a profile
+  that the cluster runs. The route of the template takes no pack values. See
+  [A cluster in a cluster template](../commands/compare/repave.md#a-cluster-in-a-cluster-template).
+- `no-cloud-config`: `snapshot --shape` reads the cloud config of a cluster,
+  and the document of the cluster names none.
+
+With `--json`, the fields of the kind are in the error. This is `stale-record`:
+
+```text
+{{#include ../output/edited-stale-record-json.txt}}
+```
 
 ## Refusals that strata does not send again
 
