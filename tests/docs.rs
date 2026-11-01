@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 use common::{INSTALLING_WORKFLOWS, recipe, repo_file, schema, script, version_of, walk};
 use strata::api::codes::ValidateRoute;
+use strata::content::canonical_json;
 
 fn docs() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/src")
@@ -272,12 +273,12 @@ fn compatibility_names_release_0_18_0_and_what_each_absent_field_of_wave_4_means
     );
 }
 
-/// The section of release 0.25.0 in the compatibility page, with each run of white space as one
-/// space.
-fn release_0_25_0(page: &str) -> String {
+/// The section of `release` in the compatibility page, such as "0.25.0", with each run of white
+/// space as one space.
+fn release_section(page: &str, release: &str) -> String {
     one_line(section(
         page,
-        "## Release 0.25.0: changes that need action",
+        &format!("## Release {release}: changes that need action"),
         Some("\n## "),
     ))
 }
@@ -338,7 +339,7 @@ fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_a
         "a reusable workflow runs cosign, and the list of the tests lacks it"
     );
 
-    let release = release_0_25_0(&read(&docs().join("reference/compatibility.md")));
+    let release = release_section(&read(&docs().join("reference/compatibility.md")), "0.25.0");
     for file in INSTALLING_WORKFLOWS {
         assert!(
             release.contains(&format!("`{file}`")),
@@ -412,7 +413,7 @@ fn the_page_names_each_document_that_carries_the_record_of_a_cluster_with_the_re
     }
 
     let page = read(&docs().join("reference/compatibility.md"));
-    let release = release_0_25_0(&page);
+    let release = release_section(&page, "0.25.0");
     let documents = one_line(section(&page, "## The documents", Some("\n## ")));
     for id in &carrying {
         assert!(
@@ -1682,4 +1683,239 @@ fn the_block_of_a_numbered_step_does_not_hold_the_next_step() {
         "{step}"
     );
     assert!(!step.contains("strata-token"), "{step}");
+}
+
+// ---- the release notes and the live results at the end of Wave 12 -------------------------------
+
+/// The changes of Wave 12 were in paragraphs that start "After 0.25.0", and most gave no action.
+/// The section sits above the one of release 0.25.0, and the opening of the page links to all
+/// three sections.
+#[test]
+fn compatibility_has_a_section_for_release_0_26_0_above_release_0_25_0_and_links_to_all_three() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let newer = page
+        .find("\n## Release 0.26.0: changes that need action\n")
+        .expect("the page has no section for release 0.26.0");
+    let older = page
+        .find("\n## Release 0.25.0: changes that need action\n")
+        .expect("the page has no section for release 0.25.0");
+    assert!(newer < older, "release 0.26.0 comes above release 0.25.0");
+
+    let opening = &page[..page.find("\n## The documents").unwrap()];
+    assert!(
+        one_line(opening).contains("Three sections list the changes that need action"),
+        "the opening does not name three sections"
+    );
+    for anchor in [
+        "(#release-0260-changes-that-need-action)",
+        "(#release-0250-changes-that-need-action)",
+        "(#release-0240-changes-that-need-action)",
+    ] {
+        assert!(opening.contains(anchor), "the opening lacks {anchor}");
+    }
+
+    let release = section(
+        &page,
+        "## Release 0.26.0: changes that need action",
+        Some("\n## "),
+    );
+    for heading in [
+        "### First: a saved directory of a cluster group can hold a password in clear\n",
+        "### For a user of the command line or of a document\n",
+        "### For a user of the CI drop-ins\n",
+        "### For a user of the library of strata\n",
+        "### For a user of the library of strata-preflight\n",
+    ] {
+        assert!(release.contains(heading), "the section lacks {heading:?}");
+    }
+    let first = release.find("### First:").unwrap();
+    for heading in [
+        "### For a user of the command line or of a document\n",
+        "### For a user of the CI drop-ins\n",
+    ] {
+        assert!(
+            first < release.find(heading).unwrap(),
+            "the first part comes after {heading:?}"
+        );
+    }
+}
+
+/// The review of the end of Wave 12 found four changes that the page stated with no action, or
+/// did not state: the directory of a cluster group, the root of a canonical text, the verdict of
+/// the merge gate, and the artifact of the GitLab job. Each one has its action in the section.
+#[test]
+fn the_section_of_release_0_26_0_gives_the_action_for_the_directory_the_root_the_gate_and_the_job()
+{
+    let release = release_section(&read(&docs().join("reference/compatibility.md")), "0.26.0");
+    for needle in [
+        // A2: who has such a directory, and what to do
+        "**Save each directory of a cluster group again, and search each repository that holds one.**",
+        "`strata snapshot --raw-dir` refuses a cluster group in each release.",
+        "Releases 0.20.0 to 0.25.0 did not mask a password in values with no canonical form.",
+        "Releases 0.11.0 to 0.19.x masked no password of the group values.",
+        "If the directory left the host, change each password that it held.",
+        "git grep -c clustersConfig $(git rev-list --all -- '*cluster.json') -- '*cluster.json'",
+        "**`save_dir` can give `serialize` now.**",
+        "Release 0.25.0 saved such values with the password in clear.",
+        // A3: the commands and the gates that show the root change, and the action
+        "`compare` of an older record and a new record of one release shows `AUTHORED`",
+        "`same-release` of the two gives `NOT THE SAME RELEASE` and exit `1`.",
+        "Take each such record again with 0.26.0. Take the two records of a pair with one release.",
+        "**A gate can fail for records of two releases.** The gates are `comment.yml`, `merge-gate.yml`, and `promote-gate.yml`.",
+        // A4: the other verdict of the merge gate
+        "now fails the gate with `BEHIND`",
+        "A move from a pre-release to its final version, such as `1.21.1-rc.1` to `1.21.1`, passes now.",
+        "A move from a version that does not parse to one that parses, such as `1.2.3.4` to `1.3.0`, fails the gate now.",
+        "**Run `merge-gate.sh` with the strata of the same release.**",
+        // A5: the artifact of the upstream report
+        "**The GitLab job `strata-upstream-save` keeps the report as an artifact.**",
+        "must name `strata-upstream-save`",
+    ] {
+        assert!(
+            release.contains(needle),
+            "the section of release 0.26.0 lacks {needle:?}"
+        );
+    }
+}
+
+/// The section lists the characters that the canonical text escapes, and the search command covers
+/// the same characters. A change of the set must change the section too.
+#[test]
+fn the_section_of_release_0_26_0_names_the_characters_that_the_canonical_text_escapes() {
+    let release = release_section(&read(&docs().join("reference/compatibility.md")), "0.26.0");
+    assert!(
+        release.contains(
+            "The characters are DEL, U+0080 to U+009F, U+2028, U+2029, U+FFFE, and U+FFFF."
+        ),
+        "the section does not list the characters of the canonical text"
+    );
+    assert!(
+        release.contains("'[\\x{7f}-\\x{9f}\\x{2028}\\x{2029}\\x{fffe}\\x{ffff}]'"),
+        "the search command does not cover the same characters"
+    );
+    // the book lists the characters that the canonical text escapes, and no others
+    let canon = |c: char| canonical_json(&serde_json::Value::String(c.to_string()));
+    for c in [
+        '\u{7f}', '\u{80}', '\u{85}', '\u{9f}', '\u{2028}', '\u{2029}', '\u{fffe}', '\u{ffff}',
+    ] {
+        assert_eq!(canon(c), format!("\"\\u{:04x}\"", c as u32), "{c:?}");
+    }
+    for c in ['\u{7e}', '\u{a0}', '\u{2027}', '\u{202a}', '\u{fffd}'] {
+        assert_eq!(canon(c), format!("\"{c}\""), "{c:?} is escaped");
+    }
+}
+
+/// The GitLab job that keeps the artifact is the job that the section names, and the job
+/// `strata-upstream` keeps none.
+#[test]
+fn the_gitlab_job_that_the_section_names_keeps_the_artifact_and_strata_upstream_keeps_none() {
+    let yml = repo_file("examples/ci/gitlab/strata.yml");
+    let upstream = section(
+        &yml,
+        "\nstrata-upstream:\n",
+        Some("\nstrata-upstream-save:\n"),
+    );
+    assert!(
+        !upstream.contains("artifacts:"),
+        "strata-upstream keeps an artifact"
+    );
+    let save = section(&yml, "\nstrata-upstream-save:\n", Some("\n# "));
+    assert!(
+        save.contains("paths: [\"$STRATA_SAVE\"]"),
+        "strata-upstream-save keeps no artifact"
+    );
+}
+
+/// The page said that release 0.25.0 panicked for a world whose metadata is not an object, and it
+/// did not. The library gave a value and ran the checks. Only a base or a `_patch` that is not an
+/// object, in a file with a key beside it, panicked. The two places that state it agree: the list
+/// of the library of `strata-preflight`, and the section of release 0.26.0.
+#[test]
+fn compatibility_says_what_release_0_25_0_did_for_a_world_and_a_fixture_that_are_not_objects() {
+    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    for phrase in ["Before, it panicked.", "Before, each case panicked."] {
+        assert!(!page.contains(phrase), "the page still says {phrase:?}");
+    }
+    for needle in [
+        "Release 0.25.0 gave the value. `run::run` and `run::watch` give the same error. Release 0.25.0 ran the checks.",
+        "Release 0.25.0 gave a value in these cases. One case panicked: a base or a `_patch` that is not an object, in a file with a key such as `_note`.",
+    ] {
+        assert_eq!(
+            page.matches(needle).count(),
+            2,
+            "the list of the changes and the section of release 0.26.0 must each state {needle:?}"
+        );
+    }
+}
+
+/// The live window of Wave 12 ran `packs-palette-latest`. Its row states the result as a fact, with
+/// no "no result yet": the marked version of each pack, and the count of versions.
+#[test]
+fn the_row_of_packs_palette_latest_states_the_result_of_the_live_window_of_wave_12() {
+    let page = read(&docs().join("development/live-runs.md"));
+    let row = page
+        .lines()
+        .find(|l| l.starts_with("| `packs-palette-latest`"))
+        .expect("live-runs.md has no row for packs-palette-latest");
+    assert!(
+        !row.to_lowercase().contains("no result yet"),
+        "the row says that the check has no result: {row}"
+    );
+    for fact in [
+        "`1.37.0` of `kubernetes`, which has 137 versions",
+        "`1.21.2` of `cert-manager`, which has 9",
+        "the rebuilds `1.19.3-rev1` and `1.19.1-rev1` below their base",
+    ] {
+        assert!(row.contains(fact), "the row lacks {fact:?}: {row}");
+    }
+}
+
+/// The pages of `behind` that depend on the order of versions of Palette link the section that
+/// shows it live: the page of the command at "A pre-release", and step 4 of the use case.
+#[test]
+fn the_behind_pages_link_the_version_that_palette_calls_the_latest_from_the_pre_release() {
+    let link = "(../internals/palette/packs.md#the-version-that-palette-calls-the-latest)";
+    for (page, anchor) in [
+        ("commands/behind.md", "A pipeline can publish a pre-release"),
+        (
+            "use-cases/behind.md",
+            "A pipeline can publish a pre-release",
+        ),
+    ] {
+        let found = block(&read(&docs().join(page)), anchor);
+        assert!(
+            found.contains(link),
+            "{page}: the block of {anchor:?} does not link {link}: {found}"
+        );
+    }
+    let packs = read(&docs().join("internals/palette/packs.md"));
+    assert!(
+        packs.contains("\n## The version that Palette calls the latest\n"),
+        "packs.md has no section for the link"
+    );
+    let latest = one_line(section(
+        &packs,
+        "## The version that Palette calls the latest",
+        Some("\n## "),
+    ));
+    assert!(
+        latest.contains(
+            "`kubernetes` and `cert-manager` in `Public Repo` each have one marked version"
+        ) && latest.contains("The marked version is the newest version for strata."),
+        "the section does not state the live result: {latest}"
+    );
+}
+
+/// The lead read the cloud config of the AWS cluster of the live example, which sets no override of
+/// a machine pool. The page of the clusters states what Palette gave.
+#[test]
+fn the_page_of_the_clusters_states_that_a_pool_with_no_override_has_no_override_field() {
+    let page = one_line(&read(&docs().join("internals/palette/clusters.md")));
+    for needle in [
+        "Palette omits a field that has no value.",
+        "no pool of its cloud config holds `overrideClusterAPIConfig`, `overrideHealthCheckConfiguration`, or `overrideKubeadmConfiguration`.",
+        "Its `spec.clusterConfig` holds `hybridConfig`, `region`, and `sshKeyName`.",
+    ] {
+        assert!(page.contains(needle), "clusters.md lacks {needle:?}");
+    }
 }

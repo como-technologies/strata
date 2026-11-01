@@ -2916,6 +2916,22 @@ fn merge_gate_reads_the_order_of_two_pre_releases_and_of_a_move_to_a_later_versi
     assert!(o.status.success(), "build data has no precedence:\n{out}");
 }
 
+#[test]
+fn merge_gate_reads_a_move_from_a_version_that_does_not_parse_to_one_that_parses_as_a_move_back() {
+    // a version that does not parse is above each version that parses
+    let (o, out) = gate_for_pin_move("1.2.3.4", "1.3.0");
+    assert_eq!(o.status.code(), Some(1), "the gate is red:\n{out}");
+    assert!(
+        out.contains("k8s/kubernetes: main has 1.2.3.4, the merge result has 1.3.0"),
+        "the line names the pack and both versions:\n{out}"
+    );
+    let (o, out) = gate_for_pin_move("1.3.0", "1.2.3.4");
+    assert!(
+        o.status.success(),
+        "the move to such a version is forward:\n{out}"
+    );
+}
+
 /// A branch that deliberately returns the record to the release that main pinned before.
 fn rollback_gate() -> (Gate, String) {
     let (base, branch, main_side) = gate_records();

@@ -544,9 +544,12 @@ Strata orders versions by semantic version too, so `1.19.3-rev1` is below
 `1.19.3` for strata as for Palette. `strata packs` gives the mark of Palette as
 `paletteLatest`, and `strata behind` gives it on each newer version: see
 [Which version is the newest](../../commands/packs.md#which-version-is-the-newest).
-On the live tenant, `kubernetes` in `Public Repo` has one marked version. The
-live example [checks that fact](../../development/live-runs.md#packssh). It also
-checks that the newest version of each pack is the marked version.
+
+On the live tenant, `kubernetes` and `cert-manager` in `Public Repo` each have
+one marked version. The live example
+[checks that fact](../../development/live-runs.md#packssh). The marked version
+is the newest version for strata. This holds for `cert-manager`, whose rebuilds
+`1.19.3-rev1` and `1.19.1-rev1` are below their base.
 
 ## Pack states
 

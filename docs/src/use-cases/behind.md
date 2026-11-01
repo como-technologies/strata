@@ -85,9 +85,11 @@ the refusal.
 ## 4. A pre-release in the registry
 
 A pipeline can publish a pre-release for each build, such as `1.66.0-rc.1` of
-`csi-aws-ebs`. Strata orders versions as Palette does, by Semantic Versioning. A
-pre-release is below its version. So it is no newer version of a pin that is not a
-pre-release. The pins of `aws-stack@1.1.1` are current:
+`csi-aws-ebs`. Strata orders versions as Palette does, by Semantic Versioning:
+see
+[The version that Palette calls the latest](../internals/palette/packs.md#the-version-that-palette-calls-the-latest).
+A pre-release is below its version. So it is no newer version of a pin that is
+not a pre-release. The pins of `aws-stack@1.1.1` are current:
 
 ```text
 {{#include ../output/behind-pre-release.txt}}

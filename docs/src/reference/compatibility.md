@@ -14,8 +14,9 @@ Each release has the tag `v<version>`. The crate builds with Rust 1.88 or later.
 The crate is not on crates.io, so a dependency names the tag: see
 [The library](../automation/library.md#add-the-dependency).
 
-Two sections list the changes that need action:
-[Release 0.25.0](#release-0250-changes-that-need-action) and
+Three sections list the changes that need action:
+[Release 0.26.0](#release-0260-changes-that-need-action),
+[Release 0.25.0](#release-0250-changes-that-need-action), and
 [Release 0.24.0](#release-0240-changes-that-need-action). They cover the command
 line, the documents, the CI drop-ins, and the two libraries.
 
@@ -143,13 +144,14 @@ After 0.25.0, the library of `strata-preflight` changes in these ways:
   of a rule and `preflight --schema rules` do not change.
 - `world::World::to_value` gives a `Result<Value>` in place of a `Value`. It gives
   `Error::Input` when the world has a `clusterUid`, and its `entity` or the
-  `metadata` of its `entity` is neither an object nor `null`. Before, it
-  panicked. `run::run`
-  and `run::watch` give the same error.
+  `metadata` of its `entity` is neither an object nor `null`. Release 0.25.0 gave
+  the value. `run::run` and `run::watch` give the same error. Release 0.25.0 ran
+  the checks.
 - `fixture::load` gives `Error::Input` for a fixture, a base, or a `_patch` that
   is not a JSON object. It gives the same error for a world with a `clusterUid`
-  and a `metadata` that is neither an object nor `null`. Before, each case
-  panicked.
+  and a `metadata` that is neither an object nor `null`. Release 0.25.0 gave a
+  value in these cases. One case panicked: a base or a `_patch` that is not an
+  object, in a file with a key such as `_note`.
 
 ## The documents
 
@@ -338,12 +340,19 @@ Each hash that covers such a character changes: `valuesHash`, `contentHash`,
 `variablesHash`, and so the `root`. `verify` of an older record that holds such
 a character shows a change. A record with none of them keeps each hash.
 
+`compare`, `same-release`, and the gates show the change for two records of one
+release that two releases took. [Release 0.26.0](#release-0260-changes-that-need-action)
+gives the action.
+
 One saved directory changes after 0.25.0, with no new id. Some values of a
 cluster group have no canonical form, because a key is a map or a list. An
 example is a template with no quotes. `RawCluster::save_dir` now writes
 `********` over each password in such values. A directory that an older version
 saved holds such a password in clear. The new `save_dir` gives `serialize` for
 values that it cannot mask.
+
+[Release 0.26.0](#release-0260-changes-that-need-action) says who has such a
+directory, and what to do with it.
 
 The tier of a cluster group is not part of the root, so no root changes. The
 `valuesHash` of such values covers the text. So a record of a new directory has
@@ -622,7 +631,259 @@ entry of `packs[]`. It is `forward` when side B has the higher version, and `bac
 when side B has the lower. It is absent when a side has no version, and when the
 two versions have the same precedence. The id stays, because a reader ignores a
 field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
-it does not sort the versions as text now.
+it does not sort the versions as text now. A move between a version and its
+pre-release gives the other verdict: see
+[Release 0.26.0](#release-0260-changes-that-need-action).
+
+## Release 0.26.0: changes that need action
+
+Release 0.26.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### First: a saved directory of a cluster group can hold a password in clear
+
+- **Save each directory of a cluster group again, and search each repository
+  that holds one.** Palette gives the group values with no mask.
+  `RawCluster::save_dir` writes `********` over each password in them. The
+  values are in `spec.clustersConfig.values` of `cluster.json`.
+  - Releases 0.20.0 to 0.25.0 did not mask a password in values with no
+    canonical form. An example is a template with no quotes,
+    `host: {{ .spectro.var.host }}`. A key that is a list is another example.
+  - Releases 0.11.0 to 0.19.x masked no password of the group values.
+  - Only a program that calls the library saves such a directory.
+    `strata snapshot --raw-dir` refuses a cluster group in each release.
+- **Do these steps for each such directory:**
+  1. Save the directory again with 0.26.0, or delete it.
+  2. If the directory left the host, change each password that it held.
+  3. If a repository holds the directory, search its history. This command
+     lists each commit and file that holds the document of a cluster group:
+     `git grep -c clustersConfig $(git rev-list --all -- '*cluster.json') -- '*cluster.json'`.
+  4. Read the values of each file that the command lists. Change each password
+     that they hold in clear.
+- **`save_dir` can give `serialize` now.** Strata cannot mask some values, for
+  example a password in a block scalar beside a key that is a map. Then
+  `save_dir` writes no file. Release 0.25.0 saved such values with the password
+  in clear. To save such values, put quotes around the template in the values
+  of the group.
+
+### For a user of the command line or of a document
+
+- **Strata orders versions as Palette does.** It uses Semantic Versioning 2.0.0
+  for two versions that parse. A pre-release is below its version, so
+  `1.0.1-rc.1` is below `1.0.1`. Release 0.25.0 put it above. See
+  [The order of versions](#the-order-of-versions).
+  - `behind` names no pre-release as a newer version of a pin that is not a
+    pre-release. So a run that gave exit `1` for such a version alone now gives
+    `0`. Add `--pre-release` to name them.
+  - `<name>@latest` is the highest version that is not a pre-release.
+  - `strata packs` and `strata list` put a pre-release below its version.
+  - Two versions are equal when they differ only by a `v`, by a missing `.0`,
+    or by build data after `+`. So `1.2` equals `1.2.0`. If a profile has both
+    versions, `@latest` gives `profile-name-ambiguous` and exit `2`. Give the
+    uid.
+  - A version that does not parse is above each version that parses. Examples
+    are `1.2.3.4` and `LTS__24.x`. So `@latest` can give `1.2.3.4` in place of
+    `2.0.0`, and `behind` does not name `2.0.0` as newer than the pin `1.2.3.4`.
+  - A script that sorts versions as text must read `versionMove` of
+    `compare --format json`. It is `forward` or `back`, in the document and in
+    each entry of `packs[]`.
+- **The root of a record changes when its values hold some characters.** The
+  canonical text writes `\uXXXX` for each of them. So each hash that covers such
+  a character changes: `valuesHash`, `contentHash`, `variablesHash`, and the
+  `root`. NUL, a tab, and each other character keep their hashes.
+  - The characters are DEL, U+0080 to U+009F, U+2028, U+2029, U+FFFE, and
+    U+FFFF.
+  - `verify` of an older record that holds such a character shows a change.
+  - `compare` of an older record and a new record of one release shows
+    `AUTHORED` and "the version was edited in place". It exits `1`.
+  - `same-release` of the two gives `NOT THE SAME RELEASE` and exit `1`.
+  - Take each such record again with 0.26.0. Take the two records of a pair
+    with one release.
+  - To find such a record, run this with GNU `grep` in a UTF-8 locale:
+    `jq -r '.. | strings' RECORD | grep -c -P '[\x{7f}-\x{9f}\x{2028}\x{2029}\x{fffe}\x{ffff}]'`.
+    A number above `0` shows such a character. A record holds no manifest
+    text, so also check each manifest where you keep it.
+- **A record holds no `packs[].masked`.** Release 0.25.0 and before wrote it
+  for a pack whose values hold a mask. `compare`, `verify`, and `same-release`
+  give the same paths as before, and no root changes. A script that reads
+  `packs[].masked` of a record must read `valuesCanon`: each value that is the
+  text `********`. `strata schema snapshot` no longer lists `masked`. A record
+  of 0.25.0 still validates. `packs[].masked` of `strata-diff/1` stays.
+- **Three refusals have a kind of their own.** Each gave `usage` before:
+  - `stale-record`: `compare --repave` of a record `cluster:<c>@pending` that
+    holds a profile that the cluster does not run now.
+  - `cluster-template-governs`: `compare --repave` of a cluster in a cluster
+    template, when the change gives pack values to a profile that the cluster
+    runs.
+  - `no-cloud-config`: `snapshot --shape` of a cluster whose document names no
+    cloud config.
+
+  The exit code `2` and the message stay. A script that reads `error.kind` must
+  read the new kinds.
+- **Some refusals come before any request.** `compare --repave` and
+  `compare --validate` refuse a pair that the refs show to be wrong. `verify`
+  gives `usage` or `no-uid` for a record that it cannot check. Before, a run
+  with no key gave `missing-credential` for these cases. Now it gives `usage` or
+  `no-uid`, with exit `2`.
+- **The message of `snapshot-schema` changes.** It names the field that does
+  not match, such as `variables[0].name`. It ends with "Take the record again."
+  A script that compares the whole message must change.
+- **`strata-preflight` decides the color as `strata` does.** An empty
+  `NO_COLOR` no longer removes the color. Give `NO_COLOR` a value, such as
+  `NO_COLOR=1`, or give `--no-color`.
+- **`strata-preflight --probes` checks each program of the file at load.** A
+  program that cannot run now gives the kind `catalog` and exit `2`. An example is an `expr` that reads `$item`: it runs over the responses,
+  with no item. Another example is a program that nests more than 64 levels.
+  - Release 0.25.0 ran a rule that reads `$item` where the check has no item.
+    The rule gave `ERROR` or `SKIP`.
+  - A POST with `each` and no `body` fails in the same way.
+  - `evidence[].kind` must be `run`, `source`, `doc`, or `report`.
+- **A `releases` bound must start with a number that parses.** A rule with `>=4.x` now applies to each release, also to `3.9`. A
+  release with three numbers follows Semantic Versioning: `1.0.1-g0123456789ab`
+  is below `1.0.1`, so it is not in `>=1.0.1`.
+- **`strata-preflight --release` refuses a text that is not a version.** An
+  example is `4.11.x`. The error kind is `usage`, the exit code is `2`, and the
+  command sends no request. Release 0.25.0 read the numbers at the start of the
+  text, so `4.11.x` was `4.11`. Give `4.11`.
+- **`strata-preflight --records` gives the kind `pattern` for a pattern that
+  matches no file or is not valid.** It gave `usage`. The exit code `2` stays.
+  The error has the field `pattern`. A script that reads `error.kind` must read
+  the new kind.
+- **Two rules of `strata-preflight` can find a fault where they found none.**
+  `pack-dependency` and `ecr-oci-images` send the body of `palette-validate`.
+  The name has the suffix `-preflight`. For `cluster:UID`, the route refused the
+  name of the cluster before, and the rules read that as no fault. So
+  `--strict` can give exit `1` where it gave `0`.
+- **The world of `strata-preflight` holds no `packs[].masked`.** A custom probe that reads `.profiles[].packs[].masked`, and
+  a reader of `world.json` of `--out`, must read `valuesCanon`.
+- **`strata-preflight cluster:<c>@pending/` gives `usage`.** Strata reads the
+  ref as `cluster:<c>@pending`, as `strata` does now. Release 0.25.0 read the
+  uid `<c>@pending`.
+
+### For a user of the CI drop-ins
+
+- **`merge-gate.sh` orders the versions as Palette does.** It reads
+  `versionMove` of the comparison, and it needs no `sort -V` now.
+  - A merge request that moves a pin to a pre-release of the same version, such
+    as `1.21.1` to `1.21.1-rc.1`, now fails the gate with `BEHIND`. Add the
+    line `Rollback: <record> to <name>@<version>` to a commit, or pin the final
+    version.
+  - A move from a pre-release to its final version, such as `1.21.1-rc.1` to
+    `1.21.1`, passes now. Before, it needed a rollback line.
+  - A move from a version that does not parse to one that parses, such as
+    `1.2.3.4` to `1.3.0`, fails the gate now.
+- **Run `merge-gate.sh` with the strata of the same release.** Strata 0.25.0
+  writes no `versionMove`, so the script of 0.26.0 finds no backward pin with
+  it. The reusable workflow and the GitLab job install both from one tag.
+- **A gate can fail for records of two releases.** The gates are `comment.yml`,
+  `merge-gate.yml`, and `promote-gate.yml`. Two records of one release have two
+  roots when their values hold a character of the new canonical text, and two
+  releases took them. See the change of the root above. Take both records with
+  one release.
+- **The GitLab job `strata-upstream-save` keeps the report as an artifact.** It
+  runs in place of `strata-upstream` when `STRATA_SAVE` names a file. Release
+  0.25.0 kept the artifact in `strata-upstream`. A `needs:` entry or a download
+  that names the job for the artifact must name `strata-upstream-save`.
+- **`install-strata.sh` needs cosign 3 or later to check the signature.** With
+  an older cosign on the `PATH`, the installer skips the check. It says so. With `--require-signature`, it stops with exit `2` before any
+  download. Install cosign 3 to keep the check. The reusable workflows install
+  cosign 3, so they do not change.
+
+### For a user of the library of strata
+
+- `RawCluster::save_dir` writes `********` over each password of the values of
+  a cluster group, also in values with no canonical form. It can give
+  `Error::Serialize` and write no file. See the first part of this section.
+- The types of Palette are in the module `model`. Each old path stays as a
+  `pub use` until release 0.27.0. The compiler gives no warning for an old
+  path, so change each path now. See [The Rust library](#the-rust-library) for
+  the list, such as `strata::cloud` to `strata::model::cloud` and
+  `strata::content::layer` to `strata::model::layer`.
+- Seven items are no longer public. Use the public function that reaches each
+  one:
+  - `candidate::pack_snapshot`: `ops::snapshot_for` reads a `pack:` ref.
+  - `candidate::warn_preset_options`: `ops::snapshot_from_candidate` and
+    `ops::snapshot_from_loaded` give the warning.
+  - `ops::app_consumers`: `ops::consumers_with` reads an app profile.
+  - `api::codes::REFUSAL_CODES`: `Error::class` applies the codes.
+  - `api::Palette::virtual_clusters`, `api::Palette::cluster_search_with_virtual`,
+    and `api::SearchedClusters`: `api::Palette::virtual_cluster_search` reads
+    the virtual clusters.
+- `error::Error` has the variants `StaleRecord`, `ClusterTemplateGoverns`, and
+  `NoCloudConfig`. A `match` with no wildcard arm must name them.
+  `ops::palette_repave` and `api::Palette::cloud_config` gave `Error::Usage` for
+  these cases. A caller that matched `Usage` must match the new variants.
+- `Error::SnapshotSchema` has the field `field: String`. It is empty when the
+  whole document does not match. A pattern with no `..` must name it.
+- The field `state` of `Error::PackUnavailable` is a
+  `model::pack_state::PackState`, in place of `String`. `ClosedSet::as_str`
+  gives the text. The message and the JSON stay.
+- `snapshot::Pack` has no field `masked`. The method `masked_paths()` gives the
+  same list.
+- `reference::version::compare` follows Semantic Versioning 2.0.0 for two
+  versions that parse, as the command line does above. Code that sorts with it
+  gets the new order.
+- `ops::BehindOptions` has the field `pre_release`. `diff::Diff` and
+  `diff::PackDiff` have the field `version_move: Option<diff::VersionMove>`. A
+  struct literal must set each new field, or use `..Default::default()`. A
+  pattern with no `..` must name it.
+- `api::codes::ValidateRoute::refuses_answer` takes the body of the error as
+  `&serde_json::Value`, in place of text. Parse the text one time, and give the
+  value.
+- `ops::ListedProfile::profile_type` is an `Option<Open<ProfileType>>`, in
+  place of `Option<String>`. `Open::as_str` gives the text.
+- `term::color::Paint::resolve` has a second argument, `term::color::Stream`.
+  Give `Stream::Stdout` to get the behavior of 0.25.0.
+- `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE` are
+  deprecated. They stay until release 0.27.0.
+  `ClusterState::Running.is(text)` replaces `text == RUNNING_STATE`.
+- `Ref::parse` reads `cluster:<uid>@pending/` as `cluster:<uid>@pending`. It
+  reads `tag:+`, and each tag text with no label, as a uid.
+- `content::canonical_json` is public. Its text can change in a release, as it
+  does in this one. Do not compare it between releases. Compare the hashes of a
+  record.
+- A serde read of a `Snapshot` moves the error fields of a record of 0.24.0
+  into `errors`, as `Snapshot::load` does. Code that moved them itself can
+  stop.
+
+### For a user of the library of strata-preflight
+
+- `world::World::to_value` gives a `Result<Value>`, in place of a `Value`. It
+  gives `Error::Input` for a world with a `clusterUid` whose `entity`, or whose
+  `metadata` of the `entity`, is neither an object nor `null`. Release 0.25.0
+  gave the value. `run::run` and `run::watch` give the same error. Release
+  0.25.0 ran the checks.
+- `fixture::load` gives `Error::Input` for a fixture, a base, or a `_patch` that
+  is not a JSON object. It also gives it for the world above. Release 0.25.0
+  gave a value in these cases. One case panicked: a base or a `_patch` that is
+  not an object, in a file with a key such as `_note`.
+- `run::RunInputs` and `run::WatchInputs` have the field `paint: Paint`, in
+  place of `color: bool`. `Paint::off()` replaces `false`. `report::render` and
+  `report::terminal` take `&Paint`, in place of `bool`.
+- `probe::LiveBackend` has private fields. `LiveBackend::new(palette, no_exec)`
+  makes it.
+- `report::label_for` is gone. `CheckResult::label` gives the word.
+- `rule::Tier::name`, `Level::name`, `Severity::name`, and `Status::name` are
+  gone. `ClosedSet::as_str` gives the same text. `Tier::ALL` is now the constant
+  of the trait. Both need `use strata::closed_set::ClosedSet`. `Tier::parse` is
+  `Tier::from_input`.
+- `rule::Check::kind` gives a `rule::CheckKind`, in place of text.
+  `rule::Evidence::kind` is a `rule::EvidenceKind`, in place of `String`.
+- `rule::Check::Palette` holds a `rule::PaletteCheck`. `Check::Palette { .. }`
+  becomes `Check::Palette(PaletteCheck { .. })` in a literal and in a pattern.
+- `world::CLOUDS` is gone. `world::clouds()` gives the same texts in the same
+  order.
+- `rule::Catalog::parse_section` compiles each program, and gives `Err` for a
+  program that cannot run.
+- `rule::release_in_range` orders a release with three numbers by
+  `reference::version::compare`. So `1.0.1-g0123456789ab` is not in `>=1.0.1`.
+  A bound that does not parse, such as `>=4.x`, is no bound: each release is in
+  it. A release that does not parse, such as `4.11.x`, is in each range. Call
+  `rule::require_release` first.
+- `world::World::with_records` gives each record with no `packs[].masked`. A
+  custom rule that reads it must read `valuesCanon`.
 
 ## Release 0.25.0: changes that need action
 
