@@ -58,6 +58,10 @@ After 0.25.0, the library of `strata-preflight` changes in these ways:
 - `rule::Catalog::parse_section` compiles each program, and gives `Err` for a
   program that cannot run. `jq::Jq::check` and `jq::Jq::check_template` do the
   same compile.
+- `rule::Check::Palette` holds a `rule::PaletteCheck`, with the fields `method`,
+  `path`, `body`, `each`, and `expr`. `Check::Palette { .. }` becomes
+  `Check::Palette(PaletteCheck { .. })` in a literal and in a pattern. The YAML
+  of a rule and `preflight --schema rules` do not change.
 
 ## The documents
 

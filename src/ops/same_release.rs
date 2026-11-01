@@ -1,6 +1,6 @@
 //! `same-release`: whether records in promotion order are one release.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -263,8 +263,7 @@ fn pair_reasons(
     b: &Snapshot,
     policy: Policy,
 ) -> (Vec<String>, usize, usize) {
-    let pa: HashMap<&str, &Pack> = a.packs.iter().map(|p| (p.key.as_str(), p)).collect();
-    let pb: HashMap<&str, &Pack> = b.packs.iter().map(|p| (p.key.as_str(), p)).collect();
+    let (pa, pb) = (a.packs_by_key(), b.packs_by_key());
     let mut reasons = Vec::new();
     let mut repinned = 0;
     let mut retagged = 0;
@@ -341,6 +340,64 @@ fn pair_reasons(
     (reasons, repinned, retagged)
 }
 
+/// The verdict on two consecutive records `(label, record)`, under `policy`.
+fn build_pair(
+    (la, a): &(String, Snapshot),
+    (lb, b): &(String, Snapshot),
+    policy: Policy,
+    allow_no_digest: bool,
+    generated_at: &str,
+) -> Pair {
+    let d = diff::compute(a, b, generated_at, None);
+    let (mut reasons, packs_repinned, packs_retagged) = pair_reasons(&d, a, b, policy);
+    // The root does not cover the annotations, so two records with one root can boot their nodes
+    // from two machine images.
+    let mut status = if !d.image_ids_changed.is_empty() {
+        PairStatus::Different
+    } else if d.same {
+        PairStatus::Identical
+    } else if d.same_content {
+        PairStatus::SameContent
+    } else if policy == Policy::RegistryMove && reasons.is_empty() {
+        PairStatus::RegistryMove
+    } else {
+        PairStatus::Different
+    };
+    if !d.upstream_unknown.is_empty() && !allow_no_digest {
+        reasons.push(format!(
+            "{}, so an equal root does not show an equal archive; --allow no-digest accepts it",
+            no_upstream_digest(&d.upstream_unknown)
+        ));
+        if status.passed() {
+            status = PairStatus::UnknownUpstream;
+        }
+    }
+    Pair {
+        a: la.clone(),
+        b: lb.clone(),
+        status,
+        root_a: a.root.clone(),
+        root_b: b.root.clone(),
+        packs_repinned,
+        packs_retagged,
+        reasons,
+        minted_uid_only: d
+            .packs
+            .iter()
+            .filter(|p| p.minted_uid_only)
+            .map(|p| p.key.clone())
+            .collect(),
+        masked: d.masked_packs(),
+        upstream_unknown: d.upstream_unknown,
+        macros_changed: d.macros_changed,
+        macros_not_compared: if diff::macros_compared(a, b) {
+            Vec::new()
+        } else {
+            d.macros
+        },
+    }
+}
+
 /// Compare consecutive records, in the order given, and decide whether they are one release
 /// under `policy`. Fewer than two records is an empty chain that passes.
 pub fn same_release(records: &[(String, Snapshot)], policy: Policy, generated_at: &str) -> Chain {
@@ -358,58 +415,7 @@ pub fn same_release_with(
 ) -> Chain {
     let pairs: Vec<Pair> = records
         .windows(2)
-        .map(|w| {
-            let ((la, a), (lb, b)) = (&w[0], &w[1]);
-            let d = diff::compute(a, b, generated_at, None);
-            let (mut reasons, packs_repinned, packs_retagged) = pair_reasons(&d, a, b, policy);
-            // The root does not cover the annotations, so two records with one root can boot
-            // their nodes from two machine images.
-            let mut status = if !d.image_ids_changed.is_empty() {
-                PairStatus::Different
-            } else if d.same {
-                PairStatus::Identical
-            } else if d.same_content {
-                PairStatus::SameContent
-            } else if policy == Policy::RegistryMove && reasons.is_empty() {
-                PairStatus::RegistryMove
-            } else {
-                PairStatus::Different
-            };
-            if !d.upstream_unknown.is_empty() && !allow_no_digest {
-                reasons.push(format!(
-                    "{}, so an equal root does not show an equal archive; --allow no-digest \
-                     accepts it",
-                    no_upstream_digest(&d.upstream_unknown)
-                ));
-                if status.passed() {
-                    status = PairStatus::UnknownUpstream;
-                }
-            }
-            Pair {
-                a: la.clone(),
-                b: lb.clone(),
-                status,
-                root_a: a.root.clone(),
-                root_b: b.root.clone(),
-                packs_repinned,
-                packs_retagged,
-                reasons,
-                minted_uid_only: d
-                    .packs
-                    .iter()
-                    .filter(|p| p.minted_uid_only)
-                    .map(|p| p.key.clone())
-                    .collect(),
-                masked: d.masked_packs(),
-                upstream_unknown: d.upstream_unknown,
-                macros_changed: d.macros_changed,
-                macros_not_compared: if diff::macros_compared(a, b) {
-                    Vec::new()
-                } else {
-                    d.macros
-                },
-            }
-        })
+        .map(|w| build_pair(&w[0], &w[1], policy, allow_no_digest, generated_at))
         .collect();
     let passed = pairs.iter().filter(|p| p.status.passed()).count();
     Chain {

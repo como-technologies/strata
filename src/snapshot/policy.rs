@@ -8,6 +8,7 @@
 //! functions that write the fields and the schema of the tier both read them, so a key is in
 //! both or in neither.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use serde_json::{Map, Value, json};
@@ -449,23 +450,33 @@ fn sort_canonical(values: &mut [Value]) {
 /// from before strata read the bindings, each keeps only the fields that the two forms share. When
 /// only one of them is from strata 0.18, each keeps all the fields less the two forms of the
 /// upgrades of the agent. The values of a cluster group get the mask on each side, because a
-/// record of strata 0.19 or before holds each password in clear.
-pub(crate) fn comparable(a: &Value, b: &Value) -> (Value, Value) {
+/// record of strata 0.19 or before holds each password in clear. A tier with no values to mask
+/// compares as it is, so the fields are not copied.
+pub(crate) fn comparable<'a>(a: &'a Value, b: &'a Value) -> (Cow<'a, Value>, Cow<'a, Value>) {
     let legacy = |v: &Value| v.get(LEGACY_RESOURCES).is_some();
     let legacy_agent = |v: &Value| v.get(LEGACY_AGENT_UPGRADES).is_some();
     if legacy(a) || legacy(b) {
-        let shared = |v: &Value| Value::Object(pick(v, legacy_keys()));
+        let shared = |v: &Value| Cow::Owned(Value::Object(pick(v, legacy_keys())));
         (shared(a), shared(b))
     } else if legacy_agent(a) != legacy_agent(b) {
-        (without_agent_upgrades(a), without_agent_upgrades(b))
+        (
+            Cow::Owned(without_agent_upgrades(a)),
+            Cow::Owned(without_agent_upgrades(b)),
+        )
     } else {
-        let masked = |v: &Value| {
-            let mut v = v.clone();
-            mask_group_fields(&mut v);
-            v
-        };
         (masked(a), masked(b))
     }
+}
+
+/// The policy fields `v` with the mask on the values of a cluster group. The fields of a cluster
+/// have no values, and stay as they are.
+fn masked(v: &Value) -> Cow<'_, Value> {
+    if v.get(VALUES).is_none_or(Value::is_null) {
+        return Cow::Borrowed(v);
+    }
+    let mut v = v.clone();
+    mask_group_fields(&mut v);
+    Cow::Owned(v)
 }
 
 /// The policy fields `v` less the two forms of the upgrades of the agent: `agentUpgrades` of strata
@@ -573,9 +584,11 @@ mod tests {
         let newer = json!({"timezone": "Etc/UTC", RBACS: [], AGENT_UPGRADES_FORBIDDEN: "true"});
         let (a, b) = comparable(&older, &newer);
         assert_eq!(a, b);
-        let (a, b) = comparable(&older, &json!({"timezone": "Etc/UTC", RBACS: []}));
+        let current = json!({"timezone": "Etc/UTC", RBACS: []});
+        let (a, b) = comparable(&older, &current);
         assert_eq!(a, b, "no annotation on the cluster now");
-        let (a, b) = comparable(&older, &json!({"timezone": "UTC", RBACS: []}));
+        let other_zone = json!({"timezone": "UTC", RBACS: []});
+        let (a, b) = comparable(&older, &other_zone);
         assert_ne!(a, b, "each other field still compares");
         // two records of strata 0.18 compare on each field
         let allowed = json!({"timezone": "Etc/UTC", RBACS: [], LEGACY_AGENT_UPGRADES: "allowed"});
@@ -622,8 +635,19 @@ mod tests {
         // each other value still compares
         let mut more = config.clone();
         more["values"] = json!("sync:\n  adminPassword: s3cr3t\n  replicas: 2\n");
-        let (a, b) = comparable(&older, &group_fields(&more));
+        let changed = group_fields(&more);
+        let (a, b) = comparable(&older, &changed);
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn the_policy_fields_of_a_cluster_compare_as_they_are_and_those_of_a_group_in_a_masked_copy() {
+        let cluster = json!({"timezone": "Etc/UTC", RBACS: []});
+        let (a, b) = comparable(&cluster, &cluster);
+        assert!(matches!((a, b), (Cow::Borrowed(_), Cow::Borrowed(_))));
+        let group = group_fields(&json!({"values": "sync:\n  adminPassword: s3cr3t\n"}));
+        let (a, b) = comparable(&group, &group);
+        assert!(matches!((a, b), (Cow::Owned(_), Cow::Owned(_))));
     }
 
     #[test]
@@ -648,14 +672,13 @@ mod tests {
         let newer = json!({"timezone": "Etc/UTC", RBACS: [], "applySetting": "DownloadAndInstall"});
         let (a, b) = comparable(&older, &newer);
         assert_eq!(a, b);
-        let (a, b) = comparable(
-            &newer,
-            &json!({"timezone": "Etc/UTC", RBACS: [{"type": "x"}]}),
-        );
+        let bound = json!({"timezone": "Etc/UTC", RBACS: [{"type": "x"}]});
+        let (a, b) = comparable(&newer, &bound);
         assert_ne!(a, b);
         // two policy tiers of a cluster group compare on each field
         let group = |cpu: u32| json!({"endpointType": "LoadBalancer", "limitConfig": {"cpu": cpu}});
-        let (a, b) = comparable(&group(6), &group(4));
+        let (six, four) = (group(6), group(4));
+        let (a, b) = comparable(&six, &four);
         assert_ne!(a, b);
     }
 }

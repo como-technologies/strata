@@ -474,72 +474,113 @@ where
         source,
     })?;
     let names = file_names(&selection.clusters);
-    let mut records = Vec::with_capacity(names.len());
-    for (cluster, name) in selection.clusters.into_iter().zip(names) {
-        let path = dir.join(name);
-        let reference = Ref::Cluster {
-            uid: cluster.uid.clone(),
-            profile: None,
-            pending: false,
-        };
-        let scope = scope_of(&cluster.project_uid);
-        let snap = super::snapshot_for(
-            &reference,
-            &super::SnapshotOptions::default(),
-            || connect(scope),
-            fetched_at,
-            progress,
-        )
-        .and_then(|snap| {
-            crate::file::write_file(&path, &snap.to_json(false)?)?;
-            Ok(snap)
-        });
-        match snap {
-            Ok(snap) => records.push(SetRecord {
-                cluster,
-                path,
-                root: Some(snap.root),
-                error: None,
-            }),
-            Err(e) => records.push(SetRecord {
-                cluster,
-                path,
-                root: None,
-                error: Some(e.to_json()),
-            }),
-        }
+    let records: Vec<SetRecord> = selection
+        .clusters
+        .into_iter()
+        .zip(names)
+        .map(|(cluster, name)| {
+            record_cluster(cluster, dir.join(name), &mut connect, fetched_at, progress)
+        })
+        .collect();
+    let removed = if prune {
+        prune_records(dir, &records)?
+    } else {
+        Vec::new()
+    };
+    Ok(set_report(
+        query,
+        selection.resolved,
+        records,
+        removed,
+        fetched_at,
+    ))
+}
+
+/// Read `cluster` in its own project and write its record to `path`. A cluster that strata could
+/// not record gets the error in its entry, and the set goes on.
+fn record_cluster<A, F>(
+    cluster: ListedCluster,
+    path: PathBuf,
+    connect: &mut F,
+    fetched_at: &str,
+    progress: &Progress,
+) -> SetRecord
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let reference = Ref::Cluster {
+        uid: cluster.uid.clone(),
+        profile: None,
+        pending: false,
+    };
+    let scope = scope_of(&cluster.project_uid);
+    let snap = super::snapshot_for(
+        &reference,
+        &super::SnapshotOptions::default(),
+        || connect(scope),
+        fetched_at,
+        progress,
+    )
+    .and_then(|snap| {
+        crate::file::write_file(&path, &snap.to_json(false)?)?;
+        Ok(snap)
+    });
+    match snap {
+        Ok(snap) => SetRecord {
+            cluster,
+            path,
+            root: Some(snap.root),
+            error: None,
+        },
+        Err(e) => SetRecord {
+            cluster,
+            path,
+            root: None,
+            error: Some(e.to_json()),
+        },
     }
-    let mut removed = Vec::new();
-    if prune {
-        let written: BTreeSet<&Path> = records.iter().map(|r| r.path.as_path()).collect();
-        let entries = std::fs::read_dir(dir).map_err(|source| Error::Io {
-            path: dir.to_path_buf(),
+}
+
+/// Remove each cluster record of `dir` that `records` does not name, and return the paths in
+/// order. A file that is not a cluster record stays.
+fn prune_records(dir: &Path, records: &[SetRecord]) -> Result<Vec<PathBuf>> {
+    let written: BTreeSet<&Path> = records.iter().map(|r| r.path.as_path()).collect();
+    let entries = std::fs::read_dir(dir).map_err(|source| Error::Io {
+        path: dir.to_path_buf(),
+        source,
+    })?;
+    let mut stale: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "json") && !written.contains(p.as_path()))
+        .filter(|p| Snapshot::load(p).is_ok_and(|s| s.source.cluster.is_some()))
+        .collect();
+    stale.sort();
+    for path in &stale {
+        std::fs::remove_file(path).map_err(|source| Error::Io {
+            path: path.clone(),
             source,
         })?;
-        let mut stale: Vec<PathBuf> = entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| {
-                p.extension().is_some_and(|x| x == "json") && !written.contains(p.as_path())
-            })
-            .filter(|p| Snapshot::load(p).is_ok_and(|s| s.source.cluster.is_some()))
-            .collect();
-        stale.sort();
-        for path in stale {
-            std::fs::remove_file(&path).map_err(|source| Error::Io {
-                path: path.clone(),
-                source,
-            })?;
-            removed.push(path);
-        }
     }
+    Ok(stale)
+}
+
+/// The report of a set: `records` as written, and `removed` as pruned.
+fn set_report(
+    query: &ClusterQuery,
+    resolved: Resolved,
+    records: Vec<SetRecord>,
+    removed: Vec<PathBuf>,
+    generated_at: &str,
+) -> SetReport {
     let failed = records.iter().filter(|r| r.error.is_some()).count();
-    Ok(SetReport {
+    SetReport {
         schema: SET_SCHEMA.to_string(),
         tool: Tool::current(),
-        generated_at: fetched_at.to_string(),
+        generated_at: generated_at.to_string(),
         query: query.clone(),
-        resolved: selection.resolved,
+        resolved,
         summary: SetCounts {
             clusters: records.len(),
             recorded: records.len() - failed,
@@ -548,7 +589,7 @@ where
         },
         records,
         removed,
-    })
+    }
 }
 
 #[cfg(test)]

@@ -280,6 +280,21 @@ impl SnapshotArgs {
             validate: self.validate,
         }
     }
+
+    /// The arguments that choose what the command reads, with `options` for the record.
+    pub(crate) fn request<'a>(
+        &'a self,
+        options: &'a ops::SnapshotOptions,
+    ) -> ops::SnapshotRequest<'a> {
+        ops::SnapshotRequest {
+            reference: self.r#ref.as_deref(),
+            from_raw: self.from_raw.as_deref(),
+            from_candidate: self.from_candidate.as_deref(),
+            dir: self.dir.as_deref(),
+            prune: self.prune,
+            options,
+        }
+    }
 }
 
 #[derive(Args)]

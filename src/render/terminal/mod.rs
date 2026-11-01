@@ -53,79 +53,93 @@ pub struct TerminalRenderer {
     pub paint: Paint,
 }
 
+/// The lines above the variables: the two records, the root, and the notes. The images and the
+/// consumers follow when the diff has them.
+fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    out.push(format!(
+        "{} (uid {})  ->  {} (uid {})",
+        p.bold(&d.a.title()),
+        p.dim(dash(d.a.shown_uid())),
+        p.bold(&d.b.title()),
+        p.dim(dash(d.b.shown_uid()))
+    ));
+    let word = diff_word(d);
+    out.push(format!(
+        "root       {} -> {}   {}",
+        p.dim(short(&d.root_a)),
+        p.dim(short(&d.root_b)),
+        if d.same || d.same_content {
+            p.bgreen(word)
+        } else {
+            p.bred(word)
+        }
+    ));
+    for note in diff_notes(d) {
+        match note {
+            DiffNote::Warn(text) => out.push(format!("note       {}", p.byellow(&text))),
+            DiffNote::Good(text) => out.push(format!("note       {}", p.bgreen(&text))),
+            DiffNote::Palette(lines) => {
+                out.extend(lines.iter().map(|line| palette_line(line)));
+            }
+        }
+    }
+    if let Some(line) = artifacts_summary(d) {
+        out.push(format!("images     {line}"));
+    }
+    if let Some((a, b)) = consumer_counts(d) {
+        // the noun agrees with the count next to it: `1 -> 2 clusters`, `2 -> 1 cluster`
+        let noun = crate::text::plural(b, "cluster", "clusters");
+        out.push(format!("consumers  {a} -> {b} {noun}"));
+    } else if let Some(sentence) = consumers_sentence(d) {
+        out.push(format!("consumers  {sentence}"));
+    }
+    out
+}
+
+/// The lines of the variables, the values of the cluster, and the tiers of the cluster.
+fn change_lines(d: &Diff, p: &Paint) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    // the blank line belongs to the variables block, so two packs, which have no variables,
+    // leave neither the line nor the gap where it was
+    if variables_comparable(d) {
+        out.push(String::new());
+        out.push(format!(
+            "  variables {}",
+            moved_word(d.variables.changed, p)
+        ));
+    }
+    for v in variable_lines(&d.variables.by_name) {
+        out.push(format!("        {}", variable_line(&v, p)));
+    }
+    if let Some(cv) = d.cluster_variables.as_ref().filter(|c| c.changed) {
+        out.push(format!("  cluster values {}", moved_word(true, p)));
+        for c in &cv.values {
+            out.push(format!("        {}", op_line(&OpLine::cluster_value(c), p)));
+        }
+    }
+    match tier_line(d) {
+        TierLine::NotCompared => {}
+        TierLine::Unchanged => out.push(format!("  cluster tiers {}", moved_word(false, p))),
+        TierLine::Differ(states) => {
+            let words: Vec<String> = states
+                .iter()
+                .map(|(t, same)| format!("{t} {}", moved_word(!*same, p)))
+                .collect();
+            out.push(format!("  cluster tiers {}", words.join(", ")));
+            for line in tier_op_lines(d) {
+                out.push(format!("        {}", op_line(&line, p)));
+            }
+        }
+    }
+    out
+}
+
 impl Renderer for TerminalRenderer {
     fn render(&self, d: &Diff, a: &Snapshot, b: &Snapshot, full: bool) -> Result<String> {
         let p = &self.paint;
-        let mut out: Vec<String> = Vec::new();
-        out.push(format!(
-            "{} (uid {})  ->  {} (uid {})",
-            p.bold(&d.a.title()),
-            p.dim(dash(d.a.shown_uid())),
-            p.bold(&d.b.title()),
-            p.dim(dash(d.b.shown_uid()))
-        ));
-        let word = diff_word(d);
-        out.push(format!(
-            "root       {} -> {}   {}",
-            p.dim(short(&d.root_a)),
-            p.dim(short(&d.root_b)),
-            if d.same || d.same_content {
-                p.bgreen(word)
-            } else {
-                p.bred(word)
-            }
-        ));
-        for note in diff_notes(d) {
-            match note {
-                DiffNote::Warn(text) => out.push(format!("note       {}", p.byellow(&text))),
-                DiffNote::Good(text) => out.push(format!("note       {}", p.bgreen(&text))),
-                DiffNote::Palette(lines) => {
-                    out.extend(lines.iter().map(|line| palette_line(line)));
-                }
-            }
-        }
-        if let Some(line) = artifacts_summary(d) {
-            out.push(format!("images     {line}"));
-        }
-        if let Some((a, b)) = consumer_counts(d) {
-            // the noun agrees with the count next to it: `1 -> 2 clusters`, `2 -> 1 cluster`
-            let noun = crate::text::plural(b, "cluster", "clusters");
-            out.push(format!("consumers  {a} -> {b} {noun}"));
-        } else if let Some(sentence) = consumers_sentence(d) {
-            out.push(format!("consumers  {sentence}"));
-        }
-        // the blank line belongs to the variables block, so two packs, which have no variables,
-        // leave neither the line nor the gap where it was
-        if variables_comparable(d) {
-            out.push(String::new());
-            out.push(format!(
-                "  variables {}",
-                moved_word(d.variables.changed, p)
-            ));
-        }
-        for v in variable_lines(&d.variables.by_name) {
-            out.push(format!("        {}", variable_line(&v, p)));
-        }
-        if let Some(cv) = d.cluster_variables.as_ref().filter(|c| c.changed) {
-            out.push(format!("  cluster values {}", moved_word(true, p)));
-            for c in &cv.values {
-                out.push(format!("        {}", op_line(&OpLine::cluster_value(c), p)));
-            }
-        }
-        match tier_line(d) {
-            TierLine::NotCompared => {}
-            TierLine::Unchanged => out.push(format!("  cluster tiers {}", moved_word(false, p))),
-            TierLine::Differ(states) => {
-                let words: Vec<String> = states
-                    .iter()
-                    .map(|(t, same)| format!("{t} {}", moved_word(!*same, p)))
-                    .collect();
-                out.push(format!("  cluster tiers {}", words.join(", ")));
-                for line in tier_op_lines(d) {
-                    out.push(format!("        {}", op_line(&line, p)));
-                }
-            }
-        }
+        let mut out = head_lines(d, p);
+        out.extend(change_lines(d, p));
         out.push(String::new());
         for pd in &d.packs {
             out.push(packline(pd, p));

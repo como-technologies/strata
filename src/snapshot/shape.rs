@@ -3,6 +3,8 @@
 //! The tier holds the machine pools and the cloud part of the cloud config of the cluster. Strata
 //! reads them by the cloud type of the cluster.
 
+use std::borrow::Cow;
+
 use serde_json::{Map, Value, json};
 
 use crate::api::RawCluster;
@@ -223,12 +225,13 @@ pub(crate) fn fields(cluster: &Value, cloud_config: &Value) -> Value {
 
 /// The shape fields `a` and `b` of two records, in a form that compares. When one of them is from
 /// before strata read the fields by cloud type, each keeps only the fields of that older record.
-pub(crate) fn comparable(a: &Value, b: &Value) -> (Value, Value) {
+/// Two records of the current form compare as they are, so the fields are not copied.
+pub(crate) fn comparable<'a>(a: &'a Value, b: &'a Value) -> (Cow<'a, Value>, Cow<'a, Value>) {
     let legacy = |v: &Value| v.get(CLOUD_TYPE).is_none();
     if legacy(a) || legacy(b) {
-        (as_legacy(a), as_legacy(b))
+        (Cow::Owned(as_legacy(a)), Cow::Owned(as_legacy(b)))
     } else {
-        (a.clone(), b.clone())
+        (Cow::Borrowed(a), Cow::Borrowed(b))
     }
 }
 
@@ -290,5 +293,15 @@ mod tests {
             assert_eq!(pool_fields(cloud), LEGACY_POOL_FIELDS, "{cloud:?}");
             assert_eq!(cloud_fields(cloud), LEGACY_CLOUD_FIELDS, "{cloud:?}");
         }
+    }
+
+    #[test]
+    fn two_shape_records_of_the_current_form_compare_as_they_are_and_an_older_one_in_a_copy() {
+        let current = json!({CLOUD_TYPE: "aws", "cloud": {"region": "us-east-1"}, "pools": []});
+        let older = json!({"cloud": {"region": "us-east-1"}, "pools": []});
+        let (a, b) = comparable(&current, &current);
+        assert!(matches!((a, b), (Cow::Borrowed(_), Cow::Borrowed(_))));
+        let (a, b) = comparable(&current, &older);
+        assert!(matches!((a, b), (Cow::Owned(_), Cow::Owned(_))));
     }
 }

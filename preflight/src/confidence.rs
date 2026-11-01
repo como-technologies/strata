@@ -9,7 +9,7 @@
 //! A probe becomes a preflight check when both bounds reach the bar, `0.8` today. With no wrong
 //! result, that is 14 correct runs of each kind, because `0.05^(1/14) = 0.807`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use schemars::JsonSchema;
@@ -18,7 +18,8 @@ use strata::cloud::CLOUD_ALL;
 
 use crate::error::{Error, Result};
 use crate::report::percent;
-use crate::rule::{Catalog, Level, Tier};
+use crate::rule::{Catalog, Level, Rule, Status, Tier};
+use crate::world::Engine;
 
 /// The schema id of a ledger file.
 pub const LEDGER_SCHEMA: &str = "strata-preflight-ledger/1";
@@ -449,53 +450,7 @@ pub fn promotion(catalog: &Catalog, ledger: &Ledger) -> PromotionReport {
             .map(|((e, r), c)| Confidence::of(e, r, c, bar))
             .collect();
         confidence.sort_by(|a, b| (&a.engine, &a.release).cmp(&(&b.engine, &b.release)));
-        // the engines the rule names: `all` is each engine the ledger has a run of
-        let engines: Vec<String> = if rule.engines.iter().any(|e| e == CLOUD_ALL) {
-            confidence
-                .iter()
-                .map(|c| c.engine.clone())
-                .collect::<std::collections::BTreeSet<_>>()
-                .into_iter()
-                .collect()
-        } else {
-            // the clouds alone: `lab` marks a check of the lab, and no run records it
-            rule.engines
-                .iter()
-                .filter(|e| crate::world::Engine::parse(e).is_some())
-                .cloned()
-                .collect()
-        };
-        // the first rule of a promotion: a live run shows the fault. A rule from the source or a
-        // reading stays a probe, whatever the plan runs count, until a build shows the fault
-        let seen = rule.status == crate::rule::Status::Seen;
-        let earned = match rule.effective_tier() {
-            _ if !seen => Level::Probe,
-            // a static rule is deterministic: one run that made the fault and one clean run prove it
-            Tier::Static => {
-                let proven = !engines.is_empty()
-                    && engines.iter().all(|e| {
-                        let c = ledger.counts_for(&rule.id, e, None);
-                        c.caught >= 1 && c.missed == 0 && c.passed >= 1 && c.false_fail == 0
-                    });
-                if proven {
-                    Level::Preflight
-                } else {
-                    Level::Probe
-                }
-            }
-            _ => {
-                let proven = !engines.is_empty()
-                    && engines.iter().all(|e| {
-                        let c = ledger.counts_for(&rule.id, e, None);
-                        Confidence::of(e, "", &c, bar).meets_bar
-                    });
-                if proven {
-                    Level::Preflight
-                } else {
-                    Level::Probe
-                }
-            }
-        };
+        let earned = earned_level(rule, ledger, &named_engines(rule, &confidence), bar);
         let advice = match (rule.level, earned) {
             (Level::Probe, Level::Preflight) => "promote",
             (Level::Preflight, Level::Probe) => "demote",
@@ -518,6 +473,52 @@ pub fn promotion(catalog: &Catalog, ledger: &Ledger) -> PromotionReport {
         schema: PROMOTION_SCHEMA.to_string(),
         rules,
         disagreements,
+    }
+}
+
+/// The engines the rule names: `all` is each engine that the ledger has a run of, in
+/// `confidence`.
+fn named_engines(rule: &Rule, confidence: &[Confidence]) -> Vec<String> {
+    if rule.engines.iter().any(|e| e == CLOUD_ALL) {
+        confidence
+            .iter()
+            .map(|c| c.engine.clone())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    } else {
+        // the clouds alone: `lab` marks a check of the lab, and no run records it
+        rule.engines
+            .iter()
+            .filter(|e| Engine::parse(e).is_some())
+            .cloned()
+            .collect()
+    }
+}
+
+/// The level that the ledger proves for `rule` on `engines`: a preflight check, or a probe.
+fn earned_level(rule: &Rule, ledger: &Ledger, engines: &[String], bar: f64) -> Level {
+    // the first rule of a promotion: a live run shows the fault. A rule from the source or a
+    // reading stays a probe, whatever the plan runs count, until a build shows the fault
+    if rule.status != Status::Seen {
+        return Level::Probe;
+    }
+    let static_rule = rule.effective_tier() == Tier::Static;
+    let proven = !engines.is_empty()
+        && engines.iter().all(|e| {
+            let c = ledger.counts_for(&rule.id, e, None);
+            if static_rule {
+                // a static rule is deterministic: one run that made the fault and one clean run
+                // prove it
+                c.caught >= 1 && c.missed == 0 && c.passed >= 1 && c.false_fail == 0
+            } else {
+                Confidence::of(e, "", &c, bar).meets_bar
+            }
+        });
+    if proven {
+        Level::Preflight
+    } else {
+        Level::Probe
     }
 }
 

@@ -5,7 +5,7 @@ use strata::config::{DEFAULT_BASE_URL, KEY_VARS, PROJECT_VARS, URL_VARS};
 
 use super::Subject;
 use crate::probe::{Outcome, Ran};
-use crate::rule::{Check, Rule};
+use crate::rule::{Check, PaletteCheck, Rule};
 
 /// The line a person runs to see the same thing the check saw: the `jq` over the world file, the
 /// `curl` to Palette, or the command.
@@ -25,20 +25,20 @@ pub(super) fn auto_reproduce(
         // a request for each item: the lines show each request. A POST body depends on the item,
         // so a POST rule gets its lines from its own `reproduce`. A rule with its own lines for
         // the engine shows those, so that no request has two lines.
-        Some(Check::Palette {
+        Some(Check::Palette(PaletteCheck {
             method,
             each: Some(_),
             ..
-        }) => {
+        })) => {
             if *method == Method::Get && rule.reproduce.for_engine(&subject.cloud).is_empty() {
                 for call in outcome.ran.requests() {
                     lines.push(curl_get(&call.path));
                 }
             }
         }
-        Some(Check::Palette {
+        Some(Check::Palette(PaletteCheck {
             method, expr, body, ..
-        }) => {
+        })) => {
             let path = match &outcome.ran {
                 Ran::Request(call) => call.path.as_str(),
                 // the templates did not fill, so the check made no request

@@ -1,0 +1,178 @@
+//! How each kind of check runs, and what it can answer. A check reads the world, adds its own
+//! answer to a copy of it, runs the program of the rule, and gives an [`Outcome`].
+//!
+//! The answers of Palette and of a command come through a [`Backend`], so a test runs the same
+//! code on a fixture: [`FixtureBackend`] reads the answers from the world document itself, and
+//! [`LiveBackend`] asks Palette and runs the command.
+
+use std::time::{Duration, Instant};
+
+use serde_json::Value;
+use strata::json::{flag, str_at, text_or};
+
+use crate::jq::Jq;
+use crate::rule::{Check, Rule};
+
+mod backend;
+mod exec;
+pub(crate) mod outcome;
+mod palette;
+
+use exec::{missing_tools, render_argv};
+use palette::run_palette;
+
+pub use backend::{Backend, ExecOutput, FixtureBackend, LiveBackend, Response, is_answer};
+pub use exec::{shell_words, tool_on_path};
+pub use outcome::{Call, Outcome, Ran, Verdict};
+
+/// Run the check of `rule` on `world`, through `backend`. A rule with no check is `NOT CHECKED`.
+pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> Outcome {
+    let started = Instant::now();
+    let Some(check) = &rule.check else {
+        return Outcome::not_run(
+            Verdict::NotChecked,
+            "no check in strata-preflight; the reproduce lines say what to run by hand",
+        );
+    };
+    match check {
+        Check::Static { expr } => judge(rule, expr, world, jq, started),
+        Check::Palette(check) => run_palette(rule, check, world, backend, jq, started),
+        Check::Exec {
+            argv,
+            needs,
+            timeout,
+            expr,
+        } => {
+            if backend.exec_off() {
+                return Outcome::not_run(Verdict::NotRun, "--no-exec: the command did not run");
+            }
+            let argv = match render_argv(rule, argv, world, jq) {
+                Ok(argv) => argv,
+                Err(e) => return Outcome::new(Verdict::Error, vec![e.to_string()], started),
+            };
+            let line = shell_words(&argv);
+            let missing = missing_tools(needs, backend);
+            if !missing.is_empty() {
+                let mut out = Outcome::not_run(
+                    Verdict::NotChecked,
+                    format!(
+                        "{} not on this machine; run by hand: {line}",
+                        missing.join(", ")
+                    ),
+                );
+                out.ran = Ran::Exec { line, answer: None };
+                return out;
+            }
+            let limit = Duration::from_secs(timeout.unwrap_or(60));
+            match backend.exec(&argv, limit) {
+                Ok(output) => {
+                    let mut with = world.clone();
+                    with["exec"] = serde_json::to_value(&output).unwrap_or(Value::Null);
+                    let mut out = judge(rule, expr, &with, jq, started);
+                    out.ran = Ran::Exec {
+                        line,
+                        answer: Some(format!("exit {}", output.exit)),
+                    };
+                    out
+                }
+                Err(e) => {
+                    let mut out = Outcome::new(Verdict::Error, vec![e.to_string()], started);
+                    out.ran = Ran::Exec { line, answer: None };
+                    out
+                }
+            }
+        }
+        // the watch adds the cluster, the summary, and the events; the caller of a watch does,
+        // and then judges with `judge_watch`
+        Check::Watch { .. } => Outcome::not_run(
+            Verdict::Skipped,
+            "a watch rule runs with --watch cluster:UID, during the build",
+        ),
+    }
+}
+
+/// Judge one reading of a watch: `world` holds `cluster`, `summary`, `events`, and `elapsed`.
+pub fn judge_watch(rule: &Rule, world: &Value, jq: &Jq) -> Outcome {
+    let started = Instant::now();
+    match &rule.check {
+        Some(Check::Watch { expr }) => judge(rule, expr, world, jq, started),
+        _ => Outcome::not_run(Verdict::Skipped, "not a watch rule"),
+    }
+}
+
+/// Run the program and read its output: `true`/`false`, a list of messages, or `{pass,
+/// message}`. Several outputs must all pass.
+fn judge(rule: &Rule, expr: &str, world: &Value, jq: &Jq, started: Instant) -> Outcome {
+    let outputs = match jq.run(&rule.id, expr, world, None) {
+        Ok(o) => o,
+        Err(e) => return Outcome::new(Verdict::Error, vec![e.to_string()], started),
+    };
+    if outputs.is_empty() {
+        return Outcome::new(
+            Verdict::Error,
+            vec!["the program gave no output; give true, false, a list of messages, or {pass, message}".into()],
+            started,
+        );
+    }
+    let mut failures = Vec::new();
+    for out in outputs {
+        match &out {
+            Value::Bool(true) => {}
+            Value::Bool(false) => failures.push("the check is false".to_string()),
+            Value::Array(items) => {
+                for item in items {
+                    failures.push(one_line(match item {
+                        Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    }));
+                }
+            }
+            Value::Object(_) => {
+                if !flag(&out, "/pass") {
+                    failures.push(one_line(
+                        text_or(&out, "/message", "the check is false").to_string(),
+                    ));
+                }
+            }
+            // null is a path that is not in the world, not a pass: a wrong program says so
+            other => {
+                return Outcome::new(
+                    Verdict::Error,
+                    vec![format!(
+                        "the program gave {other}; give true, false, a list of messages, or {{pass, message}}"
+                    )],
+                    started,
+                );
+            }
+        }
+    }
+    if failures.is_empty() {
+        Outcome::new(Verdict::Passed, vec![], started)
+    } else {
+        Outcome::new(Verdict::Failed, failures, started)
+    }
+}
+
+/// A message on one line: the report prints each message under its rule, and a line break inside
+/// one, such as the output of a tool, would leave the column.
+pub(crate) fn one_line(s: String) -> String {
+    if s.contains(['\n', '\r']) {
+        s.split(['\n', '\r'])
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        s
+    }
+}
+/// The `V1Error` of Palette as one line: `code: message`.
+pub fn palette_error_line(body: &Value) -> String {
+    match (body.get("code"), body.get("message")) {
+        (Some(_), Some(_)) => format!("{}: {}", str_at(body, "/code"), str_at(body, "/message")),
+        _ => body.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests;

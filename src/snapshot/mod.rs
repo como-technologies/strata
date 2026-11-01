@@ -463,6 +463,11 @@ impl Snapshot {
         macros_of(&self.packs)
     }
 
+    /// The packs of the record by their key.
+    pub(crate) fn packs_by_key(&self) -> BTreeMap<&str, &Pack> {
+        self.packs.iter().map(|p| (p.key.as_str(), p)).collect()
+    }
+
     /// The key of each pack whose upstream is unknown, in pack order: see
     /// [`Pack::upstream_unknown`].
     pub fn upstream_unknown(&self) -> Vec<String> {
