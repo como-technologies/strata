@@ -41,9 +41,6 @@
 //! `false`; a list of messages, where an empty list passes and each message is one failure; or an
 //! object `{pass, message}`.
 
-mod check;
-mod validate;
-
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -55,6 +52,10 @@ use strata::cloud::CLOUD_ALL;
 
 use crate::error::{Error, Result};
 use crate::world::clouds;
+
+mod check;
+mod validate;
+
 use validate::{check_section, check_section_programs};
 
 pub use check::{Check, CheckKind, PaletteCheck};

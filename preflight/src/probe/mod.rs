@@ -5,11 +5,6 @@
 //! code on a fixture: [`FixtureBackend`] reads the answers from the world document itself, and
 //! [`LiveBackend`] asks Palette and runs the command.
 
-mod backend;
-mod exec;
-pub(crate) mod outcome;
-mod palette;
-
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
@@ -17,6 +12,12 @@ use strata::json::{flag, str_at, text_or};
 
 use crate::jq::Jq;
 use crate::rule::{Check, Rule};
+
+mod backend;
+mod exec;
+pub(crate) mod outcome;
+mod palette;
+
 use exec::{missing_tools, render_argv};
 use palette::run_palette;
 

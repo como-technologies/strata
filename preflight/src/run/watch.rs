@@ -297,7 +297,8 @@ fn note_reading<A: PaletteApi>(
     ));
 }
 
-/// A rule that passed has no verdict when the watch reached its limit: the cluster did not settle.
+/// A rule that passed becomes an error when the watch reaches its limit: the cluster did not
+/// settle.
 fn end_at_limit(last: &mut BTreeMap<String, Outcome>, state: &str, limit: Duration) {
     for o in last.values_mut() {
         if o.verdict == Verdict::Passed {

@@ -108,7 +108,7 @@ fn check_level(rule: &Rule) -> std::result::Result<(), String> {
     }
 }
 
-/// The fields that say when a rule applies, `when`, `releases`, and `reproduce`, are well formed.
+/// The fields `when`, `releases`, and `reproduce` are well formed.
 fn check_conditions(rule: &Rule) -> std::result::Result<(), String> {
     if rule.when.as_deref().is_some_and(|w| w.trim().is_empty()) {
         return Err("`when` is empty; drop it, or give a program".into());

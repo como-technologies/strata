@@ -135,7 +135,7 @@ pub(super) fn summarize(
     let skipped = count(&|c| c.verdict == Verdict::Skipped);
     let errors = count(&|c| c.verdict == Verdict::Error);
     let readiness = readiness_of(passed, ran + not_run);
-    let mut summary = Summary {
+    let counted = Summary {
         rules: checks.len() as u32,
         ran,
         passed,
@@ -152,8 +152,12 @@ pub(super) fn summarize(
         exit_code: 0,
         verdict: String::new(),
     };
-    (summary.exit_code, summary.verdict) = exit_and_verdict(checks, &summary, options.ready);
-    summary
+    let (exit_code, verdict) = exit_and_verdict(checks, &counted, options.ready);
+    Summary {
+        exit_code,
+        verdict,
+        ..counted
+    }
 }
 
 /// The exit code and the verdict line of a run, from its counts. `ready` is the readiness that the

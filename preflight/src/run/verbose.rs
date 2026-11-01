@@ -92,7 +92,7 @@ pub(super) fn paint_state(paint: &Paint, state: &str) -> String {
     }
 }
 
-/// The line of `--verbose` that names the program of each watch rule, before the first reading.
+/// The lines of `--verbose` that name the program of each watch rule, before the first reading.
 pub(super) fn program_lines(rules: &[&Rule], paint: &Paint) -> Vec<String> {
     rules
         .iter()

@@ -42,8 +42,8 @@ pub fn markdown(r: &Report) -> String {
     out
 }
 
-/// The row of one check in the table: its result, rule, tier, title with the messages of a check
-/// that did not pass, time, and confidence.
+/// The row of one check in the table: result, rule, tier, title, time, and confidence. A check that
+/// did not pass shows its messages with the title.
 fn check_row(c: &CheckResult) -> String {
     let what = if c.verdict == Verdict::Passed {
         c.title.clone()
@@ -77,8 +77,8 @@ fn check_row(c: &CheckResult) -> String {
     )
 }
 
-/// The lines to run by hand for each check that failed, did not run a check, or gave an error,
-/// with the fix of a failure. Empty when no check has such lines.
+/// The lines to run by hand for each check that failed, is not checked, or gave an error, with the
+/// fix of a failure. The text is empty when no check has such lines.
 fn reproduce_section(checks: &[CheckResult]) -> String {
     let repro: Vec<&CheckResult> = checks
         .iter()

@@ -2,10 +2,6 @@
 //! catalog once, keeps the rules of the engine, the release, and the tiers asked for, runs each
 //! check, and assembles the report with the confidence of each rule from the ledger.
 
-mod rules;
-mod verbose;
-mod watch;
-
 use std::collections::BTreeMap;
 
 use serde_json::Value;
@@ -21,6 +17,11 @@ use crate::probe::{self, Backend, Outcome, Verdict};
 use crate::report::{self, Assembly, Options, Report, Subject};
 use crate::rule::{Catalog, Rule, Tier};
 use crate::world::World;
+
+mod rules;
+mod verbose;
+mod watch;
+
 use verbose::verbose_lines;
 
 pub use rules::{RULES_SCHEMA, list_rules, rules_document, rules_text};
