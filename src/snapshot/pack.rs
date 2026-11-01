@@ -297,17 +297,7 @@ impl Pack {
         given: Option<Vec<Value>>,
     ) -> Pack {
         let name = text(pk, "/name");
-        let mut mm = manifests_packs
-            .iter()
-            .find(|m| text(m, "/metadata/name") == name || text(m, "/spec/name") == name)
-            .cloned()
-            .unwrap_or(Value::Null);
-        if let Some(given) = given {
-            if !mm.is_object() {
-                mm = json!({});
-            }
-            mm["spec"]["manifests"] = Value::Array(given);
-        }
+        let mm = manifests_entry(&name, manifests_packs, given);
         let layer = first_nonempty(&[str_at(pk, "/layer"), Layer::Addon.as_str()]);
         let kind = first_nonempty(&[str_at(pk, "/type"), PackType::Spectro.as_str()]);
         let tag = text(pk, "/tag");
@@ -318,13 +308,6 @@ impl Pack {
         let registry_digest = text(&mm, "/spec/digest");
         let registry_provider_type =
             opt_str(pk, &format!("/annotations/{PROVIDER_TYPE_ANNOTATION}")).map(Open::from_text);
-        // only `imageId`: another annotation can hold a secret, and strata reads no other one.
-        // Palette gives each annotation as text; a value of another type is not an annotation
-        let annotations: BTreeMap<String, String> =
-            opt_text(pk, &format!("/annotations/{IMAGE_ID_ANNOTATION}"))
-                .map(|id| (IMAGE_ID_ANNOTATION.to_string(), id))
-                .into_iter()
-                .collect();
         // a reason without the flag is not a reason: Palette clears the flag when the tag is back
         let invalid = flag(pk, "/isInvalid");
         let invalid_reason = if invalid {
@@ -338,8 +321,114 @@ impl Pack {
             .filter(Value::is_object)
             .unwrap_or_else(|| Value::Object(Map::new()));
         let values = first_nonempty(&[str_at(pk, "/values"), str_at(&mm, "/spec/values")]);
+        let manifests = Manifest::read_all(&mm);
+        let (values_canon, values_hash, values_parse_error) = canon_yaml_hashed(&values);
+        let identity = sha256_hex(&canonical_json(&json!({
+            "name": name, "layer": layer, "type": kind, "tag": tag, "version": version,
+            "packUid": pack_uid, "registryUid": registry_uid,
+        })));
+        let authored = sha256_hex(&canonical_json(&json!({
+            "values": values_hash,
+            "manifests": manifests.iter().map(|m| json!([m.name, m.content_hash])).collect::<Vec<_>>(),
+            "params": params,
+        })));
+        let (upstream_raw, upstream_source) = upstream_digest(&ref_digest, &registry_digest);
+        let (images, charts) = pack_content(&values_canon);
+        Pack {
+            key: format!("{layer}/{name}"),
+            layer,
+            name,
+            kind,
+            tag,
+            version,
+            pack_uid,
+            registry_uid,
+            ref_digest,
+            registry_digest,
+            registry_provider_type,
+            annotations: image_id_annotation(pk),
+            invalid,
+            invalid_reason,
+            params,
+            values,
+            values_canon,
+            values_hash,
+            values_parse_error,
+            manifests,
+            images,
+            charts,
+            // no document of Palette gives a selection: the resolve of a candidate sets it
+            preset_options: Vec::new(),
+            hash: PackHash::new(identity, authored, upstream_raw, upstream_source),
+        }
+    }
+}
 
-        let mut manifests: Vec<Manifest> = arr(&mm, "/spec/manifests")
+/// The entry of the packs/manifests response for the pack `name`, or null when it has none. With
+/// `given`, the entry holds these manifests in place of its own.
+fn manifests_entry(name: &str, manifests_packs: &[Value], given: Option<Vec<Value>>) -> Value {
+    let mut entry = manifests_packs
+        .iter()
+        .find(|m| text(m, "/metadata/name") == name || text(m, "/spec/name") == name)
+        .cloned()
+        .unwrap_or(Value::Null);
+    if let Some(given) = given {
+        if !entry.is_object() {
+            entry = json!({});
+        }
+        entry["spec"]["manifests"] = Value::Array(given);
+    }
+    entry
+}
+
+/// The annotations of the pack reference `pk` that strata keeps: only `imageId`. Another
+/// annotation can hold a secret, and strata reads no other one. Palette gives each annotation as
+/// text; a value of another type is not an annotation.
+fn image_id_annotation(pk: &Value) -> BTreeMap<String, String> {
+    opt_text(pk, &format!("/annotations/{IMAGE_ID_ANNOTATION}"))
+        .map(|id| (IMAGE_ID_ANNOTATION.to_string(), id))
+        .into_iter()
+        .collect()
+}
+
+/// The upstream digest of a pack and its source. The digest of the pack reference has priority,
+/// then the digest of the registry summary. Else the pack has none.
+fn upstream_digest(ref_digest: &str, registry_digest: &str) -> (String, UpstreamSource) {
+    if !ref_digest.is_empty() {
+        (ref_digest.to_string(), UpstreamSource::PackRef)
+    } else if !registry_digest.is_empty() {
+        (registry_digest.to_string(), UpstreamSource::PackSummary)
+    } else {
+        (String::new(), UpstreamSource::NoDigest)
+    }
+}
+
+impl PackHash {
+    /// The hashes of a pack from its `identity` and `authored` hashes and the raw upstream digest
+    /// with its source. The node hash covers the three.
+    fn new(
+        identity: String,
+        authored: String,
+        upstream_raw: String,
+        upstream_source: UpstreamSource,
+    ) -> PackHash {
+        let upstream = sha256_hex(&upstream_raw);
+        let node = sha256_hex(&format!("{identity}{upstream}{authored}"));
+        PackHash {
+            identity,
+            upstream,
+            upstream_raw,
+            upstream_source: upstream_source.into(),
+            authored,
+            node,
+        }
+    }
+}
+
+impl Manifest {
+    /// The manifests of the packs/manifests `entry`, sorted by name.
+    fn read_all(entry: &Value) -> Vec<Manifest> {
+        let mut manifests: Vec<Manifest> = arr(entry, "/spec/manifests")
             .iter()
             .map(|m| {
                 let content = text(m, "/content");
@@ -355,63 +444,7 @@ impl Pack {
             })
             .collect();
         manifests.sort_by(|a, b| a.name.cmp(&b.name));
-
-        let (values_canon, values_hash, values_parse_error) = canon_yaml_hashed(&values);
-
-        let identity = sha256_hex(&canonical_json(&json!({
-            "name": name, "layer": layer, "type": kind, "tag": tag, "version": version,
-            "packUid": pack_uid, "registryUid": registry_uid,
-        })));
-        let (upstream_raw, upstream_source) = if !ref_digest.is_empty() {
-            (ref_digest.clone(), UpstreamSource::PackRef)
-        } else if !registry_digest.is_empty() {
-            (registry_digest.clone(), UpstreamSource::PackSummary)
-        } else {
-            (String::new(), UpstreamSource::NoDigest)
-        };
-        let upstream = sha256_hex(&upstream_raw);
-        let authored = sha256_hex(&canonical_json(&json!({
-            "values": values_hash,
-            "manifests": manifests.iter().map(|m| json!([m.name, m.content_hash])).collect::<Vec<_>>(),
-            "params": params,
-        })));
-        let node = sha256_hex(&format!("{identity}{upstream}{authored}"));
-
-        let (images, charts) = pack_content(&values_canon);
-        Pack {
-            key: format!("{layer}/{name}"),
-            layer,
-            name,
-            kind,
-            tag,
-            version,
-            pack_uid,
-            registry_uid,
-            ref_digest,
-            registry_digest,
-            registry_provider_type,
-            annotations,
-            invalid,
-            invalid_reason,
-            params,
-            values,
-            values_canon,
-            values_hash,
-            values_parse_error,
-            manifests,
-            images,
-            charts,
-            // no document of Palette gives a selection: the resolve of a candidate sets it
-            preset_options: Vec::new(),
-            hash: PackHash {
-                identity,
-                upstream,
-                upstream_raw,
-                upstream_source: upstream_source.into(),
-                authored,
-                node,
-            },
-        }
+        manifests
     }
 }
 
