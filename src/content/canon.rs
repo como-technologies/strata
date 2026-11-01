@@ -92,6 +92,14 @@ pub enum Canon {
     Unparseable(String),
 }
 
+/// The documents of the YAML `text`, each one as the parser reads it. A document that the parser
+/// cannot read gives an error in its place.
+pub(crate) fn yaml_documents(
+    text: &str,
+) -> impl Iterator<Item = Result<serde_yaml::Value, serde_yaml::Error>> + '_ {
+    serde_yaml::Deserializer::from_str(text).map(serde_yaml::Value::deserialize)
+}
+
 /// YAML text to a JSON value: one document is that document, several documents become an array,
 /// empty text is null. Map keys are stringified.
 pub fn canon_yaml(text: &str) -> Canon {
@@ -99,8 +107,8 @@ pub fn canon_yaml(text: &str) -> Canon {
         return Canon::Parsed(Value::Null);
     }
     let mut docs = Vec::new();
-    for de in serde_yaml::Deserializer::from_str(text) {
-        match serde_yaml::Value::deserialize(de) {
+    for doc in yaml_documents(text) {
+        match doc {
             Ok(v) => match yaml_to_json(v) {
                 Ok(j) => docs.push(j),
                 Err(e) => return Canon::Unparseable(e),

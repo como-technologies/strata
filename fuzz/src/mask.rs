@@ -254,14 +254,15 @@ fn saved_values(dir: &std::path::Path) -> String {
 }
 
 /// The path of each secret that stays in clear in `doc`: a key that ends with `password`, in
-/// capitals or not, with a scalar that has text and no `{{`.
+/// capitals or not, with a scalar that has text and no `{{`. The walk goes into a value under a
+/// key that is not text too.
 fn clear_passwords(doc: &Yaml, path: &str, out: &mut Vec<String>) {
     match doc {
         Yaml::Mapping(map) => {
             for (key, value) in map {
-                let Yaml::String(key) = key else { continue };
-                let at = format!("{path}/{key}");
-                let secret = key.to_ascii_lowercase().ends_with("password");
+                let name = key.as_str();
+                let at = format!("{path}/{}", name.unwrap_or("?"));
+                let secret = name.is_some_and(|k| k.to_ascii_lowercase().ends_with("password"));
                 match scalar_text(value) {
                     Some(t) if secret && !t.is_empty() && !t.contains("{{") && t != MASKED => {
                         out.push(at);
@@ -280,23 +281,16 @@ fn clear_passwords(doc: &Yaml, path: &str, out: &mut Vec<String>) {
     }
 }
 
-/// Make sure that `saved` keeps no password of `values` in clear, when strata can read `values`.
+/// Make sure that `saved` keeps no password of `values` in clear, when the parser reads `values`.
+/// The check holds for each key, also for a key that is not text: a map or a list, such as a
+/// template with no quotes. Values that are not YAML stay as they are.
 #[track_caller]
 fn check_group(values: &str, saved: &str) {
-    // strata finds a key in text that is YAML and has only text keys: other values stay as they are
     let docs: Option<Vec<Yaml>> = serde_yaml::Deserializer::from_str(saved)
         .map(Yaml::deserialize)
         .collect::<Result<_, _>>()
         .ok();
     let Some(docs) = docs else { return };
-    let only_text_keys = docs.iter().all(|doc| {
-        leaves(doc)
-            .keys()
-            .all(|path| path.iter().all(|key| !key.starts_with('\0')))
-    });
-    if !only_text_keys || saved == values && values.contains("{{") {
-        return;
-    }
     let mut clear = Vec::new();
     for doc in &docs {
         clear_passwords(doc, "", &mut clear);

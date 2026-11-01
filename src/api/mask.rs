@@ -13,7 +13,7 @@ use serde_json::Value;
 use serde_yaml::Value as Yaml;
 
 use crate::closed_set::ClosedSet;
-use crate::content::canon::{Canon, canon_yaml};
+use crate::content::canon::{Canon, canon_yaml, yaml_documents};
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, str_at};
 use crate::pack_type::PackType;
@@ -152,7 +152,7 @@ fn lookup_mut<'a>(doc: &'a mut Yaml, path: &[&str]) -> Option<&'a mut Yaml> {
 
 /// The text of a scalar of a document: a string, a number, or a boolean. A map, a list, and a
 /// null have none, so a mask never covers them.
-trait ScalarText {
+pub(crate) trait ScalarText {
     fn scalar_text(&self) -> Option<Cow<'_, str>>;
 }
 
@@ -191,43 +191,141 @@ fn is_password_key(key: &str) -> bool {
     key.to_ascii_lowercase().ends_with("password")
 }
 
-/// Write `********` over each secret in `values`, the canonical values of a cluster group, at each
-/// depth. Palette serves the values of a group with no mask, and the values have no schema. So a
-/// secret is a value whose key names a password. As for a pack, strata does not mask an empty
-/// value, a map, a list, or a value that holds a variable.
-pub(crate) fn mask_password_keys(values: &mut Value) {
-    match values {
-        Value::Object(map) => {
-            for (key, v) in map.iter_mut() {
-                if is_password_key(key) && holds_secret(&*v) {
-                    *v = Value::String(MASKED.to_string());
-                } else {
-                    mask_password_keys(v);
-                }
-            }
+/// A document that the mask of a cluster group walks: the canonical values of a record
+/// (`serde_json::Value`), or the parsed values of a saved document (`serde_yaml::Value`).
+pub(crate) trait Tree: ScalarText + Sized {
+    /// Call `visit` with the key and the value of each entry of a map, and with no key and each
+    /// item of a list. A key that is not text gives no key.
+    fn each_child(&mut self, visit: &mut impl FnMut(Option<&str>, &mut Self));
+
+    /// The value that the mask writes over a secret.
+    fn masked() -> Self;
+}
+
+impl Tree for Value {
+    fn each_child(&mut self, visit: &mut impl FnMut(Option<&str>, &mut Self)) {
+        match self {
+            Value::Object(map) => map.iter_mut().for_each(|(k, v)| visit(Some(k), v)),
+            Value::Array(items) => items.iter_mut().for_each(|v| visit(None, v)),
+            _ => {}
         }
-        Value::Array(items) => items.iter_mut().for_each(mask_password_keys),
-        _ => {}
     }
+
+    fn masked() -> Self {
+        Value::String(MASKED.to_string())
+    }
+}
+
+impl Tree for Yaml {
+    fn each_child(&mut self, visit: &mut impl FnMut(Option<&str>, &mut Self)) {
+        match self {
+            Yaml::Mapping(map) => map.iter_mut().for_each(|(k, v)| visit(k.as_str(), v)),
+            Yaml::Sequence(items) => items.iter_mut().for_each(|v| visit(None, v)),
+            _ => {}
+        }
+    }
+
+    fn masked() -> Self {
+        Yaml::String(MASKED.to_string())
+    }
+}
+
+/// Write `********` over each secret in `values`, the values of a cluster group, at each depth.
+/// Palette serves the values of a group with no mask, and the values have no schema. So a secret
+/// is a value whose key names a password. As for a pack, strata does not mask an empty value, a
+/// map, a list, or a value that holds a variable. A value under a key that is not text can hold a
+/// secret too, so the walk goes into it.
+pub(crate) fn mask_password_keys<T: Tree>(values: &mut T) {
+    values.each_child(&mut |key, child| {
+        if key.is_some_and(is_password_key) && holds_secret(&*child) {
+            *child = T::masked();
+        } else {
+            mask_password_keys(child);
+        }
+    });
+}
+
+/// A copy of `values` with the mask over each secret, or `None` when no secret is there.
+fn masked_copy<T: Tree + Clone + PartialEq>(values: &T) -> Option<T> {
+    let mut masked = values.clone();
+    mask_password_keys(&mut masked);
+    (masked != *values).then_some(masked)
 }
 
 /// `values`, the YAML text of the values of a cluster group, with `********` over each password,
 /// as a record keeps them.
 ///
 /// The rule of a password is the rule of [`mask_password_keys`]. When strata masks a value, it
-/// writes the values again from their canonical form, with no comments. So a record of the saved
-/// document is the record of the fetch. Values with no password stay as they are. Values that are
-/// not YAML also stay as they are, as for a pack: strata cannot find a key in them.
+/// writes the values again with no comments: from their canonical form, so that a record of the
+/// saved document is the record of the fetch. Values with no password stay as they are. Values
+/// that are not YAML also stay as they are, as for a pack: strata cannot find a key in them.
+///
+/// Some YAML has no canonical form: a key that is a map or a list, such as an explicit `? key`
+/// or a template with no quotes, `{{ .spectro.var.x }}`. Such values keep their keys as they are,
+/// and strata writes them again from the parsed YAML.
 pub(super) fn mask_group_values(values: &str) -> Result<String> {
-    let Canon::Parsed(parsed) = canon_yaml(values) else {
-        return Ok(values.to_string());
+    let masked = match canon_yaml(values) {
+        Canon::Parsed(parsed) => masked_copy(&parsed)
+            .map(|m| to_yaml(&m, "the masked values of a cluster group"))
+            .transpose()?,
+        Canon::Unparseable(_) => mask_unreadable_values(values)?,
     };
-    let mut masked = parsed.clone();
-    mask_password_keys(&mut masked);
-    if masked == parsed {
-        return Ok(values.to_string());
+    Ok(masked.unwrap_or_else(|| values.to_string()))
+}
+
+/// `values` with the mask over each password, when the parser reads `values` as YAML and the
+/// values have no canonical form. `None` when the parser cannot read them, or when no password is
+/// there.
+///
+/// Strata changes only the line of each password, so that the key that is a map stays as it is.
+/// When the edited text does not read as the masked documents, for example for a block scalar, it
+/// writes the documents again. A parser cannot write a key that is a map: then the result is an
+/// error, and never values with a password in clear.
+fn mask_unreadable_values(values: &str) -> Result<Option<String>> {
+    let Some(docs) = untagged_documents(values) else {
+        return Ok(None);
+    };
+    // the documents are the items of a list, as the canonical form of several documents is a list
+    let Some(Yaml::Sequence(masked)) = masked_copy(&Yaml::Sequence(docs)) else {
+        return Ok(None);
+    };
+    let edited = mask_password_lines(values);
+    if untagged_documents(&edited).is_some_and(|read| read == masked) {
+        return Ok(Some(edited));
     }
-    to_yaml(&masked, "the masked values of a cluster group")
+    let texts = masked
+        .iter()
+        .map(|doc| {
+            to_yaml(
+                doc,
+                "the masked values of a cluster group, which have a key that is not text",
+            )
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(Some(texts.join("---\n")))
+}
+
+/// The documents of `text` with no tag, or `None` when the parser cannot read the text.
+fn untagged_documents(text: &str) -> Option<Vec<Yaml>> {
+    yaml_documents(text)
+        .map(|doc| doc.map(untagged))
+        .collect::<std::result::Result<_, _>>()
+        .ok()
+}
+
+/// `doc` with each tag removed: a tagged value is its value, as the canonical form reads it. So
+/// `!!str adminPassword: pw` has a password.
+fn untagged(doc: Yaml) -> Yaml {
+    match doc {
+        Yaml::Tagged(tagged) => untagged(tagged.value),
+        Yaml::Sequence(items) => Yaml::Sequence(items.into_iter().map(untagged).collect()),
+        Yaml::Mapping(map) => Yaml::Mapping(
+            map.into_iter()
+                .map(|(k, v)| (untagged(k), untagged(v)))
+                .collect(),
+        ),
+        other => other,
+    }
 }
 
 /// True when `text` holds a variable of a profile, `{{ .spectro.var.NAME }}`.
@@ -303,6 +401,36 @@ fn split_key(body: &str) -> Option<(&str, &str)> {
     (rest.is_empty() || rest.starts_with([' ', '\r'])).then_some((key, rest))
 }
 
+/// `text` with `'********'` in place of the value on each line `key: value` whose key names a
+/// password and whose value is a scalar that the mask covers. A line can be an item of a list,
+/// `- key: value`. The text can hold a line that is no key, such as a line of a block scalar: the
+/// caller reads the result again to make sure of it.
+fn mask_password_lines(text: &str) -> String {
+    text.split('\n')
+        .map(|line| masked_password_line(line).unwrap_or_else(|| line.to_string()))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// `line` with the mask over its value, or `None` when the line is no secret.
+fn masked_password_line(line: &str) -> Option<String> {
+    let mut body = line.trim_start_matches(' ');
+    while let Some(item) = body.strip_prefix("- ") {
+        body = item.trim_start_matches(' ');
+    }
+    let (key, rest) = split_key(body)?;
+    let value = serde_yaml::from_str::<Yaml>(rest.trim())
+        .ok()
+        .map(untagged)?;
+    if !is_password_key(key) || !holds_secret(&value) {
+        return None;
+    }
+    let end = if line.ends_with('\r') { "\r" } else { "" };
+    let raw_key = &body[..body.len() - rest.len() - 1];
+    let indent = &line[..line.len() - body.len()];
+    Some(format!("{indent}{raw_key}: '{MASKED}'{end}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,6 +497,102 @@ mod tests {
         let broken = "password: [s3cr3t\n";
         assert_eq!(mask_group_values(broken).unwrap(), broken);
         assert_eq!(mask_group_values("").unwrap(), "");
+    }
+
+    /// The parsed YAML of `text`: each document, and each key as the parser reads it.
+    fn documents(text: &str) -> Vec<Yaml> {
+        yaml_documents(text)
+            .collect::<std::result::Result<_, _>>()
+            .unwrap_or_else(|e| panic!("{e}: {text}"))
+    }
+
+    #[test]
+    fn a_template_with_no_quotes_does_not_keep_a_password_in_clear() {
+        // the template is a map in a key, so the values have no canonical form
+        let values = "# the host\npassword: s3cr3t # keep it\nhost: {{ .spectro.var.host }}\n";
+        assert!(matches!(canon_yaml(values), Canon::Unparseable(_)));
+        let masked = mask_group_values(values).unwrap();
+        // only the line of the password changes
+        assert_eq!(
+            masked,
+            "# the host\npassword: '********'\nhost: {{ .spectro.var.host }}\n"
+        );
+        let mut want = documents(values);
+        want.iter_mut().for_each(mask_password_keys);
+        assert_eq!(documents(&masked), want);
+        // the key stays a map, so a second mask changes nothing
+        assert!(matches!(canon_yaml(&masked), Canon::Unparseable(_)));
+        assert_eq!(mask_group_values(&masked).unwrap(), masked);
+    }
+
+    #[test]
+    fn a_password_that_strata_cannot_mask_in_values_with_no_canonical_form_is_an_error() {
+        // a block scalar has no line to change, and a parser cannot write a key that is a map
+        let values = "adminPassword: |\n  s3cr3t\nhost: {{ .spectro.var.host }}\n";
+        assert!(matches!(
+            mask_group_values(values),
+            Err(Error::Serialize(_))
+        ));
+        // a key that is a list is written again
+        let values = "adminPassword: |\n  s3cr3t\n? [a]\n: b\n";
+        let masked = mask_group_values(values).unwrap();
+        assert!(!masked.contains("s3cr3t"), "{masked}");
+        assert_eq!(
+            documents(&masked)[0]["adminPassword"],
+            Yaml::String(MASKED.into())
+        );
+    }
+
+    #[test]
+    fn a_key_that_is_not_text_does_not_hide_a_password() {
+        let masked = mask_group_values("? [a]\n: {adminPassword: pw}\nPASSWORD: pw\n").unwrap();
+        assert!(!masked.contains("pw"), "{masked}");
+        let want = "? - a\n: adminPassword: '********'\nPASSWORD: '********'\n";
+        assert_eq!(masked, want);
+        // the tag of a key or of a value does not hide it, as in the canonical form
+        let tagged = "? [a]\n: b\n!!str password: pw\ntoken: x\nsecretPassword: !!str pw\n";
+        let masked = mask_group_values(tagged).unwrap();
+        assert!(!masked.contains("pw"), "{masked}");
+        assert!(masked.contains("token: x"), "{masked}");
+    }
+
+    #[test]
+    fn each_document_of_values_that_have_no_canonical_form_gets_the_mask() {
+        let values = "password: a\n---\n? [b]\n: c\nadminPassword: d\n---\nname: e\n";
+        let masked = mask_group_values(values).unwrap();
+        assert!(
+            !masked.contains(": a") && !masked.contains(": d"),
+            "{masked}"
+        );
+        let docs = documents(&masked);
+        assert_eq!(docs.len(), 3);
+        assert_eq!(docs[0]["password"], Yaml::String(MASKED.into()));
+        assert_eq!(docs[2]["name"], Yaml::String("e".into()));
+    }
+
+    #[test]
+    fn values_that_have_no_canonical_form_and_no_password_keep_their_text() {
+        // a variable, an empty value, a map, and a list are no secret
+        let values = "# a comment\nhost: {{ .spectro.var.host }}\nadminPassword: \"{{ .spectro.var.p }}\"\n\
+                      password: ''\ntlsPassword:\n  from: secret\n";
+        assert_eq!(mask_group_values(values).unwrap(), values);
+        let no_key = "host: {{ .spectro.var.host }}\nreplicas: 1\n";
+        assert_eq!(mask_group_values(no_key).unwrap(), no_key);
+        // text that is no YAML stays, with its password
+        let broken = "password: [s3cr3t\nhost: {{ .spectro.var.host }}\n";
+        assert_eq!(mask_group_values(broken).unwrap(), broken);
+    }
+
+    #[test]
+    fn a_password_under_each_kind_of_key_gets_the_mask_in_a_json_and_in_a_yaml_document() {
+        let yaml: Yaml =
+            serde_yaml::from_str("a:\n  - password: x\n  - n: {adminPassword: y}\nb: z\n").unwrap();
+        let json = json!({"a": [{"password": "x"}, {"n": {"adminPassword": "y"}}], "b": "z"});
+        let (mut yaml, mut json) = (yaml, json);
+        mask_password_keys(&mut yaml);
+        mask_password_keys(&mut json);
+        assert_eq!(serde_yaml::to_value(&json).unwrap(), yaml);
+        assert_eq!(json["a"][1]["n"]["adminPassword"], MASKED);
     }
 
     #[test]

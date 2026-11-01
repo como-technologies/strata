@@ -43,6 +43,18 @@ the save, strata writes `********` over each password, with the rule of the
 masks a value, it writes the values again from their canonical form, with no
 comments. So the record of the directory is the record of the fetch.
 
+Some values have no canonical form, because a key is a map or a list. An
+example is a template with no quotes, `host: {{ .spectro.var.host }}`. Strata
+still finds each password in such values. It changes the line of the password,
+and the rest of the text stays, with its comments. When it cannot change one
+line, for example for a block scalar, it writes the values again from the parsed
+YAML.
+
+A parser cannot write a key that is a map. Then `save_dir` gives `serialize`
+and writes no file. The record of such values holds `valuesParseError`, and
+`valuesHash` covers the text. So the `valuesHash` of the directory is not the
+`valuesHash` of the fetch.
+
 `rbacs.json` and `namespaces.json` keep the role bindings and the namespaces
 of a cluster. A directory that an older version of strata saved has neither.
 The `policy` tier of its record then holds `null` for them.

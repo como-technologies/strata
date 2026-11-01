@@ -277,6 +277,17 @@ Each hash that covers such a character changes: `valuesHash`, `contentHash`,
 `variablesHash`, and so the `root`. `verify` of an older record that holds such
 a character shows a change. A record with none of them keeps each hash.
 
+One saved directory changes after 0.25.0, with no new id. Some values of a
+cluster group have no canonical form, because a key is a map or a list. An
+example is a template with no quotes. `RawCluster::save_dir` now writes
+`********` over each password in such values. A directory that an older version
+saved holds such a password in clear. The new `save_dir` gives `serialize` for
+values that it cannot mask.
+
+The tier of a cluster group is not part of the root, so no root changes. The
+`valuesHash` of such values covers the text. So a record of a new directory has
+another `valuesHash` than a record of an old directory.
+
 Roots are comparable only within one snapshot schema id. Strata refuses a
 snapshot of another id with `unsupported-schema`, which names both ids. A file
 whose id names another document, or no document, is not a snapshot. The report
