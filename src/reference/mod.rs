@@ -16,7 +16,8 @@ pub enum Ref {
     /// A snapshot file written earlier by `snapshot`.
     Snapshot(PathBuf),
     /// `<name>@<version>`, resolved through the dashboard listing. The version [`LATEST`] picks
-    /// the highest version of that name in the scope, by natural order.
+    /// the highest version of that name in the scope that is not a pre-release, by
+    /// [`version::compare`].
     NameVersion {
         /// Profile name.
         name: String,
@@ -66,7 +67,8 @@ pub enum Ref {
         profile: Option<String>,
     },
     /// `appprofile:<uid>` or `appprofile:<name>@<version>`: an app profile, whose tiers are its
-    /// packs. The version [`LATEST`] picks the highest version of that name.
+    /// packs. The version [`LATEST`] picks the highest version of that name that is not a
+    /// pre-release.
     AppProfile {
         /// App profile uid, or its name when `version` is set.
         id: String,

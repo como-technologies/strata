@@ -135,8 +135,9 @@ pub struct Pin {
     pub pinned_by: Vec<PinnedBy>,
     /// The newer versions that the registry offers, newest first. A version that the registry
     /// has disabled or deleted is not one to move to, and a version for none of the clouds of the
-    /// pinned version is not either. A version that supports fewer architectures than the pinned
-    /// version is one, and it names what it drops.
+    /// pinned version is not either. A pre-release is not one to move to from a version that is
+    /// not a pre-release, unless [`BehindOptions::pre_release`] asks for it. A version that
+    /// supports fewer architectures than the pinned version is one, and it names what it drops.
     pub newer: Vec<Newer>,
     /// True when `newer` is not empty.
     pub behind: bool,
@@ -248,6 +249,9 @@ pub struct BehindOptions {
     pub impact: bool,
     /// The report of the previous run: each pin names the versions that arrived since.
     pub since: Option<BehindReport>,
+    /// Also name a pre-release as a newer version of a pin that is not a pre-release. Without it,
+    /// a pre-release is a newer version only for a pin that is one itself.
+    pub pre_release: bool,
 }
 
 /// What a registry offers for one pack.
@@ -398,7 +402,14 @@ where
         let mut listings = Registries::new(&palette);
         let mut questions = BumpQuestions::new(&palette, scope.as_deref());
         for (key, mut pin) in group {
-            read_pin(&mut pin, &mut listings, &mut reads, generated_at, progress)?;
+            read_pin(
+                &mut pin,
+                &mut listings,
+                &mut reads,
+                options.pre_release,
+                generated_at,
+                progress,
+            )?;
             if options.impact && pin.behind {
                 let holding: Vec<&Snapshot> = holders
                     .get(&key)
@@ -476,6 +487,7 @@ fn read_pin<A: PaletteApi>(
     pin: &mut Pin,
     listings: &mut Registries<'_, A>,
     reads: &mut Reads,
+    pre_release: bool,
     generated_at: &str,
     progress: &Progress,
 ) -> Result<()> {
@@ -544,7 +556,7 @@ fn read_pin<A: PaletteApi>(
         |b: &PackBuild| clouds.is_empty() || clouds.iter().any(|c| supports(&b.cloud_types, c));
     pin.newer = builds
         .iter()
-        .filter(|b| version::compare(&b.version, &pin.version) == std::cmp::Ordering::Greater)
+        .filter(|b| is_newer(&b.version, &pin.version, pre_release))
         .filter(|b| !b.retired())
         .filter(|b| fits(b))
         .map(|b| Newer {
@@ -574,6 +586,17 @@ fn read_pin<A: PaletteApi>(
         pin.registry_sync_error = note.error.clone();
     }
     Ok(())
+}
+
+/// True when `candidate` is a newer version than `pin`: it is above `pin` by [`version::compare`].
+///
+/// A pre-release is below its version, so a pin of `1.0.1` has no newer version in `1.0.1-rc.1`.
+/// A pre-release above a pin that is not one is still not a version to move to, unless
+/// `pre_release` asks for it. A pin that is a pre-release follows the pre-releases: it has each
+/// version above it, and its final version is the first of them.
+fn is_newer(candidate: &str, pin: &str, pre_release: bool) -> bool {
+    version::compare(candidate, pin).is_gt()
+        && (pre_release || version::is_pre_release(pin) || !version::is_pre_release(candidate))
 }
 
 /// The architectures of `pinned` that `newer` does not support: what a move drops. When the

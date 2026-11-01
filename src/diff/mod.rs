@@ -32,7 +32,7 @@ pub use cluster::{
 pub use leaf::{Leaf, Op, Segment, leaf_diff};
 pub use pack::{
     ArtifactChange, ChangeFlag, ManifestChange, MaskedPack, PackDiff, PackSide, ParamChange,
-    Status, ValuesDiff,
+    Status, ValuesDiff, VersionMove,
 };
 pub use variables::{
     VariableChange, VariableSummary, VariablesByName, VariablesDiff, group_variables,
@@ -101,6 +101,10 @@ pub struct Diff {
     /// the cluster reconciled it, differs from the version that its profile declares.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub running_behind: Vec<RunningBehind>,
+    /// Which way the version of the profile moves from side A to side B. Absent when a side has
+    /// no version, and when the two versions have the same precedence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_move: Option<VersionMove>,
     /// True when packs present on both sides appear in a different order
     pub order_changed: bool,
     /// One entry per pack key present on either side, sorted by layer then name
@@ -469,6 +473,7 @@ pub fn compute(a: &Snapshot, b: &Snapshot, generated_at: &str, verify: Option<Ve
             v.extend(running_behind(Side::B, b));
             v
         },
+        version_move: VersionMove::of(&a.source.version, &b.source.version),
         order_changed,
         packs,
         verify,

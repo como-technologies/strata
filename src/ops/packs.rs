@@ -91,11 +91,12 @@ pub struct PackBuild {
     pub cloud_types: Vec<String>,
     /// Every tag that points at this version, the exact tag first.
     pub tags: Vec<String>,
-    /// True for the newest version of the registry's copy, by the order of strata.
+    /// True for the newest version of the registry's copy, by [`version::compare`]: the order of
+    /// semantic versions, as Palette orders them.
     pub latest: bool,
-    /// True for the version that Palette calls the latest of the registry's copy. Palette orders
-    /// by semantic version, so it can mark a version below the newest: `1.30.0` below
-    /// `1.30.0-rc.1`.
+    /// True for the version that Palette calls the latest of the registry's copy. Strata orders by
+    /// semantic version as Palette does, so the mark is on the newest version. The two can differ
+    /// for a version that does not parse as a semantic version.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub palette_latest: bool,
     /// The state that the registry listing gives this version: `deprecated`, `disabled`, or
@@ -530,7 +531,7 @@ mod tests {
     }
 
     #[test]
-    fn a_pre_release_is_the_newest_and_latest_keeps_the_release_that_palette_calls_the_latest() {
+    fn a_pre_release_is_below_its_version_so_latest_keeps_one_version() {
         let options = PackOptions {
             latest: true,
             ..Default::default()
@@ -548,9 +549,47 @@ mod tests {
             .iter()
             .map(|v| (v.version.as_str(), v.latest, v.palette_latest))
             .collect();
+        assert_eq!(kept, vec![("1.30.0", true, true)]);
+        let all = packs_with(
+            &PackOptions::default(),
+            vec![
+                marked("pk-rc", "1.30.0-rc.1", false),
+                marked("pk-30", "1.30.0", true),
+                marked("pk-29", "1.29.0", false),
+            ],
+        );
+        let order: Vec<&str> = all.registries[0]
+            .versions
+            .iter()
+            .map(|v| v.version.as_str())
+            .collect();
+        assert_eq!(order, ["1.30.0", "1.30.0-rc.1", "1.29.0"]);
+    }
+
+    #[test]
+    fn latest_keeps_the_version_of_palette_when_it_is_not_the_newest_and_names_it() {
+        // a version with four numbers does not parse as a semantic version: strata puts it above
+        // the versions that parse, and Palette marks another one
+        let options = PackOptions {
+            latest: true,
+            ..Default::default()
+        };
+        let listing = packs_with(
+            &options,
+            vec![
+                marked("pk-29", "1.29.0", false),
+                marked("pk-30", "1.30.0", true),
+                marked("pk-four", "1.30.0.1", false),
+            ],
+        );
+        let kept: Vec<(&str, bool, bool)> = listing.registries[0]
+            .versions
+            .iter()
+            .map(|v| (v.version.as_str(), v.latest, v.palette_latest))
+            .collect();
         assert_eq!(
             kept,
-            vec![("1.30.0-rc.1", true, false), ("1.30.0", false, true)]
+            vec![("1.30.0.1", true, false), ("1.30.0", false, true)]
         );
         let json = serde_json::to_value(&listing).unwrap();
         assert_eq!(json["registries"][0]["versions"][1]["paletteLatest"], true);
@@ -574,7 +613,7 @@ mod tests {
             "strata-live-dep in strata-live-registry (2 of 3 versions)"
         );
         assert!(
-            lines[1].starts_with("  1.30.0-rc.1 ") && !lines[1].contains("Palette"),
+            lines[1].starts_with("  1.30.0.1 ") && !lines[1].contains("Palette"),
             "{text}"
         );
         assert!(

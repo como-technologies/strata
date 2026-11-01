@@ -15,7 +15,8 @@ plans the next release.
 **Follow along.** `just playground behind-1` serves this tenant as it was last
 week, before the registry published `csi-aws-ebs` 1.65.0, and
 `just playground behind-2` serves it today. `just playground behind-3` adds a
-profile that Palette refuses to move.
+profile that Palette refuses to move. `just playground behind-pre-release` serves a
+registry with a pre-release of `csi-aws-ebs`.
 
 ## 1. Last week
 
@@ -81,6 +82,23 @@ The playground answers each request of the route in the same way. A real Palette
 answers for the packs of the body, so only the pack that declares the limit gets
 the refusal.
 
+## 4. A pre-release in the registry
+
+A pipeline can publish a pre-release for each build, such as `1.66.0-rc.1` of
+`csi-aws-ebs`. Strata orders versions as Palette does, by Semantic Versioning. A
+pre-release is below its version. So it is no newer version of a pin that is not a
+pre-release. The pins of `aws-stack@1.1.1` are current:
+
+```text
+{{#include ../output/behind-pre-release.txt}}
+```
+
+`--pre-release` names the pre-release as a newer version:
+
+```text
+{{#include ../output/behind-pre-release-lines.txt}}
+```
+
 ## What to do
 
 - Run `behind` on a schedule over the release records, and keep its report:
@@ -92,6 +110,8 @@ the refusal.
   about the newest version only. A candidate gets no answer about the move.
   Palette checks the limit of a move against the clusters that run a version.
   No cluster runs a candidate.
+- Pin a final version. A pin of a pre-release is behind its final version and each
+  later version. Use `--pre-release` only to see what the pipeline builds.
 - Move the pin in a new release version, and not in place. Then `verify` of the
   old records still holds, and `compare` of the two versions says what changed:
   see [What changed between two pack versions](./pack-versions.md).

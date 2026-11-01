@@ -298,7 +298,7 @@ pub struct Listing {
     /// With `--cluster`: the text the cluster names and uids were matched against.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cluster: Option<String>,
-    /// Profile versions, by name and then natural version order.
+    /// Profile versions, by name and then by version, in the order of [`version::compare`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profiles: Option<Vec<ListedProfile>>,
     /// Clusters, by name.

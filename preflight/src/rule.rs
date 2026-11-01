@@ -41,6 +41,7 @@
 //! `false`; a list of messages, where an empty list passes and each message is one failure; or an
 //! object `{pass, message}`.
 
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
@@ -50,6 +51,7 @@ use strata::api::Method;
 use strata::closed_set::legend::Described;
 use strata::closed_set::{ClosedSet, impl_closed_set};
 use strata::cloud::CLOUD_ALL;
+use strata::reference::version;
 
 use crate::error::{Error, Result};
 use crate::jq::{ITEM, Jq};
@@ -880,47 +882,15 @@ fn is_kebab(s: &str) -> bool {
         && !s.ends_with('-')
 }
 
-/// A version as a list of numbers: `4.10.0` is `[4, 10, 0]`. Text after the numbers is ignored.
-fn version_parts(text: &str) -> Vec<u64> {
-    text.trim()
-        .trim_start_matches('v')
-        .split('.')
-        .map_while(|p| {
-            p.chars()
-                .take_while(|c| c.is_ascii_digit())
-                .collect::<String>()
-                .parse()
-                .ok()
-        })
-        .collect()
-}
-
-/// Compare two versions by their numbers; a missing part is `0`.
-fn cmp_versions(a: &[u64], b: &[u64]) -> std::cmp::Ordering {
-    let n = a.len().max(b.len());
-    for i in 0..n {
-        let x = a.get(i).copied().unwrap_or(0);
-        let y = b.get(i).copied().unwrap_or(0);
-        match x.cmp(&y) {
-            std::cmp::Ordering::Equal => {}
-            other => return other,
-        }
-    }
-    std::cmp::Ordering::Equal
-}
-
-/// One bound of a range: the operator and the version.
-fn parse_range(text: &str) -> Option<Vec<(&str, Vec<u64>)>> {
+/// One bound of a range: the operator and the version that it names.
+fn parse_range(text: &str) -> Option<Vec<(&str, &str)>> {
     let mut bounds = Vec::new();
     for part in text.split_whitespace() {
         let (op, ver) = ["<=", ">=", "<", ">", "="]
             .into_iter()
             .find_map(|op| part.strip_prefix(op).map(|v| (op, v)))?;
-        let parts = version_parts(ver);
-        if parts.is_empty() {
-            return None;
-        }
-        bounds.push((op, parts));
+        version::numbers(ver)?;
+        bounds.push((op, ver));
     }
     if bounds.is_empty() {
         None
@@ -929,26 +899,36 @@ fn parse_range(text: &str) -> Option<Vec<(&str, Vec<u64>)>> {
     }
 }
 
-/// True when `release` is in `range`.
+/// Compare `release` with `bound`, or None when `release` does not parse as a version.
+///
+/// A bound that names three numbers is a version, and the order is [`version::compare`]: a
+/// pre-release is below its version, so `4.10.3-rc.1` is below `4.10.3`. A bound that names fewer
+/// is a release line: only the numbers that it names count, so `4.10.3` equals `4.10`.
+fn compare_to_bound(release: &str, bound: &str) -> Option<Ordering> {
+    let named = version::numbers(bound)?.len();
+    let numbers = version::numbers(release)?;
+    if named == 3 {
+        return Some(version::compare(release, bound));
+    }
+    let line: Vec<String> = numbers.iter().take(named).map(u64::to_string).collect();
+    Some(version::compare(&line.join("."), bound))
+}
+
+/// True when `release` is in `range`. A release that does not parse is in each range.
 pub fn release_in_range(release: &str, range: &str) -> bool {
-    use std::cmp::Ordering::*;
     let Some(bounds) = parse_range(range) else {
         return true;
     };
-    let r = version_parts(release);
-    if r.is_empty() {
-        return true;
-    }
-    bounds.iter().all(|(op, v)| {
-        // compare on the parts the bound names: `<4.11` holds for 4.10.3, and `=4.10` for 4.10.3
-        let r = &r[..r.len().min(v.len())];
-        let c = cmp_versions(r, v);
+    bounds.iter().all(|(op, bound)| {
+        let Some(c) = compare_to_bound(release, bound) else {
+            return true;
+        };
         match *op {
-            "<" => c == Less,
-            "<=" => c != Greater,
-            ">" => c == Greater,
-            ">=" => c != Less,
-            _ => c == Equal,
+            "<" => c == Ordering::Less,
+            "<=" => c != Ordering::Greater,
+            ">" => c == Ordering::Greater,
+            ">=" => c != Ordering::Less,
+            _ => c == Ordering::Equal,
         }
     })
 }
@@ -1180,6 +1160,30 @@ rules:
             err.to_string().contains("is in the catalog already"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn a_pre_release_is_below_its_version_in_a_release_range() {
+        // the order is that of strata::reference::version::compare
+        assert!(!release_in_range("1.0.1-g0123456789ab", ">=1.0.1"));
+        assert!(release_in_range("1.0.1-g0123456789ab", "<1.0.1"));
+        assert!(release_in_range("1.0.1", ">=1.0.1"));
+        assert!(release_in_range("1.0.1+2", "=1.0.1"));
+        assert!(release_in_range("1.0.1-rc.2", ">1.0.1-rc.1 <1.0.1"));
+        assert!(!release_in_range("1.0.1-rc.11", "<1.0.1-rc.2"));
+        // a bound that names fewer than three numbers is a release line: only its numbers count
+        assert!(release_in_range("4.10.0-rc.1", "=4.10"));
+        assert!(!release_in_range("4.11.0-rc.1", "<4.11"));
+        // a release that does not parse is in each range
+        assert!(release_in_range("next", ">=1.0.1"));
+
+        let section = GOOD.replace("status: seen", "status: seen\n    releases: '>=1.0.1'");
+        let rule = &Catalog::parse_section(&section, Path::new("x.yaml"))
+            .unwrap()
+            .rules[0];
+        assert!(rule.applies_to_release(Some("1.0.1")));
+        assert!(!rule.applies_to_release(Some("1.0.1-g0123456789ab")));
+        assert!(rule.applies_to_release(None));
     }
 
     #[test]

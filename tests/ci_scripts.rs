@@ -752,7 +752,13 @@ const PASSES: [Passes; 4] = [
             reach("--format", "", ""),
             reach("--quiet", "", ""),
         ],
-        left: &[FORMATS],
+        left: &[
+            FORMATS,
+            Left {
+                flags: &["--pre-release"],
+                why: "an issue opens for a final version, and a pipeline would open one for each build",
+            },
+        ],
     },
     Passes {
         script: "preflight.sh",
@@ -2783,27 +2789,37 @@ impl Gate {
     }
 }
 
-/// The record of fixture a, the record the branch pins, and the later record another merge
-/// request put on main. All three carry one header, the way records written by one job do.
-fn gate_records() -> (String, String, String) {
+/// The record of fixture a with the pack kubernetes at each of `versions`, in the order given. All
+/// carry one header, the way records written by one job do: the ref and the time are what the job
+/// wrote, not the change.
+fn gate_records_at(versions: &[&str]) -> Vec<String> {
     let dir = tempfile::tempdir().unwrap();
     let raw = dir.path().join("raw");
     common::make_fixtures(&raw);
-    common::rewrite(&raw.join("a"), &raw.join("branch"), &[("1.29.4", "1.30.2")]);
-    common::rewrite(
-        &raw.join("a"),
-        &raw.join("main-side"),
-        &[("1.29.4", "1.31.0")],
+    versions
+        .iter()
+        .enumerate()
+        .map(|(i, version)| {
+            let name = format!("pin-{i}");
+            common::rewrite(&raw.join("a"), &raw.join(&name), &[("1.29.4", version)]);
+            let out = dir.path().join(format!("{name}.json"));
+            snapshot_from_raw(&raw, &name, &out);
+            let doc = std::fs::read_to_string(&out).unwrap();
+            let doc = field(&doc, "\"ref\": \"", "releases/dev.json");
+            field(&doc, "\"fetchedAt\": \"", "2026-09-17T00:00:00Z")
+        })
+        .collect()
+}
+
+/// The record of fixture a, the record the branch pins, and the later record another merge
+/// request put on main. All three carry one header, the way records written by one job do.
+fn gate_records() -> (String, String, String) {
+    let mut records = gate_records_at(&["1.29.4", "1.30.2", "1.31.0"]).into_iter();
+    let (base, branch, main_side) = (
+        records.next().unwrap(),
+        records.next().unwrap(),
+        records.next().unwrap(),
     );
-    let snap = |name: &str| -> String {
-        let out = dir.path().join(format!("{name}.json"));
-        snapshot_from_raw(&raw, name, &out);
-        // one header for all three: the ref and the time are what the job wrote, not the change
-        let doc = std::fs::read_to_string(&out).unwrap();
-        let doc = field(&doc, "\"ref\": \"", "releases/dev.json");
-        field(&doc, "\"fetchedAt\": \"", "2026-09-17T00:00:00Z")
-    };
-    let (base, branch, main_side) = (snap("a"), snap("branch"), snap("main-side"));
     assert_ne!(base, branch);
     assert_ne!(branch, main_side);
     (base, branch, main_side)
@@ -2858,6 +2874,46 @@ fn merge_gate_stops_a_branch_that_would_replace_a_newer_pin() {
         "{}",
         text(&o.stderr)
     );
+}
+
+/// The red or green gate for a branch that moves the pin of kubernetes from `on_main` to
+/// `on_branch`, with the output of the gate.
+fn gate_for_pin_move(on_main: &str, on_branch: &str) -> (Output, String) {
+    let records = gate_records_at(&[on_main, on_branch]);
+    let g = Gate::new(&records[0], &records[1], &records[0]);
+    let o = g.run(&["releases/*.json", "--base", "main", "--no-verify"]);
+    let out = format!("{}{}", text(&o.stdout), text(&o.stderr));
+    (o, out)
+}
+
+#[test]
+fn merge_gate_reads_the_move_of_a_pin_from_a_pre_release_to_its_final_as_a_move_forward() {
+    let (o, out) = gate_for_pin_move("1.30.2-g0123456789ab", "1.30.2");
+    assert!(o.status.success(), "the gate is green:\n{out}");
+    assert!(out.contains("1 record: 0 behind main"), "{out}");
+}
+
+#[test]
+fn merge_gate_reads_the_move_of_a_pin_from_a_final_to_its_pre_release_as_a_move_back() {
+    let (o, out) = gate_for_pin_move("1.30.2", "1.30.2-g0123456789ab");
+    assert_eq!(o.status.code(), Some(1), "the gate is red:\n{out}");
+    assert!(
+        out.contains("k8s/kubernetes: main has 1.30.2, the merge result has 1.30.2-g0123456789ab"),
+        "the line names the pack and both versions:\n{out}"
+    );
+}
+
+#[test]
+fn merge_gate_reads_the_order_of_two_pre_releases_and_of_a_move_to_a_later_version() {
+    // the order is that of Semantic Versioning: 11 is above 2, and a later version is above a pre-release
+    let (o, out) = gate_for_pin_move("1.30.2-rc.2", "1.30.2-rc.11");
+    assert!(o.status.success(), "rc.11 is above rc.2:\n{out}");
+    let (o, out) = gate_for_pin_move("1.30.2-rc.11", "1.30.2-rc.2");
+    assert_eq!(o.status.code(), Some(1), "rc.2 is below rc.11:\n{out}");
+    let (o, out) = gate_for_pin_move("1.30.2-rc.2", "1.31.0");
+    assert!(o.status.success(), "1.31.0 is above 1.30.2-rc.2:\n{out}");
+    let (o, out) = gate_for_pin_move("1.30.2+5", "1.30.2+4");
+    assert!(o.status.success(), "build data has no precedence:\n{out}");
 }
 
 /// A branch that deliberately returns the record to the release that main pinned before.

@@ -3246,6 +3246,44 @@ fn packs_sh_counts_the_versions_of_all_registries_against_the_100_of_one_page() 
     failed(&steps, &["packs-paged-count"]);
 }
 
+/// A run of packs.sh whose `strata packs <name> --registry ... --json` prints `kubernetes` for
+/// kubernetes and `cert_manager` for cert-manager. Gives steps.log.
+fn packs_newest(kubernetes: &str, cert_manager: &str) -> String {
+    let mut stage = Stage::new(serde_json::json!({
+        "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.1",
+        "csi_version": "1.65.0", "cloud": "aws",
+    }));
+    stage.strata("packs kubernetes --registry * --json", 0, kubernetes);
+    stage.strata("packs cert-manager --registry * --json", 0, cert_manager);
+    let (_, steps) = stage.run("packs.sh", &[]);
+    steps
+}
+
+#[test]
+fn packs_sh_checks_that_the_newest_version_of_a_pack_is_the_version_that_palette_marks() {
+    let marked = r#"{"registries":[{"versions":[
+        {"version":"1.19.3","latest":true,"paletteLatest":true},
+        {"version":"1.19.3-rev1","latest":false},
+        {"version":"1.19.2","latest":false}]}]}"#;
+    let steps = packs_newest(marked, marked);
+    passed(&steps, &["packs-palette-latest"]);
+
+    // the rebuild is the newest for strata, and Palette marks its base: the order of strata
+    // differs from the order of Palette
+    let rebuild_first = r#"{"registries":[{"versions":[
+        {"version":"1.19.3-rev1","latest":true},
+        {"version":"1.19.3","latest":false,"paletteLatest":true}]}]}"#;
+    let steps = packs_newest(marked, rebuild_first);
+    failed(&steps, &["packs-palette-latest"]);
+    let steps = packs_newest(rebuild_first, marked);
+    failed(&steps, &["packs-palette-latest"]);
+
+    // Palette marks no version
+    let unmarked = r#"{"registries":[{"versions":[{"version":"1.19.3","latest":true}]}]}"#;
+    let steps = packs_newest(marked, unmarked);
+    failed(&steps, &["packs-palette-latest"]);
+}
+
 /// A run of packs.sh whose Helm summary listing gives the Bitnami registry the sync `sync`, and
 /// whose `strata behind` on the record of the newest nginx of Bitnami prints `line` and `json`.
 /// Gives steps.log.

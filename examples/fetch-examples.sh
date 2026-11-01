@@ -29,6 +29,15 @@ VERSIONS_PER_PACK=${VERSIONS_PER_PACK:-3}
 CLOUD=${CLOUD:-aws}
 INFRA="ubuntu-aws kubernetes cni-cilium-oss csi-aws-ebs"   # varied between profile versions
 
+# oldest_first: the versions on the standard input, one on each line, from the lowest to the highest.
+# Only a version of plain numbers counts, such as 1.30.6 or 22.04. A pre-release is below its
+# version, which a text order of the shell does not know, so the examples leave it out. Strata
+# orders the versions by the numbers first, in src/reference/version.rs.
+oldest_first() {
+  jq -R -s -r '[split("\n")[] | select(test("^[0-9]+(\\.[0-9]+){0,2}$"))] | unique
+    | sort_by(split(".") | map(tonumber)) | .[]'
+}
+
 die() { echo "fetch-examples: $*" >&2; exit 2; }
 log() { echo "fetch-examples: $*" >&2; }
 [ -n "$tool" ] && [ -x "$tool" ] || die "no strata binary found; run cargo build --release or set STRATA_BIN=<path>"
@@ -93,7 +102,7 @@ for d in "$out"/packs/*/; do
   [ -s "$d/_summaries.json" ] && [ -s "$d/_entity.json" ] || continue
   find "$d" -maxdepth 1 -name '*.json' ! -name '_*' -delete
   jq -r --arg c "$CLOUD" '.[] | select((.spec.cloudTypes // ["all"]) | index($c) or index("all")) | .spec.version' "$d/_summaries.json" \
-    | sort -V -u | tail -n "$VERSIONS_PER_PACK" \
+    | oldest_first | tail -n "$VERSIONS_PER_PACK" \
     | while IFS= read -r ver; do
         jq -n --arg v "$ver" --arg name "$name" \
            --slurpfile s "$d/_summaries.json" --slurpfile e "$d/_entity.json" '
@@ -142,7 +151,7 @@ done
 # Real pack content (values, digests, packUids) wrapped in the API shapes strata
 # reads: V1ClusterProfile, V1ClusterProfilePacksManifests, V1Variables. The pack ref digest is
 # set from the registry pack digest; on a real profile Palette stamps that field itself.
-versions_of() { ls "$out/packs/$1" 2>/dev/null | grep -v '^_' | sed 's/\.json$//' | sort -V; }
+versions_of() { ls "$out/packs/$1" 2>/dev/null | grep -v '^_' | sed 's/\.json$//' | oldest_first; }
 pick() { # name which(newest|older) -> path or empty
   local vs; vs=$(versions_of "$1"); [ -n "$vs" ] || return 0
   case $2 in
@@ -259,8 +268,8 @@ cluster_report aws-stack@1.1.1 workload-a
   echo "| pack | layer | version | tag | packUid | digest |"
   echo "|------|-------|---------|-----|---------|--------|"
   for d in "$out"/packs/*/; do
-    for f in $(ls "$d" | grep -v '^_' | sort -V); do
-      jq -r '"| \(.name) | \(.layer) | \(.version) | \(.tag) | `\(.packUid)` | `\(.digest | if . == "" then "-" else .[0:19] end)` |"' "$d/$f"
+    for v in $(ls "$d" | grep -v '^_' | sed 's/\.json$//' | oldest_first); do
+      jq -r '"| \(.name) | \(.layer) | \(.version) | \(.tag) | `\(.packUid)` | `\(.digest | if . == "" then "-" else .[0:19] end)` |"' "$d/$v.json"
     done
   done
   echo

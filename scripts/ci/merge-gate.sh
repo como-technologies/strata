@@ -34,7 +34,7 @@
 #
 # Exit 0 when the merge result is clear, 1 when the gate is red, and 2 when the script could not
 # run at all. A record that strata could not check is red, not 2: the gate fails closed.
-# Needs strata (or STRATA_BIN), git, jq, and sort -V. The target branch is --base, or the
+# Needs strata (or STRATA_BIN), git, and jq. The target branch is --base, or the
 # CI variable of the merge request: CI_MERGE_REQUEST_TARGET_BRANCH_NAME on GitLab, GITHUB_BASE_REF
 # on GitHub.
 set -euo pipefail
@@ -140,17 +140,15 @@ while IFS= read -r f; do
 done < <(records_matching)
 [ ${#files[@]} -gt 0 ] || die "no record in the merge result matches: ${patterns[*]}"
 
-# backwards DIFF: the pins that the merge result moves back, one line each
+# backwards DIFF: the pins that the merge result moves back, one line each. Strata orders the
+# versions as Palette does, and says the direction of each move in `versionMove`: a pre-release is
+# below its version, which no text order of the shell knows.
 backwards() {
-  jq -r '(["the profile", (.a.version // ""), (.b.version // "")] | @tsv),
-         (.packs[] | select(.status == "changed")
-          | [.key, (.a.version // ""), (.b.version // "")] | @tsv)' "$1" \
+  jq -r '(select(.versionMove == "back") | ["the profile", .a.version, .b.version] | @tsv),
+         (.packs[] | select(.status == "changed" and .versionMove == "back")
+          | [.key, .a.version, .b.version] | @tsv)' "$1" \
     | while IFS=$'\t' read -r key from to; do
-        [ -n "$from" ] && [ -n "$to" ] && [ "$from" != "$to" ] || continue
-        lower=$(printf '%s\n%s\n' "$from" "$to" | sort -V | sed -n 1p)
-        if [ "$lower" = "$to" ]; then
-          echo "$key: $base has $from, the merge result has $to"
-        fi
+        echo "$key: $base has $from, the merge result has $to"
       done || true
 }
 
