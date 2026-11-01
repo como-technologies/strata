@@ -36,6 +36,10 @@ use std::sync::RwLock;
 
 use serde_json::{Value, json};
 
+mod palette;
+
+pub use palette::*;
+
 // comment-only values, as the real ubuntu-aws pack ships: canonical form must be null
 const OS_VALUES: &str = "\n# Spectro Golden images include most of the hardening standards recommended by CIS benchmarking\n\n# Uncomment below section to\n# 1. Include custom files to be copied over to the nodes and/or\n# 2. Execute list of commands before or after kubeadm init/join is executed\n#\n# kubeadmconfig:\n#   preKubeadmCommands:\n#   - echo \"Executing pre kube admin config commands\"\n#   - update-ca-certificates";
 
@@ -67,57 +71,6 @@ const CERTMGR_VALUES: &str = "charts:\n  cert-manager:\n    installCRDs: true";
 const METRICS_A: &str = "charts:\n  metrics-server:\n    replicas: {{ .spectro.var.replicas }}\n    args:\n      - --kubelet-insecure-tls";
 
 const METRICS_B: &str = "charts:\n  metrics-server:\n    replicas: {{ .spectro.var.replicas }}\n    args:\n      - --kubelet-insecure-tls\n      - --metric-resolution=15s";
-
-/// A pack ref on the profile template (V1PackRef).
-fn pack_ref(
-    name: &str,
-    layer: &str,
-    tag: &str,
-    version: &str,
-    uid: &str,
-    digest: &str,
-    values: &str,
-) -> Value {
-    let mut v = json!({
-        "name": name, "layer": layer, "type": "spectro", "tag": tag, "version": version,
-        "packUid": uid, "registryUid": "reg-public", "values": values,
-        "manifests": [], "params": {}, "presets": [],
-    });
-    if !digest.is_empty() {
-        v["digest"] = json!(digest);
-    }
-    v
-}
-
-/// A pack entry from /packs/manifests (V1ClusterProfilePackManifests).
-fn pack_manifests(
-    name: &str,
-    layer: &str,
-    version: &str,
-    uid: &str,
-    digest: &str,
-    values: &str,
-    manifests: Vec<Value>,
-) -> Value {
-    json!({
-        "metadata": {"name": name, "uid": uid},
-        "spec": {"name": name, "layer": layer, "version": version, "digest": digest,
-                 "registryUid": "reg-public", "values": values, "manifests": manifests},
-        "status": {},
-    })
-}
-
-fn manifest(name: &str, uid: &str, digest: &str, content: &str) -> Value {
-    json!({"name": name, "uid": uid, "digest": digest, "content": content})
-}
-
-fn variable(name: &str, display: &str, default: &str, sensitive: bool) -> Value {
-    json!({
-        "name": name, "displayName": display, "defaultValue": default, "format": "string",
-        "inputType": "text", "required": true, "hidden": false, "immutable": false,
-        "isSensitive": sensitive, "options": [],
-    })
-}
 
 fn write_profile(
     dir: &Path,
@@ -302,141 +255,134 @@ pub fn rewrite(from: &Path, to: &Path, replacements: &[(&str, &str)]) {
 pub fn make_fixtures(root: &Path) {
     let packs_a = |k8s_values: &str| {
         vec![
-            pack_ref(
-                "ubuntu-aws",
-                "os",
-                "22.04",
-                "22.04",
-                "pk-os-2204",
-                "",
-                OS_VALUES,
-            ),
-            pack_ref(
+            PackFixture::public("ubuntu-aws", "os", "22.04", "pk-os-2204", "", OS_VALUES)
+                .pack_ref(&[]),
+            PackFixture::public(
                 "kubernetes",
                 "k8s",
-                "1.29.4",
                 "1.29.4",
                 "pk-k8s-1294",
                 "sha256:k8s1294",
                 k8s_values,
-            ),
-            pack_ref(
+            )
+            .pack_ref(&[]),
+            PackFixture::public(
                 "cni-cilium-oss",
                 "cni",
-                "1.15.3",
                 "1.15.3",
                 "pk-cni-1153",
                 "sha256:cni-aaaa",
                 CNI_VALUES,
-            ),
-            pack_ref(
+            )
+            .pack_ref(&[]),
+            PackFixture::public(
                 "csi-aws-ebs",
                 "csi",
-                "1.28.0",
                 "1.28.0",
                 "pk-csi-1280",
                 "sha256:csi-1280",
                 CSI_VALUES,
-            ),
-            pack_ref(
+            )
+            .pack_ref(&[]),
+            PackFixture::public(
                 "prometheus-operator",
                 "addon",
-                "55.8.3",
                 "55.8.3",
                 "pk-prom-5583",
                 "sha256:prom-5583",
                 PROM_VALUES,
-            ),
-            pack_ref(
+            )
+            .pack_ref(&[]),
+            PackFixture::public(
                 "external-dns",
                 "addon",
-                "0.14.0",
                 "0.14.0",
                 "pk-edns-0140",
                 "sha256:edns-0140",
                 EXTDNS_VALUES,
-            ),
-            pack_ref(
+            )
+            .pack_ref(&[]),
+            PackFixture::public(
                 "metrics-server",
                 "addon",
-                "0.7.0",
                 "0.7.0",
                 "pk-ms-070",
                 "sha256:ms-070",
                 METRICS_A,
-            ),
+            )
+            .pack_ref(&[]),
         ]
     };
     let manifests_a = |k8s_values: &str| {
         vec![
-            pack_manifests(
+            PackFixture::public(
                 "ubuntu-aws",
                 "os",
                 "22.04",
                 "pk-os-2204",
                 "sha256:os-2204-registry",
                 OS_VALUES,
-                vec![],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![]),
+            PackFixture::public(
                 "kubernetes",
                 "k8s",
                 "1.29.4",
                 "pk-k8s-1294",
                 "sha256:k8s1294",
                 k8s_values,
-                vec![],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![]),
+            PackFixture::public(
                 "cni-cilium-oss",
                 "cni",
                 "1.15.3",
                 "pk-cni-1153",
                 "sha256:cni-aaaa",
                 CNI_VALUES,
-                vec![],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![]),
+            PackFixture::public(
                 "csi-aws-ebs",
                 "csi",
                 "1.28.0",
                 "pk-csi-1280",
                 "sha256:csi-1280",
                 CSI_VALUES,
-                vec![],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![]),
+            PackFixture::public(
                 "prometheus-operator",
                 "addon",
                 "55.8.3",
                 "pk-prom-5583",
                 "sha256:prom-5583",
                 PROM_VALUES,
-                vec![manifest(
-                    "extra-rules",
-                    "m-rules-1",
-                    "sha256:rules-a",
-                    RULES_A,
-                )],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![manifest(
+                "extra-rules",
+                "m-rules-1",
+                "sha256:rules-a",
+                RULES_A,
+            )]),
+            PackFixture::public(
                 "external-dns",
                 "addon",
                 "0.14.0",
                 "pk-edns-0140",
                 "sha256:edns-0140",
                 EXTDNS_VALUES,
-                vec![],
-            ),
-            pack_manifests(
+            )
+            .pack_manifests(vec![]),
+            PackFixture::public(
                 "metrics-server",
                 "addon",
                 "0.7.0",
                 "pk-ms-070",
                 "sha256:ms-070",
                 METRICS_A,
-                vec![],
-            ),
+            )
+            .pack_manifests(vec![]),
         ]
     };
     let vars_a = json!({"variables": [
@@ -510,137 +456,129 @@ pub fn make_fixtures(root: &Path) {
     );
 
     let packs_b = vec![
-        pack_ref(
-            "ubuntu-aws",
-            "os",
-            "22.04",
-            "22.04",
-            "pk-os-2204",
-            "",
-            OS_VALUES,
-        ),
-        pack_ref(
+        PackFixture::public("ubuntu-aws", "os", "22.04", "pk-os-2204", "", OS_VALUES).pack_ref(&[]),
+        PackFixture::public(
             "kubernetes",
             "k8s",
-            "1.30.2",
             "1.30.2",
             "pk-k8s-1302",
             "sha256:k8s1302",
             K8S_VALUES_B,
-        ),
-        pack_ref(
+        )
+        .pack_ref(&[]),
+        PackFixture::public(
             "cni-cilium-oss",
             "cni",
-            "1.15.3",
             "1.15.3",
             "pk-cni-1153",
             "sha256:cni-bbbb",
             CNI_VALUES,
-        ),
-        pack_ref(
+        )
+        .pack_ref(&[]),
+        PackFixture::public(
             "csi-aws-ebs",
             "csi",
-            "1.28.0",
             "1.28.0",
             "pk-csi-1280",
             "sha256:csi-1280",
             CSI_VALUES,
-        ),
-        pack_ref(
+        )
+        .pack_ref(&[]),
+        PackFixture::public(
             "prometheus-operator",
             "addon",
-            "55.8.3",
             "55.8.3",
             "pk-prom-5583",
             "sha256:prom-5583",
             PROM_VALUES,
-        ),
-        pack_ref(
+        )
+        .pack_ref(&[]),
+        PackFixture::public(
             "cert-manager",
             "addon",
-            "1.14.0",
             "1.14.0",
             "pk-cm-1140",
             "sha256:cm-1140",
             CERTMGR_VALUES,
-        ),
-        pack_ref(
+        )
+        .pack_ref(&[]),
+        PackFixture::public(
             "metrics-server",
             "addon",
-            "0.7.0",
             "0.7.0",
             "pk-ms-070",
             "sha256:ms-070",
             METRICS_B,
-        ),
+        )
+        .pack_ref(&[]),
     ];
     let manifests_b = vec![
-        pack_manifests(
+        PackFixture::public(
             "ubuntu-aws",
             "os",
             "22.04",
             "pk-os-2204",
             "sha256:os-2204-registry",
             OS_VALUES,
-            vec![],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![]),
+        PackFixture::public(
             "kubernetes",
             "k8s",
             "1.30.2",
             "pk-k8s-1302",
             "sha256:k8s1302",
             K8S_VALUES_B,
-            vec![],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![]),
+        PackFixture::public(
             "cni-cilium-oss",
             "cni",
             "1.15.3",
             "pk-cni-1153",
             "sha256:cni-bbbb",
             CNI_VALUES,
-            vec![],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![]),
+        PackFixture::public(
             "csi-aws-ebs",
             "csi",
             "1.28.0",
             "pk-csi-1280",
             "sha256:csi-1280",
             CSI_VALUES,
-            vec![],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![]),
+        PackFixture::public(
             "prometheus-operator",
             "addon",
             "55.8.3",
             "pk-prom-5583",
             "sha256:prom-5583",
             PROM_VALUES,
-            vec![
-                manifest("extra-rules", "m-rules-2", "sha256:rules-b", RULES_B),
-                manifest("dashboards", "m-dash-1", "sha256:dash-b", DASH_B),
-            ],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![
+            manifest("extra-rules", "m-rules-2", "sha256:rules-b", RULES_B),
+            manifest("dashboards", "m-dash-1", "sha256:dash-b", DASH_B),
+        ]),
+        PackFixture::public(
             "cert-manager",
             "addon",
             "1.14.0",
             "pk-cm-1140",
             "sha256:cm-1140",
             CERTMGR_VALUES,
-            vec![],
-        ),
-        pack_manifests(
+        )
+        .pack_manifests(vec![]),
+        PackFixture::public(
             "metrics-server",
             "addon",
             "0.7.0",
             "pk-ms-070",
             "sha256:ms-070",
             METRICS_B,
-            vec![],
-        ),
+        )
+        .pack_manifests(vec![]),
     ];
     let vars_b = json!({"variables": [
         variable("cluster_env", "Environment", "staging", false),
@@ -661,24 +599,28 @@ pub fn make_fixtures(root: &Path) {
         &root.join("addons"),
         UID_ADDONS,
         "2.0.0",
-        vec![pack_ref(
-            "nginx-ingress",
-            "addon",
-            "4.10.0",
-            "4.10.0",
-            "pk-ngx-4100",
-            "sha256:ngx-4100",
-            "charts:\n  ingress-nginx:\n    controller:\n      replicaCount: 2",
-        )],
-        vec![pack_manifests(
-            "nginx-ingress",
-            "addon",
-            "4.10.0",
-            "pk-ngx-4100",
-            "sha256:ngx-4100",
-            "charts:\n  ingress-nginx:\n    controller:\n      replicaCount: 2",
-            vec![],
-        )],
+        vec![
+            PackFixture::public(
+                "nginx-ingress",
+                "addon",
+                "4.10.0",
+                "pk-ngx-4100",
+                "sha256:ngx-4100",
+                "charts:\n  ingress-nginx:\n    controller:\n      replicaCount: 2",
+            )
+            .pack_ref(&[]),
+        ],
+        vec![
+            PackFixture::public(
+                "nginx-ingress",
+                "addon",
+                "4.10.0",
+                "pk-ngx-4100",
+                "sha256:ngx-4100",
+                "charts:\n  ingress-nginx:\n    controller:\n      replicaCount: 2",
+            )
+            .pack_manifests(vec![]),
+        ],
         json!({"variables": [variable("ingress_class", "Ingress class", "nginx", false)]}),
         vec![],
     );
@@ -989,205 +931,6 @@ pub fn candidate_snapshot(
     )
 }
 
-// ---- the routes of Palette ---------------------------------------------------------------------
-//
-// The crate names each route in a const of its own that is not public. So the tests name the
-// route again here, in one place.
-//
-// The route helpers write the route that Palette serves, on purpose. They do not call
-// `strata::api::subject_path` or another function of `strata::api` that builds a route. A test
-// that builds its routes with the code under test cannot see a change of a route. A test of a
-// shipped script or of a stand-in server needs the same route text as the script.
-
-/// The profile listing, `GET /v1/dashboard/clusterprofiles/metadata`.
-pub const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
-
-/// The profile search, `POST /v1/dashboard/clusterprofiles?limit=50`.
-pub const PROFILE_SEARCH: &str = "/v1/dashboard/clusterprofiles?limit=50";
-
-/// The cluster listing, `GET /v1/dashboard/spectroclusters/meta`.
-pub const CLUSTER_LISTING: &str = "/v1/dashboard/spectroclusters/meta";
-
-/// The project listing, `GET /v1/dashboard/projects/metadata`.
-pub const PROJECT_LISTING: &str = "/v1/dashboard/projects/metadata";
-
-/// The cluster search, `POST /v1/dashboard/spectroclusters/search?limit=50`.
-pub const CLUSTER_SEARCH: &str = "/v1/dashboard/spectroclusters/search?limit=50";
-
-/// The schema of the cluster search: the properties that a search can filter on.
-pub const CLUSTER_SEARCH_SCHEMA: &str = "/v1/dashboard/spectroclusters/search/schema";
-
-/// The edge host search, `POST /v1/dashboard/edgehosts/search?limit=50`.
-pub const EDGE_HOST_SEARCH: &str = "/v1/dashboard/edgehosts/search?limit=50";
-
-/// The key of a POST to `route` in the in-memory Palette, for one answer to each body.
-pub fn post(route: &str) -> String {
-    format!("POST {route}")
-}
-
-/// The document of the profile version `uid`, `GET /v1/clusterprofiles/{uid}`.
-pub fn profile_route(uid: &str) -> String {
-    format!("/v1/clusterprofiles/{uid}")
-}
-
-/// The pack manifests of the profile version `uid`.
-pub fn manifests_route(uid: &str) -> String {
-    format!("/v1/clusterprofiles/{uid}/packs/manifests")
-}
-
-/// The variables of the profile version `uid`.
-pub fn variables_route(uid: &str) -> String {
-    format!("/v1/clusterprofiles/{uid}/variables")
-}
-
-/// The value of each macro of the profile version `uid`, as Palette resolves it.
-pub fn resolved_values_route(uid: &str) -> String {
-    format!("/v1/clusterprofiles/{uid}/packs/resolvedValues")
-}
-
-/// The value of each macro of the cluster `uid`, as Palette resolves it.
-pub fn cluster_resolved_values_route(uid: &str) -> String {
-    format!("{}/packs/resolvedValues", cluster_route(uid))
-}
-
-/// The value of each macro of the cluster group `uid`, as Palette resolves it.
-pub fn group_resolved_values_route(uid: &str) -> String {
-    format!("{}/packs/resolvedValues", group_route(uid))
-}
-
-/// The document of the cluster `uid`, `GET /v1/spectroclusters/{uid}`.
-pub fn cluster_route(uid: &str) -> String {
-    format!("/v1/spectroclusters/{uid}")
-}
-
-/// The document of the pack `uid`, `GET /v1/packs/{uid}`: its values and the schema of its values.
-pub fn pack_route(uid: &str) -> String {
-    format!("/v1/packs/{uid}")
-}
-
-/// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`.
-pub fn group_route(uid: &str) -> String {
-    format!("/v1/clustergroups/{uid}")
-}
-
-/// The document of the app profile `uid`, `GET /v1/appProfiles/{uid}`.
-pub fn app_profile_route(uid: &str) -> String {
-    format!("/v1/appProfiles/{uid}")
-}
-
-/// The document of the edge host `uid`, `GET /v1/edgehosts/{uid}`.
-pub fn edge_host_route(uid: &str) -> String {
-    format!("/v1/edgehosts/{uid}")
-}
-
-/// The pack manifests of each profile of the cluster `uid`.
-pub fn cluster_manifests_route(uid: &str) -> String {
-    format!("/v1/spectroclusters/{uid}/profiles/packs/manifests")
-}
-
-/// The variables of the cluster `uid`.
-pub fn cluster_variables_route(uid: &str) -> String {
-    format!("/v1/spectroclusters/{uid}/variables")
-}
-
-/// The pack listing of the pack `name`, as strata asks for its first page.
-pub fn pack_listing_route(name: &str) -> String {
-    format!("/v1/packs?filters=spec.name={name}&limit=100&offset=0")
-}
-
-/// The pack `name` in the registry `registry`, `GET /v1/packs/{name}/registries/{registry}`: its
-/// tags.
-pub fn pack_entity_route(name: &str, registry: &str) -> String {
-    format!("/v1/packs/{name}/registries/{registry}")
-}
-
-/// The registry listing, `GET /v1/registries/metadata`.
-pub const REGISTRY_LISTING: &str = "/v1/registries/metadata";
-
-/// The summary of the OCI registries, `GET /v1/registries/oci/summary`.
-pub const OCI_REGISTRY_SUMMARY: &str = "/v1/registries/oci/summary";
-
-/// Serve the pack listing of the pack `name`: the pack summaries `items`, an array, and their count.
-pub fn serve_pack_listing(
-    api: strata::api::MemoryApi,
-    name: &str,
-    items: Value,
-) -> strata::api::MemoryApi {
-    let count = items.as_array().map_or(0, Vec::len);
-    api.with(
-        pack_listing_route(name),
-        json!({"items": items, "listmeta": {"count": count}}),
-    )
-}
-
-/// The registry endpoints strata reads for one pack, as the examples cached them from a live
-/// tenant: the version listing filtered by name, and the pack entity with its tags.
-pub fn serve_registry_pack(
-    api: strata::api::MemoryApi,
-    name: &str,
-    summaries: Value,
-    entity: Value,
-    registry: &str,
-) -> strata::api::MemoryApi {
-    serve_pack_listing(api, name, summaries).with(pack_entity_route(name, registry), entity)
-}
-
-/// One manifest `manifest` of the pack `pack` of the profile version `uid`, with the content of
-/// each template.
-pub fn manifest_route(uid: &str, pack: &str, manifest: &str) -> String {
-    format!("/v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifest}")
-}
-
-// ---- the profile documents ---------------------------------------------------------------------
-
-/// A template of a profile version: the cloud type, the type of the profile, and its packs.
-pub fn template(cloud: &str, kind: &str, packs: Value) -> Value {
-    json!({"cloudType": cloud, "type": kind, "packs": packs})
-}
-
-/// A template with no pack: the published template of a version that nobody published, or the
-/// draft of a version with no draft.
-pub fn no_template() -> Value {
-    json!({"packs": []})
-}
-
-/// The document of the profile version `uid`, as `GET /v1/clusterprofiles/{uid}` gives it.
-///
-/// `published` and `draft` are its two templates. `status.isPublished` is true when the published
-/// template has a pack. With `draft` None, the document has no draft template at all.
-pub fn profile_document(
-    uid: &str,
-    name: &str,
-    version: &str,
-    published: Value,
-    draft: Option<Value>,
-) -> Value {
-    let is_published = published["packs"].as_array().is_some_and(|p| !p.is_empty());
-    let mut doc = json!({
-        "metadata": {"name": name, "uid": uid},
-        "spec": {"version": version, "published": published},
-        "status": {"isPublished": is_published, "inUseClusterUids": []},
-    });
-    if let Some(draft) = draft {
-        doc["spec"]["draft"] = draft;
-    }
-    doc
-}
-
-/// Serve the three documents of the profile version `uid`: its document, its pack manifests,
-/// and its variables.
-pub fn serve_profile(
-    api: strata::api::MemoryApi,
-    uid: &str,
-    document: Value,
-    manifests: Value,
-    variables: Value,
-) -> strata::api::MemoryApi {
-    api.with(profile_route(uid), document)
-        .with(manifests_route(uid), manifests)
-        .with(variables_route(uid), variables)
-}
-
 /// Serve the raw files of the profile fixture `name` under `raw_root` as the version `uid`.
 pub fn serve_fixture(
     api: strata::api::MemoryApi,
@@ -1203,16 +946,6 @@ pub fn serve_fixture(
         read_json(&d.join("manifests.json")),
         read_json(&d.join("variables.json")),
     )
-}
-
-/// The answer of `packs/manifests` for a version whose packs have no manifest.
-pub fn no_manifests() -> Value {
-    json!({"spec": {"packs": []}})
-}
-
-/// The answer of `variables` for a version with no variable.
-pub fn no_variables() -> Value {
-    json!({"variables": []})
 }
 
 /// The digest that Palette gives a manifest content, as the tests make one: none for no content.

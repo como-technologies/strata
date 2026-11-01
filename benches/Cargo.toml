@@ -1,0 +1,62 @@
+[package]
+name = "strata-benches"
+version = "0.1.0"
+edition = "2024"
+# The same floor as strata: the msrv job builds the benchmarks too.
+rust-version = "1.88"
+description = "Benchmarks for strata: the snapshot, the comparison, the renderers, verify, consumers, the resolve of a candidate, and strata-preflight, at the size that Palette permits"
+publish = false
+# The benchmarks are the targets below, and they have no harness of cargo: criterion has its own.
+autobenches = false
+
+[lib]
+name = "strata_benches"
+path = "src/lib.rs"
+# The library holds the generator only. `cargo bench` gives its flags to the criterion targets, and a
+# harness of cargo for the library refuses them.
+bench = false
+
+[[bench]]
+name = "record"
+path = "record.rs"
+harness = false
+
+[[bench]]
+name = "compare"
+path = "compare.rs"
+harness = false
+
+[[bench]]
+name = "render"
+path = "render.rs"
+harness = false
+
+[[bench]]
+name = "fleet"
+path = "fleet.rs"
+harness = false
+
+[[bench]]
+name = "resolve"
+path = "resolve.rs"
+harness = false
+
+[[bench]]
+name = "preflight"
+path = "preflight.rs"
+harness = false
+
+[dependencies]
+# The code under measurement, and the generator of its input, are in the same repository.
+strata = { path = ".." }
+strata-preflight = { path = "../preflight" }
+serde_json = "1"
+tempfile = "3"
+
+[dev-dependencies]
+# No plotters and no rayon: the benchmarks print their times, and nothing draws a report.
+criterion = { version = "0.8", default-features = false, features = ["cargo_bench_support"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"

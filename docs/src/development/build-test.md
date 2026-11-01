@@ -9,6 +9,7 @@ just examples          # examples/ from the tracked registry data
 just docs-check        # docs/src/output/ is the output of this build
 just docs-lint         # each link of the book resolves
 just docs              # the book builds, and mdbook prints no warning
+just bench             # the benchmarks of benches/, with the time of each
 ```
 
 `just --list` shows each recipe.
@@ -56,7 +57,8 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/content/` | The content that the hashes read. `canon.rs` holds the canonical form, and `layer.rs` the layers of Palette. `hash.rs` holds the content digest and the root of a record. |
 | `src/reference/` | What a ref means. `version.rs` holds the version order. |
 | `xtask/` | The development tools. `palette.rs` is the stand-in for the Palette API. `tenant/` builds the tenant of each chapter of the book, with one file for each kind of object. `chapters/` holds the chapters, with one file for each group of pages. `book.rs` is the runner that writes `docs/src/output/`. `checks.rs` holds the rules that the pages must keep, and `files.rs` holds the scans of a directory. `size.rs` holds the tests of the size limits of [Write the code](./code.md#the-size-of-a-module), for `xtask` and for `src/`. |
-| `tests/` | The tests of the crate, in one crate: `main.rs` names each file as a module, and `common/mod.rs` holds each helper that two files use. `cargo test verify::` runs the tests of `verify.rs`. |
+| `tests/` | The tests of the crate, in one crate: `main.rs` names each file as a module, and `common/mod.rs` holds each helper that two files use. `common/palette.rs` names the routes of Palette and builds the documents of a profile: the pack ref, the pack manifests, and the variables. The generator of `benches/` includes that file too, so the routes and the documents have one source. `cargo test verify::` runs the tests of `verify.rs`. |
+| `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
 | `preflight/` | `strata-preflight`, a package of its own in the workspace: see [How preflight works](../internals/preflight.md). `rule/` holds the rule format: `mod.rs` holds the rule and the catalog, `check.rs` the four kinds of check, and `validate.rs` the checks of the loader. `catalog.rs` and `rules/*.yaml` hold the catalog, and `jq.rs` holds the jq engine. `world/` holds the world. `probe/` holds the checks: `mod.rs` runs a check, `backend.rs` holds the backends, `palette.rs` and `exec.rs` run a check of Palette and of a command, and `outcome.rs` holds the answer. `run/` holds the run: `mod.rs` holds the run, `watch.rs` the watch, `verbose.rs` the lines of `--verbose`, and `rules.rs` the listing of the rules. `confidence.rs` and `evidence/runs.yaml` hold the confidence and the ledger, and `fixture.rs` and `rules/fixtures/` the fixtures of the tests. `report/` holds the report, and `html.rs` the page. In `report/`, `mod.rs` holds the document, `scorecard.rs` the counts, `label.rs` the word, the color, and the class of a label, `terminal.rs` and `markdown.rs` the text forms, and `reproduce.rs` the lines to run by hand. `tests/closed_set.rs` of the package makes sure that each closed set of the rule format gives the text that serde writes. |
 
@@ -97,10 +99,12 @@ command directly. `cargo xtask` with no command prints its usage and exits `2`. 
 
 ## The tests
 
-`just test` runs three commands, one after the other: `cargo test`,
-`cargo test -p strata-preflight`, and `cargo test -p xtask`. The workspace builds
-only the root package by default. So `cargo test` alone does not run the tests of
-`xtask`, which hold the routes of the stand-in for Palette. When one test fails,
+`just test` runs four commands, one after the other: `cargo test`,
+`cargo test -p strata-preflight`, `cargo test -p xtask`, and
+`cargo test -p strata-benches`. The workspace builds only the root package by
+default. So `cargo test` alone does not run the tests of `xtask`, which hold the
+routes of the stand-in for Palette, and it does not run the tests of the
+generator of the benchmarks. When one test fails,
 `just test` stops and exits with a code that is not zero. CI runs `just test`, so
 CI runs the tests of the stand-in with the others.
 
@@ -149,6 +153,100 @@ One test measures itself, because a fuzz test that stops reaching the code it
 fuzzes still passes. `a_profile_of_junk_gives_a_record_that_round_trips`
 fails when 50 or fewer of its 2000 cases build a record.
 
+## The benchmarks
+
+`benches/` is the package `strata-benches`. Its benchmarks measure the time of the steps on the main
+path of strata. The input has the size that Palette permits: 200 packs and 200 manifests in one
+profile, and a fleet of up to 1000 clusters. The benchmarks measure time. They do not measure memory.
+
+A benchmark is not a test. `just test` does not run it, and no check fails on a time.
+
+```bash
+just bench                       # each benchmark, with the default measure time of criterion
+just bench canon_root/build/200  # the benchmarks whose name holds the text
+just bench-short                 # a short measure time: the command of the CI job
+```
+
+`just bench` prints one block for each benchmark. The line `time:` gives three values for the time of
+one run: the lowest estimate, the best estimate, and the highest estimate. The best estimate is the
+one to read.
+
+### What each benchmark measures
+
+| File | Benchmark | What it measures |
+| --- | --- | --- |
+| `benches/record.rs` | `canon_root/build/1_packs`, `50_packs`, `200_packs` | The record of a profile of that many packs with no manifest, from the responses of Palette: the canonical form of the values of each pack, the hashes, and the root. |
+| `benches/record.rs` | `canon_root/content_digest/200_packs` | The content digest of a record of 200 packs. |
+| `benches/record.rs` | `snapshot/from_raw/200_packs_200_manifests` | The record of the largest profile that Palette takes, from the responses of Palette. |
+| `benches/compare.rs` | `compare/identical`, `compare/one_change`, `compare/every_pack` | The comparison of two records of 200 packs and 200 manifests. The records are the same, or one pack moves to the next version, or each pack moves and each manifest changes. |
+| `benches/render.rs` | `render/terminal/summary`, `render/terminal/full`, and the same for `markdown` and `json` | Each renderer on the comparison with a change in each pack, without `--full` and with it. The JSON renderer writes the same document in both cases. |
+| `benches/fleet.rs` | `verify/1_clusters`, `100_clusters`, `1000_clusters` | `strata verify` of one record for each cluster, against an in-memory Palette. The time includes the read of each record file. |
+| `benches/fleet.rs` | `consumers/1_clusters`, `100_clusters`, `1000_clusters` | `strata consumers` of a profile version that each cluster of the fleet runs. |
+| `benches/resolve.rs` | `resolve/load/200_layers` | The read and the check of a candidate file of 200 layers. |
+| `benches/resolve.rs` | `resolve/resolve/200_layers` | The resolve of those layers against the registry. |
+| `benches/preflight.rs` | `preflight/full_catalog` | The jq engine of `strata-preflight` over the full catalog, for the entity of one create. The run has no Palette and no cloud, so a rule of another tier than `static` is not run. |
+
+### The input
+
+The generator is the library in `benches/src/`. It reads the real packs in `examples/packs/` and
+tracks no large file of its own. It makes the same input on each run.
+
+- A profile takes the five real packs in turn: the OS, Kubernetes, the network, the storage, and an
+  add-on. After five packs, it takes the next version of each pack. So the values have the sizes and
+  the shapes of real values.
+- A manifest is a config map of 40 keys. The first packs of a profile hold the manifests.
+- A change moves a pack to the next version of the same pack, with the values, the digest, and the
+  uid of that version.
+- A cluster of the verify fleet runs the OS, Kubernetes, and storage packs. A cluster of the
+  consumer fleet states the profile that it runs, and no pack.
+- Palette is `MemoryApi`. No benchmark uses the network.
+- `tests/common/palette.rs` names the routes. The tests use the same file.
+
+Each benchmark checks its input before it measures. A change of strata that makes the input fail
+stops the benchmark with a panic, and not with the time of an error path.
+
+### The times on the CI runner
+
+The job `benchmarks` of CI runs `just bench-short` on a runner of GitHub, and prints the times in its
+log. The runner is a shared machine, and the speed of one runner differs from the speed of another.
+So the table gives a range: the lowest and the highest best estimate of three runs of the job,
+rounded to two digits. The input is the profile of the size that Palette permits.
+
+| Step | Input | Time |
+| --- | --- | --- |
+| The record, with the canonical form and the root | 1 pack | 32 to 60 µs |
+| The record, with the canonical form and the root | 50 packs | 29 to 49 ms |
+| The record, with the canonical form and the root | 200 packs | 120 to 200 ms |
+| The record, with 200 manifests | 200 packs | 130 to 220 ms |
+| The comparison of two records | no change | 85 to 130 ms |
+| The comparison of two records | one pack changes | 87 to 130 ms |
+| The comparison of two records | each pack changes | 170 to 260 ms |
+
+The time of a record grows with the size of the values, because strata parses and hashes each text.
+The time of a comparison grows with the number of packs that differ. Use the table to see the order
+of magnitude. To see a change of the code, use [a comparison of two commits](#compare-two-commits)
+on one machine.
+
+When a benchmark is slow, criterion warns that it cannot complete 10 samples in the measure time. The
+warning is not an error. The job fails only when a benchmark does not build or panics.
+
+### Compare two commits
+
+criterion keeps the results of a run in `target/criterion/`, under the name of a baseline. Save a
+baseline at the first commit. Then run the benchmarks at the second commit against that baseline:
+
+```bash
+git switch --detach <first commit>
+just bench --save-baseline first
+git switch --detach <second commit>
+just bench --baseline first
+```
+
+For each benchmark, criterion prints the change of the time, and says if the change is significant.
+Do not run `cargo clean` between the two runs, because it removes the baseline. Run both on one
+machine, with no other heavy work. The time of one machine does not compare with the time of
+another machine. To save time, add `--warm-up-time 1 --measurement-time 3` to both commands.
+
 ## Continuous integration
 
 `.github/workflows/checks.yml` holds every check. The `ci` workflow runs it on each push to
@@ -160,6 +258,7 @@ fails when 50 or fewer of its 2000 cases build a record.
 | docs | `just docs-check`, `just docs-lint`, and `just docs`, which fails when mdbook prints a warning |
 | build | the Linux musl binary, with the step that a release uses |
 | the lowest Rust version | `cargo check --workspace --all-targets` with the `rust-version` of `Cargo.toml`, so the number a reader trusts is the number CI builds with |
+| benchmarks | `just bench-short`: each benchmark of [The benchmarks](#the-benchmarks), with a short measure time |
 
 CI does not run `just adapter-test`. The adapter needs knurl, a private
 repository, and CI has no key for it: see
