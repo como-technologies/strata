@@ -37,14 +37,18 @@ test: stand-in
     cargo test -p xtask
 
 # The rustdoc command of `just lint` and `just api-docs`. The two recipes share one command, so
-# that they share one build. `just lint` adds the package xtask.
+# that they share one build. `just lint` adds the package xtask, and runs the command a second
+# time with all items. The build of the public items does not read the comment of a private item.
+# The build of all items does not warn when a public item links to a private item. So `just lint`
+# needs both.
 rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight'
 
-# Test the format, the clippy lints, and the rustdoc
+# Test the format, the clippy lints, and the rustdoc of the public items and of all items
 lint:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
     {{rustdoc}} -p xtask
+    {{rustdoc}} -p xtask --document-private-items
 
 # Build and run examples/library and examples/library-preflight, crates that use strata and strata-preflight as libraries
 library-example:
@@ -83,15 +87,17 @@ examples-fetch: build
 # The book is docs/src/. It needs mdbook, mdbook-mermaid, and mdbook-gruvbox. docs/book/ is the
 # output, and it is not tracked.
 
-# Build the book into docs/book/
+# mdbook exits with code 0 on a warning, so the script reads its log and fails on a WARN line.
+
+# Build the book into docs/book/, and fail when mdbook prints a warning
 docs:
-    mdbook build docs
+    scripts/dev/build-book.sh docs
 
 # Build the book and serve it at http://localhost:3000 with live reload
 docs-serve:
     mdbook serve docs --open
 
-# The command is that of `just lint`. Add --open to open the pages.
+# The command is that of `just lint`, with the public items only. Add --open to open the pages.
 
 # Build the rustdoc of strata and strata-preflight into target/doc/, and print the path of the HTML
 api-docs *args:

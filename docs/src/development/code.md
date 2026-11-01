@@ -123,7 +123,11 @@ ASD-STE100.
 - A main entry point of the library has an `# Examples` section. The example
   runs as a test.
 - Link each type, function, and module that a comment names, as
-  `` [`Snapshot`] ``. `just lint` refuses a broken link.
+  `` [`Snapshot`] ``. `just lint` refuses a broken link, also in the comment of
+  a private item.
+- Write a code span on one line. Rustdoc reads a code span that breaks over a
+  line as two halves. Then a placeholder such as `<status>` is an HTML tag, and
+  `just lint` fails.
 - An inline comment says why, not what. Write one above an algorithm, with its
   steps or the rule that it keeps. Write one at a constant, a fact of Palette,
   or a workaround. Do not write a comment that says again what the code says.
@@ -140,7 +144,7 @@ ASD-STE100.
 ## Before the review
 
 ```bash
-just lint && just test     # fmt, clippy -D warnings, rustdoc -D warnings, and the tests
+just lint && just test     # fmt, clippy -D warnings, rustdoc -D warnings of all items, and the tests
 ```
 
 Then read the diff against each section of this page, and against

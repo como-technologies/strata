@@ -825,6 +825,32 @@ pub fn repo_file(path: &str) -> String {
         .unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
+/// The command lines of the recipe `name` of the justfile, trimmed. A `{{variable}}` that the
+/// justfile sets to a string in single quotes, such as `rustdoc`, is replaced with its value.
+pub fn recipe(name: &str) -> Vec<String> {
+    let justfile = repo_file("justfile");
+    let variables: Vec<(String, &str)> = justfile
+        .lines()
+        .filter_map(|line| {
+            let (key, value) = line.split_once(" := '")?;
+            Some((format!("{{{{{key}}}}}"), value.strip_suffix('\'')?))
+        })
+        .collect();
+    justfile
+        .lines()
+        .skip_while(|line| !line.starts_with(&format!("{name}:")))
+        .skip(1)
+        .take_while(|line| line.starts_with(' '))
+        .map(|line| {
+            variables
+                .iter()
+                .fold(line.trim().to_string(), |line, (key, value)| {
+                    line.replace(key, value)
+                })
+        })
+        .collect()
+}
+
 /// The text of the workflow `file` of `.github/workflows/`.
 pub fn workflow_text(file: &str) -> String {
     repo_file(&format!(".github/workflows/{file}"))
