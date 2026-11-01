@@ -1,7 +1,8 @@
-//! Confidence is a count of runs, never an estimate. For each rule, per engine and Palette
-//! release, the ledger holds the runs that made the fault on purpose and the runs of a clean
-//! build, and what the check answered in each. From the counts come two rates and their 95%
-//! lower bounds (Clopper-Pearson, one side):
+//! Confidence is a count of runs, never an estimate.
+//!
+//! For each rule, per engine and Palette release, the ledger holds the runs that made the fault on
+//! purpose and the runs of a clean build, and what the check answered in each. From the counts
+//! come two rates and their 95% lower bounds (Clopper-Pearson, one side):
 //!
 //! - **catch rate**: of the runs that made the fault, the runs in which the check found it;
 //! - **clean-pass rate**: of the runs of a clean build, the runs in which the check passed.
@@ -85,6 +86,11 @@ fn ledger_schema() -> String {
 
 impl Ledger {
     /// Parse a ledger.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Ledger`] when `text` is not a ledger, or its schema is not the schema that this
+    /// tool reads. `path` names the file in the message.
     pub fn parse(text: &str, path: &Path) -> Result<Ledger> {
         let ledger: Ledger = serde_yaml::from_str(text).map_err(|e| Error::Ledger {
             path: path.to_path_buf(),
@@ -103,6 +109,10 @@ impl Ledger {
     }
 
     /// Read a ledger file.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] when strata-preflight cannot read the file. The errors of [`Ledger::parse`].
     pub fn load(path: &Path) -> Result<Ledger> {
         let text = std::fs::read_to_string(path).map_err(|e| crate::error::io(path, e))?;
         Self::parse(&text, path)

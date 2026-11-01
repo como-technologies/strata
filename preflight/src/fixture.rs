@@ -1,6 +1,7 @@
-//! A fixture: a world document with the answers of Palette and of each command written in, for
-//! the tests of the catalog. A fixture is a file. It can stand on its own, or say `_base` and
-//! hold only what differs from the base:
+//! A fixture: a world document with the answers of Palette and of each command written in.
+//!
+//! The tests of the catalog use it. A fixture is a file. It can stand on its own, or say `_base`
+//! and hold only what differs from the base:
 //!
 //! ```json
 //! { "_base": "clean.json",
@@ -22,6 +23,11 @@ use crate::error::{Error, Result};
 
 /// Read a fixture, with its bases applied. The fixture gets the fields that the engine decides,
 /// as [`crate::world::World::to_value`] gives them to a world of a run.
+///
+/// # Errors
+///
+/// [`Error::Io`] when strata-preflight cannot read a fixture or a base. [`Error::Input`] when a
+/// fixture is not JSON, or when its chain of `_base` is longer than 8.
 pub fn load(path: &Path) -> Result<Value> {
     let mut doc = load_depth(path, 0)?;
     crate::world::add_derived_fields(&mut doc);

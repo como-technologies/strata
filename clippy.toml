@@ -1,0 +1,5 @@
+# The names that a doc comment uses and that are no code item. `clippy::doc_markdown` takes a name
+# with two capital letters for a code item and wants backticks. A backtick shows in the `--help`
+# text, which clap reads from a doc comment, so these names stay as plain text. The ".." keeps the
+# names that clippy knows.
+doc-valid-idents = ["OpenTofu", "OpenStack", "CloudStack", "NO_COLOR", "CLICOLOR_FORCE", ".."]

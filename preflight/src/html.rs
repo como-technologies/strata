@@ -1,6 +1,8 @@
-//! The HTML form of the report: one page, no script and no external file, with the readiness of
-//! each section as a bar, each result with its messages and its reproduce lines, and the
-//! confidence of each rule. A person opens it from the run directory, or a job attaches it.
+//! The HTML form of the report: one page, with no script and no external file.
+//!
+//! The page shows the readiness of each section as a bar, each result with its messages and its
+//! reproduce lines, and the confidence of each rule. A person opens it from the run directory, or
+//! a job attaches it.
 
 use strata::closed_set::ClosedSet;
 

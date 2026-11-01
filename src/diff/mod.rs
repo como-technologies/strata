@@ -1,6 +1,7 @@
-//! The diff document (schema strata-diff/1): two snapshots compared. Self-describing on
-//! purpose: every enum is spelled out, a legend explains the flags and impact levels, and a summary
-//! block answers the common questions without walking the packs.
+//! The diff document (schema strata-diff/1): two snapshots compared.
+//!
+//! The document describes itself. Every enum is spelled out, a legend explains the flags and the
+//! impact levels, and a summary block answers the common questions without a walk of the packs.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -309,9 +310,10 @@ impl ImageIdChange {
     }
 }
 
-/// Each pack on both sides whose `imageId` differs, in the pack order of A. Strata does not
-/// compare a side with no `imageId`. A record written before the annotations holds none, and a
-/// pack with none leaves the choice of the image to Palette.
+/// Each pack on both sides whose `imageId` differs, in the pack order of A.
+///
+/// Strata does not compare a side with no `imageId`. A record written before the annotations holds
+/// none, and a pack with none leaves the choice of the image to Palette.
 pub fn image_ids_changed(a: &Snapshot, b: &Snapshot) -> Vec<ImageIdChange> {
     let images: BTreeMap<&str, &str> = b
         .packs

@@ -107,6 +107,7 @@ fn name_keys(items: &[Value]) -> Option<Vec<String>> {
 
 type Leaves = BTreeMap<String, (Vec<Segment>, Value)>;
 
+/// Put each leaf of `v` in `out`, by its rendered path. `path` holds the segments down to `v`.
 fn flatten(v: &Value, path: &mut Vec<Segment>, out: &mut Leaves) {
     match v {
         Value::Object(m) if !m.is_empty() => {
@@ -150,6 +151,18 @@ pub(crate) fn paths_of_text(v: &Value, text: &str) -> Vec<String> {
 }
 
 /// Every scalar or empty container that differs between two JSON documents, sorted by path.
+///
+/// The steps:
+///
+/// 1. Flatten each document to its leaves, one entry for each path. A scalar and an empty object
+///    or list are leaves. A list of objects that all have a unique `name` is addressed by name.
+///    Any other list is addressed by index.
+/// 2. Pair the leaves of `a` and `b` by path.
+/// 3. A path on both sides with different values is `Changed`. A path on one side is `Removed` (A)
+///    or `Added` (B). A path with equal values is no leaf.
+///
+/// The name address is the rule that matters. An item inserted in a list of named items is one
+/// `Added` leaf. The items after it do not shift, and they do not show as changed.
 pub fn leaf_diff(a: &Value, b: &Value) -> Vec<Leaf> {
     let (mut la, mut lb) = (Leaves::new(), Leaves::new());
     flatten(a, &mut Vec::new(), &mut la);

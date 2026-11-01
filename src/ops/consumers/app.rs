@@ -12,12 +12,24 @@ use crate::json::{arr, text};
 use crate::profile_type::ProfileType;
 use crate::term::progress::Progress;
 
-/// The app deployments that use an app profile version: `status.inUseApps` of
-/// `GET /v1/appProfiles/{uid}`, each read with `GET /v1/appDeployments/{uid}` in its own project
-/// for its state and the version its copy names. Palette refuses the delete of an app profile
-/// while a deployment uses it, as it does for a cluster profile. `id` is a uid, or a name when
-/// `version` is given. The dashboard route of the app deployments filters no profile, and an app
+/// The app deployments that use an app profile version.
+///
+/// The uses are `status.inUseApps` of `GET /v1/appProfiles/{uid}`, each read with
+/// `GET /v1/appDeployments/{uid}` in its own project for its state and the version its copy names.
+/// Palette refuses the delete of an app profile while a deployment uses it, as it does for a
+/// cluster profile. The dashboard route of the app deployments filters no profile, and an app
 /// profile binds to no edge host, so the report has no second reading and no edge hosts.
+///
+/// `id` is a uid, or a name when `version` is given. `scope` is the project uid of the app
+/// profile, and `None` is the configured scope. `connect` gives a client for a project uid, with
+/// `None` for the configured scope. `generated_at` is the time of the report, in RFC 3339.
+///
+/// # Errors
+///
+/// The error of `connect`. [`AppProfileNotFound`](crate::Error::AppProfileNotFound) or
+/// [`AppProfileNameAmbiguous`](crate::Error::AppProfileNameAmbiguous) when `id` and `version` name
+/// no app profile, or several. The error of the read of the app profile. A deployment that cannot
+/// be read stays in the report with its error.
 pub fn app_consumers<A, F>(
     scope: Option<&str>,
     id: &str,

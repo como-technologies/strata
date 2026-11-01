@@ -43,6 +43,11 @@ pub enum Format {
 pub trait Renderer {
     /// Render the diff. `full` adds unified diffs of raw values and changed manifests where the
     /// format supports them.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Serialize`](crate::Error::Serialize) when the JSON renderer cannot write the
+    /// document. The terminal renderer and the markdown renderer give no error.
     fn render(&self, d: &Diff, a: &Snapshot, b: &Snapshot, full: bool) -> Result<String>;
 
     /// One line that states the outcome of `verify`.
@@ -53,24 +58,52 @@ pub trait Renderer {
     }
 
     /// Render the outcome of `verify` over several records.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Renderer::render`].
     fn render_verify_summary(&self, s: &VerifySummary) -> Result<String>;
 
     /// Render the outcome of `same-release`.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Renderer::render`].
     fn render_chain(&self, c: &Chain) -> Result<String>;
 
     /// Render the clusters that use a profile version.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Renderer::render`].
     fn render_consumers(&self, r: &ConsumersReport) -> Result<String>;
 
     /// Render the profiles, clusters, and projects `list` found.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Renderer::render`].
     fn render_list(&self, l: &Listing) -> Result<String>;
 
     /// The versions a registry offers for a pack.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Renderer::render`].
     fn render_packs(&self, l: &PackListing) -> Result<String>;
 
     /// The pack versions that records pin, against the newer versions the registries offer.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Renderer::render`].
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String>;
 
     /// The records that `snapshot` wrote for a set of clusters, and the files it removed.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Renderer::render`].
     fn render_set(&self, r: &SetReport) -> Result<String>;
 }
 

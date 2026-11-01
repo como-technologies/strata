@@ -194,6 +194,9 @@ fn merged_tags(answers: &[Value]) -> Vec<Value> {
 /// that has no tag in that answer. So the listing of strata leaves it out, unless Spectro Cloud
 /// retired it as disabled or deleted. A registry with no version left is not in the listing.
 ///
+/// `name` is the name of the pack. `connect` gives a client for a project uid, with `None` for the
+/// configured scope. `generated_at` is the time of the listing, in RFC 3339.
+///
 /// # Errors
 ///
 /// [`Error::RegistryNotFound`] when `--registry` names no registry that the key can see.

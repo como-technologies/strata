@@ -1,6 +1,8 @@
-//! The run: which rules apply, how each one runs, and what the report holds. A run reads the
-//! catalog once, keeps the rules of the engine, the release, and the tiers asked for, runs each
-//! check, and assembles the report with the confidence of each rule from the ledger.
+//! The run: which rules apply, how each one runs, and what the report holds.
+//!
+//! A run reads the catalog once, keeps the rules of the engine, the release, and the tiers asked
+//! for, runs each check, and assembles the report with the confidence of each rule from the
+//! ledger.
 
 use std::collections::BTreeMap;
 
@@ -182,6 +184,10 @@ pub struct RunInputs<'a> {
 }
 
 /// Run every applicable check, and assemble the report.
+///
+/// # Errors
+///
+/// None at present: a check that fails or cannot run is a result in the report, and not an error.
 pub fn run(inputs: RunInputs<'_>) -> Result<Report> {
     let jq = Jq::new();
     let world_value = inputs.world.to_value();

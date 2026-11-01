@@ -41,12 +41,21 @@ pub struct ExecOutput {
 
 /// Where a check gets an answer from outside the world.
 pub trait Backend {
-    /// One request to Palette. `Err` is a failure no check can read: no key, a transport error,
-    /// a 5xx after the retries.
+    /// One request to Palette.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Palette`] for a failure that no check can read: no key, a transport error, or a
+    /// 5xx after the retries. A 4xx is a [`Response`].
     fn palette(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Response>;
     /// True when the tool `name` is on this machine.
     fn has_tool(&self, name: &str) -> bool;
-    /// Run one command. `Err` is a failure to start it.
+    /// Run one command.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Usage`] for an empty command, and [`Error::Input`] when the command cannot start.
+    /// A command that starts and fails gives an [`ExecOutput`], and no error.
     fn exec(&self, argv: &[String], timeout: Duration) -> Result<ExecOutput>;
     /// True when a Palette check can run: a key is there.
     fn has_palette(&self) -> bool;
@@ -248,10 +257,11 @@ impl<A: PaletteApi> LiveBackend<'_, A> {
     }
 }
 
-/// The backend of a fixture: the world document holds the answers. `_responses` maps
-/// `"METHOD /path"` to a [`Response`], and `_exec` maps the command, as one string with a space
-/// between the arguments, to an [`ExecOutput`]. `_tools` lists the tools that are "there"; with
-/// no list, every tool is.
+/// The backend of a fixture: the world document holds the answers.
+///
+/// `_responses` maps `"METHOD /path"` to a [`Response`], and `_exec` maps the command, as one
+/// string with a space between the arguments, to an [`ExecOutput`]. `_tools` lists the tools that
+/// are "there"; with no list, every tool is.
 pub struct FixtureBackend {
     responses: BTreeMap<String, Response>,
     exec: BTreeMap<String, ExecOutput>,

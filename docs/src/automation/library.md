@@ -150,7 +150,16 @@ Each public item has documentation. The build refuses an item without it. In a
 clone of strata, `just api-docs` builds the same pages into `target/doc/strata/`
 and `target/doc/strata_preflight/`.
 
+Each public function that returns a `Result` has an `# Errors` section. It names
+the error kinds that the function gives, and when. A function that can panic has
+a `# Panics` section. `just lint` refuses a public function that lacks the
+section that it needs.
+
 The crate documentation starts with an example that runs as a test.
+`ops::snapshot_for`, `ops::compare`, `ops::verify`,
+`ops::snapshot_from_candidate`, and `candidate::resolve` have an `# Examples`
+section that runs as a test too.
+
 `examples/library/` is a separate crate that uses strata as a library, with no
 command line and no network. `examples/library-preflight/` does the same for
 `strata-preflight`. One recipe runs both:

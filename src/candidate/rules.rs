@@ -27,13 +27,17 @@ fn pick_registry(
     }
 }
 
-/// Read and check a candidate file, and read the files it points at. Problems here need no
-/// network: a file that does not parse or breaks a rule is `CandidateInvalid`, and a values or
-/// manifest file that cannot be read is `Io` naming that file.
+/// Read and check a candidate file, and read the files it points at.
 ///
 /// A file with `spec.template.packs` is a profile export of Palette. Strata reads it as the
 /// candidate that it holds. The page "The candidate file" of the book gives the field of the
 /// export that gives each field of the candidate.
+///
+/// # Errors
+///
+/// [`Error::CandidateInvalid`] when the file does not parse or breaks a rule. [`Error::Io`], with
+/// the path, when strata cannot read the file or a values file or a manifest file that it points
+/// at. The load needs no network.
 pub fn load(path: &Path) -> Result<LoadedCandidate> {
     let yaml = crate::file::read_file(path)?;
     let invalid = invalid_at(path);
@@ -56,10 +60,17 @@ pub(super) fn invalid_at(path: &Path) -> impl Fn(String) -> Error + Copy + '_ {
     }
 }
 
-/// Check a candidate that is in memory, and read the files it points at, relative to the
-/// directory of `path`. `path` names the candidate: in a problem, and as the ref of the record.
-/// [`load`] reads a file and then does this; a caller that builds the candidate itself, as
-/// [`Candidate::from_snapshot`] does, starts here and writes no file.
+/// Check a candidate that is in memory, and read the files it points at.
+///
+/// A path of the candidate is relative to the directory of `path`. `path` names the candidate: in
+/// a problem, and as the ref of the record. [`load`] reads a file and then does this; a caller
+/// that builds the candidate itself, as [`Candidate::from_snapshot`] does, starts here and writes
+/// no file.
+///
+/// # Errors
+///
+/// [`Error::CandidateInvalid`] when the candidate breaks a rule, and [`Error::Io`] when strata
+/// cannot read a file that the candidate points at.
 pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
     let invalid = invalid_at(path);
     if candidate.name.is_empty() || candidate.version.is_empty() {

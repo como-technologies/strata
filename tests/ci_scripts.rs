@@ -1064,8 +1064,8 @@ esac
 /// the question applies to, and it does so before any request. The stand-in asks it with a Palette
 /// that nothing listens at, and passes on its refusal of the pair as strata prints it. For any
 /// other pair, the stand-in runs the real comparison without the option, and adds the answer.
-/// FAKE_REPAVE_JSON gives the `paletteRepave` of the report, and FAKE_REPAVE_TEXT gives the
-/// `Palette:` line of the markdown. When FAKE_REPAVE_FAIL is set, it exits 2 as strata does when
+/// `FAKE_REPAVE_JSON` gives the `paletteRepave` of the report, and `FAKE_REPAVE_TEXT` gives the
+/// `Palette:` line of the markdown. When `FAKE_REPAVE_FAIL` is set, it exits 2 as strata does when
 /// Palette gives no answer.
 const FAKE_STRATA: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -1095,8 +1095,8 @@ exec "$REAL_STRATA" "$@"
 
 /// A `curl` for the GitLab REST API: logs each call as "METHOD /path field field", keeps each
 /// body file it is handed as body-<n>.md in call order, answers a GET from a gl-*.json file under
-/// FAKE_GL when the test wrote one, numbers a new issue from 41 up, and prints the status code
-/// FAKE_GL_STATUS (200 by default) the way `-w '%{http_code}'` does.
+/// `FAKE_GL` when the test wrote one, numbers a new issue from 41 up, and prints the status code
+/// `FAKE_GL_STATUS` (200 by default) the way `-w '%{http_code}'` does.
 const FAKE_GL_CURL: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 out=/dev/null; method=GET; url=""; data=()
@@ -3220,7 +3220,7 @@ fn merge_gate_names_an_unverified_record_and_passes_allow_no_digest_on() {
 
 /// A `strata` for verify-report.sh: `verify --summary ...` answers from summary.json and
 /// summary.exit, and `verify <path> --format markdown` from <basename>.md, .err, and .exit, all
-/// under FAKE_VERIFY; every call is logged.
+/// under `FAKE_VERIFY`; every call is logged.
 const FAKE_VERIFY_STRATA: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_VERIFY/strata.log"
 [ "$1" = verify ] || exit 9
@@ -3978,7 +3978,7 @@ fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
 // ---- upstream-report.sh ----------------------------------------------------------------------
 
 /// A `strata` for upstream-report.sh: `behind ...` prints report.json and exits with report.exit,
-/// both under FAKE_VERIFY, and keeps the file that `--since` names as since-used.json; every call
+/// both under `FAKE_VERIFY`, and keeps the file that `--since` names as since-used.json; every call
 /// is logged.
 const FAKE_BEHIND_STRATA: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_VERIFY/strata.log"
@@ -4413,7 +4413,7 @@ fn preflight_job() -> PreflightJob {
 
 impl PreflightJob {
     /// Run `preflight.sh` with the variables `envs` and the arguments `args`, and no key. A runner
-    /// sets GITHUB_REPOSITORY, which `pr-comment.sh` reads: the stand-in `gh` must give the repo.
+    /// sets `GITHUB_REPOSITORY`, which `pr-comment.sh` reads: the stand-in `gh` must give the repo.
     fn run(&self, args: &[&str], envs: &[(&str, &str)]) -> Output {
         let d = self.dir.path();
         std::fs::write(d.join("strata.log"), "").unwrap();

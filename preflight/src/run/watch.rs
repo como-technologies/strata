@@ -112,11 +112,17 @@ struct Ended {
     world: Value,
 }
 
-/// Watch a build: every `every`, read the cluster, and judge each watch rule. The watch ends at
-/// the first counted failure (severity `fail` at the preflight level, or any failed probe with
-/// `--strict`), when the cluster is `Running` with each counted rule passed, or at the limit. A
-/// failed probe or a warning is in the report, and the watch reads on. The second value is the
-/// world with the last reading in it, for `--out world.json`.
+/// Watch a build: every `every`, read the cluster, and judge each watch rule.
+///
+/// The watch ends at the first counted failure (severity `fail` at the preflight level, or any
+/// failed probe with `--strict`), when the cluster is `Running` with each counted rule passed, or
+/// at the limit. A failed probe or a warning is in the report, and the watch reads on. The second
+/// value is the world with the last reading in it, for `--out world.json`.
+///
+/// # Errors
+///
+/// [`Error::Usage`] when the world names no cluster. The error of the first reading that fails:
+/// see [`Error::Palette`].
 pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value)> {
     let uid =
         inputs.world.cluster_uid.clone().ok_or_else(|| {

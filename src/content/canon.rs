@@ -13,8 +13,11 @@ pub fn sha256_hex(s: &str) -> String {
     hex::encode(Sha256::digest(s.as_bytes()))
 }
 
-/// Sorted object keys, no whitespace, JSON string escaping. Sorting is done here so the result
-/// does not depend on serde_json's map ordering feature.
+/// The canonical text of `v`: the text that each hash of strata covers.
+///
+/// The rule: an object writes its keys in sorted order, and the text holds no whitespace. A string
+/// has the escapes of JSON. Strata sorts the keys here, so the result does not depend on the map
+/// ordering feature of `serde_json`. A change to this rule moves the root of each record.
 pub fn canonical_json(v: &Value) -> String {
     let mut out = String::new();
     write_canon(v, &mut out);
@@ -91,8 +94,17 @@ pub fn hash_yaml(text: &str) -> (String, Option<String>) {
     (hash, error)
 }
 
-/// YAML text in canonical form, with the hash of that form. Unparseable text gives null, the hash
-/// of the trimmed text, and the error.
+/// YAML text in canonical form, with the hash of that form.
+///
+/// The steps:
+///
+/// 1. Parse the text with [`canon_yaml`]: one document is itself, several are an array, and empty
+///    text is null. A key of a map becomes text.
+/// 2. Write the value with [`canonical_json`], so a comment, the whitespace, the order of the keys,
+///    and the style of the YAML do not change the hash.
+/// 3. Hash that text with SHA-256.
+///
+/// Unparseable text gives null, the hash of the trimmed text, and the error.
 pub fn canon_yaml_hashed(text: &str) -> (Value, String, Option<String>) {
     match canon_yaml(text) {
         Canon::Parsed(v) => {
@@ -108,7 +120,7 @@ fn first_line(s: &str) -> String {
     cut(s.lines().next().unwrap_or(""), 200)
 }
 
-/// Mapping keys must be scalars, as in PyYAML: an unquoted Go template such as
+/// Mapping keys must be scalars, as in `PyYAML`: an unquoted Go template such as
 /// `{{ .spectro.var.x }}` parses as a mapping-valued key and is reported as unparseable.
 fn yaml_to_json(v: serde_yaml::Value) -> Result<Value, String> {
     use serde_yaml::Value as Y;

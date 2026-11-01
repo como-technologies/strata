@@ -68,6 +68,11 @@ impl Candidate {
     /// tag, registry uid, values, params, and manifests spelled out, and the same variables, so
     /// `snapshot --from-candidate` turns it back into the record's root while the registry still
     /// serves those pack versions. A cluster record is refused: it is not one profile version.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::ProfileRefRequired`] when `snap` is not a profile version: a cluster, a pack, and
+    /// an app profile are not.
     pub fn from_snapshot(snap: &Snapshot) -> Result<Candidate> {
         // a candidate describes a profile version to publish: a cluster holds a copy of one, a
         // pack is one layer of one, and an app profile has tiers, so none makes a candidate
@@ -117,14 +122,25 @@ impl Candidate {
 }
 
 /// The candidate as YAML.
+///
+/// # Errors
+///
+/// [`Error::CandidateInvalid`] when serde cannot write the candidate as YAML.
 pub fn to_yaml(candidate: &Candidate) -> Result<String> {
     serde_yaml::to_string(candidate)
         .map_err(|e| invalid_at(Path::new(&candidate.name))(e.to_string()))
 }
 
-/// Write `candidate` as YAML to `path`. With `files_dir`, each layer's values go to
-/// `values/<pack>.yaml` and each manifest to `manifests/<pack>/<manifest>.yaml` under it, and the
-/// candidate references them by paths relative to its own directory, as [`load`] reads them.
+/// Write `candidate` as YAML to `path`.
+///
+/// With `files_dir`, each layer's values go to `values/<pack>.yaml` and each manifest to
+/// `manifests/<pack>/<manifest>.yaml` under it. The candidate then references them by paths
+/// relative to its own directory, as [`load`] reads them.
+///
+/// # Errors
+///
+/// [`Error::Io`] when strata cannot write a file, and [`Error::CandidateInvalid`] when it cannot
+/// write the candidate as YAML.
 pub fn write(candidate: &Candidate, path: &Path, files_dir: Option<&Path>) -> Result<()> {
     let mut c = candidate.clone();
     if let Some(dir) = files_dir {

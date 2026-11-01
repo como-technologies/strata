@@ -11,9 +11,11 @@ use crate::error::{Error, Result};
 use crate::json::{arr, flag, opt_text, str_at, value_or_null};
 use crate::snapshot::Template;
 
-/// The three raw API responses a snapshot is built from, and the project they were fetched in.
-/// Saved as `profile.json`, `manifests.json`, `variables.json` and `scope.json` by `--raw-dir` and
-/// read back by `--from-raw`.
+/// The raw API responses that a profile snapshot is built from.
+///
+/// It holds the three responses and the project that they came from. `--raw-dir` saves them as
+/// `profile.json`, `manifests.json`, `variables.json`, and `scope.json`, and `--from-raw` reads
+/// them back.
 #[derive(Debug, Clone)]
 pub struct RawProfile {
     /// `GET /v1/clusterprofiles/{uid}`
@@ -238,6 +240,11 @@ fn write_json_files(dir: &Path, files: &[(&str, &Value)]) -> Result<()> {
 
 impl RawProfile {
     /// Read the three files from `dir`, and the project from `scope.json` when it is there.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::EmptyFile`] and [`Error::FileNotJson`] when a file is empty or is not JSON, and
+    /// [`Error::Io`] when strata cannot read a file, such as a missing `profile.json`.
     pub fn load_dir(dir: &Path) -> Result<RawProfile> {
         let profile = read_json_file(dir, PROFILE_FILE)?;
         let manifests = read_json_file(dir, MANIFESTS_FILE)?;
@@ -258,6 +265,12 @@ impl RawProfile {
     /// Write the three files and `scope.json` under `dir`, and make `dir` if it is not there. For
     /// a profile that has a draft, also write its manifests, and with `--macros`, the values of
     /// the macros.
+    /// `fetched_at` is the time that the responses were read, in RFC 3339.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Io`] when strata cannot write a file, and [`Error::Serialize`] when it cannot write
+    /// a document.
     pub fn save_dir(&self, dir: &Path, fetched_at: &str) -> Result<()> {
         let scope = scope_document(&self.project_uid, fetched_at, self.variables_unavailable);
         let mut files = vec![
@@ -276,9 +289,11 @@ impl RawProfile {
     }
 }
 
-/// The three raw API responses a cluster snapshot is built from, and the project they were fetched
-/// in. Saved as `cluster.json`, `manifests.json`, `variables.json` and `scope.json` by `--raw-dir`
-/// and read back by `--from-raw`.
+/// The raw API responses that a cluster snapshot is built from.
+///
+/// It holds the three responses and the project that they came from. `--raw-dir` saves them as
+/// `cluster.json`, `manifests.json`, `variables.json`, and `scope.json`, and `--from-raw` reads
+/// them back.
 #[derive(Debug, Clone)]
 pub struct RawCluster {
     /// `GET /v1/spectroclusters/{uid}`: the applied profile templates are in
@@ -357,6 +372,11 @@ impl RawCluster {
     pub const MARKER: &'static str = "cluster.json";
 
     /// Read the three files from `dir`, and the project from `scope.json` when it is there.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::EmptyFile`] and [`Error::FileNotJson`] when a file is empty or is not JSON, and
+    /// [`Error::Io`] when strata cannot read a file, such as a missing `cluster.json`.
     pub fn load_dir(dir: &Path) -> Result<RawCluster> {
         let cluster = read_json_file(dir, Self::MARKER)?;
         let manifests = read_json_file(dir, MANIFESTS_FILE)?;
@@ -405,7 +425,7 @@ impl RawCluster {
     /// Write the three files, each other document that strata read, and `scope.json` under
     /// `dir`, and make `dir` if it is not there. Strata masks the values of
     /// each pack in the saved notifications and in the saved repave, and each password in the
-    /// values of a cluster group.
+    /// values of a cluster group. `fetched_at` is the time of the read, in RFC 3339.
     ///
     /// # Errors
     ///

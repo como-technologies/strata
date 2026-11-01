@@ -97,6 +97,11 @@ impl Config {
     /// Read `PALETTE_API_KEY` (or `SPECTROCLOUD_APIKEY`), `PALETTE_API` (or `SPECTROCLOUD_HOST`),
     /// `PALETTE_PROJECT_UID` (or the name `PALETTE_PROJECT`), `STRATA_RETRIES`, and
     /// `STRATA_MAX_RETRY_AFTER` from the environment, then from `~/.palette.env`.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Config::from_lookup`], with the environment and `~/.palette.env` as the
+    /// lookup.
     pub fn from_env() -> Result<Self> {
         Self::from_lookup(|key| {
             // An empty project variable is a choice, not an absence: it says tenant scope, as
@@ -123,6 +128,12 @@ impl Config {
     }
 
     /// Like [`Config::from_env`] but with a caller-supplied lookup; this is what tests use.
+    /// `lookup` gives the value of a variable by its name, or `None` when it has none.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::MissingCredential`] when `lookup` gives no key. [`Error::InvalidSetting`] when the
+    /// retries or the longest `Retry-After` is not a whole number.
     pub fn from_lookup(lookup: impl Fn(&str) -> Option<String>) -> Result<Self> {
         let first = |names: &[&str]| names.iter().find_map(|n| lookup(n));
         let api_key = first(&KEY_VARS).ok_or(Error::MissingCredential {
