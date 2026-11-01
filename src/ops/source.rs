@@ -67,8 +67,9 @@ impl<'a> SnapshotRequest<'a> {
     ///
     /// # Errors
     ///
-    /// - `Usage` for `validate` with `from_raw` or `dir`, for `dir` with a ref that does not name a
-    ///   set of clusters, and for no ref and no `from_raw`.
+    /// - `Usage` for `validate` with `from_raw` or `dir`.
+    /// - `Usage` for `dir` with a ref that does not name a set of clusters.
+    /// - `Usage` for no ref, no `from_raw`, and no `from_candidate`.
     /// - `RecordNotASource` for a ref to a record file: `snapshot` writes a record and reads none.
     pub fn source(&self) -> Result<SnapshotSource<'a>> {
         if self.options.validate && (self.from_raw.is_some() || self.dir.is_some()) {
