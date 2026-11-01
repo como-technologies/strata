@@ -207,23 +207,24 @@ stops the benchmark with a panic, and not with the time of an error path.
 ### The times on the CI runner
 
 The job `benchmarks` of CI runs `just bench-short` on a runner of GitHub, and prints the times in its
-log. These are the best estimates for a profile of the sizes that Palette permits, rounded to two
-digits:
+log. The runner is a shared machine, and the speed of one runner differs from the speed of another.
+So the table gives a range: the lowest and the highest best estimate of three runs of the job,
+rounded to two digits. The input is the profile of the size that Palette permits.
 
 | Step | Input | Time |
 | --- | --- | --- |
-| The record, with the canonical form and the root | 1 pack | 34 µs |
-| The record, with the canonical form and the root | 50 packs | 29 ms |
-| The record, with the canonical form and the root | 200 packs | 120 ms |
-| The record, with 200 manifests | 200 packs | 130 ms |
-| The comparison of two records | no change | 86 ms |
-| The comparison of two records | one pack changes | 87 ms |
-| The comparison of two records | each pack changes | 170 ms |
+| The record, with the canonical form and the root | 1 pack | 32 to 60 µs |
+| The record, with the canonical form and the root | 50 packs | 29 to 49 ms |
+| The record, with the canonical form and the root | 200 packs | 120 to 200 ms |
+| The record, with 200 manifests | 200 packs | 130 to 220 ms |
+| The comparison of two records | no change | 85 to 130 ms |
+| The comparison of two records | one pack changes | 87 to 130 ms |
+| The comparison of two records | each pack changes | 170 to 260 ms |
 
 The time of a record grows with the size of the values, because strata parses and hashes each text.
-The time of a comparison grows with the number of packs that differ. A shared runner is not a
-quiet machine, so the times change from run to run. Use them to see the order of magnitude, and use
-[a comparison of two commits](#compare-two-commits) to see a change.
+The time of a comparison grows with the number of packs that differ. Use the table to see the order
+of magnitude. To see a change of the code, use [a comparison of two commits](#compare-two-commits)
+on one machine.
 
 When a benchmark is slow, criterion warns that it cannot complete 10 samples in the measure time. The
 warning is not an error. The job fails only when a benchmark does not build or panics.
