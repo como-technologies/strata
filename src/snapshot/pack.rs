@@ -13,12 +13,12 @@ use crate::api::TIER_INSTALL_ORDER;
 use crate::api::mask::MASKED;
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
-use crate::content::layer::Layer;
 use crate::json::{
     arr, first_nonempty, flag, opt_set, opt_str, opt_text, set_at, str_at, text, value_at,
 };
-use crate::oci_provider::OciProvider;
-use crate::pack_type::PackType;
+use crate::model::layer::Layer;
+use crate::model::oci_provider::OciProvider;
+use crate::model::pack_type::PackType;
 
 /// The schema of [`Pack::params`]: an object of text values. The one exception is the install
 /// order of a tier of an app profile, which is an integer. A layer of a candidate has the same

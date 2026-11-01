@@ -24,6 +24,10 @@ where each module goes.
 - A type that two modules share goes in a module of its own. It does not go in
   the module of one of its users. Re-export it where the public path must not
   change.
+- The kind of the shared module says where it goes. A type of Palette goes in
+  `model/`. A read of Palette goes in `api/`. A helper of the whole crate, such
+  as `json` or `text`, stays at the crate root. `tests/crate_root.rs` lists the
+  modules of the root. A new module of the root needs a line there, with its kind.
 
 ## The size of a module
 

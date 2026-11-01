@@ -5,8 +5,8 @@ use super::verify::edited_in_place_note;
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::pack::InvalidSides;
 use crate::diff::{Diff, ImageIdChange, InvalidPack, PackDiff, Side};
+use crate::model::repave::PaletteRepaveReason;
 use crate::reference::name_version;
-use crate::repave::PaletteRepaveReason;
 use crate::snapshot::{PendingUpdate, Source, Tier};
 use crate::text::{and_list, dash, plural};
 
@@ -317,7 +317,7 @@ fn repave_reason_text(x: &PaletteRepaveReason) -> String {
 fn palette_validation_lines(d: &Diff) -> Vec<String> {
     d.palette_validation
         .as_ref()
-        .map(|v| crate::validation::answer_lines(v.answer.errors()))
+        .map(|v| crate::model::validation::answer_lines(v.answer.errors()))
         .unwrap_or_default()
 }
 

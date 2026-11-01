@@ -11,8 +11,8 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, SEARCH_TAGS, search_condition, search_filter, search_group};
 use crate::closed_set::ClosedSet;
-use crate::conjunction::Conjunction;
 use crate::error::{Error, ErrorDocument, Result};
+use crate::model::conjunction::Conjunction;
 use crate::reference::{Ref, one_named};
 use crate::snapshot::{Snapshot, Tool};
 use crate::term::progress::Progress;

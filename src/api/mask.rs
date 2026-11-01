@@ -16,7 +16,7 @@ use crate::closed_set::ClosedSet;
 use crate::content::canon::{Canon, canon_yaml, yaml_documents};
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, str_at};
-use crate::pack_type::PackType;
+use crate::model::pack_type::PackType;
 
 /// The text that Palette writes over a secret.
 pub(crate) const MASKED: &str = "********";

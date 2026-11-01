@@ -6,13 +6,13 @@ use serde_json::{Map, Value};
 
 use super::resolve::resolve_with;
 use super::{Candidate, CandidateLayer, LoadedCandidate, LoadedLayer, RegistryRef};
+use crate::api::registry::Registries;
 use crate::api::{Palette, PaletteApi};
 use crate::closed_set::ClosedSet;
 use crate::error::{Error, Result};
 use crate::json::{str_at, text};
-use crate::profile_type::ProfileType;
+use crate::model::profile_type::ProfileType;
 use crate::reference::{LATEST, name_version};
-use crate::registry::Registries;
 use crate::snapshot::{PackSource, Snapshot, Template};
 use crate::term::progress::Progress;
 use crate::text::name_or_uid;
@@ -62,7 +62,7 @@ pub(crate) fn versions_of<A: PaletteApi>(palette: &Palette<A>, name: &str) -> Re
 /// [`Error::PackInSeveralRegistries`] when no `registry` is set and more than one has it.
 /// [`Error::RegistryNotFound`] and [`Error::RegistryNameAmbiguous`] when `registry` names no
 /// registry or several. Each error of [`resolve`](fn@super::resolve), and each error of a request.
-pub fn pack_snapshot<A: PaletteApi>(
+pub(crate) fn pack_snapshot<A: PaletteApi>(
     palette: &Palette<A>,
     registry: Option<&str>,
     name: &str,

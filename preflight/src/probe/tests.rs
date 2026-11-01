@@ -10,7 +10,7 @@ fn rule(check: Check) -> Rule {
         id: "t".into(),
         title: "t".into(),
         section: "s".into(),
-        engines: vec![strata::cloud::CLOUD_ALL.into()],
+        engines: vec![strata::model::cloud::CLOUD_ALL.into()],
         tier: check.tier(),
         level: Level::Probe,
         severity: Severity::Fail,

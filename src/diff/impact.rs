@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::closed_set::impl_closed_set;
 use crate::closed_set::legend::Described;
-use crate::content::layer::Layer;
+use crate::model::layer::Layer;
 
 /// Ordered by severity, so `max` picks the worst.
 #[derive(

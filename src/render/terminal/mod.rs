@@ -21,9 +21,9 @@ use super::verify::{
 };
 use super::{Renderer, count_of, entry_error, key_line, palette_line, short};
 use crate::closed_set::ClosedSet;
-use crate::cluster_state::ClusterState;
 use crate::diff::Diff;
 use crate::error::Result;
+use crate::model::cluster_state::ClusterState;
 use crate::ops::{
     Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject, Listing,
     PackListing, PairStatus, RecordStatus, SavedFilter, VerifySummary,

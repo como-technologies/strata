@@ -8,8 +8,8 @@ use std::borrow::Cow;
 use serde_json::{Map, Value, json};
 
 use crate::api::RawCluster;
-use crate::cloud::Cloud;
 use crate::json::{arr, str_at, value_at};
+use crate::model::cloud::Cloud;
 
 /// The key of the shape fields that names the cloud type of the cluster. A record from before
 /// strata read the fields by cloud type does not have it.

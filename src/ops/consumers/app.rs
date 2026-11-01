@@ -9,7 +9,7 @@ use super::{
 use crate::api::{Palette, PaletteApi};
 use crate::error::Result;
 use crate::json::{arr, text};
-use crate::profile_type::ProfileType;
+use crate::model::profile_type::ProfileType;
 use crate::term::progress::Progress;
 
 /// The app deployments that use an app profile version.
@@ -30,7 +30,7 @@ use crate::term::progress::Progress;
 /// [`AppProfileNameAmbiguous`](crate::Error::AppProfileNameAmbiguous) when `id` and `version` name
 /// no app profile, or several. The error of the read of the app profile. A deployment that cannot
 /// be read stays in the report with its error.
-pub fn app_consumers<A, F>(
+pub(super) fn app_consumers<A, F>(
     scope: Option<&str>,
     id: &str,
     version: Option<&str>,

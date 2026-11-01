@@ -13,8 +13,8 @@ use crate::api::{RawCluster, profile_variables};
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canonical_json, sha256_hex};
 use crate::json::{arr, flag, object_at, str_at, text};
-use crate::profile_type::ProfileType;
-use crate::repave::PendingRepave;
+use crate::model::profile_type::ProfileType;
+use crate::model::repave::PendingRepave;
 use crate::timestamp::Rfc3339OrEmpty;
 
 /// A virtual cluster of a cluster group.

@@ -10,11 +10,11 @@ use serde_json::{Value, json};
 
 use crate::api::{Palette, PaletteApi};
 use crate::closed_set::Open;
-use crate::cluster_template::ClusterTemplateRef;
 use crate::diff::{ImpactLevel, PaletteRepave, Side};
 use crate::error::{Error, Result};
 use crate::json::{arr, opt_str};
-use crate::profile_type::ProfileType;
+use crate::model::cluster_template::ClusterTemplateRef;
+use crate::model::profile_type::ProfileType;
 use crate::reference::{Ref, name_version};
 use crate::snapshot::{AppliedProfile, ClusterSource, Pack, Snapshot, SubjectKind};
 

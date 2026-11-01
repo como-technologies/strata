@@ -27,11 +27,11 @@ use super::{Renderer, capitalized, count_of, entry_error, short};
 use crate::closed_set::ClosedSet;
 use crate::diff::{Diff, Leaf, Op, PackDiff, Status};
 use crate::error::Result;
+use crate::model::profile_type::ProfileType;
 use crate::ops::{
     Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject, Listing,
     PackListing, RecordStatus, SavedFilter, VerifySummary,
 };
-use crate::profile_type::ProfileType;
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
 use crate::text::{dash, markdown_cell};

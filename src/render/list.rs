@@ -253,7 +253,7 @@ pub(crate) fn profile_marks(
     let scope = p
         .scope
         .filter(|scope| *scope != l.scope())
-        .map(crate::scope::ProfileScope::as_str);
+        .map(crate::model::scope::ProfileScope::as_str);
     joined_note([scope, draft_mark(p)])
 }
 

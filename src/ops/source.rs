@@ -2,11 +2,11 @@
 
 use std::path::Path;
 
+use crate::api::registry::Registries;
 use crate::api::{Palette, PaletteApi, RawCluster, RawProfile};
 use crate::candidate::LoadedCandidate;
 use crate::error::{Error, Result};
 use crate::reference::Ref;
-use crate::registry::Registries;
 use crate::snapshot::Snapshot;
 use crate::term::progress::Progress;
 
@@ -309,7 +309,7 @@ fn candidate_snapshot<A: PaletteApi>(
     let palette = registries.palette();
     let mut snap = crate::candidate::resolve::resolve_with(loaded, registries, progress)?
         .into_snapshot(&loaded.path.display().to_string(), fetched_at)?;
-    crate::candidate::warn_preset_options(&snap, progress);
+    crate::candidate::presets::warn_preset_options(&snap, progress);
     snap.source.template = crate::snapshot::Template::Candidate.into();
     // Palette does not hold a candidate, so no request asked which clusters use it
     snap.source.consumers = None;

@@ -13,8 +13,8 @@ use super::{Diff, zip_by_key};
 use crate::closed_set::legend::Described;
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::canonical_json;
-use crate::content::layer::Layer;
 use crate::diff::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
+use crate::model::layer::Layer;
 use crate::reference::version;
 use crate::snapshot::{Pack, Snapshot, UpstreamSource};
 

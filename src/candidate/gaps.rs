@@ -11,10 +11,10 @@ use std::path::Path;
 use super::{Candidate, CandidateLayer, LayerKind, MINTED_LAYER};
 use crate::api::codes::CreateRule;
 use crate::closed_set::ClosedSet;
-use crate::cloud::{Cloud, supports};
-use crate::content::layer::Layer;
 use crate::error::Error;
-use crate::profile_type::ProfileType;
+use crate::model::cloud::{Cloud, supports};
+use crate::model::layer::Layer;
+use crate::model::profile_type::ProfileType;
 use crate::reference::version;
 use crate::text::and_list;
 

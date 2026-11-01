@@ -7,8 +7,8 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::cluster_template::ClusterTemplateRef;
 use crate::json::{arr, strings, text};
+use crate::model::cluster_template::ClusterTemplateRef;
 
 /// The consumers that a profile document names, by kind.
 ///

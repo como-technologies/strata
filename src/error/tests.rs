@@ -56,13 +56,13 @@ fn one_of_each() -> Vec<Error> {
             name: "aws-stack".into(),
             version: "1.1.1".into(),
             profiles: vec![
-                crate::scope::ScopedUid {
+                crate::model::scope::ScopedUid {
                     uid: "64e0000000000000000000c3".into(),
-                    scope: Some(crate::scope::ProfileScope::Project),
+                    scope: Some(crate::model::scope::ProfileScope::Project),
                 },
-                crate::scope::ScopedUid {
+                crate::model::scope::ScopedUid {
                     uid: "64e4000000000000000000c3".into(),
-                    scope: Some(crate::scope::ProfileScope::Tenant),
+                    scope: Some(crate::model::scope::ProfileScope::Tenant),
                 },
             ],
         },
@@ -97,7 +97,7 @@ fn one_of_each() -> Vec<Error> {
         },
         Error::PaletteRefuses {
             reference: "aws-stack.yaml".into(),
-            errors: vec![crate::validation::PaletteRefusal {
+            errors: vec![crate::model::validation::PaletteRefusal {
                 pack: "kubernetes".into(),
                 code: "DependencyPackWithMinVersionRequired".into(),
                 message: "Pack 'cni-cilium-oss' is required with minimum compatible version \

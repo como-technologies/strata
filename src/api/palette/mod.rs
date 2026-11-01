@@ -5,11 +5,11 @@ use serde_json::Value;
 
 use super::PaletteApi;
 use crate::closed_set::impl_texts;
-use crate::cloud::CLOUD_NESTED;
-use crate::conjunction::Conjunction;
 use crate::error::{Error, Result, unread_reason};
 use crate::json::{arr, items, set_at, str_at, take_items, text};
-use crate::pack_type::PackType;
+use crate::model::cloud::CLOUD_NESTED;
+use crate::model::conjunction::Conjunction;
+use crate::model::pack_type::PackType;
 use crate::snapshot::{SubjectKind, Template, manifest_of};
 use crate::term::progress::Progress;
 
@@ -315,7 +315,7 @@ impl RegistryKind {
 
 /// The clusters that a search found, and whether the virtual clusters are among them.
 #[derive(Debug)]
-pub struct SearchedClusters {
+pub(crate) struct SearchedClusters {
     /// Each cluster that the filter selects, then each virtual cluster that it selects, when
     /// `includes_virtual`.
     pub items: Vec<Value>,

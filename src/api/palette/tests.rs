@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::*;
 use crate::api::{MemoryApi, RawCluster, ReadErrors};
-use crate::scope::ProfileScope;
+use crate::model::scope::ProfileScope;
 
 fn listing() -> Value {
     json!({"items": [

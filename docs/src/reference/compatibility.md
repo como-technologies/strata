@@ -28,7 +28,7 @@ new. `ops::verify_with` makes the same check as `check_verifiable`, so its
 errors do not change.
 
 After 0.25.0, `error::Error::PackUnavailable` holds its `state` as a
-`pack_state::PackState`, not as text. Its message and its JSON stay the same.
+`model::pack_state::PackState`, not as text. Its message and its JSON stay the same.
 `ops::ListedProfile::profile_type` is an `Option<Open<ProfileType>>`, not an
 `Option<String>`. `Open::as_str` gives the text. `text::plural` is public, and
 it takes any type, so it picks a verb or an ending as well as a noun.
@@ -41,7 +41,7 @@ of the error as `&serde_json::Value`, in place of text. Parse the text one time,
 and give the value.
 
 After 0.25.0, `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE`
-are deprecated. They stay for one minor release. `cluster_state::ClusterState`
+are deprecated. They stay for one minor release. `model::cluster_state::ClusterState`
 names each state, and `ClusterState::Running.is(text)` replaces
 `text == RUNNING_STATE`. `ClosedSet::parse` reads the text of a state.
 `closed_set::impl_closed_set` is the public macro `strata::impl_closed_set`. Its
@@ -65,6 +65,38 @@ of a record instead.
 
 After 0.25.0, `json::set_at` is public. It puts a value at the object keys of a
 document, and it never panics. `strata-preflight` calls it.
+
+After 0.25.0, the types of Palette are in the new module `model`. The root of the
+crate holds no module of them. Each old path stays as a `pub use` for one minor
+release, and release 0.27.0 removes the old paths. Use the new path:
+
+- `strata::cloud` is now `strata::model::cloud`.
+- `strata::cluster_template` is now `strata::model::cluster_template`.
+- `strata::conjunction` is now `strata::model::conjunction`.
+- `strata::oci_provider` is now `strata::model::oci_provider`.
+- `strata::pack_state` is now `strata::model::pack_state`.
+- `strata::pack_type` is now `strata::model::pack_type`.
+- `strata::profile_type` is now `strata::model::profile_type`.
+- `strata::repave` is now `strata::model::repave`.
+- `strata::scope` is now `strata::model::scope`.
+- `strata::validation` is now `strata::model::validation`.
+- `strata::content::layer` is now `strata::model::layer`.
+
+`strata::cluster_state`, which is new after 0.25.0, is `strata::model::cluster_state`
+and has no old path. The module `registry` was private, and it is now
+`api::registry`. It is not part of the API.
+
+After 0.25.0, these items are no longer public, because no program outside the
+crate uses them. Use the public function that reaches each one:
+
+- `candidate::pack_snapshot`: `ops::snapshot_for` reads a `pack:` ref.
+- `candidate::warn_preset_options`: `ops::snapshot_from_candidate` and
+  `ops::snapshot_from_loaded` give the warning.
+- `ops::app_consumers`: `ops::consumers_with` reads an app profile.
+- `api::codes::REFUSAL_CODES`: `Error::class` applies the codes.
+- `api::Palette::virtual_clusters`, `api::Palette::cluster_search_with_virtual`,
+  and `api::SearchedClusters`: `api::Palette::virtual_cluster_search` reads the
+  virtual clusters.
 
 After 0.25.0, `Ref::parse` reads `cluster:<uid>@pending/` as the ref of
 `cluster:<uid>@pending`. It read the uid `<uid>@pending`, and that ref printed as

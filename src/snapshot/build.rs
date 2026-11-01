@@ -16,7 +16,7 @@ use crate::api::{RawCluster, RawProfile};
 use crate::content::hash::{content_of, root_of};
 use crate::error::{Error, Result};
 use crate::json::{arr, first_nonempty, str_at, strings, text, text_map};
-use crate::repave::{PendingRepave, is_pending};
+use crate::model::repave::{PendingRepave, is_pending};
 
 /// The manifests of pack `pk` of one template, each as [`manifest_of`] gives it, from the
 /// answers of the manifests by uid (see [`RawProfile::manifest_entities`]).

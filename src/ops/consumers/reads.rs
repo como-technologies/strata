@@ -9,9 +9,9 @@ use super::{ClustersRead, Consumer, ConsumerKind, EdgeHostsRead};
 use crate::api::{
     Palette, PaletteApi, SEARCH_CLUSTER_PROFILES, search_condition, search_filter, search_group,
 };
-use crate::conjunction::Conjunction;
 use crate::error::{Result, served};
 use crate::json::{items, text};
+use crate::model::conjunction::Conjunction;
 use crate::ops::client_for;
 use crate::ops::fleet::Resolved;
 use crate::ops::list::{ListedCluster, list_clusters};

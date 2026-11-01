@@ -12,11 +12,11 @@ use strata::api::codes::{
 };
 use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::closed_set::{ClosedSet, Open};
-use strata::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
 use strata::diff::{ChangeFlag, Side, VerifyStatus, VersionMove};
 use strata::error::{Error, FailureClass};
+use strata::model::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
+use strata::model::profile_type::ProfileType;
 use strata::ops;
-use strata::profile_type::ProfileType;
 use strata::reference::Ref;
 use strata::term::progress::Progress;
 
@@ -3526,8 +3526,8 @@ fn consumers_takes_a_profile_and_refuses_a_cluster() {
 
 // ---- list ------------------------------------------------------------------------------------
 
+use strata::model::scope::ProfileScope;
 use strata::ops::{ListKind, ListOptions};
-use strata::scope::ProfileScope;
 
 /// A profile listing entry, as `GET /v1/dashboard/clusterprofiles/metadata` returns it.
 fn listed_profile(name: &str, version: &str, uid: &str) -> Value {
@@ -16031,7 +16031,7 @@ fn snapshot_validate_of_a_candidate_with_a_disabled_pack_prints_the_refusal_of_t
     assert_eq!(api.calls(&post(IMPORT_ROUTE)), 1);
     let v = snap.source.palette_validation.clone().unwrap();
     assert!(!v.accepts());
-    let lines = strata::validation::answer_lines(v.errors());
+    let lines = strata::model::validation::answer_lines(v.errors());
     assert_eq!(
         lines,
         [format!("refuses: DisabledPacksForbidden: {message}")]
@@ -16102,7 +16102,7 @@ fn a_candidate_with_a_fault_that_only_a_route_answers_gives_a_record_with_the_sa
     assert_eq!(refused.root, recorded_b.root);
     let v = refused.source.palette_validation.clone().unwrap();
     assert_eq!(
-        strata::validation::answer_lines(v.errors()),
+        strata::model::validation::answer_lines(v.errors()),
         ["refuses: VersionParseFailure: Unable to parse the version '2.2.2.develop'"]
     );
     assert!(matches!(

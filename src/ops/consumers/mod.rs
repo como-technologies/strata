@@ -12,12 +12,12 @@ use super::fleet::Resolved;
 use super::list::{ProjectListings, TENANT_SCOPE, name_projects_of};
 use super::{client_for, scope_of};
 use crate::api::{Palette, PaletteApi};
-use crate::cluster_template::ClusterTemplateRef;
 use crate::error::{Error, ErrorDocument, Result};
 use crate::json::{arr, first_nonempty, is_zero, str_at, text};
-use crate::profile_type::ProfileType;
+use crate::model::cluster_template::ClusterTemplateRef;
+use crate::model::profile_type::ProfileType;
+use crate::model::scope::ProfileScope;
 use crate::reference::Ref;
-use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, Snapshot, SubjectKind, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
@@ -26,7 +26,7 @@ use reads::{edge_hosts_bound, second_reading};
 mod app;
 mod reads;
 
-pub use app::app_consumers;
+use app::app_consumers;
 
 /// Schema id of the document `consumers` writes.
 pub const CONSUMERS_SCHEMA: &str = "strata-consumers/1";
@@ -383,7 +383,7 @@ where
 /// search names and one per cluster that the list omits (one per cluster of the fleet when the
 /// search takes no profile), but it does not find a consumer that the list omits.
 ///
-/// An app profile, by ref or by record, gives its app deployments: see [`app_consumers`].
+/// An app profile, by ref or by record, gives its app deployments.
 ///
 /// # Errors
 ///

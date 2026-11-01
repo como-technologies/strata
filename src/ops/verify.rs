@@ -7,6 +7,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::api::registry::Registries;
 use crate::api::{AuditKind, Palette, PaletteApi};
 use crate::closed_set::impl_closed_set;
 use crate::closed_set::legend::{Described, legend};
@@ -17,7 +18,6 @@ use crate::diff::{
 use crate::error::{Error, ErrorDocument, Result, found};
 use crate::json::{is_zero, text};
 use crate::reference::name_version;
-use crate::registry::Registries;
 use crate::snapshot::{Pack, PackSource, Snapshot, SubjectKind, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::{Rfc3339, Rfc3339OrEmpty};

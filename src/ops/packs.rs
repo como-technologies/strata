@@ -6,15 +6,15 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::api::registry::{Registries, pack_type_of, registry_layer};
 use crate::api::{Palette, PaletteApi};
 use crate::closed_set::{ClosedSet, Open};
-use crate::cloud::supports;
 use crate::error::{Error, Result, found};
 use crate::json::{arr, opt_text, strings, text};
-use crate::pack_state::PackState;
-use crate::pack_type::PackType;
+use crate::model::cloud::supports;
+use crate::model::pack_state::PackState;
+use crate::model::pack_type::PackType;
 use crate::reference::version;
-use crate::registry::{Registries, pack_type_of, registry_layer};
 use crate::snapshot::Tool;
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
@@ -127,7 +127,7 @@ impl PackBuild {
 pub struct PackOptions {
     /// Only this registry, by name or uid.
     pub registry: Option<String>,
-    /// Only the versions that support this cloud, by the rule of [`crate::cloud`]. A version
+    /// Only the versions that support this cloud, by the rule of [`crate::model::cloud`]. A version
     /// with the cloud type `all`, or with no cloud type, supports each cloud.
     pub cloud: Option<String>,
     /// Only the newest version of each registry, and the version that Palette calls the latest
@@ -334,7 +334,7 @@ fn pack_registry<A: PaletteApi>(
     // is FIPS compliant
     let mine: Vec<&Value> = mine
         .into_iter()
-        .filter(|e| has_tag(&tags, e) || crate::registry::retired_state(e).is_some())
+        .filter(|e| has_tag(&tags, e) || crate::api::registry::retired_state(e).is_some())
         .collect();
     // every version of this pack that the registry offers, counted before --cloud and
     // --latest cut the list: the heading states the inventory, not the rows that survived a
@@ -377,7 +377,7 @@ fn tag_answers<A: PaletteApi>(
     let mut answers = vec![found(palette.pack_tags(name, uid, None))?];
     if mine
         .iter()
-        .any(|e| crate::registry::retired_state(e).is_some())
+        .any(|e| crate::api::registry::retired_state(e).is_some())
     {
         answers.push(found(palette.pack_tags(name, uid, Some(&listed_states())))?);
     }
@@ -388,7 +388,7 @@ fn tag_answers<A: PaletteApi>(
 fn common_state(mine: &[&Value]) -> Option<Open<PackState>> {
     let states: std::collections::BTreeSet<Option<Open<PackState>>> = mine
         .iter()
-        .map(|e| crate::registry::pack_state(e))
+        .map(|e| crate::api::registry::pack_state(e))
         .collect();
     match states.into_iter().collect::<Vec<_>>().as_slice() {
         [Some(one)] => Some(one.clone()),
@@ -428,7 +428,7 @@ fn pack_builds(
             tags: tag_names(tags, e),
             latest: false,
             palette_latest: text(e, PALETTE_LATEST) == "true",
-            state: crate::registry::pack_state(e),
+            state: crate::api::registry::pack_state(e),
             listed: text(e, "/metadata/creationTimestamp"),
         });
     }

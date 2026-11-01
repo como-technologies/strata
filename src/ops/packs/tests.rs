@@ -3,7 +3,7 @@
 
 use super::*;
 use crate::api::MemoryApi;
-use crate::cloud::CLOUD_ALL;
+use crate::model::cloud::CLOUD_ALL;
 
 fn version(uid: &str, version: &str, clouds: &[&str]) -> Value {
     serde_json::json!({
