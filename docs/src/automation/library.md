@@ -77,7 +77,7 @@ git command line, which uses your SSH configuration:
 
 ```toml
 [dependencies]
-strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.25.0" }
+strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.26.0" }
 ```
 
 ```bash
@@ -101,8 +101,8 @@ Give `strata-preflight` and `strata` the same git address and the same tag:
 
 ```toml
 [dependencies]
-strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.25.0" }
-strata-preflight = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.25.0" }
+strata = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.26.0" }
+strata-preflight = { git = "ssh://git@github.com/como-technologies/strata.git", tag = "v0.26.0" }
 ```
 
 The package is `strata-preflight`, and Rust code names the crate
