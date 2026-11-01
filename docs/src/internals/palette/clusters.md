@@ -69,6 +69,12 @@ each machine pool also gives `instanceConfig`, the CPUs and the memory of the
 instance type, and `machinePoolProperties.archType`, such as `amd64`. See
 [tiers.sh](../../development/live-runs.md#tierssh).
 
+Palette omits a field that has no value. The AWS cluster of the live
+example sets no override on a machine pool. So no pool of its cloud config holds
+`overrideClusterAPIConfig`, `overrideHealthCheckConfiguration`, or
+`overrideKubeadmConfiguration`. Its `spec.clusterConfig` holds `hybridConfig`,
+`region`, and `sshKeyName`.
+
 On a managed engine, the `spec.clusterConfig` of the cloud config also holds
 the control plane that the cloud runs. On EKS it holds `endpointAccess` and
 `addons`. On GKE it holds `managedClusterConfig`, with the `location`, and
