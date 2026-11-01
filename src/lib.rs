@@ -13,7 +13,7 @@
 //!   talks HTTP and [`api::MemoryApi`] serves canned responses for tests.
 //! - [`reference`](mod@reference): what a user-supplied ref means: a snapshot file,
 //!   `name@version`, a uid, or `cluster:<uid>`.
-//! - [`reference::version`]: natural ordering of version strings, behind `name@latest`.
+//! - [`reference::version`]: the order of version strings, by Semantic Versioning, behind `name@latest`.
 //! - [`candidate`]: a profile version described by a file, before it exists in Palette.
 //! - [`snapshot`]: the `strata-snapshot/1` document and how it is built from raw API responses.
 //! - [`closed_set`]: a value of a closed set in a document that strata writes and reads, also

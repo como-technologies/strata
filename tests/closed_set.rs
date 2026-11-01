@@ -14,7 +14,7 @@ use strata::closed_set::ClosedSet;
 use strata::cloud::Cloud;
 use strata::cluster_state::ClusterState;
 use strata::conjunction::Conjunction;
-use strata::diff::{ChangeFlag, ImpactLevel, Op, Status};
+use strata::diff::{ChangeFlag, ImpactLevel, Op, Status, VersionMove};
 use strata::oci_provider::OciProvider;
 use strata::ops::{PairStatus, Policy, RecordStatus};
 use strata::pack_state::PackState;
@@ -55,7 +55,7 @@ fn set<T: ClosedSet>(released: &'static [&'static str]) -> Set {
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value and keep the schema id, because a record of
 /// an earlier release then reads the value as unknown.
-fn sets() -> [Set; 22] {
+fn sets() -> [Set; 23] {
     [
         set::<Method>(&["GET", "POST"]),
         set::<Implementation>(&["rust", "bash"]),
@@ -74,6 +74,7 @@ fn sets() -> [Set; 22] {
         ]),
         set::<ChangeFlag>(&["IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"]),
         set::<Status>(&["unchanged", "changed", "added", "removed"]),
+        set::<VersionMove>(&["forward", "back"]),
         set::<Op>(&["changed", "added", "removed"]),
         set::<RecordStatus>(&["unchanged", "drifted", "unverified", "error"]),
         set::<PairStatus>(&[

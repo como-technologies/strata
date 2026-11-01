@@ -91,11 +91,12 @@ pub struct PackBuild {
     pub cloud_types: Vec<String>,
     /// Every tag that points at this version, the exact tag first.
     pub tags: Vec<String>,
-    /// True for the newest version of the registry's copy, by the order of strata.
+    /// True for the newest version of the registry's copy, by [`version::compare`]: the order of
+    /// semantic versions, as Palette orders them.
     pub latest: bool,
-    /// True for the version that Palette calls the latest of the registry's copy. Palette orders
-    /// by semantic version, so it can mark a version below the newest: `1.30.0` below
-    /// `1.30.0-rc.1`.
+    /// True for the version that Palette calls the latest of the registry's copy. Strata orders by
+    /// semantic version as Palette does, so the mark is on the newest version. The two can differ
+    /// for a version that does not parse as a semantic version.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub palette_latest: bool,
     /// The state that the registry listing gives this version: `deprecated`, `disabled`, or

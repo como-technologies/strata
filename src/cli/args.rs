@@ -354,6 +354,9 @@ pub(crate) struct BehindArgs {
     /// Do not compare each pin that is behind with the newest version, and do not ask Palette about the move
     #[arg(long)]
     pub(crate) no_impact: bool,
+    /// Name a pre-release as a newer version of a pin that is not a pre-release
+    #[arg(long)]
+    pub(crate) pre_release: bool,
     #[command(flatten)]
     pub(crate) out: OutputArgs,
 }

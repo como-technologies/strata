@@ -22,23 +22,30 @@ then the floating tags above it: `1.65.0`, then `1.65.x`, then `1.x`.
 question a bump asks: the pin is current when it names the version that
 `--latest` prints first.
 
+A pre-release can be the highest version. `strata behind` does not name it as a
+newer version of a pin that is not a pre-release: see
+[A pre-release](./behind.md#a-pre-release).
+
 Palette marks one version of each pack in each registry as the latest. Palette
-orders by semantic version, and strata orders by the numbers and the text. The
-two orders differ on a suffix: strata puts `1.21.1-rev1` above `1.21.1`, and
-Palette puts it below. When the two differ, `--latest` also keeps the version
-of Palette, with the mark `latest in Palette`:
+orders by semantic version, and strata does too: a pre-release or a rebuild such
+as `1.21.1-rev1` is below `1.21.1`. So the newest version is the version that
+Palette marks:
 
 ```text
 {{#include ../output/packs-palette-latest.txt}}
 ```
 
-The JSON gives `paletteLatest: true` on the version that Palette marks, also
-when strata calls it the newest. Strata leaves out the field on each other
-version:
+The JSON gives `paletteLatest: true` on the version that Palette marks. Strata
+leaves out the field on each other version:
 
 ```text
 {{#include ../output/packs-palette-latest-json.txt}}
 ```
+
+`--latest` keeps one line for each registry. It keeps a second line, with the
+mark `latest in Palette`, only when Palette marks a version that is not the
+highest. This can happen for a version that does not parse as a semantic
+version, such as a version with four numbers.
 
 `strata behind` names the version of Palette on its bump line: see
 [The pins that are behind](./behind.md#the-pins-that-are-behind). See

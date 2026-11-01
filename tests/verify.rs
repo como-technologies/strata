@@ -13,7 +13,7 @@ use strata::api::codes::{
 use strata::api::{MemoryApi, Method, Palette, RawProfile};
 use strata::closed_set::{ClosedSet, Open};
 use strata::cloud::{CLOUD_ALL, CLOUD_CUSTOM};
-use strata::diff::{ChangeFlag, Side, VerifyStatus};
+use strata::diff::{ChangeFlag, Side, VerifyStatus, VersionMove};
 use strata::error::{Error, FailureClass};
 use strata::ops;
 use strata::profile_type::ProfileType;
@@ -170,6 +170,31 @@ fn name_at_latest_records_the_resolved_version_and_keeps_latest_in_the_ref() {
     assert_eq!(snap.source.reference, "lab-profile@latest");
     assert_eq!(snap.source.version, "1.3.0");
     assert_eq!(snap.source.uid, UID_B);
+}
+
+#[test]
+fn name_at_latest_takes_the_highest_version_that_is_not_a_pre_release() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let listing = serde_json::json!({"items": [
+        {"metadata": {"name": "lab-profile", "uid": "uid-rc"}, "spec": {"version": "1.4.0-rc.1"}},
+        {"metadata": {"name": "lab-profile", "uid": UID_B}, "spec": {"version": "1.3.0"}},
+        {"metadata": {"name": "lab-profile", "uid": "uid-g"}, "spec": {"version": "1.3.0-g0123456789ab"}},
+        {"metadata": {"name": "lab-profile", "uid": UID_A}, "spec": {"version": "1.2.0"}},
+        {"metadata": {"name": "only-rc", "uid": "uid-only-2"}, "spec": {"version": "2.0.0-rc.2"}},
+        {"metadata": {"name": "only-rc", "uid": "uid-only-1"}, "spec": {"version": "2.0.0-rc.1"}},
+    ]});
+    let api = serve_fixture(MemoryApi::new(), dir.path(), "a", UID_A);
+    let api = serve_fixture(api, dir.path(), "b", UID_B).with(PROFILE_LISTING, listing);
+    let snap = snapshot_of(&api, "lab-profile@latest").unwrap();
+    assert_eq!(
+        (snap.source.version.as_str(), snap.source.uid.as_str()),
+        ("1.3.0", UID_B)
+    );
+    // a name with no other version gives its highest pre-release
+    let palette = Palette::new(&api);
+    assert_eq!(palette.resolve_latest("only-rc").unwrap(), "uid-only-2");
+    assert_eq!(palette.resolve_latest("lab-profile").unwrap(), UID_B);
 }
 
 /// The record of each kind of ref names the ref as typed. The record drops an empty part after
@@ -7148,6 +7173,14 @@ fn comparing_two_pack_versions_says_what_changed_between_them() {
     assert!(!d.same);
     let pd = &d.packs[0];
     assert_eq!(pd.name, "csi-aws-ebs");
+    assert_eq!(pd.version_move, Some(VersionMove::Forward));
+    assert_eq!(
+        d.version_move,
+        Some(VersionMove::Forward),
+        "the source of a pack record has the version of the pack"
+    );
+    let back = ops::compare(&new, &old, "t1");
+    assert_eq!(back.packs[0].version_move, Some(VersionMove::Back));
     assert!(
         pd.identity && pd.upstream && pd.authored,
         "version, digest, and values all moved"
@@ -12987,6 +13020,7 @@ fn serve_behind() -> MemoryApi {
 const WITH_IMPACT: ops::BehindOptions = ops::BehindOptions {
     impact: true,
     since: None,
+    pre_release: false,
 };
 
 /// `behind` on `api` itself and not on a copy, so that a test reads what `behind` posted.
@@ -13496,18 +13530,19 @@ fn behind_connects_one_time_for_each_project_of_its_pins() {
 
 #[test]
 fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_the_bump_line() {
-    // Palette orders by semantic version, so it calls 1.65.0 the latest, below 1.65.0-rev1
+    // a version with four numbers does not parse as a semantic version, so strata puts it above
+    // 1.65.0, and Palette calls 1.65.0 the latest
     let mut release = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
     release["metadata"]["annotations"] = serde_json::json!({"latestVersion": "true"});
     let api = serve_summaries(
         vec![
             pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
             release,
-            pack_summary_with("1.65.0-rev1", None, &["aws"]),
+            pack_summary_with("1.65.0.1", None, &["aws"]),
         ],
         &[(
             "reg-public",
-            with_tag(public_entity(), "1.65.0-rev1", "pk-1.65.0-rev1"),
+            with_tag(public_entity(), "1.65.0.1", "pk-1.65.0.1"),
         )],
     );
     let dir = tempfile::tempdir().unwrap();
@@ -13521,21 +13556,97 @@ fn behind_marks_the_newer_version_that_palette_calls_the_latest_and_names_it_on_
             .iter()
             .map(|n| (n.version.as_str(), n.palette_latest))
             .collect::<Vec<_>>(),
-        [("1.65.0-rev1", false), ("1.65.0", true)]
+        [("1.65.0.1", false), ("1.65.0", true)]
     );
     let json = serde_json::to_value(&r).unwrap();
     assert_eq!(json["pins"][0]["newer"][1]["paletteLatest"], true);
     assert!(json["pins"][0]["newer"][0].get("paletteLatest").is_none());
-    assert_eq!(
-        pin.bump.as_ref().map(|b| b.to.as_str()),
-        Some("1.65.0-rev1")
-    );
+    assert_eq!(pin.bump.as_ref().map(|b| b.to.as_str()), Some("1.65.0.1"));
     let text = common::terminal().render_behind(&r).unwrap();
     assert!(
         text.lines()
-            .any(|l| l.starts_with("      bump to 1.65.0-rev1: ")
+            .any(|l| l.starts_with("      bump to 1.65.0.1: ")
                 && l.ends_with("; Palette calls 1.65.0 the latest")),
         "{text}"
+    );
+}
+
+/// A registry with 1.63.1 and 1.65.0, and the pre-releases 1.65.0-rev1, 1.65.0-g0123456789ab, and
+/// 1.66.0-rc.1. Palette calls 1.65.0 the latest.
+fn serve_pre_releases() -> MemoryApi {
+    let mut release = pack_summary("pk-65", "1.65.0", "reg-public", "sha256:bbb", CSI_65);
+    release["metadata"]["annotations"] = serde_json::json!({"latestVersion": "true"});
+    let pre = ["1.65.0-rev1", "1.65.0-g0123456789ab", "1.66.0-rc.1"];
+    let mut entity = public_entity();
+    for v in pre {
+        entity = with_tag(entity, v, &format!("pk-{v}"));
+    }
+    let mut summaries = vec![
+        pack_summary("pk-63", "1.63.1", "reg-public", "sha256:aaa", CSI_63),
+        release,
+    ];
+    summaries.extend(pre.map(|v| pack_summary_with(v, None, &["aws"])));
+    serve_summaries(summaries, &[("reg-public", entity)])
+}
+
+/// The versions that `behind` names as newer than the pack version `pin`, in the registry of
+/// `serve_pre_releases`, with the option `pre_release`.
+fn newer_than(pin: &str, pre_release: bool) -> Vec<String> {
+    let api = serve_pre_releases();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("dev.json");
+    let record = snapshot_of(&api, &format!("pack:csi-aws-ebs@{pin}")).unwrap();
+    common::write_snapshot(&path, &record, false);
+    let r = behind_of(
+        &api,
+        &[path],
+        &ops::BehindOptions {
+            pre_release,
+            ..Default::default()
+        },
+    );
+    assert_eq!(r.pins[0].behind, !r.pins[0].newer.is_empty());
+    r.pins[0].newer.iter().map(|n| n.version.clone()).collect()
+}
+
+#[test]
+fn a_pack_at_latest_is_the_highest_version_that_is_not_a_pre_release() {
+    let api = serve_pre_releases();
+    let latest = snapshot_of(&api, "pack:csi-aws-ebs@latest").unwrap();
+    assert_eq!(latest.source.version, "1.65.0");
+    assert_eq!(latest.source.reference, "pack:csi-aws-ebs@latest");
+    // an exact version names a pre-release
+    let rc = snapshot_of(&api, "pack:csi-aws-ebs@1.66.0-rc.1").unwrap();
+    assert_eq!(rc.source.version, "1.66.0-rc.1");
+}
+
+#[test]
+fn behind_names_no_pre_release_as_newer_than_a_pin_that_is_not_one() {
+    assert_eq!(newer_than("1.63.1", false), ["1.65.0"]);
+    // a pre-release is below its version, so the pin of the version has nothing newer
+    assert!(newer_than("1.65.0", false).is_empty());
+}
+
+#[test]
+fn behind_names_a_pre_release_as_newer_when_the_option_asks_for_it() {
+    assert_eq!(
+        newer_than("1.63.1", true),
+        [
+            "1.66.0-rc.1",
+            "1.65.0",
+            "1.65.0-rev1",
+            "1.65.0-g0123456789ab"
+        ]
+    );
+    // the pin of a version still has a pre-release of a later version above it
+    assert_eq!(newer_than("1.65.0", true), ["1.66.0-rc.1"]);
+}
+
+#[test]
+fn behind_names_the_final_version_and_each_later_version_for_a_pin_that_is_a_pre_release() {
+    assert_eq!(
+        newer_than("1.65.0-g0123456789ab", false),
+        ["1.66.0-rc.1", "1.65.0", "1.65.0-rev1"]
     );
 }
 
@@ -13783,6 +13894,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
         &ops::BehindOptions {
             impact: false,
             since: Some(previous),
+            pre_release: false,
         },
     );
     assert_eq!(
@@ -14490,6 +14602,7 @@ fn each_report_of_behind_says_since_when_the_newest_version_is_listed_and_what_a
         &ops::BehindOptions {
             impact: false,
             since: None,
+            pre_release: false,
         },
     );
     // the newest version with the time of its listing, and the versions since a report

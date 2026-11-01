@@ -1,5 +1,5 @@
-$ strata packs cert-manager --latest
-cert-manager in Public Repo (2 of 9 versions)
+$ strata packs cert-manager | head -4
+cert-manager in Public Repo (9 versions)
+  1.21.1       6a75f43fd410c3b56c0d4e51  spectro  nested,all,baremetal,aws,gcp,vsphere,aks,gke,edge-native,maas,azure,eks,apache-cloudstack  1.21.1 1.21.x 1.x
   1.21.1-rev1  6a75f43fd410c3b56c0d4e5f  spectro  nested,all,baremetal,aws,gcp,vsphere,aks,gke,edge-native,maas,azure,eks,apache-cloudstack  1.21.1-rev1
-  1.21.1       6a75f43fd410c3b56c0d4e51  spectro  nested,all,baremetal,aws,gcp,vsphere,aks,gke,edge-native,maas,azure,eks,apache-cloudstack  1.21.1 1.21.x 1.x  latest in Palette
-
+  1.21.0       6a6bd41716c3cbf97a8b7f57  spectro  eks,apache-cloudstack,nested,all,baremetal,aws,gcp,vsphere,aks,gke,edge-native,maas,azure  1.21.0

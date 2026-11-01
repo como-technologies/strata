@@ -17,6 +17,7 @@ pub(super) fn run(r: &mut Runner) {
     same_names(r);
     packs(r);
     palette_latest(r);
+    behind_pre_release(r);
     retire(r);
 }
 
@@ -342,22 +343,50 @@ fn packs(r: &mut Runner) {
 
 /// The chapter `palette-latest`: a rebuild of the newest version of a pack.
 fn palette_latest(r: &mut Runner) {
-    // A rebuild of the newest version: strata orders it above its base, and Palette below
+    // A rebuild of the newest version: strata and Palette both order it below its base
     r.chapter("palette-latest", DEV_ENV);
     r.tenant(|t| t.projects(&[("dev", DEV)]));
     r.tenant(|t| t.registries(DEV));
-    r.tenant(|t| t.rebuild_pack_version(DEV, "cert-manager", "1.21.1"));
+    r.tenant(|t| t.copy_pack_version(DEV, "cert-manager", "1.21.1", "1.21.1-rev1"));
     r.step(
         "packs-palette-latest",
         0,
         false,
-        "strata packs cert-manager --latest",
+        "strata packs cert-manager | head -4",
     );
     r.step(
         "packs-palette-latest-json",
         0,
         false,
-        "strata packs cert-manager --latest --json | jq -c '.registries[0].versions[] | {version, latest, paletteLatest}'",
+        "strata packs cert-manager --json | jq -c '.registries[0].versions[:2][] | {version, latest, paletteLatest}'",
+    );
+}
+
+/// The chapter `behind-pre-release`: a pipeline publishes a pre-release of the next version.
+fn behind_pre_release(r: &mut Runner) {
+    // The pre-release is below its version, so it is no newer version of a pin that is final
+    r.chapter("behind-pre-release", DEV_ENV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.tenant(|t| t.registries(DEV));
+    r.profile(DEV, A111, "1.1.1", "aws-stack@1.1.1", &[]);
+    r.tenant(|t| t.copy_pack_version(DEV, "csi-aws-ebs", "1.65.0", "1.66.0-rc.1"));
+    r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
+    r.step(
+        "behind-pre-release",
+        0,
+        false,
+        "strata behind releases/1.1.1/dev.json --no-impact | head -1",
+    );
+    r.step(
+        "behind-pre-release-shown",
+        1,
+        false,
+        "strata behind releases/1.1.1/dev.json --no-impact --pre-release",
+    );
+    r.excerpt(
+        "behind-pre-release-lines",
+        "behind-pre-release-shown",
+        r"^(\$|\d+ pins|~ \[csi)",
     );
 }
 

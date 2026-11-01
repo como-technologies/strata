@@ -25,7 +25,9 @@ under a pin name each record that pins it.
 
 - **A newer version** is one that a person can move to. A version that Spectro
   Cloud disabled or deleted is not, and a version for none of the clouds of the
-  pinned version is not either. See
+  pinned version is not either. A pre-release is not one, unless the pin is a
+  pre-release or the option `--pre-release` asks for it: see
+  [A pre-release](#a-pre-release). See
   [A pack that supports a cloud](../internals/palette/packs.md#a-pack-that-supports-a-cloud).
   A deprecated version is, and it says so. See
   [Pack states](../internals/palette/packs.md#pack-states).
@@ -55,6 +57,32 @@ under a pin name each record that pins it.
 
 `--no-impact` skips the comparison of each bump and the question to Palette. The
 comparison costs two pack reads for each pin that is behind.
+`--pre-release` names a pre-release as a newer version of a pin that is not a
+pre-release.
+
+## A pre-release
+
+A pipeline can publish a pre-release for each build, such as `1.66.0-rc.1`. Strata
+orders versions by Semantic Versioning, as Palette does. A pre-release is below
+its version, so it is no newer version of a pin that is not a pre-release. Here
+the registry has `csi-aws-ebs` `1.66.0-rc.1`, and the record pins `1.65.0`:
+
+```text
+{{#include ../output/behind-pre-release.txt}}
+```
+
+`--pre-release` names the pre-release as a newer version:
+
+```text
+{{#include ../output/behind-pre-release-lines.txt}}
+```
+
+A pin that is a pre-release is behind its final version and each later version.
+`1.0.1-g0123456789ab` is behind `1.0.1`. Strata names each later pre-release too,
+because the pin follows the pre-releases. Two pre-releases of one version
+compare by their identifiers, as the rules of Semantic Versioning say. So the
+text of a hash, not the time of the build, orders `1.0.1-g0123456789ab` and
+`1.0.1-g0123456789ac`. Pin the final version, and not a pre-release.
 
 ## Palette accepts the move, or refuses it
 
