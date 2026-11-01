@@ -1,6 +1,7 @@
 //! The comparison of two packs: the status, the change flags, the params, the images and the
 //! charts, the values, and the manifests.
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use schemars::JsonSchema;
@@ -12,8 +13,9 @@ use super::{Diff, zip_by_key};
 use crate::closed_set::legend::Described;
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::canonical_json;
-use crate::diff::impact::{Impact, presence_impact};
-use crate::snapshot::{Pack, UpstreamSource};
+use crate::content::layer::Layer;
+use crate::diff::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
+use crate::snapshot::{Pack, Snapshot, UpstreamSource};
 
 /// What happened to one pack.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -525,6 +527,98 @@ pub(super) fn manifests_diff(x: &Pack, y: &Pack) -> Vec<ManifestChange> {
         }
     }
     out
+}
+
+/// The diff of each pack of two records, one for each key of either side. The diffs are in the
+/// order of the layers, then by name.
+pub(super) fn pack_diffs(a: &Snapshot, b: &Snapshot) -> Vec<PackDiff> {
+    let mut packs: Vec<PackDiff> = zip_by_key(packs_by_key(a), packs_by_key(b))
+        .map(|(key, x, y)| match (x, y) {
+            (None, Some(y)) => presence_pack_diff(key, y, true),
+            (Some(x), None) => presence_pack_diff(key, x, false),
+            (Some(x), Some(y)) => compared_pack_diff(key, x, y),
+            (None, None) => unreachable!("a key comes from one of the sides"),
+        })
+        .collect();
+    packs.sort_by(|p, q| {
+        (Layer::parse(&p.layer).rank(), &p.name).cmp(&(Layer::parse(&q.layer).rank(), &q.name))
+    });
+    packs
+}
+
+/// The packs of a record by key.
+fn packs_by_key(s: &Snapshot) -> BTreeMap<&str, &Pack> {
+    s.packs.iter().map(|p| (p.key.as_str(), p)).collect()
+}
+
+/// The diff of a pack that both sides hold: its status, its flags, its impact, and its changes.
+fn compared_pack_diff(key: &str, x: &Pack, y: &Pack) -> PackDiff {
+    let identity = x.hash.identity != y.hash.identity;
+    let upstream = x.hash.upstream != y.hash.upstream;
+    let authored = x.hash.authored != y.hash.authored;
+    let status = if x.hash.node == y.hash.node {
+        Status::Unchanged
+    } else {
+        Status::Changed
+    };
+    let tag_renamed = identity
+        && x.tag != y.tag
+        && (
+            &x.name,
+            &x.layer,
+            &x.kind,
+            &x.version,
+            &x.pack_uid,
+            &x.registry_uid,
+        ) == (
+            &y.name,
+            &y.layer,
+            &y.kind,
+            &y.version,
+            &y.pack_uid,
+            &y.registry_uid,
+        );
+    let mut imp = impact(
+        Layer::parse(&x.layer),
+        Flags {
+            identity: identity && !tag_renamed,
+            version: x.version != y.version,
+            upstream,
+            authored,
+        },
+    );
+    if tag_renamed && imp.level == ImpactLevel::None {
+        imp.text = "none (tag renamed, same pack build)".to_string();
+    }
+    let image_changes = artifact_changes(
+        &image_pairs(&x.images, &x.version),
+        &image_pairs(&y.images, &y.version),
+    );
+    let chart_changes = artifact_changes(&chart_pairs(&x.charts), &chart_pairs(&y.charts));
+    PackDiff {
+        key: key.to_string(),
+        layer: x.layer.clone(),
+        name: x.name.clone(),
+        status,
+        a: Some(side(x)),
+        b: Some(side(y)),
+        identity,
+        upstream,
+        authored,
+        params_changed: canonical_json(&x.params) != canonical_json(&y.params),
+        minted_uid_only: identity && !upstream && !authored && minted_uid_pair(x, y),
+        tag_renamed,
+        impact: imp,
+        values: values_diff(x, y),
+        manifests: manifests_diff(x, y),
+        upstream_unknown: x.upstream_unknown() || y.upstream_unknown(),
+        masked: masked_union(x, y),
+        images: !image_changes.is_empty(),
+        charts: !chart_changes.is_empty(),
+        image_changes,
+        chart_changes,
+        param_changes: param_changes(&x.params, &y.params),
+    }
 }
 
 /// The diff of a pack that one side holds: `added`, with the pack on side B, or removed, with the

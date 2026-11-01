@@ -10,21 +10,20 @@ use serde_json::Value;
 use crate::api::{AuditKind, Palette, PaletteApi};
 use crate::closed_set::impl_closed_set;
 use crate::closed_set::legend::{Described, legend};
-use crate::cluster_state::ClusterState;
 use crate::diff::{
     self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImageIdChange, ImpactLevel,
     InvalidPack, Verify, VerifyStatus,
 };
 use crate::error::{Error, ErrorDocument, Result, found};
-use crate::json::{flag, is_zero, opt_flag, opt_text, str_at, text};
+use crate::json::{is_zero, text};
 use crate::reference::name_version;
 use crate::registry::Registries;
-use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
+use crate::snapshot::{Pack, PackSource, Snapshot, SubjectKind, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::{Rfc3339, Rfc3339OrEmpty};
 
-use super::consumers::{ACTIVE_STATE, INACTIVE_STATE};
-use super::{HolderReads, connected, holder_snapshot, scope_of};
+use super::live::{LiveObject, known_kind, read_live};
+use super::{connected, scope_of};
 
 /// The outcome of a verification.
 #[derive(Debug)]
@@ -102,71 +101,6 @@ fn profiles_overwritten<A: PaletteApi>(
         }
     }
     Ok(out)
-}
-
-/// The state of a cluster, an edge host, or a cluster group, from its document: `status.state`,
-/// or, for a cluster group, `active` or `inactive` from `status.isActive`.
-fn subject_state(kind: SubjectKind, doc: &Value) -> Option<String> {
-    match kind {
-        SubjectKind::ClusterGroup => opt_flag(doc, "/status/isActive")
-            .map(|a| if a { ACTIVE_STATE } else { INACTIVE_STATE }.to_string()),
-        _ => opt_text(doc, "/status/state"),
-    }
-}
-
-/// True when Palette keeps the document of a deleted object: the state `Deleted`, or
-/// `metadata.isDeleted`. Palette deletes a cluster so, and keeps its spec.
-fn is_deleted(doc: &Value) -> bool {
-    ClusterState::Deleted.is(str_at(doc, "/status/state")) || flag(doc, "/metadata/isDeleted")
-}
-
-/// The live snapshot of the holder of a cluster record, from its document `doc`: with the update
-/// that waits, the macro values, and the shape, as the record holds them. `kind` is the kind of
-/// the holder that the record names.
-fn live_holder<A: PaletteApi>(
-    recorded: &Snapshot,
-    c: &crate::snapshot::ClusterSource,
-    kind: SubjectKind,
-    doc: Value,
-    palette: &Palette<A>,
-    checked_at: &str,
-    progress: &Progress,
-) -> Result<Snapshot> {
-    let raw = palette.subject_raw(kind, doc, progress)?;
-    // the record decides what the live record reads: strata checks each part that the record holds
-    let reads = HolderReads {
-        profile: c.profile.as_deref(),
-        pending: c.pending,
-        macros: c.macro_values.is_some(),
-        shape: c.tier(Tier::Shape).is_some(),
-        members: false,
-        raw_dir: None,
-    };
-    holder_snapshot(
-        palette,
-        kind,
-        raw,
-        &c.uid,
-        &reads,
-        &recorded.source.reference,
-        checked_at,
-    )
-}
-
-/// The kind of the object of the cluster record `c`, which tells strata how to read the object.
-///
-/// # Errors
-///
-/// [`Error::Usage`] for a kind that a later release wrote: this release cannot read such an
-/// object from Palette. Strata sends no request.
-fn known_kind(c: &crate::snapshot::ClusterSource) -> Result<SubjectKind> {
-    c.kind.known().ok_or_else(|| Error::Usage {
-        message: format!(
-            "a later release of strata wrote this record of the {} {}; this strata cannot read \
-             a {} from Palette, so use that release for the record",
-            c.kind, c.name, c.kind
-        ),
-    })
 }
 
 /// Make sure from the record alone that strata can verify it. The check makes no request and needs
@@ -255,50 +189,7 @@ pub fn verify_with<A: PaletteApi>(
     check_verifiable(recorded)?;
     // a pack record names a registry pack, not a profile or a cluster
     if let Some(p) = &recorded.source.pack {
-        if options.who {
-            progress
-                .note("note: Palette keeps no audit log for a registry pack; --who reads nothing");
-        }
-        progress.note(&format!(
-            "verifying {} against its registry; recorded {}",
-            recorded.source.title(),
-            recorded.source.fetched_at
-        ));
-        // one cache for the record and the sync note: each registry listing is read one time
-        let mut registries = Registries::new(palette);
-        let live = crate::candidate::pack::pack_snapshot_in(
-            &mut registries,
-            Some(&p.registry_uid),
-            &p.name,
-            &p.version,
-            &recorded.source.reference,
-            checked_at,
-            progress,
-        )?;
-        let live = live.with_project(palette.project_uid());
-        // the verdict states the copy of the registry in Palette, so it says how old that copy is
-        let pack_type = live.packs.first().and_then(Pack::pack_type);
-        // the sync is a note beside the verdict: a failed read of it is named, and the verdict
-        // stands
-        let sync = registries.sync_note(&p.registry_uid, pack_type, progress)?;
-        let image_ids_changed = images_moved_alone(recorded, &live);
-        let unchanged = recorded.root == live.root && image_ids_changed.is_empty();
-        // no last_modified: the time of a pack in the listing is its create time, so it is not
-        // a change
-        let verify = Verify {
-            image_ids_changed,
-            registry_sync: sync.sync,
-            registry_sync_error: sync.error,
-            ..Verify::new(unchanged, &p.pack_uid, recorded, &live, checked_at)
-        };
-        let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
-        let status = settle(unchanged, &mut diff, options);
-        return Ok(Verification {
-            diff,
-            live,
-            unchanged,
-            status,
-        });
+        return verify_pack(recorded, p, palette, checked_at, options, progress);
     }
     let uid = recorded.source.shown_uid();
     progress.note(&format!(
@@ -306,69 +197,15 @@ pub fn verify_with<A: PaletteApi>(
         recorded.source.title(),
         recorded.source.fetched_at
     ));
-    // set when Palette no longer has the object of the record
-    let mut gone = false;
-    let mut deleted_at = None;
-    let mut state = None;
-    // when Palette last changed the object: its document carries the time, so it costs no request
-    let mut last_modified = None;
-    let live = match &recorded.source.cluster {
-        Some(c) => {
-            let kind = known_kind(c)?;
-            // the document by uid alone: a 404 is a gone object, and not a name to look up
-            progress.note(&format!("fetching {} {uid}", kind.noun()));
-            let doc = found(palette.subject_document(kind, uid))?.unwrap_or(Value::Null);
-            state = subject_state(kind, &doc);
-            last_modified = opt_text(&doc, "/metadata/lastModifiedTimestamp");
-            if doc.is_null() || is_deleted(&doc) {
-                gone = true;
-                deleted_at = opt_text(&doc, "/metadata/deletionTimestamp");
-                recorded.gone(checked_at)
-            } else {
-                live_holder(recorded, c, kind, doc, palette, checked_at, progress)?
-            }
-        }
-        None if recorded.source.is_app() => {
-            match found(palette.fetch_app_profile(uid, progress))? {
-                Some(raw) => {
-                    last_modified = opt_text(&raw.profile, "/metadata/lastModifiedTimestamp");
-                    Snapshot::from_app_profile(&raw, uid, checked_at)?
-                }
-                None => {
-                    gone = true;
-                    recorded.gone(checked_at)
-                }
-            }
-        }
-        // a version that Palette no longer has is a drift, not an error: a retire deletes it
-        None => match found(palette.fetch_profile(uid, progress))? {
-            Some(mut raw) => {
-                last_modified = opt_text(&raw.profile, "/metadata/lastModifiedTimestamp");
-                // strata also checks the macro values of a record that holds their digests
-                if recorded.source.macro_values.is_some() {
-                    raw.resolved_values = Some(palette.profile_resolved_values(uid)?);
-                }
-                Snapshot::from_raw(&raw, uid, checked_at)?
-            }
-            None => {
-                gone = true;
-                recorded.gone(checked_at)
-            }
-        },
-    }
-    .with_project(palette.project_uid());
-    // the uid of a profile record names another version now, or the same version under another
-    // name: a rename keeps the version, and a legacy version bump changes it
-    let now_names = (recorded.source.cluster.is_none()
-        && !live.source.version.is_empty()
-        && (&live.source.name, &live.source.version)
-            != (&recorded.source.name, &recorded.source.version))
-        .then(|| name_version(&live.source.name, &live.source.version));
-    let (renamed_to, overwritten_by) = if live.source.version == recorded.source.version {
-        (now_names, None)
-    } else {
-        (None, now_names)
-    };
+    let LiveObject {
+        snapshot,
+        gone,
+        deleted_at,
+        state,
+        last_modified,
+    } = read_live(recorded, palette, checked_at, progress)?;
+    let live = snapshot.with_project(palette.project_uid());
+    let (renamed_to, overwritten_by) = renamed_or_overwritten(recorded, &live);
     let profiles_overwritten = match &live.source.cluster {
         Some(c) if !gone => profiles_overwritten(&c.profiles, palette)?,
         _ => Vec::new(),
@@ -391,7 +228,7 @@ pub fn verify_with<A: PaletteApi>(
         profiles_overwritten,
         // a gone object has no time of its own: the verdict names the deletion
         last_modified: last_modified.filter(|_| !gone),
-        macros_changed: macros_changed.clone(),
+        macros_changed,
         image_ids_changed,
         ..Verify::new(unchanged, uid, recorded, &live, checked_at)
     };
@@ -401,38 +238,7 @@ pub fn verify_with<A: PaletteApi>(
         .as_ref()
         .map_or(0, |c| c.values.len());
     let who = if options.who && !unchanged {
-        let since = &recorded.source.fetched_at;
-        let mut entries = writes(palette, audit_kind(recorded), uid, since, progress)?;
-        // the write that overwrote a version that a cluster runs is an entry of the profile
-        let overwritten = diff
-            .verify
-            .as_ref()
-            .map(|v| v.profiles_overwritten.clone())
-            .unwrap_or_default();
-        for o in &overwritten {
-            let mut more = writes(
-                palette,
-                Some(AuditKind::ClusterProfile),
-                &o.uid,
-                since,
-                progress,
-            )?;
-            // the line names the profile, also when Palette gives no resource on the entry
-            for e in &mut more {
-                let r = e.resource.get_or_insert_with(|| AuditResource {
-                    kind: AuditKind::ClusterProfile.as_str().to_string(),
-                    name: String::new(),
-                    uid: o.uid.clone(),
-                });
-                if r.name.is_empty() {
-                    r.name = o.name.clone();
-                }
-            }
-            entries.extend(more);
-        }
-        // oldest first over all the logs; each time has the same form, so the text sorts it
-        entries.sort_by(|a, b| a.time.cmp(&b.time));
-        Some(entries)
+        Some(who_wrote(recorded, &diff, palette, progress)?)
     } else {
         None
     };
@@ -447,6 +253,122 @@ pub fn verify_with<A: PaletteApi>(
         unchanged,
         status,
     })
+}
+
+/// The verification of a record of a registry pack, against the registry in Palette.
+fn verify_pack<A: PaletteApi>(
+    recorded: &Snapshot,
+    p: &PackSource,
+    palette: &Palette<A>,
+    checked_at: &str,
+    options: &VerifyOptions,
+    progress: &Progress,
+) -> Result<Verification> {
+    if options.who {
+        progress.note("note: Palette keeps no audit log for a registry pack; --who reads nothing");
+    }
+    progress.note(&format!(
+        "verifying {} against its registry; recorded {}",
+        recorded.source.title(),
+        recorded.source.fetched_at
+    ));
+    // one cache for the record and the sync note: each registry listing is read one time
+    let mut registries = Registries::new(palette);
+    let live = crate::candidate::pack::pack_snapshot_in(
+        &mut registries,
+        Some(&p.registry_uid),
+        &p.name,
+        &p.version,
+        &recorded.source.reference,
+        checked_at,
+        progress,
+    )?;
+    let live = live.with_project(palette.project_uid());
+    // the verdict states the copy of the registry in Palette, so it says how old that copy is
+    let pack_type = live.packs.first().and_then(Pack::pack_type);
+    // the sync is a note beside the verdict: a failed read of it is named, and the verdict stands
+    let sync = registries.sync_note(&p.registry_uid, pack_type, progress)?;
+    let image_ids_changed = images_moved_alone(recorded, &live);
+    let unchanged = recorded.root == live.root && image_ids_changed.is_empty();
+    // no last_modified: the time of a pack in the listing is its create time, so it is not a
+    // change
+    let verify = Verify {
+        image_ids_changed,
+        registry_sync: sync.sync,
+        registry_sync_error: sync.error,
+        ..Verify::new(unchanged, &p.pack_uid, recorded, &live, checked_at)
+    };
+    let mut diff = diff::compute(recorded, &live, checked_at, Some(verify));
+    let status = settle(unchanged, &mut diff, options);
+    Ok(Verification {
+        diff,
+        live,
+        unchanged,
+        status,
+    })
+}
+
+/// The ref that the uid of a profile record names now, as `(renamed_to, overwritten_by)`.
+///
+/// The uid names another version now, or the same version under another name: a rename keeps the
+/// version, and a legacy version bump changes it. A record of a cluster has neither.
+fn renamed_or_overwritten(
+    recorded: &Snapshot,
+    live: &Snapshot,
+) -> (Option<String>, Option<String>) {
+    let now_names = (recorded.source.cluster.is_none()
+        && !live.source.version.is_empty()
+        && (&live.source.name, &live.source.version)
+            != (&recorded.source.name, &recorded.source.version))
+        .then(|| name_version(&live.source.name, &live.source.version));
+    if live.source.version == recorded.source.version {
+        (now_names, None)
+    } else {
+        (None, now_names)
+    }
+}
+
+/// The writes to the object of `recorded` since the record was taken, oldest first, over the
+/// audit logs of the object and of each profile that `diff` shows as overwritten.
+fn who_wrote<A: PaletteApi>(
+    recorded: &Snapshot,
+    diff: &Diff,
+    palette: &Palette<A>,
+    progress: &Progress,
+) -> Result<Vec<AuditEntry>> {
+    let uid = recorded.source.shown_uid();
+    let since = &recorded.source.fetched_at;
+    let mut entries = writes(palette, audit_kind(recorded), uid, since, progress)?;
+    let overwritten = diff
+        .verify
+        .as_ref()
+        .map(|v| v.profiles_overwritten.as_slice())
+        .unwrap_or_default();
+    // the write that overwrote a version that a cluster runs is an entry of the profile
+    for o in overwritten {
+        let mut more = writes(
+            palette,
+            Some(AuditKind::ClusterProfile),
+            &o.uid,
+            since,
+            progress,
+        )?;
+        // the line names the profile, also when Palette gives no resource on the entry
+        for e in &mut more {
+            let r = e.resource.get_or_insert_with(|| AuditResource {
+                kind: AuditKind::ClusterProfile.as_str().to_string(),
+                name: String::new(),
+                uid: o.uid.clone(),
+            });
+            if r.name.is_empty() {
+                r.name = o.name.clone();
+            }
+        }
+        entries.extend(more);
+    }
+    // oldest first over all the logs; each time has the same form, so the text sorts it
+    entries.sort_by(|a, b| a.time.cmp(&b.time));
+    Ok(entries)
 }
 
 /// Schema id of the document `verify` writes for several records.

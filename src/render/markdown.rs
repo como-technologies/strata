@@ -25,7 +25,7 @@ use super::verify::{
 };
 use super::{Renderer, capitalized, count_of, entry_error, short};
 use crate::closed_set::ClosedSet;
-use crate::diff::{Diff, Leaf, Op, Status};
+use crate::diff::{Diff, Leaf, Op, PackDiff, Status};
 use crate::error::Result;
 use crate::ops::{
     Chain, ConsumerKind, ConsumersReport, Listing, PackListing, RecordStatus, VerifySummary,
@@ -66,176 +66,220 @@ pub(super) fn variable_line(v: &VarLine<'_>) -> String {
     }
 }
 
-impl Renderer for MarkdownRenderer {
-    fn render(&self, d: &Diff, a: &Snapshot, b: &Snapshot, full: bool) -> Result<String> {
-        let mut o = String::new();
-        o.push_str(&format!("### {} → {}\n\n", d.a.title(), d.b.title()));
-        o.push_str("| | A | B |\n|---|---|---|\n");
+/// The heading and the table of the two records: their uids, roots, consumers, and fetch times.
+fn heading_table(d: &Diff) -> String {
+    let mut o = String::new();
+    o.push_str(&format!("### {} → {}\n\n", d.a.title(), d.b.title()));
+    o.push_str("| | A | B |\n|---|---|---|\n");
+    o.push_str(&format!(
+        "| uid | `{}` | `{}` |\n",
+        dash(d.a.shown_uid()),
+        dash(d.b.shown_uid())
+    ));
+    o.push_str(&format!(
+        "| root | `{}` | `{}` |\n",
+        short(&d.root_a),
+        short(&d.root_b)
+    ));
+    if let Some((a, b)) = consumer_counts(d) {
         o.push_str(&format!(
-            "| uid | `{}` | `{}` |\n",
-            dash(d.a.shown_uid()),
-            dash(d.b.shown_uid())
+            "| consumers | {} | {} |\n",
+            count_of(a, "cluster"),
+            count_of(b, "cluster")
         ));
+    }
+    o.push_str(&format!(
+        "| fetched | {} | {} |\n\n",
+        dash(&d.a.fetched_at),
+        dash(&d.b.fetched_at)
+    ));
+    o
+}
+
+/// The result line, then the consumers, the notes, and the verify line, each when the diff has it.
+fn result_section(d: &Diff) -> String {
+    let mut o = String::new();
+    let s = &d.summary;
+    // two packs have no profile variables, and no request asked for any
+    let variables = if variables_comparable(d) {
+        format!(" · variables: {}", moved(s.variables_changed).as_str())
+    } else {
+        String::new()
+    };
+    o.push_str(&format!(
+        "**Result:** {} · max impact: `{}` · packs: {} changed, {} added, {} removed, {} unchanged{}\n\n",
+        diff_word(d),
+        s.max_impact.as_str(),
+        s.packs_changed,
+        s.packs_added,
+        s.packs_removed,
+        s.packs_unchanged,
+        variables
+    ));
+    if let Some(sentence) = consumers_sentence(d) {
+        o.push_str(&format!("**Consumers:** {sentence}\n\n"));
+    }
+    for note in diff_notes(d) {
+        o.push_str(&match note {
+            DiffNote::Warn(text) | DiffNote::Good(text) => format!("**Note:** {text}\n\n"),
+            DiffNote::Palette(lines) => {
+                format!("**Palette:** {}\n\n", markdown_cell(&lines.join("; ")))
+            }
+        });
+    }
+    if let Some(v) = &d.verify {
         o.push_str(&format!(
-            "| root | `{}` | `{}` |\n",
-            short(&d.root_a),
-            short(&d.root_b)
+            "**Verify:** `{}` for uid `{}`, recorded {}, checked {}\n\n",
+            record_word(RecordStatus::from(v.status)),
+            v.uid,
+            v.recorded_at,
+            v.checked_at
         ));
-        if let Some((a, b)) = consumer_counts(d) {
-            o.push_str(&format!(
-                "| consumers | {} | {} |\n",
-                count_of(a, "cluster"),
-                count_of(b, "cluster")
-            ));
-        }
-        o.push_str(&format!(
-            "| fetched | {} | {} |\n\n",
-            dash(&d.a.fetched_at),
-            dash(&d.b.fetched_at)
-        ));
-        let s = &d.summary;
-        // two packs have no profile variables, and no request asked for any
-        let variables = if variables_comparable(d) {
-            format!(" · variables: {}", moved(s.variables_changed).as_str())
-        } else {
-            String::new()
+    }
+    o
+}
+
+/// The table with one row for each pack of the diff.
+fn pack_table(d: &Diff) -> String {
+    let mut o =
+        String::from("| | layer | pack | version | change | impact |\n|---|---|---|---|---|---|\n");
+    for pd in &d.packs {
+        let mark = status_mark(pd.status);
+        let change = match pd.status {
+            Status::Changed => plain_flags(pd).replace("->", "→"),
+            status => status_word(status).to_string(),
+        };
+        let change = match invalid_mark(pd) {
+            Some(m) => format!("{change} **{}**", markdown_cell(&m)),
+            None => change,
         };
         o.push_str(&format!(
-            "**Result:** {} · max impact: `{}` · packs: {} changed, {} added, {} removed, {} unchanged{}\n\n",
-            diff_word(d),
-            s.max_impact.as_str(),
-            s.packs_changed,
-            s.packs_added,
-            s.packs_removed,
-            s.packs_unchanged,
-            variables
+            "| `{mark}` | {} | `{}` | {} | {} | {} |\n",
+            pd.layer,
+            markdown_cell(&pd.name),
+            markdown_cell(&version_display(pd).replace("->", "→")),
+            change,
+            markdown_cell(&pd.impact.text)
         ));
-        if let Some(sentence) = consumers_sentence(d) {
-            o.push_str(&format!("**Consumers:** {sentence}\n\n"));
-        }
-        for note in diff_notes(d) {
-            o.push_str(&match note {
-                DiffNote::Warn(text) | DiffNote::Good(text) => format!("**Note:** {text}\n\n"),
-                DiffNote::Palette(lines) => {
-                    format!("**Palette:** {}\n\n", markdown_cell(&lines.join("; ")))
-                }
-            });
-        }
-        if let Some(v) = &d.verify {
-            o.push_str(&format!(
-                "**Verify:** `{}` for uid `{}`, recorded {}, checked {}\n\n",
-                record_word(RecordStatus::from(v.status)),
-                v.uid,
-                v.recorded_at,
-                v.checked_at
-            ));
-        }
-        o.push_str("| | layer | pack | version | change | impact |\n|---|---|---|---|---|---|\n");
-        for pd in &d.packs {
-            let mark = status_mark(pd.status);
-            let change = match pd.status {
-                Status::Changed => plain_flags(pd).replace("->", "→"),
-                status => status_word(status).to_string(),
-            };
-            let change = match invalid_mark(pd) {
-                Some(m) => format!("{change} **{}**", markdown_cell(&m)),
-                None => change,
-            };
-            o.push_str(&format!(
-                "| `{mark}` | {} | `{}` | {} | {} | {} |\n",
-                pd.layer,
-                markdown_cell(&pd.name),
-                markdown_cell(&version_display(pd).replace("->", "→")),
-                change,
-                markdown_cell(&pd.impact.text)
-            ));
-        }
-        o.push('\n');
-        if d.variables.changed {
-            let g = &d.variables.by_name;
-            o.push_str(&format!(
-                "<details><summary>variables: {} added, {} removed, {} changed</summary>\n\n```diff\n",
-                g.added.len(),
-                g.removed.len(),
-                g.changed.len()
-            ));
-            for v in variable_lines(g) {
-                o.push_str(&variable_line(&v));
+    }
+    o.push('\n');
+    o
+}
+
+/// The fold with the changes of the variables. It is empty when no variable changed.
+fn variables_section(d: &Diff) -> String {
+    if !d.variables.changed {
+        return String::new();
+    }
+    let g = &d.variables.by_name;
+    let mut o = format!(
+        "<details><summary>variables: {} added, {} removed, {} changed</summary>\n\n```diff\n",
+        g.added.len(),
+        g.removed.len(),
+        g.changed.len()
+    );
+    for v in variable_lines(g) {
+        o.push_str(&variable_line(&v));
+    }
+    o.push_str("```\n</details>\n\n");
+    o
+}
+
+/// The line with the state of each tier of the cluster, and the fold with the tiers that differ.
+/// It is empty when the diff does not compare the tiers.
+fn tiers_section(d: &Diff) -> String {
+    match tier_line(d) {
+        TierLine::NotCompared => String::new(),
+        TierLine::Unchanged => format!("**Cluster tiers:** {}\n\n", moved(false).as_str()),
+        TierLine::Differ(states) => {
+            let words: Vec<String> = states
+                .iter()
+                .map(|(t, same)| format!("{t} {}", moved(!*same).as_str()))
+                .collect();
+            let mut o = format!("**Cluster tiers:** {}\n\n", words.join(", "));
+            o.push_str("<details><summary>cluster tiers that differ</summary>\n\n```diff\n");
+            for line in tier_op_lines(d) {
+                o.push_str(&op_line(&line));
             }
             o.push_str("```\n</details>\n\n");
+            o
         }
+    }
+}
+
+/// The fold with the changes of the values of the cluster. It is empty when none changed.
+fn cluster_values_section(d: &Diff) -> String {
+    let Some(cv) = d.cluster_variables.as_ref().filter(|c| c.changed) else {
+        return String::new();
+    };
+    let mut o = format!(
+        "<details><summary>cluster values: {}</summary>\n\n```diff\n",
+        values_changed(cv.values.len())
+    );
+    for c in &cv.values {
+        o.push_str(&op_line(&OpLine::cluster_value(c)));
+    }
+    o.push_str("```\n</details>\n\n");
+    o
+}
+
+/// The fold with the detail of a changed pack. It is empty when the pack has no detail to show.
+fn pack_detail(pd: &PackDiff) -> String {
+    let mut body = String::new();
+    if let Some(line) = upstream_line(pd, &Paint::off(), code) {
+        body.push_str(&format!("{line}\n\n"));
+    }
+    if pd.values.changed && pd.values.parseable && !pd.values.diff.is_empty() {
+        body.push_str("```diff\n");
+        for l in &pd.values.diff {
+            body.push_str(&leaf(l));
+        }
+        body.push_str("```\n");
+    }
+    if pd.values.changed && !pd.values.parseable {
+        body.push_str(&values_unparsed_sentence(code));
+        body.push('\n');
+    }
+    let artifacts = artifact_lines(pd);
+    if !artifacts.is_empty() {
+        body.push_str("```diff\n");
+        for line in &artifacts {
+            body.push_str(&format!("{line}\n"));
+        }
+        body.push_str("```\n");
+    }
+    for m in &pd.manifests {
+        body.push_str(&format!("- {}\n", manifest_change(m, code)));
+    }
+    if body.is_empty() {
+        return body;
+    }
+    let what = if pd.values.changed && pd.values.parseable {
+        values_summary(&pd.values)
+    } else {
+        plain_flags(pd)
+    };
+    format!(
+        "<details><summary><code>{}</code> {}</summary>\n\n{}\n</details>\n\n",
+        markdown_cell(&pd.name),
+        what,
+        body
+    )
+}
+
+impl Renderer for MarkdownRenderer {
+    fn render(&self, d: &Diff, a: &Snapshot, b: &Snapshot, full: bool) -> Result<String> {
+        let mut o = heading_table(d);
+        o.push_str(&result_section(d));
+        o.push_str(&pack_table(d));
+        o.push_str(&variables_section(d));
         if let Some(line) = artifacts_summary(d) {
             o.push_str(&format!("**Images:** {line}\n\n"));
         }
-        match tier_line(d) {
-            TierLine::NotCompared => {}
-            TierLine::Unchanged => {
-                o.push_str(&format!("**Cluster tiers:** {}\n\n", moved(false).as_str()))
-            }
-            TierLine::Differ(states) => {
-                let words: Vec<String> = states
-                    .iter()
-                    .map(|(t, same)| format!("{t} {}", moved(!*same).as_str()))
-                    .collect();
-                o.push_str(&format!("**Cluster tiers:** {}\n\n", words.join(", ")));
-                o.push_str("<details><summary>cluster tiers that differ</summary>\n\n```diff\n");
-                for line in tier_op_lines(d) {
-                    o.push_str(&op_line(&line));
-                }
-                o.push_str("```\n</details>\n\n");
-            }
-        }
-        if let Some(cv) = d.cluster_variables.as_ref().filter(|c| c.changed) {
-            o.push_str(&format!(
-                "<details><summary>cluster values: {}</summary>\n\n```diff\n",
-                values_changed(cv.values.len())
-            ));
-            for c in &cv.values {
-                o.push_str(&op_line(&OpLine::cluster_value(c)));
-            }
-            o.push_str("```\n</details>\n\n");
-        }
+        o.push_str(&tiers_section(d));
+        o.push_str(&cluster_values_section(d));
         for pd in d.packs.iter().filter(|p| p.status == Status::Changed) {
-            let mut body = String::new();
-            if let Some(line) = upstream_line(pd, &Paint::off(), code) {
-                body.push_str(&format!("{line}\n\n"));
-            }
-            if pd.values.changed && pd.values.parseable && !pd.values.diff.is_empty() {
-                body.push_str("```diff\n");
-                for l in &pd.values.diff {
-                    body.push_str(&leaf(l));
-                }
-                body.push_str("```\n");
-            }
-            if pd.values.changed && !pd.values.parseable {
-                body.push_str(&values_unparsed_sentence(code));
-                body.push('\n');
-            }
-            let artifacts = artifact_lines(pd);
-            if !artifacts.is_empty() {
-                body.push_str("```diff\n");
-                for line in &artifacts {
-                    body.push_str(&format!("{line}\n"));
-                }
-                body.push_str("```\n");
-            }
-            for m in &pd.manifests {
-                body.push_str(&format!("- {}\n", manifest_change(m, code)));
-            }
-            if body.is_empty() {
-                continue;
-            }
-            let what = if pd.values.changed && pd.values.parseable {
-                values_summary(&pd.values)
-            } else {
-                plain_flags(pd)
-            };
-            o.push_str(&format!(
-                "<details><summary><code>{}</code> {}</summary>\n\n{}\n</details>\n\n",
-                markdown_cell(&pd.name),
-                what,
-                body
-            ));
+            o.push_str(&pack_detail(pd));
         }
         if let Some(note) = pack_order_note(d) {
             o.push_str(&format!("> note: {note}\n\n"));

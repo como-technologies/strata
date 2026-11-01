@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::leaf::{Leaf, leaf_diff};
 use super::zip_by_key;
-use crate::snapshot::Variable;
+use crate::snapshot::{Snapshot, Variable};
 
 /// Profile variables compared by name.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -34,6 +34,29 @@ pub struct VariablesByName {
     pub removed: Vec<VariableSummary>,
     /// Variables on both sides with different fields.
     pub changed: Vec<VariableChange>,
+}
+
+impl VariablesDiff {
+    /// The comparison of the variables of two records. The lists of changes are empty when the
+    /// hashes agree.
+    pub(super) fn between(a: &Snapshot, b: &Snapshot) -> VariablesDiff {
+        let changed = a.variables_hash != b.variables_hash;
+        VariablesDiff {
+            changed,
+            hash_a: a.variables_hash.clone(),
+            hash_b: b.variables_hash.clone(),
+            diff: if changed {
+                leaf_diff(&by_name(&a.variables), &by_name(&b.variables))
+            } else {
+                Vec::new()
+            },
+            by_name: if changed {
+                group_variables(&a.variables, &b.variables)
+            } else {
+                VariablesByName::default()
+            },
+        }
+    }
 }
 
 /// One profile variable in brief: its name and the traits a reviewer cares about.

@@ -219,29 +219,7 @@ impl Snapshot {
             AppliedProfile::templates_of(&raw.cluster)
                 .into_iter()
                 .unzip();
-        let chosen: Vec<usize> = match profile {
-            None => (0..templates.len()).collect(),
-            Some(p) => {
-                // `a+b` selects several profiles, as compare does for a cluster group
-                let wanted: Vec<&str> = p.split('+').collect();
-                let chosen: Vec<usize> = applied
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, a)| {
-                        wanted.contains(&a.name.as_str()) || wanted.contains(&a.uid.as_str())
-                    })
-                    .map(|(i, _)| i)
-                    .collect();
-                if chosen.is_empty() {
-                    return Err(Error::ClusterProfileNotFound {
-                        cluster: text(&raw.cluster, "/metadata/uid"),
-                        profile: p.to_string(),
-                        applied: applied.iter().map(|a| a.name.clone()).collect(),
-                    });
-                }
-                chosen
-            }
-        };
+        let chosen = chosen_profiles(raw, &applied, profile)?;
         let parts = chosen
             .iter()
             .map(|&i| Snapshot::from_raw(&raw.template_raw(&templates[i]), reference, fetched_at))
@@ -282,38 +260,79 @@ impl Snapshot {
             palette_validation: None,
             // a cluster record holds the digests in cluster.macroValues
             macro_values: None,
-            cluster: Some({
-                let pending_updates = raw
-                    .notifications
-                    .as_ref()
-                    .map(|n| PendingUpdate::read(n, &covered))
-                    .unwrap_or_default();
-                ClusterSource {
-                    uid: text(&raw.cluster, "/metadata/uid"),
-                    name: text(&raw.cluster, "/metadata/name"),
-                    profile: profile.map(str::to_string),
-                    variables: ClusterVariable::read(raw, &covered),
-                    updates_pending: raw
-                        .notifications
-                        .as_ref()
-                        .map(|_| !pending_updates.is_empty()),
-                    pending_updates,
-                    repave_pending: Some(is_pending(&raw.cluster)),
-                    pending_repave: raw.repave.as_ref().map(PendingRepave::read),
-                    errors: cluster_errors(raw),
-                    macro_values: raw
-                        .resolved_values
-                        .as_ref()
-                        .map(|r| macro_digests(r, &covered, &macros_of(&packs))),
-                    labels: text_map(&raw.cluster, "/metadata/labels"),
-                    tiers: cluster_tiers(raw, &covered),
-                    pending: false,
-                    kind: SubjectKind::Cluster.into(),
-                    members: Vec::new(),
-                    profiles: covered,
-                }
-            }),
+            cluster: Some(cluster_source(raw, profile, covered, &packs)),
         };
         Ok(Snapshot::assemble(source, variables, packs))
+    }
+}
+
+/// The index in `applied` of each profile that a record of the cluster covers: all of them for no
+/// `profile`, else those that `profile` names by name or by uid.
+///
+/// # Errors
+///
+/// `ClusterProfileNotFound` when `profile` names none of the applied profiles.
+fn chosen_profiles(
+    raw: &RawCluster,
+    applied: &[AppliedProfile],
+    profile: Option<&str>,
+) -> Result<Vec<usize>> {
+    let Some(p) = profile else {
+        return Ok((0..applied.len()).collect());
+    };
+    // `a+b` selects several profiles, as compare does for a cluster group
+    let wanted: Vec<&str> = p.split('+').collect();
+    let chosen: Vec<usize> = applied
+        .iter()
+        .enumerate()
+        .filter(|(_, a)| wanted.contains(&a.name.as_str()) || wanted.contains(&a.uid.as_str()))
+        .map(|(i, _)| i)
+        .collect();
+    if chosen.is_empty() {
+        return Err(Error::ClusterProfileNotFound {
+            cluster: text(&raw.cluster, "/metadata/uid"),
+            profile: p.to_string(),
+            applied: applied.iter().map(|a| a.name.clone()).collect(),
+        });
+    }
+    Ok(chosen)
+}
+
+/// The cluster part of a record: what the cluster `raw` runs and waits for, for the profiles
+/// `covered`. `packs` are their packs, in order.
+fn cluster_source(
+    raw: &RawCluster,
+    profile: Option<&str>,
+    covered: Vec<AppliedProfile>,
+    packs: &[Pack],
+) -> ClusterSource {
+    let pending_updates = raw
+        .notifications
+        .as_ref()
+        .map(|n| PendingUpdate::read(n, &covered))
+        .unwrap_or_default();
+    ClusterSource {
+        uid: text(&raw.cluster, "/metadata/uid"),
+        name: text(&raw.cluster, "/metadata/name"),
+        profile: profile.map(str::to_string),
+        variables: ClusterVariable::read(raw, &covered),
+        updates_pending: raw
+            .notifications
+            .as_ref()
+            .map(|_| !pending_updates.is_empty()),
+        pending_updates,
+        repave_pending: Some(is_pending(&raw.cluster)),
+        pending_repave: raw.repave.as_ref().map(PendingRepave::read),
+        errors: cluster_errors(raw),
+        macro_values: raw
+            .resolved_values
+            .as_ref()
+            .map(|r| macro_digests(r, &covered, &macros_of(packs))),
+        labels: text_map(&raw.cluster, "/metadata/labels"),
+        tiers: cluster_tiers(raw, &covered),
+        pending: false,
+        kind: SubjectKind::Cluster.into(),
+        members: Vec::new(),
+        profiles: covered,
     }
 }
