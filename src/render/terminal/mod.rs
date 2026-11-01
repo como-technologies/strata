@@ -25,8 +25,8 @@ use crate::cluster_state::ClusterState;
 use crate::diff::Diff;
 use crate::error::Result;
 use crate::ops::{
-    Chain, ConsumerKind, ConsumersReport, Listing, PackListing, PairStatus, RecordStatus,
-    VerifySummary,
+    Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject, Listing,
+    PackListing, PairStatus, RecordStatus, SavedFilter, VerifySummary,
 };
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
@@ -413,169 +413,194 @@ impl Renderer for TerminalRenderer {
         let p = &self.paint;
         let mut out = format!("{}\n", list_scope(l));
         if let Some(profiles) = &l.profiles {
-            out.push_str(&format!(
-                "\n{}\n",
-                list_count(profiles.len(), "profile", l.pack.as_deref())
-            ));
-            // the marks of a version end its row, so their column moves with the columns before
-            let (rows, marked): (Vec<Vec<String>>, Vec<Option<usize>>) = profiles
-                .iter()
-                .map(|pr| {
-                    let mut row = vec![
-                        pr.reference.clone(),
-                        pr.uid.clone(),
-                        dash(&pr.cloud_type).to_string(),
-                    ];
-                    if let Some(msg) = entry_error(pr.error.as_ref()) {
-                        row.push(format!("({msg})"));
-                    } else if pr.packs.is_some() {
-                        row.push(dash(pr.profile_type.as_deref().unwrap_or("")).to_string());
-                        row.push(consumer_count(pr.consumers.unwrap_or(0)));
-                    }
-                    let marks = profile_marks(pr, l);
-                    let marked = marks.as_ref().map(|_| row.len());
-                    row.extend(marks);
-                    (row, marked)
-                })
-                .unzip();
-            let widths = column_widths(&rows);
-            for ((pr, row), marked) in profiles.iter().zip(&rows).zip(&marked) {
-                let failed = pr.error.is_some();
-                out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
-                    0 => p.bold(cell),
-                    1 => p.dim(cell),
-                    3 if failed => p.dim(cell),
-                    i if Some(i) == *marked => p.yellow(cell),
-                    _ => cell.to_string(),
-                }));
-                let packs: Vec<Vec<String>> = pr
-                    .packs
-                    .iter()
-                    .flatten()
-                    .map(|pk| vec![pk.layer.clone(), pk.name.clone(), pack_version(pk)])
-                    .collect();
-                let pack_widths = column_widths(&packs);
-                for row in &packs {
-                    out.push_str(&table_line("    ", row, &pack_widths, |i, cell| match i {
-                        0 => p.dim(cell),
-                        1 => matched(p, cell, l.pack.as_deref()),
-                        _ => cell.to_string(),
-                    }));
-                }
-            }
+            list_profiles(&mut out, p, l, profiles);
         }
         if let Some(clusters) = &l.clusters {
-            out.push_str(&format!(
-                "\n{}\n",
-                cluster_count(clusters.len(), l.cluster.as_deref())
-            ));
-            for line in super::list::query_line(l)
-                .into_iter()
-                .chain(virtual_line(l))
-            {
-                out.push_str(&format!("{}\n", p.dim(&line)));
-            }
-            let rows: Vec<Vec<String>> = clusters
-                .iter()
-                .map(|c| {
-                    let mut row = vec![
-                        c.reference.clone(),
-                        dash(&c.name).to_string(),
-                        dash(&c.state).to_string(),
-                        dash(&c.cloud_type).to_string(),
-                    ];
-                    if c.project_uid != l.project_uid {
-                        row.push(format!(
-                            "project {}",
-                            project_label(&c.project_uid, &c.project_name)
-                        ));
-                    }
-                    // a query is a question about labels, so its rows show them
-                    if l.query.is_some() {
-                        row.push(super::list::labels_text(&c.labels));
-                    }
-                    row.extend(virtual_note(c));
-                    if let Some(msg) = entry_error(c.error.as_ref()) {
-                        row.push(format!("({msg})"));
-                    }
-                    if let Some(note) = super::list::imported_note(c) {
-                        row.push(note.to_string());
-                    }
-                    row
-                })
-                .collect();
-            let widths = column_widths(&rows);
-            for (c, row) in clusters.iter().zip(&rows) {
-                out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
-                    0 => p.bold(cell),
-                    1 => matched(p, cell, l.cluster.as_deref()),
-                    2 if ClusterState::Running.is(&c.state) => p.green(cell),
-                    _ => cell.to_string(),
-                }));
-                let applied: Vec<Vec<String>> = c
-                    .profiles
-                    .iter()
-                    .flatten()
-                    .map(|a| {
-                        let mut row = vec![
-                            applied_ref(a),
-                            dash(&a.uid).to_string(),
-                            dash(&a.kind).to_string(),
-                        ];
-                        if c.pending_updates.iter().any(|u| u.profile_uid == a.uid) {
-                            row.push("behind: an update waits".to_string());
-                        }
-                        row
-                    })
-                    .collect();
-                let applied_widths = column_widths(&applied);
-                for row in &applied {
-                    out.push_str(&table_line(
-                        "    ",
-                        row,
-                        &applied_widths,
-                        |i, cell| match i {
-                            1 => p.dim(cell),
-                            3 => p.yellow(cell),
-                            _ => cell.to_string(),
-                        },
-                    ));
-                }
-            }
+            list_clusters(&mut out, p, l, clusters);
         }
         if let Some(projects) = &l.projects {
-            out.push_str(&format!("\n{}\n", count_of(projects.len(), "project")));
-            let rows: Vec<Vec<String>> = projects
-                .iter()
-                .map(|pr| vec![dash(&pr.name).to_string(), pr.uid.clone()])
-                .collect();
-            let widths = column_widths(&rows);
-            for row in &rows {
-                out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
-                    0 => p.bold(cell),
-                    _ => p.dim(cell),
-                }));
-            }
+            list_projects(&mut out, p, projects);
         }
         if let Some(filters) = &l.filters {
-            out.push_str(&format!(
-                "\n{}\n",
-                count_of(filters.len(), "saved tag filter")
-            ));
-            let rows: Vec<Vec<String>> = filters
-                .iter()
-                .map(|f| vec![f.reference(), f.uid.clone(), f.expression()])
-                .collect();
-            let widths = column_widths(&rows);
-            for row in &rows {
-                out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
-                    0 => p.bold(cell),
-                    1 => p.dim(cell),
-                    _ => cell.to_string(),
-                }));
-            }
+            list_filters(&mut out, p, filters);
         }
         Ok(out)
+    }
+}
+
+/// The table of the profile versions of a listing, with its count and the packs of each one.
+fn list_profiles(out: &mut String, p: &Paint, l: &Listing, profiles: &[ListedProfile]) {
+    out.push_str(&format!(
+        "\n{}\n",
+        list_count(profiles.len(), "profile", l.pack.as_deref())
+    ));
+    // the marks of a version end its row, so their column moves with the columns before
+    let (rows, marked): (Vec<Vec<String>>, Vec<Option<usize>>) = profiles
+        .iter()
+        .map(|pr| {
+            let mut row = vec![
+                pr.reference.clone(),
+                pr.uid.clone(),
+                dash(&pr.cloud_type).to_string(),
+            ];
+            if let Some(msg) = entry_error(pr.error.as_ref()) {
+                row.push(format!("({msg})"));
+            } else if pr.packs.is_some() {
+                row.push(dash(pr.profile_type.as_deref().unwrap_or("")).to_string());
+                row.push(consumer_count(pr.consumers.unwrap_or(0)));
+            }
+            let marks = profile_marks(pr, l);
+            let marked = marks.as_ref().map(|_| row.len());
+            row.extend(marks);
+            (row, marked)
+        })
+        .unzip();
+    let widths = column_widths(&rows);
+    for ((pr, row), marked) in profiles.iter().zip(&rows).zip(&marked) {
+        let failed = pr.error.is_some();
+        out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+            0 => p.bold(cell),
+            1 => p.dim(cell),
+            3 if failed => p.dim(cell),
+            i if Some(i) == *marked => p.yellow(cell),
+            _ => cell.to_string(),
+        }));
+        let packs: Vec<Vec<String>> = pr
+            .packs
+            .iter()
+            .flatten()
+            .map(|pk| vec![pk.layer.clone(), pk.name.clone(), pack_version(pk)])
+            .collect();
+        let pack_widths = column_widths(&packs);
+        for row in &packs {
+            out.push_str(&table_line("    ", row, &pack_widths, |i, cell| match i {
+                0 => p.dim(cell),
+                1 => matched(p, cell, l.pack.as_deref()),
+                _ => cell.to_string(),
+            }));
+        }
+    }
+}
+
+/// The table of the clusters of a listing, with its count, the lines of its query, and the
+/// profiles of each cluster.
+fn list_clusters(out: &mut String, p: &Paint, l: &Listing, clusters: &[ListedCluster]) {
+    out.push_str(&format!(
+        "\n{}\n",
+        cluster_count(clusters.len(), l.cluster.as_deref())
+    ));
+    for line in super::list::query_line(l)
+        .into_iter()
+        .chain(virtual_line(l))
+    {
+        out.push_str(&format!("{}\n", p.dim(&line)));
+    }
+    let rows: Vec<Vec<String>> = clusters.iter().map(|c| cluster_row(l, c)).collect();
+    let widths = column_widths(&rows);
+    for (c, row) in clusters.iter().zip(&rows) {
+        out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+            0 => p.bold(cell),
+            1 => matched(p, cell, l.cluster.as_deref()),
+            2 if ClusterState::Running.is(&c.state) => p.green(cell),
+            _ => cell.to_string(),
+        }));
+        let applied = applied_rows(c);
+        let applied_widths = column_widths(&applied);
+        for row in &applied {
+            out.push_str(&table_line(
+                "    ",
+                row,
+                &applied_widths,
+                |i, cell| match i {
+                    1 => p.dim(cell),
+                    3 => p.yellow(cell),
+                    _ => cell.to_string(),
+                },
+            ));
+        }
+    }
+}
+
+/// The cells of the row of a cluster.
+fn cluster_row(l: &Listing, c: &ListedCluster) -> Vec<String> {
+    let mut row = vec![
+        c.reference.clone(),
+        dash(&c.name).to_string(),
+        dash(&c.state).to_string(),
+        dash(&c.cloud_type).to_string(),
+    ];
+    if c.project_uid != l.project_uid {
+        row.push(format!(
+            "project {}",
+            project_label(&c.project_uid, &c.project_name)
+        ));
+    }
+    // a query is a question about labels, so its rows show them
+    if l.query.is_some() {
+        row.push(super::list::labels_text(&c.labels));
+    }
+    row.extend(virtual_note(c));
+    if let Some(msg) = entry_error(c.error.as_ref()) {
+        row.push(format!("({msg})"));
+    }
+    if let Some(note) = super::list::imported_note(c) {
+        row.push(note.to_string());
+    }
+    row
+}
+
+/// The rows of the profiles that a cluster runs, under the row of the cluster.
+fn applied_rows(c: &ListedCluster) -> Vec<Vec<String>> {
+    c.profiles
+        .iter()
+        .flatten()
+        .map(|a| {
+            let mut row = vec![
+                applied_ref(a),
+                dash(&a.uid).to_string(),
+                dash(&a.kind).to_string(),
+            ];
+            if c.pending_updates.iter().any(|u| u.profile_uid == a.uid) {
+                row.push("behind: an update waits".to_string());
+            }
+            row
+        })
+        .collect()
+}
+
+/// The table of the projects of a listing, with its count.
+fn list_projects(out: &mut String, p: &Paint, projects: &[ListedProject]) {
+    out.push_str(&format!("\n{}\n", count_of(projects.len(), "project")));
+    let rows: Vec<Vec<String>> = projects
+        .iter()
+        .map(|pr| vec![dash(&pr.name).to_string(), pr.uid.clone()])
+        .collect();
+    let widths = column_widths(&rows);
+    for row in &rows {
+        out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+            0 => p.bold(cell),
+            _ => p.dim(cell),
+        }));
+    }
+}
+
+/// The table of the saved tag filters of a listing, with its count.
+fn list_filters(out: &mut String, p: &Paint, filters: &[SavedFilter]) {
+    out.push_str(&format!(
+        "\n{}\n",
+        count_of(filters.len(), "saved tag filter")
+    ));
+    let rows: Vec<Vec<String>> = filters
+        .iter()
+        .map(|f| vec![f.reference(), f.uid.clone(), f.expression()])
+        .collect();
+    let widths = column_widths(&rows);
+    for row in &rows {
+        out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+            0 => p.bold(cell),
+            1 => p.dim(cell),
+            _ => cell.to_string(),
+        }));
     }
 }
 

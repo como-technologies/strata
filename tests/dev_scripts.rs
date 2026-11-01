@@ -11,7 +11,7 @@ use common::*;
 fn tag_release(dir: &Path) -> Output {
     let mut c = Command::new("bash");
     c.arg(script("dev/tag-release.sh")).current_dir(dir);
-    isolate_git(&mut c).output().unwrap()
+    isolate_git(&mut c).output_locked().unwrap()
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn build_book(args: &[&str], log: &str, exit: &str) -> (Output, String) {
         .env("FAKE_LOG", &calls)
         .env("FAKE_OUT", log)
         .env("FAKE_EXIT", exit)
-        .output()
+        .output_locked()
         .unwrap();
     (o, std::fs::read_to_string(calls).unwrap_or_default())
 }
@@ -160,7 +160,7 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
         .env("STRATA_BIN", strata_bin())
         .stdout(std::fs::File::create(&log).unwrap())
         .stderr(std::process::Stdio::null())
-        .spawn()
+        .spawn_locked()
         .unwrap();
 
     // the settings it prints are its contract: the address, the key, and the project uid
@@ -196,11 +196,13 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
         .env("PALETTE_API_KEY", "docs-example-key")
         .env("PALETTE_PROJECT_UID", &uid)
         .env("HOME", dir.path())
-        .output()
+        .output_locked()
         .unwrap();
     let text = text(&o.stdout);
     // stop the script first, so a failed assertion leaves no server behind
-    let _ = Command::new("kill").arg(child.id().to_string()).status();
+    let _ = Command::new("kill")
+        .arg(child.id().to_string())
+        .output_locked();
     let _ = child.wait();
 
     assert_eq!(o.status.code(), Some(1), "the two versions differ: {text}");

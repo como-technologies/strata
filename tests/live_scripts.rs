@@ -36,7 +36,7 @@ fn tf_sh(envs: &[(&str, &str)], palette_env: Option<&str>) -> Output {
     for (k, v) in envs {
         c.env(k, v);
     }
-    let o = c.output().unwrap();
+    let o = c.output_locked().unwrap();
     drop(dir);
     o
 }
@@ -155,7 +155,7 @@ fn tenant_run(args: &[&str], status: &str, body: &str, old_jq: bool) -> (Output,
         .env("FAKE_CURL_STATUS", &status_file)
         .env("FAKE_CURL_BODY", &body_file)
         .env("FAKE_CURL_LOG", &log)
-        .output()
+        .output_locked()
         .unwrap();
     let urls = std::fs::read_to_string(&log).unwrap();
     (o, urls)
@@ -983,7 +983,7 @@ echo "$addon_from -> $addon_to"
         .args(args)
         .current_dir(dir)
         .env("STRATA_BIN", strata)
-        .output()
+        .output_locked()
         .unwrap()
 }
 
@@ -1172,7 +1172,7 @@ fn run_live(script: &str, args: &[&str], root: &Path, extra: &[(&str, &str)]) ->
     for (k, v) in extra {
         c.env(k, v);
     }
-    c.output().unwrap()
+    c.output_locked().unwrap()
 }
 
 /// Every file under `dir`, as (path relative to dir, contents).
@@ -1466,7 +1466,7 @@ fn aws_inventory(answers: &[(&str, &str)]) -> (Output, String) {
         .args(["fred", "us-east-2"])
         .env("PATH", path_with(&bin))
         .env("FAKE_AWS", &fake)
-        .output()
+        .output_locked()
         .unwrap();
     let calls = std::fs::read_to_string(fake.join("calls.log")).unwrap();
     (o, calls)
@@ -1791,7 +1791,7 @@ fn preflight_script(name: &str, args: &[&str]) -> Output {
         .args(args)
         .env("STRATA_BIN", &bin)
         .env("OUT", dir.path().join("out"))
-        .output()
+        .output_locked()
         .unwrap()
 }
 
@@ -1870,7 +1870,7 @@ fn aws_cleanup(args: &[&str]) -> (Output, String) {
         .args(args)
         .env("PATH", path_with(&bin))
         .env("FAKE_AWS_LOG", &log)
-        .output()
+        .output_locked()
         .unwrap();
     let calls = std::fs::read_to_string(&log).unwrap();
     (o, calls)
@@ -1891,7 +1891,7 @@ fn aws_cleanup_takes_yes_in_any_position_and_keeps_the_name_and_the_region() {
     let o = Command::new("bash")
         .arg(live_script("aws-cleanup.sh"))
         .args(["barney", "us-west-2", "--yes", "one-more"])
-        .output()
+        .output_locked()
         .unwrap();
     assert_eq!(o.status.code(), Some(2));
     assert!(
@@ -1917,7 +1917,7 @@ fn preflight_plan_keeps_a_result_the_ledger_does_not_know_out_of_the_entry() {
             "{record}\nresults=()\nrecord a caught n\nrecord b not-made 'the edit failed'\nrecord c passed n\nprintf '%s\\n' \"${{results[@]}}\""
         ))
         .current_dir(dir.path())
-        .output()
+        .output_locked()
         .unwrap();
     assert!(o.status.success(), "{}", text(&o.stderr));
     let out = text(&o.stdout);
@@ -1958,7 +1958,7 @@ fn offering_edit(engine: &str, account_kind: &str, region: &str, answer: &str) -
             live = dir.path().display()
         ))
         .current_dir(dir.path())
-        .output()
+        .output_locked()
         .unwrap();
     let asked = std::fs::read_to_string(dir.path().join("asked.txt")).unwrap_or_default();
     (o, asked.trim().to_string())
@@ -1997,7 +1997,7 @@ fn preflight_plan_makes_the_fault_of_instance_offering_from_the_instance_type_ro
         let made = Command::new("jq")
             .args(["-c", edit.trim()])
             .arg(pool.path())
-            .output()
+            .output_locked()
             .unwrap();
         assert_eq!(
             text(&made.stdout).trim(),
@@ -2053,7 +2053,7 @@ fn preflight_plan_tests_the_shape_of_the_instance_type_route_by_type() {
         let o = Command::new("jq")
             .args(["-e", filter])
             .arg(dir.path().join("instancetypes.json"))
-            .output()
+            .output_locked()
             .unwrap();
         assert_eq!(o.status.code(), status, "{answer}");
     }
@@ -2119,7 +2119,7 @@ echo '{"items":[
             .current_dir(dir.path())
             .env("STRATA_BIN", &strata)
             .env("TFVARS", &tfvars)
-            .output()
+            .output_locked()
             .unwrap();
         assert!(o.status.success(), "{engine}: {}", text(&o.stderr));
         assert_eq!(text(&o.stdout), format!("{kind} {account}\n"), "{engine}");
@@ -2190,7 +2190,7 @@ fn preflight_plan_sends_the_missing_key_pair_to_iaas_pod_identity_on_aws_and_to_
         let o = Command::new("jq")
             .args(["-e", filter])
             .arg(dir.path().join("report.json"))
-            .output()
+            .output_locked()
             .unwrap();
         assert_eq!(o.status.code(), status, "{report}");
     }
@@ -4185,7 +4185,8 @@ fn packs_sh_stage_7_says_that_the_move_to_the_newer_version_drops_arm64() {
     failed(&steps, &["arch-behind-json"]);
 }
 
-/// A run of `registry-kinds.sh` against the stand-ins. The tools of the registries do nothing.
+/// A run of `registry-kinds.sh` against the stand-ins. The tools of the registries read their
+/// standard input and do nothing else.
 /// The fake strata prints the text `packs` for `strata packs strata-live-zarf`.
 fn registry_kinds(packs: &str) -> (Stage, String) {
     let mut stage = Stage::new(serde_json::json!({
@@ -4197,21 +4198,35 @@ fn registry_kinds(packs: &str) -> (Stage, String) {
         "case \"$*\" in\n",
         "case \"$*\" in\n  *\"output -raw kinds_password\"*) echo pw ;;\n",
     );
-    let nothing = "#!/usr/bin/env bash\nexit 0\n";
+    // The script pipes the password to each tool, under `pipefail`. A tool that ends before the
+    // password arrives makes the writer fail with SIGPIPE, and so the pipeline fails. A real tool
+    // reads its password. This one keeps what it reads in `TOOL.stdin`.
+    let reads_password = "#!/usr/bin/env bash\ncat >> \"$0.stdin\"\n";
     fake_bin(
         stage.root.path(),
         &[
             ("tofu", &tofu),
-            ("oras", nothing),
-            ("helm", nothing),
-            ("zarf", nothing),
-            ("spectro", nothing),
+            ("oras", reads_password),
+            ("helm", reads_password),
+            ("zarf", reads_password),
+            ("spectro", reads_password),
         ],
     );
     stage.route("/v1/registries/pack", r#"{"uid":"reg-packs"}"#);
     stage.strata("packs strata-live-zarf *", 0, packs);
     let (_, steps) = stage.run("registry-kinds.sh", &[]);
     (stage, steps)
+}
+
+#[test]
+fn registry_kinds_sh_gives_the_password_to_each_login_on_the_standard_input_and_each_tool_reads_it()
+{
+    let (stage, steps) = registry_kinds("");
+    assert!(steps.contains("== 0. the registry host"), "{steps}");
+    for tool in ["oras", "helm", "zarf", "spectro"] {
+        let read = std::fs::read_to_string(stage.path(&format!("bin/{tool}.stdin")));
+        assert_eq!(read.unwrap_or_default(), "pw\n", "{tool} read the password");
+    }
 }
 
 #[test]
@@ -5599,7 +5614,7 @@ fn lab_stage() -> Stage {
     let init = Command::new("git")
         .args(["init", "-q", "-b", "main"])
         .current_dir(&repo)
-        .output()
+        .output_locked()
         .unwrap();
     assert!(init.status.success(), "{}", text(&init.stderr));
     stage
