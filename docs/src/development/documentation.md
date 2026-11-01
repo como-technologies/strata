@@ -65,8 +65,8 @@ link to the page that says. `just docs-check` fails on a command page that
 omits the help, or that has no sentence for an option.
 
 A long command page splits by what the command reads. The command page keeps
-what the command does, a table of its pages, what to expect, and its options,
-with a table that names each option and links the page that shows it. One page
+what the command does, a table of its pages, what to expect, and its options.
+A table names each option and links the page that shows it. One page
 in `docs/src/commands/<command>/` holds each kind of subject or question, with
 its output and its options, and `SUMMARY.md` lists it under the command. A
 page in that directory is not a command page: `just docs-check` reads the help
@@ -92,6 +92,7 @@ under one name, or any other line that a step of the page is written to cause.
 The playground takes each chapter that `r.chapter(...)` starts in
 `xtask/src/chapters/`. No second list of the chapters exists, so a new chapter
 needs no other change. Two chapters with one name stop the runner.
+
 `just playground CHAPTER-N` serves state `N` of the chapter. A chapter has one
 state more than its calls of `serve_here`. `just docs-check` fails on a page
 that gives `just playground` with a chapter that the runner does not start. It
@@ -103,8 +104,8 @@ also fails on a state that the chapter does not have.
 `xtask/src/palette.rs`. The stand-in serves JSON files, one for each
 request. It answers an export request that accepts JSON with `{"Reader":{}}`,
 as Palette does. Each chapter of the runner builds the tenant that one page needs, from
-the real pack data in `examples/`, and changes it between commands as Palette
-changes it.
+the real pack data in `examples/`. It changes the tenant between commands as
+Palette does.
 
 1. Find the chapter of the page in `xtask/src/chapters/`, or add one with
    `r.chapter("name", env)` in the file of its group of pages.

@@ -42,9 +42,10 @@ profile, or pack version.
   [The hashes and the root](../internals/hashes.md).
 - `contentDigest`: the sha256 digest of what the version is, without the ids
   that Palette gives. Two publishes of one definition can have two roots and
-  one content digest: when the definition holds a manifest pack, or when the
-  second publish takes a pack from another registry. An older record has no
-  such field, and the library calculates the digest from the pack hashes. See
+  one content digest. One case is a definition that holds a manifest pack.
+  Another case is a second publish that takes a pack from another registry. An
+  older record has no such field, and the library calculates the digest from
+  the pack hashes. See
   [The content digest](../internals/hashes.md#the-content-digest).
 - `source`: where the record comes from.
   - `ref`: the ref as typed, a name or a uid, without an empty part after a
@@ -76,21 +77,21 @@ profile, or pack version.
     says `true` and gives an error. The field is not part of the root: see
     [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks).
   - `macroValues`, only with `snapshot --macros` on a profile version: each
-    user macro the content uses, and `sha256:` of the value Palette gives it at
-    the scope of the version, or `unresolved`. A cluster record and a cluster
-    group record hold them in `cluster.macroValues`. Not part of the root.
-  - `pack`, for a pack record: the pack's `name` and `version`, the
-    `registryUid` and `registryName` it came from, and `packUid`, the uid of
-    that version in the registry. `template` is `registry` and `type` is
-    `pack`.
+    user macro that the content uses. Each macro has `sha256:` of the value that
+    Palette gives it at the scope of the version, or `unresolved`. A cluster
+    record and a cluster group record hold them in `cluster.macroValues`. Not
+    part of the root.
+  - `pack`, for a pack record: the `name` and `version` of the pack, and the
+    `registryUid` and `registryName` it came from. `packUid` is the uid of that
+    version in the registry. `template` is `registry` and `type` is `pack`.
   - `cluster`, for a cluster record. None of its fields is part of the root.
     - `uid` and `name` of the cluster, the `profile` that
       `cluster:<cluster>/<profile>` selected, `profiles[]`, and `variables[]`.
     - `updatesPending` is `true` when Palette says that an update of a profile
-      of the record waits, `false` when none waits, and absent when strata could
-      not read it. `errors.updatesPending` then says why. `pendingUpdates[]` has
-      `profileUid`, `profile`, `message`, and `since` for each change that
-      waits.
+      of the record waits. It is `false` when none waits. It is absent when
+      strata could not read it. `errors.updatesPending` then says why.
+      `pendingUpdates[]` has `profileUid`, `profile`, `message`, and `since`
+      for each change that waits.
     - `repavePending` is `true` when Palette holds a repave of the cluster for
       approval, and `false` when none waits. It is absent for an edge host, a
       cluster group, and an older record. `pendingRepave`, only when a repave
@@ -172,8 +173,9 @@ profile, or pack version.
   - `refDigest`, the digest on the pack reference, and `registryDigest`, the
     digest of the pack in the manifests document.
   - `registryProviderType`, only for a pack from an OCI registry: `pack`,
-    `helm`, or `zarf`, the provider type of the registry, from the annotations of
-    the pack reference. Palette follows a new digest in a different way for each:
+    `helm`, or `zarf`. It is the provider type of the registry, from the
+    annotations of the pack reference. Palette follows a new digest in a
+    different way for each:
     see [The digest of each registry kind](../internals/palette/packs.md#the-digest-of-each-registry-kind).
     It is outside the root.
   - `annotations`, only when the pack reference has the annotation `imageId`:
@@ -242,8 +244,8 @@ A comparison of two sides, `a` and `b`.
   [strata-snapshot/1](#strata-snapshot1) gives it.
 - `same`: the roots are equal. `rootA` and `rootB` are the roots.
 - `sameContent`: the roots are equal, or differ only by the pack uids of
-  manifest packs and the tag names of the same builds, with the variables and
-  the pack order unchanged. `same` stays `false` in the second case.
+  manifest packs and the tag names of the same builds. The variables and the
+  pack order must be unchanged. `same` stays `false` in the second case.
 - `editedInPlace`: both sides name the same uid and version, and the roots
   differ.
 - `overwrittenInPlace`: each uid that the sides name under different versions,
@@ -251,9 +253,11 @@ A comparison of two sides, `a` and `b`.
   too. Absent when empty.
 - `summary`: `packsAdded`, `packsRemoved`, `packsChanged`, `packsUnchanged`,
   `identityChanges`, `upstreamChanges`, `authoredChanges`, `variablesChanged`,
-  `imagesChanged` and `chartsChanged` (each image and chart added, removed, or
-  moved, across the packs), `packsInvalid` (the packs that Palette marks invalid
-  on one side or on the two sides), and `maxImpact`.
+  `imagesChanged`, `chartsChanged`, `packsInvalid`, and `maxImpact`.
+  - `imagesChanged` and `chartsChanged`: each image and chart added, removed,
+    or moved, across the packs.
+  - `packsInvalid`: the packs that Palette marks invalid on one side or on the
+    two sides.
 - `variables`: `changed`, the two hashes, `diff[]` with paths
   `<variable>.<field>`, and `byName` with `added[]`, `removed[]`, and
   `changed[]`. An added or removed variable has `name`, `required`,
@@ -275,8 +279,9 @@ A comparison of two sides, `a` and `b`.
   - `versionMove`: `forward` or `back`, as at the top of the document, for the
     versions of the pack. Absent when a side has no pack, and when the two
     versions have the same precedence.
-  - `mintedUidOnly`: the only difference is a pack uid that Palette mints: for a
-    manifest pack, or for a pack from a registry that Palette does not sync.
+  - `mintedUidOnly`: the only difference is a pack uid that Palette mints. This
+    is the case for a manifest pack, and for a pack from a registry that Palette
+    does not sync.
   - `impact`: `level` and `text`.
   - `a` and `b`: `tag`, `version`, `packUid`, `registryUid`, `upstream`,
     `upstreamSource`, `valuesHash`, and `node`. `invalid` and `invalidReason`,
@@ -304,24 +309,25 @@ A comparison of two sides, `a` and `b`.
   in `imageId` on both sides, with two different images. Each entry has `key`,
   `a`, and `b`. `compare` exits `1` for it, also when `same` is `true`.
 - `clusterTiers`, only between two cluster records of one kind that carry
-  tiers: for each
-  tier that both carry, and for `labels`, `tier`, `same`, and `diff[]` with the
-  fields that differ. A difference here does not change `same`.
-- `runningBehind`, only when it is not empty: for each cluster side with a
-  `running` tier, each pack whose reconciled version differs from its profile,
-  with `side` (`a` or `b`), `pack`, `declared`, and `running`.
+  tiers. It has one entry for each tier that both carry, and one for `labels`.
+  Each entry has `tier`, `same`, and `diff[]` with the fields that differ. A
+  difference here does not change `same`.
+- `runningBehind`, only when it is not empty: each pack whose reconciled
+  version differs from its profile. Strata checks each cluster side with a
+  `running` tier. Each entry has `side` (`a` or `b`), `pack`, `declared`, and
+  `running`.
 - `paletteRepave`, only with `compare --repave`: `clusterUid`, `required`
   (Palette's `isRepaveRequired`), `reasons[]` with `code`, `message`, `pack`, and
   `keys` (the config keys that differ), and `agrees`. `agrees` is `false` when
   the most severe level of the table and Palette's answer disagree.
   `clusterTemplate`, only for a cluster that a cluster template governs, names
   the template that Palette answered for, with `uid` and `projectUid`.
-- `paletteValidation`, only with `compare --validate`: `clusterUid`, `accepts`
-  (`true` when Palette gives no error), and `errors[]`, only when it is not
-  empty, with `pack`, `code`, and `message`. An error of the whole request has
-  no `pack`. Strata sorts the errors and keeps one copy of each. Strata does
-  not read a document that says `accepts` is `false` and gives no error, or
-  that says `true` and gives an error.
+- `paletteValidation`, only with `compare --validate`: `clusterUid`, `accepts`,
+  and `errors[]`. `accepts` is `true` when Palette gives no error. `errors[]`,
+  only when it is not empty, holds `pack`, `code`, and `message`. An error of
+  the whole request has no `pack`. Strata sorts the errors and keeps one copy of
+  each. Strata does not read a document that says `accepts` is `false` and
+  gives no error, or that says `true` and gives an error.
 - `verify`, only after `verify`: `status` (`unchanged`, `drifted`, or
   `unverified`), `uid`, `recordedAt`, and `checkedAt`.
   - `upstreamUnknown`: for an `unverified` record, the packs that make it so.
@@ -345,16 +351,16 @@ A comparison of two sides, `a` and `b`.
   - `deletedAt`: for a gone object whose document Palette keeps, the time of
     the delete, from `metadata.deletionTimestamp`.
   - `state`: for a record of a cluster, an edge host, or a cluster group, the
-    state of the object now, as Palette gives it: `status.state` of a cluster
-    (such as `Running`, `Deleting`, or `Error`) or of an edge host (`ready`,
-    `unpaired`, or `in-use`), and `active` or `inactive` from `status.isActive`
-    of a cluster group. It does not change `status`.
+    state of the object now, as Palette gives it. It does not change `status`.
+    - A cluster: `status.state`, such as `Running`, `Deleting`, or `Error`.
+    - An edge host: `status.state`, which is `ready`, `unpaired`, or `in-use`.
+    - A cluster group: `active` or `inactive`, from `status.isActive`.
   - `clusterValuesChanged`, only when it is not `0`: for a cluster record, the
     number of variable values that differ from the record.
   - `profilesOverwritten`: for a cluster record, each profile that the cluster
-    runs whose uid names another version now, or no longer exists: `uid`,
-    `name`, `clusterVersion`, and `profileVersion` (empty for a uid that is
-    gone). The status is `drifted`.
+    runs whose uid names another version now, or no longer exists. Each entry
+    has `uid`, `name`, `clusterVersion`, and `profileVersion` (empty for a uid
+    that is gone). The status is `drifted`.
   - `registrySync`: for a pack record, the last sync of the registry in
     Palette. The verdict states the copy of the registry in Palette, and this
     field tells how old that copy is. It is absent when the registry does not
@@ -367,13 +373,13 @@ A comparison of two sides, `a` and `b`.
     - `syncRecovery`, when a sync waits for a recovery: `syncRecoveryState`
       (`Interrupted` or `Recovering`) and `message`.
   - `registrySyncError`: for a pack record, why strata could not read the last
-    sync of the registry: Palette answered with a 5xx, or the request did not
+    sync of the registry. Palette answered with a 5xx, or the request did not
     complete. `registrySync` is then absent. It does not change `status`.
   - `who`, only with `--who` and for a drifted record that is not a pack
-    record: each write to the object of the record that the audit log of
-    Palette holds since `recordedAt`, oldest first. For a cluster record, also
-    each write to a profile of `profilesOverwritten`. An empty list means the
-    log holds no write since the record. Each entry has these fields:
+    record. It lists each write to the object of the record that the audit log
+    of Palette holds since `recordedAt`, oldest first. For a cluster record, it
+    also lists each write to a profile of `profilesOverwritten`. An empty list
+    means the log holds no write since the record. Each entry has these fields:
     - `time`, `actor`, `actorUid` (for a user), and `auditUid`.
     - `actorType` and `action`, as Palette gives them in `v1AuditActor` and
       `v1AuditActionType`.
@@ -404,10 +410,10 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
 - `summary`: `records`, `unchanged`, `drifted`, `errors`, and `status`, which is
   the exit status in words. `unverified`, only when it is not `0`: the records
   whose content is the same and that hold a pack with no upstream digest.
-- `records[]`: one entry for each file, in the order given: `path`, `status`,
-  `name`, `version`, `uid`, `projectUid`, `recordedAt`, `rootRecorded`, and
-  `rootLive` when strata read the live profile. `recordedAt` is empty when
-  strata could not read the file.
+- `records[]`: one entry for each file, in the order given. An entry has
+  `path`, `status`, `name`, `version`, `uid`, `projectUid`, `recordedAt`,
+  `rootRecorded`, and `rootLive`. `rootLive` is there when strata read the live
+  profile. `recordedAt` is empty when strata could not read the file.
   - A drifted record adds `maxImpact`, `packsChanged`, and the full `diff`. An
     unverified record adds the `diff`, which names the packs.
   - A cluster record with changed variable values adds `clusterVariables`,
@@ -431,17 +437,19 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
   `different`, or `unknown-upstream`), `rootA`, `rootB`, `packsRepinned`,
   `packsRetagged`, and `reasons[]`. A pack that names another image in
   `imageId` on each side makes the pair `different`, also when the roots are
-  equal. `upstreamUnknown`, only when it is not empty: the packs with no
-  upstream digest, also when `--allow no-digest` accepts them.
-  `mintedUidOnly`, only when it is not empty: the packs whose only difference
-  is a pack uid that Palette mints, for a manifest pack or for a pack from a
-  registry that Palette does not sync.
-  `masked[]`, only when it is not empty: `key` and `paths` of each pack with a
-  value that Palette masks, on either side. It does not change `status`.
-  `macrosChanged`, only when it is not empty: when both records hold the
-  digests of their macro values, each macro whose value differs. It does not
-  change `status`. `macrosNotCompared`, only when it is not empty: when a
-  record holds no digests, each macro that the content of either record uses.
+  equal.
+  - `upstreamUnknown`, only when it is not empty: the packs with no upstream
+    digest, also when `--allow no-digest` accepts them.
+  - `mintedUidOnly`, only when it is not empty: the packs whose only difference
+    is a pack uid that Palette mints. This is the case for a manifest pack, and
+    for a pack from a registry that Palette does not sync.
+  - `masked[]`, only when it is not empty: `key` and `paths` of each pack with
+    a value that Palette masks, on either side. It does not change `status`.
+  - `macrosChanged`, only when it is not empty: when both records hold the
+    digests of their macro values, each macro whose value differs. It does not
+    change `status`.
+  - `macrosNotCompared`, only when it is not empty: when a record holds no
+    digests, each macro that the content of either record uses.
 
 ## strata-consumers/1
 
@@ -453,34 +461,38 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
   failed: `error`, `groupsError`, or an `unread` that is not `0` in
   `clustersRead`, or `error` in `edgeHostsRead`.
 - `overwritten`: the number of consumers whose copy names another version.
-- `consumers[]`: `kind`, `cluster`, `edgehost`, `template`, or `app` for an app
-  deployment, `uid`, `name`, `projectUid`, `state`, `version`, and `error` when
-  strata cannot read the cluster or the app deployment. `projectName` joins
-  them when strata could read the project listing. The names and the projects
-  come from `status.inUseClusters` of the profile, from
+- `consumers[]`: `kind`, `uid`, `name`, `projectUid`, `state`, `version`, and
+  `error` when strata cannot read the cluster or the app deployment. `kind` is
+  `cluster`, `edgehost`, `template`, or `app` for an app deployment.
+  `projectName` joins them when strata could read the project listing. The
+  names and the projects come from `status.inUseClusters` of the profile, from
   `status.inUseClusterTemplates` for a cluster template, and from
   `status.inUseApps` of an app profile. `unlisted`, only when true: the
   profile did not list the cluster, and the second reading found it.
   - `state`: `status.state` of the cluster, as Palette gives it in
     `v1ClusterState`, or `unknown` when strata cannot read the cluster. A
     cluster template has an empty `state` and an empty `version`.
-- `clustersRead`: the second reading. `resolved`: `search` when strata asked
-  the cluster search for the clusters that run a version of the profile, by its
-  name, or `listing` when
-  the search of Palette takes no `clusterProfiles` and strata read each cluster
-  of the listing. `read`: the cluster documents read, one for each cluster that
-  the search or the listing names and the consumer list does not. `unread`: the
-  clusters of those that strata could not read. `error`: why strata could not
-  read the search or the cluster listing. Then `read` is `0`. `groups`, only
-  when not zero: the cluster groups that pin the version, whose virtual clusters
-  strata read. `members`, only when not zero: the virtual clusters of those
-  groups that strata read, which also count in `read` or `unread`.
-  `membersUnread`, only when not zero: the virtual clusters of `members` that
-  strata could not read, which also count in `unread`.
-  `groupsError`: why strata could not read the cluster groups, or one of them.
-  `skipped`, only when true: `--list-only` asked for no second reading, or the
-  profile is an app profile. `reason`, only for an app profile: why strata did
-  no second reading.
+- `clustersRead`: the second reading.
+  - `resolved`: `search` when strata asked the cluster search for the clusters
+    that run a version of the profile, by its name. It is `listing` when the
+    search of Palette takes no `clusterProfiles` and strata read each cluster
+    of the listing.
+  - `read`: the cluster documents read, one for each cluster that the search or
+    the listing names and the consumer list does not.
+  - `unread`: the clusters of those that strata could not read.
+  - `error`: why strata could not read the search or the cluster listing. Then
+    `read` is `0`.
+  - `groups`, only when not zero: the cluster groups that pin the version,
+    whose virtual clusters strata read.
+  - `members`, only when not zero: the virtual clusters of those groups that
+    strata read, which also count in `read` or `unread`.
+  - `membersUnread`, only when not zero: the virtual clusters of `members` that
+    strata could not read, which also count in `unread`.
+  - `groupsError`: why strata could not read the cluster groups, or one of
+    them.
+  - `skipped`, only when true: `--list-only` asked for no second reading, or
+    the profile is an app profile.
+  - `reason`, only for an app profile: why strata did no second reading.
 - `edgeHostsRead`: `read`, the edge hosts listed, and `error`, why strata could
   not list them. Then no edge host counts. `skipped` and `reason`, only for an
   app profile: strata reads no edge host, and why.
@@ -501,20 +513,23 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
 - `profiles[]`, `clusters[]`, `projects[]`, and `filters[]`: only the kinds that were listed.
   A kind that was listed and holds nothing is `[]`. Profiles come by name and
   then by version, clusters by name, and projects by name.
-  - A profile: `ref`, `name`, `version`, `uid`, `cloudType`, and `scope`:
-    `project`, `tenant`, or `system`. `scope` is absent when Palette has no
-    profile search, or when strata could not read the document of the version
-    with `--packs`. With `--packs`,
-    also `type`, `consumers`, `published`, and `packs[]` with `layer`, `name`,
-    `tag`, and `version`, or `error`. `consumers` is the number of consumers
-    that the profile document names: its clusters, and the cluster templates
-    that link the version. `consumersByKind` gives the count of each kind,
-    `clusters` and `templates`. In strata 0.20 and before, `consumers` counted
-    the clusters alone. `published` is the `status.isPublished` of the version:
-    when it is `false`, nobody published it, and `packs[]` holds the packs of
-    its draft. `type` and `packs[]` come from the template that a record of
-    the version reads: the published template when it has packs, else the
-    draft. `type` is a profile type, or the text of a type of a later release.
+  - A profile: `ref`, `name`, `version`, `uid`, `cloudType`, and `scope`.
+    `scope` is `project`, `tenant`, or `system`.
+    - `scope` is absent when Palette has no profile search, or when strata
+      could not read the document of the version with `--packs`.
+    - With `--packs`, also `type`, `consumers`, `published`, and `packs[]` with
+      `layer`, `name`, `tag`, and `version`, or `error`.
+    - `consumers` is the number of consumers that the profile document names:
+      its clusters, and the cluster templates that link the version.
+      `consumersByKind` gives the count of each kind, `clusters` and
+      `templates`. In strata 0.20 and before, `consumers` counted the clusters
+      alone.
+    - `published` is the `status.isPublished` of the version. When it is
+      `false`, nobody published it, and `packs[]` holds the packs of its draft.
+    - `type` and `packs[]` come from the template that a record of the version
+      reads. This is the published template when it has packs, and the draft
+      when it has none. `type` is a profile type, or the text of a type of a
+      later release.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, `clusterType`, and
     `projectUid`.
     - `state` is `status.state` of the cluster, as Palette gives it in
@@ -529,14 +544,16 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
       each with `uid` and `name`, as the search names them. `name` is absent
       when Palette gives none, and `hostCluster` is absent for a group of the
       system.
-    - With `--applied`, also `profiles[]` with the `uid`, `name`, `version`,
-      and `type` of each profile the cluster applies, or `error`, and
-      `updatesPending` and `pendingUpdates[]` as a cluster record gives them.
-      `updatesPending` is absent when strata could not read the notifications.
+    - With `--applied`, the entry also has `profiles[]`, or `error`. Each entry
+      of `profiles[]` has the `uid`, `name`, `version`, and `type` of a profile
+      that the cluster applies.
+    - With `--applied`, the entry also has `updatesPending` and
+      `pendingUpdates[]`, as a cluster record gives them. `updatesPending` is
+      absent when strata could not read the notifications.
   - A project: `name` and `uid`.
   - A saved tag filter: `name`, `uid`, `conjunction` (`and` or `or`), and
-    `conditions[]`, each with `key`, `values[]` (empty when the key alone must be
-    there), and `negation` when true.
+    `conditions[]`. Each condition has `key`, `values[]`, and `negation` when
+    true. `values[]` is empty when the key alone must be there.
 
 ## strata-packs/1
 
@@ -549,21 +566,23 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
   is not in `versions[]`, unless Spectro Cloud retired it as `disabled` or
   `deleted`. See [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
   - A version: `version`, `packUid`, `digest`, `type`, `cloudTypes[]`, `tags[]`
-    with the exact tag first, and `latest`, which is true for the newest version
-    the command listed, by the order of Semantic Versioning. `type` is
-    `spectro`, `helm`, or `oci`. A version that
-    the listing gives no type is `spectro`, as its record says. With `--cloud`,
-    `latest` is true for the newest version for that cloud, and not the newest
-    the registry holds. `state` is `deprecated`,
-    `disabled`, or `deleted` from `system_state` of the listing, or `disabled`
-    for a version with the mark of Spectro Cloud. See
-    [Pack states](../internals/palette/packs.md#pack-states). Strata omits
-    the field when the listing gives none. `digest` is empty when the registry
-    gives none. `paletteLatest`, only when true: the version that Palette calls
-    the latest, from `metadata.annotations.latestVersion` of the listing.
-    `--latest` keeps it too. `listed`: when Palette first listed the
-    version, from `metadata.creationTimestamp` of the listing; absent when the
-    listing gives no time.
+    with the exact tag first, and `latest`.
+    - `latest` is true for the newest version the command listed, by the order
+      of Semantic Versioning. With `--cloud`, `latest` is true for the newest
+      version for that cloud, and not the newest the registry holds.
+    - `type` is `spectro`, `helm`, or `oci`. A version that the listing gives
+      no type is `spectro`, as its record says.
+    - `state` is `deprecated`, `disabled`, or `deleted` from `system_state` of
+      the listing, or `disabled` for a version with the mark of Spectro Cloud.
+      See [Pack states](../internals/palette/packs.md#pack-states). Strata
+      omits the field when the listing gives none.
+    - `digest` is empty when the registry gives none.
+    - `paletteLatest`, only when true: the version that Palette calls the
+      latest, from `metadata.annotations.latestVersion` of the listing.
+      `--latest` keeps it too.
+    - `listed`: when Palette first listed the version, from
+      `metadata.creationTimestamp` of the listing. It is absent when the
+      listing gives no time.
   - `versionsOffered`: how many versions of the pack the registry offers, before
     `--latest` or `--cloud` cut the list.
   - `tagsUnavailable`: `true` when Palette lists the pack under the registry and
@@ -676,13 +695,14 @@ what it answered.
   - `fix` with `owner` and `text`; `evidence[]` with `kind`, `ref`, `note`.
     `kind` is `run`, `source`, `doc`, or `report`. An entry with an empty
     reference has no `ref`, and an entry with no note has no `note`.
-  - `confidence`, when the ledger has runs of the rule on this engine: `catch`
-    and `clean`, each with `correct`, `total`, `rate`, and `lowerBound`; `bar`;
-    `meetsBar`; and `runs[]`.
+  - `confidence`, when the ledger has runs of the rule on this engine: `catch`,
+    `clean`, `bar`, `meetsBar`, and `runs[]`. `catch` and `clean` each have
+    `correct`, `total`, `rate`, and `lowerBound`.
   - `countsAsFailure`: true when this entry makes the exit code `1`.
 - `sections[]`: the scorecard, one line for each section with a row for the
-  engine: `rows`, `seen`, `withCheck`, `preflight`, `withRuns`, `weakestBound`, `ran`,
-  `passed`, `failed`, `notRun`, `notChecked`, `readiness`.
+  engine. A line has `rows`, `seen`, `withCheck`, `preflight`, `withRuns`,
+  `weakestBound`, `ran`, `passed`, `failed`, `notRun`, `notChecked`, and
+  `readiness`.
 - `summary`: the counts, `notRunReasons` (each reason with its count),
   `readiness`, `exitCode`, and one line, `verdict`.
 - `options`: `tiers`, `strict`, `ready`, and `outDir` when `--out` was given.

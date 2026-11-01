@@ -33,7 +33,7 @@ profiles, in tiers. Each tier has its own hash, and none is part of the root:
 | --- | --- | --- |
 | `applied` | `spcHash` and `spcInfraHash`: the hashes that Palette computes of the spec it applied to the cluster. `spcHash` is its own for each cluster, so between two clusters `compare` reads `spcInfraHash` alone | the cluster document |
 | `running` | each pack that the cluster reconciled, with its version and profile uid | the cluster document, `status.packs` |
-| `policy` | the OS patch policy, the lifecycle, the machine health, the timezone, the FIPS mode, the role bindings, the namespaces, and how the cluster takes an update. See [The policy tier](#the-policy-tier) | the cluster document, and two more requests: the role bindings and the namespaces |
+| `policy` | the OS patch policy, the lifecycle, the machine health, the timezone, and the FIPS mode. Also the role bindings, the namespaces, and how the cluster takes an update. See [The policy tier](#the-policy-tier) | the cluster document, and two more requests: the role bindings and the namespaces |
 | `shape` | the cloud type; each machine pool, with its instance type, size, zones, labels, taints, and architecture; and the cloud part that a person chooses. See [The shape on each cloud](#the-shape-on-each-cloud) | the cloud config: one more request, with `--shape` |
 
 A record of a cluster group carries a `policy` tier of its own: the config
@@ -42,7 +42,7 @@ that the group gives each virtual cluster. See
 
 The record also keeps the labels of the cluster, in `source.cluster.labels`.
 A tier is in the record only when Palette gives the part of the document that
-it reads, so a record names the tiers that it carries.
+it reads. So a record names the tiers that it carries.
 
 `compare` of two cluster records names each tier that differs, and each field in
 it. See [Two clusters on one release differ](../../use-cases/cluster-tiers.md).
@@ -266,7 +266,7 @@ update waits, the pending record has the root of the cluster.
 A macro is a name and a value that a tenant or a project defines. The values
 and the manifests of a profile can read one as `{{.spectro.macro.<name>}}`, and
 Palette gives it its value when it applies the profile. A record holds the text
-with the name, so the root covers the name and not the value: an edit of a
+with the name, so the root covers the name and not the value. An edit of a
 macro does not move the root. Each report names the macros that the content
 uses.
 

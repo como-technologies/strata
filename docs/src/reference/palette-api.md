@@ -3,9 +3,10 @@
 Strata reads. Most requests are `GET` requests. Ten are `POST` requests, and
 none of them changes anything. Four are searches that Palette takes as a
 `POST`. With the other six, `compare --repave`, `compare --validate`,
-`snapshot --validate`, and `behind` ask Palette a question. Each request has the
-headers `ApiKey` and `Accept: application/json`. A request in a project has
-the header `ProjectUid` too. The
+`snapshot --validate`, and `behind` ask Palette a question.
+
+Each request has the headers `ApiKey` and `Accept: application/json`. A request
+in a project has the header `ProjectUid` too. The
 [Palette API reference](https://docs.spectrocloud.com/api/v1/) gives the shape
 of each response.
 
@@ -24,10 +25,12 @@ of each response.
 
 A missing variables endpoint, HTTP 404 or 405 on an older Palette, counts as no
 variables. The record says so in `source.variablesUnavailable`: see
-[JSON documents](./documents.md#strata-snapshot1). Palette also answers HTTP 404
-when it does not have the profile. So after a 404, strata reads the profile
-document again. When that read answers HTTP 404, the record fails, and `verify`
-reports the version as gone. A cluster does the same with its own document. See
+[JSON documents](./documents.md#strata-snapshot1).
+
+Palette also answers HTTP 404 when it does not have the profile. So after a
+404, strata reads the profile document again. When that read answers HTTP 404,
+the record fails, and `verify` reports the version as gone. A cluster does the
+same with its own document. See
 [The variables route](../internals/palette/profiles.md#the-variables-route).
 
 ## A cluster
@@ -48,12 +51,12 @@ reports the version as gone. A cluster does the same with its own document. See
 | `GET /v1/spectroclusters/{uid}/profileUpdates` | `profiles[]`: each profile of the cluster as the update that waits gives it, in the shape of `spec.clusterProfileTemplates`. `cluster:<cluster>@pending` reads it. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` | For `@pending`: the manifests of each profile in `profiles[]`. The cluster holds no copy of them yet. |
 | `GET /v1/spectroclusters/{uid}/packs/resolvedValues` | The value that Palette gives each macro, for `snapshot --macros`, and `verify` of a record that holds macro digests. |
-| `GET /v1/clustergroups/{uid}/packs/resolvedValues` | The value that Palette gives each macro for a cluster group, in the shape of the answer for a cluster: `snapshot clustergroup:<group> --macros`, and `verify` of its record. |
-| `GET /v1/clusterprofiles/{uid}/packs/resolvedValues` | The value that Palette gives each macro at the scope of a profile version, with no cluster, in one `resolved` map: `snapshot <name>@<version> --macros`, and `verify` of its record. |
+| `GET /v1/clustergroups/{uid}/packs/resolvedValues` | The value that Palette gives each macro for a cluster group, in the shape of the answer for a cluster. `snapshot clustergroup:<group> --macros` and `verify` of its record read it. |
+| `GET /v1/clusterprofiles/{uid}/packs/resolvedValues` | The value that Palette gives each macro at the scope of a profile version, with no cluster, in one `resolved` map. `snapshot <name>@<version> --macros` and `verify` of its record read it. |
 | `GET /v1/cloudconfigs/{cloudType}/{configUid}` | The machine pools and the cloud part of the cluster, for `snapshot --shape`, and `verify` of a record that holds the `shape` tier. |
-| `POST /v1/spectroclusters/{uid}/validate/repave` | Whether a change of the profiles of the cluster replaces its nodes, for `compare --repave`: a move to a profile version, or the update that waits. The request changes nothing. |
+| `POST /v1/spectroclusters/{uid}/validate/repave` | Whether a change of the profiles of the cluster replaces its nodes, for `compare --repave`. The change is a move to a profile version, or the update that waits. The request changes nothing. |
 | `POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave` | The same answer for a cluster template, for `compare --repave` of a cluster that the template governs. The body names the profiles by uid, with `isUpgradeNow: false`. The request changes nothing. |
-| `POST /v1/spectroclusters/{uid}/validate/packs` | Whether Palette accepts the packs of a change of the profiles of the cluster, for `compare --validate` with a profile version that the cluster does not run. It takes the body of `validate/repave`, and changes nothing. It checks no sent tag of a profile that the cluster runs. So no command sends it for such a profile: see [The sent tag](../internals/palette/validate-routes.md#the-sent-tag). |
+| `POST /v1/spectroclusters/{uid}/validate/packs` | Whether Palette accepts the packs of a change of the profiles of the cluster. `compare --validate` sends it with a profile version that the cluster does not run. It takes the body of `validate/repave`, and changes nothing. It checks no sent tag of a profile that the cluster runs. So no command sends it for such a profile: see [The sent tag](../internals/palette/validate-routes.md#the-sent-tag). |
 
 ## The fleet
 
@@ -64,8 +67,8 @@ reports the version as gone. A cluster does the same with its own document. See
 | `GET /v1/filters/metadata?filterType=tag` | The name and the uid of each saved tag filter of the tenant. |
 | `GET /v1/filters/tag/{uid}` | One saved tag filter: `spec.filterGroup`, its conjunction and its conditions. |
 
-The search takes no filter uid, so strata turns each condition of a saved filter
-into a condition of the search: the property `tags`, with the values
+The search takes no filter uid. So strata turns each condition of a saved
+filter into a condition of the search. The property is `tags`, with the values
 `<key>:<value>`, or `<key>` for a label that must be there.
 
 ## An edge host, a cluster group, and an app profile
@@ -77,7 +80,7 @@ into a condition of the search: the property `tags`, with the values
 | `POST /v1/dashboard/edgehosts/search?limit=50` | Every edge host, every page, with a summary of its profiles: the uid of an edge host name, and the edge hosts that `consumers` counts. The body has no filter. A Palette with no edge host search answers HTTP 404 or 405, and `consumers` counts no edge host. |
 | `GET /v1/clustergroups/{uid}` | `spec.clusterProfileTemplates`: the profiles that the group pins for its virtual clusters. `spec.clustersConfig`: the config that the group gives each virtual cluster, for the `policy` tier. `verify` reads `status.isActive`, and takes a 404 as a group that is gone. The second reading of `consumers` reads it for each group, to find the groups that pin the version. |
 | `GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}` | `spec.published.content`: the copy of a manifest that a cluster group holds, by the uid that its template names. |
-| `GET /v1/clustergroups/hostCluster/metadata` | The name and the uid of each cluster group: the uid of a group name, and for the second reading of `consumers`, the groups to read, at tenant scope and at the scope of the key. |
+| `GET /v1/clustergroups/hostCluster/metadata` | The name and the uid of each cluster group. It gives the uid of a group name. For the second reading of `consumers`, it gives the groups to read, at tenant scope and at the scope of the key. |
 | `POST /v1/dashboard/clustergroups/{uid}/virtualClusters?limit=50` | The virtual clusters of the group, every page: `members[]` of the record. `verify` sends no such request. For the second reading of `consumers`, the virtual clusters of each group that pins the version. The body has no filter. |
 | `GET /v1/clusterprofiles/{uid}/packs/manifests` and `GET /v1/clusterprofiles/{uid}/variables` | For an edge host and a cluster group: the manifests and the variable definitions of each profile. |
 | `GET /v1/appProfiles/{uid}` | The metadata and the version of an app profile, and `status.inUseApps`: the app deployments that `consumers` lists. |
@@ -95,28 +98,31 @@ in [Edge hosts, cluster groups, and app profiles](../internals/palette/other-obj
 | --- | --- | --- |
 | `GET /v1/dashboard/projects/metadata` | `list projects`; the name in `PALETTE_PROJECT` or `--project-name`; the warning when `PALETTE_PROJECT_UID` and `PALETTE_PROJECT` name two projects; `list` and `consumers`, to name each project | Every project the key can see: name and uid. |
 | `GET /v1/registries/metadata` | `packs`, `behind`, a `pack:` ref, and `verify` on a pack record. `snapshot --from-candidate` when a layer names its registry by name, or when the listing does not have the version of a layer. `snapshot --from-candidate --validate`, for the registry of each pack in the body of the import validate route. | The registries the key can see: name and uid. Also `kind` and `isPrivate`: Palette does not sync a Helm registry that is private. |
-| `GET /v1/packs?filters=spec.name=<name>&limit=100&offset=<n>` | `snapshot --from-candidate` for each layer that is not a `manifest` layer, `packs`, `behind`, a `pack:` ref, and `verify` on a pack record | Each version of the pack in each registry: the pack uid, the layer, the type, the default values, the digest when the registry gives one, when Palette first listed the version, and the architectures that it supports. |
+| `GET /v1/packs?filters=spec.name=<name>&limit=100&offset=<n>` | `snapshot --from-candidate` for each layer that is not a `manifest` layer, `packs`, `behind`, a `pack:` ref, and `verify` on a pack record | Each version of the pack in each registry. A version has the pack uid, the layer, the type, the default values, and the digest when the registry gives one. It also has the time when Palette first listed the version, and the architectures that it supports. |
 | `GET /v1/packs/<name>/registries/<uid>` | `snapshot --from-candidate` for each layer that is not a `manifest` layer, `packs`, `behind`, a `pack:` ref, and `verify` on a pack record | The tags of the pack in one registry, with its values and its layer. |
 | `GET /v1/packs/<name>/registries/<uid>?states=deprecated,disabled,deleted` | `packs` and `behind`, when the listing shows a `disabled` or a `deleted` version in the registry | The tags of the retired versions only. The request with no query does not include the disabled and the deleted versions. See [Pack states](../internals/palette/packs.md#pack-states). |
 | `POST /v1/clusterprofiles/validate/packs` | `snapshot --from-candidate --validate` | Whether Palette takes the packs of the candidate in a new profile. The request changes nothing. See [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks). |
 | `GET /v1/clusterprofiles/validate/name?name=<name>&version=<version>` | `snapshot --from-candidate --validate` | Whether Palette takes the name and the version of the candidate for a new profile: `204` with no body, or a refusal. See [The validate routes](../internals/palette/validate-routes.md#get-v1clusterprofilesvalidatename). |
-| `POST /v1/clusterprofiles/import/validate` | `snapshot --from-candidate --validate` | Whether Palette takes the candidate as an import, in the shape of a profile export: the names of the packs and the manifests, a repeat of each, and a pack that Spectro Cloud disabled. The request changes nothing. See [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesimportvalidate). |
+| `POST /v1/clusterprofiles/import/validate` | `snapshot --from-candidate --validate` | Whether Palette takes the candidate as an import, in the shape of a profile export. It checks the names of the packs and the manifests, a repeat of each, and a pack that Spectro Cloud disabled. The request changes nothing. See [The validate routes](../internals/palette/validate-routes.md#post-v1clusterprofilesimportvalidate). |
 | `GET /v1/registries/oci/summary` | `snapshot --from-candidate`, a `pack:` ref, `verify` on a pack record, and `behind` | The provider type of each OCI registry: `pack`, `helm`, or `zarf`. A record names no provider type when Palette has no such listing: it answers HTTP 404 or 405. Another error, such as a 403, stops the record, because the provider type is part of it. Also `status.sync.isSyncSupported`, which `snapshot --from-candidate` reads when the listing does not have the version of a layer from an OCI registry. `verify` of a record of a pack of type `oci` reads `status.sync`, the last sync of the registry. `behind` reads it for a current pin of such a pack. |
 | `GET /v1/registries/pack/summary` | `verify` on a record of a pack of type `spectro`, and `behind` on a pin of such a pack that is current | `status.sync` of each pack registry, the last sync: `isSyncSupported`, `lastSyncedTime`, `lastRunTime`, `status`, `message`, and `syncRecovery`. See [The sync of a registry](../internals/palette/packs.md#the-sync-of-a-registry). |
 | `GET /v1/registries/helm/summary` | `verify` on a record of a pack of type `helm`, and `behind` on a pin of such a pack that is current | The same, for each Helm registry. The verdict and the pin have no sync note when Palette has no summary listing (HTTP 404 or 405). The same is true when the listing does not have the registry. After another error, such as a 403 or a 5xx, or a request that does not complete, they also have no sync note. Then `verify.registrySyncError` or `pins[].registrySyncError` gives the reason. |
 | `GET /v1/audits?resourceKind=<kind>&resourceUid=<uid>&startTime=<time>&limit=100` | `verify --who` | The writes to the object since the record, every page. The kind is `clusterprofile`, `appprofile`, `edgehost`, or `clustergroup`. For a cluster record, strata sends no `resourceKind`: the uid alone finds the entries of `spectrocluster` and of `virtualCluster`. Strata also reads the log of each profile of `profilesOverwritten`, as `clusterprofile`. A page has 100 entries, the most that Palette serves. |
 
-`list --packs`, and `list --pack`, read `GET /v1/clusterprofiles/{uid}` for each
-profile version. Without them, `list` reads the profile search for the scope
-of each version. `list clusters --applied`, and `list --cluster`, read
-`GET /v1/spectroclusters/{uid}` for each cluster. `consumers` reads each cluster
-that the profile lists, in its own project. Then it reads the cluster listing at
-tenant scope, and `GET /v1/spectroclusters/{uid}` for each cluster the profile
-did not name: [consumers](../commands/consumers.md) says why, and
-`--list-only` stops it. Then it searches the edge hosts. For an app profile,
-`consumers` reads `GET /v1/appDeployments/{uid}` for each app deployment that
-the app profile lists, in its own project, and nothing more. `verify` on a
-cluster record reads each profile that the cluster runs.
+- `list --packs`, and `list --pack`, read `GET /v1/clusterprofiles/{uid}` for
+  each profile version. Without them, `list` reads the profile search for the
+  scope of each version.
+- `list clusters --applied`, and `list --cluster`, read
+  `GET /v1/spectroclusters/{uid}` for each cluster.
+- `consumers` reads each cluster that the profile lists, in its own project.
+  Then it reads the cluster listing at tenant scope. It reads
+  `GET /v1/spectroclusters/{uid}` for each cluster the profile did not name.
+  [consumers](../commands/consumers.md) says why, and `--list-only` stops it.
+  Then it searches the edge hosts.
+- For an app profile, `consumers` reads `GET /v1/appDeployments/{uid}` for each
+  app deployment that the app profile lists, in its own project, and nothing
+  more.
+- `verify` on a cluster record reads each profile that the cluster runs.
 
 A command reads the project listing of a scope one time. A record, a resolve
 with its validate, and `behind` read each registry listing of a scope one time.
@@ -131,8 +137,8 @@ entries it got, until a page is short or `offset` reaches `listmeta.count`.
 `scope.json`. `scope.json` holds the project, the time of the read, and
 `variablesUnavailable`. So `--from-raw` rebuilds the same record, with the same
 fetch time and the same flag. For a cluster, it also saves the notifications,
-with the values of each pack masked, and the role bindings and the namespaces:
-see
+with the values of each pack masked. It also saves the role bindings and the
+namespaces. See
 [The saved answers of Palette](../commands/snapshot/no-network.md#the-saved-answers-of-palette).
 
 ## The checks of `strata preflight`

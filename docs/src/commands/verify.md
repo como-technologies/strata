@@ -40,8 +40,8 @@ the draft, with no `@draft` in the ref, and `verify` gives it the same verdicts.
 
 ## Who changed it
 
-`DRIFT` says that the object changed. It does not say who changed it.
-`--who` reads that from the audit log of Palette: for a record that drifted,
+`DRIFT` says that the object changed, but not who changed it.
+`--who` reads that from the audit log of Palette. For a record that drifted,
 strata reads each write to the object of the record since the record was taken.
 The object is the profile, the app profile, the cluster, the edge host, or the
 cluster group. Palette has who and when. The record has what the content was.
@@ -65,9 +65,9 @@ both kinds.
 
 For a cluster record, the write that overwrote a version that the cluster runs
 is an entry of the profile, and not of the cluster. So strata also reads the log
-of each profile in `profilesOverwritten`. A line of a write to an object other
-than the object of the record names the kind and the name of that object after
-the action:
+of each profile in `profilesOverwritten`. The line of a write to
+another object names the kind and the name of that object after the
+action:
 
 ```text
 {{#include ../output/overwritten-cluster-who.txt}}
@@ -77,12 +77,18 @@ the action:
 {{#include ../output/edited-verify-who-json.txt}}
 ```
 
-`--json` puts the same entries in `verify.who`. Each entry has `time`, `actor`,
-`actorType`, `actorUid` for a person, `action`, `summary` when Palette gives
-one, `userMsg` when the entry has a note, `resource` (the `kind`, the `name`,
-and the `uid` of the object of the write), and `auditUid`. `auditUid` names the
-entry, and `GET /v1/audits/{auditUid}` reads it again. An entry carries no
-request id.
+`--json` puts the same entries in `verify.who`. Each entry has these fields:
+
+- `time`, `actor`, and `actorType`.
+- `actorUid`, for a person.
+- `action`.
+- `summary`, when Palette gives one.
+- `userMsg`, when the entry has a note.
+- `resource`: the `kind`, the `name`, and the `uid` of the object of the write.
+- `auditUid`.
+
+`auditUid` names the entry, and `GET /v1/audits/{auditUid}` reads it again. An
+entry carries no request id.
 
 - Strata reads the log only for a record that drifted. An unchanged record
   costs no request.
@@ -152,10 +158,10 @@ document shape.
 | `DRIFT: edge host <h> no longer exists: uid <uid> is gone from Palette since the record of <time>` | A record of an edge host that Palette no longer has. A cluster group, or a cluster whose document is gone, gets the same verdict. | `1` |
 | `OK: pack <name>@<version> in registry <r> is unchanged since <time>` | A pack record: the registry holds the recorded copy. | `0` |
 | `DRIFT: pack <name>@<version> in registry <r> differs from the copy recorded <time>` | A pack record: the registry holds other content now. | `1` |
-| `DRIFT: <subject> has the content recorded <time>, but macro <m> has another value now` | A record of a version, a cluster, or a cluster group with the digests of its macro values (`snapshot --macros`): Palette gives a macro another value now. The root is the same. | `1` |
+| `DRIFT: <subject> has the content recorded <time>, but macro <m> has another value now` | A record of a version, a cluster, or a cluster group with the digests of its macro values (`snapshot --macros`). Palette gives a macro another value now. The root is the same. | `1` |
 | `DRIFT: <subject> has the content recorded <time>, but pack <key> names image <b> now, not <a>` | A pack names another machine image in `imageId` now. The root is the same. See [The OS pack names a new machine image](../use-cases/os-image.md). | `1` |
 | `INVALID: Palette marks pack <key> invalid now (<reason>)`, under the verdict | Palette marks a pack of the version invalid now: the registry deleted its tag. It does not change the verdict. See [A registry deletes the tag of a pack](../use-cases/invalid-pack.md). | the exit code of the verdict |
-| `UNVERIFIED: <subject> has the content recorded <time>, but pack <key> has no upstream digest, so a change of the archive does not show; --allow-no-digest accepts it` | The content is the same, and a pack from a registry has no digest: an equal root does not show an equal archive for it. Drift wins over this verdict. | `1` |
+| `UNVERIFIED: <subject> has the content recorded <time>, but pack <key> has no upstream digest, so a change of the archive does not show`. The line ends with `; --allow-no-digest accepts it`. | The content is the same, and a pack from a registry has no digest: an equal root does not show an equal archive for it. Drift wins over this verdict. | `1` |
 
 A verdict of a cluster record names `cluster <c> running <v>`. A verdict of an
 edge host record names `<v> on edge host <h>`. A verdict of a cluster group
@@ -163,7 +169,7 @@ record names `<v> pinned by cluster group <g>`. A verdict of a pending record
 names `<v> pending for cluster <c>`, as the heading of `compare` does. A verdict
 of a cluster that applies no profile names `cluster <c>`.
 
-`--allow-no-digest` accepts a pack with no upstream digest: the verdict is `OK`,
+`--allow-no-digest` accepts a pack with no upstream digest. The verdict is `OK`,
 the exit is `0`, and the report still names the pack in a `note`. A manifest
 pack has no archive, so it never makes a record `UNVERIFIED`. See
 [The content digest](../internals/hashes.md#the-content-digest).
@@ -176,9 +182,14 @@ Each verdict of a cluster record ends with `; N variable value changed` when the
 cluster gives a variable another value than the record holds.
 
 A verdict of a cluster, edge host, or cluster group record ends with the state
-of the object when the state is not `Running` for a cluster, `in-use` for an
-edge host, or active for a cluster group: `; the cluster is Deleting`, `; the
-edge host is ready`, or `; the cluster group is inactive`. The state does not
+of the object. It does so when the state is not one of these:
+
+- `Running` for a cluster.
+- `in-use` for an edge host.
+- Active for a cluster group.
+
+The ending looks like `; the cluster is Deleting`, `; the edge host is ready`,
+or `; the cluster group is inactive`. The state does not
 change the verdict or the exit. With many records, the line ends with `; the
 state is <state>`.
 
@@ -211,7 +222,7 @@ record ends with the last sync of the registry:
   sync of the registry started <time>`: a sync runs now. The copy is the copy
   of the last complete sync until the sync that runs completes.
 - `; the last complete sync of the registry started <time>; the last sync of
-  the registry failed: <message>`: the last sync failed, and the message is
+  the registry failed: <message>`: the last sync failed. The message is
   from Palette. The copy is the copy of the last complete sync, so `OK` says
   only that the copy did not change.
 - `; the recovery of the sync is <state>: <message>`: a sync stopped before
@@ -225,7 +236,7 @@ than the time of the sync that runs. See
 
 The sync status is a note beside the verdict. When Palette answers the sync
 request with a 5xx, or the request does not complete, strata writes a note to
-stderr and gives the verdict with no sync note. The status and the exit of the
+stderr. It gives the verdict with no sync note. The status and the exit of the
 verdict do not change: an unchanged pack is `OK` and exits `0`.
 
 With many records, the line of a pack record ends with the same note. `behind`
@@ -286,12 +297,13 @@ many records, each line says the same:
 
 ## The tiers of a cluster record
 
-`verify` of a cluster record reads the tiers that the record carries again, and
-the report names each tier that changed: see
+`verify` of a cluster record reads the tiers that the record carries again. The
+report names each tier that changed. See
 [More of the cluster than its release](snapshot/cluster.md#more-of-the-cluster-than-its-release).
 The verdict follows the release alone, so a changed tier does not make a record
 `DRIFT`. A record written before the tiers carries none, and verifies as before.
-A record of a cluster group carries the `policy` tier of the group: see
+
+A record of a cluster group carries the `policy` tier of the group. See
 [The config that a cluster group gives](snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
 A record of a later release can carry a tier that this release does not know.
 Palette gives strata no such tier, so `verify` does not compare it, and a note

@@ -43,7 +43,7 @@ variables:
 | `cloudType` | no | The cloud of the profile. The default is empty. |
 | `registry` or `registryUid` | no | The registry for each layer that names none. It does not apply to a `manifest` layer. |
 | `layers[]` | yes | One entry for each pack, in profile order. At least one. |
-| `variables[]` | no | The profile variable definitions. A variable needs a `name`. Each other field has the default of a record, also when its value is `null`: see [the variables of a record](documents.md#strata-snapshot1) and [the rules for a variable](#checks-before-any-request). |
+| `variables[]` | no | The profile variable definitions. A variable needs a `name`. Each other field has the default of a record, also when its value is `null`. See [the variables of a record](documents.md#strata-snapshot1) and [the rules for a variable](#checks-before-any-request). |
 
 A program can also give strata a candidate in memory, as JSON, through the
 library. It then writes no file.
@@ -56,14 +56,14 @@ library. It then writes no file.
 | `registry` or `registryUid` | yes, on the layer or at the top; no on a `manifest` layer | The registry, by name or uid. Not both. The setting on the layer has priority over the one at the top. A registry that Palette does not sync is permitted: see [A layer from a registry that Palette does not sync](#a-layer-from-a-registry-that-palette-does-not-sync). |
 | `type` | no | `manifest` for a layer of manifests that comes from no registry. See [A manifest layer](#a-manifest-layer). Omit it for a pack from a registry: the registry gives the type. |
 | `values` or `valuesFile` | no | The values, inline or in a file. Not both. With neither, the layer gets the default values of the pack. |
-| `layer` | no | The layer name, as Palette gives it in `v1PackLayer`. The default comes from the registry. Palette takes the layer from the registry, so the layer of a pack from a registry must be its layer in that registry: see [The registry lookups](#the-registry-lookups). A `manifest` layer takes only `addon`: see [A manifest layer](#a-manifest-layer). |
+| `layer` | no | The layer name, as Palette gives it in `v1PackLayer`. The default comes from the registry. Palette takes the layer from the registry, so the layer of a pack from a registry must be its layer in that registry. See [The registry lookups](#the-registry-lookups). A `manifest` layer takes only `addon`: see [A manifest layer](#a-manifest-layer). |
 | `tag` | no | The tag. The default is the tag that equals the version, else the first tag of that version, else the version itself. An explicit tag must be a tag of that version in the registry, or the version itself. A `manifest` layer takes any tag, and its default is the version. A floating tag, such as `1.0.x`, pins the build that the tag names now: see [Tag names](../internals/palette/packs.md#tag-names). |
 | `params` | no | A map that Palette carries on a pack beside its values. Each value is text, as in a record. Strata puts it in the authored hash, so a change to it is an `AUTHORED` change. |
 | `manifests[]` | no; one or more on a `manifest` layer | Each with a `name`, and `content` inline or a `contentFile`. |
 
 > **Set `tag` to the tag that you publish.** Palette stores the tag that a
-> profile was authored with, and a registry can give one build several tags:
-> see [Tag names](../internals/palette/packs.md#tag-names). The tag is part of
+> profile was authored with. A registry can give one build several tags. See
+> [Tag names](../internals/palette/packs.md#tag-names). The tag is part of
 > `IDENTITY`, so another tag for the same build gives another root.
 > `same-release` passes such a pair as `SAME CONTENT`.
 
@@ -99,7 +99,7 @@ Strata reads the whole file before it sends a request:
   `candidate-invalid`. No route that takes a candidate answers these rules
   before the create, so strata fills the gap. The message names the rule, the
   code of Palette, and the layer or the manifest. The JSON of the error gives
-  the code in `code`: see [Errors](errors.md). Strata checks the rules in this
+  the code in `code`. See [Errors](errors.md). Strata checks the rules in this
   order:
   1. The type takes the `layer` of each layer that gives one. `infra` takes
      `os`, `k8s`, `cni`, and `csi`. `add-on` and `system` take `addon`, `cni`,
@@ -182,17 +182,21 @@ before any request pass. The registry gives `addon`:
 {{#include ../output/candidate-layer-refused.txt}}
 ```
 
-A version or a tag that the registry does not have is `pack-not-found`. A
-registry name that the key cannot see is `registry-not-found`. A name that two
-registries have, one of the system and one of the tenant, is
-`registry-name-ambiguous`: give the `registryUid`. A `registryUid`
-that the key cannot see goes out as given, so its packs are `pack-not-found`,
-and the error names the uid. A version that Spectro Cloud retired, with the
-`system_state` `disabled` or `deleted`, is `pack-unavailable`. Palette does not
-serve it, and refuses a profile that pins it. A version with the mark
-`disabled` is not: Palette serves it, and refuses the profile on its validate
-route, so give `--validate`. See
-[Pack states](../internals/palette/packs.md#pack-states).
+The lookups give these errors:
+
+- A version or a tag that the registry does not have is `pack-not-found`.
+- A registry name that the key cannot see is `registry-not-found`.
+- A name that two registries have, one of the system and one of the tenant, is
+  `registry-name-ambiguous`. Give the `registryUid`.
+- A `registryUid` that the key cannot see goes out as given, so its packs are
+  `pack-not-found`, and the error names the uid.
+- A version that Spectro Cloud retired, with the `system_state` `disabled` or
+  `deleted`, is `pack-unavailable`. Palette does not serve it, and refuses a
+  profile that pins it.
+- A version with the mark `disabled` is not `pack-unavailable`. Palette serves
+  it, and refuses the profile on its validate route, so give `--validate`.
+
+See [Pack states](../internals/palette/packs.md#pack-states).
 
 The snapshot has `source.template` `candidate`, no uid, and no `consumers`.
 Strata takes the digest of each pack from the registry, as Palette does for a

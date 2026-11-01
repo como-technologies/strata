@@ -7,7 +7,7 @@ each one needs.
 
 ## The issue
 
-Each change starts from an issue. The issue states the problem, a plan, and a
+Each change starts from an issue that states the problem, a plan, and a
 `Done when:` line. Each item of that line names a command to run or a file to
 read, and the result that it must give. A second person can then test it. If an
 issue has no such line, write one before the work starts. The person who writes
@@ -87,8 +87,9 @@ After the merge, the author puts one comment on the issue: the evidence. It
 starts with `Evidence for the acceptance criteria: the commands run, from the
 repo root, and the output they printed.` It names the merge commit. It gives one
 heading for each item of the `Done when:` line, with the commands and the output
-that they printed. Then the author ticks each item that the evidence shows. If
-an item needs a build in the live example, which costs money, the author names
+that they printed. Then the author ticks each item that the evidence shows.
+
+If an item needs a build in the live example, which costs money, the author names
 the item in the pull request. A person who runs the live example does that item.
 The owner of the issue closes it.
 
@@ -116,5 +117,5 @@ To change a tool or a version:
    the same pull request.
 
 CI builds with the latest stable Rust. When Rust releases a new stable version,
-change `RUST_VERSION` in the same way, so that clippy finds the same lints in
-the container and in CI.
+change `RUST_VERSION` in the same way. Then clippy finds the same lints in the
+container and in CI.

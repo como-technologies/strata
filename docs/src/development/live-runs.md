@@ -66,7 +66,7 @@ This is the source for
 | `a4-still-a3` | 0 | 0 | #27: the bump left cluster A as it was |
 | `verify-a3-after-bump` | 1 | 0 | #30: `verify` of cluster A's record fails only without the flag: the version it runs was overwritten |
 | `a3-names-overwritten-profile` | 0 | 1 | #30: the verify names the add-on profile, only without the flag |
-| `verify-a3-who`, `a3-who-names-profile` | 1, 0 | 0, 1 | #140: `verify --who` of the same record reads the log of the overwritten profile, and a write names the add-on profile as its object, only without the flag. |
+| `verify-a3-who`, `a3-who-names-profile` | 1, 0 | 0, 1 | #140: `verify --who` of the same record reads the log of the overwritten profile. A write names the add-on profile as its object. Both happen only without the flag. |
 | `consumers-old` | 1 | 1 | #27: both clusters are still consumers of the first uid |
 | `consumers-old-overwritten` | 0 | 1 | #28: `consumers` marks both clusters as running a version the uid no longer names, only without the flag |
 | `clone-carried-nothing` | - | 0 | #27, #32: the flag's clone is the same release as the legacy bump of the same configuration, whatever pack uid Palette minted |
@@ -165,8 +165,9 @@ The same report runs through the reusable workflow
 [act](https://github.com/nektos/act) against a scratch caller repository. The
 job makes a checkout of the caller and of this repository at the release tag.
 It installs the binary of that release with `install-strata.sh`, which checks
-the signature of `SHA256SUMS` and then the binary. Then it runs the script. At
-the baseline it succeeds and opens nothing. After an edit in place it opens an
+the signature of `SHA256SUMS` and then the binary. Then it runs the script.
+
+At the baseline it succeeds and opens nothing. After an edit in place it opens an
 issue with the report and fails with exit 1. After the undo it closes the issue
 and succeeds.
 
@@ -200,11 +201,11 @@ registries the tenant can see, including one pack that two registries hold.
 |---|---|---|
 | `list-packs` | 0 | #55: the profiles list the pack versions they pin |
 | `compare-versions`, `compare-json` | 1 | #55: two versions of one pack differ, and the document names the pack on both sides |
-| `compare-images`, `compare-images-says` | 0 | #77: the diff flags `IMAGES` and `CHARTS` beside `AUTHORED`, and names each image that moved: from `csi-aws-ebs` 1.63.1 to 1.65.0, eight images retagged and the chart `aws-ebs-csi-driver` at 2.65.0 |
+| `compare-images`, `compare-images-says` | 0 | #77: the diff flags `IMAGES` and `CHARTS` beside `AUTHORED`, and names each image that moved. The move is from `csi-aws-ebs` 1.63.1 to 1.65.0. Eight images are retagged, and the chart `aws-ebs-csi-driver` is at 2.65.0 |
 | `compare-same` | 0 | #55: a pack version against itself is identical |
 | `record`, `record-title` | 0 | #55: `snapshot` writes a record of a pack version, which names the pack and not a profile |
 | `verify-record` | 0 | #55: the record verifies against the registry it came from |
-| `verify-sync`, `verify-sync-json` | 0 | #141, #192: the verdict ends with the last sync of the registry (the start of the last complete sync, a sync in progress, or a failure), and `--json` gives `verify.registrySync` |
+| `verify-sync`, `verify-sync-json` | 0 | #141, #192: the verdict ends with the last sync of the registry. That is the start of the last complete sync, a sync in progress, or a failure. `--json` gives `verify.registrySync` |
 | `record-images`, `old-record` | 0 | #77: the record carries the image list; a record without the list gets it from its values, and verifies |
 | `latest`, `latest-is-newest` | 0 | #55: `@latest` resolves to the newest version the registry offers |
 | `two-registries`, `two-registries-says` | 2, 0 | #55: a bare ref for a pack in two registries is an error that names both, and the ref that fixes it |
@@ -216,7 +217,7 @@ registries the tenant can see, including one pack that two registries hold.
 | `packs-cloud` | 0 | #54: `--cloud` keeps the versions of one cloud |
 | `packs-cloud-none`, `packs-cloud-none-says` | 0 | #54: a cloud no version supports is an empty answer, not an error, and it says so |
 | `packs-json` | 0 | #54: `--json` writes `strata-packs/1` |
-| `packs-palette-latest` | 0 | #124, #489: the listing marks one version of `kubernetes` and one of `cert-manager` in the registry as the latest of Palette, and it is the version that strata calls the newest, with `latest`. `cert-manager` has `-rev` versions below their base (no result yet). See [The version that Palette calls the latest](../internals/palette/packs.md#the-version-that-palette-calls-the-latest) |
+| `packs-palette-latest` | 0 | #124, #489: the listing marks one version of `kubernetes` and one of `cert-manager` in the registry as the latest of Palette. That version is the one that strata calls the newest, with `latest`. `cert-manager` has `-rev` versions below their base (no result yet). See [The version that Palette calls the latest](../internals/palette/packs.md#the-version-that-palette-calls-the-latest) |
 | `packs-rev-floating-tag` | 0 | #124: the floating tag `1.19.x` of `cert-manager` names `1.19.3`, and not the rebuild `1.19.3-rev1` |
 | `packs-unknown-registry`, `packs-unknown-pack` | 2 | #54: an unknown registry lists the visible ones; a pack no registry has is an error |
 | `preset-listing` | 0 | #151: the listing gives each option of the `access` parameter of `headlamp` 0.45.0 with no presets: see [The presets of a template option](../internals/palette/packs.md#the-presets-of-a-template-option) |
@@ -225,7 +226,7 @@ registries the tenant can see, including one pack that two registries hold.
 | `os-annotations` | 0 | #253: the record keeps no annotation of the OS pack, because `ubuntu-aws` has no `imageId` |
 | `os-profile`, `os-annotations-ref` | 0 | #189: the document of the release profile gives the pack reference of the OS pack eight annotations, and no `imageId` |
 | `os-pack-registry`, `os-annotations-registry` | 0 | #189: the pack version in the registry, `GET /v1/packs/<uid>`, gives the same annotations as the pack reference: see [The annotations of a pack reference](../internals/palette/packs.md#the-annotations-of-a-pack-reference) |
-| `pack-time-listing` | 0 | #191: the listing gives each version of the CSI pack a `lastModifiedTimestamp` that is the same as its `creationTimestamp`: see [What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack) |
+| `pack-time-listing` | 0 | #191: the listing gives each version of the CSI pack a `lastModifiedTimestamp` that equals its `creationTimestamp`. See [What a registry answers about a pack](../internals/palette/packs.md#what-a-registry-answers-about-a-pack) |
 | `verify-no-time` | 0 | #191: `verify --json` gives no `verify.lastModified` for a pack record |
 | `arch-listing` | 0 | #126: the listing names the architectures of `loki` 2.10.2 as `amd64,arm64`, and of 3.6.7 as `amd64`: see [The architectures of a version](../internals/palette/packs.md#the-architectures-of-a-version) |
 | `arch-record`, `arch-behind`, `arch-behind-says`, `arch-behind-json` | 0, 1, 0, 0 | #126: a record of `loki` 2.10.2 is behind 3.6.7, and `behind` says that the move drops `arm64`, in the line and in `newer[].drops` |
@@ -243,7 +244,7 @@ strata: pack 'csi-aws-ebs' at version '1.63.1' is in several registries: Palette
 ## pack-states.sh
 
 No cluster, and no cost. It uses three packs that Spectro Cloud retired in the
-public registries, one for each state: `nginx` 1.15.1 (disabled) and
+public registries, one for each state. They are `nginx` 1.15.1 (disabled) and
 `generic-vm-libvirt` 1.0.0 (deleted) in `Public Repo`, and `argo-cd` 3.26.7
 (deprecated) in `Palette Community Registry`. None of them requires another
 pack. It asks Palette for a profile that pins each one, and deletes the profile
@@ -283,13 +284,13 @@ cluster, and are `SEEN` without one.
 | `instance-<name>-copies` | 0 | each copy the cluster holds has the two digests of its cluster record, `cluster:<uid>/<profile>` |
 | `leaf`, `leaf-record` | 0 | a pack in one registry reads as a leaf, and strata records it from that registry |
 | `leaf-exact-is-root`, `leaf-content-is-archive`, `leaf-no-pins` | 0 | its exact digest is the root, its content digest is the digest of the pack in its registry, and it pins nothing |
-| `two-archives`, `two-archives-says` | 2, 0 | #55: a pack that two registries hold as two archives, with no digest in the address, is a terminal failure that names each registry and its digest |
+| `two-archives`, `two-archives-says` | 2, 0 | #55: a pack that two registries hold as two archives is a terminal failure when the address has no digest. The failure names each registry and its digest |
 | `two-archives-by-digest`, `two-archives-by-digest-content` | 0 | the address with the digest of one archive chooses it, and the content of knurl is that archive |
 | `not-found`, `not-found-terminal` | 2, 0 | a version the tenant does not have is a terminal failure |
 
 The one-registry leaf is the OCI pack of the registries profile. The release
-packs are of no use for it: this tenant has each of them in Public Repo and in
-Palette Registry, as two archives, so each is the two-archive case.
+packs are of no use for it. This tenant has each of them in Public Repo and in
+Palette Registry, as two archives. So each is the two-archive case.
 
 ## registry.sh
 
@@ -331,13 +332,13 @@ shows. It then asks Palette to read the registry again after each push.
 | `profile-floating`, `push-4`, `sync-4` | 0 | a profile pins the pack under `1.0.x`, and 1.0.2 is pushed, which the tag now names |
 | `pin-floating-modified`, `floating-mod` | 0 | #165: before the push, a second profile pins 1.0.1 under `1.0.x`, with values that differ from those of the pack |
 | `floating-moves` | 1 | #66: the profile pinned under the floating tag moves with it. The script verifies its record again until it reports `DRIFT`, for up to ten minutes |
-| `floating-who`, `floating-who-system`, `floating-who-versions` | 1, 0, 0 | #69: `verify --who` on the same record reads the audit log of the profile: updates by the Palette service `system`, one of which names the two versions, `1.0.1 > 1.0.2` |
+| `floating-who`, `floating-who-system`, `floating-who-versions` | 1, 0, 0 | #69: `verify --who` on the same record reads the audit log of the profile. It shows updates by the Palette service `system`. One of them names the two versions, `1.0.1 > 1.0.2` |
 | `floating-mod-keeps` | 0 | #165: the profile with values of its own stays on 1.0.1 under the tag: its record verifies after the sync that moved the first profile |
 | `floating-mod-behind`, `floating-mod-behind-names` | 1, 0 | #165: `behind` on its record says that the pin is behind. It names 1.0.2 as newer, as the version that the tag names now, and as the latest of Palette |
 | `delete-floating-modified` | 0 | the profile with values of its own is deleted |
-| `chart-empty` | 0 | the chart repository starts empty, and two applies remove the Palette registry over it and make it again, so Palette reads the chart for the first time |
-| `chart-push-1`, `chart-sync-1`, `chart-packs`, `chart-leaf` | 0 | `strata-live-chart` 1.0.0 is pushed with `helm push` into the example's OCI Helm registry, Palette reads it, and `packs` and `snapshot` read the chart as a pack of type `oci` |
-| `chart-digest` | 0 | #66: Palette lists the manifest digest of the push for a chart in an OCI registry, as for a pack, not the digest of the chart archive |
+| `chart-empty` | 0 | the chart repository starts empty. Two applies remove the Palette registry over it and make it again, so Palette reads the chart for the first time |
+| `chart-push-1`, `chart-sync-1`, `chart-packs`, `chart-leaf` | 0 | `strata-live-chart` 1.0.0 is pushed with `helm push` into the example's OCI Helm registry. Palette reads it. `packs` and `snapshot` read the chart as a pack of type `oci` |
+| `chart-digest` | 0 | #66: Palette lists the manifest digest of the push for a chart in an OCI registry, as for a pack. It does not list the digest of the chart archive |
 | `chart-profile`, `chart-profile-digest` | 0 | #66: a profile that pins the chart carries that manifest digest in its pack reference |
 | `chart-push-2`, `chart-push-2-differs`, `chart-sync-2`, `chart-leaf-after` | 0 | the same chart version is pushed again with other bytes, and Palette reads the registry again |
 | `chart-listing-keeps`, `chart-listing-not-new` | 0 | #66: Palette keeps the digest it listed first for the version: the listing does not follow the push, unlike the pack registry |
@@ -349,7 +350,7 @@ shows. It then asks Palette to read the registry again after each push.
 | `dep-profile-both` | 0 | #66: a profile with both packs is accepted |
 | `dep-record`, `dep-record-packs` | 0 | a record of that profile lists the two packs, the requiring one first, as authored |
 
-In step 3b, the document of the profile also gets the annotations `isInValid`
+In step 3b, the document of the profile also gets two annotations. They are `isInValid`
 `"true"` and `inValidReason` `The cluster profile is invalid as one or more
 pack tags are deleted from the registry`. Ten minutes after the push again, the
 pack still has the flag, and the digest of the deleted push. This is the source
@@ -373,7 +374,9 @@ Read-write. It links the release version and the add-on version to a cluster
 template before any cluster runs them. It then tries to change a linked version,
 and tries to build a cluster outside the template. Then it builds a cluster in
 the template, asks the two repave routes, and removes the cluster. Last, it
-builds the cluster without the template, with a second add-on profile. It needs
+builds the cluster without the template, with a second add-on profile.
+
+It needs
 the profiles and no cluster. It ends with the removal of the whole example,
 because step 5 edits a version that the cluster runs. It builds two clusters,
 one after the other, on AWS or GCP.
@@ -399,7 +402,7 @@ one after the other, on AWS or GCP.
 | `template-route`, `template-route-names`, `template-route-says`, `template-route-json` | 1, 0 | #276: `compare --repave` of the same move asks the route of the template. The first `palette` line names the template, and Palette says repave: `PackValuesUpdated` for `kubernetes` and `kubeadmconfig.postKubeadmCommands`. |
 | `cluster-runs-release`, `cluster-doc`, `cluster-three-profiles` | 0 | with the template gone, the cluster runs the release version and two add-on profiles |
 | `lock-gone`, `lock-gone-verify` | 0, 1 | #66: the edit in place is accepted again, and the record from before reports `DRIFT`: the lock was the template's |
-| `addon-order` | 0 | #66: the packs of the two add-on profiles start within thirty seconds of each other, whatever order the cluster lists the profiles in: the listed order is no install order. |
+| `addon-order` | 0 | #66: the packs of the two add-on profiles start within thirty seconds of each other, whatever order the cluster lists the profiles in. The listed order is no install order. |
 
 Step 4 builds the cluster in the template with the OpenTofu variable
 `cluster_in_template`. The cluster then takes the profiles of the template. The
@@ -414,16 +417,17 @@ zone, Palette refuses the create with `ShouldNotBeEmpty` for the parameter
 
 ## cluster.sh
 
-Read-write. It needs the example at its baseline with cluster A, changes the
-value the cluster gives the variable of the add-on profile, then deletes the
-cluster through the API and not the provider, and brings the OpenTofu state in
-line. It ends with the cluster gone and the profiles in place.
+Read-write. It needs the example at its baseline with cluster A. It changes the
+value that the cluster gives the variable of the add-on profile. Then it
+deletes the cluster through the API and not the provider. Last, it updates the
+OpenTofu state to match. It ends with the cluster gone and the profiles in
+place.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `variables-before`, `copy-before`, `audits-before` | 0 | the cluster variables endpoint, a record of the cluster's copy of the add-on profile, and the audit entries of the cluster, before |
 | `variables-after`, `value-changed` | 0 | #66: after an apply that gives the variable the value `changed`, the endpoint gives that value |
-| `copy-after`, `copy-verify`, `copy-compare`, `copy-source-value` | 0 | #66: the record of the copy from before verifies, the two records compare `IDENTICAL`, and the record from after carries the value under `source.cluster.variables`, outside the root |
+| `copy-after`, `copy-verify`, `copy-compare`, `copy-source-value` | 0 | #66: the record of the copy from before verifies, and the two records compare `IDENTICAL`. The record from after carries the value under `source.cluster.variables`, outside the root |
 | `audits-after`, `audit-records-change` | 0 | #66: the audit log has a new entry for the cluster |
 | `audit-says` | 0 | #66: that entry names who updated the cluster variables on the cluster |
 | `listing-before`, `listing-has-cluster`, `consumers-before`, `consumers-has-cluster` | 0, 0, 1, 0 | the listing holds the cluster, and `consumers` lists it under the add-on version, with exit 1: the version has a consumer |
@@ -439,20 +443,22 @@ line. It ends with the cluster gone and the profiles in place.
 ## order.sh
 
 Read-write. It needs the example at its baseline with cluster A. It sends a
-`PUT` of two published versions with their packs in the other order, and a `PUT`
-of the cluster's profiles in the other order. It reads what Palette stores, what
-it audits, and what `verify` says. It leaves the two versions edited, so
+`PUT` of two published versions with their packs in the other order. It also
+sends a `PUT` of the cluster's profiles in the other order. It reads what
+Palette stores, what it audits, and what `verify` says.
+
+It leaves the two versions edited, so
 `live-down` follows it. A second run reverses them again, and passes the same
 way.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `release-before`, `registries-before`, `cluster-before`, and the `*-doc-before`, `*-doc-after`, `*-audits-before`, and `*-audits-after` checks | 0 | records of the release version, the registries version, and cluster A, and each document and its audit entries before and after each `PUT` |
-| `reorder-addon`, `addon-doc-reversed`, `addon-audited` | 0 | #66: a `PUT` of the registries version with its two packs in the other order is accepted, stored in that order, and audited as an update of the profile |
+| `reorder-addon`, `addon-doc-reversed`, `addon-audited` | 0 | #66: Palette accepts a `PUT` of the registries version with its two packs in the other order. It stores them in that order, and audits the change as an update of the profile |
 | `addon-verify`, `addon-verify-says`, `registries-after`, `addon-record-reversed` | 1, 0, 0, 0 | #66: the record from before reports `DRIFT`, the report says `pack order changed`, and a new record lists the packs in the new order |
-| `reorder-release`, `release-doc-reversed`, `release-audited` | 0 | #66: Palette accepts the four infrastructure layers of the release version in the other order, on a version cluster A runs: the CSI layer first, the OS layer last, and an audit entry |
+| `reorder-release`, `release-doc-reversed`, `release-audited` | 0 | #66: Palette accepts the four infrastructure layers of the release version in the other order, on a version that cluster A runs. The CSI layer is first, the OS layer is last, and there is an audit entry |
 | `release-verify`, `release-verify-says` | 1, 0 | #66: the record from before reports `DRIFT`, and the report says `pack order changed` |
-| `reorder-cluster`, `cluster-order-kept`, `cluster-audited` | 0 | #66: a `PUT` of the cluster's profiles in the other order is accepted, the document keeps the stored order, and the audit log has an update of the cluster all the same |
+| `reorder-cluster`, `cluster-order-kept`, `cluster-audited` | 0 | #66: Palette accepts a `PUT` of the cluster's profiles in the other order. The document keeps the stored order. The audit log still has an update of the cluster |
 | `cluster-verify` | 0 | #66: the cluster record verifies: strata orders the profiles itself, so a stored order is never a change |
 
 ## who.sh
@@ -479,7 +485,7 @@ API, reads what `verify --who` says, and puts the edit back.
 ## draft.sh
 
 Read-write. It needs the profiles and no cluster. It edits the manifest of the
-add-on version through the API with no publish, records the draft, publishes
+add-on version through the API with no publish. It records the draft, publishes
 it, and puts the edit back with a publish. Then it makes a copy of the add-on
 version with no publish, lists it, and deletes it. This is the source for
 [Drafts](../internals/palette/profiles.md#drafts).
@@ -551,7 +557,7 @@ makes one change in place and puts it back, so it ends at the baseline.
 | `base-profile-updates` | 0 | #70: `profileUpdates` lists each profile of the cluster also when no update waits: it is no flag |
 | `base-at-pending`, `base-pending-same`, `base-pending-flag` | 0 | #78: with no update waiting, a record of `cluster:<uid>@pending` has the root of the cluster, and says `pending: true` |
 | `base-consumers`, `base-list-only`, `base-list-only-same` | 1, 1, 0 | #78: `consumers --list-only` gives the clusters that the second reading gives, and says `skipped` |
-| `addon-edit`, `addon-pending`, `addon-record`, `addon-names` | 0 | #70: an edit in place of a manifest of the add-on version opens an update: the record says `updatesPending: true`, and `pendingUpdates` names the add-on and `Manifest ... is updated` |
+| `addon-edit`, `addon-pending`, `addon-record`, `addon-names` | 0 | #70: an edit in place of a manifest of the add-on version opens an update. The record says `updatesPending: true`, and `pendingUpdates` names the add-on and `Manifest ... is updated` |
 | `addon-root` | 0 | #70: the root of that record is the root at the baseline: the statement is outside the root |
 | `addon-release-only` | 0 | #70: a record of the release profile alone says that no update waits for it |
 | `addon-list`, `addon-list-says` | 0 | #70: `list clusters --applied` marks the add-on `behind: an update waits` |
@@ -559,7 +565,7 @@ makes one change in place and puts it back, so it ends at the baseline.
 | `addon-at-pending`, `addon-pending-root` | 0 | #78: after the edit, the record of `@pending` has another root than the copy that runs |
 | `addon-pending-compare`, `addon-pending-compare-says` | 1, 0 | #78: `compare cluster:<uid> cluster:<uid>@pending` names the pack of the add-on `AUTHORED`, and no pack of the release |
 | `addon-pending-verify` | 0 | #78: `verify` of the pending record, while the update still waits |
-| `addon-repave`, `addon-repave-says`, `addon-repave-json` | 1, 0, 0 | #276: `compare --repave` of the cluster with `cluster:<uid>@pending` exits `1`, and the `palette` line holds the answer of Palette for a manifest of the add-on: no repave. |
+| `addon-repave`, `addon-repave-says`, `addon-repave-json` | 1, 0, 0 | #276: `compare --repave` of the cluster with `cluster:<uid>@pending` exits `1`. The `palette` line holds the answer of Palette for a manifest of the add-on. The answer is no repave. |
 | `accept`, `accept-none` | 0 | #70: a push of the content without `resolveNotification` closes the update all the same |
 | `accept-record`, `accept-as-pending` | 0 | #78: the cluster then runs the root that the record of `@pending` held |
 | `accept-undo`, `accept-undo-pending`, `accept-again`, `accept-again-none` | 0 | #70: the undo is an edit too, and opens an update; the accept with `resolveNotification` closes it |
@@ -582,12 +588,12 @@ it keeps in a temporary file. It puts each change back, and deletes the macro.
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `base-flag`, `base-record`, `base-no-note` | 0, 0, 1 | #72: at the baseline, Palette says the add-on version has no user macros, and a report names none |
-| `base-profile-resolved` | 0 | #111: Palette resolves the macros of the version with no cluster, in one `resolved` map, and the system macro of the cluster name is empty there |
+| `base-profile-resolved` | 0 | #111: Palette resolves the macros of the version with no cluster, in one `resolved` map. The system macro of the cluster name is empty there |
 | `macro-set`, `macro-edit`, `macro-flag` | 0 | #72: with the manifest reading a project macro, Palette says `hasUserMacros: true` |
 | `macro-record`, `macro-names` | 0 | #72: a report of the record names the macro, and says the root covers its name and not its value |
 | `macro-accept`, `macro-settled`, `macro-cluster`, `macro-cluster-plain`, `macro-digest` | 0 | #72: cluster A takes the update; a record with `--macros` holds `sha256:` of the value, and not the value |
 | `macro-resolved-1` | 0 | #72: `resolvedValues` gives the value of the macro |
-| `macro-version`, `macro-version-digest`, `macro-profile-resolved-1` | 0 | #111: a record of the version with `--macros` holds `sha256:` of the value at the scope of the version in `source.macroValues`; `resolvedValues` of the version gives the value of the project macro |
+| `macro-version`, `macro-version-digest`, `macro-profile-resolved-1` | 0 | #111: a record of the version with `--macros` holds `sha256:` of the value at the scope of the version in `source.macroValues`. `resolvedValues` of the version gives the value of the project macro |
 | `change`, `change-resolved` | 0 | #72: the macro gets another value, and `resolvedValues` gives it at once |
 | `change-profile-resolved` | 0 | #111: `resolvedValues` of the version gives the new value at once |
 | `change-version-macros`, `change-version-macros-says` | 1, 0 | #111: the record of the version with the digests reports `DRIFT`, and the verdict names the macro |
@@ -595,7 +601,7 @@ it keeps in a temporary file. It puts each change back, and deletes the macro.
 | `change-cluster`, `change-cluster-says` | 1, 0 | #72: the cluster record with the digests reports `DRIFT`, and the verdict names the macro |
 | `change-compare`, `change-compare-says` | 1, 0 | #72: `compare` of the two cluster records exits `1` with equal roots, and names the macro |
 | `change-no-notification`, `change-no-audit` | 0 | #72: no notification opens for the cluster, and its audit log holds no new entry |
-| `propagation` | 0 | #72: Palette writes the new value inside the cluster with no update to accept: after 11 minutes in the recorded run, where the check was recorded without an expected code |
+| `propagation` | 0 | #72: Palette writes the new value inside the cluster with no update to accept. It does this after 11 minutes in the recorded run. The check was recorded without an expected code |
 | `undo-edit`, `undo-accept`, `undo-settled`, `undo-macro`, `undo-flag`, `undo-baseline` | 0 | the manifest back, the macro deleted, and the baseline |
 
 ## macro-repave.sh
@@ -603,7 +609,7 @@ it keeps in a temporary file. It puts each change back, and deletes the macro.
 Read-write, and it replaces the nodes of cluster A. It needs the example at its
 baseline with cluster A, and `AWS_PROFILE` to read the EC2 instances. It puts a
 project macro in `kubeadmconfig.postKubeadmCommands` of the Kubernetes pack,
-has cluster A take that, then changes only the value of the macro, and watches
+and has cluster A take that. Then it changes only the value of the macro, and watches
 for 45 minutes. It ends with a repave that waits for approval, so `live-down`
 follows it.
 
@@ -626,10 +632,12 @@ follows it.
 | `repave-verify`, `repave-verify-says` | 0 | #107: `verify` of the record without the digest names the repave that waits |
 
 The recorded run reads the repave state of cluster A in a second log, once a
-minute: it became `Pending` 14 minutes 58 seconds after the change of the value,
-at the next read of the agent. `GET /v1/spectroclusters/<uid>/repave/status`
-gives the record: source `hubble`, reason `PackValuesUpdated` with the message
-`Pack 'kubernetes' values are updated`, `diffConfigKeys`
+minute. The state became `Pending` 14 minutes 58 seconds after the change of the value,
+at the next read of the agent.
+
+`GET /v1/spectroclusters/<uid>/repave/status` gives the record. It holds the
+source `hubble`, and the reason `PackValuesUpdated` with the message
+`Pack 'kubernetes' values are updated`. It also holds `diffConfigKeys`
 `kubeadmconfig.postKubeadmCommands`, and the resolved values on each side, `echo
 one` and `echo two`. The record names no macro.
 
@@ -645,7 +653,7 @@ expects the refusal. It stopped at `undo-accept`, so
 `undo-accept-says` and `undo-macro` come from the same refusal read by hand.
 
 The teardown after this run showed that the repave also holds a delete. `tofu
-destroy` asked Palette to delete cluster A at 04:05:45, and the cluster stayed
+destroy` asked Palette to delete cluster A at 04:05:45. The cluster stayed
 in `Deleting` with its EC2 instances running for 37 minutes, until
 `PATCH /v1/spectroclusters/<uid>/repave/approve` at 04:42:43. The agent deleted
 the machines 45 seconds later, and no instance was left at 04:46:42. The audit
@@ -726,18 +734,22 @@ this result. This is the source for
 No cluster and no cost. In stages 1, 2, 3, 5, and 6, each request to Palette is a
 read or a request to a validate route, which writes nothing. It uses `cert-manager`
 1.21.1 from the Public Repo, in an add-on candidate, and `gloo` 1.2.18 for the
-mark `disabled`. Stage 3 runs only with a profile version of the project: give
-it as `PROFILE=<name>@<version>`. With the add-on version of the live example,
-Palette takes the version on the route of an update. It refuses a candidate
-with that name and version on the name route. Stage 4 makes the profile
-`strata-live-layer` and deletes it. It runs only when you give its number:
-`validate-packs.sh 4`. Stage 5 asks the name route and the import validate
-route. Stage 6 runs only when you give its number:
-`PROFILE=<name>@<version> validate-packs.sh 6`. It needs a profile version that a
-cluster runs and that pins Kubernetes two minor versions or more below the newest version. With
-`CLUSTER=<name>`, `behind` also asks about the record of the cluster, and the script
-sends the route of the cluster a tag that no registry has. It asks, and it writes
-nothing.
+mark `disabled`. These are the stages and the options:
+
+- Stage 3 runs only with a profile version of the project. Give it as
+  `PROFILE=<name>@<version>`. With the add-on version of the live example,
+  Palette takes the version on the route of an update. It refuses a candidate
+  with that name and version on the name route.
+- Stage 4 makes the profile `strata-live-layer` and deletes it. It runs only
+  when you give its number: `validate-packs.sh 4`.
+- Stage 5 asks the name route and the import validate route.
+- Stage 6 runs only when you give its number:
+  `PROFILE=<name>@<version> validate-packs.sh 6`. It needs a profile version
+  that a cluster runs and that pins Kubernetes two minor versions or more below
+  the newest version.
+- With `CLUSTER=<name>`, `behind` also asks about the record of the cluster.
+  The script sends the route of the cluster a tag that no registry has. It
+  asks, and it writes nothing.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -745,7 +757,7 @@ nothing.
 | `validate-not-yaml`, `validate-not-yaml-says`, `validate-not-yaml-no-record` | 2, 0, 1 | #152, #242: strata sends values that are not YAML to Palette. Palette refuses the whole request, `PackValuesYamlInvalid`, with no pack. Strata exits `2` and writes no record |
 | `validate-not-yaml-status`, `validate-not-yaml-status-says` | 2, 0 | #152: Palette refuses the same body as the whole request, `PackValuesYamlInvalid` with no pack, and sends the refusal as HTTP 500 |
 | `validate-no-pack`, `validate-no-pack-says` | 2, 0 | #152: Palette refuses a body with no pack before it checks the packs: HTTP 400 with `ShouldNotBeEmpty` |
-| `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`: `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`, of the whole request. The import validate route gives it with HTTP 500. Strata prints `palette    refuses`, exits `2`, and writes no record |
+| `validate-disabled-mark`, `validate-disabled-mark-says` | 2, 0 | #125: Palette refuses a candidate with `gloo` 1.2.18, which carries the mark `disabled` and no `system_state`. It refuses the whole request with `DisabledPacksForbidden`, `Disabled packs 'gloo' are forbidden`. The import validate route gives it with HTTP 500. Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `validate-version`, `validate-version-says` | 0 | #152: `snapshot <ref> --validate` asks the route of an update, and Palette takes the version as it is |
 | `validate-exists`, `validate-exists-says` | 2, 0 | #273: a candidate with the name and the version of `PROFILE` gets `ClusterProfileAlreadyExists`, `Cluster Profile with name '<name>' and version '<version>' already exists`. Strata prints `palette    refuses`, exits `2`, and writes no record |
 | `layer-registry` | 0 | #210: the registry gives `cert-manager` the layer `addon` |
@@ -771,8 +783,8 @@ nothing.
 | `bump-no-impact-says` | 0 | #166: `behind --no-impact` writes no bump, so it sends no question. |
 | `bump-cluster-record` | 0 | #166: a record of the cluster `CLUSTER`. |
 | `bump-cluster-same` | 0 | #419: with `CLUSTER`, the record of the cluster and the record of the profile get one bump of `kubernetes`. The two bumps have the same version, impact level, and change flags: the bump to 1.37.0, with the level `repave`. |
-| `bump-cluster-asked` | 0 | #453: `behind` on the record of the cluster asks the route of the profile version that the cluster runs, and the bump holds an answer of Palette in `bump.paletteValidation`. |
-| `bump-cluster-refused` | 0 | #453: the route of the profile version that the cluster runs refuses the same move with `DependencyPackUpgradeNotSupported`, `Pack upgrade to '1.37.0' is not compatible with the clusters '<cluster A>'`. Cluster A is in `clusters`. |
+| `bump-cluster-asked` | 0 | #453: `behind` on the record of the cluster asks the route of the profile version that the cluster runs. The bump holds an answer of Palette in `bump.paletteValidation`. |
+| `bump-cluster-refused` | 0 | #453: the route of the profile version that the cluster runs refuses the same move. The code is `DependencyPackUpgradeNotSupported`, and the message is `Pack upgrade to '1.37.0' is not compatible with the clusters '<cluster A>'`. Cluster A is in `clusters`. |
 | `cluster-route-doc`, `cluster-route-tag`, `cluster-route-tag-says` | 0 | #453: the route of the cluster answers HTTP 200 with no error for a body with the tag `9.99.9` for `kubernetes`. No registry has that version, and the profile is one that the cluster runs. So the route does not check the sent tag. The body of a real cluster is longer than one argument can be (128 KiB). So `cluster-route-tag` writes the body to `cluster-route-body.json` and gives `api.sh post-status` the path of that file (#466). |
 
 Each check of stage 6 passes on cluster A, built on Kubernetes 1.35.8. That
@@ -808,7 +820,9 @@ No cluster, no profile of its own, and no cost. It asks
 `POST /v1/spectroclusters/{cloudType}/validate`, which changes nothing, through
 `strata preflight --rule palette-validate`. It needs the key, a directory with
 the body of a create for each engine, and the cloud accounts that the bodies
-name. A case makes one fault. The fault is one edit of the body of its engine, or
+name.
+
+A case makes one fault. The fault is one edit of the body of its engine, or
 a body of its own when the fault is in a profile. [`route-bodies.sh`](#route-bodiessh)
 writes those bodies on AWS for each case whose profile Palette takes, and runs this
 script on them. A body of a case names a profile, so it is valid only while that
@@ -918,9 +932,10 @@ states what it shows.
 ## registry-kinds.sh
 
 Read-write in the registries of its own host alone, and it needs no cluster. It
-turns `registry_kinds` on: a host in AWS that serves a Helm repository, a Helm
-repository with credentials, an OCI registry with basic auth, and a Spectro
-pack registry, and a Palette registry over each. It removes each at its end.
+sets `registry_kinds`, which adds a host in AWS. The host serves a Helm
+repository, a Helm repository with credentials, an OCI registry with basic
+auth, and a Spectro pack registry. The variable also adds a Palette registry
+over each. The script removes each at its end.
 [The digest of each registry kind](../internals/palette/packs.md#the-digest-of-each-registry-kind)
 states what it shows.
 
@@ -935,7 +950,7 @@ states what it shows.
 | `provider-types` | 0 | #75: each record of an OCI pack names `pack`, `helm`, or `zarf`, and the Helm record and the Spectro pack record name none |
 | `packs-digest` | 0 | #75: the Spectro pack registry: the digest of the push |
 | `auth-listed` | ? | #75: Palette lists no chart of the Helm repository with credentials while no profile pins one (recorded 2) |
-| `auth-candidate`, `auth-candidate-minted` | 0 | #154: a candidate with the chart builds a record before any profile pins it: no pack uid, no digest, the layer `addon`, the type `helm`, and the tag as the version |
+| `auth-candidate`, `auth-candidate-minted` | 0 | #154: a candidate with the chart builds a record before any profile pins it. The record has no pack uid and no digest. It has the layer `addon`, the type `helm`, and the tag as the version |
 | `auth-packs`, `auth-packs-says` | 2, 0 | #123: `packs --registry` of the Helm repository with credentials is `pack-not-found`. The error says that Palette does not sync the registry, and lists a pack of such a registry only while a profile pins the pack |
 | `auth-behind`, `auth-behind-says` | 2, 0 | #123: `behind` on the candidate record cannot check the pin, `not checked`. The line under the pin names the registry that Palette does not sync |
 | `auth-pin`, `auth-record` | 0 | a profile that pins the chart by name, and a record of it |
@@ -954,12 +969,13 @@ states what it shows.
 ## tiers.sh
 
 Read-write: it builds cluster B, changes its timezone and its labels through the
-API, and removes it. It needs the example at its baseline with cluster A. Stage
-5 changes the role bindings of cluster A through the API, and puts them back.
-It needs no cluster B: `tiers.sh 5` runs it alone. Stage 6 only reads. It needs
-a second key in `STRATA_LIVE_LIMITED_KEY`, the key of an active user with no
-role in the project. It runs only as `tiers.sh 6`. With no key set, it says
-`could not check` and exits `2`.
+API, and removes it. It needs the example at its baseline with cluster A.
+
+- Stage 5 changes the role bindings of cluster A through the API, and puts them
+  back. It needs no cluster B: `tiers.sh 5` runs it alone.
+- Stage 6 only reads. It needs a second key in `STRATA_LIVE_LIMITED_KEY`, the
+  key of an active user with no role in the project. It runs only as
+  `tiers.sh 6`. With no key set, it says `could not check` and exits `2`.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -974,7 +990,7 @@ role in the project. It runs only as `tiers.sh 6`. With no key set, it says
 | `b-verify`, `b-verify-says` | 0 | #76: the record of B from before still verifies, and names `policy CHANGED` |
 | `undo-baseline` | 0 | the example is at its baseline |
 | `rbac-before`, `rbac-add` | 0 | #106: the role bindings of cluster A, then one more binding of `barney@example.com` to the cluster role `view`, through `PUT /v1/spectroclusters/<uid>/config/rbacs`. Cluster A has no binding before the stage |
-| `rbac-record`, `rbac-in-record` | 0 | #106: the `policy` tier of a record of cluster A holds the binding: the type `ClusterRoleBinding`, the role `ClusterRole` `view`, and the subject `barney@example.com` of type `User` |
+| `rbac-record`, `rbac-in-record` | 0 | #106: the `policy` tier of a record of cluster A holds the binding. It has the type `ClusterRoleBinding`, the role `ClusterRole` `view`, and the subject `barney@example.com` of type `User` |
 | `rbac-edit` | 0 | #106: the subject of the binding becomes `fred@example.com` |
 | `rbac-compare`, `rbac-compare-policy`, `rbac-compare-says` | 0 | #106: `compare` of the record with cluster A exits `0` with the root `IDENTICAL`, and names `policy.rbacs[0].subjects[name=fred@example.com]` |
 | `rbac-verify`, `rbac-verify-says` | 0 | #106: `verify` of the record exits `0`, and names `policy CHANGED` |
@@ -982,7 +998,7 @@ role in the project. It runs only as `tiers.sh 6`. With no key set, it says
 | `limited-control` | 0 | #276: the key of the example reads the role bindings of cluster A |
 | `limited-read`, `limited-status` | 0, 0 | #276: the second key does not read them: Palette answers HTTP 500, and not 403. `api.sh get-status` prints the status and the body, and exits `0`. No result yet for this form of the check: the earlier form used `api.sh get`, which exits `2`. |
 | `limited-code`, `limited-code-says`, `limited-message` | ?, 0, 0 | #276: the body holds the code `ResourceAccessDenied` and the message `Project '<project uid>' access denied`. The checks read the body that `limited-read` printed after its status line. |
-| `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer: a record of cluster A that it reads with the second key, and the `errors` of its policy tier. Live, `strata snapshot` of cluster A with the second key writes no record. It exits `2`, and it prints the answer of Palette: HTTP 500, `ResourceAccessDenied`, `Project '<project uid>' access denied`. So no record holds `errors`, and `limited-record-errors` has no file to read (exit `2`). |
+| `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer. This is a record of cluster A that it reads with the second key, and the `errors` of its policy tier. Live, `strata snapshot` of cluster A with the second key writes no record. It exits `2`, and it prints the answer of Palette: HTTP 500, `ResourceAccessDenied`, `Project '<project uid>' access denied`. So no record holds `errors`, and `limited-record-errors` has no file to read (exit `2`). |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
@@ -1015,7 +1031,7 @@ cluster A.
 | `label`, `prod`, `prod-row` | 0 | #80: with the label `env=prod`, `--tag env=prod` finds cluster A alone |
 | `none` | 0 | #80: a query that no cluster meets finds none |
 | `filter-create`, `filters`, `by-filter` | 0 | #80: `list filters` names a saved tag filter and what it selects, and `list clusters --filter` finds cluster A |
-| `set`, `set-files`, `set-record` | 0 | #80: `snapshot filter:<name> --dir --prune` writes one record, of cluster A, with the label, removes the record of a cluster that left the set, and leaves a file that is not a record |
+| `set`, `set-files`, `set-record` | 0 | #80: `snapshot filter:<name> --dir --prune` writes one record, of cluster A, with the label. It removes the record of a cluster that left the set. It leaves a file that is not a record |
 | `set-tag` | 0 | #80: `snapshot tag:env=prod --dir` does the same |
 | `set-verify` | 0 | #80: the record that the set wrote verifies |
 | `unlabel`, `set-again`, `set-removed` | 0 | #80: without the label, the next run removes the record of cluster A |
@@ -1024,7 +1040,7 @@ cluster A.
 ## upstream.sh
 
 Read-write: it pushes three versions of the example's own pack into its own OCI
-registry, one of them between two runs, and opens and closes issues of this
+registry, one of them between two runs. It opens and closes issues of this
 repository with the label `strata-live-behind`. It needs the profiles and the
 registry of the example, and no cluster. It empties the registry at its end.
 
@@ -1063,11 +1079,11 @@ at its baseline. It needs no cluster of its own and costs nothing.
 | `consumers-list-only`, `consumers-list-only-host` | 1, 0 | #78: `--list-only` counts it too: the consumer list of Palette names no edge host |
 | `host-verify` | 0 | #78: `verify` of the record of the edge host |
 | `host-repave` | 2 | #78: `compare --repave` refuses an edge host |
-| `edit`, `edit-host-verify` | 0, 0 | #81: after an edit in place of the manifest of the add-on version, `verify` of the record of the edge host passes: the host keeps its own copy |
+| `edit`, `edit-host-verify` | 0, 0 | #81: after an edit in place of the manifest of the add-on version, `verify` of the record of the edge host passes. The host keeps its own copy |
 | `edit-host-vs-version` | 1 | #81: the version differs from the copy of the host |
 | `edit-host-own-uid`, `edit-host-copy` | 0 | #81: the copy has a uid of its own, and its route gives the content from before the edit |
 | `edit-host-raw`, `edit-host-manifest-uid` | 0 | #78: the template of the edge host names the manifest by its uid, with no content |
-| `release-register`, `release-host-record`, `release-edit`, `release-host-verify` | 0 | #78: a second host bound to the release version keeps its copy of the values after an edit in place of the reclaim policy: `verify` of its record is OK |
+| `release-register`, `release-host-record`, `release-edit`, `release-host-verify` | 0 | #78: a second host bound to the release version keeps its copy of the values after an edit in place of the reclaim policy. `verify` of its record is OK |
 | `release-host-raw`, `release-host-kept` | 0 | #78: the host holds `reclaimPolicy: Delete`, and the profile holds `Retain` |
 | `release-undo`, `release-delete` | 0 | the edit is put back, and the second host deleted |
 | `delete`, `after`, `after-no-host` | 0, 1, 0 | #78: after the delete, `consumers` no longer counts the edge host |
@@ -1077,10 +1093,10 @@ An edge host with no device is `unpaired`. No run pairs a device.
 ## cluster-group.sh
 
 Read-write: it sets `cluster_group`, which builds a cluster group on cluster A
-that pins the add-on version, and a virtual cluster in it; it edits the add-on
-version in place and back, changes the CPU limit of the group through
-OpenTofu and back, and removes the group. It needs the example at its baseline
-with cluster A.
+that pins the add-on version. The variable also builds a virtual cluster in the
+group. The script edits the add-on version in place and back. It changes the
+CPU limit of the group through OpenTofu and back, and removes the group. It
+needs the example at its baseline with cluster A.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
@@ -1101,7 +1117,7 @@ with cluster A.
 | `search-nested`, `search-nested-misses-member` | 0 | #184: the same search with `environment eq nested` does not answer the virtual cluster of the group, which runs the add-on version through its group |
 | `member-consumer-search` | 0 | #149: `consumers` does its second reading through the search |
 | `member-consumer-group`, `group-virtual-clusters` | 0 | #184: `consumers` finds the group that pins the add-on version, and the virtual clusters of the group, which it reads, name the virtual cluster |
-| `edit`, `edit-group-verify` | 0, 0 | #81: after an edit in place of the manifest of the add-on version, `verify` of the record of the group passes: the group keeps its own copy |
+| `edit`, `edit-group-verify` | 0, 0 | #81: after an edit in place of the manifest of the add-on version, `verify` of the record of the group passes. The group keeps its own copy |
 | `edit-group-compare` | 0 | #81: the member keeps its copy too, so the group and the member still agree |
 | `edit-group-vs-version`, `edit-group-vs-version-says` | 1, 0 | #81: the version differs from the copy of the group, and the compare names the manifest |
 | `edit-group-own-uid` | 0 | #81: the copy has a uid of its own |
@@ -1115,8 +1131,8 @@ with cluster A.
 | `member-audit-kind` | 0 | #188: the audit log of the member, read by its uid alone, has its create and its delete under the kind `virtualCluster` |
 | `member-audit-not-cluster` | 0 | #188: a query with the kind `spectrocluster` and the uid of the member does not find them |
 
-The virtual cluster runs with a CPU limit of 3 cores, and a memory limit that
-leaves 1 GiB beside the 3.2 GiB that the agents of Palette take in it.
+The virtual cluster runs with a CPU limit of 3 cores. The memory limit leaves
+1 GiB beside the 3.2 GiB that the agents of Palette take in it.
 
 ## app-profile.sh
 
@@ -1137,7 +1153,7 @@ cluster, and costs nothing.
 | `edit-last-modified` | 0 | #140: the document of the app profile gives the time of the update, after the record. |
 | `order-a-create`, `order-b-create` | 0 | #112: two app profiles with the same two tiers, made with the install orders 2 and 5, and 5 and 2 |
 | `order-a-tiers` | 0 | #112: the tiers route gives the install orders of the create |
-| `order-a-record`, `order-a-params`, `order-b-record`, `order-b-params` | 0 | #112: each record holds the orders in `packs[].params.installOrder`, and lists the tiers by them: `tier1` then `tier2` in the first, `tier2` then `tier1` in the second |
+| `order-a-record`, `order-a-params`, `order-b-record`, `order-b-params` | 0 | #112: each record holds the orders in `packs[].params.installOrder`, and lists the tiers by them. The first lists `tier1` then `tier2`. The second lists `tier2` then `tier1` |
 | `order-compare`, `order-compare-says` | 1, 0 | #112: `compare` of the two records exits `1` with two roots, and names `~ param installOrder: 2 -> 5` under `tier1` and `5 -> 2` under `tier2` |
 | `order-update`, `order-update-verify` | 1, 0 | #112: an update of the order of `tier1` to 7 through the tier route gets a 2xx answer, and the tier keeps the order 2. So the record still verifies |
 | `order-a-delete`, `order-b-delete` | 0 | the two app profiles are deleted |
@@ -1167,23 +1183,23 @@ needs the example at its baseline with cluster A.
 | `record-release`, `record-addon`, `record-cluster`, `commit-main` | 0 | main records the release version, the add-on version, and cluster A |
 | `cluster-runs-release` | 0 | #81: cluster A runs the recorded release |
 | `candidate`, `candidate-record` | 0 | #81: the change: the next version as a candidate file, and as a record before Palette has it |
-| `ask-candidate` | 0 | #385: `snapshot --from-candidate --validate` asks Palette if it accepts the packs of the candidate, under a name that the project lacks, and the record holds the answer. |
+| `ask-candidate` | 0 | #385: `snapshot --from-candidate --validate` asks Palette if it accepts the packs of the candidate, under a name that the project lacks. The record holds the answer. |
 | `comment`, `comment-says` | 0 | #81: `pr-comment.sh` writes the comment of the pull request, with the change and its impact |
 | `commit-branch`, `merge-gate` | 0 | #81: the merge gate is clear: the records after the merge verify |
 | `record-next`, `same-release`, `commit-publish` | 0 | #81: Palette holds the content that the reviewer read, by the root |
 | `ask-repave`, `ask-repave-answer` | 1, 0 | #385: `compare --repave` asks Palette if the move of cluster A to the next version repaves. The command exits `1` because the roots differ, and the report holds `paletteRepave.required`. |
 | `ask-validate`, `ask-validate-answer` | 1, 0 | #385: `compare --validate` asks Palette if it accepts the packs of the same move. The report holds `paletteValidation.accepts`. |
 | `ask-repave-comment`, `ask-repave-comment-says` | 0 | #157: `pr-comment.sh --repave` asks Palette about the same move. For the move of the CSI pack, Palette answers no repave. The comment holds `**Palette:** no repave`, and the note on standard error says `label repave: Palette says no repave; would remove label repave if present`. |
-| `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request, and in the tier of Palette, which calls the validate routes and creates nothing. |
+| `build-body`, `preflight-static`, `preflight-live` | 0 | #385: the body of a create on the release, in the cloud account of the lab. `preflight` finds no fault in it in the static tier with no request. It finds none in the tier of Palette, which calls the validate routes and creates nothing. |
 | `preflight-comment`, `preflight-comment-says` | 0 | #158: `pr-comment.sh --preflight` posts the markdown report of the static tier as the comment of the pull request. The comment starts with `<!-- strata-preflight -->` and holds the verdict of the static tier, `**OK: each counted check passed**`. |
 | `preflight-each` | 0 | #144: `template-outside` makes one request for each profile of the body, here one, and `requests` of the report holds it |
-| `preflight-offering` | 0 | #143: `instance-offering` asks the instance type route of the region with the account of the body, one request for all its pools, and passes: the type of the release body is offered in its zone |
+| `preflight-offering` | 0 | #143: `instance-offering` asks the instance type route of the region with the account of the body. It makes one request for all its pools. The check passes. The type of the release body is offered in its zone |
 | `preflight-key-pair` | 0 | #433: the rule that reads the key pair of the body passes. On AWS it is `iaas-pod-identity`, which sends the key pair to the property route. On EKS it is `ssh-key-pair`. A body on GCP or GKE has no key pair, and the check does not run. |
 | `preflight-fault` | 1 | #385: a body with a cloud account that the project lacks fails the gate `--strict`. |
 | `nightly` | 0 | #81: `verify-report.sh` finds every record unchanged |
 | `fleet`, `fleet-has-a` | 0 | #81: the fleet of a label holds cluster A |
 | `upstream` | 1 | #81: `upstream-report.sh` finds pins that the registry has passed |
-| `upstream-asks`, `upstream-asks-says` | 1, 0 | #166: `upstream-report.sh` with the impact asks Palette about the bump of each pin that is behind, and the bump column of an issue holds the answer. |
+| `upstream-asks`, `upstream-asks-says` | 1, 0 | #166: `upstream-report.sh` with the impact asks Palette about the bump of each pin that is behind. The bump column of an issue holds the answer. |
 | `override`, `override-record`, `override-not-behind` | 0 | #81: a value overridden on cluster A opens no notification: Palette says that no update waits |
 | `override-drift` | 1 | #81: the record of cluster A reports the drift |
 | `override-release` | 0 | #81: the records of the versions verify: the profiles did not change |
@@ -1191,7 +1207,7 @@ needs the example at its baseline with cluster A.
 | `edit` | 0 | #81: a person edits the add-on version in place, through the API |
 | `nightly-drift`, `nightly-names` | 1, 0 | #81: the nightly job opens an issue for the add-on record |
 | `who`, `who-says` | 1, 0 | #81: `--who` names a person who wrote the edit |
-| `nightly-who`, `nightly-who-says` | 1, 0 | #158: `verify-report.sh --who` puts the audit log in the issue of the add-on record. The body holds `who: 1 write in the audit log since the record`, and names the last write: an update by a user of the tenant. |
+| `nightly-who`, `nightly-who-says` | 1, 0 | #158: `verify-report.sh --who` puts the audit log in the issue of the add-on record. The body holds `who: 1 write in the audit log since the record`. It names the last write, an update by a user of the tenant. |
 | `cluster-kept`, `behind-record`, `behind` | 0 | #81: cluster A keeps its copy, and Palette says that an update waits for it |
 | `edit-undo`, `edit-gone` | 0 | the edit is undone, and the add-on record verifies again |
 | `incident-list`, `incident-list-has` | 0 | #81: `list --pack` finds the release among the versions that carry the CSI pack |
@@ -1201,9 +1217,9 @@ needs the example at its baseline with cluster A.
 
 ## version-states.sh
 
-The other answer to a version bump that overwrites a version: each version in a
-state of its own, a workspace of `terraform-version/`, with no feature preview
-flag. It builds its own profile, attaches it to cluster A for a while, and
+This is the other answer to a version bump that overwrites a version. Each
+version is in a state of its own, a workspace of `terraform-version/`, with no
+feature preview flag. It builds its own profile, attaches it to cluster A for a while, and
 removes it. It needs the example with cluster A.
 
 | Check | Expected exit | What it shows |
@@ -1238,15 +1254,15 @@ the example with `cloud = "eks"` and cluster A. See
 | `instances` | 0 | #89: the live helper lists the nodes of the node group |
 | `value-k8s`, `value-csi` | 0 | #89: a new value in the `kubernetes-eks` pack or the CSI pack: Palette says no repave. The OS and CNI packs of EKS have no values |
 | `k8s-bump`, `k8s-bump-lines`, `k8s-bump-repave` | 1, 0, 0 | #89: a new Kubernetes version: Palette says repave, `PackUpgraded kubernetes-eks`, and the table agrees |
-| `pool-change`, `pool-machines` | 0 | #89: another instance type for the node group, through OpenTofu, is an update in place of the cluster, and nodes of the new type run it. The cluster stays `Running` |
+| `pool-change`, `pool-machines` | 0 | #89: another instance type for the node group, through OpenTofu, is an update in place of the cluster. Nodes of the new type run it. The cluster stays `Running` |
 | `nodegroups-change` | 0 | #89: EKS holds two node groups: Palette made one of the new type and kept the old one, with its nodes |
 | `nodegroups-back` | 0 | #89: the change back leaves both groups |
 | `shape-2`, `shape-differs`, `shape-differs-says` | 0 | #89: compare of the records before and after names the change of the shape tier, `shape.pools[name=worker-pool].instanceType`. A tier does not change the exit |
 | `pool-back`, `baseline` | 0 | the node group back, and the example at its baseline |
 
 The old node group is one that Palette no longer tracks. Its nodes keep
-running, and a delete of the cluster removes the new group alone: the EKS
-control plane cannot go while the old group exists, and the delete waits at
+running, and a delete of the cluster removes the new group alone. The EKS
+control plane cannot go while the old group exists. The delete waits at
 `DeletingInfrastructure`. A delete of the old group in AWS does not end the
 wait: its object in Palette keeps its finalizer. So step 4 runs only with
 `EKS_POOL_CHANGE=1`, and a cluster after it needs the recovery of
@@ -1266,7 +1282,7 @@ the version bump: see [A GKE cluster](./live-example.md#a-gke-cluster).
 
 | Check | Expected exit | What it shows |
 | --- | --- | --- |
-| `release`, `release-cloud`, `release-layers` | 0 | #90: a record of the GKE release version, of cloud type `gke`, with an OS, a Kubernetes, a CNI, and a CSI layer: `cos-gke`, `kubernetes-gke`, `cni-vpc-native-gke`, and `gke-csi-gcp-driver` |
+| `release`, `release-cloud`, `release-layers` | 0 | #90: a record of the GKE release version, of cloud type `gke`, with an OS, a Kubernetes, a CNI, and a CSI layer. The packs are `cos-gke`, `kubernetes-gke`, `cni-vpc-native-gke`, and `gke-csi-gcp-driver` |
 | `release-packs`, `release-digests` | 0 | #90: each GKE pack has an upstream digest, `packRef.digest` |
 | `cluster`, `cluster-runs`, `verify-both` | 0 | #90: a record of cluster A verifies, and `compare` of it with the release is `IDENTICAL` |
 | `consumers` | 1 | #90: `consumers` of the release names cluster A |
@@ -1289,12 +1305,14 @@ Palette makes a new machine pool for the new machine type, and gives it the
 GKE node pool name of the old one, `worker-pool`. The delete of the old machine
 pool deletes the GKE node pool. The controllers that make the new pool ran on
 its nodes, so the cluster keeps no node. The delete of the cluster then removes
-the GKE cluster, and stays `Deleting`: the machine pool of GKE that has no
-machine pool of the cluster API keeps its finalizer, so the delete of the
-cluster does not end by itself. The EKS change of [eks.sh](#ekssh) is of the
-same kind. A change of the node pool is not a change of a layer, so the impact table
-gives it no level, and `compare` shows it in the shape tier alone. The recovery
-is in [A GKE cluster](./live-example.md#a-gke-cluster).
+the GKE cluster, and stays `Deleting`. The machine pool of GKE that has no
+machine pool of the cluster API keeps its finalizer. So the delete of the
+cluster does not end by itself.
+
+The EKS change of [eks.sh](#ekssh) is of the same kind. A change of the node
+pool is not a change of a layer. So the impact table gives it no level, and
+`compare` shows it in the shape tier alone. The recovery is in
+[A GKE cluster](./live-example.md#a-gke-cluster).
 
 ## preflight.sh
 
@@ -1314,11 +1332,11 @@ one row of the catalog with `engines: [lab]`.
 
 ## preflight-plan.sh
 
-The test plan of #91 for one engine, with no cluster: each fault the lab can make
+The test plan of #91 for one engine, with no cluster. Each fault the lab can make
 fails when it must, and the clean entity passes. Each run appends to the ledger,
 `preflight/evidence/runs.yaml`, and `strata preflight --promotion` reads it. The
-checks of each run, and what each one shows, are in `summary.md` of the run;
-this table names the faults.
+checks of each run, and what each one shows, are in `summary.md` of the run.
+This table names the faults.
 
 | Engine | The faults made on purpose, by rule id |
 |---|---|
@@ -1337,7 +1355,9 @@ The check `instance-types-shape` expects `instanceTypes[]` with `type`, and
 `nonSupportedZones` as an array or `null`. A run showed that AWS gives `null` for most
 types. The check passes on that answer (no result yet). For GCP, no run has
 shown the shape, and the check shows it (no result yet). The check `key-pairs-shape`
-expects `keyNames[]` with the key pair of the entity (no result yet). A run that makes a fault
+expects `keyNames[]` with the key pair of the entity (no result yet).
+
+A run that makes a fault
 puts `caught` in the ledger, and the clean entity of the same run puts `passed`. The ledger holds
 both results of `instance-offering` and `ssh-key-pair` for AWS.
 
@@ -1348,45 +1368,58 @@ with that code: see [The property routes](../internals/palette/validate-routes.m
 
 Part 3 of each run also runs the custom probes of the lab,
 `examples/live/preflight/lab-probes.yaml` (`lab-region`, `lab-name`), beside
-the catalog, with `--probes`: a custom probe on a real tenant. With `--build`,
-the run adds the build of cluster A through the provider with the watch on it
-from its first listing, `strata preflight cluster:UID` on the cluster as
-Palette holds it, and a change of the instance type of its worker pool, which
-`gke-type-change`, `eks-type-change-orphan`, or `pool-replace-fields` must fail;
-`--down` tears the example down and reads the inventory.
+the catalog, with `--probes`. This is a custom probe on a real tenant.
+
+With `--build`, the run adds three steps:
+
+- the build of cluster A through the provider, with the watch on it from its
+  first listing
+- `strata preflight cluster:UID` on the cluster as Palette holds it
+- a change of the instance type of its worker pool, which `gke-type-change`,
+  `eks-type-change-orphan`, or `pool-replace-fields` must fail
+
+`--down` removes the example and reads the inventory.
 
 The runs of the plan, and what each one showed, are in the section
 [What the preflight runs show](#what-the-preflight-runs-show) below.
 
 ## watch.sh
 
-`just live-watch --build --down` on aws: cluster B built beside cluster A,
-with the watch on it from the moment Palette listed it, on the terminal. 43
-readings, `Running` after 1335 seconds, each watch rule passed at the end. At
-662 seconds `webhook-call-failed` warned: a `Reconciler error` of the
-controller in the new cluster, "failed to set controlPlane type annotation",
-the call of `mspectrocluster.kb.io` refused right after the pivot, as on gcp;
-the warning held for 20 readings while the event stayed in the 50 newest, and
-the build went on to `Running`, so the watch did not stop. The removal of
-cluster B did not run: the script was edited during the run, and bash reads a
-script as it runs, so the process resumed in the changed file and ended. The
-script is one function since, which bash parses before it runs, and the
+`just live-watch --build --down` on aws built cluster B beside cluster A. The
+watch on it ran from the moment Palette listed it, on the terminal. There were
+43 readings, and the cluster was `Running` after 1335 seconds. Each watch rule
+passed at the end.
+
+At 662 seconds `webhook-call-failed` warned. The warning was a
+`Reconciler error` of the controller in the new cluster, "failed to set
+controlPlane type annotation". It was the call of `mspectrocluster.kb.io`,
+refused right after the pivot, as on gcp. The warning held for 20 readings while
+the event stayed in the 50 newest. The build then reached `Running`, so the
+watch did not stop.
+
+The removal of cluster B did not run. The script was edited during the run, and
+bash reads a script as it runs. So the process resumed in the changed file and
+ended. The script is now one function, which bash parses before it runs. The
 cluster was removed by hand with `tofu apply -var second_cluster=false`.
 
 ## preflight-walkthrough.md
 
 The story of [Preflight: one cluster, end to end](./preflight-walkthrough.md), run
-once as written, on aws. The clean entity of the last plan run passed every
-tier in 31 seconds, exit 0; the copy with one worker of four cores failed
-`worker-cpu-floor` and `palette-validate` in 33 seconds, exit 1 under
-`--strict`. `POST /v1/spectroclusters/aws` with the same body answered the uid
-in 4 seconds. The watch started at once: 25 readings, `Running` after 764
-seconds, each watch rule passed, and no warning this time. On the cluster as
-Palette holds it, two notes, `bastion-cost` and `variables-in-use`; on the
-change of the worker instance type to `m5.xlarge`, `pool-replace-fields`
-warned that the machines roll. The delete was accepted at once; ten minutes
-later the events named the security groups and the VPC as deleted, and the
-inventory of AWS read 0 on all 12 lines.
+once as written, on aws.
+
+The clean entity of the last plan run passed every tier in 31 seconds, with exit
+0. The copy with one worker of four cores failed `worker-cpu-floor` and
+`palette-validate` in 33 seconds, with exit 1 under `--strict`.
+`POST /v1/spectroclusters/aws` with the same body answered the uid in 4 seconds.
+
+The watch started at once. It took 25 readings, and the cluster was `Running`
+after 764 seconds. Each watch rule passed, and there was no warning this time.
+On the cluster as Palette holds it, there were two notes, `bastion-cost` and
+`variables-in-use`. On the change of the worker instance type to `m5.xlarge`,
+`pool-replace-fields` warned that the machines roll.
+
+The delete was accepted at once. Ten minutes later the events named the security
+groups and the VPC as deleted. The inventory of AWS read 0 on all 12 lines.
 
 ## What the preflight runs show
 
@@ -1396,196 +1429,252 @@ profiles of each engine and no cluster. Each run is an entry of the ledger.
 **aws.** Four faults made on purpose, four caught. `POST /v1/spectroclusters/aws/validate`
 refuses one worker of four cores with `MachinePoolWithMinCpuRequired`: "A
 minimum allocation of '4.1' CPU cores is required across all worker nodes.
-Current allocation : '4' CPU cores", in under 4 seconds; through the provider
+Current allocation : '4' CPU cores", in under 4 seconds. Through the provider
 the same fault comes after a full apply. A cloud account uid that is not in the
-project is a 404 of `GET /v1/cloudaccounts/aws/{uid}`, and an internal control
-plane load balancer is a static failure. On the clean entity, 37 checks ran and
-36 passed; the exec rules ran against AWS with the profile of the lab
-(`aws-quotas`, `aws-ami`, `capa-bootstrap-stack`, `ebs-csi-node-policy`,
-`iam-ten-policies`, `aws-region-not-enabled`, `leftovers-before-build`). The one
-failure was a wrong result of `role-partial-permissions`:
-`aws iam simulate-principal-policy` with `iam:PassRole` and no resource ARN
-gives `implicitDeny` for a role whose policy allows it on the CAPA roles alone,
-and that role has built clusters. The rule now leaves `iam:PassRole` to a
-reproduce line with the three CAPA role ARNs. The run is in the ledger as the
-first wrong result of a check.
+project is a 404 of `GET /v1/cloudaccounts/aws/{uid}`. An internal control
+plane load balancer is a static failure.
 
-**eks.** Six faults made on purpose, five caught: one zone, no worker pool, an
-`updateStrategy` that EKS does not read, a private endpoint alone, and a cloud
-account uid that is not in the project. The sixth, one worker of four cores,
-was not caught: `POST /v1/spectroclusters/eks/validate` answers `200` with no
-error for it, where the AWS route answers `MachinePoolWithMinCpuRequired` for
-the same pool. No run shows whether an EKS create with one worker of four
-cores fails later, so the CPU floor on EKS is a reading and not a fact. On the
-clean entity, 44 checks ran and 42 passed. The two wrong results were the two
-rules that simulate the IAM policy of the role of the cloud account:
-`aws iam simulate-principal-policy` with no `--resource-arns` evaluates each
-action against the resource `*`, and a statement that names a resource, as the
-EKS policy of Palette does for `eks:*`, does not match it. The role built the
-EKS clusters of #89. Both rules are warnings now: one simulates the actions
-that name a resource, with the cluster, the node group, and the CAPA role ARNs
-of the build; the other simulates the actions on `*` alone, and gives the
-PassRole line with the CAPA roles as a command to run by hand. A simulation
-with no request context cannot prove a build, so neither is a `fail`.
+On the clean entity, 37 checks ran and 36 passed. The exec rules ran against AWS
+with the profile of the lab (`aws-quotas`, `aws-ami`, `capa-bootstrap-stack`,
+`ebs-csi-node-policy`, `iam-ten-policies`, `aws-region-not-enabled`,
+`leftovers-before-build`).
+
+The one failure was a wrong result of
+`role-partial-permissions`. `aws iam simulate-principal-policy` with
+`iam:PassRole` and no resource ARN gives `implicitDeny` for a role whose policy
+allows it on the CAPA roles alone. That role has built clusters. The rule now
+leaves `iam:PassRole` to a reproduce line with the three CAPA role ARNs. The run
+is in the ledger as the first wrong result of a check.
+
+**eks.** Six faults made on purpose, five caught. The five were:
+
+- one zone
+- no worker pool
+- an `updateStrategy` that EKS does not read
+- a private endpoint alone
+- a cloud account uid that is not in the project
+
+The sixth, one worker
+of four cores, was not caught. `POST /v1/spectroclusters/eks/validate` answers
+`200` with no error for it. The AWS route answers `MachinePoolWithMinCpuRequired`
+for the same pool.
+
+No run shows whether an EKS create with one worker of four cores fails later. So
+the CPU floor on EKS is a reading and not a fact. On the clean entity, 44 checks
+ran and 42 passed.
+
+The two wrong results were the two rules that simulate the IAM policy of the
+role of the cloud account. `aws iam simulate-principal-policy` with no
+`--resource-arns` evaluates each action against the resource `*`. A statement
+that names a resource does not match it. The EKS policy of Palette has such
+statements for `eks:*`. The role built the EKS clusters of #89.
+
+Both rules are warnings now. One simulates the actions that name a resource, with
+the cluster, the node group, and the CAPA role ARNs of the build. The other
+simulates the actions on `*` alone, and gives the PassRole line with the CAPA
+roles as a command to run by hand. A simulation with no request context cannot
+prove a build, so neither is a `fail`.
 
 **gke.** Seven faults made on purpose, seven caught. `POST /v1/spectroclusters/gke/validate`
-refuses a pool of 4 with `InvalidParam`: "Invalid parameter 'Node pool size';
-caused by: Node pool size should be multiple of 3", in under 200 ms; through the
-provider, #90 saw the same refusal after a full apply. A cluster with no release
-channel, a GPU machine type, Autopilot with a pool, a name over 40 characters,
-and a cloud account uid that is not in the project are static failures or a
-404, in milliseconds. On the clean entity, 34 checks ran and 32 passed. The two
-failures say something about the GCP project of the lab, and not about the
-build: the service account holds no `roles/storage.objectViewer` at the project
-level, and the Cloud Resource Manager API is off, and the account built the
-GKE clusters of #90 and the GCP clusters of #74 all the same. So a documented
-role or API that a check does not find is a warning to read, and both rules
-are `warn`. The plan does not build, so a rule from the source stays a probe
-after these runs: `strata preflight --promotion` promotes a static rule only
-when a live run shows the fault (`status: seen`), such as
-`gke-no-release-channel` from #90.
+refuses a pool of 4 with `InvalidParam`, in under 200 ms. The message is
+"Invalid parameter 'Node pool size'; caused by: Node pool size should be
+multiple of 3". Through the provider, #90 saw the same refusal after a full
+apply. Five more faults are static failures or a 404, in milliseconds:
+
+- a cluster with no release channel
+- a GPU machine type
+- Autopilot with a pool
+- a name over 40 characters
+- a cloud account uid that is not in the project
+
+On the clean entity, 34 checks ran and 32 passed. The two failures say something
+about the GCP project of the lab, and not about the build. The service account
+holds no `roles/storage.objectViewer` at the project level, and the Cloud
+Resource Manager API is off. The account built the GKE clusters of #90 and the
+GCP clusters of #74 nevertheless. So a documented role or API that a check does
+not find is a warning to read, and both rules are `warn`.
+
+The plan does not build, so a rule from the source stays a probe after these
+runs. `strata preflight --promotion` promotes a static rule only when a live run
+shows the fault (`status: seen`), such as `gke-no-release-channel` from #90.
 
 **gcp.** Four faults made on purpose, four caught. The GCP validate route
 applies the CPU floor as the AWS one does: one worker of four cores is
 `MachinePoolWithMinCpuRequired` in under a second. A name over 52 characters
 gives a derived network name over 63, which the static rule computes as Palette
 derives it (`<name>-network`, `<name>-network-<region>`). On the clean entity,
-29 checks ran and 27 passed; the two failures are the two findings about the
-GCP project of the gke run, which are `warn` now.
+29 checks ran and 27 passed. The two failures are the two findings about the
+GCP project of the gke run. They are `warn` now.
 
-Over the four engines, the plan made 21 faults and the checks caught 20; the
+Over the four engines, the plan made 21 faults and the checks caught 20. The
 one not caught is the CPU floor on EKS, which the EKS validate route does not
-report, so `worker-cpu-floor` no longer names `eks` and the plan no longer
+report. So `worker-cpu-floor` no longer names `eks`, and the plan no longer
 makes that fault there. Of the 144 checks that ran on the clean entities, 137
-passed; the seven failures were three wrong results of two IAM simulations and
-the two GCP project findings, twice. After the fixes, the plan ran again on gcp
-and on eks: every fault was caught, every rule of severity `fail` passed on
-the clean entities, and `strata preflight --promotion` exits `0` with the
-ledger of the six runs. The IAM simulation on eks warns that
-`eks:CreateCluster` is `implicitDeny` on each resource of the build, for the
-role that built the #89 clusters: the warning to read that the rule now says
-it is.
+passed. The seven failures were three wrong results of two IAM simulations and
+the two GCP project findings, twice.
+
+After the fixes, the plan ran again on gcp and on eks. Every fault was caught,
+and every rule of severity `fail` passed on the clean entities.
+`strata preflight --promotion` exits `0` with the ledger of the six runs. The
+IAM simulation on eks warns that `eks:CreateCluster` is `implicitDeny` on each
+resource of the build, for the role that built the #89 clusters. The rule now
+says that this is a warning to read.
 
 **A custom probe on the tenant.** Each run since the build phase also runs the
-two custom probes of the lab, `lab-region` and `lab-name`, from
+two custom probes of the lab. They are `lab-region` and `lab-name`, from
 `examples/live/preflight/lab-probes.yaml`, beside the catalog. Both ran on the
-clean entity of the gke run and passed: a file of a company runs the same way,
+clean entity of the gke run and passed. A file of a company runs the same way,
 with no change to strata.
 
 **gke, with a build.** The plan built cluster A through the provider, with
-the watch on it from the moment Palette listed it: 39 readings, `Running`
-after 1190 seconds, and each watch rule passed (`agent-egress`,
-`node-egress-images`, `status-not-cloud`, `pivot-webhook-timeout`). On the
-cluster as Palette holds it, 38 checks ran and 34 passed. The three warnings
-are the two GCP project findings and `position-zero`: the provider put the
-add-on profile at position 0 of the cluster, as the order report says it does.
-The one failure was a wrong result of strata: the entity built from the cloud
-config carried `skipK8sUpgrade: "disabled"`, which Palette stores on each pool,
-and the GKE validate route refuses the field with `InvalidParam`; the entity
-now carries it when it is enabled alone. The change of the instance type of the
+the watch on it from the moment Palette listed it. There were 39 readings, and
+the cluster was `Running` after 1190 seconds. Each watch rule passed
+(`agent-egress`, `node-egress-images`, `status-not-cloud`,
+`pivot-webhook-timeout`). On the cluster as Palette holds it, 38 checks ran and
+34 passed. The three warnings are the two GCP project findings and
+`position-zero`. The provider put the add-on profile at position 0 of the
+cluster, as the order report says it does.
+
+The one failure was a wrong result of strata. The entity built from the cloud
+config carried `skipK8sUpgrade: "disabled"`, which Palette stores on each pool.
+The GKE validate route refuses the field with `InvalidParam`. The entity now
+carries it when it is enabled alone. The change of the instance type of the
 worker pool, `e2-standard-4` to `e2-standard-8`, was caught by
-`gke-type-change` and `pool-replace-fields` before any apply: the fault of
-#90, found in a millisecond. The destroy of the cluster ended with
-`context deadline exceeded` at the deadline of the provider, and a second
-destroy completed, as `provider-delete-timeout` says. The inventory step of the
-run could not ask GCP: `gcloud` demanded a reauthentication in the middle of
-the campaign, which a non-interactive shell cannot give, the `cloud-cli-auth`
-row of the lab. Run by hand after, the inventory was 0 on every line, the GKE
-cluster counted.
+`gke-type-change` and `pool-replace-fields` before any apply. This is the fault
+of #90, found in a millisecond.
+
+The destroy of the cluster ended with `context deadline exceeded` at the
+deadline of the provider, and a second destroy completed, as
+`provider-delete-timeout` says. The inventory step of the run could not ask GCP.
+`gcloud` demanded a reauthentication in the middle of the campaign, which a
+non-interactive shell cannot give. This is the `cloud-cli-auth` row of the lab.
+The inventory, run by hand afterward, was 0 on every line. It counted the GKE
+cluster.
 
 **eks, with a build.** The watch stopped at 1355 seconds, after 44 readings,
-on `pivot-webhook-timeout`, as the rule was then: an event named a failed call
+on `pivot-webhook-timeout`, as the rule was then. An event named a failed call
 of the webhook `mawscloudconfig.kb.io` while the controller set the owner of
-the cloud config, right after the pivot, with the cluster `Provisioning` and no
-error in its status. The message of the rule cut the event at 240 characters,
-before the cause, and the `world.json` of the watch held no reading, so whether
-the call timed out or was refused is not known; both are fixed below. The provider then ended its
-apply with exit 0 while the cluster was still `Provisioning`. On the cluster as
-Palette holds it, 46 checks ran and 42 passed; `delete-while-provisioning`
-failed, because the cluster was not `Running`, and said what a delete would do.
-The plan then deleted the cluster, and the delete waited, as the rule said:
-the first destroy ended at the deadline of the provider with the cluster
-`Deleting` and the EKS cluster, the VPC, and three NAT gateways still in AWS.
+the cloud config. This was right after the pivot, with the cluster
+`Provisioning` and no error in its status.
+
+The message of the rule cut the event at 240 characters, before the cause. The
+`world.json` of the watch held no reading. So it is not known whether the call
+timed out or was refused. Both faults are fixed below. The provider then ended
+its apply with exit 0 while the cluster was still `Provisioning`.
+
+On the cluster as Palette holds it, 46 checks ran and 42 passed.
+`delete-while-provisioning` failed, because the cluster was not `Running`, and
+said what a delete does. The plan then deleted the cluster, and the delete
+waited, as the rule said. The first destroy ended at the deadline of the
+provider. The cluster was `Deleting`, and the EKS cluster, the VPC, and three
+NAT gateways were still in AWS.
+
 The change of the instance type of the worker pool, `t3.xlarge` to
 `m5.xlarge`, was caught by `eks-type-change-orphan` and `pool-replace-fields`
-before any apply: the fault of #89, found in a millisecond. Two wrong results of
-strata came out of this run and are fixed: the validate route refuses the name
-of an existing cluster with `ResourceAlreadyExists`, so `palette-validate` and
-`worker-cpu-floor` now check an existing cluster under a suffixed name; and the
-plan now waits for `Running` before it deletes. The delete did not end by itself: after
-75 minutes the EKS control plane, its node group, the VPC, and three NAT
-gateways were still in AWS, with the cluster `Deleting` and
-`CloudInfrastructureCleanedUp: DeletingInfrastructure`. The recovery was the
-one of the book: `eks-nodegroups.sh --delete`, `aws-cleanup.sh fred us-east-2 --yes`,
-the inventory at 0, then a second plain delete, which the findings report on
-the pivot webhook gives as the step that ends the wait. It did
-not end it here: from then on each reconcile of the delete failed with "failed
-to delete additional resources: failed to get existing aws managed control
-plane: AWSManagedControlPlane fred-cp not found", every five minutes, with the
-cloud empty. In this run the delete path read a control plane object that was
-gone as an error, and not as done, and the delete did not end. A force delete
-of the record ended it. The mechanism is the one of that report, on EKS this
-time, with this one more step, which a second plain delete did not end. One
-hour of the recovery
-went to a fault of the operator: `tofu output -raw` printed a warning beside
-the project uid, a shell exported both as `PALETTE_PROJECT_UID`, and every
-request with that header answered a plain-text `400 Bad Request`, which read
-as Palette refusing the cluster. It was not: with the uid alone, the API
-answered as it does. `lib.sh` reads the outputs as JSON, with the warnings
-dropped, so the scripts of the lab do not meet it; a shell that copies a
-value by hand can.
+before any apply. This is the fault of #89, found in a millisecond.
+
+Two wrong results of strata came out of this run and are fixed:
+
+- The validate route refuses the name of an existing cluster with
+  `ResourceAlreadyExists`. So `palette-validate` and `worker-cpu-floor` now check
+  an existing cluster under a suffixed name.
+- The plan now waits for `Running` before it deletes.
+
+The delete did not end by itself. After 75 minutes the EKS control plane, its
+node group, the VPC, and three NAT gateways were still in AWS. The cluster was
+`Deleting`, with `CloudInfrastructureCleanedUp: DeletingInfrastructure`.
+
+The recovery was the one of the book: `eks-nodegroups.sh --delete`,
+`aws-cleanup.sh fred us-east-2 --yes`, the inventory at 0, then a second plain
+delete. The findings report on the pivot webhook gives that delete as the step
+that ends the wait. It did not end it here. From then on each reconcile of the
+delete failed, every five minutes, with the cloud empty. The error was "failed to
+delete additional resources: failed to get existing aws managed control plane:
+AWSManagedControlPlane fred-cp not found".
+
+In this run the delete path read a control plane object that was gone as an
+error, and not as done. So the delete did not end. A force delete of the record
+ended it. The mechanism is the one of that report, on EKS this time, with this
+one more step, which a second plain delete did not end.
+
+One hour of the recovery went to a fault of the operator. `tofu output -raw`
+printed a warning beside the project uid, and a shell exported both as
+`PALETTE_PROJECT_UID`. Every request with that header answered a plain-text
+`400 Bad Request`. This read as Palette refusing the cluster, but it was not a
+refusal. With the uid alone, the API answered as it does.
+
+`lib.sh` reads the outputs as JSON, with the warnings dropped, so the scripts of
+the lab do not meet this fault. A shell that copies a value by hand can.
 
 **aws, with a build.** The plan built cluster A through the provider, with the
-watch on it from the moment Palette listed it: 41 readings, `Running` after
-1278 seconds, and each watch rule passed (`agent-egress`,
-`csi-crash-after-running`, `node-egress-images`, `infrastructure-stalled`,
-`pivot-webhook-timeout`, `stale-worker-condition`). Before the build, the four
-faults made on purpose were caught: one worker of four cores by
-`worker-cpu-floor` and `palette-validate`, an internal control plane load
-balancer by `api-endpoint-reach` in a millisecond, and a cloud account uid that
-is not in the project by `account-missing`. On the clean entity and on the
-cluster as Palette holds it, 40 checks ran and 40 passed, with two notes:
-`bastion-cost`, and `variables-in-use` once the profile had a cluster. The
-change of the instance type of the worker pool, `t3.xlarge` to `m5.xlarge`, was
-caught by `pool-replace-fields` before any apply. The teardown ran after
-`Running`: one destroy, 14 resources, and the inventory of AWS at 0 on every
+watch on it from the moment Palette listed it. There were 41 readings, and the
+cluster was `Running` after 1278 seconds. Each watch rule passed
+(`agent-egress`, `csi-crash-after-running`, `node-egress-images`,
+`infrastructure-stalled`, `pivot-webhook-timeout`, `stale-worker-condition`).
+
+Before the build, the four faults made on purpose were caught:
+
+- one worker of four cores, by `worker-cpu-floor` and `palette-validate`
+- an internal control plane load balancer, by `api-endpoint-reach` in a
+  millisecond
+- a cloud account uid that is not in the project, by `account-missing`
+
+On the clean entity and on the cluster as Palette holds it, 40 checks ran and 40
+passed, with two notes. The notes are `bastion-cost`, and `variables-in-use`
+once the profile had a cluster. The change of the instance type of the worker
+pool, `t3.xlarge` to `m5.xlarge`, was caught by `pool-replace-fields` before any
+apply. The teardown ran after `Running`. It was one destroy of 14 resources, and
+the inventory of AWS was 0 on every line.
+
+**gcp, with a build.** The four faults were caught before the build. The derived
+network name of a long cluster name was one of them (`gcp-name-length`, in a
+millisecond).
+
+The watch stopped at 671 seconds, after 22 readings, on `pivot-webhook-timeout`
+as the rule was then. Right after the pivot, two events named a failed call,
+eight seconds apart:
+
+- a `ReconcileError` of the controller named a failed call of
+  `mspectrocluster.kb.io` while it set the type of the control plane
+- a `Log` event of the agent named a failed call of `vspectrocluster.kb.io`
+  while it updated the cluster
+
+Palette made the calls again. The wait of the plan saw `Running` 23 minutes
+after the watch started, with no other event of note. The teardown ran after it.
+It was one destroy of 14 resources, and the inventory of GCP was 0 on every
 line.
 
-**gcp, with a build.** The four faults were caught before the build, the
-derived network name of a long cluster name among them (`gcp-name-length`, in
-a millisecond). The watch stopped at 671 seconds, after 22 readings, on
-`pivot-webhook-timeout` as the rule was then: right after the pivot, a
-`ReconcileError` of the controller named a failed call of
-`mspectrocluster.kb.io` while it set the type of the control plane, and a
-`Log` event of the agent named a failed call of `vspectrocluster.kb.io` while
-it updated the cluster, eight seconds apart. Palette made the calls again: the
-wait of the plan saw `Running` 23 minutes after the watch started, with no
-other event of note, and the teardown ran after it: one destroy, 14 resources,
-and the inventory of GCP at 0 on every line. On the clean entity, 33 checks ran
-and 31 passed; on the cluster as Palette holds it, 34 ran and 32 passed. The
-two warnings are the two GCP project findings of the gke run. The change of the
-instance type of the worker pool, `e2-standard-4` to `e2-standard-8`, was
-caught by `pool-replace-fields` before any apply.
+On the clean entity, 33 checks ran and 31 passed. On the cluster as Palette
+holds it, 34 ran and 32 passed. The two warnings are the two GCP project
+findings of the gke run. The change of the instance type of the worker pool,
+`e2-standard-4` to `e2-standard-8`, was caught by `pool-replace-fields` before
+any apply.
 
 **Three wrong results of strata came out of the gcp run, and are fixed.**
-`pivot-webhook-timeout` failed on one minute of failed webhook calls, which the
-build survived. The rule now fails on the failed move of the cluster, on the
-cloud config the controller cannot read, or on 10 minutes or more of failed
-calls while the cluster is not `Running`; the new warning `webhook-call-failed`
-names each failed call. Both show the start and the end of each event, because
-the end names the cause, a timeout or a connection refused, and the old message
-cut it. The `world.json` of a watch held the world before the first reading,
-with no conditions and no events, so the full events of the eks and the gcp
-watches are lost; it now holds the last reading. And the watch ended at the
-first failure of any rule; it now ends at the first counted failure alone, as
-the exit code counts them, and a failed probe or a warning is in the report
-while the watch reads on. The ledger gives the gcp run as `passed` for the
-narrowed rule, with its events in the fixture `watch-webhook-refused` that the
-tests of the rule replay, and as `caught` for the warning on gcp and on eks;
-the eks entry of the old rule is gone, because the cluster was deleted before
-the outcome was known. The findings report on the build runs,
-`palette-preflight-build-runs-findings-2026-09-29`, holds the timeline of the
-eks delete and the source of each finding.
+
+- `pivot-webhook-timeout` failed on one minute of failed webhook calls, which the
+  build survived. The rule now fails on one of these events:
+  - the failed move of the cluster
+  - the cloud config that the controller cannot read
+  - 10 minutes or more of failed calls while the cluster is not `Running`
+
+  The new warning `webhook-call-failed` names each failed call. Both show the
+  start and the end of each event. The end names the cause, a timeout or a
+  connection refused, and the old message cut it.
+- The `world.json` of a watch held the world before the first reading, with no
+  conditions and no events. So the full events of the eks and the gcp watches
+  are lost. It now holds the last reading.
+- The watch ended at the first failure of any rule. It now ends at the first
+  counted failure alone, as the exit code counts them. A failed probe or a
+  warning is in the report while the watch continues.
+
+The ledger gives the gcp run as `passed` for the narrowed rule. Its events are in
+the fixture `watch-webhook-refused` that the tests of the rule replay. The ledger
+gives `caught` for the warning on gcp and on eks. The eks entry of the old rule
+is gone, because the cluster was deleted before the outcome was known. The
+findings report on the build runs,
+`palette-preflight-build-runs-findings-2026-09-29`, holds the timeline of the eks
+delete and the source of each finding.
 
 ## A chart pushed again, on a cluster
 
@@ -1656,7 +1745,7 @@ Each check gives the answer that it gives on AWS: strata reads the same
 documents, and Palette answers the same way. `tag-only.sh` moves cluster A to a
 version with another tag name and back, and Palette keeps each machine, as on
 AWS. `repave.sh` gets `repave` for one more kubeadm command and `no repave` for
-a manifest of the add-on, as on AWS: the two clouds use one upgrade engine.
+a manifest of the add-on, as on AWS. The two clouds use one upgrade engine.
 
 What differs is outside strata:
 
@@ -1664,8 +1753,8 @@ What differs is outside strata:
   cloud. The CSI values write the reclaim line as `reclaimPolicy: "Delete"`,
   and not `reclaimPolicy: Delete`: the edit of each script comes from the output
   `csi_reclaim_delete`.
-- **The Kubernetes version.** The Kubernetes pack lists `gcp`, and no GCP image
-  is shared for Kubernetes 1.36.2 with Ubuntu 24.04: GCP answers
+- **The Kubernetes version.** The Kubernetes pack lists `gcp`, but no GCP image
+  is shared for Kubernetes 1.36.2 with Ubuntu 24.04. GCP answers
   `Required 'compute.images.useReadOnly' permission` for the image in the project
   `spectro-image-build`, and no machine starts. The image of 1.35.6 is shared.
 - **The service account of the nodes.** The nodes run as the Compute Engine
@@ -1733,6 +1822,6 @@ create itself breaks it. The two new rules find the risk before the create. See
   versions, tags, and states as before. The read is of `csi-aws-ebs`,
   `kubernetes`, `nginx`, `ubuntu-aws`, and `cni-calico`: see
   [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
-- No script installs a Zarf package on a cluster: Palette gives a Zarf pack the
+- No script installs a Zarf package on a cluster. Palette gives a Zarf pack the
   values of an app profile, `{{.spectro.system.appdeployment.tiername}}`, so it
   needs an app deployment of Palette Dev Engine.

@@ -889,6 +889,271 @@ fn the_phrasal_verbs_and_the_would_of_the_wave_11_review_are_gone() {
     }
 }
 
+// ---- the style sweep of Wave 12 ----------------------------------------------------------------
+
+/// The length of the mark of a list item at the start of `line`: `- `, `* `, or a number and `. `.
+/// It is 0 when `line` starts no item.
+fn list_marker(line: &str) -> usize {
+    if line.starts_with("- ") || line.starts_with("* ") {
+        return 2;
+    }
+    let digits = line.chars().take_while(char::is_ascii_digit).count();
+    if digits > 0 && line[digits..].starts_with(". ") {
+        return digits + 2;
+    }
+    0
+}
+
+/// The blocks of `text`: each paragraph, each list item without its nested items, and each table
+/// row. A heading and a fenced block are no block. A block is one line, without the mark of the
+/// list.
+fn blocks_of(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current: Option<String> = None;
+    let mut fenced = false;
+    for line in text.lines() {
+        let line = line.trim();
+        if line.starts_with("```") || line.starts_with("~~~") {
+            out.extend(current.take());
+            fenced = !fenced;
+            continue;
+        }
+        let ends_block = line.is_empty() || line.starts_with('#') || line.starts_with('|');
+        let marker = list_marker(line);
+        if fenced || ends_block || marker > 0 {
+            out.extend(current.take());
+        }
+        if fenced || line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with('|') {
+            out.push(line.to_string());
+            continue;
+        }
+        let line = line[marker..].trim_start_matches('>').trim();
+        if line.starts_with("{{#") {
+            continue;
+        }
+        match current.as_mut() {
+            Some(text) => {
+                text.push(' ');
+                text.push_str(line);
+            }
+            None => current = Some(line.to_string()),
+        }
+    }
+    out.extend(current);
+    out
+}
+
+/// The sentences of a block. A table row has the sentences of each cell.
+fn block_sentences(block: &str) -> Vec<String> {
+    if block.starts_with('|') {
+        return block
+            .trim_matches('|')
+            .split('|')
+            .flat_map(|cell| sentences(cell.trim()))
+            .collect();
+    }
+    sentences(block)
+}
+
+/// The pages that Wave 8 touched. The style review of Wave 8 found sentences of more than 25
+/// words and blocks of more than six sentences in them.
+const WAVE_8_PAGES: [&str; 31] = [
+    "automation/drift-issues.md",
+    "automation/gates.md",
+    "automation/gitlab.md",
+    "automation/library.md",
+    "automation/merge-gate.md",
+    "automation/pr-comments.md",
+    "automation/preflight.md",
+    "commands/behind.md",
+    "commands/consumers.md",
+    "commands/packs.md",
+    "commands/same-release.md",
+    "commands/snapshot.md",
+    "commands/snapshot/cluster.md",
+    "commands/snapshot/profile-version.md",
+    "commands/verify.md",
+    "development/build-test.md",
+    "development/changes.md",
+    "development/code.md",
+    "development/documentation.md",
+    "development/live-runs.md",
+    "install.md",
+    "internals/palette/packs.md",
+    "internals/palette/profiles.md",
+    "reference/candidate-file.md",
+    "reference/compatibility.md",
+    "reference/documents.md",
+    "reference/errors.md",
+    "reference/formats.md",
+    "reference/palette-api.md",
+    "reference/refs.md",
+    "use-cases/publish-fan-out.md",
+];
+
+/// A description has 25 words at most, and a paragraph, a list item, or a table row has six
+/// sentences at most.
+#[test]
+fn the_pages_that_wave_8_touched_keep_to_25_words_and_six_sentences() {
+    let mut faults = Vec::new();
+    for page in WAVE_8_PAGES {
+        for block in blocks_of(&read(&docs().join(page))) {
+            let found = block_sentences(&block);
+            faults.extend(
+                found
+                    .iter()
+                    .filter(|s| words(s) > 25)
+                    .map(|s| format!("{page}: {} words: {}", words(s), s.trim())),
+            );
+            if !block.starts_with('|') && found.len() > 6 {
+                faults.push(format!("{page}: {} sentences: {block}", found.len()));
+            }
+        }
+    }
+    assert!(
+        faults.is_empty(),
+        "{} faults:\n{}",
+        faults.len(),
+        faults.join("\n")
+    );
+}
+
+/// The Rust comments that the style review of Wave 8 named: the crate doc and the comments of the
+/// types of `same_release.rs`. Each sentence has 25 words at most.
+#[test]
+fn the_rust_comments_that_the_style_review_of_wave_8_named_keep_to_25_words() {
+    let comments = [
+        ("src/lib.rs", "Strata records, compares, and verifies"),
+        ("src/lib.rs", "A profile is a stack of layers"),
+        ("src/lib.rs", "A snapshot is the record of one published"),
+        ("src/ops/same_release.rs", "The roots differ only by the"),
+        ("src/ops/same_release.rs", "The key of each pack whose only"),
+        (
+            "src/ops/same_release.rs",
+            "The differences between the records",
+        ),
+        (
+            "src/ops/same_release.rs",
+            "such a pair is `unknown-upstream`",
+        ),
+    ];
+    for (file, anchor) in comments {
+        for sentence in sentences(&comment(&repo_file(file), anchor)) {
+            assert!(
+                words(&sentence) <= 25,
+                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
+                words(&sentence)
+            );
+        }
+    }
+}
+
+/// The legend of a pair status is plain words for a reader without the book: each sentence has 25
+/// words at most, and no sentence is a fragment after a semicolon.
+#[test]
+fn the_legend_of_a_pair_status_keeps_to_25_words_and_has_no_semicolon() {
+    let legend = strata::closed_set::legend::legend::<strata::ops::PairStatus>();
+    assert!(!legend.is_empty());
+    for (status, text) in legend {
+        assert!(!text.contains(';'), "{status}: {text}");
+        for sentence in sentences(&text) {
+            assert!(
+                words(&sentence) <= 25,
+                "{status}: {} words in a sentence of 25 at most: {sentence}",
+                words(&sentence)
+            );
+        }
+    }
+}
+
+/// Each phrase in `text` where "leave", "leaves", "left", or "leaving" has "out" within the next
+/// four words in the same sentence.
+fn leave_out_phrases(text: &str) -> Vec<String> {
+    let words: Vec<&str> = text
+        .split_whitespace()
+        .filter(|w| !matches!(*w, "//" | "///" | "//!" | "#" | "*" | "-" | "|"))
+        .collect();
+    let bare = |w: &str| {
+        w.trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase()
+    };
+    let mut found = Vec::new();
+    for (at, word) in words.iter().enumerate() {
+        if !matches!(bare(word).as_str(), "leave" | "leaves" | "left" | "leaving") {
+            continue;
+        }
+        for offset in 1..=4 {
+            let Some(next) = words.get(at + offset) else {
+                break;
+            };
+            if bare(next) == "out" {
+                found.push(words[at..=at + offset].join(" "));
+                break;
+            }
+            if next.ends_with(['.', ';', ':', '?', '!']) {
+                break;
+            }
+        }
+    }
+    found
+}
+
+/// The house word for "leave out" is "omit". A phrasal verb is not STE, and one word for one thing
+/// keeps the text clear. This file holds the phrase in its own test data, so the scan skips it.
+#[test]
+fn no_file_of_the_tree_uses_the_phrasal_verb_leave_out() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let own = root.join("tests/docs.rs");
+    let mut files: Vec<PathBuf> = [
+        "adapter",
+        "benches",
+        "deploy",
+        "docs/src",
+        "examples",
+        "preflight",
+        "scripts",
+        "src",
+        "tests",
+        "xtask",
+        ".github",
+    ]
+    .iter()
+    .flat_map(|dir| walk(&root.join(dir)))
+    .collect();
+    files.extend(
+        ["README.md", "CONTRIBUTING.md", "CLAUDE.md", "justfile"]
+            .iter()
+            .map(|file| root.join(file)),
+    );
+    let mut faults = Vec::new();
+    for file in files {
+        let path = file.strip_prefix(root).unwrap_or(&file).to_string_lossy();
+        let skipped = file == own
+            || path.contains("/target/")
+            || path.starts_with("examples/packs/")
+            || path.starts_with("target/");
+        let Ok(text) = std::fs::read_to_string(&file) else {
+            continue;
+        };
+        if skipped {
+            continue;
+        }
+        faults.extend(
+            leave_out_phrases(&text)
+                .into_iter()
+                .map(|phrase| format!("{path}: {phrase}")),
+        );
+    }
+    assert!(
+        faults.is_empty(),
+        "write \"omit\" for \"leave out\":\n{}",
+        faults.join("\n")
+    );
+}
+
 /// The checks that the live window of Wave 11 ran have their result in the book. A row that says
 /// "no result yet" for one of them tells a reader that nobody ran the check.
 #[test]

@@ -8,9 +8,10 @@ The crate follows semantic versioning over the public API that `cargo doc` shows
 under `strata::`. While the version is 0.x, a minor release, such as 0.4 to
 0.5, can change that API. A patch release, such as 0.4.0 to 0.4.1, can add to
 it. A patch release removes nothing from it, and changes nothing in it. Code
-inside the crate, such as the canonical form, is not part of the API. Each
-release has the tag `v<version>`. The crate builds with Rust 1.88 or later. The
-crate is not on crates.io, so a dependency names the tag: see
+inside the crate, such as the canonical form, is not part of the API.
+
+Each release has the tag `v<version>`. The crate builds with Rust 1.88 or later.
+The crate is not on crates.io, so a dependency names the tag: see
 [The library](../automation/library.md#add-the-dependency).
 
 Two sections list the changes that need action:
@@ -51,7 +52,8 @@ for two versions that parse: see
 [The order of versions](#the-order-of-versions). `reference::version::is_pre_release`
 and `reference::version::numbers` are new. `ops::BehindOptions` has the field
 `pre_release`. A struct literal must set it, or use `..Default::default()`.
-`diff::Diff` and `diff::PackDiff` have the field
+
+After 0.25.0, `diff::Diff` and `diff::PackDiff` have the field
 `version_move: Option<diff::VersionMove>`. A struct literal or a pattern with no
 `..` must name it. `diff::VersionMove` is a new enum with the values `Forward`
 and `Back`.
@@ -230,26 +232,27 @@ must be an integer. Another value gives `candidate-invalid`, which names the
 layer and the param. Before, the candidate took any value.
 
 After 0.24.0, a tier of an app profile whose `installOrder` is not an integer
-has no `installOrder` in its record, and it sorts as a tier at 0. Before, the
+has no `installOrder` in its record. It sorts as a tier at 0. Before, the
 record kept the value, and the tier sorted first. Palette gives an integer, so
 no record changes in practice.
 
 A field can also become absent, and that keeps the id as well. For most fields
-absent is a value: a field that is false, empty, or zero is omitted, and each
+absent is a value. A field that is false, empty, or zero is omitted, and each
 such field says so at its own definition in
-[JSON documents](./documents.md). Eight fields are different, and for these
+[JSON documents](./documents.md). Eight fields are different. For these,
 absent means unknown: `source.consumers`, `rootLive`, `maxImpact`,
 `packsChanged`, `error`, `updatesPending`, `repavePending`, and the `value`,
-`old`, or `new` of a sensitive variable. `updatesPending` joined
-`source.cluster` in 0.8.0, and `strata-list/1` in the same release: absent
-means that strata could not read the notifications, and
-`errors.updatesPending` says why. `repavePending` joined `source.cluster` in
-0.18.0: absent means a record of an older release, or of an object that is not
-a cluster.
+`old`, or `new` of a sensitive variable.
+
+- `updatesPending` joined `source.cluster` in 0.8.0, and `strata-list/1` in the
+  same release. Absent means that strata could not read the notifications, and
+  `errors.updatesPending` says why.
+- `repavePending` joined `source.cluster` in 0.18.0. Absent means a record of an
+  older release, or of an object that is not a cluster.
 
 In 0.7.0 `source.consumers` became absent on a record that no consumers request
 produced, where 0.6.3 wrote `count: 0` and stated a count that nothing counted.
-A reader that takes absent for zero reads such a record wrong, so this page
+A reader that takes absent for zero reads such a record wrong. So this page
 names each field that changed this way, with the release that changed it. The
 id stays, because the root does not cover these fields and every record of the
 id still compares.
@@ -304,8 +307,9 @@ fields take a value of a later release:
 
 - `tool.impl` of a record and of `strata-behind/1`.
 - `source.template`, `source.cluster.kind`, the name of each tier in
-  `source.cluster.tiers`, the key of each entry in `source.cluster.errors`, and
-  `upstreamSource` in the `hash` of each pack, in `strata-snapshot/1`.
+  `source.cluster.tiers`, and the key of each entry in `source.cluster.errors`,
+  in `strata-snapshot/1`.
+- `upstreamSource` in the `hash` of each pack, in `strata-snapshot/1`.
 - `registryProviderType` of each pack, in `strata-snapshot/1`.
 - `bump.impact` and each value of `bump.flags[]`, in `strata-behind/1`.
 - `pinnedState` of a pin, and `state` of a newer version, in `strata-behind/1`.
@@ -338,11 +342,11 @@ strata reads each value of them:
 
 Strata only writes its other documents, such as `strata-packs/1` and
 `strata-diff/1`, and does not read them. So their closed sets stay closed. Two
-fields are exceptions, and take any text: the `state` of a version and of a
-registry in `strata-packs/1`, and the `type` of a profile in `strata-list/1`. A
-program can read such a document with the types of the library, such as
-`ops::PackBuild`. Then a value of a later release gives an error, except in
-those two fields.
+fields are exceptions, and take any text. These are the `state` of a version and
+of a registry in `strata-packs/1`, and the `type` of a profile in
+`strata-list/1`. A program can read such a document with the types of the
+library, such as `ops::PackBuild`. Then a value of a later release gives an
+error, except in those two fields.
 
 ## The command line
 
@@ -528,24 +532,27 @@ field, a value, an input, or an option is in the sections above.
   `diff.a.cluster.errors` and `diff.b.cluster.errors` of a row of `records[]`.
   Strata only writes these two documents. A script that reads an older field
   there gets no value and no error.
-- **Strata does not read a record with a variable that has `name: null`.** Only
-  a raw directory or a profile export that a person made gives such a variable,
-  because Palette requires a name. Strata now gives that variable an empty
+- **Strata does not read a record with a variable that has `name: null`.**
+  Palette requires a name. So only a raw directory or a profile export that a
+  person made gives such a variable. Strata now gives that variable an empty
   `name`, so its record has another `variablesHash`, `root`, and
   `contentDigest`. `compare`, `verify`, `behind`, `same-release`, and the gates
-  stop on an older record with `snapshot-schema` and exit `2`. Take the record
-  again. Do not change `null` to `""` in the file. Its `variablesHash` and `root`
-  stay as they are, so they no longer match the variables.
+  stop on an older record with `snapshot-schema` and exit `2`.
+  - Take the record again.
+  - Do not change `null` to `""` in the file. Its `variablesHash` and `root`
+    stay as they are, so they no longer match the variables.
 - **A variable of a candidate file needs a `name`, and each field needs its
   type.** `required`, `hidden`, `immutable`, and `isSensitive` are `true` or
   `false`. `options[]` is a list. A field of text is text, a number, or a flag,
-  but not a list or a map. Before, strata read a field of another type as its
-  default. Now the file gives `candidate-invalid` and exit `2`. The message names
-  the field, such as `variables[0].required: invalid type: string "true",
-  expected a boolean`. A YAML `yes` or `no` is text: write `true` or `false`. See
-  [Checks before any request](./candidate-file.md#checks-before-any-request).
+  but not a list or a map.
+  - Before, strata read a field of another type as its default. Now the file
+    gives `candidate-invalid` and exit `2`.
+  - The message names the field, such as
+    `variables[0].required: invalid type: string "true", expected a boolean`.
+  - A YAML `yes` or `no` is text. Write `true` or `false`. See
+    [Checks before any request](./candidate-file.md#checks-before-any-request).
 - **A number or a flag with no quotes in a text field of a candidate file keeps
-  its text.** For example, `defaultValue: 8080` gives the default `8080`.
+  its text.** `defaultValue: 8080` gives the default `8080`.
   Release 0.24.0 gave empty text, and sent no default to Palette. So the record
   of such a candidate has another `variablesHash` and root, and `--create` and
   `--validate` send the default. To get the record of 0.24.0, write
@@ -569,17 +576,18 @@ field, a value, an input, or an option is in the sections above.
   has this shape. A record of an older release validates, but for a variable
   with `name: null`.
 - **`compare --validate` and `behind` ask the route of the profile version for a
-  profile that the cluster runs.** For such a profile, the route of the cluster
-  checks no sent tag, so it accepted each move. Release 0.24.0 sent
+  profile that the cluster runs.** The cluster route accepted each move. It
+  checks no sent tag for such a profile. Release 0.24.0 sent
   `POST /v1/spectroclusters/{uid}/validate/packs` for these cases. Now strata
-  sends `POST /v1/clusterprofiles/{uid}/validate/packs`. `compare --validate`
-  does so for a profile version that the cluster runs. `behind` does so for each
-  record of a cluster, one time for each profile whose template holds the pin.
-  So `paletteValidation` can hold a refusal where it held `accepts`. The errors
-  cover each cluster that runs the version, and the message names them. The exit
-  code does not change. See [Ask Palette if it accepts the
-  packs](../commands/compare/validate.md) and
-  [Palette accepts the move, or refuses it](../commands/behind.md#palette-accepts-the-move-or-refuses-it).
+  sends `POST /v1/clusterprofiles/{uid}/validate/packs`.
+  - `compare --validate` sends it for a profile version that the cluster runs.
+  - `behind` sends it for each record of a cluster, one time for each profile
+    whose template holds the pin.
+  - So `paletteValidation` can hold a refusal where it held `accepts`. The
+    errors cover each cluster that runs the version, and the message names them.
+    The exit code does not change. See [Ask Palette if it accepts the
+    packs](../commands/compare/validate.md) and
+    [Palette accepts the move, or refuses it](../commands/behind.md#palette-accepts-the-move-or-refuses-it).
 
 ### For a user of the CI drop-ins
 
@@ -653,11 +661,12 @@ value is in the sections above.
 - **`strata-preflight`: two rules left the catalog.** `gke-pool-multiple-3` and
   `profile-cloud-mismatch` are gone. The validate route of Palette makes these
   two checks, and the rule `palette-validate` shows its answer.
-  `palette-validate` is a probe of the `palette` tier. It needs the key, and it
-  changes the exit code only with `--strict`. So a GKE pool with a size that is
-  not a multiple of 3 now gives exit `0`. It gave exit `1`. With `--offline`, no
-  rule checks the size of the pool. To stop a build for this fault, run the
-  `palette` tier with the key and `--strict`.
+  - `palette-validate` is a probe of the `palette` tier. It needs the key, and
+    it changes the exit code only with `--strict`. So a GKE pool with a size
+    that is not a multiple of 3 now gives exit `0`. It gave exit `1`. With
+    `--offline`, no rule checks the size of the pool.
+  - To stop a build for this fault, run the `palette` tier with the key and
+    `--strict`.
 - **`--rule` refuses an id that is not in the catalog.** The error is `usage`,
   the exit code is `2`, and strata sends no request. The message names the id
   and tells how to list the ids: `strata-preflight --rules`. Before, such an id
@@ -689,29 +698,32 @@ value is in the sections above.
   pool, or host. Before, they checked the first. So `--strict` can give exit `1`
   where it gave `0`.
 - **`preflight cluster:<c>` reads the variables of the cluster.** It sends one
-  more request, `GET /v1/spectroclusters/{uid}/variables`. Each profile of the
-  entity has the variables of the cluster. A sensitive value has the mask that
-  Palette gives. `entity.json` of `--out` has the variables. An error of this
-  request stops the run with exit `2`. An answer that the route is not there
-  gives no variables. The key must have permission to read the variables of the
-  cluster.
+  more request, `GET /v1/spectroclusters/{uid}/variables`.
+  - Each profile of the entity has the variables of the cluster. A sensitive
+    value has the mask that Palette gives. `entity.json` of `--out` has the
+    variables.
+  - An error of this request stops the run with exit `2`. An answer that the
+    route is not there gives no variables.
+  - The key must have permission to read the variables of the cluster.
 - **A change file merges `variables` by name.** A variable of the file replaces
   the variable with that name. A new name adds a variable. Before, the list of
   the file replaced the list. A change file cannot remove a variable now.
 - **`snapshot --from-candidate --validate`, with a disabled pack.** The import
   validate route refuses the candidate with HTTP `500` and
   `DisabledPacksForbidden`. Strata now reads this as a refusal of Palette. The
-  error kind is `palette-refuses`, with the code. It was `api`. The kind names
-  stay, but this case gives another kind. The exit code stays `2`, and strata
-  writes no record. A program that reads `error.kind` must read
+  error kind is `palette-refuses`, with the code, in place of `api`. The kind
+  names stay, but this case gives another kind. The exit code stays `2`, and
+  strata writes no record. A program that reads `error.kind` must read
   `palette-refuses` for this case.
 - **`behind` asks Palette about each pin that is behind.** This applies to a run
   with no `--no-impact`. Strata sends one request for each record that pins the
   pack, in the project of the pin. It also reads the document of each cluster
-  record. So a run sends more requests and takes more time. The exit code does
-  not change. The key must have permission to send `POST .../validate/packs`. If
-  it does not, the pin has `paletteValidationError`, and the report shows
-  `palette gave no answer`.
+  record.
+  - So a run sends more requests and takes more time. The exit code does not
+    change.
+  - The key must have permission to send `POST .../validate/packs`. If it does
+    not, the pin has `paletteValidationError`, and the report shows
+    `palette gave no answer`.
 
 ### For a user of the library of strata
 
