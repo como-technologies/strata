@@ -200,8 +200,10 @@ profile, or pack version.
     draft: see [Secrets in the values](../internals/palette/profiles.md#secrets-in-the-values).
     `valuesCanon`: the values as JSON with
     sorted keys, or `null` when the values do not parse. `valuesHash`: the
-    sha256 of `valuesCanon`, or of the trimmed text when the values do not
-    parse. `valuesParseError`, only then: why.
+    sha256 of the canonical text of `valuesCanon` (see
+    [The canonical form](../internals/hashes.md#the-canonical-form)), or of the
+    trimmed text when the values do not parse. `valuesParseError`, only then:
+    why.
   - `manifests[]`, sorted by name: `name`, `uid`, `digest`, `content`,
     `contentHash`, and `contentParseError` when the content does not parse.
   - `images`, only when the values declare some: each image of

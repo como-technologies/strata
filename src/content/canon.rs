@@ -16,12 +16,39 @@ pub fn sha256_hex(s: &str) -> String {
 /// The canonical text of `v`: the text that each hash of strata covers.
 ///
 /// The rule: an object writes its keys in sorted order, and the text holds no whitespace. A string
-/// has the escapes of JSON. Strata sorts the keys here, so the result does not depend on the map
-/// ordering feature of `serde_json`. A change to this rule moves the root of each record.
+/// has the escapes of JSON. It also has `\uXXXX` for each character that a YAML parser does not
+/// read back as itself: DEL, U+0080 to U+009F, U+2028, U+2029, U+FFFE, and U+FFFF. So the text is
+/// YAML that means the same value. Strata sorts the keys here, so the result does not depend on
+/// the map ordering feature of `serde_json`. A change to this rule moves the root of each record
+/// that holds such a value.
 pub fn canonical_json(v: &Value) -> String {
     let mut out = String::new();
     write_canon(v, &mut out);
     out
+}
+
+/// Write `s` as a JSON string, with `\uXXXX` for each character that [`needs_escape`] names.
+fn write_string(s: &str, out: &mut String) {
+    let json = serde_json::to_string(s).expect("string serializes");
+    for c in json.chars() {
+        if needs_escape(c) {
+            out.push_str(&format!("\\u{:04x}", c as u32));
+        } else {
+            out.push(c);
+        }
+    }
+}
+
+/// True for a character that JSON writes as it is, and that a YAML parser does not read back as
+/// itself in a double-quoted text.
+///
+/// The parser reads U+0085, U+2028, and U+2029 as a line break, and folds it. It refuses DEL, the
+/// other control characters of U+0080 to U+009F, and the two characters U+FFFE and U+FFFF.
+const fn needs_escape(c: char) -> bool {
+    matches!(
+        c,
+        '\u{7f}'..='\u{9f}' | '\u{2028}' | '\u{2029}' | '\u{fffe}' | '\u{ffff}'
+    )
 }
 
 fn write_canon(v: &Value, out: &mut String) {
@@ -29,7 +56,7 @@ fn write_canon(v: &Value, out: &mut String) {
         Value::Null => out.push_str("null"),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         Value::Number(n) => out.push_str(&n.to_string()),
-        Value::String(s) => out.push_str(&serde_json::to_string(s).expect("string serializes")),
+        Value::String(s) => write_string(s, out),
         Value::Array(a) => {
             out.push('[');
             for (i, x) in a.iter().enumerate() {
@@ -48,7 +75,7 @@ fn write_canon(v: &Value, out: &mut String) {
                 if i > 0 {
                     out.push(',');
                 }
-                out.push_str(&serde_json::to_string(k).expect("key serializes"));
+                write_string(k, out);
                 out.push(':');
                 write_canon(&m[*k], out);
             }
@@ -191,6 +218,83 @@ mod tests {
             canonical_json(&v),
             r#"{"a":1.5,"b":[1,{"a":"x","z":null}]}"#
         );
+    }
+
+    /// The canonical text of a string, read again as YAML.
+    fn read_again(s: &str) -> Value {
+        let text = canonical_json(&Value::String(s.to_string()));
+        match canon_yaml(&text) {
+            Canon::Parsed(v) => v,
+            Canon::Unparseable(e) => panic!("the canonical text of {s:?} is not YAML: {e}"),
+        }
+    }
+
+    #[test]
+    fn a_string_with_a_line_break_of_yaml_reads_again_as_itself_from_its_canonical_text() {
+        // YAML reads each of these three raw characters as a line break, and folds it
+        for c in ['\u{85}', '\u{2028}', '\u{2029}'] {
+            let s = format!("a{c}b");
+            assert_eq!(read_again(&s), Value::String(s.clone()), "{c:?}");
+        }
+    }
+
+    #[test]
+    fn a_string_with_a_character_that_yaml_does_not_allow_reads_again_as_itself() {
+        // YAML refuses each of these as a raw character: DEL, a C1 control, U+FFFE, and U+FFFF
+        for c in ['\u{7f}', '\u{80}', '\u{9f}', '\u{fffe}', '\u{ffff}'] {
+            let s = format!("a{c}b");
+            assert_eq!(read_again(&s), Value::String(s.clone()), "{c:?}");
+        }
+    }
+
+    #[test]
+    fn a_string_of_each_character_reads_again_as_itself_from_its_canonical_text() {
+        let all: String = ('\0'..=char::MAX).collect();
+        assert_eq!(read_again(&all), Value::String(all.clone()));
+    }
+
+    #[test]
+    fn a_key_with_a_line_break_of_yaml_reads_again_as_itself_from_its_canonical_text() {
+        let v = serde_json::json!({"a\u{2029}b": 1});
+        match canon_yaml(&canonical_json(&v)) {
+            Canon::Parsed(again) => assert_eq!(again, v),
+            Canon::Unparseable(e) => panic!("not YAML: {e}"),
+        }
+    }
+
+    #[test]
+    fn the_canonical_text_of_a_string_escapes_only_what_yaml_cannot_hold_raw() {
+        let kept = "é \u{a0} \u{2e80} \u{1f600} \u{10ffff}";
+        assert_eq!(
+            canonical_json(&Value::String(format!("tab\t quote\" slash\\ {kept}"))),
+            format!(r#""tab\t quote\" slash\\ {kept}""#)
+        );
+        for c in [
+            '\u{7f}', '\u{85}', '\u{9f}', '\u{2028}', '\u{2029}', '\u{fffe}',
+        ] {
+            assert_eq!(
+                canonical_json(&Value::String(c.to_string())),
+                format!("\"\\u{:04x}\"", c as u32)
+            );
+        }
+    }
+
+    #[test]
+    fn the_hash_of_a_value_with_a_line_break_of_yaml_covers_the_text_with_its_escape() {
+        // `\L` is U+2028 in a double-quoted YAML text
+        let (hash, error) = hash_yaml("k: \"a\\Lb\"\n");
+        assert!(error.is_none());
+        let escaped = concat!(r#"{"k":"a\u"#, "2028", r#"b"}"#);
+        assert_eq!(hash, sha256_hex(escaped));
+        // 0.25.0 hashed the text with the character as it is
+        assert_ne!(hash, sha256_hex("{\"k\":\"a\u{2028}b\"}"));
+    }
+
+    #[test]
+    fn the_hash_of_a_value_with_no_such_character_is_the_hash_of_its_json() {
+        let (hash, error) = hash_yaml("k: \"a\\tb\\u00e9\"\n");
+        assert!(error.is_none());
+        assert_eq!(hash, sha256_hex("{\"k\":\"a\\tb\u{e9}\"}"));
     }
 
     #[test]

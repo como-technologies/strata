@@ -1,8 +1,11 @@
 //! The target of the YAML check of values and manifests, and of the canonical form.
 //!
-//! The canonical form is not public: the record of a profile holds it. So the target builds the
-//! record of a profile whose pack has the input as its values and as its manifest.
+//! The record of a profile holds the canonical form. So the target builds the record of a profile
+//! whose pack has the input as its values and as its manifest. It writes the canonical text with
+//! `canonical_json`, which the library makes public for this check, and reads that text again.
 
+use serde_json::Value;
+use strata::content::canonical_json;
 use strata::snapshot::{Pack, Snapshot};
 
 use crate::support::{AT, answer, raw_profile, utf8};
@@ -35,11 +38,13 @@ pub(crate) fn canon_is_idempotent(values: &str) -> bool {
     assert_eq!(first.root, again.root, "the root of one profile changes");
 
     let pack = pack(&first);
-    if pack.values_parse_error.is_some() {
+    // values that are not YAML have no canonical form, and a long key has no JSON form that a
+    // parser reads back
+    if pack.values_parse_error.is_some() || has_a_long_key(&pack.values_canon) {
         return true;
     }
-    // JSON is YAML, so the canonical form is the values of a pack that means the same
-    let written = serde_json::to_string(&pack.values_canon).expect("a JSON value serializes");
+    // the canonical text is JSON, and JSON is YAML: the text must be values that mean the same
+    let written = canonical_json(&pack.values_canon);
     let second = record(&written, "").expect("the canonical form of values builds a record");
     assert_eq!(
         pack.values_hash,
@@ -47,6 +52,23 @@ pub(crate) fn canon_is_idempotent(values: &str) -> bool {
         "the canonical form of {values:?} is not its own canonical form: {written}"
     );
     true
+}
+
+/// The most characters that a YAML parser reads in a key of one line, with its quotes. YAML 1.2
+/// limits an implicit key to 1024 characters, and a flow mapping has no other form of key.
+const MAX_KEY: usize = 1024;
+
+/// True when the canonical text of a key of `value`, at any depth, is longer than [`MAX_KEY`]. A
+/// parser cannot read that text back, so the check of the canonical form leaves such values out.
+fn has_a_long_key(value: &Value) -> bool {
+    match value {
+        Value::Object(map) => map.iter().any(|(key, item)| {
+            canonical_json(&Value::String(key.clone())).chars().count() > MAX_KEY
+                || has_a_long_key(item)
+        }),
+        Value::Array(items) => items.iter().any(has_a_long_key),
+        _ => false,
+    }
 }
 
 /// Build the record of a profile whose pack and manifest hold the text of `bytes`, and check the
@@ -76,4 +98,15 @@ fn any_text_has_a_stable_canonical_form_as_values_and_as_a_manifest() {
     bolero::check!().for_each(|bytes| {
         values(bytes);
     });
+}
+
+#[test]
+fn a_key_of_more_than_1024_characters_is_left_out_of_the_check_and_one_of_1024_is_not() {
+    // 1022 characters and two quotes make a key of 1024, which a parser reads back
+    for (length, left_out) in [(1022, false), (1023, true)] {
+        let values = format!("? {}\n: 1\n", "k".repeat(length));
+        let snapshot = record(&values, "").expect("an explicit key of any length is YAML");
+        assert_eq!(has_a_long_key(&pack(&snapshot).values_canon), left_out);
+        assert!(canon_is_idempotent(&values));
+    }
 }

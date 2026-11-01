@@ -197,7 +197,7 @@ not a fault. A panic is the only fault.
 | Target | Input | What the target makes sure of |
 | --- | --- | --- |
 | `candidate::a_candidate_file_loads_as_the_candidate_it_writes_or_is_refused_with_a_kind` | A candidate file | The parse and the check give a candidate or an error with a kind. The YAML of a candidate that loads loads as the same candidate. |
-| `canon::any_text_has_a_stable_canonical_form_as_values_and_as_a_manifest` | YAML text | The text is the values and the manifest of a pack. The record is the same each time, and the canonical form is its own canonical form. |
+| `canon::any_text_has_a_stable_canonical_form_as_values_and_as_a_manifest` | YAML text | The text is the values and the manifest of a pack. The record is the same each time. The canonical text of the values, read again as YAML, gives the same hash. A key of more than 1024 characters is the exception: YAML cannot read it again. |
 | `mask::a_draft_pack_keeps_no_secret_in_clear_and_nothing_else_changes` | YAML text | The read of a draft masks the text. Each secret that a schema names has the mask, and no other value changes. A second mask changes nothing. |
 | `mask::a_saved_cluster_keeps_no_password_of_its_group_values_in_clear` | YAML text, or JSON | The save of a cluster with `--raw-dir` masks each password of the group values. The directory loads again, and a second save changes nothing. |
 | `reference::the_text_of_a_ref_parses_as_a_ref_that_prints_the_same_text` | A ref | The text of a ref parses as a ref that prints the same text. |
