@@ -509,6 +509,22 @@ fn the_rules_schema_takes_get_and_post_and_reads_when_a_check_names_no_method() 
 }
 
 #[test]
+fn no_description_of_a_schema_holds_the_markup_of_a_rustdoc_link() {
+    let dir = tempfile::tempdir().unwrap();
+    for kind in ["report", "rules", "ledger", "promotion"] {
+        let (code, out, err) = run(&["--schema", kind], dir.path());
+        assert_eq!(code, 0, "{kind}: {err}");
+        assert!(!out.contains("[`"), "{kind}: a link in a description");
+    }
+    let (_, out, _) = run(&["--schema", "rules"], dir.path());
+    let schema: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(
+        schema["$defs"]["Method"]["oneOf"][0]["description"],
+        "A read of a document: `PaletteApi::get_json`."
+    );
+}
+
+#[test]
 fn the_report_schema_does_not_require_the_ref_of_an_evidence_entry() {
     let dir = tempfile::tempdir().unwrap();
     let (code, out, err) = run(&["--schema", "report"], dir.path());

@@ -113,11 +113,11 @@ fn the_registry_listings_read_the_metadata_and_the_summary_of_a_kind() {
         Some(RegistryKind::Helm)
     );
     assert_eq!(RegistryKind::of_pack_type(PackType::Manifest), None);
-    for kind in [RegistryKind::Pack, RegistryKind::Helm, RegistryKind::Oci] {
-        assert_eq!(RegistryKind::of_kind(kind.route()), Some(kind));
+    for &kind in RegistryKind::ALL {
+        assert_eq!(RegistryKind::from_text(kind.as_str()), Some(kind));
         assert_eq!(RegistryKind::of_pack_type(kind.pack_type()), Some(kind));
     }
-    assert_eq!(RegistryKind::of_kind("spectro"), None);
+    assert_eq!(RegistryKind::from_text("spectro"), None);
 }
 
 #[test]

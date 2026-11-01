@@ -9,6 +9,7 @@ use serde_json::Value;
 use super::zip_by_key;
 use crate::closed_set::impl_closed_set;
 use crate::closed_set::legend::Described;
+use crate::json::value_at;
 
 /// What happened to one leaf or manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -95,7 +96,7 @@ fn render_path(segs: &[Segment]) -> String {
 fn name_keys(items: &[Value]) -> Option<Vec<String>> {
     let mut names = Vec::with_capacity(items.len());
     for it in items {
-        let n = it.as_object()?.get("name")?.as_str()?;
+        let n = value_at(it, "/name").as_str()?;
         if names.iter().any(|x: &String| x == n) {
             return None;
         }

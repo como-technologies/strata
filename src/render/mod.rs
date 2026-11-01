@@ -21,7 +21,7 @@ use crate::json::opt_str;
 use crate::ops::{Chain, ConsumersReport, Listing, PackListing, SetReport, VerifySummary};
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
-use crate::text::cut;
+use crate::text::{cut, plural};
 
 pub use json::JsonRenderer;
 pub use list::{invalid_pack_warnings, set_counts_line};
@@ -81,11 +81,13 @@ fn joined_note<const N: usize>(parts: [Option<&str>; N]) -> Option<String> {
 }
 
 /// `2 profiles`, `1 profile`, or `no profiles`.
+///
+/// Each count and its noun in a report comes from here, so zero reads in one way.
 pub(crate) fn count_of(n: usize, singular: &str) -> String {
+    let ending = plural(n, "", "s");
     match n {
-        0 => format!("no {singular}s"),
-        1 => format!("1 {singular}"),
-        n => format!("{n} {singular}s"),
+        0 => format!("no {singular}{ending}"),
+        n => format!("{n} {singular}{ending}"),
     }
 }
 
@@ -103,11 +105,21 @@ pub(crate) fn capitalized(text: &str) -> String {
     }
 }
 
-/// One line of the answer of Palette, as a report prints it: `palette    accepts`.
+/// The width of the key column of the terminal report: the longest key, `consumers`, and two
+/// spaces.
+const KEY_WIDTH: usize = 11;
+
+/// One line of the terminal report: `key` padded to the key column, and then `text`, as in
+/// `note       the content uses macro region`.
 ///
-/// Four spaces follow the word `palette`, as they follow each other key of a report.
+/// Each key of the report has this one width, so the texts of the lines start in one column.
+pub(crate) fn key_line(key: &str, text: impl std::fmt::Display) -> String {
+    format!("{key:<KEY_WIDTH$}{text}")
+}
+
+/// One line of the answer of Palette, as a report prints it: `palette    accepts`.
 pub fn palette_line(line: &str) -> String {
-    format!("palette    {line}")
+    key_line("palette", line)
 }
 
 /// The renderer for a format.
@@ -246,5 +258,12 @@ mod tests {
     #[test]
     fn a_line_of_the_answer_of_palette_starts_with_the_word_palette_in_the_key_column() {
         assert_eq!(palette_line("accepts"), "palette    accepts");
+    }
+
+    #[test]
+    fn a_key_line_pads_each_key_to_the_width_of_the_longest_key() {
+        assert_eq!(key_line("root", "a -> b"), "root       a -> b");
+        assert_eq!(key_line("consumers", 2), "consumers  2");
+        assert_eq!(key_line("palette", "x"), palette_line("x"));
     }
 }

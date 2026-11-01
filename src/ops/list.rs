@@ -9,15 +9,17 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi, named_entries, profile_versions, recorded_template};
+use crate::closed_set::Open;
 use crate::cloud::Cloud;
 use crate::error::{ErrorDocument, Result, served};
+use crate::profile_type::ProfileType;
 use crate::reference::{Ref, name_version, version};
 use crate::scope::ProfileScope;
 use crate::snapshot::{AppliedProfile, SubjectKind, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
 
-use crate::json::{arr, first_nonempty, items, opt_flag, opt_text, str_at, text, text_map};
+use crate::json::{arr, first_nonempty, items, opt_flag, opt_set, str_at, text, text_map};
 
 use super::{ConsumerCounts, client_for};
 
@@ -118,7 +120,7 @@ pub struct ListedProfile {
     pub scope: Option<ProfileScope>,
     /// With packs: the profile type, for example `cluster` or `add-on`.
     #[serde(default, rename = "type", skip_serializing_if = "Option::is_none")]
-    pub profile_type: Option<String>,
+    pub profile_type: Option<Open<ProfileType>>,
     /// With packs: the number of consumers that the profile document names, its clusters and
     /// the cluster templates that link the version. `consumers` reads each one, and the edge
     /// hosts too.
@@ -468,13 +470,7 @@ where
     // a uid names no project to a reader, so give each line the project's name as well. The
     // selection of a query names them already, from the listing of the tenant
     if options.query.is_empty() {
-        name_projects_of(
-            &mut clusters,
-            |c| &c.project_uid,
-            |c| &mut c.project_name,
-            home,
-            listings,
-        );
+        name_cluster_projects(&mut clusters, home, listings);
     }
     section.clusters = Some(clusters);
     Ok(section)
@@ -558,7 +554,7 @@ fn list_profiles<A: PaletteApi>(
                 version: text(pk, "/version"),
             })
             .collect();
-        p.profile_type = template.and_then(|t| opt_text(t, "/type"));
+        p.profile_type = template.and_then(|t| opt_set(t, "/type"));
         let consumers = ConsumerCounts::of(&doc);
         p.consumers = Some(consumers.count());
         p.consumers_by_kind = Some(consumers);
@@ -659,6 +655,21 @@ pub(super) fn name_projects_of<T, A: PaletteApi>(
             *name_of(r) = p.name.clone();
         }
     }
+}
+
+/// Give each listed cluster the name of its project: see [`name_projects_of`].
+pub(super) fn name_cluster_projects<A: PaletteApi>(
+    clusters: &mut [ListedCluster],
+    home: &Palette<A>,
+    listings: &mut ProjectListings,
+) {
+    name_projects_of(
+        clusters,
+        |c| &c.project_uid,
+        |c| &mut c.project_name,
+        home,
+        listings,
+    );
 }
 
 /// The text at `listing` of an entry of the cluster listing, or at `search` of an entry of the

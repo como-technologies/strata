@@ -3,7 +3,7 @@
 use serde_json::Value;
 
 use super::notes::{tag_rename, tier_path};
-use super::{short_digest, show, shown};
+use super::{count_of, short_digest, show, shown};
 use crate::closed_set::ClosedSet;
 use crate::diff::{
     ChangeFlag, ClusterValueChange, Diff, Leaf, ManifestChange, Op, PackDiff, Status, ValuesDiff,
@@ -11,15 +11,27 @@ use crate::diff::{
 };
 use crate::term::color::Paint;
 
+/// The mark of an operation, as the text reports print it: `~` for a change, `+` for an addition,
+/// and `-` for a removal.
+///
+/// Each line of a change starts with this mark, and the terminal paints it.
+pub(crate) fn op_mark(op: Op) -> &'static str {
+    match op {
+        Op::Changed => "~",
+        Op::Added => "+",
+        Op::Removed => "-",
+    }
+}
+
 /// The mark of a pack in a comparison, as the text reports print it.
 ///
 /// `+` is a pack only in B, `-` a pack only in A, `~` a change, and a space no change.
 pub(crate) fn status_mark(status: Status) -> &'static str {
     match status {
         Status::Unchanged => " ",
-        Status::Changed => "~",
-        Status::Added => "+",
-        Status::Removed => "-",
+        Status::Changed => op_mark(Op::Changed),
+        Status::Added => op_mark(Op::Added),
+        Status::Removed => op_mark(Op::Removed),
     }
 }
 
@@ -151,10 +163,11 @@ pub(crate) fn artifact_lines(pd: &PackDiff) -> Vec<String> {
                 format!(" {v}")
             }
         };
+        let mark = op_mark(c.op);
         match c.op {
-            crate::diff::Op::Changed => format!("~ {kind} {}: {old} -> {new}", c.name),
-            crate::diff::Op::Added => format!("+ {kind} {}{}", c.name, at(new)),
-            crate::diff::Op::Removed => format!("- {kind} {}{}", c.name, at(old)),
+            Op::Changed => format!("{mark} {kind} {}: {old} -> {new}", c.name),
+            Op::Added => format!("{mark} {kind} {}{}", c.name, at(new)),
+            Op::Removed => format!("{mark} {kind} {}{}", c.name, at(old)),
         }
     };
     // a param value is JSON: a string reads as it is, and anything else as compact JSON
@@ -164,12 +177,16 @@ pub(crate) fn artifact_lines(pd: &PackDiff) -> Vec<String> {
         None => String::new(),
     };
     let param = |c: &crate::diff::ParamChange| -> String {
+        let mark = op_mark(c.op);
         match c.op {
-            crate::diff::Op::Changed => {
-                format!("~ param {}: {} -> {}", c.name, value(&c.old), value(&c.new))
-            }
-            crate::diff::Op::Added => format!("+ param {}: {}", c.name, value(&c.new)),
-            crate::diff::Op::Removed => format!("- param {}: {}", c.name, value(&c.old)),
+            Op::Changed => format!(
+                "{mark} param {}: {} -> {}",
+                c.name,
+                value(&c.old),
+                value(&c.new)
+            ),
+            Op::Added => format!("{mark} param {}: {}", c.name, value(&c.new)),
+            Op::Removed => format!("{mark} param {}: {}", c.name, value(&c.old)),
         }
     };
     pd.image_changes
@@ -188,14 +205,11 @@ pub(crate) fn artifacts_summary(d: &Diff) -> Option<String> {
         return None;
     }
     let packs = d.packs.iter().filter(|p| p.images || p.charts).count();
-    let n = |count: usize, one: &str, many: &str| {
-        format!("{count} {}", crate::text::plural(count, one, many))
-    };
     Some(format!(
         "{}, {} changed in {}",
-        n(s.images_changed, "image", "images"),
-        n(s.charts_changed, "chart", "charts"),
-        n(packs, "pack", "packs")
+        count_of(s.images_changed, "image"),
+        count_of(s.charts_changed, "chart"),
+        count_of(packs, "pack")
     ))
 }
 

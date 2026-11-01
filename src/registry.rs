@@ -18,7 +18,7 @@ use crate::api::{Palette, PaletteApi, RegistryKind};
 use crate::closed_set::{ClosedSet, Open};
 use crate::diff::{RegistrySync, SyncRecovery};
 use crate::error::{Error, Result, served, unread_reason};
-use crate::json::{flag, opt_str, opt_text, str_at, take_items, text};
+use crate::json::{flag, opt_set, opt_text, str_at, take_items, text};
 use crate::oci_provider::OciProvider;
 use crate::pack_state::PackState;
 use crate::pack_type::PackType;
@@ -161,7 +161,7 @@ impl<'a, A: PaletteApi> Registries<'a, A> {
         let Some(meta) = registry_entry(self.metadata()?, "/uid", uid) else {
             return Ok(None);
         };
-        let kind = RegistryKind::of_kind(str_at(meta, "/kind"));
+        let kind = RegistryKind::from_text(str_at(meta, "/kind"));
         let private = flag(meta, "/isPrivate");
         match kind {
             Some(RegistryKind::Helm) => Ok(private.then_some(Unsynced {
@@ -296,7 +296,7 @@ pub(crate) fn registry_entry<'e>(entries: &'e [Value], ptr: &str, uid: &str) -> 
 /// The provider type of the OCI registry in `reg`, an entry of the OCI summary listing, or `None`
 /// when the entry names no type.
 fn provider_of(reg: &Value) -> Option<Open<OciProvider>> {
-    opt_str(reg, "/spec/providerType").map(Open::from_text)
+    opt_set(reg, "/spec/providerType")
 }
 
 /// How Palette makes the pack of a layer from a registry that it does not sync.
@@ -338,7 +338,7 @@ pub(crate) fn pack_state(summary: &Value) -> Option<Open<PackState>> {
 /// The state that Spectro Cloud gives a version that it retired: `deprecated`, `disabled`, or
 /// `deleted`.
 fn system_state(summary: &Value) -> Option<Open<PackState>> {
-    opt_str(summary, "/spec/annotations/system_state").map(Open::from_text)
+    opt_set(summary, "/spec/annotations/system_state")
 }
 
 /// The state of a pack version that Palette no longer serves: `disabled` or `deleted` in

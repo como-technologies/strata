@@ -3,8 +3,12 @@
 //! - A phrase from a list of names, and the name of an object.
 //! - A long text cut to a length.
 //! - A mark for an empty text, and a text in a cell of a markdown table.
+//! - A JSON Schema as text, with its descriptions in plain words.
 //!
 //! `strata-preflight` calls the public ones, so both tools write each of these in one way.
+
+use schemars::Schema;
+use serde_json::Value;
 
 /// The name of an object, or its uid when Palette gives no name.
 pub fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
@@ -13,7 +17,10 @@ pub fn name_or_uid<'a>(name: &'a str, uid: &'a str) -> &'a str {
 
 /// `one` when `n` is 1, else `many`: the noun that agrees with a count, such as `cluster` or
 /// `clusters`.
-pub(crate) fn plural<'a>(n: usize, one: &'a str, many: &'a str) -> &'a str {
+///
+/// It also picks a verb, an ending, or a pair of words, such as `"was"` and `"were"`. Each message
+/// of strata, and each report of `strata-preflight`, that agrees a word with a count calls it.
+pub fn plural<T>(n: usize, one: T, many: T) -> T {
     if n == 1 { one } else { many }
 }
 
@@ -49,6 +56,58 @@ pub fn cut(s: &str, n: usize) -> String {
     part
 }
 
+/// `text` with each rustdoc link written as a plain code span: ``[`Snapshot`]`` is `` `Snapshot` ``.
+///
+/// A doc comment links a type for the reader of rustdoc. A reader of a schema sees the markup of
+/// the link and cannot follow it.
+fn plain_doc(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find("[`") {
+        // `span` starts at the opening backtick of the code span
+        let span = &rest[start + 1..];
+        let Some(end) = span[1..].find("`]") else {
+            break;
+        };
+        out.push_str(&rest[..start]);
+        out.push_str(&span[..end + 2]);
+        rest = &span[end + 3..];
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Write each `description` of the schema `value` as [`plain_doc`] writes a doc comment.
+fn plain_descriptions(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            for (key, item) in map.iter_mut() {
+                match item {
+                    Value::String(text) if key == "description" => *text = plain_doc(text),
+                    _ => plain_descriptions(item),
+                }
+            }
+        }
+        Value::Array(items) => items.iter_mut().for_each(plain_descriptions),
+        _ => {}
+    }
+}
+
+/// The JSON Schema `schema` as indented JSON, with no rustdoc link in a description.
+///
+/// A description of a schema is the doc comment of a type or a field, and a person who writes a
+/// document reads it. `strata schema` and `strata-preflight --schema` print the schema here, so
+/// that both show a link as a plain code span.
+///
+/// # Errors
+///
+/// A [`serde_json::Error`] when the schema cannot be written as JSON.
+pub fn schema_json(schema: &Schema) -> serde_json::Result<String> {
+    let mut value = schema.as_value().clone();
+    plain_descriptions(&mut value);
+    serde_json::to_string_pretty(&value)
+}
+
 /// `s`, or `-` when `s` is empty.
 ///
 /// Each report that shows a field with no value shows this one mark.
@@ -73,6 +132,8 @@ mod tests {
         assert_eq!(plural(0, "cluster", "clusters"), "clusters");
         assert_eq!(plural(1, "cluster", "clusters"), "cluster");
         assert_eq!(plural(2, "cluster", "clusters"), "clusters");
+        assert_eq!(plural(1, "was", "were"), "was");
+        assert_eq!(plural(3, String::from("a"), String::from("b")), "b");
     }
 
     #[test]
@@ -92,6 +153,44 @@ mod tests {
         assert_eq!(cut("abcd", 1), "…");
         assert_eq!(cut("abcd", 0), "");
         assert_eq!(cut("", 0), "");
+    }
+
+    #[test]
+    fn a_doc_comment_shows_each_link_as_a_plain_code_span_and_keeps_the_other_text() {
+        assert_eq!(
+            plain_doc("The digest, as [`Snapshot::content_digest`] gives it: see [`Template`]."),
+            "The digest, as `Snapshot::content_digest` gives it: see `Template`."
+        );
+        assert_eq!(
+            plain_doc("an [array] and `code` and [`open"),
+            "an [array] and `code` and [`open"
+        );
+        assert_eq!(plain_doc("[`a`][`b`]"), "`a``b`");
+        assert_eq!(plain_doc(""), "");
+    }
+
+    #[test]
+    fn a_schema_prints_each_description_without_link_markup() {
+        let schema = Schema::try_from(serde_json::json!({
+            "description": "A [`Type`].",
+            "properties": {
+                "description": {"description": "see [`Field`]", "type": "string"},
+                "list": {"items": [{"description": "[`First`]"}]}
+            },
+            "const": "[`kept`]"
+        }))
+        .unwrap();
+        let printed: Value = serde_json::from_str(&schema_json(&schema).unwrap()).unwrap();
+        assert_eq!(printed["description"], "A `Type`.");
+        assert_eq!(
+            printed["properties"]["description"]["description"],
+            "see `Field`"
+        );
+        assert_eq!(
+            printed["properties"]["list"]["items"][0]["description"],
+            "`First`"
+        );
+        assert_eq!(printed["const"], "[`kept`]", "only a description changes");
     }
 
     #[test]

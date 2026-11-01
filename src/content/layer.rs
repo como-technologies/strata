@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use crate::closed_set::impl_texts;
+
 /// A profile layer. Palette names them; strata keeps unknown names as [`Layer::Other`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Layer {
@@ -23,34 +25,23 @@ pub enum Layer {
     Other,
 }
 
+// The layer as Palette names it: `kernel`, `os`, `k8s`, `cni`, `csi`, or `addon`. `app` is a tier
+// of an app profile, and `other` is a name that strata does not know.
+impl_texts!(pub(crate) Layer {
+    Kernel => "kernel",
+    Os => "os",
+    K8s => "k8s",
+    Cni => "cni",
+    Csi => "csi",
+    Addon => "addon",
+    App => "app",
+    Other => "other",
+});
+
 impl Layer {
     /// Parse Palette's layer name; unknown names become [`Layer::Other`].
     pub fn parse(name: &str) -> Layer {
-        match name {
-            "kernel" => Layer::Kernel,
-            "os" => Layer::Os,
-            "k8s" => Layer::K8s,
-            "cni" => Layer::Cni,
-            "csi" => Layer::Csi,
-            "addon" => Layer::Addon,
-            "app" => Layer::App,
-            _ => Layer::Other,
-        }
-    }
-
-    /// The layer as Palette names it: `kernel`, `os`, `k8s`, `cni`, `csi`, or `addon`. `app` for a
-    /// tier of an app profile, and `other` for a name strata does not know.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            Layer::Kernel => "kernel",
-            Layer::Os => "os",
-            Layer::K8s => "k8s",
-            Layer::Cni => "cni",
-            Layer::Csi => "csi",
-            Layer::Addon => "addon",
-            Layer::App => "app",
-            Layer::Other => "other",
-        }
+        Layer::from_text(name).unwrap_or(Layer::Other)
     }
 
     /// Sort key: infrastructure layers first, add-ons after, unknown last.

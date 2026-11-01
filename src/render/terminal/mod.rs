@@ -19,7 +19,7 @@ use super::same_release::{
 use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
 };
-use super::{Renderer, count_of, entry_error, palette_line, short};
+use super::{Renderer, count_of, entry_error, key_line, palette_line, short};
 use crate::closed_set::ClosedSet;
 use crate::cluster_state::ClusterState;
 use crate::diff::Diff;
@@ -65,34 +65,37 @@ fn head_lines(d: &Diff, p: &Paint) -> Vec<String> {
         p.dim(dash(d.b.shown_uid()))
     ));
     let word = diff_word(d);
-    out.push(format!(
-        "root       {} -> {}   {}",
-        p.dim(short(&d.root_a)),
-        p.dim(short(&d.root_b)),
-        if d.same || d.same_content {
-            p.bgreen(word)
-        } else {
-            p.bred(word)
-        }
+    out.push(key_line(
+        "root",
+        format!(
+            "{} -> {}   {}",
+            p.dim(short(&d.root_a)),
+            p.dim(short(&d.root_b)),
+            if d.same || d.same_content {
+                p.bgreen(word)
+            } else {
+                p.bred(word)
+            }
+        ),
     ));
     for note in diff_notes(d) {
         match note {
-            DiffNote::Warn(text) => out.push(format!("note       {}", p.byellow(&text))),
-            DiffNote::Good(text) => out.push(format!("note       {}", p.bgreen(&text))),
+            DiffNote::Warn(text) => out.push(key_line("note", p.byellow(&text))),
+            DiffNote::Good(text) => out.push(key_line("note", p.bgreen(&text))),
             DiffNote::Palette(lines) => {
                 out.extend(lines.iter().map(|line| palette_line(line)));
             }
         }
     }
     if let Some(line) = artifacts_summary(d) {
-        out.push(format!("images     {line}"));
+        out.push(key_line("images", line));
     }
     if let Some((a, b)) = consumer_counts(d) {
         // the noun agrees with the count next to it: `1 -> 2 clusters`, `2 -> 1 cluster`
         let noun = crate::text::plural(b, "cluster", "clusters");
-        out.push(format!("consumers  {a} -> {b} {noun}"));
+        out.push(key_line("consumers", format!("{a} -> {b} {noun}")));
     } else if let Some(sentence) = consumers_sentence(d) {
-        out.push(format!("consumers  {sentence}"));
+        out.push(key_line("consumers", sentence));
     }
     out
 }
@@ -446,7 +449,7 @@ fn list_profiles(out: &mut String, p: &Paint, l: &Listing, profiles: &[ListedPro
             if let Some(msg) = entry_error(pr.error.as_ref()) {
                 row.push(format!("({msg})"));
             } else if pr.packs.is_some() {
-                row.push(dash(pr.profile_type.as_deref().unwrap_or("")).to_string());
+                row.push(super::list::profile_type_cell(pr).to_string());
                 row.push(consumer_count(pr.consumers.unwrap_or(0)));
             }
             let marks = profile_marks(pr, l);

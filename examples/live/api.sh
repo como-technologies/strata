@@ -142,6 +142,10 @@
 #       deletes it. It is a credential: do not save it, and do not print it to a log.
 #   api.sh get PATH
 #       GET one path, `/v1/...`, and print the answer. A read, for a check.
+#   api.sh get-status PATH
+#       The request of `get`, with the status of the answer. It prints the HTTP status as
+#       `HTTP <code>` on the first line and the answer after it. It exits 0 for each status.
+#       So a check reads the status and the body of a refusal, and parses no error line.
 #   api.sh app-version [--no-key]
 #       GET /v1/mgmt/app/version, the one route that gives the release of Palette, and print the
 #       answer. With --no-key, send no ApiKey header. Neither call sends a ProjectUid header. A
@@ -776,6 +780,12 @@ post_status() {
   SHOW_STATUS=1 call POST "$path" "$body" || return 2
 }
 
+# get-status PATH: print `HTTP <code>`, then the answer, for each status
+get_status() {
+  [ $# -eq 1 ] && [ -n "$1" ] || die "usage: api.sh get-status PATH"
+  SHOW_STATUS=1 call GET "$1" || return 2
+}
+
 # macro-set NAME VALUE: POST creates a project macro, PATCH changes one that exists
 macro_set() {
   local name=${1:-} value=${2:-} body
@@ -854,6 +864,7 @@ case "${1:-}" in
   macro-delete) shift; macro_delete "$@" ;;
   get-kubeconfig) shift; get_kubeconfig "$@" ;;
   get) shift; [ -n "${1:-}" ] || die "usage: api.sh get PATH"; call GET "$1" ;;
+  get-status) shift; get_status "$@" ;;
   app-version) shift; app_version "$@" ;;
   export) shift; [ -n "${1:-}" ] || die "usage: api.sh export PROFILE_UID [yaml|json]"
     ACCEPT=application/octet-stream call GET "/v1/clusterprofiles/$1/export?format=${2:-yaml}" ;;

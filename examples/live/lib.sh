@@ -140,6 +140,8 @@ create_body() {
 # The registry of the lab and the pack versions in it that the scripts use. pack-states.sh shows what
 # Palette does with each state. addon_pack is a pack that Palette takes in an add-on profile. marked
 # has the mark disabled of Spectro Cloud and no system_state (#125). deleted has system_state deleted.
+# public_repo is the default of the Terraform variable registry_name in terraform/variables.tf: a
+# lab that names its registry in another way changes both.
 public_repo="Public Repo"
 addon_pack=cert-manager
 addon_pack_version=1.21.1

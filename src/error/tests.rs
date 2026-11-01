@@ -124,7 +124,7 @@ fn one_of_each() -> Vec<Error> {
             name: "nginx".into(),
             version: "1.15.1".into(),
             registry: "Public Repo".into(),
-            state: "disabled".into(),
+            state: PackState::Disabled,
         },
         Error::PackInSeveralRegistries {
             name: "csi-aws-ebs".into(),

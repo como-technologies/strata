@@ -21,6 +21,6 @@ pub(crate) fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
         SchemaKind::Packs => schemars::schema_for!(ops::PackListing),
         SchemaKind::Candidate => schemars::schema_for!(strata::candidate::Candidate),
     };
-    println!("{}", serde_json::to_string_pretty(&schema)?);
+    println!("{}", strata::text::schema_json(&schema)?);
     Ok(ExitCode::SUCCESS)
 }

@@ -5,17 +5,19 @@ use crate::api::mask::MASKED;
 use crate::closed_set::ClosedSet;
 use crate::diff::{ChangeFlag, ImpactLevel, Leaf, Op, PackDiff, Status};
 use crate::render::changes::{
-    OpLine, VarLine, artifact_lines, status_mark, status_word, traits_suffix, upstream_line,
-    values_summary, values_unparsed_sentence, version_display,
+    OpLine, VarLine, artifact_lines, op_mark, status_mark, status_word, traits_suffix,
+    upstream_line, values_summary, values_unparsed_sentence, version_display,
 };
 use crate::render::notes::{ARCHIVE_CHANGE_HIDDEN, invalid_mark, tag_rename};
 use crate::term::color::Paint;
 
+/// The mark of `op` in its color: yellow for a change, green for an addition, red for a removal.
 fn opmark(op: Op, p: &Paint) -> String {
+    let mark = op_mark(op);
     match op {
-        Op::Changed => p.yellow("~"),
-        Op::Added => p.green("+"),
-        Op::Removed => p.red("-"),
+        Op::Changed => p.yellow(mark),
+        Op::Added => p.green(mark),
+        Op::Removed => p.red(mark),
     }
 }
 
@@ -43,13 +45,13 @@ pub(super) fn variable_line(v: &VarLine<'_>, p: &Paint) -> String {
     match v {
         VarLine::Added(s) => format!(
             "{} variable {}{}",
-            p.green("+"),
+            opmark(Op::Added, p),
             p.bold(&s.name),
             traits_suffix(s)
         ),
         VarLine::Removed(s) => format!(
             "{} variable {}{}",
-            p.red("-"),
+            opmark(Op::Removed, p),
             p.bold(&s.name),
             traits_suffix(s)
         ),

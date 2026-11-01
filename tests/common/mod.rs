@@ -764,6 +764,24 @@ pub fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
     out
 }
 
+/// The text of each value of a closed set, from its node in a JSON Schema.
+///
+/// The node is a `oneOf` of one `const` for each value, in the order of the enum. The root of the
+/// schema of a type is such a node, and so is a definition under `$defs`.
+pub fn schema_values(node: &Value) -> Vec<String> {
+    node["oneOf"]
+        .as_array()
+        .unwrap_or_else(|| panic!("the schema of a closed set is a oneOf: {node}"))
+        .iter()
+        .map(|v| {
+            v["const"]
+                .as_str()
+                .unwrap_or_else(|| panic!("each value is a const: {v}"))
+                .to_string()
+        })
+        .collect()
+}
+
 /// The version of a manifest, from the root of the repository: `Cargo.toml` or
 /// `preflight/Cargo.toml`.
 pub fn version_of(manifest: &str) -> String {
@@ -975,6 +993,11 @@ pub fn candidate_snapshot(
 //
 // The crate names each route in a const of its own that is not public. So the tests name the
 // route again here, in one place.
+//
+// The route helpers write the route that Palette serves, on purpose. They do not call
+// `strata::api::subject_path` or another function of `strata::api` that builds a route. A test
+// that builds its routes with the code under test cannot see a change of a route. A test of a
+// shipped script or of a stand-in server needs the same route text as the script.
 
 /// The profile listing, `GET /v1/dashboard/clusterprofiles/metadata`.
 pub const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
@@ -1035,6 +1058,11 @@ pub fn group_resolved_values_route(uid: &str) -> String {
 /// The document of the cluster `uid`, `GET /v1/spectroclusters/{uid}`.
 pub fn cluster_route(uid: &str) -> String {
     format!("/v1/spectroclusters/{uid}")
+}
+
+/// The document of the pack `uid`, `GET /v1/packs/{uid}`: its values and the schema of its values.
+pub fn pack_route(uid: &str) -> String {
+    format!("/v1/packs/{uid}")
 }
 
 /// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`.

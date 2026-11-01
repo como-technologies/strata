@@ -9,7 +9,7 @@ use strata::snapshot::Tier;
 
 use common::{
     PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port, read_json, schema,
-    snapshot_from_raw, strata_bin, write_record,
+    schema_values, snapshot_from_raw, strata_bin, write_record,
 };
 
 const ESC: char = '\x1b';
@@ -919,19 +919,6 @@ fn snapshot_from_candidate_reports_local_problems_without_credentials() {
     );
 }
 
-/// The values of a closed set of a record, as `strata schema` names them under `$defs`.
-///
-/// The schema gives a `oneOf`
-/// of one constant for each value, in the order of the enum.
-fn schema_values(schema: &serde_json::Value, def: &str) -> Vec<String> {
-    schema["$defs"][def]["oneOf"]
-        .as_array()
-        .unwrap_or_else(|| panic!("{def} has no oneOf: {}", schema["$defs"][def]))
-        .iter()
-        .map(|c| c["const"].as_str().unwrap().to_string())
-        .collect()
-}
-
 /// The definition of the closed set that `field` names, for a field of a document that strata
 /// writes and reads. Such a field takes each value of the set, or any other text of a later
 /// release.
@@ -941,16 +928,29 @@ fn open_set_ref(field: &serde_json::Value) -> &serde_json::Value {
 }
 
 #[test]
-fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
+fn no_description_of_a_schema_holds_the_markup_of_a_rustdoc_link() {
+    for kind in [
+        "snapshot",
+        "diff",
+        "verify-summary",
+        "chain",
+        "consumers",
+        "behind",
+        "set",
+        "list",
+        "packs",
+        "candidate",
+    ] {
+        assert!(
+            !schema(kind).to_string().contains("[`"),
+            "{kind}: a link in a description"
+        );
+    }
+}
+
+#[test]
+fn the_schema_of_a_record_points_each_closed_set_field_at_the_definition_of_its_set() {
     let v = schema("snapshot");
-    assert_eq!(
-        schema_values(&v, "Template"),
-        ["published", "draft", "applied", "candidate", "registry"]
-    );
-    assert_eq!(
-        schema_values(&v, "UpstreamSource"),
-        ["packRef.digest", "packSummary.digest", "none"]
-    );
     let defs = &v["$defs"];
     assert_eq!(
         open_set_ref(&defs["Source"]["properties"]["template"]),
@@ -961,24 +961,15 @@ fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
         "#/$defs/UpstreamSource"
     );
     assert_eq!(
-        schema_values(&v, "SubjectKind"),
-        ["cluster", "edgeHost", "clusterGroup"]
-    );
-    assert_eq!(
         open_set_ref(&defs["ClusterSource"]["properties"]["kind"]),
         "#/$defs/SubjectKind"
     );
-    assert_eq!(schema_values(&v, "OciProvider"), ["pack", "helm", "zarf"]);
     assert_eq!(
         open_set_ref(&defs["Pack"]["properties"]["registryProviderType"]["anyOf"][0]),
         "#/$defs/OciProvider"
     );
 
     let v = schema("diff");
-    assert_eq!(
-        schema_values(&v, "Tier"),
-        ["applied", "labels", "policy", "running", "shape"]
-    );
     assert_eq!(
         open_set_ref(&v["$defs"]["TierDiff"]["properties"]["tier"]),
         "#/$defs/Tier"
@@ -990,36 +981,34 @@ fn the_schema_names_each_value_of_a_closed_set_of_a_record() {
 }
 
 #[test]
-fn the_schema_names_each_value_of_each_closed_set_of_the_other_documents() {
+fn the_schema_of_each_other_document_points_each_closed_set_field_at_the_definition_of_its_set() {
     let v = schema("snapshot");
-    assert_eq!(schema_values(&v, "Implementation"), ["rust", "bash"]);
     assert_eq!(
         open_set_ref(&v["$defs"]["Tool"]["properties"]["impl"]["anyOf"][0]),
         "#/$defs/Implementation"
     );
     let v = schema("diff");
-    assert_eq!(schema_values(&v, "Side"), ["a", "b"]);
+    assert_eq!(schema_values(&v["$defs"]["Side"]), ["a", "b"]);
     assert_eq!(
         v["$defs"]["RunningBehind"]["properties"]["side"]["$ref"],
         "#/$defs/Side"
     );
     let v = schema("candidate");
-    assert_eq!(schema_values(&v, "LayerKind"), ["manifest"]);
+    assert_eq!(schema_values(&v["$defs"]["LayerKind"]), ["manifest"]);
     assert_eq!(
         v["$defs"]["CandidateLayer"]["properties"]["type"]["anyOf"][0]["$ref"],
         "#/$defs/LayerKind"
     );
     let v = schema("list");
-    assert_eq!(schema_values(&v, "Conjunction"), ["and", "or"]);
     assert_eq!(
         v["$defs"]["SavedFilter"]["properties"]["conjunction"]["$ref"],
         "#/$defs/Conjunction"
     );
-    let v = schema("behind");
     assert_eq!(
-        schema_values(&v, "ChangeFlag"),
-        ["IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"]
+        open_set_ref(&v["$defs"]["ListedProfile"]["properties"]["type"]["anyOf"][0]),
+        "#/$defs/ProfileType"
     );
+    let v = schema("behind");
     assert_eq!(
         open_set_ref(&v["$defs"]["Bump"]["properties"]["flags"]["items"]),
         "#/$defs/ChangeFlag"
@@ -1027,10 +1016,6 @@ fn the_schema_names_each_value_of_each_closed_set_of_the_other_documents() {
     assert_eq!(
         open_set_ref(&v["$defs"]["Bump"]["properties"]["impact"]),
         "#/$defs/ImpactLevel"
-    );
-    assert_eq!(
-        schema_values(&v, "PackState"),
-        ["deprecated", "disabled", "deleted", "absent"]
     );
     assert_eq!(
         open_set_ref(&v["$defs"]["Pin"]["properties"]["pinnedState"]["anyOf"][0]),
@@ -1041,10 +1026,6 @@ fn the_schema_names_each_value_of_each_closed_set_of_the_other_documents() {
         "#/$defs/PackState"
     );
     let v = schema("consumers");
-    assert_eq!(
-        schema_values(&v, "ProfileType"),
-        ["cluster", "infra", "add-on", "system", "app", "pack"]
-    );
     assert_eq!(
         v["$defs"]["ConsumedProfile"]["properties"]["type"]["anyOf"][0]["$ref"],
         "#/$defs/ProfileType"
@@ -1293,10 +1274,6 @@ fn the_schema_of_a_record_names_the_parts_of_a_cluster_that_strata_could_not_rea
     let names = &errors["propertyNames"]["anyOf"];
     assert_eq!(names[0]["$ref"], "#/$defs/ClusterRead");
     assert_eq!(names[1]["type"], "string", "the part of a later release");
-    assert_eq!(
-        schema_values(&v, "ClusterRead"),
-        ["updatesPending", "pendingRepave"]
-    );
 }
 
 #[test]
