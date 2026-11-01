@@ -33,7 +33,7 @@
 #
 # The script posts the comment also after a failed preflight, because a person must read a failed
 # report. It needs pr-comment.sh beside it. A comment that fails turns exit 0 into exit 2. The
-# status of the command wins when it is not 0.
+# status of the command has priority when it is not 0.
 #
 # Needs strata (or STRATA_BIN), with strata-preflight beside it.
 set -euo pipefail
@@ -70,7 +70,7 @@ valued "${STRATA_PREFLIGHT_LIMIT:-}" --limit
 switch "${STRATA_PREFLIGHT_STRICT:-}" --strict
 switch "${STRATA_PREFLIGHT_NO_EXEC:-}" --no-exec
 switch "${STRATA_PREFLIGHT_WATCH:-}" --watch
-# --quiet wins over --verbose, so a verbose run omits it
+# --quiet has priority over --verbose, so a verbose run omits it
 if [ "${STRATA_PREFLIGHT_VERBOSE:-}" = true ]; then args+=(--verbose); else args+=(--quiet); fi
 # each rule id and each record pattern is one argument; read -ra splits and expands nothing
 read -ra rules <<< "${STRATA_PREFLIGHT_RULE:-}"

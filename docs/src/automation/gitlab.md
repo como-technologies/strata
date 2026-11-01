@@ -40,7 +40,8 @@ variables:
 | `strata-preflight` | each merge request pipeline | Runs `preflight.sh` on the body of a create, and keeps the report as an artifact. With `STRATA_PREFLIGHT_COMMENT`, it also keeps one note. See [Preflight in a pipeline](./preflight.md#on-github-and-gitlab). |
 | `strata-merge-gate` | each merge request pipeline | Checks the merge result. Make the merge button wait for it. |
 | `strata-verify` | a pipeline schedule | Checks `STRATA_RECORDS` against Palette and keeps one issue per record that drifted, is unverified, or could not be checked. |
-| `strata-upstream` | a pipeline schedule | Checks the pins of `STRATA_RECORDS` against the registries and keeps one issue per pack that is behind, with the label `STRATA_BEHIND_LABEL`. |
+| `strata-upstream` | a pipeline schedule, when `STRATA_SAVE` is empty | Checks the pins of `STRATA_RECORDS` against the registries and keeps one issue per pack that is behind, with the label `STRATA_BEHIND_LABEL`. |
+| `strata-upstream-save` | a pipeline schedule, when `STRATA_SAVE` names a file | Does the same as `strata-upstream`, and keeps the file as an artifact. |
 | `strata-promote-gate` | a pipeline that carries `STRATA_PROMOTE` | Checks that the records of a promotion are one release. Manual. |
 | `strata-retire-gate` | a pipeline that carries `STRATA_RETIRE` | Checks that no cluster the key can read runs the version. Manual. |
 
@@ -62,12 +63,12 @@ in Settings, Merge requests, turn on "Pipelines must succeed".
 | `STRATA_ALLOW_NO_DIGEST` | the merge gate, the drift report | `true` gives the script `--allow-no-digest`: a pack with no upstream digest does not make the record red. `false` by default. |
 | `STRATA_WHO` | the drift report | `true` gives the script `--who`: the issue of a record that drifted names who changed it. `false` by default. |
 | `STRATA_NO_IMPACT` | the upstream report | `true` gives the script `--no-impact`. `false` by default. |
-| `STRATA_SAVE` | the upstream report | A file for `--save`, which keeps the report of the run. The job keeps the file as an artifact. Empty by default: no file. |
+| `STRATA_SAVE` | the upstream report | A file for `--save`, which keeps the report of the run. Then `strata-upstream-save` runs in place of `strata-upstream`, and keeps the file as an artifact. Empty by default: no file, and no artifact. |
 | `STRATA_PROMOTE_ALLOW` | the promotion gate | The differences to accept, separated by spaces: `registry-move`, `no-digest`. Empty by default. |
-| `PALETTE_PROJECT` | a ref in a project | The project by name, for a ref such as `name@version` in the promotion gate or the retire gate. `PALETTE_PROJECT_UID` wins over it. |
+| `PALETTE_PROJECT` | a ref in a project | The project by name, for a ref such as `name@version` in the promotion gate or the retire gate. `PALETTE_PROJECT_UID` has priority over it. |
 | `STRATA_PREFLIGHT_SOURCE` | the preflight job | The body of the create, or `cluster:UID`. `clusters/payments.json` by default. |
 | `STRATA_PREFLIGHT_CLOUD`, `_TIER`, `_RECORDS` | the preflight job | `--cloud`, `--tier`, and `--records`. `eks`, `static`, and `releases/**/*.json` by default. |
-| `STRATA_PREFLIGHT_CHANGE`, `_PROBES`, `_RELEASE`, `_READY`, `_RULE`, `_EVERY`, `_LIMIT` | the preflight job | The change file, `--probes`, `--release`, `--ready`, `--rule`, `--every`, and `--limit`. Empty by default: the option is not given. `_RULE` is a list separated by spaces. |
+| `STRATA_PREFLIGHT_CHANGE`, `_PROBES`, `_RELEASE`, `_READY`, `_RULE`, `_EVERY`, `_LIMIT` | the preflight job | The change file, `--probes`, `--release`, `--ready`, `--rule`, `--every`, and `--limit`. Empty by default: the job does not give the option. `_RULE` is a list separated by spaces. |
 | `STRATA_PREFLIGHT_STRICT`, `_NO_EXEC`, `_VERBOSE`, `_WATCH` | the preflight job | `true` gives the option of the same name. `false` by default. |
 | `STRATA_PREFLIGHT_OUT` | the preflight job | The directory for `--out`. `preflight` by default. The job keeps it as an artifact. |
 | `STRATA_PREFLIGHT_COMMENT` | the preflight job | `true` posts `report.md` as one note on the merge request, with `pr-comment.sh --preflight`. `false` by default. It needs `GITLAB_TOKEN`. |
@@ -78,9 +79,9 @@ no setting. `--repo group/subgroup/project` names a project from a terminal.
 
 ## Install strata in a job
 
-`install-strata.sh` downloads one release. When `cosign` is on the `PATH`, it
-checks the signature of `SHA256SUMS`. It checks every file against `SHA256SUMS`,
-and prints the path of the binary:
+`install-strata.sh` downloads one release. When `cosign` 3 or later is on the
+`PATH`, it checks the signature of `SHA256SUMS`. It checks every file against
+`SHA256SUMS`, and prints the path of the binary:
 
 ```bash
 bash install-strata.sh --version v0.25.0 --dir .strata
@@ -113,9 +114,10 @@ markers.
 The scripts create the label before they add it, with a description that says
 what it means, so a project that does not have it yet gets it.
 
-Two things differ. On GitLab the scripts read the first 100 open issues with the
+One thing differs. On GitLab the scripts read the first 100 open issues with the
 label, the first 100 labels, and the first 100 notes of a merge request; on
 GitHub they read the first 1000 issues, the first 1000 labels, and every page of
-the comments. On GitLab `pr-comment.sh --dry-run` needs `GITLAB_TOKEN` in the
-environment, and `verify-report.sh --dry-run` and `upstream-report.sh --dry-run`
-do not.
+the comments.
+
+A dry run calls no host. So `pr-comment.sh --dry-run`, `verify-report.sh --dry-run`,
+and `upstream-report.sh --dry-run` need no `GITLAB_TOKEN`.

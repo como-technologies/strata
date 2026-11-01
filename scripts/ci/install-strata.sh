@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Install one strata release, with its CI scripts, and check every file against SHA256SUMS.
+# Install one strata release, with its CI scripts. Check the signature of SHA256SUMS, and check
+# every file against SHA256SUMS.
 #
 #   scripts/ci/install-strata.sh [--version vX.Y.Z] [--dir DIR] [--repo OWNER/REPO]
 #                                [--target TARGET] [--bin-only] [--require-signature]
@@ -16,8 +17,9 @@
 #
 # When cosign 3 or later is on the PATH, the installer makes sure that the release workflow of the
 # repository signed SHA256SUMS. A signature that does not verify stops the install. Without cosign,
-# the installer says that it did not verify the signature. --require-signature makes that an
-# error: the install stops before any download.
+# or with a cosign older than 3, the installer says that it did not check the signature. The
+# bundle of a release is in the format of cosign 3. --require-signature makes that an error: the
+# install stops before any download.
 #
 # --version defaults to STRATA_VERSION, and latest means the latest release. A private repository
 # needs a token that can read it in STRATA_TOKEN, GITHUB_TOKEN or GH_TOKEN; a public one needs no
@@ -49,10 +51,17 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# A missing cosign stops --require-signature before the first download.
+# A missing cosign, and a cosign older than 3, stop --require-signature before the first download.
+# When `cosign version` prints no number, the installer tries the cosign that it has.
 have_cosign=""
-command -v cosign > /dev/null && have_cosign=1
-[ -z "$require_signature" ] || [ -n "$have_cosign" ] \
+cosign_older=""
+if command -v cosign > /dev/null; then
+  have_cosign=1
+  cosign_major=$(cosign version 2> /dev/null \
+    | sed -n 's/^GitVersion:[[:space:]]*v\{0,1\}\([0-9]\{1,\}\)\..*/\1/p' | sed -n 1p) || true
+  [ -z "$cosign_major" ] || [ "$cosign_major" -ge 3 ] || cosign_older=1
+fi
+[ -z "$require_signature" ] || { [ -n "$have_cosign" ] && [ -z "$cosign_older" ]; } \
   || die "--require-signature needs cosign 3 or later on the PATH"
 
 # The release carries one binary for each target it builds.
@@ -117,10 +126,10 @@ else
 fi
 
 # The bundle says that the release workflow of this repository, at this tag, made SHA256SUMS. One
-# signature covers every file, because every file is checked against the sums. A release can lack
-# the bundle and still install, unless --require-signature is there.
+# signature covers every file, because the installer checks every file against the sums. A release
+# can lack the bundle and still install, unless --require-signature is there.
 bundle="SHA256SUMS.sigstore.json"
-if [ -n "$have_cosign" ]; then
+if [ -n "$have_cosign" ] && [ -z "$cosign_older" ]; then
   id=$(asset_id "$bundle")
   if [ -n "$id" ]; then
     fetch_asset "$id" "$bundle"
@@ -137,7 +146,8 @@ if [ -n "$have_cosign" ]; then
     note "signature not verified: the release $tag has no $bundle"
   fi
 else
-  note "signature not verified: cosign is not on the PATH; install cosign 3 or later, or pass --require-signature"
+  if [ -n "$cosign_older" ]; then cause="cosign older than 3"; else cause="cosign is not on the PATH"; fi
+  note "signature not verified: $cause; install cosign 3 or later to check it, and pass --require-signature to make this an error"
 fi
 
 # Check before anything is installed, and check the names the release signed.

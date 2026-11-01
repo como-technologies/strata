@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Post a strata comparison as one pull request comment and set a label from its impact.
 #
-#   scripts/ci/pr-comment.sh <A> <B> [--pr N] [--repo OWNER/REPO] [--label NAME] [--threshold LEVEL]
-#                            [--repave] [--dry-run]
+#   scripts/ci/pr-comment.sh <A> <B> [--pr N] [--repo OWNER/REPO] [--host github|gitlab]
+#                            [--label NAME] [--threshold LEVEL] [--repave] [--dry-run]
 #
 # A and B are refs strata understands: snapshot files, uids, or name@version. A ref that is not a
 # file is snapshotted once, so both renderings read files and Palette is asked once. The comment starts
@@ -152,7 +152,7 @@ if [ "$host_kind" = gitlab ]; then
   project=${CI_PROJECT_ID:-}
   # a path such as group/sub/project addresses a project too, with its slashes encoded
   [ -n "$project" ] || project=$(printf '%s' "${repo:-}" | sed 's#/#%2F#g')
-  [ -n "${GITLAB_TOKEN:-}" ] || die "set GITLAB_TOKEN: a job token cannot write notes"
+  [ -n "$dry" ] || [ -n "${GITLAB_TOKEN:-}" ] || die "set GITLAB_TOKEN: a job token cannot write notes"
 fi
 
 # Impact levels in the order strata defines them; the label follows the threshold.

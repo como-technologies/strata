@@ -9,7 +9,7 @@ on:
   workflow_call:
     inputs:
       a:
-        description: The base ref, a snapshot file in the caller's checkout, a profile uid, or name@version
+        description: The base ref, a snapshot file in the checkout of the caller, a profile uid, or name@version
         required: true
         type: string
       b:
@@ -25,7 +25,7 @@ on:
         default: repave
         type: string
       repave:
-        description: Ask Palette if the change repaves the cluster, and let its answer decide the label. One ref must be a cluster, and the other a profile version that Palette holds
+        description: Ask Palette if the change repaves the cluster, and use its answer for the label. One ref must be a cluster, and the other a profile version that Palette holds
         default: false
         type: boolean
       palette-api:
@@ -38,7 +38,7 @@ on:
         type: string
     secrets:
       strata-token:
-        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The caller's own token cannot read another private repository.
+        description: A token that can read como-technologies/strata (contents read), needed while that repository is private. The token of the caller cannot read another private repository.
         required: false
       palette-api-key:
         description: PALETTE_API_KEY, needed only when a ref is not a snapshot file, or when repave is true
@@ -55,7 +55,7 @@ jobs:
   comment:
     runs-on: ubuntu-latest
     steps:
-      # the caller's repository, where snapshot files live
+      # the repository of the caller, where snapshot files live
       - uses: actions/checkout@v7
       # this repository at the requested tag, for the installer and the script
       - uses: actions/checkout@v7
@@ -75,7 +75,7 @@ jobs:
             --require-signature
       - name: comment and label
         env:
-          # the caller's token: it owns the pull request being commented on
+          # the token of the caller: it can write a comment on the pull request
           GH_TOKEN: ${{ github.token }}
           STRATA_BIN: ${{ github.workspace }}/.strata/bin/strata
           PALETTE_API_KEY: ${{ secrets.palette-api-key }}

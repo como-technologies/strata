@@ -624,7 +624,7 @@ fn the_sentences_that_the_style_review_of_wave_11_named_keep_to_the_limits() {
     let sentences_to_check = [
         (
             "automation/preflight.md",
-            "installs the two binaries and runs",
+            "checks the signature of `SHA256SUMS`, installs the two binaries,",
             25,
         ),
         ("automation/preflight.md", "markdown to the job summary", 25),
@@ -641,7 +641,7 @@ fn the_sentences_that_the_style_review_of_wave_11_named_keep_to_the_limits() {
         ),
         (
             "automation/gitlab.md",
-            "downloads one release. When `cosign` is on the `PATH`, it",
+            "downloads one release. When `cosign` 3 or later is on the",
             25,
         ),
         ("automation/gitlab.md", "To require the check, install", 20),

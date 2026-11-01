@@ -10,9 +10,15 @@
 # for, so a mismatch runs one release's workflow against another release's scripts.
 #
 # Secrets to set in the repository or the organization:
-#   PALETTE_API_KEY     needed to read Palette: for a ref that is not a snapshot file, for the
-#                       verify in the merge gate, and for the drift and upstream reports.
+#   PALETTE_API_KEY     needed to read Palette: for a ref that is not a snapshot file, for
+#                       `repave: true`, for the verify in the merge gate, and for the drift and
+#                       upstream reports.
 #   STRATA_READ_TOKEN   a token that can read the strata repository, while it is private.
+#
+# A token does not give access to a reusable workflow of a private repository. While the strata
+# repository is private, its access setting must allow your repository too: in the strata
+# repository, open Settings, Actions, General, Access, and select "Accessible from repositories in
+# the organization". docs/src/automation/pr-comments.md describes both steps.
 #
 # Make the gate the check that the merge button waits for: Settings, Branches, the rule for the
 # default branch, "Require status checks to pass" with "Require branches to be up to date".
@@ -49,7 +55,7 @@ jobs:
     with:
       a: releases/dev.json          # the record the default branch has
       b: candidate.yaml             # what this pull request proposes
-      # repave: true               # a cluster against a version: Palette's answer decides the label
+      # repave: true               # a cluster against a version: the answer of Palette decides the label
       strata-version: v0.25.0
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}

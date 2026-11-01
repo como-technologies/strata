@@ -81,7 +81,8 @@ The GitHub drop-in `examples/ci/github/strata.yml` runs the job `upstream` on
 the schedule of the drift report, through the reusable workflow
 `.github/workflows/upstream.yml`. The GitLab drop-in
 `examples/ci/gitlab/strata.yml` runs the job `strata-upstream` on a scheduled
-pipeline. The host functions are the ones of `verify-report.sh`: see
+pipeline. When `STRATA_SAVE` names a file, it runs `strata-upstream-save` in its place.
+The host functions are the ones of `verify-report.sh`: see
 [GitLab CI](./gitlab.md) for the token that the issues need.
 
 | Option | GitHub input | GitLab variable |
