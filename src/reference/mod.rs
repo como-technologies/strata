@@ -134,105 +134,24 @@ impl Ref {
         if is_file(Path::new(text)) {
             return Ref::Snapshot(PathBuf::from(text));
         }
-        if let Some(rest) = text.strip_prefix(PACK_PREFIX)
-            && let Some((left, version)) = name_at_version(rest)
-        {
-            let (registry, name) = match left.split_once('/') {
-                Some((registry, name)) => (Some(registry), name),
-                None => (None, left),
-            };
-            if !name.is_empty() {
-                return Ref::Pack {
-                    registry: registry.filter(|r| !r.is_empty()).map(str::to_string),
-                    name: name.to_string(),
-                    version: version.to_string(),
-                };
-            }
-        }
-        if let Some(rest) = text.strip_prefix(CLUSTER_PREFIX) {
-            let (rest, pending) = match rest.strip_suffix(PENDING_SUFFIX) {
-                Some(r) => (r, true),
-                None => (rest, false),
-            };
-            let (uid, profile) = uid_and_profile(rest);
-            if !uid.is_empty() {
-                return Ref::Cluster {
-                    uid: uid.to_string(),
-                    profile: profile.map(str::to_string),
-                    pending,
-                };
-            }
-        }
-        if let Some(rest) = text.strip_prefix(EDGE_HOST_PREFIX) {
-            let (uid, profile) = uid_and_profile(rest);
-            if !uid.is_empty() {
-                return Ref::EdgeHost {
-                    uid: uid.to_string(),
-                    profile: profile.map(str::to_string),
-                };
-            }
-        }
-        if let Some(rest) = text.strip_prefix(TAG_PREFIX)
-            && !rest.is_empty()
-        {
-            return Ref::ClusterSet {
-                tags: rest
-                    .split('+')
-                    .filter(|t| !t.is_empty())
-                    .map(str::to_string)
-                    .collect(),
-                filter: None,
-            };
-        }
-        if let Some(name) = text.strip_prefix(FILTER_PREFIX)
-            && !name.is_empty()
-        {
-            return Ref::ClusterSet {
-                tags: Vec::new(),
-                filter: Some(name.to_string()),
-            };
-        }
-        if let Some(rest) = text.strip_prefix(APP_PROFILE_PREFIX)
-            && !rest.is_empty()
-            && !rest.contains('/')
-        {
-            return match name_at_version(rest) {
-                Some((name, version)) => Ref::AppProfile {
-                    id: name.to_string(),
-                    version: Some(version.to_string()),
-                },
-                None => Ref::AppProfile {
-                    id: rest.to_string(),
-                    version: None,
-                },
-            };
-        }
-        if let Some(uid) = text.strip_prefix(CLUSTER_GROUP_PREFIX)
-            && !uid.is_empty()
-            && !uid.contains('/')
-        {
-            return Ref::ClusterGroup {
-                uid: uid.to_string(),
-            };
+        // a prefix with nothing valid after it is no ref of its kind, so the text falls through
+        let prefixed = pack_ref(text)
+            .or_else(|| cluster_ref(text))
+            .or_else(|| edge_host_ref(text))
+            .or_else(|| tag_ref(text))
+            .or_else(|| filter_ref(text))
+            .or_else(|| app_profile_ref(text))
+            .or_else(|| cluster_group_ref(text));
+        if let Some(parsed) = prefixed {
+            return parsed;
         }
         // A ref that is shaped like a path is a file, whether or not the file is there: the loader
         // then says which file is missing, instead of Palette answering 404 for a uid it never had.
         if looks_like_a_path(text) {
             return Ref::Snapshot(PathBuf::from(text));
         }
-        if let Some(rest) = text.strip_suffix(DRAFT_SUFFIX)
-            && !rest.is_empty()
-        {
-            return match name_at_version(rest) {
-                Some((name, version)) => Ref::Draft {
-                    id: name.to_string(),
-                    version: Some(version.to_string()),
-                },
-                None => Ref::Draft {
-                    id: rest.to_string(),
-                    version: None,
-                },
-            };
+        if let Some(draft) = draft_ref(text) {
+            return draft;
         }
         if let Some((name, version)) = name_at_version(text) {
             return Ref::NameVersion {
@@ -260,6 +179,108 @@ fn uid_and_profile(text: &str) -> (&str, Option<&str>) {
         Some((uid, profile)) => (uid, Some(profile).filter(|p| !p.is_empty())),
         None => (text, None),
     }
+}
+
+/// The pack ref `pack:[<registry>/]<name>@<version>`, when `text` is one.
+fn pack_ref(text: &str) -> Option<Ref> {
+    let (left, version) = name_at_version(text.strip_prefix(PACK_PREFIX)?)?;
+    let (registry, name) = match left.split_once('/') {
+        Some((registry, name)) => (Some(registry), name),
+        None => (None, left),
+    };
+    (!name.is_empty()).then(|| Ref::Pack {
+        registry: registry.filter(|r| !r.is_empty()).map(str::to_string),
+        name: name.to_string(),
+        version: version.to_string(),
+    })
+}
+
+/// The cluster ref `cluster:<uid>[/<profile>][@pending]`, when `text` is one.
+fn cluster_ref(text: &str) -> Option<Ref> {
+    let rest = text.strip_prefix(CLUSTER_PREFIX)?;
+    let (rest, pending) = match rest.strip_suffix(PENDING_SUFFIX) {
+        Some(r) => (r, true),
+        None => (rest, false),
+    };
+    let (uid, profile) = uid_and_profile(rest);
+    (!uid.is_empty()).then(|| Ref::Cluster {
+        uid: uid.to_string(),
+        profile: profile.map(str::to_string),
+        pending,
+    })
+}
+
+/// The edge host ref `edgehost:<uid>[/<profile>]`, when `text` is one.
+fn edge_host_ref(text: &str) -> Option<Ref> {
+    let (uid, profile) = uid_and_profile(text.strip_prefix(EDGE_HOST_PREFIX)?);
+    (!uid.is_empty()).then(|| Ref::EdgeHost {
+        uid: uid.to_string(),
+        profile: profile.map(str::to_string),
+    })
+}
+
+/// The ref of the clusters with some labels, `tag:<key>=<value>`, when `text` is one.
+fn tag_ref(text: &str) -> Option<Ref> {
+    let rest = text.strip_prefix(TAG_PREFIX).filter(|r| !r.is_empty())?;
+    Some(Ref::ClusterSet {
+        tags: rest
+            .split('+')
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+            .collect(),
+        filter: None,
+    })
+}
+
+/// The ref of the clusters that a saved tag filter selects, `filter:<name>`, when `text` is one.
+fn filter_ref(text: &str) -> Option<Ref> {
+    let name = text.strip_prefix(FILTER_PREFIX).filter(|n| !n.is_empty())?;
+    Some(Ref::ClusterSet {
+        tags: Vec::new(),
+        filter: Some(name.to_string()),
+    })
+}
+
+/// The app profile ref `appprofile:<uid>` or `appprofile:<name>@<version>`, when `text` is one.
+fn app_profile_ref(text: &str) -> Option<Ref> {
+    let rest = text
+        .strip_prefix(APP_PROFILE_PREFIX)
+        .filter(|r| !r.is_empty() && !r.contains('/'))?;
+    Some(match name_at_version(rest) {
+        Some((name, version)) => Ref::AppProfile {
+            id: name.to_string(),
+            version: Some(version.to_string()),
+        },
+        None => Ref::AppProfile {
+            id: rest.to_string(),
+            version: None,
+        },
+    })
+}
+
+/// The cluster group ref `clustergroup:<uid>`, when `text` is one.
+fn cluster_group_ref(text: &str) -> Option<Ref> {
+    let uid = text
+        .strip_prefix(CLUSTER_GROUP_PREFIX)
+        .filter(|u| !u.is_empty() && !u.contains('/'))?;
+    Some(Ref::ClusterGroup {
+        uid: uid.to_string(),
+    })
+}
+
+/// The draft ref `<name>@<version>@draft` or `<uid>@draft`, when `text` is one.
+fn draft_ref(text: &str) -> Option<Ref> {
+    let rest = text.strip_suffix(DRAFT_SUFFIX).filter(|r| !r.is_empty())?;
+    Some(match name_at_version(rest) {
+        Some((name, version)) => Ref::Draft {
+            id: name.to_string(),
+            version: Some(version.to_string()),
+        },
+        None => Ref::Draft {
+            id: rest.to_string(),
+            version: None,
+        },
+    })
 }
 
 /// A profile version as a ref writes it: `<name>@<version>`.

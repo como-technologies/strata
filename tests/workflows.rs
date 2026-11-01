@@ -6,7 +6,7 @@
 use std::process::Command;
 
 use crate::common::{
-    INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, recipe, steps, text, workflow,
+    CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, recipe, steps, text, workflow,
     workflow_files, workflow_text,
 };
 
@@ -314,7 +314,7 @@ fn run_step(file: &str, step: &str, env: &[(&str, &str)], tools: &[&str]) -> Ste
         command.env(name.as_str().unwrap(), "");
     }
     command.envs(env.iter().copied());
-    let output = command.output().unwrap();
+    let output = command.output_locked().unwrap();
     StepRun { dir, output }
 }
 

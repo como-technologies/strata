@@ -88,48 +88,9 @@ pub(crate) fn pack_snapshot_in<A: PaletteApi>(
     // the registry listing gives the names, and the reason of an error that finds no pack
     let visible = registries.names()?;
     let entries = versions_of(palette, name)?;
-    let not_found = |registry: String, unsynced: Vec<String>| Error::PackNotFound {
-        name: name.to_string(),
-        version: version.to_string(),
-        tag: None,
-        registry,
-        unsynced,
-    };
     let registry_uid = match registry {
         Some(r) => registries.by_ref(r)?.1,
-        None => {
-            // the registries that have it, in the order Palette lists them
-            let holders: Vec<&(String, String)> = visible
-                .iter()
-                .filter(|(_, uid)| {
-                    entries.iter().any(|e| {
-                        str_at(e, "/spec/registryUid") == uid
-                            && (version == LATEST || str_at(e, "/spec/version") == version)
-                    })
-                })
-                .collect();
-            match holders.as_slice() {
-                [(_, uid)] => uid.clone(),
-                [] => {
-                    return Err(not_found(
-                        "any visible registry".to_string(),
-                        registries.unsynced_names(&visible)?,
-                    ));
-                }
-                several => {
-                    // by name, so the message reads the same on every run: Palette lists the
-                    // registries in the order it likes, and a live run saw both orders
-                    let mut registries: Vec<String> =
-                        several.iter().map(|(n, _)| n.clone()).collect();
-                    registries.sort();
-                    return Err(Error::PackInSeveralRegistries {
-                        name: name.to_string(),
-                        version: version.to_string(),
-                        registries,
-                    });
-                }
-            }
-        }
+        None => holding_registry(registries, &visible, &entries, name, version)?,
     };
     // a registry that the listing does not name has no name: each message gives its uid
     let registry_name = registries.name_of(&registry_uid)?.unwrap_or_default();
@@ -143,7 +104,9 @@ pub(crate) fn pack_snapshot_in<A: PaletteApi>(
     let resolved = crate::reference::version::pick(here.iter(), |v| v.as_str(), version).cloned();
     let Some(resolved) = resolved else {
         let asked = visible.iter().filter(|(_, u)| *u == registry_uid);
-        return Err(not_found(
+        return Err(pack_not_found(
+            name,
+            version,
             named(&registry_uid),
             registries.unsynced_names(asked)?,
         ));
@@ -153,38 +116,7 @@ pub(crate) fn pack_snapshot_in<A: PaletteApi>(
         name_version(name, &resolved),
         named(&registry_uid)
     ));
-    // one layer, the registry's own values: the same path a candidate file takes
-    let candidate = Candidate {
-        name: name.to_string(),
-        version: resolved.clone(),
-        kind: ProfileType::Pack.as_str().to_string(),
-        cloud_type: String::new(),
-        registry: None,
-        registry_uid: Some(registry_uid.clone()),
-        layers: vec![CandidateLayer {
-            name: name.to_string(),
-            version: resolved.clone(),
-            layer: None,
-            kind: None,
-            tag: None,
-            registry: None,
-            registry_uid: None,
-            values: None,
-            values_file: None,
-            params: Map::new(),
-            manifests: Vec::new(),
-        }],
-        variables: Vec::new(),
-    };
-    let loaded = LoadedCandidate {
-        path: PathBuf::from(reference),
-        candidate,
-        layers: vec![LoadedLayer {
-            registry: Some(RegistryRef::Uid(registry_uid.clone())),
-            values: None,
-            manifests: Vec::new(),
-        }],
-    };
+    let loaded = one_layer_candidate(name, &resolved, &registry_uid, reference);
     let mut snap =
         resolve_with(&loaded, registries, progress)?.into_snapshot(reference, fetched_at)?;
     snap.source.kind = ProfileType::Pack.as_str().to_string();
@@ -203,6 +135,106 @@ pub(crate) fn pack_snapshot_in<A: PaletteApi>(
             .unwrap_or_default(),
     });
     Ok(snap)
+}
+
+/// The error for a pack version that `registry` does not have. `unsynced` names the registries
+/// that Palette does not sync, among the ones that strata asked.
+fn pack_not_found(name: &str, version: &str, registry: String, unsynced: Vec<String>) -> Error {
+    Error::PackNotFound {
+        name: name.to_string(),
+        version: version.to_string(),
+        tag: None,
+        registry,
+        unsynced,
+    }
+}
+
+/// The uid of the one visible registry that has the pack `name` at `version`, from the listing
+/// `entries` of the pack. `version` can be [`LATEST`].
+///
+/// # Errors
+///
+/// [`Error::PackNotFound`] when no visible registry has it, and [`Error::PackInSeveralRegistries`]
+/// when more than one has it.
+fn holding_registry<A: PaletteApi>(
+    registries: &mut Registries<'_, A>,
+    visible: &[(String, String)],
+    entries: &[Value],
+    name: &str,
+    version: &str,
+) -> Result<String> {
+    // the registries that have it, in the order Palette lists them
+    let holders: Vec<&(String, String)> = visible
+        .iter()
+        .filter(|(_, uid)| {
+            entries.iter().any(|e| {
+                str_at(e, "/spec/registryUid") == uid
+                    && (version == LATEST || str_at(e, "/spec/version") == version)
+            })
+        })
+        .collect();
+    match holders.as_slice() {
+        [(_, uid)] => Ok(uid.clone()),
+        [] => Err(pack_not_found(
+            name,
+            version,
+            "any visible registry".to_string(),
+            registries.unsynced_names(visible)?,
+        )),
+        several => {
+            // by name, so the message reads the same on every run: Palette lists the
+            // registries in the order it likes, and a live run saw both orders
+            let mut registries: Vec<String> = several.iter().map(|(n, _)| n.clone()).collect();
+            registries.sort();
+            Err(Error::PackInSeveralRegistries {
+                name: name.to_string(),
+                version: version.to_string(),
+                registries,
+            })
+        }
+    }
+}
+
+/// A candidate with one layer, the pack `name` at `version` in the registry `registry_uid`, with
+/// the values that the registry ships: the same path a candidate file takes. `reference` is the
+/// path that the candidate reports.
+fn one_layer_candidate(
+    name: &str,
+    version: &str,
+    registry_uid: &str,
+    reference: &str,
+) -> LoadedCandidate {
+    let candidate = Candidate {
+        name: name.to_string(),
+        version: version.to_string(),
+        kind: ProfileType::Pack.as_str().to_string(),
+        cloud_type: String::new(),
+        registry: None,
+        registry_uid: Some(registry_uid.to_string()),
+        layers: vec![CandidateLayer {
+            name: name.to_string(),
+            version: version.to_string(),
+            layer: None,
+            kind: None,
+            tag: None,
+            registry: None,
+            registry_uid: None,
+            values: None,
+            values_file: None,
+            params: Map::new(),
+            manifests: Vec::new(),
+        }],
+        variables: Vec::new(),
+    };
+    LoadedCandidate {
+        path: PathBuf::from(reference),
+        candidate,
+        layers: vec![LoadedLayer {
+            registry: Some(RegistryRef::Uid(registry_uid.to_string())),
+            values: None,
+            manifests: Vec::new(),
+        }],
+    }
 }
 
 /// The registry's summary of `name` at `version` in `registry`, paging through the listing.

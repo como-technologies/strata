@@ -369,52 +369,12 @@ where
     } else {
         None
     };
-    let mut resolved = None;
-    let mut query_filter = None;
-    let mut includes_virtual = None;
-    let clusters = if options.wants(ListKind::Clusters) {
-        progress.note("listing clusters");
-        let mut clusters = if options.query.is_empty() {
-            let listing = home.cluster_listing()?;
-            // the listing leaves out each virtual cluster, so strata asks the search for them
-            let properties = home.cluster_search_properties()?;
-            let nested = home.virtual_clusters(&properties, &Value::Null, || {
-                progress.note("searching the virtual clusters")
-            })?;
-            includes_virtual = Some(nested.is_some());
-            list_clusters(items(&listing).chain(nested.iter().flatten()))
-        } else {
-            let tenant = super::tenant_of(&mut connect)?;
-            let selection = super::select_in(&options.query, &tenant, &mut listings, progress)?;
-            resolved = Some(selection.resolved);
-            query_filter = selection.filter;
-            includes_virtual = Some(selection.includes_virtual);
-            selection.clusters
-        };
-        if let Some(text) = &options.cluster {
-            let text = text.to_lowercase();
-            clusters.retain(|c| {
-                c.name.to_lowercase().contains(&text) || c.uid.to_lowercase().contains(&text)
-            });
-        }
-        if options.reads_clusters() {
-            read_applied(&mut clusters, &home, &mut connect, progress);
-        }
-        // a uid names no project to a reader, so give each line the project's name as well. The
-        // selection of a query names them already, from the listing of the tenant
-        if options.query.is_empty() {
-            name_projects_of(
-                &mut clusters,
-                |c| &c.project_uid,
-                |c| &mut c.project_name,
-                &home,
-                &mut listings,
-            );
-        }
-        Some(clusters)
-    } else {
-        None
-    };
+    let ClusterSection {
+        clusters,
+        includes_virtual,
+        resolved,
+        query_filter,
+    } = cluster_section(options, &home, &mut connect, &mut listings, progress)?;
     let filters = if options.wants(ListKind::Filters) {
         progress.note("listing saved tag filters");
         Some(super::saved_filters(&super::tenant_of(&mut connect)?)?)
@@ -428,23 +388,7 @@ where
     } else {
         None
     };
-
-    // The scope's name: from the project listing when it was read, else from the scope itself,
-    // where Palette lists that one project. A name is a convenience, so a failure leaves it empty.
-    let project_name = if project_uid.is_empty() {
-        String::new()
-    } else {
-        let named = match projects.as_deref() {
-            Some(p) => p,
-            // the name is a convenience, so a listing that strata cannot read leaves it empty
-            None => listings.of(&home).unwrap_or_default(),
-        };
-        named
-            .iter()
-            .find(|p| p.uid == project_uid)
-            .map(|p| p.name.clone())
-            .unwrap_or_default()
-    };
+    let project_name = scope_name(&project_uid, projects.as_deref(), &home, &mut listings);
 
     Ok(Listing {
         schema: LIST_SCHEMA.to_string(),
@@ -463,6 +407,101 @@ where
         query_filter,
         filters,
     })
+}
+
+/// The part of a [`Listing`] that the read of the clusters fills. It is empty when `list` reads
+/// no cluster.
+#[derive(Default)]
+struct ClusterSection {
+    clusters: Option<Vec<ListedCluster>>,
+    includes_virtual: Option<bool>,
+    resolved: Option<super::Resolved>,
+    query_filter: Option<super::SavedFilter>,
+}
+
+/// Read the clusters of a listing, when `options` ask for them. With no query they come from the
+/// cluster listing and the search for the virtual clusters. With a query they come from the
+/// search of the query. Then `options.cluster` keeps the clusters that match its text, and
+/// `options.applied` reads the profiles that each one runs.
+fn cluster_section<A, F>(
+    options: &ListOptions,
+    home: &Palette<A>,
+    connect: &mut F,
+    listings: &mut ProjectListings,
+    progress: &Progress,
+) -> Result<ClusterSection>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    if !options.wants(ListKind::Clusters) {
+        return Ok(ClusterSection::default());
+    }
+    progress.note("listing clusters");
+    let mut section = ClusterSection::default();
+    let mut clusters = if options.query.is_empty() {
+        let listing = home.cluster_listing()?;
+        // the listing leaves out each virtual cluster, so strata asks the search for them
+        let properties = home.cluster_search_properties()?;
+        let nested = home.virtual_clusters(&properties, &Value::Null, || {
+            progress.note("searching the virtual clusters")
+        })?;
+        section.includes_virtual = Some(nested.is_some());
+        list_clusters(items(&listing).chain(nested.iter().flatten()))
+    } else {
+        let tenant = super::tenant_of(connect)?;
+        let selection = super::select_in(&options.query, &tenant, listings, progress)?;
+        section.resolved = Some(selection.resolved);
+        section.query_filter = selection.filter;
+        section.includes_virtual = Some(selection.includes_virtual);
+        selection.clusters
+    };
+    if let Some(text) = &options.cluster {
+        let text = text.to_lowercase();
+        clusters.retain(|c| {
+            c.name.to_lowercase().contains(&text) || c.uid.to_lowercase().contains(&text)
+        });
+    }
+    if options.reads_clusters() {
+        read_applied(&mut clusters, home, connect, progress);
+    }
+    // a uid names no project to a reader, so give each line the project's name as well. The
+    // selection of a query names them already, from the listing of the tenant
+    if options.query.is_empty() {
+        name_projects_of(
+            &mut clusters,
+            |c| &c.project_uid,
+            |c| &mut c.project_name,
+            home,
+            listings,
+        );
+    }
+    section.clusters = Some(clusters);
+    Ok(section)
+}
+
+/// The name of the project `project_uid`, which is the scope of the listing: from the project
+/// listing `projects` when `list` read it, else from the scope itself, where Palette lists that
+/// one project. Empty at tenant scope.
+fn scope_name<A: PaletteApi>(
+    project_uid: &str,
+    projects: Option<&[ListedProject]>,
+    home: &Palette<A>,
+    listings: &mut ProjectListings,
+) -> String {
+    if project_uid.is_empty() {
+        return String::new();
+    }
+    let named = match projects {
+        Some(p) => p,
+        // the name is a convenience, so a listing that strata cannot read leaves it empty
+        None => listings.of(home).unwrap_or_default(),
+    };
+    named
+        .iter()
+        .find(|p| p.uid == project_uid)
+        .map(|p| p.name.clone())
+        .unwrap_or_default()
 }
 
 fn list_profiles<A: PaletteApi>(

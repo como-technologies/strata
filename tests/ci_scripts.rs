@@ -27,7 +27,7 @@ fn every_script_a_release_carries_prints_its_help_and_exits_0() {
         let o = Command::new("bash")
             .arg(script(&format!("ci/{name}")))
             .arg("--help")
-            .output()
+            .output_locked()
             .unwrap();
         assert_eq!(
             o.status.code(),
@@ -101,7 +101,7 @@ fn help_of(name: &str) -> String {
     let o = Command::new("bash")
         .arg(script(&format!("ci/{name}")))
         .arg("--help")
-        .output()
+        .output_locked()
         .unwrap();
     assert!(o.status.success(), "{name} --help failed");
     text(&o.stdout)
@@ -910,7 +910,7 @@ fn the_gitlab_preflight_job_gives_the_script_offline_for_the_static_tier_without
             .current_dir(dir.path())
             .env("STRATA_PREFLIGHT_TIER", tier)
             .env("STRATA_PREFLIGHT_WATCH", watch)
-            .output()
+            .output_locked()
             .unwrap();
         assert!(o.status.success(), "{}", text(&o.stderr));
         std::fs::read_to_string(dir.path().join("calls.log"))
@@ -1244,7 +1244,7 @@ impl Host {
         if self.labels.exists() {
             c.env("FAKE_GH_LABELS", &self.labels);
         }
-        c.output().unwrap()
+        c.output_locked().unwrap()
     }
 
     fn calls(&self) -> Vec<String> {
@@ -2132,7 +2132,7 @@ esac
 
 /// The SHA-256 digest of a file, as `sha256sum` prints it.
 fn sha256_of(path: &Path) -> String {
-    let sum = Command::new("sha256sum").arg(path).output().unwrap();
+    let sum = Command::new("sha256sum").arg(path).output_locked().unwrap();
     text(&sum.stdout)
         .split_whitespace()
         .next()
@@ -2240,7 +2240,7 @@ fn install(d: &Path, args: &[&str]) -> Output {
         .env_remove("STRATA_TOKEN")
         .env_remove("GITHUB_TOKEN")
         .env_remove("GH_TOKEN")
-        .output()
+        .output_locked()
         .unwrap()
 }
 
@@ -2785,7 +2785,7 @@ impl Gate {
             .env_remove("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
             .env_remove("STRATA_REMOTE")
             .envs(env.iter().copied());
-        isolate_git(&mut c).output().unwrap()
+        isolate_git(&mut c).output_locked().unwrap()
     }
 }
 
@@ -3191,7 +3191,7 @@ fn merge_gate_names_an_unverified_record_and_passes_allow_no_digest_on() {
             .env_remove("GITHUB_BASE_REF")
             .env_remove("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
             .env_remove("STRATA_REMOTE");
-        isolate_git(&mut c).output().unwrap()
+        isolate_git(&mut c).output_locked().unwrap()
     };
 
     // red, and the report says why: a pack with no digest, not a drift
@@ -3357,7 +3357,7 @@ impl Report {
             .env_remove("STRATA_BIN")
             .env_remove("GITHUB_REPOSITORY")
             .envs(envs.iter().copied());
-        c.output().unwrap()
+        c.output_locked().unwrap()
     }
 
     /// Run the script as a GitLab job does: the stand-in curl answers from the same directory,
@@ -3844,7 +3844,7 @@ fn live_scripts_refuse_a_strata_binary_older_than_the_sources() {
         Command::new("bash")
             .arg(live.join("probe.sh"))
             .env_remove("STRATA_BIN")
-            .output()
+            .output_locked()
             .unwrap()
     };
 
@@ -3881,7 +3881,7 @@ fn live_scripts_refuse_a_strata_binary_older_than_the_sources() {
     let o = Command::new("bash")
         .arg(live.join("probe.sh"))
         .env("STRATA_BIN", &strata)
-        .output()
+        .output_locked()
         .unwrap();
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
 }
@@ -3911,7 +3911,7 @@ fn live_scripts_take_jq_e_on_an_empty_input_as_a_failure_with_each_jq() {
             .current_dir(dir.path())
             .env("PATH", path_with(&bin))
             .env_remove("STRATA_BIN")
-            .output()
+            .output_locked()
             .unwrap();
         assert_eq!(
             text(&o.stdout),
@@ -3949,7 +3949,7 @@ fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
             .env("PALETTE_API_KEY", "k")
             .env("STRATA_BIN", "/bin/true")
             .env("FAKE_TF_LOG", &log)
-            .output()
+            .output_locked()
             .unwrap();
         assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
         let calls = lines_of(&log);
@@ -4432,7 +4432,7 @@ impl PreflightJob {
         for (k, v) in envs {
             c.env(k, v);
         }
-        c.output().unwrap()
+        c.output_locked().unwrap()
     }
 
     /// The calls of the stand-in `strata`, one for each line.

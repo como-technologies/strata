@@ -15,7 +15,7 @@ use crate::closed_set::Open;
 use crate::cloud::supports;
 use crate::diff::{ChangeFlag, Diff, ImpactLevel, RegistrySync};
 use crate::error::{Error, ErrorDocument, Result};
-use crate::json::{first_nonempty, str_at};
+use crate::json::first_nonempty;
 use crate::pack_state::PackState;
 use crate::reference::{Ref, version};
 use crate::registry::{Registries, RegistrySyncNote};
@@ -24,9 +24,11 @@ use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
 use crate::validation::ProfileValidation;
 
-use super::bump::BumpQuestions;
+use self::bump::BumpQuestions;
 use super::packs::{Architectures, PackBuild, PackOptions, registry_packs_in};
 use super::scope_of;
+
+mod bump;
 
 /// The schema id of the document `behind` writes.
 pub const BEHIND_SCHEMA: &str = "strata-behind/1";
@@ -269,6 +271,31 @@ pub fn is_floating(tag: &str) -> bool {
     tag.split(['.', '_', '-']).any(|part| part == "x")
 }
 
+impl Pin {
+    /// The pin that the pack `p` of a record makes, with no read of its registry yet.
+    fn of(p: &Pack) -> Pin {
+        Pin {
+            name: p.name.clone(),
+            layer: p.layer.clone(),
+            registry: String::new(),
+            registry_uid: p.registry_uid.clone(),
+            version: p.version.clone(),
+            tag: p.tag.clone(),
+            floating: is_floating(&p.tag),
+            resolved: None,
+            pinned_state: None,
+            pinned_by: Vec::new(),
+            newer: Vec::new(),
+            behind: false,
+            bump: None,
+            arrived: None,
+            error: None,
+            registry_sync: None,
+            registry_sync_error: None,
+        }
+    }
+}
+
 /// One pin in the records: a pack name, a registry, a pinned version, and a tag. The order of the
 /// fields is the order of the pins in the report.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -301,6 +328,37 @@ struct Reads {
     syncs: BTreeMap<String, RegistrySyncNote>,
 }
 
+/// A pin of the records, with the project of its first record and the records that pin it.
+struct Pinned {
+    pin: Pin,
+    /// The project of the first record that pins it.
+    project: String,
+    /// The records that pin it, as indexes into the records read: the question to Palette about a
+    /// bump reads them.
+    holders: Vec<usize>,
+}
+
+/// The records that `behind` reads, and the pins in them.
+struct Records {
+    /// The records, in the order given.
+    loaded: Vec<Snapshot>,
+    /// The pins, by key.
+    pins: BTreeMap<PinKey, Pinned>,
+}
+
+/// What the check of each pin shares.
+struct Check<'a> {
+    /// The records that the pins come from.
+    loaded: &'a [Snapshot],
+    /// Compare each pin that is behind with the newest version: see [`BehindOptions::impact`].
+    impact: bool,
+    /// Name a pre-release as a newer version of a pin that is not one: see
+    /// [`BehindOptions::pre_release`].
+    pre_release: bool,
+    generated_at: &'a str,
+    progress: &'a Progress,
+}
+
 /// Report the pack versions that `records` pin, and the newer versions that the registries offer.
 ///
 /// Strata reads each pin in the project of the first record that pins it. It calls `connect` one
@@ -320,7 +378,7 @@ struct Reads {
 pub fn behind<A, F>(
     records: &[PathBuf],
     options: &BehindOptions,
-    mut connect: F,
+    connect: F,
     generated_at: &str,
     progress: &Progress,
 ) -> Result<BehindReport>
@@ -328,138 +386,19 @@ where
     A: PaletteApi,
     F: FnMut(Option<&str>) -> Result<Palette<A>>,
 {
-    // the pin, and the project of its first record. `holders` names, for each pin, the records
-    // that pin it, as indexes into `loaded`: the question to Palette about a bump reads them
-    let mut pins: BTreeMap<PinKey, (Pin, String)> = BTreeMap::new();
-    let mut loaded: Vec<Snapshot> = Vec::with_capacity(records.len());
-    let mut holders: BTreeMap<PinKey, Vec<usize>> = BTreeMap::new();
-    for path in records {
-        let snap = Snapshot::load(path)?;
-        let subject = snap.source.title();
-        for p in snap.packs.iter().filter(|p| !p.registry_uid.is_empty()) {
-            let key = PinKey::of(p);
-            let held = holders.entry(key.clone()).or_default();
-            if held.last() != Some(&loaded.len()) {
-                held.push(loaded.len());
-            }
-            let entry = pins.entry(key).or_insert_with(|| {
-                (
-                    Pin {
-                        name: p.name.clone(),
-                        layer: p.layer.clone(),
-                        registry: String::new(),
-                        registry_uid: p.registry_uid.clone(),
-                        version: p.version.clone(),
-                        tag: p.tag.clone(),
-                        floating: is_floating(&p.tag),
-                        resolved: None,
-                        pinned_state: None,
-                        pinned_by: Vec::new(),
-                        newer: Vec::new(),
-                        behind: false,
-                        bump: None,
-                        arrived: None,
-                        error: None,
-                        registry_sync: None,
-                        registry_sync_error: None,
-                    },
-                    snap.source.project_uid.clone(),
-                )
-            });
-            let by = PinnedBy {
-                path: path.display().to_string(),
-                subject: subject.clone(),
-            };
-            if !entry.0.pinned_by.iter().any(|b| b.path == by.path) {
-                entry.0.pinned_by.push(by);
-            }
-        }
-        loaded.push(snap);
-    }
-
-    // A cache of the registry listings borrows its client. So strata groups the pins by scope:
-    // each scope connects one time, and keeps its cache for all its pins
-    let mut scopes: BTreeMap<Option<String>, Vec<(PinKey, Pin)>> = BTreeMap::new();
-    for (key, (pin, project)) in pins {
-        scopes
-            .entry(scope_of(&project).map(str::to_string))
-            .or_default()
-            .push((key, pin));
-    }
-    let mut reads = Reads::default();
-    let mut checked: BTreeMap<PinKey, Pin> = BTreeMap::new();
-    for (scope, group) in scopes {
-        let palette = match connect(scope.as_deref()) {
-            Ok(palette) => palette,
-            Err(e) => {
-                for (key, mut pin) in group {
-                    pin.error = Some(e.to_json());
-                    checked.insert(key, pin);
-                }
-                continue;
-            }
-        };
-        let mut listings = Registries::new(&palette);
-        let mut questions = BumpQuestions::new(&palette, scope.as_deref());
-        for (key, mut pin) in group {
-            read_pin(
-                &mut pin,
-                &mut listings,
-                &mut reads,
-                options.pre_release,
-                generated_at,
-                progress,
-            )?;
-            if options.impact && pin.behind {
-                let holding: Vec<&Snapshot> = holders
-                    .get(&key)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|&i| loaded.get(i))
-                    .collect();
-                read_bump(
-                    &mut pin,
-                    &holding,
-                    &mut listings,
-                    &mut questions,
-                    generated_at,
-                    progress,
-                );
-            }
-            checked.insert(key, pin);
-        }
-    }
-    let mut out: Vec<Pin> = checked.into_values().collect();
-
-    let mut arrived = 0;
-    if let Some(previous) = &options.since {
-        for pin in &mut out {
-            let known: BTreeSet<&str> = previous
-                .pins
-                .iter()
-                .filter(|p| p.name == pin.name && p.registry_uid == pin.registry_uid)
-                .flat_map(|p| {
-                    std::iter::once(p.version.as_str())
-                        .chain(p.newer.iter().map(|n| n.version.as_str()))
-                })
-                .collect();
-            if previous
-                .pins
-                .iter()
-                .any(|p| p.name == pin.name && p.registry_uid == pin.registry_uid)
-            {
-                let new: Vec<String> = pin
-                    .newer
-                    .iter()
-                    .filter(|n| !known.contains(n.version.as_str()))
-                    .map(|n| n.version.clone())
-                    .collect();
-                arrived += new.len();
-                pin.arrived = Some(new);
-            }
-        }
-    }
-
+    let Records { loaded, pins } = read_records(records)?;
+    let check = Check {
+        loaded: &loaded,
+        impact: options.impact,
+        pre_release: options.pre_release,
+        generated_at,
+        progress,
+    };
+    let mut out = check_pins(&check, pins, connect)?;
+    let arrived = options
+        .since
+        .as_ref()
+        .map_or(0, |previous| mark_arrived(&mut out, previous));
     let summary = BehindSummary {
         pins: out.len(),
         behind: out.iter().filter(|p| p.behind).count(),
@@ -478,6 +417,162 @@ where
     })
 }
 
+/// Read each record of `records`, and collect the pins in them. A pin is in the project of the
+/// first record that pins it.
+fn read_records(records: &[PathBuf]) -> Result<Records> {
+    let mut loaded: Vec<Snapshot> = Vec::with_capacity(records.len());
+    let mut pins: BTreeMap<PinKey, Pinned> = BTreeMap::new();
+    for path in records {
+        let snap = Snapshot::load(path)?;
+        let subject = snap.source.title();
+        for p in snap.packs.iter().filter(|p| !p.registry_uid.is_empty()) {
+            let pinned = pins.entry(PinKey::of(p)).or_insert_with(|| Pinned {
+                pin: Pin::of(p),
+                project: snap.source.project_uid.clone(),
+                holders: Vec::new(),
+            });
+            if pinned.holders.last() != Some(&loaded.len()) {
+                pinned.holders.push(loaded.len());
+            }
+            let by = PinnedBy {
+                path: path.display().to_string(),
+                subject: subject.clone(),
+            };
+            if !pinned.pin.pinned_by.iter().any(|b| b.path == by.path) {
+                pinned.pin.pinned_by.push(by);
+            }
+        }
+        loaded.push(snap);
+    }
+    Ok(Records { loaded, pins })
+}
+
+/// Check each pin of `pins` in its scope, and give the pins in the order of their keys.
+///
+/// A cache of the registry listings borrows its client. So strata groups the pins by scope: each
+/// scope connects one time, and keeps its cache for all its pins.
+fn check_pins<A, F>(
+    check: &Check<'_>,
+    pins: BTreeMap<PinKey, Pinned>,
+    mut connect: F,
+) -> Result<Vec<Pin>>
+where
+    A: PaletteApi,
+    F: FnMut(Option<&str>) -> Result<Palette<A>>,
+{
+    let mut scopes: BTreeMap<Option<String>, Vec<(PinKey, Pinned)>> = BTreeMap::new();
+    for (key, pinned) in pins {
+        scopes
+            .entry(scope_of(&pinned.project).map(str::to_string))
+            .or_default()
+            .push((key, pinned));
+    }
+    let mut reads = Reads::default();
+    let mut checked: BTreeMap<PinKey, Pin> = BTreeMap::new();
+    for (scope, group) in scopes {
+        match connect(scope.as_deref()) {
+            Ok(palette) => {
+                check_scope(
+                    check,
+                    &palette,
+                    scope.as_deref(),
+                    group,
+                    &mut reads,
+                    &mut checked,
+                )?;
+            }
+            Err(e) => {
+                for (key, mut pinned) in group {
+                    pinned.pin.error = Some(e.to_json());
+                    checked.insert(key, pinned.pin);
+                }
+            }
+        }
+    }
+    Ok(checked.into_values().collect())
+}
+
+/// Check the pins of `group`, the pins of one scope, with the connection `palette` to that scope.
+fn check_scope<A: PaletteApi>(
+    check: &Check<'_>,
+    palette: &Palette<A>,
+    scope: Option<&str>,
+    group: Vec<(PinKey, Pinned)>,
+    reads: &mut Reads,
+    checked: &mut BTreeMap<PinKey, Pin>,
+) -> Result<()> {
+    let Check {
+        loaded,
+        impact,
+        pre_release,
+        generated_at,
+        progress,
+    } = *check;
+    let mut listings = Registries::new(palette);
+    let mut questions = BumpQuestions::new(palette, scope);
+    for (
+        key,
+        Pinned {
+            mut pin, holders, ..
+        },
+    ) in group
+    {
+        read_pin(
+            &mut pin,
+            &mut listings,
+            reads,
+            pre_release,
+            generated_at,
+            progress,
+        )?;
+        if impact && pin.behind {
+            let holding: Vec<&Snapshot> = holders.iter().filter_map(|&i| loaded.get(i)).collect();
+            read_bump(
+                &mut pin,
+                &holding,
+                &mut listings,
+                &mut questions,
+                generated_at,
+                progress,
+            );
+        }
+        checked.insert(key, pin);
+    }
+    Ok(())
+}
+
+/// Give each pin of `pins` the versions that arrived since the report `previous`, and count them.
+/// A pin of a pack that `previous` did not know gets none.
+fn mark_arrived(pins: &mut [Pin], previous: &BehindReport) -> usize {
+    let mut arrived = 0;
+    for pin in pins {
+        let before: Vec<&Pin> = previous
+            .pins
+            .iter()
+            .filter(|p| p.name == pin.name && p.registry_uid == pin.registry_uid)
+            .collect();
+        if before.is_empty() {
+            continue;
+        }
+        let known: BTreeSet<&str> = before
+            .iter()
+            .flat_map(|p| {
+                std::iter::once(p.version.as_str())
+                    .chain(p.newer.iter().map(|n| n.version.as_str()))
+            })
+            .collect();
+        let new: Vec<String> = pin
+            .newer
+            .iter()
+            .filter(|n| !known.contains(n.version.as_str()))
+            .map(|n| n.version.clone())
+            .collect();
+        arrived += new.len();
+        pin.arrived = Some(new);
+    }
+    arrived
+}
+
 /// Give `pin` the registry name, the state of the pinned version, and the newer versions, from
 /// what its registry offers. For a pin that is current, also give it the last sync of the registry.
 ///
@@ -491,8 +586,61 @@ fn read_pin<A: PaletteApi>(
     generated_at: &str,
     progress: &Progress,
 ) -> Result<()> {
-    let offered = reads
-        .offers
+    let offered = match offered_for(&mut reads.offers, pin, listings, generated_at, progress) {
+        Ok(found) => found,
+        Err(e) => {
+            pin.error = Some(e.to_json());
+            return Ok(());
+        }
+    };
+    pin.registry.clone_from(&offered.registry);
+    let builds = &offered.builds;
+    let pinned = builds.iter().find(|b| b.version == pin.version);
+    pin.pinned_state = match pinned {
+        Some(b) => b.state.clone(),
+        None => Some(PackState::Absent.into()),
+    };
+    // the version that a floating tag names now. A profile with values of its own stays on
+    // the pinned version until a person applies the update. So each version above the pin
+    // is newer, also the one that the tag names
+    if pin.floating {
+        pin.resolved = builds
+            .iter()
+            .find(|b| b.tags.iter().any(|t| t == &pin.tag))
+            .map(|b| b.version.clone());
+    }
+    pin.newer = newer_versions(pin, offered, pinned, pre_release);
+    pin.behind = !pin.newer.is_empty();
+    // a pin that is current is current against the copy of the registry in Palette. When
+    // the last sync did not complete, the copy is the copy of an earlier sync, and the pin
+    // says so. A pin that is behind needs no note: a newer version in the copy is a newer
+    // version in the registry. The first build gives the kind of the registry. A registry
+    // with no build of the pack is not in the listing, so it gets no note
+    if !pin.behind
+        && let Some(first) = builds.first()
+    {
+        let note = match reads.syncs.entry(pin.registry_uid.clone()) {
+            Entry::Occupied(e) => e.into_mut(),
+            Entry::Vacant(v) => {
+                v.insert(listings.sync_note(&pin.registry_uid, Some(first.kind), progress)?)
+            }
+        };
+        pin.registry_sync = note.sync.as_ref().filter(|s| !s.completed()).cloned();
+        pin.registry_sync_error = note.error.clone();
+    }
+    Ok(())
+}
+
+/// What the registry of `pin` offers for its pack, from `offers`, or from the registry when no
+/// pin read the pack before.
+fn offered_for<'r, A: PaletteApi>(
+    offers: &'r mut BTreeMap<(String, String), Result<Offered>>,
+    pin: &Pin,
+    listings: &mut Registries<'_, A>,
+    generated_at: &str,
+    progress: &Progress,
+) -> &'r Result<Offered> {
+    offers
         .entry((pin.name.clone(), pin.registry_uid.clone()))
         .or_insert_with(|| {
             registry_packs_in(
@@ -518,30 +666,18 @@ fn read_pin<A: PaletteApi>(
                     architectures: architectures.remove(&pin.registry_uid).unwrap_or_default(),
                 }
             })
-        });
-    let offered = match offered {
-        Ok(found) => &*found,
-        Err(e) => {
-            pin.error = Some(e.to_json());
-            return Ok(());
-        }
-    };
-    pin.registry.clone_from(&offered.registry);
-    let builds = &offered.builds;
-    let pinned = builds.iter().find(|b| b.version == pin.version);
-    pin.pinned_state = match pinned {
-        Some(b) => b.state.clone(),
-        None => Some(PackState::Absent.into()),
-    };
-    // the version that a floating tag names now. A profile with values of its own stays on
-    // the pinned version until a person applies the update. So each version above the pin
-    // is newer, also the one that the tag names
-    if pin.floating {
-        pin.resolved = builds
-            .iter()
-            .find(|b| b.tags.iter().any(|t| t == &pin.tag))
-            .map(|b| b.version.clone());
-    }
+        })
+}
+
+/// The versions above the version of `pin` that a move can go to, newest first. `pinned` is the
+/// build of the pinned version, when the registry still lists it. `pre_release` also names a
+/// pre-release above a pin that is not one: see [`is_newer`].
+fn newer_versions(
+    pin: &Pin,
+    offered: &Offered,
+    pinned: Option<&PackBuild>,
+    pre_release: bool,
+) -> Vec<Newer> {
     let clouds: &[String] = pinned.map_or(&[], |b| b.cloud_types.as_slice());
     let architectures_of = |version: &str| -> &[String] {
         offered
@@ -554,7 +690,8 @@ fn read_pin<A: PaletteApi>(
     // with no cloud type supports each cloud, so each newer version fits it
     let fits =
         |b: &PackBuild| clouds.is_empty() || clouds.iter().any(|c| supports(&b.cloud_types, c));
-    pin.newer = builds
+    offered
+        .builds
         .iter()
         .filter(|b| is_newer(&b.version, &pin.version, pre_release))
         .filter(|b| !b.retired())
@@ -566,26 +703,7 @@ fn read_pin<A: PaletteApi>(
             listed: b.listed.clone(),
             drops: dropped(architectures, architectures_of(&b.version)),
         })
-        .collect();
-    pin.behind = !pin.newer.is_empty();
-    // a pin that is current is current against the copy of the registry in Palette. When
-    // the last sync did not complete, the copy is the copy of an earlier sync, and the pin
-    // says so. A pin that is behind needs no note: a newer version in the copy is a newer
-    // version in the registry. The first build gives the kind of the registry. A registry
-    // with no build of the pack is not in the listing, so it gets no note
-    if !pin.behind
-        && let Some(first) = builds.first()
-    {
-        let note = match reads.syncs.entry(pin.registry_uid.clone()) {
-            Entry::Occupied(e) => e.into_mut(),
-            Entry::Vacant(v) => {
-                v.insert(listings.sync_note(&pin.registry_uid, Some(first.kind), progress)?)
-            }
-        };
-        pin.registry_sync = note.sync.as_ref().filter(|s| !s.completed()).cloned();
-        pin.registry_sync_error = note.error.clone();
-    }
-    Ok(())
+        .collect()
 }
 
 /// True when `candidate` is a newer version than `pin`: it is above `pin` by [`version::compare`].
@@ -615,7 +733,8 @@ fn dropped(pinned: &[String], newer: &[String]) -> Vec<String> {
 }
 
 /// Give `pin` its bump: what a move to the newest version does, and the answer of Palette for
-/// the records `holding` that pin it. A comparison that fails is the error of `pin`.
+/// the records `holding` that pin it. A comparison that fails is the error of `pin`. A pin with no
+/// newer version has no bump.
 fn read_bump<A: PaletteApi>(
     pin: &mut Pin,
     holding: &[&Snapshot],
@@ -624,7 +743,10 @@ fn read_bump<A: PaletteApi>(
     at: &str,
     progress: &Progress,
 ) {
-    let to = pin.newer[0].version.clone();
+    let Some(newest) = pin.newer.first() else {
+        return;
+    };
+    let to = newest.version.clone();
     progress.note(&format!("comparing {} {} with {to}", pin.name, pin.version));
     match bump_of(listings, pin, &to, at, progress) {
         Ok((mut bump, target)) => {
@@ -695,27 +817,4 @@ fn bump_and_target(pin: &Pin, to: &str, d: &Diff, b: Snapshot) -> Result<(Bump, 
         .find(|p| p.name == pin.name)
         .ok_or_else(no_pack)?;
     Ok((bump, target))
-}
-
-impl Pin {
-    /// True when `p` is the pack that this pin names, as a record holds it.
-    pub(super) fn pins(&self, p: &Pack) -> bool {
-        PinKey::of(p) == self.key()
-    }
-
-    /// True when `c` is the pack that this pin names, as the template of a profile in the
-    /// document of a cluster holds it. The template names the pack and its tag.
-    pub(super) fn is_in_template(&self, c: &Value) -> bool {
-        str_at(c, "/name") == self.name && str_at(c, "/tag") == self.tag
-    }
-
-    /// What identifies this pin in the records.
-    fn key(&self) -> PinKey {
-        PinKey {
-            name: self.name.clone(),
-            registry_uid: self.registry_uid.clone(),
-            version: self.version.clone(),
-            tag: self.tag.clone(),
-        }
-    }
 }

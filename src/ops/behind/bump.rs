@@ -15,12 +15,13 @@ use std::collections::btree_map::Entry;
 
 use serde_json::Value;
 
-use super::behind::Pin;
-use super::consumer_list::consumer_names;
-use super::scope_of;
-use super::validate::{moved_profile_body, moved_template_bodies, profile_packs_answer};
+use super::{Pin, PinKey};
 use crate::api::{Palette, PaletteApi};
 use crate::error::Result;
+use crate::json::str_at;
+use crate::ops::consumer_list::consumer_names;
+use crate::ops::scope_of;
+use crate::ops::validate::{moved_profile_body, moved_template_bodies, profile_packs_answer};
 use crate::snapshot::{ClusterSource, Pack, Snapshot, SubjectKind};
 use crate::text::plural;
 use crate::validation::{PaletteRefusal, ProfileValidation};
@@ -234,4 +235,27 @@ fn not_asked(project: &str, n: usize) -> String {
         plural(n, "record", "records"),
         plural(n, "was", "were")
     )
+}
+
+impl Pin {
+    /// True when `p` is the pack that this pin names, as a record holds it.
+    fn pins(&self, p: &Pack) -> bool {
+        PinKey::of(p) == self.key()
+    }
+
+    /// True when `c` is the pack that this pin names, as the template of a profile in the
+    /// document of a cluster holds it. The template names the pack and its tag.
+    fn is_in_template(&self, c: &Value) -> bool {
+        str_at(c, "/name") == self.name && str_at(c, "/tag") == self.tag
+    }
+
+    /// What identifies this pin in the records.
+    fn key(&self) -> PinKey {
+        PinKey {
+            name: self.name.clone(),
+            registry_uid: self.registry_uid.clone(),
+            version: self.version.clone(),
+            tag: self.tag.clone(),
+        }
+    }
 }

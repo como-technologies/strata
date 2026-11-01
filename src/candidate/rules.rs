@@ -5,7 +5,8 @@ use std::path::Path;
 use serde_json::Value;
 
 use super::{
-    Candidate, LayerKind, LoadedCandidate, LoadedLayer, MINTED_LAYER, RegistryRef, export, gaps,
+    Candidate, CandidateLayer, LayerKind, LoadedCandidate, LoadedLayer, MINTED_LAYER, RegistryRef,
+    export, gaps,
 };
 use crate::error::{Error, Result};
 use crate::snapshot::pack::params_problem;
@@ -68,7 +69,6 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
         return Err(invalid("a candidate needs at least one layer".to_string()));
     }
     let base = path.parent().unwrap_or(Path::new("."));
-    let read = |rel: &str| crate::file::read_file(&base.join(rel));
     let top = pick_registry(
         &candidate.registry_uid,
         &candidate.registry,
@@ -77,74 +77,7 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
     )?;
     let mut layers = Vec::with_capacity(candidate.layers.len());
     for (i, l) in candidate.layers.iter().enumerate() {
-        let whom = format!("layer {} ({})", i + 1, l.name);
-        let registry = match l.kind {
-            None => Some(
-                pick_registry(&l.registry_uid, &l.registry, invalid, &whom)?
-                    .or_else(|| top.clone())
-                    .ok_or_else(|| {
-                        invalid(format!(
-                            "{whom} has no registry; set registry or registryUid on the layer or \
-                             at the top"
-                        ))
-                    })?,
-            ),
-            // Palette makes the pack of a manifest layer from its own manifest pack: no registry
-            // holds it, and the top-level registry does not apply to it
-            Some(LayerKind::Manifest) => {
-                if l.registry.is_some() || l.registry_uid.is_some() {
-                    return Err(invalid(format!(
-                        "{whom} is a manifest layer and names a registry; remove registry and \
-                         registryUid from it"
-                    )));
-                }
-                if l.manifests.is_empty() {
-                    return Err(invalid(format!(
-                        "{whom} is a manifest layer with no manifest; give it one manifest or more"
-                    )));
-                }
-                // Palette takes the layer from its own manifest pack, and drops the layer of the
-                // request, so another layer gives a record that the published version never has
-                if let Some(layer) = l.layer.as_deref().filter(|&x| x != MINTED_LAYER.as_str()) {
-                    return Err(invalid(format!(
-                        "{whom} is a manifest layer with layer {layer}; Palette gives each manifest \
-                         pack the layer {MINTED_LAYER}, so remove layer or set it to \
-                         {MINTED_LAYER}"
-                    )));
-                }
-                None
-            }
-        };
-        if let Some(problem) = params_problem(&l.params) {
-            return Err(invalid(format!("{whom}: {problem}")));
-        }
-        let values = match (&l.values, &l.values_file) {
-            (Some(_), Some(_)) => {
-                return Err(invalid(format!("{whom} sets both values and valuesFile")));
-            }
-            (Some(v), None) => Some(v.clone()),
-            (None, Some(f)) => Some(read(f)?),
-            (None, None) => None,
-        };
-        let mut manifests = Vec::with_capacity(l.manifests.len());
-        for m in &l.manifests {
-            let content = match (&m.content, &m.content_file) {
-                (Some(c), None) => c.clone(),
-                (None, Some(f)) => read(f)?,
-                _ => {
-                    return Err(invalid(format!(
-                        "manifest {} of {whom} needs exactly one of content and contentFile",
-                        m.name
-                    )));
-                }
-            };
-            manifests.push((m.name.clone(), content));
-        }
-        layers.push(LoadedLayer {
-            registry,
-            values,
-            manifests,
-        });
+        layers.push(check_layer(l, i, top.as_ref(), base, invalid)?);
     }
     gaps::check_file(&candidate).map_err(|broken| broken.at(path))?;
     Ok(LoadedCandidate {
@@ -152,4 +85,96 @@ pub fn check(candidate: Candidate, path: &Path) -> Result<LoadedCandidate> {
         candidate,
         layers,
     })
+}
+
+/// Check the layer `l`, the layer number `i` of the candidate, and read the files it points at,
+/// relative to the directory `base`. `top` is the registry that the candidate names, for a layer
+/// with none of its own.
+fn check_layer(
+    l: &CandidateLayer,
+    i: usize,
+    top: Option<&RegistryRef>,
+    base: &Path,
+    invalid: impl Fn(String) -> Error + Copy,
+) -> Result<LoadedLayer> {
+    let whom = format!("layer {} ({})", i + 1, l.name);
+    let read = |rel: &str| crate::file::read_file(&base.join(rel));
+    let registry = layer_registry(l, &whom, top, invalid)?;
+    if let Some(problem) = params_problem(&l.params) {
+        return Err(invalid(format!("{whom}: {problem}")));
+    }
+    let values = match (&l.values, &l.values_file) {
+        (Some(_), Some(_)) => {
+            return Err(invalid(format!("{whom} sets both values and valuesFile")));
+        }
+        (Some(v), None) => Some(v.clone()),
+        (None, Some(f)) => Some(read(f)?),
+        (None, None) => None,
+    };
+    let mut manifests = Vec::with_capacity(l.manifests.len());
+    for m in &l.manifests {
+        let content = match (&m.content, &m.content_file) {
+            (Some(c), None) => c.clone(),
+            (None, Some(f)) => read(f)?,
+            _ => {
+                return Err(invalid(format!(
+                    "manifest {} of {whom} needs exactly one of content and contentFile",
+                    m.name
+                )));
+            }
+        };
+        manifests.push((m.name.clone(), content));
+    }
+    Ok(LoadedLayer {
+        registry,
+        values,
+        manifests,
+    })
+}
+
+/// The registry of the layer `l`, called `whom` in a problem: its own, else `top`. A manifest
+/// layer has none.
+fn layer_registry(
+    l: &CandidateLayer,
+    whom: &str,
+    top: Option<&RegistryRef>,
+    invalid: impl Fn(String) -> Error + Copy,
+) -> Result<Option<RegistryRef>> {
+    match l.kind {
+        None => Ok(Some(
+            pick_registry(&l.registry_uid, &l.registry, invalid, whom)?
+                .or_else(|| top.cloned())
+                .ok_or_else(|| {
+                    invalid(format!(
+                        "{whom} has no registry; set registry or registryUid on the layer or \
+                         at the top"
+                    ))
+                })?,
+        )),
+        // Palette makes the pack of a manifest layer from its own manifest pack: no registry
+        // holds it, and the top-level registry does not apply to it
+        Some(LayerKind::Manifest) => {
+            if l.registry.is_some() || l.registry_uid.is_some() {
+                return Err(invalid(format!(
+                    "{whom} is a manifest layer and names a registry; remove registry and \
+                     registryUid from it"
+                )));
+            }
+            if l.manifests.is_empty() {
+                return Err(invalid(format!(
+                    "{whom} is a manifest layer with no manifest; give it one manifest or more"
+                )));
+            }
+            // Palette takes the layer from its own manifest pack, and drops the layer of the
+            // request, so another layer gives a record that the published version never has
+            if let Some(layer) = l.layer.as_deref().filter(|&x| x != MINTED_LAYER.as_str()) {
+                return Err(invalid(format!(
+                    "{whom} is a manifest layer with layer {layer}; Palette gives each manifest \
+                     pack the layer {MINTED_LAYER}, so remove layer or set it to \
+                     {MINTED_LAYER}"
+                )));
+            }
+            Ok(None)
+        }
+    }
 }

@@ -20,6 +20,7 @@ use strata::profile_type::ProfileType;
 use strata::reference::Ref;
 use strata::term::progress::Progress;
 
+use common::CommandExt;
 use common::{
     CLUSTER_LISTING, CLUSTER_SEARCH, CLUSTER_SEARCH_SCHEMA, CLUSTER_UID, EDGE_HOST_SEARCH,
     OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, REGISTRY_LISTING,
@@ -5273,7 +5274,7 @@ fn built_examples() -> tempfile::TempDir {
         .env("EXAMPLES_DIR", dir.path())
         .env("OFFLINE", "1")
         .env("STRATA_BIN", strata_bin())
-        .output()
+        .output_locked()
         .unwrap();
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
     dir
@@ -16462,7 +16463,7 @@ fn a_record_with_values_of_a_later_release_reads_with_no_error_and_writes_the_sa
     let out = std::process::Command::new(strata_bin())
         .args(["compare", "--json"])
         .args([&path, &path])
-        .output()
+        .output_locked()
         .unwrap();
     assert_eq!(out.status.code(), Some(0), "{}", common::text(&out.stderr));
     let d: Value = serde_json::from_slice(&out.stdout).unwrap();
