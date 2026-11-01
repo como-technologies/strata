@@ -18,7 +18,6 @@ use crate::snapshot::{GroupMember, Snapshot, SubjectKind};
 use crate::term::progress::Progress;
 
 mod behind;
-mod bump;
 mod consumer_list;
 mod consumers;
 mod fleet;
