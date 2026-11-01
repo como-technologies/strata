@@ -165,7 +165,7 @@ fn the_mask_is_idempotent_and_leaves_no_secret_in_clear() {
 }
 
 #[test]
-fn the_version_order_is_a_total_order() {
+fn the_version_order_is_a_total_preorder() {
     /// The pieces of a version: numbers with and without a zero in front, a letter, a separator,
     /// a word, and a digit that is not ASCII.
     const PIECES: [&str; 14] = [

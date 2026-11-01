@@ -64,7 +64,7 @@ pub(crate) fn canon_is_idempotent(values: &str) -> bool {
 const MAX_KEY: usize = 1024;
 
 /// True when the canonical text of a key of `value`, at any depth, is longer than [`MAX_KEY`]. A
-/// parser cannot read that text back, so the check of the canonical form leaves such values out.
+/// parser cannot read that text again, so the check of the canonical form omits such values.
 fn has_a_long_key(value: &Value) -> bool {
     match value {
         Value::Object(map) => map.iter().any(|(key, item)| {

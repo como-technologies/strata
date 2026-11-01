@@ -131,7 +131,7 @@ fn check_draft(values: &str, fields: &[String], masked: &str) {
     };
     let after: Yaml = serde_yaml::from_str(masked)
         .unwrap_or_else(|e| panic!("the mask broke the YAML of {values:?}: {e}\n{masked}"));
-    // A schema field with no name is no field: Palette leaves it out of the list of secrets.
+    // A schema field with no name is no field: Palette omits it from the list of secrets.
     let secret: BTreeSet<Vec<String>> = fields
         .iter()
         .filter(|field| !field.is_empty())

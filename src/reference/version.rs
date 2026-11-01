@@ -7,14 +7,15 @@ use crate::reference::LATEST;
 
 /// Compare two version strings as Palette does.
 ///
-/// Palette orders by semantic version, and so does this function when both strings parse as
-/// Palette parses a version: an optional `v`, one to three numbers, an optional pre-release after
-/// `-`, and optional build data after `+`. A pre-release is below its version: `1.0.1-rc.1` is
-/// below `1.0.1`. Build data has no precedence: `1.0.1+2` equals `1.0.1`. A missing number is `0`.
+/// Palette orders by semantic version. This function does the same when both strings parse as
+/// Palette parses a version. Such a version has an optional `v`, one to three numbers, an optional
+/// pre-release after `-`, and optional build data after `+`. A pre-release is below its version:
+/// `1.0.1-rc.1` is below `1.0.1`. Build data has no precedence: `1.0.1+2` equals `1.0.1`. A
+/// missing number is `0`.
 ///
-/// A string that does not parse keeps the natural order: runs of digits compare as numbers
-/// (leading zeros do not count), runs of anything else compare as text, and when one string is a
-/// prefix of the other the longer one is higher. This orders `LTS__24.x` above `LTS__22.04`. The
+/// A string that does not parse keeps the natural order. Runs of digits compare as numbers, and a
+/// zero in front does not count. Runs of other characters compare as text. When one string is a
+/// prefix of the other, the longer one is higher. This orders `LTS__24.x` above `LTS__22.04`. The
 /// order of all strings is total: the empty string is the lowest, then each string that parses,
 /// then each string that does not.
 pub fn compare(a: &str, b: &str) -> Ordering {
