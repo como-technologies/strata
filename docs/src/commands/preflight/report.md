@@ -34,3 +34,8 @@ lower bound of each rate. The summary and the section scorecard:
 `report.html` is one page with the scorecard, each result, and the reproduce
 lines, for a person who did not run the command. `world.json` is the document
 each rule reads, with no secret in it; `entity.json` is the body of the create.
+
+The terminal, the markdown, and the HTML form write a failed rule with the same
+fix, as `fix: <text> (<owner>)`. A rule that is not checked, or that gave an error,
+found no fault, so it shows no fix. The three forms write the confidence of a rule
+in the same words: `catch <rate>, clean <rate>`.

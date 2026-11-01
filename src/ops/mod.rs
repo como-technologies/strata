@@ -41,8 +41,9 @@ pub use source::*;
 pub use validate::*;
 pub use verify::*;
 
-// the command line writes each record through this public path
-pub use crate::file::write_file;
+// the command line writes each record through this public path, and names the records of its
+// arguments through the other two
+pub use crate::file::{expand_records, is_pattern, write_file};
 
 // the states of a cluster were constants of `ops` in release 0.25.0: they stay for one minor
 // release, and `cluster_state::ClusterState` replaces them

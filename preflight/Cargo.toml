@@ -27,8 +27,6 @@ path = "src/main.rs"
 # adds the rules and the checks; strata never depends on it.
 strata = { path = ".." }
 chrono = "0.4"
-# The record patterns, by the same rules as strata: `**` matches zero or more directories.
-glob = "0.3"
 clap = { version = "4", features = ["derive"] }
 # The checks of the rules are jq programs over one JSON document, so a person reads a rule with
 # the jq they know, and runs the same program by hand with `jq`. jaq is jq in Rust, with no

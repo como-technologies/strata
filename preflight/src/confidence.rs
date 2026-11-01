@@ -257,6 +257,11 @@ pub struct Confidence {
 }
 
 impl Confidence {
+    /// `catch 14/14 (81%), clean 9/9 (72%)`: the two rates, as a report shows them.
+    pub fn text(&self) -> String {
+        format!("catch {}, clean {}", self.catch.text(), self.clean.text())
+    }
+
     /// From the counts.
     pub fn of(engine: &str, release: &str, counts: &Counts, bar: f64) -> Confidence {
         let catch = Rate::of(counts.caught, counts.caught + counts.missed);

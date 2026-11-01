@@ -1,8 +1,10 @@
 //! The binary, end to end: a custom probes file, the static tier offline, the exit codes, and the
 //! JSON document. No network.
 
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::{Arc, Mutex};
 
 fn bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_strata-preflight"))
@@ -160,6 +162,48 @@ rules:
         ),
         "{err}"
     );
+}
+
+#[test]
+fn a_probes_file_with_a_program_that_nests_in_keywords_or_comments_is_refused_with_exit_2() {
+    let dir = tempfile::tempdir().unwrap();
+    // each program is far past the depth that overflows the stack of the thread of the binary
+    let programs = [
+        ("try", format!("{}[]", "try ".repeat(8000))),
+        ("and", format!("{}true", "true and ".repeat(20000))),
+        (
+            "if",
+            format!(
+                "{}1{}",
+                "if . then ".repeat(5000),
+                " else 2 end".repeat(5000)
+            ),
+        ),
+        (
+            "def",
+            format!("{}.{}", "def f: ".repeat(5000), "; f".repeat(5000)),
+        ),
+        (
+            "comment",
+            format!("{}1{}", "(# )\n".repeat(8000), ")".repeat(8000)),
+        ),
+    ];
+    for (shape, program) in programs {
+        let probes = format!(
+            "section: deep\ntitle: Deep\nrules:\n  - id: deep-{shape}\n    title: A deep program\n    engines: [aws]\n    tier: static\n    status: proposed\n    what: The program nests too deep.\n    check:\n      kind: static\n      expr: {}\n",
+            serde_json::to_string(&program).unwrap()
+        );
+        std::fs::write(dir.path().join("deep.yaml"), probes).unwrap();
+        let (code, out, err) = run(&["--rules", "--probes", "deep.yaml"], dir.path());
+        assert_eq!(code, 2, "{shape}: {err}");
+        assert!(out.is_empty(), "{shape}: {out}");
+        assert!(
+            err.contains(&format!(
+                "rule deep-{shape}: `expr`: the program nests more than 64 levels"
+            )),
+            "{shape}: {err}"
+        );
+    }
 }
 
 #[test]
@@ -432,47 +476,65 @@ fn a_cluster_ref_names_the_whole_cluster_and_needs_palette() {
     assert!(err.contains("cluster:UID needs Palette"), "{err}");
 }
 
-#[test]
-fn a_cluster_ref_with_a_profile_is_a_usage_error_with_no_key_and_before_any_request() {
-    use std::io::Write;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    // a server on this machine that counts the requests and refuses each one
+/// A server on this machine that refuses each request. Gives its address and the first line of each
+/// request that it got, such as `GET /v1/projects HTTP/1.1`.
+fn refusing_server() -> (String, Arc<Mutex<Vec<String>>>) {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let host = format!("http://{}", listener.local_addr().unwrap());
-    let requests = Arc::new(AtomicUsize::new(0));
-    let counter = Arc::clone(&requests);
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let seen = Arc::clone(&requests);
     std::thread::spawn(move || {
-        for stream in listener.incoming().flatten() {
-            counter.fetch_add(1, Ordering::SeqCst);
-            let mut stream = stream;
+        for mut stream in listener.incoming().flatten() {
+            let mut line = String::new();
+            let _ = BufReader::new(&stream).read_line(&mut line);
+            seen.lock().unwrap().push(line.trim_end().to_string());
             let _ = stream
                 .write_all(b"HTTP/1.1 500 Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
         }
     });
+    (host, requests)
+}
+
+/// The binary, set to run against the server `host` with the project `payments` and, when given, a
+/// key. A request goes to the server, and a run with no key stops before it.
+fn command_against(host: &str, key: Option<&str>, dir: &std::path::Path) -> Command {
+    let mut command = Command::new(bin());
+    command
+        .current_dir(dir)
+        .env("HOME", dir)
+        .env("STRATA_QUIET", "1")
+        .env("STRATA_RETRIES", "0")
+        .env("NO_COLOR", "1")
+        .env("PALETTE_API", host)
+        .env("PALETTE_PROJECT", "payments")
+        .env_remove("PALETTE_PROJECT_UID")
+        .env_remove("SPECTROCLOUD_APIKEY")
+        .env_remove("SPECTROCLOUD_HOST");
+    match key {
+        Some(key) => command.env("PALETTE_API_KEY", key),
+        None => command.env_remove("PALETTE_API_KEY"),
+    };
+    command
+}
+
+/// Run [`command_against`] with `args` and give its output.
+fn run_against(
+    host: &str,
+    key: Option<&str>,
+    args: &[&str],
+    dir: &std::path::Path,
+) -> std::process::Output {
+    command_against(host, key, dir).args(args).output().unwrap()
+}
+
+#[test]
+fn a_cluster_ref_with_a_profile_is_a_usage_error_with_no_key_and_before_any_request() {
+    let (host, requests) = refusing_server();
     let dir = tempfile::tempdir().unwrap();
     for source in ["cluster:barney/addons", "cluster:barney@pending"] {
         // with no key, and with a key and a project name, which makes a project lookup first
         for key in [None, Some("k")] {
-            let mut command = Command::new(bin());
-            command
-                .args([source, "--json"])
-                .current_dir(dir.path())
-                .env("HOME", dir.path())
-                .env("STRATA_QUIET", "1")
-                .env("STRATA_RETRIES", "0")
-                .env("NO_COLOR", "1")
-                .env("PALETTE_API", &host)
-                .env("PALETTE_PROJECT", "payments")
-                .env_remove("PALETTE_PROJECT_UID")
-                .env_remove("SPECTROCLOUD_APIKEY")
-                .env_remove("SPECTROCLOUD_HOST");
-            match key {
-                Some(key) => command.env("PALETTE_API_KEY", key),
-                None => command.env_remove("PALETTE_API_KEY"),
-            };
-            let output = command.output().unwrap();
+            let output = run_against(&host, key, &[source, "--json"], dir.path());
             let err = String::from_utf8_lossy(&output.stderr);
             assert_eq!(output.status.code(), Some(2), "{source} {key:?}: {err}");
             assert!(
@@ -481,7 +543,124 @@ fn a_cluster_ref_with_a_profile_is_a_usage_error_with_no_key_and_before_any_requ
             );
         }
     }
-    assert_eq!(requests.load(Ordering::SeqCst), 0);
+    assert!(requests.lock().unwrap().is_empty());
+}
+
+#[test]
+fn a_release_that_is_not_a_version_is_a_usage_error_with_no_key_and_before_any_request() {
+    let (host, requests) = refusing_server();
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
+    let runs: [&[&str]; 3] = [
+        &["cluster.json", "--cloud", "aws", "--release", "4.11.x"],
+        &["cluster:barney", "--release", "4.11.x"],
+        &["--rules", "--release", "4.11.x"],
+    ];
+    for args in runs {
+        for key in [None, Some("k")] {
+            let mut args = args.to_vec();
+            args.push("--json");
+            let output = run_against(&host, key, &args, dir.path());
+            let err = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(output.status.code(), Some(2), "{args:?} {key:?}: {err}");
+            assert!(
+                err.contains("\"kind\":\"usage\"")
+                    && err.contains("--release 4.11.x: give a release such as 4.10 or 4.10.12"),
+                "{args:?} {key:?}: {err}"
+            );
+        }
+    }
+    assert!(requests.lock().unwrap().is_empty());
+    // a release with one to three numbers lists the rules
+    for release in ["4", "4.11", "4.11.0", "4.11.0-rc.1"] {
+        let (code, _, err) = run(&["--rules", "--release", release], dir.path());
+        assert_eq!(code, 0, "{release}: {err}");
+    }
+}
+
+#[test]
+fn a_records_pattern_that_matches_no_file_is_a_pattern_error_as_in_strata() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
+    let pattern = "/nonexistent-barney/*.json";
+    let (code, out, err) = run(
+        &[
+            "cluster.json",
+            "--cloud",
+            "aws",
+            "--offline",
+            "--records",
+            pattern,
+            "--json",
+        ],
+        dir.path(),
+    );
+    assert_eq!(code, 2, "{out}");
+    let error: serde_json::Value = serde_json::from_str(err.trim()).unwrap();
+    assert_eq!(
+        error,
+        serde_json::json!({"error": {
+            "kind": "pattern",
+            "message": format!("'{pattern}' matched no files"),
+            "pattern": pattern,
+        }})
+    );
+    // a pattern that is not valid has the kind too
+    let (code, _, err) = run(
+        &[
+            "cluster.json",
+            "--cloud",
+            "aws",
+            "--offline",
+            "--records",
+            "[",
+            "--json",
+        ],
+        dir.path(),
+    );
+    assert_eq!(code, 2);
+    assert!(err.contains("\"kind\":\"pattern\""), "{err}");
+}
+
+#[test]
+fn a_uid_and_a_name_of_a_project_start_the_lookup_of_the_name_as_in_strata() {
+    let (host, requests) = refusing_server();
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
+    let args = ["cluster.json", "--cloud", "aws"];
+    let mut command = command_against(&host, Some("k"), dir.path());
+    // a person at the terminal: the lookup and the warning are on
+    command
+        .args(args)
+        .env_remove("STRATA_QUIET")
+        .env("PALETTE_PROJECT_UID", "p1")
+        .env("PALETTE_PROJECT", "lab");
+    let output = command.output().unwrap();
+    let err = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{err}");
+    assert!(
+        err.contains("looking up project lab"),
+        "the name is resolved to compare it with the uid: {err}"
+    );
+    // the server refuses the lookup, so the name is a warning and the uid decides
+    assert!(
+        err.contains("warning: PALETTE_PROJECT is 'lab', which no project matches")
+            && err.contains("PALETTE_PROJECT_UID is p1, and a uid has priority"),
+        "{err}"
+    );
+    assert!(!requests.lock().unwrap().is_empty());
+    // a quiet run writes no warning, so it makes no lookup for one
+    let mut command = command_against(&host, Some("k"), dir.path());
+    command
+        .args(args)
+        .env("PALETTE_PROJECT_UID", "p1")
+        .env("PALETTE_PROJECT", "lab");
+    let output = command.output().unwrap();
+    let err = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !err.contains("looking up project") && !err.contains("warning:"),
+        "{err}"
+    );
 }
 
 #[test]

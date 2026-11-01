@@ -50,6 +50,10 @@ assumes no topology.
 Strata reads the file before the first request. A file with a program that
 cannot run fails with the kind `catalog` and exit `2`. Such a program does not
 compile, reads `$item` where the check has no item, or nests more than 64
-levels. A level is a bracket, or an operator in a chain such as `a | b | c`. The
-programs of the catalog have fewer than 32 levels. See
+levels. See
 [A request for each item](../../reference/preflight-rules.md#a-request-for-each-item).
+
+A level is a bracket, an `if`, a `def`, or an operator in a chain such as
+`a | b | c`. The words `and`, `or`, `try`, `catch`, `reduce`, `foreach`, `as`, and
+`label` are operators too. A comment is no level. The programs of the catalog
+have fewer than 32 levels.

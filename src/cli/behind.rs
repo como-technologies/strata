@@ -6,11 +6,11 @@ use strata::error::Result;
 use strata::ops;
 
 use super::args::BehindArgs;
-use super::{connect, expand_records, now_utc};
+use super::{connect, now_utc};
 
 pub(crate) fn cmd_behind(a: &BehindArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
-    let paths = expand_records(&a.records)?;
+    let paths = ops::expand_records(&a.records)?;
     let since = match &a.since {
         Some(path) => Some(ops::BehindReport::load(path)?),
         None => None,

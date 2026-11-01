@@ -4,7 +4,6 @@ use strata::text::markdown_cell;
 
 use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
 use super::{CheckResult, Report, SectionScore, pct};
-use crate::confidence::NO_RUNS;
 use crate::probe::Verdict;
 
 /// The markdown form: a pull request comment.
@@ -61,11 +60,6 @@ fn check_row(c: &CheckResult) -> String {
         }
         t
     };
-    let conf = c
-        .confidence
-        .as_ref()
-        .map(|k| format!("catch {}, clean {}", k.catch.text(), k.clean.text()))
-        .unwrap_or_else(|| NO_RUNS.to_string());
     format!(
         "| {} | `{}` | {} | {} | {} ms | {} |\n",
         c.label(),
@@ -73,37 +67,32 @@ fn check_row(c: &CheckResult) -> String {
         c.tier.letter(),
         what,
         c.elapsed_ms,
-        conf
+        c.confidence_cell()
     )
 }
 
-/// The lines to run by hand for each check that failed, is not checked, or gave an error, with the
-/// fix of a failure. The text is empty when no check has such lines.
+/// The lines to run by hand and the fix of each check that shows them: see
+/// [`CheckResult::shown_reproduce`] and [`CheckResult::shown_fix`]. The text is empty when no check
+/// shows one.
 fn reproduce_section(checks: &[CheckResult]) -> String {
-    let repro: Vec<&CheckResult> = checks
+    let shown: Vec<&CheckResult> = checks
         .iter()
-        .filter(|c| {
-            matches!(
-                c.verdict,
-                Verdict::Failed | Verdict::NotChecked | Verdict::Error
-            ) && !c.reproduce.is_empty()
-        })
+        .filter(|c| !c.shown_reproduce().is_empty() || c.shown_fix().is_some())
         .collect();
-    if repro.is_empty() {
+    if shown.is_empty() {
         return String::new();
     }
-    let mut out = String::from("\n<details><summary>Reproduce by hand</summary>\n\n");
-    for c in repro {
-        out.push_str(&format!(
-            "**`{}`** — {}\n\n```bash\n{}\n```\n\n",
-            c.id,
-            c.title,
-            c.reproduce.join("\n")
-        ));
-        if let Some(fix) = &c.fix
-            && !fix.text.is_empty()
-        {
-            out.push_str(&format!("Fix ({}): {}\n\n", fix.owner, fix.text));
+    let mut out = String::from("\n<details><summary>Reproduce by hand and fix</summary>\n\n");
+    for c in shown {
+        out.push_str(&format!("**`{}`** — {}\n\n", c.id, c.title));
+        if !c.shown_reproduce().is_empty() {
+            out.push_str(&format!(
+                "```bash\n{}\n```\n\n",
+                c.shown_reproduce().join("\n")
+            ));
+        }
+        if let Some(fix) = c.shown_fix() {
+            out.push_str(&format!("Fix: {}\n\n", fix.line()));
         }
     }
     out.push_str("</details>\n");

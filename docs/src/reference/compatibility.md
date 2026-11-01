@@ -99,6 +99,12 @@ crate uses them. Use the public function that reaches each one:
   and `api::SearchedClusters`: `api::Palette::virtual_cluster_search` reads the
   virtual clusters.
 
+After 0.25.0, `ops::expand_records` and `ops::is_pattern` are public. `expand_records`
+gives the record files that a command line names, and it gives `Error::Pattern` for
+a pattern that no file matches. `api::connect_from_env`, `api::connect_with`, and
+`api::project_uid_named` are public. They build the client that `strata` and
+`strata-preflight` use, from the environment.
+
 After 0.25.0, `Ref::parse` reads `cluster:<uid>@pending/` as the ref of
 `cluster:<uid>@pending`. It read the uid `<uid>@pending`, and that ref printed as
 the text of another ref. `Ref::parse` reads `tag:+` and any tag text with no label
@@ -109,6 +115,11 @@ After 0.25.0, the library of `strata-preflight` changes in these ways:
 - `rule::release_in_range` orders a release that names three numbers with
   `reference::version::compare`, so `1.0.1-g0123456789ab` is below `1.0.1`. A
   bound must start with a number that parses: `>=4.x` is not a range now.
+- `rule::require_release` is new. It gives `Error::Usage` for a release that does
+  not parse. The command calls it for `--release`. `rule::release_in_range` still
+  puts a release that does not parse in each range.
+- `rule::Fix::line` and `confidence::Confidence::text` are new. They give the fix
+  line and the confidence text that the three forms of the report write.
 - `run::RunInputs` and `run::WatchInputs` have the field `paint: Paint` in
   place of `color: bool`. `Paint::off()` replaces `false`.
 - `report::render` and `report::terminal` take `&Paint` in place of `bool`.
@@ -540,6 +551,36 @@ each request, by its method, its path, and its body. The four rules that ask the
 validate route send one request. The six rules that read each edge host send one
 request for each host. `template-outside` reads the profile that the world read.
 A 5xx that is not a refusal is not kept, and the next rule asks again.
+
+After 0.25.0, `strata-preflight` refuses a `--release` that is not a version, such
+as `4.11.x`. The error kind is `usage`, the exit code is `2`, and the command
+sends no request. Release 0.25.0 read the numbers at the start of the text, so
+`4.11.x` was `4.11`. Give `4.11` now. [The order of
+versions](#the-order-of-versions) says which text is a version.
+
+After 0.25.0, the three forms of the report of `strata-preflight` show the fix in
+one way. The fix shows for a check that failed, and for no other check. The
+terminal form did this already. The markdown and the HTML form also showed the fix
+of a check that was not checked or gave an error. The markdown form showed a fix
+only for a check with `reproduce` lines.
+
+Each form writes the fix as `fix: <text> (<owner>)`, with `Fix:` in the markdown.
+Before, the markdown and the HTML form wrote `Fix (<owner>): <text>`. The markdown
+section for the lines to run by hand is now `Reproduce by hand and fix`. It lists
+each check that shows a `reproduce` line or a fix.
+
+After 0.25.0, the three forms write the confidence as `catch <rate>, clean <rate>`.
+The terminal form wrote no comma, and the HTML form put the two rates on two
+lines. A check with no confidence has `no runs` in a table, and no text in the
+terminal. The JSON report does not change.
+
+After 0.25.0, `strata-preflight --records` gives the error kind `pattern` for a
+pattern that no file matches or that is not valid, as `strata verify` does. It
+gave `usage`, and the exit code `2` stays. The message is
+`'<pattern>' matched no files`, and the error has the field `pattern`.
+`strata-preflight` also finds the uid of `PALETTE_PROJECT` as `strata` does. It
+warns when `PALETTE_PROJECT_UID` is set and the two name two projects. A quiet
+run does neither.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later

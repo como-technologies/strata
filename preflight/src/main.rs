@@ -6,9 +6,10 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
-use strata::api::{HttpApi, Palette, PaletteApi, Retry, RetryPolicy};
+use strata::api::{self, Palette, PaletteApi};
 use strata::closed_set::ClosedSet;
-use strata::config::{self, Config};
+use strata::config;
+use strata::ops;
 use strata::reference::Ref;
 use strata::term::color::{ColorMode, Paint, Stream};
 use strata::term::progress::Progress;
@@ -17,7 +18,7 @@ use strata_preflight::confidence::{self, Ledger};
 use strata_preflight::error::{Error, Result};
 use strata_preflight::probe::LiveBackend;
 use strata_preflight::report::{self, Format, Report};
-use strata_preflight::rule::{Catalog, Tier};
+use strata_preflight::rule::{self, Catalog, Tier};
 use strata_preflight::run::{self, Selection, WatchOptions};
 use strata_preflight::world::World;
 use strata_preflight::{TOOL_NAME, catalog};
@@ -207,62 +208,15 @@ fn ledger_of(cli: &Cli) -> Result<Ledger> {
     Ok(ledger)
 }
 
-fn expand(patterns: &[String]) -> Result<Vec<PathBuf>> {
-    let mut out = Vec::new();
-    for p in patterns {
-        if p.contains(['*', '?', '[']) {
-            let matches: Vec<PathBuf> = glob_paths(p)?;
-            if matches.is_empty() {
-                return Err(Error::Usage {
-                    message: format!("--records '{p}' matched no file"),
-                });
-            }
-            out.extend(matches);
-        } else {
-            out.push(PathBuf::from(p));
-        }
-    }
-    Ok(out)
-}
-
-/// A pattern over the file system, expanded by the same crate as strata, so `releases/**/*.json`
-/// names the records at every depth, the ones directly under `releases/` too.
-fn glob_paths(pattern: &str) -> Result<Vec<PathBuf>> {
-    let mut out: Vec<PathBuf> = glob::glob(pattern)
-        .map_err(|e| Error::Usage {
-            message: format!("--records '{pattern}' is not a valid pattern: {}", e.msg),
-        })?
-        .filter_map(std::result::Result::ok)
-        .filter(|p| p.is_file())
-        .collect();
-    out.sort();
-    Ok(out)
-}
-
-fn connect(progress: Progress) -> Result<Palette<Retry<HttpApi>>> {
-    let mut config = Config::from_env()?;
-    if config.project_uid.is_none()
-        && let Some(name) = config.project_name.clone()
-    {
-        let mut tenant = config.clone();
-        tenant.project_uid = None;
-        progress.note(&format!("looking up project {name}"));
-        let uid = client(tenant, progress).project_uid_named(&name)?;
-        config.project_uid = Some(uid);
-    }
-    Ok(client(config, progress))
-}
-
-fn client(config: Config, progress: Progress) -> Palette<Retry<HttpApi>> {
-    let policy = RetryPolicy::from_config(&config);
-    Palette::new(Retry::new(HttpApi::new(config), policy, progress))
-}
-
 fn run_cli(cli: Cli) -> Result<ExitCode> {
     // --verbose asks for the lines, so it wins over STRATA_QUIET; --quiet wins over both
     let progress = Progress::new(cli.quiet || (config::quiet_from_env() && !cli.verbose));
     if let Some(kind) = cli.schema {
         return print_schema(kind);
+    }
+    // a release that is not a version is in each range: refuse it before any request
+    if let Some(release) = &cli.release {
+        rule::require_release(release)?;
     }
     let catalog = catalog::with_probes(&cli.probes)?;
     let tiers = tiers_of(&cli)?;
@@ -347,7 +301,7 @@ fn check_cluster(
     let palette = if cli.offline {
         None
     } else {
-        Some(connect(progress)?)
+        Some(api::connect_from_env(progress)?)
     };
     // the world and the checks read through one backend, which keeps each answer for the run. So
     // a request that the world made, and that a rule makes again, goes out one time
@@ -441,7 +395,7 @@ fn world_of<A: PaletteApi>(
         world = world.with_change(change)?;
     }
     if !cli.records.is_empty() {
-        world = world.with_records(&expand(&cli.records)?)?;
+        world = world.with_records(&ops::expand_records(&cli.records)?)?;
     }
     if let Some(reads) = reads {
         world = world.with_palette(reads, now, progress)?;
@@ -591,43 +545,5 @@ mod tests {
         assert!(help.contains("--rules"), "{help}");
         assert!(help.contains("--probes"), "{help}");
         assert!(help.contains("--strict"), "{help}");
-    }
-
-    #[test]
-    fn a_records_pattern_matches_at_every_depth_and_a_plain_path_stays() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path().to_path_buf();
-        for f in [
-            "releases/x.json",
-            "releases/aws/a.json",
-            "releases/aws/2026/b.json",
-        ] {
-            let path = dir.join(f);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(&path, "{}").unwrap();
-        }
-        let pattern = dir.join("releases/**/*.json").display().to_string();
-        let found = expand(&[pattern]).unwrap();
-        let names: Vec<String> = found
-            .iter()
-            .map(|p| p.strip_prefix(&dir).unwrap().display().to_string())
-            .collect();
-        assert_eq!(
-            names,
-            vec![
-                "releases/aws/2026/b.json",
-                "releases/aws/a.json",
-                "releases/x.json"
-            ],
-            "`**` matches zero directories as well as many"
-        );
-        let plain = dir.join("releases/x.json").display().to_string();
-        assert_eq!(
-            expand(std::slice::from_ref(&plain)).unwrap(),
-            vec![PathBuf::from(plain)]
-        );
-        let none = dir.join("releases/**/*.yaml").display().to_string();
-        let err = expand(&[none]).unwrap_err().to_string();
-        assert!(err.contains("matched no file"), "{err}");
     }
 }

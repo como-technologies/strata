@@ -117,9 +117,8 @@ fn result_lines(c: &CheckResult, paint: &Paint) -> String {
     let mut out = String::new();
     let label = format!("{:<12}", c.label());
     let conf = c
-        .confidence
-        .as_ref()
-        .map(|k| format!("  catch {} clean {}", k.catch.text(), k.clean.text()))
+        .confidence_text()
+        .map(|text| format!("  {text}"))
         .unwrap_or_default();
     out.push_str(&format!(
         "  {}  {:<28} {:<60} {:>5} ms{conf}\n",
@@ -136,25 +135,11 @@ fn result_lines(c: &CheckResult, paint: &Paint) -> String {
             out.push_str(&format!("{:<16}{} {line}\n", "", paint.dim("ran:")));
         }
     }
-    if matches!(
-        c.verdict,
-        Verdict::Failed | Verdict::NotChecked | Verdict::Error
-    ) {
-        for line in &c.reproduce {
-            out.push_str(&format!("{:<16}{} {line}\n", "", paint.dim("reproduce:")));
-        }
-        if c.verdict == Verdict::Failed
-            && let Some(fix) = &c.fix
-            && !fix.text.is_empty()
-        {
-            out.push_str(&format!(
-                "{:<16}{} {} ({})\n",
-                "",
-                paint.dim("fix:"),
-                fix.text,
-                fix.owner
-            ));
-        }
+    for line in c.shown_reproduce() {
+        out.push_str(&format!("{:<16}{} {line}\n", "", paint.dim("reproduce:")));
+    }
+    if let Some(fix) = c.shown_fix() {
+        out.push_str(&format!("{:<16}{} {}\n", "", paint.dim("fix:"), fix.line()));
     }
     out
 }

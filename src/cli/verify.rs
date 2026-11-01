@@ -7,13 +7,13 @@ use strata::snapshot::Snapshot;
 use strata::{diff, ops};
 
 use super::args::VerifyArgs;
-use super::{connect, exit_for, expand_records, is_pattern, now_utc, project_arg};
+use super::{connect, exit_for, now_utc, project_arg};
 
 pub(crate) fn cmd_verify(a: &VerifyArgs) -> Result<ExitCode> {
     let progress = a.out.progress();
-    let paths = expand_records(&a.snapshots)?;
+    let paths = ops::expand_records(&a.snapshots)?;
     let project = project_arg(progress, &a.project)?;
-    let bulk = a.summary || a.snapshots.len() > 1 || a.snapshots.iter().any(|s| is_pattern(s));
+    let bulk = a.summary || a.snapshots.len() > 1 || a.snapshots.iter().any(|s| ops::is_pattern(s));
     let options = ops::VerifyOptions {
         who: a.who,
         allow_no_digest: a.allow_no_digest,
