@@ -121,6 +121,48 @@ fn a_custom_probes_file_runs_beside_the_catalog_and_strict_counts_it() {
 }
 
 #[test]
+fn a_probes_file_with_a_program_that_cannot_run_is_refused_before_the_first_request() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
+    // the program over the responses runs with no item, so `$item` is not a variable of it
+    let probes = r#"
+section: landing-zone
+title: The landing zone of Example Corp
+rules:
+  - id: example-items
+    title: Each profile is known
+    engines: [aws]
+    tier: palette
+    status: proposed
+    what: Palette knows each profile of the entity.
+    check:
+      kind: palette
+      path: /v1/clusterprofiles/{{ $item.uid }}
+      each: .entity.spec.profiles
+      expr: '[.responses[] | select(.response.ok | not) | "profile \($item.uid) is unknown"]'
+"#;
+    std::fs::write(dir.path().join("items.yaml"), probes).unwrap();
+    let (code, out, err) = run(
+        &[
+            "cluster.json",
+            "--cloud",
+            "aws",
+            "--offline",
+            "--probes",
+            "items.yaml",
+        ],
+        dir.path(),
+    );
+    assert_eq!(code, 2, "{out}");
+    assert!(
+        err.contains(
+            "rule example-items: `expr`: the program does not compile: undefined variable $item"
+        ),
+        "{err}"
+    );
+}
+
+#[test]
 fn verbose_names_what_each_check_ran_and_wins_over_the_quiet_variable() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
@@ -171,6 +213,96 @@ fn verbose_names_what_each_check_ran_and_wins_over_the_quiet_variable() {
         dir.path(),
     );
     assert!(quiet.is_empty(), "{quiet}");
+}
+
+/// Run the offline report of `ENTITY` in a directory, with `--verbose` and the given variables,
+/// and give the standard output and the standard error. `NO_COLOR`, `CLICOLOR_FORCE`, and `TERM`
+/// are set only by `vars`.
+fn colors(vars: &[(&str, &str)], args: &[&str]) -> (String, String) {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
+    let mut command = Command::new(bin());
+    command
+        .args(["cluster.json", "--cloud", "aws", "--offline", "--verbose"])
+        .args(args)
+        .current_dir(dir.path())
+        .env("STRATA_QUIET", "1")
+        .env_remove("NO_COLOR")
+        .env_remove("CLICOLOR_FORCE")
+        .env_remove("TERM");
+    for (name, value) in vars {
+        command.env(name, value);
+    }
+    let o = command.output().unwrap();
+    (
+        String::from_utf8_lossy(&o.stdout).into_owned(),
+        String::from_utf8_lossy(&o.stderr).into_owned(),
+    )
+}
+
+#[test]
+fn the_color_follows_the_order_of_strata_for_each_stream() {
+    let painted = |text: &str| text.contains("\x1b[");
+    // a pipe has no color
+    let (out, err) = colors(&[], &[]);
+    assert!(!painted(&out) && !painted(&err), "{out}{err}");
+    // CLICOLOR_FORCE colors both streams, also with TERM=dumb
+    let (out, err) = colors(&[("CLICOLOR_FORCE", "1"), ("TERM", "dumb")], &[]);
+    assert!(painted(&out) && painted(&err), "{out}{err}");
+    // NO_COLOR with a value wins over CLICOLOR_FORCE
+    let (out, err) = colors(&[("CLICOLOR_FORCE", "1"), ("NO_COLOR", "1")], &[]);
+    assert!(!painted(&out) && !painted(&err), "{out}{err}");
+    // NO_COLOR with no value is not set, as `strata` reads it
+    let (out, err) = colors(&[("CLICOLOR_FORCE", "1"), ("NO_COLOR", "")], &[]);
+    assert!(painted(&out) && painted(&err), "{out}{err}");
+    // the flags win over the environment
+    let (out, err) = colors(&[("CLICOLOR_FORCE", "1")], &["--no-color"]);
+    assert!(!painted(&out) && !painted(&err), "{out}{err}");
+    let (out, err) = colors(&[("NO_COLOR", "1")], &["--color", "always"]);
+    assert!(painted(&out) && painted(&err), "{out}{err}");
+}
+
+#[test]
+fn out_names_the_path_in_the_error_when_it_cannot_write_and_makes_the_directory_when_it_can() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
+    // a file where the directory should be
+    std::fs::write(dir.path().join("taken"), "x").unwrap();
+    let (code, _, err) = run(
+        &[
+            "cluster.json",
+            "--cloud",
+            "aws",
+            "--offline",
+            "--out",
+            "taken/run",
+        ],
+        dir.path(),
+    );
+    assert_eq!(code, 2, "{err}");
+    assert!(err.contains("taken/run"), "the path is in the error: {err}");
+    // a directory that is not there is made, with its parents
+    let (code, _, err) = run(
+        &[
+            "cluster.json",
+            "--cloud",
+            "aws",
+            "--offline",
+            "--out",
+            "a/b/run",
+        ],
+        dir.path(),
+    );
+    assert_eq!(code, 0, "{err}");
+    for file in [
+        "report.md",
+        "report.json",
+        "report.html",
+        "world.json",
+        "entity.json",
+    ] {
+        assert!(dir.path().join("a/b/run").join(file).is_file(), "{file}");
+    }
 }
 
 #[test]

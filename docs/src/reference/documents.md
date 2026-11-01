@@ -665,9 +665,9 @@ what it answered.
     order of the list, with `method`, `path`, and `answer`. Such a check has no
     `ran` and no `answer` of its own.
   - `reproduce[]`: the lines a person runs to see the same thing.
-  - `fix` with `owner` and `text`; `evidence[]` with `kind`, `ref`, `note`. An
-    entry with an empty reference has no `ref`, and an entry with no note has
-    no `note`.
+  - `fix` with `owner` and `text`; `evidence[]` with `kind`, `ref`, `note`.
+    `kind` is `run`, `source`, `doc`, or `report`. An entry with an empty
+    reference has no `ref`, and an entry with no note has no `note`.
   - `confidence`, when the ledger has runs of the rule on this engine: `catch`
     and `clean`, each with `correct`, `total`, `rate`, and `lowerBound`; `bar`;
     `meetsBar`; and `runs[]`.

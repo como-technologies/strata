@@ -46,3 +46,8 @@ regions, the subnets of a landing zone, the tags that a policy needs, the cloud
 account of each environment. A custom probe reads the same world document, runs
 the same way, and follows the same promotion. Strata ships no custom probe and
 assumes no topology.
+
+Strata reads the file before the first request. A file with a program that
+cannot run fails with the kind `catalog` and exit `2`: a program that does not
+compile, or one that reads `$item` where the check has no item. See
+[A request for each item](../../reference/preflight-rules.md#a-request-for-each-item).

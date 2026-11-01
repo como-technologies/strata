@@ -6,6 +6,12 @@ use super::{Method, PaletteApi};
 use crate::config::Config;
 use crate::error::{Error, Result};
 
+/// The header that carries the API key.
+pub const API_KEY_HEADER: &str = "ApiKey";
+
+/// The header that carries the uid of the project.
+pub const PROJECT_UID_HEADER: &str = "ProjectUid";
+
 /// The HTTP implementation. One attempt per call; wrap it in [`Retry`](super::Retry) for more.
 pub struct HttpApi {
     config: Config,
@@ -28,10 +34,10 @@ impl HttpApi {
     /// The headers every request carries: the key, JSON, and the project when there is one.
     fn headers<B>(&self, req: ureq::RequestBuilder<B>) -> ureq::RequestBuilder<B> {
         let req = req
-            .header("ApiKey", self.config.api_key.as_str())
+            .header(API_KEY_HEADER, self.config.api_key.as_str())
             .header("Accept", "application/json");
         match &self.config.project_uid {
-            Some(p) => req.header("ProjectUid", p.as_str()),
+            Some(p) => req.header(PROJECT_UID_HEADER, p.as_str()),
             None => req,
         }
     }

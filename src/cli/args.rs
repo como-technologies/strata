@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use strata::ops::ListKind;
 use strata::render::{self, Format};
-use strata::term::color::{ColorMode, Paint};
+use strata::term::color::{ColorMode, Paint, Stream};
 use strata::term::progress::Progress;
 use strata::{TOOL_NAME, ops};
 
@@ -163,11 +163,7 @@ impl OutputArgs {
         format_of(self.json, Some(self.format))
     }
     pub(crate) fn paint(&self) -> Paint {
-        Paint::resolve(if self.no_color {
-            ColorMode::Never
-        } else {
-            self.color
-        })
+        Paint::resolve(self.color.unless(self.no_color), Stream::Stdout)
     }
     pub(crate) fn renderer(&self) -> Box<dyn render::Renderer> {
         render::renderer(self.format(), self.paint(), self.compact.compact)

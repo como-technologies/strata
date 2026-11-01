@@ -145,11 +145,6 @@ pub(crate) fn short_digest(digest: &str) -> String {
     }
 }
 
-/// `-` for an empty string.
-pub(crate) fn dash(s: &str) -> &str {
-    if s.is_empty() { "-" } else { s }
-}
-
 /// JSON rendering of a leaf value, truncated for the text reports; the JSON document carries all of it.
 pub(crate) fn show(v: &Value) -> String {
     let t = serde_json::to_string(v).unwrap_or_default();

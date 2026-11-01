@@ -47,21 +47,23 @@ use std::path::{Path, PathBuf};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use strata::api::Method;
+use strata::closed_set::legend::Described;
+use strata::closed_set::{ClosedSet, impl_closed_set};
 use strata::cloud::CLOUD_ALL;
 
 use crate::error::{Error, Result};
-use crate::jq::ITEM;
-use crate::world::CLOUDS;
+use crate::jq::{ITEM, Jq};
+use crate::world::clouds;
 
 /// The engine `lab`: it marks a check of the lab. No run of the plan records it, so a promotion
 /// counts the clouds alone.
 const ENGINE_LAB: &str = "lab";
 
 /// The engines a rule can name: `all`, which stands for every engine, then each cloud of
-/// [`CLOUDS`], then `lab`.
+/// [`clouds`], then `lab`.
 pub fn engines() -> impl Iterator<Item = &'static str> {
     std::iter::once(CLOUD_ALL)
-        .chain(CLOUDS.iter().copied())
+        .chain(clouds())
         .chain(std::iter::once(ENGINE_LAB))
 }
 
@@ -110,33 +112,34 @@ impl Tier {
         }
     }
 
-    /// The name, as the rule files spell it.
-    pub fn name(self) -> &'static str {
-        match self {
-            Tier::Static => "static",
-            Tier::Palette => "palette",
-            Tier::Cloud => "cloud",
-            Tier::Watch => "watch",
-            Tier::Race => "race",
-            Tier::Tool => "tool",
-        }
-    }
-
-    /// Every tier, in the order of the report.
-    pub const ALL: [Tier; 6] = [
-        Tier::Static,
-        Tier::Palette,
-        Tier::Cloud,
-        Tier::Watch,
-        Tier::Race,
-        Tier::Tool,
-    ];
-
-    /// Parse the name a person types.
-    pub fn parse(text: &str) -> Option<Tier> {
+    /// The tier that a person types: its name, or its letter in either case.
+    pub fn from_input(text: &str) -> Option<Tier> {
         Tier::ALL
-            .into_iter()
-            .find(|t| t.name() == text || t.letter().eq_ignore_ascii_case(text))
+            .iter()
+            .copied()
+            .find(|t| t.as_str() == text || t.letter().eq_ignore_ascii_case(text))
+    }
+}
+
+impl_closed_set!(Tier {
+    Static => "static",
+    Palette => "palette",
+    Cloud => "cloud",
+    Watch => "watch",
+    Race => "race",
+    Tool => "tool",
+});
+
+impl Described for Tier {
+    fn describe(self) -> &'static str {
+        match self {
+            Tier::Static => "the entity and the records alone; no key, no network",
+            Tier::Palette => "a call to Palette",
+            Tier::Cloud => "a call to the cloud with its tool",
+            Tier::Watch => "the conditions and the events of the cluster during the build",
+            Tier::Race => "no check before the build finds it; the watch finds its effect",
+            Tier::Tool => "a rule of the tool that makes the entity, out of scope here",
+        }
     }
 }
 
@@ -166,12 +169,18 @@ pub enum Level {
     Preflight,
 }
 
-impl Level {
-    /// The word of the report.
-    pub fn name(self) -> &'static str {
+impl_closed_set!(Level {
+    Probe => "probe",
+    Preflight => "preflight",
+});
+
+impl Described for Level {
+    fn describe(self) -> &'static str {
         match self {
-            Level::Probe => "probe",
-            Level::Preflight => "preflight",
+            Level::Probe => {
+                "the runs do not yet prove the check; a failure does not change the exit code without --strict"
+            }
+            Level::Preflight => "the runs prove the check on this engine; a failure is exit 1",
         }
     }
 }
@@ -202,16 +211,11 @@ pub enum Severity {
     Note,
 }
 
-impl Severity {
-    /// The word of the report.
-    pub fn name(self) -> &'static str {
-        match self {
-            Severity::Fail => "fail",
-            Severity::Warn => "warn",
-            Severity::Note => "note",
-        }
-    }
-}
+impl_closed_set!(Severity {
+    Fail => "fail",
+    Warn => "warn",
+    Note => "note",
+});
 
 /// Where the knowledge of the fault comes from.
 #[derive(
@@ -229,17 +233,12 @@ pub enum Status {
     Proposed,
 }
 
-impl Status {
-    /// The word of the report.
-    pub fn name(self) -> &'static str {
-        match self {
-            Status::Seen => "seen",
-            Status::Source => "source",
-            Status::Inferred => "inferred",
-            Status::Proposed => "proposed",
-        }
-    }
-}
+impl_closed_set!(Status {
+    Seen => "seen",
+    Source => "source",
+    Inferred => "inferred",
+    Proposed => "proposed",
+});
 
 /// Who fixes the fault for good, and how.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -251,6 +250,29 @@ pub struct Fix {
     pub text: String,
 }
 
+/// What a piece of evidence is.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum EvidenceKind {
+    /// A live run: its id, or the issue that holds it.
+    Run,
+    /// The source or the documentation of Palette shows it, and no run.
+    Source,
+    /// A public page.
+    Doc,
+    /// A findings report and its finding.
+    Report,
+}
+
+impl_closed_set!(EvidenceKind {
+    Run => "run",
+    Source => "source",
+    Doc => "doc",
+    Report => "report",
+});
+
 /// One piece of evidence: a live run, the source of Palette, a public page, or a findings report.
 ///
 /// An entry of the kind `source` quotes no code of Palette, and names no file, function, or
@@ -258,8 +280,8 @@ pub struct Fix {
 /// empty, or a file of this repository.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Evidence {
-    /// `run`, `source`, `doc`, or `report`.
-    pub kind: String,
+    /// What the evidence is.
+    pub kind: EvidenceKind,
     /// The run id or issue, a file of this repository, the page, or the report and its finding.
     #[serde(rename = "ref", default, skip_serializing_if = "String::is_empty")]
     pub reference: String,
@@ -291,6 +313,15 @@ impl Reproduce {
             Reproduce::Lines(l) => l.is_empty(),
             Reproduce::ByEngine(m) => m.values().all(Vec::is_empty),
         }
+    }
+
+    /// Each line of the rule, for every engine.
+    pub fn lines(&self) -> impl Iterator<Item = &str> {
+        let lines: Box<dyn Iterator<Item = &String> + '_> = match self {
+            Reproduce::Lines(l) => Box::new(l.iter()),
+            Reproduce::ByEngine(m) => Box::new(m.values().flatten()),
+        };
+        lines.map(String::as_str)
     }
 
     /// The lines for one engine.
@@ -402,25 +433,55 @@ pub enum Check {
     },
 }
 
-impl Check {
-    /// The kind, as the rule files spell it.
-    pub fn kind(&self) -> &'static str {
+/// The kind of a check, as the rule files spell it in `kind`.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum CheckKind {
+    /// A jq program over the world alone.
+    Static,
+    /// One request to Palette, or one for each item.
+    Palette,
+    /// One command on this machine.
+    Exec,
+    /// The conditions and the events of the cluster during the build.
+    Watch,
+}
+
+impl_closed_set!(CheckKind {
+    Static => "static",
+    Palette => "palette",
+    Exec => "exec",
+    Watch => "watch",
+});
+
+impl CheckKind {
+    /// The tier that a check of this kind belongs to.
+    pub fn tier(self) -> Tier {
         match self {
-            Check::Static { .. } => "static",
-            Check::Palette { .. } => "palette",
-            Check::Exec { .. } => "exec",
-            Check::Watch { .. } => "watch",
+            CheckKind::Static => Tier::Static,
+            CheckKind::Palette => Tier::Palette,
+            CheckKind::Exec => Tier::Cloud,
+            CheckKind::Watch => Tier::Watch,
+        }
+    }
+}
+
+impl Check {
+    /// The kind of the check.
+    pub fn kind(&self) -> CheckKind {
+        match self {
+            Check::Static { .. } => CheckKind::Static,
+            Check::Palette { .. } => CheckKind::Palette,
+            Check::Exec { .. } => CheckKind::Exec,
+            Check::Watch { .. } => CheckKind::Watch,
         }
     }
 
     /// The tier a check of this kind belongs to.
     pub fn tier(&self) -> Tier {
-        match self {
-            Check::Static { .. } => Tier::Static,
-            Check::Palette { .. } => Tier::Palette,
-            Check::Exec { .. } => Tier::Cloud,
-            Check::Watch { .. } => Tier::Watch,
-        }
+        self.kind().tier()
     }
 
     /// The main program of the check.
@@ -538,8 +599,26 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    /// Parse one section file. `path` names the file in messages, and roots the fixture paths.
+    /// Parse one section file, and compile each program of it with the variables that it has
+    /// when it runs. `path` names the file in messages, and roots the fixture paths.
+    ///
+    /// # Errors
+    ///
+    /// [`Error::Catalog`] when the file does not parse, breaks a rule of the format, or holds a
+    /// program that cannot run. Such a program does not compile, or it reads `$item` where a
+    /// check has none.
     pub fn parse_section(text: &str, path: &Path) -> Result<Section> {
+        let section = Self::parse_embedded(text, path)?;
+        check_section_programs(&section, path)?;
+        Ok(section)
+    }
+
+    /// Parse one section file as [`Catalog::parse_section`] does, but compile no program.
+    ///
+    /// The binary reads its own rule files with this. The compile of every program costs about a
+    /// tenth of a second at each start. The tests of this crate compile every program of every
+    /// file of the binary. A file that a person gives is read by `parse_section`.
+    pub(crate) fn parse_embedded(text: &str, path: &Path) -> Result<Section> {
         let mut section: Section = serde_yaml::from_str(text).map_err(|e| Error::Catalog {
             path: path.to_path_buf(),
             message: e.to_string(),
@@ -647,9 +726,9 @@ fn check_section(section: &Section, path: &Path) -> Result<()> {
             if check.tier() != rule.tier {
                 return Err(at(format!(
                     "the check is of kind {}, which is tier {}, and the rule says tier {}",
-                    check.kind(),
-                    check.tier().name(),
-                    rule.tier.name()
+                    check.kind().as_str(),
+                    check.tier().as_str(),
+                    rule.tier.as_str()
                 )));
             }
             if check.expr().trim().is_empty() {
@@ -660,23 +739,12 @@ fn check_section(section: &Section, path: &Path) -> Result<()> {
             {
                 return Err(at("an exec check needs an argv".into()));
             }
-            if let Check::Palette {
-                path, body, each, ..
-            } = check
+            if let Check::Palette { each, .. } = check
+                && each
+                    .as_deref()
+                    .is_some_and(|program| program.trim().is_empty())
             {
-                match each {
-                    Some(program) if program.trim().is_empty() => {
-                        return Err(at("`each` is empty; drop it, or give a program".into()));
-                    }
-                    None if path.contains(ITEM)
-                        || body.as_deref().is_some_and(|b| b.contains(ITEM)) =>
-                    {
-                        return Err(at(format!(
-                            "`path` or `body` reads {ITEM}, and the check has no `each`"
-                        )));
-                    }
-                    _ => {}
-                }
+                return Err(at("`each` is empty; drop it, or give a program".into()));
             }
         }
         if rule.level == Level::Preflight {
@@ -722,6 +790,84 @@ fn check_section(section: &Section, path: &Path) -> Result<()> {
                 return Err(at("a test needs a check".into()));
             }
         }
+    }
+    Ok(())
+}
+
+/// Make sure that every program of every rule of `section` can run: see [`check_programs`].
+fn check_section_programs(section: &Section, path: &Path) -> Result<()> {
+    let jq = Jq::new();
+    for rule in &section.rules {
+        check_programs(rule, &jq).map_err(|message| Error::Catalog {
+            path: path.to_path_buf(),
+            message: format!("rule {}: {message}", rule.id),
+        })?;
+    }
+    Ok(())
+}
+
+/// Make sure that every program of `rule` compiles, with the variables that it has when it runs.
+///
+/// A program of a check with `each` reads `$item` in its `path` and in its `body`, and in no other
+/// place. `each`, `expr`, `when`, an `argv`, and a `reproduce` line run with no item. So a rule
+/// that reads `$item` there cannot run, and the loader refuses it with the place and the reason.
+/// A POST with `each` and no `body` is refused too: it sends the entity one time for each
+/// item.
+fn check_programs(rule: &Rule, jq: &Jq) -> std::result::Result<(), String> {
+    let id = rule.id.as_str();
+    let describe = |place: &str, e: Error| {
+        let reason = match e {
+            Error::Jq { message, .. } => message,
+            other => other.to_string(),
+        };
+        format!("{place}: {reason}")
+    };
+    let program = |place: &str, text: &str, item: bool| {
+        jq.check(id, text, item).map_err(|e| describe(place, e))
+    };
+    let template = |place: &str, text: &str, item: bool| {
+        jq.check_template(id, text, item)
+            .map_err(|e| describe(place, e))
+    };
+    if let Some(when) = &rule.when {
+        program("`when`", when, false)?;
+    }
+    match &rule.check {
+        Some(Check::Static { expr } | Check::Watch { expr }) => {
+            program("`expr`", expr, false)?;
+        }
+        Some(Check::Palette {
+            method,
+            path,
+            body,
+            each,
+            expr,
+        }) => {
+            let item = each.is_some();
+            if let Some(each) = each {
+                program("`each`", each, false)?;
+            }
+            template("`path`", path, item)?;
+            if let Some(body) = body {
+                program("`body`", body, item)?;
+            }
+            if *method == Method::Post && item && body.is_none() {
+                return Err(format!(
+                    "`body`: a POST with `each` needs a `body` that reads {ITEM}; with none, it sends the entity one time for each item"
+                ));
+            }
+            program("`expr`", expr, false)?;
+        }
+        Some(Check::Exec { argv, expr, .. }) => {
+            for arg in argv {
+                template("`argv`", arg, false)?;
+            }
+            program("`expr`", expr, false)?;
+        }
+        None => {}
+    }
+    for line in rule.reproduce.lines() {
+        template("`reproduce`", line, false)?;
     }
     Ok(())
 }
@@ -848,7 +994,7 @@ rules:
         let names: Vec<&str> = engines().collect();
         assert_eq!(names.first(), Some(&CLOUD_ALL));
         assert_eq!(names.last(), Some(&ENGINE_LAB));
-        assert_eq!(&names[1..names.len() - 1], CLOUDS);
+        assert_eq!(names[1..names.len() - 1], clouds().collect::<Vec<_>>());
         assert_eq!(
             engine_list(),
             "all, aws, eks, gcp, gke, azure, aks, maas, edge, vsphere, lab"
@@ -936,8 +1082,92 @@ rules:
         bad(palette("      each: ' '\n", "/v1/x"), "`each` is empty");
         bad(
             palette("", "/v1/clusterprofiles/{{ $item.uid }}"),
-            "reads $item, and the check has no `each`",
+            "`path`: the program does not compile: undefined variable $item",
         );
+    }
+
+    #[test]
+    fn a_program_that_runs_with_no_item_cannot_read_item_in_any_place() {
+        let each = "      each: '[.entity.spec.profiles[]]'\n";
+        let palette = |extra: &str, expr: &str| {
+            GOOD.replace("tier: static", "tier: palette").replace(
+                "check:\n      kind: static\n      expr: '[.entity.spec.machinepoolconfig[] | select(.poolConfig.size % 3 != 0) | .poolConfig.name]'",
+                &format!("check:\n      kind: palette\n      path: /v1/clusterprofiles/{{{{ $item.uid }}}}\n{each}{extra}      expr: '{expr}'"),
+            )
+        };
+        let bad = |text: String, needle: &str| {
+            let err = Catalog::parse_section(&text, Path::new("x.yaml")).unwrap_err();
+            assert!(err.to_string().contains(needle), "{err}");
+        };
+        // the program over the responses runs once over the world, with no item
+        bad(
+            palette("", "[$item]"),
+            "`expr`: the program does not compile: undefined variable $item",
+        );
+        bad(
+            palette("", "true").replace(
+                "      each: '[.entity.spec.profiles[]]'",
+                "      each: '[$item]'",
+            ),
+            "`each`: the program does not compile: undefined variable $item",
+        );
+        bad(
+            palette("", "true").replace("status: seen", "status: seen\n    when: '$item != null'"),
+            "`when`: the program does not compile: undefined variable $item",
+        );
+        bad(
+            palette("", "true").replace(
+                "    tests:",
+                "    reproduce:\n      - \"echo {{ $item }}\"\n    tests:",
+            ),
+            "`reproduce`: the program does not compile: undefined variable $item",
+        );
+        // a variable with a name that begins as $item is not $item
+        bad(
+            palette("", "true").replace("{{ $item.uid }}", "{{ $items.uid }}"),
+            "`path`: the program does not compile: undefined variable $items",
+        );
+        // a program that does not parse is refused in the same way
+        bad(palette("", "[.a"), "`expr`: the program does not parse");
+    }
+
+    #[test]
+    fn a_post_with_each_needs_a_body_that_reads_item() {
+        let post = |body: &str| {
+            GOOD.replace("tier: static", "tier: palette").replace(
+                "check:\n      kind: static\n      expr: '[.entity.spec.machinepoolconfig[] | select(.poolConfig.size % 3 != 0) | .poolConfig.name]'",
+                &format!("check:\n      kind: palette\n      method: POST\n      path: /v1/x\n      each: '[.entity.spec.profiles[]]'\n{body}      expr: 'true'"),
+            )
+        };
+        let err = Catalog::parse_section(&post(""), Path::new("x.yaml")).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("a POST with `each` needs a `body`"),
+            "{err}"
+        );
+        let ok = post("      body: '{profile: $item}'\n");
+        assert!(Catalog::parse_section(&ok, Path::new("x.yaml")).is_ok());
+        // a GET has no body to send
+        let get = ok
+            .replace("method: POST", "method: GET")
+            .replace("      body: '{profile: $item}'\n", "");
+        assert!(Catalog::parse_section(&get, Path::new("x.yaml")).is_ok());
+    }
+
+    #[test]
+    fn an_evidence_entry_names_a_kind_of_the_set_and_the_loader_refuses_another() {
+        let with = |kind: &str| {
+            GOOD.replace(
+                "status: seen",
+                &format!("status: seen\n    evidence:\n      - kind: {kind}\n        ref: x"),
+            )
+        };
+        for kind in EvidenceKind::ALL {
+            let section = Catalog::parse_section(&with(kind.as_str()), Path::new("x.yaml"));
+            assert_eq!(section.unwrap().rules[0].evidence[0].kind, *kind);
+        }
+        let err = Catalog::parse_section(&with("blog"), Path::new("x.yaml")).unwrap_err();
+        assert!(err.to_string().contains("unknown variant `blog`"), "{err}");
     }
 
     #[test]

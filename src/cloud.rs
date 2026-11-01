@@ -9,6 +9,11 @@
 //! --cloud`, `behind`, and the check of a candidate use it. The book states it in "A pack that
 //! supports a cloud". Each name of a cloud type that the code compares or sends is in this module.
 
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+use crate::closed_set::{ClosedSet, impl_closed_set};
+
 /// The cloud type `all`: each cloud. A pack with it supports each cloud, and a profile of it
 /// takes each pack.
 pub const CLOUD_ALL: &str = "all";
@@ -28,9 +33,14 @@ pub(crate) const CLOUD_NESTED: &str = "nested";
 ///
 /// Palette knows the cloud types of [`Cloud::All`] to [`Cloud::Generic`]. [`Cloud::Openstack`]
 /// is a cloud type that Palette knew. A record from then holds it, and the rule of a pack reads
-/// it as a custom cloud. Each other cloud type is [`Cloud::Custom`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Cloud {
+/// it as a custom cloud. Each other cloud type is [`Cloud::Custom`], which has the text `custom`
+/// and does not keep the name of the custom cloud.
+///
+/// [`Cloud::of`] reads the text of a cloud type, and [`ClosedSet::as_str`] writes it. The table
+/// of the texts is below the enum, and `strata-preflight` reads its engines from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Cloud {
     /// `all`, each cloud.
     All,
     /// `aws`.
@@ -52,6 +62,7 @@ pub(crate) enum Cloud {
     /// `maas`.
     Maas,
     /// `apache-cloudstack`.
+    #[serde(rename = "apache-cloudstack")]
     Cloudstack,
     /// `baremetal`.
     Baremetal,
@@ -65,26 +76,41 @@ pub(crate) enum Cloud {
     Custom,
 }
 
+impl_closed_set!(Cloud {
+    All => CLOUD_ALL,
+    Aws => "aws",
+    Eks => "eks",
+    Gcp => "gcp",
+    Gke => "gke",
+    Azure => "azure",
+    Aks => "aks",
+    Vsphere => "vsphere",
+    EdgeNative => CLOUD_EDGE_NATIVE,
+    Maas => "maas",
+    Cloudstack => "apache-cloudstack",
+    Baremetal => "baremetal",
+    Nested => CLOUD_NESTED,
+    Generic => "generic",
+    Openstack => "openstack",
+    Custom => CLOUD_CUSTOM,
+});
+
 impl Cloud {
     /// The cloud of the cloud type `cloud_type`, as a pack, a profile, or a cluster names it.
-    pub(crate) fn of(cloud_type: &str) -> Cloud {
-        match cloud_type {
-            CLOUD_ALL => Cloud::All,
-            "aws" => Cloud::Aws,
-            "eks" => Cloud::Eks,
-            "gcp" => Cloud::Gcp,
-            "gke" => Cloud::Gke,
-            "azure" => Cloud::Azure,
-            "aks" => Cloud::Aks,
-            "vsphere" => Cloud::Vsphere,
-            CLOUD_EDGE_NATIVE => Cloud::EdgeNative,
-            "maas" => Cloud::Maas,
-            "apache-cloudstack" => Cloud::Cloudstack,
-            "baremetal" => Cloud::Baremetal,
-            CLOUD_NESTED => Cloud::Nested,
-            "generic" => Cloud::Generic,
-            "openstack" => Cloud::Openstack,
-            _ => Cloud::Custom,
+    /// A cloud type that Palette does not know is [`Cloud::Custom`].
+    pub fn of(cloud_type: &str) -> Cloud {
+        Cloud::parse(cloud_type).unwrap_or(Cloud::Custom)
+    }
+
+    /// The cloud whose account this cloud uses. A managed cluster uses the account of its
+    /// cloud. An `eks` cluster uses an `aws` account, a `gke` cluster a `gcp` account, and an
+    /// `aks` cluster an `azure` account. Each other cloud uses its own.
+    pub fn account(self) -> Cloud {
+        match self {
+            Cloud::Eks => Cloud::Aws,
+            Cloud::Gke => Cloud::Gcp,
+            Cloud::Aks => Cloud::Azure,
+            other => other,
         }
     }
 
@@ -145,6 +171,30 @@ mod tests {
         // Palette does not know openstack now, so a pack of custom supports it
         assert!(supports(&clouds(&[CLOUD_CUSTOM]), "openstack"));
         assert!(!supports(&clouds(&["aws"]), "openstack"));
+    }
+
+    #[test]
+    fn a_managed_cluster_uses_the_account_of_its_cloud_and_each_other_cloud_uses_its_own() {
+        assert_eq!(Cloud::Eks.account(), Cloud::Aws);
+        assert_eq!(Cloud::Gke.account(), Cloud::Gcp);
+        assert_eq!(Cloud::Aks.account(), Cloud::Azure);
+        for cloud in [
+            Cloud::Aws,
+            Cloud::Gcp,
+            Cloud::Azure,
+            Cloud::EdgeNative,
+            Cloud::Maas,
+        ] {
+            assert_eq!(cloud.account(), cloud);
+        }
+    }
+
+    #[test]
+    fn a_cloud_keeps_its_text_and_a_custom_cloud_reads_as_custom() {
+        for cloud in Cloud::ALL {
+            assert_eq!(Cloud::of(cloud.as_str()), *cloud);
+        }
+        assert_eq!(Cloud::of("my-cloud").as_str(), CLOUD_CUSTOM);
     }
 
     #[test]

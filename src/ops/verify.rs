@@ -10,6 +10,7 @@ use serde_json::Value;
 use crate::api::{AuditKind, Palette, PaletteApi};
 use crate::closed_set::impl_closed_set;
 use crate::closed_set::legend::{Described, legend};
+use crate::cluster_state::ClusterState;
 use crate::diff::{
     self, AuditEntry, AuditResource, ClusterProfileOverwritten, Diff, ImageIdChange, ImpactLevel,
     InvalidPack, Verify, VerifyStatus,
@@ -22,7 +23,7 @@ use crate::snapshot::{Pack, Snapshot, SubjectKind, Tier, Tool};
 use crate::term::progress::Progress;
 use crate::timestamp::{Rfc3339, Rfc3339OrEmpty};
 
-use super::consumers::{ACTIVE_STATE, DELETED_STATE, INACTIVE_STATE};
+use super::consumers::{ACTIVE_STATE, INACTIVE_STATE};
 use super::{HolderReads, connected, holder_snapshot, scope_of};
 
 /// The outcome of a verification.
@@ -116,7 +117,7 @@ fn subject_state(kind: SubjectKind, doc: &Value) -> Option<String> {
 /// True when Palette keeps the document of a deleted object: the state `Deleted`, or
 /// `metadata.isDeleted`. Palette deletes a cluster so, and keeps its spec.
 fn is_deleted(doc: &Value) -> bool {
-    str_at(doc, "/status/state") == DELETED_STATE || flag(doc, "/metadata/isDeleted")
+    ClusterState::Deleted.is(str_at(doc, "/status/state")) || flag(doc, "/metadata/isDeleted")
 }
 
 /// The live snapshot of the holder of a cluster record, from its document `doc`: with the update

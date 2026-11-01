@@ -10,6 +10,9 @@
 //!
 //! Each comment states what Palette does, and not where its code does it.
 
+use serde_json::Value;
+
+use crate::api::Method;
 use crate::validation::PaletteRefusal;
 
 /// The codes of the refusals that Palette answers with HTTP 500 on a route that is not a validate
@@ -265,12 +268,48 @@ impl ValidateRoute {
         PaletteRefusal::from_error_body(body).filter(|r| self.refuses(status, &r.code))
     }
 
-    /// Whether the route refuses the whole request with the HTTP error `status` and `body`.
+    /// Whether the route refuses the whole request with the HTTP error `status` and `error`.
     ///
-    /// `body` is the body of the Palette error. A body that is not JSON with a `code` is no
-    /// refusal.
-    pub fn refuses_answer(self, status: u16, body: &str) -> bool {
-        self.refusal(status, body).is_some()
+    /// `error` is the body of the Palette error, parsed. A body with no `code` is no refusal.
+    pub fn refuses_answer(self, status: u16, error: &Value) -> bool {
+        PaletteRefusal::from_error(error).is_some_and(|r| self.refuses(status, &r.code))
+    }
+
+    /// The validate route that the request `method` `path` goes to, or `None` when it goes to
+    /// none. `path` can carry a query.
+    ///
+    /// The routes are the ones of [`ValidateRoute`]. The segment `{uid}` or `{cloudType}` is any
+    /// text.
+    pub fn of(method: Method, path: &str) -> Option<ValidateRoute> {
+        let path = path.split_once('?').map_or(path, |(path, _)| path);
+        let segments: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+        match (method, segments.as_slice()) {
+            (Method::Post, ["v1", "spectroclusters", _, "validate", "packs"]) => {
+                Some(ValidateRoute::ClusterPacks)
+            }
+            (
+                Method::Post,
+                ["v1", "clusterprofiles", "validate", "packs"]
+                | ["v1", "clusterprofiles", _, "validate", "packs"],
+            ) => Some(ValidateRoute::ProfilePacks),
+            (Method::Get, ["v1", "clusterprofiles", "validate", "name"]) => {
+                Some(ValidateRoute::ProfileName)
+            }
+            (Method::Post, ["v1", "clusterprofiles", "import", "validate"]) => {
+                Some(ValidateRoute::ProfileImport)
+            }
+            (Method::Post, ["v1", "spectroclusters", _, "validate"]) => {
+                Some(ValidateRoute::ClusterCreate)
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether the request `method` `path` goes to a validate route that refuses the whole
+    /// request with the HTTP error `status` and `error`: [`ValidateRoute::of`], then
+    /// [`ValidateRoute::refuses_answer`].
+    pub fn refuses_request(method: Method, path: &str, status: u16, error: &Value) -> bool {
+        ValidateRoute::of(method, path).is_some_and(|route| route.refuses_answer(status, error))
     }
 }
 
@@ -308,6 +347,7 @@ impl CreateRule {
 mod tests {
     use super::*;
     use crate::error::{Error, FailureClass};
+    use serde_json::json;
 
     /// Each rule of the create.
     const RULES: [CreateRule; 4] = [
@@ -429,11 +469,105 @@ mod tests {
         );
         assert_eq!(ValidateRoute::ClusterCreate.refusal(502, body), None);
         assert_eq!(ValidateRoute::ProfilePacks.refusal(500, body), None);
-        assert!(ValidateRoute::ClusterCreate.refuses_answer(500, body));
-        assert!(!ValidateRoute::ClusterCreate.refuses_answer(502, body));
-        assert!(!ValidateRoute::ProfilePacks.refuses_answer(500, body));
-        assert!(!ValidateRoute::ClusterCreate.refuses_answer(500, "<html>"));
-        assert!(!ValidateRoute::ClusterCreate.refuses_answer(500, r#"{"code":"InternalError"}"#));
+        let error: Value = serde_json::from_str(body).unwrap();
+        assert!(ValidateRoute::ClusterCreate.refuses_answer(500, &error));
+        assert!(!ValidateRoute::ClusterCreate.refuses_answer(502, &error));
+        assert!(!ValidateRoute::ProfilePacks.refuses_answer(500, &error));
+        assert!(!ValidateRoute::ClusterCreate.refuses_answer(500, &Value::Null));
+        assert!(
+            !ValidateRoute::ClusterCreate.refuses_answer(500, &json!({"code": "InternalError"}))
+        );
+    }
+
+    #[test]
+    fn a_request_goes_to_the_validate_route_that_its_method_and_its_path_name() {
+        let post = Method::Post;
+        for (method, path, route) in [
+            (
+                post,
+                "/v1/spectroclusters/u1/validate/packs",
+                ValidateRoute::ClusterPacks,
+            ),
+            (
+                post,
+                "/v1/clusterprofiles/validate/packs",
+                ValidateRoute::ProfilePacks,
+            ),
+            (
+                post,
+                "/v1/clusterprofiles/u1/validate/packs",
+                ValidateRoute::ProfilePacks,
+            ),
+            (
+                Method::Get,
+                "/v1/clusterprofiles/validate/name?name=a&version=1",
+                ValidateRoute::ProfileName,
+            ),
+            (
+                post,
+                "/v1/clusterprofiles/import/validate",
+                ValidateRoute::ProfileImport,
+            ),
+            (
+                post,
+                "/v1/spectroclusters/aws/validate",
+                ValidateRoute::ClusterCreate,
+            ),
+            (
+                post,
+                "/v1/spectroclusters/edge-native/validate",
+                ValidateRoute::ClusterCreate,
+            ),
+        ] {
+            assert_eq!(ValidateRoute::of(method, path), Some(route), "{path}");
+        }
+        for (method, path) in [
+            (Method::Get, "/v1/spectroclusters/aws/validate"),
+            (post, "/v1/spectroclusters/aws"),
+            (post, "/v1/spectroclusters/u1/validate/repave"),
+            (post, "/v1/clouds/aws/account/validate"),
+            (post, "/v1/spectroclusters/validate"),
+            (post, ""),
+        ] {
+            assert_eq!(ValidateRoute::of(method, path), None, "{path}");
+        }
+    }
+
+    #[test]
+    fn only_a_request_to_the_cluster_validate_route_reads_its_refusal() {
+        let error = json!({"code": "ClusterProfilesNotSupported"});
+        let post = Method::Post;
+        assert!(ValidateRoute::refuses_request(
+            post,
+            "/v1/spectroclusters/aws/validate",
+            500,
+            &error
+        ));
+        // the same body from another route is no refusal of the route that the code belongs to
+        assert!(!ValidateRoute::refuses_request(
+            post,
+            "/v1/clusterprofiles/validate/packs",
+            500,
+            &error
+        ));
+        assert!(!ValidateRoute::refuses_request(
+            post,
+            "/v1/clouds/aws/account/validate",
+            500,
+            &error
+        ));
+        assert!(!ValidateRoute::refuses_request(
+            Method::Get,
+            "/v1/spectroclusters/aws/validate",
+            500,
+            &error
+        ));
+        assert!(!ValidateRoute::refuses_request(
+            post,
+            "/v1/spectroclusters/aws/validate",
+            502,
+            &error
+        ));
     }
 
     #[test]

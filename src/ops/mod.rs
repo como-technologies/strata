@@ -43,6 +43,11 @@ pub use verify::*;
 // the command line writes each record through this public path
 pub use crate::file::write_file;
 
+// the states of a cluster were constants of `ops` in release 0.25.0: they stay for one minor
+// release, and `cluster_state::ClusterState` replaces them
+#[allow(deprecated)]
+pub use crate::cluster_state::{DELETED_STATE, ERROR_STATE, RUNNING_STATE};
+
 /// What `snapshot` records beyond the content of a ref, and what it asks Palette about it.
 ///
 /// Each option fits some kinds of ref. [`snapshot_for`] refuses the others with `Usage`, before

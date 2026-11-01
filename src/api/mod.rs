@@ -26,15 +26,15 @@ use crate::closed_set::{ClosedSet, impl_closed_set};
 use crate::error::{Error, Result};
 
 pub use audit::AuditKind;
-pub use http::HttpApi;
+pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
 pub use memory::MemoryApi;
 pub(crate) use palette::{
     PACK_LISTING_PAGE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER,
     named_entries, profile_versions, search_condition, search_filter, search_group,
 };
 pub use palette::{
-    Palette, SearchedClusters, VariablesRead, cluster_events_path, cluster_summary_path,
-    subject_path,
+    Palette, SearchedClusters, VariablesRead, cloud_account_path, cloud_config_path,
+    cluster_events_path, cluster_summary_path, subject_path,
 };
 pub(crate) use raw::recorded_template;
 pub use raw::{RawCluster, RawProfile, ReadErrors, has_draft, profile_variables};

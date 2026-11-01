@@ -2,11 +2,12 @@
 
 use serde_json::Value;
 
-use super::{count_of, dash, entry_error};
+use super::{count_of, entry_error};
 use crate::diff::Diff;
 use crate::ops::{ClustersRead, Consumer, ConsumersReport};
 use crate::reference::name_version;
 use crate::snapshot::Source;
+use crate::text::dash;
 
 /// What a row says about a consumer that the second reading found, and that the consumer list of
 /// the profile does not name.

@@ -7,9 +7,11 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use strata::api::{Palette, PaletteApi, cluster_events_path, cluster_summary_path, subject_path};
+use strata::closed_set::ClosedSet;
+use strata::cluster_state::ClusterState;
 use strata::json::{arr, str_at, text, text_or};
-use strata::ops::{DELETED_STATE, ERROR_STATE, RUNNING_STATE};
 use strata::snapshot::SubjectKind;
+use strata::term::color::Paint;
 use strata::term::progress::Progress;
 use strata::text::cut;
 
@@ -17,7 +19,8 @@ use crate::confidence::{Confidence, Ledger};
 use crate::error::{Error, Result};
 use crate::jq::Jq;
 use crate::probe::{self, Backend, Outcome, Verdict};
-use crate::report::{self, Assembly, Options, Report, Subject, paint};
+use crate::report::label::LabelKind;
+use crate::report::{self, Assembly, Options, Report, Subject, Tool};
 use crate::rule::{Catalog, Check, Level, Rule, Tier};
 use crate::world::{World, unreadable};
 
@@ -129,7 +132,7 @@ pub fn applicable<'a>(
                     // the check applies and did not run: it counts against the readiness
                     Some(Outcome::not_run(
                         Verdict::NotRun,
-                        format!("tier {} was not asked for", r.effective_tier().name()),
+                        format!("tier {} was not asked for", r.effective_tier().as_str()),
                     ))
                 }
             } else {
@@ -166,8 +169,8 @@ pub struct RunInputs<'a> {
     pub progress: &'a Progress,
     /// Print, after each check, what it ran, its answer, the time, and the verdict.
     pub verbose: bool,
-    /// Color the lines of `verbose`: stderr is a terminal, and nothing turned color off.
-    pub color: bool,
+    /// The color of the lines of `verbose`, which go to standard error.
+    pub paint: Paint,
 }
 
 /// Run every applicable check, and assemble the report.
@@ -188,10 +191,10 @@ pub fn run(inputs: RunInputs<'_>) -> Result<Report> {
             None => {
                 inputs
                     .progress
-                    .note(&format!("{}: {}", rule.effective_tier().name(), rule.id));
+                    .note(&format!("{}: {}", rule.effective_tier().as_str(), rule.id));
                 let outcome = probe::run_check(rule, &world_value, inputs.backend, &jq);
                 if inputs.verbose {
-                    for line in verbose_lines(rule, &outcome, inputs.color) {
+                    for line in verbose_lines(rule, &outcome, &inputs.paint) {
                         inputs.progress.note(&line);
                     }
                 }
@@ -312,15 +315,15 @@ pub fn reading<A: PaletteApi>(palette: &Palette<A>, uid: &str, elapsed: Duration
 
 /// The lines of `--verbose` for one check: one line for each request of a check with `each`, then
 /// the line of the check.
-fn verbose_lines(rule: &Rule, o: &Outcome, color: bool) -> Vec<String> {
-    let tier = rule.effective_tier().name();
+fn verbose_lines(rule: &Rule, o: &Outcome, paint: &Paint) -> Vec<String> {
+    let tier = rule.effective_tier().as_str();
     let mut lines: Vec<String> = o
         .ran
         .requests()
         .iter()
-        .map(|c| format!("{tier}: {}: {}", rule.id, paint(color, "2", &c.line())))
+        .map(|c| format!("{tier}: {}: {}", rule.id, paint.dim(&c.line())))
         .collect();
-    lines.push(verbose_line(rule, o, color));
+    lines.push(verbose_line(rule, o, paint));
     lines
 }
 
@@ -337,22 +340,18 @@ fn what_ran(o: &Outcome) -> String {
 
 /// One line of `--verbose`: what the check ran, its answer, the time, and the verdict, with the
 /// first message when it did not pass.
-fn verbose_line(rule: &Rule, o: &Outcome, color: bool) -> String {
+fn verbose_line(rule: &Rule, o: &Outcome, paint: &Paint) -> String {
     let mut line = format!(
         "{}: {}: {} {}",
-        rule.effective_tier().name(),
+        rule.effective_tier().as_str(),
         rule.id,
-        paint(
-            color,
-            "2",
-            &format!(
-                "{} -> {}{} ms,",
-                what_ran(o),
-                o.ran.answer().map(|a| format!("{a}, ")).unwrap_or_default(),
-                o.elapsed.as_millis()
-            )
-        ),
-        label(rule, o, color)
+        paint.dim(&format!(
+            "{} -> {}{} ms,",
+            what_ran(o),
+            o.ran.answer().map(|a| format!("{a}, ")).unwrap_or_default(),
+            o.elapsed.as_millis()
+        )),
+        label(rule, o, paint)
     );
     if o.verdict != Verdict::Passed
         && let Some(m) = o.messages.first()
@@ -362,14 +361,18 @@ fn verbose_line(rule: &Rule, o: &Outcome, color: bool) -> String {
     line
 }
 
-/// The ANSI color of a cluster state: green when it runs, yellow while it builds, red when it
-/// is in error or goes.
-fn state_color(state: &str) -> &'static str {
-    match state {
-        RUNNING_STATE => "32",
-        "Provisioning" | "Pending" | "Importing" => "33",
-        ERROR_STATE | "Deleting" | DELETED_STATE => "31",
-        _ => "0",
+/// `state` in the color of a cluster state: green when it runs, yellow while it builds, red when
+/// it is in error or goes. A state that strata does not know has no color.
+fn paint_state(paint: &Paint, state: &str) -> String {
+    match ClusterState::parse(state) {
+        Some(ClusterState::Running) => paint.green(state),
+        Some(ClusterState::Provisioning | ClusterState::Pending | ClusterState::Importing) => {
+            paint.yellow(state)
+        }
+        Some(ClusterState::Error | ClusterState::Deleting | ClusterState::Deleted) => {
+            paint.red(state)
+        }
+        None => state.to_string(),
     }
 }
 
@@ -384,24 +387,20 @@ fn reading_lines(
     read: &Value,
     seen_conditions: &mut BTreeMap<String, String>,
     seen_events: &mut BTreeSet<String>,
-    color: bool,
+    paint: &Paint,
 ) -> Vec<String> {
     let mut out = Vec::new();
     let events = arr(read, "/events");
     let state = text_or(read, "/cluster/status/state", UNKNOWN);
     out.push(format!(
         "{} state {}, health {}, {} events",
-        paint(
-            color,
-            "2",
-            &format!(
-                "watch: read GET {}, GET {}, GET {}:",
-                subject_path(SubjectKind::Cluster, uid),
-                cluster_summary_path(uid),
-                cluster_events_path(uid)
-            )
-        ),
-        paint(color, state_color(state), state),
+        paint.dim(&format!(
+            "watch: read GET {}, GET {}, GET {}:",
+            subject_path(SubjectKind::Cluster, uid),
+            cluster_summary_path(uid),
+            cluster_events_path(uid)
+        )),
+        paint_state(paint, state),
         text_or(read, "/summary/status/health/state", UNKNOWN),
         events.len()
     ));
@@ -416,18 +415,17 @@ fn reading_lines(
             != Some(now.as_str())
         {
             let message = text_or(c, "/message", UNKNOWN);
-            let status_color = match status {
-                "True" => "32",
-                "False" => "33",
-                _ => "0",
+            let status_text = match status {
+                "True" => paint.green(status),
+                "False" => paint.yellow(status),
+                _ => status.to_string(),
             };
             out.push(format!(
-                "watch: condition {kind}={} {reason}{}",
-                paint(color, status_color, status),
+                "watch: condition {kind}={status_text} {reason}{}",
                 if message == UNKNOWN || message.is_empty() {
                     String::new()
                 } else {
-                    paint(color, "2", &format!(": {}", cut(message, 160)))
+                    paint.dim(&format!(": {}", cut(message, 160)))
                 }
             ));
         }
@@ -441,7 +439,7 @@ fn reading_lines(
             let key = format!("{at} {reason} {message}");
             let line = format!(
                 "watch: event {}{}: {}",
-                paint(color, "36", at),
+                paint.cyan(at),
                 if reason.is_empty() {
                     String::new()
                 } else {
@@ -457,11 +455,9 @@ fn reading_lines(
     if fresh.len() > 15 {
         let older = fresh.len() - 15;
         fresh.drain(..older);
-        out.push(paint(
-            color,
-            "2",
-            &format!("watch: {older} older event(s) not shown; the report holds them"),
-        ));
+        out.push(paint.dim(&format!(
+            "watch: {older} older event(s) not shown; the report holds them"
+        )));
     }
     out.extend(fresh.into_iter().map(|(_, line)| line));
     out
@@ -470,8 +466,8 @@ fn reading_lines(
 /// One line of `--verbose` at a reading of the watch: the rule and its verdict, with the first
 /// message when it did not pass. The time of a watch rule is the time of the reading, which the
 /// line above it names, so no time here.
-fn watch_line(rule: &Rule, o: &Outcome, color: bool) -> String {
-    let mut line = format!("watch: {}: {}", rule.id, label(rule, o, color));
+fn watch_line(rule: &Rule, o: &Outcome, paint: &Paint) -> String {
+    let mut line = format!("watch: {}: {}", rule.id, label(rule, o, paint));
     if o.verdict != Verdict::Passed
         && let Some(m) = o.messages.first()
     {
@@ -481,12 +477,9 @@ fn watch_line(rule: &Rule, o: &Outcome, color: bool) -> String {
 }
 
 /// The label of an outcome, in its color.
-fn label(rule: &Rule, o: &Outcome, color: bool) -> String {
-    paint(
-        color,
-        report::label_color_for(o.verdict, rule.severity, rule.level),
-        &report::label_for(o.verdict, rule.level, rule.severity),
-    )
+fn label(rule: &Rule, o: &Outcome, paint: &Paint) -> String {
+    let kind = LabelKind::of(o.verdict, rule.level, rule.severity);
+    kind.paint(paint, &kind.word())
 }
 
 /// The inputs of a watch.
@@ -513,8 +506,8 @@ pub struct WatchInputs<'a, A: PaletteApi> {
     pub out_dir: Option<&'a str>,
     /// Print, at each reading, the verdict of each rule.
     pub verbose: bool,
-    /// Color the lines of `verbose`.
-    pub color: bool,
+    /// The color of the lines of `verbose`, which go to standard error.
+    pub paint: Paint,
 }
 
 /// Watch a build: every `every`, read the cluster, and judge each watch rule. The watch ends at
@@ -535,7 +528,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
         sleep,
         out_dir,
         verbose,
-        color,
+        paint,
     } = inputs;
     let uid = world.cluster_uid.clone().ok_or_else(|| Error::Usage {
         message:
@@ -563,15 +556,11 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
     if verbose {
         for rule in &rules {
             if let Some(Check::Watch { expr }) = &rule.check {
-                progress.note(&paint(
-                    color,
-                    "2",
-                    &format!(
-                        "watch: {} reads the cluster, its summary, and its events with: {}",
-                        rule.id,
-                        cut(&probe::one_line(expr.clone()), 160)
-                    ),
-                ));
+                progress.note(&paint.dim(&format!(
+                    "watch: {} reads the cluster, its summary, and its events with: {}",
+                    rule.id,
+                    cut(&probe::one_line(expr.clone()), 160)
+                )));
             }
         }
     }
@@ -581,7 +570,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
         readings += 1;
         let state = text_or(&read, "/cluster/status/state", UNKNOWN).to_string();
         if verbose {
-            for line in reading_lines(&uid, &read, &mut seen_conditions, &mut seen_events, color) {
+            for line in reading_lines(&uid, &read, &mut seen_conditions, &mut seen_events, &paint) {
                 progress.note(&line);
             }
         }
@@ -602,11 +591,11 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
         last_reading = with;
         progress.note(&format!(
             "{} {} after {}s, reading {readings}{}",
-            paint(color, "1", "watch:"),
-            paint(color, state_color(&state), &state),
+            paint.bold("watch:"),
+            paint_state(&paint, &state),
             elapsed.as_secs(),
             if failed {
-                paint(color, "31", ", a rule failed")
+                paint.red(", a rule failed")
             } else {
                 String::new()
             }
@@ -614,7 +603,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
         if verbose {
             for rule in &rules {
                 if let Some(o) = last.get(&rule.id) {
-                    progress.note(&watch_line(rule, o, color));
+                    progress.note(&watch_line(rule, o, &paint));
                 }
             }
         }
@@ -623,11 +612,11 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
             break;
         }
         // a cluster that runs ends the watch: a failure it read on past is in the report
-        if state == RUNNING_STATE {
+        if ClusterState::Running.is(&state) {
             final_state = state;
             break;
         }
-        if matches!(state.as_str(), DELETED_STATE | ERROR_STATE) {
+        if ClusterState::Deleted.is(&state) || ClusterState::Error.is(&state) {
             final_state = state;
             break;
         }
@@ -701,6 +690,31 @@ pub fn list_rules(
         .collect()
 }
 
+/// The schema id of the `--rules` listing as JSON.
+pub const RULES_SCHEMA: &str = "strata-preflight-rules/1";
+
+/// The `--rules` listing as a document: the sections, and the `rules` that
+/// [`list_rules`] gave for `cloud` and `release`.
+pub fn rules_document(
+    catalog: &Catalog,
+    cloud: Option<&str>,
+    release: Option<&str>,
+    rules: &[Rule],
+) -> Value {
+    json!({
+        "schema": RULES_SCHEMA,
+        "tool": Tool::current(),
+        "cloud": cloud,
+        "release": release,
+        "sections": catalog
+            .sections
+            .iter()
+            .map(|s| json!({"section": s.section, "title": s.title, "about": s.about}))
+            .collect::<Vec<_>>(),
+        "rules": rules,
+    })
+}
+
 /// The `--rules` listing as text: one line for each rule.
 pub fn rules_text(catalog: &Catalog, rules: &[Rule]) -> String {
     let mut out = String::new();
@@ -714,10 +728,10 @@ pub fn rules_text(catalog: &Catalog, rules: &[Rule]) -> String {
         out.push_str(&format!(
             "  {:<32} {:<8} {:<10} {:<9} {:<9} {:<22} {}\n",
             r.id,
-            r.effective_tier().name(),
-            r.level.name(),
-            r.severity.name(),
-            r.status.name(),
+            r.effective_tier().as_str(),
+            r.level.as_str(),
+            r.severity.as_str(),
+            r.status.as_str(),
             r.engines.join(","),
             r.title
         ));
@@ -825,7 +839,7 @@ rules:
             out_dir: None,
             progress: &Progress::silent(),
             verbose: false,
-            color: false,
+            paint: Paint::off(),
         })
         .unwrap();
         let by_id = |id: &str| report.checks.iter().find(|c| c.id == id).unwrap();
@@ -882,7 +896,7 @@ rules:
                 out_dir: None,
                 progress: &Progress::silent(),
                 verbose: false,
-                color: false,
+                paint: Paint::off(),
             })
             .unwrap()
         };
@@ -910,7 +924,7 @@ rules:
             out_dir: None,
             progress: &Progress::silent(),
             verbose: false,
-            color: false,
+            paint: Paint::off(),
         })
         .unwrap();
         let pool = report
@@ -934,7 +948,7 @@ rules:
             out_dir: None,
             progress: &Progress::silent(),
             verbose: false,
-            color: false,
+            paint: Paint::off(),
         })
         .unwrap();
         assert_eq!(report.checks.len(), 1);
@@ -983,8 +997,8 @@ rules:
         )
         .unwrap();
         let api = strata::api::MemoryApi::new()
-            .with("/v1/spectroclusters/c1", json!({"metadata": {"uid": "c1"}, "spec": {"cloudType": "gke"}, "status": {"state": "Provisioning"}}))
-            .with("/v1/events/components/spectrocluster/c1?limit=50", json!({"items": [{"reason": "GCPManagedControlPlaneReconcile", "message": "InvalidArgument: no release channel"}]}));
+            .with(subject_path(SubjectKind::Cluster, "c1"), json!({"metadata": {"uid": "c1"}, "spec": {"cloudType": "gke"}, "status": {"state": "Provisioning"}}))
+            .with(cluster_events_path("c1"), json!({"items": [{"reason": "GCPManagedControlPlaneReconcile", "message": "InvalidArgument: no release channel"}]}));
         let mut w = world(3);
         w.cluster_uid = Some("c1".into());
         let slept = std::cell::Cell::new(0);
@@ -1001,7 +1015,7 @@ rules:
             now: "t",
             progress: &Progress::silent(),
             verbose: false,
-            color: false,
+            paint: Paint::off(),
             sleep: &|_| slept.set(slept.get() + 1),
             out_dir: None,
         })
@@ -1026,20 +1040,33 @@ rules:
     }
 
     #[test]
+    fn the_rules_document_names_this_tool_as_the_report_does_and_has_its_own_schema_id() {
+        let catalog = crate::catalog::builtin().unwrap();
+        let rules = list_rules(&catalog, Some("eks"), None, &[]);
+        let doc = rules_document(&catalog, Some("eks"), None, &rules);
+        assert_eq!(doc["schema"], RULES_SCHEMA);
+        assert_eq!(doc["tool"], serde_json::to_value(Tool::current()).unwrap());
+        assert_eq!(doc["cloud"], "eks");
+        assert_eq!(doc["release"], Value::Null);
+        assert_eq!(doc["rules"].as_array().unwrap().len(), rules.len());
+        assert_eq!(doc["sections"][0]["section"], catalog.sections[0].section);
+    }
+
+    #[test]
     fn a_reading_has_no_summary_for_a_404_and_stops_at_a_401_or_a_429() {
         let cluster = json!({"metadata": {"uid": "c1"}, "status": {"state": "Provisioning"}});
-        let summary = "/v1/dashboard/spectroclusters/c1";
-        let events = "/v1/events/components/spectrocluster/c1?limit=50";
+        let summary = cluster_summary_path("c1");
+        let events = cluster_events_path("c1");
         let gone = strata::api::MemoryApi::new()
-            .with("/v1/spectroclusters/c1", cluster.clone())
+            .with(subject_path(SubjectKind::Cluster, "c1"), cluster.clone())
             .failing(events, 403, "{}");
         let read = reading(&Palette::new(&gone), "c1", Duration::from_secs(1)).unwrap();
         assert_eq!(read["summary"], Value::Null);
         assert_eq!(read["events"], json!([]));
         for status in [401, 429] {
             let refused = strata::api::MemoryApi::new()
-                .with("/v1/spectroclusters/c1", cluster.clone())
-                .failing(summary, status, "{}");
+                .with(subject_path(SubjectKind::Cluster, "c1"), cluster.clone())
+                .failing(&summary, status, "{}");
             let err = reading(&Palette::new(&refused), "c1", Duration::from_secs(1)).unwrap_err();
             assert!(err.to_string().contains(&format!("HTTP {status}")), "{err}");
         }
@@ -1050,11 +1077,8 @@ rules:
         let cluster = json!({"metadata": {"uid": "c1"}, "status": {"state": "Provisioning"}});
         // Palette gives `items: null` when the cluster has no event
         let api = strata::api::MemoryApi::new()
-            .with("/v1/spectroclusters/c1", cluster)
-            .with(
-                "/v1/events/components/spectrocluster/c1?limit=50",
-                json!({"items": null}),
-            );
+            .with(subject_path(SubjectKind::Cluster, "c1"), cluster)
+            .with(cluster_events_path("c1"), json!({"items": null}));
         let read = reading(&Palette::new(&api), "c1", Duration::from_secs(1)).unwrap();
         assert_eq!(read["events"], json!([]));
     }
@@ -1080,7 +1104,7 @@ rules:
         )
         .unwrap();
         let api = strata::api::MemoryApi::new().with(
-            "/v1/spectroclusters/c1",
+            subject_path(SubjectKind::Cluster, "c1"),
             json!({"metadata": {"uid": "c1"}, "status": {"state": "Running"}}),
         );
         let mut w = world(3);
@@ -1095,7 +1119,7 @@ rules:
             now: "t",
             progress: &Progress::silent(),
             verbose: false,
-            color: false,
+            paint: Paint::off(),
             sleep: &|_| {},
             out_dir: None,
         })
@@ -1125,7 +1149,7 @@ rules:
         )
         .unwrap();
         let api = strata::api::MemoryApi::new().with(
-            "/v1/spectroclusters/c1",
+            subject_path(SubjectKind::Cluster, "c1"),
             json!({"metadata": {"uid": "c1"}, "status": {"state": "Running"}}),
         );
         let mut w = world(3);
@@ -1147,7 +1171,7 @@ rules:
             now: "t",
             progress: &Progress::silent(),
             verbose: false,
-            color: false,
+            paint: Paint::off(),
             sleep: &|_| readings.set(readings.get() + 1),
             out_dir: None,
         })
@@ -1185,11 +1209,11 @@ rules:
         .unwrap();
         let api = strata::api::MemoryApi::new()
             .with(
-                "/v1/spectroclusters/c1",
+                subject_path(SubjectKind::Cluster, "c1"),
                 json!({"metadata": {"uid": "c1"}, "status": {"state": "Running"}}),
             )
             .with(
-                "/v1/events/components/spectrocluster/c1?limit=50",
+                cluster_events_path("c1"),
                 json!({"items": [{"reason": "Log", "message": "failed calling webhook \"vspectrocluster.kb.io\": connection refused", "metadata": {"creationTimestamp": "2026-09-29T17:59:22.272Z"}}]}),
             );
         let mut w = world(3);
@@ -1204,7 +1228,7 @@ rules:
             now: "t",
             progress: &Progress::silent(),
             verbose: false,
-            color: false,
+            paint: Paint::off(),
             sleep: &|_| {},
             out_dir: None,
         })
@@ -1251,7 +1275,7 @@ rules:
                 "GET /v1/edgehosts/h2": {"ok": false, "status": 404, "body": {}}}}));
         let rule = c.rule("edge-host-in-use").unwrap();
         let outcome = probe::run_check(rule, &world, &backend, &Jq::new());
-        let lines = verbose_lines(rule, &outcome, false);
+        let lines = verbose_lines(rule, &outcome, &Paint::off());
         assert_eq!(lines.len(), 3, "{lines:?}");
         assert_eq!(
             lines[..2],

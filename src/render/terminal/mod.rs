@@ -19,16 +19,18 @@ use super::same_release::{
 use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
 };
-use super::{Renderer, count_of, dash, entry_error, palette_line, short};
+use super::{Renderer, count_of, entry_error, palette_line, short};
 use crate::closed_set::ClosedSet;
+use crate::cluster_state::ClusterState;
 use crate::diff::Diff;
 use crate::error::Result;
 use crate::ops::{
-    Chain, ConsumerKind, ConsumersReport, Listing, PackListing, PairStatus, RUNNING_STATE,
-    RecordStatus, VerifySummary,
+    Chain, ConsumerKind, ConsumersReport, Listing, PackListing, PairStatus, RecordStatus,
+    VerifySummary,
 };
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
+use crate::text::dash;
 use lines::{op_line, packdetail, packline, variable_line};
 use table::{column_widths, matched, table_line};
 
@@ -222,10 +224,12 @@ impl Renderer for TerminalRenderer {
             .max()
             .unwrap_or(0);
         for c in &r.consumers {
-            let state = match c.state.as_str() {
-                RUNNING_STATE => p.green(&c.state),
-                crate::ops::UNKNOWN_STATE => p.yellow(&c.state),
-                _ => c.state.clone(),
+            let state = if ClusterState::Running.is(&c.state) {
+                p.green(&c.state)
+            } else if c.state == crate::ops::UNKNOWN_STATE {
+                p.yellow(&c.state)
+            } else {
+                c.state.clone()
             };
             out.push_str(&format!(
                 "  {}  {}  project {}",
@@ -491,7 +495,7 @@ impl Renderer for TerminalRenderer {
                 out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
                     0 => p.bold(cell),
                     1 => matched(p, cell, l.cluster.as_deref()),
-                    2 if c.state == RUNNING_STATE => p.green(cell),
+                    2 if ClusterState::Running.is(&c.state) => p.green(cell),
                     _ => cell.to_string(),
                 }));
                 let applied: Vec<Vec<String>> = c
@@ -564,10 +568,11 @@ impl Renderer for TerminalRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::term::color::{ColorMode, Stream};
 
     #[test]
     fn the_part_of_a_pack_name_that_matched_is_marked() {
-        let on = Paint::resolve(crate::term::color::ColorMode::Always);
+        let on = Paint::resolve(ColorMode::Always, Stream::Stdout);
         assert_eq!(
             matched(&on, "cni-cilium-oss", Some("cilium")),
             format!("cni-{}-oss", on.byellow("cilium")),
@@ -601,7 +606,7 @@ mod tests {
 
     #[test]
     fn a_record_status_has_one_color_in_the_verdict_and_in_the_row_of_the_summary() {
-        let on = Paint::resolve(crate::term::color::ColorMode::Always);
+        let on = Paint::resolve(ColorMode::Always, Stream::Stdout);
         assert_eq!(
             paint_status(&on, RecordStatus::Unchanged, "OK"),
             on.bgreen("OK")

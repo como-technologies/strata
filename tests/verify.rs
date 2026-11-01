@@ -2582,6 +2582,17 @@ fn consumers_shows_the_version_each_cluster_runs_and_marks_one_the_uid_no_longer
         beta.contains("runs `lab-profile@1.2.9`, which uid") && beta.contains("(not read: boom)"),
         "{md}"
     );
+    // a line break in the message of an error does not end the row of the table
+    let mut doc = serde_json::to_value(&r).unwrap();
+    doc["consumers"][1]["error"] =
+        serde_json::json!({"kind": "transport", "message": "first\nsecond | third"});
+    let broken: ops::ConsumersReport = serde_json::from_value(doc).unwrap();
+    let md = common::markdown().render_consumers(&broken).unwrap();
+    let beta = md.lines().find(|l| l.contains("beta")).unwrap();
+    assert!(
+        beta.contains("(not read: first second \\| third)") && beta.ends_with('|'),
+        "{md}"
+    );
     let json: Value = serde_json::from_str(
         &render::renderer(Format::Json, Paint::off(), true)
             .render_consumers(&r)

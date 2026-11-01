@@ -24,7 +24,7 @@ use crate::error::{Error, Result};
 /// as [`crate::world::World::to_value`] gives them to a world of a run.
 pub fn load(path: &Path) -> Result<Value> {
     let mut doc = load_depth(path, 0)?;
-    crate::world::add_engine_clouds(&mut doc);
+    crate::world::add_derived_fields(&mut doc);
     Ok(doc)
 }
 

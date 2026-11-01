@@ -41,7 +41,7 @@ pub fn builtin() -> Result<Catalog> {
     let dir = rules_dir();
     for (name, text) in SECTIONS {
         let path = dir.join(format!("{name}.yaml"));
-        let section: Section = Catalog::parse_section(text, &path)?;
+        let section: Section = Catalog::parse_embedded(text, &path)?;
         if section.section != *name {
             return Err(crate::error::Error::Catalog {
                 path,
@@ -80,6 +80,16 @@ mod tests {
         sorted.dedup();
         assert_eq!(ids.len(), sorted.len(), "an id is in the catalog two times");
         assert!(ids.len() >= 3, "{} rules", ids.len());
+    }
+
+    #[test]
+    fn each_program_of_the_catalog_of_the_binary_compiles_with_the_variables_it_runs_with() {
+        for (name, text) in SECTIONS {
+            let path = rules_dir().join(format!("{name}.yaml"));
+            if let Err(e) = Catalog::parse_section(text, &path) {
+                panic!("{e}");
+            }
+        }
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! The lines that a person runs by hand to see what a check saw.
 
-use strata::api::{Method, cluster_events_path};
-use strata::config::DEFAULT_BASE_URL;
+use strata::api::{API_KEY_HEADER, Method, PROJECT_UID_HEADER, cluster_events_path};
+use strata::config::{DEFAULT_BASE_URL, KEY_VARS, PROJECT_VARS, URL_VARS};
 
 use super::Subject;
 use crate::probe::{Outcome, Ran};
@@ -59,8 +59,8 @@ pub(super) fn auto_reproduce(
                 (Method::Get, _) => String::new(),
             };
             lines.push(format!(
-                "code=$(curl -s -o body.json -w '%{{http_code}}' -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\"{data} \"${{PALETTE_API:-{base}}}{path}\")",
-                base = DEFAULT_BASE_URL
+                "code=$({})",
+                curl_line(" -o body.json -w '%{http_code}'", &data, path)
             ));
             lines.push(format!(
                 "jq --arg code \"$code\" --slurpfile body body.json '.response = {{ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)}} | {}' {dir}/world.json",
@@ -88,8 +88,18 @@ pub(super) fn auto_reproduce(
 
 /// The `curl` that reads `path` of Palette.
 fn curl_get(path: &str) -> String {
+    curl_line("", "", path)
+}
+
+/// A `curl` command that sends the key and the project to `path` of Palette. The names of the
+/// headers and of the variables are the ones that strata reads. `options` go before the headers,
+/// and `data` goes after them.
+fn curl_line(options: &str, data: &str, path: &str) -> String {
     format!(
-        "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${{PALETTE_API:-{DEFAULT_BASE_URL}}}{path}\""
+        "curl -s{options} -H \"{API_KEY_HEADER}: ${key}\" -H \"{PROJECT_UID_HEADER}: ${project}\"{data} \"${{{url}:-{DEFAULT_BASE_URL}}}{path}\"",
+        key = KEY_VARS[0],
+        project = PROJECT_VARS[0],
+        url = URL_VARS[0]
     )
 }
 
@@ -98,4 +108,31 @@ fn one_line(expr: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
         .replace('\'', "'\\''")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_curl_line_names_the_headers_and_the_variables_that_strata_reads() {
+        let line = curl_get("/v1/x");
+        assert!(line.starts_with("curl -s -H "), "{line}");
+        for part in [
+            format!("-H \"{API_KEY_HEADER}: ${}\"", KEY_VARS[0]),
+            format!("-H \"{PROJECT_UID_HEADER}: ${}\"", PROJECT_VARS[0]),
+            format!("\"${{{}:-{DEFAULT_BASE_URL}}}/v1/x\"", URL_VARS[0]),
+        ] {
+            assert!(line.contains(&part), "{part} is not in {line}");
+        }
+    }
+
+    #[test]
+    fn a_curl_line_with_options_and_data_puts_the_options_before_the_headers() {
+        let line = curl_line(" -o body.json", " -X POST", "/v1/y");
+        let headers = line.find(" -H ").expect("the headers");
+        assert!(line.find(" -o body.json").unwrap() < headers, "{line}");
+        assert!(line.find(" -X POST").unwrap() > headers, "{line}");
+        assert!(line.ends_with("/v1/y\""), "{line}");
+    }
 }

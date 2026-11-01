@@ -10,7 +10,7 @@ use strata_preflight::catalog;
 use strata_preflight::fixture;
 use strata_preflight::jq::Jq;
 use strata_preflight::probe::{self, Call, FixtureBackend, Outcome, Verdict};
-use strata_preflight::rule::{Check, Evidence, Rule};
+use strata_preflight::rule::{Check, Evidence, EvidenceKind, Rule};
 
 /// Run the check of `rule` on the fixture `doc`. The test fails when `when` does not hold on the
 /// fixture: a guard that hides the check passes every test.
@@ -307,7 +307,7 @@ fn the_go_code_test_refuses_a_bad_note_of_each_form() {
     ] {
         let mut rule = clean.clone();
         rule.evidence = vec![Evidence {
-            kind: "source".to_string(),
+            kind: EvidenceKind::Source,
             reference: String::new(),
             note: bad.to_string(),
         }];
@@ -345,7 +345,7 @@ fn each_source_entry_states_what_palette_does() {
         .filter(|r| {
             r.evidence
                 .iter()
-                .any(|e| e.kind == "source" && e.note.is_empty())
+                .any(|e| e.kind == EvidenceKind::Source && e.note.is_empty())
         })
         .map(|r| r.id.as_str())
         .collect();

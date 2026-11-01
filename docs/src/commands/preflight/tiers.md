@@ -46,6 +46,14 @@ create through the provider or the API goes to the create route, so the same
 fault shows after a full apply. See
 [The validate routes](../../internals/palette/validate-routes.md).
 
+A run sends each request one time. The backend keeps the answer of each request,
+by its method, its path, and its body. So `palette-validate`, `worker-cpu-floor`,
+`pack-dependency`, and `ecr-oci-images` send the validate route one time. The six
+rules that read an edge host send one request for each host. The world reads each
+profile of the entity through the same backend, so `template-outside` sends no
+second request for a profile. A 4xx is an answer, and the backend keeps it. An
+error such as a 503 is not an answer, and the next rule asks again.
+
 ## A profile of another cloud type
 
 Here the body of an AWS create names a profile of the cloud type `gcp`. The

@@ -7,10 +7,12 @@ use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
 use strata::api::{HttpApi, Palette, Retry, RetryPolicy};
+use strata::closed_set::ClosedSet;
 use strata::config::{self, Config};
 use strata::reference::Ref;
-use strata::term::color::ColorMode;
+use strata::term::color::{ColorMode, Paint, Stream};
 use strata::term::progress::Progress;
+use strata::text::dash;
 use strata_preflight::confidence::{self, Ledger};
 use strata_preflight::error::{Error, Result};
 use strata_preflight::probe::LiveBackend;
@@ -105,7 +107,7 @@ struct Cli {
     /// No color
     #[arg(long)]
     no_color: bool,
-    /// When to color the report and the progress lines: auto (a terminal, and NO_COLOR not set), always, or never
+    /// When to color the report and the progress lines: auto (a terminal; NO_COLOR, CLICOLOR_FORCE, and TERM=dumb decide), always, or never
     #[arg(long, value_enum, default_value = "auto", value_name = "WHEN")]
     color: ColorMode,
     /// No progress messages
@@ -171,26 +173,12 @@ fn format_of(cli: &Cli) -> Format {
     }
 }
 
-/// When to color: `--color always` colors a pipe too (a `tee` to a log and a terminal), `never`
-/// and `--no-color` never do, and `auto` colors a terminal unless `NO_COLOR` is set.
-fn wants_color(cli: &Cli, stream_is_terminal: bool) -> bool {
-    match cli.color {
-        ColorMode::Never => false,
-        ColorMode::Always => !cli.no_color,
-        ColorMode::Auto => {
-            !cli.no_color && std::env::var_os("NO_COLOR").is_none() && stream_is_terminal
-        }
-    }
-}
-
-/// Color for the report, which goes to stdout.
-fn color(cli: &Cli) -> bool {
-    wants_color(cli, std::io::IsTerminal::is_terminal(&std::io::stdout()))
-}
-
-/// Color for the progress lines, which go to stderr.
-fn color_err(cli: &Cli) -> bool {
-    wants_color(cli, std::io::IsTerminal::is_terminal(&std::io::stderr()))
+/// The color of one stream, by the rule of `strata`: `--color always` colors a pipe too (a `tee`
+/// to a log and a terminal), `never` and `--no-color` never do, and `auto` colors a terminal
+/// unless the environment says otherwise. The report goes to standard output, and the progress
+/// lines go to standard error.
+fn paint_of(cli: &Cli, stream: Stream) -> Paint {
+    Paint::resolve(cli.color.unless(cli.no_color), stream)
 }
 
 fn tiers_of(cli: &Cli) -> Result<Vec<Tier>> {
@@ -204,7 +192,7 @@ fn tiers_of(cli: &Cli) -> Result<Vec<Tier>> {
     cli.tier
         .iter()
         .map(|t| {
-            Tier::parse(t).ok_or_else(|| Error::Usage {
+            Tier::from_input(t).ok_or_else(|| Error::Usage {
                 message: format!("--tier {t}: give static, palette, or cloud, as a list"),
             })
         })
@@ -293,14 +281,12 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             if cli.tier.is_empty() { &[] } else { &tiers },
         );
         if format_of(&cli) == Format::Json {
-            let doc = serde_json::json!({
-                "schema": "strata-preflight-rules/1",
-                "tool": {"name": TOOL_NAME, "version": strata_preflight::TOOL_VERSION},
-                "cloud": cli.cloud,
-                "release": cli.release,
-                "sections": catalog.sections.iter().map(|s| serde_json::json!({"section": s.section, "title": s.title, "about": s.about})).collect::<Vec<_>>(),
-                "rules": rules,
-            });
+            let doc = run::rules_document(
+                &catalog,
+                cli.cloud.as_deref(),
+                cli.release.as_deref(),
+                &rules,
+            );
             print_json(&doc, cli.compact)?;
         } else {
             emit(&run::rules_text(&catalog, &rules));
@@ -344,15 +330,19 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
     }
     let live = !cli.offline;
     let palette = if live { Some(connect(progress)?) } else { None };
+    // the world and the checks read through one backend, which keeps each answer for the run. So
+    // a request that the world made, and that a rule makes again, goes out one time
+    let backend = LiveBackend::new(palette.as_ref().map(Palette::api), cli.no_exec);
+    let reads = palette.as_ref().map(|_| Palette::new(&backend));
 
     // the world: the entity, and what the static rules need beside it
     let mut world = match reference {
         Ref::Cluster { uid, .. } => {
-            let palette = palette.as_ref().ok_or_else(|| Error::Usage {
+            let reads = reads.as_ref().ok_or_else(|| Error::Usage {
                 message: "cluster:UID needs Palette: drop --offline, or give the entity as a file"
                     .to_string(),
             })?;
-            World::from_cluster(palette, &uid, &progress)?
+            World::from_cluster(reads, &uid, &progress)?
         }
         _ => World::from_file(std::path::Path::new(&source), cli.cloud.as_deref())?,
     };
@@ -363,8 +353,8 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
     if !cli.records.is_empty() {
         world = world.with_records(&expand(&cli.records)?)?;
     }
-    if let Some(p) = &palette {
-        world = world.with_palette(p, &now, &progress)?;
+    if let Some(reads) = &reads {
+        world = world.with_palette(reads, &now, &progress)?;
     }
 
     let out_dir = cli.out.as_ref().map(|d| d.display().to_string());
@@ -389,17 +379,13 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             sleep: &std::thread::sleep,
             out_dir: out_dir.as_deref(),
             verbose: cli.verbose,
-            color: color_err(&cli),
+            paint: paint_of(&cli, Stream::Stderr),
         })
         .map(|(report, world)| {
             reading = Some(world);
             report
         })?
     } else {
-        let backend = LiveBackend {
-            palette: palette.as_ref().map(Palette::api),
-            no_exec: cli.no_exec,
-        };
         run::run(run::RunInputs {
             catalog: &catalog,
             world: &world,
@@ -410,7 +396,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
             out_dir: out_dir.as_deref(),
             progress: &progress,
             verbose: cli.verbose,
-            color: color_err(&cli),
+            paint: paint_of(&cli, Stream::Stderr),
         })?
     };
     if let Some(dir) = &cli.out {
@@ -424,7 +410,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode> {
         &report,
         format_of(&cli),
         cli.compact,
-        color(&cli),
+        &paint_of(&cli, Stream::Stdout),
     ));
     Ok(ExitCode::from(report.exit_code()))
 }
@@ -453,26 +439,25 @@ fn write_out(
     world: &World,
     reading: Option<&serde_json::Value>,
 ) -> Result<()> {
-    std::fs::create_dir_all(dir).map_err(|e| strata_preflight::error::Error::Io {
-        path: dir.to_path_buf(),
-        source: e,
-    })?;
+    // the library of strata makes the directory, and names the file in its error
     let write = |name: &str, text: String| -> Result<()> {
-        let path = dir.join(name);
-        std::fs::write(&path, text)
-            .map_err(|e| strata_preflight::error::Error::Io { path, source: e })
+        strata::ops::write_file(&dir.join(name), &text).map_err(|e| match e {
+            strata::Error::Io { path, source } => Error::Io { path, source },
+            other => other.into(),
+        })
     };
+    let off = Paint::off();
     write(
         "report.md",
-        report::render(report, Format::Markdown, false, false),
+        report::render(report, Format::Markdown, false, &off),
     )?;
     write(
         "report.json",
-        report::render(report, Format::Json, false, false),
+        report::render(report, Format::Json, false, &off),
     )?;
     write(
         "report.html",
-        report::render(report, Format::Html, false, false),
+        report::render(report, Format::Html, false, &off),
     )?;
     let mut world_value = reading.cloned().unwrap_or_else(|| world.to_value());
     strata_preflight::world::redact_for_output(&mut world_value);
@@ -501,11 +486,7 @@ fn promotion_text(report: &confidence::PromotionReport) -> String {
                 format!(
                     "{} {}: {}, {}",
                     c.engine,
-                    if c.release.is_empty() {
-                        "-"
-                    } else {
-                        &c.release
-                    },
+                    dash(&c.release),
                     c.catch.text(),
                     c.clean.text()
                 )
@@ -514,12 +495,12 @@ fn promotion_text(report: &confidence::PromotionReport) -> String {
         out.push_str(&format!(
             "{:<32} {:<8} {:<10} {:<10} {:<8} {}\n",
             r.id,
-            r.tier.name(),
-            r.level.name(),
-            r.earned.name(),
-            if r.advice.is_empty() { "-" } else { &r.advice },
+            r.tier.as_str(),
+            r.level.as_str(),
+            r.earned.as_str(),
+            dash(&r.advice),
             if conf.is_empty() {
-                "no runs".to_string()
+                confidence::NO_RUNS.to_string()
             } else {
                 conf.join("; ")
             }
@@ -541,6 +522,10 @@ mod tests {
     #[test]
     fn the_help_screen_fits_a_terminal_and_names_the_forms() {
         let help = Cli::command().render_help().to_string();
+        assert!(
+            help.contains(&strata_preflight::world::cloud_list()),
+            "{help}"
+        );
         assert!(help.contains("--watch cluster:UID"), "{help}");
         assert!(help.contains("--rules"), "{help}");
         assert!(help.contains("--probes"), "{help}");
