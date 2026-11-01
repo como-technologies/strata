@@ -706,6 +706,24 @@ pub fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
     out
 }
 
+/// The text of each value of a closed set, from its node in a JSON Schema.
+///
+/// The node is a `oneOf` of one `const` for each value, in the order of the enum. The root of the
+/// schema of a type is such a node, and so is a definition under `$defs`.
+pub fn schema_values(node: &Value) -> Vec<String> {
+    node["oneOf"]
+        .as_array()
+        .unwrap_or_else(|| panic!("the schema of a closed set is a oneOf: {node}"))
+        .iter()
+        .map(|v| {
+            v["const"]
+                .as_str()
+                .unwrap_or_else(|| panic!("each value is a const: {v}"))
+                .to_string()
+        })
+        .collect()
+}
+
 /// The version of a manifest, from the root of the repository: `Cargo.toml` or
 /// `preflight/Cargo.toml`.
 pub fn version_of(manifest: &str) -> String {

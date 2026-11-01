@@ -255,18 +255,6 @@ pub fn presence_impact(layer: &str, added: bool) -> Impact {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::closed_set::ClosedSet;
-
-    #[test]
-    fn the_text_of_an_impact_level_is_its_name_in_the_documents() {
-        for level in ImpactLevel::ALL {
-            assert_eq!(
-                serde_json::to_value(*level).unwrap(),
-                serde_json::Value::from(level.as_str()),
-                "{level:?}"
-            );
-        }
-    }
 
     #[test]
     fn impact_levels_order_by_severity() {

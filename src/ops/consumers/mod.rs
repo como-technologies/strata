@@ -471,6 +471,12 @@ fn link_and_name<A: PaletteApi>(list: &mut Vec<Consumer>, doc: &Value, home: &Pa
     // the profile document names each such template, so they cost no request (#147)
     linked_templates(list, doc);
     // a uid names no project to a reader, so give each row the project's name as well
+    name_consumer_projects(list, home);
+}
+
+/// Give each consumer the name of its project, from the project listing of `home`: see
+/// [`name_projects_of`].
+pub(super) fn name_consumer_projects<A: PaletteApi>(list: &mut [Consumer], home: &Palette<A>) {
     name_projects_of(
         list,
         |c| &c.project_uid,

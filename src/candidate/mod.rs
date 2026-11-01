@@ -298,27 +298,6 @@ impl RegistryRef {
 /// drops the layer of the request.
 const MINTED_LAYER: Layer = Layer::Addon;
 
-/// Whether `v` is a semantic version in the loose form that Palette parses: an optional `v`,
-/// one to three numbers with dots between them, an optional pre-release after `-`, and optional
-/// build data after `+`. Each identifier of the pre-release and of the build data has letters,
-/// digits, and `-` only.
-fn loose_semver(v: &str) -> bool {
-    let ids = |s: &str| {
-        s.split('.')
-            .all(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
-    };
-    let v = v.strip_prefix('v').unwrap_or(v);
-    let (v, build) = v.split_once('+').map_or((v, None), |(a, b)| (a, Some(b)));
-    let (core, pre) = v.split_once('-').map_or((v, None), |(a, b)| (a, Some(b)));
-    let numbers: Vec<&str> = core.split('.').collect();
-    numbers.len() <= 3
-        && numbers
-            .iter()
-            .all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
-        && pre.is_none_or(ids)
-        && build.is_none_or(ids)
-}
-
 /// A layer with its registry settled and its files read. A `manifest` layer has no registry.
 #[derive(Debug, Clone, PartialEq)]
 struct LoadedLayer {

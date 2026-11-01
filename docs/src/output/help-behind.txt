@@ -9,6 +9,7 @@ Arguments:
 Options:
       --since <FILE>     The JSON of a previous run: each pin names the versions that arrived since
       --no-impact        Do not compare each pin that is behind with the newest version, and do not ask Palette about the move
+      --pre-release      Name a pre-release as a newer version of a pin that is not a pre-release
       --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
       --json             The same as --format json
       --color [<COLOR>]  Color the report: auto, always, or never [default: auto]

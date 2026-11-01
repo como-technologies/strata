@@ -171,11 +171,12 @@ if stage 5 "the subjects of a role binding of cluster A"; then
     bash -c "diff <(jq -S '[.items[]?.spec.bindings]' rbac-before.out) <(jq -S '[.items[]?.spec.bindings]' rbac-after-read.out)"
 fi
 
-# limited_read: read the role bindings of cluster A with the second key. api.sh exits 2 and prints
+# limited_read: read the role bindings of cluster A with the second key. api.sh get-status prints
 # the status and the body of the refusal; the key never leaves the environment of that one call.
-limited_read() { PALETTE_API_KEY=$STRATA_LIVE_LIMITED_KEY "$live/api.sh" get "/v1/spectroclusters/$C/config/rbacs"; }
-# refusal_code: the error code in the body of the refusal that limited-read.err holds
-refusal_code() { sed -n 's/^api.sh: GET [^ ]* answered HTTP [0-9]*: //p' limited-read.err | jq -r '.code // empty'; }
+limited_read() { PALETTE_API_KEY=$STRATA_LIVE_LIMITED_KEY "$live/api.sh" get-status "/v1/spectroclusters/$C/config/rbacs"; }
+# refusal_code: the error code in the body of the refusal that limited-read.out holds after its
+# status line
+refusal_code() { sed 1d limited-read.out | jq -r '.code // empty'; }
 # limited_record: a record of cluster A that strata reads with the second key
 limited_record() { PALETTE_API_KEY=$STRATA_LIVE_LIMITED_KEY "$strata" snapshot "cluster:$C" -o limited-record.json; }
 
@@ -184,12 +185,12 @@ if [ "$from" = 6 ] && stage 6 "a key that cannot read the role bindings of clust
   [ -n "${STRATA_LIVE_LIMITED_KEY:-}" ] \
     || die "could not check: set STRATA_LIVE_LIMITED_KEY to a key that cannot read config/rbacs of cluster A"
   check limited-control 0 "#276: the key of the example reads the role bindings of cluster A" -- rbacs
-  check limited-read 2 "#276: the second key does not read them: api.sh exits 2 for the refusal of Palette" -- limited_read
-  check limited-status 0 "#276: the status of the refusal is HTTP 500, and not 403" -- grep -q 'answered HTTP 500: ' limited-read.err
+  check limited-read 0 "#276: the second key does not read them: api.sh get-status prints the refusal of Palette" -- limited_read
+  check limited-status 0 "#276: the status of the refusal is HTTP 500, and not 403" -- grep -qx 'HTTP 500' limited-read.out
   check limited-code ? "#276: the error code of the body that Palette answers" -- refusal_code
   check limited-code-says 0 "#276: the code is ResourceAccessDenied" -- grep -qx ResourceAccessDenied limited-code.out
   check limited-message 0 "#276: the message names the project: Project '<uid>' access denied" -- \
-    grep -q "Project '$PALETTE_PROJECT_UID' access denied" limited-read.err
+    grep -q "Project '$PALETTE_PROJECT_UID' access denied" limited-read.out
   check limited-record ? "#276: what strata does with the answer: a record of cluster A with the second key" -- limited_record
   check limited-record-errors ? "#276: the errors of the policy tier of that record, if strata wrote one" -- \
     jq '.source.cluster.tiers.policy.errors' limited-record.json

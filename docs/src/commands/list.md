@@ -11,8 +11,9 @@ The examples use the projects `dev` and `prod`, with `PALETTE_PROJECT=dev`.
 {{#include ../output/list.txt}}
 ```
 
-Profiles sort by name, then by version in natural order, so `1.9.0` comes
-before `1.10.0`. Clusters and projects sort by name.
+Profiles sort by name, then by version, in the order of Semantic Versioning, so
+`1.9.0` comes before `1.10.0`, and `1.0.1-rc.1` before `1.0.1`. Clusters and
+projects sort by name.
 
 ## List the projects
 

@@ -11,7 +11,9 @@
 
 use std::collections::BTreeMap;
 
-use serde_json::Value;
+use serde_json::{Map, Value};
+
+use crate::closed_set::{ClosedSet, Open};
 
 /// The null that a read gives for a value that is not there.
 static NULL: Value = Value::Null;
@@ -35,6 +37,15 @@ pub fn text_or<'a>(v: &'a Value, ptr: &str, default: &'a str) -> &'a str {
 /// The text at the pointer `ptr` of `v`, when it is there and not empty.
 pub fn opt_str<'a>(v: &'a Value, ptr: &str) -> Option<&'a str> {
     Some(str_at(v, ptr)).filter(|s| !s.is_empty())
+}
+
+/// The value of the closed set `T` that the text at the pointer `ptr` of `v` names, when the text is
+/// there and not empty.
+///
+/// A text that names no value of `T` stays as text in [`Open::Unknown`]: it is a value of a later
+/// release, and not an error.
+pub(crate) fn opt_set<T: ClosedSet>(v: &Value, ptr: &str) -> Option<Open<T>> {
+    opt_str(v, ptr).map(Open::from_text)
 }
 
 /// A copy of the text at the pointer `ptr` of `v`, when it is there and not empty.
@@ -64,6 +75,20 @@ pub fn value_or_null(v: &Value, ptr: &str) -> Value {
     value_at(v, ptr).clone()
 }
 
+/// A copy of the value at the pointer `ptr` of `v`, or an empty object when `v` has none there.
+///
+/// It is the default of a part of a document that a reader walks as an object, such as a config.
+pub fn value_or_empty_object(v: &Value, ptr: &str) -> Value {
+    v.pointer(ptr)
+        .cloned()
+        .unwrap_or_else(|| Value::Object(Map::new()))
+}
+
+/// The object at the pointer `ptr` of `v`, or `None` when `v` has no object there.
+pub(crate) fn object_at<'a>(v: &'a Value, ptr: &str) -> Option<&'a Map<String, Value>> {
+    v.pointer(ptr).and_then(Value::as_object)
+}
+
 /// The entries of the array at the pointer `ptr` of `v`, or no entry when `v` has no array there.
 pub fn arr<'a>(v: &'a Value, ptr: &str) -> &'a [Value] {
     v.pointer(ptr)
@@ -91,8 +116,7 @@ pub fn strings(v: &Value, ptr: &str) -> Vec<String> {
 /// Palette gives a label as text. So a value of another type is no label, and a tag filter must
 /// not match it as a label with an empty value.
 pub fn text_map(v: &Value, ptr: &str) -> BTreeMap<String, String> {
-    v.pointer(ptr)
-        .and_then(Value::as_object)
+    object_at(v, ptr)
         .into_iter()
         .flatten()
         .filter_map(|(k, v)| Some((k.clone(), v.as_str()?.to_string())))
@@ -190,6 +214,35 @@ mod tests {
         assert_eq!(value_or_null(&v, "/spec/gone"), Value::Null);
         assert_eq!(value_at(&v, "/spec/a"), &json!([1]));
         assert_eq!(value_at(&v, "/gone"), &Value::Null);
+    }
+
+    #[test]
+    fn value_or_empty_object_copies_the_value_and_gives_an_empty_object_for_none() {
+        let v = json!({"spec": {"config": {"a": 1}, "none": null}});
+        assert_eq!(value_or_empty_object(&v, "/spec/config"), json!({"a": 1}));
+        assert_eq!(value_or_empty_object(&v, "/spec/none"), Value::Null);
+        assert_eq!(value_or_empty_object(&v, "/spec/gone"), json!({}));
+    }
+
+    #[test]
+    fn object_at_gives_an_object_and_none_for_another_value() {
+        let v = json!({"a": {"x": 1}, "list": [1], "text": "t"});
+        assert_eq!(object_at(&v, "/a").map(Map::len), Some(1));
+        assert!(object_at(&v, "/list").is_none());
+        assert!(object_at(&v, "/text").is_none());
+        assert!(object_at(&v, "/gone").is_none());
+    }
+
+    #[test]
+    fn opt_set_reads_a_value_of_a_set_and_keeps_the_text_of_a_value_that_is_not_in_it() {
+        use crate::oci_provider::OciProvider;
+        let v = json!({"spec": {"providerType": "zarf", "later": "oras", "empty": ""}});
+        let zarf: Option<Open<OciProvider>> = opt_set(&v, "/spec/providerType");
+        assert_eq!(zarf, Some(Open::Known(OciProvider::Zarf)));
+        let later: Option<Open<OciProvider>> = opt_set(&v, "/spec/later");
+        assert_eq!(later, Some(Open::Unknown("oras".to_string())));
+        assert_eq!(opt_set::<OciProvider>(&v, "/spec/empty"), None);
+        assert_eq!(opt_set::<OciProvider>(&v, "/spec/gone"), None);
     }
 
     #[test]

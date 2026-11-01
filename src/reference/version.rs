@@ -1,14 +1,166 @@
-//! Natural ordering of Palette version strings.
+//! The order of Palette version strings: Semantic Versioning 2.0.0 where a version parses, and the
+//! natural order of the text where it does not.
 
 use std::cmp::Ordering;
 
 use crate::reference::LATEST;
 
-/// Compare two version strings naturally: runs of digits compare as numbers (leading zeros do not
-/// count), runs of anything else compare as text, and when one string is a prefix of the other
-/// the longer one is higher. This orders `1.30.6` above `1.29.10`, `22.04` above `20.04`, and
-/// `LTS__24.x` above `LTS__22.04`. It is not semver: a pre-release suffix sorts above its base.
+/// Compare two version strings as Palette does.
+///
+/// Palette orders by semantic version, and so does this function when both strings parse as
+/// Palette parses a version: an optional `v`, one to three numbers, an optional pre-release after
+/// `-`, and optional build data after `+`. A pre-release is below its version: `1.0.1-rc.1` is
+/// below `1.0.1`. Build data has no precedence: `1.0.1+2` equals `1.0.1`. A missing number is `0`.
+///
+/// A string that does not parse keeps the natural order: runs of digits compare as numbers
+/// (leading zeros do not count), runs of anything else compare as text, and when one string is a
+/// prefix of the other the longer one is higher. This orders `LTS__24.x` above `LTS__22.04`. The
+/// order of all strings is total: the empty string is the lowest, then each string that parses,
+/// then each string that does not.
 pub fn compare(a: &str, b: &str) -> Ordering {
+    match (Semver::parse(a), Semver::parse(b)) {
+        (Some(x), Some(y)) => x.precedence(&y),
+        (Some(_), None) => {
+            if b.is_empty() {
+                Ordering::Greater
+            } else {
+                Ordering::Less
+            }
+        }
+        (None, Some(_)) => {
+            if a.is_empty() {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            }
+        }
+        (None, None) => natural(a, b),
+    }
+}
+
+/// True when `v` parses as Palette parses a version: see [`compare`].
+pub(crate) fn parses(v: &str) -> bool {
+    Semver::parse(v).is_some()
+}
+
+/// The numbers of `v` as it writes them: one to three. None when `v` does not parse.
+///
+/// `4.10.3-rc.1` gives `[4, 10, 3]`, and `4.10` gives `[4, 10]`. A range of releases reads the
+/// numbers that a bound names, and leaves out the others.
+pub fn numbers(v: &str) -> Option<Vec<u64>> {
+    Semver::parse(v).map(|s| s.numbers[..s.count].to_vec())
+}
+
+/// True when `v` parses and has a pre-release: `1.0.1-rc.1`, `1.0.1-g0123456789ab`. A string that
+/// does not parse is not a pre-release.
+pub fn is_pre_release(v: &str) -> bool {
+    Semver::parse(v).is_some_and(|s| !s.pre.is_empty())
+}
+
+/// The item of `items` whose version is `wanted`, or the item with the highest version by
+/// [`compare`] when `wanted` is [`LATEST`].
+///
+/// `version_of` gives the version of an item. For [`LATEST`], a pre-release is the highest only
+/// when no item has another version. None when no item has the version, and when `items` is
+/// empty.
+pub(crate) fn pick<T>(
+    items: impl IntoIterator<Item = T>,
+    version_of: impl Fn(&T) -> &str,
+    wanted: &str,
+) -> Option<T> {
+    let items = items.into_iter();
+    if wanted != LATEST {
+        let mut items = items;
+        return items.find(|item| version_of(item) == wanted);
+    }
+    let items: Vec<T> = items.collect();
+    let any_final = items.iter().any(|i| !is_pre_release(version_of(i)));
+    items
+        .into_iter()
+        .filter(|i| !any_final || !is_pre_release(version_of(i)))
+        .max_by(|a, b| compare(version_of(a), version_of(b)))
+}
+
+/// A version that parses as Palette parses a version.
+struct Semver<'a> {
+    /// The three numbers. A number that the version leaves out is `0`.
+    numbers: [u64; 3],
+    /// How many numbers the version writes, from one to three.
+    count: usize,
+    /// The identifiers of the pre-release. Empty for a version that is not a pre-release.
+    pre: Vec<&'a str>,
+}
+
+impl<'a> Semver<'a> {
+    /// The version in `v`, or None when `v` does not parse. A number that does not fit in a `u64`
+    /// does not parse, as Palette refuses it.
+    fn parse(v: &'a str) -> Option<Self> {
+        let v = v.strip_prefix('v').unwrap_or(v);
+        let (v, build) = v.split_once('+').map_or((v, None), |(a, b)| (a, Some(b)));
+        let (core, pre) = v.split_once('-').map_or((v, None), |(a, b)| (a, Some(b)));
+        let mut numbers = [0; 3];
+        let mut count = 0;
+        for n in core.split('.') {
+            if !is_digits(n) {
+                return None;
+            }
+            *numbers.get_mut(count)? = n.parse().ok()?;
+            count += 1;
+        }
+        let ids = |s: &'a str| -> Option<Vec<&'a str>> {
+            let ids: Vec<&str> = s.split('.').collect();
+            let valid = ids.iter().all(|id| {
+                !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            });
+            valid.then_some(ids)
+        };
+        if let Some(build) = build {
+            ids(build)?;
+        }
+        let pre = match pre {
+            Some(pre) => ids(pre)?,
+            None => Vec::new(),
+        };
+        Some(Semver {
+            numbers,
+            count,
+            pre,
+        })
+    }
+
+    /// The precedence of Semantic Versioning 2.0.0, item 11: the numbers, then the pre-release.
+    /// A version is above its pre-releases. Of two pre-releases, the first identifier that
+    /// differs decides: a number is below a text, numbers compare as numbers, texts compare as
+    /// bytes, and the longer list is higher when the shorter one is its prefix.
+    fn precedence(&self, other: &Self) -> Ordering {
+        self.numbers.cmp(&other.numbers).then_with(|| {
+            match (self.pre.is_empty(), other.pre.is_empty()) {
+                (true, true) => Ordering::Equal,
+                (true, false) => Ordering::Greater,
+                (false, true) => Ordering::Less,
+                (false, false) => self.pre_cmp(other),
+            }
+        })
+    }
+
+    fn pre_cmp(&self, other: &Self) -> Ordering {
+        for (x, y) in self.pre.iter().zip(&other.pre) {
+            let ord = match (is_digits(x), is_digits(y)) {
+                (true, true) => numeric(x, y),
+                (true, false) => Ordering::Less,
+                (false, true) => Ordering::Greater,
+                (false, false) => x.cmp(y),
+            };
+            if ord != Ordering::Equal {
+                return ord;
+            }
+        }
+        self.pre.len().cmp(&other.pre.len())
+    }
+}
+
+/// The natural order of two strings: see [`compare`].
+fn natural(a: &str, b: &str) -> Ordering {
     let (ra, rb) = (runs(a), runs(b));
     for (x, y) in ra.iter().zip(rb.iter()) {
         let ord = if is_digits(x) && is_digits(y) {
@@ -21,24 +173,6 @@ pub fn compare(a: &str, b: &str) -> Ordering {
         }
     }
     ra.len().cmp(&rb.len())
-}
-
-/// The item of `items` whose version is `wanted`, or the item with the highest version by
-/// [`compare`] when `wanted` is [`LATEST`].
-///
-/// `version_of` gives the version of an item. None when no item has the version, and when `items`
-/// is empty.
-pub(crate) fn pick<T>(
-    items: impl IntoIterator<Item = T>,
-    version_of: impl Fn(&T) -> &str,
-    wanted: &str,
-) -> Option<T> {
-    let mut items = items.into_iter();
-    if wanted == LATEST {
-        items.max_by(|a, b| compare(version_of(a), version_of(b)))
-    } else {
-        items.find(|item| version_of(item) == wanted)
-    }
 }
 
 /// Split into alternating runs of digits and non-digits.
@@ -80,6 +214,11 @@ mod tests {
         assert_eq!(compare(b, a), Ordering::Less, "{b} < {a}");
     }
 
+    fn eq(a: &str, b: &str) {
+        assert_eq!(compare(a, b), Ordering::Equal, "{a} = {b}");
+        assert_eq!(compare(b, a), Ordering::Equal, "{b} = {a}");
+    }
+
     #[test]
     fn numeric_runs_compare_as_numbers() {
         gt("22.04", "20.04");
@@ -91,16 +230,125 @@ mod tests {
     #[test]
     fn palette_tag_forms_order_by_their_numbers() {
         gt("LTS__24.x", "LTS__22.04");
-        assert_eq!(compare("LTS__20.04", "LTS__20.4"), Ordering::Equal);
+        eq("LTS__20.04", "LTS__20.4");
         gt("1.29.4-rc2", "1.29.4-rc1");
+    }
+
+    #[test]
+    fn a_pre_release_is_below_its_version() {
+        gt("1.0.1", "1.0.1-g0123456789ab");
+        gt("1.0.1", "1.0.1-mr12.345");
+        gt("1.0.1", "1.0.1-rc.1");
+        gt("1.21.1", "1.21.1-rev1");
+        gt("1.0.2-rc.1", "1.0.1");
+    }
+
+    #[test]
+    fn pre_releases_order_by_their_identifiers_as_semver_does() {
+        // the example of Semantic Versioning 2.0.0, item 11
+        let chain = [
+            "1.0.0-alpha",
+            "1.0.0-alpha.1",
+            "1.0.0-alpha.beta",
+            "1.0.0-beta",
+            "1.0.0-beta.2",
+            "1.0.0-beta.11",
+            "1.0.0-rc.1",
+            "1.0.0",
+        ];
+        for pair in chain.windows(2) {
+            gt(pair[1], pair[0]);
+        }
+        // a number is below a text, and two texts compare as bytes
+        gt("1.0.0-alpha", "1.0.0-1");
+        gt("1.0.0-rev9", "1.0.0-rev10");
+        gt("1.0.1-g0123456789ac", "1.0.1-g0123456789ab");
+    }
+
+    #[test]
+    fn build_data_has_no_precedence() {
+        eq("1.0.1+2", "1.0.1");
+        eq("1.0.1+2", "1.0.1+3");
+        gt("1.0.1", "1.0.1-rc.1+5");
+    }
+
+    #[test]
+    fn the_prefix_and_the_missing_numbers_do_not_count() {
+        eq("v1.2.3", "1.2.3");
+        eq("1.2", "1.2.0");
+        eq("1", "1.0.0");
+        gt("1.2.1", "1.2");
+        eq("22.04", "22.4");
+    }
+
+    #[test]
+    fn a_string_that_does_not_parse_keeps_the_natural_order() {
+        for text in [
+            "LTS__24.x",
+            "1.2.3.4",
+            "1.0.0-",
+            "1.0.0-a_b",
+            "1..2",
+            "99999999999999999999999.0.0",
+        ] {
+            assert!(!parses(text), "{text} does not parse");
+        }
+        gt("1.2.3.5", "1.2.3.4");
+        gt("1.2.3.10", "1.2.3.9");
+    }
+
+    #[test]
+    fn the_order_of_all_strings_is_total() {
+        let versions = [
+            "",
+            "1",
+            "1.0.0-a_b",
+            "1.0.0-rc.1",
+            "1.0.0",
+            "1.2.3.4",
+            "LTS__22.04",
+            "LTS__24.x",
+            "b",
+        ];
+        for a in versions {
+            for b in versions {
+                for c in versions {
+                    if compare(a, b).is_le() && compare(b, c).is_le() {
+                        assert!(compare(a, c).is_le(), "{a} <= {b} <= {c}");
+                    }
+                }
+            }
+        }
+        gt("1", "");
+        gt("LTS__24.x", "22.04");
+        gt("b", "a");
     }
 
     #[test]
     fn a_longer_version_is_higher_when_the_prefix_is_equal() {
         gt("1.2.1", "1.2");
-        assert_eq!(compare("1.2.0", "1.2.0"), Ordering::Equal);
-        assert_eq!(compare("", ""), Ordering::Equal);
+        eq("1.2.0", "1.2.0");
+        eq("", "");
         gt("1", "");
+    }
+
+    #[test]
+    fn numbers_gives_the_numbers_that_the_version_writes() {
+        assert_eq!(numbers("4.10.3-rc.1"), Some(vec![4, 10, 3]));
+        assert_eq!(numbers("v4.10"), Some(vec![4, 10]));
+        assert_eq!(numbers("22"), Some(vec![22]));
+        assert_eq!(numbers("LTS__24.x"), None);
+        assert_eq!(numbers("1.2.3.4"), None);
+    }
+
+    #[test]
+    fn only_a_version_with_a_pre_release_is_one() {
+        assert!(is_pre_release("1.0.1-g0123456789ab"));
+        assert!(is_pre_release("v1.0.1-rc.1+5"));
+        assert!(!is_pre_release("1.0.1"));
+        assert!(!is_pre_release("1.0.1+2"));
+        assert!(!is_pre_release("LTS__24.x"));
+        assert!(!is_pre_release("1.2.3.4-rc1"));
     }
 
     #[test]
@@ -110,6 +358,17 @@ mod tests {
         assert_eq!(pick(versions, |v| *v, LATEST), Some("1.10.0"));
         assert_eq!(pick(versions, |v| *v, "2.0.0"), None);
         assert_eq!(pick(Vec::<&str>::new(), |v| *v, LATEST), None);
+    }
+
+    #[test]
+    fn latest_takes_the_highest_version_that_is_not_a_pre_release() {
+        let versions = ["1.0.1", "1.0.1-g0123456789ab", "1.0.2-rc.1", "1.0.0"];
+        assert_eq!(pick(versions, |v| *v, LATEST), Some("1.0.1"));
+        // a pre-release is the answer only when the name has no other version
+        let only = ["1.0.2-rc.2", "1.0.2-rc.1"];
+        assert_eq!(pick(only, |v| *v, LATEST), Some("1.0.2-rc.2"));
+        // an exact version still names a pre-release
+        assert_eq!(pick(versions, |v| *v, "1.0.2-rc.1"), Some("1.0.2-rc.1"));
     }
 
     #[test]

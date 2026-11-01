@@ -194,7 +194,7 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
     );
     assert_eq!(o.status.code(), Some(1), "still there: {}", text(&o.stdout));
     assert_eq!(text(&o.stdout).trim(), "fred c-123: Running");
-    assert!(urls.contains("/v1/spectroclusters/c-123"), "{urls}");
+    assert!(urls.contains(&cluster_route("c-123")), "{urls}");
     assert!(
         urls.starts_with("https://api.spectrocloud.com/"),
         "SaaS by default: {urls}"
@@ -1084,6 +1084,55 @@ fn api_sh_app_version_sends_no_key_and_no_project_header_with_no_key() {
 }
 
 #[test]
+fn api_sh_get_status_prints_the_status_and_the_body_of_each_answer_and_exits_0() {
+    let root = tempfile::tempdir().unwrap();
+    let routes = root.path().join("routes");
+    std::fs::create_dir_all(&routes).unwrap();
+    std::fs::write(routes.join("v1_x_found"), r#"{"items":[]}"#).unwrap();
+    std::fs::write(
+        routes.join("v1_x_refused"),
+        r#"{"code":"ResourceAccessDenied","message":"access denied"}"#,
+    )
+    .unwrap();
+    std::fs::write(routes.join("v1_x_refused.status"), "500").unwrap();
+
+    let o = run_live("api.sh", &["get-status", "/v1/x/found"], root.path(), &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(text(&o.stdout), "HTTP 200\n{\"items\":[]}");
+
+    // a refusal is an answer to read: the status, then the body, and no error line
+    let o = run_live("api.sh", &["get-status", "/v1/x/refused"], root.path(), &[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout),
+        "HTTP 500\n{\"code\":\"ResourceAccessDenied\",\"message\":\"access denied\"}"
+    );
+    assert_eq!(text(&o.stderr), "");
+
+    // `get` keeps its contract: exit 2 and the error line for the same refusal
+    let o = run_live("api.sh", &["get", "/v1/x/refused"], root.path(), &[]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stdout));
+    assert!(
+        text(&o.stderr).contains("GET /v1/x/refused answered HTTP 500"),
+        "{}",
+        text(&o.stderr)
+    );
+
+    for args in [
+        &["get-status"][..],
+        &["get-status", "/v1/x/a", "/v1/x/b"][..],
+    ] {
+        let o = run_live("api.sh", args, root.path(), &[]);
+        assert_eq!(o.status.code(), Some(2), "{args:?}");
+        assert!(
+            text(&o.stderr).contains("usage: api.sh get-status PATH"),
+            "{}",
+            text(&o.stderr)
+        );
+    }
+}
+
+#[test]
 fn release_sh_expects_the_release_with_no_key_and_a_refusal_with_the_key() {
     let ids = [
         "release-no-key",
@@ -1177,19 +1226,13 @@ fn run_live(script: &str, args: &[&str], root: &Path, extra: &[(&str, &str)]) ->
 
 /// Every file under `dir`, as (path relative to dir, contents).
 fn files_under(dir: &Path) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        for e in std::fs::read_dir(&d).unwrap() {
-            let p = e.unwrap().path();
-            if p.is_dir() {
-                stack.push(p);
-            } else {
-                let rel = p.strip_prefix(dir).unwrap().display().to_string();
-                out.push((rel, std::fs::read_to_string(&p).unwrap()));
-            }
-        }
-    }
+    let mut out: Vec<(String, String)> = walk(dir)
+        .into_iter()
+        .map(|p| {
+            let rel = p.strip_prefix(dir).unwrap().display().to_string();
+            (rel, std::fs::read_to_string(&p).unwrap())
+        })
+        .collect();
     out.sort();
     out
 }
@@ -2313,7 +2356,7 @@ impl Stage {
     /// packs of that PUT.
     fn published(&self, uid: &str, packs: &str, manifests: &str) {
         let route = self.root.path().join("routes");
-        let key = Self::route_key(&format!("/v1/clusterprofiles/{uid}"));
+        let key = Self::route_key(&profile_route(uid));
         std::fs::write(
             route.join(format!("{key}.first")),
             format!(
@@ -2336,10 +2379,7 @@ fi
 "#
             ),
         );
-        self.route(
-            &format!("/v1/clusterprofiles/{uid}/packs/manifests"),
-            manifests,
-        );
+        self.route(&manifests_route(uid), manifests);
         self.route(&format!("/v1/clusterprofiles/{uid}/publish"), "{}");
     }
 
@@ -2488,7 +2528,7 @@ fn baseline_outputs() -> serde_json::Value {
 fn baseline_stage() -> Stage {
     let stage = Stage::new(baseline_outputs());
     stage.route(
-        "/v1/spectroclusters/c-a",
+        &cluster_route("c-a"),
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
     );
     stage
@@ -2502,14 +2542,14 @@ fn packs_os_stage(annotations: &str, record: &str) -> Stage {
         "csi_version": "1.64.0", "release_profile_uid": "r-1", "os_pack_name": "ubuntu-aws",
     }));
     stage.route(
-        "/v1/clusterprofiles/r-1",
+        &profile_route("r-1"),
         &format!(
             r#"{{"spec":{{"published":{{"packs":[{{"name":"ubuntu-aws","layer":"os",
                 "packUid":"os-1","annotations":{annotations}}}]}}}}}}"#
         ),
     );
     stage.route(
-        "/v1/packs/os-1",
+        &pack_route("os-1"),
         &format!(r#"{{"packValues":[{{"packUid":"os-1","annotations":{annotations}}}]}}"#),
     );
     stage.strata("snapshot r-1 -o release.json", 0, record);
@@ -2772,8 +2812,8 @@ fn app_profile_sh_stage_3_makes_two_app_profiles_whose_tiers_differ_in_the_insta
             {"metadata":{"name":"tier2","uid":"t-2"},"spec":{"type":"manifest","version":"1.0.0","installOrder":5}}]}}"#,
     );
     stage.route("/v1/appProfiles/ap-1/tiers/t-1", "{}");
-    stage.route("/v1/appProfiles/ap-1", "{}");
-    stage.route("/v1/appProfiles/ap-2", "{}");
+    stage.route(&app_profile_route("ap-1"), "{}");
+    stage.route(&app_profile_route("ap-2"), "{}");
     stage.strata(
         "snapshot appprofile:ap-1 -o order-a.json",
         0,
@@ -2856,7 +2896,7 @@ fn cluster_group_stage_1() -> Stage {
     outputs["member_cluster_uid"] = "m-1".into();
     let mut stage = Stage::new(outputs);
     stage.route(
-        "/v1/spectroclusters/c-a",
+        &cluster_route("c-a"),
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
     );
     stage.strata(
@@ -2998,7 +3038,7 @@ fn registry_stage(more: serde_json::Value) -> Stage {
         "#!/usr/bin/env bash\necho \"{\\\"status\\\":\\\"Completed\\\",\\\"lastRunTime\\\":\\\"$(date +%s%N)\\\"}\"\n",
     );
     stage.route(
-        "/v1/clusterprofiles/own-1",
+        &profile_route("own-1"),
         r#"{"spec":{"published":{"packs":[{"name":"strata-live-pack","tag":"1.0.9",
             "isInvalid":true,"inValidReason":"strata-live-pack 1.0.9 tag is deleted"}]}}}"#,
     );
@@ -3246,6 +3286,44 @@ fn packs_sh_counts_the_versions_of_all_registries_against_the_100_of_one_page() 
     failed(&steps, &["packs-paged-count"]);
 }
 
+/// A run of packs.sh whose `strata packs <name> --registry ... --json` prints `kubernetes` for
+/// kubernetes and `cert_manager` for cert-manager. Gives steps.log.
+fn packs_newest(kubernetes: &str, cert_manager: &str) -> String {
+    let mut stage = Stage::new(serde_json::json!({
+        "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.1",
+        "csi_version": "1.65.0", "cloud": "aws",
+    }));
+    stage.strata("packs kubernetes --registry * --json", 0, kubernetes);
+    stage.strata("packs cert-manager --registry * --json", 0, cert_manager);
+    let (_, steps) = stage.run("packs.sh", &[]);
+    steps
+}
+
+#[test]
+fn packs_sh_checks_that_the_newest_version_of_a_pack_is_the_version_that_palette_marks() {
+    let marked = r#"{"registries":[{"versions":[
+        {"version":"1.19.3","latest":true,"paletteLatest":true},
+        {"version":"1.19.3-rev1","latest":false},
+        {"version":"1.19.2","latest":false}]}]}"#;
+    let steps = packs_newest(marked, marked);
+    passed(&steps, &["packs-palette-latest"]);
+
+    // the rebuild is the newest for strata, and Palette marks its base: the order of strata
+    // differs from the order of Palette
+    let rebuild_first = r#"{"registries":[{"versions":[
+        {"version":"1.19.3-rev1","latest":true},
+        {"version":"1.19.3","latest":false,"paletteLatest":true}]}]}"#;
+    let steps = packs_newest(marked, rebuild_first);
+    failed(&steps, &["packs-palette-latest"]);
+    let steps = packs_newest(rebuild_first, marked);
+    failed(&steps, &["packs-palette-latest"]);
+
+    // Palette marks no version
+    let unmarked = r#"{"registries":[{"versions":[{"version":"1.19.3","latest":true}]}]}"#;
+    let steps = packs_newest(marked, unmarked);
+    failed(&steps, &["packs-palette-latest"]);
+}
+
 /// A run of packs.sh whose Helm summary listing gives the Bitnami registry the sync `sync`, and
 /// whose `strata behind` on the record of the newest nginx of Bitnami prints `line` and `json`.
 /// Gives steps.log.
@@ -3337,7 +3415,7 @@ fn validate_packs_sh_stage_4_makes_a_profile_whose_pack_has_another_layer_than_i
     stage.route("/v1/clusterprofiles", r#"{"uid":"lp-1"}"#);
     stage.route("/v1/clusterprofiles/lp-1/publish", "{}");
     stage.route(
-        "/v1/clusterprofiles/lp-1",
+        &profile_route("lp-1"),
         r#"{"spec":{"published":{"packs":[{"name":"cert-manager","layer":"addon"}]}}}"#,
     );
     let record = r#"{"packs":[{"key":"addon/cert-manager","registryUid":"reg-pub",
@@ -3414,11 +3492,11 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
     outputs["next_profile_uid"] = "n-1".into();
     let mut stage = Stage::new(outputs);
     stage.route(
-        "/v1/spectroclusters/c-a",
+        &cluster_route("c-a"),
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"}}"#,
     );
     stage.route(
-        "/v1/clusterprofiles/n-1",
+        &profile_route("n-1"),
         r#"{"metadata":{"uid":"n-1"},"spec":{"published":{"packs":[{"name":"kubernetes","tag":"1.36.2",
             "type":"spectro","layer":"k8s","values":"- 'chmod {{.spectro.var.strata_mode}} /var/lib/kubelet/config.yaml'\n"}]}}}"#,
     );
@@ -3594,7 +3672,7 @@ fn pending_sh_stage_6_asks_palette_about_a_kubeadm_command_that_waits_and_closes
         ],
     );
     let values: Vec<String> = stage
-        .sent("PUT", "/v1/clusterprofiles/r-1")
+        .sent("PUT", &profile_route("r-1"))
         .iter()
         .map(|b| {
             b["spec"]["template"]["packs"][0]["values"]
@@ -3652,7 +3730,7 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
     )
     .unwrap();
     stage.route(
-        "/v1/spectroclusters/c-t",
+        &cluster_route("c-t"),
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},
             "spec":{"clusterTemplate":{"uid":"t-1","projectUid":"p-1"}}}"#,
     );
@@ -3725,7 +3803,7 @@ fn template_sh_stage_4_builds_a_cluster_in_the_template_and_asks_the_route_of_th
         "the move from the release version to the next one"
     );
     let edits: Vec<String> = stage
-        .sent("PUT", "/v1/clusterprofiles/n-1")
+        .sent("PUT", &profile_route("n-1"))
         .iter()
         .map(|b| {
             b["spec"]["template"]["packs"][0]["values"]
@@ -3796,7 +3874,7 @@ fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_i
     let mut stage = Stage::new(baseline_outputs());
     stage.env("WATCH_MINUTES", "0");
     stage.route(
-        "/v1/spectroclusters/c-a",
+        &cluster_route("c-a"),
         r#"{"metadata":{"name":"fred"},"status":{"state":"Running"},"spec":{"cloudType":"aws",
             "cloudConfigRef":{"uid":"cc-1"},"clusterProfileTemplates":[{"uid":"r-1"}]}}"#,
     );
@@ -3807,7 +3885,7 @@ fn registry_move_nodes_sh_moves_the_os_pack_of_the_release_and_cluster_a_takes_i
     stage.route("/v1/spectroclusters/c-a/profiles/packs/manifests", "{}");
     stage.route("/v1/spectroclusters/c-a/profiles", "{}");
     stage.route(
-        "/v1/clusterprofiles/r-1",
+        &profile_route("r-1"),
         r#"{"metadata":{"uid":"r-1"},"spec":{"published":{"packs":[{"name":"ubuntu-aws","tag":"24.04","type":"oci"}]}}}"#,
     );
     stage.route("/v1/clusterprofiles/r-1/packs/manifests", "{}");
@@ -3929,7 +4007,7 @@ fn unpublished_stage(un_published: bool) -> Stage {
          strata-live-unpublished@1.0.0  un-1  all  add-on  no consumers  draft\n",
     );
     stage.route(
-        "/v1/clusterprofiles/ad-1",
+        &profile_route("ad-1"),
         r#"{"metadata":{"name":"strata-live-addon","uid":"ad-1"},"spec":{"version":"1.0.0",
             "published":{"type":"add-on","cloudType":"all","packs":[{"name":"config",
             "tag":"1.0.0","type":"manifest","layer":"addon","packUid":"pk-1","values":""}]}}}"#,
@@ -3944,7 +4022,7 @@ fn unpublished_stage(un_published: bool) -> Stage {
         PROFILE_LISTING,
         r#"{"items":[{"metadata":{"name":"strata-live-unpublished","uid":"un-1"}}]}"#,
     );
-    stage.route("/v1/clusterprofiles/un-1", "{}");
+    stage.route(&profile_route("un-1"), "{}");
     stage
 }
 
@@ -3999,7 +4077,7 @@ fn draft_sh_fails_the_check_when_list_says_that_the_copy_is_published() {
 fn scope_stage(tenant_scope: &str) -> Stage {
     let mut stage = Stage::new(baseline_outputs());
     stage.route(
-        "/v1/clusterprofiles/r-1",
+        &profile_route("r-1"),
         r#"{"metadata":{"name":"strata-live-profile","uid":"r-1","annotations":{"scope":"project"}},
             "spec":{"version":"1.0.0","published":{"type":"cluster","cloudType":"aws","packs":[
             {"name":"kubernetes","tag":"1.33.0","type":"spectro","layer":"k8s","packUid":"pk-1",
@@ -4012,7 +4090,7 @@ fn scope_stage(tenant_scope: &str) -> Stage {
     stage.route("/v1/clusterprofiles", r#"{"uid":"t-1"}"#);
     stage.route("/v1/clusterprofiles/t-1/publish", "{}");
     stage.route(
-        "/v1/clusterprofiles/t-1",
+        &profile_route("t-1"),
         &format!(
             r#"{{"metadata":{{"name":"strata-live-profile","uid":"t-1","annotations":{{"scope":"{tenant_scope}"}}}},
                 "spec":{{"version":"1.0.0"}}}}"#
@@ -4451,10 +4529,7 @@ fn bump_stage_with(
         0,
         &serde_json::json!({"source": {"cluster": {"uid": FRED_UID}}}).to_string(),
     );
-    stage.route(
-        &format!("/v1/spectroclusters/{FRED_UID}"),
-        &fred_document().to_string(),
-    );
+    stage.route(&cluster_route(FRED_UID), &fred_document().to_string());
     stage.route(
         &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
         r#"{"profiles":[]}"#,
@@ -4549,10 +4624,7 @@ fn validate_packs_sh_stage_6_sends_the_route_of_the_cluster_a_body_longer_than_o
     let mut document = fred_document();
     document["spec"]["clusterProfileTemplates"][0]["packs"][1]["values"] = values.clone().into();
     let (stage, steps) = bump_stage_with(&report, &report, |stage| {
-        stage.route(
-            &format!("/v1/spectroclusters/{FRED_UID}"),
-            &document.to_string(),
-        );
+        stage.route(&cluster_route(FRED_UID), &document.to_string());
     });
     passed(
         &steps,
@@ -5167,7 +5239,7 @@ fn route_bodies_stage(packs: &str, takes: &[&str]) -> Stage {
         r#"{"items":[{"kind":"aws","metadata":{"name":"lab-aws","uid":"acc-1"}}]}"#,
     );
     stage.route(
-        "/v1/clusterprofiles/r-1",
+        &profile_route("r-1"),
         r#"{"spec":{"published":{"cloudType":"aws"}}}"#,
     );
     stage.route(
@@ -5560,7 +5632,7 @@ fn route_bodies_sh_skips_pack_cloud_support_when_the_registry_has_no_pack_withou
 fn route_bodies_sh_stops_when_the_release_profile_is_not_on_aws() {
     let stage = route_bodies_stage(&route_packs(true), &[]);
     stage.route(
-        "/v1/clusterprofiles/r-1",
+        &profile_route("r-1"),
         r#"{"spec":{"published":{"cloudType":"gcp"}}}"#,
     );
     let bodies = stage.path("bodies");

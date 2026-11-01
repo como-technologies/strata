@@ -263,12 +263,18 @@ A comparison of two sides, `a` and `b`.
   `op`, `profile`, `name`, `old`, `new`, and `sensitive`. A sensitive variable
   has no `old` or `new`. The values of each side are in `a.cluster.variables` and
   `b.cluster.variables`.
+- `versionMove`: `forward` when side B has the higher version, and `back` when it
+  has the lower. Absent when a side has no version, and when the two versions have
+  the same precedence.
 - `orderChanged`: the two sides apply their packs in a different order.
 - `packs[]`: one entry for each pack key on either side, sorted by layer and then
   by name.
   - `status`: `unchanged`, `changed`, `added`, or `removed`.
   - `identity`, `upstream`, `authored`, and `paramsChanged`.
   - `tagRenamed`: only the tag name differs, for the same build.
+  - `versionMove`: `forward` or `back`, as at the top of the document, for the
+    versions of the pack. Absent when a side has no pack, and when the two
+    versions have the same precedence.
   - `mintedUidOnly`: the only difference is a pack uid that Palette mints: for a
     manifest pack, or for a pack from a registry that Palette does not sync.
   - `impact`: `level` and `text`.
@@ -508,7 +514,7 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
     when it is `false`, nobody published it, and `packs[]` holds the packs of
     its draft. `type` and `packs[]` come from the template that a record of
     the version reads: the published template when it has packs, else the
-    draft.
+    draft. `type` is a profile type, or the text of a type of a later release.
   - A cluster: `ref`, `name`, `uid`, `state`, `cloudType`, `clusterType`, and
     `projectUid`.
     - `state` is `status.state` of the cluster, as Palette gives it in
@@ -544,7 +550,8 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
   `deleted`. See [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
   - A version: `version`, `packUid`, `digest`, `type`, `cloudTypes[]`, `tags[]`
     with the exact tag first, and `latest`, which is true for the newest version
-    the command listed. `type` is `spectro`, `helm`, or `oci`. A version that
+    the command listed, by the order of Semantic Versioning. `type` is
+    `spectro`, `helm`, or `oci`. A version that
     the listing gives no type is `spectro`, as its record says. With `--cloud`,
     `latest` is true for the newest version for that cloud, and not the newest
     the registry holds. `state` is `deprecated`,
@@ -583,8 +590,9 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
     `strata-packs/1`. It is `absent` when the registry no longer lists the
     pinned version, or does not serve it in this tenant.
   - `pinnedBy[]`: `path` and `subject` of each record that pins it.
-  - `newer[]`: the newer versions that a person can move to, newest first.
-    Each has:
+  - `newer[]`: the newer versions that a person can move to, newest first, by
+    the order of Semantic Versioning. A pre-release is a newer version of a pin that
+    is not a pre-release only with `--pre-release`. Each has:
     - `version`.
     - `state`, when the registry gives one.
     - `paletteLatest`, when Palette calls it the latest.

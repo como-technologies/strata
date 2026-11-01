@@ -113,11 +113,11 @@ fn the_registry_listings_read_the_metadata_and_the_summary_of_a_kind() {
         Some(RegistryKind::Helm)
     );
     assert_eq!(RegistryKind::of_pack_type(PackType::Manifest), None);
-    for kind in [RegistryKind::Pack, RegistryKind::Helm, RegistryKind::Oci] {
-        assert_eq!(RegistryKind::of_kind(kind.route()), Some(kind));
+    for &kind in RegistryKind::ALL {
+        assert_eq!(RegistryKind::from_text(kind.as_str()), Some(kind));
         assert_eq!(RegistryKind::of_pack_type(kind.pack_type()), Some(kind));
     }
-    assert_eq!(RegistryKind::of_kind("spectro"), None);
+    assert_eq!(RegistryKind::from_text("spectro"), None);
 }
 
 #[test]
@@ -267,10 +267,12 @@ fn the_profile_search_gives_the_uid_of_each_version_of_a_scope_over_each_page() 
 }
 
 #[test]
-fn latest_resolves_to_the_highest_version_by_natural_order() {
+fn latest_resolves_to_the_highest_version_that_is_not_a_pre_release() {
     let listing = json!({"items": [
         {"metadata": {"name": "aws-stack", "uid": "u1"}, "spec": {"version": "1.9.0"}},
         {"metadata": {"name": "aws-stack", "uid": "u2"}, "spec": {"version": "1.10.0"}},
+        {"metadata": {"name": "aws-stack", "uid": "u4"}, "spec": {"version": "1.10.0-g0123456789ab"}},
+        {"metadata": {"name": "aws-stack", "uid": "u5"}, "spec": {"version": "1.11.0-rc.1"}},
         {"metadata": {"name": "aws-stack", "uid": "u0"}, "spec": {"version": "1.2.0"}},
         {"metadata": {"name": "other", "uid": "u3"}, "spec": {"version": "9.0.0"}},
     ]});

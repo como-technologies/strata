@@ -7,14 +7,14 @@
 
 use std::path::Path;
 
-use crate::common::walk;
+use crate::common::{schema_values, walk};
 use serde_json::Value;
 use strata::api::Method;
 use strata::closed_set::ClosedSet;
 use strata::cloud::Cloud;
 use strata::cluster_state::ClusterState;
 use strata::conjunction::Conjunction;
-use strata::diff::{ChangeFlag, ImpactLevel, Op, Status};
+use strata::diff::{ChangeFlag, ImpactLevel, Op, Status, VersionMove};
 use strata::oci_provider::OciProvider;
 use strata::ops::{PairStatus, Policy, RecordStatus};
 use strata::pack_state::PackState;
@@ -55,7 +55,7 @@ fn set<T: ClosedSet>(released: &'static [&'static str]) -> Set {
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value and keep the schema id, because a record of
 /// an earlier release then reads the value as unknown.
-fn sets() -> [Set; 22] {
+fn sets() -> [Set; 23] {
     [
         set::<Method>(&["GET", "POST"]),
         set::<Implementation>(&["rust", "bash"]),
@@ -74,6 +74,7 @@ fn sets() -> [Set; 22] {
         ]),
         set::<ChangeFlag>(&["IDENTITY", "UPSTREAM", "AUTHORED", "IMAGES", "CHARTS"]),
         set::<Status>(&["unchanged", "changed", "added", "removed"]),
+        set::<VersionMove>(&["forward", "back"]),
         set::<Op>(&["changed", "added", "removed"]),
         set::<RecordStatus>(&["unchanged", "drifted", "unverified", "error"]),
         set::<PairStatus>(&[
@@ -122,20 +123,7 @@ fn sets() -> [Set; 22] {
 
 /// The text of each value of `T`, as its JSON Schema names it.
 fn schema_names<T: ClosedSet>() -> Vec<String> {
-    let schema = schemars::schema_for!(T);
-    // schemars writes each unit variant that has a doc comment as a `const` of `oneOf`
-    let variants = schema.as_value()["oneOf"]
-        .as_array()
-        .expect("the schema of a closed set is a oneOf");
-    variants
-        .iter()
-        .map(|v| {
-            v["const"]
-                .as_str()
-                .expect("each variant is a const")
-                .to_string()
-        })
-        .collect()
+    schema_values(schemars::schema_for!(T).as_value())
 }
 
 /// The text of each value of `ClosedSet::ALL`.

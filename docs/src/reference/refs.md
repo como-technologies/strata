@@ -32,10 +32,13 @@ A ref names the thing that a command reads.
 - **Scope.** Strata reads a uid, a name, or a cluster in the configured project.
   See [Configure](../configure.md#the-project). A snapshot file carries its own
   project.
-- **`@latest`.** The highest version by natural order: digit runs compare as
-  numbers, other text as text. `22.04` is above `20.04`, and `1.30.6` is above
-  `1.29.10`. The snapshot records the version that it found in
-  `source.version`, and keeps `aws-stack@latest` in `source.ref`.
+- **`@latest`.** The highest version that is not a pre-release, by Semantic
+  Versioning, as Palette orders versions. `22.04` is above `20.04`, and `1.30.6`
+  is above `1.29.10`. A pre-release is below its version. A name that has only
+  pre-releases gives its highest one. For a text that does not parse, digit runs
+  compare as numbers and other text as text. The snapshot records the version
+  that it found in `source.version`, and keeps `aws-stack@latest` in
+  `source.ref`.
 - **`@draft`.** The draft template of a profile version, and not its published
   template. A person who edits a published version and does not publish makes
   a draft. The record holds the values and the manifests of the draft, and

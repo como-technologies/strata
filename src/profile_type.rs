@@ -59,10 +59,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_profile_type_parses_and_prints_as_the_documents_name_it() {
-        for kind in ProfileType::ALL {
-            assert_eq!(ProfileType::parse(kind.as_str()), Some(*kind));
-        }
+    fn a_text_that_is_no_profile_type_reads_as_none() {
         assert_eq!(ProfileType::parse("addon"), None);
         assert_eq!(ProfileType::parse(""), None);
     }

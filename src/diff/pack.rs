@@ -1,6 +1,7 @@
 //! The comparison of two packs: the status, the change flags, the params, the images and the
 //! charts, the values, and the manifests.
 
+use std::cmp::Ordering;
 use std::fmt;
 
 use schemars::JsonSchema;
@@ -14,6 +15,7 @@ use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::canonical_json;
 use crate::content::layer::Layer;
 use crate::diff::impact::{Flags, Impact, ImpactLevel, impact, presence_impact};
+use crate::reference::version;
 use crate::snapshot::{Pack, Snapshot, UpstreamSource};
 
 /// What happened to one pack.
@@ -44,6 +46,39 @@ impl Described for Status {
             Self::Changed => "Node hash differs; see identity, upstream and authored.",
             Self::Added => "Present only in B.",
             Self::Removed => "Present only in A.",
+        }
+    }
+}
+
+/// Which way the version of a profile or of a pack moves from side A to side B.
+///
+/// The order is that of [`version::compare`]: Semantic Versioning, as Palette orders versions. A
+/// pre-release is below its version, so the move from `1.0.1-rc.1` to `1.0.1` is forward.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum VersionMove {
+    /// Side B has the higher version.
+    Forward,
+    /// Side B has the lower version.
+    Back,
+}
+
+impl_closed_set!(VersionMove {
+    Forward => "forward",
+    Back => "back",
+});
+
+impl VersionMove {
+    /// The move from the version `a` to the version `b`. None when a side has no version, and when
+    /// the two versions have the same precedence, such as `1.0.1` and `1.0.1+2`.
+    pub fn of(a: &str, b: &str) -> Option<VersionMove> {
+        if a.is_empty() || b.is_empty() {
+            return None;
+        }
+        match version::compare(a, b) {
+            Ordering::Less => Some(VersionMove::Forward),
+            Ordering::Greater => Some(VersionMove::Back),
+            Ordering::Equal => None,
         }
     }
 }
@@ -148,6 +183,10 @@ pub struct PackDiff {
     /// rename out. `AUTHORED` and `UPSTREAM` still count.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub tag_renamed: bool,
+    /// Which way the version of the pack moves from side A to side B. Absent when a side has no
+    /// pack, and when the two versions have the same precedence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_move: Option<VersionMove>,
     /// What the change does to clusters.
     pub impact: Impact,
     /// The values compared.
@@ -602,6 +641,7 @@ fn compared_pack_diff(key: &str, x: &Pack, y: &Pack) -> PackDiff {
         params_changed: canonical_json(&x.params) != canonical_json(&y.params),
         minted_uid_only: identity && !upstream && !authored && minted_uid_pair(x, y),
         tag_renamed,
+        version_move: VersionMove::of(&x.version, &y.version),
         impact: imp,
         values: values_diff(x, y),
         manifests: manifests_diff(x, y),
@@ -640,6 +680,7 @@ pub(super) fn presence_pack_diff(key: &str, pack: &Pack, added: bool) -> PackDif
         params_changed: false,
         minted_uid_only: false,
         tag_renamed: false,
+        version_move: None,
         impact: presence_impact(&pack.layer, added),
         values: ValuesDiff::default(),
         manifests: Vec::new(),

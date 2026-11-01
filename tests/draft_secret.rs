@@ -14,8 +14,8 @@ use strata::term::progress::Progress;
 use crate::common;
 use common::{
     DRAFT_PROFILE_UID, DRAFT_RULES, PUBLISHED_RULES, RULES_UID, manifest_content, manifest_entity,
-    manifest_route, no_manifests, no_template, no_variables, profile_document, profile_route,
-    serve_profile, snapshot_of, template,
+    manifest_route, no_manifests, no_template, no_variables, pack_route, profile_document,
+    profile_route, serve_profile, snapshot_of, template,
 };
 
 const PACK: &str = "64f0000000000000000000e1";
@@ -53,11 +53,6 @@ fn assert_no_saved_file_holds_secret(dir: &Path) {
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(!text.contains(SECRET), "{}: {text}", path.display());
     }
-}
-
-/// The document of the pack `uid`, `GET /v1/packs/{uid}`.
-fn pack_route(uid: &str) -> String {
-    format!("/v1/packs/{uid}")
 }
 
 /// The answer of `GET /v1/packs/{uid}`: the schema marks `adminPassword` as a password.
@@ -176,13 +171,13 @@ fn a_pack_uid_with_a_character_that_is_not_alphanumeric_is_masked() {
         no_variables(),
     )
     // strata escapes the uid in the path, as for each other uid
-    .with("/v1/packs/64f0-barney%2Be1", pack);
+    .with(pack_route("64f0-barney%2Be1"), pack);
     let raw = Palette::new(&api)
         .fetch_profile(DRAFT_PROFILE_UID, &Progress::silent())
         .unwrap();
     assert!(!raw.profile.to_string().contains(SECRET));
     assert!(!raw.manifests.to_string().contains(SECRET));
-    assert_eq!(api.calls("/v1/packs/64f0-barney%2Be1"), 1);
+    assert_eq!(api.calls(&pack_route("64f0-barney%2Be1")), 1);
 }
 
 // ---- a draft with a secret and manifests ------------------------------------------------------

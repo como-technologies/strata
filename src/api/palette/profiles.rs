@@ -101,7 +101,8 @@ impl<A: PaletteApi> Palette<A> {
     }
 
     /// Find the uid of the highest version of `name` in the current scope, by
-    /// [`version::compare`].
+    /// [`version::compare`]. A pre-release is the highest only when the name has no other
+    /// version.
     ///
     /// # Errors
     ///
@@ -158,8 +159,8 @@ impl<A: PaletteApi> Palette<A> {
         Ok(uids)
     }
 
-    /// The uid of the app profile `name` at `version`, or at its highest version for
-    /// [`LATEST`], from `GET /v1/dashboard/appProfiles/metadata`.
+    /// The uid of the app profile `name` at `version`, or at its highest version that is not a
+    /// pre-release for [`LATEST`], from `GET /v1/dashboard/appProfiles/metadata`.
     ///
     /// Palette refuses a second app profile with one name and one version with the code
     /// `AppProfileAlreadyExists`, but only in one scope. So two scopes can each hold one.

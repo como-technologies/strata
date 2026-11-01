@@ -93,9 +93,8 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn a_scope_parses_and_prints_as_palette_names_it() {
+    fn a_scope_prints_as_palette_names_it_and_reads_no_other_text() {
         for scope in ProfileScope::ALL {
-            assert_eq!(ProfileScope::parse(scope.as_str()), Some(*scope));
             assert_eq!(scope.to_string(), scope.as_str());
         }
         assert_eq!(ProfileScope::parse("global"), None);

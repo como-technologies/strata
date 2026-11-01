@@ -3,6 +3,11 @@
 //! The crate names each route in a const of its own that is not public. So this file names the
 //! route again, in one place. `tests/common/mod.rs` re-exports it for the tests, and the library
 //! of `benches/` includes it for the benchmarks, so that no second list of the routes exists.
+//!
+//! The route helpers write the route that Palette serves, on purpose. They do not call
+//! `strata::api::subject_path` or another function of `strata::api` that builds a route. A test
+//! that builds its routes with the code under test cannot see a change of a route. A test of a
+//! shipped script or of a stand-in server needs the same route text as the script.
 
 use serde_json::{Value, json};
 
@@ -65,6 +70,11 @@ pub fn group_resolved_values_route(uid: &str) -> String {
 /// The document of the cluster `uid`, `GET /v1/spectroclusters/{uid}`.
 pub fn cluster_route(uid: &str) -> String {
     format!("/v1/spectroclusters/{uid}")
+}
+
+/// The document of the pack `uid`, `GET /v1/packs/{uid}`: its values and the schema of its values.
+pub fn pack_route(uid: &str) -> String {
+    format!("/v1/packs/{uid}")
 }
 
 /// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`.

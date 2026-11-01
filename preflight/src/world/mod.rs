@@ -34,7 +34,10 @@ use serde_json::{Map, Value, json};
 use strata::api::{Palette, PaletteApi, RawCluster, profile_variables};
 use strata::closed_set::ClosedSet;
 use strata::cloud::{CLOUD_EDGE_NATIVE, Cloud};
-use strata::json::{arr, opt_str, opt_text, str_at, text_map, text_or, value_at, value_or_null};
+use strata::json::{
+    arr, opt_str, opt_text, str_at, text_map, text_or, value_at, value_or_empty_object,
+    value_or_null,
+};
 use strata::reference::Ref;
 use strata::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use strata::term::progress::Progress;
@@ -580,10 +583,7 @@ fn entity_of(
     }
     spec.insert(
         "cloudConfig".into(),
-        config
-            .pointer("/spec/clusterConfig")
-            .cloned()
-            .unwrap_or(Value::Object(Map::new())),
+        value_or_empty_object(config, "/spec/clusterConfig"),
     );
     spec.insert("machinepoolconfig".into(), Value::Array(pools));
     spec.insert("profiles".into(), Value::Array(profiles));

@@ -39,6 +39,15 @@ top. Then the gate is clear:
 {{#include ../output/merge-gate-clear.txt}}
 ```
 
+### The order of the versions
+
+The gate does not order versions itself. `strata compare` orders them as Palette
+does, by Semantic Versioning. It writes the direction of each move as
+`versionMove` in its JSON. A pre-release is below its version. So the move from
+`1.0.1-g0123456789ab` to `1.0.1` is a move forward, and the move from `1.0.1` to
+`1.0.1-g0123456789ab` is a move back. See
+[The order of versions](../reference/compatibility.md#the-order-of-versions).
+
 ### A rollback, and a branch that did not look
 
 Both move a pin backwards, and only the author knows which one it is. The gate
@@ -113,7 +122,7 @@ cluster.
 
 The script is in this repository, at `scripts/ci/merge-gate.sh`, and every
 release carries it beside the binary. It needs `strata` (or `STRATA_BIN`),
-`git`, `jq`, and `sort -V`. It
+`git`, and `jq`. It
 needs the history, so a job that clones with a depth gives it `GIT_DEPTH: 0` or
 `fetch-depth: 0`. It writes to no host: the exit status is the gate, and
 [the comment](./pr-comments.md) is what people read.

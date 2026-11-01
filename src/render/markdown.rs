@@ -606,7 +606,7 @@ fn profile_row(l: &Listing, pr: &ListedProfile, with_packs: bool) -> String {
         };
         row.push_str(&format!(
             " {} | {} | {} |",
-            markdown_cell(dash(pr.profile_type.as_deref().unwrap_or(""))),
+            markdown_cell(super::list::profile_type_cell(pr)),
             pr.consumers
                 .map(consumer_count)
                 .unwrap_or_else(|| "-".into()),
