@@ -100,15 +100,20 @@ command directly. `cargo xtask` with no command prints its usage and exits `2`. 
 
 ## The tests
 
-`just test` runs five commands, one after the other: `cargo test`,
-`cargo test -p strata-preflight`, `cargo test -p xtask`,
-`cargo test -p strata-benches`, and `cargo test -p strata-fuzz`. The workspace
-builds only the root package by default. So `cargo test` alone does not run the
-tests of `xtask`, which hold the routes of the stand-in for Palette. It does not
-run the tests of the generator of the benchmarks or the fuzz targets either.
-When one test fails, `just test` stops and exits with a code that is not zero.
-CI runs `just test`, so CI runs the tests of the stand-in, of the benchmarks, and
-of the fuzz targets with the others.
+`just test` runs five commands, one after the other:
+
+- `cargo test`
+- `cargo test -p strata-preflight`
+- `cargo test -p xtask`
+- `cargo test -p strata-benches`
+- `cargo test -p strata-fuzz`
+
+The workspace builds only the root package by default. So `cargo test` alone
+does not run the tests of `xtask`, which hold the routes of the stand-in for
+Palette. It does not run the tests of the generator of the benchmarks or the fuzz
+targets either. When one test fails, `just test` stops and exits with a code that
+is not zero. CI runs `just test`, so CI runs the tests of the stand-in, of the
+benchmarks, and of the fuzz targets with the others.
 
 `cargo test` runs:
 
@@ -265,10 +270,12 @@ reads them, and nothing else:
 - `crashes/` holds a regression case: an input that made the target fail.
   `cargo test` runs it first.
 
-`just fuzz-seed` writes the seeds into `corpus/`. A seed is a real input: a file
-of `examples/`, a rule of the catalog of `strata-preflight`, a file or an output
-of this book, or a record that the library builds from them. The name of a seed
-file is a hash of its bytes, so a second run changes no file. The recipe runs
+`just fuzz-seed` writes the seeds into `corpus/`. A seed is a real input. It is a
+file of `examples/`, a rule of the catalog of `strata-preflight`, or a file or an
+output of this book. It can also be a record that the library builds from them.
+
+The name of a seed file is a hash of its bytes, so a second run changes no file.
+The recipe runs
 `just examples` first, because it reads the profiles and the cluster that
 `just examples` builds. `.gitattributes` marks the corpus as `-text`, so Git
 keeps each byte of a seed, also a line ending.
@@ -297,8 +304,8 @@ is wrong. Make the fix in four steps:
 
 The tracked regression case of the mask is an example. Its file is
 `wave-3-mask-slices-a-char`. The mask of a draft cut the values of a user at a
-byte that is not the start of a `char`, for the text `{{ .spectroévar.x }}`. The
-test `a_draft_value_with_a_non_ascii_variable_name_is_masked_and_does_not_panic`
+byte that is not the start of a `char`. The text `{{ .spectroévar.x }}` showed
+it. The test `a_draft_value_with_a_non_ascii_variable_name_is_masked_and_does_not_panic`
 in `fuzz/src/mask.rs` states the same case in words.
 
 #### The scheduled run
