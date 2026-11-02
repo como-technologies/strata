@@ -159,6 +159,12 @@ stand-in:
 docs-check: examples stand-in
     cargo run --quiet -p xtask -- docs-examples --check
 
+# The list is in xtask/facts/. A script reads the JSON with jq. See docs/src/development/facts.md.
+
+# Print the list of the facts of Palette as JSON
+facts:
+    @cargo run --quiet -p xtask -- facts
+
 # Test each link of the book with mdbook-lint
 docs-lint:
     mdbook-lint lint docs/src/

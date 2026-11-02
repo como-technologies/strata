@@ -1,0 +1,1295 @@
+schema: strata-facts/1
+facts:
+  # ---- the requests ------------------------------------------------------------------------------
+
+  # ANCHOR: example
+  - id: registry-metadata
+    kind: request
+    request: GET /v1/registries/metadata
+    reads:
+      fields:
+        - items[].uid
+        - items[].name
+        - items[].kind
+        - items[].isPrivate
+      values:
+        "items[].kind": [pack, helm, oci]
+    stand_in:
+      - v1/registries/metadata
+    live:
+      - packs.sh:packs-unknown-registry
+      - registry-kinds.sh:auth-packs-says
+    pages:
+      - reference/palette-api.md#other-reads
+      - internals/palette/packs.md#a-pack-that-palette-makes-at-the-create
+    code:
+      - src/api/palette/listings.rs
+      - src/api/registry.rs
+  # ANCHOR_END: example
+
+  - id: pack-listing
+    kind: request
+    request: GET /v1/packs
+    reads:
+      fields:
+        - items[].metadata.uid
+        - items[].metadata.creationTimestamp
+        - items[].metadata.annotations.latestVersion
+        - items[].spec.name
+        - items[].spec.version
+        - items[].spec.registryUid
+        - items[].spec.digest
+        - items[].spec.layer
+        - items[].spec.type
+        - items[].spec.values
+        - items[].spec.cloudTypes
+        - items[].spec.annotations.system_state
+        - items[].spec.annotations.disabled
+        - items[].spec.annotations.architecture
+        - items[].spec.template.parameters.inputParameters
+        - listmeta.count
+      values:
+        "items[].spec.type": [spectro, helm, oci, manifest]
+        "items[].spec.annotations.system_state": [deprecated, disabled, deleted]
+    stand_in:
+      - v1/packs
+    live:
+      - packs.sh:packs-paged-listing
+      - packs.sh:packs-paged
+      - packs.sh:packs-palette-latest
+      - packs.sh:arch-listing
+      - packs.sh:pack-time-listing
+      - registry.sh:listing-follows
+    pages:
+      - reference/palette-api.md#other-reads
+      - internals/palette/packs.md#what-a-registry-answers-about-a-pack
+      - internals/palette/packs.md#the-architectures-of-a-version
+      - internals/palette/packs.md#the-version-that-palette-calls-the-latest
+    code:
+      - src/api/palette/listings.rs
+      - src/candidate/pack.rs
+      - src/ops/packs.rs
+
+  - id: pack-tags
+    kind: request
+    request: GET /v1/packs/{name}/registries/{uid}
+    reads:
+      fields:
+        - layer
+        - tags[].tag
+        - tags[].version
+        - tags[].packUid
+        - tags[].parentTags
+        - packValues[].packUid
+        - packValues[].values
+      codes:
+        - ResourceNotFound
+    stand_in:
+      - v1/packs/{name}/registries/{uid}
+    live:
+      - packs.sh:packs-newest
+      - pack-states.sh:states-disabled-says
+      - tag-only.sh:os-packs
+      - registry.sh:packs-two
+    pages:
+      - reference/palette-api.md#other-reads
+      - internals/palette/packs.md#what-a-registry-answers-about-a-pack
+      - internals/palette/packs.md#tag-names
+      - internals/palette/packs.md#pack-states
+    code:
+      - src/api/palette/listings.rs
+      - src/candidate/resolve.rs
+      - src/ops/packs.rs
+
+  - id: oci-registry-summary
+    kind: request
+    request: GET /v1/registries/oci/summary
+    reads:
+      fields:
+        - items[].metadata.uid
+        - items[].spec.providerType
+        - items[].status.sync.isSyncSupported
+        - items[].status.sync.status
+        - items[].status.sync.lastSyncedTime
+        - items[].status.sync.lastRunTime
+        - items[].status.sync.message
+        - items[].status.sync.syncRecovery.syncRecoveryState
+        - items[].status.sync.syncRecovery.message
+      values:
+        "items[].spec.providerType": [pack, helm, zarf]
+    stand_in:
+      - v1/registries/oci/summary
+    live:
+      - registry-kinds.sh:provider-types
+      - verify.sh:registries-provider-type
+      - registry-kinds.sh:auth-packs-says
+    pages:
+      - reference/palette-api.md#other-reads
+      - internals/palette/packs.md#the-sync-of-a-registry
+    code:
+      - src/api/palette/listings.rs
+      - src/api/registry.rs
+
+  - id: pack-registry-summary
+    kind: request
+    request: GET /v1/registries/pack/summary
+    reads:
+      fields:
+        - items[].metadata.uid
+        - items[].status.sync.isSyncSupported
+        - items[].status.sync.status
+        - items[].status.sync.lastSyncedTime
+        - items[].status.sync.lastRunTime
+        - items[].status.sync.message
+        - items[].status.sync.syncRecovery.syncRecoveryState
+        - items[].status.sync.syncRecovery.message
+    stand_in:
+      - v1/registries/pack/summary
+    live:
+      - packs.sh:verify-sync
+      - packs.sh:verify-sync-json
+    pages:
+      - reference/palette-api.md#other-reads
+      - internals/palette/packs.md#the-sync-of-a-registry
+    code:
+      - src/api/palette/listings.rs
+      - src/api/registry.rs
+
+  - id: helm-registry-summary
+    kind: request
+    request: GET /v1/registries/helm/summary
+    reads:
+      fields:
+        - items[].metadata.uid
+        - items[].status.sync.isSyncSupported
+        - items[].status.sync.status
+        - items[].status.sync.lastSyncedTime
+        - items[].status.sync.lastRunTime
+        - items[].status.sync.message
+        - items[].status.sync.syncRecovery.syncRecoveryState
+        - items[].status.sync.syncRecovery.message
+    stand_in: []
+    live:
+      - packs.sh:bitnami-sync
+      - packs.sh:stale-current
+    pages:
+      - reference/palette-api.md#other-reads
+      - internals/palette/packs.md#the-sync-of-a-registry
+    code:
+      - src/api/palette/listings.rs
+      - src/api/registry.rs
+
+  # ---- The pack-ref digest -----------------------------------------------------------------------
+
+  - id: pack-ref-digest
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].digest
+    stand_in: []
+    live:
+      - registry.sh:leaf-digest-is-push
+      - registry.sh:profile-digest-is-push
+      - registry.sh:chart-profile-digest
+      - packs.sh:verify-record
+    pages:
+      - internals/palette/packs.md#the-pack-ref-digest
+    code:
+      - src/snapshot/pack.rs
+      - src/diff/verify.rs
+
+  # ---- The sync of a registry --------------------------------------------------------------------
+
+  - id: registry-sync-fields
+    kind: behavior
+    reads:
+      fields:
+        - items[].status.sync.isSyncSupported
+        - items[].status.sync.status
+        - items[].status.sync.lastSyncedTime
+        - items[].status.sync.lastRunTime
+        - items[].status.sync.message
+        - items[].status.sync.syncRecovery.syncRecoveryState
+      values:
+        "items[].status.sync.status": [Completed, InProgress, Failed]
+        "items[].status.sync.syncRecovery.syncRecoveryState": [Interrupted, Recovering, Recovered]
+    stand_in: []
+    live:
+      - packs.sh:verify-sync
+      - packs.sh:bitnami-sync
+      - packs.sh:stale-json
+    pages:
+      - internals/palette/packs.md#the-sync-of-a-registry
+    code:
+      - src/api/registry.rs
+      - src/ops/verify.rs
+      - src/ops/behind.rs
+
+  - id: registry-sync-start-time
+    kind: behavior
+    reads:
+      fields:
+        - items[].status.sync.lastSyncedTime
+        - items[].status.sync.lastRunTime
+    stand_in: []
+    live: []
+    unchecked: A read by hand shows it. No script holds this read.
+    pages:
+      - internals/palette/packs.md#the-sync-of-a-registry
+    code:
+      - src/api/registry.rs
+
+  - id: registry-sync-recovery
+    kind: behavior
+    reads:
+      fields:
+        - items[].status.sync.status
+        - items[].status.sync.syncRecovery.syncRecoveryState
+        - items[].status.sync.syncRecovery.message
+      values:
+        "items[].status.sync.syncRecovery.syncRecoveryState": [Recovering]
+    stand_in: []
+    live:
+      - packs.sh:bitnami-sync
+      - packs.sh:stale-note
+      - packs.sh:stale-json
+    pages:
+      - internals/palette/packs.md#the-sync-of-a-registry
+    code:
+      - src/api/registry.rs
+      - src/ops/behind.rs
+
+  - id: registry-sync-never-completed
+    kind: behavior
+    reads:
+      fields:
+        - items[].status.sync.lastSyncedTime
+        - items[].status.sync.lastRunTime
+    stand_in: []
+    live: []
+    unchecked: A read by hand shows it. No script holds this read.
+    pages:
+      - internals/palette/packs.md#the-sync-of-a-registry
+    code:
+      - src/api/registry.rs
+
+  - id: registry-sync-refused-while-running
+    kind: behavior
+    reads:
+      codes:
+        - OciSyncInProgress
+    stand_in: []
+    live: []
+    unchecked: The refusal shows only while a sync runs. No check starts a second sync on purpose. The script api.sh waits and asks again.
+    pages:
+      - internals/palette/packs.md#the-sync-of-a-registry
+    code:
+      - examples/live/api.sh
+
+  # ---- A pack that requires another pack ---------------------------------------------------------
+
+  - id: pack-requires-pack
+    kind: behavior
+    reads:
+      codes:
+        - ClusterProfileCreationValidationFailure
+    stand_in: []
+    live:
+      - registry.sh:dep-profile-alone
+      - registry.sh:dep-profile-alone-says
+      - registry.sh:dep-profile-both
+      - registry.sh:dep-record-packs
+    pages:
+      - internals/palette/packs.md#a-pack-that-requires-another-pack
+    code:
+      - src/api/codes.rs
+    rules:
+      - pack-dependency
+
+  # ---- Pack schema and presets -------------------------------------------------------------------
+
+  - id: pack-schema-not-on-profile
+    kind: behavior
+    reads:
+      fields:
+        - packValues[].schema
+        - packValues[].presets
+    stand_in: []
+    live: []
+    unchecked: No run changes a schema or a preset under one version.
+    pages:
+      - internals/palette/packs.md#pack-schema-and-presets
+    code:
+      - src/api/mask.rs
+
+  - id: template-option-presets-applied
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.template.parameters.inputParameters[].targetKey
+        - items[].spec.template.parameters.inputParameters[].options
+    stand_in: []
+    live: []
+    unchecked: No run creates a profile whose values select a template option.
+    pages:
+      - internals/palette/packs.md#pack-schema-and-presets
+      - internals/palette/packs.md#the-presets-of-a-template-option
+    code:
+      - src/candidate/presets.rs
+
+  - id: template-option-presets-unlisted
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.template.parameters.inputParameters[].targetKey
+        - items[].spec.template.parameters.inputParameters[].options
+    stand_in: []
+    live:
+      - packs.sh:preset-listing
+    pages:
+      - internals/palette/packs.md#pack-schema-and-presets
+      - internals/palette/packs.md#the-presets-of-a-template-option
+    code:
+      - src/candidate/presets.rs
+
+  # ---- A pack that moves between registries ------------------------------------------------------
+
+  - id: pack-registry-move-fields
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].type
+        - spec.published.packs[].registryUid
+        - spec.published.packs[].packUid
+        - spec.published.packs[].digest
+      values:
+        "spec.published.packs[].type": [spectro, oci]
+    stand_in: []
+    live:
+      - registry-move.sh:move2-csi-is-oci
+      - registry-move.sh:compare-move
+      - registry-move.sh:same-release-registry-move
+      - registry-move-nodes.sh:move-identity
+    pages:
+      - internals/palette/packs.md#a-pack-that-moves-between-registries
+    code:
+      - src/ops/same_release.rs
+      - src/diff/pack.rs
+
+  - id: pack-registry-move-no-repave
+    kind: behavior
+    reads:
+      fields:
+        - reasons[].code
+    stand_in: []
+    live:
+      - registry-move-nodes.sh:move-palette
+      - registry-move-nodes.sh:move-reasons
+      - registry-move-nodes.sh:replaced
+      - registry-move-nodes.sh:waits
+      - registry-move-nodes.sh:after-runs
+    pages:
+      - internals/palette/packs.md#a-pack-that-moves-between-registries
+    code:
+      - src/ops/repave.rs
+
+  # ---- A pack version pushed again ---------------------------------------------------------------
+
+  - id: push-again-pack-registry
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.digest
+        - items[].spec.version
+        - items[].metadata.uid
+    stand_in: []
+    live:
+      - registry.sh:push-2-differs
+      - registry.sh:leaf-after
+      - registry.sh:listing-follows
+      - registry.sh:leaf-verify
+    pages:
+      - internals/palette/packs.md#a-pack-version-pushed-again
+    code:
+      - src/snapshot/pack.rs
+      - src/diff/verify.rs
+
+  - id: push-again-profile-follows
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].digest
+        - spec.published.packs[].values
+    stand_in: []
+    live:
+      - registry.sh:profile-follows
+      - registry.sh:profile-now-digest
+      - registry.sh:profile-who
+      - registry.sh:profile-who-system
+    pages:
+      - internals/palette/packs.md#a-pack-version-pushed-again
+    code:
+      - src/ops/verify.rs
+      - src/api/audit.rs
+    rules:
+      - profile-follows-push
+
+  - id: push-again-profile-own-values
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].digest
+        - spec.published.packs[].values
+    stand_in: []
+    live:
+      - registry.sh:profile-mod-keeps
+    pages:
+      - internals/palette/packs.md#a-pack-version-pushed-again
+    code:
+      - src/ops/verify.rs
+    rules:
+      - profile-follows-push
+
+  - id: push-again-new-version-beside
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].version
+        - spec.published.packs[].packUid
+    stand_in: []
+    live:
+      - registry.sh:profile-stays
+      - registry.sh:packs-two-order
+    pages:
+      - internals/palette/packs.md#a-pack-version-pushed-again
+    code:
+      - src/ops/behind.rs
+
+  - id: push-again-oci-helm-keeps-digest
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.digest
+        - spec.published.packs[].digest
+    stand_in: []
+    live:
+      - registry.sh:chart-listing-keeps
+      - registry.sh:chart-listing-not-new
+      - registry.sh:chart-leaf-verify
+      - registry.sh:chart-profile-verify
+      - registry.sh:chart-packs-two-versions
+    pages:
+      - internals/palette/packs.md#a-pack-version-pushed-again
+    code:
+      - src/diff/verify.rs
+    rules:
+      - helm-digest-frozen
+
+  # ---- A tag that a registry deletes -------------------------------------------------------------
+
+  - id: deleted-tag-marks-pack-invalid
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].isInvalid
+        - spec.published.packs[].inValidReason
+        - spec.published.packs[].digest
+        - metadata.annotations.isInValid
+        - metadata.annotations.inValidReason
+    stand_in: []
+    live:
+      - registry.sh:del-flag
+      - registry.sh:del-doc
+      - registry.sh:del-doc-fields
+      - registry.sh:del-record-flag
+    pages:
+      - internals/palette/packs.md#a-tag-that-a-registry-deletes
+    code:
+      - src/snapshot/pack.rs
+
+  - id: deleted-tag-pushed-again-keeps-flag
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].isInvalid
+        - spec.published.packs[].digest
+    stand_in: []
+    live:
+      - registry.sh:del-cleared
+      - registry.sh:del-doc-after
+    pages:
+      - internals/palette/packs.md#a-tag-that-a-registry-deletes
+    code:
+      - src/snapshot/pack.rs
+
+  # ---- The digest of each registry kind ----------------------------------------------------------
+
+  - id: digest-helm-synced
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.digest
+        - spec.published.packs[].digest
+      values:
+        "spec.published.packs[].type": [helm]
+    stand_in: []
+    live:
+      - registry-kinds.sh:charts-digest
+      - registry-kinds.sh:charts-keeps
+      - registry-kinds.sh:charts-verify
+    pages:
+      - internals/palette/packs.md#the-digest-of-each-registry-kind
+      - internals/palette/packs.md#the-pack-ref-digest
+    code:
+      - src/snapshot/pack.rs
+      - src/diff/verify.rs
+    rules:
+      - helm-digest-frozen
+
+  - id: digest-helm-sync-off
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.digest
+        - spec.published.packs[].digest
+    stand_in: []
+    live:
+      - registry-kinds.sh:auth-no-digest
+      - registry-kinds.sh:auth-verify
+      - registry-kinds.sh:auth-verify-says
+      - registry-kinds.sh:auth-same-release
+    pages:
+      - internals/palette/packs.md#the-digest-of-each-registry-kind
+    code:
+      - src/snapshot/pack.rs
+      - src/diff/verify.rs
+    rules:
+      - no-digest-kinds
+
+  - id: digest-oci-pack
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.digest
+        - spec.published.packs[].digest
+      values:
+        "items[].spec.providerType": [pack]
+    stand_in: []
+    live:
+      - registry-kinds.sh:oci-pack-digest
+      - registry-kinds.sh:oci-pack-follows
+      - registry-kinds.sh:oci-pack-verify
+    pages:
+      - internals/palette/packs.md#the-digest-of-each-registry-kind
+      - internals/palette/packs.md#the-pack-ref-digest
+    code:
+      - src/snapshot/pack.rs
+      - src/diff/verify.rs
+
+  - id: digest-oci-helm
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.digest
+        - spec.published.packs[].digest
+      values:
+        "items[].spec.providerType": [helm]
+    stand_in: []
+    live:
+      - registry-kinds.sh:oci-helm-digest
+      - registry-kinds.sh:oci-helm-keeps
+      - registry-kinds.sh:oci-helm-verify
+      - registry.sh:chart-digest
+    pages:
+      - internals/palette/packs.md#the-digest-of-each-registry-kind
+      - internals/palette/packs.md#the-pack-ref-digest
+    code:
+      - src/snapshot/pack.rs
+      - src/diff/verify.rs
+    rules:
+      - helm-digest-frozen
+
+  - id: digest-oci-zarf
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.digest
+        - spec.published.packs[].digest
+      values:
+        "items[].spec.providerType": [zarf]
+    stand_in: []
+    live:
+      - registry-kinds.sh:oci-zarf-digest
+      - registry-kinds.sh:oci-zarf-none
+      - registry-kinds.sh:oci-zarf-verify
+      - registry-kinds.sh:packs-zarf
+    pages:
+      - internals/palette/packs.md#the-digest-of-each-registry-kind
+    code:
+      - src/snapshot/pack.rs
+      - src/diff/verify.rs
+    rules:
+      - no-digest-kinds
+
+  - id: digest-spectro-registry
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.digest
+        - items[].spec.values
+        - spec.published.packs[].digest
+      values:
+        "items[].spec.type": [spectro]
+    stand_in: []
+    live:
+      - registry-kinds.sh:packs-digest
+      - registry-kinds.sh:packs-follows
+      - registry-kinds.sh:packs-verify
+    pages:
+      - internals/palette/packs.md#the-digest-of-each-registry-kind
+      - internals/palette/packs.md#the-pack-ref-digest
+    code:
+      - src/snapshot/pack.rs
+      - src/diff/verify.rs
+
+  - id: spectro-registry-private-empty
+    kind: behavior
+    reads:
+      fields:
+        - items[].status.sync.status
+        - items[].spec.private
+      values:
+        "items[].status.sync.status": [Completed]
+    stand_in: []
+    live: []
+    unchecked: No script adds a private pack registry.
+    pages:
+      - internals/palette/packs.md#the-digest-of-each-registry-kind
+    rules:
+      - private-pack-registry-empty
+
+  - id: oci-provider-type-record
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.providerType
+      values:
+        "items[].spec.providerType": [pack, helm, zarf]
+    stand_in: []
+    live:
+      - registry-kinds.sh:provider-types
+      - verify.sh:registries-provider-type
+      - verify.sh:registries-kinds
+    pages:
+      - internals/palette/packs.md#the-digest-of-each-registry-kind
+    code:
+      - src/api/registry.rs
+      - src/model/oci_provider.rs
+      - src/snapshot/pack.rs
+
+  # ---- What a cluster installs of a Helm pack ----------------------------------------------------
+
+  - id: helm-pack-install-by-version
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].digest
+        - spec.published.packs[].version
+    stand_in: []
+    live: []
+    unchecked: A run by hand shows it, with cluster A. No script holds this run.
+    pages:
+      - internals/palette/packs.md#what-a-cluster-installs-of-a-helm-pack
+    code:
+      - src/diff/verify.rs
+    rules:
+      - helm-digest-frozen
+
+  - id: pack-upgrade-on-digest-change
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].digest
+      values:
+        "spec.published.packs[].type": [spectro, oci]
+    stand_in: []
+    live: []
+    unchecked: No run watches a cluster take a pack whose digest changed.
+    pages:
+      - internals/palette/packs.md#what-a-cluster-installs-of-a-helm-pack
+    code:
+      - src/diff/verify.rs
+
+  # ---- Tag names ---------------------------------------------------------------------------------
+
+  - id: tag-stored-as-authored
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].tag
+        - spec.published.packs[].version
+        - spec.published.packs[].packUid
+        - tags[].tag
+        - tags[].packUid
+    stand_in: []
+    live:
+      - tag-only.sh:os-packs
+      - tag-only.sh:one-build
+    pages:
+      - internals/palette/packs.md#tag-names
+    code:
+      - src/candidate/resolve.rs
+
+  - id: tag-move-no-repave
+    kind: behavior
+    reads:
+      fields:
+        - reasons[].code
+    stand_in: []
+    live:
+      - tag-only.sh:palette-repave-exact
+      - tag-only.sh:palette-repave-floating
+      - tag-only.sh:palette-repave-control
+      - tag-only.sh:repaved-to-exact
+      - tag-only.sh:repaved-back
+    pages:
+      - internals/palette/packs.md#tag-names
+    code:
+      - src/ops/repave.rs
+
+  - id: tag-rename-published
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].tag
+        - spec.published.packs[].packUid
+    stand_in: []
+    live:
+      - tag-only.sh:retag
+      - tag-only.sh:retag-kept-pack-uid
+      - tag-only.sh:verify-exact1
+    pages:
+      - internals/palette/packs.md#tag-names
+    code:
+      - src/diff/verify.rs
+
+  - id: floating-tag-moves-profile
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].version
+        - spec.published.packs[].packUid
+        - spec.published.packs[].digest
+        - tags[].parentTags
+    stand_in: []
+    live:
+      - registry.sh:floating-moves
+      - registry.sh:floating-who-system
+      - registry.sh:floating-who-versions
+    pages:
+      - internals/palette/packs.md#tag-names
+    code:
+      - src/ops/verify.rs
+      - src/api/audit.rs
+    rules:
+      - floating-tag
+
+  - id: floating-tag-own-values-stay
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].version
+        - spec.published.packs[].values
+    stand_in: []
+    live:
+      - registry.sh:floating-mod-keeps
+      - registry.sh:floating-mod-behind
+      - registry.sh:floating-mod-behind-names
+    pages:
+      - internals/palette/packs.md#tag-names
+    code:
+      - src/ops/behind.rs
+    rules:
+      - floating-tag
+
+  # ---- The layer of a pack -----------------------------------------------------------------------
+
+  - id: layer-from-registry
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].layer
+        - layer
+    stand_in: []
+    live:
+      - validate-packs.sh:layer-registry
+      - validate-packs.sh:layer-create
+      - validate-packs.sh:layer-published
+      - validate-packs.sh:layer-record-key
+      - validate-packs.sh:layer-root
+    pages:
+      - internals/palette/packs.md#the-layer-of-a-pack
+    code:
+      - src/candidate/resolve.rs
+      - src/api/registry.rs
+
+  - id: layer-validate-route-silent
+    kind: behavior
+    reads:
+      fields:
+        - packs.results
+    stand_in: []
+    live:
+      - validate-packs.sh:layer-validate
+      - validate-packs.sh:layer-validate-says
+    pages:
+      - internals/palette/packs.md#the-layer-of-a-pack
+    code:
+      - src/ops/validate.rs
+
+  - id: layer-manifest-pack
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].layer
+      values:
+        "spec.published.packs[].layer": [addon]
+    stand_in: []
+    live: []
+    unchecked: No check reads the layer that Palette gives a manifest pack.
+    pages:
+      - internals/palette/packs.md#the-layer-of-a-pack
+    code:
+      - src/candidate/resolve.rs
+
+  # ---- Manifest pack uids ------------------------------------------------------------------------
+
+  - id: manifest-pack-uid-minted
+    kind: behavior
+    reads:
+      fields:
+        - spec.packs[].metadata.uid
+    stand_in: []
+    live:
+      - in-place.sh:edit-kept-manifest-uid
+      - in-place.sh:clone-carried-nothing
+    pages:
+      - internals/palette/packs.md#manifest-pack-uids
+    code:
+      - src/ops/same_release.rs
+
+  # ---- A pack that Palette makes at the create ---------------------------------------------------
+
+  - id: unsynced-registry-lists-no-pack
+    kind: behavior
+    reads:
+      fields:
+        - items[].isPrivate
+        - items[].status.sync.isSyncSupported
+      values:
+        "items[].kind": [helm, oci]
+    stand_in: []
+    live:
+      - registry-kinds.sh:auth-listed
+      - registry-kinds.sh:auth-packs
+      - registry-kinds.sh:auth-packs-says
+    pages:
+      - internals/palette/packs.md#a-pack-that-palette-makes-at-the-create
+    code:
+      - src/api/registry.rs
+
+  - id: pack-made-at-create
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].packUid
+        - spec.published.packs[].layer
+        - spec.published.packs[].tag
+        - spec.published.packs[].version
+        - spec.published.packs[].digest
+      values:
+        "spec.published.packs[].layer": [addon]
+    stand_in: []
+    live:
+      - registry-kinds.sh:auth-no-digest
+      - registry-kinds.sh:auth-pin
+      - registry-kinds.sh:auth-candidate-minted
+      - registry-kinds.sh:auth-candidate-again
+      - registry-kinds.sh:auth-candidate-listed
+    pages:
+      - internals/palette/packs.md#a-pack-that-palette-makes-at-the-create
+    code:
+      - src/candidate/resolve.rs
+    rules:
+      - no-digest-kinds
+
+  # ---- What a registry answers about a pack ------------------------------------------------------
+
+  - id: pack-tags-parent-tags
+    kind: behavior
+    reads:
+      fields:
+        - tags[].tag
+        - tags[].version
+        - tags[].packUid
+        - tags[].parentTags
+    stand_in: []
+    live:
+      - packs.sh:packs-one
+      - packs.sh:packs-newest
+    pages:
+      - internals/palette/packs.md#what-a-registry-answers-about-a-pack
+    code:
+      - src/ops/packs.rs
+
+  - id: pack-listing-pages
+    kind: behavior
+    reads:
+      fields:
+        - items[]
+        - listmeta.count
+    stand_in: []
+    live:
+      - packs.sh:packs-paged-listing
+      - packs.sh:packs-paged
+      - packs.sh:packs-paged-count
+    pages:
+      - internals/palette/packs.md#what-a-registry-answers-about-a-pack
+    code:
+      - src/api/palette/mod.rs
+      - src/candidate/pack.rs
+
+  - id: pack-listing-times
+    kind: behavior
+    reads:
+      fields:
+        - items[].metadata.creationTimestamp
+        - items[].metadata.lastModifiedTimestamp
+    stand_in: []
+    live:
+      - packs.sh:pack-time-listing
+      - packs.sh:verify-no-time
+    pages:
+      - internals/palette/packs.md#what-a-registry-answers-about-a-pack
+    code:
+      - src/ops/packs.rs
+
+  # ---- A pack that supports a cloud --------------------------------------------------------------
+
+  - id: pack-cloud-types-listing
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.cloudTypes
+      values:
+        "items[].spec.cloudTypes": [all]
+    stand_in: []
+    live:
+      - registry.sh:dep-packs-cloud
+      - registry.sh:dep-packs-cloud-version
+      - packs.sh:packs-cloud
+    pages:
+      - internals/palette/packs.md#a-pack-that-supports-a-cloud
+    code:
+      - src/model/cloud.rs
+      - src/ops/packs.rs
+
+  - id: pack-cloud-filter-all
+    kind: behavior
+    reads:
+      fields:
+        - tags[].tag
+      values:
+        "items[].spec.cloudTypes": [all]
+    stand_in: []
+    live: []
+    unchecked: No run sends the cloudType query.
+    pages:
+      - internals/palette/packs.md#a-pack-that-supports-a-cloud
+    code:
+      - src/model/cloud.rs
+
+  # ---- The architectures of a version ------------------------------------------------------------
+
+  - id: pack-architectures
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.annotations.architecture
+      values:
+        "items[].spec.annotations.architecture":
+          - amd64
+          - "amd64,arm64"
+          - "arm64,amd64"
+    stand_in: []
+    live:
+      - packs.sh:arch-listing
+      - packs.sh:arch-record
+      - packs.sh:arch-behind
+      - packs.sh:arch-behind-says
+      - packs.sh:arch-behind-json
+    pages:
+      - internals/palette/packs.md#the-architectures-of-a-version
+    code:
+      - src/ops/packs.rs
+      - src/ops/behind.rs
+
+  # ---- The version that Palette calls the latest -------------------------------------------------
+
+  - id: latest-version-annotation
+    kind: behavior
+    reads:
+      fields:
+        - items[].metadata.annotations.latestVersion
+      values:
+        "items[].metadata.annotations.latestVersion": ["true", "false"]
+    stand_in: []
+    live:
+      - packs.sh:packs-palette-latest
+    pages:
+      - internals/palette/packs.md#the-version-that-palette-calls-the-latest
+    code:
+      - src/ops/packs.rs
+
+  - id: latest-semver-order
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.version
+        - tags[].tag
+        - tags[].version
+    stand_in: []
+    live:
+      - packs.sh:packs-rev-floating-tag
+      - packs.sh:packs-palette-latest
+    pages:
+      - internals/palette/packs.md#the-version-that-palette-calls-the-latest
+    code:
+      - src/reference/version.rs
+      - src/ops/packs.rs
+
+  # ---- Pack states -------------------------------------------------------------------------------
+
+  - id: pack-state-listing
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.annotations.system_state
+        - items[].spec.annotations.system_deprecatedTimestamp
+        - items[].spec.annotations.system_disabledTimestamp
+      values:
+        "items[].spec.annotations.system_state": [deprecated, disabled, deleted]
+    stand_in: []
+    live:
+      - pack-states.sh:states-deprecated-says
+      - pack-states.sh:states-disabled-says
+      - pack-states.sh:states-deleted-says
+    pages:
+      - internals/palette/packs.md#pack-states
+    code:
+      - src/api/registry.rs
+      - src/model/pack_state.rs
+    rules:
+      - pack-state
+
+  - id: pack-state-none
+    kind: behavior
+    reads:
+      fields:
+        - tags[].tag
+        - packValues[].values
+    stand_in: []
+    live:
+      - packs.sh:packs-one
+      - registry.sh:profile
+    pages:
+      - internals/palette/packs.md#pack-states
+    code:
+      - src/ops/packs.rs
+
+  - id: pack-state-deprecated
+    kind: behavior
+    reads:
+      fields:
+        - tags[].tag
+        - packValues[].values
+      values:
+        "items[].spec.annotations.system_state": [deprecated]
+    stand_in: []
+    live:
+      - pack-states.sh:states-deprecated
+      - pack-states.sh:states-deprecated-says
+      - pack-states.sh:snapshot-deprecated
+      - pack-states.sh:profile-deprecated
+    pages:
+      - internals/palette/packs.md#pack-states
+    code:
+      - src/ops/packs.rs
+      - src/api/registry.rs
+    rules:
+      - pack-state
+
+  - id: pack-state-disabled
+    kind: behavior
+    reads:
+      fields:
+        - tags[].tag
+        - packValues[].values
+      codes:
+        - ClusterProfileInvalidPackState
+      values:
+        "items[].spec.annotations.system_state": [disabled]
+    stand_in: []
+    live:
+      - pack-states.sh:states-disabled
+      - pack-states.sh:states-disabled-says
+      - pack-states.sh:profile-disabled
+      - pack-states.sh:profile-disabled-says
+    pages:
+      - internals/palette/packs.md#pack-states
+    code:
+      - src/ops/packs.rs
+      - src/api/registry.rs
+      - src/api/codes.rs
+    rules:
+      - pack-state
+
+  - id: pack-state-deleted
+    kind: behavior
+    reads:
+      fields:
+        - tags[].tag
+        - packValues[].values
+      codes:
+        - ClusterProfileInvalidPackState
+      values:
+        "items[].spec.annotations.system_state": [deleted]
+    stand_in: []
+    live:
+      - pack-states.sh:states-deleted
+      - pack-states.sh:states-deleted-says
+      - pack-states.sh:profile-deleted
+      - pack-states.sh:profile-deleted-says
+    pages:
+      - internals/palette/packs.md#pack-states
+    code:
+      - src/ops/packs.rs
+      - src/api/registry.rs
+      - src/api/codes.rs
+    rules:
+      - pack-state
+
+  - id: pack-state-disabled-mark
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.annotations.disabled
+        - tags[].tag
+      codes:
+        - DisabledPacksForbidden
+      values:
+        "items[].spec.annotations.disabled": ["true"]
+    stand_in: []
+    live:
+      - pack-states.sh:states-mark
+      - pack-states.sh:states-mark-says
+      - validate-packs.sh:validate-disabled-mark
+      - validate-packs.sh:validate-disabled-mark-says
+    pages:
+      - internals/palette/packs.md#pack-states
+    code:
+      - src/api/registry.rs
+      - src/api/codes.rs
+
+  - id: pack-state-no-version-404
+    kind: behavior
+    reads:
+      codes:
+        - ResourceNotFound
+    stand_in: []
+    live:
+      - pack-states.sh:states-disabled
+      - pack-states.sh:states-deleted
+    pages:
+      - internals/palette/packs.md#pack-states
+      - internals/palette/packs.md#what-a-registry-answers-about-a-pack
+    code:
+      - src/ops/packs.rs
+
+  # ---- The FIPS rule -----------------------------------------------------------------------------
+
+  - id: fips-registry-route
+    kind: behavior
+    reads:
+      fields:
+        - tags[].tag
+        - packValues[].packUid
+      codes:
+        - ResourceNotFound
+    stand_in: []
+    live: []
+    unchecked: The live tenant does not run in FIPS mode, so no run shows the rule.
+    pages:
+      - internals/palette/packs.md#the-fips-rule
+    code:
+      - src/ops/packs.rs
+
+  - id: fips-listing-unfiltered
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.version
+    stand_in: []
+    live: []
+    unchecked: The live tenant does not run in FIPS mode, so no run shows the rule.
+    pages:
+      - internals/palette/packs.md#the-fips-rule
+    code:
+      - src/ops/packs.rs
+
+  - id: fips-new-profile-refused
+    kind: behavior
+    reads:
+      codes:
+        - PackForbidden
+    stand_in: []
+    live: []
+    unchecked: The live tenant does not run in FIPS mode, so no run shows the rule.
+    pages:
+      - internals/palette/packs.md#the-fips-rule
+    code:
+      - src/ops/packs.rs
+
+  # ---- The annotations of a pack reference -------------------------------------------------------
+
+  - id: pack-ref-annotations-copied
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].annotations
+        - packValues[].annotations
+    stand_in: []
+    live:
+      - packs.sh:os-profile
+      - packs.sh:os-annotations-ref
+      - packs.sh:os-pack-registry
+      - packs.sh:os-annotations-registry
+      - packs.sh:os-annotations
+    pages:
+      - internals/palette/packs.md#the-annotations-of-a-pack-reference
+    code:
+      - src/snapshot/pack.rs
+
+  - id: os-pack-image-id
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].annotations.imageId
+    stand_in: []
+    live: []
+    unchecked: No run uses a bring-your-own-image OS pack. The OS pack of the Public Repo has no imageId.
+    pages:
+      - internals/palette/packs.md#the-annotations-of-a-pack-reference
+    code:
+      - src/snapshot/pack.rs
+      - src/diff/verify.rs

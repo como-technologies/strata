@@ -138,7 +138,10 @@ The time that a step takes changes with the load of the machine. So no output
 shows a duration: the runner writes `1 ms` for each count of milliseconds, and
 `after 0s` for each count of seconds. When a new output prints a duration in a
 new form, add the form to `Clock` in `xtask/src/book.rs`.
-A change to Palette behavior in the stand-in needs a live run that shows it.
+
+A change to Palette behavior in the stand-in needs a live run that shows it. It also needs a
+fact in [the list of the facts of Palette](./facts.md), with the route of the stand-in and the
+live check.
 
 ## The style rules
 

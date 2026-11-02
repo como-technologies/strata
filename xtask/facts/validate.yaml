@@ -1,0 +1,801 @@
+schema: strata-facts/1
+facts:
+  # POST /v1/spectroclusters/{cloudType}/validate: the validate route of a create
+  - id: validate-cluster-create
+    kind: request
+    request: "POST /v1/spectroclusters/{cloudType}/validate"
+    reads:
+      fields:
+        - profiles[].uid
+        - profiles[].packs.results[].name
+        - profiles[].packs.results[].errors[].code
+        - profiles[].packs.results[].errors[].message
+        - machinePools.results[].name
+        - machinePools.results[].errors[].code
+        - machinePools.results[].errors[].message
+        - code
+        - message
+      codes:
+        - ClusterProfilesNotSupported
+      values:
+        cloudType:
+          - aws
+          - eks
+          - gcp
+          - gke
+          - azure
+          - aks
+          - maas
+          - edge-native
+          - vsphere
+    stand_in:
+      - v1/spectroclusters/{cloudType}/validate
+    live:
+      - validate-route.sh:aws-clean
+      - route-bodies.sh:validate-route
+      - loop.sh:preflight-live
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+      - reference/preflight-rules.md#a-check-that-a-validate-route-answers
+    code:
+      - src/api/codes.rs
+      - preflight/src/world/mod.rs
+    rules:
+      - ecr-oci-images
+      - pack-dependency
+      - palette-validate
+      - worker-cpu-floor
+
+  - id: validate-create-gke-pool-size
+    kind: behavior
+    reads:
+      codes:
+        - InvalidParam
+    stand_in: []
+    live: []
+    unchecked: Only the gke run of preflight-plan.sh shows it. The book lists no check of that run.
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+    rules:
+      - palette-validate
+
+  - id: validate-create-freemium-limit
+    kind: behavior
+    reads:
+      codes:
+        - FreemiumActiveClusterLimitExceeded
+    stand_in: []
+    live: []
+    unchecked: No live run shows it. The page states it from the code of Palette.
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+    rules:
+      - palette-validate
+
+  - id: validate-create-name-in-use
+    kind: behavior
+    reads:
+      codes:
+        - ResourceAlreadyExists
+    stand_in: []
+    live: []
+    unchecked: A build run of preflight-plan.sh shows it. No check with a fixed name proves it.
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+      - development/live-runs.md#what-the-preflight-runs-show
+    code:
+      - preflight/src/world/mod.rs
+    rules:
+      - palette-validate
+
+  - id: validate-create-cpu-floor
+    kind: behavior
+    reads:
+      codes:
+        - MachinePoolWithMinCpuRequired
+      fields:
+        - machinePools.results[].errors[].code
+        - machinePools.results[].errors[].message
+    stand_in: []
+    live: []
+    unchecked: Only the aws and gcp runs of preflight-plan.sh show it. The book lists no check of those runs.
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+    rules:
+      - worker-cpu-floor
+
+  - id: validate-create-eks-no-cpu-floor
+    kind: behavior
+    reads:
+      fields:
+        - machinePools.results[].errors[]
+    stand_in: []
+    live: []
+    unchecked: Only the eks run of preflight-plan.sh shows it. The book lists no check of that run.
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+    rules:
+      - worker-cpu-floor
+
+  - id: validate-create-profile-cloud
+    kind: behavior
+    reads:
+      codes:
+        - ClusterProfilesNotSupported
+    stand_in: []
+    live:
+      - validate-route.sh:profile-cloud-mismatch
+      - validate-route.sh:profile-cloud-mismatch-says
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+    code:
+      - src/api/codes.rs
+    rules:
+      - palette-validate
+
+  - id: validate-create-pack-cloud-gap
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].packs.results[].errors[]
+    stand_in: []
+    live:
+      - validate-route.sh:pack-cloud-support
+      - validate-route.sh:pack-cloud-support-says
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+    rules:
+      - pack-cloud-support
+      - palette-validate
+
+  - id: validate-create-variables
+    kind: behavior
+    reads:
+      fields:
+        - spec.profiles[].variables[]
+    stand_in: []
+    live: []
+    unchecked: No live run shows it. The page states it from the code of Palette.
+    pages:
+      - internals/palette/validate-routes.md#the-variables-of-the-body
+    rules:
+      - palette-validate
+
+  # POST /v1/spectroclusters/{uid}/validate/packs
+  - id: validate-cluster-packs
+    kind: request
+    request: "POST /v1/spectroclusters/{uid}/validate/packs"
+    reads:
+      fields:
+        - profiles[].uid
+        - profiles[].packs.results[].name
+        - profiles[].packs.results[].errors[].code
+        - profiles[].packs.results[].errors[].message
+        - machinePools.results[].errors[].code
+        - machinePools.results[].errors[].message
+      codes:
+        - PackValuesYamlInvalid
+        - PackManifestYamlInvalid
+        - ClusterDashboardPacksMutuallyExclusive
+        - InvalidName
+        - DuplicatePacksForbidden
+        - DuplicatePackManifestsForbidden
+        - DuplicateClusterPacksForbidden
+        - MultiPackVersionsForbidden
+        - PackSpectroIntegrationNotSupported
+        - ClusterProfileOidcNotConfigured
+        - DisabledPacksForbidden
+        - PackValuesOverrideForbidden
+    stand_in:
+      - v1/spectroclusters/{uid}/validate/packs
+    live:
+      - loop.sh:ask-validate
+      - loop.sh:ask-validate-answer
+      - validate-packs.sh:cluster-route-doc
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclustersuidvalidatepacks
+      - reference/palette-api.md#a-cluster
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+      - commands/compare/validate.md
+    code:
+      - src/api/palette/clusters.rs
+      - src/ops/validate.rs
+      - src/model/validation.rs
+      - src/api/codes.rs
+    rules: []
+
+  - id: validate-cluster-packs-sent-tag
+    kind: behavior
+    reads:
+      fields:
+        - profiles
+    stand_in: []
+    live:
+      - validate-packs.sh:cluster-route-doc
+      - validate-packs.sh:cluster-route-tag
+      - validate-packs.sh:cluster-route-tag-says
+    pages:
+      - internals/palette/validate-routes.md#the-sent-tag
+      - reference/palette-api.md#a-cluster
+    code:
+      - src/ops/validate.rs
+    rules: []
+
+  # POST /v1/spectroclusters/{uid}/validate/repave
+  - id: validate-cluster-repave
+    kind: request
+    request: "POST /v1/spectroclusters/{uid}/validate/repave"
+    reads:
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+        - reasons[].message
+        - reasons[].pack.current.name
+        - reasons[].pack.target.name
+        - reasons[].pack.diffConfigKeys
+      codes:
+        - PackUpgraded
+        - PackValuesUpdated
+        - PackAdded
+        - PackRemoved
+    stand_in:
+      - v1/spectroclusters/{uid}/validate/repave
+    live:
+      - repave.sh:none
+      - repave.sh:k8s
+      - repave.sh:addon
+      - repave.sh:csi-value
+      - loop.sh:ask-repave
+      - loop.sh:ask-repave-answer
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclustersuidvalidaterepave
+      - reference/palette-api.md#a-cluster
+      - commands/compare/repave.md
+    code:
+      - src/api/palette/clusters.rs
+      - src/ops/repave.rs
+      - src/model/repave.rs
+      - src/diff/mod.rs
+    rules:
+      - eks-repave-answers
+      - engine-repave-rules
+      - gke-repave-answers
+
+  - id: validate-repave-target
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].uid
+        - profiles[].packValues[].name
+        - profiles[].packValues[].tag
+    stand_in: []
+    live: []
+    unchecked: The page states these facts from the code of Palette, not from a live run.
+    pages:
+      - internals/palette/validate-routes.md#post-v1spectroclustersuidvalidaterepave
+    code:
+      - src/ops/repave.rs
+    rules: []
+
+  # POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave
+  - id: validate-template-repave
+    kind: request
+    request: "POST /v1/spectroclusters/clusterTemplates/{uid}/validate/repave"
+    reads:
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+        - reasons[].message
+        - reasons[].pack.current.name
+        - reasons[].pack.target.name
+        - reasons[].pack.diffConfigKeys
+      codes:
+        - PackUpgraded
+    stand_in:
+      - v1/spectroclusters/clusterTemplates/{uid}/validate/repave
+    live: []
+    unchecked: No live run uses a cluster that a cluster template governs.
+    pages:
+      - reference/palette-api.md#a-cluster
+      - commands/compare/repave.md#a-cluster-in-a-cluster-template
+    code:
+      - src/api/palette/clusters.rs
+      - src/ops/repave.rs
+    rules: []
+
+  # POST /v1/clusterprofiles/validate/packs
+  - id: validate-profile-packs
+    kind: request
+    request: "POST /v1/clusterprofiles/validate/packs"
+    reads:
+      fields:
+        - packs.results[].name
+        - packs.results[].errors[].code
+        - packs.results[].errors[].message
+      codes:
+        - ShouldNotBeEmpty
+        - PackValuesYamlInvalid
+        - PackManifestYamlInvalid
+        - ClusterDashboardPacksMutuallyExclusive
+        - DisabledPacksForbidden
+        - SubResourceLimitValidationFailure
+        - "610"
+    stand_in:
+      - v1/clusterprofiles/validate/packs
+    live:
+      - validate-packs.sh:validate-accepts
+      - validate-packs.sh:validate-not-yaml
+      - validate-packs.sh:layer-validate
+      - loop.sh:ask-candidate
+    pages:
+      - internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks
+      - reference/palette-api.md#other-reads
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+      - commands/candidate.md#ask-palette-before-you-publish
+    code:
+      - src/api/palette/profiles.rs
+      - src/ops/validate.rs
+      - src/api/codes.rs
+    rules: []
+
+  - id: validate-packs-refusal-500
+    kind: behavior
+    reads:
+      fields:
+        - code
+        - message
+      codes:
+        - PackValuesYamlInvalid
+    stand_in: []
+    live:
+      - validate-packs.sh:validate-not-yaml-status
+      - validate-packs.sh:validate-not-yaml-status-says
+    pages:
+      - internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+    code:
+      - src/api/codes.rs
+    rules: []
+
+  - id: validate-packs-empty-refused
+    kind: behavior
+    reads:
+      fields:
+        - code
+        - message
+      codes:
+        - ShouldNotBeEmpty
+    stand_in: []
+    live:
+      - validate-packs.sh:validate-no-pack
+      - validate-packs.sh:validate-no-pack-says
+    pages:
+      - internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks
+    code:
+      - src/api/codes.rs
+    rules: []
+
+  - id: validate-schema-duplicates
+    kind: behavior
+    reads:
+      codes:
+        - "610"
+    stand_in: []
+    live:
+      - validate-packs.sh:validate-same-pack-twice
+    pages:
+      - internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks
+      - internals/palette/validate-routes.md#post-v1clusterprofilesimportvalidate
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+    code:
+      - src/api/codes.rs
+    rules: []
+
+  # POST /v1/clusterprofiles/{uid}/validate/packs
+  - id: validate-version-packs
+    kind: request
+    request: "POST /v1/clusterprofiles/{uid}/validate/packs"
+    reads:
+      fields:
+        - packs.results[].name
+        - packs.results[].errors[].code
+        - packs.results[].errors[].message
+      codes:
+        - ClusterProfilePacksInConflict
+        - DependencyPackWithMinVersionRequired
+        - PackValuesYamlInvalid
+        - ClusterDashboardPacksMutuallyExclusive
+        - DisabledPacksForbidden
+        - SubResourceLimitValidationFailure
+    stand_in:
+      - v1/clusterprofiles/{uid}/validate/packs
+    live:
+      - validate-packs.sh:validate-version
+      - validate-packs.sh:validate-version-says
+      - validate-packs.sh:bump-asked
+      - validate-packs.sh:bump-cluster-asked
+      - repave.sh:validate
+      - repave.sh:validate-says
+    pages:
+      - internals/palette/validate-routes.md#post-v1clusterprofilesuidvalidatepacks
+      - reference/palette-api.md#a-profile-version
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+      - commands/behind.md#palette-accepts-the-move-or-refuses-it
+    code:
+      - src/api/palette/profiles.rs
+      - src/ops/validate.rs
+      - src/ops/behind/bump.rs
+      - src/api/codes.rs
+    rules: []
+
+  - id: validate-version-upgrade-dependency
+    kind: behavior
+    reads:
+      fields:
+        - packs.results[].errors[].code
+        - packs.results[].errors[].message
+      codes:
+        - DependencyPackUpgradeNotSupported
+    stand_in: []
+    live:
+      - validate-packs.sh:bump-refused
+      - validate-packs.sh:bump-clusters
+      - validate-packs.sh:bump-text-says
+      - validate-packs.sh:bump-cluster-refused
+    pages:
+      - internals/palette/validate-routes.md#the-upgrade-dependency
+      - commands/behind.md#palette-accepts-the-move-or-refuses-it
+    code:
+      - src/ops/behind/bump.rs
+      - src/api/codes.rs
+    rules: []
+
+  # GET /v1/clusterprofiles/validate/name
+  - id: validate-profile-name
+    kind: request
+    request: "GET /v1/clusterprofiles/validate/name"
+    reads:
+      codes:
+        - ResourceNameEmpty
+    stand_in:
+      - v1/clusterprofiles/validate/name
+    live:
+      - validate-packs.sh:validate-name-free
+      - validate-packs.sh:validate-name-short
+    pages:
+      - internals/palette/validate-routes.md#get-v1clusterprofilesvalidatename
+      - reference/palette-api.md#other-reads
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+    code:
+      - src/api/palette/profiles.rs
+      - src/api/codes.rs
+    rules: []
+
+  - id: validate-name-version-parse
+    kind: behavior
+    reads:
+      codes:
+        - VersionParseFailure
+    stand_in: []
+    live:
+      - validate-packs.sh:validate-name-version
+      - validate-packs.sh:validate-name-version-says
+      - validate-packs.sh:validate-bad-version
+    pages:
+      - internals/palette/validate-routes.md#get-v1clusterprofilesvalidatename
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+    code:
+      - src/api/codes.rs
+    rules: []
+
+  - id: validate-name-exists
+    kind: behavior
+    reads:
+      codes:
+        - ClusterProfileAlreadyExists
+    stand_in: []
+    live:
+      - validate-packs.sh:validate-exists
+      - validate-packs.sh:validate-exists-says
+    pages:
+      - internals/palette/validate-routes.md#get-v1clusterprofilesvalidatename
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+    code:
+      - src/api/codes.rs
+      - src/api/palette/profiles.rs
+    rules: []
+
+  # POST /v1/clusterprofiles/import/validate
+  - id: validate-profile-import
+    kind: request
+    request: "POST /v1/clusterprofiles/import/validate"
+    reads:
+      fields:
+        - code
+        - message
+      codes:
+        - ResourceLimitValidationFailure
+        - SubResourceLimitValidationFailure
+        - UnSupportedCloudType
+        - ClusterDashboardPacksMutuallyExclusive
+        - PackSpectroIntegrationNotSupported
+        - ClusterProfileOidcNotConfigured
+        - ClusterProfileCreationValidationFailure
+        - PackMacroUndefined
+        - ClusterProfileAlreadyExists
+    stand_in:
+      - v1/clusterprofiles/import/validate
+    live:
+      - validate-packs.sh:validate-accepts
+      - validate-packs.sh:validate-exists
+      - validate-packs.sh:validate-disabled-mark
+      - validate-packs.sh:validate-pack-twice
+      - loop.sh:ask-candidate
+    pages:
+      - internals/palette/validate-routes.md#post-v1clusterprofilesimportvalidate
+      - reference/palette-api.md#other-reads
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+      - commands/candidate.md#ask-palette-before-you-publish
+    code:
+      - src/api/palette/profiles.rs
+      - src/ops/validate.rs
+      - src/api/codes.rs
+    rules: []
+
+  - id: validate-import-disabled-pack
+    kind: behavior
+    reads:
+      codes:
+        - DisabledPacksForbidden
+    stand_in: []
+    live:
+      - validate-packs.sh:validate-disabled-mark
+      - validate-packs.sh:validate-disabled-mark-says
+    pages:
+      - internals/palette/validate-routes.md#post-v1clusterprofilesimportvalidate
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+    code:
+      - src/api/codes.rs
+    rules: []
+
+  - id: validate-import-name-faults
+    kind: behavior
+    reads:
+      codes:
+        - DuplicatePacksForbidden
+        - DuplicatePackManifestsForbidden
+        - InvalidName
+        - MultiPackVersionsForbidden
+    stand_in: []
+    live:
+      - validate-packs.sh:validate-pack-twice
+      - validate-packs.sh:validate-manifest-name
+      - validate-packs.sh:validate-manifest-twice
+    pages:
+      - internals/palette/validate-routes.md#post-v1clusterprofilesimportvalidate
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+    code:
+      - src/api/codes.rs
+    rules: []
+
+  - id: validate-import-registry-match
+    kind: behavior
+    reads:
+      codes:
+        - ClusterProfileImportRegistriesNotFound
+        - ClusterProfileImportOciRegistriesNotFound
+        - ClusterProfileImportPrivateHelmRegistriesNotFound
+        - ClusterProfileImportPackNotFound
+    stand_in: []
+    live: []
+    unchecked: No live run shows it. The page states it from the code of Palette.
+    pages:
+      - internals/palette/validate-routes.md#post-v1clusterprofilesimportvalidate
+      - reference/errors.md#refusals-that-strata-does-not-send-again
+    code:
+      - src/api/codes.rs
+    rules: []
+
+  # The property routes
+  - id: validate-aws-properties
+    kind: request
+    request: "POST /v1/clouds/aws/properties/validate"
+    reads:
+      fields:
+        - code
+        - message
+    stand_in:
+      - v1/clouds/aws/properties/validate
+    live:
+      - loop.sh:preflight-key-pair
+    pages:
+      - internals/palette/validate-routes.md#the-property-routes
+    code: []
+    rules:
+      - iaas-pod-identity
+
+  - id: validate-aws-key-pair-refused
+    kind: behavior
+    reads:
+      codes:
+        - AwsKeyPairNotFound
+    stand_in: []
+    live: []
+    unchecked: A call by hand shows it. The check properties-key-pair of preflight-plan.sh has no result yet.
+    pages:
+      - internals/palette/validate-routes.md#the-list-routes
+      - development/live-runs.md#preflight-plansh
+    rules:
+      - iaas-pod-identity
+
+  - id: validate-eks-properties
+    kind: request
+    request: "POST /v1/clouds/eks/properties/validate"
+    reads:
+      fields:
+        - code
+        - message
+    stand_in: []
+    live: []
+    unchecked: No live run calls the EKS property route. The page states it from the code of Palette.
+    pages:
+      - internals/palette/validate-routes.md#the-property-routes
+    code: []
+    rules:
+      - eks-public-subnet-mapping
+
+  - id: validate-gcp-properties
+    kind: request
+    request: "POST /v1/clouds/gcp/properties/validate"
+    reads:
+      fields:
+        - code
+        - message
+    stand_in:
+      - v1/clouds/gcp/properties/validate
+    live: []
+    unchecked: Only the gcp run of preflight-plan.sh sends it. The book lists no check of that run.
+    pages:
+      - internals/palette/validate-routes.md#the-property-routes
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    code: []
+    rules:
+      - gcp-properties
+
+  - id: validate-kms-key-route
+    kind: behavior
+    reads:
+      fields:
+        - code
+        - message
+    stand_in: []
+    live: []
+    unchecked: The page states these facts from the code of Palette, not from a live run.
+    pages:
+      - internals/palette/validate-routes.md#the-kms-key-route
+      - internals/palette/validate-routes.md#the-property-routes
+    rules:
+      - kms
+
+  # The list routes
+  - id: validate-instance-types
+    kind: request
+    request: "GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes"
+    reads:
+      fields:
+        - instanceTypes[].type
+        - instanceTypes[].nonSupportedZones
+    stand_in:
+      - v1/clouds/{cloud}/regions/{region}/instancetypes
+    live:
+      - loop.sh:preflight-offering
+    pages:
+      - internals/palette/validate-routes.md#the-list-routes
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    code: []
+    rules:
+      - instance-offering
+
+  - id: validate-instance-types-gcp
+    kind: behavior
+    reads:
+      fields:
+        - instanceTypes[].type
+        - instanceTypes[].nonSupportedZones
+    stand_in: []
+    live: []
+    unchecked: No run shows the GCP answer of this route. The stand-in of the book models it.
+    pages:
+      - internals/palette/validate-routes.md#the-list-routes
+    rules:
+      - instance-offering
+
+  - id: validate-key-pairs
+    kind: request
+    request: "GET /v1/clouds/aws/regions/{region}/keypairs"
+    reads:
+      fields:
+        - keyNames[]
+    stand_in:
+      - v1/clouds/aws/regions/{region}/keypairs
+    live:
+      - loop.sh:preflight-key-pair
+    pages:
+      - internals/palette/validate-routes.md#the-list-routes
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    code: []
+    rules:
+      - ssh-key-pair
+
+  - id: validate-eks-key-pair-gap
+    kind: behavior
+    reads:
+      fields:
+        - keyNames[]
+    stand_in: []
+    live: []
+    unchecked: No live run shows it. The page states it from the code of Palette.
+    pages:
+      - internals/palette/validate-routes.md#the-list-routes
+    rules:
+      - eks-public-subnet-mapping
+      - ssh-key-pair
+
+  - id: validate-aws-regions
+    kind: request
+    request: "GET /v1/clouds/aws/regions"
+    reads:
+      fields:
+        - regions[].name
+    stand_in:
+      - v1/clouds/aws/regions
+    live: []
+    unchecked: No run shows the answer of this route.
+    pages:
+      - internals/palette/validate-routes.md#the-list-routes
+    code: []
+    rules:
+      - aws-region-not-enabled
+
+  # The account routes
+  - id: validate-aws-account
+    kind: request
+    request: "POST /v1/clouds/aws/account/validate"
+    reads:
+      fields:
+        - code
+        - message
+    stand_in: []
+    live: []
+    unchecked: No live script calls this route.
+    pages:
+      - internals/palette/validate-routes.md#the-account-routes
+    code: []
+    rules:
+      - sts-account-not-assumable
+
+  # What no route checks
+  - id: validate-no-route-checks
+    kind: behavior
+    reads:
+      values:
+        check-that-no-route-runs:
+          - policy
+          - permission
+          - cloud-api-off
+          - quota
+          - eks-zone-count
+          - gke-release-channel
+    stand_in: []
+    live: []
+    unchecked: The page lists checks that no route runs. A live run cannot show every absence.
+    pages:
+      - internals/palette/validate-routes.md#what-no-route-checks
+    rules:
+      - aws-quotas
+      - eks-one-zone
+      - gcp-apis-off
+      - gke-no-release-channel
+      - role-partial-permissions

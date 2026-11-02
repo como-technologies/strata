@@ -9,18 +9,21 @@
 //! xtask docs-examples --check    exit 1 when docs/src/output/ is not current
 //! xtask playground CHAPTER[-N]   build that chapter's tenant, serve it, and wait
 //! xtask serve ROOT PORT_FILE     serve ROOT as the Palette API, and write the port to PORT_FILE
+//! xtask facts                    print the list of the facts of Palette as JSON
+//! xtask facts --check            exit 1 when the list does not agree with the book and the scripts
 //! ```
 
 mod book;
 mod chapters;
 mod checks;
+mod facts;
 mod files;
 mod palette;
 #[cfg(test)]
 mod size;
 mod tenant;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -31,6 +34,8 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => fail(&format!("serve: {e}")),
         },
+        ["facts"] => print_facts(),
+        ["facts", "--check"] => check_facts(),
         ["docs-examples"] => examples(book::Mode::Write),
         ["docs-examples", "--check"] => examples(book::Mode::Check),
         ["playground", name] => {
@@ -41,17 +46,42 @@ fn main() -> ExitCode {
             })
         }
         _ => fail(
-            "usage: xtask [docs-examples [--check] | playground CHAPTER[-N] | serve ROOT PORT_FILE]",
+            "usage: xtask [docs-examples [--check] | facts [--check] | playground CHAPTER[-N] | serve ROOT PORT_FILE]",
         ),
     }
 }
 
-/// Run every chapter, and write or check `docs/src/output/`.
-fn examples(mode: book::Mode) -> ExitCode {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR"))
+/// The root of the repository.
+fn repository() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("xtask sits in the repository")
-        .to_path_buf();
+        .to_path_buf()
+}
+
+/// Print the list of the facts as JSON.
+fn print_facts() -> ExitCode {
+    match facts::print(&repository()) {
+        Ok(json) => {
+            println!("{json}");
+            ExitCode::SUCCESS
+        }
+        Err(bad) => fail(&bad.join("\nxtask: ")),
+    }
+}
+
+/// Compare the list with the book and the scripts, without a run of the book.
+fn check_facts() -> ExitCode {
+    let bad = facts::check(&repository(), None);
+    for message in &bad {
+        eprintln!("xtask: {message}");
+    }
+    ExitCode::from(u8::from(!bad.is_empty()))
+}
+
+/// Run every chapter, and write or check `docs/src/output/`.
+fn examples(mode: book::Mode) -> ExitCode {
+    let repo = repository();
     let strata = std::env::var("STRATA_BIN")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| repo.join("target/release/strata"));

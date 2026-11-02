@@ -1,0 +1,1905 @@
+schema: strata-facts/1
+facts:
+  - id: cluster-document
+    kind: request
+    request: GET /v1/spectroclusters/{uid}
+    reads:
+      fields:
+        - metadata.uid
+        - metadata.name
+        - metadata.labels
+        - metadata.isDeleted
+        - metadata.deletionTimestamp
+        - metadata.annotations.projectUid
+        - spec.cloudType
+        - spec.cloudConfigRef.kind
+        - spec.cloudConfigRef.uid
+        - spec.clusterProfileTemplates
+        - spec.clusterConfig
+        - status.state
+        - status.spcApply
+        - status.packs
+        - status.fips.mode
+        - status.repave.state
+      values:
+        status.state: [Running, Provisioning, Pending, Importing, Deleting, Deleted, Error]
+    stand_in:
+      - v1/spectroclusters/{uid}
+    live:
+      - verify.sh:snapshot-cluster
+      - verify.sh:cluster-runs-release
+      - tiers.sh:a-applied
+      - cluster.sh:doc-after-deleted
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/clusters.md#cluster-tiers
+      - internals/palette/clusters.md#a-deleted-cluster
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/cluster.rs
+      - src/ops/live.rs
+      - src/ops/consumers/mod.rs
+    rules:
+      - delete-blockers
+      - delete-pending-repave
+      - delete-while-provisioning
+      - pause-agent-upgrades
+
+  - id: cluster-pack-manifests
+    kind: request
+    request: GET /v1/spectroclusters/{uid}/profiles/packs/manifests
+    reads:
+      fields:
+        - profiles[].metadata
+        - profiles[].spec.packs[].spec.manifests[]
+    stand_in:
+      - v1/spectroclusters/{uid}/profiles/packs/manifests
+    live:
+      - in-place.sh:a-owns-manifest-copy
+      - in-place.sh:a-kept-old-content
+      - in-place.sh:b-owns-manifest-copy
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+    rules: []
+
+  - id: cluster-variables
+    kind: request
+    request: GET /v1/spectroclusters/{uid}/variables
+    reads:
+      fields:
+        - "[].profileUid"
+        - "[].variables[].name"
+        - "[].variables[].value"
+    stand_in:
+      - v1/spectroclusters/{uid}/variables
+    live:
+      - verify.sh:cluster-variables-endpoint
+      - verify.sh:addon-copy-variables-hash
+      - cluster.sh:variables-before
+      - cluster.sh:variables-after
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+    rules: []
+
+  - id: cluster-rbacs
+    kind: request
+    request: GET /v1/spectroclusters/{uid}/config/rbacs
+    reads:
+      fields:
+        - items[].spec.bindings[].namespace
+        - items[].spec.bindings[].role
+        - items[].spec.bindings[].subjects
+        - items[].spec.bindings[].type
+    stand_in:
+      - v1/spectroclusters/{uid}/config/rbacs
+    live:
+      - tiers.sh:rbac-before
+      - tiers.sh:rbac-add
+      - tiers.sh:rbac-record
+      - tiers.sh:rbac-edit
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/policy.rs
+    rules: []
+
+  - id: cluster-namespaces
+    kind: request
+    request: GET /v1/spectroclusters/{uid}/config/namespaces
+    reads:
+      fields:
+        - items[].metadata.name
+        - items[].spec.isRegex
+        - items[].spec.resourceAllocation
+    stand_in:
+      - v1/spectroclusters/{uid}/config/namespaces
+    live: []
+    unchecked: No script reads the namespaces of a cluster. A read by hand shows the empty list of a deleted cluster.
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/policy.rs
+    rules: []
+
+  - id: cluster-listing
+    kind: request
+    request: GET /v1/dashboard/spectroclusters/meta
+    reads:
+      fields:
+        - metadata.name
+        - metadata.uid
+        - metadata.labels
+        - metadata.annotations.projectUid
+        - spec.cloudType
+        - spec.clusterType
+        - status.state
+    stand_in:
+      - v1/dashboard/spectroclusters/meta
+    live:
+      - verify.sh:cluster-listing
+      - verify.sh:listing-profile-fields
+      - cluster.sh:listing-has-cluster
+      - cluster-group.sh:member-not-in-listing
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/clusters.md#what-the-cluster-listing-answers
+    code:
+      - src/api/palette/listings.rs
+      - src/ops/list.rs
+      - src/ops/fleet.rs
+    rules: []
+
+  - id: cluster-summary
+    kind: request
+    request: GET /v1/dashboard/spectroclusters/{uid}
+    reads:
+      fields:
+        - status.health.state
+      values:
+        status.health.state: [Healthy, UnHealthy]
+    stand_in: []
+    live:
+      - knurl.sh:instance-<name>-health
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/clusters.md#what-the-cluster-listing-answers
+    code:
+      - src/api/palette/clusters.rs
+      - preflight/src/run/watch.rs
+      - adapter/src/lib.rs
+    rules: []
+
+  - id: cluster-notifications
+    kind: request
+    request: GET /v1/notifications/spectrocluster/{uid}
+    reads:
+      fields:
+        - items[].metadata.creationTimestamp
+        - items[].action.actionType
+        - items[].action.isDone
+        - items[].action.events[].profileUid
+        - items[].action.events[].type
+        - items[].action.events[].message
+        - listmeta.continue
+    stand_in:
+      - v1/notifications/spectrocluster/{uid}
+    live:
+      - pending.sh:base-none
+      - pending.sh:addon-record
+      - pending.sh:addon-names
+      - macro-repave.sh:edit-notification
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+      - src/ops/list.rs
+      - src/snapshot/cluster.rs
+    rules: []
+
+  - id: cluster-events
+    kind: request
+    request: GET /v1/events/components/spectrocluster/{uid}
+    reads:
+      fields:
+        - items[]
+    stand_in: []
+    live: []
+    unchecked: Only the watch of a preflight run reads it. No check of the book names it.
+    pages:
+      - reference/palette-api.md#a-cluster
+    code:
+      - src/api/palette/clusters.rs
+      - preflight/src/run/watch.rs
+    rules: []
+
+  - id: cloud-account
+    kind: request
+    request: GET /v1/cloudaccounts/{cloudType}/{uid}
+    reads:
+      fields:
+        - metadata.annotations
+        - spec
+    stand_in:
+      - v1/cloudaccounts/{cloudType}/{uid}
+    live: []
+    unchecked: Only the runs of preflight-plan.sh read it, and their checks have names with a variable.
+    pages:
+      - reference/palette-api.md#a-cluster
+    code:
+      - src/api/palette/clusters.rs
+      - preflight/src/world/mod.rs
+    rules:
+      - account-missing
+
+  - id: cluster-repave-status
+    kind: request
+    request: GET /v1/spectroclusters/{uid}/repave/status
+    reads:
+      fields:
+        - spec.source
+        - spec.reasons[].code
+        - spec.reasons[].message
+        - spec.reasons[].pack.current.name
+        - spec.reasons[].pack.target.name
+        - spec.reasons[].pack.diffConfigKeys
+        - status.repaveTransitionTime
+    stand_in:
+      - v1/spectroclusters/{uid}/repave/status
+    live:
+      - macro-repave.sh:repave-record
+      - macro-repave.sh:repave-names
+    pages:
+      - reference/palette-api.md#a-cluster
+    code:
+      - src/api/palette/clusters.rs
+      - src/model/repave.rs
+    rules: []
+
+  - id: cluster-profile-updates
+    kind: request
+    request: GET /v1/spectroclusters/{uid}/profileUpdates
+    reads:
+      fields:
+        - profiles[]
+    stand_in:
+      - v1/spectroclusters/{uid}/profileUpdates
+    live:
+      - pending.sh:base-profile-updates
+      - pending.sh:addon-at-pending
+      - pending.sh:addon-pending-root
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/other-objects.md#the-update-that-waits
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+    rules: []
+
+  - id: cloud-config
+    kind: request
+    request: GET /v1/cloudconfigs/{cloudType}/{configUid}
+    reads:
+      fields:
+        - spec.machinePoolConfig[]
+        - spec.clusterConfig
+    stand_in:
+      - v1/cloudconfigs/{cloudType}/{configUid}
+    live:
+      - tiers.sh:a-shape
+      - tiers.sh:a-arch
+      - eks.sh:shape-pool
+      - gke.sh:shape-pool
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/shape.rs
+    rules: []
+
+  - id: cluster-search-schema
+    kind: request
+    request: GET /v1/dashboard/spectroclusters/search/schema
+    reads:
+      fields:
+        - schema.properties[].name
+        - schema.properties[].type
+      values:
+        schema.properties[].name: [tags, clusterProfiles, environment]
+    stand_in:
+      - v1/dashboard/spectroclusters/search/schema
+    live:
+      - fleet.sh:tag-search
+      - cluster-group.sh:member-listed
+    pages:
+      - reference/palette-api.md#the-fleet
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/api/palette/listings.rs
+      - src/ops/list.rs
+      - src/ops/consumers/reads.rs
+    rules: []
+
+  - id: cluster-search
+    kind: request
+    request: POST /v1/dashboard/spectroclusters/search
+    reads:
+      fields:
+        - items[].metadata.name
+        - items[].metadata.uid
+        - items[].metadata.labels
+        - items[].status.virtual.clusterGroup
+        - items[].status.virtual.hostCluster
+        - listmeta.continue
+    stand_in:
+      - v1/dashboard/spectroclusters/search
+    live:
+      - fleet.sh:tag-search
+      - fleet.sh:by-filter
+      - cluster-group.sh:search-profile-runs
+      - cluster-group.sh:search-nested-misses-member
+      - cluster-group.sh:member-by-name
+    pages:
+      - reference/palette-api.md#the-fleet
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/api/palette/listings.rs
+      - src/ops/list.rs
+      - src/ops/fleet.rs
+      - src/ops/consumers/reads.rs
+    rules: []
+
+  - id: tag-filter-listing
+    kind: request
+    request: GET /v1/filters/metadata
+    reads:
+      fields:
+        - items[].metadata.name
+        - items[].metadata.uid
+    stand_in:
+      - v1/filters/metadata
+    live:
+      - fleet.sh:filters
+      - fleet.sh:by-filter
+    pages:
+      - reference/palette-api.md#the-fleet
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/api/palette/listings.rs
+      - src/ops/fleet.rs
+    rules: []
+
+  - id: tag-filter
+    kind: request
+    request: GET /v1/filters/tag/{uid}
+    reads:
+      fields:
+        - spec.filterGroup.conjunction
+        - spec.filterGroup.filters[]
+    stand_in:
+      - v1/filters/tag/{uid}
+    live:
+      - fleet.sh:by-filter
+      - fleet.sh:set
+    pages:
+      - reference/palette-api.md#the-fleet
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/api/palette/listings.rs
+      - src/ops/fleet.rs
+    rules: []
+
+  - id: edge-host-document
+    kind: request
+    request: GET /v1/edgehosts/{uid}
+    reads:
+      fields:
+        - metadata.uid
+        - metadata.name
+        - spec.clusterProfileTemplates
+        - status.state
+    stand_in:
+      - v1/edgehosts/{uid}
+    live:
+      - edge-host.sh:host-record
+      - edge-host.sh:host-flag
+      - edge-host.sh:host-verify
+      - edge-host.sh:edit-host-raw
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#edge-hosts
+    code:
+      - src/api/palette/clusters.rs
+      - src/ops/live.rs
+    rules:
+      - edge-agent-version
+      - edge-host-arch
+      - edge-host-health
+      - edge-host-in-use
+      - edge-host-nic
+      - edge-host-resources
+
+  - id: edge-host-manifest
+    kind: request
+    request: GET /v1/edgehosts/{uid}/pack/manifests/{manifestUid}
+    reads:
+      fields:
+        - spec.published.content
+    stand_in:
+      - v1/edgehosts/{uid}/pack/manifests/{manifestUid}
+    live:
+      - edge-host.sh:edit-host-own-uid
+      - edge-host.sh:edit-host-copy
+      - edge-host.sh:edit-host-manifest-uid
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#edge-hosts
+    code:
+      - src/api/palette/profiles.rs
+      - src/api/palette/clusters.rs
+    rules: []
+
+  - id: edge-host-search
+    kind: request
+    request: POST /v1/dashboard/edgehosts/search
+    reads:
+      fields:
+        - items[].metadata.uid
+        - items[].metadata.name
+        - items[].spec.clusterProfileTemplates[].uid
+        - items[].spec.clusterProfileTemplates[].name
+        - items[].spec.clusterProfileTemplates[].version
+        - listmeta.continue
+    stand_in:
+      - v1/dashboard/edgehosts/search
+    live:
+      - edge-host.sh:host-by-name
+      - edge-host.sh:consumers-host
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#edge-hosts
+    code:
+      - src/api/palette/listings.rs
+      - src/ops/consumers/reads.rs
+    rules: []
+
+  - id: cluster-group-document
+    kind: request
+    request: GET /v1/clustergroups/{uid}
+    reads:
+      fields:
+        - spec.clusterProfileTemplates
+        - spec.clustersConfig
+        - status.isActive
+    stand_in:
+      - v1/clustergroups/{uid}
+    live:
+      - cluster-group.sh:group-record
+      - cluster-group.sh:group-kind
+      - cluster-group.sh:edit-group-raw
+      - cluster-group.sh:limit-record
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#cluster-groups
+    code:
+      - src/api/palette/clusters.rs
+      - src/ops/live.rs
+      - src/snapshot/policy.rs
+    rules: []
+
+  - id: cluster-group-listing
+    kind: request
+    request: GET /v1/clustergroups/hostCluster/metadata
+    reads:
+      fields:
+        - items[].name
+        - items[].uid
+    stand_in:
+      - v1/clustergroups/hostCluster/metadata
+    live:
+      - cluster-group.sh:group-by-name
+      - cluster-group.sh:member-consumer-group
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#cluster-groups
+    code:
+      - src/api/palette/listings.rs
+      - src/ops/consumers/reads.rs
+    rules: []
+
+  - id: cluster-group-virtual-clusters
+    kind: request
+    request: POST /v1/dashboard/clustergroups/{uid}/virtualClusters
+    reads:
+      fields:
+        - items[].metadata.uid
+        - items[].metadata.name
+        - items[].metadata.annotations.projectUid
+        - listmeta.continue
+    stand_in:
+      - v1/dashboard/clustergroups/{uid}/virtualClusters
+    live:
+      - cluster-group.sh:group-members
+      - cluster-group.sh:group-virtual-clusters
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#cluster-groups
+    code:
+      - src/api/palette/clusters.rs
+      - src/ops/consumers/reads.rs
+    rules: []
+
+  - id: app-profile-document
+    kind: request
+    request: GET /v1/appProfiles/{uid}
+    reads:
+      fields:
+        - metadata.name
+        - metadata.uid
+        - spec.version
+        - status.inUseApps[].uid
+        - status.inUseApps[].name
+        - status.inUseApps[].projectUid
+    stand_in:
+      - v1/appProfiles/{uid}
+    live:
+      - app-profile.sh:record
+      - app-profile.sh:edit-same-version
+      - app-profile.sh:edit-last-modified
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+      - src/ops/consumers/app.rs
+    rules: []
+
+  - id: app-deployment-document
+    kind: request
+    request: GET /v1/appDeployments/{uid}
+    reads:
+      fields:
+        - metadata.name
+        - metadata.annotations.projectUid
+        - spec.profile.metadata.version
+        - status.state
+      values:
+        status.state: [Pending, Deploying, Deployed, Updating]
+    stand_in:
+      - v1/appDeployments/{uid}
+    live: []
+    unchecked: No run makes an app deployment. The page lists it under what no run covers.
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+      - src/ops/consumers/app.rs
+    rules: []
+
+  - id: app-profile-tiers
+    kind: request
+    request: GET /v1/appProfiles/{uid}/tiers
+    reads:
+      fields:
+        - spec.appTiers[].metadata.name
+        - spec.appTiers[].metadata.uid
+        - spec.appTiers[].spec.type
+        - spec.appTiers[].spec.version
+        - spec.appTiers[].spec.sourceAppTierUid
+        - spec.appTiers[].spec.registryUid
+        - spec.appTiers[].spec.containerRegistryUid
+        - spec.appTiers[].spec.values
+        - spec.appTiers[].spec.properties[]
+        - spec.appTiers[].spec.installOrder
+        - spec.appTiers[].spec.manifests[].uid
+    stand_in:
+      - v1/appProfiles/{uid}/tiers
+    live:
+      - app-profile.sh:record-type
+      - app-profile.sh:order-a-tiers
+      - app-profile.sh:order-a-params
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+    rules: []
+
+  - id: app-profile-tier-manifest
+    kind: request
+    request: GET /v1/appProfiles/{uid}/tiers/{tierUid}/manifests/{manifestUid}
+    reads:
+      fields:
+        - spec.published.content
+        - spec.published.digest
+    stand_in:
+      - v1/appProfiles/{uid}/tiers/{tierUid}/manifests/{manifestUid}
+    live:
+      - app-profile.sh:record-type
+      - app-profile.sh:edit-verify
+      - app-profile.sh:edit-verify-says
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+    rules: []
+
+  - id: app-profile-listing
+    kind: request
+    request: GET /v1/dashboard/appProfiles/metadata
+    reads:
+      fields:
+        - appProfiles[].metadata.name
+        - appProfiles[].metadata.uid
+        - appProfiles[].spec.version
+    stand_in:
+      - v1/dashboard/appProfiles/metadata
+    live:
+      - app-profile.sh:record
+      - app-profile.sh:record-unknown
+    pages:
+      - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+    rules: []
+
+  # ---- clusters.md: Cluster tiers
+
+  - id: cluster-tier-fields
+    kind: behavior
+    reads:
+      fields:
+        - status.spcApply.spcHash
+        - status.spcApply.spcInfraHash
+        - status.spcApply.actionType
+        - status.packs[].name
+        - status.packs[].version
+        - status.packs[].profileUid
+        - status.packs[].condition
+        - spec.clusterConfig.timezone
+        - spec.clusterConfig.clusterResources
+        - spec.clusterConfig.clusterRbac
+        - status.fips.mode
+        - metadata.labels
+        - spec.cloudConfigRef.kind
+        - spec.cloudConfigRef.uid
+    live:
+      - tiers.sh:a-tiers
+      - tiers.sh:a-applied
+      - tiers.sh:a-running
+    pages:
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/snapshot/cluster.rs
+      - src/snapshot/policy.rs
+
+  - id: cluster-config-items
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterConfig.clusterResources
+        - items[]
+    live:
+      - tiers.sh:rbac-before
+      - tiers.sh:rbac-after-read
+    pages:
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/policy.rs
+
+  - id: cluster-config-deleted
+    kind: behavior
+    reads:
+      fields:
+        - items[]
+    live: []
+    unchecked: A read by hand shows that a deleted cluster gives an empty list for each route. No script holds the check.
+    pages:
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/api/palette/clusters.rs
+
+  - id: cluster-config-not-found
+    kind: behavior
+    reads:
+      codes: [ResourceNotFound]
+    live: []
+    unchecked: A read by hand shows the answer for a uid that is not a cluster of the project. No script holds the check.
+    pages:
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/api/palette/clusters.rs
+
+  - id: cluster-config-access-denied
+    kind: behavior
+    reads:
+      codes: [ResourceAccessDenied]
+      fields:
+        - code
+        - message
+    live:
+      - tiers.sh:limited-read
+      - tiers.sh:limited-status
+      - tiers.sh:limited-code-says
+      - tiers.sh:limited-message
+    pages:
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/api/palette/clusters.rs
+      - src/error/mod.rs
+
+  - id: cluster-rbac-edit
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.bindings[].subjects
+        - status.spcApply.spcHash
+    live:
+      - tiers.sh:rbac-edit
+      - tiers.sh:rbac-compare-says
+      - tiers.sh:rbac-verify-says
+    pages:
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/snapshot/policy.rs
+      - src/snapshot/cluster.rs
+
+  - id: cloud-config-aws
+    kind: behavior
+    reads:
+      fields:
+        - spec.machinePoolConfig[].instanceConfig
+        - spec.machinePoolConfig[].machinePoolProperties.archType
+        - spec.machinePoolConfig[].overrideClusterAPIConfig
+        - spec.machinePoolConfig[].overrideHealthCheckConfiguration
+        - spec.machinePoolConfig[].overrideKubeadmConfiguration
+        - spec.clusterConfig.hybridConfig
+        - spec.clusterConfig.region
+        - spec.clusterConfig.sshKeyName
+      values:
+        spec.machinePoolConfig[].machinePoolProperties.archType: [amd64, arm64]
+    live:
+      - tiers.sh:a-shape
+      - tiers.sh:a-arch
+    pages:
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/snapshot/shape.rs
+
+  - id: cloud-config-models
+    kind: behavior
+    reads:
+      fields:
+        - spec.machinePoolConfig[]
+        - spec.clusterConfig
+    live: []
+    unchecked: The API reference of Palette gives each model. No run reads the cloud config of AKS or CloudStack.
+    pages:
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/snapshot/shape.rs
+      - src/api/raw.rs
+
+  - id: cloud-config-managed
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterConfig.endpointAccess
+        - spec.clusterConfig.addons
+        - spec.clusterConfig.managedClusterConfig.location
+        - spec.clusterConfig.overrideClusterAPIConfig
+        - spec.machinePoolConfig[].azs
+    live:
+      - eks.sh:shape-fields
+      - gke.sh:shape-control-plane
+      - gke.sh:shape-fields
+    pages:
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/snapshot/shape.rs
+
+  - id: cluster-hashes
+    kind: behavior
+    reads:
+      fields:
+        - status.spcApply.spcHash
+        - status.spcApply.spcInfraHash
+        - spec.clusterConfig.timezone
+        - metadata.labels
+    live:
+      - tiers.sh:same-release
+      - tiers.sh:same-applied
+      - tiers.sh:differ-policy
+      - tiers.sh:b-verify-says
+    pages:
+      - internals/palette/clusters.md#cluster-tiers
+    code:
+      - src/snapshot/cluster.rs
+      - src/diff/cluster.rs
+
+  # ---- clusters.md: Cluster copies
+
+  - id: cluster-copy-own
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].metadata.uid
+        - profiles[].spec.packs[].spec.manifests[].metadata.uid
+        - spec.clusterProfileTemplates[].uid
+    live:
+      - in-place.sh:a-owns-manifest-copy
+      - in-place.sh:b-owns-manifest-copy
+      - in-place.sh:edit-kept-manifest-uid
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/cluster.rs
+
+  - id: in-place-edit
+    kind: behavior
+    reads:
+      fields:
+        - metadata.uid
+        - spec.version
+    live:
+      - in-place.sh:api-edit
+      - in-place.sh:edit-kept-manifest-uid
+      - in-place.sh:verify-addon1
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/profiles.rs
+      - src/ops/verify.rs
+
+  - id: copy-keeps-old
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].spec.packs[].spec.manifests[]
+    live:
+      - in-place.sh:a-kept-old-content
+      - in-place.sh:verify-a1
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+      - src/ops/verify.rs
+
+  - id: copy-new-cluster
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].spec.packs[].spec.manifests[]
+    live:
+      - in-place.sh:b-owns-manifest-copy
+      - in-place.sh:a-vs-b
+      - in-place.sh:a-vs-b-edited-in-place
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+      - src/diff/pack.rs
+
+  - id: copy-takes-push
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].spec.packs[].spec.manifests[]
+        - items[].action.isDone
+    live:
+      - in-place.sh:apply-keeping-notification
+      - in-place.sh:a-changed-without-resolve
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/cluster.rs
+
+  - id: copy-takes-accepted-update
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].spec.packs[].spec.manifests[]
+        - items[].action.isDone
+    live:
+      - in-place.sh:apply-to-a
+      - in-place.sh:a3-matches-b
+      - in-place.sh:verify-a1-after-apply
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+      - src/ops/verify.rs
+
+  - id: cluster-variable-values
+    kind: behavior
+    reads:
+      fields:
+        - "[].profileUid"
+        - "[].variables[].name"
+        - "[].variables[].value"
+    live:
+      - verify.sh:cluster-variables-endpoint
+      - verify.sh:addon-copy-variables-hash
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/cluster.rs
+
+  - id: cluster-variable-change
+    kind: behavior
+    reads:
+      fields:
+        - "[].variables[].value"
+    live:
+      - cluster.sh:variables-after
+      - cluster.sh:value-changed
+      - cluster.sh:copy-verify
+      - cluster.sh:copy-compare
+      - cluster.sh:audit-records-change
+      - cluster.sh:audit-says
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/cluster.rs
+
+  - id: update-notification
+    kind: behavior
+    reads:
+      fields:
+        - items[].action.actionType
+        - items[].action.isDone
+        - items[].action.events[].profileUid
+        - items[].action.events[].type
+        - items[].action.events[].message
+      values:
+        items[].action.actionType: [NotifyActionClusterProfileUpdate]
+        items[].action.events[].type: [PackManifestUpdate, PackValuesUpdate]
+    live:
+      - pending.sh:addon-pending
+      - pending.sh:addon-names
+      - pending.sh:values-names
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/snapshot/cluster.rs
+
+  - id: update-done-by-take
+    kind: behavior
+    reads:
+      fields:
+        - items[].action.isDone
+    live:
+      - pending.sh:accept
+      - pending.sh:accept-none
+      - pending.sh:accept-again-none
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/snapshot/cluster.rs
+
+  - id: update-event-stays
+    kind: behavior
+    reads:
+      fields:
+        - items[].action.events[].type
+        - items[].action.isDone
+    live: []
+    unchecked: The page states it. No check shows that an event of a version or of an added or removed pack stays.
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/snapshot/cluster.rs
+
+  - id: update-undone-by-edit
+    kind: behavior
+    reads:
+      fields:
+        - items[].action.isDone
+        - items[].action.events[]
+    live:
+      - pending.sh:values-undo
+      - pending.sh:values-undo-none
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/snapshot/cluster.rs
+
+  - id: update-version-bump
+    kind: behavior
+    reads:
+      fields:
+        - items[]
+        - metadata.uid
+    live:
+      - pending.sh:bump-uid-kept
+      - pending.sh:bump-record
+      - pending.sh:bump-none
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/snapshot/cluster.rs
+
+  - id: notification-done-stays
+    kind: behavior
+    reads:
+      fields:
+        - items[].action.isDone
+    live: []
+    unchecked: The page states it. No check reads the list after a notification is done.
+    pages:
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+
+  # ---- clusters.md: The order of the profiles of a cluster
+
+  - id: cluster-profile-order
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterProfileTemplates[].uid
+        - spec.clusterProfileTemplates[].name
+    live:
+      - order.sh:reorder-cluster
+      - order.sh:cluster-order-kept
+      - order.sh:cluster-audited
+      - order.sh:cluster-verify
+    pages:
+      - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
+    code:
+      - src/snapshot/cluster.rs
+
+  - id: profile-pack-order
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].name
+    live:
+      - order.sh:reorder-addon
+      - order.sh:addon-doc-reversed
+      - order.sh:addon-audited
+      - order.sh:release-doc-reversed
+    pages:
+      - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
+    code:
+      - src/ops/same_release.rs
+      - src/render/notes.rs
+
+  - id: pack-install-priority
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].values
+    live: []
+    unchecked: No run establishes the install order of the packs. The page links the documentation of Palette.
+    pages:
+      - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
+    code:
+      - src/snapshot/pack.rs
+
+  # ---- clusters.md: What the cluster listing answers
+
+  - id: cluster-listing-fields
+    kind: behavior
+    reads:
+      fields:
+        - metadata.name
+        - metadata.uid
+        - metadata.creationTimestamp
+        - metadata.lastModifiedTimestamp
+        - metadata.deletionTimestamp
+        - metadata.labels
+        - metadata.annotations
+        - spec.cloudType
+        - spec.cloudAccountUid
+        - spec.cloudRegion
+        - spec.clusterType
+        - spec.archType
+        - spec.location
+        - spec.tags
+        - status.state
+    live:
+      - verify.sh:cluster-listing
+      - verify.sh:listing-profile-fields
+    pages:
+      - internals/palette/clusters.md#what-the-cluster-listing-answers
+    code:
+      - src/ops/list.rs
+
+  - id: cluster-health-state
+    kind: behavior
+    reads:
+      fields:
+        - status.health.state
+      values:
+        status.health.state: [Healthy, UnHealthy]
+    live:
+      - knurl.sh:instance-<name>-health
+    pages:
+      - internals/palette/clusters.md#what-the-cluster-listing-answers
+    code:
+      - adapter/src/lib.rs
+      - preflight/src/run/watch.rs
+
+  - id: cluster-listing-array
+    kind: behavior
+    reads:
+      fields:
+        - "[]"
+    live: []
+    unchecked: The API reference of Palette gives the shape. No check asserts it.
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/json.rs
+
+  # ---- clusters.md: An imported cluster
+
+  - id: cluster-type-values
+    kind: behavior
+    reads:
+      values:
+        spec.clusterType: [PureManage, AlloyMonitor, AlloyAssist, AlloyExtend]
+    live: []
+    unchecked: A read by hand shows PureManage for cluster A. No run imports a cluster.
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/ops/list.rs
+
+  - id: import-mode-unlisted
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterType
+        - spec.clusterProfileTemplates
+    live: []
+    unchecked: No run imports a cluster. The page says that the listing gives no import mode.
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/ops/list.rs
+
+  - id: consumer-list-computed
+    kind: behavior
+    reads:
+      fields:
+        - status.inUseClusters[].uid
+        - status.inUseClusters[].name
+        - status.inUseClusters[].projectUid
+    live:
+      - cluster.sh:consumers-before
+      - cluster.sh:consumers-drops-cluster
+      - cluster-group.sh:member-consumer-listed
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/ops/consumers/mod.rs
+      - src/ops/consumer_list.rs
+
+  - id: consumer-list-empty-on-error
+    kind: behavior
+    reads:
+      fields:
+        - status.inUseClusters
+    live: []
+    unchecked: No run makes Palette fail to compute the list. The page states that the list is empty with no error.
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/ops/consumers/mod.rs
+    rules:
+      - consumers-empty-on-error
+
+  - id: virtual-omitted-listing
+    kind: behavior
+    reads:
+      values:
+        spec.cloudType: [nested]
+    live:
+      - cluster-group.sh:member-not-in-listing
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/model/cloud.rs
+      - src/api/palette/listings.rs
+
+  - id: virtual-search-nested
+    kind: behavior
+    reads:
+      fields:
+        - items[].status.virtual.clusterGroup
+        - items[].status.virtual.hostCluster
+      values:
+        spec.cloudType: [nested]
+    live:
+      - cluster-group.sh:member-listed
+      - cluster-group.sh:member-listed-group
+      - cluster-group.sh:member-by-name
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/api/palette/listings.rs
+      - src/ops/list.rs
+
+  - id: cluster-search-shape
+    kind: behavior
+    reads:
+      fields:
+        - items[].metadata.labels
+        - items[].specSummary.cloudConfig.cloudType
+        - items[].specSummary.projectMeta.name
+        - items[].specSummary.projectMeta.uid
+        - listmeta.continue
+    live:
+      - fleet.sh:tag-search
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/api/palette/listings.rs
+      - src/ops/list.rs
+
+  - id: tags-are-labels
+    kind: behavior
+    reads:
+      fields:
+        - metadata.labels
+      values:
+        metadata.labels: [spectro__tag]
+    live:
+      - fleet.sh:listing-labels
+      - fleet.sh:record-labels
+      - fleet.sh:label
+      - fleet.sh:prod
+      - fleet.sh:prod-row
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/ops/fleet.rs
+      - src/ops/list.rs
+
+  - id: tag-filters-tenant
+    kind: behavior
+    reads:
+      fields:
+        - spec.filterGroup.conjunction
+        - spec.filterGroup.filters[]
+    live:
+      - fleet.sh:filter-create
+      - fleet.sh:filters
+      - fleet.sh:by-filter
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/ops/fleet.rs
+
+  - id: tag-filter-rules
+    kind: behavior
+    reads:
+      fields:
+        - spec.filterGroup.filters[]
+    live: []
+    unchecked: The page states these rules of a saved filter. No run shows a key with no value, a negation, or the nested environment.
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/ops/fleet.rs
+
+  - id: search-by-profile-name
+    kind: behavior
+    reads:
+      fields:
+        - items[].specSummary.clusterProfileTemplates
+      values:
+        schema.properties[].name: [clusterProfiles]
+    live:
+      - cluster-group.sh:search-profile
+      - cluster-group.sh:search-profile-runs
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/ops/consumers/reads.rs
+      - src/api/palette/listings.rs
+
+  - id: search-group-virtual-miss
+    kind: behavior
+    reads:
+      fields:
+        - items[].status.virtual.clusterGroup
+      values:
+        schema.properties[].name: [environment]
+    live:
+      - cluster-group.sh:search-nested-misses-member
+      - cluster-group.sh:member-consumer-group
+      - cluster-group.sh:group-virtual-clusters
+    pages:
+      - internals/palette/clusters.md#an-imported-cluster
+    code:
+      - src/ops/consumers/reads.rs
+      - src/api/palette/clusters.rs
+
+  # ---- clusters.md: A deleted cluster
+
+  - id: deleted-cluster-document
+    kind: behavior
+    reads:
+      fields:
+        - status.state
+      values:
+        status.state: [Deleted]
+    live:
+      - cluster.sh:doc-after
+      - cluster.sh:doc-after-deleted
+      - cluster.sh:listing-drops-cluster
+    pages:
+      - internals/palette/clusters.md#a-deleted-cluster
+    code:
+      - src/ops/live.rs
+      - src/ops/list.rs
+
+  - id: delete-in-progress
+    kind: behavior
+    reads:
+      fields:
+        - status.state
+      values:
+        status.state: [Deleting, Deleted]
+    live:
+      - cluster.sh:delete
+      - cluster.sh:listing-deleting
+      - cluster.sh:consumers-shows-deleting
+      - cluster.sh:listing-drops-cluster
+      - cluster.sh:consumers-drops-cluster
+      - cluster.sh:state-has-no-cluster
+    pages:
+      - internals/palette/clusters.md#a-deleted-cluster
+    code:
+      - src/ops/consumers/mod.rs
+      - src/ops/list.rs
+
+  - id: deleted-cluster-flags
+    kind: behavior
+    reads:
+      fields:
+        - metadata.isDeleted
+        - metadata.deletionTimestamp
+        - metadata.annotations.deleted
+    live:
+      - cluster.sh:verify-deleted
+      - cluster.sh:verify-deleted-says
+    pages:
+      - internals/palette/clusters.md#a-deleted-cluster
+    code:
+      - src/ops/live.rs
+
+  - id: cluster-state-values
+    kind: behavior
+    reads:
+      values:
+        status.state: [Pending, Provisioning, Running, Deleting, Deleted, Error, Importing, Adopting, Unknown, Paired, Pairing]
+    live: []
+    unchecked: Runs show Running, Provisioning, Deleting, and Deleted. The page lists the other states from the API reference.
+    pages:
+      - internals/palette/clusters.md#a-deleted-cluster
+    code:
+      - src/model/cluster_state.rs
+
+  - id: edge-host-group-state
+    kind: behavior
+    reads:
+      fields:
+        - status.state
+        - status.isActive
+      values:
+        status.state: [ready, unpaired, in-use]
+    live: []
+    unchecked: A run shows the state unpaired of an edge host. No run pairs a device or reads a deleted host or group.
+    pages:
+      - internals/palette/clusters.md#a-deleted-cluster
+    code:
+      - src/ops/live.rs
+
+  # ---- clusters.md: The CAPA stack of an AWS account
+
+  - id: capa-stack-tag
+    kind: behavior
+    reads:
+      fields:
+        - Tags[].Key
+        - Tags[].Value
+    live: []
+    unchecked: A read of the account by hand shows the tag on the six roles. No script holds a check.
+    pages:
+      - internals/palette/clusters.md#the-capa-stack-of-an-aws-account
+    rules:
+      - capa-stack-release-behind
+
+  - id: capa-stack-update-denied
+    kind: behavior
+    reads:
+      codes: [AccessDenied]
+      values:
+        Stacks[].StackStatus: [UPDATE_ROLLBACK_FAILED]
+    live: []
+    unchecked: A read of the account by hand shows the refused update and the refused rollback. No script holds a check.
+    pages:
+      - internals/palette/clusters.md#the-capa-stack-of-an-aws-account
+    rules:
+      - capa-stack-update-denied
+
+  - id: capa-stack-blocks-create
+    kind: behavior
+    reads:
+      codes: [ValidationError]
+      values:
+        Stacks[].StackStatus: [UPDATE_ROLLBACK_FAILED]
+        status.state: [Provisioning]
+    live: []
+    unchecked: A live create met a stack in that state. No script holds a check.
+    pages:
+      - internals/palette/clusters.md#the-capa-stack-of-an-aws-account
+    rules:
+      - capa-bootstrap-stack
+
+  - id: capa-manual-stack
+    kind: behavior
+    reads:
+      fields:
+        - manageCloudFormationStackManually.enabled
+    live: []
+    unchecked: No live run shows this way yet.
+    pages:
+      - internals/palette/clusters.md#the-capa-stack-of-an-aws-account
+    rules:
+      - capa-manual-stack
+
+  # ---- clusters.md: A cluster on GCP
+
+  - id: gcp-node-image
+    kind: behavior
+    reads:
+      fields:
+        - packValues[].annotations.os_version
+        - packValues[].annotations.os_spectro_version
+        - packValues[].annotations.k8s_version
+        - packValues[].annotations.k8s_spectro_version
+      values:
+        status.state: [Provisioning]
+    live: []
+    unchecked: A read by hand shows the refusal of the image. No script holds a check.
+    pages:
+      - internals/palette/clusters.md#a-cluster-on-gcp
+    rules:
+      - gcp-image-not-shared
+
+  - id: gcp-node-service-account
+    kind: behavior
+    reads:
+      values:
+        status.state: [Provisioning]
+    live: []
+    unchecked: A read by hand shows the cluster that waits for a role of the service account. No script holds a check.
+    pages:
+      - internals/palette/clusters.md#a-cluster-on-gcp
+    rules:
+      - gcp-default-sa-no-role
+
+  - id: gcp-cluster-read
+    kind: behavior
+    reads:
+      fields:
+        - spec.cloudConfigRef.kind
+      values:
+        spec.cloudConfigRef.kind: [gcp]
+    live:
+      - verify.sh:snapshot-cluster
+      - verify.sh:cluster-runs-release
+      - verify.sh:compare-release-cluster
+    pages:
+      - internals/palette/clusters.md#a-cluster-on-gcp
+    code:
+      - src/api/raw.rs
+
+  # ---- other-objects.md: The update that waits
+
+  - id: pending-lists-all-profiles
+    kind: behavior
+    reads:
+      fields:
+        - profiles[]
+    live:
+      - pending.sh:base-profile-updates
+      - pending.sh:base-at-pending
+      - pending.sh:base-pending-same
+    pages:
+      - internals/palette/other-objects.md#the-update-that-waits
+      - internals/palette/clusters.md#cluster-copies
+    code:
+      - src/api/palette/clusters.rs
+
+  - id: pending-edit-shows-profile
+    kind: behavior
+    reads:
+      fields:
+        - profiles[]
+    live:
+      - pending.sh:addon-at-pending
+      - pending.sh:addon-pending-root
+      - pending.sh:addon-pending-compare-says
+      - pending.sh:values-pending-compare-says
+    pages:
+      - internals/palette/other-objects.md#the-update-that-waits
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/cluster.rs
+
+  - id: pending-taken-by-cluster
+    kind: behavior
+    reads:
+      fields:
+        - profiles[]
+    live:
+      - pending.sh:accept-record
+      - pending.sh:accept-as-pending
+    pages:
+      - internals/palette/other-objects.md#the-update-that-waits
+    code:
+      - src/api/palette/clusters.rs
+
+  - id: pending-masks-values
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].packs[].values
+    live: []
+    unchecked: The page states it. No check shows the mask.
+    pages:
+      - internals/palette/other-objects.md#the-update-that-waits
+    code:
+      - src/api/mask.rs
+
+  - id: pending-repave-answers
+    kind: behavior
+    reads:
+      codes: [PackValuesUpdated]
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+        - reasons[].pack.current.name
+        - reasons[].pack.diffConfigKeys
+    live:
+      - pending.sh:addon-repave
+      - pending.sh:addon-repave-says
+      - pending.sh:k8s-repave
+      - pending.sh:k8s-repave-says
+    pages:
+      - internals/palette/other-objects.md#the-update-that-waits
+    code:
+      - src/ops/repave.rs
+      - src/model/repave.rs
+
+  # ---- other-objects.md: Edge hosts
+
+  - id: edge-host-binds-profiles
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterProfileTemplates
+        - status.state
+      values:
+        status.state: [unpaired]
+    live:
+      - edge-host.sh:register
+      - edge-host.sh:host-record
+      - edge-host.sh:host-flag
+    pages:
+      - internals/palette/other-objects.md#edge-hosts
+    code:
+      - src/api/palette/clusters.rs
+      - src/ops/live.rs
+
+  - id: edge-host-values-copy
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterProfileTemplates[].packs[].values
+    live:
+      - edge-host.sh:release-host-raw
+      - edge-host.sh:release-host-kept
+      - edge-host.sh:release-host-verify
+    pages:
+      - internals/palette/other-objects.md#edge-hosts
+    code:
+      - src/api/palette/clusters.rs
+
+  - id: edge-host-manifest-copy
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterProfileTemplates[].packs[].manifests[].uid
+        - spec.published.content
+    live:
+      - edge-host.sh:edit-host-raw
+      - edge-host.sh:edit-host-manifest-uid
+      - edge-host.sh:edit-host-own-uid
+      - edge-host.sh:edit-host-copy
+      - edge-host.sh:edit-host-verify
+    pages:
+      - internals/palette/other-objects.md#edge-hosts
+    code:
+      - src/api/palette/profiles.rs
+      - src/api/palette/clusters.rs
+
+  - id: edge-host-not-consumer
+    kind: behavior
+    reads:
+      fields:
+        - status.inUseClusters
+    live:
+      - edge-host.sh:consumers-list-only
+      - edge-host.sh:consumers-list-only-host
+    pages:
+      - internals/palette/other-objects.md#edge-hosts
+    code:
+      - src/ops/consumers/reads.rs
+
+  # ---- other-objects.md: Cluster groups
+
+  - id: cluster-group-pins-profiles
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterProfileTemplates
+    live:
+      - cluster-group.sh:group-record
+      - cluster-group.sh:group-members
+      - cluster-group.sh:member-record
+      - cluster-group.sh:member-runs-pin
+    pages:
+      - internals/palette/other-objects.md#cluster-groups
+    code:
+      - src/api/palette/clusters.rs
+
+  - id: cluster-group-manifest-copy
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterProfileTemplates[].packs[].manifests[].uid
+        - spec.published.content
+    live:
+      - cluster-group.sh:edit-group-raw
+      - cluster-group.sh:edit-group-manifest-uid
+      - cluster-group.sh:edit-group-own-uid
+      - cluster-group.sh:edit-group-verify
+      - cluster-group.sh:edit-group-compare
+    pages:
+      - internals/palette/other-objects.md#cluster-groups
+    code:
+      - src/api/palette/clusters.rs
+      - src/api/palette/profiles.rs
+
+  - id: cluster-group-virtual-consumer
+    kind: behavior
+    reads:
+      fields:
+        - status.inUseClusters
+    live:
+      - cluster-group.sh:member-consumer
+      - cluster-group.sh:member-consumer-listed
+      - cluster-group.sh:member-not-in-listing
+      - cluster-group.sh:member-consumer-search
+      - cluster-group.sh:member-consumer-group
+    pages:
+      - internals/palette/other-objects.md#cluster-groups
+    code:
+      - src/ops/consumers/mod.rs
+      - src/ops/consumers/reads.rs
+
+  - id: cluster-group-config
+    kind: behavior
+    reads:
+      fields:
+        - spec.clustersConfig.endpointType
+        - spec.clustersConfig.kubernetesDistroType
+        - spec.clustersConfig.limitConfig
+        - spec.clustersConfig.values
+        - spec.clustersConfig.hostClustersConfig[].clusterUid
+        - spec.clustersConfig.hostClustersConfig[].endpointConfig
+    live:
+      - cluster-group.sh:edit-group-raw
+      - cluster-group.sh:limit-record
+      - cluster-group.sh:limit-before
+    pages:
+      - internals/palette/other-objects.md#cluster-groups
+    code:
+      - src/snapshot/policy.rs
+      - src/snapshot/cluster.rs
+
+  - id: cluster-group-limit-units
+    kind: behavior
+    reads:
+      fields:
+        - spec.clustersConfig.limitConfig.cpu
+        - spec.clustersConfig.limitConfig.cpuMilliCore
+        - spec.clustersConfig.limitConfig.memory
+        - spec.clustersConfig.limitConfig.memoryMiB
+    live:
+      - cluster-group.sh:limit-verify-says
+      - cluster-group.sh:limit-compare
+      - cluster-group.sh:limit-compare-says
+    pages:
+      - internals/palette/other-objects.md#cluster-groups
+    code:
+      - src/snapshot/policy.rs
+
+  - id: cluster-group-no-lower-limit
+    kind: behavior
+    reads:
+      fields:
+        - spec.clustersConfig.limitConfig.cpu
+    live:
+      - cluster-group.sh:group-members
+    pages:
+      - internals/palette/other-objects.md#cluster-groups
+    code:
+      - src/snapshot/policy.rs
+
+  # ---- other-objects.md: App profiles
+
+  - id: app-profile-tier-content
+    kind: behavior
+    reads:
+      fields:
+        - spec.appTiers[].spec.type
+        - spec.appTiers[].spec.version
+        - spec.appTiers[].spec.sourceAppTierUid
+        - spec.appTiers[].spec.registryUid
+        - spec.appTiers[].spec.values
+        - spec.appTiers[].spec.properties[]
+        - spec.appTiers[].spec.manifests[].uid
+        - spec.published.content
+        - spec.published.digest
+    live:
+      - app-profile.sh:record-type
+      - app-profile.sh:edit-verify-says
+    pages:
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+
+  - id: app-profile-update-in-place
+    kind: behavior
+    reads:
+      fields:
+        - metadata.uid
+        - spec.version
+        - spec.versions[]
+    live:
+      - app-profile.sh:edit
+      - app-profile.sh:edit-same-version
+      - app-profile.sh:edit-verify
+    pages:
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+
+  - id: app-profile-order-rules
+    kind: behavior
+    reads:
+      fields:
+        - spec.appTiers[].spec.installOrder
+    live: []
+    unchecked: No run shows these two rules. Strata sorts the tiers by the order, and a tier with no order is at 0.
+    pages:
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+
+  - id: app-profile-order-kept
+    kind: behavior
+    reads:
+      fields:
+        - spec.appTiers[].spec.installOrder
+    live:
+      - app-profile.sh:order-a-create
+      - app-profile.sh:order-a-tiers
+      - app-profile.sh:order-a-params
+    pages:
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+
+  - id: app-profile-order-update
+    kind: behavior
+    reads:
+      fields:
+        - spec.appTiers[].spec.installOrder
+    live:
+      - app-profile.sh:order-update
+      - app-profile.sh:order-update-verify
+    pages:
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+
+  - id: app-profile-container-registry
+    kind: behavior
+    reads:
+      fields:
+        - spec.appTiers[].spec.containerRegistryUid
+    live: []
+    unchecked: No run makes a container tier. The tier of the run is a manifest tier.
+    pages:
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+
+  - id: app-profile-tier-no-digest
+    kind: behavior
+    reads:
+      fields:
+        - spec.appTiers[].spec.manifests[].uid
+    live:
+      - app-profile.sh:record-no-digest
+    pages:
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/api/palette/profiles.rs
+
+  - id: app-profile-in-use-apps
+    kind: behavior
+    reads:
+      fields:
+        - status.inUseApps[].uid
+        - status.inUseApps[].name
+        - status.inUseApps[].projectUid
+        - status.inUseApps[].kind
+    live: []
+    unchecked: No run makes an app deployment. The page gives the rule that lists the deployments.
+    pages:
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/ops/consumers/app.rs
+
+  - id: app-profile-delete-refused
+    kind: behavior
+    reads:
+      fields:
+        - status.inUseApps
+    live: []
+    unchecked: No run makes an app deployment. The page gives the rule that refuses the delete.
+    pages:
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/ops/consumers/app.rs
+
+  - id: app-deployments-dashboard
+    kind: behavior
+    reads:
+      fields:
+        - filter.filterGroups[].filters[].property
+    live: []
+    unchecked: No run makes an app deployment. The page says that the dashboard route has no filter by profile.
+    pages:
+      - internals/palette/other-objects.md#app-profiles
+    code:
+      - src/ops/consumers/app.rs
