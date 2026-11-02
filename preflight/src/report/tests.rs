@@ -389,9 +389,8 @@ rules:
     let rule = c.rule("webhook-call-failed").unwrap();
     let lines = auto_reproduce(rule, &outcome, &subject, None);
     assert_eq!(lines.len(), 1);
-    let route = strata::api::cluster_events_path("c 1");
+    let route = "/v1/events/components/spectrocluster/c%201?limit=50";
     assert!(lines[0].ends_with(&format!("}}{route}\"")), "{}", lines[0]);
-    assert!(route.ends_with("c%201?limit=50"), "{route}");
     subject.cluster_uid = None;
     assert!(auto_reproduce(rule, &outcome, &subject, None).is_empty());
 }

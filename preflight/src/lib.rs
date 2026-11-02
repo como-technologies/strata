@@ -38,3 +38,10 @@ pub use error::{Error, Result};
 pub const TOOL_NAME: &str = "strata-preflight";
 /// The crate version, in every document.
 pub const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+// The routes that the tests of strata serve, in the file that they use. The unit tests use some of
+// them, so the others are dead code here.
+#[cfg(test)]
+#[allow(dead_code)]
+#[path = "../../tests/common/palette.rs"]
+mod routes;

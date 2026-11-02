@@ -1,11 +1,11 @@
 use super::*;
 use crate::probe::FixtureBackend;
 use crate::report::Tool;
+use crate::routes::{cluster_events_route, cluster_route, cluster_summary_route};
 use serde_json::json;
 use std::path::Path;
 use std::time::Duration;
-use strata::api::{Palette, cluster_events_path, cluster_summary_path, subject_path};
-use strata::snapshot::SubjectKind;
+use strata::api::Palette;
 
 const SECTION: &str = r#"
 section: compute
@@ -316,8 +316,8 @@ rules:
     )
     .unwrap();
     let api = strata::api::MemoryApi::new()
-            .with(subject_path(SubjectKind::Cluster, "c1"), json!({"metadata": {"uid": "c1"}, "spec": {"cloudType": "gke"}, "status": {"state": "Provisioning"}}))
-            .with(cluster_events_path("c1"), json!({"items": [{"reason": "GCPManagedControlPlaneReconcile", "message": "InvalidArgument: no release channel"}]}));
+            .with(cluster_route("c1"), json!({"metadata": {"uid": "c1"}, "spec": {"cloudType": "gke"}, "status": {"state": "Provisioning"}}))
+            .with(cluster_events_route("c1"), json!({"items": [{"reason": "GCPManagedControlPlaneReconcile", "message": "InvalidArgument: no release channel"}]}));
     let mut w = world(3);
     w.cluster_uid = Some("c1".into());
     let slept = std::cell::Cell::new(0);
@@ -374,17 +374,17 @@ fn the_rules_document_names_this_tool_as_the_report_does_and_has_its_own_schema_
 #[test]
 fn a_reading_has_no_summary_for_a_404_and_stops_at_a_401_or_a_429() {
     let cluster = json!({"metadata": {"uid": "c1"}, "status": {"state": "Provisioning"}});
-    let summary = cluster_summary_path("c1");
-    let events = cluster_events_path("c1");
+    let summary = cluster_summary_route("c1");
+    let events = cluster_events_route("c1");
     let gone = strata::api::MemoryApi::new()
-        .with(subject_path(SubjectKind::Cluster, "c1"), cluster.clone())
+        .with(cluster_route("c1"), cluster.clone())
         .failing(events, 403, "{}");
     let read = reading(&Palette::new(&gone), "c1", Duration::from_secs(1)).unwrap();
     assert_eq!(read["summary"], Value::Null);
     assert_eq!(read["events"], json!([]));
     for status in [401, 429] {
         let refused = strata::api::MemoryApi::new()
-            .with(subject_path(SubjectKind::Cluster, "c1"), cluster.clone())
+            .with(cluster_route("c1"), cluster.clone())
             .failing(&summary, status, "{}");
         let err = reading(&Palette::new(&refused), "c1", Duration::from_secs(1)).unwrap_err();
         assert!(err.to_string().contains(&format!("HTTP {status}")), "{err}");
@@ -396,8 +396,8 @@ fn a_reading_of_a_cluster_with_no_event_has_an_empty_list_of_events() {
     let cluster = json!({"metadata": {"uid": "c1"}, "status": {"state": "Provisioning"}});
     // Palette gives `items: null` when the cluster has no event
     let api = strata::api::MemoryApi::new()
-        .with(subject_path(SubjectKind::Cluster, "c1"), cluster)
-        .with(cluster_events_path("c1"), json!({"items": null}));
+        .with(cluster_route("c1"), cluster)
+        .with(cluster_events_route("c1"), json!({"items": null}));
     let read = reading(&Palette::new(&api), "c1", Duration::from_secs(1)).unwrap();
     assert_eq!(read["events"], json!([]));
 }
@@ -423,7 +423,7 @@ rules:
     )
     .unwrap();
     let api = strata::api::MemoryApi::new().with(
-        subject_path(SubjectKind::Cluster, "c1"),
+        cluster_route("c1"),
         json!({"metadata": {"uid": "c1"}, "status": {"state": "Running"}}),
     );
     let mut w = world(3);
@@ -468,7 +468,7 @@ rules:
     )
     .unwrap();
     let api = strata::api::MemoryApi::new().with(
-        subject_path(SubjectKind::Cluster, "c1"),
+        cluster_route("c1"),
         json!({"metadata": {"uid": "c1"}, "status": {"state": "Running"}}),
     );
     let mut w = world(3);
@@ -528,11 +528,11 @@ rules:
     .unwrap();
     let api = strata::api::MemoryApi::new()
             .with(
-                subject_path(SubjectKind::Cluster, "c1"),
+                cluster_route("c1"),
                 json!({"metadata": {"uid": "c1"}, "status": {"state": "Running"}}),
             )
             .with(
-                cluster_events_path("c1"),
+                cluster_events_route("c1"),
                 json!({"items": [{"reason": "Log", "message": "failed calling webhook \"vspectrocluster.kb.io\": connection refused", "metadata": {"creationTimestamp": "2026-09-29T17:59:22.272Z"}}]}),
             );
     let mut w = world(3);

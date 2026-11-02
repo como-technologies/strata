@@ -2,8 +2,7 @@
 //! are in the entity, and the validate route of Palette gets them.
 
 use serde_json::json;
-use strata::api::{MemoryApi, Palette, cloud_config_path, subject_path};
-use strata::snapshot::SubjectKind;
+use strata::api::{MemoryApi, Palette};
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
 use strata_preflight::catalog;
@@ -14,18 +13,29 @@ use strata_preflight::rule::Tier;
 use strata_preflight::run::{self, RunInputs, Selection};
 use strata_preflight::world::World;
 
+// The routes that the tests of strata serve, in the file that they use. This test uses some of
+// them, so the others are dead code here.
+#[allow(dead_code)]
+#[path = "../../tests/common/palette.rs"]
+mod routes;
+
+use routes::{
+    cloud_config_route, cluster_route, cluster_variables_route, edge_host_route, manifests_route,
+    profile_route, variables_route,
+};
+
 /// A cluster of one profile that declares the variable `pod_cidr`, and a value for it.
 fn api() -> MemoryApi {
     MemoryApi::new()
         .with(
-            subject_path(SubjectKind::Cluster, "c1"),
+            cluster_route("c1"),
             json!({"metadata": {"uid": "c1", "name": "barney"},
                 "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"},
                     "clusterProfileTemplates": [{"uid": "p1", "packs": []}]}}),
         )
-        .with(cloud_config_path("aws", "cc1"), json!({"spec": {}}))
+        .with(cloud_config_route("aws", "cc1"), json!({"spec": {}}))
         .with(
-            "/v1/spectroclusters/c1/variables",
+            cluster_variables_route("c1"),
             json!([{"profileUid": "p1", "variables": [{"name": "pod_cidr", "value": "10.244.0.0/16"}]}]),
         )
         .with(
@@ -125,17 +135,17 @@ fn the_rules_that_ask_the_validate_route_send_it_one_request_with_the_name_of_th
 fn template_outside_reads_the_profile_that_the_world_read_and_the_run_sends_no_second_request() {
     let api = api()
         .with(
-            "/v1/clusterprofiles/p1",
+            profile_route("p1"),
             json!({"metadata": {"uid": "p1", "name": "base"},
                 "spec": {"version": "1.0.0", "published": {"cloudType": "aws", "type": "add-on", "packs": []}},
                 "status": {"inUseClusterTemplates": [{"uid": "t1", "name": "standard"}]}}),
         )
         .with(
-            "/v1/clusterprofiles/p1/packs/manifests",
+            manifests_route("p1"),
             json!({"spec": {"packs": []}}),
         )
         .with(
-            "/v1/clusterprofiles/p1/variables",
+            variables_route("p1"),
             json!({"variables": []}),
         );
     let backend = LiveBackend::new(Some(&api), true);
@@ -168,7 +178,7 @@ fn template_outside_reads_the_profile_that_the_world_read_and_the_run_sends_no_s
         report.checks
     );
     assert_eq!(
-        api.calls("/v1/clusterprofiles/p1"),
+        api.calls(&profile_route("p1")),
         1,
         "the world and the rule read the profile with one request"
     );
@@ -181,7 +191,7 @@ fn the_world_reads_a_cluster_one_time_and_a_rule_that_reads_it_again_costs_no_re
     let palette = Palette::new(&backend);
     let world = World::from_cluster(&palette, "c1", &Progress::silent()).unwrap();
     assert_eq!(world.cluster_uid.as_deref(), Some("c1"));
-    let path = subject_path(SubjectKind::Cluster, "c1");
+    let path = cluster_route("c1");
     let again = backend
         .palette(strata::api::Method::Get, &path, None, &[])
         .unwrap();
@@ -231,7 +241,7 @@ fn six_rules_read_each_edge_host_with_one_request_for_the_host() {
     let mut api = MemoryApi::new();
     for uid in hosts {
         api = api.with(
-            format!("/v1/edgehosts/{uid}"),
+            edge_host_route(uid),
             json!({"metadata": {"uid": uid, "name": uid}, "status": {"state": "ready"}, "spec": {}}),
         );
     }
@@ -275,7 +285,7 @@ fn six_rules_read_each_edge_host_with_one_request_for_the_host() {
     }
     for uid in hosts {
         assert_eq!(
-            api.calls(&format!("/v1/edgehosts/{uid}")),
+            api.calls(&edge_host_route(uid)),
             1,
             "{uid}: six rules read the host, and Palette gets one request"
         );

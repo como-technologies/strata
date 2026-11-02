@@ -1,20 +1,20 @@
 use super::*;
-use strata::api::{cloud_account_path, cloud_config_path, subject_path};
+use crate::routes::{cloud_account_route, cloud_config_route, cluster_route};
 
 #[test]
 fn a_world_of_a_cluster_reads_its_cloud_type_as_the_route_of_its_cloud_config_does() {
     // the document names its cloud config, and no spec.cloudType
     let api = strata::api::MemoryApi::new()
         .with(
-            subject_path(SubjectKind::Cluster, "c1"),
+            cluster_route("c1"),
             json!({"metadata": {"uid": "c1", "name": "barney"},
                     "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"}}}),
         )
-        .with(cloud_config_path("aws", "cc1"), json!({"spec": {}}));
+        .with(cloud_config_route("aws", "cc1"), json!({"spec": {}}));
     let world = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap();
     assert_eq!(world.cloud, "aws");
     let none = strata::api::MemoryApi::new().with(
-        subject_path(SubjectKind::Cluster, "c1"),
+        cluster_route("c1"),
         json!({"metadata": {"uid": "c1"}, "spec": {}}),
     );
     let err = World::from_cluster(&Palette::new(none), "c1", &Progress::silent()).unwrap_err();
@@ -29,11 +29,11 @@ fn a_world_of_a_cluster_by_name_reads_the_cluster_that_the_name_names() {
             json!([{"metadata": {"name": "barney", "uid": "c1"}}]),
         )
         .with(
-            subject_path(SubjectKind::Cluster, "c1"),
+            cluster_route("c1"),
             json!({"metadata": {"uid": "c1", "name": "barney"},
                     "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"}}}),
         )
-        .with(cloud_config_path("aws", "cc1"), json!({"spec": {}}));
+        .with(cloud_config_route("aws", "cc1"), json!({"spec": {}}));
     let world = World::from_cluster(&Palette::new(api), "barney", &Progress::silent()).unwrap();
     assert_eq!(world.cluster_uid.as_deref(), Some("c1"));
     assert_eq!(world.source, "cluster:c1");
@@ -50,12 +50,12 @@ fn a_world_of_a_cluster_tries_an_id_of_24_hex_digits_as_a_uid_and_then_as_a_name
     let config = json!({"spec": {}});
     // the id is a uid: one request for the document, and no listing
     let by_uid = strata::api::MemoryApi::new()
-        .with(subject_path(SubjectKind::Cluster, id), document(id))
+        .with(cluster_route(id), document(id))
         .with(format!("/v1/spectroclusters/{id}/variables"), json!([]))
-        .with(cloud_config_path("aws", "cc1"), config.clone());
+        .with(cloud_config_route("aws", "cc1"), config.clone());
     let world = World::from_cluster(&Palette::new(&by_uid), id, &Progress::silent()).unwrap();
     assert_eq!(world.cluster_uid.as_deref(), Some(id));
-    assert_eq!(by_uid.calls(&subject_path(SubjectKind::Cluster, id)), 1);
+    assert_eq!(by_uid.calls(&cluster_route(id)), 1);
     assert_eq!(by_uid.calls("/v1/dashboard/spectroclusters/meta"), 0);
     // the id is a name: the uid route answers 404, and the listing gives the uid
     let by_name = strata::api::MemoryApi::new()
@@ -63,12 +63,12 @@ fn a_world_of_a_cluster_tries_an_id_of_24_hex_digits_as_a_uid_and_then_as_a_name
             "/v1/dashboard/spectroclusters/meta",
             json!([{"metadata": {"name": id, "uid": "c1"}}]),
         )
-        .with(subject_path(SubjectKind::Cluster, "c1"), document("c1"))
+        .with(cluster_route("c1"), document("c1"))
         .with("/v1/spectroclusters/c1/variables", json!([]))
-        .with(cloud_config_path("aws", "cc1"), config);
+        .with(cloud_config_route("aws", "cc1"), config);
     let world = World::from_cluster(&Palette::new(&by_name), id, &Progress::silent()).unwrap();
     assert_eq!(world.cluster_uid.as_deref(), Some("c1"));
-    assert_eq!(by_name.calls(&subject_path(SubjectKind::Cluster, id)), 1);
+    assert_eq!(by_name.calls(&cluster_route(id)), 1);
     assert_eq!(by_name.calls("/v1/dashboard/spectroclusters/meta"), 1);
 }
 
@@ -260,12 +260,12 @@ fn a_change_adds_a_pool_with_an_empty_name_and_does_not_merge_it_into_another() 
 fn the_entity_of_a_cluster_keeps_the_labels_and_the_annotations_that_are_text() {
     let api = strata::api::MemoryApi::new()
         .with(
-            subject_path(SubjectKind::Cluster, "c1"),
+            cluster_route("c1"),
             json!({"metadata": {"uid": "c1", "name": "barney",
                     "labels": {"env": "dev", "n": 1}, "annotations": {"owner": "ops"}},
                     "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"}}}),
         )
-        .with(cloud_config_path("aws", "cc1"), json!({"spec": {}}));
+        .with(cloud_config_route("aws", "cc1"), json!({"spec": {}}));
     let world = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap();
     assert_eq!(
         world.entity["metadata"]["labels"],
@@ -278,11 +278,11 @@ fn the_entity_of_a_cluster_keeps_the_labels_and_the_annotations_that_are_text() 
     );
     let bare = strata::api::MemoryApi::new()
         .with(
-            subject_path(SubjectKind::Cluster, "c2"),
+            cluster_route("c2"),
             json!({"metadata": {"uid": "c2", "name": "wilma"},
                     "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc2"}}}),
         )
-        .with(cloud_config_path("aws", "cc2"), json!({"spec": {}}));
+        .with(cloud_config_route("aws", "cc2"), json!({"spec": {}}));
     let world = World::from_cluster(&Palette::new(bare), "c2", &Progress::silent()).unwrap();
     assert_eq!(world.entity["metadata"]["labels"], json!({}));
     assert_eq!(world.entity["metadata"]["annotations"], json!({}));
@@ -358,7 +358,7 @@ fn an_account_the_key_cannot_read_is_null_and_a_bad_key_is_an_error() {
     };
     for status in [403u16, 404] {
         let api =
-            strata::api::MemoryApi::new().failing(cloud_account_path("aws", "acc1"), status, "{}");
+            strata::api::MemoryApi::new().failing(cloud_account_route("aws", "acc1"), status, "{}");
         let w = base()
             .with_palette(&Palette::new(&api), "t", &Progress::silent())
             .unwrap();
@@ -366,7 +366,7 @@ fn an_account_the_key_cannot_read_is_null_and_a_bad_key_is_an_error() {
     }
     for status in [401u16, 429] {
         let api =
-            strata::api::MemoryApi::new().failing(cloud_account_path("aws", "acc1"), status, "{}");
+            strata::api::MemoryApi::new().failing(cloud_account_route("aws", "acc1"), status, "{}");
         let err = base()
             .with_palette(&Palette::new(&api), "t", &Progress::silent())
             .unwrap_err()
@@ -426,12 +426,12 @@ fn a_pack_of_a_template_keeps_its_manifests_and_gives_empty_text_for_a_missing_f
 fn cluster_api(variables: serde_json::Value) -> strata::api::MemoryApi {
     strata::api::MemoryApi::new()
             .with(
-                subject_path(SubjectKind::Cluster, "c1"),
+                cluster_route("c1"),
                 json!({"metadata": {"uid": "c1", "name": "barney"},
                     "spec": {"cloudConfigRef": {"kind": "aws", "uid": "cc1"},
                         "clusterProfileTemplates": [{"uid": "p1", "packs": []}, {"uid": "p2", "packs": []}]}}),
             )
-            .with(cloud_config_path("aws", "cc1"), json!({"spec": {}}))
+            .with(cloud_config_route("aws", "cc1"), json!({"spec": {}}))
             .with("/v1/spectroclusters/c1/variables", variables)
 }
 
