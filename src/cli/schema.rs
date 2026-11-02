@@ -17,7 +17,7 @@ pub(crate) fn cmd_schema(kind: SchemaKind) -> Result<ExitCode> {
         SchemaKind::Consumers => schemars::schema_for!(ops::ConsumersReport),
         SchemaKind::Behind => schemars::schema_for!(ops::BehindReport),
         SchemaKind::Set => schemars::schema_for!(ops::SetReport),
-        SchemaKind::Report => schemars::schema_for!(strata::closed_set::unknown::Report),
+        SchemaKind::Report => schemars::schema_for!(strata::closed_set::unknown::report::Report),
         SchemaKind::List => schemars::schema_for!(ops::Listing),
         SchemaKind::Packs => schemars::schema_for!(ops::PackListing),
         SchemaKind::Candidate => schemars::schema_for!(strata::candidate::Candidate),

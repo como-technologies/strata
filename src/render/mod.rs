@@ -17,7 +17,7 @@ use clap::ValueEnum;
 use serde_json::Value;
 
 use crate::closed_set::impl_texts;
-use crate::closed_set::unknown::Report;
+use crate::closed_set::unknown::report::Report;
 use crate::diff::Diff;
 use crate::error::{MESSAGE_AT, Result};
 use crate::json::opt_str;

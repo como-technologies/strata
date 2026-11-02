@@ -227,7 +227,7 @@ const STATE_HOME_VAR: &str = "XDG_STATE_HOME";
 ///
 /// A relative `XDG_STATE_HOME` is no place, so strata skips it, as the XDG Base Directory
 /// Specification says. The folder can be missing: the code that writes a file creates it.
-pub fn state_dir() -> Option<PathBuf> {
+pub(crate) fn state_dir() -> Option<PathBuf> {
     state_dir_from(std::env::var_os(STATE_HOME_VAR), std::env::var_os("HOME"))
 }
 

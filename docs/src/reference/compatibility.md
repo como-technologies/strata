@@ -229,6 +229,9 @@ reads a record of its own id that a later release wrote. `source.projectUid` and
 `consumers` of `strata-list/1` counts the cluster templates with the clusters,
 and `consumersByKind` joined it with the count of each kind.
 
+`strata-unknown/1` and `strata-report/1` refuse each field that they do not list, because the log and
+the report must hold nothing else. A new field of either takes a new id.
+
 Two values changed after 0.21.0 with no new id. In `strata-packs/1`, a version
 that the listing gives no type has the `type` `spectro`, where 0.21.0 wrote
 empty text. The schema now gives the field the pack types. A record of a
@@ -858,6 +861,20 @@ field, a value, an input, or an option is in the sections above.
     error, and the message names it.
   - `ccm-version` and `edge-agent-version` read a `v` before a version, and build data after
     it. A version with one of them can give another result than before.
+- **`strata-unknown/1` and `strata-report/1` lose the fields `palette`, `status`, and `errorCode`.**
+  No release of strata wrote them. A log or a report of 0.27.0 never held them.
+  - A line or an entry with one of these fields is not valid now. `strata report` stops with the
+    error `log-invalid`, and the endpoint answers 422. Only a log that a person edited has one.
+  - The table of `strata report --format markdown` has the columns `set`, `value`, `route`,
+    `count`, and `strata`. It had `Palette`, `status`, and `error code` too.
+  - The issue of the endpoint has no row `Releases of Palette` and no row `Refusals`.
+- **A value of the log and of the report has printable ASCII only.** Release 0.27.0 kept each
+  character that is not a control character.
+  - Strata writes a `?` for each other character, such as a zero width space or a letter that
+    is not ASCII. So two different values never look equal.
+  - A value of more than 64 characters ends with `...`. It ended with `…`.
+  - A line of an older log with such a character is not valid now. `strata report` stops with the
+    error `log-invalid`. Delete the line, or delete the file `strata-unknown.jsonl`.
 
 ### For a user of the library of strata
 
@@ -869,6 +886,20 @@ field, a value, an input, or an option is in the sections above.
 - `ops::PackBuild::latest` is true for the version that `pack:<name>@latest` records. It was
   true for the highest version. See the first item of the previous list.
 - `timestamp` and `render::Format::ALL` are new: see [The Rust library](#the-rust-library).
+- `closed_set::unknown::log::Line` and `closed_set::unknown::report::Entry` hold one
+  `closed_set::unknown::sighting::Sighting`. It has the fields `strata`, `set`, `value`, and
+  `route`. The JSON stays flat. Read `line.sighting.value` where you read `line.value`.
+  - The fields `palette`, `status`, and `error_code` are gone from both, and
+    `Watch::palette_release` is gone. No code of strata wrote them.
+  - `log::FIELDS` has five items. `Sighting::new` is not public, as `Line::new` was not.
+- `closed_set::unknown::Hint`, `closed_set::unknown::Line`, and `closed_set::unknown::Report` are
+  gone. Each type has one path: `closed_set::unknown::hint::Hint`,
+  `closed_set::unknown::log::Line`, and `closed_set::unknown::report::Report`.
+- `closed_set::unknown::send::Step` is `#[non_exhaustive]`. A `match` on it needs a `_` arm.
+- `config::state_dir` is not public. The functions `closed_set::unknown::log::path`,
+  `closed_set::unknown::hint::path`, and `closed_set::unknown::send::answer_path` give the files.
+- `text::code_span` is new. It writes a text as a code span of markdown, with a fence that the text
+  cannot end.
 
 ### For a user of the library of strata-preflight
 

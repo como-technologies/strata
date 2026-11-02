@@ -4,7 +4,7 @@
 //! refuses the rest: another schema, too many entries, and a value that is not a short word. A
 //! request that fails a check gets an error status and a message, and changes nothing.
 
-use strata::closed_set::unknown::Report;
+use strata::closed_set::unknown::report::Report;
 use strata::closed_set::unknown::send::{KEY_HEADER, KEY_LENGTH};
 
 /// The most bytes that the body of a request has. A report has 100 entries at most, and an entry is
@@ -107,7 +107,7 @@ mod tests {
     const JSON: Option<&str> = Some("application/json");
 
     fn entry() -> Value {
-        json!({"strata": "0.26.0", "palette": "4.7.1", "set": "ProfileType", "value": "later",
+        json!({"strata": "0.26.0", "set": "ProfileType", "value": "later",
             "route": "/v1/clusterprofiles/{uid}", "count": 2})
     }
 
@@ -128,14 +128,22 @@ mod tests {
             &report(vec![entry()]),
         )
         .unwrap();
-        assert_eq!(taken.unknown[0].value, "later");
+        assert_eq!(taken.unknown[0].sighting.value, "later");
         assert_eq!(taken.unknown[0].count, 2);
-        let mut bare = entry();
-        bare.as_object_mut().unwrap().remove("palette");
-        assert!(
-            parse(JSON, &report(vec![bare])).is_ok(),
-            "palette, status, and errorCode are optional"
-        );
+    }
+
+    #[test]
+    fn an_entry_with_a_field_that_no_release_of_strata_writes_is_refused_and_the_text_is_not_repeated()
+     {
+        // `palette`, `status`, and `errorCode` were fields of the report that no code of strata wrote
+        for field in ["palette", "status", "errorCode"] {
+            let mut with = entry();
+            with[field] = json!("hunter2");
+            let refused = refusal(JSON, &report(vec![with]));
+            assert_eq!(refused.status, 422, "{field}");
+            assert!(!refused.message.contains("hunter2"), "{refused:?}");
+            assert!(!refused.message.contains(field), "{refused:?}");
+        }
     }
 
     #[test]

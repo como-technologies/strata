@@ -397,14 +397,15 @@ fn a_listing_that_fails_is_a_failure_to_find_and_not_a_missing_object() {
 }
 
 #[test]
-fn a_value_that_a_path_cannot_hold_is_no_subject() {
+fn a_value_with_a_slash_is_one_segment_of_the_path_with_the_escape_of_the_library() {
+    // the run skipped the fact for such a value before. Now it sends what strata sends
     let listing = json!([{"metadata": {"uid": "a/b"}}]);
     let api = MemoryApi::new().with("/v1/dashboard/spectroclusters/meta", listing);
     let probe = subject::Probe::new(&api, &api);
-    assert!(matches!(
+    assert_eq!(
         subject::find(&probe, &facts(), "/v1/spectroclusters/{uid}"),
-        subject::Subject::Missing(_)
-    ));
+        subject::Subject::Path("/v1/spectroclusters/a%2Fb".to_string())
+    );
 }
 
 #[test]
@@ -544,6 +545,34 @@ fn a_placeholder_in_the_query_gets_its_value_from_the_listing_of_the_tenant() {
     assert_eq!(
         found,
         subject::Subject::Path("/v1/clouds/aws/regions?cloudAccountUid=acc1".to_string())
+    );
+}
+
+#[test]
+fn a_placeholder_value_with_a_character_of_a_query_is_escaped_as_the_library_escapes_it() {
+    // a value that a path or a query cannot hold as it is gets the escape of `query_value`, and
+    // the run still asks, where it skipped the fact before
+    let api = MemoryApi::new().with(
+        "/v1/cloudaccounts/aws",
+        json!({"items": [{"metadata": {"uid": "a+b&c d"}}]}),
+    );
+    let probe = subject::Probe::new(&api, &api);
+    let found = subject::find(
+        &probe,
+        &real_facts(),
+        "/v1/clouds/aws/regions?cloudAccountUid={cloudAccountUid}",
+    );
+    assert_eq!(
+        found,
+        subject::Subject::Path(format!(
+            "/v1/clouds/aws/regions?cloudAccountUid={}",
+            strata::text::query_value("a+b&c d")
+        ))
+    );
+    assert_eq!(
+        strata::text::query_value("a+b&c d"),
+        "a%2Bb%26c%20d",
+        "the escape is the one of the library"
     );
 }
 

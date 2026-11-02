@@ -600,7 +600,7 @@ read the issues, the script stops with exit `2` before the first send.
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `send-1`, `send-1-says`, `send-1-marked` | 0 | #397: a run with `STRATA_REPORT=1` exits as a run with no send, says that it sent the report, and marks the line as sent. Each check passes. |
-| `issue`, `issue-new` | 0 | #397: one issue of the label `palette-drift` holds the marker of the value, and its first send gives the count 1. The endpoint answers 202 and then writes the issue, so the script waits for it. The check `issue` passes. The check `issue-new` runs only when the first send opens the issue. In the run of the fix, the issue was open already. The run that opened it had 3 lines after its three counted reports, so its first send counted 1. |
+| `issue`, `issue-new` | 0 | #397, #574: one issue of the label `unknown-value` holds the marker of the value, and its first send gives the count 1. The endpoint answers 202 and then writes the issue, so the script waits for it. The check `issue-new` runs only when the first send opens the issue. No result yet: the endpoint had the label `palette-drift` until #574. |
 | `send-2`, `issue-2` | 0 | #397: a second run posts the report again. Still one issue holds the value, and its count grew by one. Each check passes. |
 | `repeat-1` | 0 | #552: the endpoint takes a report with a key and answers 202 before it writes the issue. The service keeps the CPU after the answer, so the issue changes. The check passes: the endpoint answers 202 before it writes. |
 | `repeat-2`, `repeat-count` | 0 | #552: the same report with the same key gets 200 and `duplicate`, and the issue counts the report one time. Each check passes: the same report with the same key counts one time. |

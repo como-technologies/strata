@@ -584,12 +584,19 @@ fn answers() -> Vec<Vec<u8>> {
 
 // ---- the report ------------------------------------------------------------------------------
 
-/// A report as `strata report --json` writes it, and the bodies that the endpoint refuses.
-const REPORT_CASES: [&str; 11] = [
+/// A report as `strata report --json` writes it, and the bodies that the endpoint refuses. The
+/// fields `palette`, `status`, and `errorCode` were in the report of release 0.27.0, and the check
+/// refuses them now.
+const REPORT_CASES: [&str; 16] = [
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"ProfileType","value":"later-type","route":"/v1/clusterprofiles/{uid}","count":2}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"PackState","value":"retired","route":"/v1/packs","count":1},{"strata":"0.27.0","set":"PackState","value":"retired","route":"/v1/packs","count":3}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"OciProvider","value":"oras","route":"/v1/registries/oci/summary","count":1},{"strata":"0.26.1","set":"ProfileType","value":"later-type","route":"/v1/dashboard/clusterprofiles/metadata","count":7}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.27.0-rc.1","set":"PackState","value":"x","route":"/v1/packs","count":1}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.28.0","set":"PackState","value":"two words","route":"/v1/packs","count":1}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.28.0","set":"PackState","value":"retired","route":"/v1/packs","count":2},{"strata":"0.28.0","set":"OciProvider","value":"retired","route":"/v1/registries/oci/summary","count":1}]}"#,
     r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","palette":"4.7.1","set":"ProfileType","value":"later-type","route":"/v1/clusterprofiles/{uid}","count":2}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"PackState","value":"retired","route":"/v1/packs","status":409,"errorCode":"PackGone","count":1},{"strata":"0.27.0","set":"PackState","value":"retired","route":"/v1/packs","count":3}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","palette":"4.7.1","set":"OciProvider","value":"oras","route":"/v1/registries/oci/summary","status":404,"errorCode":"RegistryNotFound","count":1},{"strata":"0.26.1","set":"ProfileType","value":"later-type","route":"/v1/dashboard/clusterprofiles/metadata","count":7}]}"#,
-    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.27.0-rc.1","palette":"4.8.0","set":"PackState","value":"x","route":"/v1/packs","count":1}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","palette":"4.7.1","set":"OciProvider","value":"oras","route":"/v1/registries/oci/summary","status":404,"errorCode":"RegistryNotFound","count":1}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"PackState","value":"pending\u200b","route":"/v1/packs","count":1}]}"#,
     r#"{"schema":"strata-report/1","unknown":[]}"#,
     r#"{"schema":"strata-report/2","unknown":[{"strata":"0.26.0","set":"S","value":"v","route":"/v1/packs","count":1}]}"#,
     r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"S","value":"v","route":"/v1/packs","count":1,"uid":"64f0a1b2c3d4e5f6a7b8c9d0"}]}"#,

@@ -98,7 +98,7 @@ Treat `2` as a failed job. It never means "no change".
 | `--format json`, `--json` | A JSON document for a script. |
 | `--compact` | The JSON on one line. |
 | `--color auto\|always\|never`, `--no-color` | Color of the terminal text. |
-| `-q`, `--quiet` | No progress messages on standard error. |
+| `-q`, `--quiet` | No progress messages on standard error, no note of an unknown value, and no warning of the send. |
 
 [Report formats](../reference/formats.md) and
 [JSON documents](../reference/documents.md) describe each output.

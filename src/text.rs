@@ -2,7 +2,7 @@
 //!
 //! - A phrase from a list of names, and the name of an object.
 //! - A long text cut to a length.
-//! - A mark for an empty text, and a text in a cell of a markdown table.
+//! - A mark for an empty text, a text in a cell of a markdown table, and a text in a code span.
 //! - A JSON Schema as text, with its descriptions in plain words.
 //!
 //! `strata-preflight` calls the public ones, so both tools write each of these in one way.
@@ -123,6 +123,23 @@ pub fn markdown_cell(s: &str) -> String {
     s.replace('|', "\\|").replace('\n', " ")
 }
 
+/// `text` as a code span of markdown. The fence is longer than each run of backticks in the text,
+/// so a value cannot end the span.
+///
+/// [`markdown_cell`] writes the text, so a value cannot end a cell or a row of a table either.
+/// Each issue and each report that shows a value of an unknown set writes the value here, so the
+/// value has one form in both.
+pub fn code_span(text: &str) -> String {
+    let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
+    let fence = "`".repeat(longest + 1);
+    let pad = if text.starts_with('`') || text.ends_with('`') {
+        " "
+    } else {
+        ""
+    };
+    format!("{fence}{pad}{}{pad}{fence}", markdown_cell(text))
+}
+
 /// `text` as a value in a query string: each byte that is not a letter, a digit, or one of
 /// `-._~:` becomes `%XX`, so a time with `+00:00` keeps its `+`.
 ///
@@ -221,6 +238,24 @@ mod tests {
         assert_eq!(markdown_cell("a|b"), "a\\|b");
         assert_eq!(markdown_cell("first\nsecond"), "first second");
         assert_eq!(markdown_cell("plain"), "plain");
+    }
+
+    #[test]
+    fn a_code_span_has_a_fence_longer_than_each_run_of_backticks_in_the_text() {
+        assert_eq!(code_span("later"), "`later`");
+        assert_eq!(code_span("late`r"), "``late`r``");
+        assert_eq!(code_span("late``r"), "```late``r```");
+        // a backtick at an end needs a space, or it joins the fence
+        assert_eq!(code_span("`later"), "`` `later ``");
+        assert_eq!(code_span("later`"), "`` later` ``");
+        assert_eq!(code_span("`"), "`` ` ``");
+        assert_eq!(code_span(""), "``");
+    }
+
+    #[test]
+    fn a_code_span_holds_no_bar_and_no_line_break() {
+        assert_eq!(code_span("a|b"), "`a\\|b`");
+        assert_eq!(code_span("first\nsecond"), "`first second`");
     }
 
     #[test]

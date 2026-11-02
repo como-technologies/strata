@@ -532,3 +532,29 @@ fn a_report_that_fails_in_the_middle_leaves_the_mark_after_the_reports_that_were
     expected.push(10);
     assert_eq!(entries_of(&taking), expected);
 }
+
+#[test]
+fn a_later_release_can_add_a_step_or_a_choice_so_a_match_outside_the_library_needs_a_wildcard() {
+    use strata::closed_set::unknown::send::{Choice, Facts, Step, step};
+    // without `#[non_exhaustive]` the wildcard arms are unreachable, and `just lint` refuses them
+    let facts = Facts {
+        setting: Some("1".to_string()),
+        answer: None,
+        endpoint: Some("http://127.0.0.1:9/".to_string()),
+        wrote: true,
+        in_ci: false,
+        terminal: false,
+    };
+    let sends = match step(&facts) {
+        Step::Send => true,
+        Step::Nothing | Step::Ask => false,
+        _ => false,
+    };
+    assert!(sends);
+    let yes = match Choice::Yes {
+        Choice::Yes => true,
+        Choice::No => false,
+        _ => false,
+    };
+    assert!(yes);
+}

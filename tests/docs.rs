@@ -2450,15 +2450,17 @@ fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for()
             assert!(none(row), "{row}");
         }
     };
-    for check in [
-        "`send-1`",
-        "`issue`",
-        "`send-2`",
-        "`repeat-1`",
-        "`repeat-2`",
-    ] {
+    for check in ["`send-1`", "`send-2`", "`repeat-1`", "`repeat-2`"] {
         has_result("## report-send.sh", &format!("| {check}"));
     }
+    // #574 gave the endpoint a label of its own, so the check `issue` waits for a live run with it
+    let send = section(&page, "## report-send.sh", Some("\n## "));
+    let issue = send
+        .lines()
+        .find(|l| l.starts_with("| `issue`"))
+        .expect("report-send.sh has no row for issue");
+    assert!(!none(issue), "{issue}");
+    assert!(issue.contains("`unknown-value`"), "{issue}");
     has_result("## fleet.sh", "| `filters-project`");
     has_result("## loop.sh", "| `report-log`");
     assert!(
@@ -2745,10 +2747,6 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_13_named_keeps_to_25_wo
             "A watch with no log shows no hint",
         ),
         ("src/closed_set/unknown/hint.rs", "When and where the hint"),
-        (
-            "src/closed_set/unknown/log.rs",
-            "comes from an answer of status 2xx",
-        ),
         ("src/ops/report.rs", "This function only reads."),
         ("src/ops/report.rs", "The address of a new issue of strata."),
         ("src/snapshot/pack.rs", "Build one pack from its ref"),

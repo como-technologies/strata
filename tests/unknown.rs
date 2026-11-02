@@ -98,10 +98,10 @@ fn each_run_adds_one_line_to_the_log_in_the_state_folder_also_with_quiet() {
     let line = &lines[0];
     assert_eq!(line, &lines[1]);
     assert_eq!(line.schema, SCHEMA);
-    assert_eq!(line.strata, strata::TOOL_VERSION);
-    assert_eq!(line.set, "ProfileType");
-    assert_eq!(line.value, LATER_TYPE);
-    assert_eq!(line.route, "/v1/clusterprofiles/{uid}");
+    assert_eq!(line.sighting.strata, strata::TOOL_VERSION);
+    assert_eq!(line.sighting.set, "ProfileType");
+    assert_eq!(line.sighting.value, LATER_TYPE);
+    assert_eq!(line.sighting.route, "/v1/clusterprofiles/{uid}");
 }
 
 #[test]
@@ -183,7 +183,7 @@ fn a_watch_on_a_read_of_the_library_logs_the_route_template_and_no_uid() {
     drop(watching);
     let lines = lines_of(&file);
     assert_eq!(lines.len(), 1, "{lines:?}");
-    assert_eq!(lines[0].route, "/v1/clusterprofiles/{uid}");
+    assert_eq!(lines[0].sighting.route, "/v1/clusterprofiles/{uid}");
     let text = std::fs::read_to_string(&file).unwrap();
     assert!(
         !text.contains(UID_A) && !text.contains("payments-prod"),

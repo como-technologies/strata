@@ -17,7 +17,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use super::Report;
+use super::report::Report;
 use crate::BOOK_URL;
 use crate::closed_set::impl_texts;
 use crate::config::{in_ci, setting, state_dir};
@@ -67,7 +67,10 @@ pub const KEY_HEADER: &str = "Idempotency-Key";
 pub const KEY_LENGTH: usize = 64;
 
 /// The choice of the user: the text of the setting, and the text in the file of the answer.
+///
+/// A later release can add a choice, so a `match` outside this crate needs a wildcard arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Choice {
     /// Send the report.
     Yes,
@@ -81,7 +84,10 @@ impl_texts!(pub Choice {
 });
 
 /// What the end of a run does about the send.
+///
+/// A later release can add a step, so a `match` outside this crate needs a wildcard arm.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Step {
     /// Do nothing.
     Nothing,

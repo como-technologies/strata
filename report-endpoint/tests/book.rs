@@ -1,15 +1,13 @@
 //! The page of the book about the endpoint states what the code does: the settings that the
 //! service reads, and the limits that it keeps.
 
-use std::path::Path;
-
 use strata_report_endpoint::server::{
     MOST_AT_ONCE, NEW_ISSUES_PER_HOUR, REQUESTS_PER_HOUR, WRITES_PER_HOUR,
 };
 
-fn read(path: &str) -> String {
-    std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap()
-}
+mod common;
+
+use common::read;
 
 fn page() -> String {
     read("../docs/src/development/report-endpoint.md")
@@ -26,7 +24,8 @@ fn section<'a>(page: &'a str, heading: &str) -> &'a str {
 }
 
 /// The names of the variables that `settings.rs` reads: each quoted word of capital letters and
-/// underscores before the tests.
+/// underscores before the tests. A `CARGO_` variable is read when the crate builds, so it is not a
+/// setting of the service.
 fn variables_of_the_code() -> Vec<String> {
     let source = read("src/settings.rs");
     let code = source.split("#[cfg(test)]").next().unwrap();
@@ -34,6 +33,7 @@ fn variables_of_the_code() -> Vec<String> {
         .skip(1)
         .step_by(2)
         .filter(|word| word.len() > 2 && word.chars().all(|c| c.is_ascii_uppercase() || c == '_'))
+        .filter(|word| !word.starts_with("CARGO_"))
         .map(str::to_string)
         .collect()
 }

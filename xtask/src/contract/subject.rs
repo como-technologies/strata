@@ -16,6 +16,7 @@ use strata::api::{PaletteApi, RawCluster};
 use strata::error::Error;
 use strata::json::str_at;
 use strata::model::validation::PaletteRefusal;
+use strata::text::query_value;
 
 use crate::facts::{Fact, Scope};
 
@@ -369,13 +370,6 @@ fn value<A: PaletteApi>(
             source.read.lacks()
         )));
     }
-    if !found
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || "-._~:".contains(c))
-    {
-        return Err(missing(format!(
-            "the value for `{{{param}}}` has a character that a path cannot hold"
-        )));
-    }
-    Ok(found.to_string())
+    // the library escapes a value of a route as this call does, so the run sends what strata sends
+    Ok(query_value(found))
 }

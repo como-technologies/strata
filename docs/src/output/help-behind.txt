@@ -15,5 +15,5 @@ Options:
       --color [<COLOR>]  Color the report: auto, always, or never [default: auto]
       --no-color         The same as --color=never
       --compact          Write the JSON on one line
-  -q, --quiet            No progress messages
+  -q, --quiet            No progress messages, no note of an unknown value, and no warning of the send
   -h, --help             Print help
