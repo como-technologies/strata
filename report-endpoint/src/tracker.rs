@@ -197,10 +197,18 @@ impl Tracker for GitHub {
                 }
             }
             if items.len() < PAGE {
-                break;
+                return Ok(found);
             }
         }
-        Ok(found)
+        // the last page was full: an issue of a value can be beyond it, and a merge that does not
+        // find it would open a second issue
+        Err(TrackerError {
+            message: format!(
+                "list the issues: more than {} issues have the label {}",
+                MOST_PAGES * PAGE,
+                self.label
+            ),
+        })
     }
 
     fn open(&mut self, title: &str, body: &str) -> Result<u64, TrackerError> {

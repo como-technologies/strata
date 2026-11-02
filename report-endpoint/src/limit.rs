@@ -43,9 +43,9 @@ impl Limiter {
     pub fn allow(&mut self, sender: &str, cost: usize, now: Instant) -> Result<(), Duration> {
         let key = self.salt.hash_one(sender);
         if self.seen.len() >= MOST_SENDERS && !self.seen.contains_key(&key) {
-            self.forget_expired(now);
+            let wait = self.forget_expired(now);
             if self.seen.len() >= MOST_SENDERS {
-                return Err(self.span);
+                return Err(wait.unwrap_or(self.span));
             }
         }
         let span = self.span;
@@ -71,14 +71,20 @@ impl Limiter {
         Ok(())
     }
 
-    /// Drop each sender whose requests are all older than the span.
-    fn forget_expired(&mut self, now: Instant) {
+    /// Drop each sender whose requests are all older than the span. Gives the time until the
+    /// first of the others is free, or `None` when no sender is left.
+    fn forget_expired(&mut self, now: Instant) -> Option<Duration> {
         let span = self.span;
         self.seen.retain(|_, spent| {
             spent
                 .back()
                 .is_some_and(|at| now.duration_since(*at) < span)
         });
+        self.seen
+            .values()
+            .filter_map(|spent| spent.back())
+            .map(|at| (*at + span).saturating_duration_since(now))
+            .min()
     }
 
     /// How many senders the limiter holds.
@@ -134,6 +140,22 @@ mod tests {
             "only one request is left"
         );
         assert!(limiter.allow("all", 1, now).is_ok());
+    }
+
+    #[test]
+    fn a_new_sender_of_a_full_table_waits_for_the_first_sender_to_be_free_and_no_longer() {
+        let mut limiter = Limiter::new(1, HOUR);
+        let start = Instant::now();
+        limiter.allow("first", 1, start).unwrap();
+        for n in 1..MOST_SENDERS {
+            limiter
+                .allow(&format!("sender-{n}"), 1, start + Duration::from_secs(600))
+                .unwrap();
+        }
+        let wait = limiter
+            .allow("one-more", 1, start + Duration::from_secs(700))
+            .unwrap_err();
+        assert_eq!(wait, HOUR - Duration::from_secs(700));
     }
 
     #[test]

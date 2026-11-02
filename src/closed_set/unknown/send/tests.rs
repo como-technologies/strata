@@ -109,7 +109,32 @@ fn the_setting_one_with_no_endpoint_sends_nothing_and_names_the_setting_that_giv
     assert_eq!(step(&facts), Step::Nothing);
     assert_eq!(
         facts.complaint().unwrap(),
-        "STRATA_REPORT is 1, and this release names no endpoint: set STRATA_REPORT_URL"
+        "the send of the report is on, and this release names no endpoint: set STRATA_REPORT_URL"
+    );
+    // the answer of yes is the same choice as the setting 1
+    let saved = Facts {
+        endpoint: None,
+        answer: Some(Choice::Yes),
+        ..first_run()
+    };
+    assert_eq!(step(&saved), Step::Nothing);
+    assert_eq!(saved.complaint(), facts.complaint());
+    // the answer of no, and the setting 0 over a saved yes, have nothing to complain about
+    assert_eq!(
+        Facts {
+            answer: Some(Choice::No),
+            ..saved.clone()
+        }
+        .complaint(),
+        None
+    );
+    assert_eq!(
+        Facts {
+            setting: Some("0".into()),
+            ..saved
+        }
+        .complaint(),
+        None
     );
     // with no setting there is nothing to complain about: strata asks nothing and sends nothing
     assert_eq!(

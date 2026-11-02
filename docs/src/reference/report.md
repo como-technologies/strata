@@ -106,15 +106,15 @@ environment has priority. See [Settings](./settings.md).
 | `STRATA_REPORT_URL` | The address of the endpoint. The default is the endpoint of the maintainers, when your release names one. |
 
 Strata reads no other value of `STRATA_REPORT`. Any other value sends nothing, and strata prints a
-warning. The value `1` also sends nothing when your release names no endpoint and `STRATA_REPORT_URL`
-is not set. Strata prints a warning then too. A run of `strata preflight --offline` reads nothing
+warning. The value `1`, and an answer of yes, also send nothing when your release names no endpoint and
+`STRATA_REPORT_URL` is not set. Strata prints a warning then too. A run of `strata preflight --offline` reads nothing
 from Palette, so it writes no line and sends nothing.
 
 ### The question
 
 When no setting and no answer exist, a run in a terminal asks one question. It asks at the end of
-the first run that wrote a line to the log. The question starts with the words Keep strata informed. It names the page of the book that says
-what the send holds. It ends with `[y/N]`.
+the first run that wrote a line to the log. The question starts with the words Keep strata
+informed. It names the page of the book that says what the send holds. It ends with `[y/N]`.
 
 The default answer is no. Strata keeps your answer in the file `strata-unknown.answer` of the
 [state folder](#the-files), and it never asks again. The setting `STRATA_REPORT` has priority over
@@ -127,24 +127,26 @@ is not a terminal. The run has `--quiet` or `STRATA_QUIET`. Or the release names
 ### What a run sends
 
 At the end of a run that wrote a line, strata posts the report of the lines that you did not mark
-as sent. The report is the document `strata-report/1` that `strata report --json`
-prints, and nothing else. The post has one try and a timeout of 3 seconds. The run prints its
-output first, so a slow endpoint delays no output.
+as sent. The report is the document `strata-report/1` that `strata report --json` prints, and
+nothing else. The post has one try and a timeout of 3 seconds. The run prints its output first, so
+a slow endpoint delays no output.
 
 ```text
 {{#include ../output/unknown-value-send.txt}}
 ```
 
-When the endpoint takes the report, strata marks the lines as sent. The next report holds only the
-lines that came after:
+When the endpoint takes the report, strata marks the lines as sent. The endpoint takes 100 entries
+in a report, so a long log goes in more than one report. Strata marks the lines of each report that
+the endpoint took. The next report holds only the lines that came after:
 
 ```text
 {{#include ../output/unknown-value-send-marked.txt}}
 ```
 
-A send never changes the output or the exit code of a run. When it fails, strata marks nothing and
-writes a warning, such as `strata: warning: could not send the report to <address>: <reason>`.
-`--quiet` hides the warning. The next send holds the lines again.
+A send never changes the output or the exit code of a run. When a report fails, strata marks no
+line of it. Strata writes a warning, such as
+`strata: warning: could not send the report to <address>: <reason>`. `--quiet` hides the warning.
+The next send holds those lines again.
 
 ## What the endpoint keeps
 

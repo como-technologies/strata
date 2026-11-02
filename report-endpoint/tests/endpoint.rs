@@ -143,11 +143,17 @@ fn github_answer(state: &mut GitHubState, method: &str, url: &str, body: &Value)
 
 /// Start the real service against the stand-in. Gives the address of the service.
 fn start_service(github: &str) -> String {
+    start_service_behind(github, false)
+}
+
+/// Start the real service. With `proxy`, it reads the sender from `X-Forwarded-For`, as it does
+/// behind the front end of Cloud Run.
+fn start_service_behind(github: &str, proxy: bool) -> String {
     let tracker = GitHub::new(github, "o/r", TOKEN, "palette-drift", Some("Backlog"));
     let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").unwrap());
     let address = format!("http://{}/", server.server_addr().to_ip().unwrap());
     let service = Arc::new(Mutex::new(Service::new(tracker)));
-    std::thread::spawn(move || serve(&server, &service));
+    std::thread::spawn(move || serve(&server, &service, proxy));
     address
 }
 
@@ -386,4 +392,87 @@ fn the_report_of_the_send_of_strata_passes_the_check_of_the_endpoint_for_each_se
     )
     .unwrap();
     post(&service, &Report::of(&lines)).unwrap();
+}
+
+/// A POST of `body` that says in `X-Forwarded-For` that it comes from `address`. Gives the status.
+fn post_from(service: &str, address: &str, body: &str) -> u16 {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .build()
+        .into();
+    agent
+        .post(service)
+        .header("X-Forwarded-For", address)
+        .content_type("application/json")
+        .send(body)
+        .unwrap()
+        .status()
+        .as_u16()
+}
+
+#[test]
+fn a_service_that_no_proxy_fronts_ignores_the_forwarded_header_and_limits_the_connection() {
+    let (github, _) = stand_in_github();
+    let service = start_service(&github);
+    let text = report_text(&[entry("later", 1)]);
+    // a client that sends a new address with each request is still one sender
+    let statuses: Vec<u16> = (0..11)
+        .map(|n| post_from(&service, &format!("203.0.113.{n}"), &text))
+        .collect();
+    assert_eq!(&statuses[..10], [200; 10]);
+    assert_eq!(statuses[10], 429, "{statuses:?}");
+}
+
+#[test]
+fn a_service_behind_the_proxy_limits_each_address_that_the_proxy_names_by_its_last_entry() {
+    let (github, _) = stand_in_github();
+    let service = start_service_behind(&github, true);
+    let text = report_text(&[entry("later", 1)]);
+    // the sender writes the first entry, and the proxy adds the true address at the end
+    for n in 0..11 {
+        let header = format!("198.51.100.{n}, 203.0.113.9");
+        let status = post_from(&service, &header, &text);
+        if n < 10 {
+            assert_eq!(status, 200, "{header}");
+        } else {
+            assert_eq!(status, 429, "the 11th request of 203.0.113.9: {header}");
+        }
+    }
+    // another true address has its own limit
+    assert_eq!(
+        post_from(&service, "198.51.100.1, 203.0.113.10", &text),
+        200
+    );
+}
+
+#[test]
+fn more_issues_than_the_service_reads_give_502_and_no_second_issue_for_the_value() {
+    let (github, state) = stand_in_github();
+    {
+        let mut state = state.lock().unwrap();
+        for number in 1..=1000 {
+            state.issues.push(Stored {
+                number,
+                title: format!("issue {number}"),
+                body: format!("<!-- strata-contract: {number} -->"),
+                labels: vec!["palette-drift".into()],
+                milestone: None,
+                state: "open",
+                pull_request: false,
+            });
+        }
+    }
+    let service = start_service(&github);
+    let (status, _) = raw_post(
+        &service,
+        "application/json",
+        &report_text(&[entry("later", 1)]),
+    );
+    assert_eq!(status, 502);
+    assert_eq!(
+        writes(&state),
+        0,
+        "the service opened no issue it could not find again"
+    );
+    assert_eq!(state.lock().unwrap().issues.len(), 1000);
 }

@@ -31,6 +31,17 @@ The answer is JSON: `{"ok":true,"opened":1,"updated":0}`, or `{"error":"..."}`. 
 error never repeats a value of the body. A failure of the tracker goes to standard error with no
 address, and the sender gets a short sentence.
 
+The merge is not atomic. When the tracker fails in the middle of a report, the issues written so
+far stay, and the sender sends the report again. The retry can count a report twice. The counts
+show how often a value comes, and they are not exact.
+
+The service reads at most 1000 issues of the label. When the label has more, the service answers
+502 and logs the cause. It does not open a second issue for a value that it cannot find. Close the
+issues of values that a release of strata names, or move them out of the label.
+
+Cloud Run takes 8 requests at a time for the one instance, so the service has 8 threads at most. A
+request reads its body in a thread of its own, and the rules run one at a time.
+
 ## The issue of a value
 
 A set and a value have one issue. Its first line is a marker:
@@ -76,10 +87,11 @@ Cloud Run sets the variables of the service. Only the token is required.
 | `GITHUB_API` | `https://api.github.com` | The address of the API. A test points it at a stand-in. |
 | `REPORT_LABEL` | `palette-drift` | The label of each issue. |
 | `REPORT_MILESTONE` | `Backlog` | The milestone of a new issue, when the repository has it open. An empty value is no milestone. |
+| `TRUST_FORWARDED_FOR` | not set | `1` reads the sender from the last entry of `X-Forwarded-For`. The deploy sets it, because the front end of Cloud Run adds that entry. |
 | `PORT` | `8080` | The port. Cloud Run sets it. |
 
-The service reads the sender from the last entry of `X-Forwarded-For`, which the front end of
-Cloud Run adds. A request without the header gets the address of its connection.
+Without `TRUST_FORWARDED_FOR=1`, the service uses the address of the connection. A client can send
+`X-Forwarded-For` to a service that no proxy fronts, and the limit of the rate would not hold.
 
 ## The settings of the service
 

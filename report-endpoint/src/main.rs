@@ -36,6 +36,10 @@ fn main() -> ExitCode {
         "strata-report-endpoint: listening on port {}, for {}",
         settings.port, settings.repository
     );
-    serve(&server, &Arc::new(Mutex::new(Service::new(tracker))));
+    serve(
+        &server,
+        &Arc::new(Mutex::new(Service::new(tracker))),
+        settings.trust_forwarded,
+    );
     ExitCode::SUCCESS
 }

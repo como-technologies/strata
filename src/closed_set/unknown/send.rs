@@ -114,23 +114,27 @@ impl Facts {
         }
     }
 
-    /// What the user must hear when the setting cannot do what it says, or `None`. A run that
+    /// What the user must hear when the choice cannot do what it says, or `None`. A run that
     /// wrote no line has nothing to send, so it says nothing. The caller prints the text as a
     /// warning.
     ///
-    /// A setting that is neither `1` nor `0` sends nothing. The setting `1` sends nothing when
-    /// the release names no endpoint and [`ADDRESS_SETTING`] is not set.
+    /// A setting that is neither `1` nor `0` sends nothing. A choice of yes, by the setting `1`
+    /// or by the answer, sends nothing when the release names no endpoint and [`ADDRESS_SETTING`]
+    /// is not set.
     pub fn complaint(&self) -> Option<String> {
         if !self.wrote {
             return None;
         }
-        match self.setting.as_deref().map(Choice::from_text) {
-            Some(None) => Some(format!("{SETTING} must be 1 or 0, so strata sends nothing")),
-            Some(Some(Choice::Yes)) if self.endpoint.is_none() => Some(format!(
-                "{SETTING} is 1, and this release names no endpoint: set {ADDRESS_SETTING}"
-            )),
-            _ => None,
-        }
+        let choice = match &self.setting {
+            Some(text) => match Choice::from_text(text) {
+                Some(choice) => Some(choice),
+                None => return Some(format!("{SETTING} must be 1 or 0, so strata sends nothing")),
+            },
+            None => self.answer,
+        };
+        (choice == Some(Choice::Yes) && self.endpoint.is_none()).then(|| {
+            format!("the send of the report is on, and this release names no endpoint: set {ADDRESS_SETTING}")
+        })
     }
 }
 

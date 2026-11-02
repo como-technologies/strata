@@ -330,10 +330,66 @@ fn the_setting_one_with_no_address_of_an_endpoint_sends_nothing_and_says_what_to
     assert_eq!(run.code, 0, "{}", run.err);
     assert!(
         run.err.contains(
-            "strata: warning: STRATA_REPORT is 1, and this release names no endpoint: set STRATA_REPORT_URL"
+            "strata: warning: the send of the report is on, and this release names no endpoint: set STRATA_REPORT_URL"
         ),
         "{}",
         run.err
     );
     assert!(!run.err.contains("could not send"), "{}", run.err);
+}
+
+/// Write a log of `count` lines, each a value of its own, and give its path.
+fn long_log(home: &Path, count: usize) -> std::path::PathBuf {
+    let file = log_in(home);
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    let lines: String = (0..count)
+        .map(|n| {
+            format!(
+                "{}\n",
+                json!({"schema": "strata-unknown/1", "strata": strata::TOOL_VERSION,
+                    "set": "ProfileType", "value": format!("later-{n:03}"), "route": "/v1/packs"})
+            )
+        })
+        .collect();
+    std::fs::write(&file, lines).unwrap();
+    file
+}
+
+/// How many entries each request of `endpoint` holds.
+fn entries_of(endpoint: &Endpoint) -> Vec<usize> {
+    endpoint
+        .requests()
+        .iter()
+        .map(|r| r.json()["unknown"].as_array().unwrap().len())
+        .collect()
+}
+
+#[test]
+fn a_log_of_more_than_100_entries_goes_in_more_than_one_report_and_each_report_marks_its_lines() {
+    let endpoint = Endpoint::answering(Answer::Status(200));
+    let home = tempfile::tempdir().unwrap();
+    let log = long_log(home.path(), 250);
+    strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
+    assert_eq!(entries_of(&endpoint), [100, 100, 50]);
+    let sent = std::fs::read_to_string(state_in(home.path()).join(SENT_FILE)).unwrap();
+    assert_eq!(sent.trim(), "250");
+    // nothing is left, so a second send posts nothing
+    strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
+    assert_eq!(endpoint.requests().len(), 3);
+}
+
+#[test]
+fn a_report_that_fails_in_the_middle_leaves_the_mark_after_the_reports_that_were_taken() {
+    let failing = Endpoint::answering(Answer::Statuses(&[200, 500]));
+    let home = tempfile::tempdir().unwrap();
+    let log = long_log(home.path(), 250);
+    let error = strata::ops::send_unknown_report(&log, &failing.url).unwrap_err();
+    assert_eq!(error.kind(), "report-send");
+    assert_eq!(entries_of(&failing), [100, 100], "the second report failed");
+    let sent = std::fs::read_to_string(state_in(home.path()).join(SENT_FILE)).unwrap();
+    assert_eq!(sent.trim(), "100", "only the first report was taken");
+    // the next send holds the 150 lines that are left
+    let taking = Endpoint::answering(Answer::Status(200));
+    strata::ops::send_unknown_report(&log, &taking.url).unwrap();
+    assert_eq!(entries_of(&taking), [100, 50]);
 }

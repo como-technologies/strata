@@ -146,13 +146,17 @@ impl<T: Tracker> Service<T> {
     }
 }
 
-/// The address of the sender of `request`: the last entry of `X-Forwarded-For`, which the front
-/// end of Cloud Run adds, or the address of the connection.
-fn sender_of(request: &tiny_http::Request) -> String {
+/// The address of the sender of `request`: with `trust_forwarded`, the last entry of
+/// `X-Forwarded-For`, which the front end of Cloud Run adds, or else the address of the connection.
+///
+/// A client can send `X-Forwarded-For` to a service that no proxy fronts, and then each request
+/// would have a sender of its own. So a service reads the header only when its settings say that a
+/// proxy sets it.
+fn sender_of(request: &tiny_http::Request, trust_forwarded: bool) -> String {
     let forwarded = request
         .headers()
         .iter()
-        .find(|header| header.field.equiv("X-Forwarded-For"))
+        .find(|header| trust_forwarded && header.field.equiv("X-Forwarded-For"))
         .and_then(|header| header.value.as_str().rsplit(',').next())
         .map(|last| last.trim().to_string())
         .filter(|last| !last.is_empty());
@@ -174,8 +178,12 @@ fn header_of(request: &tiny_http::Request, name: &'static str) -> Option<String>
 }
 
 /// Read one request, ask the service, and write the answer.
-fn respond<T: Tracker>(mut request: tiny_http::Request, service: &Mutex<Service<T>>) {
-    let sender = sender_of(&request);
+fn respond<T: Tracker>(
+    mut request: tiny_http::Request,
+    service: &Mutex<Service<T>>,
+    trust_forwarded: bool,
+) {
+    let sender = sender_of(&request, trust_forwarded);
     let content_type = header_of(&request, "Content-Type");
     let method = request.method().as_str().to_string();
     let path = request.url().split('?').next().unwrap_or("/").to_string();
@@ -227,15 +235,18 @@ fn respond<T: Tracker>(mut request: tiny_http::Request, service: &Mutex<Service<
 
 /// Answer the requests of `server` until `server` is unblocked.
 ///
-/// Each request runs in a thread of its own, so a sender that reads slowly holds no one else. The
-/// rules run one at a time, under the lock of `service`.
+/// Each request runs in a thread of its own, so a sender that reads slowly holds no one else. Cloud
+/// Run limits how many requests the instance takes at the same time, so the threads have a bound.
+/// The rules run one at a time, under the lock of `service`. `trust_forwarded` is the setting of
+/// the same name: see [`crate::settings::Settings`].
 pub fn serve<T: Tracker + Send + 'static>(
     server: &Arc<tiny_http::Server>,
     service: &Arc<Mutex<Service<T>>>,
+    trust_forwarded: bool,
 ) {
     for request in server.incoming_requests() {
         let service = Arc::clone(service);
-        std::thread::spawn(move || respond(request, &service));
+        std::thread::spawn(move || respond(request, &service, trust_forwarded));
     }
 }
 

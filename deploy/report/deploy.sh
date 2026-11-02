@@ -70,7 +70,7 @@ run gcloud builds submit --project "$project" --config deploy/report/cloudbuild.
   --substitutions "_IMAGE=$image" .
 run gcloud run deploy "$service" --project "$project" --region "$region" --image "$image" \
   --allow-unauthenticated --max-instances 1 --concurrency 8 --cpu 1 --memory 256Mi --timeout 60 \
-  --set-secrets "GITHUB_TOKEN=$secret:latest" --set-env-vars "GITHUB_REPOSITORY=$repository"
+  --set-secrets "GITHUB_TOKEN=$secret:latest" --set-env-vars "GITHUB_REPOSITORY=$repository,TRUST_FORWARDED_FOR=1"
 
 # The request log of Cloud Run holds the address of each sender. The endpoint keeps no address, so
 # the log is not kept either: an exclusion of the default sink drops it. The exclusion names the

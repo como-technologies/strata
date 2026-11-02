@@ -39,6 +39,10 @@ pub struct Settings {
     pub label: String,
     /// The milestone of a new issue: `REPORT_MILESTONE`. An empty value is no milestone.
     pub milestone: Option<String>,
+    /// True when the service reads the sender from `X-Forwarded-For`: `TRUST_FORWARDED_FOR=1`.
+    /// Only a service behind the front end of Cloud Run sets it, because a client can send the header
+    /// to a service that is not behind a proxy.
+    pub trust_forwarded: bool,
 }
 
 // Written by hand: a derived `Debug` would print the token.
@@ -51,6 +55,7 @@ impl fmt::Debug for Settings {
             .field("api", &self.api)
             .field("label", &self.label)
             .field("milestone", &self.milestone)
+            .field("trust_forwarded", &self.trust_forwarded)
             .finish()
     }
 }
@@ -82,6 +87,7 @@ impl Settings {
             api: get("GITHUB_API").unwrap_or_else(|| DEFAULT_API.into()),
             label: get("REPORT_LABEL").unwrap_or_else(|| DEFAULT_LABEL.into()),
             milestone,
+            trust_forwarded: get("TRUST_FORWARDED_FOR").is_some_and(|text| text == "1"),
         })
     }
 }
@@ -116,6 +122,10 @@ mod tests {
         assert_eq!(settings.api, "https://api.github.com");
         assert_eq!(settings.label, "palette-drift");
         assert_eq!(settings.milestone.as_deref(), Some("Backlog"));
+        assert!(
+            !settings.trust_forwarded,
+            "the header is not trusted by default"
+        );
     }
 
     #[test]
@@ -127,6 +137,7 @@ mod tests {
             ("GITHUB_API", "http://127.0.0.1:1"),
             ("REPORT_LABEL", "l"),
             ("REPORT_MILESTONE", ""),
+            ("TRUST_FORWARDED_FOR", "1"),
         ]))
         .unwrap();
         assert_eq!(settings.port, 9000);
@@ -134,6 +145,7 @@ mod tests {
         assert_eq!(settings.api, "http://127.0.0.1:1");
         assert_eq!(settings.label, "l");
         assert_eq!(settings.milestone, None);
+        assert!(settings.trust_forwarded);
         let error = Settings::from_lookup(lookup(&[("GITHUB_TOKEN", "t"), ("PORT", "http")]));
         assert_eq!(
             error.unwrap_err(),

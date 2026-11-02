@@ -116,6 +116,9 @@ impl Request {
 pub enum Answer {
     /// With this status, and a short body.
     Status(u16),
+    /// The first request gets the first status, the second request the second, and so on. The
+    /// last status stays for each later request.
+    Statuses(&'static [u16]),
     /// It reads the request and never answers, so the sender waits until its timeout.
     Silence,
 }
@@ -141,9 +144,18 @@ impl Endpoint {
                 let Some(request) = read_request(&mut stream) else {
                     continue;
                 };
-                seen.lock().unwrap().push(request);
-                match answer {
-                    Answer::Status(status) => {
+                let number = {
+                    let mut seen = seen.lock().unwrap();
+                    seen.push(request);
+                    seen.len() - 1
+                };
+                let status = match answer {
+                    Answer::Status(status) => Some(status),
+                    Answer::Statuses(list) => list.get(number).or(list.last()).copied(),
+                    Answer::Silence => None,
+                };
+                match status {
+                    Some(status) => {
                         let body = r#"{"ok":true}"#;
                         let _ = write!(
                             stream,
@@ -151,7 +163,7 @@ impl Endpoint {
                             body.len()
                         );
                     }
-                    Answer::Silence => std::thread::sleep(Duration::from_secs(20)),
+                    None => std::thread::sleep(Duration::from_secs(20)),
                 }
             }
         });

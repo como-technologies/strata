@@ -229,22 +229,39 @@ fn a_value_cannot_end_the_marker_a_code_span_or_a_cell() {
 }
 
 #[test]
-fn a_list_of_an_issue_stops_at_the_most_and_the_count_does_not() {
+fn a_list_of_releases_keeps_the_newest_at_the_most_and_the_count_does_not_stop() {
     let mut tracker = Memory::default();
+    let send = |tracker: &mut Memory, version: &str| {
+        let report = report(&[entry("ProfileType", "later", version, 1)]);
+        merge(tracker, &report).unwrap();
+    };
     for n in 0..30 {
-        let version = format!("0.{n}.0");
-        merge(
-            &mut tracker,
-            &report(&[entry("ProfileType", "later", &version, 1)]),
-        )
-        .unwrap();
+        send(&mut tracker, &format!("0.{n}.0"));
     }
-    let text = &tracker.issues[0].1;
-    assert!(text.contains("| Lines | 30 |"));
-    let row = text
-        .lines()
-        .find(|l| l.starts_with("| Releases of strata"))
-        .unwrap();
+    let row_of = |tracker: &Memory| -> String {
+        tracker.issues[0]
+            .1
+            .lines()
+            .find(|l| l.starts_with("| Releases of strata"))
+            .unwrap()
+            .to_string()
+    };
+    assert!(tracker.issues[0].1.contains("| Lines | 30 |"));
+    let row = row_of(&tracker);
+    assert_eq!(row.matches('`').count() / 2, MOST_LISTED, "{row}");
+    assert!(
+        row.contains("`0.29.0`") && row.contains("`0.10.0`"),
+        "{row}"
+    );
+    assert!(
+        !row.contains("`0.9.0`") && !row.contains("`0.0.0`"),
+        "the oldest left: {row}"
+    );
+    // a release older than the whole list does not enter, and the same release twice counts once
+    send(&mut tracker, "0.1.0");
+    send(&mut tracker, "0.29.0");
+    let row = row_of(&tracker);
+    assert!(!row.contains("`0.1.0`"), "{row}");
     assert_eq!(row.matches('`').count() / 2, MOST_LISTED, "{row}");
 }
 

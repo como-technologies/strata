@@ -9,8 +9,8 @@
 use std::path::{Path, PathBuf};
 
 use crate::REPOSITORY;
-use crate::closed_set::unknown::Report;
-use crate::closed_set::unknown::{log, send};
+use crate::closed_set::unknown::report::MOST_ENTRIES;
+use crate::closed_set::unknown::{Report, log, send};
 use crate::error::{Error, Result};
 use crate::text::query_value;
 
@@ -45,54 +45,74 @@ pub fn unknown_log() -> Result<PathBuf> {
 /// The report of the log at `log`: the lines after the mark of the last `--sent`, or every line
 /// with `all`.
 ///
-/// Strata never marks a line by itself, because only the user knows that the report went out. A
-/// mark that is past the end of the log, such as after a new log, counts for nothing: the
-/// report then holds every line.
+/// `strata report` marks a line only with `--sent`, because only the user knows that the report
+/// went out. A mark that is past the end of the log, such as after a new log, counts for nothing:
+/// the report then holds every line.
 ///
 /// # Errors
 ///
 /// `LogInvalid` when a line of the log is not a line of `strata-unknown/1`: nothing is reported
 /// and nothing is marked. `Io` when strata cannot read the log, or cannot write the mark.
 pub fn unknown_report(log: &Path, options: ReportOptions) -> Result<Report> {
-    let (report, total) = report_and_total(log, options.all)?;
+    let (lines, skip) = read_unsent(log, options.all)?;
     if options.sent {
-        log::mark_sent(&log::sent_path(log), total)?;
+        log::mark_sent(&log::sent_path(log), lines.len())?;
     }
-    Ok(report)
+    Ok(Report::of(lines.iter().skip(skip)))
 }
 
-/// The report of the log at `log`, and the number of lines that the log holds. `all` reads the
-/// lines that the user marked as sent too.
-fn report_and_total(log: &Path, all: bool) -> Result<(Report, usize)> {
+/// The lines of the log at `log`, and how many of them the user marked as sent. `all` counts none
+/// as sent. A mark past the end of the log belongs to a log that the user removed, so it counts
+/// for nothing.
+fn read_unsent(log: &Path, all: bool) -> Result<(Vec<log::Line>, usize)> {
     let lines = log::read(log)?;
     let marked = log::sent_count(&log::sent_path(log));
-    // a mark past the end of the log belongs to a log that the user removed
     let skip = if all || marked > lines.len() {
         0
     } else {
         marked
     };
-    Ok((Report::of(lines.iter().skip(skip)), lines.len()))
+    Ok((lines, skip))
 }
 
-/// Post the report of the lines that the user did not mark as sent to the endpoint `endpoint`,
-/// and mark those lines as sent after the endpoint took the report. A report with no line posts
+/// How many of the first `lines` make a report of [`MOST_ENTRIES`] entries or fewer. At least one:
+/// a line is one entry.
+fn first_chunk(lines: &[log::Line]) -> usize {
+    let (mut fits, mut over) = (1, lines.len() + 1);
+    while over - fits > 1 {
+        let middle = fits + (over - fits) / 2;
+        if Report::of(&lines[..middle]).unknown.len() <= MOST_ENTRIES {
+            fits = middle;
+        } else {
+            over = middle;
+        }
+    }
+    fits
+}
+
+/// Post the report of the lines that the user did not mark as sent to the endpoint `endpoint`.
+/// After each report that the endpoint took, mark its lines as sent. A log with no such line posts
 /// nothing.
 ///
 /// This is the one place where strata marks a line by itself: the endpoint took the report, so
-/// the lines are sent. A send that fails marks nothing, and the next send holds the lines again.
+/// the lines are sent. The endpoint takes [`MOST_ENTRIES`] entries in a report, so a long log goes
+/// in more than one report. A report that fails marks nothing, and the next send holds its lines
+/// again.
 ///
 /// # Errors
 ///
 /// `LogInvalid` or `Io` as [`unknown_report`], and `Io` when strata cannot write the mark.
-/// `ReportSend` when the endpoint did not take the report: see [`send::post`].
+/// `ReportSend` when the endpoint did not take a report: see [`send::post`].
 pub fn send_unknown_report(log: &Path, endpoint: &str) -> Result<()> {
-    let (report, total) = report_and_total(log, false)?;
-    if report.unknown.is_empty() {
-        return Ok(());
+    let (lines, mut done) = read_unsent(log, false)?;
+    while done < lines.len() {
+        let rest = &lines[done..];
+        let take = first_chunk(rest);
+        send::post(endpoint, &Report::of(&rest[..take]))?;
+        done += take;
+        log::mark_sent(&log::sent_path(log), done)?;
     }
-    send::post(endpoint, &report)?;
-    log::mark_sent(&log::sent_path(log), total)
+    Ok(())
 }
 
 /// The address of a new issue of strata, with the title and the text `body` filled in.

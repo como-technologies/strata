@@ -10,6 +10,7 @@
 //! comment. An issue that a maintainer closed gets the new count too, and stays closed: users of an
 //! older release send the value until they update.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
@@ -60,13 +61,12 @@ struct State {
 }
 
 impl State {
-    /// Add `other` to the state. A list stops at [`MOST_LISTED`].
+    /// Add `other` to the state. A list holds [`MOST_LISTED`] items at most: a list of releases
+    /// keeps the newest, and a list of routes or refusals keeps the first.
     fn add(&mut self, other: &State) {
         self.lines = self.lines.saturating_add(other.lines);
         self.reports = self.reports.saturating_add(other.reports);
         for (mine, theirs) in [
-            (&mut self.strata, &other.strata),
-            (&mut self.palette, &other.palette),
             (&mut self.routes, &other.routes),
             (&mut self.refusals, &other.refusals),
         ] {
@@ -76,7 +76,36 @@ impl State {
                 }
             }
         }
+        for (mine, theirs) in [
+            (&mut self.strata, &other.strata),
+            (&mut self.palette, &other.palette),
+        ] {
+            for item in theirs {
+                add_release(mine, item);
+            }
+        }
     }
+}
+
+/// Add the release `item` to `releases`. When the list is full, the oldest release leaves if
+/// `item` is newer, so the list keeps the releases that matter most for the maintainers.
+fn add_release(releases: &mut BTreeSet<String>, item: &str) {
+    if releases.contains(item) {
+        return;
+    }
+    if releases.len() >= MOST_LISTED {
+        let oldest = releases
+            .iter()
+            .min_by(|a, b| version::compare(a, b))
+            .cloned();
+        match oldest {
+            Some(oldest) if version::compare(item, &oldest) == Ordering::Greater => {
+                releases.remove(&oldest);
+            }
+            _ => return,
+        }
+    }
+    releases.insert(item.to_string());
 }
 
 /// One group for each different set and value of `report`, in the order of the set and the value.
