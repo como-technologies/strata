@@ -52,6 +52,19 @@ pub fn numbers(v: &str) -> Option<Vec<u64>> {
     Semver::parse(v).map(|s| s.numbers[..s.count].to_vec())
 }
 
+/// The release line of `v`: its first `count` numbers, joined by dots. A number that `v` omits is
+/// `0`. None when `v` does not parse.
+///
+/// `4.10.3-rc.1` with a `count` of 2 gives `4.10`, and `4` gives `4.0`. Two versions are one
+/// release when their lines are equal.
+pub fn line(v: &str, count: usize) -> Option<String> {
+    let semver = Semver::parse(v)?;
+    let numbers: Vec<String> = (0..count)
+        .map(|i| semver.numbers.get(i).copied().unwrap_or(0).to_string())
+        .collect();
+    Some(numbers.join("."))
+}
+
 /// True when `v` parses and has a pre-release: `1.0.1-rc.1`, `1.0.1-g0123456789ab`. A string that
 /// does not parse is not a pre-release.
 pub fn is_pre_release(v: &str) -> bool {
@@ -353,6 +366,22 @@ mod tests {
         assert_eq!(numbers("22"), Some(vec![22]));
         assert_eq!(numbers("LTS__24.x"), None);
         assert_eq!(numbers("1.2.3.4"), None);
+    }
+
+    #[test]
+    fn line_gives_the_first_numbers_and_zero_for_a_number_that_the_version_omits() {
+        assert_eq!(line("4.10.3-rc.1", 2).as_deref(), Some("4.10"));
+        assert_eq!(line("v4.10.3", 3).as_deref(), Some("4.10.3"));
+        assert_eq!(line("4", 2).as_deref(), Some("4.0"));
+        assert_eq!(line("4.10", 1).as_deref(), Some("4"));
+        assert_eq!(line("LTS__24.x", 2), None);
+        assert_eq!(line("1.2.3.4", 2), None);
+    }
+
+    #[test]
+    fn two_versions_with_one_line_compare_equal() {
+        let (a, b) = (line("4", 2).unwrap(), line("4.0.7", 2).unwrap());
+        assert_eq!(compare(&a, &b), Ordering::Equal);
     }
 
     #[test]
