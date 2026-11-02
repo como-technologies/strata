@@ -1,0 +1,12 @@
+# Start the contract run once a week. Persistent=true runs it at the next start of the machine when
+# the machine was off at the time.
+[Unit]
+Description=strata: the weekly contract run
+
+[Timer]
+OnCalendar=Mon *-*-* 05:30:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

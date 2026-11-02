@@ -34,6 +34,30 @@ pub enum Mode {
         /// Which of its states: `CHAPTER-2` serves the state after its second change.
         seed: u32,
     },
+    /// Build the tenant of every chapter, run no command, and keep the documents of each tenant at
+    /// the end of its chapter, in a directory for each chapter under `into`. The contract run reads
+    /// them as the stand-in.
+    Harvest {
+        /// The directory that gets one directory for each chapter.
+        into: PathBuf,
+    },
+}
+
+/// The first profile that `just examples` writes: the tenants of the book read their pack data from
+/// the raw profiles.
+const FIRST_EXAMPLE: &str = "examples/profiles/raw/aws-stack@1.1.1/profile.json";
+
+/// Check that `just examples` ran in the repository `repo`.
+///
+/// # Errors
+///
+/// The message to show when the examples are not built.
+pub(crate) fn built_examples(repo: &Path) -> Result<(), String> {
+    if repo.join(FIRST_EXAMPLE).is_file() {
+        Ok(())
+    } else {
+        Err("the examples are not built. Run: just examples".to_string())
+    }
 }
 
 /// Split the name that `just playground NAME` takes into its chapter and its state.
@@ -164,6 +188,12 @@ impl Runner {
         matches!(self.mode, Mode::Serve { .. })
     }
 
+    /// True when this run runs the commands of the book and writes their output. A served run and a
+    /// harvest build tenants only.
+    fn runs_commands(&self) -> bool {
+        !matches!(self.mode, Mode::Serve { .. } | Mode::Harvest { .. })
+    }
+
     /// True when this run builds the chapter: a served run builds one chapter only.
     fn building(&self) -> bool {
         !self.skip
@@ -172,6 +202,7 @@ impl Runner {
     /// Start a chapter: an empty tenant, a new working directory, and the environment of the
     /// commands that follow.
     pub fn chapter(&mut self, name: &str, env: &[(&str, &str)]) {
+        self.keep();
         // a chapter starts with one state: the end of the chapter
         if self.chapters.insert(name.to_string(), 1).is_some() {
             die(&format!("two chapters have the name '{name}'"));
@@ -307,7 +338,7 @@ impl Runner {
 
     /// Write a file into the chapter's working directory, as a candidate file a page shows.
     pub fn write_file(&mut self, name: &str, text: &str) {
-        if self.serving() {
+        if !self.runs_commands() {
             return;
         }
         std::fs::write(self.dir.join(name), text).expect("a chapter file");
@@ -363,7 +394,7 @@ impl Runner {
     /// Run one command and add `$ COMMAND` and its output to `name`. `stderr` keeps standard
     /// error too, as `show2` does.
     pub fn step(&mut self, name: &str, want: i32, stderr: bool, command: &str) {
-        if self.serving() {
+        if !self.runs_commands() {
             return;
         }
         let (got, kept, rest) = self.run(command, stderr);
@@ -389,7 +420,7 @@ impl Runner {
 
     /// A step the book does not show. It must pass.
     pub fn quiet(&mut self, command: &str) {
-        if self.serving() {
+        if !self.runs_commands() {
             return;
         }
         let (got, kept, _) = self.run(command, true);
@@ -450,7 +481,7 @@ impl Runner {
     /// each gap becomes `...`. Nothing matching is an error: when the line a page is built on
     /// stops being printed, this build fails instead of the page going quietly wrong.
     pub fn excerpt(&mut self, name: &str, from: &str, pattern: &str) {
-        if self.serving() {
+        if !self.runs_commands() {
             return;
         }
         let source = self.out.join(format!("{from}.txt"));
@@ -500,6 +531,10 @@ impl Runner {
 
     /// Write `docs/src/output/`, or say what is not current, and return the exit code.
     pub fn finish(mut self) -> std::process::ExitCode {
+        if matches!(self.mode, Mode::Harvest { .. }) {
+            self.keep();
+            return std::process::ExitCode::SUCCESS;
+        }
         if let Mode::Serve { chapter, .. } = self.mode.clone() {
             if self.served {
                 self.serve_last();
@@ -564,6 +599,16 @@ impl Runner {
             );
         }
         std::process::ExitCode::SUCCESS
+    }
+
+    /// In a harvest, keep the documents of the chapter that ends now in the directory of that
+    /// chapter. In another run, do nothing.
+    fn keep(&self) {
+        if let Mode::Harvest { into } = &self.mode
+            && !self.chapter.is_empty()
+        {
+            self.tenant.copy_to(&into.join(&self.chapter));
+        }
     }
 
     fn serve_wait(&mut self) -> ! {

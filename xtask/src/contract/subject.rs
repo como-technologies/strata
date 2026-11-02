@@ -1,0 +1,279 @@
+//! The subject of a request: the object of the tenant that the run asks about.
+//!
+//! A request of a fact has a placeholder for the object, such as `{uid}` in
+//! `GET /v1/spectroclusters/{uid}`. The tenant of the run is not the tenant of the stand-in. So the
+//! run finds an object in the tenant: the first entry of the answer of another fact. That answer
+//! is the listing of the objects, or the document of an object that holds the value.
+
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+use std::rc::Rc;
+
+use serde_json::Value;
+use strata::api::PaletteApi;
+use strata::error::Error;
+use strata::json::str_at;
+
+use crate::facts::Fact;
+
+/// Where the value of a placeholder comes from.
+pub(super) struct Source {
+    /// The start of the path that has the placeholder. With `param`, it names the placeholder.
+    pub(super) prefix: &'static str,
+    /// The name of the placeholder.
+    pub(super) param: &'static str,
+    /// The id of the fact whose answer holds the value.
+    pub(super) fact: &'static str,
+    /// The pointer of the value in that answer. The first entry of a list is the subject.
+    pub(super) pointer: &'static str,
+}
+
+/// The shortest way to the subject of each request that the run sends. The first entry of a
+/// listing is the subject, so the placeholders of one request come from one object.
+pub(super) const SOURCES: &[Source] = &[
+    Source {
+        prefix: "/v1/spectroclusters/",
+        param: "uid",
+        fact: "cluster-listing",
+        pointer: "/0/metadata/uid",
+    },
+    Source {
+        prefix: "/v1/notifications/spectrocluster/",
+        param: "uid",
+        fact: "cluster-listing",
+        pointer: "/0/metadata/uid",
+    },
+    Source {
+        prefix: "/v1/cloudconfigs/",
+        param: "cloudType",
+        fact: "cluster-document",
+        pointer: "/spec/cloudType",
+    },
+    Source {
+        prefix: "/v1/cloudconfigs/",
+        param: "configUid",
+        fact: "cluster-document",
+        pointer: "/spec/cloudConfigRef/uid",
+    },
+    Source {
+        prefix: "/v1/filters/tag/",
+        param: "uid",
+        fact: "tag-filter-listing",
+        pointer: "/items/0/metadata/uid",
+    },
+    Source {
+        prefix: "/v1/clustergroups/",
+        param: "uid",
+        fact: "cluster-group-listing",
+        pointer: "/items/0/uid",
+    },
+    Source {
+        prefix: "/v1/appProfiles/",
+        param: "uid",
+        fact: "app-profile-listing",
+        pointer: "/appProfiles/0/metadata/uid",
+    },
+    Source {
+        prefix: "/v1/appProfiles/",
+        param: "tierUid",
+        fact: "app-profile-tiers",
+        pointer: "/spec/appTiers/0/metadata/uid",
+    },
+    Source {
+        prefix: "/v1/appProfiles/",
+        param: "manifestUid",
+        fact: "app-profile-tiers",
+        pointer: "/spec/appTiers/0/spec/manifests/0/uid",
+    },
+    Source {
+        prefix: "/v1/packs/",
+        param: "name",
+        fact: "pack-listing",
+        pointer: "/items/0/spec/name",
+    },
+    Source {
+        prefix: "/v1/packs/",
+        param: "uid",
+        fact: "pack-listing",
+        pointer: "/items/0/spec/registryUid",
+    },
+    Source {
+        prefix: "/v1/clusterprofiles/",
+        param: "uid",
+        fact: "profile-listing",
+        pointer: "/items/0/metadata/uid",
+    },
+];
+
+/// The most requests that one subject takes: the document of a cluster, and its listing.
+const DEPTH: usize = 3;
+
+/// Why a request failed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Failure {
+    /// The status of the answer, when Palette answered.
+    pub status: Option<u16>,
+    /// What went wrong, in one line.
+    pub message: String,
+}
+
+impl Failure {
+    fn of(error: &Error) -> Failure {
+        let status = match error {
+            Error::Api { status, .. } => Some(*status),
+            _ => None,
+        };
+        Failure {
+            status,
+            message: error.to_string(),
+        }
+    }
+}
+
+/// The answer of a request: the document, or the failure.
+pub type Answer = Rc<Result<Value, Failure>>;
+
+/// A tenant that the run asks. It keeps each answer, so the listing that finds a subject is read
+/// once for all the facts that use it.
+pub struct Probe<'a, A> {
+    api: &'a A,
+    answers: RefCell<BTreeMap<String, Answer>>,
+}
+
+impl<'a, A: PaletteApi> Probe<'a, A> {
+    /// A probe of the tenant that `api` talks to.
+    pub fn new(api: &'a A) -> Self {
+        Probe {
+            api,
+            answers: RefCell::new(BTreeMap::new()),
+        }
+    }
+
+    /// The answer to `GET path`.
+    pub fn get(&self, path: &str) -> Answer {
+        if let Some(known) = self.answers.borrow().get(path) {
+            return Rc::clone(known);
+        }
+        let answer = Rc::new(self.api.get_json(path).map_err(|e| Failure::of(&e)));
+        self.answers
+            .borrow_mut()
+            .insert(path.to_string(), Rc::clone(&answer));
+        answer
+    }
+}
+
+/// What the run found for the subject of a request.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Subject {
+    /// The path of the request, with a value for each placeholder.
+    Path(String),
+    /// The tenant has no such object, or the run has no way to find one. The text says why.
+    Missing(String),
+    /// A request that finds the object failed.
+    Failed(Failure),
+}
+
+/// The path of `template` for a subject of the tenant: a value for each placeholder.
+pub fn find<A: PaletteApi>(probe: &Probe<A>, facts: &[Fact], template: &str) -> Subject {
+    fill(probe, facts, template, 0)
+}
+
+/// The placeholders of `template` that no [`Source`] gives a value for.
+pub(super) fn unsourced(template: &str) -> Vec<String> {
+    placeholders(template)
+        .filter(|param| source(template, param).is_none())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Why the run has no subject for a placeholder that no [`Source`] gives a value for.
+fn no_source(param: &str) -> String {
+    format!("the run has no way to find a value for `{{{param}}}`")
+}
+
+/// The names of the placeholders of `template`.
+fn placeholders(template: &str) -> impl Iterator<Item = &str> {
+    template
+        .split('/')
+        .filter_map(|s| s.strip_prefix('{')?.strip_suffix('}'))
+}
+
+fn source(template: &str, param: &str) -> Option<&'static Source> {
+    SOURCES
+        .iter()
+        .find(|s| template.starts_with(s.prefix) && s.param == param)
+}
+
+/// The fact with the id `id`, when it has a request of the method GET.
+pub(super) fn request_of<'a>(facts: &'a [Fact], id: &str) -> Option<&'a str> {
+    facts.iter().find(|f| f.id == id)?.get_path()
+}
+
+fn fill<A: PaletteApi>(probe: &Probe<A>, facts: &[Fact], template: &str, depth: usize) -> Subject {
+    // no request goes out for a path that has a placeholder with no source
+    if let Some(param) = unsourced(template).first() {
+        return Subject::Missing(no_source(param));
+    }
+    let mut segments = Vec::new();
+    for segment in template.split('/') {
+        let Some(param) = segment.strip_prefix('{').and_then(|s| s.strip_suffix('}')) else {
+            segments.push(segment.to_string());
+            continue;
+        };
+        match value(probe, facts, template, param, depth) {
+            Ok(text) => segments.push(text),
+            Err(subject) => return subject,
+        }
+    }
+    Subject::Path(segments.join("/"))
+}
+
+/// The value of the placeholder `param` of `template`, or why the run has none.
+fn value<A: PaletteApi>(
+    probe: &Probe<A>,
+    facts: &[Fact],
+    template: &str,
+    param: &str,
+    depth: usize,
+) -> Result<String, Subject> {
+    let missing = |why: String| Subject::Missing(why);
+    let Some(source) = source(template, param) else {
+        return Err(missing(no_source(param)));
+    };
+    let Some(request) = request_of(facts, source.fact).filter(|_| depth < DEPTH) else {
+        return Err(missing(format!(
+            "the fact `{}` is not a request that finds a value for `{{{param}}}`",
+            source.fact
+        )));
+    };
+    let path = match fill(probe, facts, request, depth + 1) {
+        Subject::Path(path) => path,
+        other => return Err(other),
+    };
+    let answer = probe.get(&path);
+    let document = match answer.as_ref() {
+        Ok(document) => document,
+        Err(failure) => {
+            return Err(Subject::Failed(Failure {
+                status: failure.status,
+                message: format!("GET {path}: {}", failure.message),
+            }));
+        }
+    };
+    let found = str_at(document, source.pointer);
+    if found.is_empty() {
+        return Err(missing(format!(
+            "the tenant has no object for `{{{param}}}`: the answer to GET {path} holds nothing at {}",
+            source.pointer
+        )));
+    }
+    if !found
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "-._~:".contains(c))
+    {
+        return Err(missing(format!(
+            "the value for `{{{param}}}` has a character that a path cannot hold"
+        )));
+    }
+    Ok(found.to_string())
+}

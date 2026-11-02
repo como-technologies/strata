@@ -4,6 +4,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use strata::api::Method;
+use strata::closed_set::ClosedSet;
 
 use crate::files::files_with_ext;
 
@@ -62,6 +64,23 @@ pub struct Fact {
     /// The rules of strata-preflight that use the fact.
     #[serde(default)]
     pub rules: Vec<String>,
+}
+
+impl Fact {
+    /// The method and the path of the request, such as `GET` and `/v1/clusterprofiles/{uid}`. None
+    /// when the fact has no request, or its request starts with a text that is no method.
+    pub fn parts(&self) -> Option<(Method, &str)> {
+        let (method, path) = self.request.as_deref()?.split_once(' ')?;
+        Some((Method::parse(method)?, path))
+    }
+
+    /// The path of the request, when its method is GET.
+    pub fn get_path(&self) -> Option<&str> {
+        match self.parts()? {
+            (Method::Get, path) => Some(path),
+            _ => None,
+        }
+    }
 }
 
 /// What strata reads from the answer of Palette, or depends on: the fields, the error codes, and

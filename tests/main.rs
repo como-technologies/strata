@@ -11,6 +11,7 @@ mod ci_scripts;
 mod cli;
 mod closed_set;
 mod content;
+mod contract;
 mod crate_root;
 mod dev_scripts;
 mod doc_lints;

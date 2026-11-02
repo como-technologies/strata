@@ -50,9 +50,15 @@ pub fn serve(root: &Path, port_file: &Path) -> std::io::Result<()> {
         let _ = std::io::stdin().read_to_end(&mut sink);
         std::process::exit(0);
     });
-    let root = root.canonicalize()?;
     let listener = TcpListener::bind("127.0.0.1:0")?;
     fs::write(port_file, listener.local_addr()?.port().to_string())?;
+    serve_on(root, &listener)
+}
+
+/// Answer each request that arrives on `listener` from the files under `root`, and never return.
+/// A test serves a tenant in its own process with this function.
+pub fn serve_on(root: &Path, listener: &TcpListener) -> std::io::Result<()> {
+    let root = root.canonicalize()?;
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
         let root = root.clone();
@@ -396,13 +402,25 @@ fn file_for(root: &Path, project: Option<&str>, target: &str) -> Option<PathBuf>
 /// project, no query, and no status of a refusal. `None` for a file that no request reads.
 pub fn route_of(relative: &str) -> Option<String> {
     let (_scope, name) = relative.split_once('/')?;
-    let name = name.strip_suffix(".json")?;
-    let name = REFUSALS
-        .iter()
-        .find_map(|status| name.strip_suffix(&format!(".{status}")))
-        .unwrap_or(name);
+    let (name, _) = split_refusal(name.strip_suffix(".json")?);
     let path = name.split_once('@').map_or(name, |(path, _)| path);
     Some(path.to_string())
+}
+
+/// True when the file `relative` holds the refusal of a request and not a document: its name ends
+/// with the status of a refusal, as in `v1/spectroclusters/c1/config/rbacs.403.json`.
+pub fn is_refusal(relative: &str) -> bool {
+    relative
+        .strip_suffix(".json")
+        .is_some_and(|name| split_refusal(name).1)
+}
+
+/// The name of a file without the status of a refusal, and whether it had one.
+fn split_refusal(name: &str) -> (&str, bool) {
+    REFUSALS
+        .iter()
+        .find_map(|status| name.strip_suffix(&format!(".{status}")))
+        .map_or((name, false), |name| (name, true))
 }
 
 /// The query without `startTime` and `endTime`. A command sends the real time, as `verify --who`
