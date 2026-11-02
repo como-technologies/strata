@@ -2360,3 +2360,38 @@ fn the_option_with_cluster_takes_no_value() {
             .no_cloud
     );
 }
+
+// ---- the summary line ---------------------------------------------------------------------
+
+#[test]
+fn the_line_that_the_run_prints_is_the_line_that_the_filter_of_the_scripts_writes() {
+    use crate::process::CommandExt;
+    use std::process::Command;
+    let (_root, stand_in) = stand_in(&documents("Running"));
+    // one fact is the same, one differs on its status, and the others skip: each count is not 0
+    let api = memory(&documents("Running")).failing("/v1/spectroclusters/c1", 403, "{}");
+    let contract = contract(&stand_in, &api);
+    let summary = contract.summary;
+    assert!(summary.same > 0 && summary.differs > 0 && summary.skipped > 0);
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("contract.json");
+    std::fs::write(&file, serde_json::to_string(&contract).unwrap()).unwrap();
+    let filter = crate::repository().join("examples/live/contract-summary.jq");
+    let written = Command::new("jq")
+        .args(["-r", "-f"])
+        .arg(&filter)
+        .arg(&file)
+        .output_locked()
+        .unwrap();
+    assert!(written.status.success(), "{written:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&written.stdout).trim_end(),
+        summary.line()
+    );
+    // the total is the count of the entries
+    assert!(
+        summary
+            .line()
+            .starts_with(&format!("{} facts:", contract.facts.len()))
+    );
+}

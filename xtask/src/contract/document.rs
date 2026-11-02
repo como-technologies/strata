@@ -131,6 +131,20 @@ impl Summary {
                 .sum(),
         }
     }
+
+    /// The line that the run prints: the count of the facts and of each outcome. The filter
+    /// `examples/live/contract-summary.jq` writes the same text from the document, for the scripts.
+    pub fn line(&self) -> String {
+        format!(
+            "{} facts: {} same, {} differ, {} skipped, {} could not be checked, {} unknown values",
+            self.same + self.differs + self.skipped + self.error,
+            self.same,
+            self.differs,
+            self.skipped,
+            self.error,
+            self.unknown_values
+        )
+    }
 }
 
 /// The latest release of a repository that Palette is built from, and whether it is new.

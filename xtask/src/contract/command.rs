@@ -136,16 +136,7 @@ pub(super) fn contract(options: &Options) -> Result<u8, String> {
         }
         None => println!("{text}"),
     }
-    let s = document.summary;
-    eprintln!(
-        "contract: {} facts: {} same, {} differ, {} skipped, {} could not be checked, {} unknown values",
-        document.facts.len(),
-        s.same,
-        s.differs,
-        s.skipped,
-        s.error,
-        s.unknown_values
-    );
+    eprintln!("contract: {}", document.summary.line());
     for release in document.releases.iter().filter(|r| r.new) {
         eprintln!(
             "contract: {} has a new release: {}",

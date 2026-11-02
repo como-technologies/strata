@@ -42,11 +42,19 @@ fn release(repo: &str, tag: &str, seen: Option<&str>, new: bool) -> Value {
 }
 
 fn document(facts: Vec<Value>, releases: Vec<Value>) -> Value {
+    // `summary` counts the entries, as the run does: the script reads it and counts nothing again
+    let count = |outcome: &str| facts.iter().filter(|f| f["outcome"] == outcome).count();
+    let unknown: usize = facts
+        .iter()
+        .flat_map(|f| f["unknownValues"].as_array().into_iter().flatten())
+        .map(|u| u["values"].as_array().map_or(0, Vec::len))
+        .sum();
     json!({
         "schema": "strata-contract/1",
         "checkedAt": "2026-11-02T05:45:00Z",
         "target": "https://api.spectrocloud.com",
-        "summary": {"same": 0, "differs": 0, "skipped": 0, "error": 0, "unknownValues": 0},
+        "summary": {"same": count("same"), "differs": count("differs"), "skipped": count("skipped"),
+                    "error": count("error"), "unknownValues": unknown},
         "facts": facts,
         "releases": releases,
     })
@@ -1539,7 +1547,18 @@ impl Weekly {
         let weekly = tree.join("deploy/contract/weekly.sh");
         std::fs::create_dir_all(weekly.parent().unwrap()).unwrap();
         executable(&weekly, &repo_file("deploy/contract/weekly.sh"));
+        // the folder that weekly.sh and timer.sh both source, and the filter of the summary line
+        std::fs::write(
+            weekly.with_file_name("folder.sh"),
+            repo_file("deploy/contract/folder.sh"),
+        )
+        .unwrap();
         std::fs::create_dir_all(tree.join("examples/live")).unwrap();
+        std::fs::write(
+            tree.join("examples/live/contract-summary.jq"),
+            repo_file("examples/live/contract-summary.jq"),
+        )
+        .unwrap();
         // the stand-in contract.sh writes the result where OUT says, as the script does. It logs
         // the tag that its state file holds, and keeps the tag v2 in the file, as the run does
         executable(
@@ -1988,7 +2007,7 @@ fn the_timer_shows_the_last_result_and_refuses_a_command_it_does_not_have() {
         &[("STRATA_CONTRACT_DIR", data.to_str().unwrap())],
     );
     assert!(
-        text(&o.stdout).contains("the last run: 2026-11-02T05:45:00Z, 0 same, 0 differ, 0 skipped, 0 could not be checked, 0 unknown values"),
+        text(&o.stdout).contains("the last run: 2026-11-02T05:45:00Z, 0 facts: 0 same, 0 differ, 0 skipped, 0 could not be checked, 0 unknown values"),
         "{}",
         text(&o.stdout)
     );
@@ -2063,4 +2082,120 @@ fn the_recipes_of_the_contract_run_call_the_scripts_that_exist() {
             "{script}"
         );
     }
+}
+
+// ---- the summary line, and the folder of the results --------------------------------------------
+
+#[test]
+fn the_weekly_run_prints_the_summary_of_the_result_and_says_when_the_cover_fell() {
+    let w = Weekly::new();
+    std::fs::create_dir_all(w.data()).unwrap();
+    // the last run found 24 facts the same
+    std::fs::write(
+        w.data().join("last.json"),
+        json!({"summary": {"same": 24}}).to_string(),
+    )
+    .unwrap();
+    let o = w.run(&[]);
+    let err = text(&o.stderr);
+    assert!(
+        err.contains("the contract run exited 0 and the report exited 0: 1 facts: 1 same, 0 differ, 0 skipped, 0 could not be checked, 0 unknown values"),
+        "{err}"
+    );
+    assert!(
+        err.contains("the cover fell: 1 facts are the same, and the last run had 24"),
+        "{err}"
+    );
+    // the result of this run is the last result now, and the next run is the same as it
+    let o = w.run(&[]);
+    assert!(
+        !text(&o.stderr).contains("the cover fell"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn the_weekly_run_says_nothing_of_a_fall_at_the_first_run_or_when_the_count_rises() {
+    let w = Weekly::new();
+    let o = w.run(&[]);
+    assert!(
+        !text(&o.stderr).contains("the cover fell"),
+        "{}",
+        text(&o.stderr)
+    );
+    let w = Weekly::new();
+    std::fs::create_dir_all(w.data()).unwrap();
+    std::fs::write(
+        w.data().join("last.json"),
+        json!({"summary": {"same": 0}}).to_string(),
+    )
+    .unwrap();
+    let o = w.run(&[]);
+    assert!(
+        !text(&o.stderr).contains("the cover fell"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn the_weekly_job_and_the_timer_read_the_folder_of_the_results_from_one_file() {
+    let folder = repo_file("deploy/contract/folder.sh");
+    assert!(folder.contains("data=${STRATA_CONTRACT_DIR:-$HOME/.local/share/strata-contract}"));
+    for script in ["weekly.sh", "timer.sh"] {
+        let text = repo_file(&format!("deploy/contract/{script}"));
+        assert!(text.contains(". \"$here/folder.sh\""), "{script}");
+        // the comments name the folder; no line of code does
+        let code: String = text
+            .lines()
+            .filter(|line| !line.trim_start().starts_with('#'))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(
+            !code.contains("share/strata-contract"),
+            "{script} writes the folder again"
+        );
+    }
+}
+
+#[test]
+fn the_report_and_the_timer_print_the_summary_line_from_one_filter() {
+    let filter = "contract-summary.jq";
+    for script in [
+        "examples/live/contract-report.sh",
+        "deploy/contract/timer.sh",
+    ] {
+        assert!(repo_file(script).contains(filter), "{script}");
+    }
+    assert!(repo_file("deploy/contract/weekly.sh").contains(filter));
+    // no script writes the words of the line again
+    for script in [
+        "examples/live/contract-report.sh",
+        "deploy/contract/timer.sh",
+        "deploy/contract/weekly.sh",
+        "examples/live/contract.sh",
+    ] {
+        assert!(
+            !repo_file(script).contains("could not be checked,"),
+            "{script} writes the line again"
+        );
+    }
+}
+
+#[test]
+fn the_report_counts_nothing_again_and_reads_the_summary_of_the_document() {
+    let r = Report::new();
+    // `summary` says one fact differs, and the entries list none: the script trusts `summary`
+    let mut doc = document(vec![], vec![]);
+    doc["summary"]["differs"] = json!(1);
+    let o = r.run(&["--dry-run", r.document(&doc).to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains(
+            "1 facts: 0 same, 1 differ, 0 skipped, 0 could not be checked, 0 unknown values"
+        ),
+        "{}",
+        text(&o.stderr)
+    );
 }
