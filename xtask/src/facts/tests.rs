@@ -10,6 +10,7 @@ use strata_preflight::rule::Catalog;
 use super::check::{NOT_FACTS, check as faults_of, route_matches, template_matches};
 use super::cloud::CloudSources;
 use super::model::{Fact, load};
+use super::sets::SetRead;
 use super::sources::{
     Sources, api_requests, book_rows, calls_of, query_names, rule_queries, rule_requests,
     section_headings, section_rows, shape,
@@ -78,6 +79,7 @@ fn world() -> Sources {
             set(&["template-outside"]),
         )]),
         rule_queries: BTreeMap::new(),
+        set_reads: Vec::new(),
     }
 }
 
@@ -889,5 +891,125 @@ fn a_fact_that_reads_only_names_reads_something_and_reads_a_document() {
     assert!(
         !found.iter().any(|m| m.contains("`reads` is empty")),
         "{found:?}"
+    );
+}
+
+// ---- the reads that note a value of a closed set --------------------------------------------
+
+/// A read of the set `ProfileType` at the field `spec.published.type` of the fact of [`FACT`].
+fn profile_type_read() -> SetRead {
+    SetRead {
+        set: "ProfileType".to_string(),
+        fact: "profile-document",
+        field: "spec.published.type",
+        values: ["cluster", "add-on"].map(String::from).to_vec(),
+    }
+}
+
+/// The world of [`world`] with the read of [`profile_type_read`], its list in the fact, and the one
+/// call of `opt_set` in the code that the table names. A comment or a test is no call.
+fn world_with_a_set_read() -> Sources {
+    let mut sources = world();
+    sources.set_reads = vec![profile_type_read()];
+    sources.cloud.code = BTreeMap::from([(
+        "src/ops/list.rs".to_string(),
+        "p.profile_type = template.and_then(|t| opt_set(t, \"/type\", PROFILE_TEMPLATE));"
+            .to_string(),
+    )]);
+    sources.facts[0].reads.values.insert(
+        "spec.published.type".to_string(),
+        vec!["add-on".to_string()],
+    );
+    sources
+}
+
+#[test]
+fn a_read_of_a_closed_set_with_its_list_in_a_get_fact_has_no_fault() {
+    assert_eq!(faults_of(&world_with_a_set_read()), Vec::<String>::new());
+}
+
+#[test]
+fn a_read_of_a_closed_set_whose_fact_lists_no_values_is_a_fault() {
+    let mut sources = world_with_a_set_read();
+    sources.facts[0].reads.values.clear();
+    let found = faults_of(&sources);
+    assert!(
+        found.iter().any(|m| m.contains("fact `profile-document`")
+            && m.contains("strata notes a value of ProfileType at `spec.published.type`")),
+        "{found:?}"
+    );
+}
+
+#[test]
+fn a_list_that_names_a_value_the_set_does_not_have_is_a_fault() {
+    let mut sources = world_with_a_set_read();
+    sources.facts[0]
+        .reads
+        .values
+        .insert("spec.published.type".to_string(), vec!["edge".to_string()]);
+    assert_one_fault(
+        &sources,
+        "it lists `edge` at `spec.published.type`, and the set ProfileType of strata has no such value",
+    );
+}
+
+#[test]
+fn a_read_of_a_closed_set_in_a_fact_that_is_no_get_request_or_not_there_is_a_fault() {
+    let mut sources = world_with_a_set_read();
+    sources.facts[0].request = Some("POST /v1/clusterprofiles/{uid}".to_string());
+    // the other rules of the list find a fault in a request that the book and the rules lack
+    let found = faults_of(&sources);
+    assert!(
+        found
+            .iter()
+            .any(|m| m.contains("must be a GET request that the contract run sends")),
+        "{found:?}"
+    );
+
+    let mut sources = world_with_a_set_read();
+    sources.set_reads[0].fact = "no-such-fact";
+    assert_one_fault(&sources, "no fact `no-such-fact`");
+}
+
+#[test]
+fn a_call_of_opt_set_that_the_table_of_reads_lacks_is_a_fault() {
+    let mut sources = world_with_a_set_read();
+    sources.cloud.code = BTreeMap::from([(
+        "src/ops/list.rs".to_string(),
+        "let a = opt_set(t, \"/type\", PROFILE_TEMPLATE);\nlet b = opt_set::<Scope>(t, \"/scope\", PROFILE_TEMPLATE);"
+            .to_string(),
+    )]);
+    assert_one_fault(
+        &sources,
+        "the code of strata reads 2 sets with `opt_set`, and `reads()` of `xtask/src/facts/sets.rs` names 1",
+    );
+}
+
+#[test]
+fn each_read_of_the_code_of_strata_that_notes_an_unknown_value_has_its_list_in_a_get_fact() {
+    let sources = Sources::read(&repo(), None).0;
+    assert_eq!(sources.set_reads.len(), 4);
+    for read in &sources.set_reads {
+        let fact = sources
+            .facts
+            .iter()
+            .find(|f| f.id == read.fact)
+            .unwrap_or_else(|| panic!("no fact `{}`", read.fact));
+        let listed = &fact.reads.values[read.field];
+        assert!(!listed.is_empty(), "{} at {}", read.set, read.field);
+        // the list of the fact is a part of the set: the set can hold a value that only strata gives
+        assert!(
+            listed.iter().all(|v| read.values.contains(v)),
+            "{} at {}: {listed:?} against {:?}",
+            read.set,
+            read.field,
+            read.values
+        );
+    }
+    assert!(
+        sources
+            .set_reads
+            .iter()
+            .any(|r| r.set == "ProfileType" && r.values.contains(&"add-on".to_string()))
     );
 }

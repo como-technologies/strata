@@ -290,7 +290,7 @@ fn contract_report_closes_the_issue_of_a_fact_that_is_the_same_again() {
 
 #[test]
 fn contract_report_leaves_the_issue_of_a_fact_that_the_run_skipped_or_could_not_check() {
-    for (outcome, code) in [("skipped", 0), ("error", 2)] {
+    for (outcome, code) in [("skipped", 0), ("error", 3)] {
         let r = Report::new();
         r.open_issues(&[(7, "<!-- strata-contract: cluster-document -->")]);
         let o = r.report(
@@ -844,7 +844,7 @@ fn contract_report_touches_no_issue_for_a_document_of_another_schema() {
 }
 
 #[test]
-fn contract_report_exits_2_for_a_release_that_could_not_be_read_after_it_handled_the_issues() {
+fn contract_report_exits_3_for_a_release_that_could_not_be_read_after_it_handled_the_issues() {
     let r = Report::new();
     let failed =
         json!({"repo": "spectrocloud/palette-sdk-go", "new": false, "error": "GET: HTTP 403"});
@@ -852,10 +852,39 @@ fn contract_report_exits_2_for_a_release_that_could_not_be_read_after_it_handled
         &document(vec![differing("cluster-document")], vec![failed]),
         &[],
     );
-    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert_eq!(o.status.code(), Some(3), "{}", text(&o.stderr));
     assert!(
         r.calls().iter().any(|c| c.starts_with("issue create")),
         "the issues are handled first"
+    );
+}
+
+#[test]
+fn contract_report_exits_3_and_not_2_for_a_fact_that_could_not_be_checked_when_the_issues_are_done()
+{
+    // the weekly run reads 2 as "the issues are not handled": a fact with the outcome `error` must not
+    // look like a failed host call, and it wins over a difference that the report handled
+    let r = Report::new();
+    let o = r.report(
+        &document(
+            vec![
+                differing("cluster-document"),
+                entry("cluster-listing", "error", json!([])),
+            ],
+            vec![],
+        ),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(3), "{}", text(&o.stderr));
+    assert!(
+        r.calls().iter().any(|c| c.starts_with("issue create")),
+        "the issue of the difference is open: {:?}",
+        r.calls()
+    );
+    assert!(
+        text(&o.stderr).contains("1 could not be checked"),
+        "{}",
+        text(&o.stderr)
     );
 }
 
@@ -902,6 +931,32 @@ fn contract_report_reads_the_host_layer_of_verify_report_and_stops_when_it_is_no
     let o = copy(tree.path());
     assert_eq!(o.status.code(), Some(2));
     assert!(text(&o.stderr).contains("scripts/ci/verify-report.sh has no host layer to read"));
+}
+
+#[test]
+fn contract_report_defines_no_function_of_the_host_layer_again() {
+    // a function that the script defines after it reads the layer replaces the function of the
+    // layer, so a change to the layer would not reach the script
+    let layer = repo_file("scripts/ci/verify-report.sh");
+    let layer: Vec<&str> = layer
+        .lines()
+        .skip_while(|l| !l.starts_with("die() {"))
+        .take_while(|l| !l.starts_with("host() "))
+        .collect();
+    let names: Vec<&str> = layer
+        .iter()
+        .filter_map(|l| l.strip_suffix("() {"))
+        .filter(|name| !name.contains(' '))
+        .collect();
+    assert!(names.contains(&"github_open_issue"), "{names:?}");
+    let script = repo_file("examples/live/contract-report.sh");
+    for name in names {
+        let again = format!("{name}() {{");
+        assert!(
+            !script.lines().any(|l| l.starts_with(&again)),
+            "contract-report.sh defines `{name}` again"
+        );
+    }
 }
 
 // ---- contract-report.sh: the calls of the clouds ----------------------------------------------
@@ -1158,7 +1213,7 @@ fn contract_report_closes_the_issue_of_a_call_of_a_cloud_that_is_the_same_again(
 
 #[test]
 fn contract_report_leaves_the_issue_of_a_call_of_a_cloud_that_the_run_skipped_or_could_not_send() {
-    for (outcome, code) in [("skipped", 0), ("error", 2)] {
+    for (outcome, code) in [("skipped", 0), ("error", 3)] {
         let r = Report::new();
         r.open_issues(&[(9, "<!-- strata-contract: aws-ec2-vcpu-quota -->")]);
         let o = r.report(
@@ -1514,6 +1569,40 @@ exit "${FAKE_REPORT_EXIT:-0}"
         self.dir.path().join("data")
     }
 
+    /// Replace the stand-in report with contract-report.sh and the host layer that it reads. The
+    /// `gh` lists no open issue, as the host does after a person closed each issue. The contract.sh
+    /// stand-in could not check one fact. It finds the release v2, which is new while the state
+    /// holds v1, and keeps v2 in the state.
+    fn with_the_real_report(&self) {
+        let tree = self.dir.path().join("repo");
+        for file in [
+            "examples/live/contract-report.sh",
+            "scripts/ci/verify-report.sh",
+        ] {
+            let to = tree.join(file);
+            std::fs::create_dir_all(to.parent().unwrap()).unwrap();
+            executable(&to, &repo_file(file));
+        }
+        executable(
+            &tree.join("examples/live/contract.sh"),
+            r#"#!/usr/bin/env bash
+seen=$(cat "$2" 2> /dev/null || true)
+new=true
+[ "$seen" = v2 ] && new=false
+echo v2 > "$2"
+jq -n --argjson new "$new" --arg seen "$seen" '{
+  schema: "strata-contract/1", checkedAt: "2026-11-02T05:30:00Z", target: "t",
+  summary: {same: 0, differs: 0, skipped: 0, error: 1, unknownValues: 0},
+  facts: [{id: "gcp-iam-policy", request: "gcloud projects get-iam-policy", outcome: "error",
+           reason: "Reauthentication failed", differences: [], live: [], pages: []}],
+  releases: [{repo: "spectrocloud/palette-sdk-go", tag: "v2", seen: $seen, new: $new}]
+}' > "$OUT/contract.json"
+exit 2
+"#,
+        );
+        fake_bin(self.dir.path(), &[("gh", FAKE_ISSUES_GH)]);
+    }
+
     fn run(&self, envs: &[(&str, &str)]) -> Output {
         Command::new("bash")
             .arg(self.dir.path().join("repo/deploy/contract/weekly.sh"))
@@ -1603,6 +1692,51 @@ fn the_weekly_run_keeps_the_new_tags_of_the_releases_when_the_report_is_done() {
         let run = w.data().join("runs").join(&w.runs()[0]);
         assert!(!run.join("state.json").exists(), "{report}: the copy moved");
     }
+}
+
+#[test]
+fn the_weekly_run_keeps_the_new_tags_when_the_report_is_done_and_a_fact_could_not_be_checked() {
+    // the report exits 3 then: the issues are done, and the service still shows the failure
+    let w = Weekly::new();
+    std::fs::create_dir_all(w.data()).unwrap();
+    std::fs::write(w.data().join("state.json"), "v1\n").unwrap();
+    let o = w.run(&[("FAKE_CONTRACT_EXIT", "2"), ("FAKE_REPORT_EXIT", "3")]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert_eq!(
+        std::fs::read_to_string(w.data().join("state.json")).unwrap(),
+        "v2\n"
+    );
+}
+
+#[test]
+fn a_release_issue_that_a_person_closed_stays_closed_when_a_fact_could_not_be_checked_each_week() {
+    // the real weekly.sh and contract-report.sh: one fact has the outcome `error` in each run, and
+    // the host lists no open issue because a person closed the release issue after each week
+    let w = Weekly::new();
+    w.with_the_real_report();
+    std::fs::create_dir_all(w.data()).unwrap();
+    std::fs::write(w.data().join("state.json"), "v1\n").unwrap();
+    let verify = w.dir.path().to_str().unwrap();
+    for week in 1..=3 {
+        let o = w.run(&[("FAKE_VERIFY", verify)]);
+        assert_eq!(o.status.code(), Some(2), "week {week}: {}", text(&o.stderr));
+        assert_eq!(
+            std::fs::read_to_string(w.data().join("state.json")).unwrap(),
+            "v2\n",
+            "week {week}: the new tag is kept"
+        );
+    }
+    let calls = lines_of(&w.dir.path().join("gh.log"));
+    let creates: Vec<&String> = calls
+        .iter()
+        .filter(|c| c.starts_with("issue create"))
+        .collect();
+    assert_eq!(creates.len(), 1, "{calls:?}");
+    assert!(
+        creates[0].contains("--title Prove the facts again on spectrocloud/palette-sdk-go v2"),
+        "{}",
+        creates[0]
+    );
 }
 
 #[test]

@@ -32,7 +32,7 @@ The tenant is the one that PALETTE_API, PALETTE_API_KEY, and ~/.palette.env name
 of the tenant scope with no project, as strata does. The lab account of a cloud is the one that the
 tool uses. STRATA_CONTRACT_<NAME> gives {name} in a call, such as the project.
 Exit 0 when each fact is the same, 1 when a fact differs or a value is unknown, 2 when the run could
-not check.";
+not check a fact, or checked none.";
 
 /// The options of the run.
 pub(super) struct Options {
@@ -91,7 +91,7 @@ pub fn command(args: &[&str]) -> ExitCode {
     }
 }
 
-fn contract(options: &Options) -> Result<u8, String> {
+pub(super) fn contract(options: &Options) -> Result<u8, String> {
     let repo = repository();
     let facts = facts::load(&repo).map_err(|bad| bad.join("\nxtask: "))?;
     let stand_in = stand_in(&repo, options.stand_in.as_deref())?;
@@ -168,7 +168,7 @@ pub fn harvest_command(dir: &str) -> ExitCode {
 /// builds in a directory of its own.
 fn stand_in(repo: &Path, given: Option<&Path>) -> Result<StandIn, String> {
     if let Some(dir) = given {
-        return Ok(StandIn::read(dir));
+        return StandIn::read(dir);
     }
     built_examples(repo)?;
     let into = std::env::temp_dir().join(format!("strata-contract-{}", std::process::id()));
@@ -179,5 +179,6 @@ fn stand_in(repo: &Path, given: Option<&Path>) -> Result<StandIn, String> {
     let stand_in = StandIn::read(&into);
     // the directory is in the temporary directory, so a failed removal costs only disk space
     let _ = std::fs::remove_dir_all(&into);
-    built.map(|()| stand_in)
+    built?;
+    stand_in
 }

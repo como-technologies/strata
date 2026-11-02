@@ -25,8 +25,8 @@
 # The tenant is the one that PALETTE_API, PALETTE_API_KEY, and ~/.palette.env name. The result is
 # the document strata-contract/1 in contract.json under runs/<UTC time>/contract/, or OUT.
 # Exit 0 when each fact the run checked is the same and no value is unknown, 1 when a fact differs
-# or a value is unknown, and 2 when the run could not check. contract-report.sh turns the result
-# into issues.
+# or a value is unknown, and 2 when the run could not check a fact, or checked none.
+# contract-report.sh turns the result into issues.
 set -uo pipefail
 
 live=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

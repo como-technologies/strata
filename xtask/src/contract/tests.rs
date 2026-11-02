@@ -7,7 +7,7 @@ use std::path::Path;
 
 use serde_json::{Value, json};
 use strata::api::codes::PROJECT_SCOPE_CODE;
-use strata::api::{HttpApi, MemoryApi};
+use strata::api::{HttpApi, MemoryApi, RawCluster, cloud_config_path};
 use strata::config::Config;
 
 use super::document::{Contract, DifferenceKind, Outcome, Unknown};
@@ -144,7 +144,7 @@ fn write_tenant(dir: &Path, docs: &[(&str, Value)]) {
 fn stand_in(docs: &[(&str, Value)]) -> (tempfile::TempDir, StandIn) {
     let root = tempfile::tempdir().unwrap();
     write_tenant(&root.path().join("chapter"), docs);
-    let stand_in = StandIn::read(root.path());
+    let stand_in = StandIn::read(root.path()).unwrap();
     (root, stand_in)
 }
 
@@ -305,6 +305,60 @@ fn the_placeholders_of_a_cloud_config_come_from_the_document_of_the_cluster() {
     );
 }
 
+/// The documents of the small tenant, with `cluster` as the document of its cluster.
+fn with_cluster(cluster: Value) -> Vec<(&'static str, Value)> {
+    let mut docs = documents("Running");
+    docs[1].1 = cluster;
+    docs
+}
+
+#[test]
+fn the_cloud_type_of_a_cluster_is_read_as_strata_reads_it() {
+    // the kind of the cloud config comes first, then the cloud type of the spec, as the route of
+    // the cloud config of strata reads them
+    let cases = [
+        (
+            "the kind only",
+            json!({"cloudConfigRef": {"kind": "eks", "uid": "cc1"}}),
+        ),
+        (
+            "the kind and another cloud type",
+            json!({"cloudType": "aws", "cloudConfigRef": {"kind": "eks", "uid": "cc1"}}),
+        ),
+        (
+            "the cloud type only",
+            json!({"cloudType": "aws", "cloudConfigRef": {"uid": "cc1"}}),
+        ),
+    ];
+    for (name, spec) in cases {
+        let cluster = json!({"metadata": {"uid": "c1"}, "spec": spec});
+        let kind = RawCluster::cloud_type(&cluster).to_string();
+        let api = memory(&with_cluster(cluster));
+        let probe = subject::Probe::new(&api, &api);
+        let found = subject::find(&probe, &facts(), "/v1/cloudconfigs/{cloudType}/{configUid}");
+        assert!(!kind.is_empty(), "{name}");
+        assert_eq!(
+            found,
+            subject::Subject::Path(cloud_config_path(&kind, "cc1")),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn a_cluster_that_names_no_cloud_type_is_no_subject_for_its_cloud_config() {
+    let cluster = json!({"metadata": {"uid": "c1"}, "spec": {"cloudConfigRef": {"uid": "cc1"}}});
+    let api = memory(&with_cluster(cluster));
+    let probe = subject::Probe::new(&api, &api);
+    match subject::find(&probe, &facts(), "/v1/cloudconfigs/{cloudType}/{configUid}") {
+        subject::Subject::Missing(why) => {
+            assert!(why.contains("{cloudType}"), "{why}");
+            assert!(why.contains("holds no cloud type"), "{why}");
+        }
+        other => panic!("expected no subject, got {other:?}"),
+    }
+}
+
 #[test]
 fn a_listing_is_read_once_for_all_the_requests_that_use_it() {
     let api = memory(&documents("Running"));
@@ -419,11 +473,9 @@ fn each_source_names_a_get_request_of_the_list_whose_own_placeholders_have_a_sou
             "the request of `{}` has a placeholder with no source",
             source.fact
         );
-        assert!(
-            source.pointer.starts_with('/'),
-            "{} is no pointer",
-            source.pointer
-        );
+        if let subject::Read::Pointer(pointer) = source.read {
+            assert!(pointer.starts_with('/'), "{pointer} is no pointer");
+        }
     }
 }
 
@@ -716,6 +768,16 @@ fn a_skipped_fact_does_not_change_the_exit_code() {
 }
 
 #[test]
+fn a_run_that_checked_no_fact_exits_2_and_not_0() {
+    // the stand-in serves no document, so each fact is skipped and the run sends no request
+    let contract = contract(&StandIn::default(), &memory(&documents("Running")));
+    assert_eq!(contract.summary.same + contract.summary.differs, 0);
+    assert!(contract.summary.skipped > 0);
+    assert_eq!(contract.summary.error, 0);
+    assert_eq!(contract.exit_code(), 2);
+}
+
+#[test]
 fn a_field_of_another_type_makes_the_fact_differ_and_the_entry_names_the_field() {
     let (_root, stand_in) = stand_in(&documents("Running"));
     let mut changed = documents("Running");
@@ -760,7 +822,7 @@ fn a_field_that_the_stand_in_lacks_in_one_document_can_be_missing_from_the_answe
     let root = tempfile::tempdir().unwrap();
     write_tenant(&root.path().join("one"), &documents("Running"));
     write_tenant(&root.path().join("two"), &with);
-    let stand_in = StandIn::read(root.path());
+    let stand_in = StandIn::read(root.path()).unwrap();
     let contract = contract(&stand_in, &memory(&documents("Running")));
     assert_eq!(outcome(&contract, "cluster-document"), Outcome::Same);
 }
@@ -1317,10 +1379,45 @@ fn the_stand_in_omits_a_file_of_a_refusal_and_a_file_that_is_no_json() {
         "not json",
     )
     .unwrap();
-    let stand_in = StandIn::read(root.path());
+    let stand_in = StandIn::read(root.path()).unwrap();
     let found = stand_in.documents(&["v1/spectroclusters/{uid}".to_string()]);
     assert_eq!(found.len(), 1);
     assert_eq!(found[0]["metadata"]["uid"], "c1");
+}
+
+#[test]
+fn a_stand_in_directory_that_is_not_there_is_an_error_and_not_an_empty_stand_in() {
+    let root = tempfile::tempdir().unwrap();
+    let missing = root.path().join("no/such/dir");
+    let error = StandIn::read(&missing).unwrap_err();
+    assert!(error.contains(missing.to_str().unwrap()), "{error}");
+}
+
+#[test]
+fn a_stand_in_directory_that_holds_no_document_is_an_error() {
+    let root = tempfile::tempdir().unwrap();
+    let error = StandIn::read(root.path()).unwrap_err();
+    assert!(error.contains("the stand-in holds no document"), "{error}");
+
+    // a chapter whose only file is no JSON gives no document either
+    let tenant = root.path().join("chapter/tenant/v1");
+    std::fs::create_dir_all(&tenant).unwrap();
+    std::fs::write(tenant.join("clusters.json"), "not json").unwrap();
+    assert!(StandIn::read(root.path()).is_err());
+}
+
+#[test]
+fn the_command_stops_at_a_stand_in_that_is_not_there_before_it_sends_a_request() {
+    use super::command::{Options, contract as run_command};
+    let root = tempfile::tempdir().unwrap();
+    let missing = root.path().join("no/such/dir");
+    let missing = missing.to_str().unwrap();
+    let error = run_command(&Options::parse(&["--stand-in", missing]).unwrap()).unwrap_err();
+    assert!(error.contains(missing), "{error}");
+
+    let empty = root.path().to_str().unwrap();
+    let error = run_command(&Options::parse(&["--stand-in", empty]).unwrap()).unwrap_err();
+    assert!(error.contains("the stand-in holds no document"), "{error}");
 }
 
 // ---- the document ----------------------------------------------------------------------------
@@ -1515,7 +1612,7 @@ fn harvested() -> Option<StandIn> {
     }
     let into = tempfile::tempdir().unwrap();
     super::stand_in::harvest(&repo, &xtask, into.path()).unwrap();
-    Some(StandIn::read(into.path()))
+    Some(StandIn::read(into.path()).expect("the harvest wrote the tenant of each chapter"))
 }
 
 /// The harvest gives the stand-in a document for each route of a fact.
@@ -1712,5 +1809,71 @@ fn an_option_that_the_command_does_not_have_and_an_option_with_no_value_are_refu
     assert_eq!(
         Options::parse(&["--state"]).err().as_deref(),
         Some("--state needs a value")
+    );
+}
+
+// ---- the values of a profile --------------------------------------------------------------
+
+/// The documents of a tenant with one profile: its listing, and the profile with the type `kind`
+/// and one pack from a registry with the provider `provider`.
+fn profile_documents(kind: &str, provider: &str) -> Vec<(&'static str, Value)> {
+    vec![
+        (
+            "v1/dashboard/clusterprofiles/metadata",
+            json!({"items": [{"metadata": {"uid": "p1", "name": "stack"}}]}),
+        ),
+        (
+            "v1/clusterprofiles/p1",
+            json!({
+                "metadata": {"uid": "p1"},
+                "spec": {"published": {"type": kind, "packs": [
+                    {"name": "chart", "annotations": {"ociRegistryProviderType": provider}}]}},
+            }),
+        ),
+    ]
+}
+
+/// The entry of the fact `profile-document` when the stand-in holds a profile of the type
+/// `add-on` with the provider `zarf` and the tenant holds `tenant`.
+fn profile_entry(tenant: &[(&str, Value)]) -> super::document::Entry {
+    let (_root, stand_in) = stand_in(&profile_documents("add-on", "zarf"));
+    let contract = contract_of(&real_facts(), &stand_in, &memory(tenant));
+    contract
+        .facts
+        .into_iter()
+        .find(|e| e.id == "profile-document")
+        .expect("an entry for the profile")
+}
+
+#[test]
+fn a_profile_type_and_a_provider_that_strata_does_not_know_are_unknown_values() {
+    let entry = profile_entry(&profile_documents("edge-addon", "oras"));
+    assert_eq!(entry.outcome, Outcome::Same, "{:?}", entry.differences);
+    let found: Vec<(&str, &[String])> = entry
+        .unknown_values
+        .iter()
+        .map(|u| (u.set.as_str(), u.values.as_slice()))
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (
+                "spec.published.packs[].annotations.ociRegistryProviderType",
+                ["oras".to_string()].as_slice()
+            ),
+            ("spec.published.type", ["edge-addon".to_string()].as_slice()),
+        ]
+    );
+}
+
+#[test]
+fn a_profile_type_and_a_provider_that_the_fact_names_are_no_unknown_values() {
+    // the stand-in holds `add-on` and `zarf`; the fact names the other values of the sets
+    let entry = profile_entry(&profile_documents("infra", "helm"));
+    assert_eq!(entry.outcome, Outcome::Same);
+    assert!(
+        entry.unknown_values.is_empty(),
+        "{:?}",
+        entry.unknown_values
     );
 }
