@@ -672,6 +672,17 @@ pub fn live_script(name: &str) -> std::path::PathBuf {
         .join(name)
 }
 
+/// Copy each file of `files`, a path from the root of the repository, to the same path under
+/// `tree`, and make it executable. A test that runs a script in a tree of its own names with the
+/// script each file that it sources, such as `examples/live/common.sh`.
+pub fn copy_scripts(tree: &Path, files: &[&str]) {
+    for file in files {
+        let to = tree.join(file);
+        fs::create_dir_all(to.parent().unwrap()).unwrap();
+        executable(&to, &repo_file(file));
+    }
+}
+
 /// A stand-in that logs its name and its arguments to the file `FAKE_LOG`, prints `FAKE_OUT`, and
 /// exits with `FAKE_EXIT`. With `--out DIR`, it also writes `FAKE_OUT` to `DIR/report.md`, as
 /// `strata preflight` writes its report.
@@ -1289,6 +1300,14 @@ pub fn snapshot_from_raw(raw: &Path, name: &str, out: &Path) {
         .output_locked()
         .unwrap();
     assert!(o.status.success(), "snapshot {name}: {}", text(&o.stderr));
+}
+
+/// The `kind` (a body or a comment) that a stand-in kept from the call with the 1-based number
+/// `call`, as `<kind>-<call>.md` under `dir`. [`FAKE_ISSUES_GH`] and the stand-in curl of the
+/// GitLab tests write the files.
+pub fn handed_in(dir: &Path, kind: &str, call: usize) -> String {
+    fs::read_to_string(dir.join(format!("{kind}-{call}.md")))
+        .unwrap_or_else(|_| panic!("no {kind} from call {call}"))
 }
 
 /// A `gh` for issues: logs each call, keeps each body file it is handed as body-<n>.md in call

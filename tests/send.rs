@@ -10,22 +10,23 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use strata::closed_set::unknown::log::{FILE, SENT_FILE};
-use strata::closed_set::unknown::report::MOST_VALUES;
+use strata::closed_set::unknown::report::{MOST_VALUES, SCHEMA as REPORT_SCHEMA};
 use strata::closed_set::unknown::send::{ADDRESS_SETTING, ANSWER_FILE, ENDPOINT, SETTING};
 
 use crate::common::{
-    Answer, Endpoint, REFUSED, Run, fake_bin, give_strata, isolate_palette, later_type_tenant,
-    list_command, log_in, path_with, serve_routes, strata_command, through_proxy, walk,
+    Answer, Endpoint, LATER_TYPE, REFUSED, Run, fake_bin, give_strata, isolate_palette,
+    later_type_tenant, list_command, log_in, log_line, path_with, serve_routes, state_in,
+    strata_command, through_proxy, walk, write_log,
 };
 
 /// The report that one run of `list` sends: one value, seen once.
 fn one_run_report() -> Value {
     json!({
-        "schema": "strata-report/1",
+        "schema": REPORT_SCHEMA,
         "unknown": [{
             "strata": strata::TOOL_VERSION,
             "set": "ProfileType",
-            "value": "later-type",
+            "value": LATER_TYPE,
             "route": "/v1/clusterprofiles/{uid}",
             "count": 1,
         }],
@@ -58,11 +59,6 @@ fn list_unguarded(api: &str, home: &Path, trap: &Endpoint, env: &[(&str, &str)])
         .env_remove(ADDRESS_SETTING)
         .envs(env.iter().copied());
     Run::of(&mut command)
-}
-
-/// The state folder of the run that used `home` as its home.
-fn state_in(home: &Path) -> std::path::PathBuf {
-    log_in(home).parent().unwrap().to_path_buf()
 }
 
 /// With the address that the release names, a run that wrote a line to the log sends nothing and
@@ -144,16 +140,10 @@ fn offline_preflight_sends_nothing_though_the_setting_is_on_and_the_log_holds_a_
     assert!(ENDPOINT.is_some(), "the release names the endpoint");
     let trap = trap();
     let home = tempfile::tempdir().unwrap();
-    std::fs::create_dir_all(state_in(home.path())).unwrap();
-    std::fs::write(
-        log_in(home.path()),
-        format!(
-            "{}\n",
-            json!({"schema": "strata-unknown/1", "strata": strata::TOOL_VERSION,
-                "set": "ProfileType", "value": "later-type", "route": "/v1/packs"})
-        ),
-    )
-    .unwrap();
+    write_log(
+        home.path(),
+        &[log_line("ProfileType", LATER_TYPE, "/v1/packs")],
+    );
     // preflight is the other binary, and offline it reads nothing from Palette. The run uses the
     // binary beside strata when a build made it, and else this stand-in: the result is the same
     let bin = fake_bin(home.path(), &[("strata-preflight", "#!/bin/sh\nexit 0\n")]);
@@ -443,19 +433,10 @@ fn no_file_of_the_tests_but_the_helpers_names_the_binary_of_strata_to_start_it()
 
 /// Write a log of `count` lines, each a value of its own, and give its path.
 fn long_log(home: &Path, count: usize) -> std::path::PathBuf {
-    let file = log_in(home);
-    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-    let lines: String = (0..count)
-        .map(|n| {
-            format!(
-                "{}\n",
-                json!({"schema": "strata-unknown/1", "strata": strata::TOOL_VERSION,
-                    "set": "ProfileType", "value": format!("later-{n:03}"), "route": "/v1/packs"})
-            )
-        })
+    let lines: Vec<String> = (0..count)
+        .map(|n| log_line("ProfileType", &format!("later-{n:03}"), "/v1/packs"))
         .collect();
-    std::fs::write(&file, lines).unwrap();
-    file
+    write_log(home, &lines)
 }
 
 /// How many entries each request of `endpoint` holds.
@@ -489,20 +470,17 @@ fn a_report_has_20_values_or_fewer_also_when_the_endpoint_would_take_more_entrie
     // limit of 20 values does not.
     let endpoint = Endpoint::answering(Answer::Status(200));
     let home = tempfile::tempdir().unwrap();
-    let file = log_in(home.path());
-    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-    let lines: String = (0..3)
+    let lines: Vec<String> = (0..3)
         .flat_map(|value| (0..50).map(move |route| (value, route)))
         .map(|(value, route)| {
-            format!(
-                "{}\n",
-                json!({"schema": "strata-unknown/1", "strata": strata::TOOL_VERSION,
-                    "set": "ProfileType", "value": format!("later-{value}"),
-                    "route": format!("/v1/routes/{route}")})
+            log_line(
+                "ProfileType",
+                &format!("later-{value}"),
+                &format!("/v1/routes/{route}"),
             )
         })
         .collect();
-    std::fs::write(&file, lines).unwrap();
+    let file = write_log(home.path(), &lines);
     strata::ops::send_unknown_report(&file, &endpoint.url).unwrap();
     assert_eq!(entries_of(&endpoint), [100, 50]);
 }

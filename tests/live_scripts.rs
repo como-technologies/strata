@@ -1062,6 +1062,69 @@ fn lib_sh_stops_the_send_of_the_report_whatever_the_machine_says() {
     }
 }
 
+#[test]
+fn common_sh_defines_die_and_usage_and_nothing_else_and_it_prints_nothing_when_a_script_sources_it()
+{
+    // lib.sh stops on a stale binary of strata. common.sh is for a script that runs no strata, so
+    // it holds no check
+    let dir = tempfile::tempdir().unwrap();
+    let demo = dir.path().join("demo.sh");
+    executable(
+        &demo,
+        &format!(
+            "#!/usr/bin/env bash\n# The demo of common.sh.\n#\n#   demo.sh\nset -uo pipefail\nscript=demo\n. '{common}'\ndeclare -F\nusage\ndie 'it failed'\n",
+            common = live_script("common.sh").display()
+        ),
+    );
+    // no variable of the machine, so that no exported function of the machine shows in the list
+    let o = Command::new("bash")
+        .arg(&demo)
+        .env_clear()
+        .env("PATH", std::env::var("PATH").unwrap())
+        .output_locked()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    assert_eq!(
+        text(&o.stdout),
+        "declare -f die\ndeclare -f usage\nThe demo of common.sh.\n\n  demo.sh\n"
+    );
+    assert_eq!(text(&o.stderr), "demo: it failed\n");
+}
+
+#[test]
+fn die_and_usage_are_defined_in_common_sh_alone_and_the_scripts_that_have_them_source_it() {
+    // the same two lines were in lib.sh, contract.sh, and contract-profiles.sh
+    let common = repo_file("examples/live/common.sh");
+    let die = r#"die() { echo "$script: $*" >&2; exit 2; }"#;
+    assert!(common.lines().any(|l| l == die), "common.sh has die");
+    assert!(
+        common
+            .lines()
+            .any(|l| l.starts_with("usage() { sed -n '2,/^set -uo/p'")),
+        "common.sh has usage"
+    );
+    for entry in std::fs::read_dir(live_script("")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "sh") || path.ends_with("common.sh") {
+            continue;
+        }
+        let script = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            !script
+                .lines()
+                .any(|l| l == die || l.starts_with("usage() ")),
+            "{} defines die or usage again: source common.sh",
+            path.display()
+        );
+    }
+    for name in ["lib.sh", "contract.sh", "contract-profiles.sh"] {
+        assert!(
+            repo_file(&format!("examples/live/{name}")).contains(". \"$live/common.sh\"\n"),
+            "{name} sources common.sh"
+        );
+    }
+}
+
 /// The route that gives the release, as Palette answers it: the release to a call with no key,
 /// and HTTP 500 to a call with an `ApiKey` header.
 fn release_route(routes: &Path) {
@@ -4332,18 +4395,22 @@ fn terraform_file(name: &str) -> String {
     std::fs::read_to_string(live_script("terraform").join(name)).unwrap()
 }
 
-/// The default of the variable `name` in `variables.tf`, without the quotes of a text. `None` when
-/// the variable has no default.
-fn variable_default(name: &str) -> Option<String> {
-    let variables = terraform_file("variables.tf");
-    let declaration = variables
+/// The text of the declaration of the variable `name` in `variables.tf`, after its opening brace.
+fn variable_declaration(name: &str) -> String {
+    terraform_file("variables.tf")
         .split(&format!("variable \"{name}\" {{"))
         .nth(1)
         .unwrap_or_else(|| panic!("variables.tf declares {name}"))
         .split("\n}\n")
         .next()
-        .unwrap();
-    declaration
+        .unwrap()
+        .to_string()
+}
+
+/// The default of the variable `name` in `variables.tf`, without the quotes of a text. `None` when
+/// the variable has no default.
+fn variable_default(name: &str) -> Option<String> {
+    variable_declaration(name)
         .lines()
         .find_map(|l| l.trim().strip_prefix("default"))
         .and_then(|l| l.trim_start().strip_prefix('='))
@@ -4379,13 +4446,13 @@ fn a_cluster_in_the_cluster_template_gets_a_time_zone_because_palette_refuses_it
     );
 
     // The clouds whose cluster resource takes a cluster template: variables.tf says aws and gcp.
-    let mut templated: Vec<String> = std::fs::read_dir(live_script("terraform"))
-        .unwrap()
-        .map(|e| e.unwrap().file_name().into_string().unwrap())
-        .filter(|name| name.starts_with("cloud-") && name.ends_with(".tf"))
-        .filter(|name| terraform_file(name).contains("dynamic \"cluster_template\""))
+    let templated: Vec<String> = terraform_files()
+        .into_iter()
+        .filter(|(name, text)| {
+            name.starts_with("cloud-") && text.contains("dynamic \"cluster_template\"")
+        })
+        .map(|(name, _)| name)
         .collect();
-    templated.sort();
     assert_eq!(templated, ["cloud-aws.tf", "cloud-gcp.tf"]);
     for name in templated {
         assert!(
@@ -4660,14 +4727,7 @@ fn each_profile_that_needs_an_own_registry_counts_by_own_registries() {
 
 #[test]
 fn the_switch_own_registries_defaults_to_true_and_no_recipe_of_the_live_example_sets_it() {
-    let variables = terraform_file("variables.tf");
-    let declaration = variables
-        .split("variable \"own_registries\" {")
-        .nth(1)
-        .expect("variables.tf declares own_registries")
-        .split("\n}\n")
-        .next()
-        .unwrap();
+    let declaration = variable_declaration("own_registries");
     assert!(declaration.contains("type        = bool"), "{declaration}");
     assert_eq!(
         variable_default("own_registries").as_deref(),
@@ -4696,8 +4756,9 @@ fn the_switch_own_registries_defaults_to_true_and_no_recipe_of_the_live_example_
     assert!(!terraform_file("terraform.tfvars.example").contains("own_registries"));
 }
 
-/// A tree with `contract-profiles.sh` and `tf.sh`, and a `tofu` that logs its arguments to
-/// `FAKE_LOG`. The state file of the set is where the script puts it in this tree.
+/// A tree with `contract-profiles.sh`, the `common.sh` that it sources, and `tf.sh`, and a `tofu`
+/// that logs its arguments to `FAKE_LOG`. The state file of the set is where the script puts it in
+/// this tree.
 struct StandingSet {
     dir: tempfile::TempDir,
 }
@@ -4707,12 +4768,14 @@ impl StandingSet {
         let dir = tempfile::tempdir().unwrap();
         let live = dir.path().join("tree/examples/live");
         std::fs::create_dir_all(live.join("terraform")).unwrap();
-        for script in ["contract-profiles.sh", "tf.sh"] {
-            executable(
-                &live.join(script),
-                &repo_file(&format!("examples/live/{script}")),
-            );
-        }
+        copy_scripts(
+            &dir.path().join("tree"),
+            &[
+                "examples/live/contract-profiles.sh",
+                "examples/live/common.sh",
+                "examples/live/tf.sh",
+            ],
+        );
         fake_bin(dir.path(), &[("tofu", LOGGING_TOOL)]);
         std::fs::create_dir(dir.path().join("home")).unwrap();
         StandingSet { dir }

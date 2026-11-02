@@ -43,6 +43,8 @@
 # The host layer is the one of scripts/ci/verify-report.sh. This script reads its functions from
 # that file, so a change to the host layer reaches this script. This script is not shipped, so it
 # can read a file of the repository, which a shipped script cannot. Only GitHub is a host here.
+# The project of a checkout and the first line of a body come from github.sh, which upstream.sh
+# reads too.
 #
 # Needs jq, and gh logged in to the repository.
 set -Eeuo pipefail
@@ -61,6 +63,8 @@ case "$layer" in
   *) echo "$script: scripts/ci/verify-report.sh has no host layer to read" >&2; exit 2 ;;
 esac
 eval "$layer"
+# remote_repo, and the jq function that reads the first line of the body of an issue
+. "$here/github.sh"
 
 # ---- arguments ---------------------------------------------------------------------------------
 document=""
@@ -110,14 +114,6 @@ use_label() {
   fi
 }
 
-# remote_repo -> OWNER/REPO of the origin remote of the checkout in the current directory, when the
-# remote is on GitHub, or nothing. It reads a local file, so a dry run still calls no host.
-remote_repo() {
-  git remote get-url origin 2> /dev/null \
-    | sed -nE 's#^(https?|ssh|git)://([^/@]+@)?github\.com/([^/]+/[^/]+)$#\3#p; s#^[^/@:]+@github\.com:([^/]+/[^/]+)$#\1#p' \
-    | sed -E 's#\.git$##' || true
-}
-
 if [ -z "$dry" ]; then
   [ -n "$repo" ] || repo=$(host repo)
   [ -n "$repo" ] || die "could not determine the project; pass --repo"
@@ -140,8 +136,7 @@ page="https://github.com/${repo:-OWNER/REPO}/blob/main/docs/src/development/fact
 
 # issue_for MARKER -> the lowest open issue number whose body starts with MARKER
 issue_for() {
-  jq -r --arg m "$1" \
-    '[.[] | select(((.body // "") | split("\n")[0] | rtrimstr("\r")) == $m) | .number] | min // empty' \
+  jq -r --arg m "$1" "$first_line_jq"'[.[] | select(first_line == $m) | .number] | min // empty' \
     "$work/issues.json"
 }
 
@@ -222,8 +217,8 @@ values_issues() {
     case " ${current[*]-} " in *" $field "*) continue ;; esac
     host close_issue "$number" "No answer of the tenant holds a new value for \`$field\` in \`$id\` now (checked $checked)."
     actions+=("closed #$number for $id $field")
-  done 4< <(jq -r --arg p "$prefix" '
-    .[] | ((.body // "") | split("\n")[0] | rtrimstr("\r")) as $first
+  done 4< <(jq -r --arg p "$prefix" "$first_line_jq"'
+    .[] | first_line as $first
     | select($first | startswith($p))
     | "\(.number)\t\($first | ltrimstr($p) | rtrimstr(" -->"))"' "$work/issues.json")
 }

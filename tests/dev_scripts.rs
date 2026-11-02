@@ -68,6 +68,164 @@ fn tag_release_tags_the_cargo_version_once_and_only_on_a_clean_tree() {
     );
 }
 
+// ---- set-version.sh ------------------------------------------------------------------------
+
+/// A `just` that stands in for the recipe `docs-examples`. It writes the version of `Cargo.toml`
+/// in the output of the book that names a version, as a build of that version does.
+/// `FAKE_STALE` makes it change an output that names no version, and `FAKE_JUST_EXIT` makes it fail.
+const FAKE_JUST_DOCS: &str = r#"#!/usr/bin/env bash
+echo "just $*" >> "$FAKE_LOG"
+[ "$1" = docs-examples ] || exit 2
+version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml)
+sed -i "s/strata [0-9][0-9.]*$/strata $version/" docs/src/output/report.txt
+[ -z "${FAKE_STALE:-}" ] || echo "changed" > docs/src/output/list.txt
+exit "${FAKE_JUST_EXIT:-0}"
+"#;
+
+/// A repository at version `0.9.9` with `set-version.sh`, a lock file, and two outputs of the
+/// book. `report.txt` prints `printed` as the version of strata. `list.txt` names no version of
+/// strata. The commit has the subject `init`.
+fn release_tree(printed: &str) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path();
+    git(d, &["init", "-q", "-b", "main"]);
+    std::fs::write(
+        d.join("Cargo.toml"),
+        "[package]\nname = \"x\"\nversion = \"0.9.9\"\n",
+    )
+    .unwrap();
+    std::fs::write(d.join("Cargo.lock"), "# the lock\n").unwrap();
+    copy_scripts(d, &["scripts/dev/set-version.sh"]);
+    let output = d.join("docs/src/output");
+    std::fs::create_dir_all(&output).unwrap();
+    std::fs::write(
+        output.join("report.txt"),
+        format!(
+            "$ strata report\n  ProfileType  later-type  /v1/packs  2 times  strata {printed}\n"
+        ),
+    )
+    .unwrap();
+    std::fs::write(output.join("list.txt"), "$ strata list\naws-stack@1.1.1\n").unwrap();
+    git(d, &["add", "."]);
+    git(d, &["commit", "-q", "-m", "init"]);
+    dir
+}
+
+/// Run `set-version.sh` in `dir` with the stand-ins `cargo` and `just`. Gives the output and the
+/// calls that the stand-ins got.
+fn set_version(dir: &Path, new: &str, env: &[(&str, &str)]) -> (Output, Vec<String>) {
+    let bin = fake_bin(dir, &[("cargo", LOGGING_TOOL), ("just", FAKE_JUST_DOCS)]);
+    let log = dir.join("calls.log");
+    let mut c = Command::new("bash");
+    c.arg(dir.join("scripts/dev/set-version.sh"))
+        .arg(new)
+        .current_dir(dir)
+        .env("PATH", path_with(&bin))
+        .env("FAKE_LOG", &log)
+        .envs(env.iter().copied());
+    let o = isolate_git(&mut c).output_locked().unwrap();
+    let calls = std::fs::read_to_string(&log)
+        .unwrap_or_default()
+        .lines()
+        .map(String::from)
+        .collect();
+    (o, calls)
+}
+
+/// The text of `file` in the last commit of `dir`.
+fn committed(dir: &Path, file: &str) -> String {
+    text(&git(dir, &["show", &format!("HEAD:{file}")]).stdout)
+}
+
+#[test]
+fn set_version_writes_the_outputs_of_the_book_that_print_the_version_in_the_release_commit() {
+    // the outputs of the book print the version of strata, so `just docs-check` failed on the
+    // release commit until a person wrote them again by hand
+    let dir = release_tree("0.9.9");
+    let (o, calls) = set_version(dir.path(), "0.9.10", &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(
+        calls,
+        ["cargo update --offline --workspace", "just docs-examples"]
+    );
+    let d = dir.path();
+    assert_eq!(
+        text(&git(d, &["log", "-1", "--format=%s"]).stdout).trim(),
+        "chore: release 0.9.10"
+    );
+    assert!(committed(d, "docs/src/output/report.txt").ends_with("2 times  strata 0.9.10\n"));
+    assert!(committed(d, "Cargo.toml").contains("version = \"0.9.10\""));
+    assert_eq!(
+        committed(d, "docs/src/output/list.txt"),
+        "$ strata list\naws-stack@1.1.1\n"
+    );
+    assert_eq!(
+        text(&git(d, &["status", "--porcelain", "--untracked-files=no"]).stdout),
+        "",
+        "the release commit holds each change"
+    );
+}
+
+#[test]
+fn set_version_runs_the_book_only_when_an_output_names_the_old_version() {
+    let dir = release_tree("1.0.0");
+    let (o, calls) = set_version(dir.path(), "0.9.10", &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(
+        calls,
+        ["cargo update --offline --workspace"],
+        "no output names 0.9.9"
+    );
+}
+
+#[test]
+fn set_version_commits_nothing_when_an_output_that_names_no_version_changes() {
+    // the book was not current before the release: the commit must not hide that
+    let dir = release_tree("0.9.9");
+    let (o, _) = set_version(dir.path(), "0.9.10", &[("FAKE_STALE", "1")]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(
+        text(&o.stderr).contains("they did not name 0.9.9:\n  docs/src/output/list.txt\n"),
+        "{}",
+        text(&o.stderr)
+    );
+    let d = dir.path();
+    assert_eq!(
+        text(&git(d, &["log", "-1", "--format=%s"]).stdout).trim(),
+        "init"
+    );
+}
+
+#[test]
+fn set_version_commits_nothing_when_the_book_does_not_build() {
+    let dir = release_tree("0.9.9");
+    let (o, _) = set_version(dir.path(), "0.9.10", &[("FAKE_JUST_EXIT", "1")]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(text(&o.stderr).contains("just docs-examples failed; nothing is committed"));
+    assert_eq!(
+        text(&git(dir.path(), &["log", "-1", "--format=%s"]).stdout).trim(),
+        "init"
+    );
+}
+
+#[test]
+fn set_version_refuses_an_output_of_the_book_that_holds_uncommitted_changes() {
+    let dir = release_tree("0.9.9");
+    std::fs::write(
+        dir.path().join("docs/src/output/report.txt"),
+        "edited by hand strata 0.9.9\n",
+    )
+    .unwrap();
+    let (o, calls) = set_version(dir.path(), "0.9.10", &[]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(
+        text(&o.stderr).contains("docs/src/output"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(calls.is_empty(), "{calls:?}");
+}
+
 // ---- the build of the book -----------------------------------------------------------------
 
 /// Run `build-book.sh` with a stand-in `mdbook` that prints `log` and exits with `exit`. Gives the

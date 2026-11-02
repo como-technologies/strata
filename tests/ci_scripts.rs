@@ -1142,13 +1142,6 @@ fn gitlab_job(gl: &str) -> Vec<(&str, &str)> {
     ]
 }
 
-/// The `kind` (a body or a comment) that a stand-in kept from the call with the 1-based number
-/// `call`, as `<kind>-<call>.md` under `dir`.
-fn handed_in(dir: &Path, kind: &str, call: usize) -> String {
-    std::fs::read_to_string(dir.join(format!("{kind}-{call}.md")))
-        .unwrap_or_else(|_| panic!("no {kind} from call {call}"))
-}
-
 struct Host {
     _dir: tempfile::TempDir,
     bin: PathBuf,
@@ -3817,7 +3810,10 @@ fn live_scripts_refuse_a_strata_binary_older_than_the_sources() {
     for d in [&live, &release, &root.path().join("src")] {
         std::fs::create_dir_all(d).unwrap();
     }
-    std::fs::copy(live_script("lib.sh"), live.join("lib.sh")).unwrap();
+    copy_scripts(
+        root.path(),
+        &["examples/live/lib.sh", "examples/live/common.sh"],
+    );
     executable(
         &live.join("probe.sh"),
         "script=probe\n. \"$(dirname \"$0\")/lib.sh\"\necho ran \"$strata\"\n",
