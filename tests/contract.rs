@@ -475,6 +475,16 @@ fn contract_report_exits_2_for_a_release_that_could_not_be_read_after_it_handled
 }
 
 #[test]
+fn contract_report_exits_2_when_a_host_call_fails_and_not_1() {
+    // the weekly run reads 1 as "the issues are handled": a failed host call must not look like it
+    let r = Report::new();
+    r.open_issues(&[(99, "<!-- strata-contract: cluster-document -->")]);
+    let o = r.report(&document(vec![differing("cluster-document")], vec![]), &[]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert!(text(&o.stderr).contains("Could not resolve to an issue"));
+}
+
+#[test]
 fn contract_report_reads_the_host_layer_of_verify_report_and_stops_when_it_is_not_there() {
     // a copy of the repository with the two scripts, and a verify-report.sh with no host layer
     let tree = tempfile::tempdir().unwrap();
@@ -682,12 +692,15 @@ impl Weekly {
         std::fs::create_dir_all(weekly.parent().unwrap()).unwrap();
         executable(&weekly, &repo_file("deploy/contract/weekly.sh"));
         std::fs::create_dir_all(tree.join("examples/live")).unwrap();
-        // the stand-in contract.sh writes the result where OUT says, as the script does
+        // the stand-in contract.sh writes the result where OUT says, as the script does. It logs
+        // the tag that its state file holds, and keeps the tag v2 in the file, as the run does
         executable(
             &tree.join("examples/live/contract.sh"),
             r#"#!/usr/bin/env bash
 echo "contract.sh $*" >> "$FAKE_LOG"
 echo "OUT=$OUT" >> "$FAKE_LOG"
+echo "state-in=$(cat "$2" 2> /dev/null || echo none)" >> "$FAKE_LOG"
+echo v2 > "$2"
 [ -z "${FAKE_NO_RESULT:-}" ] && echo '{"schema":"strata-contract/1","checkedAt":"t","summary":{"same":1,"differs":0,"skipped":0,"error":0}}' > "$OUT/contract.json"
 exit "${FAKE_CONTRACT_EXIT:-0}"
 "#,
@@ -757,11 +770,11 @@ fn the_weekly_run_updates_builds_runs_reports_and_keeps_the_result() {
     assert_eq!(calls[1], "just examples stand-in");
     assert_eq!(
         calls[2],
-        "contract.sh --state ".to_string() + w.data().join("state.json").to_str().unwrap()
+        "contract.sh --state ".to_string() + run.join("state.json").to_str().unwrap()
     );
     assert_eq!(calls[3], format!("OUT={}", run.display()));
     assert_eq!(
-        calls[4],
+        calls[5],
         format!("contract-report.sh {}/contract.json", run.display())
     );
     assert_eq!(
@@ -769,6 +782,68 @@ fn the_weekly_run_updates_builds_runs_reports_and_keeps_the_result() {
         std::fs::read_to_string(run.join("contract.json")).unwrap()
     );
     assert!(repo.join("deploy/contract/weekly.sh").is_file());
+}
+
+/// The tags that the runs of `w` read from their state file, in the order of the runs.
+fn state_read(w: &Weekly) -> Vec<String> {
+    w.calls()
+        .into_iter()
+        .filter(|c| c.starts_with("state-in="))
+        .collect()
+}
+
+#[test]
+fn the_weekly_run_keeps_the_new_tags_of_the_releases_when_the_report_is_done() {
+    // the report exits 1 when it opened an issue: its work is done, and the tag must not come again
+    for report in ["0", "1"] {
+        let w = Weekly::new();
+        std::fs::create_dir_all(w.data()).unwrap();
+        std::fs::write(w.data().join("state.json"), "v1\n").unwrap();
+        let o = w.run(&[("FAKE_REPORT_EXIT", report)]);
+        assert_eq!(o.status.code(), Some(0), "{report}: {}", text(&o.stderr));
+        assert_eq!(state_read(&w), ["state-in=v1"], "{report}");
+        assert_eq!(
+            std::fs::read_to_string(w.data().join("state.json")).unwrap(),
+            "v2\n",
+            "{report}"
+        );
+        let run = w.data().join("runs").join(&w.runs()[0]);
+        assert!(!run.join("state.json").exists(), "{report}: the copy moved");
+    }
+}
+
+#[test]
+fn a_report_that_fails_keeps_the_old_state_and_the_next_run_notes_the_tag_as_new_again() {
+    let w = Weekly::new();
+    std::fs::create_dir_all(w.data()).unwrap();
+    std::fs::write(w.data().join("state.json"), "v1\n").unwrap();
+    let state = || std::fs::read_to_string(w.data().join("state.json")).unwrap();
+
+    let o = w.run(&[("FAKE_REPORT_EXIT", "2")]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert_eq!(state(), "v1\n", "the tags of the failed week are not kept");
+
+    // the next run starts from the old tags, so it notes the new tag again
+    let o = w.run(&[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(state(), "v2\n");
+
+    // and the week after that has nothing new
+    let o = w.run(&[]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert_eq!(
+        state_read(&w),
+        ["state-in=v1", "state-in=v1", "state-in=v2"]
+    );
+}
+
+#[test]
+fn the_weekly_run_keeps_no_state_from_a_run_that_writes_no_result() {
+    let w = Weekly::new();
+    let o = w.run(&[("FAKE_NO_RESULT", "1"), ("FAKE_CONTRACT_EXIT", "2")]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(!w.data().join("state.json").exists());
+    assert_eq!(state_read(&w), ["state-in=none"]);
 }
 
 #[test]

@@ -354,7 +354,7 @@ fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() 
     let facts = crate::facts::load(&crate::repository()).expect("the list of the facts");
     let mut lacking = Vec::new();
     for fact in facts.iter().filter(|f| f.kind == Kind::Request) {
-        let Some(template) = fact.request.as_deref().and_then(|r| r.strip_prefix("GET ")) else {
+        let Some(template) = fact.get_path() else {
             continue;
         };
         let named = NO_SUBJECT.iter().any(|(id, _)| *id == fact.id);
@@ -842,8 +842,7 @@ fn a_refused_key_a_limit_of_the_rate_and_a_fault_of_the_server_are_not_a_differe
 fn the_harvest_of_the_book_gives_the_stand_in_a_document_for_each_route_of_a_fact() {
     let repo = crate::repository();
     let xtask = repo.join("target/debug/xtask");
-    let built = repo.join("examples/profiles/raw/aws-stack@1.1.1/profile.json");
-    if !built.is_file() || !xtask.is_file() {
+    if crate::book::built_examples(&repo).is_err() || !xtask.is_file() {
         return;
     }
     let into = tempfile::tempdir().unwrap();

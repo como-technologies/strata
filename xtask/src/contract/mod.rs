@@ -17,7 +17,6 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 use strata::api::{Method, PaletteApi};
-use strata::closed_set::ClosedSet;
 
 use crate::facts::{Fact, Kind};
 
@@ -80,10 +79,10 @@ fn check<A: PaletteApi>(
         pages: fact.pages.clone(),
     };
     let skipped = |reason: &str| entry(Outcome::Skipped, Some(reason.to_string()), Vec::new());
-    let Some((method, template)) = request.split_once(' ') else {
+    let Some((method, template)) = fact.parts() else {
         return skipped("the fact states no request");
     };
-    if Method::parse(method) != Some(Method::Get) {
+    if method != Method::Get {
         return skipped("the request sends a body: its live checks send it");
     }
     if fact.reads.fields.is_empty() && fact.reads.values.is_empty() {

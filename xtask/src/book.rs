@@ -43,6 +43,23 @@ pub enum Mode {
     },
 }
 
+/// The first profile that `just examples` writes: the tenants of the book read their pack data from
+/// the raw profiles.
+const FIRST_EXAMPLE: &str = "examples/profiles/raw/aws-stack@1.1.1/profile.json";
+
+/// Check that `just examples` ran in the repository `repo`.
+///
+/// # Errors
+///
+/// The message to show when the examples are not built.
+pub(crate) fn built_examples(repo: &Path) -> Result<(), String> {
+    if repo.join(FIRST_EXAMPLE).is_file() {
+        Ok(())
+    } else {
+        Err("the examples are not built. Run: just examples".to_string())
+    }
+}
+
 /// Split the name that `just playground NAME` takes into its chapter and its state.
 ///
 /// `NAME` is `CHAPTER` or `CHAPTER-N`, with one digit in `N`. `CHAPTER` alone asks for state 1.

@@ -230,6 +230,10 @@ them in this way:
 - A new release has one issue, "Prove the facts again on" the repository and the tag. A person
   closes it.
 
+The script exits with 0 when no fact differs and no release is new. It exits with 1 when it
+handled a fact that differs or a new release. It exits with 2 when a fact or a release could not
+be checked, or when a call to GitHub failed.
+
 The script reads the host layer of `scripts/ci/verify-report.sh`, so it holds no second copy of the
 functions that call GitHub. The contract script is not shipped, so it can read a file of the
 repository. The shipped report scripts stay copies on purpose.
@@ -267,9 +271,15 @@ The job keeps its results in `~/.local/share/strata-contract/`, or in `STRATA_CO
 - `runs/<UTC time>/` holds each run. The 12 newest runs stay.
 - `last.json` holds the newest result.
 - `state.json` holds the tags of the releases that the last run saw.
- The job exits with 2, and the service shows a failure,
-when the run could not check a fact or a release. A fact that differs is no failure: the issue is
-the report.
+
+The run writes the new tags to a copy, `runs/<UTC time>/state.json`. The job moves the copy onto
+`state.json` only when the report handled the issues: the report exits with 0 or 1. When the
+report fails, the old tags stay. The next run then notes the new tag again, and the report opens
+the issue of the release. A report that fails never loses the issue of a release.
+
+The job exits with 2, and the service shows a failure, when the run could not check a fact or a
+release. It also exits with 2 when the report could not write an issue. A fact that differs is no
+failure: the issue is the report.
 
 ### What to do with an issue
 

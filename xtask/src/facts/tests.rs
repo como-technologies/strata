@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use strata::api::Method;
 use strata_preflight::rule::Catalog;
 
 use super::check::{NOT_FACTS, check as faults_of, route_matches, template_matches};
@@ -714,5 +715,28 @@ fn the_list_of_the_repository_prints_as_json_for_a_script() {
         ] {
             assert!(fact.get(field).is_some(), "{} has no {field}", fact["id"]);
         }
+    }
+}
+
+#[test]
+fn the_parts_of_a_request_are_its_method_and_its_path() {
+    let mut fact = world().facts[0].clone();
+    fact.request = Some("GET /v1/clusterprofiles/{uid}".to_string());
+    assert_eq!(
+        fact.parts(),
+        Some((Method::Get, "/v1/clusterprofiles/{uid}"))
+    );
+    assert_eq!(fact.get_path(), Some("/v1/clusterprofiles/{uid}"));
+
+    fact.request = Some("POST /v1/spectroclusters/search".to_string());
+    assert_eq!(
+        fact.parts(),
+        Some((Method::Post, "/v1/spectroclusters/search"))
+    );
+    assert_eq!(fact.get_path(), None);
+
+    for request in [Some("PATCH /v1/x"), Some("/v1/x"), None] {
+        fact.request = request.map(String::from);
+        assert_eq!(fact.parts(), None, "{request:?}");
     }
 }

@@ -97,11 +97,8 @@ fn examples(mode: book::Mode) -> ExitCode {
             strata.display()
         ));
     }
-    if !repo
-        .join("examples/profiles/raw/aws-stack@1.1.1/profile.json")
-        .is_file()
-    {
-        return fail("the examples are not built. Run: just examples");
+    if let Err(message) = book::built_examples(&repo) {
+        return fail(&message);
     }
     let xtask = std::env::current_exe().expect("this binary has a path");
     let mut runner = match book::Runner::start(&repo, &strata, &xtask, mode) {

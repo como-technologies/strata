@@ -20,17 +20,20 @@
 # The label is created when the repository has none. --dry-run prints each issue body and what
 # the script does, and calls no host.
 #
-# Exit 0 when no fact differs and no release is new. Exit 1 when one does. Exit 2 when the document
-# is not a strata-contract/1 document, or holds a fact or a release that the run could not check.
-# The issues are handled first, so a scheduled job shows the state too. A host call that fails
-# stops the script with a nonzero status and what the host said.
+# Exit 0 when no fact differs and no release is new. Exit 1 when one does: the issues are handled.
+# Exit 2 when the document is not a strata-contract/1 document, or holds a fact or a release that
+# the run could not check, or when a host call fails. The script prints what the host said. The
+# issues are handled first, so a scheduled job shows the state too. The weekly job keeps the tags
+# of the releases only when the exit is not 2.
 #
 # The host layer is the one of scripts/ci/verify-report.sh. This script reads its functions from
 # that file, so a change to the host layer reaches this script. This script is not shipped, so it
 # can read a file of the repository, which a shipped script cannot. Only GitHub is a host here.
 #
 # Needs jq, and gh logged in to the repository.
-set -euo pipefail
+set -Eeuo pipefail
+# a command that fails, such as a host call, ends the script with 2, never with the 1 of a difference
+trap 'exit 2' ERR
 
 script=contract-report
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -68,7 +71,7 @@ while [ $# -gt 0 ]; do
     --label) label=$2; shift 2 ;;
     --milestone) milestone=$2; shift 2 ;;
     --dry-run) dry=1; shift ;;
-    -h|--help) sed -n '2,/^set -euo/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,/^set -Eeuo/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     --*) die "unknown option $1" ;;
     *) document=$1; shift ;;
   esac

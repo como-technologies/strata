@@ -10,6 +10,7 @@ use strata::term::progress::Progress;
 use super::releases::{self, GITHUB};
 use super::run;
 use super::stand_in::{StandIn, harvest};
+use crate::book::built_examples;
 use crate::{facts, fail, repository};
 
 /// The usage line, and what the options do.
@@ -127,18 +128,6 @@ fn contract(options: &Options) -> Result<u8, String> {
     match state_error {
         Some(e) => Err(format!("the state of the releases: {e}")),
         None => Ok(document.exit_code()),
-    }
-}
-
-/// Stop with a message when the examples are not built: the tenants of the book read their pack data.
-fn built_examples(repo: &Path) -> Result<(), String> {
-    if repo
-        .join("examples/profiles/raw/aws-stack@1.1.1/profile.json")
-        .is_file()
-    {
-        Ok(())
-    } else {
-        Err("the examples are not built. Run: just examples".to_string())
     }
 }
 

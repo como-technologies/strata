@@ -116,7 +116,7 @@ fn a_harvest_keeps_the_documents_of_each_chapter_in_its_own_directory_and_runs_n
     let answer = serde_json::json!({"ok": true});
     r.chapter("first", &[]);
     r.answer("p", "v1/first/u1", &answer);
-    // a harvest runs no command: this one would stop the run with its exit code
+    // a harvest runs no command: this step exits with 7, and a run of it stops the run
     r.step("never-run", 0, false, "exit 7");
     r.chapter("second", &[]);
     r.answer("p", "v1/second", &answer);
@@ -127,4 +127,17 @@ fn a_harvest_keeps_the_documents_of_each_chapter_in_its_own_directory_and_runs_n
     assert!(!into.join("first/p/v1/second.json").exists());
     assert!(!into.join("second/p/v1/first/u1.json").exists());
     let _ = std::fs::remove_dir_all(&into);
+}
+
+#[test]
+fn the_examples_are_built_when_the_first_example_profile_is_there() {
+    let repo = tempfile::tempdir().unwrap();
+    assert_eq!(
+        built_examples(repo.path()),
+        Err("the examples are not built. Run: just examples".to_string())
+    );
+    let profile = repo.path().join(FIRST_EXAMPLE);
+    std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+    std::fs::write(&profile, "{}").unwrap();
+    assert_eq!(built_examples(repo.path()), Ok(()));
 }

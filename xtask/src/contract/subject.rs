@@ -206,8 +206,7 @@ fn source(template: &str, param: &str) -> Option<&'static Source> {
 
 /// The fact with the id `id`, when it has a request of the method GET.
 pub(super) fn request_of<'a>(facts: &'a [Fact], id: &str) -> Option<&'a str> {
-    let fact = facts.iter().find(|f| f.id == id)?;
-    fact.request.as_deref()?.strip_prefix("GET ")
+    facts.iter().find(|f| f.id == id)?.get_path()
 }
 
 fn fill<A: PaletteApi>(probe: &Probe<A>, facts: &[Fact], template: &str, depth: usize) -> Subject {
