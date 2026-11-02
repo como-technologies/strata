@@ -52,6 +52,8 @@ load_outputs
 C=$(out cluster_uid) R=$(out release_profile_uid)
 release=$(out profile_name)
 [ -n "$C" ] || die "no cluster A; run just live-up"
+# the role bindings of cluster A: stage 5 reads and puts them, and stage 6 reads them with a second key
+rbacs_route=/v1/spectroclusters/$C/config/rbacs
 export PALETTE_PROJECT_UID=$(out project_uid)
 
 # tier_state FILE TIER: the state of one tier in a compare --json, same or changed
@@ -59,18 +61,15 @@ tier_state() { jq -r --arg t "$2" '.clusterTiers[] | select(.tier == $t) | if .s
 
 # rbacs: the role bindings of cluster A, as Palette gives them. A 404 is a cluster with none.
 rbacs() {
-  local err
-  err=$(mktemp)
-  if "$live/api.sh" get "/v1/spectroclusters/$C/config/rbacs" 2> "$err"; then
-    rm -f "$err"
-  elif grep -q 'HTTP 404' "$err"; then
-    rm -f "$err"
-    echo '{"items": []}'
-  else
-    cat "$err" >&2
-    rm -f "$err"
-    return 2
-  fi
+  local answer status
+  answer=$("$live/api.sh" get-status "$rbacs_route") || return 2
+  status=$(sed -n 1p <<< "$answer")
+  case "$status" in
+    "HTTP 2"*) sed 1d <<< "$answer" ;;
+    "HTTP 404") echo '{"items": []}' ;;
+    *) echo "tiers.sh: GET $rbacs_route answered $status: $(sed 1d <<< "$answer" | head -c 300)" >&2
+       return 2 ;;
+  esac
 }
 # put_rbacs [SUBJECT]: PUT the role bindings of cluster A as they were before stage 5, and, with
 # SUBJECT, one more binding of the user SUBJECT to the cluster role view. The PUT replaces each
@@ -81,7 +80,7 @@ put_rbacs() {
     + if $s == "" then [] else [{spec: {bindings: [{type: "ClusterRoleBinding",
       role: {kind: "ClusterRole", name: "view"}, subjects: [{type: "User", name: $s}]}]}}] end)}' rbac-before.out) \
     || return 2
-  "$live/api.sh" put "/v1/spectroclusters/$C/config/rbacs" "$body"
+  "$live/api.sh" put "$rbacs_route" "$body"
 }
 
 if stage 1 "cluster A"; then
@@ -179,7 +178,7 @@ fi
 
 # limited_read: read the role bindings of cluster A with the second key. api.sh get-status prints
 # the status and the body of the refusal; the key never leaves the environment of that one call.
-limited_read() { PALETTE_API_KEY=$STRATA_LIVE_LIMITED_KEY "$live/api.sh" get-status "/v1/spectroclusters/$C/config/rbacs"; }
+limited_read() { PALETTE_API_KEY=$STRATA_LIVE_LIMITED_KEY "$live/api.sh" get-status "$rbacs_route"; }
 # refusal_code: the error code in the body of the refusal that limited-read.out holds after its
 # status line
 refusal_code() { sed 1d limited-read.out | jq -r '.code // empty'; }

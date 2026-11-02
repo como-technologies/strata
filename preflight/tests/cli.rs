@@ -6,6 +6,13 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
+// The lock of the tests of strata: a process that a test starts takes it. These tests write no
+// script, so they do not call `executable`.
+#[path = "../../tests/common/process.rs"]
+#[allow(dead_code)]
+mod process;
+use process::CommandExt;
+
 fn bin() -> PathBuf {
     PathBuf::from(env!("CARGO_BIN_EXE_strata-preflight"))
 }
@@ -16,7 +23,7 @@ fn run(args: &[&str], dir: &std::path::Path) -> (i32, String, String) {
         .current_dir(dir)
         .env("STRATA_QUIET", "1")
         .env("NO_COLOR", "1")
-        .output()
+        .output_locked()
         .expect("the binary runs");
     (
         o.status.code().unwrap_or(-1),
@@ -215,7 +222,7 @@ fn verbose_names_what_each_check_ran_and_wins_over_the_quiet_variable() {
         .current_dir(dir.path())
         .env("STRATA_QUIET", "1")
         .env("NO_COLOR", "1")
-        .output()
+        .output_locked()
         .unwrap();
     let err = String::from_utf8_lossy(&o.stderr);
     assert!(
@@ -236,7 +243,7 @@ fn verbose_names_what_each_check_ran_and_wins_over_the_quiet_variable() {
         ])
         .current_dir(dir.path())
         .env("STRATA_QUIET", "1")
-        .output()
+        .output_locked()
         .unwrap();
     assert!(
         String::from_utf8_lossy(&painted.stderr).contains("\x1b[32mPROBE PASS\x1b[0m"),
@@ -277,7 +284,7 @@ fn colors(vars: &[(&str, &str)], args: &[&str]) -> (String, String) {
     for (name, value) in vars {
         command.env(name, value);
     }
-    let o = command.output().unwrap();
+    let o = command.output_locked().unwrap();
     (
         String::from_utf8_lossy(&o.stdout).into_owned(),
         String::from_utf8_lossy(&o.stderr).into_owned(),
@@ -524,7 +531,10 @@ fn run_against(
     args: &[&str],
     dir: &std::path::Path,
 ) -> std::process::Output {
-    command_against(host, key, dir).args(args).output().unwrap()
+    command_against(host, key, dir)
+        .args(args)
+        .output_locked()
+        .unwrap()
 }
 
 #[test]
@@ -635,7 +645,7 @@ fn a_uid_and_a_name_of_a_project_start_the_lookup_of_the_name_as_in_strata() {
         .env_remove("STRATA_QUIET")
         .env("PALETTE_PROJECT_UID", "p1")
         .env("PALETTE_PROJECT", "lab");
-    let output = command.output().unwrap();
+    let output = command.output_locked().unwrap();
     let err = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(2), "{err}");
     assert!(
@@ -655,7 +665,7 @@ fn a_uid_and_a_name_of_a_project_start_the_lookup_of_the_name_as_in_strata() {
         .args(args)
         .env("PALETTE_PROJECT_UID", "p1")
         .env("PALETTE_PROJECT", "lab");
-    let output = command.output().unwrap();
+    let output = command.output_locked().unwrap();
     let err = String::from_utf8_lossy(&output.stderr);
     assert!(
         !err.contains("looking up project") && !err.contains("warning:"),

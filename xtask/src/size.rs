@@ -1,10 +1,12 @@
 //! The size limits of `docs/src/development/code.md` for the Rust files of strata, xtask,
-//! strata-preflight, strata-fuzz, and strata-report-endpoint: a module file has at most 800 lines,
-//! and a function has at most 80 lines.
+//! strata-preflight, strata-fuzz, strata-report-endpoint, and strata-benches: a module file has at
+//! most 800 lines, and a function has at most 80 lines.
 
 use std::path::{Path, PathBuf};
 
-use regex::Regex;
+use syn::visit::{self, Visit};
+use syn::{Attribute, Block, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemTrait, Signature};
+use syn::{TraitItemFn, parse_file};
 
 use crate::files::files_under;
 
@@ -14,32 +16,82 @@ const MODULE_LINES: usize = 800;
 /// The most lines that a function has, from its `fn` line to its closing brace.
 const FUNCTION_LINES: usize = 80;
 
-/// The line that starts the unit tests inside a module file. A test function is out of the count.
-const INLINE_TESTS: &str = "\n#[cfg(test)]\nmod tests {";
+/// True when `attrs` mark the item as test code: `#[test]` or `#[cfg(test)]`.
+fn is_test_code(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("test")
+            || (attr.path().is_ident("cfg")
+                && attr
+                    .parse_args::<syn::Path>()
+                    .is_ok_and(|path| path.is_ident("test")))
+    })
+}
 
-/// The functions of `text` with their length in lines: from the `fn` line to the closing brace.
-fn function_lengths(text: &str) -> Vec<(String, usize)> {
-    let start = Regex::new(r"^(\s*)(?:pub(?:\([a-z]+\))? )?(?:const )?fn (\w+)")
-        .expect("the pattern is valid");
-    let lines: Vec<&str> = text.lines().collect();
-    let mut found = Vec::new();
-    for (first, line) in lines.iter().enumerate() {
-        let Some(head) = start.captures(line) else {
-            continue;
-        };
-        let closing = format!("{}}}", &head[1]);
-        let text = line.trim_end();
-        let length = if text.ends_with(';') || (text.ends_with('}') && text.contains('{')) {
-            1
-        } else {
-            lines[first..]
-                .iter()
-                .position(|l| *l == closing)
-                .map_or(1, |last| last + 1)
-        };
-        found.push((head[2].to_string(), length));
+/// The functions that a file holds with a body, each with its length in lines. The items that are
+/// test code are out of the list, and the items after them are in it.
+#[derive(Default)]
+struct Lengths(Vec<(String, usize)>);
+
+impl Lengths {
+    /// Note the function `sig` with the body `block`: its length goes from the line of `fn` to the
+    /// line of the closing brace.
+    fn note(&mut self, sig: &Signature, block: &Block) {
+        let first = sig.fn_token.span.start().line;
+        let last = block.brace_token.span.close().end().line;
+        self.0.push((sig.ident.to_string(), last - first + 1));
     }
-    found
+}
+
+impl<'ast> Visit<'ast> for Lengths {
+    fn visit_item_fn(&mut self, item: &'ast ItemFn) {
+        if !is_test_code(&item.attrs) {
+            self.note(&item.sig, &item.block);
+            visit::visit_item_fn(self, item);
+        }
+    }
+
+    fn visit_impl_item_fn(&mut self, item: &'ast ImplItemFn) {
+        if !is_test_code(&item.attrs) {
+            self.note(&item.sig, &item.block);
+            visit::visit_impl_item_fn(self, item);
+        }
+    }
+
+    fn visit_trait_item_fn(&mut self, item: &'ast TraitItemFn) {
+        if let Some(block) = &item.default
+            && !is_test_code(&item.attrs)
+        {
+            self.note(&item.sig, block);
+            visit::visit_trait_item_fn(self, item);
+        }
+    }
+
+    fn visit_item_mod(&mut self, item: &'ast ItemMod) {
+        if !is_test_code(&item.attrs) {
+            visit::visit_item_mod(self, item);
+        }
+    }
+
+    fn visit_item_impl(&mut self, item: &'ast ItemImpl) {
+        if !is_test_code(&item.attrs) {
+            visit::visit_item_impl(self, item);
+        }
+    }
+
+    fn visit_item_trait(&mut self, item: &'ast ItemTrait) {
+        if !is_test_code(&item.attrs) {
+            visit::visit_item_trait(self, item);
+        }
+    }
+}
+
+/// The functions of the Rust file `text` with their length in lines: from the `fn` line to the
+/// closing brace. A function of the unit tests is out of the list. A file that is not Rust is an
+/// error.
+fn function_lengths(text: &str) -> Result<Vec<(String, usize)>, syn::Error> {
+    let mut lengths = Lengths::default();
+    lengths.visit_file(&parse_file(text)?);
+    Ok(lengths.0)
 }
 
 /// Each Rust file under `src` with its text, in name order. A file `tests.rs` holds only tests, so
@@ -78,8 +130,8 @@ fn long_functions(src: &Path) -> Vec<String> {
     sources(src)
         .iter()
         .flat_map(|(file, text)| {
-            let code = text.split(INLINE_TESTS).next().unwrap_or(text);
-            function_lengths(code)
+            function_lengths(text)
+                .unwrap_or_else(|e| panic!("{file}: {e}"))
                 .into_iter()
                 .filter(|(_, lines)| *lines > FUNCTION_LINES)
                 .map(move |(name, lines)| format!("{file}: {name} has {lines} lines"))
@@ -110,6 +162,11 @@ fn fuzz_src() -> PathBuf {
 /// The directory of the source files of strata-report-endpoint.
 fn endpoint_src() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../report-endpoint/src")
+}
+
+/// The directory of the source files of strata-benches.
+fn benches_src() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../benches/src")
 }
 
 #[test]
@@ -173,6 +230,18 @@ fn no_function_of_strata_report_endpoint_has_more_than_80_lines() {
 }
 
 #[test]
+fn no_module_file_of_strata_benches_has_more_than_800_lines() {
+    let long = long_modules(&benches_src());
+    assert!(long.is_empty(), "divide these module files: {long:?}");
+}
+
+#[test]
+fn no_function_of_strata_benches_has_more_than_80_lines() {
+    let long = long_functions(&benches_src());
+    assert!(long.is_empty(), "divide these functions: {long:?}");
+}
+
+#[test]
 fn a_function_counts_from_its_fn_line_to_its_closing_brace() {
     let text = "\
 /// A doc comment is no part of the function.
@@ -190,7 +259,7 @@ impl Thing {
 }
 ";
     assert_eq!(
-        function_lengths(text),
+        function_lengths(text).unwrap(),
         [
             ("long".to_string(), 4),
             ("method".to_string(), 3),
@@ -200,20 +269,111 @@ impl Thing {
 }
 
 #[test]
+fn a_function_counts_with_each_head_that_rust_allows() {
+    let text = "\
+async fn a() {
+}
+unsafe fn b() {
+}
+pub(in crate::ops) fn c() {
+}
+pub const unsafe fn d() {
+}
+pub(crate) fn e() {
+}
+trait Shape {
+    fn declared(&self);
+    fn provided(&self) {
+    }
+}
+";
+    let names: Vec<String> = function_lengths(text)
+        .unwrap()
+        .into_iter()
+        .map(|(name, lines)| format!("{name} {lines}"))
+        .collect();
+    assert_eq!(names, ["a 2", "b 2", "c 2", "d 2", "e 2", "provided 2"]);
+}
+
+#[test]
+fn a_closing_brace_in_a_raw_string_does_not_end_a_function() {
+    let text = "\
+fn holds_text() {
+    let text = r#\"
+}
+\"#;
+    let more = 1;
+}
+";
+    assert_eq!(
+        function_lengths(text).unwrap(),
+        [("holds_text".to_string(), 6)]
+    );
+}
+
+#[test]
+fn a_function_after_the_unit_tests_of_a_module_file_is_in_the_function_count() {
+    let text = "\
+fn before() {
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_test() {
+        let a = 1;
+    }
+}
+
+fn after() {
+    let b = 2;
+}
+
+#[cfg(test)]
+fn helper() {
+}
+
+impl Thing {
+    #[cfg(test)]
+    fn only_in_tests(&self) {
+    }
+
+    fn method(&self) {
+    }
+}
+";
+    let names: Vec<String> = function_lengths(text)
+        .unwrap()
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert_eq!(names, ["before", "after", "method"]);
+}
+
+#[test]
 fn the_unit_tests_of_a_module_file_are_out_of_the_function_count() {
-    let dir = std::env::temp_dir().join(format!("strata-size-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = tempfile::tempdir().unwrap();
     let body = "    let a = 1;\n".repeat(FUNCTION_LINES);
     let helper = format!("fn helper() {{\n{body}}}\n");
-    std::fs::write(dir.join("tests.rs"), &helper).unwrap();
+    std::fs::write(dir.path().join("tests.rs"), &helper).unwrap();
     std::fs::write(
-        dir.join("inline.rs"),
+        dir.path().join("inline.rs"),
         format!("fn code() {{\n}}\n\n#[cfg(test)]\nmod tests {{\n{helper}}}\n"),
     )
     .unwrap();
-    assert!(long_functions(&dir).is_empty());
-    std::fs::write(dir.join("long.rs"), &helper).unwrap();
-    let long = long_functions(&dir);
-    std::fs::remove_dir_all(&dir).unwrap();
-    assert_eq!(long, ["long.rs: helper has 82 lines"]);
+    assert!(long_functions(dir.path()).is_empty());
+    std::fs::write(dir.path().join("long.rs"), &helper).unwrap();
+    assert_eq!(long_functions(dir.path()), ["long.rs: helper has 82 lines"]);
+}
+
+#[test]
+fn a_long_function_after_the_unit_tests_of_a_module_file_is_found() {
+    let dir = tempfile::tempdir().unwrap();
+    let body = "    let a = 1;\n".repeat(FUNCTION_LINES);
+    std::fs::write(
+        dir.path().join("late.rs"),
+        format!("#[cfg(test)]\nmod tests {{\n}}\n\nfn late() {{\n{body}}}\n"),
+    )
+    .unwrap();
+    assert_eq!(long_functions(dir.path()), ["late.rs: late has 82 lines"]);
 }

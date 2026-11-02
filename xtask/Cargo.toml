@@ -2,6 +2,8 @@
 name = "xtask"
 version = "0.1.0"
 edition = "2024"
+# The floor of the workspace: the msrv job builds the tooling too.
+rust-version.workspace = true
 description = "Development tooling for strata: the stand-in for the Palette API, and the book's examples"
 publish = false
 
@@ -31,6 +33,10 @@ tempfile = "3"
 # A test compares the answer of the stand-in for the endpoint of the report with the answer of the
 # real service, so the stand-in cannot go stale.
 strata-report-endpoint = { path = "../report-endpoint" }
+# The size check reads each function of the sources with a parser, and not with a pattern. A line
+# number of a token needs `span-locations`, which a parser outside a macro does not give by default.
+proc-macro2 = { version = "1", features = ["span-locations"] }
+syn = { version = "2", features = ["full", "visit"] }
 
 [lints.rust]
 unsafe_code = "forbid"

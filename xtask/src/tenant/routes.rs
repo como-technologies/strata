@@ -1,5 +1,7 @@
 //! The routes of Palette that the tenant serves, as the stand-in names their files.
 
+use serde_json::{Value, json};
+
 // The routes of Palette, as the server names their files: the path, and the query after an `@`.
 // A route that two helpers write has one const or one fn here, and the server reads the same
 // one.
@@ -14,6 +16,10 @@ pub const PROFILE_SEARCH_PATH: &str = "v1/dashboard/clusterprofiles";
 ///
 /// The server keeps the clusters that the body selects.
 pub const CLUSTER_SEARCH_PATH: &str = "v1/dashboard/spectroclusters/search";
+/// The most entries in one page of the audit log, as Palette serves it. The stand-in models
+/// Palette, not the code that it tests. So it keeps its own copy of the value, and does not take it
+/// from strata. A test holds the literal.
+const AUDIT_PAGE: u32 = 100;
 /// The audit log, `GET /v1/audits`.
 ///
 /// The server answers an empty log for a resource with no file.
@@ -70,6 +76,22 @@ pub(super) fn manifest_route(uid: &str, pack: &str, manifest: &str) -> String {
 /// The document of the cluster `uid`, `GET /v1/spectroclusters/{uid}`.
 pub(super) fn cluster_route(uid: &str) -> String {
     format!("{CLUSTERS}/{uid}")
+}
+
+/// The validate route of a create for the cloud type `cloud`,
+/// `POST /v1/spectroclusters/{cloudType}/validate`.
+pub fn cluster_validate_route(cloud: &str) -> String {
+    format!("{CLUSTERS}/{cloud}/validate")
+}
+
+/// The cloud type of the validate route of a create, `v1/spectroclusters/{cloudType}/validate`.
+/// `None` for any other path.
+pub fn validated_cloud(path: &str) -> Option<&str> {
+    let cloud = path
+        .strip_prefix(CLUSTERS)?
+        .strip_prefix('/')?
+        .strip_suffix("/validate")?;
+    (!cloud.is_empty() && !cloud.contains('/')).then_some(cloud)
 }
 
 /// The variables of the cluster `uid`, `GET /v1/spectroclusters/{uid}/variables`.
@@ -166,7 +188,12 @@ pub(super) fn pack_entity_route(name: &str, registry: &str) -> String {
 ///
 /// The server omits the time from the query.
 pub(super) fn audit_log_file(kind: &str, uid: &str) -> String {
-    format!("{AUDITS}@resourceKind={kind}&resourceUid={uid}&limit=100")
+    format!("{AUDITS}@resourceKind={kind}&resourceUid={uid}&limit={AUDIT_PAGE}")
+}
+
+/// The audit log of a resource with no entry. Palette answers it for such a resource, and not 404.
+pub fn empty_audit_log() -> Value {
+    json!({"items": [], "listmeta": {"continue": "", "limit": AUDIT_PAGE}})
 }
 
 /// The uid of the cloud config of the cluster `uid`: the uid of the cluster with a `c` at the end.
@@ -185,6 +212,33 @@ pub(super) fn cloud_config_route(kind: &str, uid: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_validate_route_of_a_create_names_the_cloud_type_that_it_checks() {
+        assert_eq!(
+            cluster_validate_route("aws"),
+            "v1/spectroclusters/aws/validate"
+        );
+        assert_eq!(validated_cloud(&cluster_validate_route("gcp")), Some("gcp"));
+        for other in [
+            "v1/spectroclusters/validate",
+            "v1/spectroclusters//validate",
+            "v1/spectroclusters/aws/validate/packs",
+            "v1/spectroclusters/c1/config/rbacs",
+            "v1/clusterprofiles/aws/validate",
+        ] {
+            assert_eq!(validated_cloud(other), None, "{other}");
+        }
+    }
+
+    #[test]
+    fn the_empty_audit_log_has_no_item_and_the_page_size_of_a_request_for_a_log() {
+        assert_eq!(
+            empty_audit_log().to_string(),
+            r#"{"items":[],"listmeta":{"continue":"","limit":100}}"#
+        );
+        assert!(audit_log_file("clusterprofile", "u1").ends_with("&limit=100"));
+    }
 
     #[test]
     fn the_export_route_names_the_profile_it_exports() {

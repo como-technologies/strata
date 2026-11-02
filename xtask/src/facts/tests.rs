@@ -564,29 +564,21 @@ fn a_route_matches_a_pattern_segment_by_segment() {
 
 // ---- the files of the list -----------------------------------------------------------------------
 
-/// A directory for the test `test`, empty.
-fn directory(test: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("strata-facts-{test}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
-}
-
 fn write(dir: &Path, name: &str, text: &str) {
     std::fs::write(dir.join(name), text).unwrap();
 }
 
 #[test]
 fn the_files_of_the_list_give_their_facts_in_the_order_of_the_names() {
-    let dir = directory("order");
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path();
     write(
-        &dir,
+        dir,
         "b.yaml",
         &format!("schema: strata-facts/1\nfacts:{FACT}"),
     );
-    write(&dir, "a.yaml", "schema: strata-facts/1\nfacts: []\n");
-    let (loaded, bad) = load(&dir);
-    std::fs::remove_dir_all(&dir).unwrap();
+    write(dir, "a.yaml", "schema: strata-facts/1\nfacts: []\n");
+    let (loaded, bad) = load(dir);
     assert!(bad.is_empty(), "{bad:?}");
     assert_eq!(loaded.len(), 1);
     assert_eq!(loaded[0].id, "profile-document");
@@ -594,29 +586,29 @@ fn the_files_of_the_list_give_their_facts_in_the_order_of_the_names() {
 
 #[test]
 fn a_file_with_a_field_that_the_schema_lacks_is_an_error_that_names_the_file() {
-    let dir = directory("field");
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path();
     write(
-        &dir,
+        dir,
         "a.yaml",
         "schema: strata-facts/1\nfacts:\n  - id: x\n    kind: behavior\n    colour: red\n",
     );
-    let (_, bad) = load(&dir);
-    std::fs::remove_dir_all(&dir).unwrap();
+    let (_, bad) = load(dir);
     assert!(bad[0].starts_with("a.yaml: "), "{bad:?}");
     assert!(bad[0].contains("colour"), "{bad:?}");
 }
 
 #[test]
 fn a_file_that_cannot_be_read_does_not_hide_the_facts_of_the_other_files() {
-    let dir = directory("hide");
-    write(&dir, "a.yaml", "schema: strata-facts/1\nfacts: [{broken\n");
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path();
+    write(dir, "a.yaml", "schema: strata-facts/1\nfacts: [{broken\n");
     write(
-        &dir,
+        dir,
         "b.yaml",
         &format!("schema: strata-facts/1\nfacts:{FACT}"),
     );
-    let (loaded, bad) = load(&dir);
-    std::fs::remove_dir_all(&dir).unwrap();
+    let (loaded, bad) = load(dir);
     assert_eq!(loaded.len(), 1);
     assert_eq!(bad.len(), 1);
     assert!(bad[0].starts_with("a.yaml: "), "{bad:?}");
@@ -624,18 +616,18 @@ fn a_file_that_cannot_be_read_does_not_hide_the_facts_of_the_other_files() {
 
 #[test]
 fn a_file_with_another_schema_is_an_error() {
-    let dir = directory("schema");
-    write(&dir, "a.yaml", "schema: strata-facts/2\nfacts: []\n");
-    let (_, bad) = load(&dir);
-    std::fs::remove_dir_all(&dir).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path();
+    write(dir, "a.yaml", "schema: strata-facts/2\nfacts: []\n");
+    let (_, bad) = load(dir);
     assert!(bad[0].contains("must be `strata-facts/1`"), "{bad:?}");
 }
 
 #[test]
 fn a_directory_with_no_file_is_an_error() {
-    let dir = directory("empty");
-    let (_, bad) = load(&dir);
-    std::fs::remove_dir_all(&dir).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path();
+    let (_, bad) = load(dir);
     assert!(bad[0].contains("no file of facts"), "{bad:?}");
 }
 
@@ -696,7 +688,8 @@ fn the_rows_of_a_section_are_the_names_in_the_first_column_up_to_the_next_sectio
 
 #[test]
 fn the_book_lists_the_checks_of_verify_sh_on_the_page_of_the_live_example() {
-    let dir = directory("rows");
+    let temp = tempfile::tempdir().unwrap();
+    let dir = temp.path();
     let development = dir.join("development");
     std::fs::create_dir_all(&development).unwrap();
     write(
@@ -709,8 +702,7 @@ fn the_book_lists_the_checks_of_verify_sh_on_the_page_of_the_live_example() {
         "live-example.md",
         "## The checks of verify.sh\n\n| `state` | x |\n\n## Other\n\n| `other` | x |\n",
     );
-    let rows = book_rows(&dir);
-    std::fs::remove_dir_all(&dir).unwrap();
+    let rows = book_rows(dir);
     assert_eq!(rows["in-place.sh"], set(&["a1"]));
     assert_eq!(rows["verify.sh"], set(&["state"]));
 }

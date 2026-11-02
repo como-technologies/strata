@@ -10,7 +10,10 @@ use crate::common;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use common::{INSTALLING_WORKFLOWS, one_line, recipe, repo_file, schema, script, version_of, walk};
+use common::{
+    GITLAB_DROP_IN, INSTALLING_WORKFLOWS, gitlab_drop_in, one_line, recipe, repo_file, schema,
+    script, version_of, walk,
+};
 use strata::api::codes::ValidateRoute;
 use strata::content::canonical_json;
 
@@ -470,8 +473,7 @@ fn publish_fan_out_runs_the_installer_with_the_signature_check_and_says_what_it_
 /// variable to explain a behavior, and then it links to `gitlab.md`.
 #[test]
 fn the_variables_of_the_gitlab_preflight_job_are_described_on_gitlab_md_and_listed_nowhere_else() {
-    let drop_in: serde_yaml::Value =
-        serde_yaml::from_str(&repo_file("examples/ci/gitlab/strata.yml")).unwrap();
+    let drop_in = gitlab_drop_in();
     let names: Vec<&str> = drop_in["variables"]
         .as_mapping()
         .unwrap()
@@ -1857,7 +1859,7 @@ fn the_section_of_release_0_26_0_names_the_characters_that_the_canonical_text_es
 /// `strata-upstream` keeps none.
 #[test]
 fn the_gitlab_job_that_the_section_names_keeps_the_artifact_and_strata_upstream_keeps_none() {
-    let yml = repo_file("examples/ci/gitlab/strata.yml");
+    let yml = repo_file(GITLAB_DROP_IN);
     let upstream = section(
         &yml,
         "\nstrata-upstream:\n",

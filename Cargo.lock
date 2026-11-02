@@ -2176,6 +2176,7 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "proc-macro2",
  "regex",
  "serde",
  "serde_json",
@@ -2183,6 +2184,7 @@ dependencies = [
  "strata",
  "strata-preflight",
  "strata-report-endpoint",
+ "syn 2.0.119",
  "tempfile",
  "ureq",
 ]

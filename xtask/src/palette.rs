@@ -46,7 +46,10 @@ use std::{fs, thread};
 
 use strata::api::codes::PROJECT_SCOPE_CODE;
 
-use crate::tenant::{AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT, exported_profile};
+use crate::tenant::{
+    AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT, empty_audit_log, exported_profile,
+    profile_route, validated_cloud,
+};
 
 mod report;
 pub use report::REPORT_ENDPOINT;
@@ -166,10 +169,9 @@ fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
         },
         (Some(path), Some(status)) => (status, fs::read(refused(&path, status))?),
         // Palette answers an empty log for an object with no entry, and not 404
-        (Some(_), None) if with_query(&request.target, AUDITS) => (
-            200,
-            br#"{"items":[],"listmeta":{"continue":"","limit":100}}"#.to_vec(),
-        ),
+        (Some(_), None) if with_query(&request.target, AUDITS) => {
+            (200, empty_audit_log().to_string().into_bytes())
+        }
         _ => (
             404,
             serde_json::json!({
@@ -205,15 +207,6 @@ fn export_reader(root: &Path, request: &Request) -> Option<Vec<u8>> {
         .then(|| EXPORT_FOR_JSON.to_vec())
 }
 
-/// The cloud type in `target`, when it is the validate route of a create:
-/// `/v1/spectroclusters/{cloudType}/validate`.
-fn cluster_validate_cloud(target: &str) -> Option<&str> {
-    let cloud = target
-        .strip_prefix("/v1/spectroclusters/")?
-        .strip_suffix("/validate")?;
-    (!cloud.contains('/')).then_some(cloud)
-}
-
 /// The refusal of the validate route of a create for a body with a profile of another cloud type,
 /// as Palette gives it: HTTP 500, the code `ClusterProfilesNotSupported`, and the names of those
 /// profiles. A profile of the cloud type `all` fits each cloud. `None` when `request` is not that
@@ -222,14 +215,14 @@ fn cluster_validate_cloud(target: &str) -> Option<&str> {
 /// A live run shows the message for one profile. The stand-in joins the names of several with a
 /// comma, which no run shows.
 fn profile_cloud_refusal(root: &Path, request: &Request) -> Option<Vec<u8>> {
-    let cloud = cluster_validate_cloud(&request.target)?;
+    let cloud = validated_cloud(request.target.trim_start_matches('/'))?;
     let entity: serde_json::Value = serde_json::from_slice(&request.body).ok()?;
     let names: Vec<String> = entity["spec"]["profiles"]
         .as_array()
         .into_iter()
         .flatten()
         .filter_map(|p| {
-            let route = format!("/v1/clusterprofiles/{}", p["uid"].as_str()?);
+            let route = profile_route(p["uid"].as_str()?);
             let file = file_for(root, request.project.as_deref(), &route)?;
             let profile: serde_json::Value = serde_json::from_slice(&fs::read(file).ok()?).ok()?;
             let kind = profile["spec"]["published"]["cloudType"].as_str()?;
@@ -653,7 +646,8 @@ mod tests {
     /// cloud type `all` fits each cloud.
     #[test]
     fn the_validate_route_of_a_create_refuses_a_profile_of_another_cloud_type() {
-        let dir = std::env::temp_dir().join(format!("strata-cloud-type-{}", std::process::id()));
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path();
         let profiles = dir.join("p1/v1/clusterprofiles");
         fs::create_dir_all(&profiles).unwrap();
         for (uid, name, cloud) in [
@@ -675,7 +669,7 @@ mod tests {
                     .to_string()
                     .into_bytes(),
             };
-            profile_cloud_refusal(&dir, &request)
+            profile_cloud_refusal(dir, &request)
                 .map(|body| serde_json::from_slice::<serde_json::Value>(&body).unwrap())
         };
         let route = "/v1/spectroclusters/aws/validate";
@@ -695,7 +689,6 @@ mod tests {
             refusal("/v1/spectroclusters/aws/validate/packs", &["u-gcp"]),
             None
         );
-        fs::remove_dir_all(&dir).unwrap();
     }
 
     /// The export route gives the file to a request that accepts a file, and `{"Reader":{}}` to a
@@ -703,7 +696,8 @@ mod tests {
     /// and not the file, and it does not depend on the query.
     #[test]
     fn the_export_route_answers_a_request_that_accepts_json_with_a_reader_and_not_the_file() {
-        let dir = std::env::temp_dir().join(format!("strata-export-{}", std::process::id()));
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path();
         let profiles = dir.join("p1/v1/clusterprofiles");
         fs::create_dir_all(profiles.join("u1")).unwrap();
         fs::write(profiles.join("u1.json"), "{}").unwrap();
@@ -719,7 +713,7 @@ mod tests {
                 accept: accept.map(str::to_string),
                 body: Vec::new(),
             };
-            let (status, body) = served(&dir, &request).unwrap();
+            let (status, body) = served(dir, &request).unwrap();
             (status, String::from_utf8(body).unwrap())
         };
         let file = (200, r#"{"spec":{}}"#.to_string());
@@ -747,14 +741,13 @@ mod tests {
             Some("application/json"),
         );
         assert_eq!(missing.0, 404);
-        fs::remove_dir_all(&dir).unwrap();
     }
 
     /// A file of a refusal gives its status, and the first status of [`REFUSALS`] wins.
     #[test]
     fn the_file_of_a_refusal_gives_its_status() {
-        let dir = std::env::temp_dir().join(format!("strata-refusals-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path();
         let answer = dir.join("name@name=barney&version=1.1.1.1.json");
         assert_eq!(refusal_of(&answer), None);
         let file = refused(&answer, 500);
@@ -763,7 +756,6 @@ mod tests {
         assert_eq!(refusal_of(&answer), Some(500));
         fs::write(refused(&answer, 409), "{}").unwrap();
         assert_eq!(refusal_of(&answer), Some(409));
-        fs::remove_dir_all(&dir).unwrap();
     }
 
     /// The file that makes the server answer HTTP 403 is beside the file of the answer.

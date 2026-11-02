@@ -81,18 +81,23 @@ pub struct UpgradeRefusal<'a> {
     pub clusters: &'a [&'a str],
 }
 
+/// The reason `PackValuesUpdated` of a repave, as a live run gave it for a kubeadm command. The
+/// values of the pack `kubernetes` changed in the key `kubeadmconfig.postKubeadmCommands`.
+/// `pack` holds the pack of the reason, and this function adds the key.
+fn values_updated(mut pack: Value) -> Value {
+    pack["diffConfigKeys"] = json!(["kubeadmconfig.postKubeadmCommands"]);
+    json!({
+        "code": "PackValuesUpdated",
+        "message": "Pack 'kubernetes' values are updated",
+        "pack": pack,
+    })
+}
+
 /// An answer of a `validate/repave` route. It holds a repave for a kubeadm command when
 /// `required`, as a live run gave it. Otherwise it holds no repave and no reason.
 fn repave_answer_of(required: bool) -> Value {
     let reasons = if required {
-        json!([{
-            "code": "PackValuesUpdated",
-            "message": "Pack 'kubernetes' values are updated",
-            "pack": {
-                "current": {"name": "kubernetes"},
-                "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"],
-            },
-        }])
+        json!([values_updated(json!({"current": {"name": "kubernetes"}}))])
     } else {
         json!([])
     };
@@ -179,15 +184,9 @@ impl Tenant {
                 "spec": {
                     "spectroClusterUid": cluster,
                     "source": "hubble",
-                    "reasons": [{
-                        "code": "PackValuesUpdated",
-                        "message": "Pack 'kubernetes' values are updated",
-                        "pack": {
-                            "current": side("echo one"),
-                            "target": side("echo two"),
-                            "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"],
-                        },
-                    }],
+                    "reasons": [values_updated(
+                        json!({"current": side("echo one"), "target": side("echo two")}),
+                    )],
                 },
                 "status": {"state": "Pending", "repaveTransitionTime": since},
             }),
@@ -339,6 +338,22 @@ mod tests {
         let results = upgrade_results(Some(refusal));
         let message = results[0]["errors"][0]["message"].as_str().unwrap();
         assert!(message.ends_with("'payments, billing'"), "{message}");
+    }
+
+    #[test]
+    fn the_reason_of_a_repave_for_a_kubeadm_command_is_the_same_in_the_answer_and_in_the_status() {
+        let answer = repave_answer_of(true);
+        let reason = &answer["reasons"][0];
+        assert_eq!(reason["code"], "PackValuesUpdated");
+        assert_eq!(reason["message"], "Pack 'kubernetes' values are updated");
+        assert_eq!(
+            reason["pack"],
+            json!({"current": {"name": "kubernetes"},
+                "diffConfigKeys": ["kubeadmconfig.postKubeadmCommands"]})
+        );
+        assert_eq!(repave_answer_of(false)["reasons"], json!([]));
+        let sides = json!({"current": {"name": "kubernetes"}, "target": {"name": "kubernetes"}});
+        assert_eq!(values_updated(sides)["code"], reason["code"]);
     }
 
     #[test]
