@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use super::{IMAGE_ID_ANNOTATION, PROVIDER_TYPE_ANNOTATION};
-use crate::api::TIER_INSTALL_ORDER;
 use crate::api::mask::MASKED;
+use crate::api::{PROFILE_TEMPLATE, TIER_INSTALL_ORDER};
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canon_yaml_hashed, canonical_json, hash_yaml, sha256_hex};
 use crate::json::{
@@ -285,18 +285,24 @@ impl Pack {
             .filter(|id| !id.is_empty())
     }
 
-    /// Build one pack from its ref on the profile template and the matching entry of the
-    /// packs/manifests response (matched by name; missing entries leave those fields empty).
+    /// Build one pack from its ref on the profile template of a profile version and the matching
+    /// entry of the packs/manifests response (matched by name; missing entries leave those fields
+    /// empty).
     pub fn from_api(pk: &Value, manifests_packs: &[Value]) -> Pack {
-        Self::from_api_with(pk, manifests_packs, None)
+        Self::from_api_with(pk, manifests_packs, None, PROFILE_TEMPLATE)
     }
 
     /// [`Pack::from_api`], with the manifests of the pack given apart, each as `name`, `uid`,
     /// `digest`, and `content`, in place of those of the packs/manifests entry.
-    pub(super) fn from_api_with(
+    ///
+    /// `route` is the template of the route that gave the ref, such as `/v1/spectroclusters/{uid}`
+    /// for the ref on a template of a cluster. A value of the ref that this release does not know
+    /// names it in the log of the unknown values.
+    pub(crate) fn from_api_with(
         pk: &Value,
         manifests_packs: &[Value],
         given: Option<Vec<Value>>,
+        route: &'static str,
     ) -> Pack {
         let name = text(pk, "/name");
         let mm = manifests_entry(&name, manifests_packs, given);
@@ -308,8 +314,11 @@ impl Pack {
         let registry_uid = text(pk, "/registryUid");
         let ref_digest = text(pk, "/digest");
         let registry_digest = text(&mm, "/spec/digest");
-        let registry_provider_type =
-            opt_set(pk, &format!("/annotations/{PROVIDER_TYPE_ANNOTATION}"));
+        let registry_provider_type = opt_set(
+            pk,
+            &format!("/annotations/{PROVIDER_TYPE_ANNOTATION}"),
+            route,
+        );
         // a reason without the flag is not a reason: Palette clears the flag when the tag is back
         let invalid = flag(pk, "/isInvalid");
         let invalid_reason = if invalid {
@@ -460,7 +469,12 @@ mod tests {
     fn the_manifests_of_a_pack_go_into_an_entry_whose_spec_is_not_an_object() {
         let entry = json!({"metadata": {"name": "cfg"}, "spec": 5});
         let given = vec![json!({"name": "m", "uid": "u1", "digest": "d", "content": "a: 1"})];
-        let pack = Pack::from_api_with(&json!({"name": "cfg"}), &[entry], Some(given));
+        let pack = Pack::from_api_with(
+            &json!({"name": "cfg"}),
+            &[entry],
+            Some(given),
+            PROFILE_TEMPLATE,
+        );
         assert_eq!(pack.manifests.len(), 1);
         assert_eq!(pack.manifests[0].uid, "u1");
     }

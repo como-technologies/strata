@@ -46,7 +46,7 @@ fn document(facts: Vec<Value>, releases: Vec<Value>) -> Value {
         "schema": "strata-contract/1",
         "checkedAt": "2026-11-02T05:45:00Z",
         "target": "https://api.spectrocloud.com",
-        "summary": {"same": 0, "differs": 0, "skipped": 0, "error": 0},
+        "summary": {"same": 0, "differs": 0, "skipped": 0, "error": 0, "unknownValues": 0},
         "facts": facts,
         "releases": releases,
     })
@@ -305,6 +305,267 @@ fn contract_report_leaves_the_issue_of_a_fact_that_the_run_skipped_or_could_not_
             "{outcome}: {calls:?}"
         );
     }
+}
+
+// ---- the unknown values ------------------------------------------------------------------------
+
+/// The entry `entry` with the closed set `set` that holds the unknown `values`.
+fn with_values(mut entry: Value, set: &str, values: &[&str]) -> Value {
+    let list = entry["unknownValues"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let mut list = list;
+    list.push(json!({"set": set, "known": ["Provisioning", "Running"], "values": values}));
+    entry["unknownValues"] = Value::Array(list);
+    entry
+}
+
+/// A fact that the run found the same, with an unknown value of `status.state`.
+fn new_state(id: &str, values: &[&str]) -> Value {
+    with_values(entry(id, "same", json!([])), "status.state", values)
+}
+
+const VALUES_MARKER: &str = "<!-- strata-contract: values cluster-document status.state -->";
+
+#[test]
+fn contract_report_opens_one_issue_for_the_new_values_of_a_set_and_names_each_value() {
+    let r = Report::new();
+    let o = r.report(
+        &document(
+            vec![new_state(
+                "cluster-document",
+                &["Hibernating", "Quarantined"],
+            )],
+            vec![],
+        ),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = r.calls();
+    let creates: Vec<&String> = calls
+        .iter()
+        .filter(|c| c.starts_with("issue create"))
+        .collect();
+    assert_eq!(
+        creates.len(),
+        1,
+        "one issue for the set, not one for each value: {calls:?}"
+    );
+    assert!(
+        creates[0]
+            .contains("--title Palette has a new value of `status.state` in `cluster-document`"),
+        "{}",
+        creates[0]
+    );
+    assert!(
+        creates[0].contains("--label palette-drift"),
+        "{}",
+        creates[0]
+    );
+    assert!(creates[0].contains("--milestone Backlog"), "{}", creates[0]);
+    let n = calls
+        .iter()
+        .position(|c| c.starts_with("issue create"))
+        .unwrap()
+        + 1;
+    let body = r.body(n);
+    assert_eq!(body.lines().next(), Some(VALUES_MARKER));
+    for expected in [
+        "| `Hibernating` |",
+        "| `Quarantined` |",
+        "The fact and the stand-in name: Provisioning, Running.",
+        "`GET /v1/cluster-document/{uid}`",
+        "`verify.sh:snapshot-cluster`, `tiers.sh:a-applied`",
+        "`docs/src/reference/palette-api.md#a-cluster`",
+        "https://github.com/o/r/blob/main/docs/src/development/facts.md#what-to-do-with-a-new-value",
+    ] {
+        assert!(
+            body.contains(expected),
+            "`{expected}` is not in the body: {body}"
+        );
+    }
+    assert!(
+        text(&o.stderr).contains(
+            "1 facts: 1 same, 0 differ, 0 skipped, 0 could not be checked, 2 unknown values"
+        ),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn contract_report_opens_an_issue_for_each_set_and_for_each_fact_that_holds_a_new_value() {
+    let r = Report::new();
+    let two_sets = with_values(
+        new_state("cluster-document", &["Hibernating"]),
+        "spec.cloudType",
+        &["gcp"],
+    );
+    let o = r.report(
+        &document(
+            vec![two_sets, new_state("cluster-listing", &["Hibernating"])],
+            vec![],
+        ),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let titles: Vec<String> = r
+        .calls()
+        .into_iter()
+        .filter(|c| c.starts_with("issue create"))
+        .collect();
+    assert_eq!(titles.len(), 3, "{titles:?}");
+    for title in [
+        "Palette has a new value of `status.state` in `cluster-document`",
+        "Palette has a new value of `spec.cloudType` in `cluster-document`",
+        "Palette has a new value of `status.state` in `cluster-listing`",
+    ] {
+        assert!(
+            titles.iter().any(|c| c.contains(title)),
+            "{title}: {titles:?}"
+        );
+    }
+}
+
+#[test]
+fn contract_report_updates_the_issue_of_a_set_that_still_holds_a_new_value() {
+    let r = Report::new();
+    r.open_issues(&[(7, VALUES_MARKER)]);
+    let o = r.report(
+        &document(
+            vec![new_state("cluster-document", &["Hibernating"])],
+            vec![],
+        ),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = r.calls();
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("issue edit 7 --repo o/r --title")),
+        "{calls:?}"
+    );
+    assert!(
+        !calls.iter().any(|c| c.starts_with("issue create")),
+        "{calls:?}"
+    );
+    assert!(
+        !calls.iter().any(|c| c.starts_with("issue close")),
+        "{calls:?}"
+    );
+    assert!(text(&o.stderr).contains("updated #7 for cluster-document status.state"));
+}
+
+#[test]
+fn contract_report_closes_the_issue_of_a_set_that_holds_no_new_value_now() {
+    let r = Report::new();
+    r.open_issues(&[
+        (7, VALUES_MARKER),
+        (
+            8,
+            "<!-- strata-contract: values cluster-document spec.cloudType -->",
+        ),
+        (
+            9,
+            "<!-- strata-contract: values cluster-listing status.state -->",
+        ),
+    ]);
+    let o = r.report(
+        &document(
+            vec![
+                new_state("cluster-document", &["Hibernating"]),
+                entry("cluster-listing", "same", json!([])),
+            ],
+            vec![],
+        ),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = r.calls();
+    assert!(
+        !calls.iter().any(|c| c.starts_with("issue close 7")),
+        "{calls:?}"
+    );
+    let close = calls
+        .iter()
+        .position(|c| c.starts_with("issue close 8"))
+        .expect("the set with no new value closes");
+    assert!(
+        r.comment(close + 1).contains(
+            "No answer of the tenant holds a new value for `spec.cloudType` in `cluster-document` now (checked 2026-11-02T05:45:00Z)"
+        ),
+        "{}",
+        r.comment(close + 1)
+    );
+    assert!(
+        calls.iter().any(|c| c.starts_with("issue close 9")),
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn contract_report_keeps_the_issue_of_a_set_when_the_run_did_not_check_the_fact() {
+    for outcome in ["skipped", "error"] {
+        let r = Report::new();
+        r.open_issues(&[(7, VALUES_MARKER)]);
+        r.report(
+            &document(vec![entry("cluster-document", outcome, json!([]))], vec![]),
+            &[],
+        );
+        assert!(
+            !r.calls().iter().any(|c| c.starts_with("issue close")),
+            "{outcome}: {:?}",
+            r.calls()
+        );
+    }
+}
+
+#[test]
+fn contract_report_exits_0_for_a_fact_that_holds_no_new_value_and_1_for_a_fact_that_does() {
+    let r = Report::new();
+    let same = r.report(
+        &document(vec![entry("cluster-document", "same", json!([]))], vec![]),
+        &[],
+    );
+    assert_eq!(same.status.code(), Some(0), "{}", text(&same.stderr));
+    assert!(
+        text(&same.stderr).contains("0 unknown values"),
+        "{}",
+        text(&same.stderr)
+    );
+    let new = r.report(
+        &document(
+            vec![new_state("cluster-document", &["Hibernating"])],
+            vec![],
+        ),
+        &[],
+    );
+    assert_eq!(new.status.code(), Some(1), "{}", text(&new.stderr));
+}
+
+#[test]
+fn contract_report_dry_run_prints_the_body_of_a_new_value_and_calls_no_host() {
+    let r = Report::new();
+    let doc = r.document(&document(
+        vec![new_state("cluster-document", &["Hibernating"])],
+        vec![],
+    ));
+    let o = r.run(&[doc.to_str().unwrap(), "--dry-run"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stdout).contains(VALUES_MARKER),
+        "{}",
+        text(&o.stdout)
+    );
+    assert!(
+        text(&o.stderr)
+            .contains("dry run: opens or updates the issue for cluster-document status.state"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(r.calls().is_empty(), "{:?}", r.calls());
 }
 
 #[test]
@@ -601,6 +862,28 @@ fn contract_sh_runs_the_contract_command_writes_the_result_and_names_each_differ
         "{err}"
     );
     assert!(out.join("contract.log").is_file());
+}
+
+#[test]
+fn contract_sh_names_each_unknown_value_with_the_values_that_the_fact_names() {
+    let r = Run::new();
+    let doc = document(
+        vec![new_state(
+            "cluster-document",
+            &["Hibernating", "Quarantined"],
+        )],
+        vec![],
+    );
+    std::fs::write(r.dir.path().join("document.json"), doc.to_string()).unwrap();
+    let o = r.contract(&[], "1");
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains(
+            "new value: cluster-document status.state: Hibernating, Quarantined; the fact and the stand-in name Provisioning, Running"
+        ),
+        "{}",
+        text(&o.stderr)
+    );
 }
 
 #[test]
@@ -1061,7 +1344,7 @@ fn the_timer_shows_the_last_result_and_refuses_a_command_it_does_not_have() {
         &[("STRATA_CONTRACT_DIR", data.to_str().unwrap())],
     );
     assert!(
-        text(&o.stdout).contains("the last run: 2026-11-02T05:45:00Z, 0 same, 0 differ, 0 skipped, 0 could not be checked"),
+        text(&o.stdout).contains("the last run: 2026-11-02T05:45:00Z, 0 same, 0 differ, 0 skipped, 0 could not be checked, 0 unknown values"),
         "{}",
         text(&o.stdout)
     );

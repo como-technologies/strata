@@ -6,8 +6,9 @@
 //!
 //! For each fact of the kind `request` that a read-only request can show, the run finds an object in
 //! the tenant and sends the request. It compares the answer with the documents that the stand-in
-//! serves for the fact. It compares the status, the type of each field that strata reads, and the
-//! values of each closed set. It compares shapes, and never the values of two tenants.
+//! serves for the fact. It compares the status and the type of each field that strata reads. It also
+//! lists each value of a closed set that neither the fact nor the stand-in names: strata does not
+//! know such a value. It compares shapes, and never the values of two tenants.
 //!
 //! The result is the document `strata-contract/1`, with one entry for each fact. The run changes
 //! nothing in the tenant: it sends GET requests only. [The list of the
@@ -31,7 +32,7 @@ mod subject;
 mod tests;
 
 pub use command::{command, harvest_command};
-use document::{Contract, Difference, DifferenceKind, Entry, Outcome, SCHEMA, Summary};
+use document::{Contract, Difference, DifferenceKind, Entry, Outcome, SCHEMA, Summary, Unknown};
 use shape::{JsonType, Path};
 use stand_in::StandIn;
 use subject::{Probe, Subject};
@@ -76,6 +77,7 @@ fn check<A: PaletteApi>(
         outcome,
         reason,
         differences,
+        unknown_values: Vec::new(),
         live: fact.live.clone(),
         pages: fact.pages.clone(),
     };
@@ -108,7 +110,10 @@ fn check<A: PaletteApi>(
             } else {
                 Outcome::Differs
             };
-            entry(outcome, None, differences)
+            Entry {
+                unknown_values: unknown_values(fact, &documents, found),
+                ..entry(outcome, None, differences)
+            }
         }
         Err(failure) => match failure.status.filter(|status| unreadable(*status)) {
             Some(status) => entry(
@@ -127,7 +132,7 @@ fn check<A: PaletteApi>(
 }
 
 /// Each difference between the answer `found` of the tenant and the documents `expected` of the
-/// stand-in, for the fields and the values that `fact` reads.
+/// stand-in, for the fields that `fact` reads.
 fn compare(fact: &Fact, expected: &[&Value], found: &Value) -> Vec<Difference> {
     let mut differences = Vec::new();
     for field in &fact.reads.fields {
@@ -135,23 +140,31 @@ fn compare(fact: &Fact, expected: &[&Value], found: &Value) -> Vec<Difference> {
         let wanted: BTreeSet<JsonType> = expected.iter().flat_map(|d| path.types(d)).collect();
         differences.extend(type_difference(field, &wanted, &path.types(found)));
     }
+    differences
+}
+
+/// Each closed set of `fact` for which the answer `found` of the tenant holds a value that neither
+/// the fact nor the documents `expected` of the stand-in name.
+///
+/// The fact names the values that strata tells apart, and the stand-in can hold more. A value that
+/// neither names is a value that Palette added: strata does not know it. The answer is not a
+/// difference of the fact, so a new value alone leaves the outcome `same`.
+fn unknown_values(fact: &Fact, expected: &[&Value], found: &Value) -> Vec<Unknown> {
+    let mut unknown = Vec::new();
     for (field, names) in &fact.reads.values {
         let path = Path::parse(field);
-        // The fact names the values that strata tells apart, and the stand-in can hold more. A
-        // value that neither names is a value that Palette added.
         let mut known: BTreeSet<String> = names.iter().cloned().collect();
         known.extend(expected.iter().flat_map(|d| path.texts(d)));
-        let new: Vec<String> = path.texts(found).difference(&known).cloned().collect();
-        if !new.is_empty() {
-            differences.push(Difference {
-                kind: DifferenceKind::Value,
-                path: field.clone(),
-                expected: known.into_iter().collect(),
-                found: new,
+        let values: Vec<String> = path.texts(found).difference(&known).cloned().collect();
+        if !values.is_empty() {
+            unknown.push(Unknown {
+                set: field.clone(),
+                known: known.into_iter().collect(),
+                values,
             });
         }
     }
-    differences
+    unknown
 }
 
 /// The difference at one field between the types that the stand-in has (`wanted`) and the types

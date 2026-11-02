@@ -8,7 +8,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::api::{Palette, PaletteApi, named_entries, profile_versions, recorded_template};
+use crate::api::{
+    PROFILE_TEMPLATE, Palette, PaletteApi, named_entries, profile_versions, recorded_template,
+};
 use crate::closed_set::Open;
 use crate::error::{ErrorDocument, Result, served};
 use crate::model::cloud::Cloud;
@@ -561,7 +563,7 @@ fn list_profiles<A: PaletteApi>(
                 version: text(pk, "/version"),
             })
             .collect();
-        p.profile_type = template.and_then(|t| opt_set(t, "/type"));
+        p.profile_type = template.and_then(|t| opt_set(t, "/type", PROFILE_TEMPLATE));
         let consumers = ConsumerCounts::of(&doc);
         p.consumers = Some(consumers.count());
         p.consumers_by_kind = Some(consumers);

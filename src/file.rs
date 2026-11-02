@@ -5,9 +5,26 @@
 //! It also names the record files that a command line gives: a path, or a pattern that strata
 //! expands itself.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
+
+/// The `Io` error of `source`, with the path `path`.
+fn io_error(path: &Path, source: std::io::Error) -> Error {
+    Error::Io {
+        path: path.to_path_buf(),
+        source,
+    }
+}
+
+/// Make the directory that `path` names, when `path` has one and it does not exist.
+fn make_parent(path: &Path) -> Result<()> {
+    match path.parent().filter(|p| !p.as_os_str().is_empty()) {
+        Some(parent) => std::fs::create_dir_all(parent).map_err(|source| io_error(path, source)),
+        None => Ok(()),
+    }
+}
 
 /// Write `text` to `path`, and make the directory that `path` names when it does not exist.
 ///
@@ -18,14 +35,27 @@ use crate::error::{Error, Result};
 ///
 /// `Io`, with `path`, when strata cannot make the directory or write the file.
 pub fn write_file(path: &Path, text: &str) -> Result<()> {
-    let io = |source| Error::Io {
-        path: path.to_path_buf(),
-        source,
-    };
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(io)?;
-    }
-    std::fs::write(path, text).map_err(io)
+    make_parent(path)?;
+    std::fs::write(path, text).map_err(|source| io_error(path, source))
+}
+
+/// Add `text` to the end of the file at `path`. The call makes the file and the directory that
+/// `path` names when they do not exist.
+///
+/// A log goes through here. The call writes `text` with one write, so two runs that add a line
+/// do not mix their lines.
+///
+/// # Errors
+///
+/// `Io`, with `path`, when strata cannot make the directory or write the file.
+pub(crate) fn append_file(path: &Path, text: &str) -> Result<()> {
+    make_parent(path)?;
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .and_then(|mut file| file.write_all(text.as_bytes()))
+        .map_err(|source| io_error(path, source))
 }
 
 /// Read the text of the file at `path`.
@@ -36,10 +66,7 @@ pub fn write_file(path: &Path, text: &str) -> Result<()> {
 ///
 /// `Io`, with `path`, when strata cannot read the file.
 pub(crate) fn read_file(path: &Path) -> Result<String> {
-    std::fs::read_to_string(path).map_err(|source| Error::Io {
-        path: path.to_path_buf(),
-        source,
-    })
+    std::fs::read_to_string(path).map_err(|source| io_error(path, source))
 }
 
 /// True when `arg` is a file pattern: it holds `*`, `?`, or `[`.

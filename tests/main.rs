@@ -23,6 +23,7 @@ mod live_scripts;
 mod masked;
 mod presets;
 mod spawn;
+mod unknown;
 mod unsynced;
 mod verify;
 mod workflows;

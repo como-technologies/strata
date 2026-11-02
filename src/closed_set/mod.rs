@@ -73,6 +73,12 @@
 //! each value with [`ClosedSet::as_str`] and lists the values with [`ClosedSet::ALL`]. So no other
 //! table names the values of a set.
 //!
+//! # The unknown values of Palette
+//!
+//! A read of a document of Palette can give a value that a later Palette release added. The
+//! module `unknown` tells a person about such a value with one note on standard error, and
+//! appends one line to a local log.
+//!
 //! # Examples
 //!
 //! A later release adds the tier `network`, and writes this map of tiers. This release reads the
@@ -102,6 +108,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod legend;
+pub mod unknown;
 
 /// A closed set of values that a document names by text: an enum of unit variants.
 ///
