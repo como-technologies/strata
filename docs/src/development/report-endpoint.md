@@ -161,6 +161,9 @@ write on `como-technologies/strata`, and no other. It lives in Secret Manager, i
 `GITHUB_TOKEN` when the service starts. The token is never in the repository, in GitHub, in an image,
 or in a log. The `Debug` text of the settings and of the tracker prints `<redacted>` for it.
 
+The account `strata-report` reads the secret, and no other account does. See
+[Make the two accounts](#make-the-two-accounts).
+
 ## Run the tests
 
 ```bash
@@ -177,26 +180,94 @@ calls GitHub or Google.
 The lead deploys the endpoint after the merge, on kadomony, with `gcloud` logged in. A session does
 not deploy it, because a session has no account of Google.
 
-1. Make sure that the project has the APIs `run`, `cloudbuild`, `artifactregistry`, and
-   `secretmanager`, and the secret `strata-report-token`. The service account of Cloud Run needs
-   the role `roles/secretmanager.secretAccessor` on the secret.
-2. Run `just report-deploy --dry-run`, and read the commands.
-3. Run `just report-deploy`. The script builds the image on Cloud Build and deploys the service
-   `strata-report` with one instance and the CPU on after the answer. Then it prints the address.
-4. Run `just live-report-send ADDRESS` with the address that the script printed. The script sends
+1. Make sure that the project has the APIs `run`, `cloudbuild`, `artifactregistry`,
+   `secretmanager`, and `iam`, and the secret `strata-report-token`.
+2. Make the two accounts, with the commands of [Make the two accounts](#make-the-two-accounts). A
+   person who owns the project does this one time.
+3. Run `just report-deploy --dry-run`, and read the commands.
+4. Run `just report-deploy`. The script builds the image on Cloud Build as `strata-report-build`.
+   Then it deploys the service `strata-report` as `strata-report`, with one instance and the CPU on
+   after the answer. Then it prints the address. When an account is missing, the script stops with a
+   message that names it.
+5. Run `just live-report-send ADDRESS` with the address that the script printed. The script sends
    two reports, waits for the issue, and checks that one issue holds both. It also posts one report
    twice with one key, and checks that the issue counts it one time. Close the issue with a comment
    after you read it.
-5. Make sure of three points that a test cannot show. Each point is a fact of Cloud Run:
+6. Make sure of three points that a test cannot show. Each point is a fact of Cloud Run:
    - The last entry of `X-Forwarded-For` is the address of the client. Send 11 reports with another
      first entry each time. The 11th must get 429.
    - Cloud Run takes IPv6 for the service. Run `curl -6` against the address. If the connection
      fails, the rule of the /64 network has no effect: state that on this page.
    - Cloud Run buffers a slow body. Run `curl --limit-rate 100` with a report. Note when the answer
      comes, and state the result on this page.
-6. Name the address in the release: set the constant `ENDPOINT` in
+7. Name the address in the release: set the constant `ENDPOINT` in
    `src/closed_set/unknown/send.rs`. Until then, a user must set `STRATA_REPORT_URL`.
 
-The deploy script reads no secret. `just report-deploy --project ID --region NAME` replaces the
-project and the region. To remove the service, run
+The deploy script reads no secret and grants no role. `just report-deploy --project ID --region NAME`
+replaces the project and the region. To remove the service, run
 `gcloud run services delete strata-report --project ID --region NAME`.
+
+### Make the two accounts
+
+The service and the build each run as an account of their own. The script does not use the default
+compute account of the project. That account holds `roles/compute.admin` on the project. A fault in
+the public service can give that power to a sender. Each other program that runs as that account
+can read the token too, when the account has access to the secret.
+
+| Account | Runs | Role | On |
+| --- | --- | --- | --- |
+| `strata-report` | The service | `roles/secretmanager.secretAccessor` | The secret `strata-report-token` |
+| `strata-report-build` | The build | `roles/storage.objectViewer` | The bucket `PROJECT_cloudbuild` |
+| `strata-report-build` | The build | `roles/logging.logWriter` | The project |
+| `strata-report-build` | The build | `roles/artifactregistry.writer` | The repository `strata` |
+
+The default compute account gets no role and no access to the secret.
+
+The bucket `PROJECT_cloudbuild` holds the source that `gcloud builds submit` uploads. The first build
+of a project makes it. A role needs the bucket and the repository, so the commands make them first.
+A create command that says the repository or the bucket exists is harmless. The build writes its log
+to Cloud Logging only, because a build with its own account must say where its log goes.
+
+The person who runs the commands must own the project. An owner can act as both accounts
+(`roles/iam.serviceAccountUser`), so `just report-deploy` can start the build and the service with
+them.
+
+```bash
+project=como-strata-test
+region=us-central1
+service_account=strata-report@$project.iam.gserviceaccount.com
+build_account=strata-report-build@$project.iam.gserviceaccount.com
+
+gcloud iam service-accounts create strata-report --project "$project" \
+  --display-name "The service of the report endpoint"
+gcloud iam service-accounts create strata-report-build --project "$project" \
+  --display-name "The build of the report endpoint"
+gcloud artifacts repositories create strata --project "$project" --location "$region" \
+  --repository-format docker --description "images of strata"
+gcloud storage buckets create "gs://${project}_cloudbuild" --project "$project" \
+  --location "$region"
+gcloud secrets add-iam-policy-binding strata-report-token --project "$project" \
+  --member "serviceAccount:$service_account" --role roles/secretmanager.secretAccessor
+gcloud storage buckets add-iam-policy-binding "gs://${project}_cloudbuild" \
+  --member "serviceAccount:$build_account" --role roles/storage.objectViewer
+gcloud projects add-iam-policy-binding "$project" \
+  --member "serviceAccount:$build_account" --role roles/logging.logWriter --condition=None
+gcloud artifacts repositories add-iam-policy-binding strata \
+  --project "$project" --location "$region" \
+  --member "serviceAccount:$build_account" --role roles/artifactregistry.writer
+```
+
+Then make sure that the secret lists `strata-report` and no other account:
+
+```bash
+gcloud secrets get-iam-policy strata-report-token --project "$project"
+```
+
+If the list shows the default compute account, remove its role from the secret. Replace
+`PROJECT_NUMBER` with the number of the project:
+
+```bash
+gcloud secrets remove-iam-policy-binding strata-report-token --project "$project" \
+  --member "serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+  --role roles/secretmanager.secretAccessor
+```

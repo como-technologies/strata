@@ -8,11 +8,50 @@
 # service. The script reads no secret: the token of GitHub stays in Secret Manager, and Cloud Run
 # gives it to the service as GITHUB_TOKEN when the service starts.
 #
+# The service and the build each run as an account of their own. The default compute account of the
+# project runs neither of them. It holds the role roles/compute.admin, and a fault in a public
+# service can give that power to a sender. It gets no role and no access to the secret.
+#   - The account strata-report runs the service. It has one role: it reads the secret
+#     strata-report-token (roles/secretmanager.secretAccessor).
+#   - The account strata-report-build runs the build. It has three roles: it reads the source in the
+#     bucket PROJECT_cloudbuild (roles/storage.objectViewer), it writes the log of the build
+#     (roles/logging.logWriter on the project), and it writes the image to the repository strata
+#     (roles/artifactregistry.writer).
+#
 # The project has these before the first run:
-#   - The APIs run, cloudbuild, artifactregistry, and secretmanager are on.
+#   - The APIs run, cloudbuild, artifactregistry, secretmanager, and iam are on.
 #   - The secret strata-report-token holds a token of GitHub that can write the issues of
 #     como-technologies/strata. It has the permission Issues: read and write, and no other.
-#   - The service account of Cloud Run can read the secret (roles/secretmanager.secretAccessor).
+#   - The two accounts exist, with the roles above. A person who owns the project runs these
+#     commands one time, and the script runs none of them. A create command that says the
+#     repository or the bucket exists is harmless. "Make the two accounts" in
+#     docs/src/development/report-endpoint.md gives the same commands.
+#
+#       project=como-strata-test
+#       region=us-central1
+#       service_account=strata-report@$project.iam.gserviceaccount.com
+#       build_account=strata-report-build@$project.iam.gserviceaccount.com
+#
+#       gcloud iam service-accounts create strata-report --project "$project" \
+#         --display-name "The service of the report endpoint"
+#       gcloud iam service-accounts create strata-report-build --project "$project" \
+#         --display-name "The build of the report endpoint"
+#       gcloud artifacts repositories create strata --project "$project" --location "$region" \
+#         --repository-format docker --description "images of strata"
+#       gcloud storage buckets create "gs://${project}_cloudbuild" --project "$project" \
+#         --location "$region"
+#       gcloud secrets add-iam-policy-binding strata-report-token --project "$project" \
+#         --member "serviceAccount:$service_account" --role roles/secretmanager.secretAccessor
+#       gcloud storage buckets add-iam-policy-binding "gs://${project}_cloudbuild" \
+#         --member "serviceAccount:$build_account" --role roles/storage.objectViewer
+#       gcloud projects add-iam-policy-binding "$project" \
+#         --member "serviceAccount:$build_account" --role roles/logging.logWriter --condition=None
+#       gcloud artifacts repositories add-iam-policy-binding strata \
+#         --project "$project" --location "$region" \
+#         --member "serviceAccount:$build_account" --role roles/artifactregistry.writer
+#
+# The person who runs the script must be able to act as both accounts
+# (roles/iam.serviceAccountUser). An owner of the project can.
 #
 # The service takes one instance and 8 requests at a time. One instance keeps the limits of the
 # rate in one place. A second instance splits the count of an issue.
@@ -45,6 +84,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 root=$(cd "$here/../.." && pwd)
 tag=$(git -C "$root" rev-parse --short=12 HEAD 2> /dev/null) || tag=latest
 image="$region-docker.pkg.dev/$project/$registry/report-endpoint:$tag"
+service_account="strata-report@$project.iam.gserviceaccount.com"
+build_account="strata-report-build@$project.iam.gserviceaccount.com"
 
 # run COMMAND...: print the command, and run it unless this is a dry run
 run() {
@@ -62,18 +103,25 @@ ask() {
 [ -n "$dry" ] || command -v gcloud > /dev/null || die "gcloud is not installed"
 ask gcloud secrets describe "$secret" --project "$project" > /dev/null \
   || die "the secret $secret does not exist in the project $project: create it, and put the token in it"
+# The script makes no account and grants no role: a person who owns the project does it one time.
+for account in "$service_account" "$build_account"; do
+  ask gcloud iam service-accounts describe "$account" --project "$project" > /dev/null \
+    || die "the service account $account does not exist in the project $project: make it with the commands of \"Make the two accounts\" in docs/src/development/report-endpoint.md"
+done
 if ! ask gcloud artifacts repositories describe "$registry" --project "$project" --location "$region" > /dev/null; then
   run gcloud artifacts repositories create "$registry" --project "$project" --location "$region" \
     --repository-format docker --description "images of strata"
 fi
 
 cd "$root"
+# The build and the service each run as their own account, never as the default compute account.
 run gcloud builds submit --project "$project" --config deploy/report/cloudbuild.yaml \
+  --service-account "projects/$project/serviceAccounts/$build_account" \
   --substitutions "_IMAGE=$image" .
 # The service answers a report and then writes it to GitHub, so Cloud Run must keep the CPU on
 # after the answer (--no-cpu-throttling).
 run gcloud run deploy "$service" --project "$project" --region "$region" --image "$image" \
-  --allow-unauthenticated --max-instances 1 --concurrency 8 --cpu 1 --memory 256Mi --timeout 60 \
+  --service-account "$service_account" --allow-unauthenticated --max-instances 1 --concurrency 8 --cpu 1 --memory 256Mi --timeout 60 \
   --no-cpu-throttling \
   --set-secrets "GITHUB_TOKEN=$secret:latest" --set-env-vars "GITHUB_REPOSITORY=$repository,TRUST_FORWARDED_FOR=1"
 
