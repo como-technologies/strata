@@ -45,6 +45,7 @@ An entry has these fields:
 | `kind` | `request`, `behavior`, `gap`, or `cloud`. See the next table. |
 | `request` | The method, the path, and the query of the request. A value of the query that varies is `{name}`, as in the path. The query holds each name that a rule of the fact sends in its path. Only a fact of the kind `request` has it. |
 | `scope` | Only a fact of the kind `request` has it: `client` or `tenant`. The default is `client`. The run sends a fact of the scope `tenant` with no project. See [The scope of a request](#the-scope-of-a-request). |
+| `absent_codes` | Only a fact with a GET request has it. The error codes of Palette that mean that the tenant has no such object, such as `ResourceNotFound`. A page of the fact states each code. See [The object that can be absent](#the-object-that-can-be-absent). |
 | `reads` | What strata reads from the answer or depends on. `fields` are paths in the document: `[]` marks an array, and `*` marks the values of an object. `codes` are error codes of Palette. `values` are the values of a closed set, by field. `names` are the names that strata needs from a set that Palette can extend, by field. |
 | `stand_in` | The routes of the stand-in that imitate the fact, as paths with `{name}` for a segment that varies. Empty when the stand-in serves no document for it. |
 | `live` | The live checks that prove the fact, each as `script.sh:check`. |
@@ -115,7 +116,8 @@ the fact.
 | A live check names a script that does not exist, or a check that the script does not call. | The proof is not there. |
 | A live check has no row in the book. | The book does not tell what the check establishes. |
 | A page or an anchor of a fact is not in the book. | The book does not state the fact. |
-| An error code of a fact is on none of its pages. | The code has a typing fault, or the page lost it. |
+| An error code of `reads.codes` or `absent_codes` is on none of the pages of the fact. | The code has a typing fault, or the page lost it. |
+| A fact without a GET request has `absent_codes`. | The run sends GET requests only, so the key does nothing. |
 | A table of `reference/palette-api.md` lists a request that no fact has. | The book lists a request that the list does not hold. |
 | A rule of strata-preflight sends a request that no fact has, or a fact names the wrong rules. The read of Palette that a command check makes first is such a request. | The rules and the list disagree. |
 | A rule of a fact sends a query in its path, and the request of the fact lacks that query. | The fact does not state the request that the rule sends. Palette can refuse the request without the query. |
@@ -175,7 +177,7 @@ The comparison has three parts:
 
 | Part | A difference is |
 | --- | --- |
-| The status | The tenant answers with a status of 4xx, other than 401 and 429. The stand-in answers 200. |
+| The status | The tenant answers with a status of 4xx, other than 401 and 429. The stand-in answers 200. An HTTP 404 with a code of `absent_codes` is no difference: the run skips the fact. |
 | The type of a field | A field of `reads.fields` has a type that no document of the stand-in has there. Or each document of the stand-in has the field, and no place of the answer has it. |
 | The names | A name of `reads.names` is not in the answer, and the answer has a value at that field. |
 
@@ -197,6 +199,7 @@ The run skips a fact in these cases:
 - The request is a POST. It sends a body, and the live checks of the fact send it.
 - The stand-in serves no document for the fact, or the fact reads no field, no value, and no name.
 - The tenant has no object for a placeholder. An empty tenant skips most of the facts.
+- The tenant answers HTTP 404 with a code that the fact names in `absent_codes`. See [The object that can be absent](#the-object-that-can-be-absent).
 - No source gives an object for a placeholder. `cloud-account` and the edge hosts are such facts.
 
 A skipped fact names its live checks in the entry. Run them in a live window to prove the fact.
@@ -239,6 +242,33 @@ A fact of such a route has `scope: tenant`. The run sends the request with a sec
 same tenant that names no project, as strata does. The run sends the listing that finds the subject
 in that scope too: the `{uid}` of `tag-filter` comes from `tag-filter-listing`. A fact with no
 `scope` has the scope `client`, and the run sends it with the project.
+
+### The object that can be absent
+
+Some routes give the record of one object that a cluster can lack. The route of the repave record is
+an example. A cluster that had no repave has no record, and Palette answers HTTP 404 with the code
+`ResourceNotFound`. It is the answer of Palette for a tenant with no such object, as an empty
+listing is. It is no change of Palette, so the run must not report a difference.
+
+A fact names such a code in `absent_codes`:
+
+```yaml
+absent_codes:
+  - ResourceNotFound
+```
+
+The run reads the code from the body of the answer. It decides in this way:
+
+| The answer | The outcome |
+| --- | --- |
+| HTTP 404 with a code of `absent_codes` | `skipped`. The reason names the code. |
+| HTTP 404 with another code, or with no code | `differs`, as for each 4xx. |
+| Another status, also with a code of `absent_codes` | The rules of [What the run compares](#what-the-run-compares). |
+
+A fact that names no code keeps the rules of [What the run compares](#what-the-run-compares).
+
+Name a code only when a read of Palette shows that it answers so for an absent object. A route that
+gives a list answers HTTP 200 with an empty list, so its fact names no code.
 
 ### The sets of values
 

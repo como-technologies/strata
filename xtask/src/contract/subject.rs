@@ -14,7 +14,7 @@ use std::rc::Rc;
 use serde_json::Value;
 use strata::api::{PaletteApi, RawCluster};
 use strata::error::Error;
-use strata::json::str_at;
+use strata::json::{opt_str, str_at};
 
 use crate::facts::{Fact, Scope};
 
@@ -176,21 +176,37 @@ const DEPTH: usize = 3;
 pub struct Failure {
     /// The status of the answer, when Palette answered.
     pub status: Option<u16>,
+    /// The code in the body of the answer, when the body is JSON with a text `code`.
+    pub code: Option<String>,
     /// What went wrong, in one line.
     pub message: String,
 }
 
 impl Failure {
     fn of(error: &Error) -> Failure {
-        let status = match error {
-            Error::Api { status, .. } => Some(*status),
-            _ => None,
+        let (status, code) = match error {
+            Error::Api { status, body, .. } => (Some(*status), code_of(body)),
+            _ => (None, None),
         };
         Failure {
             status,
+            code,
             message: error.to_string(),
         }
     }
+
+    /// The code of `absent` that Palette answered with HTTP 404: the tenant has no such object. A
+    /// 404 with another code gives none, and so does another status with one of these codes.
+    pub fn absent<'a>(&self, absent: &'a [String]) -> Option<&'a str> {
+        let code = self.code.as_deref().filter(|_| self.status == Some(404))?;
+        absent.iter().map(String::as_str).find(|a| *a == code)
+    }
+}
+
+/// The text `code` in the body of an error of Palette, when the body is JSON.
+fn code_of(body: &str) -> Option<String> {
+    let body: Value = serde_json::from_str(body).ok()?;
+    opt_str(&body, "/code").map(str::to_string)
 }
 
 /// The answer of a request: the document, or the failure.
@@ -342,8 +358,8 @@ fn value<A: PaletteApi>(
         Ok(document) => document,
         Err(failure) => {
             return Err(Subject::Failed(Failure {
-                status: failure.status,
                 message: format!("GET {path}: {}", failure.message),
+                ..failure.clone()
             }));
         }
     };

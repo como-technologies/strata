@@ -1599,6 +1599,149 @@ fn a_refused_key_a_limit_of_the_rate_and_a_fault_of_the_server_are_not_a_differe
     }
 }
 
+// ---- the object that can be absent ---------------------------------------------------------
+
+/// The code that Palette gives for an object that the tenant lacks.
+const ABSENT: &str = "ResourceNotFound";
+
+/// The small list, with the fact `id` naming `ResourceNotFound` as its absent code.
+fn facts_naming_the_absent_code(id: &str) -> Vec<Fact> {
+    let mut facts = facts();
+    let named = facts.iter_mut().find(|f| f.id == id).unwrap();
+    named.absent_codes = vec![ABSENT.to_string()];
+    facts
+}
+
+/// The entry of the fact `cluster-document` when the tenant answers its route with `status` and
+/// `body`.
+fn document_entry(facts: &[Fact], status: u16, body: &str) -> super::document::Entry {
+    let (_root, stand_in) = stand_in(&documents("Running"));
+    let api = memory(&documents("Running")).failing("/v1/spectroclusters/c1", status, body);
+    contract_of(facts, &stand_in, &api)
+        .facts
+        .into_iter()
+        .find(|e| e.id == "cluster-document")
+        .unwrap()
+}
+
+#[test]
+fn a_404_with_a_code_that_the_fact_names_is_skipped_with_the_code_in_its_reason() {
+    let body = format!(r#"{{"code":"{ABSENT}","message":"Resource not found for the type 'x'"}}"#);
+    let entry = document_entry(
+        &facts_naming_the_absent_code("cluster-document"),
+        404,
+        &body,
+    );
+    assert_eq!(entry.outcome, Outcome::Skipped);
+    assert!(entry.differences.is_empty());
+    let reason = entry.reason.unwrap_or_default();
+    assert!(reason.contains(&format!("`{ABSENT}`")), "{reason}");
+    assert!(reason.contains("HTTP 404"), "{reason}");
+}
+
+#[test]
+fn a_404_with_another_code_or_with_no_code_differs_when_the_fact_names_a_code() {
+    let facts = facts_naming_the_absent_code("cluster-document");
+    for body in [
+        r#"{"code":"ClusterNotFound","message":"m"}"#,
+        r#"{"code":404}"#,
+        "{}",
+        "<html>404</html>",
+        "",
+    ] {
+        let entry = document_entry(&facts, 404, body);
+        assert_eq!(entry.outcome, Outcome::Differs, "{body}");
+        assert_eq!(entry.differences[0].kind, DifferenceKind::Status, "{body}");
+        assert_eq!(entry.differences[0].found, ["404"], "{body}");
+    }
+}
+
+#[test]
+fn a_fact_that_names_no_code_keeps_the_rule_for_a_404_with_the_code() {
+    let body = format!(r#"{{"code":"{ABSENT}"}}"#);
+    let entry = document_entry(&facts(), 404, &body);
+    assert_eq!(entry.outcome, Outcome::Differs);
+    assert_eq!(entry.differences[0].found, ["404"]);
+}
+
+#[test]
+fn the_code_that_the_fact_names_does_not_change_the_outcome_of_another_status() {
+    let facts = facts_naming_the_absent_code("cluster-document");
+    let body = format!(r#"{{"code":"{ABSENT}"}}"#);
+    for (status, outcome) in [
+        (400, Outcome::Differs),
+        (403, Outcome::Differs),
+        (401, Outcome::Error),
+        (429, Outcome::Error),
+        (500, Outcome::Error),
+    ] {
+        assert_eq!(
+            document_entry(&facts, status, &body).outcome,
+            outcome,
+            "HTTP {status}"
+        );
+    }
+}
+
+#[test]
+fn a_skipped_fact_for_an_absent_object_leaves_the_exit_code_at_0() {
+    // no other fact reads the cloud config, so the run checks each other fact as before
+    let (_root, stand_in) = stand_in(&documents("Running"));
+    let body = format!(r#"{{"code":"{ABSENT}"}}"#);
+    let api = memory(&documents("Running")).failing("/v1/cloudconfigs/aws/cfg1", 404, &body);
+    let contract = contract_of(
+        &facts_naming_the_absent_code("cloud-config"),
+        &stand_in,
+        &api,
+    );
+    assert_eq!(outcome(&contract, "cloud-config"), Outcome::Skipped);
+    assert_eq!(contract.summary.differs, 0);
+    assert_eq!(contract.exit_code(), 0);
+}
+
+#[test]
+fn the_fact_of_the_repave_record_names_the_code_for_an_object_that_is_absent() {
+    let fact = real_facts()
+        .into_iter()
+        .find(|f| f.id == "cluster-repave-status")
+        .unwrap();
+    assert_eq!(fact.absent_codes, [ABSENT]);
+}
+
+#[test]
+fn a_cluster_that_had_no_repave_does_not_make_the_fact_of_the_repave_record_differ() {
+    // the tenant serves the listing and the document of the cluster, and no repave record: the
+    // memory tenant answers HTTP 404 with the code `ResourceNotFound` for it, as Palette does
+    let mut docs = documents("Running");
+    docs.push((
+        "v1/spectroclusters/c1/repave/status",
+        json!({"spec": {"source": "hubble"}, "status": {"repaveTransitionTime": "2026-11-01T00:00:00Z"}}),
+    ));
+    let (_root, stand_in) = stand_in(&docs);
+    let contract = contract_of(&real_facts(), &stand_in, &memory(&documents("Running")));
+    let entry = contract
+        .facts
+        .iter()
+        .find(|e| e.id == "cluster-repave-status")
+        .unwrap();
+    assert_eq!(entry.outcome, Outcome::Skipped);
+    let reason = entry.reason.as_deref().unwrap_or_default();
+    assert!(reason.contains(ABSENT), "{reason}");
+}
+
+#[test]
+fn a_failure_reads_the_code_of_the_body_only_when_the_body_is_json_with_a_text_code() {
+    let (_dir, client, tenant) = served_with_project(&[]);
+    let probe = subject::Probe::new(&client, &tenant);
+    let failure = probe.get(Scope::Client, "/v1/nothing");
+    let failure = failure.as_ref().as_ref().unwrap_err();
+    assert_eq!(failure.status, Some(404));
+    assert_eq!(failure.code.as_deref(), Some(ABSENT));
+    let named = [ABSENT.to_string()];
+    assert_eq!(failure.absent(&named), Some(ABSENT));
+    assert_eq!(failure.absent(&[]), None);
+}
+
 // ---- the harvest of the book -----------------------------------------------------------------
 
 /// The stand-in that the harvest of the book builds: the tenant of every chapter. It needs the
