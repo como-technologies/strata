@@ -157,17 +157,17 @@ enum Kept {
 }
 
 impl Kept {
-    /// This answer for a check that names `refusal_codes`: the answer when the check reads it,
-    /// else the error that Palette gave. An answer that was kept for a check that named its code
-    /// is an error for a check that does not.
-    fn read_by(self, method: Method, path: &str, refusal_codes: &[String]) -> Result<Kept> {
-        match &self {
+    /// Make sure that a check that names `refusal_codes` reads this answer: the error that Palette
+    /// gave, when it does not. An answer that was kept for a check that named its code is an error
+    /// for a check that does not.
+    fn read_by(&self, method: Method, path: &str, refusal_codes: &[String]) -> Result<()> {
+        match self {
             Kept::Answer { status, text, body }
                 if !reads_error(method, path, *status, Some(body), refusal_codes) =>
             {
                 Err(http_error(method, path, *status, text).into())
             }
-            _ => Ok(self),
+            _ => Ok(()),
         }
     }
 
@@ -212,25 +212,27 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
         }
     }
 
-    /// The answer to a request: the one that the run kept when it sent the same request, else
-    /// the one that Palette gives now. `refusal_codes` are the codes that the check reads at a
-    /// 5xx. The request is the same for each check, so the answer is the same, and only the
-    /// reading of a 5xx differs.
-    fn ask(
+    /// What `read` makes of the answer to a request. The answer is the one that the run kept for
+    /// this request, else the one that Palette gives now. `refusal_codes` are the codes that the
+    /// check reads at a 5xx. The request is the same for each check, so the answer is the same,
+    /// and only the reading of a 5xx differs. `read` borrows the answer, so a kept answer is not
+    /// cloned.
+    fn ask<R>(
         &self,
         method: Method,
         path: &str,
         body: Option<&Value>,
         refusal_codes: &[String],
-    ) -> Result<Kept> {
+        read: impl FnOnce(&Kept) -> R,
+    ) -> Result<R> {
         let api = self.client()?;
         let key = format!(
             "{method} {path} {}",
             body.map(Value::to_string).unwrap_or_default()
         );
-        let seen = self.kept.borrow().get(&key).cloned();
-        if let Some(kept) = seen {
-            return kept.read_by(method, path, refusal_codes);
+        if let Some(kept) = self.kept.borrow().get(&key) {
+            kept.read_by(method, path, refusal_codes)?;
+            return Ok(read(kept));
         }
         let answer = match method {
             Method::Get => api.get_json(path),
@@ -267,8 +269,9 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
             }
             Err(e) => return Err(e.into()),
         };
-        self.kept.borrow_mut().insert(key, kept.clone());
-        Ok(kept)
+        let out = read(&kept);
+        self.kept.borrow_mut().insert(key, kept);
+        Ok(out)
     }
 
     /// The Palette client, or the error that says a key is missing.
@@ -290,7 +293,7 @@ impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
         body: Option<&Value>,
         refusal_codes: &[String],
     ) -> Result<Response> {
-        Ok(self.ask(method, path, body, refusal_codes)?.response())
+        self.ask(method, path, body, refusal_codes, Kept::response)
     }
 
     fn has_tool(&self, name: &str) -> bool {
@@ -328,18 +331,16 @@ impl<A: PaletteApi> LiveBackend<'_, A> {
     /// A request of the world, in the terms of the library: an answer that is an HTTP error is
     /// the error that Palette gave.
     fn send(&self, method: Method, path: &str, body: Option<&Value>) -> strata::Result<Value> {
-        let kept = match self.ask(method, path, body, &[]) {
-            Ok(kept) => kept,
-            Err(Error::Palette(e)) => return Err(e),
-            Err(other) => {
-                return Err(strata::Error::Usage {
-                    message: other.to_string(),
-                });
-            }
+        let read = |kept: &Kept| match kept {
+            Kept::Value(value) => Ok(value.clone()),
+            Kept::Answer { status, text, .. } => Err(http_error(method, path, *status, text)),
         };
-        match kept {
-            Kept::Value(value) => Ok(value),
-            Kept::Answer { status, text, .. } => Err(http_error(method, path, status, &text)),
+        match self.ask(method, path, body, &[], read) {
+            Ok(answer) => answer,
+            Err(Error::Palette(e)) => Err(e),
+            Err(other) => Err(strata::Error::Usage {
+                message: other.to_string(),
+            }),
         }
     }
 }

@@ -574,7 +574,7 @@ fn the_variables_of_a_cluster_come_with_a_flag_for_a_missing_route() {
 }
 
 #[test]
-fn each_validate_post_of_the_client_goes_to_the_route_that_the_codes_name() {
+fn each_validate_request_of_the_client_goes_to_the_route_that_the_codes_name() {
     use crate::api::Method;
     use crate::api::codes::ValidateRoute;
 
@@ -586,11 +586,19 @@ fn each_validate_post_of_the_client_goes_to_the_route_that_the_codes_name() {
     let _ = p.validate_profile_packs(None, &body);
     let _ = p.validate_profile_packs(Some("u2"), &body);
     let _ = p.validate_profile_import(&body);
-    let routes: Vec<_> = api
+    let mut routes: Vec<_> = api
         .posted()
         .iter()
         .map(|(path, _)| ValidateRoute::of(Method::Post, path))
         .collect();
+    // the name route is a GET: the 404 error holds the method and the path with the query that the
+    // client sent
+    let err = p.validate_profile_name("a b", "1.0.0").unwrap_err();
+    let Error::Api { method, path, .. } = err else {
+        panic!("the answer is a 404");
+    };
+    assert!(path.contains("?name=a%20b&version=1.0.0"), "{path}");
+    routes.push(ValidateRoute::of(method, &path));
     assert_eq!(
         routes,
         [
@@ -598,6 +606,7 @@ fn each_validate_post_of_the_client_goes_to_the_route_that_the_codes_name() {
             Some(ValidateRoute::ProfilePacks),
             Some(ValidateRoute::ProfilePacks),
             Some(ValidateRoute::ProfileImport),
+            Some(ValidateRoute::ProfileName),
         ]
     );
 }

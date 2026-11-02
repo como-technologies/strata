@@ -91,7 +91,8 @@ where each module goes.
 - Write a field with `set_at`. The index of `serde_json` panics for a value that
   is not an object. `set_at` makes an object of that value. When the value must
   stay, check it first. An entity whose `metadata` is a number is an error, and
-  the name must not replace it.
+  the name must not replace it. A `json!` object that the function builds itself
+  is an object, so it can take the index.
 - The records of strata are typed structs. Give each one
   `#[serde(rename_all = "camelCase")]`, `skip_serializing_if` for an empty
   field, `#[serde(default)]` for a field that an older record does not have,

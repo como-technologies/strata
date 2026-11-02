@@ -15,10 +15,12 @@ just bench             # the benchmarks of benches/, with the time of each
 `just --list` shows each recipe.
 
 `just lint` builds the rustdoc of `strata`, `strata-preflight`, `xtask`,
-`strata-benches`, and `strata-report-endpoint` two times. It fails on a warning of each build. The first build
+`strata-benches`, `strata-report-endpoint`, and `strata-fuzz` two times. It fails on a warning of each build. The first build
 documents the public items, and it warns when a public item links to a private
 item. The second build documents all items, so it reads the comments of the
-private items too.
+private items too. The package `strata-fuzz` has code in tests only, and rustdoc
+builds no test. So its crate is `#![cfg(any(test, doc))]` and its dependencies
+are normal dependencies, and the build reads the comments of its tests.
 
 `just docs` runs `scripts/dev/build-book.sh`. mdbook exits with code `0` when
 it prints a warning, so the script reads the log. It fails on a line that

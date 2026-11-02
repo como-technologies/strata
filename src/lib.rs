@@ -92,7 +92,7 @@ pub mod render;
 pub mod snapshot;
 pub mod term;
 pub mod text;
-pub(crate) mod timestamp;
+pub mod timestamp;
 
 pub use error::{Error, Result};
 

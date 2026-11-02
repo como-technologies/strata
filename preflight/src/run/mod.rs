@@ -27,7 +27,7 @@ mod watch;
 
 use verbose::verbose_lines;
 
-pub use rules::{RULES_SCHEMA, list_rules, rules_document, rules_text};
+pub use rules::{list_rules, rules_document, rules_text};
 pub use watch::{
     DEFAULT_EVERY_SECS, DEFAULT_LIMIT_SECS, WatchInputs, WatchOptions, reading, watch,
 };

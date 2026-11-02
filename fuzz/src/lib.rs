@@ -9,7 +9,7 @@
 //!
 //! A target calls the public API of the packages, as a program that uses them does. The
 //! directory of each target is `src/__fuzz__/<module>__<test>/`, which is where bolero looks.
-#![cfg(test)]
+#![cfg(any(test, doc))]
 
 mod candidate;
 mod canon;

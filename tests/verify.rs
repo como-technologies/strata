@@ -10060,10 +10060,14 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
     let moved = serve_cluster(MemoryApi::new(), dir.path(), "cluster-a");
     let err = ask(&moved, &cluster, &pending).unwrap_err();
     assert!(
-        matches!(&err, Error::StaleRecord { cluster, .. } if cluster == "lab-cluster"),
+        matches!(&err, Error::StaleRecord { cluster, name, .. }
+            if cluster == CLUSTER_UID && name == "lab-cluster"),
         "{err}"
     );
     assert_eq!(err.kind(), "stale-record");
+    // `cluster` holds the uid in each error of a cluster, so a script reads one kind of value
+    assert_eq!(err.to_json()["cluster"], CLUSTER_UID);
+    assert_eq!(err.to_json()["name"], "lab-cluster");
     assert!(
         err.to_string()
             .ends_with("Record cluster:lab-cluster@pending again"),
@@ -12697,6 +12701,55 @@ fn a_raw_directory_of_a_cluster_group_masks_each_password_and_gives_the_record_o
             .fields["values"],
         serde_json::json!({"sync": {"adminPassword": "********", "replicas": 1},
             "users": [{"name": "fred", "password": "********"}]})
+    );
+}
+
+#[test]
+fn a_cluster_group_with_values_that_have_no_canonical_form_records_the_mask_and_not_the_password() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    // an unquoted template is a map in a key, so the values have no canonical form
+    let take = |password: &str, name: &str| {
+        let values = format!("adminPassword: {password}\nhost: {{{{ .spectro.var.host }}}}\n");
+        let mut doc = group_doc(dir.path());
+        doc["spec"]["clustersConfig"] = clusters_config(6000, &values);
+        let api = serve_cluster_group(MemoryApi::new(), dir.path()).with(group_route("g1"), doc);
+        let fetched = Palette::new(api)
+            .fetch_subject(SubjectKind::ClusterGroup, "g1", &Progress::silent())
+            .unwrap();
+        let direct = Snapshot::from_cluster(&fetched, None, "raw", "t0").unwrap();
+        let saved = dir.path().join(name);
+        fetched.save_dir(&saved, "t0").unwrap();
+        let from_raw = ops::snapshot_from_dir(&saved, "raw", "t0").unwrap();
+        (direct, from_raw)
+    };
+    let policy = |snap: &Snapshot| {
+        let tier = snap.source.cluster.as_ref().unwrap().tier(Tier::Policy);
+        let tier = tier.unwrap();
+        (tier.hash.clone(), tier.fields["values"].clone())
+    };
+    let (direct, from_raw) = take("barney-clear-secret", "raw-one");
+    let (hash, values) = policy(&direct);
+    assert_eq!(values, Value::Null, "the values have no canonical form");
+    let json = serde_json::to_string(&direct).unwrap();
+    assert!(!json.contains("barney-clear-secret"), "{json}");
+
+    // the record of the saved directory is the record of the fetch, and covers the mask
+    assert_eq!(policy(&from_raw).0, hash);
+    assert_eq!(
+        serde_json::to_value(&from_raw).unwrap(),
+        serde_json::to_value(&direct).unwrap()
+    );
+
+    // a new password changes no hash, so it changes no tier
+    let (other, other_raw) = take("pebbles-clear-secret", "raw-two");
+    assert_eq!(policy(&other).0, hash);
+    assert_eq!(policy(&other_raw).0, hash);
+    let d = ops::compare(&direct, &other, "t1");
+    assert!(
+        d.same && d.cluster_tiers.iter().all(|t| t.same),
+        "{:?}",
+        d.cluster_tiers
     );
 }
 

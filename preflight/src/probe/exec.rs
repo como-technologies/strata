@@ -8,9 +8,9 @@ use serde_json::Value;
 use strata::config::KEY_VARS;
 
 use super::backend::{Backend, ExecOutput};
-use super::judge;
 use super::outcome::{Outcome, Ran, Verdict, by_hand};
 use super::palette::{Asked, read as read_palette};
+use super::{judge, put_data};
 use crate::error::{Error, Result};
 use crate::jq::Jq;
 use crate::rule::{ExecCheck, PaletteRead, Rule};
@@ -63,7 +63,7 @@ pub(super) fn run_exec(
     if let Some(read) = &check.palette {
         match read_first(rule, read, world, backend, jq, started) {
             Ok(asked) => {
-                with["response"] = serde_json::to_value(&asked.response).unwrap_or(Value::Null);
+                put_data(&mut with, "response", &asked.response);
                 request = Some(asked.call);
             }
             Err(out) => return *out,
@@ -72,9 +72,9 @@ pub(super) fn run_exec(
     let limit = Duration::from_secs(check.timeout.unwrap_or(60));
     match run_commands(backend, &argv, &also, limit) {
         Ok((output, second)) => {
-            with["exec"] = serde_json::to_value(&output).unwrap_or(Value::Null);
+            put_data(&mut with, "exec", &output);
             if let Some(second) = second {
-                with["also"] = serde_json::to_value(&second).unwrap_or(Value::Null);
+                put_data(&mut with, "also", &second);
             }
             let mut out = judge(rule, &check.expr, &with, jq, started);
             out.ran = Ran::Exec {

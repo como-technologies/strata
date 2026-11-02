@@ -8,7 +8,7 @@
 use std::time::Instant;
 
 use serde_json::Value;
-use strata::json::{flag, text_or};
+use strata::json::{flag, set_at, text_or};
 
 use crate::jq::Jq;
 use crate::rule::{Check, Rule};
@@ -48,6 +48,16 @@ pub fn judge_watch(rule: &Rule, world: &Value, jq: &Jq) -> Outcome {
         Some(Check::Watch { expr }) => judge(rule, expr, world, jq, started),
         _ => Outcome::not_run(Verdict::Skipped, "not a watch rule"),
     }
+}
+
+/// Put `data` in the field `key` of `world`, the world of a check, for the program to read. A
+/// derived `Serialize` of plain data does not fail, so a program never reads the `null` here.
+fn put_data(world: &mut Value, key: &str, data: &impl serde::Serialize) {
+    set_at(
+        world,
+        &[key],
+        serde_json::to_value(data).unwrap_or(Value::Null),
+    );
 }
 
 /// Run the program and read its output: `true`/`false`, a list of messages, or `{pass,

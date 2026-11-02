@@ -14,7 +14,7 @@ use crate::json::{arr, opt_text, strings, text};
 use crate::model::cloud::supports;
 use crate::model::pack_state::PackState;
 use crate::model::pack_type::PackType;
-use crate::reference::version;
+use crate::reference::{LATEST, version};
 use crate::snapshot::Tool;
 use crate::term::progress::Progress;
 use crate::timestamp::Rfc3339;
@@ -91,12 +91,14 @@ pub struct PackBuild {
     pub cloud_types: Vec<String>,
     /// Every tag that points at this version, the exact tag first.
     pub tags: Vec<String>,
-    /// True for the newest version of the registry's copy, by [`version::compare`]: the order of
-    /// semantic versions, as Palette orders them.
+    /// True for the version that `pack:<name>@latest` records. That is the highest version that is
+    /// not a pre-release, or the highest pre-release when the registry's copy has no other version.
+    /// See [`version::pick`].
     pub latest: bool,
-    /// True for the version that Palette calls the latest of the registry's copy. Strata orders by
-    /// semantic version as Palette does, so the mark is on the newest version. The two can differ
-    /// for a version that does not parse as a semantic version.
+    /// True for the version that Palette calls the latest of the registry's copy. Palette marks the
+    /// highest version by the order of semantic versions, also when it is a pre-release. So it can
+    /// differ from `latest` for a pre-release, and for a version that does not parse as a
+    /// semantic version.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub palette_latest: bool,
     /// The state that the registry listing gives this version: `deprecated`, `disabled`, or
@@ -130,8 +132,8 @@ pub struct PackOptions {
     /// Only the versions that support this cloud, by the rule of [`crate::model::cloud`]. A version
     /// with the cloud type `all`, or with no cloud type, supports each cloud.
     pub cloud: Option<String>,
-    /// Only the newest version of each registry, and the version that Palette calls the latest
-    /// when it is a different one.
+    /// Only the version that `@latest` names in each registry, and the version that Palette calls
+    /// the latest when it is a different one.
     pub latest: bool,
 }
 
@@ -433,8 +435,11 @@ fn pack_builds(
         });
     }
     versions.sort_by(|a, b| version::compare(&b.version, &a.version));
-    if let Some(first) = versions.first_mut() {
-        first.latest = true;
+    // the version that `@latest` records: `version::pick` is the one rule of both
+    let latest =
+        version::pick(versions.iter(), |v| v.version.as_str(), LATEST).map(|v| v.version.clone());
+    for v in &mut versions {
+        v.latest = latest.as_deref() == Some(v.version.as_str());
     }
     if options.latest {
         versions.retain(|v| v.latest || v.palette_latest);

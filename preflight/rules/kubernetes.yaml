@@ -243,10 +243,10 @@ rules:
         .cloud as $c
         | (if $c == "aws" then "1.27" elif $c == "gcp" then "1.29" else null end) as $fs
         | if $fs == null then [] else
-          ($fs | split(".") | map(tonumber)) as $floor
+          ($fs | semver_numbers) as $floor
           | [ (.profiles // [])[] | .packs[] | select(.layer == "k8s")
               | .version as $v
-              | ($v | split(".") | .[:2] | map(try tonumber catch 0)) as $p
+              | ($v | semver_numbers // [] | .[:2]) as $p
               | select(($p | length) == 2)
               | select(($p[0] < $floor[0]) or ($p[0] == $floor[0] and $p[1] < $floor[1]))
               | "pack \(.name)@\($v) on \($c) is under Kubernetes \($fs), the floor of the external cloud controller: Palette installs none, and a values `cloud-provider: external` leaves the nodes uninitialized" ]

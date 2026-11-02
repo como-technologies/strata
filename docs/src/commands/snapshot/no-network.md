@@ -51,9 +51,10 @@ line, for example for a block scalar, it writes the values again from the parsed
 YAML.
 
 A parser cannot write a key that is a map. Then `save_dir` gives `serialize`
-and writes no file. The record of such values holds `valuesParseError`, and
-`valuesHash` covers the text. So the `valuesHash` of the directory is not the
-`valuesHash` of the fetch.
+and writes no file. A snapshot of the group gives the same error, because the
+`valuesHash` of its record needs the same mask. The record of such values holds
+`valuesParseError`, and `valuesHash` covers the masked text. So the `valuesHash`
+of the directory is the `valuesHash` of the fetch.
 
 `rbacs.json` and `namespaces.json` keep the role bindings and the namespaces
 of a cluster. A directory that an older version of strata saved has neither.

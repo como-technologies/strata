@@ -12,9 +12,13 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use jaq_core::load::{Arena, File, Loader};
-use jaq_core::{Compiler, Ctx, Vars, data};
+use jaq_core::native::{Fun, bome, run, v};
+use jaq_core::{Compiler, Ctx, ValR, Vars, data};
 use jaq_json::Val;
+use jaq_std::ValT;
 use serde_json::Value;
+
+use strata::reference::version;
 
 use crate::error::{Error, Result};
 
@@ -52,6 +56,30 @@ impl Default for Jq {
     }
 }
 
+/// The filters that this crate adds to the standard library of jq.
+///
+/// A rule reads a version with one of them, so that the one module of `strata` that parses a
+/// version parses it: see [`semver_numbers`].
+fn added_funs() -> impl Iterator<Item = Fun<data::JustLut<Val>>> {
+    [run(("semver_numbers", v(0), |cv| {
+        bome(semver_numbers(&cv.1))
+    }))]
+    .into_iter()
+}
+
+/// `semver_numbers`: the numbers of the version in the input, as [`version::numbers`] reads them.
+///
+/// `4.10.3-rc.1` gives `[4, 10, 3]`, and `4.10` gives `[4, 10]`. A text that is no version gives
+/// `null`. The input must be a text.
+fn semver_numbers(input: &Val) -> ValR<Val> {
+    let text = std::str::from_utf8(input.try_as_utf8_bytes()?).ok();
+    Ok(text
+        .and_then(version::numbers)
+        .map_or(Val::Null, |numbers| {
+            numbers.into_iter().map(|n| Val::from(n as usize)).collect()
+        }))
+}
+
 impl Jq {
     /// A new engine with nothing compiled.
     pub fn new() -> Self {
@@ -76,7 +104,8 @@ impl Jq {
         }
         let funs = jaq_core::funs()
             .chain(jaq_std::funs())
-            .chain(jaq_json::funs());
+            .chain(jaq_json::funs())
+            .chain(added_funs());
         let loader = Loader::new(self.library.iter().cloned());
         let arena = Arena::default();
         let modules = loader
@@ -304,6 +333,23 @@ fn to_json(v: &Val) -> Value {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn semver_numbers_reads_a_version_as_strata_does() {
+        let jq = Jq::new();
+        let numbers = |input: Value| {
+            jq.first("t", "semver_numbers", &input, None)
+                .expect("the filter runs")
+        };
+        assert_eq!(numbers(json!("4.10.3-rc.1")), json!([4, 10, 3]));
+        assert_eq!(numbers(json!("v4.10")), json!([4, 10]));
+        assert_eq!(numbers(json!("1.0.1+2")), json!([1, 0, 1]));
+        assert_eq!(numbers(json!("LTS__24.x")), Value::Null);
+        assert_eq!(numbers(json!("")), Value::Null);
+        // a value that is no text is an error of the program
+        let err = jq.run("t", "semver_numbers", &json!(4), None).unwrap_err();
+        assert!(err.to_string().contains("the program failed"), "{err}");
+    }
 
     #[test]
     fn a_program_runs_on_a_document() {

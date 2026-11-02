@@ -97,7 +97,7 @@ pub(super) fn contract(options: &Options) -> Result<u8, String> {
     let stand_in = stand_in(&repo, options.stand_in.as_deref())?;
     let config = Config::from_env().map_err(|e| e.to_string())?;
     let palette = connect_from_env(Progress::silent()).map_err(|e| e.to_string())?;
-    let checked_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let checked_at = strata::timestamp::now_utc();
     // the second client names no project, for the routes that refuse one
     let tenant = connect_with(config.clone().without_project(), Progress::silent());
     let mut document = run(

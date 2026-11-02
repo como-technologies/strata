@@ -368,7 +368,8 @@ fn pending_body(doc: &Value, pending: &Snapshot, source: &ClusterSource) -> Resu
         .find(|p| !running.iter().any(|r| r.uid == p.uid))
     {
         return Err(Error::StaleRecord {
-            cluster: source.name.clone(),
+            cluster: source.uid.clone(),
+            name: source.name.clone(),
             profile: name_version(&old.name, &old.version),
         });
     }

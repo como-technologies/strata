@@ -296,12 +296,14 @@ pub enum Error {
     /// so the refusal comes after the first request. The command is correct. The record must
     /// change.
     #[error(
-        "the record of the update that waits holds {profile}, and the cluster {cluster} does not run it now. Record {} again",
-        pending_ref(cluster)
+        "the record of the update that waits holds {profile}, and the cluster {name} does not run it now. Record {} again",
+        pending_ref(name)
     )]
     StaleRecord {
-        /// The name of the cluster.
+        /// The uid of the cluster, as in the other errors of a cluster.
         cluster: String,
+        /// The name of the cluster, for the message.
+        name: String,
         /// The first profile of the record that the cluster does not run, as `name@version`.
         profile: String,
     },

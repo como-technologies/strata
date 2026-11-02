@@ -1567,3 +1567,71 @@ fn a_subnet_with_no_secondary_range_has_no_key_in_the_fixture_and_the_rule_fails
         out.messages
     );
 }
+
+/// The path of a fixture of the catalog: `folder` is the engine, such as `eks`.
+fn fixture_path(folder: &str, file: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("rules/fixtures")
+        .join(folder)
+        .join(file)
+}
+
+/// A rule that reads a version reads it as `strata` reads it, so a pre-release, a `v`, and build
+/// data are versions. The program of `capa-stack-release-behind` stopped on `4.11.0-rc.1`, a
+/// release that `--release` takes.
+#[test]
+fn the_rules_that_read_a_version_read_a_pre_release_a_v_and_build_data_as_strata_does() {
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    let rule = |id: &str| catalog.rules().find(|r| r.id == id).unwrap().clone();
+    let run = |id: &str, doc: serde_json::Value| {
+        let outcome = outcome_of(&rule(id), doc, &jq);
+        (outcome.verdict, outcome.messages)
+    };
+
+    // the tag of the role is 4.10.4 in this fixture
+    let capa = |release: &str| {
+        let mut doc = fixture::load(&fixture_path("eks", "capa-release-behind.json")).unwrap();
+        doc["release"] = serde_json::json!(release);
+        run("capa-stack-release-behind", doc)
+    };
+    let (verdict, messages) = capa("4.11.0-rc.1");
+    assert_eq!(verdict, Verdict::Failed, "{messages:?}");
+    assert!(
+        messages[0].contains("the tenant runs 4.11.0-rc.1"),
+        "{messages:?}"
+    );
+    for same in ["4.10", "v4.10", "4.10.4-rc.1", "4.10.4+build.5"] {
+        assert_eq!(capa(same).0, Verdict::Passed, "{same}");
+    }
+    let (verdict, messages) = capa("latest");
+    assert_eq!(verdict, Verdict::Error, "{messages:?}");
+    assert!(
+        messages[0].contains("--release latest is no version"),
+        "{messages:?}"
+    );
+
+    // the pack is 1.26.15 in this fixture, under the floor 1.27 of AWS
+    let ccm = |version: &str| {
+        let mut doc = fixture::load(&fixture_path("aws", "k8s-1-26.json")).unwrap();
+        doc["profiles"][0]["packs"][1]["version"] = serde_json::json!(version);
+        run("ccm-version", doc).0
+    };
+    assert_eq!(ccm("1.26.15-rc.1"), Verdict::Failed);
+    assert_eq!(ccm("v1.26.15"), Verdict::Failed);
+    for at_the_floor in ["1.27.0-rc.1", "v1.27.3+rke2r1", "1.28"] {
+        assert_eq!(ccm(at_the_floor), Verdict::Passed, "{at_the_floor}");
+    }
+
+    // the release is 4.10 in this fixture, and the agent of the host cp-1 is 4.7.16
+    let agent = |version: &str| {
+        let mut doc = fixture::load(&fixture_path("edge", "agent-old.json")).unwrap();
+        doc["_responses"]["GET /v1/edgehosts/edge-host-cp-1"]["body"]["status"]["health"]["agentVersion"] =
+            serde_json::json!(version);
+        run("edge-agent-version", doc).0
+    };
+    assert_eq!(agent("v4.7.0-rc.1"), Verdict::Failed);
+    for current in ["v4.10.0-rc.1", "4.10.16+build.2", "4.11"] {
+        assert_eq!(agent(current), Verdict::Passed, "{current}");
+    }
+}

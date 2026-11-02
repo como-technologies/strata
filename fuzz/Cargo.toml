@@ -11,8 +11,9 @@ publish = false
 
 # A target is a test. On stable Rust, `cargo test -p strata-fuzz` runs each one on its corpus and on
 # random input. On nightly, `cargo bolero` runs the same test under libFuzzer: see `just fuzz`. The
-# crate has no code outside its tests, so each dependency is a dev-dependency.
-[dev-dependencies]
+# crate has no code outside its tests, but rustdoc reads its comments for `just lint`, and rustdoc
+# builds no dev-dependency. So each dependency is a normal dependency.
+[dependencies]
 bolero = "0.13"
 serde = "1"
 serde_json = "1"

@@ -84,7 +84,8 @@ fn one_of_each() -> Vec<Error> {
             uid: "64e0000000000000000000c3".into(),
         },
         Error::StaleRecord {
-            cluster: "payments".into(),
+            cluster: "64f1000000000000000000e1".into(),
+            name: "payments".into(),
             profile: "aws-stack@1.1.1".into(),
         },
         Error::ClusterTemplateGoverns {
@@ -420,7 +421,8 @@ fn a_record_that_does_not_match_names_its_field_and_says_to_take_the_record_agai
 #[test]
 fn a_refusal_that_a_record_or_a_cluster_causes_has_a_kind_of_its_own_and_stays_terminal() {
     let stale = Error::StaleRecord {
-        cluster: "payments".into(),
+        cluster: "64f1000000000000000000e1".into(),
+        name: "payments".into(),
         profile: "aws-stack@1.1.1".into(),
     };
     assert_eq!(
@@ -505,6 +507,15 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
         "{ambiguous}"
     );
     assert_eq!(by_kind("snapshot-schema")["schema"], "strata-snapshot/1");
+    // the document names the field, so a script need not read it from the message
+    assert_eq!(by_kind("snapshot-schema")["field"], "variables[0].name");
+    let whole = Error::SnapshotSchema {
+        path: "old.json".into(),
+        schema: "strata-snapshot/1",
+        field: String::new(),
+        source: bad_json(),
+    };
+    assert!(whole.to_json().get("field").is_none());
     let log = by_kind("log-invalid");
     assert_eq!(log["path"], "strata-unknown.jsonl");
     assert_eq!(log["line"], 3);
@@ -542,11 +553,13 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
     );
     assert_eq!(cp["applied"], serde_json::json!(["infra", "addons"]));
     assert_eq!(by_kind("profile-ref-required")["reference"], "cluster:c1");
+    // `cluster` is the uid in the three errors of a cluster, and the name is a field of its own
     let stale = by_kind("stale-record");
     assert_eq!(
         (stale["cluster"].clone(), stale["profile"].clone()),
-        ("payments".into(), "aws-stack@1.1.1".into())
+        ("64f1000000000000000000e1".into(), "aws-stack@1.1.1".into())
     );
+    assert_eq!(stale["name"], "payments");
     let governed = by_kind("cluster-template-governs");
     assert_eq!(
         (governed["cluster"].clone(), governed["template"].clone()),

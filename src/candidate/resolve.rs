@@ -14,7 +14,7 @@ use crate::api::registry::{Registries, pack_type_of, registry_layer, retired_sta
 use crate::api::{Palette, PaletteApi, RawProfile};
 use crate::closed_set::{ClosedSet, Open};
 use crate::error::{Error, Result};
-use crate::json::{arr, opt_str, opt_text, str_at, strings, text};
+use crate::json::{arr, opt_str, opt_text, set_at, str_at, strings, text};
 use crate::model::oci_provider::OciProvider;
 use crate::model::pack_type::PackType;
 use crate::reference::name_version;
@@ -70,7 +70,8 @@ fn pack_documents(l: &CandidateLayer, f: &PackFields, manifests: Vec<Value>) -> 
 
 /// Put the provider type of an OCI registry on `pack_ref`, as a published profile carries it.
 fn set_provider_type(pack_ref: &mut Value, provider_type: &Open<OciProvider>) {
-    pack_ref["annotations"] = json!({ PROVIDER_TYPE_ANNOTATION: provider_type });
+    let annotations = json!({ PROVIDER_TYPE_ANNOTATION: provider_type });
+    set_at(pack_ref, &["annotations"], annotations);
 }
 
 /// The state of one resolve: the candidate, the client, and the registry listings, which strata
