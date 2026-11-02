@@ -851,6 +851,12 @@ field, a value, an input, or an option is in the sections above.
     record again.
   - A snapshot of such a group gives the error `serialize`, and writes no record, when strata
     cannot mask a password in the values. `save_dir` gave that error before.
+- **`verify-report.sh` and `upstream-report.sh` run when an open issue has no text in its
+  body.** GitHub gives `null` as the body of such an issue.
+  - `upstream-report.sh` stopped with a jq error on each version of jq. `verify-report.sh`
+    stopped on the jq of `ubuntu-latest`.
+  - Both scripts read the first line of such a body as an empty line now. They skip the issue
+    and do their usual work. No script of yours needs a change.
 - **`strata-preflight`: three rules read a version as `strata` does.** The rules are
   `capa-stack-release-behind`, `ccm-version`, and `edge-agent-version`.
   - `capa-stack-release-behind` stopped with an error for `--release 4.11.0-rc.1`. It compares

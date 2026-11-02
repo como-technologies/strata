@@ -171,7 +171,7 @@ fi
 # issue_for PATH -> the lowest open issue number whose body starts with PATH's marker
 issue_for() {
   jq -r --arg m "<!-- strata-verify: $1 -->" \
-    '[.[] | select(((.body // "") | split("\n")[0] | rtrimstr("\r")) == $m) | .number] | min // empty' \
+    '[.[] | select(((.body // "") | (split("\n")[0] // "") | rtrimstr("\r")) == $m) | .number] | min // empty' \
     "$work/issues.json"
 }
 

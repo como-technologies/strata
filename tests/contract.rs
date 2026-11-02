@@ -88,6 +88,11 @@ impl Report {
         self.put("issues.json", &Value::Array(list).to_string());
     }
 
+    /// Run the script with the stand-in `jq` `stand_in`: see [`JQ_STRICT_TRIM`].
+    fn use_jq(&self, stand_in: &str) {
+        executable(&self.dir.path().join("bin/jq"), stand_in);
+    }
+
     /// The path of a contract document that holds `document`.
     fn document(&self, document: &Value) -> PathBuf {
         let path = self.dir.path().join("contract.json");
@@ -471,6 +476,58 @@ fn contract_report_updates_the_issue_of_a_set_that_still_holds_a_new_value() {
 }
 
 #[test]
+fn contract_report_goes_on_when_an_open_issue_has_no_text_in_its_body() {
+    // GitHub gives `"body": null` for an issue that a person opens with no text. The second jq
+    // stops on a null in `rtrimstr`, as the jq of ubuntu-latest does.
+    for (jq, stand_in) in [
+        ("the jq of the machine", None),
+        ("the jq of ubuntu-latest", Some(JQ_STRICT_TRIM)),
+    ] {
+        let r = Report::new();
+        if let Some(stand_in) = stand_in {
+            r.use_jq(stand_in);
+        }
+        r.put(
+            "issues.json",
+            &json!([
+                {"number": 3, "title": "t", "body": null},
+                {"number": 4, "title": "t", "body": ""},
+                {"number": 7, "title": "t", "body": format!("{VALUES_MARKER}\nold")},
+                {"number": 9, "title": "t", "body": "<!-- strata-contract: values cluster-listing status.state -->\nold"},
+            ])
+            .to_string(),
+        );
+        let o = r.report(
+            &document(
+                vec![
+                    new_state("cluster-document", &["Hibernating"]),
+                    entry("cluster-listing", "same", json!([])),
+                ],
+                vec![],
+            ),
+            &[],
+        );
+        assert_eq!(o.status.code(), Some(1), "{jq}: {}", text(&o.stderr));
+        let calls = r.calls();
+        assert!(
+            calls.iter().any(|c| c.starts_with("issue edit 7 ")),
+            "{jq}: {calls:?}"
+        );
+        assert!(
+            calls.iter().any(|c| c.starts_with("issue close 9 ")),
+            "{jq}: {calls:?}"
+        );
+        assert!(
+            calls.iter().all(|c| !c.starts_with("issue close 3 ")
+                && !c.starts_with("issue close 4 ")
+                && !c.starts_with("issue edit 3 ")
+                && !c.starts_with("issue edit 4 ")),
+            "{jq}: an issue with no text is not touched: {calls:?}"
+        );
+    }
+}
+
+#[test]
 fn contract_report_closes_the_issue_of_a_set_that_holds_no_new_value_now() {
     let r = Report::new();
     r.open_issues(&[
@@ -780,11 +837,17 @@ fn contract_report_dry_run_says_when_the_project_is_unknown() {
 
 /// Run the function `call` of github.sh in the directory `cwd`, and give what it prints.
 fn github_sh(cwd: &Path, call: &str) -> String {
+    github_sh_on(cwd, call, &std::env::var("PATH").unwrap())
+}
+
+/// Run the function `call` of github.sh in the directory `cwd`, with the `PATH` `path`.
+fn github_sh_on(cwd: &Path, call: &str, path: &str) -> String {
     let mut command = Command::new("bash");
     command
         .arg("-c")
         .arg(format!(". {}; {call}", live_script("github.sh").display()))
-        .current_dir(cwd);
+        .current_dir(cwd)
+        .env("PATH", path);
     let o = isolate_git(&mut command).output_locked().unwrap();
     assert!(o.status.success(), "{call}: {}", text(&o.stderr));
     text(&o.stdout)
@@ -841,7 +904,7 @@ fn remote_repo_reads_the_checkout_that_it_is_given_and_not_the_current_directory
 }
 
 #[test]
-fn the_first_line_of_a_body_ends_before_the_return_and_a_body_with_no_text_has_none() {
+fn the_first_line_of_a_body_ends_before_the_return_and_a_body_with_no_text_has_an_empty_one() {
     let issues = json!([
         {"number": 1, "body": "<!-- marker -->\r\nrest of the body"},
         {"number": 2, "body": "<!-- marker -->"},
@@ -850,14 +913,23 @@ fn the_first_line_of_a_body_ends_before_the_return_and_a_body_with_no_text_has_n
     ]);
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("issues.json"), issues.to_string()).unwrap();
-    let lines = github_sh(
-        dir.path(),
-        "jq -c \"$first_line_jq\"'[.[] | first_line]' issues.json",
-    );
-    assert_eq!(
-        lines.trim(),
-        r#"["<!-- marker -->","<!-- marker -->",null,null]"#
-    );
+    // the jq of ubuntu-latest stops on a null in `rtrimstr`: the line is never null
+    let bin = fake_bin(dir.path(), &[("jq", JQ_STRICT_TRIM)]);
+    for (jq, path) in [
+        ("the jq of the machine", std::env::var("PATH").unwrap()),
+        ("the jq of ubuntu-latest", path_with(&bin)),
+    ] {
+        let lines = github_sh_on(
+            dir.path(),
+            "jq -c \"$first_line_jq\"'[.[] | first_line]' issues.json",
+            &path,
+        );
+        assert_eq!(
+            lines.trim(),
+            r#"["<!-- marker -->","<!-- marker -->","",""]"#,
+            "{jq}"
+        );
+    }
 }
 
 #[test]

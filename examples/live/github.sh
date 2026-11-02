@@ -14,7 +14,8 @@ remote_repo() {
 }
 
 # The jq function `first_line` gives the first line of the body of an issue, without a carriage
-# return: the line that holds the marker of an issue. A program puts the definition before its own
-# text, as in: jq "$first_line_jq"'.[] | select(first_line == $marker)'
+# return: the line that holds the marker of an issue. A body with no text gives an empty string,
+# and never null, because `rtrimstr` fails on a null in some versions of jq. A program puts the
+# definition before its own text, as in: jq "$first_line_jq"'.[] | select(first_line == $marker)'
 # The variable is exported, so a `bash -c` of a check has it too.
-export first_line_jq='def first_line: (.body // "") | split("\n")[0] | rtrimstr("\r");'
+export first_line_jq='def first_line: (.body // "") | (split("\n")[0] // "") | rtrimstr("\r");'

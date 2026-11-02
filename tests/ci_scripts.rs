@@ -3277,9 +3277,9 @@ impl Report {
         std::fs::write(self.dir.path().join(name), body).unwrap();
     }
 
-    /// Run the script with a `jq` that acts as jq 1.6: see [`JQ_1_6`].
-    fn use_jq_1_6(&self) {
-        executable(&self.dir.path().join("bin/jq"), JQ_1_6);
+    /// Run the script with the stand-in `jq` `stand_in`: see [`JQ_1_6`] and [`JQ_STRICT_TRIM`].
+    fn use_jq(&self, stand_in: &str) {
+        executable(&self.dir.path().join("bin/jq"), stand_in);
     }
 
     /// The summary that strata prints for verify-report.sh, from (path, status, name, version)
@@ -3641,7 +3641,7 @@ fn verify_report_touches_no_issue_when_verify_checks_nothing() {
             for exit in EXITS_OF_NOTHING {
                 let d = Report::verify();
                 if old_jq {
-                    d.use_jq_1_6();
+                    d.use_jq(JQ_1_6);
                 }
                 d.put("summary.json", printed);
                 d.put(
@@ -3664,6 +3664,88 @@ fn verify_report_touches_no_issue_when_verify_checks_nothing() {
                 );
             }
         }
+    }
+}
+
+/// The stand-in `jq`s that a run of a script uses: the `jq` of the machine, and the `jq` of
+/// `ubuntu-latest`, which stops on a null in `rtrimstr`.
+fn jq_stand_ins() -> [(&'static str, Option<&'static str>); 2] {
+    [
+        ("the jq of the machine", None),
+        ("the jq of ubuntu-latest", Some(JQ_STRICT_TRIM)),
+    ]
+}
+
+#[test]
+fn the_jq_of_ubuntu_latest_stops_on_a_null_in_rtrimstr_and_trims_a_string() {
+    let dir = tempfile::tempdir().unwrap();
+    let bin = fake_bin(dir.path(), &[("jq", JQ_STRICT_TRIM)]);
+    let jq = |program: &str| {
+        Command::new(bin.join("jq"))
+            .args(["-n", "-c", program])
+            .env("PATH", path_with(&bin))
+            .output_locked()
+            .unwrap()
+    };
+    let o = jq(r#"null | rtrimstr("\r")"#);
+    assert!(!o.status.success(), "{}", text(&o.stdout));
+    assert!(
+        text(&o.stderr).contains("endswith() requires string inputs"),
+        "{}",
+        text(&o.stderr)
+    );
+    let o = jq(r#"["a\r", "b", ""] | map(rtrimstr("\r"))"#);
+    assert_eq!(
+        text(&o.stdout),
+        "[\"a\",\"b\",\"\"]\n",
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn verify_report_goes_on_when_an_open_issue_has_no_text_in_its_body() {
+    // GitHub gives `"body": null` for an issue that a person opens with no text
+    for (jq, stand_in) in jq_stand_ins() {
+        let d = Report::verify();
+        if let Some(stand_in) = stand_in {
+            d.use_jq(stand_in);
+        }
+        d.summary(
+            1,
+            &[
+                ("releases/a.json", "unchanged", "lab-profile", "1.2.0"),
+                ("releases/b.json", "drifted", "lab-profile", "1.3.0"),
+            ],
+        );
+        d.record("b", 1, "**Result:** CHANGED\n", "");
+        d.put(
+            "issues.json",
+            r#"[{"number":3,"title":"t","body":null},
+                {"number":4,"title":"t","body":""},
+                {"number":7,"title":"t","body":"<!-- strata-verify: releases/a.json -->\nold"}]"#,
+        );
+        let o = d.run(&["releases/*.json", "--repo", "o/r"]);
+        assert_eq!(o.status.code(), Some(1), "{jq}: {}", text(&o.stderr));
+        let calls = d.log("gh.log");
+        assert!(
+            calls
+                .iter()
+                .any(|c| c.starts_with("issue close 7 --repo o/r")),
+            "{jq}: the issue of a record that verifies closes: {calls:#?}"
+        );
+        assert!(
+            calls
+                .iter()
+                .any(|c| c.starts_with("issue create --repo o/r")),
+            "{jq}: the record that drifted gets an issue: {calls:#?}"
+        );
+        assert!(
+            calls
+                .iter()
+                .all(|c| !c.starts_with("issue close 3 ") && !c.starts_with("issue close 4 ")),
+            "{jq}: an issue with no text is not touched: {calls:#?}"
+        );
     }
 }
 
@@ -4411,7 +4493,7 @@ fn upstream_report_touches_no_issue_when_behind_checks_nothing() {
             for exit in EXITS_OF_NOTHING {
                 let u = Report::upstream();
                 if old_jq {
-                    u.use_jq_1_6();
+                    u.use_jq(JQ_1_6);
                 }
                 u.put("report.json", printed);
                 u.put("report.exit", exit);
@@ -4433,6 +4515,52 @@ fn upstream_report_touches_no_issue_when_behind_checks_nothing() {
                 );
             }
         }
+    }
+}
+
+#[test]
+fn upstream_report_goes_on_when_an_open_issue_has_no_text_in_its_body() {
+    // GitHub gives `"body": null` for an issue that a person opens with no text
+    for (jq, stand_in) in jq_stand_ins() {
+        let u = Report::upstream();
+        if let Some(stand_in) = stand_in {
+            u.use_jq(stand_in);
+        }
+        u.put(
+            "issues.json",
+            r#"[{"number":3,"title":"t","body":null},
+                {"number":4,"title":"t","body":""},
+                {"number":41,"title":"t","body":"<!-- strata-behind: csi-aws-ebs reg-public -->\nold"}]"#,
+        );
+        // the pack is behind: the issue that holds its marker is the one that changes
+        u.report(1, &["1.65.0"], None);
+        let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+        assert_eq!(o.status.code(), Some(1), "{jq}: {}", text(&o.stderr));
+        let calls = u.log("gh.log");
+        assert!(
+            calls
+                .iter()
+                .any(|c| c.starts_with("issue edit 41 --repo o/r")),
+            "{jq}: {calls:#?}"
+        );
+        // the pack is current: its issue closes
+        u.report(0, &[], None);
+        let o = u.run(&["releases/*.json", "--repo", "o/r"]);
+        assert_eq!(o.status.code(), Some(0), "{jq}: {}", text(&o.stderr));
+        let calls = u.log("gh.log");
+        assert!(
+            calls
+                .iter()
+                .any(|c| c.starts_with("issue close 41 --repo o/r")),
+            "{jq}: {calls:#?}"
+        );
+        assert!(
+            calls.iter().all(|c| !c.starts_with("issue close 3 ")
+                && !c.starts_with("issue close 4 ")
+                && !c.starts_with("issue edit 3 ")
+                && !c.starts_with("issue edit 4 ")),
+            "{jq}: an issue with no text is not touched: {calls:#?}"
+        );
     }
 }
 
