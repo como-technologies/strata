@@ -100,9 +100,7 @@ fn release_tree(printed: &str) -> tempfile::TempDir {
     std::fs::create_dir_all(&output).unwrap();
     std::fs::write(
         output.join("report.txt"),
-        format!(
-            "$ strata report\n  ProfileType  later-type  /v1/packs  2 times  strata {printed}\n"
-        ),
+        format!("$ strata report\n  ProfileType  a-value  /v1/packs  2 times  strata {printed}\n"),
     )
     .unwrap();
     std::fs::write(output.join("list.txt"), "$ strata list\naws-stack@1.1.1\n").unwrap();

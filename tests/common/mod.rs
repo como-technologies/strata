@@ -673,8 +673,8 @@ pub fn live_script(name: &str) -> std::path::PathBuf {
 }
 
 /// Copy each file of `files`, a path from the root of the repository, to the same path under
-/// `tree`, and make it executable. A test that runs a script in a tree of its own names with the
-/// script each file that it sources, such as `examples/live/common.sh`.
+/// `tree`, and make it executable. A test that runs a script in a tree of its own copies each file
+/// that the script sources too, such as `examples/live/common.sh`.
 pub fn copy_scripts(tree: &Path, files: &[&str]) {
     for file in files {
         let to = tree.join(file);

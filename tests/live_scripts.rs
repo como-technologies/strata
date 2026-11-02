@@ -7103,7 +7103,8 @@ esac
 "#;
 
 /// A `strata` that stands in for the send: a run appends a line to the log, and "posts" to the
-/// endpoint by changing the issue file, which a `gh` lists. It writes down the settings it got.
+/// endpoint by changing the issue file, which a `gh` lists. It writes down the settings it got. The
+/// schema id in its log line is text on purpose: a script cannot read the `const` of the crate.
 const FAKE_STRATA_SEND: &str = r#"#!/usr/bin/env bash
 [ "$1" != "--version" ] || { echo "strata 0.26.0"; exit 0; }
 echo "$STRATA_REPORT $STRATA_REPORT_URL $PALETTE_API $PALETTE_PROJECT $XDG_STATE_HOME $HOME $*" >> "$FAKE_SEND/strata.log"

@@ -10,8 +10,8 @@
 #
 # The outputs of the book print the version in some places, such as the column "strata" of
 # `strata report`. A build of the new version writes them, so the command runs `just docs-examples`
-# and commits the outputs that change. The release commit then passes `just docs-check` with no
-# hand step. It refuses to commit when an output that did not name the old version changes,
+# and commits the outputs that change. The release commit then passes `just docs-check` without a
+# manual step. It refuses to commit when an output that did not name the old version changes,
 # because the book was not current before this command.
 #
 # It refuses when a file it must rewrite already has uncommitted changes, so the commit it writes

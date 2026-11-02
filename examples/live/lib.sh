@@ -19,8 +19,8 @@ flag=${flag:-false}
 # saved answer say. A script that tests the send, such as report-send.sh, sets it again.
 export STRATA_REPORT=0
 
-# `die` and `usage` are in common.sh, which the scripts that do not run strata source alone. This file
-# adds the check for a stale binary below, so it stops such a script.
+# `die` and `usage` are in common.sh. A script that runs no strata sources that file alone, because
+# the check for a stale binary below would stop it.
 . "$live/common.sh"
 
 # stage N TITLE: print the heading of stage N, and succeed when this run reaches it. The script sets
