@@ -1,2 +1,2 @@
 $ strata preflight cluster-null.json --cloud aws --no-exec --tier palette --rule instance-offering --strict --quiet | sed -n '4p'
-  PROBE PASS    instance-offering            The instance type is offered in each zone of the pool            1 ms  catch 3/3 (37%), clean 2/3 (14%)
+  PROBE PASS    instance-offering            The instance type is offered in each zone of the pool            1 ms  catch 5/5 (55%), clean 4/5 (34%)
