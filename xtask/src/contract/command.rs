@@ -6,7 +6,9 @@ use std::process::ExitCode;
 use strata::api::connect_from_env;
 use strata::config::Config;
 use strata::term::progress::Progress;
+use strata_preflight::probe::LiveBackend;
 
+use super::cloud::{Lab, run as run_clouds};
 use super::releases::{self, GITHUB};
 use super::run;
 use super::stand_in::{StandIn, harvest};
@@ -15,7 +17,7 @@ use crate::{facts, fail, repository};
 
 /// The usage line, and what the options do.
 const USAGE: &str =
-    "usage: xtask contract [--stand-in DIR] [--out FILE] [--state FILE] [--github URL]
+    "usage: xtask contract [--stand-in DIR] [--out FILE] [--state FILE] [--github URL] [--no-cloud]
 
   --stand-in DIR  read the documents of the stand-in from DIR, one directory for each chapter;
                   without it, build the tenant of every chapter of the book (needs: just examples)
@@ -23,8 +25,11 @@ const USAGE: &str =
   --state FILE    read the latest release of the Palette SDK and of the Terraform provider from
                   GitHub, compare each tag with the tag in FILE, and keep the new tags in FILE
   --github URL    the address of the GitHub API (default https://api.github.com)
+  --no-cloud      send no call of the tool of a cloud (aws, gcloud, az); without it, the run sends the
+                  read-only calls of the facts of the kind cloud in the lab account
 
-The tenant is the one that PALETTE_API, PALETTE_API_KEY, and ~/.palette.env name.
+The tenant is the one that PALETTE_API, PALETTE_API_KEY, and ~/.palette.env name. The lab account of a
+cloud is the one that the tool uses. STRATA_CONTRACT_<NAME> gives {name} in a call, such as the project.
 Exit 0 when each fact is the same, 1 when a fact differs or a value is unknown, 2 when the run could
 not check.";
 
@@ -34,6 +39,7 @@ pub(super) struct Options {
     pub(super) out: Option<PathBuf>,
     pub(super) state: Option<PathBuf>,
     pub(super) github: String,
+    pub(super) no_cloud: bool,
 }
 
 impl Options {
@@ -43,6 +49,7 @@ impl Options {
             out: None,
             state: None,
             github: GITHUB.to_string(),
+            no_cloud: false,
         };
         let mut args = args.iter();
         while let Some(flag) = args.next() {
@@ -56,6 +63,7 @@ impl Options {
                 "--out" => options.out = Some(PathBuf::from(value()?)),
                 "--state" => options.state = Some(PathBuf::from(value()?)),
                 "--github" => options.github = value()?.trim_end_matches('/').to_string(),
+                "--no-cloud" => options.no_cloud = true,
                 other => return Err(format!("unknown option {other}")),
             }
         }
@@ -96,6 +104,11 @@ fn contract(options: &Options) -> Result<u8, String> {
         &config.base_url,
         &checked_at,
     );
+    if !options.no_cloud {
+        let rules = facts::cloud_rules().map_err(|bad| bad.join("\nxtask: "))?;
+        let backend = LiveBackend::new(Some(palette.api()), false);
+        document.add(run_clouds(&facts, &rules, &backend, &Lab::from_env()));
+    }
     let mut state_error = None;
     if let Some(state) = &options.state {
         match releases::read(&options.github, state) {

@@ -48,9 +48,9 @@ rules:
       `UnsupportedAvailabilityZoneException`. The zone id behind a name such as us-east-1e differs
       for each account, so the check asks EC2 for the ids of the zones the pools name. Palette does
       not check the zone.
-      `GET /v1/clouds/aws/regions/{region}/availabilityzones` lists each zone of the account with
-      `name`, `state`, and `zoneId`. The Local Zone and Wavelength Zone test reads the zone type, so
-      the check stays at the cloud tier until a run shows that the route gives it.
+      The zone route of Palette (`GET /v1/clouds/aws/regions/{region}/availabilityzones`) lists each
+      zone of the account with `name`, `state`, and `zoneId`. It lists no zone type, and the test for a
+      Local Zone or a Wavelength Zone reads the zone type. So the check stays at the cloud tier.
     when: ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.azs // [])[], ((.cloudConfig.subnets // [])[] | .az // empty) ] | map(select(. != null and . != "")) | unique | length) > 0
     check:
       kind: exec
@@ -244,7 +244,9 @@ rules:
       A VPC-native GKE cluster takes its pod and service addresses from two secondary ranges of the
       subnet. Palette sets none, so GKE makes its own in the subnet: they can run out, and in a
       shared VPC subnet of another project GKE cannot make them. The check lists the subnets of the
-      static network in the region and reports the pool subnets with no secondary range.
+      static network in the region and reports the pool subnets with no secondary range. The
+      network route of Palette lists the `id` and the `name` of each subnet, and no address range. So
+      the check stays at the cloud tier.
     when: .cloud == "gke" and (.entity.spec.cloudConfig.network // "") != ""
     check:
       kind: exec
@@ -302,8 +304,8 @@ rules:
       `InsufficientFreeAddresses`. The check sums the nodes (maxSize) of the pools that use a
       subnet. It asks 16 for each node with the VPC CNI (1 with another CNI), plus 16 for the
       cluster. That is a floor, not the real need: the count of pods on each node decides it.
-      `GET /v1/clouds/aws/regions/{region}/vpcs` lists no count of free addresses, so this check stays
-      at the cloud tier.
+      The VPC route of Palette (`GET /v1/clouds/aws/regions/{region}/vpcs`) lists no count of free
+      addresses for a subnet. So the check stays at the cloud tier.
     when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
     check:
       kind: exec
@@ -359,8 +361,9 @@ rules:
       A node needs a 0.0.0.0/0 route to a NAT gateway, an internet gateway, a transit gateway, or a
       NAT instance. Without one it cannot reach Palette, EKS, or the registries: the nodes do not
       join, and the images do not pull. On AWS the row reports instances that delete every 30
-      minutes with no end. The private test of Palette reads the
-      internet gateway route alone and checks no NAT route. The check runs for a static VPC on aws
+      minutes with no end. The private test of Palette reads the internet gateway route alone and
+      checks no NAT route. The VPC route of Palette lists `isPrivate` for a subnet, from that test, and
+      it lists no route. So the check stays at the cloud tier. The check runs for a static VPC on aws
       and eks. For GCP and GKE the router with NAT needs `gcloud compute routers list` (see
       reproduce), and the watch sees the nodes that never join.
     when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
@@ -415,40 +418,33 @@ rules:
   - id: static-subnets
     title: Each pool subnet exists, in the VPC and in the zone of the pool
     engines: [aws, eks]
-    tier: cloud
+    tier: palette
     severity: fail
     status: source
     what: |
       A pool subnet that does not exist, is in another VPC, or is in another zone than the pool
-      says fails during the build. Palette lists the subnets of the VPC and
-      tests the public ones for MapPublicIpOnLaunch. A subnet id that is not in the VPC is never
-      seen, and passes.
-      `GET /v1/clouds/aws/regions/{region}/vpcs` lists each VPC of the account with its subnets: `az`,
-      `isPrivate`, `mapPublicIpOnLaunch`, `subnetId`, and `name`. It answers this check with a key
-      alone. No run shows its answer yet, so the check stays at the cloud tier.
-    when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
+      says fails during the build. Palette lists the subnets of the VPC and tests the public ones
+      for MapPublicIpOnLaunch. A subnet id that is not in the VPC is never seen, and passes.
+      The VPC route of Palette lists each VPC of the account in the region with its subnets: `az`,
+      `isPrivate`, `mapPublicIpOnLaunch`, `name`, and `subnetId`. A subnet is in the VPC that lists
+      it. The check reads that list with the key alone, and needs no tool of the cloud. It fails a
+      subnet that no VPC lists. It also fails a subnet in another VPC than the cluster, and a subnet
+      in another zone than the pool says.
+    when: (.cloud == "aws" or .cloud == "eks") and .entity.spec.cloudAccountUid != null and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
     check:
-      kind: exec
-      needs: [aws]
-      argv:
-        - aws
-        - ec2
-        - describe-subnets
-        - --region
-        - '{{ .entity.spec.cloudConfig.region }}'
-        - --filters
-        - 'Name=subnet-id,Values={{ [ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | unique | join(",") }}'
-        - --output
-        - json
+      kind: palette
+      method: GET
+      path: '/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/vpcs?cloudAccountUid={{ .entity.spec.cloudAccountUid }}'
       expr: |
         .entity.spec.cloudConfig.vpcId as $vpc | .entity.spec.cloudConfig.region as $region
-        | if .exec.exit != 0 then ["aws ec2 describe-subnets failed: \(.exec.stderr | .[:200])"]
-          else (.exec.stdout.Subnets // []) as $s
+        | if (.response.ok | not) then ["Palette cannot list the VPCs of region \($region): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          elif ((.response.body.vpcs | type) != "array") then ["Palette gave no list of VPCs for region \($region)"]
+          else [ .response.body.vpcs[] | .vpcId as $in | (.subnets // [])[] | . + { vpcId: $in } ] as $s
             | [ .entity.spec.machinepoolconfig[]? | .poolConfig.name as $pool | (.cloudConfig.subnets // [])[] | . as $want
-                | ([ $s[] | select(.SubnetId == $want.id) ] | .[0]) as $have
+                | ([ $s[] | select(.subnetId == $want.id) ] | .[0]) as $have
                 | if $have == null then "subnet \($want.id) of pool \($pool) is not in region \($region) for this account"
-                  elif $have.VpcId != $vpc then "subnet \($want.id) of pool \($pool) is in VPC \($have.VpcId), not in \($vpc)"
-                  elif ($want.az // "") != "" and $have.AvailabilityZone != $want.az then "subnet \($want.id) of pool \($pool) is in zone \($have.AvailabilityZone), not in \($want.az)"
+                  elif $have.vpcId != $vpc then "subnet \($want.id) of pool \($pool) is in VPC \($have.vpcId), not in \($vpc)"
+                  elif ($want.az // "") != "" and $have.az != $want.az then "subnet \($want.id) of pool \($pool) is in zone \($have.az), not in \($want.az)"
                   else empty end ] | unique
           end
     reproduce:
@@ -459,6 +455,8 @@ rules:
     evidence:
       - kind: source
         note: Palette tests the subnets that the VPC lists; a subnet of the request that is not among them is not tested
+      - kind: source
+        note: the VPC route lists every VPC of the account in the region, each with its subnets
     tests:
       - fault: fixtures/eks/subnet-mismatch.json
         clean: fixtures/eks/static-vpc-clean.json
@@ -512,8 +510,9 @@ rules:
       A subnet without `kubernetes.io/role/elb` (public) or `kubernetes.io/role/internal-elb`
       (private) is not found by the load balancer controller: a Service of type LoadBalancer stays
       Pending. For EKS with a static VPC Palette adds the tags during the build; the docs ask for
-      them on the public subnets before the build. The
-      check reads the tags of the pool subnets as they are now.
+      them on the public subnets before the build. The check reads the tags of the pool subnets as
+      they are now. The VPC route of Palette lists no tag of a subnet. So the check stays at the cloud
+      tier.
     when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
     check:
       kind: exec
@@ -556,34 +555,28 @@ rules:
   - id: sg-name-collision
     title: No security group of the cluster is in the VPC before the build
     engines: [aws]
-    tier: cloud
+    tier: palette
     severity: fail
     status: source
     what: |
       Palette makes the security groups `<cluster>-node`, `<cluster>-controlplane`,
       `<cluster>-apiserver-lb`, `<cluster>-lb`, and `<cluster>-bastion` in the VPC. A group of one
       of these names in the VPC already, such as one left by an earlier cluster of the name, fails
-      the create. The docs name `<cluster>-node` as the one to check.
-    when: (.entity.spec.cloudConfig.vpcId // "") != ""
+      the create. The docs name `<cluster>-node` as the one to check. The security group route of
+      Palette lists the groups of a VPC with `groupId` and `groupName`. The check reads that list
+      with the key alone, and needs no tool of the cloud.
+    when: .entity.spec.cloudAccountUid != null and (.entity.spec.cloudConfig.vpcId // "") != ""
     check:
-      kind: exec
-      needs: [aws]
-      argv:
-        - aws
-        - ec2
-        - describe-security-groups
-        - --region
-        - '{{ .entity.spec.cloudConfig.region }}'
-        - --filters
-        - 'Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }}'
-        - 'Name=group-name,Values={{ .entity.metadata.name }}-node,{{ .entity.metadata.name }}-controlplane,{{ .entity.metadata.name }}-apiserver-lb,{{ .entity.metadata.name }}-lb,{{ .entity.metadata.name }}-bastion'
-        - --output
-        - json
+      kind: palette
+      method: GET
+      path: '/v1/clouds/aws/securitygroups?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&region={{ .entity.spec.cloudConfig.region }}&vpcId={{ .entity.spec.cloudConfig.vpcId }}'
       expr: |
-        .entity.spec.cloudConfig.vpcId as $vpc
-        | if .exec.exit != 0 then ["aws ec2 describe-security-groups failed: \(.exec.stderr | .[:200])"]
-          else [ (.exec.stdout.SecurityGroups // [])[]
-                 | "security group \(.GroupName) (\(.GroupId)) is in VPC \($vpc) already: Palette makes a group of that name for the cluster, and the create of it fails" ]
+        .entity.metadata.name as $name | .entity.spec.cloudConfig.vpcId as $vpc
+        | ["node", "controlplane", "apiserver-lb", "lb", "bastion"] as $roles
+        | if (.response.ok | not) then ["Palette cannot list the security groups of VPC \($vpc): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          elif ((.response.body.groups | type) != "array") then ["Palette gave no list of security groups for VPC \($vpc)"]
+          else [ .response.body.groups[] | select(.groupName as $g | any($roles[]; "\($name)-\(.)" == $g))
+                 | "security group \(.groupName) (\(.groupId)) is in VPC \($vpc) already: Palette makes a group of that name for the cluster, and the create of it fails" ]
           end
     reproduce:
       - "aws ec2 describe-security-groups --region {{ .entity.spec.cloudConfig.region }} --filters Name=vpc-id,Values={{ .entity.spec.cloudConfig.vpcId }} Name=group-name,Values={{ .entity.metadata.name }}-node --query 'SecurityGroups[].[GroupName,GroupId]' --output table"
@@ -594,6 +587,8 @@ rules:
       - kind: doc
         ref: https://docs.spectrocloud.com/clusters/public-cloud/aws/create-cluster/
         note: the prerequisite on a security group named after the cluster with -node
+      - kind: source
+        note: the security group route lists every group of the VPC, each with its id and its name
     tests:
       - fault: fixtures/aws/sg-node-exists.json
         clean: fixtures/aws/static-vpc-clean.json

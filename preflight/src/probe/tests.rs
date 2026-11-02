@@ -1,8 +1,9 @@
 use super::exec::run_command;
 use super::*;
 use crate::error::Result;
-use crate::rule::{Level, PaletteCheck, Severity, Status};
+use crate::rule::{ExecCheck, Level, PaletteCheck, PaletteRead, Severity, Status};
 use serde_json::json;
+use std::time::Duration;
 use strata::api::{Method, PaletteApi};
 
 fn rule(check: Check) -> Rule {
@@ -397,12 +398,13 @@ fn an_exec_check_needs_its_tool_and_reads_the_output() {
     let jq = Jq::new();
     let (b, w) = fixture(json!({"region": "us-east-2", "_tools": ["aws"],
             "_exec": {"aws ec2 describe-subnets --region us-east-2": {"exit": 0, "stdout": {"Subnets": [{"AvailabilityZone": "us-east-2a"}]}, "stderr": ""}}}));
-    let r = rule(Check::Exec {
-            argv: vec!["aws".into(), "ec2".into(), "describe-subnets".into(), "--region".into(), "{{ .region }}".into()],
-            needs: vec!["aws".into()],
-            timeout: None,
-            expr: r#"[.exec.stdout.Subnets | map(.AvailabilityZone) | unique | select(length < 2) | "one zone: \(.)"]"#.into(),
-        });
+    let r = rule(Check::Exec(ExecCheck {
+        argv: vec!["aws".into(), "ec2".into(), "describe-subnets".into(), "--region".into(), "{{ .region }}".into()],
+        needs: vec!["aws".into()],
+        timeout: None,
+        palette: None,
+        expr: r#"[.exec.stdout.Subnets | map(.AvailabilityZone) | unique | select(length < 2) | "one zone: \(.)"]"#.into(),
+    }));
     let out = run_check(&r, &w, &b, &jq);
     assert_eq!(out.verdict, Verdict::Failed);
     assert_eq!(out.messages, vec![r#"one zone: ["us-east-2a"]"#]);
@@ -410,21 +412,118 @@ fn an_exec_check_needs_its_tool_and_reads_the_output() {
         out.ran,
         Ran::Exec {
             line: "aws ec2 describe-subnets --region us-east-2".into(),
-            answer: Some("exit 0".into())
+            answer: Some("exit 0".into()),
+            request: None,
         }
     );
-    let missing = rule(Check::Exec {
+    let missing = rule(Check::Exec(ExecCheck {
         argv: vec!["gcloud".into(), "services".into(), "list".into()],
         needs: vec!["gcloud".into()],
         timeout: None,
+        palette: None,
         expr: "true".into(),
-    });
+    }));
     let out = run_check(&missing, &w, &b, &jq);
     assert_eq!(out.verdict, Verdict::NotChecked);
     assert!(
         out.messages[0].contains("gcloud not on this machine"),
         "{:?}",
         out.messages
+    );
+}
+
+/// An exec check that reads the cpu of its type from Palette, and the quota from the tool.
+fn exec_with_a_read() -> Rule {
+    rule(Check::Exec(ExecCheck {
+        argv: vec![
+            "aws".into(),
+            "service-quotas".into(),
+            "{{ .region }}".into(),
+        ],
+        needs: vec!["aws".into()],
+        timeout: None,
+        palette: Some(PaletteRead {
+            path: "/v1/clouds/aws/regions/{{ .region }}/instancetypes".into(),
+        }),
+        expr: r#".exec.stdout.Quota.Value as $quota
+            | [ .response.body.instanceTypes[] | select(.type == "t3.xlarge" and .cpu > $quota)
+                | "\(.type) asks \(.cpu) vCPUs, and the quota is \($quota)" ]"#
+            .into(),
+    }))
+}
+
+#[test]
+fn an_exec_check_with_a_read_gives_the_program_the_response_and_the_output() {
+    let jq = Jq::new();
+    let (b, w) = fixture(json!({"region": "us-east-2",
+        "_exec": {"aws service-quotas us-east-2": {"exit": 0, "stdout": {"Quota": {"Value": 2.0}}, "stderr": ""}},
+        "_responses": {"GET /v1/clouds/aws/regions/us-east-2/instancetypes": {"ok": true, "status": 200,
+            "body": {"instanceTypes": [{"type": "t3.xlarge", "cpu": 4.0}]}}}}));
+    let out = run_check(&exec_with_a_read(), &w, &b, &jq);
+    assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+    assert_eq!(
+        out.messages,
+        vec!["t3.xlarge asks 4.0 vCPUs, and the quota is 2.0"]
+    );
+    assert_eq!(
+        out.ran,
+        Ran::Exec {
+            line: "aws service-quotas us-east-2".into(),
+            answer: Some("exit 0".into()),
+            request: Some(Call::get(
+                "/v1/clouds/aws/regions/us-east-2/instancetypes",
+                Some("HTTP 200")
+            )),
+        }
+    );
+    // the report shows the command, and the one request beside it
+    assert_eq!(
+        out.ran.text().as_deref(),
+        Some("aws service-quotas us-east-2")
+    );
+    assert_eq!(out.ran.requests().len(), 1);
+}
+
+#[test]
+fn an_exec_check_with_a_read_and_no_key_is_not_run_and_runs_no_command() {
+    let jq = Jq::new();
+    // the fixture has no output for the command: a command that runs is an error
+    let (b, w) = fixture(json!({"region": "us-east-2", "_palette": false}));
+    let out = run_check(&exec_with_a_read(), &w, &b, &jq);
+    assert_eq!(out.verdict, Verdict::NotRun);
+    assert!(out.messages[0].contains("no key"), "{:?}", out.messages);
+    assert_eq!(out.ran, Ran::Nothing);
+}
+
+#[test]
+fn an_exec_check_with_a_read_and_no_tool_asks_palette_nothing() {
+    let jq = Jq::new();
+    // the fixture has no answer for the request: a request that goes out is an error
+    let (b, w) = fixture(json!({"region": "us-east-2", "_tools": []}));
+    let out = run_check(&exec_with_a_read(), &w, &b, &jq);
+    assert_eq!(out.verdict, Verdict::NotChecked);
+    assert_eq!(
+        out.ran,
+        Ran::Exec {
+            line: "aws service-quotas us-east-2".into(),
+            answer: None,
+            request: None,
+        }
+    );
+}
+
+#[test]
+fn an_exec_check_whose_read_fails_is_an_error_that_names_the_request() {
+    let jq = Jq::new();
+    let (b, w) = fixture(json!({"region": "us-east-2"}));
+    let out = run_check(&exec_with_a_read(), &w, &b, &jq);
+    assert_eq!(out.verdict, Verdict::Error);
+    assert_eq!(
+        out.ran,
+        Ran::Request(Call::get(
+            "/v1/clouds/aws/regions/us-east-2/instancetypes",
+            None
+        ))
     );
 }
 

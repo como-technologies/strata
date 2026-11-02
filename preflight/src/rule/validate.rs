@@ -8,7 +8,8 @@ use strata::api::Method;
 use strata::closed_set::ClosedSet;
 
 use super::{
-    Check, Level, PaletteCheck, Reproduce, Rule, Section, engine_list, is_engine, parse_range,
+    Check, ExecCheck, Level, PaletteCheck, Reproduce, Rule, Section, engine_list, is_engine,
+    parse_range,
 };
 use crate::error::{Error, Result};
 use crate::jq::{ITEM, Jq};
@@ -79,7 +80,7 @@ fn check_tier_and_programs(rule: &Rule, check: &Check) -> std::result::Result<()
     if check.expr().trim().is_empty() {
         return Err("the check has no expr".into());
     }
-    if let Check::Exec { argv, .. } = check
+    if let Check::Exec(ExecCheck { argv, .. }) = check
         && argv.is_empty()
     {
         return Err("an exec check needs an argv".into());
@@ -208,9 +209,17 @@ fn check_programs(rule: &Rule, jq: &Jq) -> std::result::Result<(), String> {
             }
             program("`expr`", expr, false)?;
         }
-        Some(Check::Exec { argv, expr, .. }) => {
+        Some(Check::Exec(ExecCheck {
+            argv,
+            palette,
+            expr,
+            ..
+        })) => {
             for arg in argv {
                 template("`argv`", arg, false)?;
+            }
+            if let Some(read) = palette {
+                template("`palette`", &read.path, false)?;
             }
             program("`expr`", expr, false)?;
         }

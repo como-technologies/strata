@@ -360,6 +360,14 @@ fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() 
             "validate-key-pairs",
             "the region and the account come from the lab",
         ),
+        (
+            "validate-vpcs",
+            "the region and the account come from the lab",
+        ),
+        (
+            "validate-security-groups",
+            "the region, the account, and the VPC come from the lab",
+        ),
     ];
     let facts = real_facts();
     let mut lacking = Vec::new();

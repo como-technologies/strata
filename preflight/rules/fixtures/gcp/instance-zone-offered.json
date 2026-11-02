@@ -3,7 +3,7 @@
   "_note": "the type e2-standard-4 is listed in the region, and its nonSupportedZones names a zone that no pool uses",
   "_patch": {
     "_responses": {
-      "GET /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-gcp-1": {
+      "GET /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-gcp-1&cpuGtEq=0&memoryGtEq=0": {
         "ok": true,
         "status": 200,
         "body": {

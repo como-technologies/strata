@@ -2025,7 +2025,7 @@ fn preflight_plan_makes_the_fault_of_instance_offering_from_the_instance_type_ro
         ("gke", "gcp", "us-east1"),
     ] {
         let path = format!(
-            "get /v1/clouds/{account_kind}/regions/{region}/instancetypes?cloudAccountUid=acc-1"
+            "get /v1/clouds/{account_kind}/regions/{region}/instancetypes?cloudAccountUid=acc-1&cpuGtEq=0&memoryGtEq=0"
         );
         let (o, asked) = offering_edit(engine, account_kind, region, answer);
         assert!(o.status.success(), "{engine}: {}", text(&o.stderr));
@@ -2101,6 +2101,298 @@ fn preflight_plan_tests_the_shape_of_the_instance_type_route_by_type() {
             .unwrap();
         assert_eq!(o.status.code(), status, "{answer}");
     }
+}
+
+/// The jq filter of the check `id` in the plan: the line after the line of `check id`, between the
+/// single quotes.
+fn plan_filter(id: &str) -> String {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    let line = script
+        .lines()
+        .skip_while(|l| !l.contains(&format!("check {id} ")))
+        .nth(1)
+        .unwrap_or_else(|| panic!("no check {id} in the plan"));
+    line[line.find('\'').unwrap() + 1..line.rfind('\'').unwrap()].to_string()
+}
+
+/// The exit code of `jq -e filter` on `answer`.
+fn jq_exit(filter: &str, answer: &str) -> Option<i32> {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("answer.json"), answer).unwrap();
+    Command::new("jq")
+        .args(["-e", filter])
+        .arg(dir.path().join("answer.json"))
+        .output_locked()
+        .unwrap()
+        .status
+        .code()
+}
+
+/// The check `vpcs-route-keys` of the plan reads the exact keys of the VPC route (#393). The answer
+/// of the route passes it. These answers fail it: a subnet without a zone, a subnet with a tag, a VPC
+/// with another key, and an answer with no subnet.
+#[test]
+fn preflight_plan_reads_the_exact_keys_of_the_vpc_route() {
+    let filter = plan_filter("vpcs-route-keys");
+    let subnet = r#"{"subnetId":"subnet-1","az":"us-east-2a","isPrivate":true,"mapPublicIpOnLaunch":false,"name":"a"}"#;
+    for (answer, status) in [
+        (
+            format!(
+                r#"{{"vpcs":[{{"vpcId":"vpc-1","name":"a","cidrBlock":"10.0.0.0/16","subnets":[{subnet}]}}]}}"#
+            ),
+            Some(0),
+        ),
+        // a public subnet has no isPrivate, and an empty name is omitted
+        (
+            r#"{"vpcs":[{"vpcId":"vpc-1","subnets":[{"subnetId":"subnet-1","az":"us-east-2a","mapPublicIpOnLaunch":true}]}]}"#.to_string(),
+            Some(0),
+        ),
+        (
+            r#"{"vpcs":[{"vpcId":"vpc-1","subnets":[{"subnetId":"subnet-1","isPrivate":true,"name":"a"}]}]}"#.to_string(),
+            Some(1),
+        ),
+        (
+            r#"{"vpcs":[{"vpcId":"vpc-1","subnets":[{"subnetId":"subnet-1","az":"us-east-2a","tags":[]}]}]}"#.to_string(),
+            Some(1),
+        ),
+        (
+            r#"{"vpcs":[{"vpcId":"vpc-1","subnets":[{"subnetId":"subnet-1","az":"us-east-2a","availableIpAddressCount":9}]}]}"#.to_string(),
+            Some(1),
+        ),
+        (
+            r#"{"vpcs":[{"subnets":[{"subnetId":"subnet-1","az":"us-east-2a"}]}]}"#.to_string(),
+            Some(1),
+        ),
+        (
+            r#"{"vpcs":[{"vpcId":"vpc-1","tags":{},"subnets":[{"subnetId":"subnet-1","az":"us-east-2a"}]}]}"#.to_string(),
+            Some(1),
+        ),
+        (r#"{"vpcs":[{"vpcId":"vpc-1","subnets":[]}]}"#.to_string(), Some(1)),
+        // the list is under `vpcs`, and not at any other depth
+        (format!(r#"[{{"vpcId":"vpc-1","subnets":[{subnet}]}}]"#), Some(5)),
+        ("{}".to_string(), Some(1)),
+    ] {
+        assert_eq!(jq_exit(&filter, &answer), status, "{answer}");
+    }
+}
+
+/// The check `zones-route-keys` needs the name, the state, and the id of each zone, and no other
+/// key. The route lists no zone type, and `eks-unsupported-zone` reads it.
+#[test]
+fn preflight_plan_reads_the_exact_keys_of_the_zone_route() {
+    let filter = plan_filter("zones-route-keys");
+    for (answer, status) in [
+        (
+            r#"{"zones":[{"name":"us-east-2a","state":"available","zoneId":"use2-az1"}]}"#,
+            Some(0),
+        ),
+        (
+            r#"{"zones":[{"name":"us-east-2a","state":"available","zoneId":"use2-az1","zoneType":"availability-zone"}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"zones":[{"name":"us-east-2a","zoneId":"use2-az1"}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"zones":[{"name":"us-east-2a","state":"available"}]}"#,
+            Some(1),
+        ),
+        (r#"{"zones":[]}"#, Some(1)),
+        // the list is under `zones`, and under no other name
+        (
+            r#"{"azs":[{"name":"us-east-2a","state":"available","zoneId":"use2-az1"}]}"#,
+            Some(1),
+        ),
+    ] {
+        assert_eq!(jq_exit(&filter, answer), status, "{answer}");
+    }
+}
+
+/// The check `sgs-route-keys` needs the id and the name of each group. It allows `ownerId` and no
+/// other key.
+#[test]
+fn preflight_plan_reads_the_exact_keys_of_the_security_group_route() {
+    let filter = plan_filter("sgs-route-keys");
+    for (answer, status) in [
+        (
+            r#"{"groups":[{"groupId":"sg-1","groupName":"default","ownerId":"123456789012"}]}"#,
+            Some(0),
+        ),
+        (
+            r#"{"groups":[{"groupId":"sg-1","groupName":"default"}]}"#,
+            Some(0),
+        ),
+        (r#"{"groups":[{"groupName":"default"}]}"#, Some(1)),
+        (r#"{"groups":[{"groupId":"sg-1"}]}"#, Some(1)),
+        (
+            r#"{"groups":[{"groupId":"sg-1","groupName":"default","tags":[]}]}"#,
+            Some(1),
+        ),
+        (r#"{"groups":[]}"#, Some(1)),
+    ] {
+        assert_eq!(jq_exit(&filter, answer), status, "{answer}");
+    }
+}
+
+/// The check `instancetypes-cpu` needs each pool type of the entity in the list, with `cpu` as a
+/// number above 0, and a type under 2 vCPUs or 4 GiB with `cpu` above 0. A type that the list
+/// lacks, a type with no `cpu`, and a list with no small type fail it: the query of the rules lifts
+/// the default filter of Palette, so the list holds the small types.
+#[test]
+fn preflight_plan_needs_the_cpu_of_each_pool_type_in_the_instance_type_route() {
+    let filter = plan_filter("instancetypes-cpu");
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("clean.json"),
+        r#"{"spec":{"machinepoolconfig":[{"cloudConfig":{"instanceType":"t3.xlarge"}},{"cloudConfig":{"instanceType":"m5.large"}}]}}"#,
+    )
+    .unwrap();
+    for (answer, status) in [
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":2,"memory":8},{"type":"t3.small","cpu":2,"memory":2}]}"#,
+            Some(0),
+        ),
+        // a type under 2 vCPUs is small too
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":2,"memory":8},{"type":"e2-micro","cpu":1,"memory":8}]}"#,
+            Some(0),
+        ),
+        // the default filter of Palette: no type under 2 vCPUs or 4 GiB is in the list
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":2,"memory":8}]}"#,
+            Some(1),
+        ),
+        // a pool type that the list lacks
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"t3.small","cpu":2,"memory":2}]}"#,
+            Some(1),
+        ),
+        // a small type with no cpu, or with 0
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":2,"memory":8},{"type":"t3.small","memory":2}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":2,"memory":8},{"type":"t3.small","cpu":0,"memory":2}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","memory":8},{"type":"t3.small","cpu":2,"memory":2}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":"2","memory":8},{"type":"t3.small","cpu":2,"memory":2}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":0,"memory":8},{"type":"t3.small","cpu":2,"memory":2}]}"#,
+            Some(1),
+        ),
+    ] {
+        std::fs::write(dir.path().join("instancetypes.json"), answer).unwrap();
+        let out = Command::new("jq")
+            .arg("-e")
+            .arg("--slurpfile")
+            .arg("e")
+            .arg(dir.path().join("clean.json"))
+            .arg(&filter)
+            .arg(dir.path().join("instancetypes.json"))
+            .output_locked()
+            .unwrap();
+        assert_eq!(out.status.code(), status, "{answer}");
+    }
+}
+
+/// The check `instancetypes-default-filter` expects the answer of the route with no query to hold no
+/// type under 2 vCPUs or 4 GiB, and the answer with the query `cpuGtEq=0&memoryGtEq=0` to hold one,
+/// and to be longer. A route that ignores the filter, and a query that lifts nothing, fail it.
+#[test]
+fn preflight_plan_shows_the_default_filter_of_the_instance_type_route() {
+    let filter = plan_filter("instancetypes-default-filter");
+    let list = |types: &[&str]| format!(r#"{{"instanceTypes":[{}]}}"#, types.join(","));
+    let big = r#"{"type":"t3.xlarge","cpu":4,"memory":16}"#;
+    let small_memory = r#"{"type":"t3.small","cpu":2,"memory":2}"#;
+    let small_cpu = r#"{"type":"e2-micro","cpu":1,"memory":8}"#;
+    let dir = tempfile::tempdir().unwrap();
+    for (default, all, status) in [
+        (list(&[big]), list(&[big, small_memory]), Some(0)),
+        (list(&[big]), list(&[big, small_cpu]), Some(0)),
+        // the route ignores the filter: the answer with no query holds a small type
+        (
+            list(&[big, small_memory]),
+            list(&[big, small_memory]),
+            Some(1),
+        ),
+        (list(&[big, small_cpu]), list(&[big, small_cpu]), Some(1)),
+        // the query lifts nothing
+        (list(&[big]), list(&[big]), Some(1)),
+        // the answer with the query is not longer
+        (list(&[big, big]), list(&[big, small_memory]), Some(1)),
+        // an empty answer
+        (list(&[]), list(&[big, small_memory]), Some(1)),
+    ] {
+        std::fs::write(dir.path().join("instancetypes-default.json"), &default).unwrap();
+        std::fs::write(dir.path().join("instancetypes.json"), &all).unwrap();
+        let out = Command::new("jq")
+            .arg("-e")
+            .arg("--slurpfile")
+            .arg("all")
+            .arg(dir.path().join("instancetypes.json"))
+            .arg(&filter)
+            .arg(dir.path().join("instancetypes-default.json"))
+            .output_locked()
+            .unwrap();
+        assert_eq!(out.status.code(), status, "{default} against {all}");
+    }
+}
+
+/// The five checks of the routes expect an exit code of 0. A key beside the known keys is a fault
+/// of the run, and not a note.
+#[test]
+fn preflight_plan_judges_each_check_of_the_routes() {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    for id in [
+        "instancetypes-cpu",
+        "instancetypes-default-filter",
+        "vpcs-route-keys",
+        "zones-route-keys",
+        "sgs-route-keys",
+    ] {
+        let line = script
+            .lines()
+            .find(|l| l.contains(&format!("check {id} ")))
+            .unwrap_or_else(|| panic!("no check {id}"));
+        assert!(line.contains(&format!("check {id} 0 ")), "{line}");
+    }
+}
+
+/// The route checks of AWS run for the engines on AWS only, and the plan for GCP never calls them.
+/// The instance type check runs for every engine.
+#[test]
+fn preflight_plan_asks_the_list_routes_of_aws_for_aws_and_eks_only() {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    let start = script
+        .find("  aws|eks)\n    \"$live/api.sh\" get \"/v1/clouds/aws/regions/$region/keypairs")
+        .expect("the case of aws and eks");
+    let end = script[start..].find("\n  gcp)").expect("the case of gcp") + start;
+    let aws = &script[start..end];
+    for route in [
+        "/vpcs?cloudAccountUid=",
+        "/availabilityzones?cloudAccountUid=",
+        "/securitygroups?cloudAccountUid=",
+    ] {
+        assert!(aws.contains(route), "{route}");
+        assert!(!script[end..].contains(route), "{route} is asked for GCP");
+    }
+    assert!(
+        !script[start..].contains("vpcs-route-shape") && !script.contains("zones-route-shape"),
+        "the checks of the shape at any depth are gone"
+    );
+    assert!(
+        script[..start].contains("check instancetypes-cpu "),
+        "every engine runs the instance type check"
+    );
 }
 
 #[test]

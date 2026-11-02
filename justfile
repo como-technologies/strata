@@ -331,7 +331,7 @@ live-scope: build
 live-release: build
     examples/live/release.sh
 
-# The contract run (#390): ask the real tenant the requests of the facts of Palette, and compare each answer with the stand-in. It sends GET requests only. Needs only the key and just examples; --state FILE also reads the latest releases of the Palette SDK and the Terraform provider.
+# The contract run (#390, #393): ask the real tenant the requests of the facts of Palette, and compare each answer with the stand-in. It sends GET requests only, and the read-only calls of the clouds in the lab account (--no-cloud sends none). Needs the key and just examples; --state FILE also reads the latest releases of the Palette SDK and the Terraform provider.
 live-contract *args: examples stand-in
     examples/live/contract.sh {{args}}
 

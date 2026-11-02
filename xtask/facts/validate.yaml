@@ -678,35 +678,98 @@ facts:
   # The list routes
   - id: validate-instance-types
     kind: request
-    request: "GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes"
+    request: "GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cpuGtEq=0&memoryGtEq=0"
     reads:
       fields:
         - instanceTypes[].type
+        - instanceTypes[].cpu
+        - instanceTypes[].memory
         - instanceTypes[].nonSupportedZones
     stand_in:
       - v1/clouds/aws/regions/{region}/instancetypes
     live:
       - loop.sh:preflight-offering
+      - preflight-plan.sh:instancetypes-cpu
+      - preflight-plan.sh:instancetypes-default-filter
     pages:
       - internals/palette/validate-routes.md#the-list-routes
       - reference/palette-api.md#the-checks-of-strata-preflight
     code: []
     rules:
       - instance-offering
+      - aws-quotas
+      - gcp-quotas
+      - azure-vcpu-quota
 
   - id: validate-instance-types-gcp
     kind: behavior
     reads:
       fields:
         - instanceTypes[].type
+        - instanceTypes[].cpu
+        - instanceTypes[].memory
         - instanceTypes[].nonSupportedZones
     stand_in: []
-    live: []
-    unchecked: No run shows the GCP answer of this route.
+    live:
+      - preflight-plan.sh:instancetypes-cpu
+      - preflight-plan.sh:instancetypes-default-filter
     pages:
       - internals/palette/validate-routes.md#the-list-routes
     rules:
       - instance-offering
+      - gcp-quotas
+
+  - id: validate-instance-types-azure
+    kind: behavior
+    reads:
+      fields:
+        - instanceTypes[].type
+        - instanceTypes[].cpu
+        - instanceTypes[].memory
+    stand_in: []
+    live: []
+    unchecked: The lab has no account of Azure.
+    pages:
+      - internals/palette/validate-routes.md#the-list-routes
+    rules:
+      - azure-vcpu-quota
+
+  - id: validate-vpcs
+    kind: request
+    request: "GET /v1/clouds/aws/regions/{region}/vpcs"
+    reads:
+      fields:
+        - vpcs[].vpcId
+        - vpcs[].subnets[].subnetId
+        - vpcs[].subnets[].az
+    stand_in:
+      - v1/clouds/aws/regions/{region}/vpcs
+    live:
+      - preflight-plan.sh:vpcs-route-keys
+    pages:
+      - internals/palette/validate-routes.md#the-list-routes
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    code: []
+    rules:
+      - static-subnets
+
+  - id: validate-security-groups
+    kind: request
+    request: "GET /v1/clouds/aws/securitygroups"
+    reads:
+      fields:
+        - groups[].groupId
+        - groups[].groupName
+    stand_in:
+      - v1/clouds/aws/securitygroups
+    live:
+      - preflight-plan.sh:sgs-route-keys
+    pages:
+      - internals/palette/validate-routes.md#the-list-routes
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    code: []
+    rules:
+      - sg-name-collision
 
   - id: validate-key-pairs
     kind: request

@@ -29,6 +29,31 @@
       }
     },
     "_responses": {
+      "GET /v1/clouds/aws/regions/us-east-2/vpcs?cloudAccountUid=acc-eks-1": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "vpcs": [
+            {
+              "vpcId": "vpc-0a1b2c3d4e5f60718",
+              "name": "lab",
+              "cidrBlock": "10.10.0.0/16",
+              "subnets": [
+                { "subnetId": "subnet-0aaa", "name": "lab-public-a", "az": "us-east-2a", "isPrivate": false, "mapPublicIpOnLaunch": true },
+                { "subnetId": "subnet-0bbb", "name": "lab-private-b", "az": "us-east-2b", "isPrivate": true, "mapPublicIpOnLaunch": false }
+              ]
+            },
+            {
+              "vpcId": "vpc-0f9e8d7c6b5a43210",
+              "name": "other",
+              "cidrBlock": "10.20.0.0/16",
+              "subnets": [
+                { "subnetId": "subnet-0ccc", "name": "other-a", "az": "us-east-2a", "isPrivate": true, "mapPublicIpOnLaunch": false }
+              ]
+            }
+          ]
+        }
+      },
       "POST /v1/clouds/eks/properties/validate": {
         "ok": true,
         "status": 204,

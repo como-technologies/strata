@@ -1,0 +1,22 @@
+{
+  "_base": "vcpu-quota-clean.json",
+  "_note": "the worker pool names m3.large, which the instance type route does not list, so the check cannot count the vCPUs of that pool; the control plane pool asks for 4 vCPUs, and the quota is 8",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          { "poolConfig": { "name": "worker-pool" }, "cloudConfig": { "instanceType": "m3.large" } }
+        ]
+      }
+    },
+    "_exec": {
+      "aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region us-east-2 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Quota": { "ServiceCode": "ec2", "QuotaCode": "L-1216C47A", "QuotaName": "Running On-Demand Standard (A, C, D, H, I, M, R, T, Z) instances", "Value": 8.0, "Unit": "None", "Adjustable": true }
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

@@ -10,7 +10,14 @@ use strata_preflight::catalog;
 use strata_preflight::fixture;
 use strata_preflight::jq::Jq;
 use strata_preflight::probe::{self, Call, FixtureBackend, Outcome, Verdict};
-use strata_preflight::rule::{Check, Evidence, EvidenceKind, PaletteCheck, Rule};
+use strata_preflight::rule::{Check, Evidence, EvidenceKind, ExecCheck, PaletteCheck, Rule};
+
+/// The request of the instance type route for the fixtures of the AWS, GCP, and Azure rules, as the
+/// rules send it. Its query lifts the default filter of Palette, which drops each type with fewer
+/// than 2 vCPUs or less than 4 GiB of memory (#393).
+const AWS_TYPES: &str = "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1&cpuGtEq=0&memoryGtEq=0";
+const GCP_TYPES: &str = "GET /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-gcp-1&cpuGtEq=0&memoryGtEq=0";
+const AZURE_TYPES: &str = "GET /v1/clouds/azure/regions/eastus/instancetypes?cloudAccountUid=acc-azure-1&subscriptionId=11111111-2222-3333-4444-555555555555&cpuGtEq=0&memoryGtEq=0";
 
 /// Run the check of `rule` on the fixture `doc`. The test fails when `when` does not hold on the
 /// fixture: a guard that hides the check passes every test.
@@ -766,7 +773,7 @@ fn instance_offering_names_the_pool_the_type_and_the_zone_for_aws_and_gcp() {
     for (fixture, ran, expected) in [
         (
             "fixtures/aws/instance-zone-not-offered.json",
-            "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1",
+            AWS_TYPES,
             vec![
                 "pool cp-pool: the type t3.xlarge is not offered in the zone us-east-2a",
                 "pool worker-pool: the type t3.xlarge is not offered in the zone us-east-2a",
@@ -774,7 +781,7 @@ fn instance_offering_names_the_pool_the_type_and_the_zone_for_aws_and_gcp() {
         ),
         (
             "fixtures/aws/instance-type-not-listed.json",
-            "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1",
+            AWS_TYPES,
             vec![
                 "pool cp-pool: the type t3.xlarge is not in the list of region us-east-2",
                 "pool worker-pool: the type t3.xlarge is not in the list of region us-east-2",
@@ -782,7 +789,7 @@ fn instance_offering_names_the_pool_the_type_and_the_zone_for_aws_and_gcp() {
         ),
         (
             "fixtures/gcp/instance-zone-not-offered.json",
-            "GET /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-gcp-1",
+            GCP_TYPES,
             vec![
                 "pool cp-pool: the type e2-standard-4 is not offered in the zone us-east1-b",
                 "pool worker-pool: the type e2-standard-4 is not offered in the zone us-east1-b",
@@ -813,7 +820,7 @@ fn instance_offering_reads_the_type_of_an_entry_from_type() {
     let catalog = catalog::builtin().unwrap();
     let rule = catalog.rule("instance-offering").unwrap();
     let path = catalog::rules_dir().join("fixtures/aws/instance-zone-offered.json");
-    let key = "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1";
+    let key = AWS_TYPES;
     let live = serde_json::json!({"category": "GPU instance", "cpu": 32, "memory": 488,
         "price": 7.2, "type": "p2.8xlarge",
         "cost": {"price": [{"onDemand": 7.2, "os": "linux"}]},
@@ -862,13 +869,13 @@ fn instance_offering_passes_a_pool_whose_type_has_null_in_non_supported_zones_in
     for (fixture, key, kind, zones) in [
         (
             "fixtures/aws/instance-zone-null.json",
-            "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1",
+            AWS_TYPES,
             "t3.xlarge",
             ["us-east-2a", "us-east-2b", "us-east-2c"],
         ),
         (
             "fixtures/gcp/instance-zone-null.json",
-            "GET /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-gcp-1",
+            GCP_TYPES,
             "e2-standard-4",
             ["us-east1-b", "us-east1-c", "us-east1-d"],
         ),
@@ -925,7 +932,7 @@ fn instance_offering_fails_when_palette_refuses_or_gives_no_list_of_types() {
     let catalog = catalog::builtin().unwrap();
     let rule = catalog.rule("instance-offering").unwrap();
     let path = catalog::rules_dir().join("fixtures/aws/instance-zone-offered.json");
-    let key = "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1";
+    let key = AWS_TYPES;
     for (answer, expected) in [
         (
             serde_json::json!({"ok": false, "status": 403, "body": {"code": "AccessDenied", "message": "no"}}),
@@ -939,6 +946,175 @@ fn instance_offering_fails_when_palette_refuses_or_gives_no_list_of_types() {
         let mut doc = fixture::load(&path).unwrap();
         doc["_responses"][key] = answer;
         let out = outcome_of(rule, doc, &Jq::new());
+        assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+        assert_eq!(out.messages, [expected]);
+    }
+}
+
+/// The three quota rules count the vCPUs of a pool from the field `cpu` of the instance type route
+/// (#393), and not from the name of the type. Each sends one request beside its command. The quota
+/// still comes from the tool of the cloud.
+#[test]
+fn the_quota_rules_count_the_vcpus_of_a_pool_from_the_cpu_that_palette_lists() {
+    let catalog = catalog::builtin().unwrap();
+    for (id, fixture, ran, expected) in [
+        (
+            "aws-quotas",
+            "fixtures/aws/vcpu-quota-low.json",
+            AWS_TYPES,
+            "the on-demand vCPU quota L-1216C47A in us-east-2 is 8.0, and the pools ask for 20 vCPUs: 1 x t3.xlarge, 2 x m5.2xlarge",
+        ),
+        (
+            "gcp-quotas",
+            "fixtures/gke/cpu-quota-low.json",
+            GCP_TYPES,
+            "CPUS in us-east1: limit 24.0, usage 20.0, free 4.0; the pools ask for 12 CPUs: 3 x e2-standard-4",
+        ),
+        (
+            "azure-vcpu-quota",
+            "fixtures/azure/vcpu-quota-low.json",
+            AZURE_TYPES,
+            "the pools ask for 12 vCPUs in eastus, and the regional quota has 2 free of 10 (8 in use)",
+        ),
+    ] {
+        let rule = catalog.rule(id).unwrap();
+        let path = catalog::rules_dir().join(fixture);
+        let out = outcome_of(rule, fixture::load(&path).unwrap(), &Jq::new());
+        assert_eq!(out.verdict, Verdict::Failed, "{id}: {:?}", out.messages);
+        assert!(
+            out.messages[0].starts_with(expected),
+            "{id}: {:?}",
+            out.messages
+        );
+        assert_eq!(out.ran.requests().len(), 1, "{id}: one request of Palette");
+        assert_eq!(out.ran.requests()[0].ran(), ran, "{id}");
+    }
+}
+
+/// Palette drops each type with fewer than 2 vCPUs or less than 4 GiB of memory from the instance
+/// type route when the query says nothing. The three quota rules send `cpuGtEq=0&memoryGtEq=0`, so a
+/// pool of a small type adds its vCPUs: the pools of the fixtures ask for more than the quota gives,
+/// and the rule says so. With no query, the route lists no small type, and the rule counts 0 vCPUs
+/// for that pool.
+#[test]
+fn the_quota_rules_ask_for_the_small_types_that_palette_drops_by_default_and_count_them() {
+    let catalog = catalog::builtin().unwrap();
+    for (id, fixture, ran, expected) in [
+        (
+            "aws-quotas",
+            "fixtures/aws/vcpu-quota-small-type.json",
+            AWS_TYPES,
+            "the on-demand vCPU quota L-1216C47A in us-east-2 is 8.0, and the pools ask for 44 vCPUs: 1 x t3.xlarge, 20 x t3.small",
+        ),
+        (
+            "gcp-quotas",
+            "fixtures/gke/cpu-quota-small-type.json",
+            GCP_TYPES,
+            "CPUS in us-east1: limit 24.0, usage 20.0, free 4.0; the pools ask for 8 CPUs: 4 x e2-small",
+        ),
+        (
+            "azure-vcpu-quota",
+            "fixtures/azure/vcpu-quota-small-size.json",
+            AZURE_TYPES,
+            "the pools ask for 8 vCPUs in eastus, and the regional quota has 2 free of 10 (8 in use): Azure refuses the machines with OperationNotAllowed; the family quota of each type can be lower still",
+        ),
+    ] {
+        let rule = catalog.rule(id).unwrap();
+        let path = catalog::rules_dir().join(fixture);
+        let out = outcome_of(rule, fixture::load(&path).unwrap(), &Jq::new());
+        assert_eq!(out.verdict, Verdict::Failed, "{id}: {:?}", out.messages);
+        assert_eq!(out.messages, [expected], "{id}");
+        assert_eq!(out.ran.requests()[0].ran(), ran, "{id}");
+        assert!(
+            ran.ends_with("&cpuGtEq=0&memoryGtEq=0"),
+            "{id}: the query lifts both filters of Palette"
+        );
+    }
+    // the same pools, with a quota that covers them, pass
+    let rule = catalog.rule("aws-quotas").unwrap();
+    let path = catalog::rules_dir().join("fixtures/aws/vcpu-quota-small-type-clean.json");
+    let out = outcome_of(rule, fixture::load(&path).unwrap(), &Jq::new());
+    assert_eq!(out.verdict, Verdict::Passed, "{:?}", out.messages);
+}
+
+/// A type that the route still does not list, such as an old family, does not add 0 vCPUs: the rule
+/// fails closed for that pool, and names the pool and the type. A listed entry with no number in
+/// `cpu` is the same. The message of a short quota counts the listed pools alone.
+#[test]
+fn a_quota_rule_fails_for_a_pool_whose_type_the_route_does_not_list() {
+    let catalog = catalog::builtin().unwrap();
+    for (id, fixture, expected) in [
+        (
+            "aws-quotas",
+            "fixtures/aws/vcpu-quota-type-not-listed.json",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the type m3.large in region us-east-2, so the check cannot count the vCPUs of the pool",
+        ),
+        (
+            "gcp-quotas",
+            "fixtures/gke/cpu-quota-type-not-listed.json",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the type n1-standard-1 in region us-east1, so the check cannot count the CPUs of the pool",
+        ),
+        (
+            "azure-vcpu-quota",
+            "fixtures/azure/vcpu-quota-size-not-listed.json",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the size Standard_A1 in region eastus, so the check cannot count the vCPUs of the pool",
+        ),
+    ] {
+        let rule = catalog.rule(id).unwrap();
+        let path = catalog::rules_dir().join(fixture);
+        let out = outcome_of(rule, fixture::load(&path).unwrap(), &Jq::new());
+        assert_eq!(out.verdict, Verdict::Failed, "{id}: {:?}", out.messages);
+        assert_eq!(out.messages, [expected], "{id}: the quota covers the rest");
+    }
+    let rule = catalog.rule("aws-quotas").unwrap();
+    let exec = "aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region us-east-2 --output json";
+    let path = catalog::rules_dir().join("fixtures/aws/vcpu-quota-type-not-listed.json");
+    let mut short = fixture::load(&path).unwrap();
+    short["_exec"][exec]["stdout"]["Quota"]["Value"] = serde_json::json!(2.0);
+    let out = outcome_of(rule, short, &Jq::new());
+    assert_eq!(
+        out.messages,
+        [
+            "the on-demand vCPU quota L-1216C47A in us-east-2 is 2.0, and the pools ask for 4 vCPUs: 1 x t3.xlarge",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the type m3.large in region us-east-2, so the check cannot count the vCPUs of the pool",
+        ]
+    );
+    let mut no_number = fixture::load(&path).unwrap();
+    no_number["entity"]["spec"]["machinepoolconfig"][1]["cloudConfig"]["instanceType"] =
+        serde_json::json!("t3.xlarge");
+    no_number["_responses"][AWS_TYPES]["body"]["instanceTypes"][0]["cpu"] = serde_json::json!("4");
+    let out = outcome_of(rule, no_number, &Jq::new());
+    assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+    assert!(
+        out.messages
+            .iter()
+            .any(|m| m.contains("lists no cpu for the type t3.xlarge")),
+        "{:?}",
+        out.messages
+    );
+}
+
+/// A list that Palette refuses, or gives no `instanceTypes`, is a failure that says so: a quota rule
+/// cannot count the vCPUs of any pool then.
+#[test]
+fn a_quota_rule_fails_when_palette_refuses_the_list_of_instance_types() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("aws-quotas").unwrap();
+    let path = catalog::rules_dir().join("fixtures/aws/vcpu-quota-clean.json");
+    let doc = fixture::load(&path).unwrap();
+    for (answer, expected) in [
+        (
+            serde_json::json!({"ok": false, "status": 403, "body": {"code": "AccessDenied", "message": "no"}}),
+            "Palette cannot list the instance types of region us-east-2: AccessDenied: no",
+        ),
+        (
+            serde_json::json!({"ok": true, "status": 200, "body": {}}),
+            "Palette gave no list of instance types for region us-east-2",
+        ),
+    ] {
+        let mut refused = doc.clone();
+        refused["_responses"][AWS_TYPES] = answer;
+        let out = outcome_of(rule, refused, &Jq::new());
         assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
         assert_eq!(out.messages, [expected]);
     }
@@ -1125,9 +1301,15 @@ fn no_check_maps_the_engine_to_a_cloud_itself() {
                 .flatten()
                 .map(String::as_str)
                 .collect(),
-            Some(Check::Exec { argv, expr, .. }) => argv
+            Some(Check::Exec(ExecCheck {
+                argv,
+                palette,
+                expr,
+                ..
+            })) => argv
                 .iter()
                 .map(String::as_str)
+                .chain(palette.iter().map(|read| read.path.as_str()))
                 .chain([expr.as_str()])
                 .collect(),
             None => Vec::new(),

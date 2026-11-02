@@ -171,6 +171,15 @@ After 0.26.0, the library of `strata-preflight` changes in these ways:
   ends with `older runs <n>` when `older_runs` is not `0`.
 - A `report::CheckResult` has a `confidence` for a rule that has runs of older
   releases only. It holds no run of the release, and its `older_runs` is not `0`.
+- `rule::Check::Exec` holds a `rule::ExecCheck` in place of the four fields. A pattern that names
+  `argv`, `needs`, `timeout`, or `expr` must read them from the `ExecCheck`. `ExecCheck` has the
+  new field `palette: Option<rule::PaletteRead>`, the `GET` request that the check sends before its
+  command. A struct literal must set it to `None`.
+- `probe::Ran::Exec` has the new field `request: Option<probe::Call>`. A struct literal must set it
+  to `None`, and a pattern with no `..` must name it. `probe::Ran::requests` gives the one request
+  for a command that has a read of Palette.
+- `rule::PaletteRead` is a new type. A rule file takes `palette: { path: ... }` in the check of kind
+  `exec`. The program of the check reads the answer as `.response`.
 
 ## The documents
 
@@ -699,6 +708,36 @@ run that you add to a ledger of your own. Add `--release` to `--promotion`, and
 run it after each upgrade of Palette. [The runs of one
 release](../commands/preflight/promotion.md#the-runs-of-one-release) shows the
 steps.
+
+After 0.26.0, `strata-preflight` asks Palette first for five rules that ran the tool of a cloud.
+Palette lists the fields that these rules read, or a part of them:
+
+- **`static-subnets` and `sg-name-collision` are in the `palette` tier.** They read the VPC route and
+  the security group route of Palette. Before, they were in the `cloud` tier and ran `aws`.
+  - A run with `--tier cloud` does not run them now. A run with `--no-exec` and the key runs them.
+  - They need the field `spec.cloudAccountUid` in the entity. A run without it skips them.
+  - `static-subnets` fails a subnet that no VPC of the account lists. It fails a subnet in another
+    VPC, and a subnet in another zone than the pool says.
+  - The messages stay the same, and the rules need no tool.
+- **`aws-quotas`, `gcp-quotas`, and `azure-vcpu-quota` read the vCPUs of a pool from Palette.**
+  - The rules stay in the `cloud` tier, because no route of Palette lists a quota.
+  - Each rule reads the instance type route first, and then runs the tool of the cloud for the
+    quota. The report shows the command, and the request in `requests[]`.
+  - Before, a rule counted the vCPUs from the name of the type: 4 for an `xlarge` type, and 2 for a
+    smaller one. Now it counts the `cpu` that the route lists, so the sum can differ from 0.26.0.
+  - The three rules need the key and the field `spec.cloudAccountUid`. A run with no key shows
+    `NOT RUN` for them. Before, a run with the tool and no key checked the quota.
+  - Each rule sends the query `cpuGtEq=0&memoryGtEq=0` with `cloudAccountUid`. When the query says
+    nothing, the route lists only the types with 2 vCPUs or more and 4 GiB of memory or more. The
+    query lifts that filter, so a pool of `t3.small` counts.
+  - A pool whose type the route still does not list, such as an old family, fails the rule. The
+    message names the pool and the type. Before, the rule counted the vCPUs of that pool from the
+    name of the type. The message of a short quota counts the listed pools alone.
+  - When Palette answers with an error, the rule fails and gives the code of Palette.
+
+After 0.26.0, `instance-offering` sends the same query: `cpuGtEq=0&memoryGtEq=0`. The list holds the
+small types now: the types with fewer than 2 vCPUs or less than 4 GiB of memory. Before, the rule
+reported such a type as not in the list of the region.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later

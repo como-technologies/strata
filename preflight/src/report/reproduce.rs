@@ -5,7 +5,12 @@ use strata::config::{DEFAULT_BASE_URL, KEY_VARS, PROJECT_VARS, URL_VARS};
 
 use super::Subject;
 use crate::probe::{Outcome, Ran};
-use crate::rule::{Check, PaletteCheck, Rule};
+use crate::rule::{Check, ExecCheck, PaletteCheck, Rule};
+
+/// The jq object that a program reads as `.response`, built from the `curl` of a request: the status
+/// code in `$code` and the body in `$body`.
+const RESPONSE_OF_CURL: &str =
+    "{ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)}";
 
 /// The line a person runs to see the same thing the check saw: the `jq` over the world file, the
 /// `curl` to Palette, or the command.
@@ -63,19 +68,11 @@ pub(super) fn auto_reproduce(
                 curl_line(" -o body.json -w '%{http_code}'", &data, path)
             ));
             lines.push(format!(
-                "jq --arg code \"$code\" --slurpfile body body.json '.response = {{ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)}} | {}' {dir}/world.json",
+                "jq --arg code \"$code\" --slurpfile body body.json '.response = {RESPONSE_OF_CURL} | {}' {dir}/world.json",
                 one_line(expr)
             ));
         }
-        Some(Check::Exec { expr, .. }) => {
-            if let Ran::Exec { line, .. } = &outcome.ran {
-                lines.push(line.clone());
-                lines.push(format!(
-                    "jq --argjson out \"$(<the output>)\" '.exec = {{exit: 0, stdout: $out, stderr: \"\"}} | {}' {dir}/world.json",
-                    one_line(expr)
-                ));
-            }
-        }
+        Some(Check::Exec(ExecCheck { expr, .. })) => exec_lines(expr, outcome, dir, &mut lines),
         Some(Check::Watch { .. }) => {
             if let Some(uid) = &subject.cluster_uid {
                 lines.push(curl_get(&cluster_events_path(uid)));
@@ -84,6 +81,33 @@ pub(super) fn auto_reproduce(
         None => {}
     }
     lines
+}
+
+/// The lines of a command check: the `curl` of its read of Palette when it has one, the command,
+/// and the `jq` over the world with the answers. The program reads `.exec`, and `.response` after a
+/// read.
+fn exec_lines(expr: &str, outcome: &Outcome, dir: &str, lines: &mut Vec<String>) {
+    let Ran::Exec { line, request, .. } = &outcome.ran else {
+        return;
+    };
+    let (flags, response) = match request {
+        Some(call) => {
+            lines.push(format!(
+                "code=$({})",
+                curl_line(" -o body.json -w '%{http_code}'", "", &call.path)
+            ));
+            (
+                "--arg code \"$code\" --slurpfile body body.json ",
+                format!(".response = {RESPONSE_OF_CURL} | "),
+            )
+        }
+        None => ("", String::new()),
+    };
+    lines.push(line.clone());
+    lines.push(format!(
+        "jq {flags}--argjson out \"$(<the output>)\" '{response}.exec = {{exit: 0, stdout: $out, stderr: \"\"}} | {}' {dir}/world.json",
+        one_line(expr)
+    ));
 }
 
 /// The `curl` that reads `path` of Palette.

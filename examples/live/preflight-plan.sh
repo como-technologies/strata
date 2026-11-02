@@ -132,12 +132,13 @@ fault() {
 resize='def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n;'
 # offering_edit: print the jq edit of the clean entity that puts the first pool in a zone that the
 # instance type route marks as not offering the type of the pool. The route is read for the region
-# and the account of the entity, with the account_kind that create_body set, and its answer is kept
-# in instancetypes.json. The edit takes the first type that has a zone in nonSupportedZones. Exit 1,
-# with the reason, when the route lists none.
+# and the account of the entity, with the account_kind that create_body set, and with the query that
+# the rules send (it lifts the default filter of Palette: see instancetypes-default-filter). Its
+# answer is kept in instancetypes.json. The edit takes the first type that has a zone in
+# nonSupportedZones. Exit 1, with the reason, when the route lists none.
 offering_edit() {
   local pair
-  "$live/api.sh" get "/v1/clouds/$account_kind/regions/$region/instancetypes?cloudAccountUid=$A" > instancetypes.json || { echo "api.sh get failed: $(tail -n 1 instancetypes.json)" >&2; return 1; }
+  "$live/api.sh" get "/v1/clouds/$account_kind/regions/$region/instancetypes?cloudAccountUid=$A&cpuGtEq=0&memoryGtEq=0" > instancetypes.json || { echo "api.sh get failed: $(tail -n 1 instancetypes.json)" >&2; return 1; }
   pair=$(jq -r '[.instanceTypes[]? | select((.nonSupportedZones // []) | length > 0)] | .[0] // empty | "\(.type)\t\(.nonSupportedZones[0])"' instancetypes.json) || { echo "instancetypes.json is not JSON" >&2; return 1; }
   [ -n "$pair" ] || { echo "the route lists no type with a zone in nonSupportedZones" >&2; return 1; }
   local type zone
@@ -189,11 +190,35 @@ else
   record instance-offering not-made "$(cat offering-edit.err)"
   echo "instance-offering: $(cat offering-edit.err)" | tee -a steps.log
 fi
+# The quota rules count the vCPUs of a pool from the field cpu of the same route (#393). A type
+# under 2 vCPUs or 4 GiB is in the list, because the query lifts the default filter of Palette, and
+# it has a cpu too
+check instancetypes-cpu 0 "the instance type route lists each pool type of the entity with cpu as a number above 0, the vCPUs that aws-quotas, gcp-quotas, and azure-vcpu-quota count, and it lists a type under 2 vCPUs or 4 GiB with cpu above 0" -- \
+  jq -e --slurpfile e clean.json 'def small: select((.memory | type == "number" and . < 4) or (.cpu | type == "number" and . < 2)); [$e[0].spec.machinepoolconfig[].cloudConfig.instanceType] as $want | .instanceTypes as $t | all($want[]; . as $w | ([$t[] | select(.type == $w) | .cpu] | first | (type == "number" and . > 0))) and ([$t[] | small] | length) > 0 and all($t[] | small; (.cpu | type == "number" and . > 0))' instancetypes.json
+# With no query, the route lists only the types with 2 vCPUs or more and 4 GiB or more. The same
+# request without the query shows the filter: the answer lists no small type, and the answer with
+# the query lists one and is longer
+"$live/api.sh" get "/v1/clouds/$account_kind/regions/$region/instancetypes?cloudAccountUid=$A" > instancetypes-default.json 2> instancetypes-default.err
+check instancetypes-default-filter 0 "the instance type route with no query for the filter lists no type under 2 vCPUs or 4 GiB, and the query cpuGtEq=0&memoryGtEq=0 lists more types, with a small type among them" -- \
+  jq -e --slurpfile all instancetypes.json 'def small: select((.memory | type == "number" and . < 4) or (.cpu | type == "number" and . < 2)); (.instanceTypes | length) > 0 and ([.instanceTypes[] | small] | length) == 0 and ([$all[0].instanceTypes[] | small] | length) > 0 and ($all[0].instanceTypes | length) > (.instanceTypes | length)' instancetypes-default.json
 case "$engine" in
   aws|eks)
     "$live/api.sh" get "/v1/clouds/aws/regions/$region/keypairs?cloudAccountUid=$A" > keypairs.json 2> keypairs.err
     check key-pairs-shape 0 "the key pair route lists keyNames[] for $region, and the key $ssh_key of the entity is in it" -- \
       jq -e --arg k "$ssh_key" '(.keyNames | index($k)) != null' keypairs.json
+    # Three list routes answer the rules static-subnets and sg-name-collision (#393). Each check
+    # reads the keys that the route gives, and fails on a key beside them. A new key can be a field
+    # that a cloud rule reads, such as the tags of a subnet. Then that rule can move to Palette
+    "$live/api.sh" get "/v1/clouds/aws/regions/$region/vpcs?cloudAccountUid=$A" > vpcs.json 2> vpcs.err
+    check vpcs-route-keys 0 "the VPC route lists vpcs[] with vpcId, and each subnet with subnetId and az; a VPC has no key beside cidrBlock, name, subnets, and vpcId, and a subnet has none beside az, isPrivate, mapPublicIpOnLaunch, name, and subnetId" -- \
+      jq -e '(.vpcs | length) > 0 and all(.vpcs[]; has("vpcId") and ((keys - ["cidrBlock", "name", "subnets", "vpcId"]) | length) == 0) and ([.vpcs[] | (.subnets // [])[]] as $s | ($s | length) > 0 and all($s[]; has("subnetId") and has("az") and ((keys - ["az", "isPrivate", "mapPublicIpOnLaunch", "name", "subnetId"]) | length) == 0))' vpcs.json
+    "$live/api.sh" get "/v1/clouds/aws/regions/$region/availabilityzones?cloudAccountUid=$A" > zones.json 2> zones.err
+    check zones-route-keys 0 "the zone route lists zones[] with name, state, and zoneId, and a zone has no key beside those three, so it lists no zone type" -- \
+      jq -e '(.zones | length) > 0 and all(.zones[]; has("name") and has("state") and has("zoneId") and ((keys - ["name", "state", "zoneId"]) | length) == 0)' zones.json
+    vpc=$(jq -r '.vpcs[0].vpcId // empty' vpcs.json 2> /dev/null)
+    "$live/api.sh" get "/v1/clouds/aws/securitygroups?cloudAccountUid=$A&region=$region&vpcId=$vpc" > sgs.json 2> sgs.err
+    check sgs-route-keys 0 "the security group route lists groups[] with groupId and groupName for the first VPC of $region, and a group has no key beside groupId, groupName, and ownerId" -- \
+      jq -e '(.groups | length) > 0 and all(.groups[]; has("groupId") and has("groupName") and ((keys - ["groupId", "groupName", "ownerId"]) | length) == 0)' sgs.json
     # ssh-key-pair names eks alone. The property route of aws refuses a key pair that the region
     # lacks (HTTP 500, AwsKeyPairNotFound). iaas-pod-identity sends it the key pair (#430)
     case "$engine" in
