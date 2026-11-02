@@ -564,6 +564,11 @@ For each cloud fact, the run does these steps:
 4. For a table, it checks that the answer lists each value of the table. For a table of an account,
    it checks the values that the account lists. See [The tables](#the-tables).
 
+A fixture shows the answer as the tool prints it. A tool can omit a field that has no value:
+`gcloud` omits `secondaryIpRanges` for a subnet with no secondary range. Write the fixture of such a
+subnet with no key. If each fixture holds the field, an answer with no key is a difference, and
+the difference is false.
+
 The outcomes and the exit code are those of the requests of Palette. The run sends each call with a
 time limit of two minutes. The document keeps the differences and the reasons, and no answer.
 

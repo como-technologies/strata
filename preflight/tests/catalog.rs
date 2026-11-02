@@ -1448,3 +1448,35 @@ fn the_rule_of_the_managed_policies_of_a_role_has_an_id_with_no_number() {
         rule.title
     );
 }
+
+/// `gcloud` omits the key `secondaryIpRanges` for a subnet that has no secondary range. The
+/// fixture shows the answer as the tool prints it, and the rule still fails on it (#550).
+#[test]
+fn a_subnet_with_no_secondary_range_has_no_key_in_the_fixture_and_the_rule_fails() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("gke-secondary-ranges").unwrap();
+    let path = catalog::rules_dir().join("fixtures/gke/no-secondary-ranges.json");
+    let doc = fixture::load(&path).unwrap();
+    let subnets: Vec<&serde_json::Value> = doc["_exec"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter(|(command, _)| command.starts_with("gcloud compute networks subnets list"))
+        .flat_map(|(_, answer)| answer["stdout"].as_array().unwrap())
+        .collect();
+    assert_eq!(subnets.len(), 1);
+    assert!(
+        subnets[0].get("secondaryIpRanges").is_none(),
+        "the fixture holds the key: {}",
+        subnets[0]
+    );
+    let out = outcome_of(rule, doc, &Jq::new());
+    assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+    assert_eq!(out.messages.len(), 1, "{:?}", out.messages);
+    assert!(
+        out.messages[0]
+            .starts_with("subnet shared-net-us-east1 (10.10.0.0/20) has no secondary range"),
+        "{:?}",
+        out.messages
+    );
+}
