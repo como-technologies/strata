@@ -6,8 +6,8 @@
 use std::process::Command;
 
 use crate::common::{
-    CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, recipe, repo_file, steps,
-    text, workflow, workflow_files, workflow_text,
+    CommandExt, INSTALLING_WORKFLOWS, LOGGING_TOOL, executable, git, recipe, repo_file, runs_of,
+    steps, text, workflow, workflow_files, workflow_text,
 };
 
 #[test]
@@ -62,23 +62,6 @@ fn the_gate_job_of_ci_needs_the_checks_and_has_no_condition() {
     );
 }
 
-/// The `run` lines of the steps of the job `name` of `checks.yml`.
-fn runs_of_job(name: &str) -> Vec<String> {
-    let doc = workflow("checks.yml");
-    let job = doc["jobs"]
-        .as_mapping()
-        .expect("checks.yml has jobs")
-        .values()
-        .find(|job| job["name"].as_str() == Some(name))
-        .unwrap_or_else(|| panic!("checks.yml has no job named {name}"));
-    job["steps"]
-        .as_sequence()
-        .expect("the job has steps")
-        .iter()
-        .filter_map(|step| step["run"].as_str().map(str::to_string))
-        .collect()
-}
-
 /// The tests of `xtask` hold the routes of the stand-in of Palette, and `cargo test` of the root
 /// package does not run them. So the `test` recipe runs them by name, and the job `lint and test`
 /// runs the recipe. The job has no step of its own for them, because then they run two times.
@@ -92,7 +75,7 @@ fn the_lint_and_test_job_runs_the_tests_of_xtask() {
         "{test:?}"
     );
 
-    let runs = runs_of_job("lint and test");
+    let runs = runs_of("checks.yml", "lint and test");
     assert!(runs.contains(&"just test".to_string()), "{runs:?}");
     assert!(
         !runs.contains(&"cargo test -p xtask".to_string()),
@@ -133,7 +116,7 @@ fn just_lint_builds_the_rustdoc_of_each_package_with_the_public_items_and_with_a
     );
 
     assert!(
-        runs_of_job("lint and test").contains(&"just lint".to_string()),
+        runs_of("checks.yml", "lint and test").contains(&"just lint".to_string()),
         "the job lint and test runs the recipe"
     );
 }
@@ -145,7 +128,7 @@ fn just_lint_builds_the_rustdoc_of_each_package_with_the_public_items_and_with_a
 fn just_docs_builds_the_book_with_the_script_that_fails_on_a_warning_and_the_docs_job_runs_it() {
     assert_eq!(recipe("docs"), ["scripts/dev/build-book.sh docs"]);
     assert!(
-        runs_of_job("docs").contains(&"just docs".to_string()),
+        runs_of("checks.yml", "docs").contains(&"just docs".to_string()),
         "the job docs runs the recipe"
     );
 }
@@ -601,14 +584,7 @@ fn the_fuzz_workflow_runs_each_target_on_nightly_on_a_schedule_and_keeps_the_new
         );
     }
 
-    let runs = |job: &str| -> Vec<String> {
-        doc["jobs"][job]["steps"]
-            .as_sequence()
-            .unwrap_or_else(|| panic!("fuzz.yml has no job {job}"))
-            .iter()
-            .filter_map(|step| step["run"].as_str().map(str::to_string))
-            .collect()
-    };
+    let runs = |job: &str| runs_of("fuzz.yml", job);
     assert!(
         runs("targets").iter().any(|r| r.contains("just fuzz-list")),
         "the list of targets comes from `just fuzz-list`"
@@ -682,7 +658,7 @@ fn the_version_of_cargo_bolero_matches_the_crate_and_the_book() {
 /// not run them: they take minutes, and the job `lint and test` is the one every change waits for.
 #[test]
 fn the_benchmarks_job_runs_the_short_recipe_and_the_tests_do_not_run_the_benchmarks() {
-    assert_eq!(runs_of_job("benchmarks"), ["just bench-short"]);
+    assert_eq!(runs_of("checks.yml", "benchmarks"), ["just bench-short"]);
 
     let short = recipe("bench-short");
     assert_eq!(short.len(), 1, "{short:?}");
@@ -707,4 +683,44 @@ fn the_benchmarks_job_runs_the_short_recipe_and_the_tests_do_not_run_the_benchma
     for line in recipe("test").iter().chain(&recipe("lint")) {
         assert!(!line.contains("cargo bench"), "{line}");
     }
+}
+
+/// The floor of the Rust version is one line of the root `Cargo.toml`, and the job `the lowest
+/// Rust version` reads it. Each member of the workspace takes it with `rust-version.workspace =
+/// true`. A member with a floor of its own would name a number that the job does not build with.
+#[test]
+fn each_member_of_the_workspace_takes_the_rust_version_that_the_msrv_job_reads() {
+    let root = repo_file("Cargo.toml");
+    let floors: Vec<&str> = root
+        .lines()
+        .filter(|l| l.starts_with("rust-version = "))
+        .collect();
+    assert_eq!(floors.len(), 1, "the msrv job reads one line: {floors:?}");
+    let members: Vec<&str> = root
+        .lines()
+        .find_map(|l| l.strip_prefix("members = ["))
+        .expect("the workspace lists its members")
+        .trim_end_matches(']')
+        .split(',')
+        .map(|member| member.trim().trim_matches('"'))
+        .collect();
+    assert!(members.len() >= 6, "{members:?}");
+    for member in members {
+        let manifest = repo_file(&format!("{member}/Cargo.toml"));
+        assert!(
+            manifest
+                .lines()
+                .any(|l| l == "rust-version.workspace = true"),
+            "{member} does not take the floor of the workspace"
+        );
+        assert!(
+            member == "." || !manifest.lines().any(|l| l.starts_with("rust-version = ")),
+            "{member} names a floor of its own"
+        );
+    }
+    let msrv = runs_of("checks.yml", "the lowest Rust version");
+    assert!(
+        msrv.iter().any(|r| r.contains("^rust-version = ")),
+        "the msrv job does not read the line of the root: {msrv:?}"
+    );
 }

@@ -35,14 +35,26 @@ fn a_script_that_a_test_writes_runs_while_other_threads_write_scripts_and_start_
     });
 }
 
-/// Each file of the tests but the two that hold the lock and its test.
+/// The trees of Rust files that start a process in a test, from the root of the repository: the
+/// tests of strata, the tests of strata-preflight, and the source of xtask, whose unit tests
+/// and whose runner of the book start processes. The three include `tests/common/process.rs`. The
+/// other packages start no process.
+const TREES: [&str; 3] = ["tests", "preflight/tests", "xtask/src"];
+
+/// Each Rust file of [`TREES`] but the file that holds the lock and the two methods that take it.
 fn files_that_start_processes() -> Vec<std::path::PathBuf> {
-    let tests = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
-    let own = [tests.join("common/mod.rs"), tests.join("spawn.rs")];
-    walk(&tests)
-        .into_iter()
-        .filter(|f| f.extension().is_some_and(|e| e == "rs") && !own.contains(f))
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let own = root.join("tests/common/process.rs");
+    TREES
+        .iter()
+        .flat_map(|tree| walk(&root.join(tree)))
+        .filter(|f| f.extension().is_some_and(|e| e == "rs") && *f != own)
         .collect()
+}
+
+/// A line without the status of an HTTP answer, which `status()` of a response also names.
+fn without_http_status(line: &str) -> String {
+    line.replace(".status().as_u16()", "")
 }
 
 #[test]
@@ -53,6 +65,7 @@ fn no_test_starts_a_process_with_a_method_of_command_that_takes_no_lock() {
     for file in files_that_start_processes() {
         let text = std::fs::read_to_string(&file).unwrap();
         for (n, line) in text.lines().enumerate() {
+            let line = without_http_status(line);
             if methods.iter().any(|m| line.contains(m.as_str())) {
                 found.push(format!("{}:{}: {}", file.display(), n + 1, line.trim()));
             }
@@ -63,4 +76,18 @@ fn no_test_starts_a_process_with_a_method_of_command_that_takes_no_lock() {
         "use `output_locked` or `spawn_locked` of `CommandExt`:\n{}",
         found.join("\n")
     );
+}
+
+#[test]
+fn the_trees_that_the_scan_reads_are_the_trees_that_include_the_lock() {
+    // a package that starts a process in a test includes the file with `#[path]`
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let include = "#[path = \"../../tests/common/process.rs\"]";
+    for file in ["preflight/tests/cli.rs", "xtask/src/main.rs"] {
+        let text = std::fs::read_to_string(root.join(file)).unwrap();
+        assert!(text.contains(include), "{file} includes process.rs");
+    }
+    for tree in TREES {
+        assert!(root.join(tree).is_dir(), "{tree}");
+    }
 }

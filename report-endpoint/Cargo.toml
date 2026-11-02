@@ -2,8 +2,8 @@
 name = "strata-report-endpoint"
 version = "0.27.0"
 edition = "2024"
-# The same floor as strata: this crate uses the same `if let` chains.
-rust-version = "1.88"
+# The floor of the workspace: this crate uses the same `if let` chains as strata.
+rust-version.workspace = true
 description = "The endpoint that takes the report of the values that strata does not know, and merges the reports into one issue for each set and value"
 license = "Apache-2.0"
 repository = "https://github.com/como-technologies/strata"

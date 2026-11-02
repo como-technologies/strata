@@ -2,6 +2,8 @@
 //! groups, and app profiles.
 
 use serde_json::{Value, json};
+use strata::closed_set::ClosedSet;
+use strata::model::scope::ProfileScope;
 
 use super::macros::Pinner;
 use super::profiles::template_of;
@@ -32,7 +34,8 @@ impl Tenant {
             &format!("{EDGE_HOSTS}/{uid}"),
             &json!({
                 "metadata": {"uid": uid, "name": name,
-                    "annotations": {"projectUid": project, "scope": "project"}},
+                    "annotations": {"projectUid": project,
+                        "scope": ProfileScope::Project.as_str()}},
                 "spec": {"clusterProfileTemplates": templates},
                 "status": {"state": "ready"},
             }),
@@ -120,7 +123,8 @@ impl Tenant {
         self.write(
             project,
             "v1/clustergroups/hostCluster/metadata",
-            &json!({"items": [{"uid": uid, "name": name, "scope": "project"}]}),
+            &json!({"items": [{"uid": uid, "name": name,
+                "scope": ProfileScope::Project.as_str()}]}),
         );
         let items: Vec<Value> = members
             .iter()

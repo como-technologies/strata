@@ -29,17 +29,17 @@
 //! variable always gets `SECRET_VALUE`. No document must contain it.
 
 use std::fs;
-use std::io;
 use std::path::Path;
-use std::process::{Child, Command, Output, Stdio};
-use std::sync::RwLock;
+use std::process::{Command, Output};
 
 use serde_json::{Value, json};
 
 mod palette;
+mod process;
 mod stand_in;
 
 pub use palette::*;
+pub use process::*;
 pub use stand_in::*;
 
 // comment-only values, as the real ubuntu-aws pack ships: canonical form must be null
@@ -776,35 +776,6 @@ pub fn git(dir: &Path, args: &[&str]) -> std::process::Output {
     o
 }
 
-/// A test takes this lock for writing while it writes a file that it will run, and for reading
-/// while it starts a process.
-///
-/// A new process keeps a copy of each file that is open in its parent until it runs its program.
-/// When a test runs a file in that time, the system answers "Text file busy". The tests run on
-/// many threads, so a test failed with this answer in some runs.
-static OPEN_FOR_WRITE: RwLock<()> = RwLock::new(());
-
-/// Write a file and make it executable, for a stand-in command on a test's PATH.
-pub fn executable(path: &Path, body: &str) {
-    let made = {
-        // no code panics while it holds the lock, so the lock is never poisoned
-        let _no_start = OPEN_FOR_WRITE.write().unwrap();
-        std::fs::write(path, body).and_then(|()| make_executable(path))
-    };
-    made.unwrap();
-}
-
-#[cfg(unix)]
-fn make_executable(path: &Path) -> io::Result<()> {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
-}
-
-#[cfg(not(unix))]
-fn make_executable(_: &Path) -> io::Result<()> {
-    Ok(())
-}
-
 // ---- the workflow helpers ----------------------------------------------------------------------
 
 /// The text of a file of the repository, by its path from the root.
@@ -874,6 +845,35 @@ pub fn steps(doc: &serde_yaml::Value) -> impl Iterator<Item = &serde_yaml::Value
         .expect("a workflow has jobs")
         .values()
         .flat_map(|job| job["steps"].as_sequence().into_iter().flatten())
+}
+
+/// The `run` lines of the steps of the job `job` of the workflow `file`. `job` is the key of the
+/// job, or its `name`.
+pub fn runs_of(file: &str, job: &str) -> Vec<String> {
+    let doc = workflow(file);
+    let jobs = doc["jobs"]
+        .as_mapping()
+        .unwrap_or_else(|| panic!("{file} has no jobs"));
+    let found = jobs
+        .iter()
+        .find(|(key, value)| key.as_str() == Some(job) || value["name"].as_str() == Some(job))
+        .unwrap_or_else(|| panic!("{file} has no job {job}"))
+        .1;
+    found["steps"]
+        .as_sequence()
+        .unwrap_or_else(|| panic!("the job {job} of {file} has steps"))
+        .iter()
+        .filter_map(|step| step["run"].as_str().map(str::to_string))
+        .collect()
+}
+
+/// The GitLab drop-in for the jobs of strata, from the root of the repository.
+pub const GITLAB_DROP_IN: &str = "examples/ci/gitlab/strata.yml";
+
+/// The GitLab drop-in [`GITLAB_DROP_IN`], parsed.
+pub fn gitlab_drop_in() -> serde_yaml::Value {
+    serde_yaml::from_str(&repo_file(GITLAB_DROP_IN))
+        .unwrap_or_else(|e| panic!("{GITLAB_DROP_IN}: not YAML: {e}"))
 }
 
 /// Whether `text` holds `word` as a whole word: the character after it is not a letter, a digit,
@@ -1061,33 +1061,6 @@ pub fn verify_summary_with(
 }
 
 // ---- the processes -----------------------------------------------------------------------------
-
-/// The two ways to start a process in a test. A test never calls `spawn`, `output`, or `status` of
-/// [`Command`]: while another test writes a script, they can start a process that keeps the script
-/// open. See [`OPEN_FOR_WRITE`]. The tests of `tests/spawn.rs` make sure of this.
-pub trait CommandExt {
-    /// As [`Command::spawn`].
-    fn spawn_locked(&mut self) -> io::Result<Child>;
-
-    /// As [`Command::output`]: no standard input, and the two outputs on pipes.
-    fn output_locked(&mut self) -> io::Result<Output>;
-}
-
-impl CommandExt for Command {
-    fn spawn_locked(&mut self) -> io::Result<Child> {
-        // `spawn` gives its result after the new process runs its program, so it holds no copy
-        // of an open file when the lock ends
-        let _no_write = OPEN_FOR_WRITE.read().unwrap();
-        self.spawn()
-    }
-
-    fn output_locked(&mut self) -> io::Result<Output> {
-        self.stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        self.spawn_locked()?.wait_with_output()
-    }
-}
 
 /// The strata binary that cargo built for the tests. It is private: a test starts it with
 /// [`strata_command`], or gives it to a script with [`give_strata`], so that no run of the tests

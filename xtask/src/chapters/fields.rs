@@ -11,6 +11,9 @@
 //! each value is one that Palette can give.
 
 use serde_json::json;
+use strata::closed_set::ClosedSet;
+use strata::model::cluster_state::ClusterState;
+use strata::model::scope::ProfileScope;
 
 use super::ids::DEV;
 use crate::book::Runner;
@@ -52,7 +55,7 @@ fn cluster_and_group(r: &mut Runner) {
                 "location": {"countryCode": "US", "countryName": "United States",
                     "regionCode": "OH", "regionName": "Ohio"},
                 "tags": ["env:dev"]},
-            "status": {"state": "Deleting"},
+            "status": {"state": ClusterState::Deleting.as_str()},
         }]),
     );
     r.answer(
@@ -112,7 +115,7 @@ fn profile(r: &mut Runner) {
         DEV,
         &profile_route(PROFILE),
         &json!({"metadata": {"name": "platform-policy", "uid": PROFILE,
-                "annotations": {"scope": "project", "projectUid": DEV}},
+                "annotations": {"scope": ProfileScope::Project.as_str(), "projectUid": DEV}},
             "spec": {"version": "1.0.0",
                 "published": {"type": "add-on", "cloudType": "all", "packs": [pack]},
                 "draft": {"type": "add-on", "cloudType": "all", "packs": [pack]}},

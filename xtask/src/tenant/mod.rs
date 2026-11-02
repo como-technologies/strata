@@ -43,8 +43,8 @@ mod routes;
 pub use answers::{PackRefusal, UpgradeRefusal};
 pub use edit::Edit;
 pub use routes::{
-    AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, PROJECT_LISTING, exported_profile,
-    rbacs_route,
+    AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, PROJECT_LISTING, cluster_validate_route,
+    empty_audit_log, exported_profile, rbacs_route, validated_cloud,
 };
 // the routes that the chapter `fields` writes: each document there has the route of its kind
 pub(crate) use routes::{
@@ -154,17 +154,14 @@ mod tests {
 
     #[test]
     fn the_routes_of_a_tenant_are_the_routes_of_its_documents_in_each_project() {
-        let dir = std::env::temp_dir().join(format!("strata-tenant-routes-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let tenant = Tenant::new(&dir, Path::new("/nowhere"));
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), Path::new("/nowhere"));
         tenant.put("p1", "v1/clusterprofiles/u1", &json!({}));
         tenant.put("p2", "v1/clusterprofiles/u1", &json!({}));
         tenant.put(TENANT, "v1/clusterprofiles/u2", &json!({}));
         tenant.put("p1", "v1/packs@filters=spec.name=a&limit=100", &json!({}));
         tenant.forbid("p1", "v1/spectroclusters/c1/config/rbacs");
         let routes = tenant.routes();
-        std::fs::remove_dir_all(&dir).unwrap();
         let want = [
             "v1/clusterprofiles/u1",
             "v1/clusterprofiles/u2",

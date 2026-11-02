@@ -1,17 +1,14 @@
 //! The tests of the runner.
 
 use super::*;
-use std::os::unix::fs::PermissionsExt;
+use crate::process::executable;
 
-/// A runner whose stand-in is a script that writes a port and waits for the end of its input.
-/// `test` names the directory of the test, so two tests can start a runner at once.
-fn runner(mode: Mode, test: &str) -> Runner {
-    let repo = std::env::temp_dir().join(format!("strata-book-{test}-{}", std::process::id()));
-    std::fs::create_dir_all(&repo).expect("a directory");
+/// A runner whose stand-in is a script that writes a port and waits for the end of its input. The
+/// script is in `repo`, the directory of the test, so two tests can start a runner at once.
+fn runner(mode: Mode, repo: &Path) -> Runner {
     let script = repo.join("stand-in");
-    std::fs::write(&script, "#!/bin/sh\necho 4242 > \"$3\"\ncat > /dev/null\n").expect("a script");
-    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("a mode");
-    Runner::start(&repo, &repo.join("strata"), &script, mode).expect("a runner")
+    executable(&script, "#!/bin/sh\necho 4242 > \"$3\"\ncat > /dev/null\n");
+    Runner::start(repo, &repo.join("strata"), &script, mode).expect("a runner")
 }
 
 #[test]
@@ -20,7 +17,8 @@ fn a_served_run_writes_the_answer_of_the_chapter_it_builds_and_no_other() {
         chapter: "served".to_string(),
         seed: 1,
     };
-    let mut r = runner(mode, "served");
+    let repo = tempfile::tempdir().unwrap();
+    let mut r = runner(mode, repo.path());
     let answer = serde_json::json!({"ok": true});
     r.chapter("other", &[]);
     r.answer("p", "v1/other", &answer);
@@ -28,12 +26,12 @@ fn a_served_run_writes_the_answer_of_the_chapter_it_builds_and_no_other() {
     r.chapter("served", &[]);
     r.answer("p", "v1/served", &answer);
     assert!(r.tenant.doc("p", "v1/served").is_file());
-    let _ = std::fs::remove_dir_all(r.repo.clone());
 }
 
 #[test]
 fn a_run_keeps_the_routes_of_the_tenant_of_each_chapter_when_the_next_chapter_clears_it() {
-    let mut r = runner(Mode::Write, "routes");
+    let repo = tempfile::tempdir().unwrap();
+    let mut r = runner(Mode::Write, repo.path());
     let answer = serde_json::json!({"ok": true});
     r.chapter("first", &[]);
     r.answer("p", "v1/first/u1", &answer);
@@ -44,7 +42,6 @@ fn a_run_keeps_the_routes_of_the_tenant_of_each_chapter_when_the_next_chapter_cl
     r.routes.extend(r.tenant.routes());
     let routes: Vec<&str> = r.routes.iter().map(String::as_str).collect();
     assert_eq!(routes, ["v1/first/u1", "v1/second"]);
-    let _ = std::fs::remove_dir_all(r.repo.clone());
 }
 
 #[test]
@@ -110,9 +107,10 @@ fn each_duration_that_preflight_prints_becomes_one_fixed_value() {
 
 #[test]
 fn a_harvest_keeps_the_documents_of_each_chapter_in_its_own_directory_and_runs_no_command() {
-    let into = std::env::temp_dir().join(format!("strata-harvest-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&into);
-    let mut r = runner(Mode::Harvest { into: into.clone() }, "harvest");
+    let repo = tempfile::tempdir().unwrap();
+    let harvest = tempfile::tempdir().unwrap();
+    let into = harvest.path().to_path_buf();
+    let mut r = runner(Mode::Harvest { into: into.clone() }, repo.path());
     let answer = serde_json::json!({"ok": true});
     r.chapter("first", &[]);
     r.answer("p", "v1/first/u1", &answer);
@@ -126,7 +124,6 @@ fn a_harvest_keeps_the_documents_of_each_chapter_in_its_own_directory_and_runs_n
     assert!(into.join("second/p/v1/second.json").is_file());
     assert!(!into.join("first/p/v1/second.json").exists());
     assert!(!into.join("second/p/v1/first/u1.json").exists());
-    let _ = std::fs::remove_dir_all(&into);
 }
 
 #[test]
@@ -144,7 +141,8 @@ fn the_examples_are_built_when_the_first_example_profile_is_there() {
 
 #[test]
 fn a_step_of_the_book_gets_the_stand_in_for_the_endpoint_and_no_setting_of_the_machine() {
-    let mut r = runner(Mode::Write, "report-address");
+    let repo = tempfile::tempdir().unwrap();
+    let mut r = runner(Mode::Write, repo.path());
     r.chapter("send", &[]);
     let (code, address, _) = r.run("printf '%s' \"$STRATA_REPORT_URL\"", false);
     assert_eq!(code, 0);
@@ -157,5 +155,4 @@ fn a_step_of_the_book_gets_the_stand_in_for_the_endpoint_and_no_setting_of_the_m
     // the step starts from an empty environment: a setting of the machine does not reach it
     let (code, setting, _) = r.run("printf '%s' \"${STRATA_REPORT-unset}\"", false);
     assert_eq!((code, setting.as_str()), (0, "unset"));
-    let _ = std::fs::remove_dir_all(r.repo.clone());
 }

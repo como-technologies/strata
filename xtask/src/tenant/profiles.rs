@@ -2,11 +2,13 @@
 //! drafts.
 
 use serde_json::{Value, json};
+use strata::closed_set::ClosedSet;
+use strata::model::scope::ProfileScope;
 
 use super::edit::Edit;
 use super::routes::{
-    REGISTRY_LISTING, audit_log_file, export_file, manifest_route, manifests_route, profile_route,
-    variables_route,
+    REGISTRY_LISTING, audit_log_file, empty_audit_log, export_file, manifest_route,
+    manifests_route, profile_route, variables_route,
 };
 use super::{TENANT, Tenant};
 
@@ -14,14 +16,14 @@ impl Tenant {
     /// Publish a copy of the example profile `example`, such as `aws-stack@1.1.1`, in `project`
     /// under `uid` and `version`, with each edit applied.
     pub fn profile(&self, project: &str, uid: &str, version: &str, example: &str, edits: &[Edit]) {
-        self.profile_of_scope(project, "project", uid, version, example, edits);
+        self.profile_of_scope(project, ProfileScope::Project, uid, version, example, edits);
     }
 
     /// Publish a copy of the example profile `example` at tenant scope, under `uid` and
     /// `version`. Palette lists a profile of the tenant in each project, beside the profiles of
     /// the project. It serves its document there too, so `listings` gives each project a copy.
     pub fn tenant_profile(&self, uid: &str, version: &str, example: &str, edits: &[Edit]) {
-        self.profile_of_scope(TENANT, "tenant", uid, version, example, edits);
+        self.profile_of_scope(TENANT, ProfileScope::Tenant, uid, version, example, edits);
     }
 
     /// Publish a copy of `example` in the directory `project`, with the scope `scope` in
@@ -29,7 +31,7 @@ impl Tenant {
     fn profile_of_scope(
         &self,
         project: &str,
-        scope: &str,
+        scope: ProfileScope,
         uid: &str,
         version: &str,
         example: &str,
@@ -40,7 +42,7 @@ impl Tenant {
             .unwrap_or_else(|e| panic!("{}: {e}", from.display()));
         let mut doc: Value = serde_json::from_str(&text).expect("an example profile is JSON");
         doc["metadata"]["uid"] = json!(uid);
-        doc["metadata"]["annotations"]["scope"] = json!(scope);
+        doc["metadata"]["annotations"]["scope"] = json!(scope.as_str());
         doc["spec"]["version"] = json!(version);
         doc["status"]["inUseClusterUids"] = json!([]);
         doc["status"]["inUseClusters"] = json!([]);
@@ -159,7 +161,7 @@ impl Tenant {
             &profile_route(uid),
             &json!({
                 "apiVersion": "v1", "kind": "ClusterProfile",
-                "metadata": {"name": name, "uid": uid, "annotations": {"scope": "project"}},
+                "metadata": {"name": name, "uid": uid, "annotations": {"scope": ProfileScope::Project.as_str()}},
                 "spec": {"version": version, "published": {"cloudType": "all", "type": "add-on",
                     "packs": [{"name": "namespace-policy", "layer": "addon", "type": "manifest",
                         "tag": "1.0.0", "version": "1.0.0", "packUid": pack,
@@ -172,7 +174,7 @@ impl Tenant {
             project,
             &manifests_route(uid),
             &json!({
-                "metadata": {"name": name, "uid": uid, "annotations": {"scope": "project"}},
+                "metadata": {"name": name, "uid": uid, "annotations": {"scope": ProfileScope::Project.as_str()}},
                 "spec": {"packs": [{"metadata": {"name": "namespace-policy", "uid": pack},
                     "spec": {"name": "namespace-policy", "layer": "addon", "version": "1.0.0",
                         "manifests": [{"name": "namespace-policy", "content": content}]},
@@ -296,7 +298,7 @@ impl Tenant {
         let mut log = if self.doc(project, &path).is_file() {
             self.read(project, &path)
         } else {
-            json!({"items": [], "listmeta": {"continue": "", "limit": 100}})
+            empty_audit_log()
         };
         let items = log["items"].as_array_mut().expect("an audit log has items");
         let n = items.len();

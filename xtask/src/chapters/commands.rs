@@ -9,6 +9,8 @@ use super::ids::{
 use crate::book::Runner;
 use crate::tenant::Edit;
 use serde_json::json;
+use strata::closed_set::ClosedSet;
+use strata::model::cluster_state::ClusterState;
 
 /// Run the chapters of the command pages.
 pub(super) fn run(r: &mut Runner) {
@@ -626,7 +628,14 @@ fn verify_objects(r: &mut Runner) {
     r.quiet("strata snapshot aws-stack@1.1.1 -o releases/1.1.1/dev.json");
     r.quiet("strata snapshot cluster:payments -o runs/payments.json");
     // the cluster goes: it runs the same copy, and the verdict says the state
-    r.tenant(|t| t.cluster_field(DEV, PAYMENTS, "/status/state", json!("Deleting")));
+    r.tenant(|t| {
+        t.cluster_field(
+            DEV,
+            PAYMENTS,
+            "/status/state",
+            json!(ClusterState::Deleting.as_str()),
+        )
+    });
     r.step(
         "verify-state-full",
         0,

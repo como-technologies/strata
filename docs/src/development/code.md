@@ -45,9 +45,11 @@ where each module goes.
 - When a public module moves under a new parent, keep a `pub use` at the old
   path for one minor release.
 - `cargo test -p xtask` checks the limit of 800 lines for each module file of
-  `src/`, `xtask`, `preflight/src/`, `fuzz/src/`, and `report-endpoint/src/`. It checks the
-  limit of 80 lines for each function of the five, with the unit tests out of the count. A
-  file named `tests.rs` holds only tests, so it has no limit.
+  `src/`, `xtask/src/`, `preflight/src/`, `fuzz/src/`, `report-endpoint/src/`, and
+  `benches/src/`. It checks the limit of 80 lines for each function of the six.
+- The check parses each file, so it counts a function with any head, such as `async fn`.
+  Code under `#[cfg(test)]` is out of the count, and the code after it is in. A file named
+  `tests.rs` holds only tests, so it has no limit.
 
 ## Visibility
 
@@ -204,11 +206,20 @@ ASD-STE100.
   Both stop the send of the report: see
   [The tests send no report](./build-test.md#the-tests-send-no-report).
 - Start a process with `output_locked` or `spawn_locked` of `CommandExt`, never
-  with `output`, `spawn`, or `status` of `Command`. Write a script that a test
+  with `output`, `spawn`, or `status` of `Command`. To wait for the end of a
+  process, call `wait` on the result of `spawn_locked`. Write a script that a test
   runs with `executable`. The tests run on many threads, and the two functions
   share a lock. Without it, a process can start during the write and keep the
   script open. The run of the script then fails with "Text file busy".
-  `tests/spawn.rs` makes sure of the rule.
+- `CommandExt` and `executable` are in `tests/common/process.rs`. The tests of
+  `strata-preflight` and of `xtask` include that file with `#[path]`, so one lock
+  covers the processes of the three packages. The runner of the book in `xtask`
+  takes the same lock. `tests/spawn.rs` scans `tests/`, `preflight/tests/`, and
+  `xtask/src/`, and makes sure of the rule. The other packages start no process, so
+  they need no lock.
+- Make a temporary directory with `tempfile::tempdir()`, never by hand from
+  `std::env::temp_dir()`. The directory goes when the test ends, also when the
+  test fails.
 
 ## Before the review
 

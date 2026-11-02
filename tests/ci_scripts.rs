@@ -617,7 +617,7 @@ fn each_reusable_workflow_names_each_option_of_its_script() {
 /// The GitLab job reads the variable that takes the place of each input, and passes the option.
 #[test]
 fn each_gitlab_job_sets_the_options_that_its_reusable_workflow_sets() {
-    let gitlab = repo_file("examples/ci/gitlab/strata.yml");
+    let gitlab = repo_file(GITLAB_DROP_IN);
     for w in &WRAPPERS {
         let job = gitlab_job_text(&gitlab, w.job);
         assert!(!job.is_empty(), "the drop-in has no job {}", w.job);
@@ -817,7 +817,7 @@ fn each_script_passes_the_options_of_its_command_or_omits_them_on_purpose() {
 #[test]
 fn the_preflight_workflow_and_the_gitlab_job_give_each_input_to_the_script_as_a_variable() {
     let script = code_of("scripts/ci/preflight.sh");
-    let gitlab = repo_file("examples/ci/gitlab/strata.yml");
+    let gitlab = repo_file(GITLAB_DROP_IN);
     let job = gitlab_job_text(&gitlab, "strata-preflight");
     let workflow = workflow("preflight.yml");
     let inputs = workflow["on"]["workflow_call"]["inputs"]
@@ -889,8 +889,7 @@ fn the_preflight_workflow_and_the_gitlab_job_give_each_input_to_the_script_as_a_
 /// the drop-in sets, and `preflight.sh` is a stand-in that logs its arguments.
 #[test]
 fn the_gitlab_preflight_job_gives_the_script_offline_for_the_static_tier_without_a_watch() {
-    let gitlab: serde_yaml::Value =
-        serde_yaml::from_str(&repo_file("examples/ci/gitlab/strata.yml")).unwrap();
+    let gitlab = gitlab_drop_in();
     let lines: Vec<&str> = gitlab["strata-preflight"]["script"]
         .as_sequence()
         .expect("the job has script lines")
@@ -948,8 +947,7 @@ fn a_variable_in_a_path_is_found_with_or_without_braces() {
 /// empty, or each rule of the job selects the job only when the variable is set.
 #[test]
 fn no_gitlab_job_keeps_an_artifact_at_the_path_that_an_empty_variable_names() {
-    let gitlab: serde_yaml::Value =
-        serde_yaml::from_str(&repo_file("examples/ci/gitlab/strata.yml")).unwrap();
+    let gitlab = gitlab_drop_in();
     let mut paths = 0;
     for (job, body) in gitlab.as_mapping().unwrap() {
         let job = job.as_str().unwrap();
@@ -991,8 +989,7 @@ fn no_gitlab_job_keeps_an_artifact_at_the_path_that_an_empty_variable_names() {
 /// is the same job otherwise.
 #[test]
 fn the_gitlab_job_of_the_upstream_report_keeps_an_artifact_only_when_it_saves_a_file() {
-    let gitlab: serde_yaml::Value =
-        serde_yaml::from_str(&repo_file("examples/ci/gitlab/strata.yml")).unwrap();
+    let gitlab = gitlab_drop_in();
     assert_eq!(
         gitlab["variables"]["STRATA_SAVE"].as_str(),
         Some(""),
@@ -4341,6 +4338,54 @@ fn the_host_layer_of_the_two_report_scripts_differs_only_in_the_lines_of_their_o
         assert_eq!(v, u, "the layers differ at line {} of the layer", i + 1);
     }
     assert_eq!(verify.len(), upstream.len(), "one layer is longer");
+}
+
+/// The GitLab functions and the host block of `pr-comment.sh` are those of `verify-report.sh`, line
+/// for line. Like the two report scripts, `pr-comment.sh` is one download that stands alone, so
+/// the copy is on purpose, and a change to one copy must reach the others. Only the name of the
+/// script in a message, and the object that the token writes, differ.
+#[test]
+fn the_gitlab_layer_of_pr_comment_is_the_gitlab_layer_of_the_report_scripts() {
+    /// Where a part of a script ends.
+    enum End {
+        /// The line that starts the part is the whole part.
+        SameLine,
+        /// The first line that is this text, which ends a function.
+        Line(&'static str),
+        /// The line before the first empty line.
+        BeforeEmpty,
+    }
+    let part = |name: &str, from: &str, end: &End| -> Vec<String> {
+        let text = repo_file(&format!("scripts/ci/{name}"))
+            .replace("pr-comment:", "$script:")
+            .replace("cannot write notes", "cannot write issues");
+        let lines: Vec<&str> = text.lines().skip_while(|l| !l.starts_with(from)).collect();
+        let length = match end {
+            End::SameLine => 1,
+            End::Line(last) => lines.iter().position(|l| l == last).map_or(0, |n| n + 1),
+            End::BeforeEmpty => lines.iter().position(|l| l.is_empty()).unwrap_or(0),
+        };
+        lines[..length].iter().map(|l| l.to_string()).collect()
+    };
+    let parts = [
+        ("the call of the API", "gitlab_api() {", End::Line("}")),
+        ("the repo", "gitlab_repo() {", End::SameLine),
+        ("the dispatch", "host() {", End::SameLine),
+        (
+            "the host block",
+            "# The CI variables name the host when nothing else does.",
+            End::BeforeEmpty,
+        ),
+    ];
+    for (what, from, end) in parts {
+        let comment = part("pr-comment.sh", from, &end);
+        assert!(!comment.is_empty(), "{what} is not found in pr-comment.sh");
+        assert_eq!(
+            comment,
+            part("verify-report.sh", from, &end),
+            "{what} differs in pr-comment.sh"
+        );
+    }
 }
 
 #[test]

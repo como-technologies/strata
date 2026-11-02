@@ -16,6 +16,7 @@ use crate::checks::OutputState;
 use crate::contract::StandIn;
 use crate::files::{files_with_ext, output_dir};
 use crate::palette::REPORT_ENDPOINT;
+use crate::process::CommandExt;
 use crate::tenant::{Edit, PROJECT_LISTING, TENANT, Tenant};
 
 /// How many runners this process started, so that two runners of one process (two tests) work in
@@ -144,7 +145,7 @@ impl Runner {
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
-            .spawn()?;
+            .spawn_locked()?;
         let hold = server.stdin.take();
         let mut port = None;
         for _ in 0..100 {
@@ -485,7 +486,10 @@ impl Runner {
         }
         c.stdout(Stdio::from(out));
         c.stderr(Stdio::from(err));
-        let status = c.status().expect("bash runs");
+        let status = c
+            .spawn_locked()
+            .and_then(|mut bash| bash.wait())
+            .expect("bash runs");
         let kept = std::fs::read_to_string(&out_file).unwrap_or_default();
         let rest = if join {
             String::new()

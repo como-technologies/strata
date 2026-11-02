@@ -4,8 +4,10 @@
 use super::DEV_ENV;
 use super::ids::{A110, A111, AWS_STANDARD, DEV, GCP_STACK, PAYMENTS, PLATFORM_AWS, PROD};
 use crate::book::Runner;
-use crate::tenant::Edit;
+use crate::tenant::{Edit, cluster_validate_route};
 use serde_json::json;
+use strata::closed_set::ClosedSet;
+use strata::model::scope::ProfileScope;
 
 /// The body of an AWS create named `name`, for the profile `profile`. It names the cloud account
 /// platform-aws, and two pools of t3.xlarge in one zone, with one worker.
@@ -30,7 +32,9 @@ pub(super) fn preflight_entity(name: &str, profile: &str) -> String {
 }
 
 /// The route of Palette that checks the body of an AWS create, with nothing created.
-pub(super) const AWS_VALIDATE: &str = "v1/spectroclusters/aws/validate";
+pub(super) fn aws_validate() -> String {
+    cluster_validate_route("aws")
+}
 
 /// The answer of the validate route when a pool has too few cores for the packs. The one worker of
 /// `preflight_entity` has 4 cores, and the packs need 4.1.
@@ -102,7 +106,7 @@ pub(super) fn preflight_routes(r: &mut Runner, project: &str) {
         &format!("v1/cloudaccounts/aws/{PLATFORM_AWS}"),
         &json!({"kind": "aws",
             "metadata": {"name": "platform-aws", "uid": PLATFORM_AWS,
-                "annotations": {"scope": "project"}},
+                "annotations": {"scope": ProfileScope::Project.as_str()}},
             "spec": {"credentialType": "secret", "partition": "aws", "policyARNs": []}, "status": {"state": "Active"}}),
     );
     // the listing of the AWS accounts of the project: the contract run takes the account of the
@@ -144,7 +148,7 @@ pub(super) fn preflight_routes(r: &mut Runner, project: &str) {
         &format!("v1/clouds/aws/regions/us-east-2/keypairs@cloudAccountUid={PLATFORM_AWS}"),
         &json!({"keyNames": ["platform", "lab"]}),
     );
-    r.answer(project, AWS_VALIDATE, &cpu_floor_answer());
+    r.answer(project, &aws_validate(), &cpu_floor_answer());
 }
 
 /// The chapter `preflight`: can Palette build this cluster?

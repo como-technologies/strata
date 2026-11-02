@@ -2,8 +2,8 @@
 name = "strata-benches"
 version = "0.1.0"
 edition = "2024"
-# The same floor as strata: the msrv job builds the benchmarks too.
-rust-version = "1.88"
+# The floor of the workspace: the msrv job builds the benchmarks too.
+rust-version.workspace = true
 description = "Benchmarks for strata: the snapshot, the comparison, the renderers, verify, consumers, the resolve of a candidate, and strata-preflight, at the size that Palette permits"
 publish = false
 # The benchmarks are the targets below, and they have no harness of cargo: criterion has its own.
