@@ -1,6 +1,6 @@
 [package]
 name = "strata-fuzz"
-version = "0.26.0"
+version = "0.27.0"
 edition = "2024"
 # The same floor as strata: this crate uses the same `if let` chains.
 rust-version = "1.88"

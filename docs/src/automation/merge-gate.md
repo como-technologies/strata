@@ -166,10 +166,10 @@ permissions:
   contents: read
 jobs:
   gate:
-    uses: como-technologies/strata/.github/workflows/merge-gate.yml@v0.26.0
+    uses: como-technologies/strata/.github/workflows/merge-gate.yml@v0.27.0
     with:
       records: releases/**/*.json
-      strata-version: v0.26.0
+      strata-version: v0.27.0
       base: main              # the default branch, for a merge queue run
     secrets:
       strata-token: ${{ secrets.STRATA_READ_TOKEN }}   # while this repository is private
