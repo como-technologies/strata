@@ -4,6 +4,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use strata_preflight::rule::Catalog;
+
 use super::check::{NOT_FACTS, check as faults_of, route_matches, template_matches};
 use super::model::{Fact, load};
 use super::sources::{
@@ -632,40 +634,31 @@ fn only_the_level_two_headings_are_sections() {
 
 #[test]
 fn the_requests_of_the_rules_are_the_palette_checks_with_their_method_and_their_rules() {
-    let dir = directory("rules");
-    let rules = dir.join("preflight/rules");
-    std::fs::create_dir_all(&rules).unwrap();
-    write(
-        &rules,
-        "a.yaml",
-        "\
-section: a
-rules:
-  - id: static-rule
-    check:
-      kind: static
-      expr: 'true'
-  - id: reads-profile
-    check:
-      kind: palette
-      path: /v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}
-      expr: 'true'
-  - id: validates
-    check:
-      kind: palette
-      method: post
-      path: /v1/spectroclusters/{{ .routeCloud }}/validate
-      expr: 'true'
-  - id: reads-profile-again
-    check:
-      kind: palette
-      method: GET
-      path: /v1/clusterprofiles/{{ $item.uid }}
-      expr: 'true'
-",
+    let rule = |id: &str, check: &str| {
+        format!(
+            "  - id: {id}\n    title: t\n    engines: [all]\n    tier: palette\n    status: seen\n    what: w\n    check:\n{check}\n"
+        )
+    };
+    let section = format!(
+        "section: a\ntitle: A\nrules:\n{}{}{}{}",
+        rule("static-rule", "      kind: static\n      expr: 'true'"),
+        rule(
+            "reads-profile",
+            "      kind: palette\n      path: /v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}\n      expr: 'true'"
+        ),
+        rule(
+            "validates",
+            "      kind: palette\n      method: POST\n      path: /v1/spectroclusters/{{ .routeCloud }}/validate\n      expr: 'true'"
+        ),
+        rule(
+            "reads-profile-again",
+            "      kind: palette\n      method: GET\n      path: /v1/clusterprofiles/{{ $item.uid }}\n      each: .entity.spec.profiles\n      expr: 'true'"
+        ),
     );
-    let (ids, requests) = rule_requests(&dir);
-    std::fs::remove_dir_all(&dir).unwrap();
+    let catalog = Catalog {
+        sections: vec![serde_yaml::from_str(&section).expect("a section")],
+    };
+    let (ids, requests) = rule_requests(&catalog);
     assert_eq!(
         ids,
         set(&[

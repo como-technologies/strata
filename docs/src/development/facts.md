@@ -91,9 +91,10 @@ proves, with the reason. The third lists each live check that a fact names, as t
 
 ## What the check does
 
-The check reads the list, the book, the scripts of `examples/live/`, the rules of
-`preflight/rules/`, and the routes that the stand-in serves. It reports each fault with the id of the
-fact.
+The check reads the list, the book, the scripts of `examples/live/`, the catalog of rules that
+strata-preflight carries, and the routes that the stand-in serves. It reads the rules with the types
+of strata-preflight, and writes no second parse of a rule file. It reports each fault with the id of
+the fact.
 
 | The check fails when | Why |
 | --- | --- |

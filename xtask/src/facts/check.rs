@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use super::model::{Fact, Kind};
-use super::sources::{API_PAGE, FACT_PAGES, Sources, shape};
+use super::sources::{API_PAGE, FACT_PAGES, Sources, method_pattern, shape};
 
 /// The headings of `internals/palette/` that state nothing about Palette, each as `page#anchor`:
 /// they say how strata or the book works. Every other `##` heading needs a fact.
@@ -56,7 +56,7 @@ fn ids(facts: &[Fact]) -> Vec<String> {
 
 /// The fields that each fact must have, by its kind.
 fn fields(facts: &[Fact]) -> Vec<String> {
-    let method = Regex::new(r"^(GET|POST) /v1/\S+$").expect("a pattern");
+    let method = Regex::new(&format!(r"^({}) /v1/\S+$", method_pattern())).expect("a pattern");
     let mut bad = Vec::new();
     for fact in facts {
         let id = &fact.id;

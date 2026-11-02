@@ -18,6 +18,9 @@ serde_yaml = "0.9"
 # The order of versions comes from strata, the one parse of a version: see "Types and data" in
 # docs/src/development/code.md.
 strata = { path = ".." }
+# The rules that the list of the facts is compared with come from the catalog of strata-preflight,
+# the one parse of a rule file.
+strata-preflight = { path = "../preflight" }
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -6,6 +6,10 @@ use std::path::Path;
 use std::sync::LazyLock;
 
 use regex::Regex;
+use strata::api::Method;
+use strata::closed_set::ClosedSet;
+use strata_preflight::catalog::builtin;
+use strata_preflight::rule::{Catalog, Check};
 
 use super::model::{DIRECTORY, Fact, load};
 use crate::checks::anchors;
@@ -19,9 +23,6 @@ pub const FACT_PAGES: &str = "internals/palette";
 
 /// The directory of the live scripts, from the root of the repository.
 const LIVE: &str = "examples/live";
-
-/// The directory of the rules of strata-preflight, from the root of the repository.
-const RULES: &str = "preflight/rules";
 
 /// The page and the heading that list the checks of a script, when it is not the section
 /// `## <script>` of `development/live-runs.md`.
@@ -65,7 +66,7 @@ impl Sources {
     /// Read the list and what it is compared with, in the repository at `repo`. The messages are
     /// about the files of the list that cannot be read.
     pub fn read(repo: &Path, served: Option<BTreeSet<String>>) -> (Sources, Vec<String>) {
-        let (facts, bad) = load(&repo.join(DIRECTORY));
+        let (facts, mut bad) = load(&repo.join(DIRECTORY));
         let docs = book(repo);
         let mut sources = Sources {
             served,
@@ -96,14 +97,17 @@ impl Sources {
             .filter(|path| repo.join(path).is_file())
             .cloned()
             .collect();
-        (sources.rule_ids, sources.rule_requests) = rule_requests(repo);
+        match builtin() {
+            Ok(catalog) => (sources.rule_ids, sources.rule_requests) = rule_requests(&catalog),
+            Err(e) => bad.push(format!("the rules of strata-preflight: {e}")),
+        }
         sources.facts = facts;
         (sources, bad)
     }
 }
 
 /// The text of a file, or an empty text for a file that cannot be read. A check reports the
-/// missing thing that the text would have held.
+/// missing thing that the text must hold.
 fn read_text(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_default()
 }
@@ -119,10 +123,17 @@ pub fn shape(request: &str) -> String {
     format!("{method} {}", PLACEHOLDER.replace_all(path, "{}"))
 }
 
+/// The pattern of the method of a request: each value of [`Method`], so the pattern follows the
+/// type.
+pub(super) fn method_pattern() -> String {
+    let methods: Vec<&str> = Method::ALL.iter().map(|m| m.as_str()).collect();
+    methods.join("|")
+}
+
 /// The shape of each request in the first column of the tables of `page`: a code span that
-/// starts with `GET ` or `POST `.
+/// starts with a method and a space.
 pub(super) fn api_requests(page: &str) -> BTreeSet<String> {
-    let span = Regex::new(r"`((?:GET|POST) /[^`]*)`").expect("a pattern");
+    let span = Regex::new(&format!(r"`((?:{}) /[^`]*)`", method_pattern())).expect("a pattern");
     page.lines()
         .filter(|line| line.starts_with('|'))
         .filter_map(|line| line.trim_start_matches('|').split('|').next())
@@ -208,30 +219,20 @@ pub(super) fn book_rows(docs: &Path) -> BTreeMap<String, BTreeSet<String>> {
     rows
 }
 
-/// The id of each rule of strata-preflight, and the rules that send each request of Palette, by
-/// the shape of the request. A rule sends one when its check is of the kind `palette`.
-pub(super) fn rule_requests(repo: &Path) -> (BTreeSet<String>, BTreeMap<String, BTreeSet<String>>) {
+/// The id of each rule of `catalog`, and the rules that send each request of Palette, by the
+/// shape of the request. A rule sends one when its check is a [`Check::Palette`].
+pub(super) fn rule_requests(
+    catalog: &Catalog,
+) -> (BTreeSet<String>, BTreeMap<String, BTreeSet<String>>) {
     let mut ids = BTreeSet::new();
     let mut requests: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for file in files_with_ext(&repo.join(RULES), "yaml") {
-        let Ok(section) = serde_yaml::from_str::<serde_yaml::Value>(&read_text(&file)) else {
-            continue;
-        };
-        for rule in section["rules"].as_sequence().into_iter().flatten() {
-            let Some(id) = rule["id"].as_str() else {
-                continue;
-            };
-            ids.insert(id.to_string());
-            let check = &rule["check"];
-            if check["kind"].as_str() == Some("palette")
-                && let Some(path) = check["path"].as_str()
-            {
-                let method = check["method"].as_str().unwrap_or("GET").to_uppercase();
-                requests
-                    .entry(shape(&format!("{method} {path}")))
-                    .or_default()
-                    .insert(id.to_string());
-            }
+    for rule in catalog.rules() {
+        ids.insert(rule.id.clone());
+        if let Some(Check::Palette(check)) = &rule.check {
+            requests
+                .entry(shape(&format!("{} {}", check.method, check.path)))
+                .or_default()
+                .insert(rule.id.clone());
         }
     }
     (ids, requests)
