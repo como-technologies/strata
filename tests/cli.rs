@@ -154,6 +154,31 @@ fn a_command_name_that_is_not_first_says_so_instead_of_failing_as_a_compare() {
     assert_eq!(r.code, 0, "{}{}", r.out, r.err);
 }
 
+/// `strata report` is a command, so a file named `report` is the command when it comes first, and
+/// `compare` reads it as a file (compatibility.md, release 0.27.0).
+#[test]
+fn a_file_named_report_names_the_command_after_another_argument_and_compare_reads_it_as_a_file() {
+    let fx = fixtures();
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::copy(&fx.a, dir.path().join("report")).unwrap();
+    let mut c = Command::new(strata_bin());
+    c.args(["compare", "report", &fx.a2])
+        .current_dir(dir.path())
+        .env("STRATA_QUIET", "1");
+    let r = Run::of(&mut c);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(r.out.contains("IDENTICAL"), "{}", r.out);
+
+    let r = run(&[&fx.a, "report"]);
+    assert_eq!(r.code, 2, "{}{}", r.out, r.err);
+    assert!(
+        r.err
+            .contains("'report' is a command, so it comes first: strata report ..."),
+        "{}",
+        r.err
+    );
+}
+
 #[test]
 fn each_command_that_reads_a_record_with_a_null_variable_name_names_the_field_and_exits_two() {
     let fx = fixtures();

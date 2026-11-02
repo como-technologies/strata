@@ -88,6 +88,6 @@ impact on running clusters.
   about a change, and `preflight` before a build.
 - [Use cases](./use-cases/index.md): a problem, the commands, and the fix.
 - [Commands](./commands/index.md): each command, its output, and its options.
-- [Palette gives a value that strata does not know](./use-cases/unknown-value.md): what to do when
-  strata writes a note about a value that this release does not know, and how to tell the
-  maintainers, by hand or with the setting `STRATA_REPORT`.
+- [Palette gives a value that strata does not know](./use-cases/unknown-value.md): what to do about a
+  note of a value that this release does not know. It also shows how to tell the maintainers, by
+  hand or with the setting `STRATA_REPORT`.

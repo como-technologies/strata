@@ -27,6 +27,7 @@ gives the command and the page of each job.
 | Nobody works | An issue opens when somebody changes a version or a cluster outside a review, or when a pack that you pin has a newer version. | the jobs of the night |
 | A pack has a security fault | Each profile and each cluster that carries the pack, what changed, and who changed it. | a person at a terminal |
 | You delete an old version | When a cluster or a template still uses it, the gate stays closed. | the retire gate, on demand |
+| A job writes a note about a value that strata does not know | The value, the route that gave it, and a link that opens an issue of strata. Strata sends nothing unless you choose the send. | a person at a terminal, on the machine of the job |
 
 The chart puts each step in its lane. An arrow goes from a step to the step that
 it leads to. An issue of the night leads to a pull request.
@@ -55,8 +56,8 @@ flowchart TB
 
 Strata publishes nothing, and it deletes nothing. The pipeline of the team does
 each write, and it decides what to do with each answer. Strata sends nothing about
-your tenants either, unless a person sets `STRATA_REPORT=1`. See
-[What strata can report](./reference/report.md).
+your tenants either, unless a person chooses the send, with `STRATA_REPORT=1` or a yes to its one
+question. See [What strata can report](./reference/report.md).
 
 ## The jobs and their commands
 
@@ -76,6 +77,7 @@ of a job and the page that describes it.
 | Each night | a scheduled job | Does the registry have newer versions of what we pin? | `upstream-report.sh` | [Upstream issues](./automation/upstream-issues.md) |
 | An incident | a person at a terminal | Who carries this pack, who runs it, what changed, and who changed it? | `list --pack`, `consumers`, `compare`, `verify --who` | [Find the profiles that carry a pack](./use-cases/find-a-pack.md) |
 | The end of a version | a person, on demand | Does anything still use it? | `consumers` | [Retire a version](./use-cases/retire.md) |
+| A note of an unknown value | a person, on demand | Which values of Palette does this release not know? | `report`, `report --link`, and `report --sent`; `STRATA_REPORT=1` in the job for the send | [Palette gives a value that strata does not know](./use-cases/unknown-value.md) |
 
 ## One change, from the pull request to the retire
 
@@ -345,6 +347,8 @@ job also writes one note on standard error:
 {{#include output/unknown-value-note.txt}}
 ```
 
+**Follow along.** `just playground unknown-value` serves a tenant with such a value.
+
 A job that passes `--quiet` hides the note. The note also adds one line to a log on the machine of
 the job. [The note for a value that Palette gives](./reference/compatibility.md#the-note-for-a-value-that-palette-gives)
 says what the note and the log hold.
@@ -358,8 +362,9 @@ choose it: you read the report, and you decide whether to send it by hand or by 
 ## Palette behavior
 
 The live run of `just live-loop` runs this loop end to end against a tenant,
-with the records in a git repository: the comment, the merge gate, the publish,
-the questions to Palette about a move, `preflight` on the body of a cluster, the
-nightly jobs, a value overridden on a cluster, an edit in place, an incident,
-and a retire. See
+with the records in a git repository. It covers the comment, the merge gate, the
+publish, and the questions to Palette about a move. It covers `preflight` on the
+body of a cluster, the nightly jobs, and a value overridden on a cluster. It
+covers an edit in place, an incident, a retire, and a read of the log of the
+unknown values. See
 [What the live example verifies](./development/live-runs.md#loopsh).

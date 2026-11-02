@@ -89,9 +89,27 @@ each message is one failure; or an object `{pass, message}`.
 | Kind | Fields | Adds to the world |
 | --- | --- | --- |
 | `static` | `expr` | nothing |
-| `palette` | `method` (`GET`, `POST`), `path` (with `{{ jq }}` templates), `body` (a jq program that gives the body of a POST; default `.entity`), `each` (a jq program that gives a list; see [A request for each item](#a-request-for-each-item)), `refusal_codes` (the codes of a 5xx that are an answer; see [A refusal at a 5xx](#a-refusal-at-a-5xx)), `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx with a code of `refusal_codes` is an answer too. Another 5xx or a transport error is `ERROR`. With `each`, `responses` instead. |
-| `exec` | `argv` (each with templates), `needs` (the tools, checked on the PATH), `timeout` (seconds, default 60), `palette` (a `path` with templates; see [A read of Palette before the command](#a-read-of-palette-before-the-command)), `also` (the second command; see [A second command](#a-second-command)), `expr` | `exec`: `{exit, stdout, stderr}`. `stdout` is JSON when it parses. A tool that is not there is `NOT CHECKED`. With `palette`, also `response`. With `also`, also `also`, in the same shape. |
+| `palette` | `method`, `path`, `body`, `each`, `refusal_codes`, `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx with a code of `refusal_codes` is an answer too. Another 5xx or a transport error is `ERROR`. With `each`, `responses` instead. |
+| `exec` | `argv`, `needs`, `timeout`, `palette`, `also`, `expr` | `exec`: `{exit, stdout, stderr}`. `stdout` is JSON when it parses. A tool that is not there is `NOT CHECKED`. With `palette`, also `response`. With `also`, also `also`, in the same shape. |
 | `watch` | `expr` | `cluster`, `summary`, `events`, `elapsed` (seconds), on each reading |
+
+The fields of a check of kind `palette`:
+
+- `method` is `GET` or `POST`.
+- `path` takes `{{ jq }}` templates.
+- `body` is a jq program that gives the body of a POST. The default is `.entity`.
+- `each` is a jq program that gives a list: see [A request for each item](#a-request-for-each-item).
+- `refusal_codes` lists the codes of a 5xx that are an answer: see
+  [A refusal at a 5xx](#a-refusal-at-a-5xx).
+
+The fields of a check of kind `exec`:
+
+- `argv` is the command and its arguments. Each word takes templates.
+- `needs` lists the tools. The check looks for them on the PATH.
+- `timeout` is in seconds. The default is 60.
+- `palette` is a `path` with templates: see
+  [A read of Palette before the command](#a-read-of-palette-before-the-command).
+- `also` is the second command: see [A second command](#a-second-command).
 
 jq is jaq 3, which runs the programs of jq 1.7 with a small number of
 differences. Two to know: `false // x` gives `x`, so read a boolean with
@@ -272,8 +290,8 @@ The program of `expr` reads `.response`, as a check of Palette does, and `.exec`
 `argv` read the world alone. The check runs in this order:
 
 1. With no key, the result is `NOT RUN`, and no command runs.
-2. A tool in `needs` that is not there makes the result `NOT CHECKED`, and no request goes out.
-3. The request goes out. A 4xx is an answer in `.response`. A transport error, a 5xx, a 401, a 403, or a
+2. A tool in `needs` that is not there makes the result `NOT CHECKED`, and the check sends no request.
+3. The check sends the request. A 4xx is an answer in `.response`. A transport error, a 5xx, a 401, a 403, or a
    429 is `ERROR`, and the report names the request. A read has no `refusal_codes`, so each 5xx is `ERROR`.
 4. The command runs, and the program judges both answers.
 
@@ -402,7 +420,9 @@ runs:
 ```
 
 The binary carries the ledger of the lab. `--ledger FILE` adds the runs of a
-company. `4.10.3` and `4.10` are one release for the counts.
+company.
+
+`4.10.3` and `4.10` are one release for the counts.
 When a report names a release, only the runs of that release count. A run
 with no release (`release: ""`) is a run of an older release, so it counts for
 no release. See [The runs of one release](../commands/preflight/promotion.md#the-runs-of-one-release).

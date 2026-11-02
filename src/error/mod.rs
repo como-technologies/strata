@@ -33,9 +33,9 @@ pub enum Error {
         alternate: &'static str,
     },
     /// Palette answered with a non-2xx status. A 401 or a 403 is almost always the key, so the
-    /// message names where a key comes from; the body alone names nothing the reader can set. A 403
-    /// with the code `ProjectUidIsNotEmpty` is no fault of the key: the message says that the route
-    /// is of the tenant scope and that the request named a project.
+    /// message names where a key comes from. The body alone names nothing that the reader can set.
+    /// A 403 with the code `ProjectUidIsNotEmpty` is no fault of the key. The message says that the
+    /// route is of the tenant scope and that the request named a project.
     #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body, BODY_IN_MESSAGE), status_hint(*status, body))]
     Api {
         /// The request method.

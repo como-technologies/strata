@@ -72,8 +72,8 @@ The command then stops with the error `log-invalid`, prints nothing, and marks n
 
 ## Send a report
 
-`strata report --link` prints the address of a new issue of strata. The title and the body are
-filled in with the report as markdown. Open the address in a browser, read each field, and send
+`strata report --link` prints the address of a new issue of strata. The address holds the title,
+and the report as markdown in the body. Open the address in a browser, read each field, and send
 the issue from your own account. With the link, strata sends nothing itself. To send with no
 action of yours, see [Send the report by itself](#send-the-report-by-itself).
 
@@ -196,5 +196,5 @@ log is reported whole.
 
 The note of an unknown value can end with the words `strata report` shows what you can send. This
 hint shows one time in a day at most. It shows only when standard error is a terminal. It never
-shows with `--quiet` or `STRATA_QUIET`, and a run that hides the hint does not use up the day. A
-job in CI runs with no terminal, so it prints no hint.
+shows with `--quiet` or `STRATA_QUIET`. A run that hides the hint does not record the time, so a
+later run of that day can show it. A job in CI runs with no terminal, so it prints no hint.

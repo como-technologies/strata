@@ -158,9 +158,9 @@ and a whole team.
 **9. When strata is out of date.** Palette changes between two releases of strata, and a
 maintainer cannot see your tenant.
 
-- [Palette gives a value that strata does not know](./unknown-value.md): a job writes a note that
-  Palette gave a value of a closed set which this release does not name, and you decide whether to
-  tell the maintainers, by hand or by the setting `STRATA_REPORT`.
+- [Palette gives a value that strata does not know](./unknown-value.md): a job writes a note about a
+  value that this release does not name. You decide whether to tell the maintainers, by hand or by
+  the setting `STRATA_REPORT`.
 
 ## The examples
 

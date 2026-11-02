@@ -285,9 +285,8 @@ impl Pack {
             .filter(|id| !id.is_empty())
     }
 
-    /// Build one pack from its ref on the profile template of a profile version and the matching
-    /// entry of the packs/manifests response (matched by name; missing entries leave those fields
-    /// empty).
+    /// Build one pack from its ref on the profile template of a profile version, and from the entry
+    /// of the packs/manifests response with its name. With no such entry, those fields are empty.
     pub fn from_api(pk: &Value, manifests_packs: &[Value]) -> Pack {
         Self::from_api_with(pk, manifests_packs, None, PROFILE_TEMPLATE)
     }

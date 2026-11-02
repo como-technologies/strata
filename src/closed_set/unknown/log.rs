@@ -13,7 +13,7 @@
 //! template, such as `/v1/clusterprofiles/{uid}`, and never the path of a real request.
 //!
 //! `status` and `errorCode` state a refusal of Palette. A value of a document that Palette served
-//! comes from an answer of status 2xx with no error code, so a line of such a value has neither.
+//! comes from an answer of status 2xx with no error code. So a line of such a value has neither.
 
 use std::path::{Path, PathBuf};
 

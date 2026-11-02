@@ -128,13 +128,16 @@ another estate. The bar is `0.8`, as a field of each rule, so that it can go up.
 A new Palette release sets the counts of a rule to zero for that release. A
 release is its first two numbers, as strata reads a version: `4.10.3` and `4.10`
 are one release, and so are `4` and `4.0`. A release that is not a version, such
-as `dev`, is the same release only as the same text. When a report names a
-release, only the runs of that release count. A run of an older release counts
-for nothing, and so does a run with no release: the ledger does not say which
-release it proved. The report gives the number of these older runs for each
-rule and engine. A rule that no run proved on the release is a probe until a run
-proves it, so a gate never rests on the behavior of an older release.
-`--promotion` with no `--release` counts each run.
+as `dev`, is the same release only as the same text.
+
+When a report names a release, only the runs of that release count. A run of an
+older release counts for nothing. A run with no release also counts for nothing,
+because the ledger does not say which release it proved. The report gives the
+number of these older runs for each rule and engine.
+
+A rule that no run proved on the release is a probe until a run proves it. So a
+gate never depends on the behavior of an older release. `--promotion` with no
+`--release` counts each run.
 
 ## The section scorecard
 

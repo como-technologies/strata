@@ -37,7 +37,7 @@ fields of the log and a `count`:
 
 ## A link that opens a new issue
 
-`--link` prints the address of a new issue of strata, with the title and the body filled in:
+`--link` prints the address of a new issue of strata. The address holds the title and the body:
 
 ```text
 {{#include ../output/unknown-value-report-link.txt}}

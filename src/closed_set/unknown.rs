@@ -13,9 +13,10 @@
 //!   this release of strata does not know`. `--quiet` hides the note.
 //! - It appends one line to the log: see [`log`]. `--quiet` does not stop the log.
 //!
-//! After the first note of a day, in a terminal, the watch adds a hint that `strata report` shows
-//! what the user can send: see [`hint`]. The report is made from the log: see [`report`]. A user
-//! who chose the send gets the report posted at the end of the run: see [`send`].
+//! After the first note of a day, in a terminal, the watch adds a hint: see [`hint`]. The hint says
+//! that `strata report` shows what the user can send. The report is made from the log: see
+//! [`report`]. A user who chose the send gets the report posted at the end of the run: see
+//! [`send`].
 //!
 //! The set is the name that `strata schema` gives to the definition of the set. The JSON
 //! documents do not change.
@@ -88,7 +89,7 @@ impl Watch {
     }
 
     /// Also show `hint` after the first note that has a line in the log, when it is time: see
-    /// [`hint`]. A watch with no log shows no hint, because `strata report` would show nothing.
+    /// [`hint`]. A watch with no log shows no hint, because `strata report` has nothing to show.
     #[must_use]
     pub fn hinting(mut self, hint: Hint) -> Watch {
         self.hint = Some(hint);
@@ -134,7 +135,7 @@ impl Watch {
     }
 
     /// The words of the hint, when this run shows it. The hint gets one try in a run. `--quiet`
-    /// hides the note, so it hides the hint too, and it does not use up the day.
+    /// hides the note, so it hides the hint too, and it does not record the time of a hint.
     fn hint_text(&mut self) -> Option<&'static str> {
         if self.progress.is_quiet() {
             return None;

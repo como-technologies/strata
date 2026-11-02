@@ -192,12 +192,12 @@ After 0.26.0, the library of `strata-preflight` changes in these ways:
   check reads as an answer. A struct literal must set it to `Vec::new()`, and a pattern with no
   `..` must name it. A rule file takes `refusal_codes: [...]` in the check of kind `palette`. The
   JSON Schema of `preflight --schema rules` has the new key.
-- `probe::Backend::palette` has a fourth argument, `refusal_codes: &[String]`. Give `&[]` to get
-  the result of 0.26.0. An `impl Backend` must take the argument. `LiveBackend` gives a `Response`
-  with `ok: false` for a 5xx whose `code` is in the list, and an error for each other 5xx.
-  `FixtureBackend` follows the same rule for an entry of `_responses` with a status that is not
-  2xx: see [Release 0.27.0](#release-0270-changes-that-need-action). Release 0.26.0 gave each
-  such entry as a `Response`.
+- `probe::Backend::palette` has a fourth argument, `refusal_codes: &[String]`, and an `impl Backend`
+  must take it. A 5xx whose `code` is in the list is a `Response` with `ok: false`. So is a refusal
+  of a validate route, such as `POST /v1/spectroclusters/{cloud}/validate`, as in 0.26.0. Each other
+  5xx is an error. For `LiveBackend`, `&[]` gives the result of 0.26.0. For `FixtureBackend`, an
+  entry with another 5xx is now an error, where 0.26.0 gave a `Response`: see
+  [Release 0.27.0](#release-0270-changes-that-need-action).
 
 ## The documents
 
@@ -707,14 +707,15 @@ run does neither.
 After 0.26.0, `strata-preflight` counts only the runs of the release that you
 name with `--release`. This changes the level of a rule on that release:
 
-- `strata-preflight --promotion --release 4.11` counts the runs of `4.11` alone.
-  A rule that no run proved on `4.11` is a probe. When the rule file says
+- `strata-preflight --promotion --release 4.10` counts the runs of `4.10` alone.
+  A rule that no run proved on `4.10` is a probe. When the rule file says
   `level: preflight`, the advice is `demote`, and the exit code is `1`. After a
-  run on `4.11` is in the ledger, the rule is a preflight check again.
+  run on `4.10` is in the ledger, the rule is a preflight check again.
 - A run with no release counts for no release. Release 0.26.0 counted it for each
   release. The ledger of the lab has no release in its runs, so with `--release`
   the lab proves no rule. The rule `gke-no-release-channel` is `demote` for each
-  release until the ledger holds a run of the lab with a release.
+  release below 4.11, the range of the rule. It stays so until the ledger holds a
+  run of the lab with a release.
 - The report of a check shows the same counts. A rule with runs of older releases
   only shows `no runs, older runs <n>`. Release 0.26.0 showed the counts of those
   runs.
@@ -825,6 +826,7 @@ field, a value, an input, or an option is in the sections above.
   - The entry of the rule in `checks[]` holds both commands in `ran`, with `; ` between them.
     Before, `ran` held the command that lists the policies of the role alone. `answer` is
     still the exit code of that first command.
+  - A run of your ledger that names `iam-ten-policies` counts for no rule. Rename it in `rule:`.
 - **`strata-preflight`: `iaas-pod-identity` is `FAILED` for a key pair that the region does not
   hold, and for a Pod Identity account. It was `ERROR`.**
   - Palette answers HTTP 500 with the code `AwsKeyPairNotFound` for that key pair, and with the
@@ -835,10 +837,11 @@ field, a value, an input, or an option is in the sections above.
     `failed`. The rule is a probe, so a `FAILED` result changes the exit code only with
     `--strict`. The `ERROR` result gave exit `2`.
   - A rule file that you give with `--probes` takes `refusal_codes` in a check of kind
-    `palette`. A 5xx with a code that the check does not name is still `ERROR`.
+    `palette`. A 5xx with a code that the check does not name is still `ERROR`, except a refusal
+    of a validate route such as `POST /v1/spectroclusters/{cloud}/validate`.
   - The loader refuses a code in `refusal_codes` that the library of strata does not list as a
-    refusal at a 5xx. The library sends a request again after such a 5xx, and the check would
-    read the refusal only after the retries. The error is `catalog` and names the code.
+    refusal at a 5xx. The library sends a request again after any other 5xx, so a check reads
+    such a code only after the retries. The error is `catalog` and names the code.
 - **`strata-preflight`: the rule `system-macros-hidden` has no check.**
   - A check reads a 403 of Palette as an error of the key, and never as the result of a rule.
     So the old check could not report the 403 that it named. A run gave `ERROR` and exit `2` for
@@ -846,6 +849,43 @@ field, a value, an input, or an option is in the sections above.
   - The report shows `not-checked` for the rule now, and the `reproduce` line says what to run
     by hand. A script that reads the verdict `passed` or `error` of `system-macros-hidden` must
     read `not-checked`.
+- **`strata-preflight`: the rule `eks-ami-type` is gone.** The validate route of Palette refuses an
+  AMI type that EKS does not take, so the rule repeated Palette.
+  - `palette-validate` reports the refusal: `UnsupportedAmiType` for `AL2_x86_64`, and
+    `IsValidValue` for a type that Palette does not know. It needs the key.
+  - `--rule eks-ami-type` is a `usage` error with exit `2`, because the id is not in the catalog.
+  - A run with `--offline` does not find an AL2 AMI type now. With `--strict`, such a pool gave
+    exit `1`, and now it gives exit `0`.
+  - An EKS entity has one passed static check fewer, so its readiness falls. A `--ready` gate can
+    fail where it passed.
+  - A run of your ledger that names `eks-ami-type` counts for no rule.
+- **`strata-preflight --promotion --release` counts only the runs of that release.** A rule with
+  `level: preflight` and no run on it is `demote`. The exit code is `1`. Write `release:` in each
+  run of your ledger. See [The command line](#the-command-line).
+  - `gke-no-release-channel` is `demote` for each release below 4.11. For example,
+    `--promotion --release 4.10` gave exit `0` in 0.26.0, and it gives exit `1` now.
+  - A run with no `release:` counts for no release.
+  - With no `--release`, the result is the same as in 0.26.0.
+- **`strata-preflight`: the confidence of a check with `--release` counts only that release.** A
+  rule with older runs alone shows `no runs, older runs <n>`. Release 0.26.0 showed the counts of
+  those runs.
+- **`strata-preflight`: `static-subnets` and `sg-name-collision` are in the `palette` tier.**
+  `--tier cloud` does not run them. Give `--tier palette`, or no `--tier`. Both rules need the key
+  and `spec.cloudAccountUid`, and no `aws` tool.
+- **`strata-preflight`: `aws-quotas`, `gcp-quotas`, and `azure-vcpu-quota` need the key and
+  `spec.cloudAccountUid`.** They read the vCPUs of a pool from the instance type route of Palette.
+  - A run with no key shows `NOT RUN` for them, and the readiness falls. A `--ready` gate can fail
+    where it passed. A run with the tool and no key checked the quota in 0.26.0.
+  - A pool whose type the route does not list fails the rule. The sum of the vCPUs comes from the
+    `cpu` that the route lists, so it can differ from 0.26.0.
+- **`strata-preflight`: `instance-offering` sends `cpuGtEq=0&memoryGtEq=0`.** A small type, such as
+  `t3.small`, no longer fails the rule.
+- **`strata report` is a new command.** A file or a ref named `report` now names the command when
+  it comes first. After another argument, it gives an error with exit `2`. Write
+  `strata compare report <B>` for such a ref.
+- **`api`: the message for a 403 with `ProjectUidIsNotEmpty` changed.** It says that the route is of
+  the tenant scope. The request named a project, and the key is right. The kind `api` and exit `2`
+  stay. A script that reads the text of that message must change.
 
 ### For a user of the library of strata
 
@@ -894,21 +934,44 @@ field, a value, an input, or an option is in the sections above.
 - `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE` are gone, and so are the
   same constants in `model::cluster_state`. The compiler gives `E0425` for them. Use
   `ClusterState::Running.is(text)`, and `ClosedSet::as_str` for the text of a state.
+- The `Display` of `Error::Api` for a 403 with the code `ProjectUidIsNotEmpty` changed. It says
+  that the route is of the tenant scope and that the request named a project. A program that reads
+  the text must change. `Error::kind` and the exit code stay.
 
 ### For a user of the library of strata-preflight
 
+The list [After 0.26.0](#the-rust-library) gives the details.
+
+- `confidence::promotion` has a third argument, `release: Option<&str>`. A call with two
+  arguments does not build. Give `None` for the result of 0.26.0.
+- `confidence::Ledger::counts_for` counts a run with no release for no release. Release 0.26.0
+  counted such a run for each release. The build does not show this change.
+- `confidence::Counts` has the new field `older: Vec<String>`, and `confidence::Confidence` has the
+  new field `older_runs: u32`. `confidence::PromotionReport` has the new field
+  `release: Option<String>`. A struct literal must set each field.
+- `confidence::Confidence::text` gives `no runs` for no run. It ends with `older runs <n>` when
+  `older_runs` is not `0`. A `report::CheckResult` has a `confidence` for a rule with older runs only.
+- `rule::Check::Exec` holds a `rule::ExecCheck`. `Check::Exec { argv, needs, timeout, expr }`
+  becomes `Check::Exec(ExecCheck { argv, needs, timeout, palette: None, also: Vec::new(), expr })`
+  in a literal and in a pattern. `rule::PaletteRead` is new.
+- `probe::Ran::Exec` has the new fields `also: Option<String>` and `request: Option<probe::Call>`.
+  A literal must set them, and a pattern with no `..` must name them. `Ran::text` joins the two
+  commands with `; `.
 - `rule::PaletteCheck` has the new field `refusal_codes: Vec<String>`. A struct literal must set
   it to `Vec::new()`, and a pattern with no `..` must name it.
 - `probe::Backend::palette` has a fourth argument, `refusal_codes: &[String]`. An `impl Backend`
-  must take it, and a call must give it. Give `&[]` for the result of 0.26.0. A 5xx whose `code`
-  is in the list is a `Response` with `ok: false`. Each other 5xx is an error.
+  must take it, and a call must give it. A 5xx whose `code` is in the list is a `Response` with
+  `ok: false`. So is a refusal of a validate route, such as `POST /v1/spectroclusters/{cloud}/validate`,
+  as in 0.26.0. Each other 5xx is an error. For `LiveBackend`, `&[]` gives the result of 0.26.0.
 - `FixtureBackend` follows the same rule for an entry of `_responses` with a status that is not
   2xx. An entry with a 401, a 403, or a 429 is an error, as on a live run. An entry with a 5xx
-  status is a `Response` only for a check that names its code. Release 0.26.0 gave each such
-  entry as a `Response`. A fixture of a custom rule can need `refusal_codes` in its check now.
-  A fixture with a 401, a 403, or a 429 gives an error.
+  status is a `Response` only for a check that names its code, or for a refusal of a validate
+  route. Release 0.26.0 gave each such entry as a `Response`. A fixture of a custom rule can need
+  `refusal_codes` in its check now.
 - `catalog::with_probes` and `rule::Catalog::parse_section` give `Error::Catalog` for a
   `refusal_codes` entry that `api::codes::is_refusal_code` does not accept.
+- The catalog has no `eks-ami-type`, and `iam-ten-policies` is `iam-role-policy-quota`.
+  `Catalog::rule("iam-ten-policies")` gives `None`.
 
 ## Release 0.26.0: changes that need action
 

@@ -319,7 +319,9 @@ and the cluster document carry the same labels.
 lists them, and `GET /v1/filters/tag/{uid}` gives the conditions of one. Neither route is an
 operation of the project scope. A request that names a project gets HTTP 403 with the code
 `ProjectUidIsNotEmpty`, also with `filterType=tag`. The key is right: the request must name no
-project. Strata sends both requests at tenant scope. The query takes `tag`, `meta`, or `resource`.
+project. Strata sends both requests at tenant scope.
+
+The query takes `tag`, `meta`, or `resource`.
 With no `filterType`, the listing gives the filters of each type. The
 search takes no filter uid, so strata turns the conditions into a search. The
 code of Palette gives the rest: a key with no value means the label is

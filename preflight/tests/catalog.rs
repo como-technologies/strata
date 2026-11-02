@@ -1284,9 +1284,9 @@ fn iaas_pod_identity_fails_on_the_http_500_that_the_property_route_gives_for_a_p
 }
 
 /// A refusal at a 5xx is read one time. The library sends a request again after a 5xx, and the
-/// codes of a refusal are the exception. Preflight connects through `Retry`, so a code that the
-/// rule names and the library does not list would be sent four times, with a wait of seven seconds
-/// (#553). The two codes of the property route of AWS go out one time.
+/// codes of a refusal are the exception. Preflight connects through `Retry`. A code that the
+/// rule names and the library does not list gets four requests and a wait of seven seconds (#553).
+/// The two codes of the property route of AWS get one request.
 #[test]
 fn the_refusals_of_the_property_route_of_aws_are_read_after_one_request_and_not_after_the_retries()
 {

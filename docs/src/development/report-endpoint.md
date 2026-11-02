@@ -9,7 +9,7 @@ The service is the package `strata-report-endpoint` in `report-endpoint/`. It ru
 the project of the lab, and it writes issues of the repository of strata. No release of strata
 carries it.
 
-## What a request goes through
+## The checks of a request
 
 The service checks each request in this order. A request that fails a check changes nothing.
 
@@ -76,7 +76,7 @@ far stay. The sender has its answer by then, so the rest of the report is lost.
 
 The service reads at most 1000 issues of the label. When the label has more, the service answers
 502 and logs the cause. It does not open a second issue for a value that it cannot find. Close the
-issues of values that a release of strata names, or move them out of the label.
+issues of values that a release of strata names, or remove the label from them.
 
 ## The locks and the threads
 
@@ -177,7 +177,7 @@ calls GitHub or Google.
 
 ## Deploy the endpoint
 
-The lead deploys the endpoint after the merge, on kadomony, with `gcloud` logged in. A session does
+The lead deploys the endpoint after the merge, on kadomony, after `gcloud auth login`. A session does
 not deploy it, because a session has no account of Google.
 
 1. Make sure that the project has the APIs `run`, `cloudbuild`, `artifactregistry`,

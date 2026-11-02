@@ -1,9 +1,9 @@
 # The facts of Palette
 
 Strata depends on facts about Palette. A fact is a request that strata sends, a field that it reads,
-an error code that Palette gives, or a behavior that Palette shows after a change. A rule of the
-cloud tier of strata-preflight also depends on the answer of a cloud. [The facts of the
-clouds](#the-facts-of-the-clouds) are in the same list.
+or an error code that Palette gives. A fact can also be a behavior that Palette shows after a
+change. A rule of the cloud tier of strata-preflight also depends on the answer of a cloud. [The
+facts of the clouds](#the-facts-of-the-clouds) are in the same list.
 
 Each fact is in three places:
 
@@ -53,8 +53,8 @@ An entry has these fields:
 | `code` | The files of strata that use the fact. |
 | `rules` | The rules of strata-preflight that use the fact. |
 | `call` | Only a fact of the kind `cloud` has it: the read-only call of the tool of the cloud, as a list of words. `{name}` is a value of the lab. |
-| `table` | Only a fact of the kind `cloud` has it: the date of a table that a rule holds, its values, and `per_account` for a table whose values each account sees for itself. See [The tables](#the-tables). |
-| `palette` | Only a fact of the kind `cloud` has it: the route of Palette that lists a part of the answer, and the fields that it lacks. See [Add a fact of a cloud](#add-a-fact-of-a-cloud). |
+| `table` | Only a fact of the kind `cloud` has it: the date of a table that a rule holds, and its values. `per_account` marks a table whose values each account sees for itself. See [The tables](#the-tables). |
+| `palette` | Only a fact of the kind `cloud` has it. It names the route of Palette that lists a part of the answer, and the fields that the route lacks. See [Add a fact of a cloud](#add-a-fact-of-a-cloud). |
 
 A fact must have a code or a rule, because a fact that nothing uses is not a dependency.
 
@@ -90,7 +90,7 @@ The fourth lists each call of a cloud.
    rule of the fact sends in its path. If the page has no row for it, add the row first.
 3. Name the route of the stand-in. If the stand-in serves no document for the fact, leave `stand_in`
    empty.
-4. Name the live checks that prove the fact. Each name is a check that the script calls, and each
+4. Name the live checks that prove the fact. Each name is a check that the script calls. Each
    check has a row in [What the live example verifies](./live-runs.md). If no check proves the fact,
    write the reason in `unchecked`.
 
@@ -138,7 +138,7 @@ come from". `NOT_FACTS` in `xtask/src/facts/check.rs` lists them.
 
 `cargo test -p xtask` makes every rule, except the two rules of the routes of the stand-in. `just test`
 runs it. It makes the rule of the fields too, when `just examples` has built the examples.
-`just docs-check` and `just docs-examples` run each chapter of the book, so they know the routes and
+`just docs-check` and `just docs-examples` run each chapter of the book. So they know the routes and
 the documents that the stand-in serves, and they make the three rules of the stand-in.
 
 ## The weekly contract run
@@ -216,8 +216,9 @@ See [The list routes](../internals/palette/validate-routes.md#the-list-routes):
 - The key pair route needs `cloudAccountUid`.
 - The security group route needs `region` and `vpcId`. It takes `cloudAccountUid` too.
 
-The stand-in puts the query in the name of the file of the document, after an `@`, and serves a
+The stand-in puts the query in the name of the file of the document, after an `@`. It serves a
 route with a query only with that query. A value of the query that varies is `{name}` in the request.
+
 The run takes the value from a listing of the tenant, as it takes the `{uid}` of a path. The fact
 `cloud-account-listing` gives the account of AWS. The fact `validate-aws-regions` gives its first
 region, and the fact `validate-vpcs` gives the first VPC of that region. When the run finds no value
@@ -227,7 +228,9 @@ without the query.
 ### The scope of a request
 
 A request names a project with the header `ProjectUid`, or names none. The run asks with the project
-of `~/.palette.env`. A route of the tenant is not an operation of the project scope. Palette refuses
+of `~/.palette.env`.
+
+A route of the tenant is not an operation of the project scope. Palette refuses
 a request that names a project: HTTP 403, with the code `ProjectUidIsNotEmpty`. The refusal is the
 same with each query. The saved tag filters are such routes. See
 [An imported cluster](../internals/palette/clusters.md#an-imported-cluster).
@@ -259,8 +262,8 @@ can hold no entry of a kind that strata acts on. It can also hold a kind that st
 `cloudaccount` or `registry`. Neither is a difference or an unknown value. The fact
 `audit-resource-kind` lists the kinds that strata acts on.
 
-An answer with no value at the field of a set of names has nothing to compare, as a list with no
-entry has no type to compare.
+An answer with no value at the field of a set of names has nothing to compare. A list with no
+entry also has no type to compare.
 
 ### The fields of the stand-in
 
@@ -288,7 +291,7 @@ cluster listing is a list, not a text.
 
 A fact can name the values of a closed set, by field, in `reads.values`. The run reads the text at
 each such field of the answer. A text that neither the fact nor the documents of the stand-in name
-is an unknown value: Palette gave a value that strata does not know.
+is an unknown value. Palette gave a value that strata does not know.
 
 An unknown value is no difference. The status and the types can be the same, so the outcome stays
 `same`. The entry lists the values for each field, and the run counts each value one time in the
@@ -360,7 +363,7 @@ Each entry of `releases[]` has these fields:
 
 ### The issues
 
-`contract-report.sh` turns the result into issues of the repository. It opens, updates, and closes
+`contract-report.sh` writes the result as issues of the repository. It opens, updates, and closes
 them in this way:
 
 - A fact that differs has one open issue with the label `palette-drift`, in the milestone
@@ -419,7 +422,7 @@ variables:
 | `own_registries` | `false` | The module makes no ECR repository, no IAM user with its key, no Palette registry, and no profile that needs one. |
 | `cloud` | `aws` | The cloud `eks` makes a role in AWS. |
 
-The cluster group, the cluster template, and the registry kinds stay off, as their defaults say.
+The module does not make the cluster group, the cluster template, or the registry kinds, as their defaults say.
 The default of `own_registries` is `true`, and no recipe of the live example sets it. So the live
 example builds what it built before the switch.
 
@@ -465,7 +468,7 @@ just contract-timer-remove    # stop the timer, and delete the units; the result
 The service sets `AWS_PROFILE=spectro-admin`. It reads the values of the lab account from
 `~/.config/strata-contract/lab.env`: see [The lab values](#the-lab-values). The run reads the
 Palette key from `~/.palette.env`, so no key is in a unit file, in the repository, or in GitHub. A
-user timer runs when no one is logged in only if the user has linger: `loginctl enable-linger`.
+user timer runs with no session of that user only if the user has linger: `loginctl enable-linger`.
 `install` tells when it is off.
 
 The job keeps its results in `~/.local/share/strata-contract/`, or in `STRATA_CONTRACT_DIR`:
@@ -490,8 +493,8 @@ value that is unknown, is no failure: the issue is the report.
 An issue of drift means that Palette answers one request in another way than the stand-in. The
 issue lists each difference, the live checks, and the pages of the fact. Do these steps:
 
-1. Prove the fact again with its live checks. A difference can come from the tenant: an object
-   that lacks a field, or a key that cannot read a route.
+1. Prove the fact again with its live checks. A difference can come from the tenant. Examples are an object
+   that lacks a field, and a key that cannot read a route.
 2. For a `name` difference, read the names that the tenant has. If Palette renamed a name that strata
    needs, change the fact, the code, and the page together. If the tenant lacks the name, learn
    why: an audit log lacks a kind when no entry has it.
@@ -507,10 +510,10 @@ the text apart from the values it knows. The issue lists each new value and the 
 steps for each new value:
 
 1. Prove the value again. Read the answer of the request by hand, or run a live check of the fact.
-   A value can come from one object of the lab tenant, such as a cluster that a person made by hand.
+   A value can come from one object of the lab tenant, such as a cluster that a person made.
 2. Find the closed set of strata that reads the field. The files in `code` of the fact name it.
    Most sets are `Open` values, so they keep the text of a value that they do not name.
-3. Decide, and write the decision down:
+3. Decide, and record the decision:
    - Add the value to the closed set when strata must tell it apart. Add the variant with
      `impl_closed_set!`, and add its text to the test of the sets in `tests/closed_set.rs`. Then
      add the value to `reads.values` of the fact and to the page of the fact.
@@ -610,7 +613,9 @@ answer lists at the field. A value that the answer does not list is a difference
 Each account sees its own values in some tables. An account has its own zone ids: the lab account
 has `usw1-az1` and `usw1-az3` in `us-west-1`, and not `usw1-az2`. A fact of such a table has
 `per_account: true`. A value that the answer lacks is then no difference, because the account
-cannot check it. When the answer lists some values, the outcome is `same`, and the reason names the
+cannot check it.
+
+When the answer lists some values, the outcome is `same`, and the reason names the
 values that the account cannot check. When the answer lists none, the outcome is `skipped`, and the
 reason says that the account cannot check the table. A table with no `per_account` keeps the check:
 a value that the answer lacks is a difference.
