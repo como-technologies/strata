@@ -119,6 +119,9 @@ profile, or pack version.
       The `fields` of `shape` are `cloudType`, `cloud`, and `pools[]`, by
       [The shape on each cloud](../commands/snapshot/cluster.md#the-shape-on-each-cloud).
       A record that an older version of strata wrote has no `cloudType`.
+      - `pools[]` of `shape`: each pool holds `overrideClusterAPIConfig` and
+        `overrideHealthCheckConfiguration` when it sets them. A record of
+        strata 0.26.0 and before holds neither.
       - `errors`, only when strata could not read a field: the field and the
         error. `fields` then does not hold the field, so the hash does not
         cover it. `errors` is not part of the hash either. A record of strata

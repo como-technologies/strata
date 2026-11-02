@@ -2639,6 +2639,10 @@ fn tiers_sh_stage_5_edits_the_subjects_of_a_binding_of_cluster_a_and_puts_the_bi
     );
     assert!(!steps.contains("== stage 4"), "stage 5 runs alone: {steps}");
     assert!(
+        !steps.contains("== stage 7"),
+        "stage 7 writes a pool, so it runs only when asked: {steps}"
+    );
+    assert!(
         !steps.contains("== stage 6"),
         "stage 6 needs a second key, so it runs only when asked: {steps}"
     );
@@ -2796,6 +2800,179 @@ fn tiers_sh_stage_6_says_could_not_check_and_exits_2_without_the_second_key() {
     assert!(!steps.contains("limited-"), "no check ran: {steps}");
     let calls = std::fs::read_to_string(stage.path("curl.log")).unwrap_or_default();
     assert!(!calls.contains("config/rbacs"), "no request: {calls}");
+}
+
+/// A `strata` for tiers.sh stage 7. strata-preflight writes the create body of cluster A into the
+/// directory of `--out` and exits 1, as it does when a rule fails. Any other call goes to the
+/// answers of the stage.
+const FAKE_STRATA_POOL: &str = r#"#!/usr/bin/env bash
+if [ "$1" = preflight ]; then
+  echo "$*" >> "$FAKE_STRATA/calls"
+  dir=""; prev=""
+  for a in "$@"; do [ "$prev" = --out ] && dir=$a; prev=$a; done
+  mkdir -p "$dir" && cp "$FAKE_STRATA/entity.json" "$dir/entity.json"
+  exit 1
+fi
+exec "$(dirname "$0")/fake-strata-rules" "$@"
+"#;
+
+/// The text that tiers.sh stage 7 sets as both overrides of the worker pool.
+const POOL_OVERRIDE: &str = "# strata tiers.sh stage 7: this text sets no value\n";
+
+/// The worker pool of cluster A as the create body holds it, and as strata-preflight writes it.
+fn pool_entity() -> serde_json::Value {
+    serde_json::json!({
+        "cloudConfig": {"instanceType": "t3.xlarge", "azs": ["us-east-2a"]},
+        "poolConfig": {"name": "worker-pool", "size": 2, "minSize": 2, "maxSize": 2,
+            "isControlPlane": false, "labels": ["worker"]}})
+}
+
+/// A stage of tiers.sh stage 7. Cluster A has the cloud config `cc-1`, whose worker pool takes
+/// the `poolConfig` of each PUT when `takes` is true, and ignores the PUT otherwise.
+fn pool_stage(takes: bool) -> Stage {
+    let mut stage = baseline_stage();
+    stage.wrap_strata(FAKE_STRATA_POOL);
+    stage.route(
+        &cluster_route("c-a"),
+        r#"{"metadata":{"name":"fred"},"spec":{"cloudType":"aws","cloudConfigRef":{"kind":"aws","uid":"cc-1"}},
+            "status":{"state":"Running"}}"#,
+    );
+    stage.route("/v1/cloudconfigs/aws/cc-1/machinePools/worker-pool", "{}");
+    let routes = stage.path("routes");
+    std::fs::write(
+        routes.join("base"),
+        r#"{"spec":{"clusterConfig":{"region":"us-east-2"},"machinePoolConfig":[
+            {"name":"cp-pool","isControlPlane":true,"size":1},
+            {"name":"worker-pool","isControlPlane":false,"size":2,"instanceType":"t3.xlarge"}]}}"#,
+    )
+    .unwrap();
+    let applied = if takes {
+        r#"jq --slurpfile e "$sent" '(.spec.machinePoolConfig[] | select(.name == "worker-pool")) |= (. + $e[0].poolConfig)' "$FAKE_ROUTES/base""#
+    } else {
+        r#"cat "$FAKE_ROUTES/base""#
+    };
+    executable(
+        &routes.join("v1_cloudconfigs_aws_cc-1.sh"),
+        &format!(
+            r#"#!/usr/bin/env bash
+sent="$FAKE_ROUTES/sent/PUT_v1_cloudconfigs_aws_cc-1_machinePools_worker-pool"
+if [ -f "$sent" ]; then {applied}; else cat "$FAKE_ROUTES/base"; fi
+"#
+        ),
+    );
+    std::fs::write(
+        stage.path("strata/entity.json"),
+        serde_json::json!({"spec": {"machinepoolconfig": [
+            {"cloudConfig": {"instanceType": "t3.xlarge"}, "poolConfig": {"name": "cp-pool", "size": 1}},
+            pool_entity()]}})
+        .to_string(),
+    )
+    .unwrap();
+    let record = |worker: serde_json::Value| {
+        serde_json::json!({"source": {"cluster": {"tiers": {"shape": {"fields": {
+            "cloudType": "aws", "cloud": {"region": "us-east-2"},
+            "pools": [{"name": "cp-pool", "size": 1}, worker]}}}}}})
+        .to_string()
+    };
+    stage.strata(
+        "snapshot cluster:c-a --shape -o pool-before.json",
+        0,
+        &record(serde_json::json!({"name": "worker-pool", "size": 2})),
+    );
+    stage.strata(
+        "snapshot cluster:c-a --shape -o pool-after.json",
+        0,
+        &record(serde_json::json!({"name": "worker-pool", "size": 2,
+            "overrideClusterAPIConfig": POOL_OVERRIDE,
+            "overrideHealthCheckConfiguration": POOL_OVERRIDE})),
+    );
+    let added = |field: &str| serde_json::json!({"op": "added", "path": format!("pools[name=worker-pool].{field}")});
+    stage.strata(
+        "compare pool-before.json pool-after.json --json",
+        0,
+        &serde_json::json!({"clusterTiers": [{"tier": "shape", "same": false, "diff": [
+            added("overrideClusterAPIConfig"), added("overrideHealthCheckConfiguration")]}]})
+        .to_string(),
+    );
+    stage.strata(
+        "compare pool-before.json pool-after.json",
+        0,
+        "  cluster tiers applied unchanged, shape CHANGED\n        + shape.pools[name=worker-pool].overrideHealthCheckConfiguration: \"#\"\n",
+    );
+    stage.strata(
+        "verify pool-before.json",
+        0,
+        "  cluster tiers applied unchanged, shape CHANGED\nOK: cluster fred\n",
+    );
+    stage.strata(
+        "compare pool-before.json cluster:c-a",
+        0,
+        "  cluster tiers unchanged\nOK: IDENTICAL\n",
+    );
+    stage
+}
+
+#[test]
+fn tiers_sh_stage_7_sets_both_overrides_on_the_worker_pool_records_them_and_puts_the_pool_back() {
+    let stage = pool_stage(true);
+    let (o, steps) = stage.run("tiers.sh", &["7"]);
+    assert_eq!(o.status.code(), Some(0), "{steps}{}", text(&o.stderr));
+    assert!(!steps.contains("FAIL"), "{steps}");
+    passed(
+        &steps,
+        &[
+            "pool-before-none",
+            "pool-entity",
+            "pool-body",
+            "pool-set",
+            "pool-in-cloud-config",
+            "pool-in-record",
+            "pool-compare",
+            "pool-compare-shape",
+            "pool-compare-says",
+            "pool-verify",
+            "pool-verify-says",
+            "pool-undo",
+            "pool-undone",
+            "pool-restored",
+            "pool-restored-says",
+        ],
+    );
+    assert!(
+        has_verdict(&steps, "SEEN", "pool-world")
+            && has_verdict(&steps, "SEEN", "pool-cluster-level"),
+        "the two checks that record an answer judge none: {steps}"
+    );
+    assert!(!steps.contains("== stage 6"), "stage 7 runs alone: {steps}");
+
+    let mut set = pool_entity();
+    set["poolConfig"]["overrideClusterAPIConfig"] = POOL_OVERRIDE.into();
+    set["poolConfig"]["overrideHealthCheckConfiguration"] = POOL_OVERRIDE.into();
+    assert_eq!(
+        stage.sent("PUT", "/v1/cloudconfigs/aws/cc-1/machinePools/worker-pool"),
+        vec![set, pool_entity()],
+        "the PUTs set both overrides in poolConfig and then send the pool as it was"
+    );
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    assert!(
+        calls.contains("preflight cluster:c-a --tier static"),
+        "the entity comes from the static tier, with no probe: {calls}"
+    );
+    let pool_cloud_config = std::fs::read_to_string(stage.path("out/pool-read.out")).unwrap();
+    assert!(
+        pool_cloud_config.contains("overrideHealthCheckConfiguration"),
+        "{pool_cloud_config}"
+    );
+}
+
+#[test]
+fn tiers_sh_stage_7_fails_the_checks_of_the_override_when_palette_drops_it() {
+    let stage = pool_stage(false);
+    let (o, steps) = stage.run("tiers.sh", &["7"]);
+    assert_eq!(o.status.code(), Some(1), "{steps}{}", text(&o.stderr));
+    failed(&steps, &["pool-in-cloud-config"]);
+    // the record is a canned answer here, so only the check of the cloud config sees the drop
+    passed(&steps, &["pool-set", "pool-undone"]);
 }
 
 #[test]

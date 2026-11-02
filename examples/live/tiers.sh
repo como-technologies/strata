@@ -20,16 +20,22 @@
 #      ResourceAccessDenied, and not HTTP 403. The stage records the status and the code, and what
 #      strata makes of the answer (#276). It writes nothing. `tiers.sh 6` runs it alone, and no
 #      other FROM_STAGE runs it. With no variable set, it says "could not check" and exits 2
+#   7  an override on a machine pool of cluster A, through the API (the item of #515): both
+#      overrides, overrideClusterAPIConfig and overrideHealthCheckConfiguration, go on the worker
+#      pool, as a YAML comment that sets no value. Palette holds them in the pool of the cloud
+#      config; a new record keeps them in the shape tier; compare of a record from before names
+#      them, with exit 0. Then the pool as before. `tiers.sh 7` runs it alone, and no other
+#      FROM_STAGE runs it
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
-# jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stages 5 and 6
-# add no machine. Results go under
+# jq, and the key as verify.sh needs it. Billable: cluster B for about 30 minutes; stages 5, 6, and
+# 7 add no machine. Results go under
 # runs/<UTC time>/tiers/, or OUT; FROM_STAGE resumes a run in OUT. Exit 0 only when no check fails.
 set -uo pipefail
 script=tiers
 from=${1:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-case "$from" in 1|2|3|4|5|6) ;; *) usage; exit 2 ;; esac
+case "$from" in 1|2|3|4|5|6|7) ;; *) usage; exit 2 ;; esac
 [ -x "$strata" ] || die "no strata binary at $strata"
 
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/tiers}
@@ -194,6 +200,72 @@ if [ "$from" = 6 ] && stage 6 "a key that cannot read the role bindings of clust
   check limited-record ? "#276: what strata does with the answer: a record of cluster A with the second key" -- limited_record
   check limited-record-errors ? "#276: the errors of the policy tier of that record, if strata wrote one" -- \
     jq '.source.cluster.tiers.policy.errors' limited-record.json
+fi
+
+# pool_route: the route of the cloud config of cluster A, /v1/cloudconfigs/<cloud type>/<config uid>
+pool_route() {
+  "$live/api.sh" get "/v1/spectroclusters/$C" \
+    | jq -er '"/v1/cloudconfigs/\(.spec.cloudConfigRef.kind // .spec.cloudType)/\(.spec.cloudConfigRef.uid)"'
+}
+# put_pool FILE: PUT the machine pool worker-pool of the cloud config with the entity in FILE, a
+# pair {cloudConfig, poolConfig}, as the create body holds a pool
+put_pool() { "$live/api.sh" put "$pool_cc/machinePools/worker-pool" "$(cat "$1")"; }
+# The text of both overrides: a YAML comment. It sets no value, so no machine of the pool changes.
+pool_override=$'# strata tiers.sh stage 7: this text sets no value\n'
+
+# stage 7 runs only when its number is given: it writes a machine pool of cluster A
+if [ "$from" = 7 ] && stage 7 "an override on a machine pool of cluster A"; then
+  require_baseline
+  check pool-route 0 "the route of the cloud config of cluster A" -- pool_route
+  pool_cc=$(< pool-route.out)
+  check pool-before 0 "a record of cluster A with the shape tier, before the override" -- \
+    "$strata" snapshot "cluster:$C" --shape -o pool-before.json
+  check pool-before-none 0 "the worker pool has neither override: Palette omits a field with no value" -- \
+    jq -e '.source.cluster.tiers.shape.fields.pools[] | select(.name == "worker-pool")
+      | (has("overrideClusterAPIConfig") or has("overrideHealthCheckConfiguration")) | not' pool-before.json
+  # the entity of the pool in the form of the create body: strata-preflight splits the pool of the
+  # cloud config into poolConfig and cloudConfig. Its exit follows the rules, so it is not judged.
+  check pool-world ? "the create body of cluster A, from strata-preflight with the static tier" -- \
+    "$strata" preflight "cluster:$C" --tier static --quiet --no-color --out pool-world
+  check pool-entity 0 "the entity of the worker pool: poolConfig and cloudConfig" -- \
+    jq -e '.spec.machinepoolconfig[] | select(.poolConfig.name == "worker-pool")' pool-world/entity.json
+  check pool-body 0 "the entity with both overrides in its poolConfig" -- \
+    jq -e --arg v "$pool_override" '.poolConfig += {overrideClusterAPIConfig: $v, overrideHealthCheckConfiguration: $v}' pool-entity.out
+  check pool-set 0 "the worker pool of cluster A gets both overrides, through the API" -- put_pool pool-body.out
+  check pool-read 0 "the cloud config of cluster A after the override" -- "$live/api.sh" get "$pool_cc"
+  check pool-in-cloud-config 0 "Palette holds both overrides in the worker pool of spec.machinePoolConfig" -- \
+    jq -e --arg v "$pool_override" '.spec.machinePoolConfig[] | select(.name == "worker-pool")
+      | .overrideClusterAPIConfig == $v and .overrideHealthCheckConfiguration == $v' pool-read.out
+  check pool-cluster-level ? "whether spec.clusterConfig holds an override now: the value of each, null when absent" -- \
+    jq '.spec.clusterConfig | {overrideClusterAPIConfig, overrideHealthCheckConfiguration}' pool-read.out
+  check pool-record 0 "a record of cluster A with the shape tier, after the override" -- \
+    "$strata" snapshot "cluster:$C" --shape -o pool-after.json
+  check pool-in-record 0 "the shape tier keeps both overrides on the worker pool, and on no other pool or the cloud part" -- \
+    jq -e --arg v "$pool_override" '.source.cluster.tiers.shape.fields
+      | (.pools[] | select(.name == "worker-pool") | .overrideClusterAPIConfig == $v and .overrideHealthCheckConfiguration == $v)
+        and ([.pools[] | select(.name != "worker-pool") | has("overrideClusterAPIConfig") or has("overrideHealthCheckConfiguration")] | any | not)
+        and (.cloud | has("overrideHealthCheckConfiguration") | not)' pool-after.json
+  check pool-compare 0 "compare of the record from before with the record after: the release is the same, exit 0" -- \
+    "$strata" compare pool-before.json pool-after.json
+  check pool-compare-json 0 "the same comparison as JSON" -- "$strata" compare pool-before.json pool-after.json --json
+  check pool-compare-shape 0 "the shape tier differs at both overrides of the worker pool" -- \
+    jq -e '.clusterTiers[] | select(.tier == "shape") | .same == false
+      and ([.diff[].path] | index("pools[name=worker-pool].overrideClusterAPIConfig") != null
+        and index("pools[name=worker-pool].overrideHealthCheckConfiguration") != null)' pool-compare-json.out
+  check pool-compare-says 0 "the report names the override of the pool" -- \
+    grep -q '+ shape.pools\[name=worker-pool\].overrideHealthCheckConfiguration' pool-compare.out
+  check pool-verify 0 "verify of the record from before: the verdict follows the release, exit 0" -- \
+    "$strata" verify pool-before.json
+  check pool-verify-says 0 "and it reports the shape tier" -- grep -q 'shape CHANGED' pool-verify.out
+  check pool-undo 0 "the worker pool of cluster A as before the stage" -- put_pool pool-entity.out
+  check pool-after-read 0 "the cloud config of cluster A after the undo" -- "$live/api.sh" get "$pool_cc"
+  check pool-undone 0 "the worker pool has neither override again" -- \
+    jq -e '.spec.machinePoolConfig[] | select(.name == "worker-pool")
+      | (has("overrideClusterAPIConfig") or has("overrideHealthCheckConfiguration")) | not' pool-after-read.out
+  check pool-restored 0 "compare of the record from before with cluster A: the shape tier is the same, exit 0" -- \
+    "$strata" compare pool-before.json "cluster:$C"
+  check pool-restored-says 0 "and it names no change of the shape tier" -- \
+    bash -c "! grep -q 'shape CHANGED' pool-restored.out"
 fi
 
 echo

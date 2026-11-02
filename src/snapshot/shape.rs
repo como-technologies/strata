@@ -36,11 +36,16 @@ pub(super) const POOL_FIELDS: &[&str] = &[
     "updateStrategy",
     "skipK8sUpgrade",
     "overrideKubeadmConfiguration",
+    // Palette holds each override in the pool: in `poolConfig` of a create, and in the pool of the
+    // cloud config. A pool that sets none has no such key.
+    "overrideClusterAPIConfig",
+    "overrideHealthCheckConfiguration",
     // the architecture of the nodes, `amd64` or `arm64`
     "machinePoolProperties",
 ];
 
-/// The cloud part fields that a person chooses on each cloud.
+/// The cloud part fields that a person chooses on each cloud. `overrideClusterAPIConfig` is the
+/// override of the cluster. The override of a pool is a field of the pool, in [`POOL_FIELDS`].
 pub(super) const CLOUD_FIELDS: &[&str] = &["overrideClusterAPIConfig"];
 
 /// The key of the id that Palette gives each vSphere placement of a cluster.
@@ -274,6 +279,7 @@ fn without_placement_uid(placement: &mut Value) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::content::canon::{canonical_json, sha256_hex};
 
     #[test]
     fn a_managed_cloud_reads_the_model_of_its_cloud_and_an_unknown_type_the_fields_of_an_older_record()
@@ -293,6 +299,90 @@ mod tests {
             assert_eq!(pool_fields(cloud), LEGACY_POOL_FIELDS, "{cloud:?}");
             assert_eq!(cloud_fields(cloud), LEGACY_CLOUD_FIELDS, "{cloud:?}");
         }
+    }
+
+    /// A cloud config of two pools, as Palette gives it. `worker` is the worker pool.
+    fn cloud_config(worker: Value) -> Value {
+        json!({"spec": {
+        "clusterConfig": {"region": "us-east-2", "sshKeyName": "platform", "vpcId": "vpc-fred"},
+        "machinePoolConfig": [
+            worker,
+            {"name": "cp-pool", "isControlPlane": true, "instanceType": "t3.xlarge", "size": 1,
+             "azs": ["us-east-2a"], "subnetIds": {"us-east-2a": "subnet-fred"}},
+        ]}})
+    }
+
+    fn worker_pool() -> Value {
+        json!({"name": "worker-pool", "isControlPlane": false, "instanceType": "t3.xlarge",
+            "size": 2, "azs": ["us-east-2a"], "labels": ["worker"], "rootDeviceSize": 65,
+            "subnetIds": {"us-east-2a": "subnet-fred"}})
+    }
+
+    /// The shape fields of a cluster on the cloud type `cloud_type`.
+    fn shape_of(cloud_type: &str, cloud_config: &Value) -> Value {
+        fields(&json!({"spec": {"cloudType": cloud_type}}), cloud_config)
+    }
+
+    #[test]
+    fn a_pool_that_sets_an_override_keeps_it_in_the_shape_on_each_cloud() {
+        let mut worker = worker_pool();
+        worker["overrideClusterAPIConfig"] = json!("awsMachineTemplate:\n  spec: {}\n");
+        worker["overrideHealthCheckConfiguration"] = json!("machineHealthCheck:\n  spec: {}\n");
+        let config = cloud_config(worker.clone());
+        for cloud_type in [
+            "aws",
+            "eks",
+            "gcp",
+            "gke",
+            "azure",
+            "aks",
+            "vsphere",
+            "edge-native",
+            "maas",
+            "openstack",
+            "apache-cloudstack",
+            "custom",
+        ] {
+            let shape = shape_of(cloud_type, &config);
+            let (control_plane, pool) = (&shape["pools"][0], &shape["pools"][1]);
+            assert_eq!(pool["name"], "worker-pool", "{cloud_type}");
+            for field in [
+                "overrideClusterAPIConfig",
+                "overrideHealthCheckConfiguration",
+            ] {
+                assert_eq!(pool[field], worker[field], "{cloud_type}: {field}");
+                assert!(control_plane.get(field).is_none(), "{cloud_type}: {field}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_override_of_the_cluster_stays_in_the_cloud_part_and_the_override_of_a_pool_in_the_pool()
+    {
+        let mut config = cloud_config(worker_pool());
+        config["spec"]["clusterConfig"]["overrideClusterAPIConfig"] = json!("cluster: {}\n");
+        config["spec"]["machinePoolConfig"][0]["overrideClusterAPIConfig"] = json!("pool: {}\n");
+        let shape = shape_of("aws", &config);
+        assert_eq!(shape["cloud"]["overrideClusterAPIConfig"], "cluster: {}\n");
+        assert_eq!(shape["pools"][1]["overrideClusterAPIConfig"], "pool: {}\n");
+        assert!(
+            shape["cloud"]
+                .get("overrideHealthCheckConfiguration")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn the_hash_of_a_shape_whose_pools_set_no_override_is_the_hash_that_release_0_26_0_wrote() {
+        let shape = shape_of("aws", &cloud_config(worker_pool()));
+        assert_eq!(
+            sha256_hex(&canonical_json(&shape)),
+            "a56fdd17df4fbc0669acdd08623a72d62414a0bad58d657c9b525cc3bc078858"
+        );
+        // Palette omits a field that has no value, and strata omits a null
+        let mut worker = worker_pool();
+        worker["overrideClusterAPIConfig"] = Value::Null;
+        assert_eq!(shape_of("aws", &cloud_config(worker)), shape);
     }
 
     #[test]
