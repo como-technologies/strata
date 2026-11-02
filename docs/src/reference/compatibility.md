@@ -799,6 +799,7 @@ After 0.27.0, the text of `strata-preflight` agrees each noun with its count. Th
 `1 probe(s) failed`, and now it says `1 probe failed`, `2 probes failed`, or `no probes failed`. The
 same holds for the warnings, the notes, the errors, the readings of a watch, and the events of
 `--verbose`.
+
 `summary.verdict` in the JSON changes in the same way, for example `FAIL: 2 checks failed: a, b`.
 `--promotion` says `1 level disagrees with the ledger`, `2 levels disagree with the ledger`, or
 `no levels disagree with the ledger`.
@@ -806,9 +807,9 @@ A script must read `summary.exitCode`, and not the text. The exit codes do not c
 
 After 0.27.0, a watch of `strata-preflight` ends when the document of the cluster has
 `metadata.isDeleted`, also when `status.state` is not `Deleted`. Before, it read until the limit.
-The terminal form of `strata consumers` and `strata list` colors a state of a cluster as `--verbose`
-of `strata-preflight` does: green for `Running`, yellow for a build, and red for `Error`, `Deleting`,
-and `Deleted`.
+The terminal form of `strata consumers` and `strata list` colors a cluster state as
+`strata-preflight --verbose` does. Green is `Running`, yellow is a build, and red is `Error`,
+`Deleting`, or `Deleted`.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
