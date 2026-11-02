@@ -14,7 +14,8 @@ Each release has the tag `v<version>`. The crate builds with Rust 1.88 or later.
 The crate is not on crates.io, so a dependency names the tag: see
 [The library](../automation/library.md#add-the-dependency).
 
-Four sections list the changes that need action:
+Five sections list the changes that need action:
+[Release 0.28.0](#release-0280-changes-that-need-action),
 [Release 0.27.0](#release-0270-changes-that-need-action),
 [Release 0.26.0](#release-0260-changes-that-need-action),
 [Release 0.25.0](#release-0250-changes-that-need-action), and
@@ -132,7 +133,8 @@ After 0.25.0, the library of `strata-preflight` changes in these ways:
 - `report::label_for` is gone. `CheckResult::label` gives the word.
 - `rule::Tier::name`, `Level::name`, `Severity::name`, and `Status::name` are
   gone. `ClosedSet::as_str` gives the same text, and `Tier::ALL` is the constant
-  of the trait. `Tier::parse` is `Tier::from_input`.
+  of the trait. Both need `use strata::closed_set::ClosedSet`, because
+  `strata-preflight` does not export the trait. `Tier::parse` is `Tier::from_input`.
 - `rule::Check::kind` gives a `rule::CheckKind`, in place of text.
   `rule::Evidence::kind` is a `rule::EvidenceKind`, in place of `String`.
 - `world::CLOUDS` is gone. `world::clouds()` gives the same texts in the same
@@ -198,6 +200,15 @@ After 0.26.0, the library of `strata-preflight` changes in these ways:
   5xx is an error. For `LiveBackend`, `&[]` gives the result of 0.26.0. For `FixtureBackend`, an
   entry with another 5xx is now an error, where 0.26.0 gave a `Response`: see
   [Release 0.27.0](#release-0270-changes-that-need-action).
+
+After 0.27.0, `timestamp` is a public module of `strata`. `timestamp::now_utc` gives the time
+now as RFC 3339 in UTC, with whole seconds. `timestamp::utc_text` writes a number of seconds
+since the Unix epoch in the same way. `strata`, `strata-preflight`, and the adapter of knurl
+call them, so the three write a time in one way.
+
+After 0.27.0, `render::Format` has `ALL`, `as_str`, and `from_text`, from one table. In
+`strata-preflight`, the jq programs of a rule can call the new filter `semver_numbers`. It reads
+a text as a version, as `reference::version::numbers` does.
 
 ## The documents
 
@@ -803,6 +814,69 @@ field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
 it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
+
+## Release 0.28.0: changes that need action
+
+Release 0.28.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **`strata packs`: `latest` marks the version that `<name>@latest` records.** Before,
+  it marked the highest version, also when that version was a pre-release.
+  - The two differ when the highest version is a pre-release and the registry has another
+    version. An example is `1.31.0-rc.1` above `1.29.0`. `latest` marks `1.29.0` now.
+  - `paletteLatest` stays on the version that Palette marks. `--latest` keeps that version
+    too, and the terminal output marks it `latest in Palette`.
+  - A script that reads the highest version must read the first entry of `versions[]`. The
+    list is in the order of Semantic Versioning, from the highest.
+- **The message of `snapshot-schema` names the field inside the cluster of a record.** It
+  named `source.cluster` for each such field. Now it names `source.cluster.profiles[0].version`,
+  for example. The error document has the new key `field`, which holds the same path. A script
+  that matched `source.cluster` in the text of the message must match the full path.
+- **`stale-record`: `cluster` holds the uid of the cluster.** It held the name, while the
+  other errors of a cluster held the uid. The new key `name` holds the name. A script that read
+  the name from `error.cluster` must read `error.name`. The message stays.
+- **The policy `valuesHash` of a group with values of no canonical form changes.** A key of such
+  values is a map or a list.
+  - An example is a template with no quotes. See
+    [The config that a cluster group gives](../commands/snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
+  - The hash covered the text with each password in clear. It covers the text with `********`
+    now. A new password changes no hash, and the record of a saved directory has the hash of
+    the record of the fetch.
+  - A record of 0.27.0 or before differs in the `policy` tier from a new record of the same
+    group. `compare` and `verify` show that difference. The root does not change. Take the
+    record again.
+  - A snapshot of such a group gives the error `serialize`, and writes no record, when strata
+    cannot mask a password in the values. `save_dir` gave that error before.
+- **`strata-preflight`: three rules read a version as `strata` does.** The rules are
+  `capa-stack-release-behind`, `ccm-version`, and `edge-agent-version`.
+  - `capa-stack-release-behind` stopped with an error for `--release 4.11.0-rc.1`. It compares
+    the numbers of the release now. A `--release` or a tag that is no version is still an
+    error, and the message names it.
+  - `ccm-version` and `edge-agent-version` read a `v` before a version, and build data after
+    it. A version with one of them can give another result than before.
+
+### For a user of the library of strata
+
+- `snapshot::cluster_tiers` gives a `Result`. A call must handle the error, or use `?`. It
+  gives `Error::Serialize` for a cluster group whose values have a password that strata
+  cannot mask. `Snapshot::from_cluster` gives the same error.
+- `error::Error::StaleRecord` has the new field `name: String`. A literal must set it, and a
+  pattern with no `..` must name it. The field `cluster` holds the uid.
+- `ops::PackBuild::latest` is true for the version that `pack:<name>@latest` records. It was
+  true for the highest version. See the first item of the previous list.
+- `timestamp` and `render::Format::ALL` are new: see [The Rust library](#the-rust-library).
+
+### For a user of the library of strata-preflight
+
+- `world::Engine`, `world::ENGINES`, and `run::RULES_SCHEMA` are not public. No program of
+  this repository used them. `world::clouds()` and `world::cloud_list()` give the texts of the
+  engines, and the document of `preflight --rules --json` holds its schema id in `schema`.
+- A program in a rule can call the new jq filter `semver_numbers`. A rule file that you give
+  with `--probes` can use it. It runs in `strata-preflight` only, and not in the `jq` tool.
 
 ## Release 0.27.0: changes that need action
 

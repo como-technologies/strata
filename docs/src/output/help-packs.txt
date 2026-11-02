@@ -9,7 +9,7 @@ Arguments:
 Options:
       --registry <NAME>  Only this registry, by name or uid
       --cloud <TYPE>     Keep the versions of this cloud, such as aws, and the versions of the cloud type all
-      --latest           Only the newest version of each registry, and the version Palette calls the latest when it differs
+      --latest           Only the version that `@latest` names in each registry, and the version Palette calls the latest when it differs
       --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
       --json             The same as --format json
       --color [<COLOR>]  Color the report: auto, always, or never [default: auto]

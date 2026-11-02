@@ -23,7 +23,7 @@ pub fn list_rules(
 }
 
 /// The schema id of the `--rules` listing as JSON.
-pub const RULES_SCHEMA: &str = "strata-preflight-rules/1";
+pub(crate) const RULES_SCHEMA: &str = "strata-preflight-rules/1";
 
 /// The `--rules` listing as a document: the sections, and the `rules` that
 /// [`list_rules`] gave for `cloud` and `release`.

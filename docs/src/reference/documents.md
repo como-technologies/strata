@@ -141,7 +141,8 @@ profile, or pack version.
       `valuesParseError` when the values are not YAML, and `hostClusters[]`
       with `uid` and `endpointConfig`. `values` holds `********` over each
       value whose key ends with `password`, and `valuesHash` is the hash of
-      the masked values. See
+      the masked values. Values with no canonical form give `values` as `null`,
+      and `valuesHash` is the hash of the masked text. See
       [The config that a cluster group gives](../commands/snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
     - `pending`, only when true: the record is of `cluster:<cluster>@pending`,
       and holds no `updatesPending` and no `repavePending`.
@@ -575,9 +576,11 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
   `deleted`. See [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
   - A version: `version`, `packUid`, `digest`, `type`, `cloudTypes[]`, `tags[]`
     with the exact tag first, and `latest`.
-    - `latest` is true for the newest version the command listed, by the order
-      of Semantic Versioning. With `--cloud`, `latest` is true for the newest
-      version for that cloud, and not the newest the registry holds.
+    - `latest` is true for the version that `pack:<name>@latest` records, of the
+      versions the command listed. That is the highest version that is not a
+      pre-release, by the order of Semantic Versioning. A registry that holds
+      pre-releases alone gives its highest pre-release. With `--cloud`, `latest`
+      is true for that version among the versions for that cloud.
     - `type` is `spectro`, `helm`, or `oci`. A version that the listing gives
       no type is `spectro`, as its record says.
     - `state` is `deprecated`, `disabled`, or `deleted` from `system_state` of

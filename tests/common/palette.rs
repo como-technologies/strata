@@ -186,6 +186,18 @@ pub fn profile_document(
     doc
 }
 
+/// The entry of `spec.clusterProfileTemplates` that a cluster holds for a profile version. It has
+/// the uid, the name, `profileVersion`, and the published type, cloud type, and packs of
+/// `document`. `document` is a profile as [`profile_document`] builds it.
+pub fn cluster_template(document: &Value) -> Value {
+    let published = &document["spec"]["published"];
+    json!({
+        "uid": document["metadata"]["uid"], "name": document["metadata"]["name"],
+        "profileVersion": document["spec"]["version"], "type": published["type"],
+        "cloudType": published["cloudType"], "packs": published["packs"],
+    })
+}
+
 // ---- the pack documents ------------------------------------------------------------------------
 
 /// The registry of a pack when a fixture names none.

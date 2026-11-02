@@ -824,7 +824,7 @@ fn the_rust_comments_that_the_style_review_of_wave_11_named_keep_to_25_words() {
     let comments = [
         (
             "src/snapshot/cluster.rs",
-            "The cluster of a record of any release",
+            "The two fields of a record of strata 0.24 and before",
         ),
         (
             "src/snapshot/cluster.rs",
@@ -2171,10 +2171,11 @@ fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_o
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
     assert!(
-        one_line(opening).contains("Four sections list the changes that need action"),
-        "the opening does not name four sections"
+        one_line(opening).contains("Five sections list the changes that need action"),
+        "the opening does not name five sections"
     );
     for anchor in [
+        "(#release-0280-changes-that-need-action)",
         "(#release-0270-changes-that-need-action)",
         "(#release-0260-changes-that-need-action)",
         "(#release-0250-changes-that-need-action)",
@@ -2878,4 +2879,80 @@ fn loop_sh_has_the_check_report_log_and_the_book_has_its_row() {
         row.contains("| 0 | #396:") && !row.to_lowercase().contains("no result yet"),
         "{row}"
     );
+}
+
+// ---- the cleanup of Wave 12, in Wave 14 ---------------------------------------------------------
+
+/// The section of release 0.28.0 sits above the one of release 0.27.0. It gives the action for
+/// each change of the cleanup that can break a script, a document reader, or a program that uses a
+/// library: the mark `latest`, the path of `snapshot-schema`, the field `cluster` of
+/// `stale-record`, the hash of the values of a group, and the items of the two libraries.
+#[test]
+fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let newer = page
+        .find("\n## Release 0.28.0: changes that need action\n")
+        .expect("the page has no section for release 0.28.0");
+    let older = page
+        .find("\n## Release 0.27.0: changes that need action\n")
+        .expect("the page has no section for release 0.27.0");
+    assert!(newer < older, "release 0.28.0 comes above release 0.27.0");
+
+    let release = section(
+        &page,
+        "## Release 0.28.0: changes that need action",
+        Some("\n## "),
+    );
+    let part = |heading: &str| one_line(section(release, heading, Some("\n### ")));
+    let command_line = part("### For a user of the command line or of a document\n");
+    for needle in [
+        "**`strata packs`: `latest` marks the version that `<name>@latest` records.**",
+        "`latest` marks `1.29.0` now.",
+        "**The message of `snapshot-schema` names the field inside the cluster of a record.**",
+        "`source.cluster.profiles[0].version`",
+        "The error document has the new key `field`",
+        "**`stale-record`: `cluster` holds the uid of the cluster.**",
+        "A script that read the name from `error.cluster` must read `error.name`.",
+        "**The policy `valuesHash` of a group with values of no canonical form changes.**",
+        "A record of 0.27.0 or before differs in the `policy` tier from a new record of the same group.",
+        "**`strata-preflight`: three rules read a version as `strata` does.**",
+    ] {
+        assert!(
+            command_line.contains(needle),
+            "the part of the command line lacks {needle:?}"
+        );
+    }
+    let strata = part("### For a user of the library of strata\n");
+    for needle in [
+        "`snapshot::cluster_tiers` gives a `Result`.",
+        "`error::Error::StaleRecord` has the new field `name: String`.",
+        "`ops::PackBuild::latest` is true for the version that `pack:<name>@latest` records.",
+    ] {
+        assert!(strata.contains(needle), "the library part lacks {needle:?}");
+    }
+    let preflight = part("### For a user of the library of strata-preflight\n");
+    for needle in [
+        "`world::Engine`, `world::ENGINES`, and `run::RULES_SCHEMA` are not public.",
+        "`semver_numbers`",
+    ] {
+        assert!(
+            preflight.contains(needle),
+            "the strata-preflight part lacks {needle:?}"
+        );
+    }
+    // the additions are in the first section of the page
+    let library = one_line(section(
+        &page,
+        "## The Rust library",
+        Some("\n## The documents"),
+    ));
+    for needle in [
+        "After 0.27.0, `timestamp` is a public module of `strata`.",
+        "After 0.27.0, `render::Format` has `ALL`, `as_str`, and `from_text`",
+    ] {
+        assert!(
+            library.contains(needle),
+            "the library part lacks {needle:?}"
+        );
+    }
 }

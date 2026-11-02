@@ -128,38 +128,52 @@ impl_closed_set!(ClusterRead {
     PendingRepave => "pendingRepave",
 });
 
-/// The cluster of a record of any release. It has the fields of [`ClusterSource`], and the two
-/// fields of strata 0.24 and before that held a read error. Each older field has the key of
-/// [`ClusterSource::errors`] that holds the error now. Do not remove a field: a record of an
-/// older release needs it.
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ClusterRecord {
-    #[serde(flatten)]
-    cluster: ClusterSource,
-    updates_pending_error: Option<String>,
-    pending_repave_error: Option<String>,
+/// The two fields of a record of strata 0.24 and before that held a read error. Each has the key of
+/// [`ClusterSource::errors`] that holds the error now. Do not remove one: a record of an older
+/// release needs it.
+const OLDER_ERRORS: [(&str, ClusterRead); 2] = [
+    ("updatesPendingError", ClusterRead::UpdatesPending),
+    ("pendingRepaveError", ClusterRead::PendingRepave),
+];
+
+/// Move the older read errors of `cluster`, the JSON of a cluster record, into its `errors`.
+///
+/// An entry that `errors` holds already stays. An older field that holds null is no error. An
+/// older field that is not text moves too, so the read of [`ClusterSource`] refuses it and names
+/// the entry.
+///
+/// The move works on the JSON and not on a struct with `#[serde(flatten)]`. Serde loses the path
+/// of a field inside a flatten, so the error would name the parent.
+pub(super) fn move_older_errors(cluster: &mut Value) {
+    let Some(fields) = cluster.as_object_mut() else {
+        return;
+    };
+    for (older, read) in OLDER_ERRORS {
+        let Some(why) = fields.remove(older).filter(|why| !why.is_null()) else {
+            continue;
+        };
+        if let Value::Object(errors) = fields
+            .entry("errors")
+            .or_insert_with(|| Value::Object(Default::default()))
+        {
+            errors.entry(read.as_str()).or_insert(why);
+        }
+    }
 }
 
-impl From<ClusterRecord> for ClusterSource {
-    /// The cluster with the older read errors in `errors`. An entry that `errors` holds already
-    /// stays. An older field that holds null is no error.
-    fn from(record: ClusterRecord) -> ClusterSource {
-        let ClusterRecord {
-            mut cluster,
-            updates_pending_error,
-            pending_repave_error,
-        } = record;
-        for (why, read) in [
-            (updates_pending_error, ClusterRead::UpdatesPending),
-            (pending_repave_error, ClusterRead::PendingRepave),
-        ] {
-            if let Some(why) = why {
-                cluster.errors.entry(read.into()).or_insert(why);
-            }
-        }
-        cluster
-    }
+/// Take the field `source.cluster` out of `document`, the JSON of a record, with the older read
+/// errors moved: see [`move_older_errors`]. None when the record has no cluster.
+///
+/// [`Snapshot::load`](super::Snapshot::load) reads the cluster apart from the rest of the record.
+/// So an error names the field inside the cluster, as `source.cluster.profiles[0].version`.
+pub(super) fn take_record(document: &mut Value) -> Option<Value> {
+    let mut cluster = document
+        .get_mut("source")?
+        .get_mut("cluster")
+        .map(Value::take)
+        .filter(|cluster| !cluster.is_null())?;
+    move_older_errors(&mut cluster);
+    Some(cluster)
 }
 
 /// Read the field `cluster` of [`Source`](super::Source) from a record of any release.
@@ -174,7 +188,13 @@ pub(super) fn deserialize_cluster<'de, D>(
 where
     D: Deserializer<'de>,
 {
-    Ok(Option::<ClusterRecord>::deserialize(deserializer)?.map(ClusterSource::from))
+    let Some(mut cluster) = Option::<Value>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    move_older_errors(&mut cluster);
+    serde_json::from_value(cluster)
+        .map(Some)
+        .map_err(serde::de::Error::custom)
 }
 
 /// The schema of [`ClusterSource::errors`]: a map from a part to the error of Palette. A key can
@@ -317,10 +337,15 @@ impl ClusterTier {
 /// role bindings, the namespaces, and the cloud config when strata read them. `covered` limits
 /// `running` to the profiles that the record covers. The record carries a tier only when Palette
 /// gives the part of the document that the tier reads.
+///
+/// # Errors
+///
+/// [`Error::Serialize`](crate::Error::Serialize) for a cluster group whose values have no
+/// canonical form, when strata cannot mask a password in them.
 pub fn cluster_tiers(
     raw: &RawCluster,
     covered: &[AppliedProfile],
-) -> BTreeMap<Open<Tier>, ClusterTier> {
+) -> crate::error::Result<BTreeMap<Open<Tier>, ClusterTier>> {
     let cluster = &raw.cluster;
     let mut tiers = BTreeMap::new();
     // Palette's own hashes of the spec that it applied to the cluster
@@ -353,7 +378,7 @@ pub fn cluster_tiers(
     if let Some(config) = cluster.pointer("/spec/clustersConfig") {
         tiers.insert(
             Tier::Policy.into(),
-            ClusterTier::of(crate::snapshot::policy::group_fields(config)),
+            ClusterTier::of(crate::snapshot::policy::group_fields(config)?),
         );
     }
     if let Some(cc) = &raw.cloud_config {
@@ -362,7 +387,7 @@ pub fn cluster_tiers(
             ClusterTier::of(crate::snapshot::shape::fields(cluster, cc)),
         );
     }
-    tiers
+    Ok(tiers)
 }
 
 fn running_tier(cluster: &Value, covered: &[AppliedProfile]) -> ClusterTier {
@@ -607,182 +632,4 @@ impl AppliedProfile {
 }
 
 #[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-
-    #[test]
-    fn a_document_applies_the_profile_of_a_uid_with_the_version_that_its_template_names() {
-        let doc = json!({"spec": {"clusterProfileTemplates": [
-            {"uid": "p1", "name": "lab", "profileVersion": "1.2.0", "type": "cluster",
-             "version": 3},
-            {"uid": "p2", "name": "addons", "profileVersion": "2.0.0", "type": "add-on",
-             "version": 1},
-        ]}});
-        let applied = AppliedProfile::applied(&doc, "p2").expect("the document applies p2");
-        assert_eq!(
-            (
-                applied.uid.as_str(),
-                applied.name.as_str(),
-                applied.version.as_str(),
-                applied.kind.as_str()
-            ),
-            ("p2", "addons", "2.0.0", "add-on"),
-            "the version is the profile version, not the version of the template"
-        );
-        assert_eq!(
-            AppliedProfile::template_of(&doc, "p1").map(|t| t["version"].clone()),
-            Some(json!(3))
-        );
-        assert!(AppliedProfile::applied(&doc, "p3").is_none());
-        assert!(AppliedProfile::applied(&json!({}), "p1").is_none());
-    }
-
-    #[test]
-    fn a_pack_of_a_template_is_an_entry_of_pack_values_with_empty_text_for_a_missing_field() {
-        let doc = json!({"spec": {"clusterProfileTemplates": [
-            {"uid": "p1", "packs": [
-                {"name": "kubernetes", "tag": "1.32", "type": "spectro", "values": "a: 1\n",
-                 "manifests": [{"name": "m"}]},
-                {"name": "manifest-pack", "type": "manifest"},
-            ]},
-        ]}});
-        let packs = AppliedProfile::template_packs(&doc, "p1");
-        assert_eq!(packs.len(), 2);
-        assert_eq!(
-            AppliedProfile::template_pack_value(&packs[0]),
-            json!({"name": "kubernetes", "tag": "1.32", "type": "spectro", "values": "a: 1\n"})
-        );
-        assert_eq!(
-            AppliedProfile::template_pack_value(&packs[1]),
-            json!({"name": "manifest-pack", "tag": "", "type": "manifest", "values": ""})
-        );
-        assert!(AppliedProfile::template_packs(&doc, "p2").is_empty());
-    }
-
-    #[test]
-    fn a_tier_leaves_a_field_that_strata_could_not_read_out_of_its_fields_and_its_hash() {
-        let errors = BTreeMap::from([("rbacs".to_string(), "HTTP 403: forbidden".to_string())]);
-        let unread = ClusterTier::with_errors(
-            json!({"timezone": "Etc/UTC", "rbacs": null}),
-            errors.clone(),
-        );
-        let read = ClusterTier::of(json!({"timezone": "Etc/UTC"}));
-        assert_eq!(unread.fields, read.fields);
-        assert_eq!(unread.hash, read.hash);
-        assert_eq!(unread.errors, errors);
-    }
-
-    /// The field `cluster` of a `Source`, as serde reads it from `record`.
-    fn try_read_cluster(record: Value) -> Result<Option<ClusterSource>, serde_json::Error> {
-        #[derive(Deserialize)]
-        struct Holder {
-            #[serde(deserialize_with = "deserialize_cluster")]
-            cluster: Option<ClusterSource>,
-        }
-        serde_json::from_value::<Holder>(json!({"cluster": record})).map(|h| h.cluster)
-    }
-
-    fn read_cluster(record: Value) -> Option<ClusterSource> {
-        try_read_cluster(record).unwrap()
-    }
-
-    /// A cluster object with the fields that a record must hold, and `more`.
-    fn cluster_object(more: Value) -> Value {
-        let mut cluster = json!({"uid": "c1", "name": "payments", "profiles": []});
-        cluster
-            .as_object_mut()
-            .unwrap()
-            .extend(more.as_object().unwrap().clone());
-        cluster
-    }
-
-    #[test]
-    fn the_read_errors_of_an_older_record_move_into_errors_and_an_entry_of_errors_stays() {
-        let older = read_cluster(cluster_object(json!({
-            "updatesPendingError": "HTTP 404: not found",
-            "pendingRepaveError": "HTTP 403: forbidden",
-        })))
-        .unwrap();
-        assert_eq!(
-            serde_json::to_value(&older.errors).unwrap(),
-            json!({
-                "updatesPending": "HTTP 404: not found",
-                "pendingRepave": "HTTP 403: forbidden",
-            })
-        );
-        assert_eq!(older.uid, "c1");
-
-        // a record that holds both shapes keeps the entry of the new one
-        let both = read_cluster(cluster_object(json!({
-            "pendingRepaveError": "HTTP 500: older",
-            "errors": {"pendingRepave": "HTTP 403: newer", "updatesPending": "HTTP 404: x"},
-        })))
-        .unwrap();
-        assert_eq!(
-            serde_json::to_value(&both.errors).unwrap(),
-            json!({"pendingRepave": "HTTP 403: newer", "updatesPending": "HTTP 404: x"})
-        );
-    }
-
-    #[test]
-    fn a_cluster_that_a_record_writes_now_reads_with_the_errors_it_holds_and_writes_the_same() {
-        let current = cluster_object(json!({
-            "updatesPending": true,
-            "errors": {"network": "HTTP 500: later", "pendingRepave": "HTTP 403: forbidden"},
-        }));
-        let read = read_cluster(current.clone()).unwrap();
-        assert_eq!(read.errors.len(), 2);
-        assert_eq!(serde_json::to_value(&read).unwrap(), current);
-
-        let none = read_cluster(cluster_object(json!({}))).unwrap();
-        assert!(none.errors.is_empty());
-        assert_eq!(read_cluster(Value::Null).map(|c| c.uid), None);
-    }
-
-    #[test]
-    fn an_older_field_that_holds_null_is_no_error() {
-        let read = read_cluster(cluster_object(json!({"updatesPendingError": null}))).unwrap();
-        assert!(read.errors.is_empty());
-    }
-
-    #[test]
-    fn an_older_field_that_is_not_text_is_an_error_of_the_record() {
-        let err = try_read_cluster(cluster_object(json!({"pendingRepaveError": 7}))).unwrap_err();
-        assert!(err.to_string().contains("invalid type: integer"), "{err}");
-    }
-
-    #[test]
-    fn the_errors_of_a_cluster_name_the_field_that_strata_could_not_read() {
-        let reasons = [
-            (
-                Open::Known(ClusterRead::UpdatesPending),
-                &Some("HTTP 404: not found".to_string()),
-            ),
-            (Open::Known(ClusterRead::PendingRepave), &None),
-        ];
-        assert_eq!(
-            unread(reasons),
-            BTreeMap::from([(
-                Open::Known(ClusterRead::UpdatesPending),
-                "HTTP 404: not found".to_string()
-            )])
-        );
-    }
-
-    #[test]
-    fn the_errors_of_a_record_keep_a_part_that_a_later_release_names() {
-        let errors: BTreeMap<Open<ClusterRead>, String> = serde_json::from_value(json!({
-            "network": "HTTP 500: later",
-            "pendingRepave": "HTTP 403: forbidden",
-        }))
-        .unwrap();
-        let known: Vec<Option<ClusterRead>> = errors.keys().map(Open::known).collect();
-        assert_eq!(known, [None, Some(ClusterRead::PendingRepave)]);
-        assert_eq!(
-            serde_json::to_value(&errors).unwrap(),
-            json!({"network": "HTTP 500: later", "pendingRepave": "HTTP 403: forbidden"})
-        );
-    }
-}
+mod tests;

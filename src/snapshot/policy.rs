@@ -15,9 +15,10 @@ use serde_json::{Map, Value, json};
 
 use super::cluster::unread;
 use crate::api::RawCluster;
-use crate::api::mask::mask_password_keys;
+use crate::api::mask::{mask_group_values, mask_password_keys};
 use crate::content::canon::{canon_yaml_hashed, canonical_json, sha256_hex};
-use crate::json::{arr, flag, items, str_at, value_at, value_or_null};
+use crate::error::Result;
+use crate::json::{arr, flag, items, set_at, str_at, value_at, value_or_null};
 
 /// The type that the schema gives to a key of the policy fields.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -359,8 +360,21 @@ pub(crate) fn errors(raw: &RawCluster) -> BTreeMap<String, String> {
 /// The group applies `values` to each virtual cluster as YAML, as a pack applies its values. So
 /// the tier holds the values in canonical form with their hash, and the host clusters sorted by
 /// uid. The values hold `********` over each password, and the hash covers the masked values.
-pub(crate) fn group_fields(config: &Value) -> Value {
-    let (values, values_hash, values_parse_error) = canon_yaml_hashed(str_at(config, "/values"));
+///
+/// Some values have no canonical form, and the tier holds `values` as `null`. The hash then covers
+/// the text, so it covers the text with the mask. A new password changes no hash. The record of the
+/// saved directory has the hash of the record of the fetch.
+///
+/// # Errors
+///
+/// [`Error::Serialize`](crate::Error::Serialize) when the values have no canonical form and
+/// strata cannot mask a password in them: see [`mask_group_values`].
+pub(crate) fn group_fields(config: &Value) -> Result<Value> {
+    let text = str_at(config, "/values");
+    let (values, mut values_hash, values_parse_error) = canon_yaml_hashed(text);
+    if values_parse_error.is_some() {
+        values_hash = sha256_hex(mask_group_values(text)?.trim());
+    }
     let mut hosts: Vec<Value> = arr(config, "/hostClustersConfig")
         .iter()
         .map(|h| {
@@ -380,7 +394,7 @@ pub(crate) fn group_fields(config: &Value) -> Value {
     }
     let mut fields = Value::Object(fields);
     mask_group_fields(&mut fields);
-    fields
+    Ok(fields)
 }
 
 /// Write `********` over each password in `values` of the policy fields `fields` of a cluster
@@ -392,7 +406,7 @@ fn mask_group_fields(fields: &mut Value) {
     };
     mask_password_keys(values);
     let hash = sha256_hex(&canonical_json(values));
-    fields[VALUES_HASH] = Value::String(hash);
+    set_at(fields, &[VALUES_HASH], Value::String(hash));
 }
 
 /// Each role binding in `doc`, the answer of `GET /v1/spectroclusters/{uid}/config/rbacs`: its
@@ -543,11 +557,11 @@ mod tests {
     #[test]
     fn the_fields_of_a_group_have_each_key_of_the_table_and_the_parse_error_only_for_broken_values()
     {
-        let good = group_fields(&json!({"values": "a: 1\n"}));
+        let good = group_fields(&json!({"values": "a: 1\n"})).unwrap();
         let mut without = keys_in(GROUP_KEYS);
         without.remove(VALUES_PARSE_ERROR);
         assert_eq!(keys_of(&good), without);
-        let broken = group_fields(&json!({"values": "a: [1"}));
+        let broken = group_fields(&json!({"values": "a: [1"})).unwrap();
         assert_eq!(keys_of(&broken), keys_in(GROUP_KEYS));
     }
 
@@ -602,7 +616,7 @@ mod tests {
             json!({"endpointType": "LoadBalancer",
                 "values": format!("# the admin\nsync:\n  adminPassword: {password}\n  replicas: 1\n")})
         };
-        let fields = group_fields(&config("s3cr3t"));
+        let fields = group_fields(&config("s3cr3t")).unwrap();
         let masked = json!({"sync": {"adminPassword": "********", "replicas": 1}});
         assert_eq!(fields["values"], masked);
         assert_eq!(
@@ -611,18 +625,53 @@ mod tests {
         );
         assert!(!canonical_json(&fields).contains("s3cr3t"));
         // the hash does not show a new password: the record holds no trace of it
-        assert_eq!(fields, group_fields(&config("an0ther")));
+        assert_eq!(fields, group_fields(&config("an0ther")).unwrap());
         // values that do not parse keep no values
-        let broken = group_fields(&json!({"values": "a: [1"}));
+        let broken = group_fields(&json!({"values": "a: [1"})).unwrap();
         assert_eq!(broken["values"], Value::Null);
         assert!(broken.get("valuesParseError").is_some());
     }
 
     #[test]
+    fn values_with_no_canonical_form_hash_the_text_with_the_mask_and_not_the_password() {
+        // an unquoted template is a map in a key, so the values have no canonical form
+        let config = |password: &str| {
+            json!({"endpointType": "LoadBalancer",
+                "values": format!("password: {password}\nhost: {{{{ .spectro.var.host }}}}\n")})
+        };
+        let fields = group_fields(&config("s3cr3t")).unwrap();
+        assert_eq!(fields["values"], Value::Null);
+        assert!(fields.get("valuesParseError").is_some());
+        let masked = "password: '********'\nhost: {{ .spectro.var.host }}";
+        assert_eq!(fields["valuesHash"], Value::String(sha256_hex(masked)));
+        // a new password changes no hash, so it changes no tier
+        assert_eq!(fields, group_fields(&config("an0ther")).unwrap());
+        // the text that the saved directory holds has the same hash as the text of the fetch
+        let saved = mask_group_values(str_at(&config("s3cr3t"), "/values")).unwrap();
+        let from_directory =
+            group_fields(&json!({"endpointType": "LoadBalancer", "values": saved}));
+        assert_eq!(from_directory.unwrap(), fields);
+        // each other change of the text still changes the hash
+        let other = json!({"endpointType": "LoadBalancer",
+            "values": "password: s3cr3t\nhost: {{ .spectro.var.other }}\n"});
+        assert_ne!(group_fields(&other).unwrap(), fields);
+    }
+
+    #[test]
+    fn values_with_a_password_that_strata_cannot_mask_give_no_hash_and_an_error() {
+        // a block scalar has no line to change, and a key that is a map cannot be written again
+        let config =
+            json!({"values": "adminPassword: |\n  s3cr3t\nhost: {{ .spectro.var.host }}\n"});
+        assert!(matches!(
+            group_fields(&config),
+            Err(crate::Error::Serialize(_))
+        ));
+    }
+    #[test]
     fn an_older_group_tier_with_a_password_in_clear_compares_with_a_masked_one() {
         let config = json!({"endpointType": "LoadBalancer",
             "values": "sync:\n  adminPassword: s3cr3t\n  replicas: 1\n"});
-        let newer = group_fields(&config);
+        let newer = group_fields(&config).unwrap();
         // a record of strata 0.19 or before kept the values in clear, with their hash
         let clear = json!({"sync": {"adminPassword": "s3cr3t", "replicas": 1}});
         let mut older = newer.clone();
@@ -635,7 +684,7 @@ mod tests {
         // each other value still compares
         let mut more = config.clone();
         more["values"] = json!("sync:\n  adminPassword: s3cr3t\n  replicas: 2\n");
-        let changed = group_fields(&more);
+        let changed = group_fields(&more).unwrap();
         let (a, b) = comparable(&older, &changed);
         assert_ne!(a, b);
     }
@@ -645,7 +694,7 @@ mod tests {
         let cluster = json!({"timezone": "Etc/UTC", RBACS: []});
         let (a, b) = comparable(&cluster, &cluster);
         assert!(matches!((a, b), (Cow::Borrowed(_), Cow::Borrowed(_))));
-        let group = group_fields(&json!({"values": "sync:\n  adminPassword: s3cr3t\n"}));
+        let group = group_fields(&json!({"values": "sync:\n  adminPassword: s3cr3t\n"})).unwrap();
         let (a, b) = comparable(&group, &group);
         assert!(matches!((a, b), (Cow::Owned(_), Cow::Owned(_))));
     }

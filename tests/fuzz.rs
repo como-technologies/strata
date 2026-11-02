@@ -396,11 +396,7 @@ fn a_diff_of_two_junk_records_answers() {
                 seed()
             );
             // every renderer walks the whole document
-            for format in [
-                strata::render::Format::Terminal,
-                strata::render::Format::Markdown,
-                strata::render::Format::Json,
-            ] {
+            for &format in strata::render::Format::ALL {
                 let out =
                     strata::render::renderer(format, strata::term::color::Paint::off(), false)
                         .render(&d, a, b, true);

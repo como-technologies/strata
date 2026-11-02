@@ -16,6 +16,7 @@ mod verify;
 use clap::ValueEnum;
 use serde_json::Value;
 
+use crate::closed_set::impl_texts;
 use crate::closed_set::unknown::Report;
 use crate::diff::Diff;
 use crate::error::{MESSAGE_AT, Result};
@@ -40,6 +41,12 @@ pub enum Format {
     /// The `strata-diff/1` document.
     Json,
 }
+
+impl_texts!(pub Format {
+    Terminal => "terminal",
+    Markdown => "markdown",
+    Json => "json",
+});
 
 /// Turns a diff into text.
 pub trait Renderer {
@@ -260,6 +267,17 @@ fn registry_sync_suffix(sync: Option<&crate::diff::RegistrySync>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_format_has_the_name_that_the_command_line_gives_it() {
+        let named: Vec<String> = Format::value_variants()
+            .iter()
+            .map(|f| f.to_possible_value().unwrap().get_name().to_string())
+            .collect();
+        let texts: Vec<&str> = Format::ALL.iter().map(|f| f.as_str()).collect();
+        assert_eq!(texts, named);
+        assert_eq!(Format::from_text("markdown"), Some(Format::Markdown));
+    }
 
     #[test]
     fn a_long_value_shows_its_start_with_a_mark_and_its_length() {

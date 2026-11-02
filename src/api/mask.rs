@@ -264,7 +264,7 @@ fn masked_copy<T: Tree + Clone + PartialEq>(values: &T) -> Option<T> {
 /// Some YAML has no canonical form: a key that is a map or a list, such as an explicit `? key`
 /// or a template with no quotes, `{{ .spectro.var.x }}`. Such values keep their keys as they are,
 /// and strata writes them again from the parsed YAML.
-pub(super) fn mask_group_values(values: &str) -> Result<String> {
+pub(crate) fn mask_group_values(values: &str) -> Result<String> {
     let masked = match canon_yaml(values) {
         Canon::Parsed(parsed) => masked_copy(&parsed)
             .map(|m| to_yaml(&m, "the masked values of a cluster group"))

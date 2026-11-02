@@ -18,18 +18,20 @@ then the floating tags above it: `1.65.0`, then `1.65.x`, then `1.x`.
 {{#include ../output/packs-latest.txt}}
 ```
 
-`--latest` keeps one line for each registry that has the pack. This is the
-question a bump asks: the pin is current when it names the version that
-`--latest` prints first.
+`--latest` keeps one line for each registry that has the pack. That line is the
+version that `pack:<name>@latest` records: the highest version that is not a
+pre-release. This is the question a bump asks: the pin is current when it names
+that version.
 
-A pre-release can be the highest version. `strata behind` does not name it as a
+A pre-release is below its version. A registry that holds pre-releases alone
+gives its highest pre-release. `strata behind` does not name a pre-release as a
 newer version of a pin that is not a pre-release: see
 [A pre-release](./behind.md#a-pre-release).
 
 Palette marks one version of each pack in each registry as the latest. Palette
 orders by semantic version, and strata does too: a pre-release or a rebuild such
-as `1.21.1-rev1` is below `1.21.1`. So the newest version is the version that
-Palette marks:
+as `1.21.1-rev1` is below `1.21.1`. So the version that strata marks is the
+version that Palette marks:
 
 ```text
 {{#include ../output/packs-palette-latest.txt}}
@@ -43,9 +45,11 @@ omits the field on each other version:
 ```
 
 `--latest` keeps one line for each registry. It keeps a second line, with the
-mark `latest in Palette`, only when Palette marks a version that is not the
-highest. This can happen for a version that does not parse as a semantic
-version, such as a version with four numbers.
+mark `latest in Palette`, only when Palette marks another version. This can
+happen in two cases. The highest version is a pre-release, such as `1.31.0-rc.1`
+above `1.29.0`: `@latest` skips it, and Palette marks the highest version. Or a
+version does not parse as a semantic version, such as a version with four
+numbers.
 
 `strata behind` names the version of Palette on its bump line: see
 [The pins that are behind](./behind.md#the-pins-that-are-behind). See
@@ -61,7 +65,7 @@ version, such as a version with four numbers.
 | --- | --- |
 | `--registry NAME` | Only this registry, by its name or its uid. |
 | `--cloud TYPE` | Keep the versions that support this cloud, such as `aws`. |
-| `--latest` | Only the newest version of each registry, and the version that Palette calls the latest when it is a different one. |
+| `--latest` | Only the version that `@latest` names in each registry, and the version that Palette calls the latest when it is a different one. |
 
 A version supports a cloud by the rule of Palette for a pack in a profile: see
 [A pack that supports a cloud](../internals/palette/packs.md#a-pack-that-supports-a-cloud).

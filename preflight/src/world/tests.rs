@@ -132,6 +132,16 @@ fn the_world_gives_the_account_kind_and_the_route_cloud_of_each_engine() {
 }
 
 #[test]
+fn the_derived_fields_of_a_value_that_is_no_object_make_an_object_and_do_not_panic() {
+    for odd in [json!(42), json!("world"), json!([1]), Value::Null] {
+        let mut world = odd.clone();
+        add_derived_fields(&mut world).unwrap();
+        assert!(world.is_object(), "{odd}: {world}");
+        assert_eq!(world["edgeHosts"], json!([]), "{odd}");
+    }
+}
+
+#[test]
 fn the_edge_hosts_of_the_world_are_the_hosts_of_each_pool_with_the_pool_in_order() {
     let entity = json!({"spec": {"machinepoolconfig": [
         {"poolConfig": {"name": "cp"}, "cloudConfig": {"edgeHosts": [{"hostUid": "h1"}, {"hostUid": "h2"}]}},

@@ -198,12 +198,7 @@ fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &st
         let prof = read_json(&root.join(name).join("profile.json"));
         let man = read_json(&root.join(name).join("manifests.json"));
         let vars = read_json(&root.join(name).join("variables.json"));
-        let published = &prof["spec"]["published"];
-        templates.push(json!({
-            "uid": prof["metadata"]["uid"], "name": prof["metadata"]["name"],
-            "profileVersion": prof["spec"]["version"], "type": published["type"],
-            "cloudType": published["cloudType"], "packs": published["packs"],
-        }));
+        templates.push(cluster_template(&prof));
         manifests.push(json!({"metadata": man["metadata"], "spec": man["spec"]}));
         let with_values: Vec<Value> = vars["variables"]
             .as_array()

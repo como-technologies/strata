@@ -530,15 +530,17 @@ rules:
         - --output
         - json
       expr: |
-        def parts: split(".") | map(tonumber);
         if .exec.exit != 0 then
           (if ((.exec.stderr // "") | test("NoSuchEntity")) then [] else ["aws iam list-role-tags failed: \(.exec.stderr | tostring | .[:200])"] end)
         else
           ([ (.exec.stdout.Tags // [])[] | select(.Key == "palette-version") | .Value ] | .[0]) as $tag
           | if $tag == null then []
             else (.release | tostring) as $rel
-              | ($rel | parts) as $want
-              | if (($tag | parts | .[:($want | length)]) < $want) then
+              | ($rel | semver_numbers) as $want
+              | ($tag | semver_numbers) as $have
+              | if $want == null then error("--release \($rel) is no version")
+                elif $have == null then error("the tag palette-version of the role holds \($tag), and that is no version")
+                elif ($have | .[:($want | length)]) < $want then
                   ["Palette \($tag) applied the CAPA stack last, and the tenant runs \($rel): the next create in the account updates the stack (capa-stack-update-denied tells if the role can apply the update)"]
                 else [] end
             end

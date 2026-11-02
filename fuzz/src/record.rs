@@ -18,7 +18,7 @@ pub(crate) fn compares_equal_to_itself(record: &Snapshot) {
         diff.same && diff.nothing_differs(),
         "a record differs from itself"
     );
-    for format in [Format::Terminal, Format::Markdown, Format::Json] {
+    for &format in Format::ALL {
         let shown = renderer(format, Paint::off(), false).render(&diff, record, record, true);
         assert!(shown.is_ok(), "{format:?} cannot show a record: {shown:?}");
     }

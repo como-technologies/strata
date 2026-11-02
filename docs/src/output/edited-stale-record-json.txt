@@ -1,2 +1,2 @@
 $ strata compare cluster:payments review/payments-pending.json --repave --json --quiet
-{"error":{"cluster":"payments","kind":"stale-record","message":"the record of the update that waits holds aws-stack@1.1.1, and the cluster payments does not run it now. Record cluster:payments@pending again","profile":"aws-stack@1.1.1"}}
+{"error":{"cluster":"64f1000000000000000000e1","kind":"stale-record","message":"the record of the update that waits holds aws-stack@1.1.1, and the cluster payments does not run it now. Record cluster:payments@pending again","name":"payments","profile":"aws-stack@1.1.1"}}

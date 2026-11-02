@@ -413,8 +413,8 @@ pub(crate) struct PacksArgs {
     /// Keep the versions of this cloud, such as aws, and the versions of the cloud type all
     #[arg(long, value_name = "TYPE")]
     pub(crate) cloud: Option<String>,
-    /// Only the newest version of each registry, and the version Palette calls the latest when it
-    /// differs
+    /// Only the version that `@latest` names in each registry, and the version Palette calls the
+    /// latest when it differs
     #[arg(long)]
     pub(crate) latest: bool,
     #[command(flatten)]

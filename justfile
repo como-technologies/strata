@@ -58,9 +58,9 @@ bench-short:
     cargo bench -p strata-benches -- --warm-up-time 1 --measurement-time 3
 
 # The rustdoc command of `just lint` and `just api-docs`. The two recipes share one command, so
-# that they share one build. `just lint` adds the packages xtask, strata-benches, and strata-report-endpoint, and runs the
-# command a second time with all items. The build of the public items does not read the comment of
-# a private item. The build of all items does not warn when a public item links to a private item.
+# that they share one build. `just lint` adds the packages xtask, strata-benches,
+# strata-report-endpoint, and strata-fuzz, and runs the command a second time with all items. The
+# build of the public items does not read the comment of a private item. The build of all items does not warn when a public item links to a private item.
 # So `just lint` needs both.
 rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-preflight'
 
@@ -68,8 +68,8 @@ rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-p
 lint:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
-    {{rustdoc}} -p xtask -p strata-benches -p strata-report-endpoint
-    {{rustdoc}} -p xtask -p strata-benches -p strata-report-endpoint --document-private-items
+    {{rustdoc}} -p xtask -p strata-benches -p strata-report-endpoint -p strata-fuzz
+    {{rustdoc}} -p xtask -p strata-benches -p strata-report-endpoint -p strata-fuzz --document-private-items
 
 # Build and run examples/library and examples/library-preflight, crates that use strata and strata-preflight as libraries
 library-example:

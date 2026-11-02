@@ -26,7 +26,6 @@ path = "src/main.rs"
 # The Palette client, the records of profiles, and the error type come from strata. This crate
 # adds the rules and the checks; strata never depends on it.
 strata = { path = ".." }
-chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 # The checks of the rules are jq programs over one JSON document, so a person reads a rule with
 # the jq they know, and runs the same program by hand with `jq`. jaq is jq in Rust, with no

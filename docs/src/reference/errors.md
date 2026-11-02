@@ -29,7 +29,7 @@ the kind.
 | `record-not-a-source` | `snapshot` got a record. It writes one, and does not read one. | `path` |
 | `palette-refuses` | `snapshot --validate` asked Palette whether it takes the version, and Palette refused its name, its version, or its packs. Strata prints each error as a `palette    refuses:` line first, and writes no record. | `reference`, `errors[]` of `pack`, `code`, and `message` |
 | `usage` | The command line cannot work as given. See [The usage errors](#the-usage-errors). | |
-| `stale-record` | The record of the update that waits for a cluster holds a profile that the cluster does not run now. The record is older than the cluster. See [The refusals that a record or a cluster causes](#the-refusals-that-a-record-or-a-cluster-causes). | `cluster`, `profile` |
+| `stale-record` | The record of the update that waits for a cluster holds a profile that the cluster does not run now. The record is older than the cluster. See [The refusals that a record or a cluster causes](#the-refusals-that-a-record-or-a-cluster-causes). | `cluster`, `name`, `profile` |
 | `cluster-template-governs` | A cluster template governs the cluster, and `compare --repave` asks about a change that gives pack values to a profile that the cluster runs. The route of the template takes no pack values. | `cluster`, `template` |
 | `no-cloud-config` | The document of the cluster names no cloud config, so `snapshot --shape` has nothing to read. | `cluster` |
 | `candidate-invalid` | The candidate file has a problem, or it gives a value that Palette changes at the create. A rule that only the create of Palette checks also gives this kind. Then the message names the code of Palette, and `code` holds it. For the rules of the validate route, `snapshot --validate` asks Palette. See [Checks before any request](candidate-file.md#checks-before-any-request). | `path`, `code` for a rule of the create |
@@ -52,7 +52,7 @@ the kind.
 | `app-profile-name-ambiguous` | Two or more app profiles in the scope have this name and version. Palette refuses a second one only in one scope. Give the uid in place of the name. | `name`, `version`, `uids` |
 | `not-snapshot` | The file is not a strata snapshot. | `path` |
 | `unsupported-schema` | The file is a record, or a report for `behind --since`, of a schema id that this strata does not read. | `path`, `found`, `supported` |
-| `snapshot-schema` | The record, or the report for `behind --since`, does not match its schema. The message names the field that does not match, such as `variables[0].name`, and says to take the file again. | `path`, `schema` |
+| `snapshot-schema` | The record, or the report for `behind --since`, does not match its schema. The message names the field that does not match, such as `variables[0].name` or `source.cluster.profiles[0].version`, and says to take the file again. | `path`, `schema`, `field` unless the document as a whole does not match |
 | `log-invalid` | `strata report` read a line of the log of the unknown values that is not a line of `strata-unknown/1`. The line has a field outside the list or a field of the wrong type. Or its route is the path of a real request, or its value is not a short word. The message gives the number of the line. Strata prints nothing and marks nothing. See [What strata never reports](./report.md#what-strata-never-reports). | `path`, `line` |
 | `report-send` | The endpoint did not take the report. Strata could not reach it, the endpoint answered a status outside 2xx, or the report was not valid. A run never fails with this error. It prints the message as a warning, and `--quiet` hides it. The next send holds the lines again. See [Send the report by itself](./report.md#send-the-report-by-itself). | `endpoint` |
 | `no-uid` | The record has no uid, for example a candidate record. | |
@@ -105,6 +105,10 @@ request, because only the document of the cluster shows it:
   [A cluster in a cluster template](../commands/compare/repave.md#a-cluster-in-a-cluster-template).
 - `no-cloud-config`: `snapshot --shape` reads the cloud config of a cluster,
   and the document of the cluster names none.
+
+In each of the three, `cluster` is the uid of the cluster. `stale-record` adds
+`name`, the name of the cluster, which its message shows. `no-cloud-config`
+holds the name in `cluster` only when the document of the cluster gives no uid.
 
 With `--json`, the fields of the kind are in the error. This is `stale-record`:
 

@@ -943,3 +943,54 @@ fn shell_words_quotes_what_needs_it() {
         "a 'b c' 'd'\\''e'"
     );
 }
+
+/// `path` with each `{{ jq }}` template of it replaced by `x`.
+fn without_templates(path: &str) -> String {
+    let mut out = String::new();
+    let mut rest = path;
+    while let Some(start) = rest.find("{{") {
+        out.push_str(&rest[..start]);
+        match rest[start..].find("}}") {
+            Some(end) => {
+                out.push('x');
+                rest = &rest[start + end + 2..];
+            }
+            None => return out,
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+#[test]
+fn each_rule_that_sends_the_cluster_create_to_the_validate_route_sends_it_where_the_library_names_it()
+ {
+    use strata::api::codes::ValidateRoute;
+
+    let catalog = crate::catalog::builtin().unwrap();
+    let mut create_routes = 0;
+    for rule in catalog.rules() {
+        let Some(Check::Palette(check)) = &rule.check else {
+            continue;
+        };
+        let path = without_templates(&check.path);
+        // a path of the create ends with `/validate`, and the library names it
+        if path.starts_with("/v1/spectroclusters/") && path.ends_with("/validate") {
+            assert_eq!(
+                ValidateRoute::of(check.method, &path),
+                Some(ValidateRoute::ClusterCreate),
+                "{}: {}",
+                rule.id,
+                check.path
+            );
+            create_routes += 1;
+        } else {
+            // no other route of a rule is a validate route that the library reads as an answer
+            assert_eq!(ValidateRoute::of(check.method, &path), None, "{}", rule.id);
+        }
+    }
+    assert!(
+        create_routes >= 4,
+        "the catalog has {create_routes} rules that validate the create"
+    );
+}
