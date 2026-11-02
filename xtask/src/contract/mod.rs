@@ -11,7 +11,8 @@
 //! also lists each value of a closed set that neither the fact nor the stand-in names: strata does
 //! not know such a value. It compares shapes, and never the values of two tenants. A fact can name
 //! the error codes that mean the tenant has no such object. The run skips the fact for an HTTP 404
-//! with one of them.
+//! with one of them. A request with alternatives, such as `{aws,gcp,azure}`, goes out once for each
+//! choice, and the entry of the fact joins the results.
 //!
 //! The result is the document `strata-contract/1`, with one entry for each fact. The run changes
 //! nothing in the tenant: it sends GET requests only. The [`cloud`] module adds the entry of each

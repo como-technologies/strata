@@ -45,7 +45,8 @@ pub enum DifferenceKind {
 pub struct Difference {
     /// What differs.
     pub kind: DifferenceKind,
-    /// The field, as the fact writes it, or `status` for a status.
+    /// The field, as the fact writes it, or `status` for a status. For a request with alternatives, a
+    /// field has the choice and a colon in front.
     pub path: String,
     /// What the stand-in has: the types, or the status. For a name, the names that strata needs
     /// and that the answer lacks.
@@ -79,7 +80,8 @@ pub struct Entry {
     /// What the run found.
     pub outcome: Outcome,
     /// Why the run skipped the fact, or could not check it. It also names the values of a table that
-    /// the account cannot check, when it can check the others.
+    /// the account cannot check, when it can check the others. For a request with alternatives, it
+    /// lists the reason of each choice that is not the same, with the choice in front.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     /// Each difference, when the outcome is `differs`.
