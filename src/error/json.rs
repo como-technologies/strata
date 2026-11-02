@@ -155,6 +155,10 @@ impl Error {
                 put_path(m, path);
                 put(m, "schema", *schema);
             }
+            Error::LogInvalid { path, line, .. } => {
+                put_path(m, path);
+                put(m, "line", *line);
+            }
             _ => {}
         }
     }

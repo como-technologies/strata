@@ -43,6 +43,7 @@ With no tenant, `just examples` builds real profiles offline. See the
 | Compare | `compare`, `same-release` |
 | Check | `verify`, `consumers`, `behind` |
 | Before a build | `preflight` |
+| What strata does not know | `report` |
 | Reference | `schema` |
 
 Run `strata --help` for the list, and `strata <command> --help` for the options.

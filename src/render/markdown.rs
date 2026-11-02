@@ -17,6 +17,7 @@ use super::notes::{
     DiffNote, TierLine, diff_notes, invalid_mark, invalid_pack_sentences, pack_order_note,
     pending_profile_names, tier_line, variables_comparable,
 };
+use super::report::markdown_report;
 use super::same_release::{
     chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word,
 };
@@ -25,6 +26,7 @@ use super::verify::{
 };
 use super::{Renderer, capitalized, count_of, entry_error, short};
 use crate::closed_set::ClosedSet;
+use crate::closed_set::unknown::Report;
 use crate::diff::{Diff, Leaf, Op, PackDiff, Status};
 use crate::error::Result;
 use crate::model::profile_type::ProfileType;
@@ -40,7 +42,7 @@ use crate::text::{dash, markdown_cell};
 pub struct MarkdownRenderer;
 
 /// The text in a code span: `` `--full` ``.
-fn code(text: &str) -> String {
+pub(super) fn code(text: &str) -> String {
     format!("`{text}`")
 }
 
@@ -381,6 +383,10 @@ impl Renderer for MarkdownRenderer {
         }
         o.push('\n');
         Ok(o)
+    }
+
+    fn render_report(&self, r: &Report) -> Result<String> {
+        Ok(markdown_report(r))
     }
 
     fn render_behind(&self, r: &crate::ops::BehindReport) -> Result<String> {

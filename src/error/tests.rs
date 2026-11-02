@@ -197,6 +197,11 @@ fn one_of_each() -> Vec<Error> {
             field: "variables[0].name".into(),
             source: bad_json(),
         },
+        Error::LogInvalid {
+            path: "strata-unknown.jsonl".into(),
+            line: 3,
+            message: "unknown field `uid`".into(),
+        },
         Error::NoUid,
         Error::Io {
             path: "rel.json".into(),
@@ -496,6 +501,13 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
         "{ambiguous}"
     );
     assert_eq!(by_kind("snapshot-schema")["schema"], "strata-snapshot/1");
+    let log = by_kind("log-invalid");
+    assert_eq!(log["path"], "strata-unknown.jsonl");
+    assert_eq!(log["line"], 3);
+    assert_eq!(
+        log["message"],
+        "strata-unknown.jsonl: line 3 is not a line of strata-unknown/1: unknown field `uid`"
+    );
     assert_eq!(by_kind("invalid-setting")["variable"], "STRATA_RETRIES");
     assert_eq!(by_kind("invalid-setting")["value"], "lots");
     assert_eq!(by_kind("retry-after-too-long")["path"], "/v1/y");

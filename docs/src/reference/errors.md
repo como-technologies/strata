@@ -53,6 +53,7 @@ the kind.
 | `not-snapshot` | The file is not a strata snapshot. | `path` |
 | `unsupported-schema` | The file is a record, or a report for `behind --since`, of a schema id that this strata does not read. | `path`, `found`, `supported` |
 | `snapshot-schema` | The record, or the report for `behind --since`, does not match its schema. The message names the field that does not match, such as `variables[0].name`, and says to take the file again. | `path`, `schema` |
+| `log-invalid` | `strata report` read a line of the log of the unknown values that is not a line of `strata-unknown/1`. The line has a field outside the list or a field of the wrong type. Or its route is the path of a real request, or its value is not a short word. The message gives the number of the line. Strata prints nothing and marks nothing. See [What strata never reports](./report.md#what-strata-never-reports). | `path`, `line` |
 | `no-uid` | The record has no uid, for example a candidate record. | |
 | `io` | Strata cannot read or write the file. | `path` |
 | `empty-file` | A file in a `--from-raw` directory is empty. | `path` |

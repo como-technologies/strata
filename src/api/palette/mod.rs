@@ -12,6 +12,7 @@ use crate::model::conjunction::Conjunction;
 use crate::model::pack_type::PackType;
 use crate::snapshot::{SubjectKind, Template, manifest_of};
 use crate::term::progress::Progress;
+use crate::text::query_value;
 
 mod clusters;
 mod listings;
@@ -209,20 +210,6 @@ pub(crate) fn profile_versions(listing: &Value) -> impl Iterator<Item = ProfileV
         uid: text(it, "/metadata/uid"),
         cloud_type: text(it, "/spec/cloudType"),
     })
-}
-
-/// `text` as a value in a query string: each byte that is not a letter, a digit, or one of
-/// `-._~:` becomes `%XX`, so a time with `+00:00` keeps its `+`.
-fn query_value(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for b in text.bytes() {
-        if b.is_ascii_alphanumeric() || b"-._~:".contains(&b) {
-            out.push(b as char);
-        } else {
-            out.push_str(&format!("%{b:02X}"));
-        }
-    }
-    out
 }
 
 /// `(version, uid)` of each item of the profile listing named `name`.

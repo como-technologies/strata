@@ -1,0 +1,16 @@
+$ strata report --help
+Print the values that Palette gave and this release does not know, to read and send
+
+Usage: strata report [OPTIONS]
+
+Options:
+      --link             Print a link that opens a new issue of strata with the report filled in
+      --all              Report each line of the log, also the lines that you marked as sent
+      --sent             Mark the lines of the report as sent, so that the next report omits them
+      --format <FORMAT>  The report format: terminal, markdown, or json [default: terminal]
+      --json             The same as --format json
+      --color [<COLOR>]  Color the report: auto, always, or never [default: auto]
+      --no-color         The same as --color=never
+      --compact          Write the JSON on one line
+  -q, --quiet            No progress messages
+  -h, --help             Print help

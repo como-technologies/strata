@@ -3,10 +3,12 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::{Value, json};
 
-use super::log::{FIELDS, FILE, Line, SCHEMA};
-use super::{Watch, note, seen, shown};
+use super::hint::{FILE as HINT_FILE, TEXT};
+use super::log::{FIELDS, FILE, Line, SCHEMA, SENT_FILE, mark_sent, read, sent_count, sent_path};
+use super::{Hint, Report, Watch, note, seen, shown};
 use crate::api::registry::Registries;
 use crate::api::{CLUSTER_TEMPLATE, MemoryApi, PROFILE_TEMPLATE, Palette};
 use crate::json::opt_set;
@@ -315,4 +317,393 @@ fn a_provider_type_on_the_pack_ref_of_a_cluster_names_the_cluster_route() {
     let lines = lines_of(&dir.path().join(FILE));
     assert_eq!(lines.len(), 1, "{lines:?}");
     assert_eq!(lines[0].route, "/v1/spectroclusters/{uid}");
+}
+
+// ---- the read of the log ---------------------------------------------------------------------
+
+/// The text of a log with `lines`, one for each element.
+fn log_of(lines: &[&str]) -> String {
+    lines.iter().map(|l| format!("{l}\n")).collect()
+}
+
+/// A line of the log as strata writes it, with the value `value`.
+fn written(value: &str) -> String {
+    serde_json::to_string(&Line::new("PackState", value, "/v1/packs", None)).unwrap()
+}
+
+#[test]
+fn a_log_that_is_not_there_is_an_empty_log() {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(read(&dir.path().join(FILE)).unwrap().is_empty());
+}
+
+#[test]
+fn the_read_gives_the_lines_that_strata_wrote_in_order_and_skips_a_blank_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    full_line().append(&file).unwrap();
+    std::fs::write(
+        &file,
+        format!(
+            "{}\n\n{}\n  \n",
+            serde_json::to_string(&full_line()).unwrap(),
+            written("retired")
+        ),
+    )
+    .unwrap();
+    let lines = read(&file).unwrap();
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0], full_line());
+    assert_eq!(lines[1].value, "retired");
+}
+
+#[test]
+fn a_log_with_a_uid_in_a_line_fails_the_read_and_names_the_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    let mut with_uid = serde_json::to_value(full_line()).unwrap();
+    with_uid["uid"] = json!("64f0000000000000000000a1");
+    std::fs::write(&file, log_of(&[&written("a"), &with_uid.to_string()])).unwrap();
+    let error = read(&file).unwrap_err();
+    assert_eq!(error.kind(), "log-invalid");
+    let message = error.to_string();
+    assert!(message.contains("line 2"), "{message}");
+    assert!(message.contains("unknown field `uid`"), "{message}");
+    assert!(
+        !message.contains("64f0000000000000000000a1"),
+        "the message holds the uid: {message}"
+    );
+    let document = error.to_json();
+    assert_eq!(document["line"], 2);
+    assert_eq!(document["path"], file.display().to_string());
+}
+
+#[test]
+fn a_log_fails_the_read_for_each_field_that_the_list_does_not_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    for extra in ["uid", "name", "host", "message", "values", "project"] {
+        let mut line = serde_json::to_value(full_line()).unwrap();
+        line[extra] = json!("x");
+        std::fs::write(&file, log_of(&[&line.to_string()])).unwrap();
+        let error = read(&file).unwrap_err();
+        assert_eq!(error.kind(), "log-invalid", "`{extra}`");
+    }
+}
+
+#[test]
+fn a_line_that_is_not_json_or_has_a_field_of_the_wrong_type_fails_the_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    for bad in ["not json", "[1, 2]", r#"{"schema": "strata-unknown/1"}"#] {
+        std::fs::write(&file, log_of(&[bad])).unwrap();
+        let error = read(&file).unwrap_err();
+        assert_eq!(error.kind(), "log-invalid", "{bad}");
+    }
+    let mut wrong = serde_json::to_value(full_line()).unwrap();
+    wrong["status"] = json!("404");
+    std::fs::write(&file, log_of(&[&wrong.to_string()])).unwrap();
+    assert_eq!(read(&file).unwrap_err().kind(), "log-invalid");
+}
+
+#[test]
+fn a_line_of_another_schema_fails_the_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    let mut other = serde_json::to_value(full_line()).unwrap();
+    other["schema"] = json!("strata-unknown/2");
+    std::fs::write(&file, log_of(&[&other.to_string()])).unwrap();
+    let message = read(&file).unwrap_err().to_string();
+    assert!(
+        message.contains("the schema is not strata-unknown/1"),
+        "{message}"
+    );
+}
+
+#[test]
+fn a_route_that_is_the_path_of_a_real_request_fails_the_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    for route in [
+        "/v1/clusterprofiles/64f0000000000000000000a1",
+        "/v1/spectroclusters/64F0000000000000000000A1/validate",
+        "/v1/things/123e4567-e89b-12d3-a456-426614174000",
+        "v1/packs",
+        "",
+    ] {
+        let mut line = serde_json::to_value(full_line()).unwrap();
+        line["route"] = json!(route);
+        std::fs::write(&file, log_of(&[&line.to_string()])).unwrap();
+        assert_eq!(read(&file).unwrap_err().kind(), "log-invalid", "{route:?}");
+    }
+    // the templates that strata writes stay valid
+    for route in [
+        PROFILE_TEMPLATE,
+        CLUSTER_TEMPLATE,
+        "/v1/registries/oci/summary",
+    ] {
+        let mut line = serde_json::to_value(full_line()).unwrap();
+        line["route"] = json!(route);
+        std::fs::write(&file, log_of(&[&line.to_string()])).unwrap();
+        assert_eq!(read(&file).unwrap().len(), 1, "{route}");
+    }
+}
+
+#[test]
+fn a_value_that_is_empty_long_or_not_text_fails_the_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    for value in [String::new(), "a".repeat(65), "a\u{1b}b".to_string()] {
+        let mut line = serde_json::to_value(full_line()).unwrap();
+        line["value"] = json!(value);
+        std::fs::write(&file, log_of(&[&line.to_string()])).unwrap();
+        assert_eq!(read(&file).unwrap_err().kind(), "log-invalid", "{value:?}");
+    }
+    // the longest value that a watch writes is 64 characters, with the mark of a cut
+    let mut line = serde_json::to_value(full_line()).unwrap();
+    line["value"] = json!(shown(&"a".repeat(100)));
+    std::fs::write(&file, log_of(&[&line.to_string()])).unwrap();
+    assert_eq!(read(&file).unwrap().len(), 1);
+}
+
+#[test]
+fn every_line_that_a_watch_writes_passes_the_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    let _watching = logging(dir.path()).palette_release("4.10").start();
+    seen::<OciProvider>("oras", "/v1/registries/oci/summary");
+    seen::<PackState>(&"é".repeat(100), PROFILE_TEMPLATE);
+    seen::<PackState>("a\nb", CLUSTER_TEMPLATE);
+    assert_eq!(read(&file).unwrap().len(), 3);
+}
+
+// ---- the mark of the lines that the user sent -------------------------------------------------
+
+#[test]
+fn the_mark_is_a_file_beside_the_log_and_a_missing_or_damaged_mark_counts_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("strata").join(FILE);
+    let sent = sent_path(&log);
+    assert_eq!(sent, dir.path().join("strata").join(SENT_FILE));
+    assert_eq!(sent_count(&sent), 0);
+    mark_sent(&sent, 3).unwrap();
+    assert_eq!(sent_count(&sent), 3);
+    for damaged in ["", "many\n", "-1\n", "3 4\n"] {
+        std::fs::write(&sent, damaged).unwrap();
+        assert_eq!(sent_count(&sent), 0, "{damaged:?}");
+    }
+}
+
+// ---- the report ------------------------------------------------------------------------------
+
+/// A line with the set `set`, the value `value`, and the version `strata` of strata.
+fn line_of(set: &str, value: &str, strata: &str) -> Line {
+    let mut line = Line::new(set, value, "/v1/packs", None);
+    line.strata = strata.to_string();
+    line
+}
+
+#[test]
+fn the_report_holds_each_different_line_once_with_its_count() {
+    let lines = vec![
+        line_of("PackState", "retired", "0.26.0"),
+        line_of("OciProvider", "oras", "0.26.0"),
+        line_of("PackState", "retired", "0.26.0"),
+        line_of("PackState", "retired", "0.26.0"),
+        line_of("PackState", "retired", "0.27.0"),
+    ];
+    let report = Report::of(&lines);
+    assert_eq!(report.schema, "strata-report/1");
+    let found: Vec<(&str, &str, &str, usize)> = report
+        .unknown
+        .iter()
+        .map(|e| (e.set.as_str(), e.value.as_str(), e.strata.as_str(), e.count))
+        .collect();
+    assert_eq!(
+        found,
+        vec![
+            ("OciProvider", "oras", "0.26.0", 1),
+            ("PackState", "retired", "0.26.0", 3),
+            ("PackState", "retired", "0.27.0", 1),
+        ]
+    );
+    assert_eq!(
+        report.unknown.iter().map(|e| e.count).sum::<usize>(),
+        lines.len(),
+        "the counts add up to the lines of the log"
+    );
+}
+
+#[test]
+fn the_report_orders_the_entries_by_set_value_route_and_then_by_version_not_by_text() {
+    let lines = vec![
+        line_of("B", "x", "0.9.0"),
+        line_of("A", "y", "0.26.0"),
+        line_of("A", "x", "0.26.0"),
+        line_of("A", "x", "0.9.0"),
+    ];
+    let report = Report::of(&lines);
+    let order: Vec<(&str, &str, &str)> = report
+        .unknown
+        .iter()
+        .map(|e| (e.set.as_str(), e.value.as_str(), e.strata.as_str()))
+        .collect();
+    assert_eq!(
+        order,
+        vec![
+            ("A", "x", "0.9.0"),
+            ("A", "x", "0.26.0"),
+            ("A", "y", "0.26.0"),
+            ("B", "x", "0.9.0"),
+        ],
+        "0.9.0 comes before 0.26.0"
+    );
+}
+
+#[test]
+fn two_lines_with_one_version_order_and_two_texts_are_two_entries_and_the_equal_ones_merge() {
+    let lines = vec![
+        line_of("A", "x", "1.0.1+2"),
+        line_of("A", "x", "1.0.1"),
+        line_of("A", "x", "1.0.1+2"),
+    ];
+    let report = Report::of(&lines);
+    assert_eq!(report.unknown.len(), 2);
+    assert_eq!(report.unknown.iter().map(|e| e.count).sum::<usize>(), 3);
+}
+
+#[test]
+fn lines_that_differ_in_the_release_the_status_or_the_error_code_are_separate_entries() {
+    let base = line_of("A", "x", "0.26.0");
+    let mut release = base.clone();
+    release.palette = Some("4.10".to_string());
+    let mut status = base.clone();
+    status.status = Some(404);
+    let mut code = base.clone();
+    code.error_code = Some("Gone".to_string());
+    let report = Report::of(&[base, release, status, code]);
+    assert_eq!(report.unknown.len(), 4);
+}
+
+#[test]
+fn an_entry_holds_the_fields_of_the_log_and_a_count_and_no_other() {
+    let report = Report::of(&[full_line()]);
+    let written = serde_json::to_value(&report.unknown[0]).unwrap();
+    let names: BTreeSet<&str> = written
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    let mut expected: BTreeSet<&str> = FIELDS.into_iter().filter(|f| *f != "schema").collect();
+    expected.insert("count");
+    assert_eq!(names, expected);
+    let document = serde_json::to_value(&report).unwrap();
+    let top: BTreeSet<&str> = document
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(top, BTreeSet::from(["schema", "unknown"]));
+}
+
+#[test]
+fn an_empty_log_gives_an_empty_report_and_a_value_counts_once_for_each_set() {
+    assert!(Report::of(&[]).unknown.is_empty());
+    assert_eq!(Report::of(&[]).distinct_values(), 0);
+    let lines = vec![
+        line_of("A", "x", "0.26.0"),
+        line_of("A", "x", "0.27.0"),
+        line_of("B", "x", "0.26.0"),
+    ];
+    assert_eq!(Report::of(&lines).distinct_values(), 2);
+}
+
+// ---- the hint --------------------------------------------------------------------------------
+
+/// A time on the day of the tests, `hours` after midnight.
+fn at(hours: i64) -> DateTime<Utc> {
+    "2026-11-02T00:00:00Z".parse::<DateTime<Utc>>().unwrap() + TimeDelta::hours(hours)
+}
+
+#[test]
+fn the_hint_names_strata_report_and_what_the_user_can_send() {
+    assert_eq!(TEXT, "`strata report` shows what you can send");
+}
+
+#[test]
+fn the_hint_shows_in_a_terminal_and_records_the_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("state").join(HINT_FILE);
+    assert_eq!(Hint::new(file.clone(), at(9), true).show(), Some(TEXT));
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert_eq!(text.trim(), at(9).to_rfc3339());
+}
+
+#[test]
+fn the_hint_does_not_show_when_standard_error_is_not_a_terminal_and_records_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(HINT_FILE);
+    assert_eq!(Hint::new(file.clone(), at(9), false).show(), None);
+    assert!(!file.exists(), "a run in a pipe must not use up the day");
+}
+
+#[test]
+fn the_hint_shows_one_time_in_a_day_at_most() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(HINT_FILE);
+    let run = |hours: i64| Hint::new(file.clone(), at(hours), true).show();
+    assert_eq!(run(9), Some(TEXT));
+    assert_eq!(run(9), None, "the same minute");
+    assert_eq!(run(10), None);
+    assert_eq!(run(32), None, "23 hours after the hint");
+    assert_eq!(run(33), Some(TEXT), "24 hours after the hint");
+    assert_eq!(run(34), None);
+}
+
+#[test]
+fn the_hint_shows_again_for_a_time_in_the_future_and_for_a_file_that_holds_no_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(HINT_FILE);
+    std::fs::write(&file, format!("{}\n", at(100).to_rfc3339())).unwrap();
+    assert_eq!(Hint::new(file.clone(), at(9), true).show(), Some(TEXT));
+    for damaged in ["", "yesterday\n", "1762041600\n"] {
+        std::fs::write(&file, damaged).unwrap();
+        assert_eq!(
+            Hint::new(file.clone(), at(9), true).show(),
+            Some(TEXT),
+            "{damaged:?}"
+        );
+    }
+}
+
+#[test]
+fn the_hint_stays_back_when_strata_cannot_record_the_time() {
+    let dir = tempfile::tempdir().unwrap();
+    // a file where the folder of the hint must be
+    let blocker = dir.path().join("blocker");
+    std::fs::write(&blocker, "x").unwrap();
+    assert_eq!(Hint::new(blocker.join(HINT_FILE), at(9), true).show(), None);
+}
+
+#[test]
+fn a_watch_shows_the_hint_one_time_in_a_run_and_never_when_quiet() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(HINT_FILE);
+    let hint = || Hint::new(file.clone(), at(9), true);
+    // --quiet hides the note, so it hides the hint, and it does not use up the day
+    let mut quiet = Watch::new(Progress::new(true)).hinting(hint());
+    assert_eq!(quiet.hint_text(), None);
+    assert!(!file.exists());
+    let mut watch = Watch::new(Progress::new(false)).hinting(hint());
+    assert_eq!(watch.hint_text(), Some(TEXT));
+    assert_eq!(watch.hint_text(), None, "one try in a run");
+    assert!(file.exists());
+}
+
+#[test]
+fn a_watch_with_no_hint_shows_none() {
+    let mut watch = Watch::new(Progress::new(false));
+    assert_eq!(watch.hint_text(), None);
 }

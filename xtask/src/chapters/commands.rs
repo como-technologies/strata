@@ -96,6 +96,34 @@ fn unknown_value(r: &mut Runner) {
         true,
         "strata list profiles --packs --quiet > /dev/null",
     );
+    // the two runs above wrote two lines to the log of the home of the runner
+    r.step("unknown-value-report", 0, false, "strata report");
+    r.step(
+        "unknown-value-report-markdown",
+        0,
+        false,
+        "strata report --format markdown",
+    );
+    r.step(
+        "unknown-value-report-json",
+        0,
+        false,
+        "strata report --json | jq -c '.unknown[]'",
+    );
+    // the link is one long line: the page shows its start
+    r.step(
+        "unknown-value-report-link",
+        0,
+        false,
+        "strata report --link | cut -c 1-150",
+    );
+    r.step(
+        "unknown-value-report-sent",
+        0,
+        false,
+        "strata report --sent > /dev/null && strata report",
+    );
+    r.step("unknown-value-report-all", 0, false, "strata report --all");
 }
 
 /// The part of the chapter `list` for a draft, an imported cluster, and a cluster template.

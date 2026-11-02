@@ -13,6 +13,9 @@
 //!   this release of strata does not know`. `--quiet` hides the note.
 //! - It appends one line to the log: see [`log`]. `--quiet` does not stop the log.
 //!
+//! After the first note of a day, in a terminal, the watch adds a hint that `strata report` shows
+//! what the user can send: see [`hint`]. The report is made from the log: see [`report`].
+//!
 //! The set is the name that `strata schema` gives to the definition of the set. The JSON
 //! documents do not change.
 //!
@@ -35,11 +38,15 @@ use super::ClosedSet;
 use crate::term::progress::Progress;
 use crate::text::cut;
 
+pub mod hint;
 pub mod log;
+pub mod report;
 #[cfg(test)]
 mod tests;
 
+pub use hint::Hint;
 pub use log::Line;
+pub use report::Report;
 
 /// The most characters of a value that the note and the log show. A value of a closed set is a
 /// short word, so a longer text is not a value of a set.
@@ -50,6 +57,7 @@ const LONGEST_VALUE: usize = 64;
 pub struct Watch {
     progress: Progress,
     log: Option<PathBuf>,
+    hint: Option<Hint>,
     release: Option<String>,
     /// The set and the value of each note so far, so that a run notes a value one time.
     told: BTreeSet<(String, String)>,
@@ -61,6 +69,7 @@ impl Watch {
         Watch {
             progress,
             log: None,
+            hint: None,
             release: None,
             told: BTreeSet::new(),
         }
@@ -70,6 +79,14 @@ impl Watch {
     #[must_use]
     pub fn logging_to(mut self, file: PathBuf) -> Watch {
         self.log = Some(file);
+        self
+    }
+
+    /// Also show `hint` after the first note that has a line in the log, when it is time: see
+    /// [`hint`]. A watch with no log shows no hint, because `strata report` would show nothing.
+    #[must_use]
+    pub fn hinting(mut self, hint: Hint) -> Watch {
+        self.hint = Some(hint);
         self
     }
 
@@ -103,7 +120,20 @@ impl Watch {
                 .warn(&format!("could not write {}: {e}", file.display()));
             // a log that fails once fails again, and one warning is enough
             self.log = None;
+            return;
         }
+        if let Some(text) = self.hint_text() {
+            self.progress.note(text);
+        }
+    }
+
+    /// The words of the hint, when this run shows it. The hint gets one try in a run. `--quiet`
+    /// hides the note, so it hides the hint too, and it does not use up the day.
+    fn hint_text(&mut self) -> Option<&'static str> {
+        if self.progress.is_quiet() {
+            return None;
+        }
+        self.hint.take()?.show()
     }
 }
 
