@@ -43,9 +43,10 @@ of the error as `&serde_json::Value`, in place of text. Parse the text one time,
 and give the value.
 
 After 0.25.0, `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE`
-are deprecated. They stay for one minor release. `model::cluster_state::ClusterState`
-names each state, and `ClusterState::Running.is(text)` replaces
-`text == RUNNING_STATE`. `ClosedSet::parse` reads the text of a state.
+are gone: release 0.26.0 deprecated them, and release 0.27.0 removed them.
+`model::cluster_state::ClusterState` names each state, and
+`ClusterState::Running.is(text)` replaces `text == RUNNING_STATE`.
+`ClosedSet::parse` reads the text of a state.
 `closed_set::impl_closed_set` is the public macro `strata::impl_closed_set`. Its
 table takes an expression for each text, and a literal is one.
 
@@ -70,8 +71,8 @@ After 0.25.0, `json::set_at` is public. It puts a value at the object keys of a
 document, and it never panics. `strata-preflight` calls it.
 
 After 0.25.0, the types of Palette are in the new module `model`. The root of the
-crate holds no module of them. Each old path stays as a `pub use` for one minor
-release, and release 0.27.0 removes the old paths. Use the new path:
+crate holds no module of them. Each old path stayed as a `pub use` for one minor
+release, and release 0.27.0 removed the old paths. Use the new path:
 
 - `strata::cloud` is now `strata::model::cloud`.
 - `strata::cluster_template` is now `strata::model::cluster_template`.
@@ -878,6 +879,13 @@ field, a value, an input, or an option is in the sections above.
   `ops::send_unknown_report` posts the report of the unmarked lines, and then marks them. The new
   method `Watching::lines_written` tells how many lines a watch wrote. `term::ask::yes_or_no` asks
   a question. `text::query_value` and `BOOK_URL` are now public.
+- The old paths of the types of Palette are gone. `strata::cloud` and the nine other modules at
+  the root, and `strata::content::layer`, do not build. The compiler gives `E0432` or `E0433` for
+  such a path. Use `strata::model::<module>`: see [The Rust library](#the-rust-library) for the
+  list. Release 0.26.0 gave no warning for an old module path.
+- `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE` are gone, and so are the
+  same constants in `model::cluster_state`. The compiler gives `E0425` for them. Use
+  `ClusterState::Running.is(text)`, and `ClosedSet::as_str` for the text of a state.
 
 ### For a user of the library of strata-preflight
 
