@@ -331,6 +331,28 @@ live-scope: build
 live-release: build
     examples/live/release.sh
 
+# The contract run (#390): ask the real tenant the requests of the facts of Palette, and compare each answer with the stand-in. It sends GET requests only. Needs only the key and just examples; --state FILE also reads the latest releases of the Palette SDK and the Terraform provider.
+live-contract *args: examples stand-in
+    examples/live/contract.sh {{args}}
+
+# Open, update, and close the issues of a contract run (#390): one for each fact that differs, one for each new release. Needs gh logged in. --dry-run calls no host.
+contract-report *args:
+    examples/live/contract-report.sh {{args}}
+
+# The timer runs deploy/contract/weekly.sh of this checkout once a week. See "The weekly contract run" in docs/src/development/facts.md.
+
+# Install the weekly contract run on this machine as a systemd user timer (#390)
+contract-timer-install:
+    deploy/contract/timer.sh install
+
+# Stop the weekly contract run and delete its units; the results stay (#390)
+contract-timer-remove:
+    deploy/contract/timer.sh remove
+
+# Show the weekly contract run: the timer, and the last result (#390)
+contract-timer-status:
+    deploy/contract/timer.sh status
+
 # The pending update test: when Palette says an update waits for cluster A, what a record, the listing, and compare say, what cluster:<uid>@pending holds (#70, #78), and what compare --repave asks Palette about it (#276). Needs live-up; undoes each change.
 live-pending: build
     examples/live/pending.sh

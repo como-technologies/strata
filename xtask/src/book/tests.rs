@@ -107,3 +107,24 @@ fn each_duration_that_preflight_prints_becomes_one_fixed_value() {
         assert_eq!(clock.fixed(from), to, "{from}");
     }
 }
+
+#[test]
+fn a_harvest_keeps_the_documents_of_each_chapter_in_its_own_directory_and_runs_no_command() {
+    let into = std::env::temp_dir().join(format!("strata-harvest-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&into);
+    let mut r = runner(Mode::Harvest { into: into.clone() }, "harvest");
+    let answer = serde_json::json!({"ok": true});
+    r.chapter("first", &[]);
+    r.answer("p", "v1/first/u1", &answer);
+    // a harvest runs no command: this one would stop the run with its exit code
+    r.step("never-run", 0, false, "exit 7");
+    r.chapter("second", &[]);
+    r.answer("p", "v1/second", &answer);
+    assert!(into.join("first/p/v1/first/u1.json").is_file());
+    assert!(!into.join("second").exists(), "the chapter has not ended");
+    let _ = r.finish();
+    assert!(into.join("second/p/v1/second.json").is_file());
+    assert!(!into.join("first/p/v1/second.json").exists());
+    assert!(!into.join("second/p/v1/first/u1.json").exists());
+    let _ = std::fs::remove_dir_all(&into);
+}

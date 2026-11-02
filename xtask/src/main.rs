@@ -11,11 +11,15 @@
 //! xtask serve ROOT PORT_FILE     serve ROOT as the Palette API, and write the port to PORT_FILE
 //! xtask facts                    print the list of the facts of Palette as JSON
 //! xtask facts --check            exit 1 when the list does not agree with the book and the scripts
+//! xtask contract [OPTIONS]       ask a real tenant the requests of the facts, and compare the answers
+//!                                with the stand-in; `xtask contract --help` names the options
+//! xtask harvest DIR            write the tenant of every chapter to DIR, for xtask contract --stand-in
 //! ```
 
 mod book;
 mod chapters;
 mod checks;
+mod contract;
 mod facts;
 mod files;
 mod palette;
@@ -36,6 +40,8 @@ fn main() -> ExitCode {
         },
         ["facts"] => print_facts(),
         ["facts", "--check"] => check_facts(),
+        ["contract", rest @ ..] => contract::command(rest),
+        ["harvest", dir] => contract::harvest_command(dir),
         ["docs-examples"] => examples(book::Mode::Write),
         ["docs-examples", "--check"] => examples(book::Mode::Check),
         ["playground", name] => {
@@ -46,7 +52,7 @@ fn main() -> ExitCode {
             })
         }
         _ => fail(
-            "usage: xtask [docs-examples [--check] | facts [--check] | playground CHAPTER[-N] | serve ROOT PORT_FILE]",
+            "usage: xtask [docs-examples [--check] | facts [--check] | contract [OPTIONS] | harvest DIR | playground CHAPTER[-N] | serve ROOT PORT_FILE]",
         ),
     }
 }

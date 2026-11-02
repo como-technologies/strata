@@ -546,6 +546,20 @@ This is the source for
 | `release-no-key`, `release-no-key-says` | 0 | #146: a call with no key answers 200, and the body holds `version.installedVersion`. |
 | `release-with-key`, `release-with-key-says` | 2, 0 | #146: a call with the `ApiKey` header answers HTTP 500, so a tenant key cannot read the release. |
 
+## contract.sh
+
+Read-only. It needs the key and `just examples`: no profile and no cluster. It sends GET
+requests only, to the tenant that `~/.palette.env` names. It has no checks. It is the contract run that
+[The weekly contract run](./facts.md#the-weekly-contract-run) describes. It writes the document
+`strata-contract/1`, and exits with 0, 1, or 2.
+
+A tenant with no profile and no cluster skips most of the facts. Run `just live-profiles` first to
+give the run profiles to read, and `just live-up` to give it a cluster.
+
+| Result | What it shows |
+|---|---|
+| `contract.json` | #390: for each fact of the kind `request`, the status, the type of each field, and the values of each closed set, against the stand-in. No result yet. |
+
 ## pending.sh
 
 Read-write. It needs the example at its baseline with cluster A. Each stage

@@ -19,6 +19,8 @@ mod sources;
 #[cfg(test)]
 mod tests;
 
+pub use check::route_matches;
+pub use model::{Fact, Kind};
 use sources::Sources;
 
 /// Every fault of the list in the repository at `repo`, as messages.
@@ -31,13 +33,17 @@ pub fn check(repo: &Path, served: Option<&BTreeSet<String>>) -> Vec<String> {
     bad
 }
 
+/// The facts of the list in the repository at `repo`. An error is the messages about the files of
+/// the list that cannot be read.
+pub fn load(repo: &Path) -> Result<Vec<Fact>, Vec<String>> {
+    let (facts, bad) = model::load(&repo.join(model::DIRECTORY));
+    if bad.is_empty() { Ok(facts) } else { Err(bad) }
+}
+
 /// The list as JSON: the schema id and the facts, for a script that reads them with `jq`. An
 /// error is the messages about the files of the list.
 pub fn print(repo: &Path) -> Result<String, Vec<String>> {
-    let (facts, bad) = model::load(&repo.join(model::DIRECTORY));
-    if !bad.is_empty() {
-        return Err(bad);
-    }
+    let facts = load(repo)?;
     let document = serde_json::json!({"schema": model::SCHEMA, "facts": facts});
     serde_json::to_string_pretty(&document).map_err(|e| vec![e.to_string()])
 }

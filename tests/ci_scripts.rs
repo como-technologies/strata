@@ -3251,30 +3251,6 @@ cat "$FAKE_VERIFY/$key.md" 2>/dev/null
 exit "$(cat "$FAKE_VERIFY/$key.exit")"
 "#;
 
-/// A `gh` for issues: logs each call, keeps each body file it is handed as body-<n>.md in call
-/// order, lists the open issues from issues.json, and numbers a new issue from 41 up.
-const FAKE_ISSUES_GH: &str = r#"#!/usr/bin/env bash
-set -euo pipefail
-echo "$*" >> "$FAKE_VERIFY/gh.log"
-n=$(wc -l < "$FAKE_VERIFY/gh.log")
-prev=""
-for a in "$@"; do
-  [ "$prev" = "--body-file" ] && cp "$a" "$FAKE_VERIFY/body-$n.md"
-  [ "$prev" = "--comment" ] && printf '%s' "$a" > "$FAKE_VERIFY/comment-$n.md"
-  prev="$a"
-done
-case "$*" in
-  *" 99 "*) echo "GraphQL: Could not resolve to an issue with the number of 99." >&2; exit 1 ;;
-  "issue close"*) echo "✓ Closed issue o/r#$3" >&2 ;;
-  "label create"*) echo "✓ Label \"$3\" created in o/r" >&2 ;;
-  "issue list"*) cat "$FAKE_VERIFY/issues.json" 2>/dev/null || echo "[]" ;;
-  "issue create"*) c=$(cat "$FAKE_VERIFY/created" 2>/dev/null || echo 40); c=$((c + 1)); echo "$c" > "$FAKE_VERIFY/created"
-                   echo "https://github.com/o/r/issues/$c" ;;
-  "label list"*) cat "$FAKE_VERIFY/labels.json" 2>/dev/null || echo "[]" ;;
-  "repo view"*) echo '{"nameWithOwner":"o/r"}' ;;
-esac
-"#;
-
 /// The stand-ins of one script that opens issues: verify-report.sh or upstream-report.sh.
 ///
 /// The directory holds a `strata` that answers from the files that a test puts there. Its `gh`

@@ -306,7 +306,7 @@ fn profile_search(profiles: &[Value]) -> Value {
 }
 
 /// Copy each file under `from` to the same path under `to`.
-fn copy_dir(from: &Path, to: &Path) {
+pub(super) fn copy_dir(from: &Path, to: &Path) {
     for entry in std::fs::read_dir(from).into_iter().flatten().flatten() {
         let path = entry.path();
         let target = to.join(entry.file_name());
