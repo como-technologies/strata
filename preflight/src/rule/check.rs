@@ -52,7 +52,13 @@ pub struct ExecCheck {
     /// reads no answer of Palette.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette: Option<PaletteRead>,
-    /// The program over the world with `.exec`, and with `.response` when `palette` is set.
+    /// A second command, such as the read of a quota. It runs after `argv`, with the same `needs`
+    /// and the same `timeout`, and its output is `.also` in the world. A failure of this command
+    /// is an answer: the program reads `.also.exit`. With no value, the check runs one command.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub also: Vec<String>,
+    /// The program over the world with `.exec`, with `.also` when `also` is set, and with
+    /// `.response` when `palette` is set.
     pub expr: String,
 }
 
@@ -90,6 +96,8 @@ pub enum Check {
     ///
     /// With `palette`, the check reads Palette first, and the program also reads `.response`, as
     /// in a check of Palette. The check is `NOT RUN` when no key is there.
+    ///
+    /// With `also`, a second command runs after the first, and the program also reads `.also`.
     Exec(ExecCheck),
     /// During a build: every `every` seconds, read the cluster, its summary, and its events, and
     /// run the program over the world with `.cluster`, `.summary`, `.events`, and `.elapsed`

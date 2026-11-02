@@ -9,14 +9,15 @@ use strata::config::KEY_VARS;
 
 use super::backend::{Backend, ExecOutput};
 use super::judge;
-use super::outcome::{Outcome, Ran, Verdict};
+use super::outcome::{Outcome, Ran, Verdict, by_hand};
 use super::palette::{Asked, read as read_palette};
 use crate::error::{Error, Result};
 use crate::jq::Jq;
 use crate::rule::{ExecCheck, PaletteRead, Rule};
 
-/// Run an exec check. It reads Palette first when the check has a read, and then runs the command.
-/// The program of the rule judges the world with `.exec`, and with `.response` after a read.
+/// Run an exec check. It reads Palette first when the check has a read, and then runs the command,
+/// and the second command when the check has one. The program of the rule judges the world with
+/// `.exec`, with `.also` after a second command, and with `.response` after a read.
 pub(super) fn run_exec(
     rule: &Rule,
     check: &ExecCheck,
@@ -28,23 +29,31 @@ pub(super) fn run_exec(
     if backend.exec_off() {
         return Outcome::not_run(Verdict::NotRun, "--no-exec: the command did not run");
     }
-    let argv = match render_argv(rule, &check.argv, world, jq) {
-        Ok(argv) => argv,
-        Err(e) => return Outcome::new(Verdict::Error, vec![e.to_string()], started),
+    let (argv, also) = match (
+        render_argv(rule, &check.argv, world, jq),
+        render_argv(rule, &check.also, world, jq),
+    ) {
+        (Ok(argv), Ok(also)) => (argv, also),
+        (Err(e), _) | (_, Err(e)) => {
+            return Outcome::new(Verdict::Error, vec![e.to_string()], started);
+        }
     };
     let line = shell_words(&argv);
+    let also_line = (!also.is_empty()).then(|| shell_words(&also));
     let missing = missing_tools(&check.needs, backend);
     if !missing.is_empty() {
+        let to_run = by_hand(&line, also_line.as_deref());
         let mut out = Outcome::not_run(
             Verdict::NotChecked,
             format!(
-                "{} not on this machine; run by hand: {line}",
+                "{} not on this machine; run by hand: {to_run}",
                 missing.join(", ")
             ),
         );
         out.ran = Ran::Exec {
             line,
             answer: None,
+            also: also_line,
             request: None,
         };
         return out;
@@ -61,13 +70,17 @@ pub(super) fn run_exec(
         }
     }
     let limit = Duration::from_secs(check.timeout.unwrap_or(60));
-    match backend.exec(&argv, limit) {
-        Ok(output) => {
+    match run_commands(backend, &argv, &also, limit) {
+        Ok((output, second)) => {
             with["exec"] = serde_json::to_value(&output).unwrap_or(Value::Null);
+            if let Some(second) = second {
+                with["also"] = serde_json::to_value(&second).unwrap_or(Value::Null);
+            }
             let mut out = judge(rule, &check.expr, &with, jq, started);
             out.ran = Ran::Exec {
                 line,
                 answer: Some(format!("exit {}", output.exit)),
+                also: also_line,
                 request,
             };
             out
@@ -77,11 +90,29 @@ pub(super) fn run_exec(
             out.ran = Ran::Exec {
                 line,
                 answer: None,
+                also: also_line,
                 request,
             };
             out
         }
     }
+}
+
+/// The output of the command `argv`, and the output of the second command `also` when it has
+/// words. The second command runs after the first, whatever the exit code of the first is.
+fn run_commands(
+    backend: &dyn Backend,
+    argv: &[String],
+    also: &[String],
+    limit: Duration,
+) -> Result<(ExecOutput, Option<ExecOutput>)> {
+    let output = backend.exec(argv, limit)?;
+    let second = if also.is_empty() {
+        None
+    } else {
+        Some(backend.exec(also, limit)?)
+    };
+    Ok((output, second))
 }
 
 /// The read of Palette that an exec check makes before its command. The `Err` is the outcome of

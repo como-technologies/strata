@@ -292,3 +292,40 @@ fn release_ranges() {
     let r = Catalog::parse_section(GOOD, Path::new("x.yaml")).unwrap();
     assert!(r.rules[0].applies_to_release(None));
 }
+
+/// The rule `GOOD` with a check of kind `exec` that runs two commands.
+fn exec_with_also(also: &str) -> String {
+    GOOD.replace("tier: static", "tier: cloud").replace(
+        "check:\n      kind: static\n      expr: '[.entity.spec.machinepoolconfig[] | select(.poolConfig.size % 3 != 0) | .poolConfig.name]'",
+        &format!(
+            "check:\n      kind: exec\n      argv: [aws, iam, list-attached-role-policies]\n      also: {also}\n      expr: 'true'"
+        ),
+    )
+}
+
+#[test]
+fn an_exec_check_takes_a_second_command_and_the_loader_checks_its_templates() {
+    let section = Catalog::parse_section(
+        &exec_with_also("[aws, service-quotas, get-service-quota, '{{ .region }}']"),
+        Path::new("x.yaml"),
+    )
+    .unwrap();
+    let Some(Check::Exec(exec)) = &section.rules[0].check else {
+        panic!("{:?}", section.rules[0].check);
+    };
+    assert_eq!(exec.also[0], "aws");
+    assert_eq!(exec.also.len(), 4);
+    // a check with no `also` runs one command
+    let one = exec_with_also("[]");
+    let section = Catalog::parse_section(&one, Path::new("x.yaml")).unwrap();
+    let Some(Check::Exec(exec)) = &section.rules[0].check else {
+        panic!("{:?}", section.rules[0].check);
+    };
+    assert!(exec.also.is_empty());
+    let err = Catalog::parse_section(
+        &exec_with_also("[aws, '{{ .region | nope( }}']"),
+        Path::new("x.yaml"),
+    )
+    .unwrap_err();
+    assert!(err.to_string().contains("`also`"), "{err}");
+}

@@ -474,7 +474,7 @@ const ISSUE_IDS: &[&str] = &[
     "capa-bootstrap-stack",
     "capa-manual-stack",
     "global-policy-attach-silent",
-    "iam-ten-policies",
+    "iam-role-policy-quota",
     "ebs-csi-node-policy",
     "eks-irsa-roles",
     "eks-pod-identity-mapusers",
@@ -1332,5 +1332,72 @@ fn no_check_maps_the_engine_to_a_cloud_itself() {
         found.is_empty(),
         "read `.accountKind` or `.routeCloud` of the world:\n{}",
         found.join("\n")
+    );
+}
+
+/// The messages of the rule `iam-role-policy-quota` on the fixture `name` of the EKS fixtures.
+fn policy_quota_messages(name: &str) -> (Verdict, Vec<String>) {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("iam-role-policy-quota").unwrap();
+    let path = catalog::rules_dir().join("fixtures/eks").join(name);
+    verdict(rule, &path, &Jq::new())
+}
+
+/// AWS gives 20 managed policies for a role by default, and raises the quota of an account on
+/// request. The rule reads the quota of the account, so a role with 11 to 20 policies passes, and a
+/// role over the quota of the account fails with the number of the account (#540).
+#[test]
+fn the_rule_of_the_managed_policies_of_a_role_reads_the_quota_of_the_account() {
+    let (v, m) = policy_quota_messages("nodes-policies-within-quota.json");
+    assert_eq!((v, m), (Verdict::Passed, Vec::<String>::new()));
+    let (v, m) = policy_quota_messages("nodes-policies-over-quota.json");
+    assert_eq!(v, Verdict::Failed);
+    assert_eq!(
+        m,
+        [
+            "the nodes role has 20 managed policies, and the cloud account adds 1 more: 21 is over the IAM quota of 20 for a role"
+        ]
+    );
+    // 26 policies are over the default 20, and the quota of the account is 30: they pass
+    let (v, m) = policy_quota_messages("nodes-policies-within-raised-quota.json");
+    assert_eq!((v, m), (Verdict::Passed, Vec::<String>::new()));
+    let (v, m) = policy_quota_messages("nodes-policies-over-raised-quota.json");
+    assert_eq!(v, Verdict::Failed);
+    assert_eq!(
+        m,
+        [
+            "the nodes role has 30 managed policies, and the cloud account adds 1 more: 31 is over the IAM quota of 30 for a role"
+        ]
+    );
+}
+
+/// When the call that reads the quota fails, the rule uses the default 20, and the message says
+/// that it did (#540).
+#[test]
+fn the_rule_of_the_managed_policies_of_a_role_uses_the_default_when_it_cannot_read_the_quota() {
+    let (v, m) = policy_quota_messages("nodes-policies-quota-unread-within.json");
+    assert_eq!((v, m), (Verdict::Passed, Vec::<String>::new()));
+    let (v, m) = policy_quota_messages("nodes-policies-quota-unread.json");
+    assert_eq!(v, Verdict::Failed);
+    assert_eq!(
+        m,
+        [
+            "the nodes role has 20 managed policies, and the cloud account adds 1 more: 21 is over the IAM quota of 20 for a role. The check could not read the quota of the account (An error occurred (AccessDeniedException) when calling the GetServiceQuota operation: User is not authorized to perform: servicequotas:GetServiceQuota), so it used the default quota"
+        ]
+    );
+}
+
+/// The rule keeps no figure of the quota: the old id is not in the catalog, and the new id has no
+/// number (#540).
+#[test]
+fn the_rule_of_the_managed_policies_of_a_role_has_an_id_with_no_number() {
+    let catalog = catalog::builtin().unwrap();
+    assert!(catalog.rule("iam-ten-policies").is_none());
+    let rule = catalog.rule("iam-role-policy-quota").unwrap();
+    assert!(!rule.id.chars().any(|c| c.is_ascii_digit()), "{}", rule.id);
+    assert!(
+        !rule.title.chars().any(|c| c.is_ascii_digit()),
+        "{}",
+        rule.title
     );
 }

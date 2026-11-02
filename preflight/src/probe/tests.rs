@@ -403,6 +403,7 @@ fn an_exec_check_needs_its_tool_and_reads_the_output() {
         needs: vec!["aws".into()],
         timeout: None,
         palette: None,
+        also: Vec::new(),
         expr: r#"[.exec.stdout.Subnets | map(.AvailabilityZone) | unique | select(length < 2) | "one zone: \(.)"]"#.into(),
     }));
     let out = run_check(&r, &w, &b, &jq);
@@ -413,6 +414,7 @@ fn an_exec_check_needs_its_tool_and_reads_the_output() {
         Ran::Exec {
             line: "aws ec2 describe-subnets --region us-east-2".into(),
             answer: Some("exit 0".into()),
+            also: None,
             request: None,
         }
     );
@@ -421,6 +423,7 @@ fn an_exec_check_needs_its_tool_and_reads_the_output() {
         needs: vec!["gcloud".into()],
         timeout: None,
         palette: None,
+        also: Vec::new(),
         expr: "true".into(),
     }));
     let out = run_check(&missing, &w, &b, &jq);
@@ -445,6 +448,7 @@ fn exec_with_a_read() -> Rule {
         palette: Some(PaletteRead {
             path: "/v1/clouds/aws/regions/{{ .region }}/instancetypes".into(),
         }),
+        also: Vec::new(),
         expr: r#".exec.stdout.Quota.Value as $quota
             | [ .response.body.instanceTypes[] | select(.type == "t3.xlarge" and .cpu > $quota)
                 | "\(.type) asks \(.cpu) vCPUs, and the quota is \($quota)" ]"#
@@ -470,6 +474,7 @@ fn an_exec_check_with_a_read_gives_the_program_the_response_and_the_output() {
         Ran::Exec {
             line: "aws service-quotas us-east-2".into(),
             answer: Some("exit 0".into()),
+            also: None,
             request: Some(Call::get(
                 "/v1/clouds/aws/regions/us-east-2/instancetypes",
                 Some("HTTP 200")
@@ -484,6 +489,96 @@ fn an_exec_check_with_a_read_gives_the_program_the_response_and_the_output() {
     assert_eq!(out.ran.requests().len(), 1);
 }
 
+/// An exec check that counts the policies of a role with one command, and reads the quota with a
+/// second command. It uses the default quota 20 when the second command fails.
+fn exec_with_a_second_command() -> Rule {
+    rule(Check::Exec(ExecCheck {
+        argv: vec![
+            "aws".into(),
+            "iam".into(),
+            "list-attached-role-policies".into(),
+        ],
+        needs: vec!["aws".into()],
+        timeout: None,
+        palette: None,
+        also: vec![
+            "aws".into(),
+            "service-quotas".into(),
+            "{{ .region }}".into(),
+        ],
+        expr: r#"(if .also.exit == 0 then .also.stdout.Quota.Value else 20 end) as $quota
+            | [ select(.exec.stdout.Count > $quota) | "\(.exec.stdout.Count) policies, and the quota is \($quota)" ]"#
+            .into(),
+    }))
+}
+
+const POLICIES: &str = "aws iam list-attached-role-policies";
+const QUOTA: &str = "aws service-quotas us-east-2";
+
+#[test]
+fn an_exec_check_with_a_second_command_gives_the_program_both_outputs() {
+    let jq = Jq::new();
+    let (b, w) = fixture(json!({"region": "us-east-2", "_exec": {
+        POLICIES: {"exit": 0, "stdout": {"Count": 25}, "stderr": ""},
+        QUOTA: {"exit": 0, "stdout": {"Quota": {"Value": 30.0}}, "stderr": ""}}}));
+    let out = run_check(&exec_with_a_second_command(), &w, &b, &jq);
+    assert_eq!(out.verdict, Verdict::Passed, "{:?}", out.messages);
+    let (b, w) = fixture(json!({"region": "us-east-2", "_exec": {
+        POLICIES: {"exit": 0, "stdout": {"Count": 35}, "stderr": ""},
+        QUOTA: {"exit": 0, "stdout": {"Quota": {"Value": 30.0}}, "stderr": ""}}}));
+    let out = run_check(&exec_with_a_second_command(), &w, &b, &jq);
+    assert_eq!(out.messages, vec!["35 policies, and the quota is 30.0"]);
+    // the report shows both commands as a person types them, and the exit code of the first
+    assert_eq!(
+        out.ran,
+        Ran::Exec {
+            line: POLICIES.into(),
+            answer: Some("exit 0".into()),
+            also: Some(QUOTA.into()),
+            request: None,
+        }
+    );
+    assert_eq!(
+        out.ran.text().as_deref(),
+        Some("aws iam list-attached-role-policies; aws service-quotas us-east-2")
+    );
+}
+
+#[test]
+fn an_exec_check_whose_second_command_fails_gives_the_program_the_exit_code() {
+    let jq = Jq::new();
+    let (b, w) = fixture(json!({"region": "us-east-2", "_exec": {
+        POLICIES: {"exit": 0, "stdout": {"Count": 21}, "stderr": ""},
+        QUOTA: {"exit": 254, "stdout": "", "stderr": "AccessDeniedException"}}}));
+    let out = run_check(&exec_with_a_second_command(), &w, &b, &jq);
+    assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+    assert_eq!(out.messages, vec!["21 policies, and the quota is 20"]);
+}
+
+#[test]
+fn an_exec_check_with_a_second_command_needs_an_output_for_each_command() {
+    let jq = Jq::new();
+    // the fixture has no output for the second command: a command that runs is an error
+    let (b, w) = fixture(json!({"region": "us-east-2", "_exec": {
+        POLICIES: {"exit": 0, "stdout": {"Count": 1}, "stderr": ""}}}));
+    let out = run_check(&exec_with_a_second_command(), &w, &b, &jq);
+    assert_eq!(out.verdict, Verdict::Error);
+    assert!(out.messages[0].contains(QUOTA), "{:?}", out.messages);
+}
+
+#[test]
+fn an_exec_check_with_a_second_command_and_no_tool_names_both_commands_to_run_by_hand() {
+    let jq = Jq::new();
+    let (b, w) = fixture(json!({"region": "us-east-2", "_tools": []}));
+    let out = run_check(&exec_with_a_second_command(), &w, &b, &jq);
+    assert_eq!(out.verdict, Verdict::NotChecked);
+    assert_eq!(
+        out.messages,
+        vec![
+            "aws not on this machine; run by hand: aws iam list-attached-role-policies; aws service-quotas us-east-2"
+        ]
+    );
+}
 #[test]
 fn an_exec_check_with_a_read_and_no_key_is_not_run_and_runs_no_command() {
     let jq = Jq::new();
@@ -507,6 +602,7 @@ fn an_exec_check_with_a_read_and_no_tool_asks_palette_nothing() {
         Ran::Exec {
             line: "aws service-quotas us-east-2".into(),
             answer: None,
+            also: None,
             request: None,
         }
     );

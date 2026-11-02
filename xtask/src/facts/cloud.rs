@@ -107,6 +107,8 @@ pub struct CloudRule {
     pub of_the_lab: bool,
     /// The command of its check, one word for each argument; empty when the rule runs none.
     pub argv: Vec<String>,
+    /// The second command of its check, one word for each argument; empty when the check has none.
+    pub also: Vec<String>,
     /// The answers that the fixtures of its tests hold.
     pub answers: Vec<Answer>,
 }
@@ -168,8 +170,9 @@ pub fn read_rules(catalog: &Catalog) -> (CloudSources, Vec<String>) {
             of_the_lab: rule.engines.iter().any(|e| e == ENGINE_LAB),
             ..CloudRule::default()
         };
-        if let Some(Check::Exec(ExecCheck { argv, .. })) = &rule.check {
+        if let Some(Check::Exec(ExecCheck { argv, also, .. })) = &rule.check {
             cloud.argv.clone_from(argv);
+            cloud.also.clone_from(also);
         }
         let fixtures = rule
             .tests
@@ -194,7 +197,7 @@ fn programs_of(rule: &Rule) -> String {
         programs.push(check.expr().to_string());
         match check {
             Check::Exec(exec) => {
-                programs.extend(exec.argv.iter().cloned());
+                programs.extend(exec.argv.iter().chain(&exec.also).cloned());
                 programs.extend(exec.palette.iter().map(|read| read.path.clone()));
             }
             Check::Palette(request) => {
@@ -272,6 +275,7 @@ pub fn check(sources: &Sources) -> Vec<String> {
     let mut bad = Vec::new();
     bad.extend(rules_named(sources));
     bad.extend(calls_agree(sources));
+    bad.extend(second_commands_named(sources));
     bad.extend(calls_read_only(sources));
     bad.extend(tables_proven(sources));
     bad.extend(routes_beside(sources));
@@ -324,8 +328,8 @@ fn rules_named(sources: &Sources) -> Vec<String> {
     bad
 }
 
-/// The call of a fact that is no table is the command of each of its rules, and a fixture of
-/// those rules answers it. No two facts send one call.
+/// The call of a fact that is no table is a command of each of its rules, and a fixture of those
+/// rules answers it. No two facts send one call.
 fn calls_agree(sources: &Sources) -> Vec<String> {
     let mut bad = Vec::new();
     let mut seen: BTreeMap<&[String], &str> = BTreeMap::new();
@@ -342,9 +346,9 @@ fn calls_agree(sources: &Sources) -> Vec<String> {
             let Some(rule) = sources.cloud.rules.get(id) else {
                 continue;
             };
-            if command_words(rule.argv.iter().map(String::as_str)) != words {
+            if !runs(rule, &words) {
                 bad.push(format!(
-                    "fact `{}`: the command of the rule `{id}` is not `{}`",
+                    "fact `{}`: no command of the rule `{id}` is `{}`",
                     fact.id,
                     words.join(" ")
                 ));
@@ -354,6 +358,37 @@ fn calls_agree(sources: &Sources) -> Vec<String> {
             bad.push(format!(
                 "fact `{}`: no fixture of its rules answers `{}`",
                 fact.id,
+                words.join(" ")
+            ));
+        }
+    }
+    bad
+}
+
+/// True when a command of `rule` starts with `words`: its command, or its second command.
+fn runs(rule: &CloudRule, words: &[&str]) -> bool {
+    [&rule.argv, &rule.also]
+        .into_iter()
+        .any(|command| command_words(command.iter().map(String::as_str)) == words)
+}
+
+/// The second command of a rule that runs on a cloud of the lab is the call of a fact that names
+/// the rule. The contract run sends the calls of the list, so a command with no fact has no check.
+fn second_commands_named(sources: &Sources) -> Vec<String> {
+    let mut bad = Vec::new();
+    let rules = sources
+        .cloud
+        .rules
+        .iter()
+        .filter(|(_, rule)| rule.lab && !rule.of_the_lab && !rule.also.is_empty());
+    for (id, rule) in rules {
+        let words = command_words(rule.also.iter().map(String::as_str));
+        let proved = clouds(sources)
+            .filter(|fact| fact.table.is_none() && fact.rules.contains(id))
+            .any(|fact| command_words(fact.call.iter().map(String::as_str)) == words);
+        if !proved {
+            bad.push(format!(
+                "the rule `{id}` runs `{}` as its second command on a cloud of the lab, and no fact of the kind cloud has that call",
                 words.join(" ")
             ));
         }

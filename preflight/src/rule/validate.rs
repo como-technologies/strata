@@ -211,12 +211,16 @@ fn check_programs(rule: &Rule, jq: &Jq) -> std::result::Result<(), String> {
         }
         Some(Check::Exec(ExecCheck {
             argv,
+            also,
             palette,
             expr,
             ..
         })) => {
             for arg in argv {
                 template("`argv`", arg, false)?;
+            }
+            for arg in also {
+                template("`also`", arg, false)?;
             }
             if let Some(read) = palette {
                 template("`palette`", &read.path, false)?;

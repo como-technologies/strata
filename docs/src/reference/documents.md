@@ -716,7 +716,9 @@ what it answered.
     for, no key, or `--no-exec`; it counts against the readiness.
   - `messages[]`: one for each failure, or the reason for another verdict.
   - `elapsedMs`, and `ran`, the request or the command the check ran, with
-    `answer`, its HTTP status or exit code.
+    `answer`, its HTTP status or exit code. A check with a second command shows
+    both commands in `ran`, with `; ` between them. Then `answer` is the exit
+    code of the first command.
   - `requests[]`, for a rule with `each`: one entry for each request, in the
     order of the list, with `method`, `path`, and `answer`. Such a check has no
     `ran` and no `answer` of its own.

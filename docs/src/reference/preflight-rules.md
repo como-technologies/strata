@@ -90,7 +90,7 @@ each message is one failure; or an object `{pass, message}`.
 | --- | --- | --- |
 | `static` | `expr` | nothing |
 | `palette` | `method` (`GET`, `POST`), `path` (with `{{ jq }}` templates), `body` (a jq program that gives the body of a POST; default `.entity`), `each` (a jq program that gives a list; see [A request for each item](#a-request-for-each-item)), `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx or a transport error is `ERROR`. With `each`, `responses` instead. |
-| `exec` | `argv` (each with templates), `needs` (the tools, checked on the PATH), `timeout` (seconds, default 60), `palette` (a `path` with templates; see [A read of Palette before the command](#a-read-of-palette-before-the-command)), `expr` | `exec`: `{exit, stdout, stderr}`. `stdout` is JSON when it parses. A tool that is not there is `NOT CHECKED`. With `palette`, also `response`. |
+| `exec` | `argv` (each with templates), `needs` (the tools, checked on the PATH), `timeout` (seconds, default 60), `palette` (a `path` with templates; see [A read of Palette before the command](#a-read-of-palette-before-the-command)), `also` (the second command; see [A second command](#a-second-command)), `expr` | `exec`: `{exit, stdout, stderr}`. `stdout` is JSON when it parses. A tool that is not there is `NOT CHECKED`. With `palette`, also `response`. With `also`, also `also`, in the same shape. |
 | `watch` | `expr` | `cluster`, `summary`, `events`, `elapsed` (seconds), on each reading |
 
 jq is jaq 3, which runs the programs of jq 1.7 with a small number of
@@ -244,6 +244,37 @@ The program of `expr` reads `.response`, as a check of Palette does, and `.exec`
 
 The report shows the command in `ran`, and the request in `requests[]`. The rule keeps the tier
 `cloud`, because it needs the tool.
+
+## A second command
+
+A rule of the cloud tier can run two commands. An example is the policies of a role, and the quota
+that limits them. The key `also` of an `exec` check holds the words of the second command:
+
+```yaml
+check:
+  kind: exec
+  needs: [aws]
+  argv: [aws, iam, list-attached-role-policies, --role-name, '{{ .account.spec.namePrefix }}nodes', --output, json]
+  also: [aws, service-quotas, get-service-quota, --service-code, iam, --quota-code, L-0DA4ABF3, --region, us-east-1, --output, json]
+  expr: '...'
+```
+
+The program of `expr` reads `.also` beside `.exec`. Both have the shape `{exit, stdout, stderr}`.
+The templates of `also` read the world alone, as the templates of `argv` do. The two commands share
+`needs` and `timeout`. The check runs in this order:
+
+1. A tool in `needs` that is not there makes the result `NOT CHECKED`. The message names both
+   commands.
+2. The first command runs. Then the second command runs, also when the first fails.
+3. The program judges both outputs.
+
+A second command that fails is an answer, as the first command is. The program reads `.also.exit`
+and decides: the rule `iam-role-policy-quota` uses the default quota when the read of the quota
+fails. A command that cannot start is an `ERROR`.
+
+The report shows both commands in `ran`, with `; ` between them. `answer` is the exit code of the
+first command. A fixture holds an output for each command under `_exec`, and a fixture that lacks
+one makes the check `ERROR`.
 
 ## The world document
 

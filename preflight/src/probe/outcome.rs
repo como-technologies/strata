@@ -79,6 +79,15 @@ pub(crate) fn ran_line(ran: &str, answer: Option<&str>) -> String {
     }
 }
 
+/// The commands of a check as a person types them: the second command follows the first, with `; `
+/// between them.
+pub(crate) fn by_hand(line: &str, also: Option<&str>) -> String {
+    match also {
+        Some(also) => format!("{line}; {also}"),
+        None => line.to_string(),
+    }
+}
+
 /// One request that a check made, with the answer to it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Call {
@@ -126,8 +135,10 @@ pub enum Ran {
     Exec {
         /// The command line.
         line: String,
-        /// The exit code, as `exit 0`.
+        /// The exit code of the first command, as `exit 0`.
         answer: Option<String>,
+        /// The line of the second command, when the check has one.
+        also: Option<String>,
         /// The read of Palette that the check made before the command, when it has one.
         request: Option<Call>,
     },
@@ -142,7 +153,7 @@ impl Ran {
     /// a check that made none, or one for each item.
     pub fn text(&self) -> Option<String> {
         match self {
-            Ran::Exec { line, .. } => Some(line.clone()),
+            Ran::Exec { line, also, .. } => Some(by_hand(line, also.as_deref())),
             Ran::Request(call) => Some(call.ran()),
             Ran::Nothing | Ran::Requests(_) => None,
         }

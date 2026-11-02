@@ -130,7 +130,7 @@ Teardown and leftovers
 
 Section scorecard
   section                      rows seen check preflight runs weakest  ran pass fail not run not checked ready
-  Identity and permissions       13    6    13         0    7      0%    0    0    0       4           0    0%
+  Identity and permissions       13    6    13         0    6      0%    0    0    0       4           0    0%
   Cloud services and APIs         2    0     1         0    1     72%    0    0    0       1           1    0%
   Quotas and limits               4    2     2         0    2     65%    0    0    0       2           2    0%
   Networking                     12    2    10         0    5     22%    2    2    0       0           1  100%
