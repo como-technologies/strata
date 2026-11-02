@@ -778,8 +778,8 @@ A line is one JSON object with only these fields:
 - `strata`: the version of strata that read the value.
 - `set`: the name of the closed set, as `strata schema` names its definition. Examples are
   `PackState`, `OciProvider`, and `ProfileType`.
-- `value`: the text of the value. It has printable ASCII only, from the space to `~`. Each other
-  character becomes `?`. Strata cuts a value of more than 64 characters to 61 characters and `...`.
+- `value`: the text of the value. It is one word of printable ASCII, from `!` to `~`, with no space.
+  Each space and each other character becomes `?`. Strata cuts a value of more than 64 characters to 61 characters and `...`.
 - `route`: the template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It
   never holds the uid of a real request.
 

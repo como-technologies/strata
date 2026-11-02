@@ -2974,3 +2974,34 @@ fn the_page_of_the_versions_says_that_the_two_documents_of_the_unknown_values_re
         "documents.md does not send the reader to the rule"
     );
 }
+
+/// Review of Wave 13, A13: a `match` outside the library breaks on each public type of the send
+/// that is `#[non_exhaustive]`. The section of release 0.28.0 names every one of them.
+#[test]
+fn the_section_of_release_0_28_0_names_each_non_exhaustive_type_of_the_send() {
+    let source =
+        read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src/closed_set/unknown/send.rs"));
+    let marked: Vec<&str> = source
+        .lines()
+        .zip(source.lines().skip(1))
+        .filter(|(attribute, _)| attribute.trim() == "#[non_exhaustive]")
+        .filter_map(|(_, item)| item.strip_prefix("pub enum ")?.split_whitespace().next())
+        .collect();
+    assert!(marked.len() >= 2, "the send has marked types: {marked:?}");
+    let page = read(&docs().join("reference/compatibility.md"));
+    let library = one_line(section(
+        section(
+            &page,
+            "## Release 0.28.0: changes that need action",
+            Some("\n## "),
+        ),
+        "### For a user of the library of strata\n",
+        Some("\n### "),
+    ));
+    for name in marked {
+        assert!(
+            library.contains(&format!("`closed_set::unknown::send::{name}`")),
+            "the section of release 0.28.0 does not name {name}"
+        );
+    }
+}

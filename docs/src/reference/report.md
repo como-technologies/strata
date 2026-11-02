@@ -38,7 +38,7 @@ A report is the document `strata-report/1`. It has the fields `schema` and `unkn
 | --- | --- |
 | `strata` | The version of strata that read the value. |
 | `set` | The name of the closed set, as `strata schema` names its definition, such as `ProfileType`. |
-| `value` | The text of the value. It has printable ASCII only, from the space to `~`. Strata writes a `?` for each other character, such as a control character or a zero width space. Strata cuts a value of more than 64 characters, and ends it with `...`. |
+| `value` | The text of the value. It is one word of printable ASCII, from `!` to `~`, with no space. Strata writes a `?` for each space and for each other character, such as a control character or a zero width space. Strata cuts a value of more than 64 characters, and ends it with `...`. |
 | `route` | The template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It is never the path of a real request. It starts with `/v1/`, and holds only letters, digits, and the characters `/`, `_`, `-`, `.`, `{`, and `}`. |
 | `count` | How many lines of the log are this entry. |
 
@@ -64,8 +64,8 @@ three cases:
 
 - It has a field outside the list.
 - Its route is not a template of a route. The `route` field in the table above gives the rule.
-- Its value is not a short word: it is empty, it has more than 64 characters, or it has a character
-  other than printable ASCII.
+- Its value is not a short word: it is empty, it has more than 64 characters, it has a space, or it
+  has a character other than printable ASCII.
 
 The command then stops with the error `log-invalid`, prints nothing, and marks nothing. See
 [Errors](./errors.md).

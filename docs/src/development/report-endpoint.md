@@ -28,7 +28,8 @@ so the list of fields has one definition. A report has 1 to 100 entries. The che
 count of more than 1,000,000.
 
 The check also refuses a route that is not a template of a route. It refuses a value of more than
-64 characters, and a value with a character other than printable ASCII. Check 4 comes after
+64 characters, and a value with a space or with a character other than printable ASCII. Check 4
+comes after
 checks 2 and 3, so a request that fails them spends no request of the sender.
 
 A request that passes check 7 gets the answer 202, and the service writes the report after the

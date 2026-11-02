@@ -163,10 +163,18 @@ fn report_markdown_writes_a_value_with_a_backtick_or_a_bar_in_a_code_span_that_i
 }
 
 #[test]
-fn report_stops_on_a_log_with_a_value_that_has_a_format_character() {
+fn report_stops_on_a_log_with_a_value_that_is_not_one_word_of_printable_ascii() {
     // U+200B is a zero width space: the issue of `pending` and the issue of `pending` and U+200B
-    // would look equal, and U+202E sets the direction of the text from there on
-    for value in ["pending\u{200b}", "later\u{202e}gnp.exe", "p\u{0435}nding"] {
+    // look equal, and U+202E sets the direction of the text from there on. Markdown drops one
+    // space at each end of a code span, so ` pending ` and `pending` look equal too
+    for value in [
+        "pending\u{200b}",
+        "later\u{202e}gnp.exe",
+        "p\u{0435}nding",
+        " pending ",
+        "pending ",
+        "two words",
+    ] {
         let home = tempfile::tempdir().unwrap();
         write_log(
             home.path(),

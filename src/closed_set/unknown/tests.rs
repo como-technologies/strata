@@ -146,7 +146,6 @@ fn a_log_that_cannot_be_written_gives_no_error_and_the_read_goes_on() {
 #[test]
 fn a_value_shows_at_most_64_characters_and_only_printable_ascii() {
     assert_eq!(shown("quarantined"), "quarantined");
-    assert_eq!(shown("two words"), "two words");
     assert_eq!(shown(&"a".repeat(64)), "a".repeat(64), "64 characters fit");
     assert_eq!(shown(&"a".repeat(100)), format!("{}...", "a".repeat(61)));
     assert_eq!(shown("a\u{1b}[31mb\n"), "a?[31mb?");
@@ -165,6 +164,20 @@ fn a_format_character_and_a_letter_outside_ascii_show_as_a_mark() {
         "a Cyrillic letter that looks like e"
     );
     assert_ne!(shown("pending\u{200b}"), shown("pending"));
+}
+
+#[test]
+fn a_space_shows_as_a_mark_so_that_no_value_that_strata_writes_has_a_space() {
+    // markdown drops one space at each end of a code span: ` pending ` and `pending` look equal
+    assert_eq!(shown(" pending "), "?pending?");
+    assert_eq!(shown("two words"), "two?words");
+    for value in [" pending ", "two words", "\u{a0}", "a b\tc"] {
+        assert_eq!(
+            super::sighting::value_fault(&shown(value)),
+            None,
+            "{value:?}"
+        );
+    }
 }
 
 // ---- the line ------------------------------------------------------------------------------
@@ -512,6 +525,9 @@ fn a_value_that_is_empty_long_or_not_text_fails_the_read() {
         "pending\u{200b}".to_string(),
         "later\u{202e}gnp.exe".to_string(),
         "p\u{0435}nding".to_string(),
+        " pending ".to_string(),
+        "pending ".to_string(),
+        "two words".to_string(),
     ] {
         let mut line = serde_json::to_value(full_line()).unwrap();
         line["value"] = json!(value);

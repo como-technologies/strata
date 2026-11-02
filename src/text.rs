@@ -43,16 +43,25 @@ pub(crate) fn and_list<S: AsRef<str>>(items: &[S]) -> String {
 /// `s`, cut to at most `n` characters: its first `n - 1` characters and `…` when it is longer.
 ///
 /// Each message and each column of a report that shows the start of a long text cuts it here.
-/// So each one marks the cut in the same way. An `n` of zero gives empty text.
+/// So each one marks the cut in the same way. An `n` of zero gives empty text. A text that must stay
+/// in ASCII, such as a value of the log, calls `cut_with` with another mark.
 pub fn cut(s: &str, n: usize) -> String {
+    cut_with(s, n, "…")
+}
+
+/// `s`, cut to at most `n` characters, with `mark` as the last characters when `s` is longer.
+///
+/// [`cut`] uses `…`. A text that must stay in ASCII, such as a value of the log, passes `...`. An
+/// `n` that is smaller than the mark gives empty text.
+pub(crate) fn cut_with(s: &str, n: usize, mark: &str) -> String {
     if s.chars().count() <= n {
         return s.to_string();
     }
-    let Some(kept) = n.checked_sub(1) else {
+    let Some(kept) = n.checked_sub(mark.chars().count()) else {
         return String::new();
     };
     let mut part: String = s.chars().take(kept).collect();
-    part.push('…');
+    part.push_str(mark);
     part
 }
 
@@ -187,6 +196,17 @@ mod tests {
         assert_eq!(cut("abcd", 1), "…");
         assert_eq!(cut("abcd", 0), "");
         assert_eq!(cut("", 0), "");
+    }
+
+    #[test]
+    fn a_cut_text_ends_with_the_mark_that_the_caller_gives_and_has_at_most_n_characters() {
+        assert_eq!(cut_with("abcdef", 5, "..."), "ab...");
+        assert_eq!(cut_with("abcde", 5, "..."), "abcde");
+        assert_eq!(cut_with("ééééé", 4, "..."), "é...");
+        // an n that is smaller than the mark leaves no room for the text
+        assert_eq!(cut_with("abcdef", 2, "..."), "");
+        assert_eq!(cut_with("abcdef", 3, "..."), "...");
+        assert_eq!(cut_with("abcdef", 4, "…"), cut("abcdef", 4));
     }
 
     #[test]

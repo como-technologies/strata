@@ -77,7 +77,7 @@ valid:
 
 - A field outside the list of [`strata-unknown/1`](../reference/documents.md#strata-unknown1).
 - A route that is not a template of a route, such as the path of a real request.
-- A value with a character other than printable ASCII.
+- A value with a space, or with a character other than printable ASCII.
 
 `strata report` then stops with the error `log-invalid`, prints nothing, and marks nothing. The
 message gives the number of the line. See [Errors](../reference/errors.md).

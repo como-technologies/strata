@@ -879,13 +879,17 @@ field, a value, an input, or an option is in the sections above.
   - The table of `strata report --format markdown` has the columns `set`, `value`, `route`,
     `count`, and `strata`. It had `Palette`, `status`, and `error code` too.
   - The issue of the endpoint has no row `Releases of Palette` and no row `Refusals`.
-- **A value of the log and of the report has printable ASCII only.** Release 0.27.0 kept each
-  character that is not a control character.
-  - Strata writes a `?` for each other character, such as a zero width space or a letter that
-    is not ASCII. So two different values never look equal.
+- **A value of the log and of the report is one word of printable ASCII.** Release 0.27.0 kept
+  each character that is not a control character.
+  - Strata writes a `?` for each space, and for each character that is not printable ASCII.
+    Examples are a zero width space and a letter that is not ASCII. No value of a closed set of
+    strata has a space.
+  - Markdown drops one space at each end of a code span. So the values `pending` and ` pending `
+    gave two issues that look equal.
   - A value of more than 64 characters ends with `...`. It ended with `…`.
-  - A line of an older log with such a character is not valid now. `strata report` stops with the
-    error `log-invalid`. Delete the line, or delete the file `strata-unknown.jsonl`.
+  - A line of an older log with a space, or with such a character, is not valid now.
+    `strata report` stops with the error `log-invalid`. Delete the line, or delete the file
+    `strata-unknown.jsonl`.
 
 ### For a user of the library of strata
 
@@ -906,7 +910,8 @@ field, a value, an input, or an option is in the sections above.
 - `closed_set::unknown::Hint`, `closed_set::unknown::Line`, and `closed_set::unknown::Report` are
   gone. Each type has one path: `closed_set::unknown::hint::Hint`,
   `closed_set::unknown::log::Line`, and `closed_set::unknown::report::Report`.
-- `closed_set::unknown::send::Step` is `#[non_exhaustive]`. A `match` on it needs a `_` arm.
+- `closed_set::unknown::send::Step` and `closed_set::unknown::send::Choice` are `#[non_exhaustive]`.
+  A `match` on either needs a `_` arm.
 - `config::state_dir` is not public. The functions `closed_set::unknown::log::path`,
   `closed_set::unknown::hint::path`, and `closed_set::unknown::send::answer_path` give the files.
 - `text::code_span` is new. It writes a text as a code span of markdown, with a fence that the text

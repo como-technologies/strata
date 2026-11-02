@@ -198,6 +198,25 @@ mod tests {
     }
 
     #[test]
+    fn a_value_that_is_not_one_word_of_printable_ascii_is_refused_and_the_text_is_not_repeated() {
+        // markdown drops one space at each end of a code span, so ` later ` and `later` give
+        // two issues that look equal
+        for value in [
+            " later ",
+            "later ",
+            "two words",
+            "later\u{200b}",
+            "later\u{202e}x",
+        ] {
+            let mut with = entry();
+            with["value"] = json!(value);
+            let refused = refusal(JSON, &report(vec![with]));
+            assert_eq!(refused.status, 422, "{value:?}");
+            assert!(!refused.message.contains("later"), "{refused:?}");
+        }
+    }
+
+    #[test]
     fn a_body_that_is_not_json_or_too_long_or_has_another_content_type_is_refused() {
         assert_eq!(refusal(JSON, b"not json").status, 400);
         assert_eq!(refusal(JSON, b"").status, 400);

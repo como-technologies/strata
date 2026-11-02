@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::TOOL_VERSION;
 use crate::reference::version;
+use crate::text::cut_with;
 
 /// The most characters of a value that the note and the log show. A value of a closed set is a
 /// short word, so a longer text is not a value of a set.
@@ -85,14 +86,15 @@ impl Sighting {
     }
 }
 
-/// True for a character that a value can hold: printable ASCII, from the space to `~`. So a value
-/// holds no control character, no format character such as U+200B or U+202E, and no letter that
-/// looks like another. Two issues of two values cannot look equal.
+/// True for a character that a value can hold: printable ASCII with no space, from `!` to `~`. So a
+/// value holds no control character, no format character such as U+200B or U+202E, no letter that
+/// looks like another, and no space that a code span of markdown drops at its ends. Two issues of
+/// two values cannot look equal.
 fn is_value_char(c: char) -> bool {
-    matches!(c, ' '..='~')
+    c.is_ascii_graphic()
 }
 
-/// What is wrong with `value` as the value of a closed set, or `None`. A value is a short word: it
+/// What is wrong with `value` as the value of a closed set, or `None`. A value is one short word: it
 /// has [`LONGEST_VALUE`] characters or fewer, and holds only the characters of [`is_value_char`].
 pub(super) fn value_fault(value: &str) -> Option<String> {
     if value.is_empty()
@@ -100,7 +102,7 @@ pub(super) fn value_fault(value: &str) -> Option<String> {
         || !value.chars().all(is_value_char)
     {
         return Some(format!(
-            "the value is not a short word of {LONGEST_VALUE} printable ASCII characters or fewer"
+            "the value is not a short word of {LONGEST_VALUE} printable ASCII characters or fewer, with no space"
         ));
     }
     None
@@ -115,15 +117,7 @@ pub(super) fn shown(value: &str) -> String {
         .chars()
         .map(|c| if is_value_char(c) { c } else { '?' })
         .collect();
-    if printable.chars().count() <= LONGEST_VALUE {
-        return printable;
-    }
-    let kept = LONGEST_VALUE - CUT_MARK.len();
-    printable
-        .chars()
-        .take(kept)
-        .chain(CUT_MARK.chars())
-        .collect()
+    cut_with(&printable, LONGEST_VALUE, CUT_MARK)
 }
 
 /// What is wrong with `route` as the template of a route, or `None`. A template starts with
