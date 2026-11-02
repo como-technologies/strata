@@ -562,7 +562,7 @@ just live-knurl                                                                #
 just live-who                                                                  # #69, stage 2 needs just live-up
 just live-draft                                                                # #155, needs just live-profiles
 just live-release                                                              # #146, needs only the key
-just live-contract                                                             # #390, #391, needs only the key and just examples; reads only
+just live-contract                                                             # #390, #391, #393, needs the key and just examples; reads only, also the calls of the clouds
 just live-validate-route BODIES                                                # #243, needs the key and a directory of bodies; no cluster
 just live-route-bodies BODIES                                                  # #408, #413, needs just live-profiles on AWS; tries four add-on profiles, runs validate-route.sh on those that Palette takes, deletes them
 just live-pending                                                              # #70, #276, needs just live-up

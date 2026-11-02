@@ -11,7 +11,8 @@
 //! know such a value. It compares shapes, and never the values of two tenants.
 //!
 //! The result is the document `strata-contract/1`, with one entry for each fact. The run changes
-//! nothing in the tenant: it sends GET requests only. [The list of the
+//! nothing in the tenant: it sends GET requests only. The [`cloud`] module adds the entry of each
+//! fact of the kind `cloud`, a read-only call of the tool of a cloud. [The list of the
 //! facts](../../../docs/src/development/facts.md#the-weekly-contract-run) tells how the run works.
 
 use std::collections::BTreeSet;
@@ -22,6 +23,7 @@ use strata_preflight::world::unreadable;
 
 use crate::facts::{Fact, Kind};
 
+mod cloud;
 mod command;
 mod document;
 mod releases;
@@ -73,6 +75,7 @@ fn check<A: PaletteApi>(
     let request = fact.request.clone().unwrap_or_default();
     let entry = |outcome, reason: Option<String>, differences| Entry {
         id: fact.id.clone(),
+        kind: Kind::Request,
         request: request.clone(),
         outcome,
         reason,
@@ -80,6 +83,7 @@ fn check<A: PaletteApi>(
         unknown_values: Vec::new(),
         live: fact.live.clone(),
         pages: fact.pages.clone(),
+        rules: Vec::new(),
     };
     let skipped = |reason: &str| entry(Outcome::Skipped, Some(reason.to_string()), Vec::new());
     let Some((method, template)) = fact.parts() else {

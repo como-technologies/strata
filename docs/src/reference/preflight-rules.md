@@ -76,7 +76,8 @@ rules:
 A rule with a check has the tier of its check. Strata does not call a cloud
 itself: a `cloud` rule runs the tool of the cloud (`aws`, `gcloud`) when it is
 on the machine and authenticated, and prints `NOT CHECKED` with the command
-when it is not.
+when it is not. Each call of a cloud is a fact of the list: see [The facts of the
+clouds](../internals/preflight.md#the-facts-of-the-clouds).
 
 ## The checks
 

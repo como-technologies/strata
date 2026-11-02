@@ -8,6 +8,7 @@ use strata::api::Method;
 use strata_preflight::rule::Catalog;
 
 use super::check::{NOT_FACTS, check as faults_of, route_matches, template_matches};
+use super::cloud::CloudSources;
 use super::model::{Fact, load};
 use super::sources::{
     Sources, api_requests, book_rows, calls_of, rule_requests, section_headings, section_rows,
@@ -46,6 +47,7 @@ fn facts(text: &str) -> Vec<Fact> {
 fn world() -> Sources {
     let page = |text: &str| text.to_string();
     Sources {
+        cloud: CloudSources::default(),
         facts: facts(FACT),
         served: Some(set(&["v1/clusterprofiles/64e0000000000000000000a1"])),
         requests: set(&["GET /v1/clusterprofiles/{}"]),

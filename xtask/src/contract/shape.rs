@@ -108,14 +108,35 @@ impl Path {
     /// The text of each value that this path reaches in `doc`. A value that is no text, or has no
     /// characters, is omitted.
     pub fn texts(&self, doc: &Value) -> BTreeSet<String> {
+        self.collect(doc, |value| match value {
+            Some(Value::String(text)) if !text.is_empty() => Some(text.clone()),
+            _ => None,
+        })
+    }
+
+    /// The text of each text and each number that this path reaches in `doc`. A number with no
+    /// fraction is its integer, so `10.0` is `10`.
+    pub fn scalars(&self, doc: &Value) -> BTreeSet<String> {
+        self.collect(doc, |value| match value {
+            Some(Value::Number(number)) => Some(match number.as_f64() {
+                Some(float) if float.fract() == 0.0 => format!("{float:.0}"),
+                _ => number.to_string(),
+            }),
+            Some(Value::String(text)) if !text.is_empty() => Some(text.clone()),
+            _ => None,
+        })
+    }
+
+    /// The set of what `pick` makes of the value at each place that this path reaches in `doc`.
+    fn collect(
+        &self,
+        doc: &Value,
+        pick: impl Fn(Option<&Value>) -> Option<String>,
+    ) -> BTreeSet<String> {
         let mut found = BTreeSet::new();
         for root in self.roots(doc) {
             self.walk(Some(root), &self.steps, &mut |value| {
-                if let Some(Value::String(text)) = value
-                    && !text.is_empty()
-                {
-                    found.insert(text.clone());
-                }
+                found.extend(pick(value));
             });
         }
         found

@@ -1,0 +1,498 @@
+schema: strata-facts/1
+facts:
+  # The calls of the tool of a cloud that the rules of the cloud tier of strata-preflight depend on,
+  # and the tables of cloud facts that the rules hold. The fixtures of the rules are the stand-in of
+  # a cloud. The contract run sends each call in the lab account, and `{name}` is a value of the lab:
+  # see "The facts of the clouds" in development/facts.md. The lab has accounts of AWS and GCP only.
+
+  # ---- the calls on AWS ---------------------------------------------------------------------------
+
+  - id: aws-caller-identity
+    kind: cloud
+    call: [aws, sts, get-caller-identity, --output, json]
+    reads:
+      fields: [Account]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [cloud-cli-auth]
+
+  - id: aws-policy-simulation
+    kind: cloud
+    call: [aws, iam, simulate-principal-policy, --policy-source-arn, "{role_arn}", --action-names, "ec2:DescribeInstances", --resource-arns, "{role_arn}", --output, json]
+    reads:
+      fields:
+        - EvaluationResults[].EvalActionName
+        - EvaluationResults[].EvalDecision
+        - EvaluationResults[].ResourceSpecificResults[].EvalResourceName
+        - EvaluationResults[].ResourceSpecificResults[].EvalResourceDecision
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [eks-role-no-eks-policy, role-partial-permissions, capa-stack-update-denied]
+
+  - id: aws-core-policies
+    kind: cloud
+    call: [aws, iam, list-policies, --scope, Local, --output, json]
+    reads:
+      fields: ["Policies[].PolicyName"]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [eks-core-policies]
+
+  - id: aws-capa-stack
+    kind: cloud
+    call: [aws, cloudformation, describe-stacks, --stack-name, cluster-api-provider-aws-sigs-k8s-io, --region, "{region}", --output, json]
+    reads:
+      fields:
+        - Stacks[].StackName
+        - Stacks[].StackStatus
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [capa-bootstrap-stack]
+
+  - id: aws-instance-profiles
+    kind: cloud
+    call: [aws, iam, list-instance-profiles, --output, json]
+    reads:
+      fields:
+        - InstanceProfiles[].InstanceProfileName
+        - InstanceProfiles[].Roles
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [capa-manual-stack]
+
+  - id: aws-role-tags
+    kind: cloud
+    call: [aws, iam, list-role-tags, --role-name, "{name_prefix}controllers.cluster-api-provider-aws.sigs.k8s.io", --output, json]
+    reads:
+      fields:
+        - Tags[].Key
+        - Tags[].Value
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [capa-stack-release-behind]
+
+  - id: aws-attached-role-policies
+    kind: cloud
+    call: [aws, iam, list-attached-role-policies, --role-name, "{name_prefix}nodes.cluster-api-provider-aws.sigs.k8s.io", --output, json]
+    reads:
+      fields: ["AttachedPolicies[].PolicyArn"]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [global-policy-attach-silent, iam-ten-policies, ebs-csi-node-policy]
+
+  # ANCHOR: example
+  - id: aws-ec2-vcpu-quota
+    kind: cloud
+    call: [aws, service-quotas, get-service-quota, --service-code, ec2, --quota-code, L-1216C47A, --region, "{region}", --output, json]
+    reads:
+      fields: [Quota.Value]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [aws-quotas]
+  # ANCHOR_END: example
+
+  - id: aws-eks-node-quota
+    kind: cloud
+    call: [aws, service-quotas, get-service-quota, --service-code, eks, --quota-code, L-BD136A63, --region, "{region}", --output, json]
+    reads:
+      fields: [Quota.Value]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [eks-quotas]
+
+  - id: aws-availability-zones
+    kind: cloud
+    call: [aws, ec2, describe-availability-zones, --region, "{region}", --output, json]
+    reads:
+      fields:
+        - AvailabilityZones[].ZoneName
+        - AvailabilityZones[].ZoneId
+        - AvailabilityZones[].ZoneType
+        - AvailabilityZones[].State
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [eks-unsupported-zone]
+
+  - id: aws-subnets
+    kind: cloud
+    call: [aws, ec2, describe-subnets, --region, "{region}", --output, json]
+    reads:
+      fields:
+        - Subnets[].SubnetId
+        - Subnets[].VpcId
+        - Subnets[].AvailabilityZone
+        - Subnets[].AvailableIpAddressCount
+        - Subnets[].Tags[].Key
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [subnet-ips, static-subnets, lb-subnet-tags]
+
+  - id: aws-route-tables
+    kind: cloud
+    call: [aws, ec2, describe-route-tables, --region, "{region}", --output, json]
+    reads:
+      fields:
+        - RouteTables[].RouteTableId
+        - RouteTables[].Associations[].SubnetId
+        - RouteTables[].Associations[].Main
+        - RouteTables[].Routes[].DestinationCidrBlock
+        - RouteTables[].Routes[].GatewayId
+        - RouteTables[].Routes[].NatGatewayId
+        - RouteTables[].Routes[].State
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [private-egress, eks-fargate-private]
+
+  - id: aws-security-groups
+    kind: cloud
+    call: [aws, ec2, describe-security-groups, --region, "{region}", --output, json]
+    reads:
+      fields:
+        - SecurityGroups[].GroupName
+        - SecurityGroups[].GroupId
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [sg-name-collision]
+
+  - id: aws-images
+    kind: cloud
+    call: [aws, ec2, describe-images, --region, "{region}", --owners, amazon, --filters, "Name=name,Values=al2023-ami-minimal-*-x86_64", --output, json]
+    reads:
+      fields:
+        - Images[].ImageId
+        - Images[].State
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [eks-launch-template, aws-ami]
+
+  - id: aws-eks-cluster-versions
+    kind: cloud
+    call: [aws, eks, describe-cluster-versions, --region, "{region}", --output, json]
+    reads:
+      fields: ["clusterVersions[].clusterVersion"]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [eks-version-not-offered]
+
+  - id: aws-eks-addon-versions
+    kind: cloud
+    call: [aws, eks, describe-addon-versions, --addon-name, eks-pod-identity-agent, --region, "{region}", --output, json]
+    reads:
+      fields:
+        - addons[].addonName
+        - addons[].addonVersions[].addonVersion
+        - addons[].addonVersions[].compatibilities[].defaultVersion
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [eks-addon-version]
+
+  - id: aws-kms-key
+    kind: cloud
+    call: [aws, kms, describe-key, --key-id, alias/aws/ebs, --region, "{region}", --output, json]
+    reads:
+      fields:
+        - KeyMetadata.KeyId
+        - KeyMetadata.KeyState
+        - KeyMetadata.KeyUsage
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [kms]
+
+  - id: aws-volumes
+    kind: cloud
+    call: [aws, ec2, describe-volumes, --region, "{region}", --max-items, "20", --output, json]
+    reads:
+      fields:
+        - Volumes[].VolumeId
+        - Volumes[].State
+        - Volumes[].Size
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [pvc-lb-leftover]
+
+  - id: aws-vpcs
+    kind: cloud
+    call: [aws, ec2, describe-vpcs, --region, "{region}", --output, json]
+    reads:
+      fields: ["Vpcs[].VpcId"]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [teardown-order]
+
+  - id: aws-instances
+    kind: cloud
+    call: [aws, ec2, describe-instances, --region, "{region}", --max-items, "20", --output, json]
+    reads:
+      fields: ["Reservations[].Instances[].InstanceId"]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [leftovers-before-build]
+
+  # ---- the calls on GCP ---------------------------------------------------------------------------
+
+  - id: gcp-iam-policy
+    kind: cloud
+    call: [gcloud, projects, get-iam-policy, "{project}", --format, json]
+    reads:
+      fields:
+        - bindings[].role
+        - bindings[].members[]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [gcp-account-roles, gcp-default-sa-no-role]
+
+  - id: gcp-service-accounts
+    kind: cloud
+    call: [gcloud, iam, service-accounts, list, --project, "{project}", --format, json]
+    reads:
+      fields: [email]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [gcp-default-sa-missing]
+
+  - id: gcp-enabled-services
+    kind: cloud
+    call: [gcloud, services, list, --enabled, --project, "{project}", --format, json]
+    reads:
+      fields: [config.name]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [gke-api-off, gcp-apis-off]
+
+  - id: gcp-region-quotas
+    kind: cloud
+    call: [gcloud, compute, regions, describe, "{gcp_region}", --project, "{project}", --format, json]
+    reads:
+      fields:
+        - quotas[].metric
+        - quotas[].limit
+        - quotas[].usage
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [gcp-quotas]
+
+  - id: gcp-subnets
+    kind: cloud
+    call: [gcloud, compute, networks, subnets, list, --project, "{project}", --regions, "{gcp_region}", --format, json]
+    reads:
+      fields:
+        - name
+        - ipCidrRange
+        - secondaryIpRanges
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [gke-secondary-ranges]
+
+  # The rule reads the exit code of the call. The name proves that the answer is an image.
+  - id: gcp-image
+    kind: cloud
+    call: [gcloud, compute, images, describe, "{image}", --project, spectro-image-build, --format, json]
+    reads:
+      fields: [name]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [gcp-image-not-shared]
+
+  - id: gcp-server-config
+    kind: cloud
+    call: [gcloud, container, get-server-config, --location, "{gcp_region}", --project, "{project}", --format, json]
+    reads:
+      fields:
+        - channels[].channel
+        - channels[].validVersions[]
+        - validMasterVersions[]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [gke-version-not-offered]
+
+  - id: gcp-node-pools
+    kind: cloud
+    call: [gcloud, container, node-pools, list, --cluster, "{cluster}", --location, "{gcp_region}", --project, "{project}", --format, json]
+    reads:
+      fields:
+        - name
+        - status
+        - config.machineType
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [gke-pool-roll]
+
+  # ---- the calls that the lab cannot send ---------------------------------------------------------
+
+  - id: azure-role-assignments
+    kind: cloud
+    reads:
+      fields:
+        - roleDefinitionName
+        - scope
+    unchecked: The lab has no account of Azure.
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [azure-account-roles]
+
+  - id: azure-resource-providers
+    kind: cloud
+    reads:
+      fields:
+        - namespace
+        - registrationState
+    unchecked: The lab has no account of Azure.
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [azure-resource-providers]
+
+  - id: azure-vm-usage
+    kind: cloud
+    reads:
+      fields:
+        - name.value
+        - limit
+        - currentValue
+    unchecked: The lab has no account of Azure.
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [azure-vcpu-quota]
+
+  - id: maas-machines
+    kind: cloud
+    unchecked: The lab has no MAAS. The rule has no check, because the MAAS API needs a login that the world does not carry.
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [maas-machines-ready]
+
+  - id: vsphere-template
+    kind: cloud
+    unchecked: The lab has no account of vSphere. The rule has no check, because no tool on this machine reaches vCenter with the account of the world.
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [vsphere-ova-template]
+
+  # ---- the rules that have no check of a cloud ----------------------------------------------------
+
+  - id: gcp-org-policy
+    kind: cloud
+    unchecked: The rule has no check. The tool describes one constraint for each call, and a check runs one command. The reproduce lines describe the constraints.
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [gcp-org-policies]
+
+  - id: aws-security-group-rules
+    kind: cloud
+    unchecked: The rule has no check. No security group exists before the build. The reproduce lines read the groups of a cluster that runs.
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [aws-sg-rules]
+
+  - id: cloud-after-force-delete
+    kind: cloud
+    unchecked: The rule has no check. The inventory scripts of the lab read the cloud.
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [force-delete-leaves-cloud]
+
+  - id: registry-login
+    kind: cloud
+    unchecked: The rules read the exit code of crane against a registry. A registry is no cloud API with an answer to compare.
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [ecr-token, crane-empty-password]
+
+  - id: machine-tools
+    kind: cloud
+    unchecked: The rule reads which tools are on this machine. No cloud answers it.
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [tools-present]
+
+  # ---- the tables of cloud facts that the rules hold ----------------------------------------------
+
+  # The zone ids that EKS takes no cluster subnet in. The list of zones of each region shows the id.
+  - id: eks-refused-zone-id-us-east-1
+    kind: cloud
+    call: [aws, ec2, describe-availability-zones, --region, us-east-1, --all-availability-zones, --output, json]
+    reads:
+      fields: ["AvailabilityZones[].ZoneId"]
+    table:
+      as_of: "2026-09-29"
+      holds: [use1-az3]
+    pages:
+      - internals/preflight.md#the-tables-of-cloud-facts
+    rules: [eks-unsupported-zone]
+
+  - id: eks-refused-zone-id-us-west-1
+    kind: cloud
+    call: [aws, ec2, describe-availability-zones, --region, us-west-1, --all-availability-zones, --output, json]
+    reads:
+      fields: ["AvailabilityZones[].ZoneId"]
+    table:
+      as_of: "2026-09-29"
+      holds: [usw1-az2]
+    pages:
+      - internals/preflight.md#the-tables-of-cloud-facts
+    rules: [eks-unsupported-zone]
+
+  - id: eks-refused-zone-id-ca-central-1
+    kind: cloud
+    call: [aws, ec2, describe-availability-zones, --region, ca-central-1, --all-availability-zones, --output, json]
+    reads:
+      fields: ["AvailabilityZones[].ZoneId"]
+    table:
+      as_of: "2026-09-29"
+      holds: [cac1-az3]
+    pages:
+      - internals/preflight.md#the-tables-of-cloud-facts
+    rules: [eks-unsupported-zone]
+
+  # The default limit of managed policies for a role. AWS raises it for an account on request, so
+  # the default quota is the one to prove, not the quota of the lab.
+  - id: aws-policies-per-role-limit
+    kind: cloud
+    call: [aws, service-quotas, get-aws-default-service-quota, --service-code, iam, --quota-code, L-0DA4ABF3, --region, us-east-1, --output, json]
+    reads:
+      fields: [Quota.Value]
+    table:
+      as_of: "2026-09-29"
+      holds: ["10"]
+    pages:
+      - internals/preflight.md#the-tables-of-cloud-facts
+    rules: [iam-ten-policies]
+
+  # The rules read the vCPUs of an instance type from its name: 2 below xlarge, 4 for xlarge, and 4
+  # for each multiple of it. The three types show the three steps of that reading.
+  - id: aws-vcpus-of-types
+    kind: cloud
+    call: [aws, ec2, describe-instance-types, --instance-types, t3.large, t3.xlarge, t3.2xlarge, --region, "{region}", --output, json]
+    reads:
+      fields: ["InstanceTypes[].VCpuInfo.DefaultVCpus"]
+    table:
+      as_of: "2026-09-29"
+      holds: ["2", "4", "8"]
+    pages:
+      - internals/preflight.md#the-tables-of-cloud-facts
+    rules: [aws-quotas]
+
+  # The rule reads the vCPUs of a machine type from the number at the end of its name, and counts 2
+  # for a name with no number.
+  - id: gcp-vcpus-of-types
+    kind: cloud
+    call: [gcloud, compute, machine-types, list, --filter, "name=e2-standard-4 OR name=e2-medium", --project, "{project}", --format, json]
+    reads:
+      fields: [guestCpus]
+    table:
+      as_of: "2026-09-29"
+      holds: ["2", "4"]
+    pages:
+      - internals/preflight.md#the-tables-of-cloud-facts
+    rules: [gcp-quotas]
+
+  - id: azure-vcpus-of-sizes
+    kind: cloud
+    reads:
+      fields: [numberOfCores]
+    table:
+      as_of: "2026-09-29"
+      holds: ["1", "4"]
+    unchecked: The lab has no account of Azure.
+    pages:
+      - internals/preflight.md#the-tables-of-cloud-facts
+    rules: [azure-vcpu-quota]

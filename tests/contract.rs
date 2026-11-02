@@ -780,6 +780,332 @@ fn contract_report_reads_the_host_layer_of_verify_report_and_stops_when_it_is_no
     assert!(text(&o.stderr).contains("scripts/ci/verify-report.sh has no host layer to read"));
 }
 
+// ---- contract-report.sh: the calls of the clouds ----------------------------------------------
+
+/// The entry of a fact of the kind `cloud`: a call of the tool of a cloud, with its rules.
+fn cloud_entry(id: &str, outcome: &str, differences: Value) -> Value {
+    json!({
+        "id": id,
+        "kind": "cloud",
+        "request": "aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region {region} --output json",
+        "outcome": outcome,
+        "differences": differences,
+        "live": [],
+        "pages": ["internals/preflight.md#the-calls-of-the-clouds"],
+        "rules": ["aws-quotas"],
+    })
+}
+
+/// A call whose `Quota.Value` is text in the answer of the cloud and a number in the fixtures.
+fn cloud_differing(id: &str) -> Value {
+    cloud_entry(
+        id,
+        "differs",
+        json!([{"kind": "type", "path": "Quota.Value", "expected": ["number"], "found": ["string"]}]),
+    )
+}
+
+/// The document that `xtask contract` writes for a run with a difference in a call and in a table.
+/// The tests of `xtask/src/contract/cloud/` make sure that the run writes this file.
+#[test]
+fn contract_report_reads_the_document_that_the_contract_run_writes() {
+    let written: Value =
+        serde_json::from_str(&repo_file("xtask/src/contract/cloud/document.json")).unwrap();
+    let r = Report::new();
+    let o = r.report(&written, &[]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = r.calls();
+    let creates: Vec<&String> = calls
+        .iter()
+        .filter(|c| c.starts_with("issue create"))
+        .collect();
+    assert_eq!(creates.len(), 2, "{calls:?}");
+    assert!(
+        creates[0].contains("--label cloud-drift")
+            && creates[0].contains(
+                "--title Cloud drift: `aws-ec2-vcpu-quota` differs from the fixtures of the rules"
+            ),
+        "{}",
+        creates[0]
+    );
+    assert!(
+        creates[1].contains("--label cloud-drift")
+            && creates[1].contains("Cloud drift: `eks-refused-zone-id-us-east-1`"),
+        "{}",
+        creates[1]
+    );
+    let first = calls
+        .iter()
+        .position(|c| c.starts_with("issue create"))
+        .unwrap()
+        + 1;
+    let body = r.body(first);
+    assert!(
+        body.contains("| type | `Quota.Value` | number | string |"),
+        "{body}"
+    );
+    assert!(body.contains("`aws-quotas`"), "{body}");
+    assert!(
+        text(&o.stderr).contains("3 facts: 0 same, 2 differ, 1 skipped, 0 could not be checked"),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn contract_report_opens_an_issue_with_the_label_cloud_drift_for_a_call_of_a_cloud_that_differs() {
+    let r = Report::new();
+    let o = r.report(
+        &document(
+            vec![
+                differing("cluster-document"),
+                cloud_differing("aws-ec2-vcpu-quota"),
+            ],
+            vec![],
+        ),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = r.calls();
+    let creates: Vec<&String> = calls
+        .iter()
+        .filter(|c| c.starts_with("issue create"))
+        .collect();
+    assert_eq!(creates.len(), 2, "{calls:?}");
+    assert!(
+        creates[0].contains("--label palette-drift"),
+        "{}",
+        creates[0]
+    );
+    let cloud = creates[1];
+    assert!(cloud.contains("--label cloud-drift"), "{cloud}");
+    assert!(
+        cloud.contains(
+            "--title Cloud drift: `aws-ec2-vcpu-quota` differs from the fixtures of the rules"
+        ),
+        "{cloud}"
+    );
+    assert!(cloud.contains("--milestone Backlog"), "{cloud}");
+    let n = calls
+        .iter()
+        .rposition(|c| c.starts_with("issue create"))
+        .unwrap()
+        + 1;
+    let body = r.body(n);
+    assert_eq!(
+        body.lines().next(),
+        Some("<!-- strata-contract: aws-ec2-vcpu-quota -->")
+    );
+    assert!(
+        body.contains("sent the call `aws service-quotas get-service-quota"),
+        "{body}"
+    );
+    assert!(
+        body.contains("| type | `Quota.Value` | number | string |"),
+        "{body}"
+    );
+    assert!(
+        body.contains("The rules of the cloud tier that read the fact: `aws-quotas`."),
+        "{body}"
+    );
+    assert!(
+        body.contains("`docs/src/internals/preflight.md#the-calls-of-the-clouds`"),
+        "{body}"
+    );
+    assert!(
+        !body.contains("live checks"),
+        "a cloud fact has no live script: {body}"
+    );
+    // each label is created when the repository has none, one time
+    let labels: Vec<&String> = calls
+        .iter()
+        .filter(|c| c.starts_with("label create"))
+        .collect();
+    assert_eq!(labels.len(), 2, "{calls:?}");
+    assert!(labels.iter().any(|c| c.contains("palette-drift")));
+    assert!(labels.iter().any(|c| c.contains("cloud-drift")));
+}
+
+#[test]
+fn contract_report_shows_the_value_of_a_table_that_the_cloud_does_not_list() {
+    let r = Report::new();
+    let table = cloud_entry(
+        "eks-refused-zone-id-us-east-1",
+        "differs",
+        json!([{"kind": "table", "path": "AvailabilityZones[].ZoneId", "expected": ["use1-az3"], "found": ["use1-az1", "use1-az2"]}]),
+    );
+    let o = r.report(&document(vec![table], vec![]), &[]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = r.calls();
+    let n = calls
+        .iter()
+        .position(|c| c.starts_with("issue create"))
+        .unwrap()
+        + 1;
+    assert!(
+        r.body(n)
+            .contains("| table | `AvailabilityZones[].ZoneId` | use1-az3 | use1-az1, use1-az2 |"),
+        "{}",
+        r.body(n)
+    );
+}
+
+#[test]
+fn contract_report_lists_the_issues_of_both_labels_and_updates_the_issue_of_a_call_of_a_cloud() {
+    let r = Report::new();
+    r.open_issues(&[(9, "<!-- strata-contract: aws-ec2-vcpu-quota -->")]);
+    let o = r.report(
+        &document(vec![cloud_differing("aws-ec2-vcpu-quota")], vec![]),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = r.calls();
+    let lists: Vec<&String> = calls
+        .iter()
+        .filter(|c| c.starts_with("issue list"))
+        .collect();
+    assert_eq!(lists.len(), 2, "{calls:?}");
+    assert!(lists[0].contains("--label palette-drift"), "{}", lists[0]);
+    assert!(lists[1].contains("--label cloud-drift"), "{}", lists[1]);
+    assert!(
+        calls
+            .iter()
+            .any(|c| c.starts_with("issue edit 9 --repo o/r --title")),
+        "{calls:?}"
+    );
+    assert!(
+        !calls.iter().any(|c| c.starts_with("issue create")),
+        "{calls:?}"
+    );
+    assert!(text(&o.stderr).contains("updated #9 for aws-ec2-vcpu-quota"));
+}
+
+#[test]
+fn contract_report_lists_the_issues_of_the_label_of_the_clouds_only_for_a_call_of_a_cloud() {
+    let r = Report::new();
+    let o = r.report(&document(vec![differing("cluster-document")], vec![]), &[]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let calls = r.calls();
+    let lists = calls.iter().filter(|c| c.starts_with("issue list")).count();
+    assert_eq!(lists, 1, "{calls:?}");
+    // a call of a cloud that was skipped has no issue to find
+    let r = Report::new();
+    r.report(
+        &document(
+            vec![cloud_entry("aws-ec2-vcpu-quota", "skipped", json!([]))],
+            vec![],
+        ),
+        &[],
+    );
+    assert_eq!(
+        r.calls()
+            .iter()
+            .filter(|c| c.starts_with("issue list"))
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn contract_report_closes_the_issue_of_a_call_of_a_cloud_that_is_the_same_again() {
+    let r = Report::new();
+    r.open_issues(&[(9, "<!-- strata-contract: aws-ec2-vcpu-quota -->")]);
+    let o = r.report(
+        &document(
+            vec![cloud_entry("aws-ec2-vcpu-quota", "same", json!([]))],
+            vec![],
+        ),
+        &[],
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let calls = r.calls();
+    let close = calls
+        .iter()
+        .position(|c| c.starts_with("issue close 9"))
+        .expect("the issue closes");
+    assert!(
+        r.comment(close + 1).contains(
+            "`aws-ec2-vcpu-quota` is the same as the fixtures of the rules again (checked 2026-11-02T05:45:00Z)"
+        ),
+        "{}",
+        r.comment(close + 1)
+    );
+}
+
+#[test]
+fn contract_report_leaves_the_issue_of_a_call_of_a_cloud_that_the_run_skipped_or_could_not_send() {
+    for (outcome, code) in [("skipped", 0), ("error", 2)] {
+        let r = Report::new();
+        r.open_issues(&[(9, "<!-- strata-contract: aws-ec2-vcpu-quota -->")]);
+        let o = r.report(
+            &document(
+                vec![cloud_entry("aws-ec2-vcpu-quota", outcome, json!([]))],
+                vec![],
+            ),
+            &[],
+        );
+        assert_eq!(
+            o.status.code(),
+            Some(code),
+            "{outcome}: {}",
+            text(&o.stderr)
+        );
+        assert!(
+            r.calls()
+                .iter()
+                .all(|c| c.starts_with("issue list") || c.starts_with("repo view")),
+            "{outcome}: {:?}",
+            r.calls()
+        );
+    }
+}
+
+#[test]
+fn contract_report_takes_the_label_of_the_clouds_from_its_option() {
+    let r = Report::new();
+    let doc = r.document(&document(
+        vec![cloud_differing("aws-ec2-vcpu-quota")],
+        vec![],
+    ));
+    let o = r.run(&[
+        doc.to_str().unwrap(),
+        "--repo",
+        "o/r",
+        "--cloud-label",
+        "drift-of-clouds",
+    ]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(r.call("issue create").contains("--label drift-of-clouds"));
+    assert!(
+        r.call("label create drift-of-clouds")
+            .contains("drift-of-clouds")
+    );
+    assert!(
+        r.calls()
+            .iter()
+            .any(|c| c.starts_with("issue list") && c.contains("--label drift-of-clouds")),
+        "{:?}",
+        r.calls()
+    );
+}
+
+#[test]
+fn contract_report_dry_run_prints_the_body_of_a_call_of_a_cloud_and_calls_no_host() {
+    let r = Report::new();
+    let doc = r.document(&document(
+        vec![cloud_differing("aws-ec2-vcpu-quota")],
+        vec![],
+    ));
+    let o = r.run(&[doc.to_str().unwrap(), "--dry-run"]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(text(&o.stdout).contains("<!-- strata-contract: aws-ec2-vcpu-quota -->"));
+    assert!(
+        text(&o.stderr)
+            .contains("Cloud drift: `aws-ec2-vcpu-quota` differs from the fixtures of the rules")
+    );
+    assert!(r.calls().is_empty(), "{:?}", r.calls());
+}
+
 // ---- contract.sh -------------------------------------------------------------------------------
 
 /// A stand-in `xtask` that logs its arguments, writes the document of `FAKE_DOCUMENT` where
@@ -919,6 +1245,45 @@ fn contract_sh_gives_the_exit_code_of_the_run_and_names_what_could_not_be_checke
             "could not read the release of spectrocloud/terraform-provider-spectrocloud: HTTP 403"
         ),
         "{err}"
+    );
+}
+
+#[test]
+fn contract_sh_names_the_difference_of_a_call_of_a_cloud_with_the_fixtures_and_the_cloud() {
+    let r = Run::new();
+    let doc = document(
+        vec![
+            differing("cluster-document"),
+            cloud_differing("aws-ec2-vcpu-quota"),
+        ],
+        vec![],
+    );
+    std::fs::write(r.dir.path().join("document.json"), doc.to_string()).unwrap();
+    let o = r.contract(&[], "1");
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let err = text(&o.stderr);
+    assert!(
+        err.contains("differs: aws-ec2-vcpu-quota\n  type Quota.Value: the fixtures have number; the cloud has string"),
+        "{err}"
+    );
+    assert!(
+        err.contains("  type metadata.uid: the stand-in has string; the tenant has object"),
+        "a request of Palette keeps its words: {err}"
+    );
+}
+
+#[test]
+fn contract_sh_gives_no_cloud_to_the_run_and_the_run_sends_no_call_of_a_cloud() {
+    let r = Run::new();
+    let o = r.contract(&["--no-cloud", "--state", "/tmp/state.json"], "0");
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    let out = r.dir.path().join("out");
+    assert_eq!(
+        r.calls(),
+        [format!(
+            "contract --out {}/contract.json --no-cloud --state /tmp/state.json",
+            out.display()
+        )]
     );
 }
 
@@ -1384,6 +1749,16 @@ fn the_units_hold_no_secret_and_name_only_files_that_exist() {
     let service = repo_file("deploy/contract/strata-contract.service");
     assert!(service.contains("ExecStart=@REPO@/deploy/contract/weekly.sh"));
     assert!(service.contains("Type=oneshot"));
+}
+
+#[test]
+fn the_service_reads_the_values_of_the_lab_from_a_file_that_can_be_missing() {
+    let service = repo_file("deploy/contract/strata-contract.service");
+    // the minus sign makes the file optional: a lab with no file skips the calls that name a value
+    assert!(
+        service.contains("EnvironmentFile=-%h/.config/strata-contract/lab.env"),
+        "{service}"
+    );
 }
 
 #[test]

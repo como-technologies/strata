@@ -2103,6 +2103,127 @@ fn preflight_plan_tests_the_shape_of_the_instance_type_route_by_type() {
     }
 }
 
+/// The jq filter of the check `id` in the plan: the line after the line of `check id`, between the
+/// single quotes.
+fn plan_filter(id: &str) -> String {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    let line = script
+        .lines()
+        .skip_while(|l| !l.contains(&format!("check {id} ")))
+        .nth(1)
+        .unwrap_or_else(|| panic!("no check {id} in the plan"));
+    line[line.find('\'').unwrap() + 1..line.rfind('\'').unwrap()].to_string()
+}
+
+/// The exit code of `jq -e filter` on `answer`.
+fn jq_exit(filter: &str, answer: &str) -> Option<i32> {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("answer.json"), answer).unwrap();
+    Command::new("jq")
+        .args(["-e", filter])
+        .arg(dir.path().join("answer.json"))
+        .output_locked()
+        .unwrap()
+        .status
+        .code()
+}
+
+/// The check `vpcs-route-shape` of the plan reads each subnet at any depth, because no run has
+/// shown the name of the list (#393). The answer of the route passes it. A subnet without a zone,
+/// and an answer without a subnet, fail it.
+#[test]
+fn preflight_plan_tests_the_shape_of_the_vpc_route_at_any_depth() {
+    let filter = plan_filter("vpcs-route-shape");
+    let subnet = r#"{"subnetId":"subnet-1","az":"us-east-2a","isPrivate":true,"mapPublicIpOnLaunch":false,"name":"a"}"#;
+    for (answer, status) in [
+        (format!(r#"{{"vpcs":[{{"cidrBlock":"10.0.0.0/16","subnets":[{subnet}]}}]}}"#), Some(0)),
+        (format!(r#"[{{"subnets":[{subnet},{subnet}]}}]"#), Some(0)),
+        (
+            r#"{"vpcs":[{"subnets":[{"subnetId":"subnet-1","isPrivate":true,"mapPublicIpOnLaunch":false,"name":"a"}]}]}"#.to_string(),
+            Some(1),
+        ),
+        (r#"{"vpcs":[{"subnets":[]}]}"#.to_string(), Some(1)),
+        ("{}".to_string(), Some(1)),
+    ] {
+        assert_eq!(jq_exit(&filter, &answer), status, "{answer}");
+    }
+}
+
+/// The check `zones-route-shape` needs the name, the state, and the id of each zone.
+#[test]
+fn preflight_plan_tests_the_shape_of_the_zone_route_at_any_depth() {
+    let filter = plan_filter("zones-route-shape");
+    for (answer, status) in [
+        (
+            r#"{"azs":[{"name":"us-east-2a","state":"available","zoneId":"use2-az1"}]}"#,
+            Some(0),
+        ),
+        (
+            r#"[{"name":"us-east-2a","state":"available","zoneId":"use2-az1","zoneType":"availability-zone"}]"#,
+            Some(0),
+        ),
+        (
+            r#"{"azs":[{"name":"us-east-2a","zoneId":"use2-az1"}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"azs":[{"name":"us-east-2a","state":"available"}]}"#,
+            Some(1),
+        ),
+        (r#"{"azs":[]}"#, Some(1)),
+    ] {
+        assert_eq!(jq_exit(&filter, answer), status, "{answer}");
+    }
+}
+
+/// The two checks with a `?` only record the keys of an entry, so a run shows whether the routes
+/// list the tags of a subnet and the type of a zone.
+#[test]
+fn preflight_plan_records_the_keys_of_a_subnet_and_of_a_zone_and_fails_on_neither() {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    for id in ["vpcs-route-keys", "zones-route-keys"] {
+        let line = script
+            .lines()
+            .find(|l| l.contains(&format!("check {id} ")))
+            .unwrap_or_else(|| panic!("no check {id}"));
+        assert!(line.contains(&format!("check {id} ? ")), "{line}");
+    }
+    let keys = plan_filter("zones-route-keys");
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("zones.json"),
+        r#"{"azs":[{"name":"a","state":"available","zoneId":"use2-az1","zoneType":"availability-zone"}]}"#,
+    )
+    .unwrap();
+    let o = Command::new("jq")
+        .args(["-c", &keys])
+        .arg(dir.path().join("zones.json"))
+        .output_locked()
+        .unwrap();
+    assert_eq!(
+        text(&o.stdout).trim(),
+        r#"["name","state","zoneId","zoneType"]"#
+    );
+}
+
+/// The route checks run for the engines on AWS only, and the plan for GCP never calls them.
+#[test]
+fn preflight_plan_asks_the_list_routes_of_aws_for_aws_and_eks_only() {
+    let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
+    let start = script
+        .find("  aws|eks)\n    \"$live/api.sh\" get \"/v1/clouds/aws/regions/$region/keypairs")
+        .expect("the case of aws and eks");
+    let end = script[start..].find("\n  gcp)").expect("the case of gcp") + start;
+    let aws = &script[start..end];
+    for route in [
+        "/vpcs?cloudAccountUid=",
+        "/availabilityzones?cloudAccountUid=",
+    ] {
+        assert!(aws.contains(route), "{route}");
+        assert!(!script[end..].contains(route), "{route} is asked for GCP");
+    }
+}
+
 #[test]
 fn preflight_plan_makes_no_fault_of_instance_offering_when_the_route_lists_no_zone_that_a_type_lacks()
  {

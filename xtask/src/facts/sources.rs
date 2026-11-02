@@ -11,6 +11,7 @@ use strata::closed_set::ClosedSet;
 use strata_preflight::catalog::builtin;
 use strata_preflight::rule::{Catalog, Check};
 
+use super::cloud::{CloudSources, read_code, read_rules};
 use super::model::{DIRECTORY, Fact, load};
 use crate::checks::anchors;
 use crate::files::{book, files_with_ext, pages};
@@ -60,6 +61,8 @@ pub struct Sources {
     pub rule_ids: BTreeSet<String>,
     /// The rules that send each request of Palette, by the shape of the request.
     pub rule_requests: BTreeMap<String, BTreeSet<String>>,
+    /// The rules of the cloud tier and the code of strata, for the facts of the clouds.
+    pub cloud: CloudSources,
 }
 
 impl Sources {
@@ -98,9 +101,17 @@ impl Sources {
             .cloned()
             .collect();
         match builtin() {
-            Ok(catalog) => (sources.rule_ids, sources.rule_requests) = rule_requests(&catalog),
+            Ok(catalog) => {
+                (sources.rule_ids, sources.rule_requests) = rule_requests(&catalog);
+                let (cloud, unread) = read_rules(&catalog);
+                sources.cloud = cloud;
+                bad.extend(unread);
+            }
             Err(e) => bad.push(format!("the rules of strata-preflight: {e}")),
         }
+        let (code, unread) = read_code(repo);
+        sources.cloud.code = code;
+        bad.extend(unread);
         sources.facts = facts;
         (sources, bad)
     }

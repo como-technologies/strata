@@ -2,7 +2,7 @@
 # The contract run: ask a real tenant the requests of the facts of Palette, and compare each answer
 # with the stand-in. A weekly timer on kadomony runs it (deploy/contract/).
 #
-#   just live-contract [--state FILE] [--stand-in DIR] [--github URL]
+#   just live-contract [--state FILE] [--stand-in DIR] [--github URL] [--no-cloud]
 #
 # For each fact of the kind request that a GET can show, the run finds an object in the tenant. It
 # sends the request, and compares the answer with the documents that the stand-in serves for the
@@ -10,6 +10,12 @@
 # value of a closed set that neither the fact nor the stand-in names: strata does not know it. The
 # run sends GET requests only, and builds nothing. A fact that needs a body or a cluster names its
 # live script in the result.
+#
+# For each fact of the kind cloud, the run also sends a read-only call of the tool of a cloud (aws,
+# gcloud) in the lab account, and compares the answer with the answers that the fixtures of the rules
+# hold. It checks that the answer lists each value of a table that a rule holds. STRATA_CONTRACT_NAME
+# gives the value of {name} in a call, such as the project. A tool that is not on the PATH, or a value
+# that the lab lacks, skips the call. --no-cloud sends no call of a cloud.
 #
 # With --state FILE, the run also reads the latest release of the Palette SDK and of the Terraform
 # provider from GitHub. It notes a tag that the last run did not see. FILE keeps the tags.
@@ -33,6 +39,7 @@ args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --state|--stand-in|--github) [ $# -ge 2 ] || die "$1 needs a value"; args+=("$1" "$2"); shift 2 ;;
+    --no-cloud) args+=("$1"); shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument $1" ;;
   esac
@@ -50,8 +57,9 @@ cat "$run/contract.log" >&2
 # could not check, and each release that is new
 if command -v jq > /dev/null && [ -s "$run/contract.json" ]; then
   jq -r '
-    (.facts[] | select(.outcome == "differs") | "differs: \(.id)",
-      (.differences[] | "  \(.kind) \(.path): the stand-in has \(.expected | join(", ")); the tenant has \(.found | join(", "))")),
+    (.facts[] | select(.outcome == "differs") | (if .kind == "cloud" then ["the fixtures have", "the cloud has"] else ["the stand-in has", "the tenant has"] end) as $who
+      | "differs: \(.id)",
+      (.differences[] | "  \(.kind) \(.path): \($who[0]) \(.expected | join(", ")); \($who[1]) \(.found | join(", "))")),
     (.facts[] | .id as $id | .unknownValues[]? | "new value: \($id) \(.set): \(.values | join(", ")); the fact and the stand-in name \(.known | join(", "))"),
     (.facts[] | select(.outcome == "error") | "could not check: \(.id): \(.reason)"),
     (.releases[] | select(.new) | "new release: \(.repo) \(.tag), the last run saw \(.seen)"),

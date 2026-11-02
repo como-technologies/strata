@@ -553,12 +553,18 @@ requests only, to the tenant that `~/.palette.env` names. It has no checks. It i
 [The weekly contract run](./facts.md#the-weekly-contract-run) describes. It writes the document
 `strata-contract/1`, and exits with 0, 1, or 2.
 
+The run also sends the read-only calls of the tool of a cloud, such as `aws` and `gcloud`, in the
+lab account. `AWS_PROFILE` and [the lab values](./facts.md#the-lab-values) select that account.
+A call needs the objects that the lab values name, such as the project and the role.
+`--no-cloud` sends no call of a cloud.
+
 A tenant with no profile and no cluster skips most of the facts. Run `just live-profiles` first to
 give the run profiles to read, and `just live-up` to give it a cluster.
 
 | Result | What it shows |
 |---|---|
 | `contract.json` | #390, #391: for each fact of the kind `request`, the status and the type of each field against the stand-in. It also lists each value of a closed set that the fact and the stand-in do not name. No result yet. |
+| `contract.json` | #393: for each fact of the kind `cloud`, the shape of the answer, and the values of its table, against the fixtures of the rules. No result yet. |
 
 ## contract-profiles.sh
 
@@ -1393,6 +1399,15 @@ The check `instance-types-shape` expects `instanceTypes[]` with `type`, and
 types. The check passes on that answer (no result yet). For GCP, no run has
 shown the shape, and the check shows it (no result yet). The check `key-pairs-shape`
 expects `keyNames[]` with the key pair of the entity (no result yet).
+
+Four checks ask the list routes that can answer cloud rules (#393). The check
+`vpcs-route-shape` expects the VPC route to list each subnet with `subnetId`, `az`,
+`isPrivate`, `mapPublicIpOnLaunch`, and `name` (no result yet). The check `zones-route-shape`
+expects the zone route to list each zone with `name`, `state`, and `zoneId` (no result yet).
+The checks `vpcs-route-keys` and `zones-route-keys` record the keys of one entry (no result
+yet). They show whether the routes list what `static-subnets`, `lb-subnet-tags`, `subnet-ips`,
+and `eks-unsupported-zone` read. See
+[The routes of Palette beside the calls](../internals/preflight.md#the-routes-of-palette-beside-the-calls).
 
 A run that makes a fault
 puts `caught` in the ledger, and the clean entity of the same run puts `passed`. The ledger holds

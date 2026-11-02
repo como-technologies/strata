@@ -54,7 +54,8 @@ Each rule has a tier: where a check can find the fault.
 Strata calls no cloud API itself. A cloud rule runs `aws` or `gcloud` when the
 tool is on the machine, so the credentials stay where the person keeps them.
 When the tool is not there, the rule is `NOT CHECKED`, with the command to run
-by hand: the report names the check that did not run.
+by hand: the report names the check that did not run. Each call of a cloud is a fact
+of the list: see [The facts of the clouds](#the-facts-of-the-clouds).
 
 ## Two levels: probe and preflight check
 
@@ -168,6 +169,88 @@ a job: `--ready 80` is exit `1` under 80%. It says how ready an estate is to
 start a first build, and where the work is first. It does not say that a build
 will pass: a row that is `NOT CHECKED` (no check in strata-preflight) is
 outside the count, and the report prints that count beside the readiness.
+
+## The facts of the clouds
+
+A rule of the cloud tier runs the tool of a cloud and reads the answer. The rule depends on that
+answer. A cloud changes: a service adds a field, renames one, or retires a value. Then the rule reads
+nothing, and the tests of the catalog do not show it, because their fixtures are copies of the old
+answers.
+
+So [the list of the facts](../development/facts.md#the-facts-of-the-clouds) holds each call of a
+cloud as a fact of the kind `cloud`. Each rule of the cloud tier is in one fact or more. A check
+makes sure of that. The weekly contract run sends each call in the lab account. It compares the
+shape of the answer with the answers in the fixtures of the rules.
+
+### The calls of the clouds
+
+Strata makes no call of a cloud itself. A rule runs the tool of the cloud, and the call is one of
+these:
+
+| Cloud | Service | What the rules read |
+| --- | --- | --- |
+| AWS | IAM | The policies of the account, the policies and the tags of a role, the instance profiles, and the simulation of a role |
+| AWS | EC2 | The zones, the subnets, the route tables, the security groups, the images, the volumes, the VPCs, and the instances |
+| AWS | EKS | The Kubernetes versions, and the versions of an add-on |
+| AWS | CloudFormation | The status of the stack of the Cluster API provider |
+| AWS | KMS | The state of a key |
+| AWS | Service Quotas | The quota of vCPUs, and the quota of nodes for each node group |
+| AWS | STS | The identity of the caller |
+| GCP | Resource Manager and IAM | The IAM policy of the project, and its service accounts |
+| GCP | Service Usage | The services that are on in the project |
+| GCP | Compute Engine | The quotas of a region, the subnets of a network, and an image |
+| GCP | Kubernetes Engine | The versions that a location offers, and the node pools of a cluster |
+| Azure | ARM | The role assignments, the resource providers, and the use of vCPUs |
+
+The lab has accounts of AWS and GCP. No run checks the calls of Azure, MAAS, or vSphere, and the fact
+of each call gives the reason. Some rules have no call: they print the commands to run by hand. Their
+facts give the reason too.
+
+### The routes of Palette beside the calls
+
+The scope of strata says: ask Palette first. A route of Palette that answers a rule replaces its
+call, and the rule moves to the palette tier. These routes answer a part of a call.
+
+| Call | Route of Palette | What the rules still need from the cloud |
+| --- | --- | --- |
+| `ec2 describe-subnets` | `GET /v1/clouds/aws/regions/{region}/vpcs` | `static-subnets` reads the subnet, its VPC, and its zone, which the route lists. `subnet-ips` reads the free addresses, which the route does not list. |
+| `ec2 describe-availability-zones` | `GET /v1/clouds/aws/regions/{region}/availabilityzones` | `eks-unsupported-zone` reads the zone type. No run shows whether the route lists it. |
+| `iam list-attached-role-policies` | `POST /v1/clouds/aws/policyArns/validate` | The policies on the nodes role. The route tells whether a policy ARN exists. |
+| `kms describe-key` | `GET /v1/clouds/aws/regions/{region}/kmskeys/validate` | The state of the key. See [The KMS key route](./palette/validate-routes.md#the-kms-key-route). |
+| `services list` | `POST /v1/clouds/gcp/properties/validate` | The services that are on. The route reads the project and the zones. |
+
+No run shows the answer of the first two routes yet. The checks `vpcs-route-shape` and
+`zones-route-shape` of [the live run of the plan](../development/live-runs.md#preflight-plansh)
+ask them. When the first check shows the answer, `static-subnets` moves to the palette tier, and
+its call leaves the list. [What no route checks](./palette/validate-routes.md#what-no-route-checks)
+says that no route runs a quota, a policy, a permission, or a version check of a cloud.
+
+### The tables of cloud facts
+
+A rule does not hold a table of cloud facts, such as a list of zones, instance types, regions,
+images, or limits. The table becomes wrong when the cloud changes. A rule reads the fact from the
+cloud at the run, or from a route of Palette. When a rule must hold the table, a fact of the list
+proves it. The fact has the date of the table, and a call whose answer must list each value.
+
+The test of the list finds the tables. It reads the programs of the rules and the code of strata.
+It looks for these texts:
+
+- A zone id, a region, an instance type, or a machine type.
+- An Azure size, an image id, an AMI type, or a quota code.
+
+A text of that kind is in a fact, or the test fails. The code of strata holds none.
+
+The rules hold these tables today:
+
+| The table | How the contract run proves it |
+| --- | --- |
+| The zone ids that EKS takes no cluster subnet in | The list of the zones of each region shows each id. |
+| The default limit of managed policies for a role | The default quota of Service Quotas gives the figure. |
+| The vCPUs of a type, read from its name | The answer for three instance types and two machine types gives their vCPUs. |
+
+The vCPUs of an Azure size have no proof, because the lab has no account of Azure. A list of the
+names that a build needs is no table of cloud facts. Examples are the roles, the policies, the
+services, and the actions of the documentation of Palette. The evidence of the rule names the page.
 
 ## The decisions
 

@@ -28,6 +28,10 @@ pub enum Kind {
     /// A check that strata makes because no route of Palette answers it: the fact names the
     /// error code that Palette gives at the create.
     Gap,
+    /// A call of the tool of a cloud that a cloud-tier rule of strata-preflight depends on, or a
+    /// table of cloud facts that such a rule holds. The contract run sends the call in the lab
+    /// account.
+    Cloud,
 }
 
 /// One fact of the list.
@@ -43,7 +47,9 @@ pub struct Fact {
     /// The method and the path of the request, such as `GET /v1/clusterprofiles/{uid}`. Only a
     /// fact of the kind `request` has one.
     pub request: Option<String>,
-    /// What strata reads from the answer or depends on.
+    /// What strata reads from the answer or depends on. A fact of the kind `cloud` that no call
+    /// proves needs no field here.
+    #[serde(default)]
     pub reads: Reads,
     /// The routes of the stand-in that imitate the request, as paths with `{name}` for a segment
     /// that varies. The list is empty when the stand-in serves no document for the fact.
@@ -64,6 +70,25 @@ pub struct Fact {
     /// The rules of strata-preflight that use the fact.
     #[serde(default)]
     pub rules: Vec<String>,
+    /// The read-only call of a fact of the kind `cloud`, as the words of the command, with
+    /// `{name}` for a value of the lab account: `[aws, ec2, describe-subnets, --region, "{region}"]`.
+    /// The contract run sends it.
+    #[serde(default)]
+    pub call: Vec<String>,
+    /// The table of cloud facts that a rule holds as text, when the fact proves one.
+    pub table: Option<Table>,
+}
+
+/// A table of cloud facts that a rule of strata-preflight holds as text, such as the zone ids that
+/// EKS refuses. The answer of the call of the fact must list each value, so a table that the cloud
+/// no longer knows is a difference.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Table {
+    /// The date on which the table was last proven, as `YYYY-MM-DD`.
+    pub as_of: String,
+    /// The values of the table. The answer of the call lists each one at the field of `reads`.
+    pub holds: Vec<String>,
 }
 
 impl Fact {
