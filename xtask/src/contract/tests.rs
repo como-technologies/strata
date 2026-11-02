@@ -1248,9 +1248,21 @@ fn the_stand_in_of_the_book_serves_a_list_an_object_or_a_boolean_where_palette_d
         ("cluster-listing", "spec.archType", JsonType::Array),
         ("cluster-listing", "spec.tags", JsonType::Array),
         ("cluster-listing", "spec.location", JsonType::Object),
-        ("cluster-group-document", "status.isActive", JsonType::Boolean),
-        ("oci-registry-summary", "items[].status.sync.isSyncSupported", JsonType::Boolean),
-        ("profile-variables", "variables[].required", JsonType::Boolean),
+        (
+            "cluster-group-document",
+            "status.isActive",
+            JsonType::Boolean,
+        ),
+        (
+            "oci-registry-summary",
+            "items[].status.sync.isSyncSupported",
+            JsonType::Boolean,
+        ),
+        (
+            "profile-variables",
+            "variables[].required",
+            JsonType::Boolean,
+        ),
     ] {
         let types: Vec<_> = held_types(&stand_in, &facts, id, field)
             .into_iter()

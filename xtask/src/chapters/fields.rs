@@ -91,7 +91,11 @@ fn app_profile(r: &mut Runner) {
     );
     r.answer(
         DEV,
-        &app_tier_manifest_route(APP_PROFILE, &format!("{APP_PROFILE}2"), &format!("{APP_PROFILE}3")),
+        &app_tier_manifest_route(
+            APP_PROFILE,
+            &format!("{APP_PROFILE}2"),
+            &format!("{APP_PROFILE}3"),
+        ),
         &json!({"spec": {"published": {
             "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n",
             "digest": "686122de341e08f21472eae762a35db4ef64ec5a"}}}),
