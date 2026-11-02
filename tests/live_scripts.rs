@@ -2492,7 +2492,8 @@ fn preflight_plan_sends_the_missing_key_pair_to_iaas_pod_identity_on_aws_and_to_
             "{engine}"
         );
     }
-    // the check passes on a report that names the code of Palette, as a failed rule or as an error
+    // the check passes on a report that names the code of Palette in a failed rule. An error is no
+    // catch: the rule reads the HTTP 500 through `refusal_codes` (#546)
     let line = lines
         .iter()
         .skip_while(|l| !l.contains("check properties-key-pair"))
@@ -2507,7 +2508,7 @@ fn preflight_plan_sends_the_missing_key_pair_to_iaas_pod_identity_on_aws_and_to_
         ),
         (
             r#"{"checks":[{"id":"iaas-pod-identity","verdict":"error","messages":["POST /v1/clouds/aws/properties/validate failed with HTTP 500: {\"code\":\"AwsKeyPairNotFound\"}"]}]}"#,
-            Some(0),
+            Some(1),
         ),
         (
             r#"{"checks":[{"id":"iaas-pod-identity","verdict":"failed","messages":["Palette refuses the properties of the AWS cluster: FeatureNotSupported"]}]}"#,

@@ -58,7 +58,13 @@ fn ask(
         (Method::Post, None) => Some(value_or_null(world, "/entity")),
         (Method::Get, _) => None,
     };
-    send(check.method, path, body.as_ref(), backend)
+    send(
+        check.method,
+        path,
+        body.as_ref(),
+        &check.refusal_codes,
+        backend,
+    )
 }
 
 /// Fill the path of the read of an exec check, and ask Palette with a `GET`.
@@ -72,17 +78,19 @@ pub(super) fn read(
     let path = jq
         .render(&rule.id, &read.path, world, None)
         .map_err(|error| Box::new(Failed { call: None, error }))?;
-    send(Method::Get, path, None, backend)
+    send(Method::Get, path, None, &[], backend)
 }
 
 /// Send the request with the filled `path`, and keep the request beside its answer.
+/// `refusal_codes` are the codes of a 5xx that the check reads as an answer.
 fn send(
     method: Method,
     path: String,
     body: Option<&Value>,
+    refusal_codes: &[String],
     backend: &dyn Backend,
 ) -> std::result::Result<Asked, Box<Failed>> {
-    match backend.palette(method, &path, body) {
+    match backend.palette(method, &path, body, refusal_codes) {
         Ok(response) => {
             let answer = Some(format!("HTTP {}", response.status));
             Ok(Asked {

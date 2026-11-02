@@ -10,7 +10,7 @@ use serde_json::Value;
 use strata::api::codes::ValidateRoute;
 use strata::api::{Method, PaletteApi};
 use strata::config::KEY_VARS;
-use strata::json::opt_flag;
+use strata::json::{opt_flag, opt_str};
 
 use super::exec::{run_command, tool_on_path};
 use crate::error::{Error, Result};
@@ -18,7 +18,8 @@ use crate::error::{Error, Result};
 /// The answer of Palette to one request.
 ///
 /// A 2xx is `ok`, a 4xx is an answer with its `V1Error` body, and a 204 is `ok` with a `null`
-/// body. A refusal of the cluster validate route with HTTP 500 is an answer too.
+/// body. A refusal of the cluster validate route with HTTP 500 is an answer too, and so is a 5xx
+/// with a code that the check names in `refusal_codes`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Response {
     /// True for a 2xx.
@@ -42,13 +43,21 @@ pub struct ExecOutput {
 
 /// Where a check gets an answer from outside the world.
 pub trait Backend {
-    /// One request to Palette.
+    /// One request to Palette. `refusal_codes` are the codes that the check reads as an answer
+    /// also at a 5xx.
     ///
     /// # Errors
     ///
     /// [`Error::Palette`] for a failure that no check can read: no key, a transport error, or a
-    /// 5xx after the retries. A 4xx is a [`Response`].
-    fn palette(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Response>;
+    /// 5xx after the retries. A 4xx is a [`Response`]. So is a 5xx whose `code` is in
+    /// `refusal_codes`.
+    fn palette(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+        refusal_codes: &[String],
+    ) -> Result<Response>;
     /// True when the tool `name` is on this machine.
     fn has_tool(&self, name: &str) -> bool;
     /// Run one command.
@@ -72,6 +81,42 @@ pub fn is_answer(status: u16) -> bool {
     (400..500).contains(&status) && !matches!(status, 401 | 403 | 429)
 }
 
+/// True when a 5xx is the answer of a check: the `code` of its body is one that the check names in
+/// `refusal_codes`. Palette answers some refusals by design with HTTP 500, and a retry gets the
+/// same refusal. A 5xx with another code, or with no code, is an error.
+fn is_named_refusal(status: u16, error: &Value, refusal_codes: &[String]) -> bool {
+    (500..600).contains(&status)
+        && opt_str(error, "/code").is_some_and(|code| refusal_codes.iter().any(|c| c == code))
+}
+
+/// True when the check reads the HTTP error `status` as the answer of the route: a 4xx that is no
+/// key or rate error, a refusal of a validate route, or a 5xx that the check names. `error` is the
+/// body of the Palette error, parsed, or `None` when it is not JSON.
+fn reads_error(
+    method: Method,
+    path: &str,
+    status: u16,
+    error: Option<&Value>,
+    refusal_codes: &[String],
+) -> bool {
+    is_answer(status)
+        || error.is_some_and(|error| {
+            ValidateRoute::refuses_request(method, path, status, error)
+                || is_named_refusal(status, error, refusal_codes)
+        })
+}
+
+/// The error that Palette gave to the request `method` `path`: an HTTP error with its body as text.
+fn http_error(method: Method, path: &str, status: u16, body: &str) -> strata::Error {
+    strata::Error::Api {
+        method,
+        path: path.to_string(),
+        status,
+        body: body.to_string(),
+        retry_after: None,
+    }
+}
+
 /// What the backend keeps of the answer to one request. An answer is the same for the rest of
 /// the run, because a run changes nothing in Palette.
 #[derive(Debug, Clone)]
@@ -79,7 +124,8 @@ enum Kept {
     /// A 2xx: the body, as JSON. A 204 has a `null` body.
     Value(Value),
     /// An HTTP error that is an answer. It is a 4xx that a check reads. It is also the refusal of
-    /// a validate route, such as a profile of another cloud type with HTTP 500.
+    /// a validate route, such as a profile of another cloud type with HTTP 500. A check that names
+    /// the code of a 5xx in `refusal_codes` reads that 5xx too, and no other check does.
     Answer {
         status: u16,
         /// The body as Palette sent it.
@@ -92,6 +138,20 @@ enum Kept {
 }
 
 impl Kept {
+    /// This answer for a check that names `refusal_codes`: the answer when the check reads it,
+    /// else the error that Palette gave. An answer that was kept for a check that named its code
+    /// is an error for a check that does not.
+    fn read_by(self, method: Method, path: &str, refusal_codes: &[String]) -> Result<Kept> {
+        match &self {
+            Kept::Answer { status, text, body }
+                if !reads_error(method, path, *status, Some(body), refusal_codes) =>
+            {
+                Err(http_error(method, path, *status, text).into())
+            }
+            _ => Ok(self),
+        }
+    }
+
     fn response(&self) -> Response {
         match self {
             Kept::Value(body) => Response {
@@ -134,15 +194,24 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
     }
 
     /// The answer to a request: the one that the run kept when it sent the same request, else
-    /// the one that Palette gives now.
-    fn ask(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Kept> {
+    /// the one that Palette gives now. `refusal_codes` are the codes that the check reads at a
+    /// 5xx. The request is the same for each check, so the answer is the same, and only the
+    /// reading of a 5xx differs.
+    fn ask(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+        refusal_codes: &[String],
+    ) -> Result<Kept> {
         let api = self.client()?;
         let key = format!(
             "{method} {path} {}",
             body.map(Value::to_string).unwrap_or_default()
         );
-        if let Some(kept) = self.kept.borrow().get(&key) {
-            return Ok(kept.clone());
+        let seen = self.kept.borrow().get(&key).cloned();
+        if let Some(kept) = seen {
+            return kept.read_by(method, path, refusal_codes);
         }
         let answer = match method {
             Method::Get => api.get_json(path),
@@ -160,11 +229,9 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
                 // the body is parsed one time, for the refusal and for the answer
                 let parsed = serde_json::from_str::<Value>(&text).ok();
                 // a 4xx is what a validate route answers when the entity is wrong: it is the
-                // result. The route also refuses with a 500 and a code that it names.
-                let refusal = parsed
-                    .as_ref()
-                    .is_some_and(|b| ValidateRoute::refuses_request(method, &path, status, b));
-                if !is_answer(status) && !refusal {
+                // result. A route also refuses with a 5xx and a code. The validate routes are
+                // known, and a check names the code of any other route in `refusal_codes`.
+                if !reads_error(method, &path, status, parsed.as_ref(), refusal_codes) {
                     return Err(strata::Error::Api {
                         method,
                         path,
@@ -197,8 +264,14 @@ impl<'a, A: PaletteApi> LiveBackend<'a, A> {
 }
 
 impl<A: PaletteApi> Backend for LiveBackend<'_, A> {
-    fn palette(&self, method: Method, path: &str, body: Option<&Value>) -> Result<Response> {
-        Ok(self.ask(method, path, body)?.response())
+    fn palette(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+        refusal_codes: &[String],
+    ) -> Result<Response> {
+        Ok(self.ask(method, path, body, refusal_codes)?.response())
     }
 
     fn has_tool(&self, name: &str) -> bool {
@@ -236,7 +309,7 @@ impl<A: PaletteApi> LiveBackend<'_, A> {
     /// A request of the world, in the terms of the library: an answer that is an HTTP error is
     /// the error that Palette gave.
     fn send(&self, method: Method, path: &str, body: Option<&Value>) -> strata::Result<Value> {
-        let kept = match self.ask(method, path, body) {
+        let kept = match self.ask(method, path, body, &[]) {
             Ok(kept) => kept,
             Err(Error::Palette(e)) => return Err(e),
             Err(other) => {
@@ -247,13 +320,7 @@ impl<A: PaletteApi> LiveBackend<'_, A> {
         };
         match kept {
             Kept::Value(value) => Ok(value),
-            Kept::Answer { status, text, .. } => Err(strata::Error::Api {
-                method,
-                path: path.to_string(),
-                status,
-                body: text,
-                retry_after: None,
-            }),
+            Kept::Answer { status, text, .. } => Err(http_error(method, path, status, &text)),
         }
     }
 }
@@ -297,14 +364,31 @@ impl FixtureBackend {
 }
 
 impl Backend for FixtureBackend {
-    fn palette(&self, method: Method, path: &str, _body: Option<&Value>) -> Result<Response> {
+    fn palette(
+        &self,
+        method: Method,
+        path: &str,
+        _body: Option<&Value>,
+        refusal_codes: &[String],
+    ) -> Result<Response> {
         let key = format!("{method} {path}");
-        self.responses
+        let response = self
+            .responses
             .get(&key)
             .cloned()
             .ok_or_else(|| Error::Input {
                 message: format!("the fixture has no answer for {key} under _responses"),
-            })
+            })?;
+        // A 5xx is an answer on the live backend only when the route is a validate route that
+        // refuses with it, or the check names its code. The fixture keeps the same rule, so a
+        // fixture cannot show a catch that a live run does not give.
+        let status = response.status;
+        if (500..600).contains(&status)
+            && !reads_error(method, path, status, Some(&response.body), refusal_codes)
+        {
+            return Err(http_error(method, path, status, &response.body.to_string()).into());
+        }
+        Ok(response)
     }
 
     fn has_tool(&self, name: &str) -> bool {

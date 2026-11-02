@@ -106,6 +106,7 @@ fn a_palette_check_reads_a_4xx_as_an_answer() {
             path: "/v1/spectroclusters/{{ .cloud }}/validate".into(),
             body: None,
             each: None,
+            refusal_codes: Vec::new(),
             expr: r#"[select(.response.ok | not) | "Palette: \(.response.body.code): \(.response.body.message)"]"#.into(),
         }));
     let out = run_check(&r, &w, &b, &jq);
@@ -126,6 +127,7 @@ fn each_check(each: &str, path: &str, expr: &str) -> Rule {
         path: path.into(),
         body: None,
         each: Some(each.into()),
+        refusal_codes: Vec::new(),
         expr: expr.into(),
     }))
 }
@@ -161,7 +163,13 @@ fn a_palette_check_with_each_asks_once_for_each_item_and_reads_the_responses_in_
 fn a_post_with_each_fills_its_body_from_the_item() {
     struct Echo(std::cell::RefCell<Vec<(String, Value)>>);
     impl Backend for Echo {
-        fn palette(&self, _m: Method, path: &str, body: Option<&Value>) -> Result<Response> {
+        fn palette(
+            &self,
+            _m: Method,
+            path: &str,
+            body: Option<&Value>,
+            _refusal_codes: &[String],
+        ) -> Result<Response> {
             self.0
                 .borrow_mut()
                 .push((path.to_string(), body.cloned().unwrap_or(Value::Null)));
@@ -187,6 +195,7 @@ fn a_post_with_each_fills_its_body_from_the_item() {
         path: "/v1/capacity?arn={{ $item.arn }}".into(),
         body: Some("{arn: $item.arn, size: ($item.size + 1)}".into()),
         each: Some("[.pools[] | select(.arn != null)]".into()),
+        refusal_codes: Vec::new(),
         expr: "[.responses[] | select(.response.ok | not) | .item.arn]".into(),
     }));
     let world = json!({"pools": [{"arn": "a1", "size": 1}, {"size": 9}, {"arn": "a2", "size": 2}]});
@@ -270,14 +279,14 @@ fn a_401_a_403_and_a_429_are_errors_of_the_check_and_a_404_is_its_answer() {
         let api = strata::api::MemoryApi::new().failing("/v1/x", status, "{}");
         let b = LiveBackend::new(Some(&api), false);
         let err = b
-            .palette(Method::Get, "/v1/x", None)
+            .palette(Method::Get, "/v1/x", None, &[])
             .unwrap_err()
             .to_string();
         assert!(err.contains(&format!("HTTP {status}")), "{status}: {err}");
     }
     let api = strata::api::MemoryApi::new().failing("/v1/x", 404, r#"{"code": "NotFound"}"#);
     let b = LiveBackend::new(Some(&api), false);
-    let r = b.palette(Method::Get, "/v1/x", None).unwrap();
+    let r = b.palette(Method::Get, "/v1/x", None, &[]).unwrap();
     assert!(!r.ok);
     assert_eq!(r.status, 404);
     assert_eq!(r.body["code"], "NotFound");
@@ -290,9 +299,13 @@ fn the_backend_sends_a_request_one_time_and_gives_the_same_answer_to_the_rule_th
         .failing("/v1/edgehosts/h2", 404, r#"{"code": "NotFound"}"#);
     let b = LiveBackend::new(Some(&api), false);
     for _ in 0..6 {
-        let found = b.palette(Method::Get, "/v1/edgehosts/h1", None).unwrap();
+        let found = b
+            .palette(Method::Get, "/v1/edgehosts/h1", None, &[])
+            .unwrap();
         assert_eq!((found.ok, found.status), (true, 200));
-        let gone = b.palette(Method::Get, "/v1/edgehosts/h2", None).unwrap();
+        let gone = b
+            .palette(Method::Get, "/v1/edgehosts/h2", None, &[])
+            .unwrap();
         assert_eq!((gone.ok, gone.status), (false, 404));
     }
     assert_eq!(api.calls("/v1/edgehosts/h1"), 1, "an answer");
@@ -305,8 +318,8 @@ fn the_backend_tells_two_posts_with_two_bodies_apart_and_sends_each_body_one_tim
     let b = LiveBackend::new(Some(&api), false);
     let (one, two) = (json!({"name": "a"}), json!({"name": "b"}));
     for _ in 0..3 {
-        b.palette(Method::Post, "/v1/x", Some(&one)).unwrap();
-        b.palette(Method::Post, "/v1/x", Some(&two)).unwrap();
+        b.palette(Method::Post, "/v1/x", Some(&one), &[]).unwrap();
+        b.palette(Method::Post, "/v1/x", Some(&two), &[]).unwrap();
     }
     assert_eq!(
         api.posted(),
@@ -319,8 +332,8 @@ fn the_backend_does_not_keep_an_error_that_no_check_can_read() {
     for status in [500u16, 503, 401] {
         let api = strata::api::MemoryApi::new().failing("/v1/x", status, "{}");
         let b = LiveBackend::new(Some(&api), false);
-        assert!(b.palette(Method::Get, "/v1/x", None).is_err());
-        assert!(b.palette(Method::Get, "/v1/x", None).is_err());
+        assert!(b.palette(Method::Get, "/v1/x", None, &[]).is_err());
+        assert!(b.palette(Method::Get, "/v1/x", None, &[]).is_err());
         assert_eq!(api.calls("/v1/x"), 2, "HTTP {status} is asked again");
     }
 }
@@ -337,7 +350,7 @@ fn the_world_and_the_checks_share_the_answers_of_the_backend() {
         "p1"
     );
     let again = b
-        .palette(Method::Get, "/v1/clusterprofiles/p1", None)
+        .palette(Method::Get, "/v1/clusterprofiles/p1", None, &[])
         .unwrap();
     assert!(again.ok);
     assert_eq!(api.calls("/v1/clusterprofiles/p1"), 1);
@@ -350,7 +363,7 @@ fn the_world_and_the_checks_share_the_answers_of_the_backend() {
         "{err}"
     );
     assert_eq!(
-        b.palette(Method::Get, "/v1/gone", None).unwrap().body["message"],
+        b.palette(Method::Get, "/v1/gone", None, &[]).unwrap().body["message"],
         "not json"
     );
 }
@@ -368,15 +381,197 @@ fn only_the_cluster_validate_route_has_its_refusal_with_http_500_as_an_answer() 
             Method::Post,
             "/v1/spectroclusters/aws/validate",
             Some(&body),
+            &[],
         )
         .unwrap();
     assert_eq!((answer.ok, answer.status), (false, 500));
     assert_eq!(answer.body["code"], "ClusterProfilesNotSupported");
     // the same body from another route is an error of Palette, not an answer
     assert!(
-        b.palette(Method::Post, "/v1/clouds/aws/account/validate", Some(&body))
-            .is_err()
+        b.palette(
+            Method::Post,
+            "/v1/clouds/aws/account/validate",
+            Some(&body),
+            &[]
+        )
+        .is_err()
     );
+}
+
+/// What the property route of AWS answers for a key pair that the region lacks: HTTP 500 and this
+/// code.
+const KEY_PAIR_REFUSAL: &str =
+    r#"{"code":"AwsKeyPairNotFound","message":"Aws KeyPair 'k' not found for region us-east-2"}"#;
+const PROPERTIES: &str = "/v1/clouds/aws/properties/validate";
+
+fn codes(names: &[&str]) -> Vec<String> {
+    names.iter().map(ToString::to_string).collect()
+}
+
+/// A check that sends the property route and reports the code of a refusal.
+fn properties_check(refusal_codes: &[&str]) -> Rule {
+    rule(Check::Palette(PaletteCheck {
+        method: Method::Post,
+        path: PROPERTIES.into(),
+        body: Some("{}".into()),
+        each: None,
+        refusal_codes: codes(refusal_codes),
+        expr: r#"[select(.response.ok | not) | "refused: \(.response.body.code)"]"#.into(),
+    }))
+}
+
+#[test]
+fn a_5xx_with_a_code_that_the_check_names_is_its_answer() {
+    let body = json!({});
+    for status in [500u16, 503] {
+        let api = strata::api::MemoryApi::new().failing(
+            format!("POST {PROPERTIES}"),
+            status,
+            KEY_PAIR_REFUSAL,
+        );
+        let b = LiveBackend::new(Some(&api), false);
+        let answer = b
+            .palette(
+                Method::Post,
+                PROPERTIES,
+                Some(&body),
+                &codes(&["AwsKeyPairNotFound"]),
+            )
+            .unwrap();
+        assert_eq!((answer.ok, answer.status), (false, status));
+        assert_eq!(answer.body["code"], "AwsKeyPairNotFound");
+        assert_eq!(api.calls(&format!("POST {PROPERTIES}")), 1);
+    }
+}
+
+#[test]
+fn a_5xx_with_another_code_or_with_no_code_is_an_error_also_when_the_check_names_a_code() {
+    let body = json!({});
+    for text in [
+        r#"{"code":"InternalError","message":"boom"}"#,
+        r#"{"message":"boom"}"#,
+        r#"{"code":500}"#,
+        "not json",
+        "[]",
+    ] {
+        let api = strata::api::MemoryApi::new().failing(format!("POST {PROPERTIES}"), 500, text);
+        let b = LiveBackend::new(Some(&api), false);
+        let named = codes(&["AwsKeyPairNotFound"]);
+        for refusal_codes in [named.as_slice(), &[]] {
+            let err = b
+                .palette(Method::Post, PROPERTIES, Some(&body), refusal_codes)
+                .unwrap_err()
+                .to_string();
+            assert!(err.contains("HTTP 500"), "{text}: {err}");
+        }
+        assert_eq!(
+            api.calls(&format!("POST {PROPERTIES}")),
+            2,
+            "{text}: an error is asked again"
+        );
+    }
+}
+
+#[test]
+fn a_5xx_with_a_named_code_is_an_error_for_a_check_that_does_not_name_it() {
+    let api =
+        strata::api::MemoryApi::new().failing(format!("POST {PROPERTIES}"), 500, KEY_PAIR_REFUSAL);
+    let b = LiveBackend::new(Some(&api), false);
+    let body = json!({});
+    assert!(
+        b.palette(Method::Post, PROPERTIES, Some(&body), &[])
+            .is_err(),
+        "no code is named"
+    );
+    assert!(
+        b.palette(
+            Method::Post,
+            PROPERTIES,
+            Some(&body),
+            &codes(&["AwsKeyPairNotFound"])
+        )
+        .is_ok()
+    );
+    // the answer is kept, and a check that names no code reads the 500 as an error
+    let err = b
+        .palette(Method::Post, PROPERTIES, Some(&body), &codes(&["Other"]))
+        .unwrap_err();
+    assert!(err.to_string().contains("HTTP 500"), "{err}");
+    let world = b.post_json(PROPERTIES, &body).unwrap_err();
+    assert!(
+        matches!(&world, strata::Error::Api { status: 500, .. }),
+        "{world}"
+    );
+    assert_eq!(
+        api.calls(&format!("POST {PROPERTIES}")),
+        2,
+        "one request for the error, one for the answer"
+    );
+}
+
+#[test]
+fn a_key_a_rate_and_a_4xx_with_a_named_code_follow_the_rule_of_their_status() {
+    let body = json!({});
+    for (status, answer) in [(401u16, false), (403, false), (429, false), (404, true)] {
+        let api = strata::api::MemoryApi::new().failing(
+            format!("POST {PROPERTIES}"),
+            status,
+            KEY_PAIR_REFUSAL,
+        );
+        let b = LiveBackend::new(Some(&api), false);
+        let got = b.palette(
+            Method::Post,
+            PROPERTIES,
+            Some(&body),
+            &codes(&["AwsKeyPairNotFound"]),
+        );
+        assert_eq!(got.is_ok(), answer, "HTTP {status}");
+    }
+}
+
+#[test]
+fn a_check_with_refusal_codes_fails_on_the_5xx_that_it_names_and_errors_on_another() {
+    let jq = Jq::new();
+    let world = json!({});
+    let run = |refusal_codes: &[&str], text: &str| {
+        let api = strata::api::MemoryApi::new().failing(format!("POST {PROPERTIES}"), 500, text);
+        let b = LiveBackend::new(Some(&api), false);
+        run_check(&properties_check(refusal_codes), &world, &b, &jq)
+    };
+    let named = run(&["AwsKeyPairNotFound"], KEY_PAIR_REFUSAL);
+    assert_eq!(named.verdict, Verdict::Failed, "{:?}", named.messages);
+    assert_eq!(named.messages, ["refused: AwsKeyPairNotFound"]);
+    assert!(
+        matches!(&named.ran, Ran::Request(call) if call.line() == format!("POST {PROPERTIES} -> HTTP 500")),
+        "{:?}",
+        named.ran
+    );
+    let other = run(&["AwsKeyPairNotFound"], r#"{"code":"InternalError"}"#);
+    assert_eq!(other.verdict, Verdict::Error, "{:?}", other.messages);
+    let unnamed = run(&[], KEY_PAIR_REFUSAL);
+    assert_eq!(unnamed.verdict, Verdict::Error, "{:?}", unnamed.messages);
+    assert!(
+        unnamed.messages[0].contains("HTTP 500"),
+        "{:?}",
+        unnamed.messages
+    );
+}
+
+#[test]
+fn a_fixture_5xx_is_an_answer_only_when_the_check_names_its_code_as_a_live_run_does() {
+    let jq = Jq::new();
+    let doc = json!({"_responses": {format!("POST {PROPERTIES}"): {
+        "ok": false, "status": 500,
+        "body": {"code": "AwsKeyPairNotFound", "message": "no key pair"}}}});
+    let (b, w) = fixture(doc);
+    let named = run_check(&properties_check(&["AwsKeyPairNotFound"]), &w, &b, &jq);
+    assert_eq!(named.verdict, Verdict::Failed, "{:?}", named.messages);
+    assert_eq!(named.messages, ["refused: AwsKeyPairNotFound"]);
+    for refusal_codes in [&[][..], &["Other"]] {
+        let out = run_check(&properties_check(refusal_codes), &w, &b, &jq);
+        assert_eq!(out.verdict, Verdict::Error, "{:?}", out.messages);
+        assert!(out.messages[0].contains("HTTP 500"), "{:?}", out.messages);
+    }
 }
 
 #[test]
@@ -388,6 +583,7 @@ fn a_palette_check_with_no_key_is_not_run() {
         path: "/v1/x".into(),
         body: None,
         each: None,
+        refusal_codes: Vec::new(),
         expr: "true".into(),
     }));
     assert_eq!(run_check(&r, &w, &b, &jq).verdict, Verdict::NotRun);

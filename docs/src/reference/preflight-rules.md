@@ -89,7 +89,7 @@ each message is one failure; or an object `{pass, message}`.
 | Kind | Fields | Adds to the world |
 | --- | --- | --- |
 | `static` | `expr` | nothing |
-| `palette` | `method` (`GET`, `POST`), `path` (with `{{ jq }}` templates), `body` (a jq program that gives the body of a POST; default `.entity`), `each` (a jq program that gives a list; see [A request for each item](#a-request-for-each-item)), `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx or a transport error is `ERROR`. With `each`, `responses` instead. |
+| `palette` | `method` (`GET`, `POST`), `path` (with `{{ jq }}` templates), `body` (a jq program that gives the body of a POST; default `.entity`), `each` (a jq program that gives a list; see [A request for each item](#a-request-for-each-item)), `refusal_codes` (the codes of a 5xx that are an answer; see [A refusal at a 5xx](#a-refusal-at-a-5xx)), `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx with a code of `refusal_codes` is an answer too. Another 5xx or a transport error is `ERROR`. With `each`, `responses` instead. |
 | `exec` | `argv` (each with templates), `needs` (the tools, checked on the PATH), `timeout` (seconds, default 60), `palette` (a `path` with templates; see [A read of Palette before the command](#a-read-of-palette-before-the-command)), `also` (the second command; see [A second command](#a-second-command)), `expr` | `exec`: `{exit, stdout, stderr}`. `stdout` is JSON when it parses. A tool that is not there is `NOT CHECKED`. With `palette`, also `response`. With `also`, also `also`, in the same shape. |
 | `watch` | `expr` | `cluster`, `summary`, `events`, `elapsed` (seconds), on each reading |
 
@@ -147,6 +147,34 @@ each request. For a GET, the report adds one `curl` line for each request to its
 `reproduce` lines. A rule with `reproduce` lines of its own for the engine gets no
 such line, so no request has two lines. See
 [The static tier and the live tier](../commands/preflight/tiers.md#a-rule-over-a-list).
+
+## A refusal at a 5xx
+
+Palette gives some refusals the type of a server fault: HTTP 500 with a `code`. The
+route read the request and refused what it says. A check reads a 5xx as an error by
+default, because a 5xx can also come from the gateway or from a fault of Palette.
+
+A check of Palette names the codes of such a refusal in `refusal_codes`. A 5xx with one
+of these codes is an answer in `.response`, with `ok: false`, as a 4xx is. A 5xx with
+another code, or with no code, stays `ERROR`. A 401, a 403, and a 429 stay `ERROR`
+with every code, because they say that the key or the rate failed.
+
+```yaml
+check:
+  kind: palette
+  method: POST
+  path: /v1/clouds/aws/properties/validate
+  refusal_codes: [AwsKeyPairNotFound]
+  expr: '...'
+```
+
+`iaas-pod-identity` names `AwsKeyPairNotFound`. The property route of AWS answers HTTP 500
+with that code for a key pair that the region does not hold. Before the key, the rule
+was `ERROR` for this fault, and never `FAILED`.
+
+The backend keeps the answer of a request for the run. A rule that does not name the code
+reads the same 500 as an error. A fixture follows the same rule: an entry of `_responses` with
+a 5xx status is an answer only when the check names its code. The loader refuses an empty code.
 
 ## A check that a validate route answers
 
@@ -239,7 +267,7 @@ The program of `expr` reads `.response`, as a check of Palette does, and `.exec`
 1. With no key, the result is `NOT RUN`, and no command runs.
 2. A tool in `needs` that is not there makes the result `NOT CHECKED`, and no request goes out.
 3. The request goes out. A 4xx is an answer in `.response`. A transport error, a 5xx, a 401, a 403, or a
-   429 is `ERROR`, and the report names the request.
+   429 is `ERROR`, and the report names the request. A read has no `refusal_codes`, so each 5xx is `ERROR`.
 4. The command runs, and the program judges both answers.
 
 The report shows the command in `ran`, and the request in `requests[]`. The rule keeps the tier

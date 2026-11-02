@@ -224,8 +224,8 @@ case "$engine" in
     case "$engine" in
       aws)
         fault iaas-pod-identity '.spec.cloudConfig.sshKeyName = "strata-no-such-key"'
-        check properties-key-pair 0 "the property route of aws refuses a key pair that the region lacks, and the report of iaas-pod-identity names AwsKeyPairNotFound" -- \
-          jq -e '[.checks[] | select(.id == "iaas-pod-identity") | (.messages // [])[]] | any(.[]; test("AwsKeyPairNotFound"))' fault-iaas-pod-identity.report.json
+        check properties-key-pair 0 "the property route of aws refuses a key pair that the region lacks with HTTP 500 and AwsKeyPairNotFound, and the report of iaas-pod-identity fails the rule with that code, not as an error" -- \
+          jq -e '[.checks[] | select(.id == "iaas-pod-identity" and .verdict == "failed") | (.messages // [])[]] | any(.[]; test("AwsKeyPairNotFound"))' fault-iaas-pod-identity.report.json
         ;;
       eks) fault ssh-key-pair '.spec.cloudConfig.sshKeyName = "strata-no-such-key"' ;;
     esac

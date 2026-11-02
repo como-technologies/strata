@@ -183,7 +183,7 @@ fn the_world_reads_a_cluster_one_time_and_a_rule_that_reads_it_again_costs_no_re
     assert_eq!(world.cluster_uid.as_deref(), Some("c1"));
     let path = subject_path(SubjectKind::Cluster, "c1");
     let again = backend
-        .palette(strata::api::Method::Get, &path, None)
+        .palette(strata::api::Method::Get, &path, None, &[])
         .unwrap();
     assert!(again.ok);
     assert_eq!(api.calls(&path), 1);

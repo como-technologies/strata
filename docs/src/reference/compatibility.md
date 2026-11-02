@@ -187,6 +187,15 @@ After 0.26.0, the library of `strata-preflight` changes in these ways:
   struct literal must set it to `None`, and a pattern with no `..` must name it. `probe::Ran::text`
   gives both lines, with `; ` between them. `probe::Ran::answer` is still the exit code of the first
   command.
+- `rule::PaletteCheck` has the new field `refusal_codes: Vec<String>`, the codes of a 5xx that the
+  check reads as an answer. A struct literal must set it to `Vec::new()`, and a pattern with no
+  `..` must name it. A rule file takes `refusal_codes: [...]` in the check of kind `palette`. The
+  JSON Schema of `preflight --schema rules` has the new key.
+- `probe::Backend::palette` has a fourth argument, `refusal_codes: &[String]`. Give `&[]` to get
+  the result of 0.26.0. An `impl Backend` must take the argument. `LiveBackend` gives a `Response`
+  with `ok: false` for a 5xx whose `code` is in the list, and an error for each other 5xx.
+  `FixtureBackend` follows the same rule for an entry of `_responses` with a 5xx status. Release
+  0.26.0 gave each such entry as a `Response`.
 
 ## The documents
 
@@ -814,6 +823,16 @@ field, a value, an input, or an option is in the sections above.
   - The entry of the rule in `checks[]` holds both commands in `ran`, with `; ` between them.
     Before, `ran` held the command that lists the policies of the role alone. `answer` is
     still the exit code of that first command.
+- **`strata-preflight`: `iaas-pod-identity` is `FAILED` for a key pair that the region does not
+  hold. It was `ERROR`.**
+  - Palette answers HTTP 500 with the code `AwsKeyPairNotFound` for that key pair. A check
+    read each 5xx as an error. The rule now names the code in the new key `refusal_codes`, so
+    the program reads the 500 as the answer of the route.
+  - A script that reads the verdict `error` of `iaas-pod-identity` for this fault must read
+    `failed`. The rule is a probe, so a `FAILED` result changes the exit code only with
+    `--strict`. The `ERROR` result gave exit `2`.
+  - A rule file that you give with `--probes` takes `refusal_codes` in a check of kind
+    `palette`. A 5xx with a code that the check does not name is still `ERROR`.
 
 ### For a user of the library of strata
 
@@ -843,6 +862,17 @@ field, a value, an input, or an option is in the sections above.
   `ops::send_unknown_report` posts the report of the unmarked lines, and then marks them. The new
   method `Watching::lines_written` tells how many lines a watch wrote. `term::ask::yes_or_no` asks
   a question. `text::query_value` and `BOOK_URL` are now public.
+
+### For a user of the library of strata-preflight
+
+- `rule::PaletteCheck` has the new field `refusal_codes: Vec<String>`. A struct literal must set
+  it to `Vec::new()`, and a pattern with no `..` must name it.
+- `probe::Backend::palette` has a fourth argument, `refusal_codes: &[String]`. An `impl Backend`
+  must take it, and a call must give it. Give `&[]` for the result of 0.26.0. A 5xx whose `code`
+  is in the list is a `Response` with `ok: false`. Each other 5xx is an error.
+- `FixtureBackend` follows the same rule for an entry of `_responses` with a 5xx status. Release
+  0.26.0 gave such an entry as a `Response`. A fixture of a custom rule can need `refusal_codes`
+  in its check now.
 
 ## Release 0.26.0: changes that need action
 

@@ -1445,9 +1445,13 @@ puts `caught` in the ledger, and the clean entity of the same run puts `passed`.
 both results of `instance-offering` and `ssh-key-pair` for AWS.
 
 On AWS, the plan sends the key pair that the region lacks to `iaas-pod-identity`, because the
-property route of AWS refuses it. The check `properties-key-pair` expects the report of that
-fault to name `AwsKeyPairNotFound` (no result yet). A call of the route by hand answered HTTP 500
-with that code: see [The property routes](../internals/palette/validate-routes.md#the-property-routes).
+property route of AWS refuses it. A call of the route by hand answered HTTP 500 with the code
+`AwsKeyPairNotFound`: see [The property routes](../internals/palette/validate-routes.md#the-property-routes).
+A check reads a 5xx as an error, so the rule names that code in
+[`refusal_codes`](../reference/preflight-rules.md#a-refusal-at-a-5xx). The check
+`properties-key-pair` expects the report of the fault to fail the rule with `AwsKeyPairNotFound`,
+and not to give `ERROR` (no result yet). The step `fault-iaas-pod-identity` expects `caught` in the
+ledger (no result yet).
 
 Part 3 of each run also runs the custom probes of the lab,
 `examples/live/preflight/lab-probes.yaml` (`lab-region`, `lab-name`), beside

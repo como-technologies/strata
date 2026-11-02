@@ -31,6 +31,12 @@ pub struct PaletteCheck {
     /// one request.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub each: Option<String>,
+    /// The `code` values of Palette that the route answers with a 5xx, as a refusal of the
+    /// request. A 5xx with one of these codes is an answer in `.response`, with `ok: false`, as a
+    /// 4xx is. A 5xx with another code, or with no code, is an error. With no value, each 5xx is
+    /// an error.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refusal_codes: Vec<String>,
     /// The program over the world with `.response`. With `each`, it runs one time over the
     /// world with `.responses`: one `{item, response}` for each item, in the order of the list.
     pub expr: String,
@@ -83,8 +89,8 @@ pub enum Check {
         expr: String,
     },
     /// One request to Palette, then a jq program over the world with `.response` added:
-    /// `{ok, status, body}`. A 4xx is an answer, with `ok: false` and its `V1Error` body. A 204 is
-    /// `ok: true` with a `null` body.
+    /// `{ok, status, body}`. A 4xx is an answer, with `ok: false` and its `V1Error` body. So is a
+    /// 5xx with a code in `refusal_codes`. A 204 is `ok: true` with a `null` body.
     ///
     /// With `each`, the request runs one time for each item of a list, and the program runs one
     /// time over the world with `.responses` added instead of `.response`.
