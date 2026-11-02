@@ -808,17 +808,19 @@ rules:
     when: .entity.spec.cloudAccountUid != null
     what: |
       A Pod Identity cloud account serves EKS alone. `POST /v1/clouds/aws/properties/validate`
-      refuses it for an AWS infrastructure cluster with `FeatureNotSupported`. The route also
-      refuses an SSH key pair that the account does not hold in the region. Palette answers HTTP
-      500 with the code `AwsKeyPairNotFound`, and a live run shows it (#430). The check names that
-      code in `refusal_codes`, so the program reads the 500 as the answer of the route. The
-      console calls the route; the create path of the API does not. The world shows the same fact
-      about the account in `.account.spec.credentialType`.
+      refuses it for an AWS infrastructure cluster with `FeatureNotSupported`. The route checks the
+      account before the key pair. It also refuses an SSH key pair that the account does not hold
+      in the region, with `AwsKeyPairNotFound`. Palette gives both refusals the type of a server
+      fault, so each answer is HTTP 500. A live run shows the answer for the key pair (#430). No
+      live run shows the answer for the account yet. The check names both codes in
+      `refusal_codes`, so the program reads each 500 as the answer of the route. The console calls
+      the route; the create path of the API does not. The world shows the same fact about the
+      account in `.account.spec.credentialType`.
     check:
       kind: palette
       method: POST
       path: /v1/clouds/aws/properties/validate
-      refusal_codes: [AwsKeyPairNotFound]
+      refusal_codes: [AwsKeyPairNotFound, FeatureNotSupported]
       body: '{cloudAccountUid: .entity.spec.cloudAccountUid, region: .entity.spec.cloudConfig.region, sshKeyName: (.entity.spec.cloudConfig.sshKeyName // "")}'
       expr: |
         if .response.ok then []
@@ -828,7 +830,7 @@ rules:
       text: The check exists in the property route; strata-preflight calls it.
     evidence:
       - kind: source
-        note: Palette returns FeatureNotSupported, with the message "Pod Identity for AWS infrastructure clusters", when the account is Pod Identity
+        note: Palette returns FeatureNotSupported, with the message "Pod Identity for AWS infrastructure clusters", when the account is Pod Identity. The answer is HTTP 500, and no live run shows it
       - kind: run
         ref: "#430"
         note: the route returns HTTP 500 and AwsKeyPairNotFound for a key pair that the region does not hold
@@ -1062,7 +1064,7 @@ rules:
         note: the documented custom role holds orgpolicy.policy.get
 
   - id: system-macros-hidden
-    title: The key can read the resolved pack values of the cluster
+    title: No tenant list shows the system macros that resolve on the cluster
     engines: [all]
     tier: palette
     severity: note
@@ -1072,15 +1074,10 @@ rules:
       A system macro, such as `cloudanix.partnerIdentifier`, resolves on each cluster, and no
       tenant or project list shows it: only an operations administrator lists system macros.
       `GET /v1/spectroclusters/{uid}/packs/resolvedValues` shows each value a cluster gets, system
-      macros included, so a tenant can read the values and not their source. A 403 on the route
-      hides the values too. The reproduce line lists the macro keys that resolve.
-    check:
-      kind: palette
-      method: GET
-      path: /v1/spectroclusters/{{ .clusterUid }}/packs/resolvedValues
-      expr: |
-        if .response.ok then []
-        else ["the key cannot read the resolved pack values of cluster \(.clusterUid): \(.response.body.code // .response.status); a tenant administrator cannot list the system macros that resolve on the cluster"] end
+      macros included, so a tenant can read the values and not their source. This rule has no
+      check. A check reads a 403 of Palette as an error of the key, so a check of the route
+      cannot report it as the result of the rule. The reproduce line lists the macro keys that
+      resolve.
     reproduce:
       - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/{{ .clusterUid }}/packs/resolvedValues\" | jq -r '[.profiles[].resolved | to_entries[] | select(.key | test(\"spectro.macro\")) | \"\\(.key) = \\(.value)\"] | unique[]'"
     fix:
@@ -1089,9 +1086,6 @@ rules:
     evidence:
       - kind: report
         ref: palette-macro-findings-2026-09-25 F7, B5
-    tests:
-      - fault: fixtures/eks/resolved-values-403.json
-        clean: fixtures/eks/resolved-values.json
 
   - id: account-just-created
     title: The cloud account is 2 minutes old or more

@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use strata::api::Method;
+use strata::api::codes::is_refusal_code;
 use strata::closed_set::ClosedSet;
 
 use super::{
@@ -92,12 +93,27 @@ fn check_tier_and_programs(rule: &Rule, check: &Check) -> std::result::Result<()
     {
         return Err("`each` is empty; drop it, or give a program".into());
     }
-    if let Check::Palette(PaletteCheck { refusal_codes, .. }) = check
-        && refusal_codes.iter().any(|code| code.trim().is_empty())
-    {
-        return Err("`refusal_codes` has an empty code; drop it, or give the code".into());
+    if let Check::Palette(PaletteCheck { refusal_codes, .. }) = check {
+        check_refusal_codes(refusal_codes)?;
     }
     Ok(())
+}
+
+/// Refuse a `refusal_codes` list with an empty code, or with a code that the library of strata
+/// does not list as a refusal at a 5xx. The library sends no request again after a 5xx with a
+/// listed code. A code that it does not list makes the check read the refusal only after the
+/// retries.
+fn check_refusal_codes(refusal_codes: &[String]) -> std::result::Result<(), String> {
+    if refusal_codes.iter().any(|code| code.trim().is_empty()) {
+        return Err("`refusal_codes` has an empty code; drop it, or give the code".into());
+    }
+    match refusal_codes.iter().find(|code| !is_refusal_code(code)) {
+        Some(code) => Err(format!(
+            "`refusal_codes` names {code}, and the library of strata does not list it as a refusal \
+             at a 5xx, so it sends the request again; list the code in the library, or drop it"
+        )),
+        None => Ok(()),
+    }
 }
 
 /// A preflight check has a check, and the runs of its promotion.

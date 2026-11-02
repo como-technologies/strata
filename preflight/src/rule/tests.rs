@@ -164,9 +164,9 @@ fn a_check_of_palette_names_the_codes_of_a_5xx_that_it_reads_as_an_answer() {
     };
     assert_eq!(
         refusal_codes(&palette(
-            "      refusal_codes: [AwsKeyPairNotFound, Other]\n"
+            "      refusal_codes: [AwsKeyPairNotFound, FeatureNotSupported]\n"
         )),
-        ["AwsKeyPairNotFound", "Other"]
+        ["AwsKeyPairNotFound", "FeatureNotSupported"]
     );
     assert!(
         refusal_codes(&palette("")).is_empty(),
@@ -180,6 +180,34 @@ fn a_check_of_palette_names_the_codes_of_a_5xx_that_it_reads_as_an_answer() {
     assert!(
         err.to_string()
             .contains("`refusal_codes` has an empty code"),
+        "{err}"
+    );
+}
+
+#[test]
+fn a_check_of_palette_cannot_name_a_code_that_the_library_does_not_list_as_a_refusal() {
+    let palette = |codes: &str| {
+        GOOD.replace("tier: static", "tier: palette").replace(
+                "check:\n      kind: static\n      expr: '[.entity.spec.machinepoolconfig[] | select(.poolConfig.size % 3 != 0) | .poolConfig.name]'",
+                &format!("check:\n      kind: palette\n      path: /v1/x\n      refusal_codes: [{codes}]\n      expr: 'true'"),
+            )
+    };
+    // each code that the library lists is right: a refusal of another route, and a check of a
+    // validate route
+    let listed =
+        "AwsKeyPairNotFound, FeatureNotSupported, OperationForbidden, ClusterProfilesNotSupported";
+    assert!(Catalog::parse_section(&palette(listed), Path::new("x.yaml")).is_ok());
+    // a 5xx with another code is sent again, so the check would read it only after the retries
+    let err = Catalog::parse_section(
+        &palette("AwsKeyPairNotFound, InternalError"),
+        Path::new("x.yaml"),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(
+        err.contains(
+            "`refusal_codes` names InternalError, and the library of strata does not list it"
+        ),
         "{err}"
     );
 }

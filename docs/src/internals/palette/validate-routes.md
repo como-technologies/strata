@@ -458,6 +458,13 @@ cloud account. A live run shows the answers of the AWS route: see
 
 No such route exists for Azure, MAAS, or vSphere.
 
+The AWS route checks the cloud account before the key pair. A Pod Identity account serves EKS
+alone, so the route refuses it with HTTP `500` and the code `FeatureNotSupported`. The refusal
+names the feature "Pod Identity for AWS infrastructure clusters". Palette gives it the type of a
+server fault, as it does for `AwsKeyPairNotFound`. These facts come from the code of Palette,
+not from a live run. Palette also refuses the create of a Pod Identity account in the SaaS mode,
+with the same code. So a lab on SaaS cannot hold the account that shows the refusal.
+
 ### The KMS key route
 
 The KMS key route checks the list of keys, not the key. It answers `204` when
