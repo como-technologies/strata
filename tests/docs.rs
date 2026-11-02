@@ -10,7 +10,7 @@ use crate::common;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use common::{INSTALLING_WORKFLOWS, recipe, repo_file, schema, script, version_of, walk};
+use common::{INSTALLING_WORKFLOWS, one_line, recipe, repo_file, schema, script, version_of, walk};
 use strata::api::codes::ValidateRoute;
 use strata::content::canonical_json;
 
@@ -54,11 +54,6 @@ fn section<'a>(text: &'a str, from: &str, to: Option<&str>) -> &'a str {
         Some(end) => &rest[..end],
         None => rest,
     }
-}
-
-/// `text` with each run of white space as one space, as a line break can fall inside a sentence.
-fn one_line(text: &str) -> String {
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 #[test]
