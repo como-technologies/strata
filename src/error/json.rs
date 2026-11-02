@@ -159,6 +159,7 @@ impl Error {
                 put_path(m, path);
                 put(m, "line", *line);
             }
+            Error::ReportSend { endpoint, .. } => put(m, "endpoint", endpoint.as_str()),
             _ => {}
         }
     }

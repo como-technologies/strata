@@ -1,0 +1,45 @@
+[package]
+name = "strata-report-endpoint"
+version = "0.26.0"
+edition = "2024"
+# The same floor as strata: this crate uses the same `if let` chains.
+rust-version = "1.88"
+description = "The endpoint that takes the report of the values that strata does not know, and merges the reports into one issue for each set and value"
+license = "Apache-2.0"
+repository = "https://github.com/como-technologies/strata"
+# As strata: a private repository publishes no crate. The service runs on Cloud Run: see
+# `deploy/report/` and "The endpoint of the report" in the book.
+publish = false
+
+[lib]
+name = "strata_report_endpoint"
+path = "src/lib.rs"
+
+[[bin]]
+name = "strata-report-endpoint"
+path = "src/main.rs"
+
+[dependencies]
+# The report, its schema, and its check come from strata, so the endpoint and the send of strata
+# keep one definition of the fields. Strata never depends on this crate.
+strata = { path = ".." }
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# A small server with no async runtime: the service takes one request at a time.
+tiny_http = "0.12"
+ureq = { version = "3", features = ["json"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+
+# The same four lints as the root package: see "Comments" in docs/src/development/code.md.
+[lints.clippy]
+missing_errors_doc = "deny"
+missing_panics_doc = "deny"
+too_long_first_doc_paragraph = "deny"
+doc_markdown = "deny"

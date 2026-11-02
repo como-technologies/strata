@@ -125,3 +125,4 @@
 - [Preflight: one cluster, end to end](./development/preflight-walkthrough.md)
 - [What the live example verifies](./development/live-runs.md)
 - [The facts of Palette](./development/facts.md)
+- [The endpoint of the report](./development/report-endpoint.md)

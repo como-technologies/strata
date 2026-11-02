@@ -1,0 +1,7 @@
+# The build of the image of the endpoint of the report, on Cloud Build. deploy.sh submits it from
+# the root of the repository with the substitution _IMAGE, the full name of the image.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "deploy/report/Dockerfile", "-t", "${_IMAGE}", "."]
+images:
+  - "${_IMAGE}"

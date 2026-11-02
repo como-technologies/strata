@@ -6952,3 +6952,166 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
         "a request that is not a read:\n{curl}"
     );
 }
+
+// ---- report-send.sh ----------------------------------------------------------------------------
+
+/// An `xtask` that makes the chapter `unknown-value` and "serves" it: it writes a port and waits for
+/// the end of its standard input, as the real server does.
+const FAKE_XTASK_SERVE: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_SEND/xtask.log"
+case "$1" in
+  harvest) mkdir -p "$2/unknown-value" ;;
+  serve) echo 4321 > "$3"; cat > /dev/null ;;
+esac
+"#;
+
+/// A `strata` that stands in for the send: a run appends a line to the log, and "posts" to the
+/// endpoint by changing the issue file, which a `gh` lists. It writes down the settings it got.
+const FAKE_STRATA_SEND: &str = r#"#!/usr/bin/env bash
+[ "$1" != "--version" ] || { echo "strata 0.26.0"; exit 0; }
+echo "$STRATA_REPORT $STRATA_REPORT_URL $PALETTE_API $PALETTE_PROJECT $XDG_STATE_HOME $HOME $*" >> "$FAKE_SEND/strata.log"
+log="$XDG_STATE_HOME/strata/strata-unknown.jsonl"
+mkdir -p "$(dirname "$log")"
+echo '{"schema":"strata-unknown/1"}' >> "$log"
+if [ -z "$FAKE_NO_POST" ]; then
+  lines=$(sed -n 's/^| Lines | \([0-9]*\) |.*/\1/p' "$FAKE_SEND/body" 2>/dev/null)
+  lines=$(( ${lines:-0} + 1 ))
+  printf '%s\n| Lines | %s |\n' '<!-- strata-report: values ProfileType later-type -->' "$lines" > "$FAKE_SEND/body"
+  jq -n --rawfile body "$FAKE_SEND/body" '[{number: 7, state: "OPEN", body: $body}]' > "$FAKE_SEND/issues.json"
+  wc -l < "$log" | tr -d ' ' > "$XDG_STATE_HOME/strata/strata-unknown.sent"
+  echo "strata: sent the report of the unknown values" >&2
+fi
+echo '{"profiles":[{"name":"aws-stack"}]}'
+"#;
+
+/// A `gh` that lists the issues of `$FAKE_SEND/issues.json`.
+const FAKE_GH_SEND: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_SEND/gh.log"
+case "$*" in
+  "issue list"*) cat "$FAKE_SEND/issues.json" 2>/dev/null || echo '[]' ;;
+esac
+"#;
+
+/// Run `report-send.sh` with `args` in a root of its own. Gives the output, the result directory,
+/// and the root.
+fn report_send(args: &[&str], no_post: bool, root: &Path) -> (Output, PathBuf) {
+    let bin = fake_bin(root, &[("gh", FAKE_GH_SEND), ("xtask", FAKE_XTASK_SERVE)]);
+    executable(&root.join("bin/strata"), FAKE_STRATA_SEND);
+    let out = root.join("out");
+    let mut c = Command::new("bash");
+    c.arg(live_script("report-send.sh"))
+        .args(args)
+        .env("PATH", path_with(&bin))
+        .env("FAKE_SEND", root)
+        .env("XTASK_BIN", root.join("bin/xtask"))
+        .env("STRATA_BIN", root.join("bin/strata"))
+        .env("OUT", &out)
+        .env("TMPDIR", root);
+    if no_post {
+        c.env("FAKE_NO_POST", "1");
+    }
+    (c.output_locked().unwrap(), out)
+}
+
+#[test]
+fn report_send_sh_sends_twice_to_the_endpoint_and_checks_that_one_issue_holds_both() {
+    let dir = tempfile::tempdir().unwrap();
+    let (o, out) = report_send(
+        &["https://report.example/", "--repo", "o/r"],
+        false,
+        dir.path(),
+    );
+    assert_eq!(
+        o.status.code(),
+        Some(0),
+        "{}\n{}",
+        text(&o.stdout),
+        text(&o.stderr)
+    );
+    let steps = std::fs::read_to_string(out.join("steps.log")).unwrap();
+    for id in [
+        "send-1",
+        "send-1-says",
+        "send-1-marked",
+        "issue",
+        "issue-new",
+        "send-2",
+        "issue-2",
+    ] {
+        assert!(steps.contains(&format!("PASS  {id} ")), "{id}:\n{steps}");
+    }
+    assert!(steps.contains("the issue is o/r#7"), "{steps}");
+    // the run served the chapter, and strata got the settings of the send and no other setting
+    let xtask = std::fs::read_to_string(dir.path().join("xtask.log")).unwrap();
+    assert!(xtask.contains("harvest tenants"), "{xtask}");
+    assert!(
+        xtask.contains("serve tenants/unknown-value port"),
+        "{xtask}"
+    );
+    let strata = std::fs::read_to_string(dir.path().join("strata.log")).unwrap();
+    let runs: Vec<&str> = strata.lines().collect();
+    assert_eq!(runs.len(), 2, "{strata}");
+    for run in runs {
+        let words: Vec<&str> = run.split(' ').collect();
+        assert_eq!(
+            &words[..4],
+            [
+                "1",
+                "https://report.example/",
+                "http://127.0.0.1:4321",
+                "dev"
+            ],
+            "{run}"
+        );
+        assert!(words[4].ends_with("/out/state"), "{run}");
+        assert!(run.ends_with("list profiles --packs --json"), "{run}");
+    }
+    let gh = std::fs::read_to_string(dir.path().join("gh.log")).unwrap();
+    assert!(
+        gh.contains("issue list --repo o/r --label palette-drift --state all"),
+        "{gh}"
+    );
+    assert!(
+        std::fs::read_to_string(out.join("summary.md"))
+            .unwrap()
+            .contains("report send test"),
+    );
+}
+
+#[test]
+fn report_send_sh_fails_the_checks_when_the_endpoint_took_no_report() {
+    let dir = tempfile::tempdir().unwrap();
+    let (o, out) = report_send(&["https://report.example/"], true, dir.path());
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let steps = std::fs::read_to_string(out.join("steps.log")).unwrap();
+    assert!(steps.contains("FAIL  send-1-says "), "{steps}");
+    assert!(steps.contains("FAIL  issue "), "{steps}");
+}
+
+#[test]
+fn report_send_sh_needs_the_address_and_the_tools_and_stops_before_it_runs_anything() {
+    let dir = tempfile::tempdir().unwrap();
+    let (o, _) = report_send(&[], false, dir.path());
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("give the address of the endpoint"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(
+        text(&o.stderr).contains("Usage") || text(&o.stderr).contains("just live-report-send URL")
+    );
+    let (o, _) = report_send(&["a", "b"], false, dir.path());
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("one address only"),
+        "{}",
+        text(&o.stderr)
+    );
+    let (o, _) = report_send(&["--bogus"], false, dir.path());
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        !dir.path().join("strata.log").exists(),
+        "no run before the arguments are right"
+    );
+}

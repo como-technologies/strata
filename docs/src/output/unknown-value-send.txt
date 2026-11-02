@@ -1,0 +1,6 @@
+$ STRATA_REPORT=1 strata list profiles --packs > /dev/null
+strata: looking up project dev
+strata: listing profiles
+strata: reading profile aws-stack@1.1.12
+strata: Palette gave the ProfileType value 'later-type', which this release of strata does not know
+strata: sent the report of the unknown values

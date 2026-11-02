@@ -1,9 +1,9 @@
 //! The log of the unknown values: one line in `strata-unknown.jsonl` for each value that strata
 //! noted.
 //!
-//! The log is a file of the user, in the state folder: see [`path`]. It never leaves the machine.
-//! Later stages of the self-report, `strata report` and the opt-in send, read only this file. A
-//! reader refuses a line that holds more than the fields below.
+//! The log is a file of the user, in the state folder: see [`path`]. The file never leaves the
+//! machine. `strata report` and the opt-in send read only this file, and they send the report of its
+//! lines, never the file. A reader refuses a line that holds more than the fields below.
 //!
 //! # The line
 //!
@@ -102,24 +102,50 @@ impl Line {
 
     /// What is wrong with a line that has the right fields, or `None`. The type refuses a field
     /// that is not in [`FIELDS`]. This check refuses a value that no closed set has, and a route
-    /// that is the path of a real request. Strata never writes such a line.
+    /// that is not a template of a route, such as the path of a real request. Strata never writes
+    /// such a line.
     fn fault(&self) -> Option<String> {
         if self.schema != SCHEMA {
             return Some(format!("the schema is not {SCHEMA}"));
         }
-        if self.value.is_empty()
-            || self.value.chars().count() > LONGEST_VALUE
-            || self.value.chars().any(char::is_control)
-        {
-            return Some(format!(
-                "the value is not a short word of {LONGEST_VALUE} characters or fewer"
-            ));
-        }
-        if !self.route.starts_with('/') || self.route.split('/').any(looks_like_uid) {
-            return Some("the route is not a template of a route".to_string());
-        }
-        None
+        value_fault(&self.value).or_else(|| route_fault(&self.route))
     }
+}
+
+/// What is wrong with `value` as the value of a closed set, or `None`. A value is a short word:
+/// it has [`LONGEST_VALUE`] characters or fewer, and no control character.
+pub(super) fn value_fault(value: &str) -> Option<String> {
+    if value.is_empty()
+        || value.chars().count() > LONGEST_VALUE
+        || value.chars().any(char::is_control)
+    {
+        return Some(format!(
+            "the value is not a short word of {LONGEST_VALUE} characters or fewer"
+        ));
+    }
+    None
+}
+
+/// What is wrong with `route` as the template of a route, or `None`. A template starts with
+/// [`ROUTE_PREFIX`], holds only the characters of [`is_route_char`], and none of its words is a uid.
+pub(super) fn route_fault(route: &str) -> Option<String> {
+    if !route.starts_with(ROUTE_PREFIX)
+        || !route.chars().all(is_route_char)
+        || route.split('/').any(looks_like_uid)
+    {
+        return Some("the route is not a template of a route".to_string());
+    }
+    None
+}
+
+/// The start of each route that strata reads.
+const ROUTE_PREFIX: &str = "/v1/";
+
+/// True for a character of a route template: a letter or a digit of ASCII, or one of `/`, `_`, `-`,
+/// `.`, `{`, and `}`. So a template holds no space, no quote, no mark of markdown, and no line
+/// break.
+fn is_route_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '.' | '{' | '}')
 }
 
 /// The fewest characters of a uid. A uid of Palette has 24 hexadecimal digits, and a UUID has more.

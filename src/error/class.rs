@@ -35,10 +35,13 @@ impl Error {
                 FailureClass::Transient
             }
             // A 2xx that is not JSON can be a gateway page or a real fault, and a file or a
-            // serializer that fails says nothing about the next try.
-            Error::NotJson { .. } | Error::NoUid | Error::Io { .. } | Error::Serialize(_) => {
-                FailureClass::Unknown
-            }
+            // serializer that fails says nothing about the next try. A send of the report can fail
+            // for the network of the user or for the endpoint, and the error does not tell which.
+            Error::NotJson { .. }
+            | Error::NoUid
+            | Error::Io { .. }
+            | Error::Serialize(_)
+            | Error::ReportSend { .. } => FailureClass::Unknown,
             // Every other failure stays while the inputs stay: another HTTP status, a thing that
             // is not there, a file or a setting that is not valid.
             _ => FailureClass::Terminal,

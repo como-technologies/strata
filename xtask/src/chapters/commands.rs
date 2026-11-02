@@ -124,6 +124,15 @@ fn unknown_value(r: &mut Runner) {
         "strata report --sent > /dev/null && strata report",
     );
     r.step("unknown-value-report-all", 0, false, "strata report --all");
+    // the runner gives each step STRATA_REPORT_URL, the stand-in for the endpoint of the report
+    r.step(
+        "unknown-value-send",
+        0,
+        true,
+        "STRATA_REPORT=1 strata list profiles --packs > /dev/null",
+    );
+    // the send marked the line that it sent, so the report holds nothing new
+    r.step("unknown-value-send-marked", 0, false, "strata report");
 }
 
 /// The part of the chapter `list` for a draft, an imported cluster, and a cluster template.

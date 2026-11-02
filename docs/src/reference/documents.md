@@ -695,6 +695,10 @@ not know. See [strata report](../commands/report.md) and
 The report has no `tool` block and no time, because the log has none. A log with no line gives
 `unknown: []`. An entry holds no name, no uid, no host, no free text, and no value of a pack.
 
+The send of the report posts this document to the endpoint, and the endpoint takes this document
+alone. It refuses a field that is not in the list. See
+[Send the report by itself](./report.md#send-the-report-by-itself).
+
 
 ## strata-preflight/1
 

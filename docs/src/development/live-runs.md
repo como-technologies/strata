@@ -577,6 +577,21 @@ checks. It needs the key and the `terraform.tfvars` of the live example.
 | `up` | #531: the plan holds cluster profiles only: no `aws_*` resource, no registry, no cluster. No result yet. |
 | `contract.json` of the next contract run | #531: the facts that need a cluster profile are `same` or `differs`, and none is `skipped` for want of a profile. No result yet. |
 
+## report-send.sh
+
+It reads and writes no Palette tenant. It needs the address of the deployed endpoint of the report
+and `gh` logged in to the repository. It serves the tenant of the chapter `unknown-value` of the book
+on this machine, and runs strata against it with `STRATA_REPORT=1` and `STRATA_REPORT_URL` set. So
+the send is real, and the value is the made-up profile type of the book. The run opens or changes the
+issue of that value through the endpoint, and leaves it open. [The endpoint of the
+report](./report-endpoint.md) says how the lead deploys the endpoint and runs this check.
+
+| Check | Expected exit | What it shows |
+|---|---|---|
+| `send-1`, `send-1-says`, `send-1-marked` | 0 | #397: a run with `STRATA_REPORT=1` exits as a run with no send, says that it sent the report, and marks the line as sent. No result yet. |
+| `issue`, `issue-new` | 0 | #397: one issue of the label `palette-drift` holds the marker of the value, and its first send gives the count 1. No result yet. |
+| `send-2`, `issue-2` | 0 | #397: a second run posts the report again. Still one issue holds the value, and its count grew by one. No result yet. |
+
 ## pending.sh
 
 Read-write. It needs the example at its baseline with cluster A. Each stage

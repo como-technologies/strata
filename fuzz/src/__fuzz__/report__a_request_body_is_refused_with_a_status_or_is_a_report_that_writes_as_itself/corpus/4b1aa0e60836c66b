@@ -1,0 +1,1 @@
+{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"PackState","value":"retired","route":"/v1/packs","status":409,"errorCode":"PackGone","count":1},{"strata":"0.27.0","set":"PackState","value":"retired","route":"/v1/packs","count":3}]}

@@ -4,8 +4,8 @@
 use std::process::ExitCode;
 
 use clap::{CommandFactory, FromArgMatches};
-use strata::TOOL_NAME;
 use strata::error::Result;
+use strata::{BOOK_URL, TOOL_NAME};
 
 mod cli;
 
@@ -48,9 +48,8 @@ fn command() -> clap::Command {
                 .action(clap::ArgAction::Version)
                 .help("Print version"),
         )
-        .after_help(concat!(
-            "Use \"strata <command> --help\" for more information about a command.\n",
-            "The book: https://legendary-train-pzq9ojj.pages.github.io/"
+        .after_help(format!(
+            "Use \"strata <command> --help\" for more information about a command.\nThe book: {BOOK_URL}"
         ));
     // `strata preflight --help` is the help of strata-preflight, so it goes through
     let names: Vec<String> = cmd
@@ -91,7 +90,9 @@ fn main() -> ExitCode {
     let matches = cmd.get_matches_from(argv);
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
     let json = cli.json_selected();
-    match run(cli) {
+    let progress = cli.cmd.progress();
+    let watching = cli::watch_unknown(progress);
+    let code = match run(cli) {
         Ok(code) => code,
         Err(e) => {
             if json {
@@ -101,11 +102,13 @@ fn main() -> ExitCode {
             }
             ExitCode::from(e.exit_code())
         }
-    }
+    };
+    // after the result, so that a slow endpoint delays no output, and never the exit code
+    cli::send_unknown(&watching, progress);
+    code
 }
 
 fn run(cli: Cli) -> Result<ExitCode> {
-    let _watching = cli::watch_unknown(cli.cmd.progress());
     match cli.cmd {
         Cmd::Compare(a) => cmd_compare(&a),
         Cmd::Snapshot(a) => cmd_snapshot(&a),

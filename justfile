@@ -33,13 +33,14 @@ build-target target:
 # strata-fuzz holds the fuzz targets and the property tests. It runs each target on its corpus and
 # on random input.
 
-# Run the tests of strata, strata-preflight, xtask (the stand-in for Palette), strata-benches (the input of the benchmarks), and strata-fuzz. No network.
+# Run the tests of strata, strata-preflight, xtask (the stand-in for Palette), strata-benches (the input of the benchmarks), strata-fuzz, and strata-report-endpoint. No network.
 test: stand-in
     cargo test
     cargo test -p strata-preflight
     cargo test -p xtask
     cargo test -p strata-benches
     cargo test -p strata-fuzz
+    cargo test -p strata-report-endpoint
 
 # The benchmarks are the package strata-benches in benches/. They are not tests. `just test` does
 # not run them, and no recipe fails on a time. See "The benchmarks" in
@@ -57,7 +58,7 @@ bench-short:
     cargo bench -p strata-benches -- --warm-up-time 1 --measurement-time 3
 
 # The rustdoc command of `just lint` and `just api-docs`. The two recipes share one command, so
-# that they share one build. `just lint` adds the packages xtask and strata-benches, and runs the
+# that they share one build. `just lint` adds the packages xtask, strata-benches, and strata-report-endpoint, and runs the
 # command a second time with all items. The build of the public items does not read the comment of
 # a private item. The build of all items does not warn when a public item links to a private item.
 # So `just lint` needs both.
@@ -67,8 +68,8 @@ rustdoc := 'RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p strata -p strata-p
 lint:
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
-    {{rustdoc}} -p xtask -p strata-benches
-    {{rustdoc}} -p xtask -p strata-benches --document-private-items
+    {{rustdoc}} -p xtask -p strata-benches -p strata-report-endpoint
+    {{rustdoc}} -p xtask -p strata-benches -p strata-report-endpoint --document-private-items
 
 # Build and run examples/library and examples/library-preflight, crates that use strata and strata-preflight as libraries
 library-example:
@@ -358,6 +359,16 @@ contract-timer-remove:
 # Show the weekly contract run: the timer, and the last result (#390)
 contract-timer-status:
     deploy/contract/timer.sh status
+
+# The lead runs this on kadomony after the merge. The script reads no secret: see "The endpoint of the report" in docs/src/development/report-endpoint.md.
+
+# Build the image of the endpoint of the report, and deploy it to Cloud Run in the project of the lab (#397). Needs gcloud logged in. --dry-run prints the gcloud commands and runs none.
+report-deploy *args:
+    deploy/report/deploy.sh {{args}}
+
+# Send one report to the deployed endpoint of the report, twice, and check that one issue of the label palette-drift holds both (#397). It serves the stand-in tenant of the book, and reads and writes no Palette tenant. Needs gh logged in, and the address that report-deploy printed.
+live-report-send *args: examples stand-in
+    examples/live/report-send.sh {{args}}
 
 # The pending update test: when Palette says an update waits for cluster A, what a record, the listing, and compare say, what cluster:<uid>@pending holds (#70, #78), and what compare --repave asks Palette about it (#276). Needs live-up; undoes each change.
 live-pending: build

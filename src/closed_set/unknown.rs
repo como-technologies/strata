@@ -14,7 +14,8 @@
 //! - It appends one line to the log: see [`log`]. `--quiet` does not stop the log.
 //!
 //! After the first note of a day, in a terminal, the watch adds a hint that `strata report` shows
-//! what the user can send: see [`hint`]. The report is made from the log: see [`report`].
+//! what the user can send: see [`hint`]. The report is made from the log: see [`report`]. A user
+//! who chose the send gets the report posted at the end of the run: see [`send`].
 //!
 //! The set is the name that `strata schema` gives to the definition of the set. The JSON
 //! documents do not change.
@@ -41,6 +42,7 @@ use crate::text::cut;
 pub mod hint;
 pub mod log;
 pub mod report;
+pub mod send;
 #[cfg(test)]
 mod tests;
 
@@ -59,6 +61,8 @@ pub struct Watch {
     log: Option<PathBuf>,
     hint: Option<Hint>,
     release: Option<String>,
+    /// How many lines this watch wrote to the log.
+    written: usize,
     /// The set and the value of each note so far, so that a run notes a value one time.
     told: BTreeSet<(String, String)>,
 }
@@ -71,6 +75,7 @@ impl Watch {
             log: None,
             hint: None,
             release: None,
+            written: 0,
             told: BTreeSet::new(),
         }
     }
@@ -122,6 +127,7 @@ impl Watch {
             self.log = None;
             return;
         }
+        self.written += 1;
         if let Some(text) = self.hint_text() {
             self.progress.note(text);
         }
@@ -140,6 +146,14 @@ impl Watch {
 /// The guard of a started watch: it removes the watch from the thread when it drops.
 #[derive(Debug)]
 pub struct Watching(());
+
+impl Watching {
+    /// How many lines of the log the watch has written so far. A run that wrote none saw no
+    /// unknown value, and has nothing to send.
+    pub fn lines_written(&self) -> usize {
+        WATCH.with(|slot| slot.borrow().as_ref().map_or(0, |watch| watch.written))
+    }
+}
 
 impl Drop for Watching {
     fn drop(&mut self) {

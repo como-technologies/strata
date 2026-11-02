@@ -126,8 +126,9 @@ pub fn markdown_cell(s: &str) -> String {
 /// `text` as a value in a query string: each byte that is not a letter, a digit, or one of
 /// `-._~:` becomes `%XX`, so a time with `+00:00` keeps its `+`.
 ///
-/// A route of Palette and the link to a new issue of strata build their queries here.
-pub(crate) fn query_value(text: &str) -> String {
+/// A route of Palette and the link to a new issue of strata build their queries here. The endpoint
+/// of the report writes the marker of an issue with it, so that a value cannot end the comment.
+pub fn query_value(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for b in text.bytes() {
         if b.is_ascii_alphanumeric() || b"-._~:".contains(&b) {

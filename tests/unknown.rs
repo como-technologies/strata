@@ -2,10 +2,7 @@
 //! know (`strata-unknown/1`). The unit tests of the watch and of the line are in
 //! `src/closed_set/unknown/tests.rs`. These tests run the reads of the commands, and the binary.
 
-use std::collections::BTreeMap;
-use std::io::{Read, Write};
-use std::net::TcpListener;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use serde_json::{Value, json};
@@ -17,103 +14,17 @@ use strata::ops::{ListKind, ListOptions};
 use strata::term::progress::Progress;
 
 use crate::common::{
-    PROFILE_LISTING, Run, UID_A, UID_B, isolate_palette, listing, profile_document, profile_route,
+    LATER_TYPE, PROFILE_LISTING, Run, UID_A, UID_B, isolate_palette, later_type_tenant,
+    list_command, listed, listing, log_in, packs, profile_document, profile_route, serve_routes,
     strata_bin, template,
 };
-
-/// The profile type that a later Palette release adds.
-const LATER_TYPE: &str = "later-type";
 
 /// The note for that type, as a person reads it on standard error.
 const NOTE: &str = "strata: Palette gave the ProfileType value 'later-type', which this release of strata does not know";
 
-/// The listing entry of a profile version, as `GET /v1/dashboard/clusterprofiles/metadata` gives
-/// it.
-fn listed(name: &str, uid: &str) -> Value {
-    json!({"metadata": {"name": name, "uid": uid}, "spec": {"cloudType": "aws", "version": "1.0.0"}})
-}
-
-/// The packs of the template: one pack, so that the template is the published one.
-fn packs() -> Value {
-    json!([{"name": "cert-manager", "layer": "addon", "type": "spectro",
-        "tag": "1.14.0", "version": "1.14.0"}])
-}
-
-/// The documents of two profile versions whose template has the type `LATER_TYPE`, by route.
-fn tenant() -> BTreeMap<String, Value> {
-    let mut routes = BTreeMap::new();
-    routes.insert(
-        PROFILE_LISTING.to_string(),
-        json!({"items": [listed("payments-prod", UID_A), listed("payments-test", UID_B)]}),
-    );
-    for (uid, name) in [(UID_A, "payments-prod"), (UID_B, "payments-test")] {
-        routes.insert(
-            profile_route(uid),
-            profile_document(
-                uid,
-                name,
-                "1.0.0",
-                template("aws", LATER_TYPE, packs()),
-                None,
-            ),
-        );
-    }
-    routes
-}
-
-/// Serve `routes` on this machine, one answer for each request. A route that nobody lists
-/// answers 404. The address is the one for `PALETTE_API`.
-fn serve(routes: BTreeMap<String, Value>) -> String {
-    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = listener.local_addr().unwrap();
-    std::thread::spawn(move || {
-        for stream in listener.incoming() {
-            let Ok(mut stream) = stream else { continue };
-            let mut request = Vec::new();
-            let mut chunk = [0u8; 1024];
-            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
-                match stream.read(&mut chunk) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => request.extend_from_slice(&chunk[..n]),
-                }
-            }
-            let text = String::from_utf8_lossy(&request).into_owned();
-            let path = text
-                .lines()
-                .next()
-                .and_then(|line| line.split_whitespace().nth(1))
-                .unwrap_or("/");
-            let (status, body) = match routes.get(path) {
-                Some(doc) => ("200 OK", doc.to_string()),
-                None => ("404 Not Found", "{}".to_string()),
-            };
-            let answer = format!(
-                "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-                body.len()
-            );
-            let _ = stream.write_all(answer.as_bytes());
-        }
-    });
-    format!("http://{address}")
-}
-
-/// Run `strata list profiles --packs` with the arguments `more` against `api`. The run has a home
-/// of its own, `home`, and no state folder from the environment of the test.
+/// Run `strata list profiles --packs` with the arguments `more` against `api`.
 fn list(api: &str, home: &Path, more: &[&str]) -> Run {
-    let mut command = Command::new(strata_bin());
-    isolate_palette(&mut command, home);
-    command
-        .env_remove("STRATA_QUIET")
-        .env_remove("XDG_STATE_HOME")
-        .env("PALETTE_API", api)
-        .args(["list", "profiles", "--packs"])
-        .args(more);
-    Run::of(&mut command)
-}
-
-/// The log of the run that used `home` as its home.
-fn log_in(home: &Path) -> PathBuf {
-    home.join(".local/state/strata").join(FILE)
+    Run::of(&mut list_command(api, home, more))
 }
 
 fn lines_of(file: &Path) -> Vec<Line> {
@@ -126,7 +37,7 @@ fn lines_of(file: &Path) -> Vec<Line> {
 
 #[test]
 fn a_read_of_a_document_with_an_unknown_value_writes_the_note_one_time() {
-    let api = serve(tenant());
+    let api = serve_routes(later_type_tenant());
     let home = tempfile::tempdir().unwrap();
     let run = list(&api, home.path(), &[]);
     assert_eq!(run.code, 0, "{}", run.err);
@@ -141,7 +52,7 @@ fn a_read_of_a_document_with_an_unknown_value_writes_the_note_one_time() {
 
 #[test]
 fn quiet_hides_the_note_and_the_environment_hides_it_too() {
-    let api = serve(tenant());
+    let api = serve_routes(later_type_tenant());
     let home = tempfile::tempdir().unwrap();
     let noisy = list(&api, home.path(), &[]);
     let quiet = list(&api, home.path(), &["--quiet"]);
@@ -162,7 +73,7 @@ fn quiet_hides_the_note_and_the_environment_hides_it_too() {
 
 #[test]
 fn the_json_document_is_the_same_with_and_without_the_note() {
-    let api = serve(tenant());
+    let api = serve_routes(later_type_tenant());
     let home = tempfile::tempdir().unwrap();
     let noisy = list(&api, home.path(), &["--json"]);
     let quiet = list(&api, home.path(), &["--json", "--quiet"]);
@@ -179,7 +90,7 @@ fn the_json_document_is_the_same_with_and_without_the_note() {
 
 #[test]
 fn each_run_adds_one_line_to_the_log_in_the_state_folder_also_with_quiet() {
-    let api = serve(tenant());
+    let api = serve_routes(later_type_tenant());
     let home = tempfile::tempdir().unwrap();
     list(&api, home.path(), &[]);
     list(&api, home.path(), &["--quiet"]);
@@ -196,7 +107,7 @@ fn each_run_adds_one_line_to_the_log_in_the_state_folder_also_with_quiet() {
 
 #[test]
 fn the_state_home_of_the_environment_decides_where_the_log_is() {
-    let api = serve(tenant());
+    let api = serve_routes(later_type_tenant());
     let home = tempfile::tempdir().unwrap();
     let state = tempfile::tempdir().unwrap();
     let mut command = Command::new(strata_bin());
@@ -214,7 +125,7 @@ fn the_state_home_of_the_environment_decides_where_the_log_is() {
 
 #[test]
 fn a_document_with_a_uid_and_a_name_writes_neither_to_the_log() {
-    let api = serve(tenant());
+    let api = serve_routes(later_type_tenant());
     let home = tempfile::tempdir().unwrap();
     list(&api, home.path(), &[]);
     let text = std::fs::read_to_string(log_in(home.path())).unwrap();
@@ -283,7 +194,7 @@ fn a_watch_on_a_read_of_the_library_logs_the_route_template_and_no_uid() {
 
 #[test]
 fn the_hint_does_not_show_when_standard_error_is_not_a_terminal_and_uses_up_no_day() {
-    let api = serve(tenant());
+    let api = serve_routes(later_type_tenant());
     let home = tempfile::tempdir().unwrap();
     // the run reads its standard error through a pipe, as a script or a test does
     let run = list(&api, home.path(), &[]);

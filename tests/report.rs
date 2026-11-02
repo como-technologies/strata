@@ -3,7 +3,7 @@
 //! `src/closed_set/unknown/tests.rs`. These tests run the binary and the operations.
 
 use std::net::TcpListener;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
@@ -13,12 +13,7 @@ use serde_json::{Value, json};
 use strata::closed_set::unknown::log::{FILE, SENT_FILE};
 use strata::ops::{ReportOptions, report_link, unknown_report};
 
-use crate::common::{Run, isolate_palette, strata_bin};
-
-/// The log of the run that used `home` as its home.
-fn log_in(home: &Path) -> PathBuf {
-    home.join(".local/state/strata").join(FILE)
-}
+use crate::common::{Run, isolate_palette, log_in, strata_bin};
 
 /// A line of the log, as strata writes it.
 fn line(set: &str, value: &str, route: &str) -> String {

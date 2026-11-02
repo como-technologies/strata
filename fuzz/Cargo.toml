@@ -4,7 +4,7 @@ version = "0.26.0"
 edition = "2024"
 # The same floor as strata: this crate uses the same `if let` chains.
 rust-version = "1.88"
-description = "The fuzz targets and the property tests of strata and strata-preflight, on bolero"
+description = "The fuzz targets and the property tests of strata, strata-preflight, and strata-report-endpoint, on bolero"
 license = "Apache-2.0"
 repository = "https://github.com/como-technologies/strata"
 publish = false
@@ -20,6 +20,7 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 strata = { path = ".." }
 strata-preflight = { path = "../preflight" }
+strata-report-endpoint = { path = "../report-endpoint" }
 tempfile = "3"
 
 [lints.rust]

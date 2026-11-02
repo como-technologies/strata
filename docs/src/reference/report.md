@@ -1,9 +1,10 @@
 # What strata can report
 
 Strata publishes nothing by itself. It reads your tenant, and it writes files on your machine.
-One thing can leave the machine, and only you can send it. It is a report of the values that
-Palette gave and that your release of strata does not know. You read the report, and you decide
-whether to send it. [`strata report`](../commands/report.md) prints it, and sends no request.
+One thing can leave the machine, and only you can choose to send it. It is a report of the values
+that Palette gave and that your release of strata does not know. You read the report, and you
+decide how to send it, by hand or with the setting `STRATA_REPORT`, which is off by default.
+[`strata report`](../commands/report.md) prints the report, and sends no request.
 
 ## Why a report exists
 
@@ -38,7 +39,7 @@ A report is the document `strata-report/1`. It has the fields `schema` and `unkn
 | `palette` | The Palette release, when strata knows it. A key cannot read the release, so an entry of the command line has none. |
 | `set` | The name of the closed set, as `strata schema` names its definition, such as `ProfileType`. |
 | `value` | The text of the value. Strata cuts a value of more than 64 characters. |
-| `route` | The template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It is never the path of a real request. |
+| `route` | The template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It is never the path of a real request. It starts with `/v1/`, and holds only letters, digits, and the characters `/`, `_`, `-`, `.`, `{`, and `}`. |
 | `status` | The status of a refusal of Palette. An entry for a value of a document has none. |
 | `errorCode` | The error code of a refusal of Palette. An entry for a value of a document has none. |
 | `count` | How many lines of the log are this entry. |
@@ -63,7 +64,7 @@ other field. `strata report` also refuses the whole log when one line is not val
 valid in three cases:
 
 - It has a field outside the list.
-- Its route is the path of a real request.
+- Its route is not a template of a route. The `route` field in the table above gives the rule.
 - Its value is not a short word.
 
 The command then stops with the error `log-invalid`, prints nothing, and marks nothing. See
@@ -73,7 +74,8 @@ The command then stops with the error `log-invalid`, prints nothing, and marks n
 
 `strata report --link` prints the address of a new issue of strata. The title and the body are
 filled in with the report as markdown. Open the address in a browser, read each field, and send
-the issue from your own account. Strata sends nothing itself.
+the issue from your own account. With the link, strata sends nothing itself. To send with no
+action of yours, see [Send the report by itself](#send-the-report-by-itself).
 
 When the report is too long for an address, `strata report --link` stops with a `usage` error. Run
 `strata report --format markdown`, and paste the text in a new issue.
@@ -88,7 +90,82 @@ you marked lines as sent. `strata report --sent` prints the report and marks its
 The next report then holds only the lines that came after. `strata report --all` holds each line
 again.
 
-Strata never marks a line by itself, because only you know that the report went out.
+Strata marks a line by itself in one case only: when the endpoint took a report that strata sent
+by the setting `STRATA_REPORT`. See [Send the report by itself](#send-the-report-by-itself).
+
+## Send the report by itself
+
+The send is off by default. Strata sends the report by itself only when you choose it, and nothing
+else starts a send. These settings decide. Set them in the environment or in `~/.palette.env`. The
+environment has priority. See [Settings](./settings.md).
+
+| Setting | What it does |
+| --- | --- |
+| `STRATA_REPORT=1` | Strata sends the report at the end of each run that wrote a line to the log. |
+| `STRATA_REPORT=0` | Strata sends nothing and asks nothing. |
+| `STRATA_REPORT_URL` | The address of the endpoint. The default is the endpoint of the maintainers, when your release names one. |
+
+Strata reads no other value of `STRATA_REPORT`. Any other value sends nothing, and strata prints a
+warning. The value `1`, and an answer of yes, also send nothing when your release names no endpoint and
+`STRATA_REPORT_URL` is not set. Strata prints a warning then too. A run of `strata preflight --offline` reads nothing
+from Palette, so it writes no line and sends nothing.
+
+### The question
+
+When no setting and no answer exist, a run in a terminal asks one question. It asks at the end of
+the first run that wrote a line to the log. The question starts with the words Keep strata
+informed. It names the page of the book that says what the send holds. It ends with `[y/N]`.
+
+The default answer is no. Strata keeps your answer in the file `strata-unknown.answer` of the
+[state folder](#the-files), and it never asks again. The setting `STRATA_REPORT` has priority over
+the answer. Delete the file to be asked again.
+
+Strata asks nothing in four cases. The variable `CI` has a value. Standard input or standard error
+is not a terminal. The run has `--quiet` or `STRATA_QUIET`. Or the release names no endpoint and
+`STRATA_REPORT_URL` is not set.
+
+### What a run sends
+
+At the end of a run that wrote a line, strata posts the report of the lines that you did not mark
+as sent. The report is the document `strata-report/1` that `strata report --json` prints, and
+nothing else. The post has one try and a timeout of 3 seconds. The run prints its output first, so
+a slow endpoint delays no output.
+
+```text
+{{#include ../output/unknown-value-send.txt}}
+```
+
+When the endpoint takes the report, strata marks the lines as sent. The endpoint takes 100 entries
+in a report, so a long log goes in more than one report. Strata marks the lines of each report that
+the endpoint took. The next report holds only the lines that came after:
+
+```text
+{{#include ../output/unknown-value-send-marked.txt}}
+```
+
+A send never changes the output or the exit code of a run. When a report fails, strata marks no
+line of it. Strata writes a warning, such as
+`strata: warning: could not send the report to <address>: <reason>`. `--quiet` hides the warning.
+The next send holds those lines again.
+
+## What the endpoint keeps
+
+The endpoint takes `strata-report/1` alone. It refuses a report with a field outside the list. It
+refuses a value of more than 64 characters, and a route that is not a template of a route. It
+refuses a body of more than 64 KiB. See [The endpoint of the report](../development/report-endpoint.md) for the service.
+
+The endpoint keeps these things, and no other:
+
+- **One issue of strata for each set and value.** The issue has the label `palette-drift`. It holds
+  the count of the lines and the count of the reports. It lists the releases of strata and of
+  Palette, the routes, and the refusals that the reports named. It holds no report. A later report of the same
+  value changes the issue, and opens no new one.
+- **A hash of the address of the sender, in memory, for one hour.** It limits the rate. The
+  process makes the salt of the hash when it starts, and writes the hash nowhere. A restart of the
+  service forgets it.
+
+The service writes no address and no report to its log. The maintainers also exclude the request
+log of the platform, because that log holds the address. An issue stays until a maintainer deletes it.
 
 ## The files
 
@@ -100,6 +177,7 @@ variable is not set. See [Settings](./settings.md).
 | `strata-unknown.jsonl` | The log: one line of `strata-unknown/1` for each new value in a run. |
 | `strata-unknown.sent` | The number of lines of the log that you marked as sent. |
 | `strata-unknown.hint` | The time of the last hint, as a time in RFC 3339. |
+| `strata-unknown.answer` | Your answer to the question of the send: `1` for yes, and `0` for no. |
 
 Delete a file to start again. A mark that is past the end of the log counts for nothing, so a new
 log is reported whole.
