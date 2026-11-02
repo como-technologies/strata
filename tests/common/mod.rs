@@ -813,6 +813,11 @@ pub fn repo_file(path: &str) -> String {
         .unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
+/// `text` with each run of white space as one space, as a line break can fall inside a sentence.
+pub fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// The command lines of the recipe `name` of the justfile, trimmed. A `{{variable}}` that the
 /// justfile sets to a string in single quotes, such as `rustdoc`, is replaced with its value.
 pub fn recipe(name: &str) -> Vec<String> {

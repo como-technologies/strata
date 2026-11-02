@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::common::{Run, fake_bin, path_with, recipe, repo_file};
+use crate::common::{Run, fake_bin, one_line, path_with, recipe, repo_file};
 
 /// A `gcloud` that logs each call to `$FAKE_GCLOUD/calls`, and answers as the file `$FAKE_GCLOUD/*`
 /// says: `no-secret` makes `secrets describe` fail, `no-registry` makes the registry missing, and
@@ -89,12 +89,13 @@ fn account_commands(text: &str) -> Vec<String> {
     commands
 }
 
-/// The words of `text` with one space between them, without the mark of a comment.
-fn words(text: &str) -> String {
-    text.split_whitespace()
-        .filter(|word| *word != "#")
-        .collect::<Vec<_>>()
-        .join(" ")
+/// `text` on one line, without the mark of a comment at the start of a line.
+fn plain(text: &str) -> String {
+    let lines: Vec<&str> = text
+        .lines()
+        .map(|line| line.trim_start().trim_start_matches('#'))
+        .collect();
+    one_line(&lines.join("\n"))
 }
 
 #[test]
@@ -353,7 +354,7 @@ fn the_header_and_the_page_give_the_same_commands_for_the_accounts_and_the_roles
         assert!(!command.contains("compute@developer"), "{command}");
     }
     // both texts say that the default compute account gets nothing
-    for text in [words(&script), words(&page)] {
+    for text in [plain(&script), plain(&page)] {
         assert!(
             text.contains("gets no role and no access to the secret"),
             "{text}"
