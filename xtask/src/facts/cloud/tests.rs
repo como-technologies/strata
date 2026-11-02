@@ -2,14 +2,17 @@
 //! with the rules has none.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 
 use serde_json::json;
+use strata_preflight::probe::{Backend, FixtureBackend};
 
 use super::super::check::check as faults_of;
 use super::super::model::{Fact, PaletteRoute};
 use super::super::sources::Sources;
 use super::{
-    Answer, CloudRule, CloudSources, command_words, documents, literals, read_code, read_rules,
+    Answer, CloudRule, CloudSources, answers_of, command_words, documents, literals, read_code,
+    read_rules,
 };
 
 /// A fact of a call that a rule sends, a table of zone ids, and a call that the lab cannot send.
@@ -981,4 +984,43 @@ fn a_route_of_palette_starts_with_a_method_and_a_table_has_no_route() {
         lacks: vec!["AvailabilityZones[].ZoneId".to_string()],
     });
     assert_one_fault(&sources, "a table has no route of Palette");
+}
+
+#[test]
+fn the_answers_of_a_fixture_are_the_answers_that_preflight_runs() {
+    // the output of `describe-x` has no `stderr`, so preflight reads no output of the fixture
+    let world = json!({"_exec": {
+        "aws ec2 describe-x --output json": {"exit": 0, "stdout": {"x": 1}},
+        "aws ec2 describe-y --output json": {"exit": 0, "stdout": {"y": 1}, "stderr": ""},
+        "aws ec2 describe-z --output json": {"exit": 1, "stdout": "no", "stderr": "failed"},
+    }});
+    let (backend, _) = FixtureBackend::split(world.clone());
+    let run = |command: &str| {
+        let argv: Vec<String> = command.split(' ').map(str::to_string).collect();
+        backend.exec(&argv, Duration::from_secs(1)).is_ok()
+    };
+    let read: Vec<String> = answers_of(world).into_iter().map(|a| a.command).collect();
+    for command in [
+        "aws ec2 describe-x --output json",
+        "aws ec2 describe-y --output json",
+    ] {
+        assert_eq!(
+            read.iter().any(|c| c == command),
+            run(command),
+            "{command}: the facts and preflight read one answer"
+        );
+    }
+}
+
+#[test]
+fn a_fixture_whose_every_output_is_complete_gives_each_document_that_a_command_printed() {
+    let world = json!({"_exec": {
+        "aws ec2 describe-y --output json": {"exit": 0, "stdout": {"y": 1}, "stderr": ""},
+        "aws ec2 describe-z --output json": {"exit": 1, "stdout": "no", "stderr": "failed"},
+        "aws ec2 describe-w --output json": {"exit": 0, "stdout": "text", "stderr": ""},
+    }});
+    let answers = answers_of(world);
+    assert_eq!(answers.len(), 1, "{answers:?}");
+    assert_eq!(answers[0].command, "aws ec2 describe-y --output json");
+    assert_eq!(answers[0].stdout, json!({"y": 1}));
 }

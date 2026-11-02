@@ -18,6 +18,7 @@ use strata::api::Method;
 use strata::closed_set::ClosedSet;
 use strata::model::cloud::Cloud;
 use strata_preflight::fixture;
+use strata_preflight::probe::FixtureBackend;
 use strata_preflight::rule::{Catalog, Check, ExecCheck, Rule, Tier};
 
 use super::model::{Fact, Kind};
@@ -178,7 +179,7 @@ pub fn read_rules(catalog: &Catalog) -> (CloudSources, Vec<String>) {
             .flatten();
         for path in fixtures {
             match fixture::load(path) {
-                Ok(world) => cloud.answers.extend(answers_of(&world)),
+                Ok(world) => cloud.answers.extend(answers_of(world)),
                 Err(e) => bad.push(format!("rule `{}`: {e}", rule.id)),
             }
         }
@@ -208,18 +209,18 @@ fn programs_of(rule: &Rule) -> String {
     programs.join("\n")
 }
 
-/// The answers under `_exec` in a fixture. A command that failed has no document to compare.
-fn answers_of(world: &Value) -> Vec<Answer> {
-    let Some(exec) = world.get("_exec").and_then(Value::as_object) else {
-        return Vec::new();
-    };
-    exec.iter()
-        .filter(|(_, output)| output.get("exit").and_then(Value::as_i64) == Some(0))
-        .filter_map(|(command, output)| {
-            Some(Answer {
-                command: command.clone(),
-                stdout: output.get("stdout").filter(|v| !v.is_string())?.clone(),
-            })
+/// The answers under `_exec` in a fixture, as the backend of a rule test reads them. A command that
+/// failed has no document to compare.
+fn answers_of(world: Value) -> Vec<Answer> {
+    let (backend, _) = FixtureBackend::split(world);
+    backend
+        .outputs()
+        .iter()
+        .filter(|(_, output)| output.exit == 0)
+        .filter(|(_, output)| !output.stdout.is_string())
+        .map(|(command, output)| Answer {
+            command: command.clone(),
+            stdout: output.stdout.clone(),
         })
         .collect()
 }
