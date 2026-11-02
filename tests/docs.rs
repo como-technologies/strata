@@ -2736,6 +2736,10 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_13_named_keeps_to_25_wo
             "preflight/src/probe/backend.rs",
             "True when the 4xx `status` is the answer of a route",
         ),
+        (
+            "preflight/src/probe/backend.rs",
+            "A 401 is the key and a 429 is the rate for each reader.",
+        ),
         ("src/closed_set/unknown.rs", "After the first note of a day"),
         (
             "src/closed_set/unknown.rs",

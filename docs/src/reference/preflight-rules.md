@@ -56,7 +56,7 @@ rules:
 | `what` | text | What goes wrong, and what Palette shows. |
 | `when` | a jq program | When the rule applies: `.before != null` for a change, `.clusterUid != null` for an existing cluster, `.account != null` for the cloud account. A rule that does not apply is `SKIP`. |
 | `check` | see below | The check. A rule with none is a row: `NOT CHECKED` with its `reproduce` lines. |
-| `fix` | `owner`, `text` | The fix for good: `palette`, `provider`, `lab`, `strata`, `operator`, or `none`. |
+| `fix` | `owner`, `text` | The fix for good. `owner` is one of six values, and the loader refuses another: `palette`, `provider`, `lab`, `strata`, `operator`, or `none`. | 
 | `reproduce` | commands | What a person runs to see the same thing. `{{ jq }}` templates over the world are filled in the report. |
 | `evidence` | `kind`, `ref`, `note` | `kind` is one of four values, and the loader refuses another. `run`: an issue or a run id. `source`: the source or the documentation of Palette shows it. `doc`: a page. `report`: a findings report and its finding. A `source` entry has a `note` that states what Palette does. It quotes no code of Palette, and names no file, function, or commit of it. Its `ref` is empty, or a file of this repository. |
 | `promotion` | `bar`, `runs` | For a preflight check: the bar its bounds met, `0.8`, and the run ids of the promotion. |
@@ -346,6 +346,7 @@ one makes the check `ERROR`.
   "accountKind": "aws",               the kind of cloud account of the engine
   "routeCloud": "edge-native",        the cloud type of the engine in a route
   "edgeHosts": [ {pool, host} ],      each edge host of each pool, with the poolConfig of its pool
+  "packFacts": { "<packUid>": ... }, what strata derives for each pack in packs
   "validateBody": { metadata, spec }  the body that the checks send to the validate route
 }
 ```
@@ -355,6 +356,12 @@ account of kind `aws`, `gke` one of kind `gcp`, and `aks` one of kind `azure`.
 `routeCloud` is the cloud type of the engine in a route of Palette: the engine
 itself, and `edge-native` for `edge`. A rule reads these two fields, and does not
 map the engine itself.
+
+`packFacts` holds three fields for each pack in `packs`, from the rules of strata for a pack
+that a profile pins. `supportsCloud` is true when the cloud types of the pack include
+`routeCloud`. A pack with no cloud type supports each cloud. It is `null` for a world with no
+engine. `state` is the `system_state` of the pack, or empty text. `retired` is true for
+`disabled` and `deleted`. A rule reads these fields, and does not write the rules again.
 
 `edgeHosts` is the list of the edge hosts of the entity, in the order of the
 pools. Each item has `pool`, the `poolConfig` of the pool, and `host`, the host.

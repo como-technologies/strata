@@ -17,7 +17,7 @@ $ strata preflight cluster.json --cloud aws --no-exec --json --quiet | jq '{summ
     "errors": 0,
     "readiness": 0.59375,
     "exitCode": 0,
-    "verdict": "OK: each counted check passed; 2 probe(s) failed, not counted"
+    "verdict": "OK: each counted check passed; 2 probes failed, not counted"
   },
   "scorecard": [
     {

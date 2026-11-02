@@ -199,6 +199,41 @@ After 0.26.0, the library of `strata-preflight` changes in these ways:
   entry with another 5xx is now an error, where 0.26.0 gave a `Response`: see
   [Release 0.27.0](#release-0270-changes-that-need-action).
 
+After 0.27.0, the library of `strata` changes in these ways:
+
+- `model::cloud::supports` and `model::pack_state::PackState::is_retired` are public.
+  `strata-preflight` calls them. Their results do not change.
+- `model::cluster_state::ClusterState::is_gone` is new. It is true for a document with the
+  state `Deleted` or with `metadata.isDeleted`. `ops` reads a record with the same rule.
+- `render::paint_state` is new. The terminal form of `consumers` and of `list` paints a state with
+  it. `consumers` painted `Running` green and `unknown` yellow. `list` painted `Running` green.
+  Now both paint a building state yellow, and `Error`, `Deleting`, and `Deleted` red. A text
+  without color does not change.
+
+After 0.27.0, the library of `strata-preflight` changes in these ways:
+
+- `probe::is_answer` has a second argument, `probe::Reader`. `Reader::Check` gives the result of
+  0.27.0. `world::unreadable(status)` is gone: `is_answer(status, Reader::World)` gives its result.
+  A 403 is an error for `Reader::Check`, and the world holds `null` for it.
+- `probe::palette_error_line` is gone. No code called it.
+  `strata::model::validation::PaletteRefusal::from_error_body` reads the same body.
+- `catalog::LEDGER` is private. `catalog::builtin_ledger()` gives the ledger of the binary as a
+  `Result<confidence::Ledger>`.
+- `rule::Fix::owner` is a `rule::Owner`, not `String`. A rule file with an owner that is not
+  `palette`, `provider`, `lab`, `strata`, `operator`, or `none` fails at load, with the
+  error `catalog`. The text of the report does not change.
+- `confidence::RunResult` implements `ClosedSet`. `report::Format` derives `clap::ValueEnum`,
+  and the command line reads it. The values and their texts do not change.
+- `rule::Rule::bar` is new. `run::DEFAULT_EVERY_SECS` and `run::DEFAULT_LIMIT_SECS` are new. They
+  hold the defaults of `--every` and `--limit`.
+- `report::Summary::applies` and `report::SectionScore::applies` are new. They count the checks
+  that ran and the checks that did not run.
+- `world::World::to_value` and `fixture::load` add the field `packFacts` to the world. See
+  [The world document](./preflight-rules.md#the-world-document). A rule or a custom probe can
+  read it.
+- `run::watch` ends when the document of the cluster has `metadata.isDeleted`, also when its state
+  is not `Deleted`. Before, it read until the limit.
+
 ## The documents
 
 Each JSON document has a schema id, such as `strata-snapshot/1`. The id changes
@@ -759,6 +794,19 @@ Palette lists the fields that these rules read, or a part of them:
 After 0.26.0, `instance-offering` sends the same query: `cpuGtEq=0&memoryGtEq=0`. The list holds the
 small types now: the types with fewer than 2 vCPUs or less than 4 GiB of memory. Before, the rule
 reported such a type as not in the list of the region.
+
+After 0.27.0, the text of `strata-preflight` agrees each noun with its count. The report said
+`1 probe(s) failed`, and now it says `1 probe failed` or `2 probes failed`. The same holds for the
+warnings, the notes, the errors, the readings of a watch, and the events of `--verbose`.
+`summary.verdict` in the JSON changes in the same way, for example `FAIL: 2 checks failed: a, b`.
+`--promotion` says `1 level disagrees with the ledger`, and `2 levels disagree with the ledger`.
+A script must read `summary.exitCode`, and not the text. The exit codes do not change.
+
+After 0.27.0, a watch of `strata-preflight` ends when the document of the cluster has
+`metadata.isDeleted`, also when `status.state` is not `Deleted`. Before, it read until the limit.
+The terminal form of `strata consumers` and `strata list` colors a state of a cluster as `--verbose`
+of `strata-preflight` does: green for `Running`, yellow for a build, and red for `Error`, `Deleting`,
+and `Deleted`.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later

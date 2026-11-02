@@ -168,9 +168,11 @@ pub fn palette_line(line: &str) -> String {
     key_line("palette", line)
 }
 
-/// `state` in the color of a cluster state: green when the cluster runs, yellow while Palette
-/// builds it or when strata could not read the state, red when the cluster is in error or goes.
-/// A state that strata does not know has no color.
+/// `state` in the color of a cluster state.
+///
+/// Green is a cluster that runs. Yellow is a cluster that Palette builds, or a state that strata
+/// could not read. Red is a cluster in error or one that goes. A state that strata does not know
+/// has no color.
 pub fn paint_state(paint: &Paint, state: &str) -> String {
     match ClusterState::parse(state) {
         Some(ClusterState::Running) => paint.green(state),

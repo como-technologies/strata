@@ -3,4 +3,4 @@ pr-comment: would post the preflight comment, or update the one that carries <!-
 <!-- strata-preflight -->
 ## strata-preflight: aws cluster `ledger`
 
-**OK: each counted check passed** — source `cluster.json`, Palette release not given, tiers static. 4 ran: 4 passed, 0 failed, 0 probe(s) failed; 16 did not run, 24 not checked; readiness **20%** (4 of 20 checks passed).
+**OK: each counted check passed** — source `cluster.json`, Palette release not given, tiers static. 4 ran: 4 passed, 0 failed, 0 probes failed; 16 did not run, 24 not checked; readiness **20%** (4 of 20 checks passed).

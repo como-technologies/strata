@@ -724,6 +724,7 @@ what it answered.
     `ran` and no `answer` of its own.
   - `reproduce[]`: the lines a person runs to see the same thing.
   - `fix` with `owner` and `text`; `evidence[]` with `kind`, `ref`, `note`.
+    `owner` is `palette`, `provider`, `lab`, `strata`, `operator`, or `none`.
     `kind` is `run`, `source`, `doc`, or `report`. An entry with an empty
     reference has no `ref`, and an entry with no note has no `note`.
   - `confidence`, when the ledger has runs of the rule on this engine: `catch`,

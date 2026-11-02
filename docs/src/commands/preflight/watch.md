@@ -3,7 +3,9 @@
 `--watch cluster:UID` reads the cluster, its summary, and its events every
 `--every` seconds, and judges each watch rule. It ends at the first counted
 failure, with the event that shows the fault. It also ends when the cluster is
-`Running` with each counted rule passed, or at `--limit`. A counted failure is a
+`Running` with each counted rule passed, or at `--limit`. It ends too when the
+cluster is in the state `Error`, or when Palette deletes it: the state is `Deleted`,
+or `metadata.isDeleted` is true. A counted failure is a
 rule of severity `fail` at the preflight level, or any failed probe with
 `--strict`. Any other failed probe, or a warning, is in the report, and the
 watch continues.

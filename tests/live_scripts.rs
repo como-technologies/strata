@@ -6954,7 +6954,7 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
     stage.strata(
         "preflight build-fault.json --cloud aws --tier static,palette --no-exec --strict --quiet",
         1,
-        "FAIL: 1 check(s) failed: account-missing\n",
+        "FAIL: 1 check failed: account-missing\n",
     );
 
     let (_, steps) = stage.run("loop.sh", &["3"]);

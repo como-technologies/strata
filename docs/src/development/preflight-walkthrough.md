@@ -62,7 +62,7 @@ Two rules fail: `worker-cpu-floor` and `palette-validate`, both with Palette's
 own words, "A minimum allocation of '4.1' CPU cores is required across all
 worker nodes. Current allocation : '4' CPU cores". Under each, `ran: POST
 /v1/spectroclusters/aws/validate -> HTTP 200` and a `reproduce:` line with the
-`curl` that shows the same answer. The last line is `FAIL: 2 check(s) failed`,
+`curl` that shows the same answer. The last line is `FAIL: 2 checks failed`,
 and the exit is `1`: with `--strict` a failed probe stops a pipeline. Through
 the provider, this fault comes after a full apply of 20 minutes.
 

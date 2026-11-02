@@ -87,9 +87,11 @@ pub enum Reader {
 }
 
 /// True when the 4xx `status` is the answer of a route for `reader`: the route read the request
-/// and refused what it says. A 401 is the key and a 429 is the rate for each reader. The run stops
-/// with the error that names it, because the status says nothing about the object. A 403 depends
-/// on the reader. Another 4xx is the answer of Palette to the request.
+/// and refused what it says.
+///
+/// A 401 is the key and a 429 is the rate for each reader. The run stops with the error that names
+/// it, because the status says nothing about the object. A 403 depends on the reader. Another 4xx
+/// is the answer of Palette to the request.
 pub fn is_answer(status: u16, reader: Reader) -> bool {
     let key_or_rate = match reader {
         Reader::Check => matches!(status, 401 | 403 | 429),
