@@ -1,5 +1,7 @@
 //! The document that the contract run writes: `strata-contract/1`.
 
+use std::collections::BTreeSet;
+
 use serde::Serialize;
 
 use crate::facts::Kind;
@@ -43,7 +45,8 @@ pub enum DifferenceKind {
 pub struct Difference {
     /// What differs.
     pub kind: DifferenceKind,
-    /// The field, as the fact writes it, or `status` for a status.
+    /// The field, as the fact writes it, or `status` for a status. For a request with alternatives, a
+    /// field has the choice and a colon in front.
     pub path: String,
     /// What the stand-in has: the types, or the status. For a name, the names that strata needs
     /// and that the answer lacks.
@@ -77,7 +80,8 @@ pub struct Entry {
     /// What the run found.
     pub outcome: Outcome,
     /// Why the run skipped the fact, or could not check it. It also names the values of a table that
-    /// the account cannot check, when it can check the others.
+    /// the account cannot check, when it can check the others. For a request with alternatives, it
+    /// lists the reason of each choice that is not the same, with the choice in front.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     /// Each difference, when the outcome is `differs`.
@@ -129,6 +133,20 @@ impl Summary {
                 .sum(),
         }
     }
+
+    /// The line that the run prints: the count of the facts and of each outcome. The filter
+    /// `examples/live/contract-summary.jq` writes the same text from the document, for the scripts.
+    pub fn line(&self) -> String {
+        format!(
+            "{} facts: {} same, {} differ, {} skipped, {} could not be checked, {} unknown values",
+            self.same + self.differs + self.skipped + self.error,
+            self.same,
+            self.differs,
+            self.skipped,
+            self.error,
+            self.unknown_values
+        )
+    }
 }
 
 /// The latest release of a repository that Palette is built from, and whether it is new.
@@ -176,6 +194,23 @@ impl Contract {
     /// Add `entries` after the entries that the document holds, and count them in the summary.
     pub fn add(&mut self, entries: Vec<Entry>) {
         self.facts.extend(entries);
+        self.summary = Summary::of(&self.facts);
+    }
+
+    /// Turn each skipped entry of `floor` into an error, and count the entries again.
+    ///
+    /// `floor` holds the ids of the facts that a window with a cluster must check. The run skipped
+    /// such a fact, so the cover fell: the entry says so, and the exit code is 2.
+    pub fn hold_floor(&mut self, floor: &BTreeSet<&str>) {
+        for entry in &mut self.facts {
+            if entry.outcome == Outcome::Skipped && floor.contains(entry.id.as_str()) {
+                let why = entry.reason.take().unwrap_or_default();
+                entry.outcome = Outcome::Error;
+                entry.reason = Some(format!(
+                    "the window holds a cluster, so the run must check this fact, and it skipped it: {why}"
+                ));
+            }
+        }
         self.summary = Summary::of(&self.facts);
     }
 

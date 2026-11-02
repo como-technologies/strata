@@ -116,7 +116,7 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
 
 /// The routes that belong to the tenant: each path under them is not an operation of the project
 /// scope. The saved tag filters are such routes, for the listing and for one filter.
-const TENANT_ROUTES: &[&str] = &["/v1/filters"];
+pub(crate) const TENANT_ROUTES: &[&str] = &["/v1/filters"];
 
 /// The refusal of a request that names a project on a route of [`TENANT_ROUTES`]: HTTP 403 and the
 /// code [`PROJECT_SCOPE_CODE`], with each query. `None` for another request.

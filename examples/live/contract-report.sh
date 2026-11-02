@@ -174,7 +174,6 @@ open_or_update() {
 
 # ---- the unknown values ------------------------------------------------------------------------
 values_page="https://github.com/${repo:-OWNER/REPO}/blob/main/docs/src/development/facts.md#what-to-do-with-a-new-value"
-unknown=0
 
 # values_issues ID ENTRY: for each closed set of the fact ID that holds a value which neither the
 # fact nor the stand-in names, open or update one issue. For each set that holds no such value now,
@@ -186,7 +185,6 @@ values_issues() {
   while IFS= read -r set_entry <&4; do
     field=$(jq -r .set <<<"$set_entry")
     current+=("$field")
-    unknown=$((unknown + $(jq '.values | length' <<<"$set_entry")))
     {
       echo "$prefix$field -->"
       jq -r --arg checked "$checked" --arg target "$target" --arg page "$values_page" --arg id "$id" \
@@ -256,7 +254,6 @@ cloud_body() {
   ' <<<"$1"
 }
 
-differs=0 same=0 skipped=0 errors=0
 while IFS= read -r entry <&3; do
   id=$(jq -r .id <<<"$entry")
   marker="<!-- strata-contract: $id -->"
@@ -265,7 +262,6 @@ while IFS= read -r entry <&3; do
   values_issues "$id" "$entry"
   case "$(jq -r .outcome <<<"$entry")" in
     differs)
-      differs=$((differs + 1))
       if [ "$kind" = cloud ]; then
         { echo "$marker"; cloud_body "$entry"; } > "$work/body.md"
         title="Cloud drift: \`$id\` differs from the fixtures of the rules"
@@ -276,7 +272,6 @@ while IFS= read -r entry <&3; do
       open_or_update "$marker" "$title" "$work/body.md" "$id"
       ;;
     same)
-      same=$((same + 1))
       if [ -n "$dry" ]; then
         note "dry run: closes the open issue for $id, if any"
         continue
@@ -287,8 +282,6 @@ while IFS= read -r entry <&3; do
       host close_issue "$number" "\`$id\` is the same as $against again (checked $checked)."
       actions+=("closed #$number for $id")
       ;;
-    skipped) skipped=$((skipped + 1)) ;;
-    *) errors=$((errors + 1)) ;;
   esac
 done 3< <(jq -c '.facts[]' "$document")
 use_label request
@@ -320,7 +313,9 @@ EOF
 done 3< <(jq -c '.releases[]? | select(.new == true)' "$document")
 release_errors=$(jq '[.releases[]? | select(.error != null)] | length' "$document")
 
-line="$((differs + same + skipped + errors)) facts: $same same, $differs differ, $skipped skipped, $errors could not be checked, $unknown unknown values"
+# the document holds the count of each outcome in `summary`, so the script counts nothing again
+read -r differs errors unknown < <(jq -r '.summary | [.differs, .error, (.unknownValues // 0)] | @tsv' "$document")
+line=$(jq -r -f "$here/contract-summary.jq" "$document")
 [ "$news" -eq 0 ] || line="$line; $news new release"
 for a in "${actions[@]+"${actions[@]}"}"; do
   line="$line; $a"

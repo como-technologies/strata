@@ -1,6 +1,11 @@
-//! The scans of a directory that the tools of the book share.
+//! The scans of a directory and of a Rust file that the tools of the book share.
 
 use std::path::{Path, PathBuf};
+
+use proc_macro2::Span;
+use syn::spanned::Spanned;
+use syn::visit::{self, Visit};
+use syn::{Attribute, ImplItemFn, Item, TraitItemFn, parse_file};
 
 /// The book, from the root of the repository.
 const BOOK: &str = "docs/src";
@@ -62,6 +67,95 @@ pub fn pages(dir: &Path) -> Vec<PathBuf> {
     files_under(dir, "md")
 }
 
+/// True when `attrs` mark the item as test code: `#[test]` or `#[cfg(test)]`.
+pub fn is_test_code(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("test")
+            || (attr.path().is_ident("cfg")
+                && attr
+                    .parse_args::<syn::Path>()
+                    .is_ok_and(|path| path.is_ident("test")))
+    })
+}
+
+/// The attributes of `item`. An item of a kind that carries none, such as a bare macro call, gives
+/// an empty list.
+fn attrs_of(item: &Item) -> &[Attribute] {
+    match item {
+        Item::Const(i) => &i.attrs,
+        Item::Enum(i) => &i.attrs,
+        Item::Fn(i) => &i.attrs,
+        Item::Impl(i) => &i.attrs,
+        Item::Macro(i) => &i.attrs,
+        Item::Mod(i) => &i.attrs,
+        Item::Static(i) => &i.attrs,
+        Item::Struct(i) => &i.attrs,
+        Item::Trait(i) => &i.attrs,
+        Item::Type(i) => &i.attrs,
+        Item::Union(i) => &i.attrs,
+        Item::Use(i) => &i.attrs,
+        _ => &[],
+    }
+}
+
+/// The lines, first and last, that each item of test code takes. A line number starts at 1.
+#[derive(Default)]
+struct TestLines(Vec<(usize, usize)>);
+
+impl TestLines {
+    fn note(&mut self, span: Span) {
+        self.0.push((span.start().line, span.end().line));
+    }
+
+    fn holds(&self, line: usize) -> bool {
+        self.0
+            .iter()
+            .any(|(first, last)| (*first..=*last).contains(&line))
+    }
+}
+
+impl<'ast> Visit<'ast> for TestLines {
+    fn visit_item(&mut self, item: &'ast Item) {
+        if is_test_code(attrs_of(item)) {
+            self.note(item.span());
+        } else {
+            visit::visit_item(self, item);
+        }
+    }
+
+    fn visit_impl_item_fn(&mut self, item: &'ast ImplItemFn) {
+        if is_test_code(&item.attrs) {
+            self.note(item.span());
+        } else {
+            visit::visit_impl_item_fn(self, item);
+        }
+    }
+
+    fn visit_trait_item_fn(&mut self, item: &'ast TraitItemFn) {
+        if is_test_code(&item.attrs) {
+            self.note(item.span());
+        } else {
+            visit::visit_trait_item_fn(self, item);
+        }
+    }
+}
+
+/// The lines of the Rust file `text` that are no comment and no test code. An item for the tests
+/// (`#[cfg(test)]`, or `#[test]`) is out at any place of the file: an inline module, a line
+/// `mod tests;`, or a function. The code after such an item stays. A file that is not Rust is an
+/// error.
+pub fn code_without_tests(text: &str) -> Result<String, syn::Error> {
+    let mut tests = TestLines::default();
+    tests.visit_file(&parse_file(text)?);
+    Ok(text
+        .lines()
+        .enumerate()
+        .filter(|(index, line)| !tests.holds(index + 1) && !line.trim_start().starts_with("//"))
+        .map(|(_, line)| line)
+        .collect::<Vec<_>>()
+        .join("\n"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -105,5 +199,34 @@ mod tests {
         let missing = temp.path().join("missing");
         assert!(files_with_ext(&missing, "md").is_empty());
         assert!(pages(&missing).is_empty());
+    }
+
+    #[test]
+    fn the_code_without_tests_stops_at_no_module_and_keeps_the_code_after_it() {
+        let text = "fn code() {}\n\n#[cfg(test)]\nmod other_tests {\n    fn t() {}\n}\n\n#[cfg(test)]\nmod tests;\nfn later() {}\n";
+        assert_eq!(
+            code_without_tests(text).unwrap(),
+            "fn code() {}\n\n\nfn later() {}"
+        );
+    }
+
+    #[test]
+    fn the_code_without_tests_drops_each_item_for_the_tests_and_each_comment() {
+        let text = "// a comment\nfn code() {}\n#[test]\nfn a_test() {}\n#[cfg(test)]\nimpl Call {\n    fn helper() {}\n}\nstruct Thing;\nimpl Thing {\n    #[cfg(test)]\n    fn only_in_tests(&self) {}\n    fn method(&self) {}\n}\n/// docs\nfn last() {}\n";
+        assert_eq!(
+            code_without_tests(text).unwrap(),
+            "fn code() {}\nstruct Thing;\nimpl Thing {\n    fn method(&self) {}\n}\nfn last() {}"
+        );
+    }
+
+    #[test]
+    fn a_module_that_is_not_for_the_tests_is_code() {
+        let text = "mod tests {\n    fn kept() {}\n}\n#[cfg(not(test))]\nfn also_kept() {}\n";
+        assert_eq!(code_without_tests(text).unwrap(), text.trim_end());
+    }
+
+    #[test]
+    fn a_text_that_is_no_rust_is_an_error() {
+        assert!(code_without_tests("fn {").is_err());
     }
 }

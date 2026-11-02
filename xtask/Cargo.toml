@@ -21,6 +21,11 @@ serde_json = "1"
 serde_yaml = "0.9"
 # The run reads the latest release of two repositories from GitHub, with the HTTP client of strata.
 ureq = { version = "3", features = ["json"] }
+# The size check and the scan of the code read the sources with a parser, and not with a pattern. A
+# line number of a token needs `span-locations`, which a parser outside a macro does not give by
+# default.
+proc-macro2 = { version = "1", features = ["span-locations"] }
+syn = { version = "2", features = ["full", "visit"] }
 # The order of versions comes from strata, the one parse of a version: see "Types and data" in
 # docs/src/development/code.md.
 strata = { path = ".." }
@@ -33,10 +38,6 @@ tempfile = "3"
 # A test compares the answer of the stand-in for the endpoint of the report with the answer of the
 # real service, so the stand-in cannot go stale.
 strata-report-endpoint = { path = "../report-endpoint" }
-# The size check reads each function of the sources with a parser, and not with a pattern. A line
-# number of a token needs `span-locations`, which a parser outside a macro does not give by default.
-proc-macro2 = { version = "1", features = ["span-locations"] }
-syn = { version = "2", features = ["full", "visit"] }
 
 [lints.rust]
 unsafe_code = "forbid"

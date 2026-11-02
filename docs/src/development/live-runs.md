@@ -556,7 +556,8 @@ requests only, to the tenant that `~/.palette.env` names. It has no checks. It i
 The run also sends the read-only calls of the tool of a cloud, such as `aws` and `gcloud`, in the
 lab account. `AWS_PROFILE` and [the lab values](./facts.md#the-lab-values) select that account.
 A call needs the objects that the lab values name, such as the project and the role.
-`--no-cloud` sends no call of a cloud.
+`--no-cloud` sends no call of a cloud. `--with-cluster` says that the tenant holds a cluster: the run
+then makes an error of each skipped fact of the floor.
 
 A tenant with no profile and no cluster skips most of the facts. Run `just live-profiles` first to
 give the run profiles to read, and `just live-up` to give it a cluster.
@@ -571,6 +572,8 @@ give the run profiles to read, and `just live-up` to give it a cluster.
 | `contract.json` | #540: the fact `aws-policies-per-role-limit` is `same`: the default quota of managed policies for a role is 20. The fact `aws-policies-per-role-quota` is `same`: the lab account gives the quota in `us-east-1` with the shape that the fixtures of `iam-role-policy-quota` hold. |
 | `contract.json` | #390, #393: the whole run on the real tenant, with the cloud calls and the lab account. It finds 120 facts: 47 are `same`, none `differs`, 67 are skipped, and 6 cannot be checked. [The facts page](./facts.md#what-the-run-compares) lists the cases where the run skips a fact. |
 | `contract.json` | #567: with a cluster up that had no repave, the fact `cluster-repave-status` is `skipped`. The reason names the code `ResourceNotFound`, which Palette gives for that cluster with HTTP 404. The run finds 120 facts: 61 are `same`, none `differs`, 59 are skipped, none cannot be checked, and 0 values are unknown. `just contract-report --dry-run runs/contract.json` exits 0 and opens no issue. |
+| `contract.json` | #576, no result yet: with a cluster up, `just live-contract --with-cluster` has no skipped fact of the floor. [The floor](./facts.md#the-floor-of-a-window-with-a-cluster) lists the rule. The fact `cluster-repave-status` stays skipped for a cluster with no repave, because it names `ResourceNotFound`. The exit code is 0 or 1, never 2. |
+| `contract.json` | #576, no result yet: the fact `validate-security-groups` is `same` when the first region of the account holds no VPC. The run takes the first region that holds one. The entry of `validate-instance-types` is `same` for the choice `aws`, and its reason says that the choices `gcp` and `azure` have no source. |
 
 ## contract-profiles.sh
 

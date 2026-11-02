@@ -19,7 +19,8 @@ die() { echo "$script: $*" >&2; exit 2; }
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 units=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
-data=${STRATA_CONTRACT_DIR:-$HOME/.local/share/strata-contract}
+# shellcheck source=deploy/contract/folder.sh
+. "$here/folder.sh"
 names=(strata-contract.service strata-contract.timer)
 
 case "${1:-}" in
@@ -49,7 +50,7 @@ case "${1:-}" in
     command -v systemctl > /dev/null || die "systemctl is not installed"
     systemctl --user list-timers strata-contract.timer --no-pager || true
     if [ -f "$data/last.json" ] && command -v jq > /dev/null; then
-      jq -r '"the last run: \(.checkedAt), \(.summary.same) same, \(.summary.differs) differ, \(.summary.skipped) skipped, \(.summary.error) could not be checked, \(.summary.unknownValues // 0) unknown values"' "$data/last.json"
+      echo "the last run: $(jq -r .checkedAt "$data/last.json"), $(jq -r -f "$repo/examples/live/contract-summary.jq" "$data/last.json")"
     else
       echo "$script: no result in $data yet"
     fi
