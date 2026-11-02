@@ -1,5 +1,8 @@
 use super::*;
-use crate::routes::{cloud_account_route, cloud_config_route, cluster_route};
+use crate::routes::{
+    CLUSTER_LISTING, cloud_account_route, cloud_config_route, cluster_route,
+    cluster_variables_route,
+};
 
 #[test]
 fn a_world_of_a_cluster_reads_its_cloud_type_as_the_route_of_its_cloud_config_does() {
@@ -25,7 +28,7 @@ fn a_world_of_a_cluster_reads_its_cloud_type_as_the_route_of_its_cloud_config_do
 fn a_world_of_a_cluster_by_name_reads_the_cluster_that_the_name_names() {
     let api = strata::api::MemoryApi::new()
         .with(
-            "/v1/dashboard/spectroclusters/meta",
+            CLUSTER_LISTING,
             json!([{"metadata": {"name": "barney", "uid": "c1"}}]),
         )
         .with(
@@ -51,25 +54,25 @@ fn a_world_of_a_cluster_tries_an_id_of_24_hex_digits_as_a_uid_and_then_as_a_name
     // the id is a uid: one request for the document, and no listing
     let by_uid = strata::api::MemoryApi::new()
         .with(cluster_route(id), document(id))
-        .with(format!("/v1/spectroclusters/{id}/variables"), json!([]))
+        .with(cluster_variables_route(id), json!([]))
         .with(cloud_config_route("aws", "cc1"), config.clone());
     let world = World::from_cluster(&Palette::new(&by_uid), id, &Progress::silent()).unwrap();
     assert_eq!(world.cluster_uid.as_deref(), Some(id));
     assert_eq!(by_uid.calls(&cluster_route(id)), 1);
-    assert_eq!(by_uid.calls("/v1/dashboard/spectroclusters/meta"), 0);
+    assert_eq!(by_uid.calls(CLUSTER_LISTING), 0);
     // the id is a name: the uid route answers 404, and the listing gives the uid
     let by_name = strata::api::MemoryApi::new()
         .with(
-            "/v1/dashboard/spectroclusters/meta",
+            CLUSTER_LISTING,
             json!([{"metadata": {"name": id, "uid": "c1"}}]),
         )
         .with(cluster_route("c1"), document("c1"))
-        .with("/v1/spectroclusters/c1/variables", json!([]))
+        .with(cluster_variables_route("c1"), json!([]))
         .with(cloud_config_route("aws", "cc1"), config);
     let world = World::from_cluster(&Palette::new(&by_name), id, &Progress::silent()).unwrap();
     assert_eq!(world.cluster_uid.as_deref(), Some("c1"));
     assert_eq!(by_name.calls(&cluster_route(id)), 1);
-    assert_eq!(by_name.calls("/v1/dashboard/spectroclusters/meta"), 1);
+    assert_eq!(by_name.calls(CLUSTER_LISTING), 1);
 }
 
 #[test]
@@ -432,7 +435,7 @@ fn cluster_api(variables: serde_json::Value) -> strata::api::MemoryApi {
                         "clusterProfileTemplates": [{"uid": "p1", "packs": []}, {"uid": "p2", "packs": []}]}}),
             )
             .with(cloud_config_route("aws", "cc1"), json!({"spec": {}}))
-            .with("/v1/spectroclusters/c1/variables", variables)
+            .with(cluster_variables_route("c1"), variables)
 }
 
 #[test]
@@ -460,7 +463,7 @@ fn the_entity_of_a_cluster_carries_the_variable_values_of_each_profile() {
 #[test]
 fn a_cluster_on_a_palette_with_no_variables_route_sends_no_variable() {
     let api = cluster_api(json!([]));
-    let older = cluster_api(json!([])).failing("/v1/spectroclusters/c1/variables", 405, "{}");
+    let older = cluster_api(json!([])).failing(cluster_variables_route("c1"), 405, "{}");
     for api in [api, older] {
         let world = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap();
         assert_eq!(world.entity["spec"]["profiles"][0]["variables"], json!([]));
@@ -469,7 +472,7 @@ fn a_cluster_on_a_palette_with_no_variables_route_sends_no_variable() {
 
 #[test]
 fn a_variables_route_that_fails_stops_the_world_of_a_cluster() {
-    let api = cluster_api(json!([])).failing("/v1/spectroclusters/c1/variables", 500, "boom");
+    let api = cluster_api(json!([])).failing(cluster_variables_route("c1"), 500, "boom");
     let err = World::from_cluster(&Palette::new(api), "c1", &Progress::silent()).unwrap_err();
     assert!(err.to_string().contains("HTTP 500"), "{err}");
 }

@@ -304,6 +304,7 @@ mod tests {
             assert_eq!(paint_state(&Paint::off(), state), state, "{state}");
         }
     }
+
     #[test]
     fn a_long_value_shows_its_start_with_a_mark_and_its_length() {
         let long = Value::from("x".repeat(130));

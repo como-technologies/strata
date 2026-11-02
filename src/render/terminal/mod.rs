@@ -33,7 +33,7 @@ use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
 use crate::text::dash;
 use lines::{op_line, packdetail, packline, variable_line};
-use table::{column_widths, matched, table_line};
+use table::{column_widths, matched, painted_text, table_line};
 
 mod lines;
 mod table;
@@ -529,7 +529,7 @@ fn list_clusters(out: &mut String, p: &Paint, l: &Listing, clusters: &[ListedClu
         out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
             0 => p.bold(cell),
             1 => matched(p, cell, l.cluster.as_deref()),
-            2 => paint_state(p, cell),
+            2 => painted_text(cell, |state| paint_state(p, state)),
             _ => cell.to_string(),
         }));
         let applied = applied_rows(c);
@@ -669,6 +669,58 @@ mod tests {
         // text that is not ASCII is left alone, because lowercasing can change its length
         assert_eq!(matched(&on, "pack-ß", Some("ß")), "pack-ß");
         assert_eq!(matched(&on, "cilium", Some("CILIUM")), on.byellow("cilium"));
+    }
+
+    #[test]
+    fn the_table_of_clusters_paints_the_state_of_each_row_and_not_its_padding() {
+        let on = Paint::resolve(ColorMode::Always, Stream::Stdout);
+        let listing = Listing {
+            schema: crate::ops::LIST_SCHEMA.to_string(),
+            tool: crate::snapshot::Tool::current(),
+            generated_at: "2026-11-02T00:00:00Z".to_string(),
+            project_uid: String::new(),
+            project_name: String::new(),
+            pack: None,
+            cluster: None,
+            profiles: None,
+            clusters: None,
+            includes_virtual: None,
+            projects: None,
+            query: None,
+            resolved: None,
+            query_filter: None,
+            filters: None,
+        };
+        let clusters: Vec<ListedCluster> = ["Running", "Provisioning", "Error"]
+            .into_iter()
+            .map(|state| {
+                serde_json::from_value(serde_json::json!({
+                    "ref": format!("cluster:{state}"),
+                    "name": state,
+                    "uid": state,
+                    "state": state,
+                    "cloudType": "aws",
+                    "projectUid": "",
+                }))
+                .unwrap()
+            })
+            .collect();
+        let mut out = String::new();
+        list_clusters(&mut out, &on, &listing, &clusters);
+        for (state, painted) in [
+            ("Running", on.green("Running")),
+            ("Provisioning", on.yellow("Provisioning")),
+            ("Error", on.red("Error")),
+        ] {
+            // the state is painted whatever the width of its column, and its padding is not
+            let padding = " ".repeat("Provisioning".len() - state.len());
+            let cell = format!("{painted}{padding}  aws");
+            assert!(out.contains(&cell), "{state}: {out:?}");
+        }
+        let mut plain = String::new();
+        list_clusters(&mut plain, &Paint::off(), &listing, &clusters);
+        assert!(!plain.contains('\x1b'), "{plain:?}");
+        assert!(plain.contains("Running       aws"), "{plain:?}");
     }
 
     #[test]
