@@ -245,6 +245,11 @@ After 0.27.0, `render::Format` has `ALL`, `as_str`, and `from_text`, from one ta
 `strata-preflight`, the jq programs of a rule can call the new filter `semver_numbers`. It reads
 a text as a version, as `reference::version::numbers` does.
 
+After 0.27.0, two items are new, and both only add to the API. `reference::version::line` gives the
+release line of a version: its first numbers, joined by dots, such as `4.10` for `4.10.3-rc.1`.
+`probe::FixtureBackend::outputs` in `strata-preflight` gives the output of each command that a
+fixture holds under `_exec`, as `exec` answers them.
+
 ## The documents
 
 Each JSON document has a schema id, such as `strata-snapshot/1`. The id changes

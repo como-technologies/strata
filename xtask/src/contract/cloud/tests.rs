@@ -2,7 +2,6 @@
 //! of a fact, and the run of the list of the repository against the fixtures of the rules.
 
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use serde_json::{Value, json};
 use strata::api::MemoryApi;
@@ -58,7 +57,7 @@ const FACTS: &str = r#"
 "#;
 
 fn facts() -> Vec<Fact> {
-    serde_yaml::from_str(FACTS).expect("the facts are YAML")
+    crate::facts::from_text(FACTS)
 }
 
 /// The lab of an account in one region and one project.
@@ -179,6 +178,15 @@ fn a_value_that_the_lab_lacks_is_named_and_a_prefix_that_the_lab_lacks_is_empty(
     // a variable with no text gives nothing, so the next source answers
     let blank = lab_of(&[("STRATA_CONTRACT_REGION", ""), ("AWS_REGION", "us-east-2")]);
     assert_eq!(words(&blank, &["{region}"]).unwrap(), ["us-east-2"]);
+}
+
+#[test]
+fn a_name_with_a_capital_letter_is_a_name_of_the_call_as_it_is_of_a_request() {
+    let lab = lab_of(&[("STRATA_CONTRACT_REGION", "eu-west-1")]);
+    assert_eq!(words(&lab, &["{Region}"]).unwrap(), ["eu-west-1"]);
+    // the word with no name stays as it is, and so does a group that the list refuses
+    assert_eq!(words(&lab, &["{gcp-region}"]).unwrap(), ["{gcp-region}"]);
+    assert_eq!(words(&lab, &["{Other}"]), Err("Other".to_string()));
 }
 
 #[test]
@@ -453,7 +461,7 @@ fn a_zone_id_that_the_account_cannot_check_leaves_the_exit_code_at_0_when_the_ru
 
 #[test]
 fn only_the_tables_of_the_zone_ids_are_tables_of_an_account() {
-    let facts = facts::load(&repo()).expect("the list of the facts");
+    let facts = facts::load(&crate::repository()).expect("the list of the facts");
     let of_account: Vec<&str> = facts
         .iter()
         .filter(|f| f.table.as_ref().is_some_and(|t| t.per_account))
@@ -584,10 +592,6 @@ fn the_kind_of_a_difference_in_a_table_is_table() {
 
 // ---- the list of the repository against the fixtures of the rules -------------------------------
 
-fn repo() -> std::path::PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
-}
-
 /// The calls of the list that the run sends: a fact of the kind cloud with a call and no table.
 fn readings(facts: &[Fact]) -> Vec<&Fact> {
     facts
@@ -630,7 +634,7 @@ fn full_lab() -> Lab {
 #[test]
 fn the_fixtures_of_the_rules_answer_the_call_of_each_fact_of_the_list_in_the_shape_the_fact_reads()
 {
-    let facts = facts::load(&repo()).unwrap();
+    let facts = facts::load(&crate::repository()).unwrap();
     let rules = facts::cloud_rules().unwrap();
     let mut bad = Vec::new();
     for fact in readings(&facts) {
@@ -653,7 +657,7 @@ fn the_fixtures_of_the_rules_answer_the_call_of_each_fact_of_the_list_in_the_sha
 
 #[test]
 fn the_run_of_the_list_against_the_fixtures_of_the_rules_finds_no_difference() {
-    let facts = facts::load(&repo()).unwrap();
+    let facts = facts::load(&crate::repository()).unwrap();
     let rules = facts::cloud_rules().unwrap();
     let backend = fixtures_backend(&facts, &rules, |_, document| document);
     let only: Vec<Fact> = facts
@@ -693,7 +697,7 @@ fn the_run_of_the_list_against_the_fixtures_of_the_rules_finds_no_difference() {
 /// default when it cannot read the quota of the account, so the table must hold what AWS gives.
 #[test]
 fn the_default_quota_of_the_managed_policies_for_a_role_is_20_and_the_run_finds_it_the_same() {
-    let facts = facts::load(&repo()).unwrap();
+    let facts = facts::load(&crate::repository()).unwrap();
     let rules = facts::cloud_rules().unwrap();
     let find = |id: &str| facts.iter().find(|f| f.id == id).unwrap();
     let limit = find("aws-policies-per-role-limit");
@@ -723,7 +727,7 @@ fn the_default_quota_of_the_managed_policies_for_a_role_is_20_and_the_run_finds_
 /// lacks the key is no difference.
 #[test]
 fn a_subnet_with_no_secondary_range_is_no_difference_when_gcloud_omits_the_key() {
-    let facts = facts::load(&repo()).unwrap();
+    let facts = facts::load(&crate::repository()).unwrap();
     let rules = facts::cloud_rules().unwrap();
     let subnets = facts.iter().find(|f| f.id == "gcp-subnets").unwrap();
     let backend = fixtures_backend(&facts, &rules, |fact, mut document| {
@@ -741,7 +745,7 @@ fn a_subnet_with_no_secondary_range_is_no_difference_when_gcloud_omits_the_key()
 
 #[test]
 fn a_field_that_changes_in_one_answer_makes_the_fact_differ_and_no_other_fact() {
-    let facts = facts::load(&repo()).unwrap();
+    let facts = facts::load(&crate::repository()).unwrap();
     let rules = facts::cloud_rules().unwrap();
     let backend = fixtures_backend(&facts, &rules, |fact, mut document| {
         if fact.id == "aws-ec2-vcpu-quota" {

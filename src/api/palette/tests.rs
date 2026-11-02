@@ -93,7 +93,7 @@ fn the_registry_listings_read_the_metadata_and_the_summary_of_a_kind() {
         MemoryApi::new()
             .with("/v1/registries/metadata", json!({"items": [1]}))
             .with("/v1/registries/pack/summary", json!({"items": [2]}))
-            .with("/v1/registries/oci/summary", json!({"items": [3]})),
+            .with(OCI_SUMMARY_TEMPLATE, json!({"items": [3]})),
     );
     assert_eq!(p.registry_metadata().unwrap()["items"], json!([1]));
     assert_eq!(
@@ -695,4 +695,14 @@ fn a_listing_by_offset_ends_at_a_page_that_starts_with_the_item_the_page_before_
         .unwrap();
     assert_eq!(asked.get(), 2, "the second page repeats the first");
     assert_eq!(seen.len(), 2, "the repeated page gives no item");
+}
+
+#[test]
+fn each_template_of_a_route_that_gives_a_closed_set_starts_from_its_collection() {
+    assert_eq!(PROFILE_TEMPLATE, format!("{PROFILES}/{{uid}}"));
+    assert_eq!(CLUSTER_TEMPLATE, format!("{CLUSTERS}/{{uid}}"));
+    assert_eq!(
+        OCI_SUMMARY_TEMPLATE,
+        route(REGISTRIES, &[RegistryKind::Oci.as_str(), "summary"])
+    );
 }

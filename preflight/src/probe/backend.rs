@@ -385,6 +385,13 @@ impl FixtureBackend {
             fixture,
         )
     }
+
+    /// The output of each command that the fixture holds under `_exec`, by the command as one text
+    /// with a space between the arguments. [`Backend::exec`] answers from the same map, so a
+    /// caller that reads the answers of a fixture reads what a rule test runs.
+    pub fn outputs(&self) -> &BTreeMap<String, ExecOutput> {
+        &self.exec
+    }
 }
 
 impl Backend for FixtureBackend {

@@ -98,7 +98,7 @@ facts:
     reads:
       fields: [Quota.Value]
     palette:
-      route: GET /v1/clouds/aws/regions/{region}/instancetypes?cpuGtEq=0&memoryGtEq=0
+      fact: validate-instance-types
       lacks: [Quota.Value]
     pages:
       - internals/preflight.md#the-calls-of-the-clouds
@@ -141,7 +141,7 @@ facts:
         - Subnets[].AvailableIpAddressCount
         - Subnets[].Tags[].Key
     palette:
-      route: GET /v1/clouds/aws/regions/{region}/vpcs
+      fact: validate-vpcs
       lacks:
         - Subnets[].AvailableIpAddressCount
         - Subnets[].Tags[].Key
@@ -163,7 +163,7 @@ facts:
         - RouteTables[].Routes[].NatGatewayId
         - RouteTables[].Routes[].State
     palette:
-      route: GET /v1/clouds/aws/regions/{region}/vpcs
+      fact: validate-vpcs
       lacks:
         - RouteTables[].RouteTableId
         - RouteTables[].Associations[].SubnetId
@@ -297,7 +297,7 @@ facts:
         - quotas[].limit
         - quotas[].usage
     palette:
-      route: GET /v1/clouds/gcp/regions/{region}/instancetypes?cpuGtEq=0&memoryGtEq=0
+      fact: validate-instance-types
       lacks:
         - quotas[].metric
         - quotas[].limit
@@ -391,7 +391,7 @@ facts:
         - limit
         - currentValue
     palette:
-      route: GET /v1/clouds/azure/regions/{region}/instancetypes?cpuGtEq=0&memoryGtEq=0
+      fact: validate-instance-types
       lacks:
         - name.value
         - limit

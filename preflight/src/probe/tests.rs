@@ -1017,3 +1017,23 @@ fn each_rule_that_sends_the_cluster_create_to_the_validate_route_sends_it_where_
         "the catalog has {create_routes} rules that validate the create"
     );
 }
+
+#[test]
+fn a_fixture_gives_the_outputs_that_it_answers_a_command_with() {
+    let (b, _) = fixture(json!({"_exec": {
+        "aws ec2 describe-y --output json": {"exit": 0, "stdout": {"y": 1}, "stderr": ""},
+    }}));
+    let outputs = b.outputs();
+    assert_eq!(
+        outputs.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["aws ec2 describe-y --output json"]
+    );
+    let argv: Vec<String> = ["aws", "ec2", "describe-y", "--output", "json"]
+        .map(String::from)
+        .into();
+    let ran = b.exec(&argv, Duration::from_secs(1)).unwrap();
+    assert_eq!(&ran, &outputs["aws ec2 describe-y --output json"]);
+    // an output that lacks a field is no output: the backend drops the whole `_exec`
+    let (b, _) = fixture(json!({"_exec": {"aws x": {"exit": 0, "stdout": {}}}}));
+    assert!(b.outputs().is_empty());
+}

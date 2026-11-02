@@ -198,13 +198,8 @@ enum Standing {
     Later,
 }
 
-/// The release line of `v`: its first two numbers, so `4.10` for `4.10.3-rc.1`. None when `v` does
-/// not parse as a version.
-fn line_of(v: &str) -> Option<String> {
-    let numbers = version::numbers(v)?;
-    let [major, minor] = [0, 1].map(|i| numbers.get(i).copied().unwrap_or(0));
-    Some(format!("{major}.{minor}"))
-}
+/// The count of numbers in the release line of a version: `4.10` for `4.10.3-rc.1`.
+const LINE_NUMBERS: usize = 2;
 
 /// Place `run`, the release of a run, against `want`, the release that a report names.
 ///
@@ -213,7 +208,10 @@ fn line_of(v: &str) -> Option<String> {
 /// same release only as the same text. A run with no release, and a text that no order places,
 /// are older: they prove nothing for the release that the report names.
 fn standing(run: &str, want: &str) -> Standing {
-    match (line_of(run), line_of(want)) {
+    match (
+        version::line(run, LINE_NUMBERS),
+        version::line(want, LINE_NUMBERS),
+    ) {
         (Some(r), Some(w)) => match version::compare(&r, &w) {
             Ordering::Less => Standing::Older,
             Ordering::Equal => Standing::Same,

@@ -11,7 +11,8 @@
 //! also lists each value of a closed set that neither the fact nor the stand-in names: strata does
 //! not know such a value. It compares shapes, and never the values of two tenants. A fact can name
 //! the error codes that mean the tenant has no such object. The run skips the fact for an HTTP 404
-//! with one of them.
+//! with one of them. A request with alternatives, such as `{aws,gcp,azure}`, goes out once for each
+//! choice, and the entry of the fact joins the results.
 //!
 //! The result is the document `strata-contract/1`, with one entry for each fact. The run changes
 //! nothing in the tenant: it sends GET requests only. The [`cloud`] module adds the entry of each
@@ -24,7 +25,7 @@ use serde_json::Value;
 use strata::api::{Method, PaletteApi};
 use strata_preflight::probe::{Reader, is_answer};
 
-use crate::facts::{Fact, Kind};
+use crate::facts::{Fact, Kind, expand};
 
 mod cloud;
 mod command;
@@ -70,18 +71,17 @@ pub fn run<A: PaletteApi>(
     }
 }
 
-/// The entry of one fact.
-fn check<A: PaletteApi>(
-    probe: &Probe<A>,
-    facts: &[Fact],
-    stand_in: &StandIn,
+/// An entry of a fact of the kind `request` with the outcome `outcome`.
+fn entry_of(
     fact: &Fact,
+    outcome: Outcome,
+    reason: Option<String>,
+    differences: Vec<Difference>,
 ) -> Entry {
-    let request = fact.request.clone().unwrap_or_default();
-    let entry = |outcome, reason: Option<String>, differences| Entry {
+    Entry {
         id: fact.id.clone(),
         kind: Kind::Request,
-        request: request.clone(),
+        request: fact.request.clone().unwrap_or_default(),
         outcome,
         reason,
         differences,
@@ -89,8 +89,20 @@ fn check<A: PaletteApi>(
         live: fact.live.clone(),
         pages: fact.pages.clone(),
         rules: Vec::new(),
-    };
-    let skipped = |reason: &str| entry(Outcome::Skipped, Some(reason.to_string()), Vec::new());
+    }
+}
+
+/// The entry of one fact.
+///
+/// A request with alternatives, such as `{aws,gcp}`, goes out once for each choice. The entry of
+/// the fact joins the entries of its requests: see [`merge`].
+fn check<A: PaletteApi>(
+    probe: &Probe<A>,
+    facts: &[Fact],
+    stand_in: &StandIn,
+    fact: &Fact,
+) -> Entry {
+    let skipped = |reason: &str| entry_of(fact, Outcome::Skipped, Some(reason.to_string()), vec![]);
     let Some((method, template)) = fact.parts() else {
         return skipped("the fact states no request");
     };
@@ -106,31 +118,53 @@ fn check<A: PaletteApi>(
     if documents.is_empty() {
         return skipped("the stand-in serves no document for it");
     }
+    let parts = expand(template)
+        .into_iter()
+        .map(|(choices, text)| {
+            (
+                choices.join(","),
+                check_request(probe, facts, fact, &documents, &text),
+            )
+        })
+        .collect();
+    merge(parts).unwrap_or_else(|| skipped("the fact states no request"))
+}
+
+/// The entry of the request `template` of `fact`, which has no alternative.
+fn check_request<A: PaletteApi>(
+    probe: &Probe<A>,
+    facts: &[Fact],
+    fact: &Fact,
+    documents: &[&Value],
+    template: &str,
+) -> Entry {
+    let entry = |outcome, reason, differences| entry_of(fact, outcome, reason, differences);
     let path = match subject::find(probe, facts, template) {
         Subject::Path(path) => path,
-        Subject::Missing(why) => return skipped(&why),
+        Subject::Missing(why) => return entry(Outcome::Skipped, Some(why), Vec::new()),
         Subject::Failed(failure) => {
             return entry(Outcome::Error, Some(failure.message), Vec::new());
         }
     };
     match probe.get(fact.scope, &path).as_ref() {
         Ok(found) => {
-            let differences = compare(fact, &documents, found);
+            let differences = compare(fact, documents, found);
             let outcome = if differences.is_empty() {
                 Outcome::Same
             } else {
                 Outcome::Differs
             };
             Entry {
-                unknown_values: unknown_values(fact, &documents, found),
+                unknown_values: unknown_values(fact, documents, found),
                 ..entry(outcome, None, differences)
             }
         }
         Err(failure) => {
             if let Some(code) = failure.absent(&fact.absent_codes) {
-                return skipped(&format!(
+                let reason = format!(
                     "the tenant has no such object: Palette answers HTTP 404 with the code `{code}`"
-                ));
+                );
+                return entry(Outcome::Skipped, Some(reason), Vec::new());
             }
             match failure
                 .status
@@ -150,6 +184,61 @@ fn check<A: PaletteApi>(
             }
         }
     }
+}
+
+/// How much an outcome counts when the requests of one fact disagree: a difference, then an error
+/// that stops the check, then a request that is the same. A skipped request counts least, because
+/// the other requests still show the fact.
+fn rank(outcome: Outcome) -> u8 {
+    match outcome {
+        Outcome::Differs => 3,
+        Outcome::Error => 2,
+        Outcome::Same => 1,
+        Outcome::Skipped => 0,
+    }
+}
+
+/// The entry of a fact from the entry of each of its requests, each with its choice of the
+/// alternatives. None when there is no request.
+///
+/// The outcome is that of the request that counts most: see [`rank`]. A fact with one request has
+/// that entry as it is. With more, a difference names its choice, and the reason lists the reason
+/// of each request that is not the same, so a skipped GCP request shows beside a same AWS request.
+fn merge(parts: Vec<(String, Entry)>) -> Option<Entry> {
+    if let [(_, only)] = parts.as_slice() {
+        return Some(only.clone());
+    }
+    let best = parts.iter().map(|(_, e)| rank(e.outcome)).max()?;
+    let mut merged = parts
+        .iter()
+        .find(|(_, e)| rank(e.outcome) == best)?
+        .1
+        .clone();
+    let named = |label: &str, text: &str| format!("{label}: {text}");
+    merged.differences = parts
+        .iter()
+        .flat_map(|(label, e)| {
+            e.differences.iter().map(move |d| Difference {
+                path: if d.kind == DifferenceKind::Status {
+                    d.path.clone()
+                } else {
+                    format!("{label}: {}", d.path)
+                },
+                ..d.clone()
+            })
+        })
+        .collect();
+    merged.unknown_values = parts
+        .iter()
+        .flat_map(|(_, e)| e.unknown_values.clone())
+        .collect();
+    let reasons: Vec<String> = parts
+        .iter()
+        .filter_map(|(label, e)| Some(named(label, e.reason.as_deref()?)))
+        .collect();
+    merged.reason =
+        (merged.outcome != Outcome::Differs && !reasons.is_empty()).then(|| reasons.join("; "));
+    Some(merged)
 }
 
 /// Each difference between the answer `found` of the tenant and the documents `expected` of the

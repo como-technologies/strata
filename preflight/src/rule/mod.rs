@@ -649,12 +649,11 @@ fn parse_range(text: &str) -> Option<Vec<(&str, &str)>> {
 /// is a release line: only the numbers that it names count, so `4.10.3` equals `4.10`.
 fn compare_to_bound(release: &str, bound: &str) -> Option<Ordering> {
     let named = version::numbers(bound)?.len();
-    let numbers = version::numbers(release)?;
+    let line = version::line(release, named)?;
     if named == 3 {
         return Some(version::compare(release, bound));
     }
-    let line: Vec<String> = numbers.iter().take(named).map(u64::to_string).collect();
-    Some(version::compare(&line.join("."), bound))
+    Some(version::compare(&line, bound))
 }
 
 /// True when `release` is in `range`. A release that does not parse is in each range, so the
