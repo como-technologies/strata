@@ -567,10 +567,10 @@ give the run profiles to read, and `just live-up` to give it a cluster.
 | `contract.json` | #393: for each fact of the kind `cloud`, the shape of the answer, and the values of its table, against the fixtures of the rules. Each call of AWS that the lab sends is `same`. The six calls of GCP cannot be checked, because `gcloud` needs a login on the machine. The calls for a GKE cluster and for an image are skipped, because the lab values name none. |
 | `contract.json` | #539: the fact `tag-filter-listing` is `same`, because the run sends it with no project. The fact `tag-filter` is skipped, because the tenant holds no saved filter. The fact `audit-log` is `same` for a page that lacks a kind that strata acts on and for a kind that strata ignores. The facts `validate-aws-regions` and `validate-security-groups` are `same`, because the run sends the account, the region, and the VPC of the tenant. A zone id that the lab account lacks gives no difference. The facts `eks-refused-zone-id-us-west-1` and `eks-refused-zone-id-ca-central-1` are skipped. The entry says that the account cannot check the value. |
 | `contract.json` | #543: the fact `validate-key-pairs` is `same`, because the run sends the account of the tenant in the query `cloudAccountUid`. |
-| `contract.json` | #554 (no result yet: the last contract run came before this item): the fact `profile-document` is `same` for the first profile of the listing. It has no unknown value for the type of the profile or for the provider of a pack ref. A type or a provider that the fact does not name is an unknown value. The fact `cloud-config` reads the cloud type of a cluster as strata does. A cluster that names its cloud type in the kind of its cloud config only still gives a subject. |
+| `contract.json` | #554: with a cluster up, the fact `profile-document` is `same` for the first profile of the listing. The run has 0 unknown values, also for the type of the profile and for the provider of a pack ref. A type or a provider that the fact does not name is an unknown value. The fact `cloud-config` reads the cloud type of a cluster as strata does. A cluster that names its cloud type in the kind of its cloud config only still gives a subject. |
 | `contract.json` | #540: the fact `aws-policies-per-role-limit` is `same`: the default quota of managed policies for a role is 20. The fact `aws-policies-per-role-quota` is `same`: the lab account gives the quota in `us-east-1` with the shape that the fixtures of `iam-role-policy-quota` hold. |
 | `contract.json` | #390, #393: the whole run on the real tenant, with the cloud calls and the lab account. It finds 120 facts: 47 are `same`, none `differs`, 67 are skipped, and 6 cannot be checked. [The facts page](./facts.md#what-the-run-compares) lists the cases where the run skips a fact. |
-| `contract.json` | #567 (no result yet: the last contract run came before this item): with a cluster up that had no repave, the fact `cluster-repave-status` is `skipped`. The reason names the code `ResourceNotFound`, which Palette gives for that cluster with HTTP 404. No fact differs. |
+| `contract.json` | #567: with a cluster up that had no repave, the fact `cluster-repave-status` is `skipped`. The reason names the code `ResourceNotFound`, which Palette gives for that cluster with HTTP 404. The run finds 120 facts: 61 are `same`, none `differs`, 59 are skipped, none cannot be checked, and 0 values are unknown. `just contract-report --dry-run runs/contract.json` exits 0 and opens no issue. |
 
 ## contract-profiles.sh
 
@@ -599,11 +599,11 @@ read the issues, the script stops with exit `2` before the first send.
 
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `send-1`, `send-1-says`, `send-1-marked` | 0 | #397: a run with `STRATA_REPORT=1` exits as a run with no send, says that it sent the report, and marks the line as sent. No result yet: the lead runs this check again with the fix of #569. |
-| `issue`, `issue-new` | 0 | #397: one issue of the label `palette-drift` holds the marker of the value, and its first send gives the count 1. The endpoint answers 202 and then writes the issue, so the script waits for it. No result yet: the lead runs this check again with the fix of #569. |
-| `send-2`, `issue-2` | 0 | #397: a second run posts the report again. Still one issue holds the value, and its count grew by one. No result yet: the lead runs this check again with the fix of #569. |
-| `repeat-1` | 0 | #552: the endpoint takes a report with a key and answers 202 before it writes the issue. The service keeps the CPU after the answer, so the issue changes. No result yet: the lead runs this check again with the fix of #569. |
-| `repeat-2`, `repeat-count` | 0 | #552: the same report with the same key gets 200 and `duplicate`, and the issue counts the report one time. No result yet: the lead runs this check again with the fix of #569. |
+| `send-1`, `send-1-says`, `send-1-marked` | 0 | #397: a run with `STRATA_REPORT=1` exits as a run with no send, says that it sent the report, and marks the line as sent. Each check passes. |
+| `issue`, `issue-new` | 0 | #397: one issue of the label `palette-drift` holds the marker of the value, and its first send gives the count 1. The endpoint answers 202 and then writes the issue, so the script waits for it. The check `issue` passes. The check `issue-new` runs only when the first send opens the issue. In the run of the fix, the issue was open already. The run that opened it had 3 lines after its three counted reports, so its first send counted 1. |
+| `send-2`, `issue-2` | 0 | #397: a second run posts the report again. Still one issue holds the value, and its count grew by one. Each check passes. |
+| `repeat-1` | 0 | #552: the endpoint takes a report with a key and answers 202 before it writes the issue. The service keeps the CPU after the answer, so the issue changes. The check passes: the endpoint answers 202 before it writes. |
+| `repeat-2`, `repeat-count` | 0 | #552: the same report with the same key gets 200 and `duplicate`, and the issue counts the report one time. Each check passes: the same report with the same key counts one time. |
 
 ## pending.sh
 
@@ -1102,7 +1102,7 @@ cluster A.
 | `label`, `prod`, `prod-row` | 0 | #80: with the label `env=prod`, `--tag env=prod` finds cluster A alone |
 | `none` | 0 | #80: a query that no cluster meets finds none |
 | `filter-create`, `filters`, `by-filter` | 0 | #80: `list filters` names a saved tag filter and what it selects, and `list clusters --filter` finds cluster A |
-| `filters-project`, `filters-project-says`, `filter-project`, `filter-project-says` | 0 | #539: the saved filters belong to the tenant. `api.sh get-status` asks the listing with `filterType=tag`, and the filter by its uid, with the project of cluster A. Palette answers HTTP 403 with the code `ProjectUidIsNotEmpty` for both. No result yet: no live window has run `just live-fleet` since the checks came in. |
+| `filters-project`, `filters-project-says`, `filter-project`, `filter-project-says` | 0 | #539: the saved filters belong to the tenant. `api.sh get-status` asks the listing with `filterType=tag`, and the filter by its uid, with the project of cluster A. Palette answers HTTP 403 with the code `ProjectUidIsNotEmpty` for both. Each check passes. |
 | `set`, `set-files`, `set-record` | 0 | #80: `snapshot filter:<name> --dir --prune` writes one record, of cluster A, with the label. It removes the record of a cluster that left the set. It leaves a file that is not a record |
 | `set-tag` | 0 | #80: `snapshot tag:env=prod --dir` does the same |
 | `set-verify` | 0 | #80: the record that the set wrote verifies |
@@ -1285,7 +1285,7 @@ needs the example at its baseline with cluster A.
 | `incident-list`, `incident-list-has` | 0 | #81: `list --pack` finds the release among the versions that carry the CSI pack |
 | `incident-consumers`, `incident-compare` | 1, 0 | #81: cluster A runs the release, and exactly its content |
 | `retire` | 0 | #81: nothing runs the next version: the retire gate is open |
-| `report-log` | 0 | #396: `strata report` reads the log of the unknown values that this run wrote. The script sets `XDG_STATE_HOME` under the run directory, so the log holds this run alone. The command exits `0` when each line is a line of `strata-unknown/1`. No result yet: no live window has run this check. |
+| `report-log` | 0 | #396: `strata report` reads the log of the unknown values that this run wrote. The script sets `XDG_STATE_HOME` under the run directory, so the log holds this run alone. The command exits `0` when each line is a line of `strata-unknown/1`. The check passes. |
 | `baseline` | 0 | the example is at its baseline |
 
 ## version-states.sh

@@ -194,13 +194,18 @@ not deploy it, because a session has no account of Google.
    two reports, waits for the issue, and checks that one issue holds both. It also posts one report
    twice with one key, and checks that the issue counts it one time. Close the issue with a comment
    after you read it.
-6. Make sure of three points that a test cannot show. Each point is a fact of Cloud Run:
-   - The last entry of `X-Forwarded-For` is the address of the client. Send 11 reports with another
-     first entry each time. The 11th must get 429.
-   - Cloud Run takes IPv6 for the service. Run `curl -6` against the address. If the connection
-     fails, the rule of the /64 network has no effect: state that on this page.
-   - Cloud Run buffers a slow body. Run `curl --limit-rate 100` with a report. Note when the answer
-     comes, and state the result on this page.
+6. Know three points of Cloud Run that a test cannot show. A live run showed each one:
+   - **The last entry of `X-Forwarded-For` is the address of the client.** Valid reports with
+     another forged first entry each count as one sender. The service refuses them at the limit
+     with 429. A control with no forged header also gets 429. A bad body spends no limit, so the
+     check needs valid reports.
+   - **IPv6.** The service publishes IPv6 addresses, so a sender can reach it on IPv6. The rule of
+     the /64 network has an effect. The lab machine has no IPv6 route, and `curl -6` exits 7. So no
+     live request shows the rule, and the tests of `network_of` show it. A failed `curl -6` shows
+     a fault of the route of the machine, not a fault of the service.
+   - **A slow body.** 12 connections, above the 8 requests that the service takes at a time, each
+     sent a body one byte in a second. A quick request beside them took 0.20 s. So a slow body
+     holds up nothing that a sender sees. No run shows where the front end buffers.
 7. Name the address in the release: set the constant `ENDPOINT` in
    `src/closed_set/unknown/send.rs` to the address that the script printed. The release names the
    endpoint now, so a user sets no address. A new address needs a new release.

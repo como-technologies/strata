@@ -2119,6 +2119,39 @@ fn the_pages_of_the_report_keep_to_the_style_rules() {
     );
 }
 
+/// Step 6 of the deploy states the three points of Cloud Run as facts that a live run showed. The
+/// lab machine has no IPv6 route, so a failed `curl -6` shows a fault of the route of the machine,
+/// and the page says so.
+#[test]
+fn step_6_of_the_deploy_states_the_three_results_of_cloud_run() {
+    let page = one_line(&read(&docs().join("development/report-endpoint.md")));
+    let from = page
+        .find("6. Know three points of Cloud Run")
+        .expect("step 6");
+    let step = &page[from..from + page[from..].find("7. Name the address").expect("step 7")];
+    for needle in [
+        "**The last entry of `X-Forwarded-For` is the address of the client.** Valid reports with another forged first entry each count as one sender.",
+        "The service refuses them at the limit with 429. A control with no forged header also gets 429.",
+        "A bad body spends no limit, so the check needs valid reports.",
+        "**IPv6.** The service publishes IPv6 addresses, so a sender can reach it on IPv6. The rule of the /64 network has an effect.",
+        "The lab machine has no IPv6 route, and `curl -6` exits 7. So no live request shows the rule, and the tests of `network_of` show it.",
+        "A failed `curl -6` shows a fault of the route of the machine, not a fault of the service.",
+        "**A slow body.** 12 connections, above the 8 requests that the service takes at a time, each sent a body one byte in a second. A quick request beside them took 0.20 s.",
+        "So a slow body holds up nothing that a sender sees. No run shows where the front end buffers.",
+    ] {
+        assert!(step.contains(needle), "step 6 lacks {needle:?}: {step}");
+    }
+    for old in [
+        "If the connection fails",
+        "has no effect",
+        "Cloud Run buffers a slow body",
+    ] {
+        assert!(!step.contains(old), "step 6 still says {old:?}");
+    }
+    // the page names the 8 requests at a time that the deploy sets
+    assert!(repo_file("deploy/report/deploy.sh").contains("--concurrency 8"));
+}
+
 /// `strata report` adds two changes that break code outside the crate: a required method of the
 /// public trait `Renderer`, and a variant of `Error`, which is not `#[non_exhaustive]`. The section
 /// of release 0.27.0 sits above the one of release 0.26.0. The opening of the page links to all
@@ -2362,14 +2395,17 @@ fn each_row_of_live_runs_with_no_result_gives_its_reason() {
 }
 
 /// The rows that the end-of-wave review named for #390, #391, #530, #393, #539, #543, #540, #531,
-/// and #515 have their results. The rows that wait for a new run against the endpoint of the
-/// report, the live run of the fleet, and the other engines of the plan say what they wait for.
+/// #515, #554, and #567 have their results. So have the rows of the send of the report, the
+/// listing of the filters, and the log of the unknown values. The rows of the other engines of the
+/// plan say what they wait for.
 #[test]
 fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for() {
     let page = read(&docs().join("development/live-runs.md"));
     let none = |row: &str| !row.to_lowercase().contains("no result yet");
     let contract = section(&page, "## contract.sh", Some("\n## "));
-    for item in ["#390", "#393", "#530", "#539", "#540", "#543"] {
+    for item in [
+        "#390", "#393", "#530", "#539", "#540", "#543", "#554", "#567",
+    ] {
         let rows: Vec<&str> = contract
             .lines()
             .filter(|l| l.starts_with("| `contract.json` | ") && l.contains(item))
@@ -2403,15 +2439,14 @@ fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for()
         assert!(none(row), "{row}");
     }
 
-    let waits = |section_name: &str, anchor: &str, reason: &str| {
+    let has_result = |section_name: &str, anchor: &str| {
         let part = section(&page, section_name, Some("\n## "));
         let rows: Vec<&str> = part.lines().filter(|l| l.contains(anchor)).collect();
         assert!(!rows.is_empty(), "{section_name} has no row for {anchor}");
         for row in rows {
-            assert!(row.contains(reason), "{row}");
+            assert!(none(row), "{row}");
         }
     };
-    let endpoint = "No result yet: the lead runs this check again with the fix of #569.";
     for check in [
         "`send-1`",
         "`issue`",
@@ -2419,13 +2454,10 @@ fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for()
         "`repeat-1`",
         "`repeat-2`",
     ] {
-        waits("## report-send.sh", &format!("| {check}"), endpoint);
+        has_result("## report-send.sh", &format!("| {check}"));
     }
-    waits(
-        "## fleet.sh",
-        "| `filters-project`",
-        "No result yet: no live window has run `just live-fleet`",
-    );
+    has_result("## fleet.sh", "| `filters-project`");
+    has_result("## loop.sh", "| `report-log`");
     assert!(
         one_line(plan).contains(
             "The other engines have no result yet: the live window ran the plan on AWS alone."
@@ -2841,7 +2873,7 @@ fn loop_sh_has_the_check_report_log_and_the_book_has_its_row() {
         .find(|l| l.starts_with("| `report-log` |"))
         .expect("the section of loop.sh has no row for report-log");
     assert!(
-        row.contains("| 0 | #396:") && row.contains("No result yet:"),
+        row.contains("| 0 | #396:") && !row.to_lowercase().contains("no result yet"),
         "{row}"
     );
 }
