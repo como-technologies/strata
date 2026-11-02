@@ -159,8 +159,10 @@ For each fact of the kind `request`, the run does these steps:
 1. It reads the documents that the stand-in serves for the routes of `stand_in`. Each chapter of
    the book builds a tenant, and the run reads the documents of every chapter.
 2. It finds an object in the tenant. The first entry of a listing is the object. The `{uid}` of
-   a cluster comes from the cluster listing, and the `{configUid}` of a cloud config comes from the
-   document of that cluster. A value of the query comes from a listing too: the `{cloudAccountUid}`
+   a cluster comes from the cluster listing. The `{configUid}` and the `{cloudType}` of a cloud
+   config come from the document of that cluster. The run reads the cloud type with the rule of
+   strata: the kind of `spec.cloudConfigRef`, and else `spec.cloudType`. A value of the query
+   comes from a listing too: the `{cloudAccountUid}`
    of the regions route comes from `GET /v1/cloudaccounts/aws`. The security groups take the first
    account, the first region of that account, and the first VPC of that region.
 3. It sends the request with its query, and compares the answer with the documents of the stand-in.
@@ -198,6 +200,10 @@ The run skips a fact in these cases:
 - No source gives an object for a placeholder. `cloud-account` and the edge hosts are such facts.
 
 A skipped fact names its live checks in the entry. Run them in a live window to prove the fact.
+
+The run needs a stand-in with at least one document. When the directory of `--stand-in` is not
+there, or holds no document, the run stops with an error and the exit code 2. A run that checked no
+fact exits with 2 too, because it found no difference when it looked at nothing.
 
 ### The query of a request
 
@@ -288,6 +294,16 @@ An unknown value is no difference. The status and the types can be the same, so 
 `same`. The entry lists the values for each field, and the run counts each value one time in the
 summary. A new value makes the exit code 1.
 
+Each read of strata that notes a value of a closed set has such a list in a GET fact. The check of
+the list makes sure of it. It counts the calls of `opt_set` in the code of strata, and compares
+them with the reads that `xtask/src/facts/sets.rs` names. For each read, the fact must list the
+field, and each value that it lists must be a value of the set in strata. So the run counts the
+value that the note of a user names. A new read of strata needs a line in that table and a list in
+a fact.
+
+The run reads one object for each fact, such as the first profile of the listing. It finds a new
+value when that object holds it.
+
 The library of strata finds the same values in the run of a user, and writes a note. See
 [The note for a value that Palette gives](../reference/compatibility.md#the-note-for-a-value-that-palette-gives).
 The contract run asks one real tenant on a schedule. The note comes from the tenants of the users,
@@ -316,9 +332,9 @@ The run exits with one of these codes:
 
 - 0: each fact that the run checked is the same, and no value is unknown.
 - 1: a fact differs, or a value is unknown.
-- 2: the run could not check a fact or a release.
+- 2: the run could not check a fact or a release, or checked no fact.
 
-A skipped fact does not change the code.
+A skipped fact does not change the code when the run checked another fact.
 
 ### The releases
 
@@ -363,8 +379,10 @@ them in this way:
   closes it.
 
 The script exits with 0 when no fact differs, no value is unknown, and no release is new. It exits
-with 1 when it handled a fact that differs, an unknown value, or a new release. It exits with 2
-when a fact or a release could not be checked, or when a call to GitHub failed.
+with 1 when it handled a fact that differs, an unknown value, or a new release. It exits with 3
+when a fact or a release could not be checked: it handled the issues first, and the code says so.
+It exits with 2 when a call to GitHub failed, or the document is not a `strata-contract/1`
+document.
 
 Each body links this page in the repository that the report writes to. That repository is `--repo`,
 or the repository that GitHub names for the checkout. A dry run calls no host, so it takes the
@@ -457,9 +475,11 @@ The job keeps its results in `~/.local/share/strata-contract/`, or in `STRATA_CO
 - `state.json` holds the tags of the releases that the last run saw.
 
 The run writes the new tags to a copy, `runs/<UTC time>/state.json`. The job moves the copy onto
-`state.json` only when the report handled the issues: the report exits with 0 or 1. When the
-report fails, the old tags stay. The next run then notes the new tag again, and the report opens
-the issue of the release. A report that fails never loses the issue of a release.
+`state.json` when the report handled the issues: the report exits with 0, 1, or 3. When the
+report fails with 2, the old tags stay. The next run then notes the new tag again, and the report
+opens the issue of the release. A report that fails never loses the issue of a release. A report
+that exits with 3 handled the issues, so the tags stay new. A person can close the issue of a
+release, and the next week does not open it again.
 
 The job exits with 2, and the service shows a failure, when the run could not check a fact or a
 release. It also exits with 2 when the report could not write an issue. A fact that differs, or a

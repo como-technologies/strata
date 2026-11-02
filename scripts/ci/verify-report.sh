@@ -56,10 +56,11 @@ github_create_label() {
   quietly gh label create "$1" --repo "$repo" --color d93f0b \
     --description "$label_description"
 }
-# prints the new issue's number
+# prints the new issue's number. A script that sets $milestone opens the issue in it; this script
+# sets none, and gh opens no issue when the milestone does not exist.
 github_open_issue() {
   local url
-  url=$(gh issue create --repo "$repo" --title "$1" --body-file "$2" --label "$label")
+  url=$(gh issue create --repo "$repo" --title "$1" --body-file "$2" --label "$label" ${milestone:+--milestone "$milestone"})
   echo "${url##*/}"
 }
 github_update_issue() { quietly gh issue edit "$1" --repo "$repo" --title "$2" --body-file "$3"; }

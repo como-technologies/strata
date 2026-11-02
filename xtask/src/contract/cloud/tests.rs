@@ -440,9 +440,13 @@ fn a_table_of_an_account_that_lists_each_value_is_the_same_with_no_reason() {
 }
 
 #[test]
-fn a_zone_id_that_the_account_cannot_check_leaves_the_exit_code_at_0() {
+fn a_zone_id_that_the_account_cannot_check_leaves_the_exit_code_at_0_when_the_run_checked_a_fact() {
     let mut contract = document();
-    contract.add(vec![account_entry(&["usw1-az2"], &["usw1-az1"])]);
+    contract.add(vec![
+        account_entry(&["use1-az3"], &["use1-az1", "use1-az3"]),
+        account_entry(&["usw1-az2"], &["usw1-az1"]),
+    ]);
+    assert_eq!(contract.summary.same, 1);
     assert_eq!(contract.summary.skipped, 1);
     assert_eq!(contract.exit_code(), 0);
 }

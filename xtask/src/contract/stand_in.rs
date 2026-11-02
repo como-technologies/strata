@@ -26,13 +26,28 @@ pub struct StandIn {
 impl StandIn {
     /// Read the tenants under `root`: one directory for each chapter, with the layout of a tenant.
     /// A file that is no JSON, and the file of a refusal, are omitted.
-    pub fn read(root: &Path) -> StandIn {
+    ///
+    /// # Errors
+    ///
+    /// The text of the error of the read when `root` or an entry of it cannot be read. A text that
+    /// says the stand-in holds no document when the tenants hold none. A run with no document
+    /// checks no fact, so it must not read as a run that found no difference.
+    pub fn read(root: &Path) -> Result<StandIn, String> {
+        let unreadable = |e: std::io::Error| format!("{}: {e}", root.display());
         let mut stand_in = StandIn::default();
-        let chapters = std::fs::read_dir(root).into_iter().flatten().flatten();
-        for chapter in chapters.filter(|c| c.path().is_dir()) {
-            stand_in.add_tenant(&chapter.path());
+        for entry in std::fs::read_dir(root).map_err(unreadable)? {
+            let chapter = entry.map_err(unreadable)?.path();
+            if chapter.is_dir() {
+                stand_in.add_tenant(&chapter);
+            }
         }
-        stand_in
+        if stand_in.documents.is_empty() {
+            return Err(format!(
+                "{}: the stand-in holds no document; give a directory with one directory for each chapter",
+                root.display()
+            ));
+        }
+        Ok(stand_in)
     }
 
     /// Add the documents of the tenant in the directory `tenant`.

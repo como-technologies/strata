@@ -13,6 +13,7 @@ use strata_preflight::rule::{Catalog, Check, ExecCheck, Rule};
 
 use super::cloud::{CloudSources, read_code, read_rules};
 use super::model::{DIRECTORY, Fact, load};
+use super::sets::{SetRead, reads};
 use crate::checks::anchors;
 use crate::files::{book, files_with_ext, pages};
 
@@ -65,6 +66,8 @@ pub struct Sources {
     pub rule_queries: BTreeMap<String, BTreeSet<String>>,
     /// The rules of the cloud tier and the code of strata, for the facts of the clouds.
     pub cloud: CloudSources,
+    /// The reads of strata that note a value of a closed set that this release does not know.
+    pub set_reads: Vec<SetRead>,
 }
 
 impl Sources {
@@ -112,6 +115,7 @@ impl Sources {
             }
             Err(e) => bad.push(format!("the rules of strata-preflight: {e}")),
         }
+        sources.set_reads = reads();
         let (code, unread) = read_code(repo);
         sources.cloud.code = code;
         bad.extend(unread);
