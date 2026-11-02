@@ -99,13 +99,7 @@ fn contract(options: &Options) -> Result<u8, String> {
     let palette = connect_from_env(Progress::silent()).map_err(|e| e.to_string())?;
     let checked_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     // the second client names no project, for the routes that refuse one
-    let tenant = connect_with(
-        Config {
-            project_uid: None,
-            ..config.clone()
-        },
-        Progress::silent(),
-    );
+    let tenant = connect_with(config.clone().without_project(), Progress::silent());
     let mut document = run(
         &facts,
         &stand_in,

@@ -96,6 +96,13 @@ impl Config {
         self
     }
 
+    /// Scope requests to the tenant: they name no project. A route of the tenant refuses a request
+    /// that names one.
+    pub fn without_project(mut self) -> Self {
+        self.project_uid = None;
+        self
+    }
+
     /// Read `PALETTE_API_KEY` (or `SPECTROCLOUD_APIKEY`), `PALETTE_API` (or `SPECTROCLOUD_HOST`),
     /// `PALETTE_PROJECT_UID` (or the name `PALETTE_PROJECT`), `STRATA_RETRIES`, and
     /// `STRATA_MAX_RETRY_AFTER` from the environment, then from `~/.palette.env`.
@@ -276,6 +283,18 @@ mod tests {
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect();
         move |k| m.get(k).cloned()
+    }
+
+    #[test]
+    fn a_config_without_a_project_names_no_project_and_keeps_the_rest() {
+        let cfg = Config::new("https://api.example.com", "k")
+            .with_project("p1")
+            .without_project();
+        assert_eq!(cfg.project_uid, None);
+        assert_eq!(cfg.api_key, "k");
+        assert_eq!(cfg.base_url, "https://api.example.com");
+        // a config with no project stays so
+        assert_eq!(cfg.clone().without_project().project_uid, None);
     }
 
     #[test]

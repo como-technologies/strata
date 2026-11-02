@@ -169,9 +169,8 @@ fn served(docs: &[(&str, Value)]) -> (tempfile::TempDir, HttpApi) {
 /// `p1`, as the environment of a run does, and one that names no project.
 fn served_with_project(docs: &[(&str, Value)]) -> (tempfile::TempDir, HttpApi, HttpApi) {
     let (dir, url) = serving(docs);
-    let mut config = Config::new(url.clone(), "a-key");
-    config.project_uid = Some("p1".to_string());
-    let tenant = HttpApi::new(Config::new(url, "a-key"));
+    let config = Config::new(url, "a-key").with_project("p1");
+    let tenant = HttpApi::new(config.clone().without_project());
     (dir, HttpApi::new(config), tenant)
 }
 
