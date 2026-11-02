@@ -5,27 +5,16 @@
 use std::path::{Path, PathBuf};
 
 use syn::visit::{self, Visit};
-use syn::{Attribute, Block, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemTrait, Signature};
+use syn::{Block, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemTrait, Signature};
 use syn::{TraitItemFn, parse_file};
 
-use crate::files::files_under;
+use crate::files::{files_under, is_test_code};
 
 /// The most lines that a module file has.
 const MODULE_LINES: usize = 800;
 
 /// The most lines that a function has, from its `fn` line to its closing brace.
 const FUNCTION_LINES: usize = 80;
-
-/// True when `attrs` mark the item as test code: `#[test]` or `#[cfg(test)]`.
-fn is_test_code(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|attr| {
-        attr.path().is_ident("test")
-            || (attr.path().is_ident("cfg")
-                && attr
-                    .parse_args::<syn::Path>()
-                    .is_ok_and(|path| path.is_ident("test")))
-    })
-}
 
 /// The functions that a file holds with a body, each with its length in lines. The items that are
 /// test code are out of the list, and the items after them are in it.

@@ -22,7 +22,7 @@ use strata_preflight::rule::{Catalog, Check, ExecCheck, Rule, Tier};
 
 use super::model::{Fact, Kind};
 use super::sources::Sources;
-use crate::files::files_under;
+use crate::files::{code_without_tests, files_under};
 
 #[cfg(test)]
 mod tests;
@@ -38,9 +38,6 @@ const ENGINE_LAB: &str = "lab";
 /// The directories of the code of strata, from the root of the repository, that hold no table of
 /// cloud facts.
 const CODE: &[&str] = &["src", "preflight/src", "adapter/src"];
-
-/// The line that starts an item for the unit tests. A module of tests after it is test data.
-const TESTS_START: &str = "#[cfg(test)]";
 
 /// The last word of the operation of a call starts with one of these words. A call that starts
 /// with another word could change the account, so the list refuses it.
@@ -228,9 +225,9 @@ fn answers_of(world: &Value) -> Vec<Answer> {
 }
 
 /// The code of strata under `repo` that is no test: each file of the directories of [`CODE`],
-/// without the lines of a comment, up to a module of unit tests. A file named `tests.rs`, and a file
-/// under a directory `tests`, is a test. The second value holds a message for each file that cannot
-/// be read.
+/// without the lines of a comment and the items for the unit tests. A file named `tests.rs`, and a
+/// file under a directory `tests`, is a test. The second value holds a message for each file that
+/// cannot be read or parsed.
 pub fn read_code(repo: &Path) -> (BTreeMap<String, String>, Vec<String>) {
     let mut code = BTreeMap::new();
     let mut bad = Vec::new();
@@ -243,31 +240,18 @@ pub fn read_code(repo: &Path) -> (BTreeMap<String, String>, Vec<String>) {
             if file.file_name().is_some_and(|n| n == "tests.rs") || relative.contains("/tests/") {
                 continue;
             }
-            match std::fs::read_to_string(&file) {
+            let read = std::fs::read_to_string(&file)
+                .map_err(|e| e.to_string())
+                .and_then(|text| code_without_tests(&text).map_err(|e| e.to_string()));
+            match read {
                 Ok(text) => {
-                    code.insert(relative, without_tests(&text));
+                    code.insert(relative, text);
                 }
                 Err(e) => bad.push(format!("{relative}: {e}")),
             }
         }
     }
     (code, bad)
-}
-
-/// The lines of `text` that are no comment and that come before the module of its unit tests. An
-/// item with `#[cfg(test)]` that is no module, such as an `impl`, does not end the code.
-fn without_tests(text: &str) -> String {
-    let lines: Vec<&str> = text.lines().collect();
-    let end = lines
-        .windows(2)
-        .position(|pair| pair[0].trim() == TESTS_START && pair[1].trim_start().starts_with("mod "))
-        .unwrap_or(lines.len());
-    lines[..end]
-        .iter()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .copied()
-        .collect::<Vec<_>>()
-        .join("\n")
 }
 
 /// Every fault of the facts of the kind `cloud`, as messages.

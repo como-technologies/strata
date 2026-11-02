@@ -10,7 +10,6 @@ use super::super::model::{Fact, PaletteRoute};
 use super::super::sources::Sources;
 use super::{
     Answer, CloudRule, CloudSources, command_words, documents, literals, read_code, read_rules,
-    without_tests,
 };
 
 /// A fact of a call that a rule sends, a table of zone ids, and a call that the lab cannot send.
@@ -695,14 +694,49 @@ fn the_code_that_the_scan_reads_has_no_test_module_no_test_file_and_no_comment()
 }
 
 #[test]
-fn an_item_for_the_tests_that_is_no_module_does_not_end_the_code_that_the_scan_reads() {
-    let text = "const A: &str = \"x\";\n#[cfg(test)]\nimpl Call {\n}\nconst B: &str = \"us-east-1\";\n#[cfg(test)]\n#[allow(dead_code)]\nmod tests;\nconst C: &str = \"eu-west-1\";\n";
-    let kept = without_tests(text);
-    assert!(kept.contains("const B"), "{kept}");
-    assert!(kept.contains("#[cfg(test)]\n#[allow(dead_code)]"), "{kept}");
-    // the module of tests ends the code, also when an attribute stands between them
-    let plain = "const A: &str = \"x\";\n#[cfg(test)]\nmod tests {\n    const R: &str = \"us-east-1\";\n}\n";
-    assert_eq!(without_tests(plain), "const A: &str = \"x\";");
+fn the_code_after_a_line_mod_tests_is_in_the_code_that_the_scan_reads() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(
+        src.join("lib.rs"),
+        "const A: &str = \"x\";\n#[cfg(test)]\nmod tests;\nconst B: &str = \"us-east-1\";\n",
+    )
+    .unwrap();
+    let (code, unread) = read_code(dir.path());
+    assert_eq!(unread, Vec::<String>::new());
+    assert_eq!(
+        code["src/lib.rs"],
+        "const A: &str = \"x\";\nconst B: &str = \"us-east-1\";"
+    );
+}
+
+#[test]
+fn the_scan_reads_the_code_after_the_line_mod_tests_of_the_files_of_strata() {
+    let (code, unread) = read_code(&crate::repository());
+    assert_eq!(unread, Vec::<String>::new());
+    // each of these files declares its module of tests above its code
+    for (file, item) in [
+        ("src/closed_set/unknown.rs", "const LONGEST_VALUE"),
+        ("src/closed_set/unknown/send.rs", "pub const SETTING"),
+    ] {
+        assert!(
+            code[file].contains(item),
+            "{file} lost the code after `mod tests;`"
+        );
+    }
+}
+
+#[test]
+fn a_file_of_the_code_that_is_no_rust_is_named_and_not_taken_for_clean() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(src.join("broken.rs"), "fn {").unwrap();
+    let (code, unread) = read_code(dir.path());
+    assert!(code.is_empty());
+    assert_eq!(unread.len(), 1);
+    assert!(unread[0].starts_with("src/broken.rs: "), "{unread:?}");
 }
 
 #[test]
