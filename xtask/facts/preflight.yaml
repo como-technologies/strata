@@ -238,25 +238,6 @@ facts:
 
   # The gaps that preflight fills: one fact for each row of the table in
   # reference/preflight-rules.md. The last row is a behavior: those rules call a route.
-  - id: preflight-gap-eks-hop-limit
-    kind: gap
-    reads:
-      fields:
-        - spec.machinepoolconfig[].cloudConfig.amiType
-      values:
-        spec.machinepoolconfig[].cloudConfig.amiType:
-          - AL2023_x86_64_STANDARD
-          - AL2023_x86_64_NEURON
-          - AL2023_x86_64_NVIDIA
-    stand_in: []
-    code: []
-    live: []
-    unchecked: No run shows that Palette ignores the hop limit of the instance metadata.
-    pages:
-      - reference/preflight-rules.md#the-gaps-that-preflight-fills
-    rules:
-      - eks-ami-type
-
   - id: preflight-gap-edge-two-node-hosts
     kind: gap
     reads:
