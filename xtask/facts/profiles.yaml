@@ -243,8 +243,6 @@ facts:
     code:
       - src/api/palette/clusters.rs
       - src/snapshot/cluster.rs
-    rules:
-      - system-macros-hidden
 
   - id: group-resolved-values
     kind: request

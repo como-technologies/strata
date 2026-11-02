@@ -330,6 +330,10 @@ impl<A: PaletteApi> LiveBackend<'_, A> {
 /// `_responses` maps `"METHOD /path"` to a [`Response`], and `_exec` maps the command, as one
 /// string with a space between the arguments, to an [`ExecOutput`]. `_tools` lists the tools that
 /// are "there"; with no list, every tool is.
+///
+/// An entry of `_responses` with a status that is not 2xx is a [`Response`] only when
+/// [`LiveBackend`] would read that status as an answer. Else it is the error that the live
+/// backend gives, so a fixture cannot show a catch that a live run does not give.
 pub struct FixtureBackend {
     responses: BTreeMap<String, Response>,
     exec: BTreeMap<String, ExecOutput>,
@@ -379,11 +383,12 @@ impl Backend for FixtureBackend {
             .ok_or_else(|| Error::Input {
                 message: format!("the fixture has no answer for {key} under _responses"),
             })?;
-        // A 5xx is an answer on the live backend only when the route is a validate route that
-        // refuses with it, or the check names its code. The fixture keeps the same rule, so a
-        // fixture cannot show a catch that a live run does not give.
+        // An HTTP error is an answer on the live backend only when `reads_error` says so: a 4xx
+        // that is no key or rate error, a refusal of a validate route, or a 5xx that the check
+        // names. The fixture keeps the same rule for each status that is not 2xx, so a fixture
+        // cannot show a catch that a live run does not give. A 401, a 403, and a 429 are errors.
         let status = response.status;
-        if (500..600).contains(&status)
+        if !(200..300).contains(&status)
             && !reads_error(method, path, status, Some(&response.body), refusal_codes)
         {
             return Err(http_error(method, path, status, &response.body.to_string()).into());

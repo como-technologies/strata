@@ -15,19 +15,25 @@ use serde_json::Value;
 use crate::api::Method;
 use crate::model::validation::PaletteRefusal;
 
-/// The codes of the refusals that Palette answers with HTTP 500 on a route that is not a validate
-/// route.
+/// The codes of the refusals that Palette answers with HTTP 500 on a route that [`ValidateRoute`]
+/// does not name.
 ///
-/// The routes are the delete of an object, an operation on an object, the update of a profile, and
-/// a listing. Palette gives these errors the response type of a server fault, so a refusal by
-/// design arrives as a 5xx. A retry gets the same refusal.
-pub(crate) const REFUSAL_CODES: [&str; 6] = [
+/// The routes are the delete of an object, an operation on an object, the update of a profile, a
+/// listing, and the property route of AWS. Palette gives these errors the response type of a
+/// server fault, so a refusal by design arrives as a 5xx. A retry gets the same refusal.
+///
+/// The property route of AWS refuses a Pod Identity account with `FeatureNotSupported`, and a key
+/// pair that the region lacks with `AwsKeyPairNotFound`. A live run shows the second answer. No
+/// live run shows the first.
+pub(crate) const REFUSAL_CODES: [&str; 8] = [
     "DeletionResourceInUseError",
     "ResOperationForbidden",
     "OperationForbidden",
     "ClusterProfileUpdateValidationFailure",
     "ClusterProfileInvalidPackState",
     "InvalidLimit",
+    "AwsKeyPairNotFound",
+    "FeatureNotSupported",
 ];
 
 /// The code of the refusal of a profile name and version that the project already holds.
@@ -320,6 +326,22 @@ impl ValidateRoute {
     }
 }
 
+/// Whether `code` is the code of a refusal that Palette answers with HTTP 500, and that a retry
+/// does not change.
+///
+/// The codes are the ones of the refusals of the other routes, the errors of the import validate
+/// route that match no pack to a registry, and the checks of each [`ValidateRoute`].
+/// [`Error::class`](crate::Error::class) gives the class `Terminal` to a 5xx with such a code. A
+/// rule of `strata-preflight` that names a code in `refusal_codes` must name one of them, so that
+/// the check and the retry read one list.
+pub fn is_refusal_code(code: &str) -> bool {
+    REFUSAL_CODES.contains(&code)
+        || PROFILE_IMPORT_MATCH_CODES.contains(&code)
+        || ValidateRoute::ALL
+            .iter()
+            .any(|route| route.refusal_codes().any(|c| c == code))
+}
+
 /// A rule of Palette that only the create of a profile version checks.
 ///
 /// No route that takes a candidate answers it before the create, so strata checks it before the
@@ -430,6 +452,44 @@ mod tests {
             for route in ValidateRoute::ALL {
                 assert!(!route.refuses(500, rule.code()), "{route:?} {rule:?}");
             }
+        }
+    }
+
+    #[test]
+    fn a_code_of_a_refusal_at_a_5xx_is_a_refusal_code_and_the_class_of_its_error_is_terminal() {
+        let api = |status: u16, code: &str| Error::Api {
+            method: Method::Post,
+            path: "/v1/clouds/aws/properties/validate".into(),
+            status,
+            body: format!(r#"{{"code":"{code}","message":"refused"}}"#),
+            retry_after: None,
+        };
+        let mut listed: Vec<&str> = REFUSAL_CODES.to_vec();
+        listed.extend(PROFILE_IMPORT_MATCH_CODES);
+        listed.extend(ValidateRoute::ALL.iter().flat_map(|r| r.refusal_codes()));
+        // the property route of AWS: a Pod Identity account, and a key pair that the region lacks
+        listed.extend(["FeatureNotSupported", "AwsKeyPairNotFound"]);
+        for code in listed {
+            assert!(is_refusal_code(code), "{code}");
+            assert_eq!(api(500, code).class(), FailureClass::Terminal, "{code}");
+            assert_eq!(api(503, code).class(), FailureClass::Terminal, "{code}");
+        }
+        // a code that a route gives with another status, an error of a pack in a 200 answer, a
+        // rule of the create, and a fault of the server are no refusal at a 5xx
+        let other = [
+            PROFILE_EXISTS_CODE,
+            PACK_MACRO_UNDEFINED_CODE,
+            PACK_FORBIDDEN_CODE,
+            UPGRADE_NOT_SUPPORTED_CODE,
+            "InternalError",
+            "610",
+            "",
+        ]
+        .into_iter()
+        .chain(RULES.map(CreateRule::code));
+        for code in other {
+            assert!(!is_refusal_code(code), "{code}");
+            assert_eq!(api(500, code).class(), FailureClass::Transient, "{code}");
         }
     }
 

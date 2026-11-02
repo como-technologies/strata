@@ -575,6 +575,49 @@ fn a_fixture_5xx_is_an_answer_only_when_the_check_names_its_code_as_a_live_run_d
 }
 
 #[test]
+fn a_fixture_reads_each_status_that_is_not_2xx_as_a_live_run_does() {
+    let body = json!({"code": "AwsKeyPairNotFound", "message": "no key pair"});
+    let named = codes(&["AwsKeyPairNotFound"]);
+    // a 4xx that is no key or rate error is the answer. A 401, a 403, a 429, and a 5xx are
+    // errors, also when the check names the code. A 5xx is an answer only with the code named
+    for (status, answer, answer_with_code) in [
+        (400u16, true, true),
+        (404, true, true),
+        (409, true, true),
+        (422, true, true),
+        (401, false, false),
+        (403, false, false),
+        (429, false, false),
+        (500, false, true),
+        (503, false, true),
+    ] {
+        let key = format!("POST {PROPERTIES}");
+        let api = strata::api::MemoryApi::new().failing(&key, status, body.to_string());
+        let live = LiveBackend::new(Some(&api), false);
+        let (kept, _) = fixture(json!({"_responses": {
+            key: {"ok": false, "status": status, "body": body}}}));
+        for (refusal_codes, expected) in [(&[][..], answer), (named.as_slice(), answer_with_code)] {
+            let sent = json!({});
+            let asked = |backend: &dyn Backend| {
+                backend
+                    .palette(Method::Post, PROPERTIES, Some(&sent), refusal_codes)
+                    .is_ok()
+            };
+            assert_eq!(
+                asked(&live),
+                expected,
+                "live, HTTP {status}, {refusal_codes:?}"
+            );
+            assert_eq!(
+                asked(&kept),
+                expected,
+                "fixture, HTTP {status}, {refusal_codes:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn a_palette_check_with_no_key_is_not_run() {
     let jq = Jq::new();
     let (b, w) = fixture(json!({"cloud": "gke", "_palette": false}));
