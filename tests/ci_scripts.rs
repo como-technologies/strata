@@ -4341,7 +4341,7 @@ fn the_host_layer_of_the_two_report_scripts_differs_only_in_the_lines_of_their_o
 }
 
 /// The GitLab functions and the host block of `pr-comment.sh` are those of `verify-report.sh`, line
-/// for line. Like the two report scripts, `pr-comment.sh` is one download that stands alone, so
+/// for line. Like the two report scripts, `pr-comment.sh` is one download with no other file. So
 /// the copy is on purpose, and a change to one copy must reach the others. Only the name of the
 /// script in a message, and the object that the token writes, differ.
 #[test]

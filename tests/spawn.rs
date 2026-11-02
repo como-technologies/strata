@@ -35,10 +35,10 @@ fn a_script_that_a_test_writes_runs_while_other_threads_write_scripts_and_start_
     });
 }
 
-/// The trees of Rust files that start a process in a test, from the root of the repository: the
-/// tests of strata, the tests of strata-preflight, and the source of xtask, whose unit tests
-/// and whose runner of the book start processes. The three include `tests/common/process.rs`. The
-/// other packages start no process.
+/// The trees of Rust files that start a process in a test, from the root of the repository. They
+/// are the tests of strata, the tests of strata-preflight, and the source of xtask. The unit tests
+/// and the runner of the book in xtask start processes. The three include
+/// `tests/common/process.rs`. The other packages start no process.
 const TREES: [&str; 3] = ["tests", "preflight/tests", "xtask/src"];
 
 /// Each Rust file of [`TREES`] but the file that holds the lock and the two methods that take it.

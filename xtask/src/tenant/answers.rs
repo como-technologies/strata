@@ -81,7 +81,7 @@ pub struct UpgradeRefusal<'a> {
     pub clusters: &'a [&'a str],
 }
 
-/// The reason `PackValuesUpdated` of a repave, as a live run gave it for a kubeadm command: the
+/// The reason `PackValuesUpdated` of a repave, as a live run gave it for a kubeadm command. The
 /// values of the pack `kubernetes` changed in the key `kubeadmconfig.postKubeadmCommands`.
 /// `pack` holds the pack of the reason, and this function adds the key.
 fn values_updated(mut pack: Value) -> Value {

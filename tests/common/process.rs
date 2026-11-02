@@ -44,7 +44,7 @@ fn make_executable(_: &Path) -> io::Result<()> {
 }
 
 /// The two ways to start a process in a test. A test never calls `spawn`, `output`, or `status` of
-/// [`Command`]: while another test writes a script, they can start a process that keeps the script
+/// [`Command`]. While another test writes a script, they can start a process that keeps the script
 /// open. See [`OPEN_FOR_WRITE`]. To wait for the end of a process, call `wait` on the result of
 /// `spawn_locked`. The tests of `tests/spawn.rs` make sure of this.
 pub trait CommandExt {

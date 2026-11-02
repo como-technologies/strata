@@ -16,7 +16,9 @@ pub const PROFILE_SEARCH_PATH: &str = "v1/dashboard/clusterprofiles";
 ///
 /// The server keeps the clusters that the body selects.
 pub const CLUSTER_SEARCH_PATH: &str = "v1/dashboard/spectroclusters/search";
-/// The most entries in one page of the audit log. strata asks for this page size.
+/// The most entries in one page of the audit log, as Palette serves it. The stand-in models
+/// Palette, not the code that it tests. So it keeps its own copy of the value, and does not take it
+/// from strata. A test holds the literal.
 const AUDIT_PAGE: u32 = 100;
 /// The audit log, `GET /v1/audits`.
 ///
