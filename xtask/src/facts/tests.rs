@@ -740,3 +740,38 @@ fn the_parts_of_a_request_are_its_method_and_its_path() {
         assert_eq!(fact.parts(), None, "{request:?}");
     }
 }
+
+#[test]
+fn the_query_of_a_request_is_part_of_its_path_and_not_of_its_shape() {
+    let mut fact = world().facts[0].clone();
+    fact.request = Some("GET /v1/clouds/aws/regions?cloudAccountUid={cloudAccountUid}".to_string());
+    assert_eq!(
+        fact.get_path(),
+        Some("/v1/clouds/aws/regions?cloudAccountUid={cloudAccountUid}")
+    );
+    // the book and the rules write the route with their own query, so the shape has none
+    assert_eq!(
+        shape("GET /v1/clouds/aws/regions?cloudAccountUid={cloudAccountUid}"),
+        shape("GET /v1/clouds/aws/regions?cloudAccountUid={{ .entity.spec.cloudAccountUid }}")
+    );
+    assert_eq!(
+        shape("GET /v1/filters/metadata?filterType=tag"),
+        "GET /v1/filters/metadata"
+    );
+}
+
+#[test]
+fn a_fact_that_reads_only_names_reads_something_and_reads_a_document() {
+    let mut sources = world();
+    sources.facts[0].reads = Default::default();
+    sources.facts[0].reads.names.insert(
+        "schema.properties[].name".to_string(),
+        vec!["tags".to_string()],
+    );
+    assert!(sources.facts[0].reads.reads_a_document());
+    let found = faults_of(&sources);
+    assert!(
+        !found.iter().any(|m| m.contains("`reads` is empty")),
+        "{found:?}"
+    );
+}

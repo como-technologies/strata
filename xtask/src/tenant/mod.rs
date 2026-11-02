@@ -65,6 +65,11 @@ impl Tenant {
         }
     }
 
+    /// The directory that holds the documents of the tenant.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     /// The file that answers `GET path` in `project`, or at tenant scope for `"tenant"`. The
     /// directory above it is created, so a caller can write the file at once.
     pub fn doc(&self, project: &str, path: &str) -> PathBuf {

@@ -308,7 +308,10 @@ as `<key>` for a label that must be there, with the operator `eq`. The listing
 and the cluster document carry the same labels.
 
 **Saved tag filters** belong to the tenant: `GET /v1/filters/metadata?filterType=tag`
-lists them, and `GET /v1/filters/tag/{uid}` gives the conditions of one. The
+lists them, and `GET /v1/filters/tag/{uid}` gives the conditions of one. The query is needed in a
+project. The listing is not an operation of the project scope. With no `filterType`, a request that
+names a project gets HTTP 403 with the code `ProjectUidIsNotEmpty`. The query takes `tag`, `meta`, or
+`resource`, and `tag` gives the answer in the project scope. The
 search takes no filter uid, so strata turns the conditions into a search. The
 code of Palette gives the rest: a key with no value means the label is
 there, `negation` turns a condition with values over, and the search lists no

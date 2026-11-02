@@ -51,7 +51,7 @@ cat "$run/contract.log" >&2
 if command -v jq > /dev/null && [ -s "$run/contract.json" ]; then
   jq -r '
     (.facts[] | select(.outcome == "differs") | "differs: \(.id)",
-      (.differences[] | "  \(.kind) \(.path): the stand-in has \(.expected | join(", ")); the tenant has \(.found | join(", "))")),
+      (.differences[] | if .kind == "name" then "  name \(.path): the answer lacks \(.expected | join(", ")); the tenant has \(.found | join(", "))" else "  \(.kind) \(.path): the stand-in has \(.expected | join(", ")); the tenant has \(.found | join(", "))" end)),
     (.facts[] | .id as $id | .unknownValues[]? | "new value: \($id) \(.set): \(.values | join(", ")); the fact and the stand-in name \(.known | join(", "))"),
     (.facts[] | select(.outcome == "error") | "could not check: \(.id): \(.reason)"),
     (.releases[] | select(.new) | "new release: \(.repo) \(.tag), the last run saw \(.seen)"),
