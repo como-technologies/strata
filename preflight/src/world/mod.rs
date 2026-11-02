@@ -43,6 +43,7 @@ use strata::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use strata::term::progress::Progress;
 
 use crate::error::{Error, Result};
+use crate::probe::{Reader, is_answer};
 
 /// An engine: the kind of cluster that a run checks.
 ///
@@ -388,7 +389,7 @@ impl World {
                         self.packs.insert(pack.pack_uid.clone(), doc);
                     }
                     // a pack the key cannot read is not a pack; a rule that needs it says so
-                    Err(strata::Error::Api { status, .. }) if unreadable(status) => {}
+                    Err(strata::Error::Api { status, .. }) if is_answer(status, Reader::World) => {}
                     Err(e) => return Err(e.into()),
                 }
             }
@@ -402,22 +403,12 @@ impl World {
                 }
                 // an account that is not there, or that the key cannot read, is what a rule
                 // reports; the world says null
-                Err(strata::Error::Api { status, .. }) if unreadable(status) => {}
+                Err(strata::Error::Api { status, .. }) if is_answer(status, Reader::World) => {}
                 Err(e) => return Err(e.into()),
             }
         }
         Ok(self)
     }
-}
-
-/// True for each 4xx on a read of the world but 401 and 429: the object is not there for this key.
-///
-/// A 404 is one case, and the 403 of a project key on an object of the tenant is another. The
-/// world holds `null`, and a rule says so. A 401 is the key itself, and a 429 the rate: the run
-/// stops with the error that names it. The contract run of xtask uses the same test. A 401, a 429,
-/// or a 5xx says nothing about a fact, and another 4xx is the answer of Palette to the request.
-pub fn unreadable(status: u16) -> bool {
-    (400..500).contains(&status) && !matches!(status, 401 | 429)
 }
 
 /// The cloud account kind of an engine: a managed engine uses the account of its cloud. Text that

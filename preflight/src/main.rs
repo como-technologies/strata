@@ -201,7 +201,7 @@ fn tiers_of(cli: &Cli) -> Result<Vec<Tier>> {
 }
 
 fn ledger_of(cli: &Cli) -> Result<Ledger> {
-    let mut ledger = Ledger::parse(catalog::LEDGER, std::path::Path::new("evidence/runs.yaml"))?;
+    let mut ledger = catalog::builtin_ledger()?;
     for path in &cli.ledger {
         ledger.extend(Ledger::load(path)?);
     }

@@ -22,7 +22,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 use strata::api::{Method, PaletteApi};
-use strata_preflight::world::unreadable;
+use strata_preflight::probe::{Reader, is_answer};
 
 use crate::facts::{Fact, Kind};
 
@@ -132,7 +132,10 @@ fn check<A: PaletteApi>(
                     "the tenant has no such object: Palette answers HTTP 404 with the code `{code}`"
                 ));
             }
-            match failure.status.filter(|status| unreadable(*status)) {
+            match failure
+                .status
+                .filter(|status| is_answer(*status, Reader::World))
+            {
                 Some(status) => entry(
                     Outcome::Differs,
                     None,

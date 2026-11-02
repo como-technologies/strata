@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::confidence::Ledger;
 use crate::error::Result;
 use crate::rule::{Catalog, Section};
 
@@ -29,7 +30,10 @@ pub const SECTIONS: &[(&str, &str)] = &[
 ];
 
 /// The ledger of the runs of the lab, which the binary carries with the rules.
-pub const LEDGER: &str = include_str!("../evidence/runs.yaml");
+const LEDGER: &str = include_str!("../evidence/runs.yaml");
+
+/// The path of the ledger in the source tree. An error of the ledger of the binary names it.
+const LEDGER_PATH: &str = "evidence/runs.yaml";
 
 /// The directory of the rule files in the source tree, for the fixtures of the tests.
 pub fn rules_dir() -> PathBuf {
@@ -61,6 +65,16 @@ pub fn builtin() -> Result<Catalog> {
         catalog.push(section, &path)?;
     }
     Ok(catalog)
+}
+
+/// The ledger of the binary: the runs of the lab, which prove the level of each rule.
+///
+/// # Errors
+///
+/// [`Error::Ledger`](crate::error::Error::Ledger) when the ledger of the binary does not parse. A
+/// binary that passes its tests gives no error.
+pub fn builtin_ledger() -> Result<Ledger> {
+    Ledger::parse(LEDGER, Path::new(LEDGER_PATH))
 }
 
 /// The catalog of the binary, with each probes file after it.
@@ -144,6 +158,6 @@ mod tests {
 
     #[test]
     fn the_ledger_of_the_binary_parses() {
-        crate::confidence::Ledger::parse(LEDGER, Path::new("evidence/runs.yaml")).unwrap();
+        builtin_ledger().unwrap();
     }
 }

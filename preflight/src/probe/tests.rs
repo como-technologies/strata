@@ -293,6 +293,24 @@ fn a_401_a_403_and_a_429_are_errors_of_the_check_and_a_404_is_its_answer() {
 }
 
 #[test]
+fn a_check_reads_a_403_as_the_key_and_the_world_reads_it_as_an_object_that_is_not_there() {
+    for (status, check, world) in [
+        (400u16, true, true),
+        (401, false, false),
+        (403, false, true),
+        (404, true, true),
+        (422, true, true),
+        (429, false, false),
+        (499, true, true),
+        (399, false, false),
+        (500, false, false),
+    ] {
+        assert_eq!(is_answer(status, Reader::Check), check, "{status}: check");
+        assert_eq!(is_answer(status, Reader::World), world, "{status}: world");
+    }
+}
+
+#[test]
 fn the_backend_sends_a_request_one_time_and_gives_the_same_answer_to_the_rule_that_asks_again() {
     let api = strata::api::MemoryApi::new()
         .with("/v1/edgehosts/h1", json!({"metadata": {"uid": "h1"}}))

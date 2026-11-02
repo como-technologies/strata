@@ -8,7 +8,7 @@
 use std::time::Instant;
 
 use serde_json::Value;
-use strata::json::{flag, str_at, text_or};
+use strata::json::{flag, text_or};
 
 use crate::jq::Jq;
 use crate::rule::{Check, Rule};
@@ -21,7 +21,7 @@ mod palette;
 use exec::run_exec;
 use palette::run_palette;
 
-pub use backend::{Backend, ExecOutput, FixtureBackend, LiveBackend, Response, is_answer};
+pub use backend::{Backend, ExecOutput, FixtureBackend, LiveBackend, Reader, Response, is_answer};
 pub use exec::{shell_words, tool_on_path};
 pub use outcome::{Call, Outcome, Ran, Verdict};
 
@@ -120,13 +120,6 @@ pub(crate) fn one_line(s: String) -> String {
             .join(" ")
     } else {
         s
-    }
-}
-/// The `V1Error` of Palette as one line: `code: message`.
-pub fn palette_error_line(body: &Value) -> String {
-    match (body.get("code"), body.get("message")) {
-        (Some(_), Some(_)) => format!("{}: {}", str_at(body, "/code"), str_at(body, "/message")),
-        _ => body.to_string(),
     }
 }
 

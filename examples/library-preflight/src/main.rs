@@ -9,7 +9,6 @@ use strata::api::MemoryApi;
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
 use strata_preflight::catalog;
-use strata_preflight::confidence::Ledger;
 use strata_preflight::probe::{LiveBackend, Verdict};
 use strata_preflight::rule::Tier;
 use strata_preflight::run::{self, RunInputs, Selection};
@@ -28,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ANCHOR: run
     // The rules, and the runs that prove them, are data that the library carries.
     let catalog = catalog::builtin()?;
-    let ledger = Ledger::parse(catalog::LEDGER, Path::new("evidence/runs.yaml"))?;
+    let ledger = catalog::builtin_ledger()?;
     // The entity of a create, read from the fixture. The second argument names the cloud.
     let world = World::from_file(&fixture, Some("aws"))?;
 

@@ -17,10 +17,10 @@ use super::{Selection, confidence_of, holds, subject_of};
 use crate::confidence::Ledger;
 use crate::error::{Error, Result};
 use crate::jq::Jq;
-use crate::probe::{self, Outcome, Verdict};
+use crate::probe::{self, Outcome, Reader, Verdict, is_answer};
 use crate::report::{self, Assembly, Options, Report};
 use crate::rule::{Catalog, Check, Rule, Tier};
-use crate::world::{World, unreadable};
+use crate::world::World;
 
 /// The settings of a watch.
 #[derive(Debug, Clone)]
@@ -56,12 +56,14 @@ pub fn reading<A: PaletteApi>(palette: &Palette<A>, uid: &str, elapsed: Duration
     let cluster = palette.subject_document(SubjectKind::Cluster, uid)?;
     let summary = match palette.fetch_cluster_summary(uid) {
         Ok(s) => s,
-        Err(strata::Error::Api { status, .. }) if unreadable(status) => Value::Null,
+        Err(strata::Error::Api { status, .. }) if is_answer(status, Reader::World) => Value::Null,
         Err(e) => return Err(e.into()),
     };
     let events = match palette.cluster_events(uid) {
         Ok(e) => Value::Array(e),
-        Err(strata::Error::Api { status, .. }) if unreadable(status) => Value::Array(vec![]),
+        Err(strata::Error::Api { status, .. }) if is_answer(status, Reader::World) => {
+            Value::Array(vec![])
+        }
         Err(e) => return Err(e.into()),
     };
     Ok(json!({

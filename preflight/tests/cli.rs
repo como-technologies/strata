@@ -908,11 +908,7 @@ fn the_promotion_text_names_the_runs_of_older_releases_for_each_rule() {
 
 /// How many runs of the ledger in the binary answer `gke-no-release-channel`: they have no release.
 fn lab_runs_of_the_rule() -> usize {
-    let ledger = strata_preflight::confidence::Ledger::parse(
-        strata_preflight::catalog::LEDGER,
-        std::path::Path::new("evidence/runs.yaml"),
-    )
-    .unwrap();
+    let ledger = strata_preflight::catalog::builtin_ledger().unwrap();
     ledger
         .counts_for("gke-no-release-channel", "gke", None)
         .runs
