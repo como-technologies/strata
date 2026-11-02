@@ -20,7 +20,7 @@ flag=${flag:-false}
 export STRATA_REPORT=0
 
 # `die` and `usage` are in common.sh. A script that runs no strata sources that file alone, because
-# the check for a stale binary below would stop it.
+# the check for a stale binary below stops it.
 . "$live/common.sh"
 
 # stage N TITLE: print the heading of stage N, and succeed when this run reaches it. The script sets
