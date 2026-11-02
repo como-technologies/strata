@@ -5,6 +5,10 @@
 //! run reports a difference for each tenant that gives the field. The command of a page prints some
 //! fields, such as the note of an audit entry, only in a state that no page builds. A document here
 //! holds each such field. The chapter runs no command and writes no output.
+//!
+//! A document holds only the fields that a fact reads. The type of each field is the type that the
+//! API definition of Palette gives, such as a list for `spec.archType` of the cluster listing, and
+//! each value is one that Palette can give.
 
 use serde_json::json;
 
@@ -44,7 +48,7 @@ fn cluster_and_group(r: &mut Runner) {
                 "deletionTimestamp": "2026-09-18T09:00:00.000Z",
                 "labels": {"managed-by": "opentofu"}},
             "spec": {"cloudType": "aws", "clusterType": "PureManage",
-                "cloudAccountUid": ACCOUNT, "cloudRegion": "us-east-2", "archType": "amd64",
+                "cloudAccountUid": ACCOUNT, "cloudRegion": "us-east-2", "archType": ["amd64"],
                 "location": {"countryCode": "US", "countryName": "United States",
                     "regionCode": "OH", "regionName": "Ohio"},
                 "tags": ["env:dev"]},
@@ -55,7 +59,7 @@ fn cluster_and_group(r: &mut Runner) {
         DEV,
         &group_route(GROUP),
         &json!({"metadata": {"name": "vclusters", "uid": GROUP},
-            "spec": {"type": "hostCluster", "clusterProfileTemplates": [],
+            "spec": {"clusterProfileTemplates": [],
                 "clustersConfig": {"endpointType": "LoadBalancer"}},
             "status": {"isActive": true}}),
     );
@@ -82,17 +86,15 @@ fn app_profile(r: &mut Runner) {
                     "values": "replicas: 1\n", "properties": []}},
             {"metadata": {"name": "settings", "uid": format!("{APP_PROFILE}2")},
                 "spec": {"type": "manifest", "version": "1.0.0",
-                    "manifests": [{"kind": "manifest", "name": "settings",
-                        "uid": format!("{APP_PROFILE}3")}]}},
+                    "manifests": [{"uid": format!("{APP_PROFILE}3")}]}},
         ]}}),
     );
     r.answer(
         DEV,
         &app_tier_manifest_route(APP_PROFILE, &format!("{APP_PROFILE}2"), &format!("{APP_PROFILE}3")),
-        &json!({"metadata": {"name": "settings", "uid": format!("{APP_PROFILE}3")},
-            "spec": {"published": {
-                "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n",
-                "digest": "sha256:0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"}}}),
+        &json!({"spec": {"published": {
+            "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n",
+            "digest": "686122de341e08f21472eae762a35db4ef64ec5a"}}}),
     );
 }
 
@@ -187,6 +189,6 @@ fn audit_log(r: &mut Runner) {
                     "userMsg": "bumped for the patch window",
                     "resource": {"kind": "clusterprofile", "name": "platform-policy",
                         "uid": PROFILE}}},
-        ], "listmeta": {"continue": "", "limit": 100}}),
+        ], "listmeta": {"continue": ""}}),
     );
 }

@@ -1236,6 +1236,30 @@ fn the_stand_in_of_the_book_serves_the_eight_fields_with_a_string_and_a_registry
     );
 }
 
+/// The fields that the API definition of Palette gives as a list, an object, or a boolean. A string
+/// there would make the next contract run report a false `type` difference.
+#[test]
+fn the_stand_in_of_the_book_serves_a_list_an_object_or_a_boolean_where_palette_does() {
+    let Some(stand_in) = harvested() else {
+        return;
+    };
+    let facts = real_facts();
+    for (id, field, expected) in [
+        ("cluster-listing", "spec.archType", JsonType::Array),
+        ("cluster-listing", "spec.tags", JsonType::Array),
+        ("cluster-listing", "spec.location", JsonType::Object),
+        ("cluster-group-document", "status.isActive", JsonType::Boolean),
+        ("oci-registry-summary", "items[].status.sync.isSyncSupported", JsonType::Boolean),
+        ("profile-variables", "variables[].required", JsonType::Boolean),
+    ] {
+        let types: Vec<_> = held_types(&stand_in, &facts, id, field)
+            .into_iter()
+            .filter(|t| *t != JsonType::Absent)
+            .collect();
+        assert_eq!(types, [expected], "{id} {field}");
+    }
+}
+
 /// The stand-in of the book holds each field that a fact reads.
 #[test]
 fn the_stand_in_of_the_book_holds_each_field_that_a_fact_reads() {

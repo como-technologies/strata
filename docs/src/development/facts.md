@@ -196,10 +196,13 @@ run takes the value from a listing of the tenant, as it takes the `{uid}` of a p
 A fact lists a set of values under one of two keys of `reads`. The key says what the run does with
 the set:
 
-| Key | The set | A difference is |
+| Key | The set | The run reports |
 | --- | --- | --- |
-| `values` | A closed set. Palette gives no other value, and strata tells the values apart. | A value that neither the fact nor the stand-in names. See [The unknown values](#the-unknown-values). |
-| `names` | The names that strata needs from a set that Palette can extend. | A name of the fact that the answer lacks. A name that the fact does not list is no difference. |
+| `values` | A closed set. Palette gives no other value, and strata tells the values apart. | An unknown value, for a value that neither the fact nor the stand-in names. See [The unknown values](#the-unknown-values). |
+| `names` | The names that strata needs from a set that Palette can extend. | A difference of the kind `name`, for a name of the fact that the answer lacks. A name that the fact does not list is no difference. |
+
+A value that a closed set does not name is an unknown value and nothing else. It is not also a
+difference, so one new value opens one issue.
 
 The search schema is a set of names. The tenant has more properties than the three that strata
 sends in a search.
@@ -228,6 +231,11 @@ The chapters of the book build the documents. Some fields are in no page, such a
 audit entry. The chapter `fields` in `xtask/src/chapters/fields.rs` holds one document for each such
 field. It runs no command and writes no output. Add a document there when the check names a field
 that the other chapters omit.
+
+A document of this chapter holds only the fields that a fact reads. Read the API definition of the
+route before you add a field. The type of the field and each value must agree with it. A wrong type
+makes the next contract run report a false `type` difference. For example, `spec.archType` of the
+cluster listing is a list, not a text.
 
 ### The unknown values
 
