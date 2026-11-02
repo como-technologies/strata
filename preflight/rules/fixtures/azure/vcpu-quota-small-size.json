@@ -1,0 +1,13 @@
+{
+  "_base": "vcpu-quota-low.json",
+  "_note": "the worker pool asks for 4 x Standard_B1s, a size under 2 vCPUs that the route lists only when the query lifts its default filter; 10 regional vCPUs, 8 in use, and the pools ask for 8 (1 x Standard_D4s_v3, 4 x Standard_B1s)",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          { "poolConfig": { "name": "worker-pool", "size": 4 }, "cloudConfig": { "instanceType": "Standard_B1s" } }
+        ]
+      }
+    }
+  }
+}

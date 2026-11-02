@@ -1,5 +1,6 @@
 # The weekly contract run on kadomony. It asks the real tenant the requests of the facts of Palette,
-# compares the answers with the stand-in, and opens an issue for each fact that differs.
+# and sends the read-only calls of the clouds in the lab account. It compares the answers with the
+# stand-in and the fixtures of the rules, and opens an issue for each fact that differs.
 # deploy/contract/timer.sh writes this file to ~/.config/systemd/user/, with @REPO@ replaced by the
 # checkout. It holds no secret: the run reads the Palette key from ~/.palette.env.
 [Unit]
@@ -11,6 +12,9 @@ Type=oneshot
 WorkingDirectory=@REPO@
 # the profile of the cloud account that the checks of the clouds use
 Environment=AWS_PROFILE=spectro-admin
+# the values of the lab account that a call of a cloud names, one STRATA_CONTRACT_NAME=value in each
+# line (the project, the role, the region); a lab that gives none skips those calls
+EnvironmentFile=-%h/.config/strata-contract/lab.env
 # a user service starts with a short PATH: cargo and just are in the home of the user
 Environment=PATH=%h/.cargo/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=@REPO@/deploy/contract/weekly.sh

@@ -4,7 +4,7 @@
 # issues of the repository.
 #
 #   examples/live/contract-report.sh <contract.json> [--repo OWNER/REPO] [--label NAME]
-#                                     [--milestone NAME] [--dry-run]
+#                                     [--cloud-label NAME] [--milestone NAME] [--dry-run]
 #
 # Reads the document strata-contract/1 that contract.sh writes. A fact with the outcome differs
 # has one open issue labeled NAME (default palette-drift). The script finds the issue by the marker
@@ -21,11 +21,15 @@
 # run checked the fact and found no such value. A set is the field that the fact names in
 # reads.values.
 #
+# A fact of the kind cloud is a call of the tool of a cloud. Its issue has the label of
+# --cloud-label (default cloud-drift) and the marker of its id. It says that the answer of the cloud
+# differs from the answers that the fixtures of the rules hold, or lacks a value of a table.
+#
 # A release with new set to true has one issue, which the script opens once. The marker is
 # <!-- strata-contract: release <repo> <tag> -->. The issue asks to prove the facts again on the
 # new release. A person closes it.
 #
-# The label is created when the repository has none. --dry-run prints each issue body and what
+# Each label is created when the repository has none. --dry-run prints each issue body and what
 # the script does, and calls no host.
 #
 # Exit 0 when no fact differs, no value is unknown, and no release is new. Exit 1 when one is: the
@@ -71,6 +75,8 @@ document=""
 repo="${GITHUB_REPOSITORY:-}"
 label="palette-drift"
 label_description="strata: a fact of Palette that differs from the stand-in"
+cloud_label="cloud-drift"
+cloud_description="strata: a call of a cloud whose answer differs from the fixtures of the rules"
 milestone="Backlog"
 dry=""
 host_kind=github
@@ -78,6 +84,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --repo) repo=$2; shift 2 ;;
     --label) label=$2; shift 2 ;;
+    --cloud-label) cloud_label=$2; shift 2 ;;
     --milestone) milestone=$2; shift 2 ;;
     --dry-run) dry=1; shift ;;
     -h|--help) sed -n '2,/^set -Eeuo/{/^#/p}' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -85,7 +92,7 @@ while [ $# -gt 0 ]; do
     *) document=$1; shift ;;
   esac
 done
-[ -n "$document" ] || die "usage: contract-report.sh <contract.json> [--repo OWNER/REPO] [--label NAME] [--milestone NAME] [--dry-run]"
+[ -n "$document" ] || die "usage: contract-report.sh <contract.json> [--repo OWNER/REPO] [--label NAME] [--cloud-label NAME] [--milestone NAME] [--dry-run]"
 [ -f "$document" ] || die "$document is not a file"
 command -v jq > /dev/null || die "jq is not installed"
 # -s reads the file as an array: a jq older than 1.7 exits with 0 for `jq -e` on an empty file
@@ -96,6 +103,20 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 checked=$(jq -r .checkedAt "$document")
 target=$(jq -r .target "$document")
+
+# use_label KIND: the host functions read $label and $label_description, so the label of the kind of
+# the fact goes there before a call
+palette_label=$label
+palette_description=$label_description
+use_label() {
+  if [ "$1" = cloud ]; then
+    label=$cloud_label
+    label_description=$cloud_description
+  else
+    label=$palette_label
+    label_description=$palette_description
+  fi
+}
 
 # remote_repo -> OWNER/REPO of the origin remote of the checkout in the current directory, when the
 # remote is on GitHub, or nothing. It reads a local file, so a dry run still calls no host.
@@ -109,6 +130,14 @@ if [ -z "$dry" ]; then
   [ -n "$repo" ] || repo=$(host repo)
   [ -n "$repo" ] || die "could not determine the project; pass --repo"
   host open_issues > "$work/issues.json"
+  # the issues of the calls of the clouds have their own label, so they are listed apart
+  if jq -e '[.facts[]? | select(.kind == "cloud" and (.outcome == "differs" or .outcome == "same"))] | length > 0' "$document" > /dev/null; then
+    use_label cloud
+    host open_issues > "$work/cloud-issues.json"
+    use_label request
+    jq -s 'add' "$work/issues.json" "$work/cloud-issues.json" > "$work/all-issues.json"
+    mv "$work/all-issues.json" "$work/issues.json"
+  fi
 else
   # a dry run asks no host, so the links name the project of the checkout
   [ -n "$repo" ] || repo=$(remote_repo)
@@ -124,13 +153,14 @@ issue_for() {
     "$work/issues.json"
 }
 
-label_ready=""
+# the labels that the repository has, as far as this run knows
+labels_ready=" "
 ensure_label() {
-  [ -z "$label_ready" ] || return 0
+  case "$labels_ready" in *" $label "*) return 0 ;; esac
   local labels
   labels=$(host repo_labels)
   grep -Fxq "$label" <<<"$labels" || host create_label "$label"
-  label_ready=1
+  labels_ready="$labels_ready$label "
 }
 
 actions=()
@@ -207,32 +237,56 @@ values_issues() {
 }
 
 # ---- the facts ---------------------------------------------------------------------------------
+# palette_body ENTRY, cloud_body ENTRY: the body of the issue of a fact that differs, after its marker
+palette_body() {
+  jq -r --arg checked "$checked" --arg target "$target" --arg page "$page" '
+    "The contract run of \($checked) found that the tenant `\($target)` answers `\(.request)` in another way than the stand-in.",
+    "",
+    "| Difference | Field | Expected | Found |",
+    "| --- | --- | --- | --- |",
+    (.differences[] | "| \(.kind) | `\(.path)` | \(.expected | join(", ")) | \(.found | join(", ")) |"),
+    "",
+    "Expected is what the stand-in has. For a `name`, it is the names that strata needs and the answer lacks. Found is what the tenant has.",
+    "",
+    "Prove the fact again with its live checks: \(if (.live | length) > 0 then (.live | map("`\(.)`") | join(", ")) else "the fact has none" end).",
+    "The pages of the book that state the fact: \(.pages | map("`docs/src/\(.)`") | join(", ")).",
+    "",
+    "Then change the stand-in and the page, or record a fault of Palette in the local findings log. [The weekly contract run](\($page)) says how."
+  ' <<<"$1"
+}
+cloud_body() {
+  jq -r --arg checked "$checked" --arg page "$page" '
+    "The contract run of \($checked) sent the call `\(.request)` in the lab account. The answer differs from the answers that the fixtures of the rules hold, or lacks a value that a rule holds in a table.",
+    "",
+    "| Difference | Field | The rules expect | The cloud answers with |",
+    "| --- | --- | --- | --- |",
+    (.differences[] | "| \(.kind) | `\(.path)` | \(.expected | join(", ")) | \(.found | join(", ")) |"),
+    "",
+    "Send the call by hand in the lab account, and read the answer. The rules of the cloud tier that read the fact: \((.rules // []) | map("`\(.)`") | join(", ")).",
+    "The pages of the book that state the fact: \(.pages | map("`docs/src/\(.)`") | join(", ")).",
+    "",
+    "Then change the rules, the fixtures, the table, and the page together, so that they agree with the cloud. [The weekly contract run](\($page)) says how."
+  ' <<<"$1"
+}
+
 differs=0 same=0 skipped=0 errors=0
 while IFS= read -r entry <&3; do
   id=$(jq -r .id <<<"$entry")
   marker="<!-- strata-contract: $id -->"
+  kind=$(jq -r '.kind // "request"' <<<"$entry")
+  use_label "$kind"
   values_issues "$id" "$entry"
   case "$(jq -r .outcome <<<"$entry")" in
     differs)
       differs=$((differs + 1))
-      {
-        echo "$marker"
-        jq -r --arg checked "$checked" --arg target "$target" --arg page "$page" '
-          "The contract run of \($checked) found that the tenant `\($target)` answers `\(.request)` in another way than the stand-in.",
-          "",
-          "| Difference | Field | Expected | Found |",
-          "| --- | --- | --- | --- |",
-          (.differences[] | "| \(.kind) | `\(.path)` | \(.expected | join(", ")) | \(.found | join(", ")) |"),
-          "",
-          "Expected is what the stand-in has. For a `name`, it is the names that strata needs and the answer lacks. Found is what the tenant has.",
-          "",
-          "Prove the fact again with its live checks: \(if (.live | length) > 0 then (.live | map("`\(.)`") | join(", ")) else "the fact has none" end).",
-          "The pages of the book that state the fact: \(.pages | map("`docs/src/\(.)`") | join(", ")).",
-          "",
-          "Then change the stand-in and the page, or record a fault of Palette in the local findings log. [The weekly contract run](\($page)) says how."
-        ' <<<"$entry"
-      } > "$work/body.md"
-      open_or_update "$marker" "Palette drift: \`$id\` differs from the stand-in" "$work/body.md" "$id"
+      if [ "$kind" = cloud ]; then
+        { echo "$marker"; cloud_body "$entry"; } > "$work/body.md"
+        title="Cloud drift: \`$id\` differs from the fixtures of the rules"
+      else
+        { echo "$marker"; palette_body "$entry"; } > "$work/body.md"
+        title="Palette drift: \`$id\` differs from the stand-in"
+      fi
+      open_or_update "$marker" "$title" "$work/body.md" "$id"
       ;;
     same)
       same=$((same + 1))
@@ -242,13 +296,15 @@ while IFS= read -r entry <&3; do
       fi
       number=$(issue_for "$marker")
       [ -n "$number" ] || continue
-      host close_issue "$number" "\`$id\` is the same as the stand-in again (checked $checked)."
+      if [ "$kind" = cloud ]; then against="the fixtures of the rules"; else against="the stand-in"; fi
+      host close_issue "$number" "\`$id\` is the same as $against again (checked $checked)."
       actions+=("closed #$number for $id")
       ;;
     skipped) skipped=$((skipped + 1)) ;;
     *) errors=$((errors + 1)) ;;
   esac
 done 3< <(jq -c '.facts[]' "$document")
+use_label request
 
 # ---- the releases ------------------------------------------------------------------------------
 news=0 release_errors=0

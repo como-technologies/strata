@@ -1,0 +1,13 @@
+{
+  "_base": "vcpu-quota-low.json",
+  "_note": "the worker pool asks for 20 x t3.small, a type under 4 GiB that the route lists only when the query lifts its default filter; the on-demand vCPU quota is 8, and the pools ask for 44 (1 x t3.xlarge, 20 x t3.small)",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          { "poolConfig": { "name": "worker-pool", "size": 20 }, "cloudConfig": { "instanceType": "t3.small" } }
+        ]
+      }
+    }
+  }
+}

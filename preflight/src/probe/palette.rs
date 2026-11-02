@@ -14,7 +14,7 @@ use super::judge;
 use super::outcome::{Call, Outcome, Ran, Verdict};
 use crate::error::Error;
 use crate::jq::Jq;
-use crate::rule::{PaletteCheck, Rule};
+use crate::rule::{PaletteCheck, PaletteRead, Rule};
 
 /// The answer of Palette to the request for one item of a check with `each`. It holds the item,
 /// and the response in the shape of `.response` of a check with no `each`.
@@ -25,16 +25,16 @@ struct ItemResponse<'a> {
 }
 
 /// A request that went out, and the answer to it.
-struct Asked {
-    call: Call,
-    response: Response,
+pub(super) struct Asked {
+    pub(super) call: Call,
+    pub(super) response: Response,
 }
 
 /// A request that no check can read: the templates did not fill, or Palette did not answer.
-struct Failed {
+pub(super) struct Failed {
     /// The request as it went out, when the templates filled.
-    call: Option<Call>,
-    error: Error,
+    pub(super) call: Option<Call>,
+    pub(super) error: Error,
 }
 
 /// Fill the templates of the request for `item`, and ask Palette. A check with no `each` has no
@@ -58,8 +58,31 @@ fn ask(
         (Method::Post, None) => Some(value_or_null(world, "/entity")),
         (Method::Get, _) => None,
     };
-    let method = check.method;
-    match backend.palette(method, &path, body.as_ref()) {
+    send(check.method, path, body.as_ref(), backend)
+}
+
+/// Fill the path of the read of an exec check, and ask Palette with a `GET`.
+pub(super) fn read(
+    rule: &Rule,
+    read: &PaletteRead,
+    world: &Value,
+    backend: &dyn Backend,
+    jq: &Jq,
+) -> std::result::Result<Asked, Box<Failed>> {
+    let path = jq
+        .render(&rule.id, &read.path, world, None)
+        .map_err(|error| Box::new(Failed { call: None, error }))?;
+    send(Method::Get, path, None, backend)
+}
+
+/// Send the request with the filled `path`, and keep the request beside its answer.
+fn send(
+    method: Method,
+    path: String,
+    body: Option<&Value>,
+    backend: &dyn Backend,
+) -> std::result::Result<Asked, Box<Failed>> {
+    match backend.palette(method, &path, body) {
         Ok(response) => {
             let answer = Some(format!("HTTP {}", response.status));
             Ok(Asked {

@@ -3,7 +3,7 @@
   "_note": "Palette gives null in nonSupportedZones of t3.xlarge, as it does for most types: each zone offers the type",
   "_patch": {
     "_responses": {
-      "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1": {
+      "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1&cpuGtEq=0&memoryGtEq=0": {
         "ok": true,
         "status": 200,
         "body": {

@@ -1,0 +1,13 @@
+{
+  "_base": "vcpu-quota-clean.json",
+  "_note": "the worker pool names Standard_A1, which the instance type route does not list, so the check cannot count the vCPUs of that pool; the regional quota has 92 free",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          { "poolConfig": { "name": "worker-pool" }, "cloudConfig": { "instanceType": "Standard_A1" } }
+        ]
+      }
+    }
+  }
+}

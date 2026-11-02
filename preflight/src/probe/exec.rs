@@ -5,11 +5,112 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
+use strata::config::KEY_VARS;
 
 use super::backend::{Backend, ExecOutput};
+use super::judge;
+use super::outcome::{Outcome, Ran, Verdict};
+use super::palette::{Asked, read as read_palette};
 use crate::error::{Error, Result};
 use crate::jq::Jq;
-use crate::rule::Rule;
+use crate::rule::{ExecCheck, PaletteRead, Rule};
+
+/// Run an exec check. It reads Palette first when the check has a read, and then runs the command.
+/// The program of the rule judges the world with `.exec`, and with `.response` after a read.
+pub(super) fn run_exec(
+    rule: &Rule,
+    check: &ExecCheck,
+    world: &Value,
+    backend: &dyn Backend,
+    jq: &Jq,
+    started: Instant,
+) -> Outcome {
+    if backend.exec_off() {
+        return Outcome::not_run(Verdict::NotRun, "--no-exec: the command did not run");
+    }
+    let argv = match render_argv(rule, &check.argv, world, jq) {
+        Ok(argv) => argv,
+        Err(e) => return Outcome::new(Verdict::Error, vec![e.to_string()], started),
+    };
+    let line = shell_words(&argv);
+    let missing = missing_tools(&check.needs, backend);
+    if !missing.is_empty() {
+        let mut out = Outcome::not_run(
+            Verdict::NotChecked,
+            format!(
+                "{} not on this machine; run by hand: {line}",
+                missing.join(", ")
+            ),
+        );
+        out.ran = Ran::Exec {
+            line,
+            answer: None,
+            request: None,
+        };
+        return out;
+    }
+    let mut with = world.clone();
+    let mut request = None;
+    if let Some(read) = &check.palette {
+        match read_first(rule, read, world, backend, jq, started) {
+            Ok(asked) => {
+                with["response"] = serde_json::to_value(&asked.response).unwrap_or(Value::Null);
+                request = Some(asked.call);
+            }
+            Err(out) => return *out,
+        }
+    }
+    let limit = Duration::from_secs(check.timeout.unwrap_or(60));
+    match backend.exec(&argv, limit) {
+        Ok(output) => {
+            with["exec"] = serde_json::to_value(&output).unwrap_or(Value::Null);
+            let mut out = judge(rule, &check.expr, &with, jq, started);
+            out.ran = Ran::Exec {
+                line,
+                answer: Some(format!("exit {}", output.exit)),
+                request,
+            };
+            out
+        }
+        Err(e) => {
+            let mut out = Outcome::new(Verdict::Error, vec![e.to_string()], started);
+            out.ran = Ran::Exec {
+                line,
+                answer: None,
+                request,
+            };
+            out
+        }
+    }
+}
+
+/// The read of Palette that an exec check makes before its command. The `Err` is the outcome of
+/// the check when the read gives no answer: no key, or a failure that no program can read.
+fn read_first(
+    rule: &Rule,
+    read: &PaletteRead,
+    world: &Value,
+    backend: &dyn Backend,
+    jq: &Jq,
+    started: Instant,
+) -> std::result::Result<Asked, Box<Outcome>> {
+    if !backend.has_palette() {
+        return Err(Box::new(Outcome::not_run(
+            Verdict::NotRun,
+            format!(
+                "no key: set {} to run this check, which reads Palette before the command",
+                KEY_VARS[0]
+            ),
+        )));
+    }
+    read_palette(rule, read, world, backend, jq).map_err(|failed| {
+        let mut out = Outcome::new(Verdict::Error, vec![failed.error.to_string()], started);
+        if let Some(call) = failed.call {
+            out.ran = Ran::Request(call);
+        }
+        Box::new(out)
+    })
+}
 
 /// Each argument of the command of `rule`, with its `{{ jq }}` templates filled from `world`.
 pub(super) fn render_argv(

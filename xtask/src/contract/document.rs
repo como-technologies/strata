@@ -2,6 +2,8 @@
 
 use serde::Serialize;
 
+use crate::facts::Kind;
+
 /// The schema id of the document.
 pub const SCHEMA: &str = "strata-contract/1";
 
@@ -32,6 +34,8 @@ pub enum DifferenceKind {
     Missing,
     /// A name that strata needs is not in the answer, and the answer has a value at its field.
     Name,
+    /// The answer of a cloud does not list a value of a table that a rule holds.
+    Table,
 }
 
 /// One difference between an answer of the tenant and the stand-in.
@@ -66,7 +70,9 @@ pub struct Unknown {
 pub struct Entry {
     /// The id of the fact.
     pub id: String,
-    /// The request of the fact, as the list writes it.
+    /// What the fact is: a request of Palette, or a call of a cloud.
+    pub kind: Kind,
+    /// The request of the fact, as the list writes it. For a call of a cloud: the command.
     pub request: String,
     /// What the run found.
     pub outcome: Outcome,
@@ -84,6 +90,9 @@ pub struct Entry {
     pub live: Vec<String>,
     /// The pages of the book that state the fact.
     pub pages: Vec<String>,
+    /// The rules of the cloud tier that read the fact; a fact of the kind `request` has none here.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub rules: Vec<String>,
 }
 
 /// The count of each outcome, and of the unknown values.
@@ -155,13 +164,20 @@ pub struct Contract {
     pub target: String,
     /// The count of each outcome.
     pub summary: Summary,
-    /// One entry for each fact of the kind `request`, in the order of the list.
+    /// One entry for each fact of the kind `request`, in the order of the list, then one for each
+    /// fact of the kind `cloud`.
     pub facts: Vec<Entry>,
     /// The latest release of each repository that the run reads; empty when it keeps no state.
     pub releases: Vec<Release>,
 }
 
 impl Contract {
+    /// Add `entries` after the entries that the document holds, and count them in the summary.
+    pub fn add(&mut self, entries: Vec<Entry>) {
+        self.facts.extend(entries);
+        self.summary = Summary::of(&self.facts);
+    }
+
     /// The exit code of the run: 0 when each fact the run checked is the same and no value is
     /// unknown, 1 when a fact differs or a value is unknown, and 2 when the run could not check a
     /// fact or a release.

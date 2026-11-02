@@ -553,12 +553,18 @@ requests only, to the tenant that `~/.palette.env` names. It has no checks. It i
 [The weekly contract run](./facts.md#the-weekly-contract-run) describes. It writes the document
 `strata-contract/1`, and exits with 0, 1, or 2.
 
+The run also sends the read-only calls of the tool of a cloud, such as `aws` and `gcloud`, in the
+lab account. `AWS_PROFILE` and [the lab values](./facts.md#the-lab-values) select that account.
+A call needs the objects that the lab values name, such as the project and the role.
+`--no-cloud` sends no call of a cloud.
+
 A tenant with no profile and no cluster skips most of the facts. Run `just live-profiles` first to
 give the run profiles to read, and `just live-up` to give it a cluster.
 
 | Result | What it shows |
 |---|---|
 | `contract.json` | #390, #391, #530: for each fact of the kind `request`, the status and the type of each field against the stand-in. The run asks with the query that strata sends. It checks the names that strata needs, and lists each value of a closed set that the fact and the stand-in do not name. The facts `tag-filter-listing`, `tag-filter`, and `validate-aws-regions` show that the filter listing needs `filterType=tag` and the regions route needs `cloudAccountUid`. No result yet. |
+| `contract.json` | #393: for each fact of the kind `cloud`, the shape of the answer, and the values of its table, against the fixtures of the rules. No result yet. |
 
 ## contract-profiles.sh
 
@@ -1408,6 +1414,27 @@ The check `instance-types-shape` expects `instanceTypes[]` with `type`, and
 types. The check passes on that answer (no result yet). For GCP, no run has
 shown the shape, and the check shows it (no result yet). The check `key-pairs-shape`
 expects `keyNames[]` with the key pair of the entity (no result yet).
+
+Five checks ask the list routes that the rules read (#393). Each check of a key list expects the
+keys that the route gives, and no other key. A key beside them is a field that a rule of the cloud
+tier reads, such as the tags of a subnet. That rule can then move to Palette.
+
+A call by hand showed the default filter of the instance type route on AWS. With no query, the
+route lists no `t3.small` and no `t3.micro`. With `cpuGtEq=0&memoryGtEq=0`, it lists both, each with
+`cpu` 2. It lists no `m3.large` in both cases. The two checks `instancetypes-cpu` and
+`instancetypes-default-filter` show the filter on every engine of the plan (no result yet). The
+quota rules and `instance-offering` send the query.
+
+| Check | What it expects |
+|---|---|
+| `instancetypes-cpu` | The instance type route, asked with `cpuGtEq=0&memoryGtEq=0`, lists each pool type of the entity with `cpu` as a number above 0. The quota rules count that number as the vCPUs. The list holds a type under 2 vCPUs or 4 GiB, with `cpu` above 0. No result yet. |
+| `instancetypes-default-filter` | The route with no query for the filter lists no type under 2 vCPUs or 4 GiB. The query `cpuGtEq=0&memoryGtEq=0` lists more types, with a small type among them. No result yet. |
+| `vpcs-route-keys` | The VPC route lists `vpcs[]` with `vpcId`, and each subnet with `subnetId` and `az`. A VPC has no key beside `cidrBlock`, `name`, `subnets`, and `vpcId`. A subnet has none beside `az`, `isPrivate`, `mapPublicIpOnLaunch`, `name`, and `subnetId`. No result yet. |
+| `zones-route-keys` | The zone route lists `zones[]` with `name`, `state`, and `zoneId`, and no other key. So it lists no zone type. No result yet. |
+| `sgs-route-keys` | The security group route lists `groups[]` with `groupId` and `groupName` for the first VPC of the region. A group has no key beside `groupId`, `groupName`, and `ownerId`. No result yet. |
+
+See
+[The routes of Palette beside the calls](../internals/preflight.md#the-routes-of-palette-beside-the-calls).
 
 A run that makes a fault
 puts `caught` in the ledger, and the clean entity of the same run puts `passed`. The ledger holds

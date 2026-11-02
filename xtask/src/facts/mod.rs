@@ -10,10 +10,11 @@
 //! scripts, the rules of strata-preflight, and the stand-in. [`print()`] gives them as JSON for a
 //! script.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 mod check;
+pub(crate) mod cloud;
 mod model;
 mod sources;
 #[cfg(test)]
@@ -46,4 +47,17 @@ pub fn print(repo: &Path) -> Result<String, Vec<String>> {
     let facts = load(repo)?;
     let document = serde_json::json!({"schema": model::SCHEMA, "facts": facts});
     serde_json::to_string_pretty(&document).map_err(|e| vec![e.to_string()])
+}
+
+/// The rules of the cloud tier in the catalog of strata-preflight, by id, with the answers that
+/// their fixtures hold. An error is the messages about the rules and the fixtures that cannot be
+/// read.
+pub fn cloud_rules() -> Result<BTreeMap<String, cloud::CloudRule>, Vec<String>> {
+    let catalog = strata_preflight::catalog::builtin().map_err(|e| vec![e.to_string()])?;
+    let (cloud, unread) = cloud::read_rules(&catalog);
+    if unread.is_empty() {
+        Ok(cloud.rules)
+    } else {
+        Err(unread)
+    }
 }

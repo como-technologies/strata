@@ -1,0 +1,80 @@
+{
+  "schema": "strata-contract/1",
+  "checkedAt": "2026-11-02T06:00:00Z",
+  "target": "https://tenant.example",
+  "summary": {
+    "same": 0,
+    "differs": 2,
+    "skipped": 1,
+    "error": 0,
+    "unknownValues": 0
+  },
+  "facts": [
+    {
+      "id": "aws-ec2-vcpu-quota",
+      "kind": "cloud",
+      "request": "aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region {region} --output json",
+      "outcome": "differs",
+      "differences": [
+        {
+          "kind": "type",
+          "path": "Quota.Value",
+          "expected": [
+            "number"
+          ],
+          "found": [
+            "string"
+          ]
+        }
+      ],
+      "live": [],
+      "pages": [
+        "internals/preflight.md#the-calls-of-the-clouds"
+      ],
+      "rules": [
+        "aws-quotas"
+      ]
+    },
+    {
+      "id": "eks-refused-zone-id-us-east-1",
+      "kind": "cloud",
+      "request": "aws ec2 describe-availability-zones --region us-east-1 --all-availability-zones --output json",
+      "outcome": "differs",
+      "differences": [
+        {
+          "kind": "table",
+          "path": "AvailabilityZones[].ZoneId",
+          "expected": [
+            "use1-az3"
+          ],
+          "found": [
+            "use1-az1",
+            "use1-az2"
+          ]
+        }
+      ],
+      "live": [],
+      "pages": [
+        "internals/preflight.md#the-tables-of-cloud-facts"
+      ],
+      "rules": [
+        "eks-unsupported-zone"
+      ]
+    },
+    {
+      "id": "azure-vm-usage",
+      "kind": "cloud",
+      "request": "",
+      "outcome": "skipped",
+      "reason": "The lab has no account of Azure.",
+      "live": [],
+      "pages": [
+        "internals/preflight.md#the-calls-of-the-clouds"
+      ],
+      "rules": [
+        "azure-vcpu-quota"
+      ]
+    }
+  ],
+  "releases": []
+}

@@ -7,6 +7,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+use super::cloud;
 use super::model::{Fact, Kind};
 use super::sources::{API_PAGE, FACT_PAGES, Sources, method_pattern, shape};
 
@@ -32,6 +33,7 @@ pub fn check(sources: &Sources) -> Vec<String> {
     bad.extend(sections_stated(sources));
     bad.extend(live_checks_exist(sources));
     bad.extend(stand_in_agrees(sources));
+    bad.extend(cloud::check(sources));
     bad
 }
 
@@ -67,35 +69,91 @@ fn fields(facts: &[Fact]) -> Vec<String> {
             (None, Kind::Request) => {
                 bad.push(format!("fact `{id}`: a request fact needs a request"))
             }
-            (Some(_), Kind::Behavior | Kind::Gap) => {
+            (Some(_), Kind::Behavior | Kind::Gap | Kind::Cloud) => {
                 bad.push(format!("fact `{id}`: only a request fact has a request"));
             }
             _ => {}
         }
-        for (name, empty) in [
-            ("reads", fact.reads.is_empty()),
-            ("pages", fact.pages.is_empty()),
-            (
-                "code or rules",
-                fact.code.is_empty() && fact.rules.is_empty(),
-            ),
-        ] {
-            if empty {
-                bad.push(format!("fact `{id}`: `{name}` is empty"));
-            }
+        bad.extend(proof(fact));
+    }
+    bad
+}
+
+/// The fields that a fact needs to be proved: a live check, or a reason why none proves it. A
+/// fact of the kind `cloud` is proved by a call that the contract run sends, so it needs a call or
+/// a reason, and it names no live check.
+fn proof(fact: &Fact) -> Vec<String> {
+    let id = &fact.id;
+    let cloud = fact.kind == Kind::Cloud;
+    let proved = if cloud {
+        !fact.call.is_empty()
+    } else {
+        !fact.live.is_empty()
+    };
+    // a cloud fact that no call proves can state its reasons in `unchecked` alone
+    let reads_needed = !cloud || proved;
+    let mut bad = Vec::new();
+    for (name, empty) in [
+        ("reads", reads_needed && fact.reads.is_empty()),
+        ("pages", fact.pages.is_empty()),
+        (
+            "code or rules",
+            fact.code.is_empty() && fact.rules.is_empty(),
+        ),
+    ] {
+        if empty {
+            bad.push(format!("fact `{id}`: `{name}` is empty"));
         }
-        match (fact.live.is_empty(), fact.unchecked.as_deref()) {
-            (true, None) => bad.push(format!(
-                "fact `{id}`: no live check proves it, and `unchecked` gives no reason"
-            )),
-            (false, Some(_)) => bad.push(format!(
-                "fact `{id}`: it has a live check, so `unchecked` must go"
-            )),
-            (true, Some(reason)) if reason.trim().is_empty() => {
-                bad.push(format!("fact `{id}`: `unchecked` is empty"));
-            }
-            _ => {}
+    }
+    let means = if cloud {
+        "no call proves it"
+    } else {
+        "no live check proves it"
+    };
+    let has = if cloud {
+        "it has a call"
+    } else {
+        "it has a live check"
+    };
+    match (proved, fact.unchecked.as_deref()) {
+        (false, None) => bad.push(format!(
+            "fact `{id}`: {means}, and `unchecked` gives no reason"
+        )),
+        (true, Some(_)) => bad.push(format!("fact `{id}`: {has}, so `unchecked` must go")),
+        (false, Some(reason)) if reason.trim().is_empty() => {
+            bad.push(format!("fact `{id}`: `unchecked` is empty"));
         }
+        _ => {}
+    }
+    if cloud {
+        bad.extend(cloud_fields(fact));
+    } else if !fact.call.is_empty() || fact.table.is_some() {
+        bad.push(format!(
+            "fact `{id}`: only a fact of the kind cloud has a call or a table"
+        ));
+    }
+    bad
+}
+
+/// The fields that a fact of the kind `cloud` must not have: a live check, and a route of the
+/// stand-in. The fixtures of its rules are its stand-in.
+fn cloud_fields(fact: &Fact) -> Vec<String> {
+    let id = &fact.id;
+    let mut bad = Vec::new();
+    if !fact.live.is_empty() {
+        bad.push(format!(
+            "fact `{id}`: the contract run proves a cloud fact, so it names no live check"
+        ));
+    }
+    if !fact.stand_in.is_empty() {
+        bad.push(format!(
+            "fact `{id}`: the fixtures of its rules are the stand-in of a cloud fact, so it names no route"
+        ));
+    }
+    if fact.rules.is_empty() {
+        bad.push(format!(
+            "fact `{id}`: a cloud fact names a rule of the cloud tier"
+        ));
     }
     bad
 }

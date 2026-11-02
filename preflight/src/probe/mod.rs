@@ -5,7 +5,7 @@
 //! code on a fixture: [`FixtureBackend`] reads the answers from the world document itself, and
 //! [`LiveBackend`] asks Palette and runs the command.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use serde_json::Value;
 use strata::json::{flag, str_at, text_or};
@@ -18,7 +18,7 @@ mod exec;
 pub(crate) mod outcome;
 mod palette;
 
-use exec::{missing_tools, render_argv};
+use exec::run_exec;
 use palette::run_palette;
 
 pub use backend::{Backend, ExecOutput, FixtureBackend, LiveBackend, Response, is_answer};
@@ -37,51 +37,7 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
     match check {
         Check::Static { expr } => judge(rule, expr, world, jq, started),
         Check::Palette(check) => run_palette(rule, check, world, backend, jq, started),
-        Check::Exec {
-            argv,
-            needs,
-            timeout,
-            expr,
-        } => {
-            if backend.exec_off() {
-                return Outcome::not_run(Verdict::NotRun, "--no-exec: the command did not run");
-            }
-            let argv = match render_argv(rule, argv, world, jq) {
-                Ok(argv) => argv,
-                Err(e) => return Outcome::new(Verdict::Error, vec![e.to_string()], started),
-            };
-            let line = shell_words(&argv);
-            let missing = missing_tools(needs, backend);
-            if !missing.is_empty() {
-                let mut out = Outcome::not_run(
-                    Verdict::NotChecked,
-                    format!(
-                        "{} not on this machine; run by hand: {line}",
-                        missing.join(", ")
-                    ),
-                );
-                out.ran = Ran::Exec { line, answer: None };
-                return out;
-            }
-            let limit = Duration::from_secs(timeout.unwrap_or(60));
-            match backend.exec(&argv, limit) {
-                Ok(output) => {
-                    let mut with = world.clone();
-                    with["exec"] = serde_json::to_value(&output).unwrap_or(Value::Null);
-                    let mut out = judge(rule, expr, &with, jq, started);
-                    out.ran = Ran::Exec {
-                        line,
-                        answer: Some(format!("exit {}", output.exit)),
-                    };
-                    out
-                }
-                Err(e) => {
-                    let mut out = Outcome::new(Verdict::Error, vec![e.to_string()], started);
-                    out.ran = Ran::Exec { line, answer: None };
-                    out
-                }
-            }
-        }
+        Check::Exec(check) => run_exec(rule, check, world, backend, jq, started),
         // the watch adds the cluster, the summary, and the events; the caller of a watch does,
         // and then judges with `judge_watch`
         Check::Watch { .. } => Outcome::not_run(

@@ -122,9 +122,10 @@ states `each`.
 ## A rule over the list of an account
 
 Palette lists some facts of a cloud account in one request: the instance types
-of a region, and its key pairs. The tool of the cloud gives the same answer, but
-it needs the credentials of the cloud on your machine. These rules need the key
-of Palette alone. See
+of a region, its key pairs, its VPCs with their subnets, and the security groups
+of a VPC. The tool of the cloud gives the same answer, but it needs the
+credentials of the cloud on your machine. These rules need the key of Palette
+alone. See
 [The list routes](../../internals/palette/validate-routes.md#the-list-routes)
 for what each route gives.
 
@@ -152,8 +153,37 @@ of an EKS cluster names a key pair that the account lacks:
 {{#include ../../output/preflight-ssh-key.txt}}
 ```
 
+`static-subnets` reads the VPCs of the region. It fails a subnet that no VPC
+lists. It also fails a subnet in another VPC, and a subnet in another zone than
+the pool says. Here the pools say that `subnet-0bbb` is in `us-east-2a`:
+
+```text
+{{#include ../../output/preflight-subnets.txt}}
+```
+
+`sg-name-collision` reads the security groups of the VPC. It fails when a group
+has the name that Palette gives to a group of the cluster. Here an earlier
+cluster of the name `payments` left `payments-node`:
+
+```text
+{{#include ../../output/preflight-security-group.txt}}
+```
+
 The `reproduce:` line of each rule asks the cloud, because the list is the
 catalog of Palette and not the cloud.
+
+### A rule that reads Palette and the cloud
+
+Some rules need a fact that Palette lists, and a fact that only the cloud gives.
+`aws-quotas`, `gcp-quotas`, and `azure-vcpu-quota` count the vCPUs of the pools
+from the field `cpu` of the instance type route. They compare the sum with the
+quota that the tool of the cloud reads, because no route of Palette lists a
+quota. These rules are in the `cloud` tier. They need the key and the tool, and
+the report shows the command and the request. The request has the query
+`cpuGtEq=0&memoryGtEq=0`, so the route lists the small types too. A pool whose
+type the route still does not list fails the rule. The message names the pool and
+the type. [The rule format](../../reference/preflight-rules.md#a-read-of-palette-before-the-command)
+states the key `palette` of the check.
 
 ## A rule over the property route of a cloud
 

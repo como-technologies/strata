@@ -3,7 +3,7 @@
   "_note": "Palette gives null in nonSupportedZones of e2-standard-4, as it does for most types: each zone offers the type",
   "_patch": {
     "_responses": {
-      "GET /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-gcp-1": {
+      "GET /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-gcp-1&cpuGtEq=0&memoryGtEq=0": {
         "ok": true,
         "status": 200,
         "body": {
