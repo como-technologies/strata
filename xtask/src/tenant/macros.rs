@@ -13,6 +13,15 @@ pub(super) const CLUSTER_NAME_MACRO: &str = "{{.spectro.system.cluster.name}}";
 /// The system macro of the profile name.
 pub(super) const PROFILE_NAME_MACRO: &str = "{{.spectro.system.clusterprofile.name}}";
 
+/// The placeholder of the user macro `name`, as a value reads it and as `packs/resolvedValues` keys
+/// it: `{{.spectro.macro.NAME}}`.
+///
+/// The stand-in writes the text as Palette gives it. It does not call strata for it, so a change of
+/// strata cannot move the answer of the stand-in.
+pub(super) fn user_macro(name: &str) -> String {
+    format!("{{{{.spectro.macro.{name}}}}}")
+}
+
 /// The object whose `packs/resolvedValues` answer lists the profiles that it pins.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Pinner {
@@ -75,7 +84,7 @@ impl Tenant {
         let mut resolved = Map::new();
         for m in macros.as_array().into_iter().flatten() {
             let name = m["name"].as_str().unwrap_or_default();
-            resolved.insert(format!("{{{{.spectro.macro.{name}}}}}"), m["value"].clone());
+            resolved.insert(user_macro(name), m["value"].clone());
         }
         resolved
     }
@@ -130,13 +139,18 @@ impl Tenant {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_user_macro_is_its_name_in_double_braces_after_the_prefix_of_palette() {
+        assert_eq!(user_macro("region"), "{{.spectro.macro.region}}");
+    }
+
     /// One function resolves the macros of a cluster and of a cluster group. Both list each
     /// profile they pin with each project macro. Only the cluster adds the system macro of its
     /// name.
     #[test]
     fn a_macro_resolves_for_a_cluster_with_its_name_and_for_a_group_without_it() {
-        let dir = std::env::temp_dir().join(format!("strata-macros-{}", std::process::id()));
-        let tenant = Tenant::new(&dir, &dir);
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), dir.path());
         let owner = |uid: &str, name: &str| {
             json!({"metadata": {"uid": uid, "name": name},
                 "spec": {"clusterProfileTemplates": [{"uid": "p1"}, {"uid": "p2"}]}})
@@ -144,7 +158,8 @@ mod tests {
         tenant.put("proj", &cluster_route("c1"), &owner("c1", "fred"));
         tenant.put("proj", &group_route("g1"), &owner("g1", "edge"));
         let resolved = |route: String| tenant.read("proj", &resolved_values_file(&route));
-        let region = "{{.spectro.macro.region}}";
+        let placeholder = user_macro("region");
+        let region = placeholder.as_str();
         for value in ["us-east-2", "eu-west-1"] {
             tenant.set_macro("proj", "region", value);
             let cluster = json!({"profiles": [
@@ -156,6 +171,5 @@ mod tests {
             assert_eq!(resolved(cluster_route("c1")), cluster);
             assert_eq!(resolved(group_route("g1")), group);
         }
-        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

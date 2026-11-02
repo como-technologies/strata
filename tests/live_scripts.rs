@@ -4350,6 +4350,25 @@ fn variable_default(name: &str) -> Option<String> {
         .map(|l| l.trim().trim_matches('"').to_string())
 }
 
+/// The scripts name the registry of the lab with `public_repo` in `lib.sh`, and OpenTofu makes the
+/// registry with the default of the variable `registry_name`. A lab that names its registry in
+/// another way changes both, and this test fails when only one changes.
+#[test]
+fn the_registry_of_the_lab_has_one_name_in_lib_sh_and_in_the_variables_of_the_configuration() {
+    let lib = std::fs::read_to_string(live_script("lib.sh")).unwrap();
+    let in_lib = lib
+        .lines()
+        .find_map(|l| l.strip_prefix("public_repo="))
+        .map(|name| name.trim_matches('"'))
+        .expect("lib.sh names the registry of the lab");
+    assert!(!in_lib.is_empty());
+    assert_eq!(
+        variable_default("registry_name").as_deref(),
+        Some(in_lib),
+        "lib.sh and variables.tf name the registry of the lab in two ways"
+    );
+}
+
 #[test]
 fn a_cluster_in_the_cluster_template_gets_a_time_zone_because_palette_refuses_it_without_one() {
     let default = variable_default("cluster_timezone").expect("cluster_timezone has a default");

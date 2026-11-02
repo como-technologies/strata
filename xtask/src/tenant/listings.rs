@@ -4,6 +4,9 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde_json::{Map, Value, json};
+use strata::closed_set::ClosedSet;
+use strata::model::cluster_state::ClusterState;
+use strata::model::scope::ProfileScope;
 
 use super::routes::{
     CLUSTER_LISTING, CLUSTER_SEARCH_PATH, CLUSTERS, GROUPS, PROFILE_SEARCH_PATH, PROFILES,
@@ -41,14 +44,14 @@ impl Tenant {
             let profiles: Vec<Value> = self
                 .documents_in(project, PROFILES)
                 .into_iter()
-                .filter(|d| d["metadata"]["annotations"]["scope"] != "tenant")
+                .filter(|d| d["metadata"]["annotations"]["scope"] != ProfileScope::Tenant.as_str())
                 .chain(tenant_profiles.iter().cloned())
                 .collect();
             // a deleted cluster leaves the listing and the search, and keeps its document
             let clusters: Vec<Value> = self
                 .documents_in(project, CLUSTERS)
                 .into_iter()
-                .filter(|d| d["status"]["state"] != "Deleted")
+                .filter(|d| d["status"]["state"] != ClusterState::Deleted.as_str())
                 .collect();
             every_cluster.extend(clusters.iter().cloned());
             self.write_listings(project, &profiles, &clusters);
@@ -280,7 +283,7 @@ fn profile_search(profiles: &[Value]) -> Value {
         let name = doc["metadata"]["name"].as_str().unwrap_or("").to_string();
         let scope = doc["metadata"]["annotations"]["scope"]
             .as_str()
-            .unwrap_or("project")
+            .unwrap_or(ProfileScope::Project.as_str())
             .to_string();
         by_name.entry((name, scope)).or_default().push(doc);
     }

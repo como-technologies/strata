@@ -406,13 +406,13 @@ mod tests {
     #[test]
     fn the_check_of_the_book_reports_a_field_that_no_document_of_the_stand_in_holds() {
         // a cluster listing with no entry holds none of the fields that the fact reads
-        let tenant = std::env::temp_dir().join(format!("strata-fields-{}", std::process::id()));
+        let temp = tempfile::tempdir().unwrap();
+        let tenant = temp.path();
         let listing = tenant.join("tenant/v1/dashboard/spectroclusters");
         std::fs::create_dir_all(&listing).unwrap();
         std::fs::write(listing.join("meta.json"), "[]").unwrap();
         let mut stand_in = StandIn::default();
-        stand_in.add_tenant(&tenant);
-        std::fs::remove_dir_all(&tenant).unwrap();
+        stand_in.add_tenant(tenant);
         let repo = crate::repository();
         let bad = fields_held(&repo, &stand_in);
         assert!(
@@ -430,8 +430,9 @@ mod tests {
 
     #[test]
     fn each_check_reports_a_page_that_it_cannot_read() {
-        let repo = std::env::temp_dir().join(format!("strata-checks-{}", std::process::id()));
-        let use_cases = book(&repo).join(USE_CASES);
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let use_cases = book(repo).join(USE_CASES);
         std::fs::create_dir_all(&use_cases).unwrap();
         std::fs::write(repo.join("Cargo.toml"), "version = \"1.0.0\"\n").unwrap();
         std::fs::write(repo.join("README.md"), "strata\n").unwrap();
@@ -439,18 +440,17 @@ mod tests {
         let broken = use_cases.join("broken.md");
         std::fs::write(&broken, [0xff, 0xfe]).unwrap();
         let bad = check(
-            &repo,
+            repo,
             &chapters(),
             &BTreeSet::new(),
             &BTreeSet::new(),
             &StandIn::default(),
         );
-        std::fs::remove_dir_all(&repo).unwrap();
         // release_tags, links_resolve, follow_along_first, playgrounds, seeds, and cited_run_ids each
         // read the page
         let unread = bad
             .iter()
-            .filter(|m| m.starts_with(&format!("{}: cannot read the file", shown(&repo, &broken))))
+            .filter(|m| m.starts_with(&format!("{}: cannot read the file", shown(repo, &broken))))
             .count();
         assert_eq!(unread, 6, "{bad:?}");
     }
@@ -537,8 +537,9 @@ mod tests {
 
     #[test]
     fn a_git_dependency_that_names_another_release_fails_and_this_release_passes() {
-        let repo = std::env::temp_dir().join(format!("strata-release-tags-{}", std::process::id()));
-        let docs = book(&repo);
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let docs = book(repo);
         std::fs::create_dir_all(&docs).unwrap();
         std::fs::write(repo.join("Cargo.toml"), "version = \"1.0.0\"\n").unwrap();
         std::fs::write(
@@ -551,8 +552,7 @@ mod tests {
             "strata = { git = \"ssh://git@example.com/a.git\", tag = \"v0.9.0\" }\n",
         )
         .unwrap();
-        let bad = release_tags(&repo);
-        std::fs::remove_dir_all(&repo).unwrap();
+        let bad = release_tags(repo);
         assert_eq!(
             bad,
             [
@@ -564,8 +564,9 @@ mod tests {
 
     #[test]
     fn a_page_that_cites_a_run_id_fails_and_a_page_with_none_passes() {
-        let repo = std::env::temp_dir().join(format!("strata-run-ids-{}", std::process::id()));
-        let docs = book(&repo);
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let docs = book(repo);
         std::fs::create_dir_all(docs.join("sub")).unwrap();
         std::fs::write(docs.join("clean.md"), "A date is 2026-09-30.\n").unwrap();
         std::fs::write(
@@ -573,8 +574,7 @@ mod tests {
             "Run 20260930T120000Z shows it.\n",
         )
         .unwrap();
-        let bad = cited_run_ids(&repo);
-        std::fs::remove_dir_all(&repo).unwrap();
+        let bad = cited_run_ids(repo);
         assert_eq!(bad.len(), 1, "{bad:?}");
         assert!(
             bad[0].starts_with("docs/src/sub/cited.md cites the run id 20260930T120000Z."),
@@ -593,12 +593,12 @@ mod tests {
 
     #[test]
     fn a_page_that_cites_a_run_id_of_2027_fails() {
-        let repo = std::env::temp_dir().join(format!("strata-run-ids-2027-{}", std::process::id()));
-        let docs = book(&repo);
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path();
+        let docs = book(repo);
         std::fs::create_dir_all(&docs).unwrap();
         std::fs::write(docs.join("later.md"), "Run 20270105T083000Z shows it.\n").unwrap();
-        let bad = cited_run_ids(&repo);
-        std::fs::remove_dir_all(&repo).unwrap();
+        let bad = cited_run_ids(repo);
         assert_eq!(bad.len(), 1, "{bad:?}");
         assert!(
             bad[0].starts_with("docs/src/later.md cites the run id 20270105T083000Z."),

@@ -2,6 +2,7 @@
 
 use serde_json::{Value, json};
 
+use super::macros::user_macro;
 use super::registries::{OCI_CSI_DIGEST, OCI_CSI_PACK, PALETTE_REGISTRY};
 
 /// One change to a published profile document, as a person makes it through the API.
@@ -162,7 +163,7 @@ impl Edit {
             }
             Edit::Macro { pack, name } => {
                 for p in packs_named(doc, pack) {
-                    append_value_line(p, &format!("{name}: \"{{{{.spectro.macro.{name}}}}}\""));
+                    append_value_line(p, &format!("{name}: \"{}\"", user_macro(name)));
                 }
             }
         }

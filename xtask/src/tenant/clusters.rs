@@ -2,6 +2,9 @@
 //! makes.
 
 use serde_json::{Map, Value, json};
+use strata::closed_set::ClosedSet;
+use strata::model::cluster_state::ClusterState;
+use strata::model::scope::ProfileScope;
 
 use super::edit::with_reclaim_policy;
 use super::macros::Pinner;
@@ -21,7 +24,7 @@ impl Tenant {
     pub fn delete_cluster(&self, project: &str, uid: &str, at: &str) {
         let path = cluster_route(uid);
         let mut doc = self.read(project, &path);
-        doc["status"]["state"] = json!("Deleted");
+        doc["status"]["state"] = json!(ClusterState::Deleted.as_str());
         doc["metadata"]["isDeleted"] = json!(true);
         doc["metadata"]["deletionTimestamp"] = json!(at);
         doc["metadata"]["lastModifiedTimestamp"] = json!(at);
@@ -378,7 +381,7 @@ fn cluster_document(project: &str, uid: &str, name: &str, templates: &[Value]) -
     json!({
         "apiVersion": "v1", "kind": "SpectroCluster",
         "metadata": {"name": name, "uid": uid,
-            "annotations": {"projectUid": project, "scope": "project"},
+            "annotations": {"projectUid": project, "scope": ProfileScope::Project.as_str()},
             "labels": {"managed-by": "opentofu"}},
         "spec": {"cloudType": "aws", "clusterType": "PureManage",
             "clusterProfileTemplates": templates,

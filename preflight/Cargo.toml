@@ -2,8 +2,8 @@
 name = "strata-preflight"
 version = "0.27.0"
 edition = "2024"
-# The same floor as strata: this crate uses the same `if let` chains.
-rust-version = "1.88"
+# The floor of the workspace: this crate uses the same `if let` chains as strata.
+rust-version.workspace = true
 description = "Check that Spectro Cloud Palette can build a cluster, before the build: a catalog of rules as data, each a probe or a preflight check, with the confidence of each from the runs that prove it"
 license = "Apache-2.0"
 repository = "https://github.com/como-technologies/strata"

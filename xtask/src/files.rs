@@ -66,12 +66,12 @@ pub fn pages(dir: &Path) -> Vec<PathBuf> {
 mod tests {
     use super::*;
 
-    /// A directory for the test `test`, with `b.md`, `a.md`, `c.txt`, and `sub/d.md`.
-    fn tree(test: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("strata-files-{test}-{}", std::process::id()));
-        std::fs::create_dir_all(root.join("sub")).unwrap();
+    /// A directory with `b.md`, `a.md`, `c.txt`, and `sub/d.md`. It goes when the test ends.
+    fn tree() -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("sub")).unwrap();
         for file in ["b.md", "a.md", "c.txt", "sub/d.md"] {
-            std::fs::write(root.join(file), "").unwrap();
+            std::fs::write(root.path().join(file), "").unwrap();
         }
         root
     }
@@ -85,24 +85,24 @@ mod tests {
 
     #[test]
     fn the_files_of_a_directory_with_an_extension_come_in_name_order_without_the_subdirectories() {
-        let root = tree("files");
-        let found = names(&root, files_with_ext(&root, "md"));
-        std::fs::remove_dir_all(&root).unwrap();
+        let temp = tree();
+        let root = temp.path();
+        let found = names(root, files_with_ext(root, "md"));
         assert_eq!(found, ["a.md", "b.md"]);
     }
 
     #[test]
     fn the_pages_of_a_directory_come_in_name_order_at_any_depth() {
-        let root = tree("pages");
-        let found = names(&root, pages(&root));
-        std::fs::remove_dir_all(&root).unwrap();
+        let temp = tree();
+        let root = temp.path();
+        let found = names(root, pages(root));
         assert_eq!(found, ["a.md", "b.md", "sub/d.md"]);
     }
 
     #[test]
     fn a_directory_that_does_not_exist_has_no_file() {
-        let missing =
-            std::env::temp_dir().join(format!("strata-files-missing-{}", std::process::id()));
+        let temp = tempfile::tempdir().unwrap();
+        let missing = temp.path().join("missing");
         assert!(files_with_ext(&missing, "md").is_empty());
         assert!(pages(&missing).is_empty());
     }

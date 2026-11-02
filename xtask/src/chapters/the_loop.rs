@@ -4,7 +4,7 @@ use super::edits::RETAIN;
 use super::ids::{
     A100, A100_PROD, A110, A110_PROD, DEV, PAYMENTS, PAYMENTS_PROD, PROD, PRODUCTION,
 };
-use super::preflight::{AWS_VALIDATE, accepted_answer, preflight_entity, preflight_routes};
+use super::preflight::{accepted_answer, aws_validate, preflight_entity, preflight_routes};
 use super::{CANDIDATE_YAML, GIT};
 use crate::book::Runner;
 use serde_json::json;
@@ -196,7 +196,7 @@ fn loop_preflight(r: &mut Runner) {
         false,
         r#"jq '(.spec.machinepoolconfig[] | select(.poolConfig.name == "worker-pool") | .poolConfig.size) = 2' cluster.json > fixed.json && mv fixed.json cluster.json && jq -c '.spec.machinepoolconfig[].poolConfig | {name, size}' cluster.json"#,
     );
-    r.answer(PROD, AWS_VALIDATE, &accepted_answer());
+    r.answer(PROD, &aws_validate(), &accepted_answer());
     r.serve_here(); // state 4: Palette finds no fault in the body with two workers
     r.step(
         "loop-preflight-clean",
