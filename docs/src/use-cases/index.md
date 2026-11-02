@@ -159,8 +159,8 @@ and a whole team.
 maintainer cannot see your tenant.
 
 - [Palette gives a value that strata does not know](./unknown-value.md): a job writes a note about a
-  value that this release does not name. You decide whether to tell the maintainers, by hand or by
-  the setting `STRATA_REPORT`.
+  value that this release does not name. You decide whether to tell the maintainers: by hand, with
+  the setting `STRATA_REPORT`, or with a yes to the one question.
 
 ## The examples
 

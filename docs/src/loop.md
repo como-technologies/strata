@@ -355,8 +355,8 @@ says what the note and the log hold.
 
 A person who sees the note can run `strata report` on that machine. It prints the values of the
 log, and a link that opens a new issue of strata with them. Strata sends nothing unless you
-choose it: you read the report, and you decide whether to send it by hand or by the setting
-`STRATA_REPORT`. See
+choose it: you read the report, and you decide whether to send it by hand, by the setting
+`STRATA_REPORT`, or by a yes to its one question. See
 [Palette gives a value that strata does not know](./use-cases/unknown-value.md).
 
 ## Palette behavior

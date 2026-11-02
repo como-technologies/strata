@@ -3,19 +3,18 @@
 use crate::common;
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use strata::snapshot::Tier;
 
 use common::{
     PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port, read_json, schema,
-    schema_values, snapshot_from_raw, strata_bin, write_record,
+    schema_values, snapshot_from_raw, strata_command, write_record,
 };
 
 const ESC: char = '\x1b';
 
 fn run_in(args: &[&str], envs: &[(&str, &str)], clear: &[&str]) -> Run {
-    let mut c = Command::new(strata_bin());
+    let mut c = strata_command();
     c.args(args).env("STRATA_QUIET", "1");
     for k in clear {
         c.env_remove(k);
@@ -161,7 +160,7 @@ fn a_file_named_report_names_the_command_after_another_argument_and_compare_read
     let fx = fixtures();
     let dir = tempfile::tempdir().unwrap();
     std::fs::copy(&fx.a, dir.path().join("report")).unwrap();
-    let mut c = Command::new(strata_bin());
+    let mut c = strata_command();
     c.args(["compare", "report", &fx.a2])
         .current_dir(dir.path())
         .env("STRATA_QUIET", "1");
@@ -1622,7 +1621,7 @@ fn json_mode_writes_one_structured_error_line_on_stderr() {
 
 /// [`against_closed_port`] with `STRATA_QUIET` set, as [`run`] sets it.
 fn closed_port(args: &[&str], envs: &[(&str, &str)]) -> Run {
-    against_closed_port(Command::new(strata_bin()), args, envs, true)
+    against_closed_port(strata_command(), args, envs, true)
 }
 
 /// [`closed_port`] in JSON mode: the exit status and the error object.
@@ -1734,7 +1733,7 @@ fn candidate_names_the_whole_root_of_a_record_whose_root_has_fewer_than_twelve_c
     write_record(&record, &doc);
     let file = out.path().join("profile.yaml");
     let r = Run::of(
-        Command::new(strata_bin())
+        strata_command()
             .args(["candidate", record.to_str().unwrap(), "-o"])
             .arg(&file)
             .env_remove("STRATA_QUIET"),
@@ -1746,7 +1745,7 @@ fn candidate_names_the_whole_root_of_a_record_whose_root_has_fewer_than_twelve_c
 
 /// [`closed_port`] without `STRATA_QUIET`, so the warnings a person sees are on.
 fn first_request_loud(args: &[&str], envs: &[(&str, &str)]) -> Run {
-    against_closed_port(Command::new(strata_bin()), args, envs, false)
+    against_closed_port(strata_command(), args, envs, false)
 }
 
 /// A uid and a name both reach strata and the uid decides, so the name decided nothing. Strata

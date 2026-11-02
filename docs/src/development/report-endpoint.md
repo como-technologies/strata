@@ -173,7 +173,8 @@ cargo test --test integration report_deploy   # the deploy script, against a sta
 
 The tests of the service start the real service and a stand-in of GitHub on this machine. They post
 with the same function that strata uses, so the send and the endpoint are tested together. No test
-calls GitHub or Google.
+calls GitHub or Google. No test posts to the endpoint that the release names: see
+[The tests send no report](./build-test.md#the-tests-send-no-report).
 
 ## Deploy the endpoint
 
@@ -201,7 +202,8 @@ not deploy it, because a session has no account of Google.
    - Cloud Run buffers a slow body. Run `curl --limit-rate 100` with a report. Note when the answer
      comes, and state the result on this page.
 7. Name the address in the release: set the constant `ENDPOINT` in
-   `src/closed_set/unknown/send.rs`. Until then, a user must set `STRATA_REPORT_URL`.
+   `src/closed_set/unknown/send.rs` to the address that the script printed. The release names the
+   endpoint now, so a user sets no address. A new address needs a new release.
 
 The deploy sets `--no-cpu-throttling` and `--memory 512Mi` together. Cloud Run refuses a service
 that keeps the CPU on after the answer and has less than 512 MiB of memory. The error is `Total

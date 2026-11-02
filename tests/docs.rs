@@ -2046,6 +2046,19 @@ fn without_code(text: &str) -> String {
         .join(" ")
 }
 
+/// The page of the report states the address that the release names, so a person can read where
+/// a send goes. The page and the constant agree.
+#[test]
+fn the_page_of_the_report_states_the_address_of_the_endpoint_that_the_release_names() {
+    let address = strata::closed_set::unknown::send::ENDPOINT
+        .expect("the release names the endpoint of the report");
+    let page = read(&docs().join("reference/report.md"));
+    assert!(
+        page.contains(&format!("`{address}`")),
+        "reference/report.md does not state {address}"
+    );
+}
+
 /// A sentence has 25 words at most, and a paragraph, a list item, or a table row has six
 /// sentences at most. The pages use none of the words that "The style rules" refuse, and no
 /// phrasal verb that the reviews named.
@@ -2349,8 +2362,8 @@ fn each_row_of_live_runs_with_no_result_gives_its_reason() {
 }
 
 /// The rows that the end-of-wave review named for #390, #391, #530, #393, #539, #543, #540, #531,
-/// and #515 have their results. The rows that wait for the endpoint of the report, the live run of
-/// the fleet, and the other engines of the plan say what they wait for.
+/// and #515 have their results. The rows that wait for a new run against the endpoint of the
+/// report, the live run of the fleet, and the other engines of the plan say what they wait for.
 #[test]
 fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for() {
     let page = read(&docs().join("development/live-runs.md"));
@@ -2398,7 +2411,7 @@ fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for()
             assert!(row.contains(reason), "{row}");
         }
     };
-    let endpoint = "No result yet: the lead has not deployed the endpoint of the report.";
+    let endpoint = "No result yet: the lead runs this check again with the fix of #569.";
     for check in [
         "`send-1`",
         "`issue`",

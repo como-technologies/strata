@@ -35,9 +35,11 @@ pub const SETTING: &str = "STRATA_REPORT";
 /// The setting that names the address of the endpoint, in place of [`ENDPOINT`].
 pub const ADDRESS_SETTING: &str = "STRATA_REPORT_URL";
 
-/// The address of the endpoint of the maintainers, or `None` when this release names none. With no
-/// address, strata asks nothing and sends nothing, unless [`ADDRESS_SETTING`] names one.
-pub const ENDPOINT: Option<&str> = None;
+/// The address of the endpoint of the maintainers, or `None` when a release names none.
+///
+/// This release names the endpoint that runs on Cloud Run. With no address, strata asks nothing and
+/// sends nothing, unless [`ADDRESS_SETTING`] names one.
+pub const ENDPOINT: Option<&str> = Some("https://strata-report-4ud4ygs3ua-uc.a.run.app");
 
 /// The name of the file that keeps the answer of the user, in the state folder.
 pub const ANSWER_FILE: &str = "strata-unknown.answer";

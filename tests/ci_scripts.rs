@@ -1224,7 +1224,6 @@ impl Host {
         c.arg(script("ci/pr-comment.sh"))
             .args(args)
             .env("PATH", path_with(&self.bin))
-            .env("STRATA_BIN", strata_bin())
             .env("STRATA_QUIET", "1")
             .env("FAKE_GH_LOG", &self.log)
             .env("FAKE_GH_SAVED_BODY", &self.body)
@@ -1232,6 +1231,9 @@ impl Host {
             .env_remove("GITHUB_REPOSITORY")
             .env_remove("PALETTE_API_KEY")
             .env_remove("SPECTROCLOUD_APIKEY");
+        // the script runs the binary of the tests, or a stand-in that runs it as REAL_STRATA
+        give_strata(&mut c, "STRATA_BIN");
+        give_strata(&mut c, "REAL_STRATA");
         if self.repo_labels.exists() {
             c.env("FAKE_GH_REPO_LABELS", &self.repo_labels);
         }
@@ -1458,7 +1460,6 @@ fn pr_comment_snapshots_a_live_ref_once_and_compares_files_offline() {
         &["lab-profile@1.3.0", &h.a, "--pr", "7", "--repo", "o/r"],
         &[
             ("STRATA_BIN", h.bin.join("fake-strata").to_str().unwrap()),
-            ("REAL_STRATA", strata_bin().to_str().unwrap()),
             ("FAKE_STRATA_SNAPSHOT", &h.b),
             ("FAKE_STRATA_LOG", log.to_str().unwrap()),
         ],
@@ -1502,7 +1503,6 @@ impl Host {
         std::fs::write(&log, "").unwrap();
         let mut envs = vec![
             ("STRATA_BIN", fake.to_str().unwrap()),
-            ("REAL_STRATA", strata_bin().to_str().unwrap()),
             ("FAKE_STRATA_LOG", log.to_str().unwrap()),
             ("FAKE_REPAVE_JSON", json),
             ("FAKE_REPAVE_TEXT", text),
@@ -2774,7 +2774,6 @@ impl Gate {
             .current_dir(self.dir.path())
             // a key in the ~/.palette.env of the machine must not reach the gate
             .env("HOME", self.dir.path())
-            .env("STRATA_BIN", strata_bin())
             .env("STRATA_QUIET", "1")
             .env_remove("PALETTE_API_KEY")
             .env_remove("SPECTROCLOUD_APIKEY")
@@ -2783,8 +2782,8 @@ impl Gate {
             // gets the base of that run and not the one it gives.
             .env_remove("GITHUB_BASE_REF")
             .env_remove("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
-            .env_remove("STRATA_REMOTE")
-            .envs(env.iter().copied());
+            .env_remove("STRATA_REMOTE");
+        give_strata(&mut c, "STRATA_BIN").envs(env.iter().copied());
         isolate_git(&mut c).output_locked().unwrap()
     }
 }
@@ -3150,7 +3149,7 @@ fn merge_gate_says_when_it_does_not_verify_and_finds_the_key_where_strata_does()
     let home = tempfile::tempdir().unwrap();
     std::fs::write(
         home.path().join(".palette.env"),
-        "PALETTE_API_KEY=k\nPALETTE_API=http://127.0.0.1:9\nSTRATA_RETRIES=0\n",
+        format!("PALETTE_API_KEY=k\nPALETTE_API={REFUSED}\nSTRATA_RETRIES=0\n"),
     )
     .unwrap();
     let o = g.run_env(
@@ -3200,13 +3199,13 @@ fn merge_gate_names_an_unverified_record_and_passes_allow_no_digest_on() {
             .current_dir(g.dir.path())
             .env("HOME", g.dir.path())
             .env("STRATA_BIN", &fake)
-            .env("REAL_STRATA", strata_bin())
             .env("FAKE_LOG", &log)
             .env("STRATA_QUIET", "1")
             .env("PALETTE_API_KEY", "k")
             .env_remove("GITHUB_BASE_REF")
             .env_remove("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
             .env_remove("STRATA_REMOTE");
+        give_strata(&mut c, "REAL_STRATA");
         isolate_git(&mut c).output_locked().unwrap()
     };
 

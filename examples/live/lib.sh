@@ -14,6 +14,11 @@ strata=${STRATA_BIN:-$(cd "$live/../.." && pwd)/target/release/strata}
 script=${script:-live}
 flag=${flag:-false}
 
+# The scripts read the tenant of the lab, and the lab can hold a value that strata does not know.
+# No run of a script sends a report of such a value, whatever the environment, ~/.palette.env, or a
+# saved answer say. A script that tests the send, such as report-send.sh, sets it again.
+export STRATA_REPORT=0
+
 die() { echo "$script: $*" >&2; exit 2; }
 
 # usage: print the comment at the top of the script: from its second line to the line before

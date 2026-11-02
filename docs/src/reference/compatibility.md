@@ -883,6 +883,17 @@ field, a value, an input, or an option is in the sections above.
 - **`strata report` is a new command.** A file or a ref named `report` now names the command when
   it comes first. After another argument, it gives an error with exit `2`. Write
   `strata compare report <B>` for such a ref.
+- **This release names the endpoint of the report, so a run in a terminal asks one question.** The
+  release sends nothing by itself. You choose the send with the setting `STRATA_REPORT=1` or with a
+  yes to the question. See [Send the report by itself](./report.md#send-the-report-by-itself).
+  - A run of `strata` asks at its end when it wrote a line to the log. The variable `STRATA_REPORT`
+    must not be set, and you must not have answered before.
+  - A run asks nothing in three cases. `CI` has a value. Standard input or standard error is not a
+    terminal. Or the run has `--quiet` or `STRATA_QUIET`.
+  - `STRATA_REPORT=0` stops the question and the send. Strata keeps your answer in the file
+    `strata-unknown.answer` of the state folder, and asks one time.
+  - `STRATA_REPORT_URL` names another address than the endpoint of the maintainers.
+  - A script that runs strata in a terminal must set `STRATA_REPORT=0` to avoid the question.
 - **`api`: the message for a 403 with `ProjectUidIsNotEmpty` changed.** It says that the route is of
   the tenant scope. The request named a project, and the key is right. The kind `api` and exit `2`
   stay. A script that reads the text of that message must change.

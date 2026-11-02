@@ -1033,6 +1033,35 @@ fn lib_sh_prints_the_usage_and_the_heading_of_a_stage_and_writes_the_summary_of_
     );
 }
 
+#[test]
+fn lib_sh_stops_the_send_of_the_report_whatever_the_machine_says() {
+    let dir = tempfile::tempdir().unwrap();
+    let probe = dir.path().join("probe.sh");
+    executable(
+        &probe,
+        &format!(
+            "#!/usr/bin/env bash\nset -uo pipefail\nscript=probe\n. '{lib}'\nprintf '%s' \"$STRATA_REPORT\"\n",
+            lib = live_script("lib.sh").display()
+        ),
+    );
+    // the environment and a file of the home both start the send. The script sets the variable,
+    // and the environment has priority over the file.
+    std::fs::write(dir.path().join(".palette.env"), "STRATA_REPORT=1\n").unwrap();
+    for machine in [Some("1"), Some("yes"), None] {
+        let mut c = Command::new("bash");
+        c.arg(&probe)
+            .env("HOME", dir.path())
+            .env("STRATA_BIN", "/no/such/strata")
+            .env_remove("STRATA_REPORT");
+        if let Some(setting) = machine {
+            c.env("STRATA_REPORT", setting);
+        }
+        let o = c.output_locked().unwrap();
+        assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+        assert_eq!(text(&o.stdout), "0", "{machine:?}");
+    }
+}
+
 /// The route that gives the release, as Palette answers it: the release to a call with no key,
 /// and HTTP 500 to a call with an `ApiKey` header.
 fn release_route(routes: &Path) {
@@ -7030,17 +7059,41 @@ else
 fi
 "#;
 
-/// A `gh` that lists the issues of `$FAKE_SEND/issues.json`.
+/// A `gh` that lists the issues of `$FAKE_SEND/issues.json`. It finds its login as the real `gh`
+/// does: the variable `GH_TOKEN`, or the file `hosts.yml` in the folder `GH_CONFIG_DIR`, or else
+/// `gh` in `XDG_CONFIG_HOME`, or else `.config/gh` in the home. With no login it fails with exit 4,
+/// as the real `gh` does. It writes down the folder that it looked in.
 const FAKE_GH_SEND: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_SEND/gh.log"
+folder=${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}
+echo "$folder" >> "$FAKE_SEND/gh.folder"
+if [ -z "$GH_TOKEN" ] && [ ! -f "$folder/hosts.yml" ]; then
+  echo "To get started with GitHub CLI, please run:  gh auth login" >&2
+  exit 4
+fi
 case "$*" in
   "issue list"*) cat "$FAKE_SEND/issues.json" 2>/dev/null || echo '[]' ;;
 esac
 "#;
 
-/// Run `report-send.sh` with `args` in a root of its own. Gives the output, the result directory,
-/// and the root.
-fn report_send(args: &[&str], no_post: bool, root: &Path) -> (Output, PathBuf) {
+/// How the machine of a test of `report-send.sh` keeps the login of `gh`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum GhLogin {
+    /// The file `hosts.yml` in `.config/gh` of the home of the machine, where `gh` looks first.
+    HomeFolder,
+    /// The file `hosts.yml` in the folder that `GH_CONFIG_DIR` names.
+    ConfigDir,
+    /// The file `hosts.yml` in `gh` under the folder that `XDG_CONFIG_HOME` names.
+    XdgConfigHome,
+    /// The variable `GH_TOKEN`, and no file.
+    Token,
+    /// No login.
+    Nothing,
+}
+
+/// Run `report-send.sh` with `args` in a root of its own, on a machine with the login `login` of
+/// `gh`. Gives the output and the result directory.
+fn report_send(args: &[&str], no_post: bool, root: &Path, login: GhLogin) -> (Output, PathBuf) {
     let bin = fake_bin(
         root,
         &[
@@ -7065,6 +7118,33 @@ fn report_send(args: &[&str], no_post: bool, root: &Path) -> (Output, PathBuf) {
     if no_post {
         c.env("FAKE_NO_POST", "1");
     }
+    // the machine of the person: its home holds the login of gh, and the script changes HOME
+    let home = root.join("machine");
+    let hosts = |folder: PathBuf| {
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("hosts.yml"), "github.com:\n  user: lead\n").unwrap();
+        folder
+    };
+    c.env("HOME", &home)
+        .env_remove("GH_CONFIG_DIR")
+        .env_remove("XDG_CONFIG_HOME")
+        .env_remove("GH_TOKEN");
+    match login {
+        GhLogin::HomeFolder => {
+            hosts(home.join(".config/gh"));
+        }
+        GhLogin::ConfigDir => {
+            c.env("GH_CONFIG_DIR", hosts(root.join("elsewhere")));
+        }
+        GhLogin::XdgConfigHome => {
+            hosts(root.join("xdg/gh"));
+            c.env("XDG_CONFIG_HOME", root.join("xdg"));
+        }
+        GhLogin::Token => {
+            c.env("GH_TOKEN", "token-of-the-environment");
+        }
+        GhLogin::Nothing => std::fs::create_dir_all(&home).unwrap(),
+    }
     (c.output_locked().unwrap(), out)
 }
 
@@ -7075,6 +7155,7 @@ fn report_send_sh_sends_twice_to_the_endpoint_and_checks_that_one_issue_holds_bo
         &["https://report.example/", "--repo", "o/r"],
         false,
         dir.path(),
+        GhLogin::HomeFolder,
     );
     assert_eq!(
         o.status.code(),
@@ -7147,6 +7228,8 @@ fn report_send_sh_sends_twice_to_the_endpoint_and_checks_that_one_issue_holds_bo
         gh.contains("issue list --repo o/r --label palette-drift --state all"),
         "{gh}"
     );
+    // the script changed HOME, and gh still looked in the folder of the login
+    assert_gh_looked_in(dir.path(), &dir.path().join("machine/.config/gh"));
     assert!(
         std::fs::read_to_string(out.join("summary.md"))
             .unwrap()
@@ -7154,10 +7237,72 @@ fn report_send_sh_sends_twice_to_the_endpoint_and_checks_that_one_issue_holds_bo
     );
 }
 
+/// Make sure that each call of `gh` in the test root `root` looked in the folder `folder`.
+fn assert_gh_looked_in(root: &Path, folder: &Path) {
+    let looked = std::fs::read_to_string(root.join("gh.folder")).unwrap();
+    assert!(!looked.is_empty());
+    for line in looked.lines() {
+        assert_eq!(Path::new(line), folder, "{looked}");
+    }
+}
+
+#[test]
+fn report_send_sh_keeps_the_login_of_gh_when_it_changes_the_home() {
+    // each place where gh finds a login: the script sets GH_CONFIG_DIR to it before the change
+    let cases = [
+        (GhLogin::HomeFolder, "machine/.config/gh"),
+        (GhLogin::ConfigDir, "elsewhere"),
+        (GhLogin::XdgConfigHome, "xdg/gh"),
+    ];
+    for (login, folder) in cases {
+        let dir = tempfile::tempdir().unwrap();
+        let (o, _) = report_send(&["https://report.example/"], false, dir.path(), login);
+        assert_eq!(o.status.code(), Some(0), "{folder}: {}", text(&o.stderr));
+        assert_gh_looked_in(dir.path(), &dir.path().join(folder));
+    }
+    // a GH_TOKEN of the environment works with no file of a login
+    let dir = tempfile::tempdir().unwrap();
+    let (o, _) = report_send(
+        &["https://report.example/"],
+        false,
+        dir.path(),
+        GhLogin::Token,
+    );
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+}
+
+#[test]
+fn report_send_sh_stops_before_the_first_send_when_gh_has_no_login() {
+    let dir = tempfile::tempdir().unwrap();
+    let (o, out) = report_send(
+        &["https://report.example/", "--repo", "o/r"],
+        false,
+        dir.path(),
+        GhLogin::Nothing,
+    );
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o.stderr));
+    assert!(
+        text(&o.stderr).contains("gh cannot read the issues of o/r"),
+        "{}",
+        text(&o.stderr)
+    );
+    // gh said why, and the script kept it
+    let said = std::fs::read_to_string(out.join("gh.err")).unwrap();
+    assert!(said.contains("gh auth login"), "{said}");
+    // no run of strata and no post: a send with no login can only fail the checks
+    assert!(!dir.path().join("strata.log").exists());
+    assert!(!dir.path().join("curl.log").exists());
+}
+
 #[test]
 fn report_send_sh_fails_the_checks_when_the_endpoint_took_no_report() {
     let dir = tempfile::tempdir().unwrap();
-    let (o, out) = report_send(&["https://report.example/"], true, dir.path());
+    let (o, out) = report_send(
+        &["https://report.example/"],
+        true,
+        dir.path(),
+        GhLogin::HomeFolder,
+    );
     assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
     let steps = std::fs::read_to_string(out.join("steps.log")).unwrap();
     assert!(steps.contains("FAIL  send-1-says "), "{steps}");
@@ -7167,7 +7312,7 @@ fn report_send_sh_fails_the_checks_when_the_endpoint_took_no_report() {
 #[test]
 fn report_send_sh_needs_the_address_and_the_tools_and_stops_before_it_runs_anything() {
     let dir = tempfile::tempdir().unwrap();
-    let (o, _) = report_send(&[], false, dir.path());
+    let (o, _) = report_send(&[], false, dir.path(), GhLogin::HomeFolder);
     assert_eq!(o.status.code(), Some(2));
     assert!(
         text(&o.stderr).contains("give the address of the endpoint"),
@@ -7177,14 +7322,14 @@ fn report_send_sh_needs_the_address_and_the_tools_and_stops_before_it_runs_anyth
     assert!(
         text(&o.stderr).contains("Usage") || text(&o.stderr).contains("just live-report-send URL")
     );
-    let (o, _) = report_send(&["a", "b"], false, dir.path());
+    let (o, _) = report_send(&["a", "b"], false, dir.path(), GhLogin::HomeFolder);
     assert_eq!(o.status.code(), Some(2));
     assert!(
         text(&o.stderr).contains("one address only"),
         "{}",
         text(&o.stderr)
     );
-    let (o, _) = report_send(&["--bogus"], false, dir.path());
+    let (o, _) = report_send(&["--bogus"], false, dir.path(), GhLogin::HomeFolder);
     assert_eq!(o.status.code(), Some(2));
     assert!(
         !dir.path().join("strata.log").exists(),

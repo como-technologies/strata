@@ -240,6 +240,8 @@ c1=$(write_cluster workload-a "$CLUSTER_UID" "$p2")   # still on 1.1.0 while 1.1
 
 # ------------------------------------------------------------------ 4. snapshots and reports
 export STRATA_QUIET=1
+# the data is fixed, so no run of this script sends a report, whatever the environment says
+export STRATA_REPORT=0
 for d in "$p1" "$p2" "$p3"; do
   # the ref is recorded in the snapshot; keep it relative so the files do not carry a machine path
   "$tool" snapshot --from-raw "$d" "examples/profiles/raw/$(basename "$d")" -o "$out/profiles/$(basename "$d").json"

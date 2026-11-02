@@ -13,8 +13,8 @@ use serde_json::{Value, json};
 use strata::closed_set::unknown::log::FILE;
 
 use super::{
-    PROFILE_LISTING, UID_A, UID_B, isolate_palette, profile_document, profile_route, strata_bin,
-    template,
+    PROFILE_LISTING, UID_A, UID_B, isolate_palette, profile_document, profile_route,
+    strata_command, template,
 };
 
 /// The profile type that a later Palette release adds.
@@ -80,7 +80,7 @@ pub fn serve_routes(routes: BTreeMap<String, Value>) -> String {
 /// The command `strata list profiles --packs` with the arguments `more` against `api`. The run
 /// has a home of its own, `home`, and no state folder from the environment of the test.
 pub fn list_command(api: &str, home: &Path, more: &[&str]) -> Command {
-    let mut command = Command::new(strata_bin());
+    let mut command = strata_command();
     isolate_palette(&mut command, home);
     command
         .env_remove("STRATA_QUIET")
@@ -174,6 +174,18 @@ impl Endpoint {
     pub fn requests(&self) -> Vec<Request> {
         self.requests.lock().unwrap().clone()
     }
+}
+
+/// Send each request of `command` that is not for this machine to `proxy`, a stand-in endpoint.
+///
+/// A proxy takes the request of the address that a run names, and it records it as `CONNECT` with
+/// the host and the port. So a test sees an attempt to send, with any address, and no request
+/// leaves the machine. A request to `127.0.0.1`, such as one to the stand-in for Palette, goes
+/// direct.
+pub fn through_proxy<'a>(command: &'a mut Command, proxy: &Endpoint) -> &'a mut Command {
+    command
+        .env("ALL_PROXY", &proxy.url)
+        .env("NO_PROXY", "127.0.0.1")
 }
 
 /// The request on `stream`: the line, the headers, and the body that `Content-Length` names.

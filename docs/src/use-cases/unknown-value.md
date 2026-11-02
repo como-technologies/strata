@@ -11,8 +11,9 @@ of strata cannot see your tenant. They find the new value only when somebody tel
 
 **Follow along.** `just playground unknown-value` serves this tenant. Before you run the commands,
 set `XDG_STATE_HOME` to a new folder, so that the example keeps its own log:
-`export XDG_STATE_HOME=$(mktemp -d)`. The playground also prints `STRATA_REPORT_URL`: it is a
-stand-in for the endpoint of the report, so the send in step 5 reaches no real endpoint.
+`export XDG_STATE_HOME=$(mktemp -d)`. This release names the real endpoint of the maintainers. The
+playground also prints `STRATA_REPORT_URL`, the address of a stand-in on your machine. Export it, so
+that the send in step 5 reaches no real endpoint.
 
 ## 1. The note
 
@@ -91,9 +92,14 @@ The report holds nothing new now:
 {{#include ../output/unknown-value-send-marked.txt}}
 ```
 
-The page [What strata can report](../reference/report.md#send-the-report-by-itself) gives the
-question that a terminal asks one time, and what the endpoint keeps. A job in CI asks nothing: set
-`STRATA_REPORT=1` in the job when you want the send. Set `STRATA_REPORT=0` to stop it.
+A run in a terminal asks you one question when no setting and no answer exist. It asks at the end
+of the first run that wrote a line. Answer `y` to send. Any other answer, also an empty line,
+refuses. Strata keeps your answer and asks no more.
+
+A job in CI asks nothing. Set `STRATA_REPORT=1` in the job when you want the send. Set
+`STRATA_REPORT=0` to stop the send and the question. The page
+[What strata can report](../reference/report.md#send-the-report-by-itself) gives the question,
+where strata asks and sends, and what the endpoint keeps.
 
 ## 6. What the maintainers do
 

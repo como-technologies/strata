@@ -3,8 +3,9 @@
 Print the values that Palette gave and that this release of strata does not know. When a read of a
 document gives such a value, strata writes a note and appends a line to a log on your machine.
 `strata report` reads that log. It sends nothing: you read the report, and you decide whether to
-send it. A run of another command can send the report by itself, when you choose it with the setting
-`STRATA_REPORT`. See [What strata can report](../reference/report.md).
+send it. A run of another command can send the report by itself, when you choose the setting
+`STRATA_REPORT` or answer yes to its one question. See
+[What strata can report](../reference/report.md).
 
 The examples use a tenant where the profile `aws-stack@1.1.12` has a type that this release does
 not know. Two runs of `strata list profiles --packs` noted the type.
@@ -68,8 +69,7 @@ holds only the new lines:
 ```
 
 Strata marks a line by itself in one case only: when the endpoint took a report that strata sent
-by the setting `STRATA_REPORT`. See
-[Send the report by itself](../reference/report.md#send-the-report-by-itself).
+by itself. See [Send the report by itself](../reference/report.md#send-the-report-by-itself).
 
 ## A line that is not valid
 

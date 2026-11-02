@@ -26,12 +26,12 @@ use common::{
     OCI_REGISTRY_SUMMARY, PROFILE_LISTING, PROFILE_SEARCH, PROJECT_LISTING, REGISTRY_LISTING,
     SECRET_VALUE, UID_A, UID_ADDONS, UID_B, app_profile_route, candidate_snapshot,
     cluster_manifests_route, cluster_ref, cluster_resolved_values_route, cluster_route,
-    cluster_variables_route, edge_host_route, group_resolved_values_route, group_route, listing,
-    manifest_route, manifests_route, no_manifests, no_template, no_variables, pack_entity_route,
-    pack_listing_route, post, profile_document, profile_route, read_json, resolved_values_route,
-    serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack, snapshot_of,
-    snapshot_of_at, snapshot_of_ref, strata_bin, template, variables_route, write_record,
-    write_yaml,
+    cluster_variables_route, edge_host_route, fetch_examples, group_resolved_values_route,
+    group_route, listing, manifest_route, manifests_route, no_manifests, no_template, no_variables,
+    pack_entity_route, pack_listing_route, post, profile_document, profile_route, read_json,
+    resolved_values_route, serve_fixture, serve_pack_listing, serve_profile, serve_registry_pack,
+    snapshot_of, snapshot_of_at, snapshot_of_ref, strata_command, template, variables_route,
+    write_record, write_yaml,
 };
 
 #[test]
@@ -5263,23 +5263,7 @@ fn never_connect() -> strata::Result<Palette<MemoryApi>> {
 /// The examples that `just examples` builds, built into a temporary directory from the fetched
 /// pack data the repository tracks, with this build of strata.
 fn built_examples() -> tempfile::TempDir {
-    let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let dir = tempfile::tempdir().unwrap();
-    for entry in fs::read_dir(repo.join("examples/packs")).unwrap() {
-        let pack = entry.unwrap().path();
-        let to = dir.path().join("packs").join(pack.file_name().unwrap());
-        fs::create_dir_all(&to).unwrap();
-        for file in ["_entity.json", "_summaries.json"] {
-            fs::copy(pack.join(file), to.join(file)).unwrap();
-        }
-    }
-    let o = std::process::Command::new("bash")
-        .arg(repo.join("examples/fetch-examples.sh"))
-        .env("EXAMPLES_DIR", dir.path())
-        .env("OFFLINE", "1")
-        .env("STRATA_BIN", strata_bin())
-        .output_locked()
-        .unwrap();
+    let (dir, o) = fetch_examples(None, &[]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
     dir
 }
@@ -16530,7 +16514,7 @@ fn a_record_with_values_of_a_later_release_reads_with_no_error_and_writes_the_sa
     assert!(!read.packs[0].upstream_unknown());
 
     // compare reads the record, and the diff holds the text of each value
-    let out = std::process::Command::new(strata_bin())
+    let out = strata_command()
         .args(["compare", "--json"])
         .args([&path, &path])
         .output_locked()
@@ -16603,7 +16587,7 @@ fn verify_refuses_a_record_that_it_cannot_check_before_it_needs_a_key() {
     // the run has no key, so a request would give missing-credential
     let home = tempfile::tempdir().unwrap();
     let run = |args: &[&Path]| {
-        let mut c = std::process::Command::new(strata_bin());
+        let mut c = strata_command();
         c.args(["verify", "--json"])
             .args(args)
             .env("STRATA_QUIET", "1")

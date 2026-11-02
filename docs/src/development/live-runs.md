@@ -593,13 +593,17 @@ the send is real, and the value is the made-up profile type of the book. The run
 issue of that value through the endpoint, and leaves it open. [The endpoint of the
 report](./report-endpoint.md) says how the lead deploys the endpoint and runs this check.
 
+The run changes `HOME`, so the script keeps the login of `gh`. It sets `GH_CONFIG_DIR` to the folder
+of the login before the change, and a `GH_TOKEN` of the environment still works. When `gh` cannot
+read the issues, the script stops with exit `2` before the first send.
+
 | Check | Expected exit | What it shows |
 |---|---|---|
-| `send-1`, `send-1-says`, `send-1-marked` | 0 | #397: a run with `STRATA_REPORT=1` exits as a run with no send, says that it sent the report, and marks the line as sent. No result yet: the lead has not deployed the endpoint of the report. |
-| `issue`, `issue-new` | 0 | #397: one issue of the label `palette-drift` holds the marker of the value, and its first send gives the count 1. The endpoint answers 202 and then writes the issue, so the script waits for it. No result yet: the lead has not deployed the endpoint of the report. |
-| `send-2`, `issue-2` | 0 | #397: a second run posts the report again. Still one issue holds the value, and its count grew by one. No result yet: the lead has not deployed the endpoint of the report. |
-| `repeat-1` | 0 | #552: the endpoint takes a report with a key and answers 202 before it writes the issue. The service keeps the CPU after the answer, so the issue changes. No result yet: the lead has not deployed the endpoint of the report. |
-| `repeat-2`, `repeat-count` | 0 | #552: the same report with the same key gets 200 and `duplicate`, and the issue counts the report one time. No result yet: the lead has not deployed the endpoint of the report. |
+| `send-1`, `send-1-says`, `send-1-marked` | 0 | #397: a run with `STRATA_REPORT=1` exits as a run with no send, says that it sent the report, and marks the line as sent. No result yet: the lead runs this check again with the fix of #569. |
+| `issue`, `issue-new` | 0 | #397: one issue of the label `palette-drift` holds the marker of the value, and its first send gives the count 1. The endpoint answers 202 and then writes the issue, so the script waits for it. No result yet: the lead runs this check again with the fix of #569. |
+| `send-2`, `issue-2` | 0 | #397: a second run posts the report again. Still one issue holds the value, and its count grew by one. No result yet: the lead runs this check again with the fix of #569. |
+| `repeat-1` | 0 | #552: the endpoint takes a report with a key and answers 202 before it writes the issue. The service keeps the CPU after the answer, so the issue changes. No result yet: the lead runs this check again with the fix of #569. |
+| `repeat-2`, `repeat-count` | 0 | #552: the same report with the same key gets 200 and `duplicate`, and the issue counts the report one time. No result yet: the lead runs this check again with the fix of #569. |
 
 ## pending.sh
 
