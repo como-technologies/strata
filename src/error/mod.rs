@@ -476,6 +476,15 @@ pub enum Error {
         /// What is wrong with the line.
         message: String,
     },
+    /// The endpoint of the report did not take the report: strata could not reach it, or it refused
+    /// the report. A run never fails on this error: it prints the message as a warning.
+    #[error("could not send the report to {endpoint}: {message}")]
+    ReportSend {
+        /// The address of the endpoint.
+        endpoint: String,
+        /// What went wrong, on one line.
+        message: String,
+    },
     /// A snapshot without `source.uid` cannot be verified.
     #[error("snapshot has no source.uid to verify against")]
     NoUid,
@@ -726,6 +735,7 @@ impl Error {
             Error::UnsupportedSchema { .. } => "unsupported-schema",
             Error::SnapshotSchema { .. } => "snapshot-schema",
             Error::LogInvalid { .. } => "log-invalid",
+            Error::ReportSend { .. } => "report-send",
             Error::NoUid => "no-uid",
             Error::Io { .. } => "io",
             Error::EmptyFile(_) => "empty-file",

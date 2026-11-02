@@ -1,11 +1,13 @@
 [workspace]
-members = [".", "xtask", "preflight", "fuzz", "benches"]
+members = [".", "xtask", "preflight", "fuzz", "benches", "report-endpoint"]
 # `cargo build` and `cargo test` at the root stay about strata alone. The development tooling in
 # xtask/ builds when a recipe asks for it, and it never reaches a release. The preflight tool in
 # preflight/ is a package of its own, `strata-preflight`: the release carries it as a second
 # binary, `just build` builds it, and another repository can depend on it by name. The fuzz targets
 # in fuzz/ are tests of both, and `just test` runs them. The benchmarks in benches/ are the package
-# `strata-benches`: `just bench` builds them, and no release carries them.
+# `strata-benches`: `just bench` builds them, and no release carries them. The endpoint of the report
+# in report-endpoint/ is the package `strata-report-endpoint`: a service on Cloud Run that no release
+# carries, and `just test` runs its tests.
 default-members = ["."]
 
 [package]

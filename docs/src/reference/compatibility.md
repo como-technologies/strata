@@ -524,7 +524,9 @@ the state folder of the user: `$XDG_STATE_HOME/strata/`, or `~/.local/state/stra
 variable is not set. A run adds one line for each set and value. `--quiet` hides the note and does
 not stop the log.
 
-The log needs no network. It stays on the machine, and no command sends it. A line holds only the
+The log needs no network. It stays on the machine, and no command sends it. Only the setting
+`STRATA_REPORT=1`, or your answer of yes, lets a run send the report of the log: see
+[Send the report by itself](./report.md#send-the-report-by-itself). A line holds only the
 fields of [`strata-unknown/1`](./documents.md#strata-unknown1). It holds no name, no uid, no host,
 no free text, and no value of a pack.
 
@@ -804,6 +806,19 @@ only adds a field, a value, an input, or an option is in the sections above.
   `#[non_exhaustive]`, so a `match` on `Error` with no wildcard arm does not
   build. Add a `_` arm, or name `Error::LogInvalid { .. }`. `Error::kind` gives
   `log-invalid` for it, and `Error::to_json` gives the same kind.
+- `error::Error` has the new variant `ReportSend`, with the fields `endpoint` and `message`.
+  `ops::send_unknown_report` gives it when the endpoint of the report did not take the report.
+  The command line prints it as a warning and never as the result of a run. Add a `_` arm, or name
+  `Error::ReportSend { .. }`. `Error::kind` gives `report-send` for it, and `Error::to_json` gives
+  the same kind. `Error::class` gives `Unknown`.
+- `closed_set::unknown::Report` and `closed_set::unknown::report::Entry` now implement
+  `Deserialize`, and they refuse a field that they do not list. The JSON Schema of
+  `strata-report/1` has `additionalProperties: false` for the report and for an entry. The
+  document does not change. `Report::fault` is new: it checks a report that arrives from outside.
+- The new module `closed_set::unknown::send` holds the decision and the post of the send.
+  `ops::send_unknown_report` posts the report of the unmarked lines, and then marks them. The new
+  method `Watching::lines_written` tells how many lines a watch wrote. `term::ask::yes_or_no` asks
+  a question. `text::query_value` and `BOOK_URL` are now public.
 
 ## Release 0.26.0: changes that need action
 

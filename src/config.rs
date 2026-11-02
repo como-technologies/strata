@@ -25,6 +25,8 @@ pub const PROJECT_VARS: [&str; 1] = ["PALETTE_PROJECT_UID"];
 pub const PROJECT_NAME_VAR: &str = "PALETTE_PROJECT";
 /// The variable that stops the progress messages.
 const QUIET_VAR: &str = "STRATA_QUIET";
+/// The variable that pipelines set. A run with it never asks a question.
+const CI_VAR: &str = "CI";
 const RETRIES_VAR: &str = "STRATA_RETRIES";
 const DEFAULT_RETRIES: u32 = 3;
 /// The variable that sets the longest `Retry-After` wait that strata takes.
@@ -123,7 +125,7 @@ impl Config {
             {
                 return Some(value);
             }
-            env_nonempty(key).or_else(|| dotenv_lookup(key))
+            setting(key)
         })
         .map(|mut cfg| {
             cfg.shadowed_project_name = shadowed_project_name(
@@ -244,6 +246,18 @@ fn state_dir_from(state_home: Option<OsString>, home: Option<OsString>) -> Optio
 
 fn env_nonempty(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|v| !v.is_empty())
+}
+
+/// The setting `key`: the environment first, then a line of `~/.palette.env`. An empty value is
+/// no setting. [`Config::from_env`] reads its settings in the same order.
+pub(crate) fn setting(key: &str) -> Option<String> {
+    env_nonempty(key).or_else(|| dotenv_lookup(key))
+}
+
+/// True when the variable `CI` has a value: a job of a pipeline runs strata, and no person answers
+/// a question.
+pub(crate) fn in_ci() -> bool {
+    env_nonempty(CI_VAR).is_some()
 }
 
 /// `KEY=VALUE` lines from `~/.palette.env`, with optional `export ` and quotes.

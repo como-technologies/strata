@@ -45,8 +45,8 @@ where each module goes.
 - When a public module moves under a new parent, keep a `pub use` at the old
   path for one minor release.
 - `cargo test -p xtask` checks the limit of 800 lines for each module file of
-  `src/`, `xtask`, `preflight/src/`, and `fuzz/src/`. It checks the limit of 80
-  lines for each function of the four, with the unit tests out of the count. A
+  `src/`, `xtask`, `preflight/src/`, `fuzz/src/`, and `report-endpoint/src/`. It checks the
+  limit of 80 lines for each function of the five, with the unit tests out of the count. A
   file named `tests.rs` holds only tests, so it has no limit.
 
 ## Visibility

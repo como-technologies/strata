@@ -202,6 +202,10 @@ fn one_of_each() -> Vec<Error> {
             line: 3,
             message: "unknown field `uid`".into(),
         },
+        Error::ReportSend {
+            endpoint: "https://report.example/".into(),
+            message: "the endpoint answered HTTP 429".into(),
+        },
         Error::NoUid,
         Error::Io {
             path: "rel.json".into(),
@@ -507,6 +511,12 @@ fn to_json_carries_kind_message_and_the_variant_fields() {
     assert_eq!(
         log["message"],
         "strata-unknown.jsonl: line 3 is not a line of strata-unknown/1: unknown field `uid`"
+    );
+    let send = by_kind("report-send");
+    assert_eq!(send["endpoint"], "https://report.example/");
+    assert_eq!(
+        send["message"],
+        "could not send the report to https://report.example/: the endpoint answered HTTP 429"
     );
     assert_eq!(by_kind("invalid-setting")["variable"], "STRATA_RETRIES");
     assert_eq!(by_kind("invalid-setting")["value"], "lots");

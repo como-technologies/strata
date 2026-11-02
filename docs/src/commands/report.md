@@ -3,7 +3,8 @@
 Print the values that Palette gave and that this release of strata does not know. When a read of a
 document gives such a value, strata writes a note and appends a line to a log on your machine.
 `strata report` reads that log. It sends nothing: you read the report, and you decide whether to
-send it. See [What strata can report](../reference/report.md).
+send it. A run of another command can send the report by itself, when you choose it with the setting
+`STRATA_REPORT`. See [What strata can report](../reference/report.md).
 
 The examples use a tenant where the profile `aws-stack@1.1.12` has a type that this release does
 not know. Two runs of `strata list profiles --packs` noted the type.
@@ -62,13 +63,15 @@ and marks its lines as sent. The next report then holds only the new lines:
 {{#include ../output/unknown-value-report-all.txt}}
 ```
 
-Strata never marks a line by itself, because only you know that the report went out.
+Strata marks a line by itself in one case only: when the endpoint took a report that strata sent
+by the setting `STRATA_REPORT`. See
+[Send the report by itself](../reference/report.md#send-the-report-by-itself).
 
 ## A line that is not valid
 
 A log that you edited can hold a line that strata did not write. A line with a field outside the
 list of [`strata-unknown/1`](../reference/documents.md#strata-unknown1) is one case. Another case
-is a route that is the path of a real request. `strata report` then stops with the error
+is a route that is not a template of a route, such as the path of a real request. `strata report` then stops with the error
 `log-invalid`, prints nothing, and marks nothing. The message gives the number of the line. See
 [Errors](../reference/errors.md).
 
