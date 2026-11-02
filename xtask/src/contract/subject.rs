@@ -14,7 +14,8 @@ use std::rc::Rc;
 use serde_json::Value;
 use strata::api::{PaletteApi, RawCluster};
 use strata::error::Error;
-use strata::json::{opt_str, str_at};
+use strata::json::str_at;
+use strata::model::validation::PaletteRefusal;
 
 use crate::facts::{Fact, Scope};
 
@@ -176,7 +177,8 @@ const DEPTH: usize = 3;
 pub struct Failure {
     /// The status of the answer, when Palette answered.
     pub status: Option<u16>,
-    /// The code in the body of the answer, when the body is JSON with a text `code`.
+    /// The code in the body of the answer, when the body is JSON with a `code` of text or of a
+    /// number.
     pub code: Option<String>,
     /// What went wrong, in one line.
     pub message: String,
@@ -185,7 +187,10 @@ pub struct Failure {
 impl Failure {
     fn of(error: &Error) -> Failure {
         let (status, code) = match error {
-            Error::Api { status, body, .. } => (Some(*status), code_of(body)),
+            Error::Api { status, body, .. } => (
+                Some(*status),
+                PaletteRefusal::from_error_body(body).map(|r| r.code),
+            ),
             _ => (None, None),
         };
         Failure {
@@ -201,12 +206,6 @@ impl Failure {
         let code = self.code.as_deref().filter(|_| self.status == Some(404))?;
         absent.iter().map(String::as_str).find(|a| *a == code)
     }
-}
-
-/// The text `code` in the body of an error of Palette, when the body is JSON.
-fn code_of(body: &str) -> Option<String> {
-    let body: Value = serde_json::from_str(body).ok()?;
-    opt_str(&body, "/code").map(str::to_string)
 }
 
 /// The answer of a request: the document, or the failure.

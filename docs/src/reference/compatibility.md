@@ -937,6 +937,9 @@ field, a value, an input, or an option is in the sections above.
 - The `Display` of `Error::Api` for a 403 with the code `ProjectUidIsNotEmpty` changed. It says
   that the route is of the tenant scope and that the request named a project. A program that reads
   the text must change. `Error::kind` and the exit code stay.
+- `model::validation::PaletteRefusal::from_error_body` is new in the public API. It was private to
+  the crate. It reads the `code` and the `message` of the body of a Palette error. It gives `None`
+  when the body is not JSON with a `code` of text or of a number. No existing call changes.
 
 ### For a user of the library of strata-preflight
 

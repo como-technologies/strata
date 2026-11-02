@@ -1730,7 +1730,7 @@ fn a_cluster_that_had_no_repave_does_not_make_the_fact_of_the_repave_record_diff
 }
 
 #[test]
-fn a_failure_reads_the_code_of_the_body_only_when_the_body_is_json_with_a_text_code() {
+fn a_failure_reads_the_code_of_the_body_when_the_body_is_json_with_a_code() {
     let (_dir, client, tenant) = served_with_project(&[]);
     let probe = subject::Probe::new(&client, &tenant);
     let failure = probe.get(Scope::Client, "/v1/nothing");

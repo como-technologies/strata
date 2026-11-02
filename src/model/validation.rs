@@ -179,7 +179,7 @@ impl PaletteRefusal {
     /// The refusal of the whole request in the body of a Palette error: its `code` and its
     /// `message`, with no pack. The code is text, or a number when the check of the body against
     /// the API schema refuses it. `None` when the body is not JSON with a `code`.
-    pub(crate) fn from_error_body(body: &str) -> Option<PaletteRefusal> {
+    pub fn from_error_body(body: &str) -> Option<PaletteRefusal> {
         PaletteRefusal::from_error(&serde_json::from_str(body).ok()?)
     }
 
@@ -378,5 +378,30 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(err.contains("accepts false with no error"), "{err}");
+    }
+
+    #[test]
+    fn the_refusal_of_a_body_has_the_code_as_text_or_as_a_number_and_a_body_with_no_code_has_none()
+    {
+        let refused =
+            PaletteRefusal::from_error_body(r#"{"code":"ResourceNotFound","message":"m"}"#)
+                .unwrap();
+        assert_eq!(
+            (refused.code.as_str(), refused.message.as_str()),
+            ("ResourceNotFound", "m")
+        );
+        assert!(refused.pack.is_empty() && refused.clusters.is_empty());
+        let numbered = PaletteRefusal::from_error_body(r#"{"code":404}"#).unwrap();
+        assert_eq!(numbered.code, "404");
+        for body in [
+            "",
+            "<html>",
+            "{}",
+            r#"{"code":null}"#,
+            r#"{"code":["a"]}"#,
+            "[]",
+        ] {
+            assert_eq!(PaletteRefusal::from_error_body(body), None, "{body}");
+        }
     }
 }
