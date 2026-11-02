@@ -6,7 +6,7 @@ use serde_json::Value;
 use strata::api::{cluster_events_path, cluster_summary_path, subject_path};
 use strata::closed_set::ClosedSet;
 use strata::json::{arr, str_at, text_or};
-use strata::model::cluster_state::ClusterState;
+use strata::render::paint_state;
 use strata::snapshot::SubjectKind;
 use strata::term::color::Paint;
 use strata::text::{cut, plural};
@@ -75,21 +75,6 @@ fn verbose_line(rule: &Rule, o: &Outcome, paint: &Paint) -> String {
         line.push_str(&format!(": {m}"));
     }
     line
-}
-
-/// `state` in the color of a cluster state: green when it runs, yellow while it builds, red when
-/// it is in error or goes. A state that strata does not know has no color.
-pub(super) fn paint_state(paint: &Paint, state: &str) -> String {
-    match ClusterState::parse(state) {
-        Some(ClusterState::Running) => paint.green(state),
-        Some(ClusterState::Provisioning | ClusterState::Pending | ClusterState::Importing) => {
-            paint.yellow(state)
-        }
-        Some(ClusterState::Error | ClusterState::Deleting | ClusterState::Deleted) => {
-            paint.red(state)
-        }
-        None => state.to_string(),
-    }
 }
 
 /// The lines of `--verbose` that name the program of each watch rule, before the first reading.

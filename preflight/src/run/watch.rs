@@ -6,13 +6,14 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use strata::api::{Palette, PaletteApi};
-use strata::json::text_or;
+use strata::json::{text_or, value_at};
 use strata::model::cluster_state::ClusterState;
+use strata::render::paint_state;
 use strata::snapshot::SubjectKind;
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
 
-use super::verbose::{Seen, UNKNOWN, paint_state, program_lines, reading_lines, watch_line};
+use super::verbose::{Seen, UNKNOWN, program_lines, reading_lines, watch_line};
 use super::{Selection, confidence_of, holds, subject_of};
 use crate::confidence::Ledger;
 use crate::error::{Error, Result};
@@ -251,7 +252,7 @@ fn read_until_ended<A: PaletteApi>(
         // a cluster that runs ends the watch: a failure it read on past is in the report
         let ends = (failed && options.stop_at_first)
             || ClusterState::Running.is(&state)
-            || ClusterState::Deleted.is(&state)
+            || ClusterState::is_gone(value_at(&read, "/cluster"))
             || ClusterState::Error.is(&state);
         let at_limit = !ends && elapsed >= options.limit;
         if at_limit {

@@ -20,12 +20,11 @@ use super::same_release::{
 use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
 };
-use super::{Renderer, count_of, entry_error, key_line, palette_line, short};
+use super::{Renderer, count_of, entry_error, key_line, paint_state, palette_line, short};
 use crate::closed_set::ClosedSet;
 use crate::closed_set::unknown::Report;
 use crate::diff::Diff;
 use crate::error::Result;
-use crate::model::cluster_state::ClusterState;
 use crate::ops::{
     Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject, Listing,
     PackListing, PairStatus, RecordStatus, SavedFilter, VerifySummary,
@@ -243,13 +242,7 @@ impl Renderer for TerminalRenderer {
             .max()
             .unwrap_or(0);
         for c in &r.consumers {
-            let state = if ClusterState::Running.is(&c.state) {
-                p.green(&c.state)
-            } else if c.state == crate::ops::UNKNOWN_STATE {
-                p.yellow(&c.state)
-            } else {
-                c.state.clone()
-            };
+            let state = paint_state(p, &c.state);
             out.push_str(&format!(
                 "  {}  {}  project {}",
                 p.bold(&format!("{:<width$}", dash(&c.name))),
@@ -536,7 +529,7 @@ fn list_clusters(out: &mut String, p: &Paint, l: &Listing, clusters: &[ListedClu
         out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
             0 => p.bold(cell),
             1 => matched(p, cell, l.cluster.as_deref()),
-            2 if ClusterState::Running.is(&c.state) => p.green(cell),
+            2 => paint_state(p, cell),
             _ => cell.to_string(),
         }));
         let applied = applied_rows(c);

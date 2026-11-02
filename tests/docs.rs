@@ -2733,8 +2733,8 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_13_named_keeps_to_25_wo
             "The answer of Palette to one request.",
         ),
         (
-            "preflight/src/world/mod.rs",
-            "True for each 4xx on a read of the world",
+            "preflight/src/probe/backend.rs",
+            "True when the 4xx `status` is the answer of a route",
         ),
         ("src/closed_set/unknown.rs", "After the first note of a day"),
         (

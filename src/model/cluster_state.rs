@@ -5,8 +5,10 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::closed_set::{ClosedSet, impl_closed_set};
+use crate::json::{flag, str_at};
 
 /// A state of a cluster that strata acts on.
 ///
@@ -46,6 +48,13 @@ impl ClusterState {
     pub fn is(self, text: &str) -> bool {
         self.as_str() == text
     }
+
+    /// True when `doc`, the document of a cluster or of another object of a record, is the document
+    /// of an object that Palette deleted: its state is `Deleted`, or `metadata.isDeleted` is true.
+    /// Palette keeps the document of such an object, with its spec.
+    pub fn is_gone(doc: &Value) -> bool {
+        ClusterState::Deleted.is(str_at(doc, "/status/state")) || flag(doc, "/metadata/isDeleted")
+    }
 }
 
 #[cfg(test)]
@@ -57,5 +66,23 @@ mod tests {
         assert_eq!(ClusterState::parse("Running"), Some(ClusterState::Running));
         assert_eq!(ClusterState::parse("running"), None);
         assert_eq!(ClusterState::parse("Upgrading"), None);
+    }
+
+    #[test]
+    fn a_document_is_gone_when_its_state_is_deleted_or_palette_marks_it_deleted() {
+        use serde_json::json;
+        assert!(ClusterState::is_gone(
+            &json!({"status": {"state": "Deleted"}})
+        ));
+        assert!(ClusterState::is_gone(&json!({
+            "status": {"state": "Deleting"},
+            "metadata": {"isDeleted": true},
+        })));
+        assert!(!ClusterState::is_gone(&json!({
+            "status": {"state": "Running"},
+            "metadata": {"isDeleted": false},
+        })));
+        assert!(!ClusterState::is_gone(&json!({})));
+        assert!(!ClusterState::is_gone(&Value::Null));
     }
 }

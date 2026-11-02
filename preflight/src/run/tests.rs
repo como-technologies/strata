@@ -596,6 +596,64 @@ rules:
 }
 
 #[test]
+fn a_cluster_that_palette_marks_deleted_ends_the_watch_whatever_its_state_is() {
+    let section = r#"
+section: platform
+title: P
+rules:
+  - id: agent-egress
+    title: t
+    engines: [all]
+    tier: watch
+    status: source
+    what: w
+    check: {kind: watch, expr: "true"}
+"#;
+    let mut c = Catalog::default();
+    c.push(
+        Catalog::parse_section(section, Path::new("p.yaml")).unwrap(),
+        Path::new("p.yaml"),
+    )
+    .unwrap();
+    // the limit is zero, so a watch that does not end at the first reading ends at the limit
+    // with an error for the rule that passed
+    for (is_deleted, verdict, state) in [
+        (true, Verdict::Passed, "Deleting"),
+        (false, Verdict::Error, "Deleting"),
+    ] {
+        let api = strata::api::MemoryApi::new().with(
+            cluster_route("c1"),
+            json!({"metadata": {"uid": "c1", "isDeleted": is_deleted}, "status": {"state": state}}),
+        );
+        let mut w = world(3);
+        w.cluster_uid = Some("c1".into());
+        let (report, _) = watch(WatchInputs {
+            catalog: &c,
+            world: &w,
+            palette: &Palette::new(&api),
+            ledger: &Ledger::default(),
+            selection: &Selection::default(),
+            options: &WatchOptions {
+                limit: Duration::ZERO,
+                ..WatchOptions::default()
+            },
+            now: "t",
+            progress: &Progress::silent(),
+            verbose: false,
+            paint: Paint::off(),
+            sleep: &|_| {},
+            out_dir: None,
+        })
+        .unwrap();
+        assert_eq!(
+            report.checks[0].verdict, verdict,
+            "isDeleted {is_deleted}: {:?}",
+            report.checks[0].messages
+        );
+    }
+}
+
+#[test]
 fn a_failed_probe_does_not_end_the_watch_and_is_in_the_report() {
     let section = r#"
 section: platform
