@@ -186,9 +186,9 @@ not deploy it, because a session has no account of Google.
    person who owns the project does this one time.
 3. Run `just report-deploy --dry-run`, and read the commands.
 4. Run `just report-deploy`. The script builds the image on Cloud Build as `strata-report-build`.
-   Then it deploys the service `strata-report` as `strata-report`, with one instance and the CPU on
-   after the answer. Then it prints the address. When an account is missing, the script stops with a
-   message that names it.
+   Then it deploys the service `strata-report` as `strata-report`, with one instance, 512 MiB of
+   memory, and the CPU on after the answer. Then it prints the address. When an account is missing,
+   the script stops with a message that names it.
 5. Run `just live-report-send ADDRESS` with the address that the script printed. The script sends
    two reports, waits for the issue, and checks that one issue holds both. It also posts one report
    twice with one key, and checks that the issue counts it one time. Close the issue with a comment
@@ -202,6 +202,11 @@ not deploy it, because a session has no account of Google.
      comes, and state the result on this page.
 7. Name the address in the release: set the constant `ENDPOINT` in
    `src/closed_set/unknown/send.rs`. Until then, a user must set `STRATA_REPORT_URL`.
+
+The deploy sets `--no-cpu-throttling` and `--memory 512Mi` together. Cloud Run refuses a service
+that keeps the CPU on after the answer and has less than 512 MiB of memory. The error is `Total
+memory < 512 Mi is not supported with cpu always allocated (unthrottled)`. A test of the deploy
+fails when the memory is less than 512 MiB with `--no-cpu-throttling`.
 
 The deploy script reads no secret and grants no role. `just report-deploy --project ID --region NAME`
 replaces the project and the region. To remove the service, run

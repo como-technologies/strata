@@ -59,6 +59,29 @@ fn command_with<'a>(commands: &'a [String], prefix: &str) -> &'a str {
         .unwrap_or_else(|| panic!("no command starts with {prefix}: {commands:?}"))
 }
 
+/// The word that follows `option` in `command`.
+fn option_value<'a>(command: &'a str, option: &str) -> Option<&'a str> {
+    let mut words = command.split_whitespace();
+    words.find(|word| *word == option)?;
+    words.next()
+}
+
+/// The size in MiB of a memory value of Cloud Run, which has the unit `Mi` or `Gi`.
+fn memory_mib(value: &str) -> u64 {
+    let split = value
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(value.len());
+    let (number, unit) = value.split_at(split);
+    let number: u64 = number
+        .parse()
+        .unwrap_or_else(|_| panic!("no number in {value}"));
+    match unit {
+        "Mi" => number,
+        "Gi" => number * 1024,
+        _ => panic!("no unit Mi or Gi in {value}"),
+    }
+}
+
 /// The `gcloud` commands in `text` that make an account, a repository, a bucket, or a role, each on
 /// one line. `text` is a script or a page: the mark of a comment and the line continuations go.
 fn account_commands(text: &str) -> Vec<String> {
@@ -146,6 +169,22 @@ fn a_dry_run_prints_each_gcloud_command_and_runs_none() {
     ] {
         assert!(run.err.contains(part), "{part}:\n{}", run.err);
     }
+}
+
+#[test]
+fn the_service_gets_at_least_512_mib_when_the_cpu_stays_on_after_the_answer() {
+    // Cloud Run refuses a service with less than 512 MiB when the CPU is always allocated
+    let dir = tempfile::tempdir().unwrap();
+    assert_eq!(deploy(dir.path(), &[]).code, 0);
+    let sent = calls(dir.path());
+    let service = command_with(&sent, "run deploy");
+    assert!(service.contains(" --no-cpu-throttling"), "{service}");
+    let memory = option_value(service, "--memory")
+        .unwrap_or_else(|| panic!("the deploy sets no memory: {service}"));
+    assert!(
+        memory_mib(memory) >= 512,
+        "{memory} is less than 512 MiB with --no-cpu-throttling: {service}"
+    );
 }
 
 #[test]
