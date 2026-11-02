@@ -22,3 +22,7 @@ SCCACHE_IGNORE_SERVER_IO_ERROR = "1"
 [session.volumes]
 strata-cargo = "$HOME/.cargo"
 strata-sccache = "$HOME/.cache/sccache"
+# The code of Palette, to read. On the host of the lead, the volume holds a copy of the repositories
+# of Palette that the lead refreshes. On another host, the volume is empty. A session writes
+# nothing to it.
+strata-palette = "$HOME/palette"
