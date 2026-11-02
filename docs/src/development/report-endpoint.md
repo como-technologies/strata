@@ -82,8 +82,7 @@ far stay. The sender has its answer by then, so the rest of the report is lost.
 The service reads at most 1000 issues of its label, open and closed. A closed issue counts, because
 the service must find the issue of a value to give it the new count. When the label has more, the
 service answers 502 and logs the cause. It does not open a second issue for a value that it cannot
-find. Remove the label from the issues of values that a release of strata names. Closing an issue
-does not lower the count.
+find. Remove the label from the issues of values that a release of strata names.
 
 The label belongs to the service. The weekly contract run has its own label, `palette-drift`, so its
 issues do not count toward the 1000.
