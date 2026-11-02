@@ -34,6 +34,7 @@ script=drift-report
 mode=${1:-}
 from=${2:-1}
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+. "$live/github.sh"
 case "$mode" in
   off) flag=false ;;
   on) flag=true ;;
@@ -75,7 +76,7 @@ report() { STRATA_BIN="$strata" "$reporter" "$records/*.json" --repo "$repo" --l
 # open_issues: the open issues with the label, one line each: the number and the marker line
 open_issues() {
   gh issue list --repo "$repo" --label "$label" --state open --limit 1000 --json number,body \
-    | jq -r '.[] | "\(.number)\t\(.body | split("\n")[0] | rtrimstr("\r"))"'
+    | jq -r "$first_line_jq"'.[] | "\(.number)\t\(first_line)"'
 }
 # issues_are RECORD...: the open issues with the label are exactly one per RECORD, by marker.
 # GitHub lists a new or closed issue about 5 seconds later (measured on 2026-09-17, the same through

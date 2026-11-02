@@ -1553,6 +1553,8 @@ fn the_variables_of_an_older_release_keep_their_root_and_their_hash() {
 
 #[test]
 fn schema_subcommand_prints_json_schema() {
+    // The ids are pinned on purpose: `strata schema` names each kind with the id that a consumer
+    // reads, so a change of an id must change this table too
     for (kind, id) in [
         ("snapshot", "strata-snapshot/1"),
         ("diff", "strata-diff/1"),

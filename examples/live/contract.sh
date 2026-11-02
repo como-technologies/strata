@@ -31,8 +31,7 @@ set -uo pipefail
 
 live=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 script=contract
-die() { echo "$script: $*" >&2; exit 2; }
-usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+. "$live/common.sh"
 
 xtask=${XTASK_BIN:-$live/../../target/debug/xtask}
 args=()

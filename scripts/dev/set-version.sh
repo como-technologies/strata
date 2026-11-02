@@ -8,6 +8,12 @@
 #   just version 1.2.3     # rewrites and commits
 #   just release           # tags the commit
 #
+# The outputs of the book print the version in some places, such as the column "strata" of
+# `strata report`. A build of the new version writes them, so the command runs `just docs-examples`
+# and commits the outputs that change. The release commit then passes `just docs-check` without a
+# manual step. It refuses to commit when an output that did not name the old version changes,
+# because the book was not current before this command.
+#
 # It refuses when a file it must rewrite already has uncommitted changes, so the commit it writes
 # is the version and nothing else.
 #
@@ -51,16 +57,22 @@ if [ "$old" = "$new" ]; then
   exit 0
 fi
 
-# every tracked file that names the old version, less the recorded runs and the built book
+# every tracked file that names the old version, less the recorded runs, the built book, and the
+# outputs of the book, which a build of the new version writes below
 mapfile -t files < <(git grep -l -F "$old" -- \
   ':!examples/live/runs' \
   ':!docs/src/development/live-runs.md' \
   ':!docs/book' \
+  ':!docs/src/output' \
   ':!Cargo.lock' || true)
+# the outputs of the book that name the old version
+mapfile -t outputs < <(git grep -l -F "$old" -- docs/src/output || true)
 
 # the commit must hold the version and nothing else
 dirty=()
-for f in "${files[@]}" Cargo.lock; do
+checked=("${files[@]}" Cargo.lock)
+[ ${#outputs[@]} -eq 0 ] || checked+=(docs/src/output)
+for f in "${checked[@]}"; do
   git diff --quiet -- "$f" && git diff --cached --quiet -- "$f" || dirty+=("$f")
 done
 if [ ${#dirty[@]} -gt 0 ]; then
@@ -96,7 +108,29 @@ if ! cargo update --offline --workspace >/dev/null 2>&1; then
   exit 1
 fi
 
-git add -- "${files[@]}" Cargo.lock
+# The outputs of the book print the version of strata. A build of the new version writes them
+# again. Only an output that named the old version can change. Another change means that the book
+# was not current before this command, and the release commit must not hide that.
+added=("${files[@]}" Cargo.lock)
+if [ ${#outputs[@]} -gt 0 ]; then
+  if ! just docs-examples; then
+    echo "set-version: just docs-examples failed; nothing is committed" >&2
+    exit 1
+  fi
+  stale=()
+  while IFS= read -r f; do
+    case " ${outputs[*]} " in *" $f "*) ;; *) stale+=("$f") ;; esac
+  done < <(git status --porcelain -- docs/src/output | cut -c4-)
+  if [ ${#stale[@]} -gt 0 ]; then
+    echo "set-version: these outputs of the book changed, and they did not name $old:" >&2
+    printf '  %s\n' "${stale[@]}" >&2
+    echo "set-version: nothing is committed, and the files above stay rewritten. Restore them, run just docs-examples, commit the outputs, and run this command again" >&2
+    exit 1
+  fi
+  added+=(docs/src/output)
+fi
+
+git add -- "${added[@]}"
 git commit -q -m "chore: release $new"
 echo "set-version: $old -> $new in ${#files[@]} files, committed as 'chore: release $new'"
 echo "set-version: tag it with: just release" >&2

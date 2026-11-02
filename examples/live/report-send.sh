@@ -27,6 +27,7 @@
 set -uo pipefail
 script=report-send
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+. "$live/github.sh"
 
 url=""
 repo=como-technologies/strata
@@ -79,7 +80,7 @@ marker='<!-- strata-report: values ProfileType later-type -->'
 # issues_of_value: the issues of the label palette-drift whose first line is the marker, as JSON
 issues_of_value() {
   gh issue list --repo "$repo" --label palette-drift --state all --limit 500 --json number,state,body \
-    | jq --arg m "$marker" '[.[] | select((.body | split("\n")[0] | rtrimstr("\r")) == $m)]'
+    | jq --arg m "$marker" "$first_line_jq"'[.[] | select(first_line == $m)]'
 }
 # lines_of_issue: the number in the row "Lines" of the one issue of the value
 lines_of_issue() {
