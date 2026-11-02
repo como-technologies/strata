@@ -2158,3 +2158,45 @@ fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_o
         assert!(error.contains(needed), "the item lacks {needed:?}");
     }
 }
+
+/// Release 0.27.0 removed the old paths of the modules that moved to `model/`, and the deprecated
+/// constants of a cluster state. The section of the release gives the new path for each, and the
+/// page no longer says that the old paths stay.
+#[test]
+fn the_section_of_release_0_27_0_gives_the_new_path_for_each_removed_old_path() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let release = section(
+        &page,
+        "## Release 0.27.0: changes that need action",
+        Some("\n## "),
+    );
+    let library = section(release, "### For a user of the library of strata\n", None);
+    let paths = block(library, "The old paths of the types of Palette are gone");
+    for needed in [
+        "`strata::cloud`",
+        "`strata::content::layer`",
+        "`strata::model::<module>`",
+        "(#the-rust-library)",
+    ] {
+        assert!(paths.contains(needed), "the item lacks {needed:?}");
+    }
+    let constants = block(library, "`ops::RUNNING_STATE`");
+    for needed in [
+        "`ops::ERROR_STATE`",
+        "`ops::DELETED_STATE`",
+        "`model::cluster_state`",
+        "`ClusterState::Running.is(text)`",
+    ] {
+        assert!(constants.contains(needed), "the item lacks {needed:?}");
+    }
+
+    let opening = one_line(&page[..page.find("\n## The documents").unwrap()]);
+    assert!(
+        opening.contains("release 0.27.0 removed the old paths"),
+        "the page does not say that release 0.27.0 removed the old paths"
+    );
+    assert!(
+        !opening.contains("They stay for one minor release"),
+        "the page says that the constants of a state stay"
+    );
+}

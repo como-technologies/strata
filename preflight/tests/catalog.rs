@@ -19,6 +19,12 @@ const AWS_TYPES: &str = "GET /v1/clouds/aws/regions/us-east-2/instancetypes?clou
 const GCP_TYPES: &str = "GET /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-gcp-1&cpuGtEq=0&memoryGtEq=0";
 const AZURE_TYPES: &str = "GET /v1/clouds/azure/regions/eastus/instancetypes?cloudAccountUid=acc-azure-1&subscriptionId=11111111-2222-3333-4444-555555555555&cpuGtEq=0&memoryGtEq=0";
 
+/// What Palette answers to a key that cannot read a route. A live run reads a 403 as an `ERROR`,
+/// and the fixture backend does too.
+fn forbidden() -> serde_json::Value {
+    serde_json::json!({"ok": false, "status": 403, "body": {"code": "AccessDenied", "message": "no"}})
+}
+
 /// Run the check of `rule` on the fixture `doc`. The test fails when `when` does not hold on the
 /// fixture: a guard that hides the check passes every test.
 fn outcome_of(rule: &Rule, doc: serde_json::Value, jq: &Jq) -> Outcome {
@@ -925,8 +931,9 @@ fn instance_offering_checks_a_pool_with_no_zone_against_the_list_of_the_region()
     assert_eq!(out.verdict, Verdict::Passed, "{:?}", out.messages);
 }
 
-/// The check of `instance-offering` fails, and says so, when Palette refuses the request or gives
-/// no list: a wrong answer is never a pass.
+/// The check of `instance-offering` fails, and says so, when Palette gives no list, or refuses the
+/// request with a 4xx that is an answer: a wrong answer is never a pass. A 403 is the key, so it
+/// is an `ERROR` on a live run, and the fixture backend gives the same verdict.
 #[test]
 fn instance_offering_fails_when_palette_refuses_or_gives_no_list_of_types() {
     let catalog = catalog::builtin().unwrap();
@@ -935,8 +942,8 @@ fn instance_offering_fails_when_palette_refuses_or_gives_no_list_of_types() {
     let key = AWS_TYPES;
     for (answer, expected) in [
         (
-            serde_json::json!({"ok": false, "status": 403, "body": {"code": "AccessDenied", "message": "no"}}),
-            "Palette cannot list the instance types of region us-east-2: AccessDenied: no",
+            serde_json::json!({"ok": false, "status": 404, "body": {"code": "ResourceNotFound", "message": "no"}}),
+            "Palette cannot list the instance types of region us-east-2: ResourceNotFound: no",
         ),
         (
             serde_json::json!({"ok": true, "status": 200, "body": {}}),
@@ -949,6 +956,11 @@ fn instance_offering_fails_when_palette_refuses_or_gives_no_list_of_types() {
         assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
         assert_eq!(out.messages, [expected]);
     }
+    let mut doc = fixture::load(&path).unwrap();
+    doc["_responses"][key] = forbidden();
+    let out = outcome_of(rule, doc, &Jq::new());
+    assert_eq!(out.verdict, Verdict::Error, "{:?}", out.messages);
+    assert!(out.messages[0].contains("HTTP 403"), "{:?}", out.messages);
 }
 
 /// The three quota rules count the vCPUs of a pool from the field `cpu` of the instance type route
@@ -1094,8 +1106,9 @@ fn a_quota_rule_fails_for_a_pool_whose_type_the_route_does_not_list() {
     );
 }
 
-/// A list that Palette refuses, or gives no `instanceTypes`, is a failure that says so: a quota rule
-/// cannot count the vCPUs of any pool then.
+/// A list that Palette refuses with a 4xx that is an answer, or gives no `instanceTypes`, is a
+/// failure that says so: a quota rule cannot count the vCPUs of any pool then. A 403 is the key,
+/// so it is an `ERROR`, as on a live run.
 #[test]
 fn a_quota_rule_fails_when_palette_refuses_the_list_of_instance_types() {
     let catalog = catalog::builtin().unwrap();
@@ -1104,8 +1117,8 @@ fn a_quota_rule_fails_when_palette_refuses_the_list_of_instance_types() {
     let doc = fixture::load(&path).unwrap();
     for (answer, expected) in [
         (
-            serde_json::json!({"ok": false, "status": 403, "body": {"code": "AccessDenied", "message": "no"}}),
-            "Palette cannot list the instance types of region us-east-2: AccessDenied: no",
+            serde_json::json!({"ok": false, "status": 404, "body": {"code": "ResourceNotFound", "message": "no"}}),
+            "Palette cannot list the instance types of region us-east-2: ResourceNotFound: no",
         ),
         (
             serde_json::json!({"ok": true, "status": 200, "body": {}}),
@@ -1118,6 +1131,11 @@ fn a_quota_rule_fails_when_palette_refuses_the_list_of_instance_types() {
         assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
         assert_eq!(out.messages, [expected]);
     }
+    let mut forbidden_list = doc;
+    forbidden_list["_responses"][AWS_TYPES] = forbidden();
+    let out = outcome_of(rule, forbidden_list, &Jq::new());
+    assert_eq!(out.verdict, Verdict::Error, "{:?}", out.messages);
+    assert!(out.messages[0].contains("HTTP 403"), "{:?}", out.messages);
 }
 
 /// The message of `ssh-key-pair` names the key pair and the region, for EKS with a dynamic VPC
@@ -1185,7 +1203,10 @@ fn iaas_pod_identity_fails_on_the_http_500_that_the_property_route_gives_for_a_k
     let Some(Check::Palette(PaletteCheck { refusal_codes, .. })) = &pod.check else {
         panic!("iaas-pod-identity calls the property route");
     };
-    assert_eq!(refusal_codes, &["AwsKeyPairNotFound"]);
+    assert_eq!(
+        refusal_codes,
+        &["AwsKeyPairNotFound", "FeatureNotSupported"]
+    );
     let path = catalog::rules_dir().join("fixtures/aws/key-pair-not-found.json");
     let (_, world) = FixtureBackend::split(fixture::load(&path).unwrap());
     let jq = Jq::new();
@@ -1217,6 +1238,80 @@ fn iaas_pod_identity_fails_on_the_http_500_that_the_property_route_gives_for_a_k
     // the fixture keeps the same rule, so it cannot show a catch that a live run does not give
     let out = outcome_of(&bare, fixture::load(&path).unwrap(), &jq);
     assert_eq!(out.verdict, Verdict::Error, "{:?}", out.messages);
+}
+
+/// The property route of AWS checks the account before the key pair, and refuses a Pod Identity
+/// account with `FeatureNotSupported`. Palette gives that refusal the type of a server fault, so
+/// the answer is HTTP 500. No live run shows it yet. The fixture states the 500, so it cannot show
+/// a catch that a live run does not give (#553).
+#[test]
+fn iaas_pod_identity_fails_on_the_http_500_that_the_property_route_gives_for_a_pod_identity_account()
+ {
+    const ROUTE: &str = "POST /v1/clouds/aws/properties/validate";
+    const REFUSAL: &str = r#"{"code":"FeatureNotSupported","message":"Pod Identity for AWS infrastructure clusters is not supported"}"#;
+    const MESSAGE: &str = "Palette refuses the properties of the AWS cluster, the cloud account or the key pair: FeatureNotSupported: Pod Identity for AWS infrastructure clusters is not supported";
+    let catalog = catalog::builtin().unwrap();
+    let pod = catalog.rule("iaas-pod-identity").unwrap();
+    let path = catalog::rules_dir().join("fixtures/aws/pod-identity-iaas.json");
+    let doc = fixture::load(&path).unwrap();
+    assert_eq!(doc["_responses"][ROUTE]["status"], 500);
+    let (_, world) = FixtureBackend::split(doc.clone());
+    let jq = Jq::new();
+    let live = |rule: &Rule, status: u16| {
+        let api = strata::api::MemoryApi::new().failing(ROUTE, status, REFUSAL);
+        probe::run_check(rule, &world, &LiveBackend::new(Some(&api), false), &jq)
+    };
+    // the live backend and the fixture: the 500 with the code is the answer, and the rule fails
+    let out = live(pod, 500);
+    assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+    assert_eq!(out.messages, [MESSAGE]);
+    let out = outcome_of(pod, doc.clone(), &jq);
+    assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+    assert_eq!(out.messages, [MESSAGE]);
+    // the rule that names the key pair alone read this 500 as an error (#553)
+    let mut key_pair_only = pod.clone();
+    let Some(Check::Palette(check)) = &mut key_pair_only.check else {
+        unreachable!("checked above");
+    };
+    check.refusal_codes = vec!["AwsKeyPairNotFound".into()];
+    for out in [
+        live(&key_pair_only, 500),
+        outcome_of(&key_pair_only, doc, &jq),
+    ] {
+        assert_eq!(out.verdict, Verdict::Error, "{:?}", out.messages);
+        assert!(out.messages[0].contains("HTTP 500"), "{:?}", out.messages);
+    }
+}
+
+/// A refusal at a 5xx is read one time. The library sends a request again after a 5xx, and the
+/// codes of a refusal are the exception. Preflight connects through `Retry`, so a code that the
+/// rule names and the library does not list would be sent four times, with a wait of seven seconds
+/// (#553). The two codes of the property route of AWS go out one time.
+#[test]
+fn the_refusals_of_the_property_route_of_aws_are_read_after_one_request_and_not_after_the_retries()
+{
+    const ROUTE: &str = "POST /v1/clouds/aws/properties/validate";
+    let catalog = catalog::builtin().unwrap();
+    let pod = catalog.rule("iaas-pod-identity").unwrap();
+    let path = catalog::rules_dir().join("fixtures/aws/key-pair-not-found.json");
+    let (_, world) = FixtureBackend::split(fixture::load(&path).unwrap());
+    let jq = Jq::new();
+    for code in ["AwsKeyPairNotFound", "FeatureNotSupported"] {
+        let body = format!(r#"{{"code":"{code}","message":"refused"}}"#);
+        let api = strata::api::MemoryApi::new().failing(ROUTE, 500, body);
+        let slept = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let record = slept.clone();
+        let retry = strata::api::Retry::with_sleep(
+            &api,
+            strata::api::RetryPolicy::new(3),
+            strata::term::progress::Progress::silent(),
+            move |wait| record.borrow_mut().push(wait),
+        );
+        let out = probe::run_check(pod, &world, &LiveBackend::new(Some(&retry), false), &jq);
+        assert_eq!(out.verdict, Verdict::Failed, "{code}: {:?}", out.messages);
+        assert_eq!(api.calls(ROUTE), 1, "{code}: one request and no retry");
+        assert!(slept.borrow().is_empty(), "{code}: {:?}", slept.borrow());
+    }
 }
 
 /// `ssh-key-pair` applies where `eks-public-subnet-mapping` does not. The property route of EKS

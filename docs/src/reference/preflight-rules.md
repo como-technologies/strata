@@ -159,22 +159,29 @@ of these codes is an answer in `.response`, with `ok: false`, as a 4xx is. A 5xx
 another code, or with no code, stays `ERROR`. A 401, a 403, and a 429 stay `ERROR`
 with every code, because they say that the key or the rate failed.
 
+The library of strata sends a request again after a 5xx, except a 5xx with a code that it lists
+as a refusal. A code that it does not list makes the check read the refusal only after the
+retries. So the loader refuses a code in `refusal_codes` that the library does not list.
+
 ```yaml
 check:
   kind: palette
   method: POST
   path: /v1/clouds/aws/properties/validate
-  refusal_codes: [AwsKeyPairNotFound]
+  refusal_codes: [AwsKeyPairNotFound, FeatureNotSupported]
   expr: '...'
 ```
 
-`iaas-pod-identity` names `AwsKeyPairNotFound`. The property route of AWS answers HTTP 500
-with that code for a key pair that the region does not hold. Before the key, the rule
-was `ERROR` for this fault, and never `FAILED`.
+`iaas-pod-identity` names `AwsKeyPairNotFound` and `FeatureNotSupported`. The property route of AWS
+answers HTTP 500 with the first code for a key pair that the region does not hold. It answers
+HTTP 500 with the second code for a Pod Identity account. A live run shows the first answer. No
+live run shows the second answer. Without the codes, the rule was `ERROR` for these faults, and
+never `FAILED`.
 
 The backend keeps the answer of a request for the run. A rule that does not name the code
-reads the same 500 as an error. A fixture follows the same rule: an entry of `_responses` with
-a 5xx status is an answer only when the check names its code. The loader refuses an empty code.
+reads the same 500 as an error. A fixture follows the same rule for each status
+that is not 2xx. An entry of `_responses` with a 401, a 403, or a 429 is `ERROR`. An entry with a
+5xx status is an answer only when the check names its code.
 
 ## A check that a validate route answers
 

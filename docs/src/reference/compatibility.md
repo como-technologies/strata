@@ -43,9 +43,10 @@ of the error as `&serde_json::Value`, in place of text. Parse the text one time,
 and give the value.
 
 After 0.25.0, `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE`
-are deprecated. They stay for one minor release. `model::cluster_state::ClusterState`
-names each state, and `ClusterState::Running.is(text)` replaces
-`text == RUNNING_STATE`. `ClosedSet::parse` reads the text of a state.
+are gone: release 0.26.0 deprecated them, and release 0.27.0 removed them.
+`model::cluster_state::ClusterState` names each state, and
+`ClusterState::Running.is(text)` replaces `text == RUNNING_STATE`.
+`ClosedSet::parse` reads the text of a state.
 `closed_set::impl_closed_set` is the public macro `strata::impl_closed_set`. Its
 table takes an expression for each text, and a literal is one.
 
@@ -70,8 +71,8 @@ After 0.25.0, `json::set_at` is public. It puts a value at the object keys of a
 document, and it never panics. `strata-preflight` calls it.
 
 After 0.25.0, the types of Palette are in the new module `model`. The root of the
-crate holds no module of them. Each old path stays as a `pub use` for one minor
-release, and release 0.27.0 removes the old paths. Use the new path:
+crate holds no module of them. Each old path stayed as a `pub use` for one minor
+release, and release 0.27.0 removed the old paths. Use the new path:
 
 - `strata::cloud` is now `strata::model::cloud`.
 - `strata::cluster_template` is now `strata::model::cluster_template`.
@@ -194,8 +195,9 @@ After 0.26.0, the library of `strata-preflight` changes in these ways:
 - `probe::Backend::palette` has a fourth argument, `refusal_codes: &[String]`. Give `&[]` to get
   the result of 0.26.0. An `impl Backend` must take the argument. `LiveBackend` gives a `Response`
   with `ok: false` for a 5xx whose `code` is in the list, and an error for each other 5xx.
-  `FixtureBackend` follows the same rule for an entry of `_responses` with a 5xx status. Release
-  0.26.0 gave each such entry as a `Response`.
+  `FixtureBackend` follows the same rule for an entry of `_responses` with a status that is not
+  2xx: see [Release 0.27.0](#release-0270-changes-that-need-action). Release 0.26.0 gave each
+  such entry as a `Response`.
 
 ## The documents
 
@@ -824,15 +826,26 @@ field, a value, an input, or an option is in the sections above.
     Before, `ran` held the command that lists the policies of the role alone. `answer` is
     still the exit code of that first command.
 - **`strata-preflight`: `iaas-pod-identity` is `FAILED` for a key pair that the region does not
-  hold. It was `ERROR`.**
-  - Palette answers HTTP 500 with the code `AwsKeyPairNotFound` for that key pair. A check
-    read each 5xx as an error. The rule now names the code in the new key `refusal_codes`, so
-    the program reads the 500 as the answer of the route.
-  - A script that reads the verdict `error` of `iaas-pod-identity` for this fault must read
+  hold, and for a Pod Identity account. It was `ERROR`.**
+  - Palette answers HTTP 500 with the code `AwsKeyPairNotFound` for that key pair, and with the
+    code `FeatureNotSupported` for a Pod Identity account. A check read each 5xx as an error. The
+    rule now names both codes in the new key `refusal_codes`, so the program reads each 500 as
+    the answer of the route.
+  - A script that reads the verdict `error` of `iaas-pod-identity` for these faults must read
     `failed`. The rule is a probe, so a `FAILED` result changes the exit code only with
     `--strict`. The `ERROR` result gave exit `2`.
   - A rule file that you give with `--probes` takes `refusal_codes` in a check of kind
     `palette`. A 5xx with a code that the check does not name is still `ERROR`.
+  - The loader refuses a code in `refusal_codes` that the library of strata does not list as a
+    refusal at a 5xx. The library sends a request again after such a 5xx, and the check would
+    read the refusal only after the retries. The error is `catalog` and names the code.
+- **`strata-preflight`: the rule `system-macros-hidden` has no check.**
+  - A check reads a 403 of Palette as an error of the key, and never as the result of a rule.
+    So the old check could not report the 403 that it named. A run gave `ERROR` and exit `2` for
+    a key that cannot read the route.
+  - The report shows `not-checked` for the rule now, and the `reproduce` line says what to run
+    by hand. A script that reads the verdict `passed` or `error` of `system-macros-hidden` must
+    read `not-checked`.
 
 ### For a user of the library of strata
 
@@ -858,6 +871,10 @@ field, a value, an input, or an option is in the sections above.
   `Deserialize`, and they refuse a field that they do not list. The JSON Schema of
   `strata-report/1` has `additionalProperties: false` for the report and for an entry. The
   document does not change. `Report::fault` is new: it checks a report that arrives from outside.
+- `api::codes::is_refusal_code` is new. It says whether a code is the code of a refusal at a 5xx
+  that a retry does not change. `Error::class` gives `Terminal` to a 5xx with `AwsKeyPairNotFound`
+  or `FeatureNotSupported`. Release 0.26.0 gave `Transient`, so `api::Retry` sent the request
+  again. It sends the request one time now.
 - The new module `closed_set::unknown::send` holds the decision and the post of the send.
   `ops::send_unknown_report` posts the report of the unmarked lines, and then marks them. The new
   method `Watching::lines_written` tells how many lines a watch wrote. `term::ask::yes_or_no` asks
@@ -870,6 +887,13 @@ field, a value, an input, or an option is in the sections above.
   endpoint counts a second try of the same lines one time. A report holds 20 different values or
   fewer: see `closed_set::unknown::report::MOST_VALUES`. `Report::fault` refuses a count above
   `MOST_COUNT`.
+- The old paths of the types of Palette are gone. `strata::cloud` and the nine other modules at
+  the root, and `strata::content::layer`, do not build. The compiler gives `E0432` or `E0433` for
+  such a path. Use `strata::model::<module>`: see [The Rust library](#the-rust-library) for the
+  list. Release 0.26.0 gave no warning for an old module path.
+- `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE` are gone, and so are the
+  same constants in `model::cluster_state`. The compiler gives `E0425` for them. Use
+  `ClusterState::Running.is(text)`, and `ClosedSet::as_str` for the text of a state.
 
 ### For a user of the library of strata-preflight
 
@@ -878,9 +902,13 @@ field, a value, an input, or an option is in the sections above.
 - `probe::Backend::palette` has a fourth argument, `refusal_codes: &[String]`. An `impl Backend`
   must take it, and a call must give it. Give `&[]` for the result of 0.26.0. A 5xx whose `code`
   is in the list is a `Response` with `ok: false`. Each other 5xx is an error.
-- `FixtureBackend` follows the same rule for an entry of `_responses` with a 5xx status. Release
-  0.26.0 gave such an entry as a `Response`. A fixture of a custom rule can need `refusal_codes`
-  in its check now.
+- `FixtureBackend` follows the same rule for an entry of `_responses` with a status that is not
+  2xx. An entry with a 401, a 403, or a 429 is an error, as on a live run. An entry with a 5xx
+  status is a `Response` only for a check that names its code. Release 0.26.0 gave each such
+  entry as a `Response`. A fixture of a custom rule can need `refusal_codes` in its check now.
+  A fixture with a 401, a 403, or a 429 gives an error.
+- `catalog::with_probes` and `rule::Catalog::parse_section` give `Error::Catalog` for a
+  `refusal_codes` entry that `api::codes::is_refusal_code` does not accept.
 
 ## Release 0.26.0: changes that need action
 

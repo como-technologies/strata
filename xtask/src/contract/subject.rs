@@ -12,11 +12,38 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use serde_json::Value;
-use strata::api::PaletteApi;
+use strata::api::{PaletteApi, RawCluster};
 use strata::error::Error;
 use strata::json::str_at;
 
 use crate::facts::{Fact, Scope};
+
+/// How the run reads the value of a placeholder from the answer of a fact.
+pub(super) enum Read {
+    /// The text at a JSON pointer. The first entry of a list is the subject.
+    Pointer(&'static str),
+    /// The cloud type of a cluster document. Strata reads it with one rule, so the run asks the
+    /// route of the cloud config as strata does.
+    CloudType,
+}
+
+impl Read {
+    /// The value in `document`, or empty when the document holds none.
+    fn value<'a>(&self, document: &'a Value) -> &'a str {
+        match self {
+            Read::Pointer(pointer) => str_at(document, pointer),
+            Read::CloudType => RawCluster::cloud_type(document),
+        }
+    }
+
+    /// What the document lacks when [`Read::value`] gives an empty text.
+    fn lacks(&self) -> String {
+        match self {
+            Read::Pointer(pointer) => format!("nothing at {pointer}"),
+            Read::CloudType => "no cloud type".to_string(),
+        }
+    }
+}
 
 /// Where the value of a placeholder comes from.
 pub(super) struct Source {
@@ -27,8 +54,8 @@ pub(super) struct Source {
     pub(super) param: &'static str,
     /// The id of the fact whose answer holds the value.
     pub(super) fact: &'static str,
-    /// The pointer of the value in that answer. The first entry of a list is the subject.
-    pub(super) pointer: &'static str,
+    /// How to read the value from that answer.
+    pub(super) read: Read,
 }
 
 /// The shortest way to the subject of each request that the run sends. The first entry of a
@@ -38,31 +65,31 @@ pub(super) const SOURCES: &[Source] = &[
         prefix: "/v1/spectroclusters/",
         param: "uid",
         fact: "cluster-listing",
-        pointer: "/0/metadata/uid",
+        read: Read::Pointer("/0/metadata/uid"),
     },
     Source {
         prefix: "/v1/notifications/spectrocluster/",
         param: "uid",
         fact: "cluster-listing",
-        pointer: "/0/metadata/uid",
+        read: Read::Pointer("/0/metadata/uid"),
     },
     Source {
         prefix: "/v1/cloudconfigs/",
         param: "cloudType",
         fact: "cluster-document",
-        pointer: "/spec/cloudType",
+        read: Read::CloudType,
     },
     Source {
         prefix: "/v1/cloudconfigs/",
         param: "configUid",
         fact: "cluster-document",
-        pointer: "/spec/cloudConfigRef/uid",
+        read: Read::Pointer("/spec/cloudConfigRef/uid"),
     },
     Source {
         prefix: "/v1/filters/tag/",
         param: "uid",
         fact: "tag-filter-listing",
-        pointer: "/items/0/metadata/uid",
+        read: Read::Pointer("/items/0/metadata/uid"),
     },
     // the three AWS list routes ask for the account, the region, and the VPC. They take the first
     // account, the first region of that account, and the first VPC of that region.
@@ -70,73 +97,73 @@ pub(super) const SOURCES: &[Source] = &[
         prefix: "/v1/clouds/aws/regions",
         param: "cloudAccountUid",
         fact: "cloud-account-listing",
-        pointer: "/items/0/metadata/uid",
+        read: Read::Pointer("/items/0/metadata/uid"),
     },
     Source {
         prefix: "/v1/clouds/aws/regions/",
         param: "region",
         fact: "validate-aws-regions",
-        pointer: "/regions/0/name",
+        read: Read::Pointer("/regions/0/name"),
     },
     Source {
         prefix: "/v1/clouds/aws/securitygroups",
         param: "cloudAccountUid",
         fact: "cloud-account-listing",
-        pointer: "/items/0/metadata/uid",
+        read: Read::Pointer("/items/0/metadata/uid"),
     },
     Source {
         prefix: "/v1/clouds/aws/securitygroups",
         param: "region",
         fact: "validate-aws-regions",
-        pointer: "/regions/0/name",
+        read: Read::Pointer("/regions/0/name"),
     },
     Source {
         prefix: "/v1/clouds/aws/securitygroups",
         param: "vpcId",
         fact: "validate-vpcs",
-        pointer: "/vpcs/0/vpcId",
+        read: Read::Pointer("/vpcs/0/vpcId"),
     },
     Source {
         prefix: "/v1/clustergroups/",
         param: "uid",
         fact: "cluster-group-listing",
-        pointer: "/items/0/uid",
+        read: Read::Pointer("/items/0/uid"),
     },
     Source {
         prefix: "/v1/appProfiles/",
         param: "uid",
         fact: "app-profile-listing",
-        pointer: "/appProfiles/0/metadata/uid",
+        read: Read::Pointer("/appProfiles/0/metadata/uid"),
     },
     Source {
         prefix: "/v1/appProfiles/",
         param: "tierUid",
         fact: "app-profile-tiers",
-        pointer: "/spec/appTiers/0/metadata/uid",
+        read: Read::Pointer("/spec/appTiers/0/metadata/uid"),
     },
     Source {
         prefix: "/v1/appProfiles/",
         param: "manifestUid",
         fact: "app-profile-tiers",
-        pointer: "/spec/appTiers/0/spec/manifests/0/uid",
+        read: Read::Pointer("/spec/appTiers/0/spec/manifests/0/uid"),
     },
     Source {
         prefix: "/v1/packs/",
         param: "name",
         fact: "pack-listing",
-        pointer: "/items/0/spec/name",
+        read: Read::Pointer("/items/0/spec/name"),
     },
     Source {
         prefix: "/v1/packs/",
         param: "uid",
         fact: "pack-listing",
-        pointer: "/items/0/spec/registryUid",
+        read: Read::Pointer("/items/0/spec/registryUid"),
     },
     Source {
         prefix: "/v1/clusterprofiles/",
         param: "uid",
         fact: "profile-listing",
-        pointer: "/items/0/metadata/uid",
+        read: Read::Pointer("/items/0/metadata/uid"),
     },
 ];
 
@@ -320,11 +347,11 @@ fn value<A: PaletteApi>(
             }));
         }
     };
-    let found = str_at(document, source.pointer);
+    let found = source.read.value(document);
     if found.is_empty() {
         return Err(missing(format!(
-            "the tenant has no object for `{{{param}}}`: the answer to GET {path} holds nothing at {}",
-            source.pointer
+            "the tenant has no object for `{{{param}}}`: the answer to GET {path} holds {}",
+            source.read.lacks()
         )));
     }
     if !found

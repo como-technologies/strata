@@ -3429,6 +3429,11 @@ fn verify_report_opens_one_issue_per_record_that_did_not_verify_and_closes_it_on
         calls[3]
     );
     assert!(calls[3].contains("--label strata-drift"), "{}", calls[3]);
+    assert!(
+        !calls[3].contains("--milestone"),
+        "the shipped script sets no milestone: {}",
+        calls[3]
+    );
     let b = d.handed("body", 4);
     assert!(
         b.starts_with("<!-- strata-verify: releases/b.json -->\n"),
@@ -4048,6 +4053,11 @@ fn upstream_report_opens_one_issue_per_pack_behind_names_what_arrived_and_closes
             "issue create --repo o/r --title strata behind: csi-aws-ebs 1.63.1 behind 1.65.0 in Public Repo"
         ),
         "{}",
+        calls[3]
+    );
+    assert!(
+        !calls[3].contains("--milestone"),
+        "the shipped script sets no milestone: {}",
         calls[3]
     );
     let body = u.handed("body", 4);

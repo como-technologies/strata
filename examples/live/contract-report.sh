@@ -34,10 +34,11 @@
 #
 # Exit 0 when no fact differs, no value is unknown, and no release is new. Exit 1 when one is: the
 # issues are handled.
-# Exit 2 when the document is not a strata-contract/1 document, or holds a fact or a release that
-# the run could not check, or when a host call fails. The script prints what the host said. The
-# issues are handled first, so a scheduled job shows the state too. The weekly job keeps the tags
-# of the releases only when the exit is not 2.
+# Exit 3 when the document holds a fact or a release that the run could not check. The issues are
+# handled first, so a scheduled job shows the state too, and this exit says that they are done.
+# Exit 2 when the document is not a strata-contract/1 document, or when a host call fails. The
+# script prints what the host said. The weekly job keeps the tags of the releases when the exit is
+# not 2, so a release issue that a person closed does not open again.
 #
 # The host layer is the one of scripts/ci/verify-report.sh. This script reads its functions from
 # that file, so a change to the host layer reaches this script. This script is not shipped, so it
@@ -60,15 +61,6 @@ case "$layer" in
   *) echo "$script: scripts/ci/verify-report.sh has no host layer to read" >&2; exit 2 ;;
 esac
 eval "$layer"
-
-# github_open_issue TITLE BODYFILE: the function of the host layer, with the milestone. A new issue is
-# in the milestone from its first moment, and gh opens no issue when the milestone does not exist.
-# It prints the new number.
-github_open_issue() {
-  local url
-  url=$(gh issue create --repo "$repo" --title "$1" --body-file "$2" --label "$label" --milestone "$milestone")
-  echo "${url##*/}"
-}
 
 # ---- arguments ---------------------------------------------------------------------------------
 document=""
@@ -339,6 +331,6 @@ for a in "${actions[@]+"${actions[@]}"}"; do
   line="$line; $a"
 done
 note "$line"
-if [ "$errors" -gt 0 ] || [ "$release_errors" -gt 0 ]; then exit 2; fi
+if [ "$errors" -gt 0 ] || [ "$release_errors" -gt 0 ]; then exit 3; fi
 if [ "$differs" -gt 0 ] || [ "$unknown" -gt 0 ] || [ "$news" -gt 0 ]; then exit 1; fi
 exit 0

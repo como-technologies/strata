@@ -48,7 +48,8 @@ fault shows after a full apply. See
 
 A run sends each request one time. The backend keeps the answer of each request,
 by its method, its path, and its body. A 4xx is an answer, and the backend keeps
-it. A 5xx is an answer only for a check that names its code in
+it. A 401, a 403, and a 429 are errors of the key or of the rate, so they are not
+answers. A 5xx is an answer only for a check that names its code in
 [`refusal_codes`](../../reference/preflight-rules.md#a-refusal-at-a-5xx). An error such as a 503 is
 not an answer, and the next rule asks again.
 

@@ -626,6 +626,19 @@ facts:
     rules:
       - iaas-pod-identity
 
+  - id: validate-aws-pod-identity-refused
+    kind: behavior
+    reads:
+      codes:
+        - FeatureNotSupported
+    stand_in: []
+    live: []
+    unchecked: No live run shows it. Palette refuses the create of a Pod Identity account in the SaaS mode, so a lab on SaaS cannot hold the account.
+    pages:
+      - internals/palette/validate-routes.md#the-property-routes
+    rules:
+      - iaas-pod-identity
+
   - id: validate-eks-properties
     kind: request
     request: "POST /v1/clouds/eks/properties/validate"

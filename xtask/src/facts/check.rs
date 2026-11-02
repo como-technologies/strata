@@ -9,6 +9,7 @@ use regex::Regex;
 
 use super::cloud;
 use super::model::{Fact, Kind};
+use super::sets;
 use super::sources::{API_PAGE, FACT_PAGES, Sources, method_pattern, query_names, shape};
 
 /// The headings of `internals/palette/` that state nothing about Palette, each as `page#anchor`:
@@ -35,6 +36,7 @@ pub fn check(sources: &Sources) -> Vec<String> {
     bad.extend(live_checks_exist(sources));
     bad.extend(stand_in_agrees(sources));
     bad.extend(cloud::check(sources));
+    bad.extend(sets::check(sources));
     bad
 }
 

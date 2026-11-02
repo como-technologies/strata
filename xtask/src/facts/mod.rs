@@ -16,6 +16,7 @@ use std::path::Path;
 mod check;
 pub(crate) mod cloud;
 mod model;
+mod sets;
 mod sources;
 #[cfg(test)]
 mod tests;

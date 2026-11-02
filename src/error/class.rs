@@ -1,7 +1,7 @@
 //! The class of a failure: how a caller treats it when it decides to try again.
 
 use super::Error;
-use crate::api::codes::{PROFILE_IMPORT_MATCH_CODES, REFUSAL_CODES, ValidateRoute};
+use crate::api::codes::is_refusal_code;
 use crate::model::validation::PaletteRefusal;
 
 /// The class of a failure, for a caller that decides to try again.
@@ -13,7 +13,7 @@ pub enum FailureClass {
     /// It stays while the inputs stay.
     ///
     /// - Another HTTP 4xx.
-    /// - A 5xx with the code of a refusal of Palette, or of a check of a [`ValidateRoute`].
+    /// - A 5xx with the code of a refusal of Palette, or of a check of a validate route.
     /// - A 5xx of the import validate route when it matches no pack of the body to a registry.
     /// - A thing that is not there, or a file or a setting that is not valid.
     Terminal,
@@ -51,13 +51,9 @@ impl Error {
 
 /// True when the body of a Palette error is JSON with a `code` of a refusal by design.
 ///
-/// Such a code is in [`REFUSAL_CODES`], in `PROFILE_IMPORT_MATCH_CODES`, or in a check of a
-/// [`ValidateRoute`]. Each [`ValidateRoute`] says which bodies are a refusal of its checks.
+/// [`is_refusal_code`] says which codes these are: the refusals of the other routes, the errors of
+/// the import validate route that match no pack to a registry, and the checks of each validate
+/// route.
 fn is_refusal(body: &str) -> bool {
-    PaletteRefusal::from_error_body(body).is_some_and(|r| {
-        let code = r.code.as_str();
-        REFUSAL_CODES.contains(&code) || PROFILE_IMPORT_MATCH_CODES.contains(&code)
-    }) || ValidateRoute::ALL
-        .iter()
-        .any(|route| route.refusal(500, body).is_some())
+    PaletteRefusal::from_error_body(body).is_some_and(|r| is_refusal_code(&r.code))
 }

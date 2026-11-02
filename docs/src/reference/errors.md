@@ -130,6 +130,8 @@ sent.
 | `ClusterProfileUpdateValidationFailure` | A change to a profile that is not valid. |
 | `ClusterProfileInvalidPackState` | A profile that pins a pack version that is disabled or deleted. |
 | `InvalidLimit` | A listing with a `limit` above the maximum. |
+| `AwsKeyPairNotFound` | A key pair that the region does not hold, on the property route of AWS. |
+| `FeatureNotSupported` | A feature that the cloud account does not support, such as a Pod Identity account on the property route of AWS. |
 
 `POST /v1/spectroclusters/{uid}/validate/packs` refuses the whole request with
 HTTP `500` and one of these codes. Strata does not send it again.

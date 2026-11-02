@@ -166,7 +166,7 @@ Teardown and leftovers
 
 Section scorecard
   section                      rows seen check preflight runs weakest  ran pass fail not run not checked ready
-  Identity and permissions       13    6    13         0    7      0%    2    2    0       3           0   40%
+  Identity and permissions       13    6    12         0    7      0%    2    2    0       3           0   40%
   Cloud services and APIs         2    0     1         0    1     76%    1    1    0       0           1  100%
   Quotas and limits               4    2     2         0    2     72%    1    0    1       1           2    0%
   Networking                     12    2    10         0    5     22%    4    4    0       0           1  100%
@@ -179,7 +179,7 @@ Section scorecard
   The Palette platform           11    9     6         0    3     22%    1    0    1       0           5    0%
   Client tools                    9    9     4         0    0 no runs    0    0    0       3           0    0%
   Teardown and leftovers          6    6     3         0    1     72%    1    1    0       2           3   33%
-runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: 0 of 74 checks.
+runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: 0 of 73 checks.
 
 104 rules apply; 22 ran: 19 passed, 0 failed, 2 probe(s) failed, 1 warning(s), 2 note(s); 10 did not run, 24 not checked, 41 do not apply, 0 error(s); readiness 59%: 19 of 32 checks passed
 10 checks did not run: --no-exec: the command did not run (10)

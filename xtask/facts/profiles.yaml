@@ -46,6 +46,8 @@ facts:
         - status.inUseClusterTemplates[].projectUid
       values:
         metadata.annotations.scope: [project, tenant, system]
+        spec.published.type: [cluster, infra, add-on, system]
+        "spec.published.packs[].annotations.ociRegistryProviderType": [pack, helm, zarf]
     stand_in:
       - v1/clusterprofiles/{uid}
     live:
@@ -243,8 +245,6 @@ facts:
     code:
       - src/api/palette/clusters.rs
       - src/snapshot/cluster.rs
-    rules:
-      - system-macros-hidden
 
   - id: group-resolved-values
     kind: request

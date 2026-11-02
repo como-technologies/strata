@@ -94,27 +94,6 @@ pub mod term;
 pub mod text;
 pub(crate) mod timestamp;
 
-/// The old path of [`model::cloud`]. It goes in release 0.27.
-pub use model::cloud;
-/// The old path of [`model::cluster_template`]. It goes in release 0.27.
-pub use model::cluster_template;
-/// The old path of [`model::conjunction`]. It goes in release 0.27.
-pub use model::conjunction;
-/// The old path of [`model::oci_provider`]. It goes in release 0.27.
-pub use model::oci_provider;
-/// The old path of [`model::pack_state`]. It goes in release 0.27.
-pub use model::pack_state;
-/// The old path of [`model::pack_type`]. It goes in release 0.27.
-pub use model::pack_type;
-/// The old path of [`model::profile_type`]. It goes in release 0.27.
-pub use model::profile_type;
-/// The old path of [`model::repave`]. It goes in release 0.27.
-pub use model::repave;
-/// The old path of [`model::scope`]. It goes in release 0.27.
-pub use model::scope;
-/// The old path of [`model::validation`]. It goes in release 0.27.
-pub use model::validation;
-
 pub use error::{Error, Result};
 
 /// The tool's name, used in messages and recorded in every document.
