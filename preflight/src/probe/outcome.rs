@@ -214,4 +214,22 @@ impl Outcome {
             ran: Ran::Nothing,
         }
     }
+
+    /// A row with no check in strata-preflight: `NOT CHECKED`. The reproduce lines of the report
+    /// say what to run by hand.
+    pub(crate) fn unchecked() -> Outcome {
+        Outcome::not_run(
+            Verdict::NotChecked,
+            "no check in strata-preflight; the reproduce lines say what to run by hand",
+        )
+    }
+
+    /// A watch rule in a run that is no watch: `SKIP`. The rule is of the build, so it does not
+    /// apply here.
+    pub(crate) fn outside_watch() -> Outcome {
+        Outcome::not_run(
+            Verdict::Skipped,
+            "a watch rule runs with --watch cluster:UID, during the build",
+        )
+    }
 }

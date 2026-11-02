@@ -9,7 +9,7 @@ use strata::json::{arr, str_at, text_or};
 use strata::model::cluster_state::ClusterState;
 use strata::snapshot::SubjectKind;
 use strata::term::color::Paint;
-use strata::text::cut;
+use strata::text::{cut, plural};
 
 use crate::probe::{self, Outcome, Verdict};
 use crate::report::label::LabelKind;
@@ -203,7 +203,8 @@ fn event_lines(read: &Value, seen: &mut BTreeSet<String>, paint: &Paint) -> Vec<
         let older = fresh.len() - EVENTS_SHOWN;
         fresh.drain(..older);
         out.push(paint.dim(&format!(
-            "watch: {older} older event(s) not shown; the report holds them"
+            "watch: {older} older {} not shown; the report holds them",
+            plural(older, "event", "events")
         )));
     }
     out.extend(fresh.into_iter().map(|(_, line)| line));
@@ -227,4 +228,41 @@ pub(super) fn watch_line(rule: &Rule, o: &Outcome, paint: &Paint) -> String {
 fn label(rule: &Rule, o: &Outcome, paint: &Paint) -> String {
     let kind = LabelKind::of(o.verdict, rule.level, rule.severity);
     kind.paint(paint, &kind.word())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// A reading with `n` events, one second apart.
+    fn reading_with_events(n: usize) -> Value {
+        let events: Vec<Value> = (0..n)
+            .map(|i| {
+                json!({
+                    "metadata": {"creationTimestamp": format!("2026-01-01T00:00:{i:02}Z")},
+                    "reason": "Reconcile",
+                    "message": format!("event {i}"),
+                })
+            })
+            .collect();
+        json!({"events": events})
+    }
+
+    #[test]
+    fn the_line_of_the_older_events_agrees_its_noun_with_the_count() {
+        for (extra, line) in [
+            (1, "watch: 1 older event not shown; the report holds them"),
+            (2, "watch: 2 older events not shown; the report holds them"),
+        ] {
+            let read = reading_with_events(EVENTS_SHOWN + extra);
+            let lines = event_lines(&read, &mut BTreeSet::new(), &Paint::off());
+            assert_eq!(lines[0], line);
+            assert_eq!(
+                lines.len(),
+                EVENTS_SHOWN + 1,
+                "the newest events and the count"
+            );
+        }
+    }
 }

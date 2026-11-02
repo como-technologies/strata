@@ -132,6 +132,91 @@ fn a_run_keeps_the_rules_of_the_engine_and_says_why_the_others_do_not_run() {
 }
 
 #[test]
+fn a_row_that_does_not_run_says_why_with_the_words_of_its_tier_and_one_reason_for_each_case() {
+    let section = r#"
+section: lifecycle
+title: Lifecycle
+rules:
+  - id: by-hand
+    title: A check that is done by hand
+    engines: [all]
+    tier: static
+    status: seen
+    what: w
+  - id: a-race
+    title: A race
+    engines: [all]
+    tier: race
+    status: seen
+    what: w
+  - id: of-the-tool
+    title: A rule of the tool
+    engines: [all]
+    tier: tool
+    status: seen
+    what: w
+  - id: of-the-build
+    title: A rule of the build
+    engines: [all]
+    tier: watch
+    status: seen
+    what: w
+    check: {kind: watch, expr: "true"}
+"#;
+    let mut c = Catalog::default();
+    c.push(
+        Catalog::parse_section(section, Path::new("c.yaml")).unwrap(),
+        Path::new("c.yaml"),
+    )
+    .unwrap();
+    let (backend, _) = FixtureBackend::split(json!({}));
+    let report = run(RunInputs {
+        catalog: &c,
+        world: &world(4),
+        backend: &backend,
+        ledger: &Ledger::default(),
+        selection: &Selection::default(),
+        now: "2026-09-30T00:00:00Z",
+        out_dir: None,
+        progress: &Progress::silent(),
+        verbose: false,
+        paint: Paint::off(),
+    })
+    .unwrap();
+    let row = |id: &str| {
+        let check = report.checks.iter().find(|c| c.id == id).unwrap();
+        (check.verdict, check.messages.clone())
+    };
+    let reason = |outcome: Outcome| (outcome.verdict, outcome.messages);
+    assert_eq!(row("by-hand"), reason(Outcome::unchecked()));
+    assert_eq!(
+        row("a-race"),
+        (
+            Verdict::NotChecked,
+            vec![format!("a race: {}", Tier::Race.describe())]
+        )
+    );
+    assert_eq!(
+        row("of-the-tool"),
+        (Verdict::Skipped, vec![Tier::Tool.describe().to_string()])
+    );
+    assert_eq!(row("of-the-build"), reason(Outcome::outside_watch()));
+    // the check of a watch rule says the same, when a caller runs it outside a watch
+    let rule = c.rule("of-the-build").unwrap();
+    let outside = probe::run_check(rule, &json!({}), &backend, &Jq::new());
+    assert_eq!(
+        (outside.verdict, outside.messages),
+        reason(Outcome::outside_watch())
+    );
+    let rule = c.rule("by-hand").unwrap();
+    let unchecked = probe::run_check(rule, &json!({}), &backend, &Jq::new());
+    assert_eq!(
+        (unchecked.verdict, unchecked.messages),
+        reason(Outcome::unchecked())
+    );
+}
+
+#[test]
 fn strict_counts_a_failed_probe_and_a_clean_entity_passes() {
     let c = catalog();
     let (backend, _) = FixtureBackend::split(json!({}));
@@ -502,6 +587,11 @@ rules:
         readings.get(),
         0,
         "the first reading saw Running, and the watch ended there"
+    );
+    assert!(
+        report.subject.source.ends_with("after 0s, 1 reading)"),
+        "{}",
+        report.subject.source
     );
 }
 

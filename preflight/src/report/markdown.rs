@@ -2,7 +2,7 @@
 
 use strata::text::markdown_cell;
 
-use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
+use super::scorecard::{bound_text, count_noun, not_run_text, scorecard_legend, written_text};
 use super::{CheckResult, Report, SectionScore, pct};
 use crate::probe::Verdict;
 
@@ -10,18 +10,19 @@ use crate::probe::Verdict;
 pub fn markdown(r: &Report) -> String {
     let mut out = String::new();
     let s = &r.summary;
+    let probes = count_noun(s.probe_failed, "probe", "probes");
     out.push_str(&format!(
         "## strata-preflight: {} cluster `{}`\n\n",
         r.subject.cloud,
         r.subject.name_or_dash()
     ));
     out.push_str(&format!(
-        "**{}** — source `{}`, Palette {}, tiers {}. {} ran: {} passed, {} failed, {} probe(s) failed; {} did not run, {} not checked; readiness **{}** ({} of {} checks passed).\n\n",
+        "**{}** — source `{}`, Palette {}, tiers {}. {} ran: {} passed, {} failed, {probes} failed; {} did not run, {} not checked; readiness **{}** ({} of {} checks passed).\n\n",
         s.verdict,
         r.subject.source,
         r.subject.release_text(),
         r.options.tiers_text(),
-        s.ran, s.passed, s.failed, s.probe_failed, s.not_run, s.not_checked, pct(s.readiness), s.passed, s.ran + s.not_run
+        s.ran, s.passed, s.failed, s.not_run, s.not_checked, pct(s.readiness), s.passed, s.applies()
     ));
     out.push_str(
         "| result | rule | tier | what | time | confidence |\n|---|---|---|---|---|---|\n",

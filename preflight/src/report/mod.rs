@@ -267,6 +267,14 @@ pub struct SectionScore {
     pub readiness: Option<f64>,
 }
 
+impl SectionScore {
+    /// The checks of the section that apply here: the ones that ran and the ones that did not run.
+    /// The readiness counts them.
+    pub fn applies(&self) -> u32 {
+        self.ran + self.not_run
+    }
+}
+
 /// The counts of the run.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -303,6 +311,14 @@ pub struct Summary {
     pub exit_code: u8,
     /// One line that says the outcome.
     pub verdict: String,
+}
+
+impl Summary {
+    /// The checks that apply here: the ones that ran and the ones that did not run. The readiness
+    /// counts them.
+    pub fn applies(&self) -> u32 {
+        self.ran + self.not_run
+    }
 }
 
 /// What the words of the document mean, for a reader of the JSON.

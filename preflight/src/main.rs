@@ -13,7 +13,7 @@ use strata::ops;
 use strata::reference::Ref;
 use strata::term::color::{ColorMode, Paint, Stream};
 use strata::term::progress::Progress;
-use strata::text::dash;
+use strata::text::{dash, plural};
 use strata_preflight::confidence::{self, Ledger};
 use strata_preflight::error::{Error, Result};
 use strata_preflight::probe::LiveBackend;
@@ -515,10 +515,11 @@ fn promotion_text(report: &confidence::PromotionReport) -> String {
             }
         ));
     }
+    let n = report.disagreements;
     out.push_str(&format!(
-        "\n{} rules with a check; {} level(s) disagree with the ledger\n",
+        "\n{} rules with a check; {n} {} the ledger\n",
         report.rules.len(),
-        report.disagreements
+        plural(n as usize, "level disagrees with", "levels disagree with")
     ));
     out
 }

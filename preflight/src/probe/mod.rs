@@ -29,10 +29,7 @@ pub use outcome::{Call, Outcome, Ran, Verdict};
 pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> Outcome {
     let started = Instant::now();
     let Some(check) = &rule.check else {
-        return Outcome::not_run(
-            Verdict::NotChecked,
-            "no check in strata-preflight; the reproduce lines say what to run by hand",
-        );
+        return Outcome::unchecked();
     };
     match check {
         Check::Static { expr } => judge(rule, expr, world, jq, started),
@@ -40,10 +37,7 @@ pub fn run_check(rule: &Rule, world: &Value, backend: &dyn Backend, jq: &Jq) -> 
         Check::Exec(check) => run_exec(rule, check, world, backend, jq, started),
         // the watch adds the cluster, the summary, and the events; the caller of a watch does,
         // and then judges with `judge_watch`
-        Check::Watch { .. } => Outcome::not_run(
-            Verdict::Skipped,
-            "a watch rule runs with --watch cluster:UID, during the build",
-        ),
+        Check::Watch { .. } => Outcome::outside_watch(),
     }
 }
 

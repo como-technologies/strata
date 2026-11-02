@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 use strata::closed_set::ClosedSet;
+use strata::closed_set::legend::Described;
 use strata::json::text;
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
@@ -120,26 +121,19 @@ pub fn applicable<'a>(
             } else if r.check.is_none() {
                 match r.tier {
                     // a row with no check: the report says what to run by hand
-                    Tier::Cloud | Tier::Static | Tier::Palette | Tier::Watch => Some(Outcome::not_run(
-                        Verdict::NotChecked,
-                        "no check in strata-preflight; the reproduce lines say what to run by hand",
-                    )),
+                    Tier::Cloud | Tier::Static | Tier::Palette | Tier::Watch => {
+                        Some(Outcome::unchecked())
+                    }
                     Tier::Race => Some(Outcome::not_run(
                         Verdict::NotChecked,
-                        "a race: no check before the build finds it; the watch finds its effect",
+                        format!("a race: {}", r.tier.describe()),
                     )),
-                    Tier::Tool => Some(Outcome::not_run(
-                        Verdict::Skipped,
-                        "a rule of the tool that makes the entity, out of scope here",
-                    )),
+                    Tier::Tool => Some(Outcome::not_run(Verdict::Skipped, r.tier.describe())),
                 }
             } else if !selection.tiers.contains(&r.effective_tier()) {
                 if r.effective_tier() == Tier::Watch {
                     // a watch rule is of the build, not of this run: it does not apply here
-                    Some(Outcome::not_run(
-                        Verdict::Skipped,
-                        "a watch rule runs with --watch cluster:UID, during the build",
-                    ))
+                    Some(Outcome::outside_watch())
                 } else {
                     // the check applies and did not run: it counts against the readiness
                     Some(Outcome::not_run(

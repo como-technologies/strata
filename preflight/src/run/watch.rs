@@ -18,6 +18,7 @@ use crate::confidence::Ledger;
 use crate::error::{Error, Result};
 use crate::jq::Jq;
 use crate::probe::{self, Outcome, Reader, Verdict, is_answer};
+use crate::report::scorecard::count_noun;
 use crate::report::{self, Assembly, Options, Report};
 use crate::rule::{Catalog, Check, Rule, Tier};
 use crate::world::World;
@@ -166,11 +167,11 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
     let confidence = confidence_of(inputs.catalog, inputs.ledger, inputs.world, &outcomes);
     let mut subject = subject_of(inputs.world);
     subject.source = format!(
-        "{} ({} after {}s, {} reading(s))",
+        "{} ({} after {}s, {})",
         subject.source,
         ended.state,
         started.elapsed().as_secs(),
-        ended.readings
+        count_noun(ended.readings, "reading", "readings")
     );
     let report = report::assemble(
         Assembly {

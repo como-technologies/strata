@@ -43,7 +43,7 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
             .fold(None, |acc: Option<f64>, b| {
                 Some(acc.map_or(b, |a| a.min(b)))
             });
-        out.push(SectionScore {
+        let mut score = SectionScore {
             section: section.section.clone(),
             title: section.title.clone(),
             rows: rows.len() as u32,
@@ -63,8 +63,10 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
                 .iter()
                 .filter(|c| c.verdict == Verdict::NotChecked)
                 .count() as u32,
-            readiness: readiness_of(passed, ran.len() as u32 + not_run),
-        });
+            readiness: None,
+        };
+        score.readiness = readiness_of(score.passed, score.applies());
+        out.push(score);
     }
     out
 }
@@ -91,6 +93,11 @@ pub(crate) fn not_run_reasons<'a>(
 /// `no runs` when no row of the section has a run.
 pub(crate) fn bound_text(bound: Option<f64>) -> String {
     bound.map_or_else(|| NO_RUNS.to_string(), percent)
+}
+
+/// `n` and its noun in the form that agrees with it, such as `1 probe` and `2 probes`.
+pub(crate) fn count_noun(n: u32, one: &str, many: &str) -> String {
+    format!("{n} {}", plural(n as usize, one, many))
 }
 
 /// `N check(s) did not run: reason (count); reason (count)`.
@@ -135,8 +142,7 @@ pub(super) fn summarize(
     let not_run_reasons = not_run_reasons(checks.iter());
     let skipped = count(&|c| c.verdict == Verdict::Skipped);
     let errors = count(&|c| c.verdict == Verdict::Error);
-    let readiness = readiness_of(passed, ran + not_run);
-    let counted = Summary {
+    let mut counted = Summary {
         rules: checks.len() as u32,
         ran,
         passed,
@@ -149,10 +155,11 @@ pub(super) fn summarize(
         not_checked,
         skipped,
         errors,
-        readiness,
+        readiness: None,
         exit_code: 0,
         verdict: String::new(),
     };
+    counted.readiness = readiness_of(counted.passed, counted.applies());
     let (exit_code, verdict) = exit_and_verdict(checks, &counted, options.ready);
     Summary {
         exit_code,
@@ -185,7 +192,11 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
             .collect();
         (
             1,
-            format!("FAIL: {failed} check(s) failed: {}", ids.join(", ")),
+            format!(
+                "FAIL: {} failed: {}",
+                count_noun(failed, "check", "checks"),
+                ids.join(", ")
+            ),
         )
     } else if under_ready {
         (
@@ -205,7 +216,8 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
         (
             2,
             format!(
-                "ERROR: {errors} check(s) could not answer: {}",
+                "ERROR: {} could not answer: {}",
+                count_noun(errors, "check", "checks"),
                 ids.join(", ")
             ),
         )
@@ -213,7 +225,10 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
         (0, "OK: no check ran".to_string())
     } else {
         let probes = if probe_failed > 0 {
-            format!("; {probe_failed} probe(s) failed, not counted")
+            format!(
+                "; {} failed, not counted",
+                count_noun(probe_failed, "probe", "probes")
+            )
         } else {
             String::new()
         };
