@@ -160,16 +160,15 @@ rules:
       deleted version with `ClusterProfileInvalidPackState`, and a deleted version refuses a new
       cluster. A deprecated version builds, and this check does not name it; `strata packs` shows
       the state of each version. The world reads the state from `GET /v1/packs/{uid}`; a pack the
-      key cannot read is not checked.
+      key cannot read is not checked. The world derives `packFacts` from that state: a pack is
+      retired when its state is disabled or deleted.
     check:
       kind: static
       expr: |
-        .packs as $packs
+        .packFacts as $facts
         | [ .profiles[] | .source.name as $p | .packs[]
-            | select((.packUid // "") != "" and $packs[.packUid] != null)
-            | .packUid as $u
-            | (($packs[$u].packValues // [])[] | select(.packUid == $u) | (.annotations.system_state // "")) as $s
-            | select($s == "disabled" or $s == "deleted")
+            | select((.packUid // "") != "" and $facts[.packUid].retired == true)
+            | $facts[.packUid].state as $s
             | "pack \(.name)@\(.version) of profile \($p) is \($s) in its registry: Palette refuses the profile with ClusterProfileInvalidPackState" ]
     reproduce:
       - "strata packs <pack>"

@@ -14,14 +14,16 @@
 //!   "accountKind": "aws",              the kind of cloud account of the engine: eks has aws
 //!   "routeCloud": "edge-native",       the cloud type of the engine in a route: edge has edge-native
 //!   "edgeHosts": [ {pool, host} ],     each edge host of each pool, with the poolConfig of its pool
+//!   "packFacts": { "<packUid>": {...} } supportsCloud, state, and retired for each pack
 //!   "validateBody": { metadata, spec } the body that the checks send to the validate route
 //! }
 //! ```
 //!
 //! `accountKind` and `routeCloud` come from the engine, by [`account_kind`] and [`route_cloud`], so
-//! that no rule writes that mapping again. `edgeHosts` and `validateBody` come from the entity.
-//! The rules that read each host share one program, and so do the rules that ask the validate
-//! route.
+//! that no rule writes that mapping again. `packFacts` comes from `packs` and `routeCloud`, by the
+//! rules of strata for a pack that a profile pins. `edgeHosts` and `validateBody` come from the
+//! entity. The rules that read each host share one program, and so do the rules that ask the
+//! validate route.
 //!
 //! A check adds `response` (Palette), `exec` (a command), or `cluster`, `summary`, `events`,
 //! and `elapsed` (the watch). A fixture of a test is a world with the answers written in, under
@@ -44,6 +46,10 @@ use strata::term::progress::Progress;
 
 use crate::error::{Error, Result};
 use crate::probe::{Reader, is_answer};
+
+mod packs;
+
+use packs::pack_facts;
 
 /// An engine: the kind of cluster that a run checks.
 ///
@@ -442,6 +448,7 @@ pub(crate) fn add_derived_fields(world: &mut Value) -> Result<()> {
         world["accountKind"] = json!(account_kind(&cloud));
         world["routeCloud"] = json!(route_cloud(&cloud));
     }
+    world["packFacts"] = pack_facts(world);
     world["edgeHosts"] = edge_hosts(value_at(world, "/entity"));
     world["validateBody"] = validate_body(world)?;
     Ok(())

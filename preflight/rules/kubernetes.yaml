@@ -274,15 +274,15 @@ rules:
       `palette-validate` passes. So no route answers this check, and this rule is a gap that
       preflight fills. Palette owns the rule. A pack that lists no cloud type supports each cloud.
       The cloud type of an edge cluster is `edge-native`, so the check reads `routeCloud` and not
-      `cloud`.
+      `cloud`. The world derives `packFacts` from the cloud types of each pack, by the rule of
+      Palette.
     check:
       kind: static
       expr: |
-        .routeCloud as $c | .packs as $packs
+        .routeCloud as $c | .packs as $packs | .packFacts as $facts
         | [ .profiles[] | .source.name as $p | .packs[]
-            | select((.packUid // "") != "" and ($packs[.packUid] != null))
+            | select((.packUid // "") != "" and $facts[.packUid].supportsCloud == false)
             | ($packs[.packUid].cloudTypes // []) as $t
-            | select(($t | length) > 0 and ($t | index("all")) == null and ($t | index($c)) == null)
             | "pack \(.name)@\(.version) of profile \($p) supports \($t | join(", ")), not \($c)" ]
     fix:
       owner: palette

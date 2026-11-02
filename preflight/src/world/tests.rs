@@ -555,3 +555,69 @@ fn a_world_with_no_cluster_sends_a_metadata_that_is_not_an_object_as_it_is() {
         "Palette answers for a body that it cannot read"
     );
 }
+
+/// The document of the pack `uid`, as `GET /v1/packs/{uid}` gives it: its cloud types, and its
+/// `system_state` in the entry of `packValues` that holds its uid.
+fn pack_document(uid: &str, cloud_types: Value, state: Option<&str>) -> Value {
+    let annotations = state.map_or(json!({}), |s| json!({"system_state": s}));
+    json!({
+        "cloudTypes": cloud_types,
+        "packValues": [
+            {"packUid": "another", "annotations": {"system_state": "deleted"}},
+            {"packUid": uid, "annotations": annotations},
+        ],
+    })
+}
+
+#[test]
+fn the_pack_facts_hold_the_support_of_the_cloud_and_the_state_of_each_pack() {
+    let mut world = json!({
+        "cloud": "gke",
+        "packs": {
+            "any": pack_document("any", json!([]), None),
+            "listed": pack_document("listed", json!(["gcp", "gke"]), Some("deprecated")),
+            "other": pack_document("other", json!(["aws"]), Some("disabled")),
+            "all": pack_document("all", json!(["all"]), Some("deleted")),
+            "unknown": pack_document("unknown", json!(["aws"]), Some("quarantined")),
+        },
+    });
+    add_derived_fields(&mut world).unwrap();
+    let facts = |uid: &str| world["packFacts"][uid].clone();
+    assert_eq!(
+        facts("any"),
+        json!({"supportsCloud": true, "state": "", "retired": false}),
+        "a pack that lists no cloud type supports each cloud"
+    );
+    assert_eq!(
+        facts("listed"),
+        json!({"supportsCloud": true, "state": "deprecated", "retired": false}),
+        "a deprecated pack builds"
+    );
+    assert_eq!(
+        facts("other"),
+        json!({"supportsCloud": false, "state": "disabled", "retired": true})
+    );
+    assert_eq!(
+        facts("all"),
+        json!({"supportsCloud": true, "state": "deleted", "retired": true})
+    );
+    assert_eq!(
+        facts("unknown"),
+        json!({"supportsCloud": false, "state": "quarantined", "retired": false}),
+        "a state of a later release is not retired"
+    );
+}
+
+#[test]
+fn a_pack_for_custom_supports_a_custom_cloud_and_a_world_with_no_engine_has_no_answer() {
+    let packs = json!({"p": pack_document("p", json!(["custom"]), None)});
+    let mut world = json!({"cloud": "openstack", "packs": packs.clone()});
+    add_derived_fields(&mut world).unwrap();
+    assert_eq!(world["packFacts"]["p"]["supportsCloud"], true);
+    let mut no_engine = json!({"packs": packs});
+    add_derived_fields(&mut no_engine).unwrap();
+    assert_eq!(no_engine["packFacts"]["p"]["supportsCloud"], Value::Null);
+    let mut none = json!({"cloud": "aws"});
+    add_derived_fields(&mut none).unwrap();
+    assert_eq!(none["packFacts"], json!({}));
+}
