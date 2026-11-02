@@ -773,3 +773,23 @@ fn a_watch_with_no_hint_shows_none() {
     let mut watch = Watch::new(Progress::new(false));
     assert_eq!(watch.hint_text(), None);
 }
+
+#[test]
+fn the_schema_of_the_report_refuses_a_field_outside_the_list_in_the_report_and_in_an_entry() {
+    // the entry flattens the sighting, and the schema still lists the fields of both
+    let schema = schemars::schema_for!(Report);
+    let value = schema.as_value();
+    assert_eq!(value["additionalProperties"], false);
+    let entry = &value["$defs"]["Entry"];
+    assert_eq!(entry["additionalProperties"], false);
+    let names: BTreeSet<&str> = entry["properties"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        names,
+        BTreeSet::from(["strata", "set", "value", "route", "count"])
+    );
+}

@@ -2954,3 +2954,23 @@ fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup
         );
     }
 }
+
+/// Review of Wave 13, A12: the rule of the ids says that a new field keeps the id, and the two
+/// documents of the unknown values are the exception. The page of the versions says so.
+#[test]
+fn the_page_of_the_versions_says_that_the_two_documents_of_the_unknown_values_refuse_a_new_field() {
+    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    for needle in [
+        "`strata-unknown/1` and `strata-report/1` refuse each field that they do not list",
+        "A new field of either takes a new id.",
+    ] {
+        assert!(page.contains(needle), "the page lacks {needle:?}");
+    }
+    let documents = one_line(&read(&docs().join("reference/documents.md")));
+    assert!(
+        documents.contains(
+            "A new field takes a new id: see [The documents](./compatibility.md#the-documents)."
+        ),
+        "documents.md does not send the reader to the rule"
+    );
+}

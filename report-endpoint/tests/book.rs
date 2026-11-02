@@ -4,6 +4,7 @@
 use strata_report_endpoint::server::{
     MOST_AT_ONCE, NEW_ISSUES_PER_HOUR, REQUESTS_PER_HOUR, WRITES_PER_HOUR,
 };
+use strata_report_endpoint::settings::DEFAULT_LABEL;
 
 mod common;
 
@@ -108,4 +109,21 @@ fn the_page_states_the_limits_and_the_most_requests_at_once_of_the_code() {
         )),
         "{request}"
     );
+}
+
+#[test]
+fn the_page_names_the_label_of_the_service_and_says_that_a_closed_issue_counts_toward_the_limit() {
+    let page = page();
+    let settings = section(&page, "The settings of the service");
+    assert!(
+        settings.contains(&format!("| `REPORT_LABEL` | `{DEFAULT_LABEL}` |")),
+        "the table does not give the default label"
+    );
+    let limits = section(&page, "The limits");
+    assert!(
+        limits.contains("reads at most 1000 issues of its label, open and closed"),
+        "{limits}"
+    );
+    // closing an issue does not lower the count, so the page must not say that it does
+    assert!(!page.contains("Close the issues of values"), "{page}");
 }
