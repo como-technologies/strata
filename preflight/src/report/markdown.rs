@@ -2,15 +2,16 @@
 
 use strata::text::markdown_cell;
 
-use super::scorecard::{bound_text, count_noun, not_run_text, scorecard_legend, written_text};
+use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
 use super::{CheckResult, Report, SectionScore, pct};
 use crate::probe::Verdict;
+use strata::render::count_of;
 
 /// The markdown form: a pull request comment.
 pub fn markdown(r: &Report) -> String {
     let mut out = String::new();
     let s = &r.summary;
-    let probes = count_noun(s.probe_failed, "probe", "probes");
+    let probes = count_of(s.probe_failed as usize, "probe");
     out.push_str(&format!(
         "## strata-preflight: {} cluster `{}`\n\n",
         r.subject.cloud,

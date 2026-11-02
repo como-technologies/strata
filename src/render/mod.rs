@@ -129,7 +129,7 @@ fn joined_note<const N: usize>(parts: [Option<&str>; N]) -> Option<String> {
 /// `2 profiles`, `1 profile`, or `no profiles`.
 ///
 /// Each count and its noun in a report comes from here, so zero reads in one way.
-pub(crate) fn count_of(n: usize, singular: &str) -> String {
+pub fn count_of(n: usize, singular: &str) -> String {
     let ending = plural(n, "", "s");
     match n {
         0 => format!("no {singular}{ending}"),

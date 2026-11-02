@@ -592,7 +592,6 @@ fn the_checks_that_apply_are_the_checks_that_ran_and_the_checks_that_did_not_run
     let sections = sections(&checks);
     let s = summarize(&checks, &sections, &options());
     assert_eq!((s.ran, s.not_run, s.applies()), (2, 1, 3));
-    assert_eq!(sections[0].applies(), 3);
     assert_eq!(s.readiness, Some(1.0 / 3.0));
 }
 
@@ -673,11 +672,11 @@ rules:
     assert!(text.contains("NOT CHECKED   gke-no-gpu"), "{text}");
     assert!(text.contains("Section scorecard"), "{text}");
     assert!(
-        text.contains("1 probe failed, 0 warnings, 0 notes"),
+        text.contains("1 probe failed, no warnings, no notes"),
         "{text}"
     );
     assert!(
-        text.contains("0 errors; readiness 0%: 0 of 1 checks passed"),
+        text.contains("no errors; readiness 0%: 0 of 1 checks passed"),
         "{text}"
     );
     let md = markdown(&report);

@@ -922,7 +922,7 @@ fn the_text_of_the_promotion_agrees_the_noun_and_the_verb_with_the_count_of_leve
     let (code, out, err) = run(&["--promotion"], dir.path());
     assert_eq!(code, 0, "{err}");
     assert!(
-        out.contains(" rules with a check; 0 levels disagree with the ledger\n"),
+        out.contains(" rules with a check; no levels disagree with the ledger\n"),
         "{out}"
     );
     // 4.10: the runs of the lab have no release, so one level disagrees with the ledger

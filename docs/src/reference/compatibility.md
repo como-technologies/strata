@@ -205,6 +205,7 @@ After 0.27.0, the library of `strata` changes in these ways:
   `strata-preflight` calls them. Their results do not change.
 - `model::cluster_state::ClusterState::is_gone` is new. It is true for a document with the
   state `Deleted` or with `metadata.isDeleted`. `ops` reads a record with the same rule.
+- `render::count_of` is public. It gives `1 probe`, `2 probes`, or `no probes`.
 - `render::paint_state` is new. The terminal form of `consumers` and of `list` paints a state with
   it. `consumers` painted `Running` green and `unknown` yellow. `list` painted `Running` green.
   Now both paint a building state yellow, and `Error`, `Deleting`, and `Deleted` red. A text
@@ -226,8 +227,7 @@ After 0.27.0, the library of `strata-preflight` changes in these ways:
   and the command line reads it. The values and their texts do not change.
 - `rule::Rule::bar` is new. `run::DEFAULT_EVERY_SECS` and `run::DEFAULT_LIMIT_SECS` are new. They
   hold the defaults of `--every` and `--limit`.
-- `report::Summary::applies` and `report::SectionScore::applies` are new. They count the checks
-  that ran and the checks that did not run.
+- `report::Summary::applies` is new. It counts the checks that ran and the checks that did not run.
 - `world::World::to_value` and `fixture::load` add the field `packFacts` to the world. See
   [The world document](./preflight-rules.md#the-world-document). A rule or a custom probe can
   read it.
@@ -796,10 +796,12 @@ small types now: the types with fewer than 2 vCPUs or less than 4 GiB of memory.
 reported such a type as not in the list of the region.
 
 After 0.27.0, the text of `strata-preflight` agrees each noun with its count. The report said
-`1 probe(s) failed`, and now it says `1 probe failed` or `2 probes failed`. The same holds for the
-warnings, the notes, the errors, the readings of a watch, and the events of `--verbose`.
+`1 probe(s) failed`, and now it says `1 probe failed`, `2 probes failed`, or `no probes failed`. The
+same holds for the warnings, the notes, the errors, the readings of a watch, and the events of
+`--verbose`.
 `summary.verdict` in the JSON changes in the same way, for example `FAIL: 2 checks failed: a, b`.
-`--promotion` says `1 level disagrees with the ledger`, and `2 levels disagree with the ledger`.
+`--promotion` says `1 level disagrees with the ledger`, `2 levels disagree with the ledger`, or
+`no levels disagree with the ledger`.
 A script must read `summary.exitCode`, and not the text. The exit codes do not change.
 
 After 0.27.0, a watch of `strata-preflight` ends when the document of the cluster has

@@ -7,6 +7,7 @@ use super::{CheckResult, Options, SectionScore, Summary, percent};
 use crate::confidence::{Confidence, NO_RUNS, runs_to_reach};
 use crate::probe::Verdict;
 use crate::rule::{Catalog, DEFAULT_BAR, Level, Severity, Status};
+use strata::render::count_of;
 use strata::text::plural;
 
 /// The scorecard: one line for each section that has a row for this engine.
@@ -43,7 +44,7 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
             .fold(None, |acc: Option<f64>, b| {
                 Some(acc.map_or(b, |a| a.min(b)))
             });
-        let mut score = SectionScore {
+        out.push(SectionScore {
             section: section.section.clone(),
             title: section.title.clone(),
             rows: rows.len() as u32,
@@ -63,16 +64,21 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
                 .iter()
                 .filter(|c| c.verdict == Verdict::NotChecked)
                 .count() as u32,
-            readiness: None,
-        };
-        score.readiness = readiness_of(score.passed, score.applies());
-        out.push(score);
+            readiness: readiness_of(passed, ran.len() as u32, not_run),
+        });
     }
     out
 }
 
+/// The checks that apply here: the ones that ran and the ones that did not run. The readiness
+/// counts them, and so does the summary line of each form of the report.
+pub(super) fn applies(ran: u32, not_run: u32) -> u32 {
+    ran + not_run
+}
+
 /// The readiness: the checks that passed over the checks that apply, or none when none applies.
-pub(super) fn readiness_of(passed: u32, apply: u32) -> Option<f64> {
+pub(super) fn readiness_of(passed: u32, ran: u32, not_run: u32) -> Option<f64> {
+    let apply = applies(ran, not_run);
     (apply > 0).then(|| f64::from(passed) / f64::from(apply))
 }
 
@@ -93,11 +99,6 @@ pub(crate) fn not_run_reasons<'a>(
 /// `no runs` when no row of the section has a run.
 pub(crate) fn bound_text(bound: Option<f64>) -> String {
     bound.map_or_else(|| NO_RUNS.to_string(), percent)
-}
-
-/// `n` and its noun in the form that agrees with it, such as `1 probe` and `2 probes`.
-pub(crate) fn count_noun(n: u32, one: &str, many: &str) -> String {
-    format!("{n} {}", plural(n as usize, one, many))
 }
 
 /// `N check(s) did not run: reason (count); reason (count)`.
@@ -142,7 +143,7 @@ pub(super) fn summarize(
     let not_run_reasons = not_run_reasons(checks.iter());
     let skipped = count(&|c| c.verdict == Verdict::Skipped);
     let errors = count(&|c| c.verdict == Verdict::Error);
-    let mut counted = Summary {
+    let counted = Summary {
         rules: checks.len() as u32,
         ran,
         passed,
@@ -155,11 +156,10 @@ pub(super) fn summarize(
         not_checked,
         skipped,
         errors,
-        readiness: None,
+        readiness: readiness_of(passed, ran, not_run),
         exit_code: 0,
         verdict: String::new(),
     };
-    counted.readiness = readiness_of(counted.passed, counted.applies());
     let (exit_code, verdict) = exit_and_verdict(checks, &counted, options.ready);
     Summary {
         exit_code,
@@ -194,7 +194,7 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
             1,
             format!(
                 "FAIL: {} failed: {}",
-                count_noun(failed, "check", "checks"),
+                count_of(failed as usize, "check"),
                 ids.join(", ")
             ),
         )
@@ -217,7 +217,7 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
             2,
             format!(
                 "ERROR: {} could not answer: {}",
-                count_noun(errors, "check", "checks"),
+                count_of(errors as usize, "check"),
                 ids.join(", ")
             ),
         )
@@ -227,7 +227,7 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
         let probes = if probe_failed > 0 {
             format!(
                 "; {} failed, not counted",
-                count_noun(probe_failed, "probe", "probes")
+                count_of(probe_failed as usize, "probe")
             )
         } else {
             String::new()

@@ -113,15 +113,9 @@ fn the_kind_of_a_check_is_the_tag_that_the_rule_files_write() {
     }
 }
 
-/// The text of a file of the repository, from the root.
-fn repo_file(path: &str) -> String {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    std::fs::read_to_string(root.join(path)).unwrap_or_else(|e| panic!("{path}: {e}"))
-}
-
 #[test]
 fn the_live_script_of_the_plan_accepts_the_results_that_the_ledger_knows() {
-    let script = repo_file("examples/live/preflight-plan.sh");
+    let script = include_str!("../../examples/live/preflight-plan.sh");
     let results: Vec<&str> = script
         .lines()
         .map(str::trim)
@@ -136,7 +130,7 @@ fn the_live_script_of_the_plan_accepts_the_results_that_the_ledger_knows() {
 #[test]
 fn the_workflow_lists_the_engines_of_the_world_in_order() {
     let workflow: serde_yaml::Value =
-        serde_yaml::from_str(&repo_file(".github/workflows/preflight.yml")).unwrap();
+        serde_yaml::from_str(include_str!("../../.github/workflows/preflight.yml")).unwrap();
     let description = workflow["on"]["workflow_call"]["inputs"]["cloud"]["description"]
         .as_str()
         .expect("the input `cloud` has a description");

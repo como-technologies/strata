@@ -268,14 +268,6 @@ pub struct SectionScore {
     pub readiness: Option<f64>,
 }
 
-impl SectionScore {
-    /// The checks of the section that apply here: the ones that ran and the ones that did not run.
-    /// The readiness counts them.
-    pub fn applies(&self) -> u32 {
-        self.ran + self.not_run
-    }
-}
-
 /// The counts of the run.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -318,7 +310,7 @@ impl Summary {
     /// The checks that apply here: the ones that ran and the ones that did not run. The readiness
     /// counts them.
     pub fn applies(&self) -> u32 {
-        self.ran + self.not_run
+        scorecard::applies(self.ran, self.not_run)
     }
 }
 

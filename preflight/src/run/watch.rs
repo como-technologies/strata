@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use strata::api::{Palette, PaletteApi};
 use strata::json::{text_or, value_at};
 use strata::model::cluster_state::ClusterState;
-use strata::render::paint_state;
+use strata::render::{count_of, paint_state};
 use strata::snapshot::SubjectKind;
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
@@ -19,7 +19,6 @@ use crate::confidence::Ledger;
 use crate::error::{Error, Result};
 use crate::jq::Jq;
 use crate::probe::{self, Outcome, Reader, Verdict, is_answer};
-use crate::report::scorecard::count_noun;
 use crate::report::{self, Assembly, Options, Report};
 use crate::rule::{Catalog, Check, Rule, Tier};
 use crate::world::World;
@@ -172,7 +171,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
         subject.source,
         ended.state,
         started.elapsed().as_secs(),
-        count_noun(ended.readings, "reading", "readings")
+        count_of(ended.readings as usize, "reading")
     );
     let report = report::assemble(
         Assembly {

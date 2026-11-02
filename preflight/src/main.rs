@@ -11,6 +11,7 @@ use strata::closed_set::ClosedSet;
 use strata::config;
 use strata::ops;
 use strata::reference::Ref;
+use strata::render::count_of;
 use strata::term::color::{ColorMode, Paint, Stream};
 use strata::term::progress::Progress;
 use strata::text::{dash, plural};
@@ -499,11 +500,12 @@ fn promotion_text(report: &confidence::PromotionReport) -> String {
             }
         ));
     }
-    let n = report.disagreements;
+    let n = report.disagreements as usize;
     out.push_str(&format!(
-        "\n{} rules with a check; {n} {} the ledger\n",
+        "\n{} rules with a check; {} {} the ledger\n",
         report.rules.len(),
-        plural(n as usize, "level disagrees with", "levels disagree with")
+        count_of(n, "level"),
+        plural(n, "disagrees with", "disagree with")
     ));
     out
 }
