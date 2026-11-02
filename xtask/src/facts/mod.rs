@@ -62,3 +62,9 @@ pub fn cloud_rules() -> Result<BTreeMap<String, cloud::CloudRule>, Vec<String>> 
         Err(unread)
     }
 }
+
+/// The facts in `text`, a YAML list of entries. The tests give their own list this way.
+#[cfg(test)]
+pub(crate) fn from_text(text: &str) -> Vec<Fact> {
+    serde_yaml::from_str(text).expect("the facts are YAML")
+}

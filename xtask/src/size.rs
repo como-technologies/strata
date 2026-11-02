@@ -141,32 +141,32 @@ fn long_functions(src: &Path) -> Vec<String> {
 
 /// The directory of the source files of strata.
 fn strata_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../src")
+    crate::repository().join("src")
 }
 
 /// The directory of the source files of xtask.
 fn xtask_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
+    crate::repository().join("xtask/src")
 }
 
 /// The directory of the source files of strata-preflight.
 fn preflight_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../preflight/src")
+    crate::repository().join("preflight/src")
 }
 
 /// The directory of the source files of strata-fuzz.
 fn fuzz_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../fuzz/src")
+    crate::repository().join("fuzz/src")
 }
 
 /// The directory of the source files of strata-report-endpoint.
 fn endpoint_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../report-endpoint/src")
+    crate::repository().join("report-endpoint/src")
 }
 
 /// The directory of the source files of strata-benches.
 fn benches_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../benches/src")
+    crate::repository().join("benches/src")
 }
 
 #[test]

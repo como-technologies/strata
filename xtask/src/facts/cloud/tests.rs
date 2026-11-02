@@ -49,7 +49,7 @@ const FACTS: &str = r#"
 "#;
 
 fn facts() -> Vec<Fact> {
-    serde_yaml::from_str(FACTS).expect("the facts are YAML")
+    crate::facts::from_text(FACTS)
 }
 
 /// A rule of the cloud tier with the words of its command and the answers of its fixtures.
@@ -720,7 +720,7 @@ fn a_file_of_the_code_that_cannot_be_read_is_named_and_not_taken_for_clean() {
 
 #[test]
 fn the_code_of_strata_holds_no_text_that_names_a_cloud_fact() {
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let repo = crate::repository();
     let (code, unread) = read_code(&repo);
     assert_eq!(unread, Vec::<String>::new());
     assert!(

@@ -129,7 +129,7 @@ fn documents(state: &str) -> Vec<(&'static str, Value)> {
 }
 
 fn facts() -> Vec<Fact> {
-    serde_yaml::from_str(FACTS).expect("the facts are YAML")
+    crate::facts::from_text(FACTS)
 }
 
 /// Write the documents `docs` into the tenant directory `dir`, at tenant scope.

@@ -2,14 +2,15 @@
 //! repository passes.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use strata::api::Method;
 use strata_preflight::rule::Catalog;
 
 use super::check::{NOT_FACTS, check as faults_of, route_matches, template_matches};
 use super::cloud::CloudSources;
-use super::model::{Fact, load};
+use super::from_text;
+use super::model::load;
 use super::sets::SetRead;
 use super::sources::{
     Sources, api_requests, book_rows, calls_of, query_names, rule_queries, rule_requests,
@@ -38,18 +39,13 @@ fn set(items: &[&str]) -> BTreeSet<String> {
     items.iter().map(|s| (*s).to_string()).collect()
 }
 
-/// The facts in `text`, a YAML list.
-fn facts(text: &str) -> Vec<Fact> {
-    serde_yaml::from_str(text).expect("the facts are YAML")
-}
-
 /// The world in which [`FACT`] has no fault: the book, the scripts, the rules, and the stand-in
 /// all agree with it.
 fn world() -> Sources {
     let page = |text: &str| text.to_string();
     Sources {
         cloud: CloudSources::default(),
-        facts: facts(FACT),
+        facts: from_text(FACT),
         served: Some(set(&["v1/clusterprofiles/64e0000000000000000000a1"])),
         requests: set(&["GET /v1/clusterprofiles/{}"]),
         texts: BTreeMap::from([
@@ -787,19 +783,11 @@ fn the_requests_of_the_rules_are_the_palette_checks_and_the_reads_of_a_command_c
 
 // ---- the list of the repository ------------------------------------------------------------------
 
-/// The root of the repository.
-fn repo() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("xtask sits in the repository")
-        .to_path_buf()
-}
-
 /// The check that `just docs-check` makes needs a run of the book, and adds the stand-in. This
 /// test makes the other rules on the repository, so `just test` keeps the list true.
 #[test]
 fn the_list_of_the_repository_agrees_with_the_book_the_live_scripts_and_the_rules() {
-    let found = super::check(&repo(), None);
+    let found = super::check(&crate::repository(), None);
     assert!(found.is_empty(), "{}", found.join("\n"));
 }
 
@@ -827,7 +815,7 @@ fn the_request_of_each_fact_holds_the_query_that_its_rules_send() {
             &["cloudAccountUid", "cpuGtEq", "memoryGtEq", "subscriptionId"],
         ),
     ];
-    let facts = super::load(&repo()).expect("the list of the facts");
+    let facts = super::load(&crate::repository()).expect("the list of the facts");
     for (id, names) in QUERIES {
         let fact = facts.iter().find(|f| f.id == *id).expect(id);
         let request = fact.request.as_deref().expect(id);
@@ -837,7 +825,7 @@ fn the_request_of_each_fact_holds_the_query_that_its_rules_send() {
 
 #[test]
 fn the_list_of_the_repository_prints_as_json_for_a_script() {
-    let json = super::print(&repo()).unwrap();
+    let json = super::print(&crate::repository()).unwrap();
     let document: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(document["schema"], "strata-facts/1");
     let facts = document["facts"].as_array().unwrap();
@@ -1002,7 +990,7 @@ fn a_call_of_opt_set_that_the_table_of_reads_lacks_is_a_fault() {
 
 #[test]
 fn each_read_of_the_code_of_strata_that_notes_an_unknown_value_has_its_list_in_a_get_fact() {
-    let sources = Sources::read(&repo(), None).0;
+    let sources = Sources::read(&crate::repository(), None).0;
     assert_eq!(sources.set_reads.len(), 4);
     for read in &sources.set_reads {
         let fact = sources
