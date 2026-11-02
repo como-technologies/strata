@@ -743,7 +743,7 @@ pub fn text(bytes: &[u8]) -> String {
 /// The JSON Schema that `strata schema <kind>` prints.
 pub fn schema(kind: &str) -> Value {
     let r = Run::of(
-        Command::new(strata_bin())
+        strata_command()
             .args(["schema", kind])
             .env("STRATA_QUIET", "1"),
     );
@@ -1089,9 +1089,74 @@ impl CommandExt for Command {
     }
 }
 
-/// The strata binary that cargo built for the tests.
-pub fn strata_bin() -> &'static Path {
+/// The strata binary that cargo built for the tests. It is private: a test starts it with
+/// [`strata_command`], or gives it to a script with [`give_strata`], so that no run of the tests
+/// can send the report to the endpoint of the release.
+fn strata_bin() -> &'static Path {
     Path::new(env!("CARGO_BIN_EXE_strata"))
+}
+
+/// The address that refuses a connection: nothing listens on the port 9 of this machine.
+pub const REFUSED: &str = "http://127.0.0.1:9";
+
+/// Give `command` the guard of the send of the report: `STRATA_REPORT=0`, and a
+/// `STRATA_REPORT_URL` that refuses a connection.
+///
+/// The release names the address of the real endpoint, so a run that sends would post there. The
+/// setting `0` makes the run send nothing, whatever `~/.palette.env` or a saved answer say, because
+/// the environment has priority. The address is the second guard: a test that turns the send on
+/// and gives no address of its own posts to [`REFUSED`], and never to the real endpoint. A test that
+/// sends sets `STRATA_REPORT=1` and `STRATA_REPORT_URL` after this call, with the address of its
+/// stand-in.
+pub fn without_report(command: &mut Command) -> &mut Command {
+    command
+        .env("STRATA_REPORT", "0")
+        .env("STRATA_REPORT_URL", REFUSED)
+}
+
+/// The strata binary as a command that can send no report: see [`without_report`].
+pub fn strata_command() -> Command {
+    let mut command = Command::new(strata_bin());
+    without_report(&mut command);
+    command
+}
+
+/// Give `command` the path of the strata binary in the variable `name`, for a script that runs it,
+/// and the guard of [`without_report`]. The script passes the guard to each strata that it starts.
+pub fn give_strata<'a>(command: &'a mut Command, name: &str) -> &'a mut Command {
+    without_report(command).env(name, strata_bin())
+}
+
+/// Run `examples/fetch-examples.sh` offline into a new directory, from the fetched pack data that the
+/// repository tracks. Gives the directory and what the script printed.
+///
+/// The script runs the binary of the tests, or `wrapper` when there is one. The wrapper gets the
+/// binary of the tests in `REAL_STRATA`. `env` holds the settings of the machine, which the guard
+/// of [`without_report`] does not cover.
+pub fn fetch_examples(wrapper: Option<&Path>, env: &[(&str, &str)]) -> (tempfile::TempDir, Output) {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let dir = tempfile::tempdir().unwrap();
+    for entry in fs::read_dir(repo.join("examples/packs")).unwrap() {
+        let pack = entry.unwrap().path();
+        let to = dir.path().join("packs").join(pack.file_name().unwrap());
+        fs::create_dir_all(&to).unwrap();
+        for file in ["_entity.json", "_summaries.json"] {
+            fs::copy(pack.join(file), to.join(file)).unwrap();
+        }
+    }
+    let mut fetch = Command::new("bash");
+    match wrapper {
+        None => give_strata(&mut fetch, "STRATA_BIN"),
+        Some(wrapper) => give_strata(&mut fetch, "REAL_STRATA").env("STRATA_BIN", wrapper),
+    };
+    let o = fetch
+        .arg(repo.join("examples/fetch-examples.sh"))
+        .env("EXAMPLES_DIR", dir.path())
+        .env("OFFLINE", "1")
+        .envs(env.iter().copied())
+        .output_locked()
+        .unwrap();
+    (dir, o)
 }
 
 /// Make the directory `bin` under `dir`, and put the stand-in commands `commands` in it: each is a
@@ -1159,20 +1224,18 @@ pub fn isolate_git(command: &mut Command) -> &mut Command {
 }
 
 /// The settings of the machine that name a project or a tenant: the variables of strata, and those
-/// of the Terraform provider, which strata reads too. It also holds the settings of the send of the
-/// report, and the variable `CI`, because a pipeline sets it.
-const MACHINE_SETTINGS: [&str; 7] = [
+/// of the Terraform provider, which strata reads too. It also holds the variable `CI`, because a
+/// pipeline sets it.
+const MACHINE_SETTINGS: [&str; 5] = [
     "PALETTE_PROJECT_UID",
     "PALETTE_PROJECT",
     "SPECTROCLOUD_APIKEY",
     "SPECTROCLOUD_HOST",
-    "STRATA_REPORT",
-    "STRATA_REPORT_URL",
     "CI",
 ];
 
-/// Give `command` an address that refuses connections, the home `home`, and no setting of the
-/// machine that names a project.
+/// Give `command` an address that refuses connections, the home `home`, no setting of the machine
+/// that names a project, and no send of the report: see [`without_report`].
 ///
 /// The run makes no retry, and it gets no setting that names a tenant either. So a request fails
 /// at once, and the run reads only the `.palette.env` of `home`, not the one of the person who
@@ -1181,10 +1244,10 @@ pub fn isolate_palette<'a>(command: &'a mut Command, home: &Path) -> &'a mut Com
     for key in MACHINE_SETTINGS {
         command.env_remove(key);
     }
-    command
+    without_report(command)
         .env("HOME", home)
         .env("PALETTE_API_KEY", "k")
-        .env("PALETTE_API", "http://127.0.0.1:9")
+        .env("PALETTE_API", REFUSED)
         .env("STRATA_RETRIES", "0")
 }
 
@@ -1234,7 +1297,7 @@ pub fn against_closed_port(
 
 /// The names of the commands of the binary, as the help of clap lists them under `Commands:`.
 pub fn command_names() -> Vec<String> {
-    let help = Run::of(Command::new(strata_bin()).arg("--help"));
+    let help = Run::of(strata_command().arg("--help"));
     assert_eq!(help.code, 0, "{}", help.err);
     help.out
         .lines()
@@ -1249,7 +1312,7 @@ pub fn command_names() -> Vec<String> {
 /// Write the record of the raw profile fixture `name` under `raw` to `out` with the strata
 /// binary, as `snapshot --from-raw` writes one.
 pub fn snapshot_from_raw(raw: &Path, name: &str, out: &Path) {
-    let o = Command::new(strata_bin())
+    let o = strata_command()
         .args(["snapshot", "--from-raw"])
         .arg(raw.join(name))
         .arg("-o")

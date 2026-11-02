@@ -20,8 +20,8 @@ use strata::term::progress::Progress;
 use common::{
     CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, Run, UID_B,
     against_closed_port, cluster_manifests_route, cluster_ref, cluster_route,
-    cluster_variables_route, listing, manifests_route, profile_route, snapshot_of_ref, strata_bin,
-    variables_route,
+    cluster_variables_route, listing, manifests_route, profile_route, snapshot_of_ref,
+    strata_command, variables_route,
 };
 
 /// xorshift64*: a deterministic source of cases, so a failure has a seed that reproduces it.
@@ -475,7 +475,7 @@ fn the_binary_never_panics_on_junk_arguments() {
                 _ => args.push(dir.path().display().to_string()),
             }
         }
-        let Run { code, err, .. } = fuzz_case(Command::new(strata_bin()), &args);
+        let Run { code, err, .. } = fuzz_case(strata_command(), &args);
         assert!(
             !err.contains("panicked at"),
             "seed {} case {case}: {args:?} panicked:\n{err}",
@@ -508,7 +508,7 @@ fn a_case_of_the_fuzz_run_reads_no_palette_env_of_the_home_of_the_machine() {
     // listing
     let machine = tempfile::tempdir().unwrap();
     std::fs::write(machine.path().join(".palette.env"), "PALETTE_PROJECT=lab\n").unwrap();
-    let mut command = Command::new(strata_bin());
+    let mut command = strata_command();
     command
         .env("HOME", machine.path())
         .env("PALETTE_PROJECT", "barney");
@@ -531,7 +531,7 @@ fn a_case_of_the_fuzz_run_reads_no_palette_env_of_the_home_of_the_machine() {
     // the same run with the home of the machine reads the project there
     let home = machine.path().to_str().unwrap();
     let r = against_closed_port(
-        Command::new(strata_bin()),
+        strata_command(),
         &["list", "profiles", "--json"],
         &[("HOME", home)],
         true,

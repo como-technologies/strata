@@ -1,9 +1,10 @@
 # What strata can report
 
-Strata publishes nothing by itself. It reads your tenant, and it writes files on your machine.
+Strata publishes nothing by itself: it reads your tenant, and it writes files on your machine.
 One thing can leave the machine, and only you can choose to send it. It is a report of the values
 that Palette gave and that your release of strata does not know. You read the report, and you
-decide how to send it, by hand or with the setting `STRATA_REPORT`, which is off by default.
+decide how to send it: by hand, with the setting `STRATA_REPORT`, or with a yes to one question.
+The setting is off by default, and strata asks the question only in a terminal.
 [`strata report`](../commands/report.md) prints the report, and sends no request.
 
 ## Why a report exists
@@ -91,7 +92,7 @@ The next report then holds only the lines that came after. `strata report --all`
 again.
 
 Strata marks a line by itself in one case only: when the endpoint took a report that strata sent
-by the setting `STRATA_REPORT`. See [Send the report by itself](#send-the-report-by-itself).
+by itself. See [Send the report by itself](#send-the-report-by-itself).
 
 ## Send the report by itself
 
@@ -103,12 +104,24 @@ environment has priority. See [Settings](./settings.md).
 | --- | --- |
 | `STRATA_REPORT=1` | Strata sends the report at the end of each run that wrote a line to the log. |
 | `STRATA_REPORT=0` | Strata sends nothing and asks nothing. |
-| `STRATA_REPORT_URL` | The address of the endpoint. The default is the endpoint of the maintainers, when your release names one. |
+| `STRATA_REPORT_URL` | The address of the endpoint. The default is the endpoint of the maintainers, `https://strata-report-4ud4ygs3ua-uc.a.run.app`, which this release names. Set it to send to another endpoint. |
 
 Strata reads no other value of `STRATA_REPORT`. Any other value sends nothing, and strata prints a
-warning. The value `1`, and an answer of yes, also send nothing when your release names no endpoint and
-`STRATA_REPORT_URL` is not set. Strata prints a warning then too. A run of `strata preflight --offline` reads nothing
-from Palette, so it writes no line and sends nothing.
+warning. A run of `strata preflight --offline` reads nothing from Palette, so it writes no line and
+sends nothing.
+
+### Where strata asks and sends
+
+Strata asks and sends in one place only: at the end of a run of the `strata` command, after the
+result. The place is the same for each command. A run that wrote no line to the log asks nothing
+and sends nothing. The separate command `strata-preflight` never asks and never sends.
+
+| The run | What strata does at its end |
+| --- | --- |
+| `STRATA_REPORT=1`, or the saved answer yes | It posts the report to the endpoint, and writes a note when the endpoint took it. |
+| `STRATA_REPORT=0`, or the saved answer no | It sends nothing and asks nothing. |
+| No setting and no answer, in a terminal | It asks the question one time. |
+| No setting and no answer, in CI or without a terminal | It sends nothing and asks nothing. |
 
 ### The question
 
@@ -120,9 +133,8 @@ The default answer is no. Strata keeps your answer in the file `strata-unknown.a
 [state folder](#the-files), and it never asks again. The setting `STRATA_REPORT` has priority over
 the answer. Delete the file to be asked again.
 
-Strata asks nothing in four cases. The variable `CI` has a value. Standard input or standard error
-is not a terminal. The run has `--quiet` or `STRATA_QUIET`. Or the release names no endpoint and
-`STRATA_REPORT_URL` is not set.
+Strata asks nothing in three cases. The variable `CI` has a value. Standard input or standard error
+is not a terminal. Or the run has `--quiet` or `STRATA_QUIET`.
 
 ### What a run sends
 

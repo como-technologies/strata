@@ -141,3 +141,21 @@ fn the_examples_are_built_when_the_first_example_profile_is_there() {
     std::fs::write(&profile, "{}").unwrap();
     assert_eq!(built_examples(repo.path()), Ok(()));
 }
+
+#[test]
+fn a_step_of_the_book_gets_the_stand_in_for_the_endpoint_and_no_setting_of_the_machine() {
+    let mut r = runner(Mode::Write, "report-address");
+    r.chapter("send", &[]);
+    let (code, address, _) = r.run("printf '%s' \"$STRATA_REPORT_URL\"", false);
+    assert_eq!(code, 0);
+    // the stand-in runs on this machine, so a step that sends posts to nothing outside it
+    assert_eq!(address, "http://127.0.0.1:4242/strata-report");
+    assert_ne!(
+        Some(address.as_str()),
+        strata::closed_set::unknown::send::ENDPOINT
+    );
+    // the step starts from an empty environment: a setting of the machine does not reach it
+    let (code, setting, _) = r.run("printf '%s' \"${STRATA_REPORT-unset}\"", false);
+    assert_eq!((code, setting.as_str()), (0, "unset"));
+    let _ = std::fs::remove_dir_all(r.repo.clone());
+}

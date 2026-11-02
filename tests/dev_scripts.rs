@@ -272,9 +272,10 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
     let last = "automation";
     let dir = tempfile::tempdir().unwrap();
     let log = dir.path().join("serve.log");
-    let mut child = Command::new(&stand_in)
+    let mut playground = Command::new(&stand_in);
+    give_strata(&mut playground, "STRATA_BIN");
+    let mut child = playground
         .args(["playground", last])
-        .env("STRATA_BIN", strata_bin())
         .stdout(std::fs::File::create(&log).unwrap())
         .stderr(std::process::Stdio::null())
         .spawn_locked()
@@ -301,7 +302,7 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
     let uid = value("PALETTE_PROJECT_UID=");
 
     // the commands of the book run against it, by name, with no key of a real tenant
-    let o = Command::new(strata_bin())
+    let o = strata_command()
         .args([
             "compare",
             "aws-stack@1.0.0",
@@ -380,4 +381,67 @@ fn the_examples_fetch_orders_plain_versions_as_strata_does() {
         "1.0.0",
     ];
     assert_eq!(oldest_first(&mixed), ["1.0.0", "1.0.1"]);
+}
+
+#[test]
+fn the_examples_fetch_stops_the_send_of_the_report_whatever_the_machine_says() {
+    let dir = tempfile::tempdir().unwrap();
+    let log = dir.path().join("send.log");
+    // a strata that writes down the setting it got, and then runs the real one
+    let wrapper = dir.path().join("strata");
+    executable(
+        &wrapper,
+        "#!/usr/bin/env bash\necho \"$STRATA_REPORT\" >> \"$FAKE_LOG\"\nexec \"$REAL_STRATA\" \"$@\"\n",
+    );
+    let (_, o) = fetch_examples(
+        Some(&wrapper),
+        &[("STRATA_REPORT", "1"), ("FAKE_LOG", log.to_str().unwrap())],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let runs = lines_of(&log);
+    assert!(!runs.is_empty(), "the script ran strata");
+    assert!(runs.iter().all(|setting| setting == "0"), "{runs:?}");
+}
+
+/// The scripts of this repository that run the binary of strata, but not the drop-ins that a
+/// pipeline of a user runs: those obey the settings of the user. `adapter/scripts/by-hand.sh` is
+/// not in the list: it serves two chapters of the book, and their tenants hold no unknown value.
+fn scripts_that_run_strata() -> Vec<std::path::PathBuf> {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let own = ["examples", "deploy", "scripts/dev"];
+    // the binary by its path, by the variable of the script, or by the variable of lib.sh
+    let runs = [
+        "STRATA_BIN",
+        "target/release/strata",
+        "target/debug/strata",
+        "\"$strata\"",
+    ];
+    own.iter()
+        .flat_map(|dir| walk(&repo.join(dir)))
+        .filter(|file| file.extension().is_some_and(|e| e == "sh"))
+        .filter(|file| !file.starts_with(repo.join("examples/ci")))
+        .filter(|file| {
+            let text = std::fs::read_to_string(file).unwrap();
+            runs.iter().any(|word| text.contains(word))
+        })
+        .collect()
+}
+
+#[test]
+fn each_script_that_runs_strata_stops_the_send_of_the_report_or_sources_lib_sh_which_does() {
+    let scripts = scripts_that_run_strata();
+    assert!(scripts.len() > 20, "{scripts:?}");
+    let lib = live_script("lib.sh");
+    assert!(scripts.contains(&lib));
+    let without: Vec<_> = scripts
+        .iter()
+        .filter(|file| {
+            let text = std::fs::read_to_string(file).unwrap();
+            !text.contains("/lib.sh") && !text.contains("STRATA_REPORT=0")
+        })
+        .collect();
+    assert!(
+        without.is_empty(),
+        "a run of these scripts can send a report of the machine of the person: {without:?}"
+    );
 }

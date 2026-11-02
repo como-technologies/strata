@@ -200,6 +200,9 @@ ASD-STE100.
 - Put a helper that two test files use in `tests/common/mod.rs`. Compare
   against the `const` of the crate, not against a copy of its text.
 - The name of a test is a full sentence that states the behavior.
+- Start the binary of strata with `strata_command`, and give it to a script with `give_strata`.
+  Both stop the send of the report: see
+  [The tests send no report](./build-test.md#the-tests-send-no-report).
 - Start a process with `output_locked` or `spawn_locked` of `CommandExt`, never
   with `output`, `spawn`, or `status` of `Command`. Write a script that a test
   runs with `executable`. The tests run on many threads, and the two functions

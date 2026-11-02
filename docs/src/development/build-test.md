@@ -133,6 +133,24 @@ benchmarks, and of the fuzz targets with the others.
 
 No test uses the network.
 
+### The tests send no report
+
+The release names the address of the endpoint of the report. A run of strata with the setting
+`STRATA_REPORT=1`, or with a saved answer of yes, posts to that address. These rules stop it:
+
+- A test starts strata with `strata_command` of `tests/common/mod.rs`, and gives the binary to a
+  script with `give_strata`. Both set `STRATA_REPORT=0`, and set `STRATA_REPORT_URL` to an address
+  that refuses a connection. The environment has priority over `~/.palette.env` and over a saved
+  answer. `strata_bin` is private, and a test fails on a file that names the binary itself.
+- A test that sends sets `STRATA_REPORT=1`, and sets `STRATA_REPORT_URL` to its stand-in endpoint.
+- A test of the address that the release names removes both variables. It sends each request that
+  leaves the machine to a stand-in proxy with `through_proxy`. The proxy refuses the request, so no
+  address receives it, also when the code is wrong. The tests for `CI` and for `--offline` do this.
+- A script of this repository that runs strata sets `STRATA_REPORT=0`, or it sources
+  `examples/live/lib.sh`, which sets it. A test fails on a script that does neither. The runner of
+  the book gives each step the address of its stand-in endpoint. The drop-ins in `scripts/ci/`
+  and `examples/ci/` obey the settings of the user.
+
 ### The fuzzing
 
 Two kinds of test send hostile input to strata. `tests/fuzz.rs` sends random

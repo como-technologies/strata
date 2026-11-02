@@ -3,7 +3,6 @@
 //! `src/closed_set/unknown/tests.rs`. These tests run the reads of the commands, and the binary.
 
 use std::path::Path;
-use std::process::Command;
 
 use serde_json::{Value, json};
 use strata::api::MemoryApi;
@@ -16,7 +15,7 @@ use strata::term::progress::Progress;
 use crate::common::{
     LATER_TYPE, PROFILE_LISTING, Run, UID_A, UID_B, isolate_palette, later_type_tenant,
     list_command, listed, listing, log_in, packs, profile_document, profile_route, serve_routes,
-    strata_bin, template,
+    strata_command, template,
 };
 
 /// The note for that type, as a person reads it on standard error.
@@ -60,7 +59,7 @@ fn quiet_hides_the_note_and_the_environment_hides_it_too() {
     assert!(!quiet.err.contains("Palette gave"), "{}", quiet.err);
     assert_eq!(quiet.out, noisy.out, "the note is not part of the output");
 
-    let mut command = Command::new(strata_bin());
+    let mut command = strata_command();
     isolate_palette(&mut command, home.path());
     command
         .env_remove("XDG_STATE_HOME")
@@ -110,7 +109,7 @@ fn the_state_home_of_the_environment_decides_where_the_log_is() {
     let api = serve_routes(later_type_tenant());
     let home = tempfile::tempdir().unwrap();
     let state = tempfile::tempdir().unwrap();
-    let mut command = Command::new(strata_bin());
+    let mut command = strata_command();
     isolate_palette(&mut command, home.path());
     command
         .env_remove("STRATA_QUIET")
@@ -206,7 +205,7 @@ fn the_hint_does_not_show_when_standard_error_is_not_a_terminal_and_uses_up_no_d
         "a run in a pipe wrote the time of a hint"
     );
     // the log has the line, and a report of the next command shows it
-    let mut command = Command::new(strata_bin());
+    let mut command = strata_command();
     isolate_palette(&mut command, home.path());
     command
         .env_remove("STRATA_QUIET")

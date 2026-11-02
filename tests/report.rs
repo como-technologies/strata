@@ -4,7 +4,6 @@
 
 use std::net::TcpListener;
 use std::path::Path;
-use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
 use std::time::Duration;
@@ -13,7 +12,7 @@ use serde_json::{Value, json};
 use strata::closed_set::unknown::log::{FILE, SENT_FILE};
 use strata::ops::{ReportOptions, mark_reported, report_link, unknown_report};
 
-use crate::common::{Run, isolate_palette, log_in, strata_bin};
+use crate::common::{Run, isolate_palette, log_in, strata_command};
 
 /// A line of the log, as strata writes it.
 fn line(set: &str, value: &str, route: &str) -> String {
@@ -45,7 +44,7 @@ fn two_values() -> Vec<String> {
 
 /// Run `strata report` with the arguments `more` and a home of its own, `home`.
 fn report(home: &Path, more: &[&str]) -> Run {
-    let mut command = Command::new(strata_bin());
+    let mut command = strata_command();
     isolate_palette(&mut command, home);
     command
         .env_remove("STRATA_QUIET")
@@ -267,7 +266,7 @@ fn link_sends_no_request() {
         vec!["--json"],
         vec!["--link", "--sent"],
     ] {
-        let mut command = Command::new(strata_bin());
+        let mut command = strata_command();
         isolate_palette(&mut command, home.path());
         command
             .env_remove("STRATA_QUIET")

@@ -11,6 +11,9 @@
 # the value is the made-up value of the book. The check opens or changes the issue of that value in
 # OWNER/REPO (default como-technologies/strata) through the endpoint. It needs gh logged in to read
 # the issue, jq, curl, the strata release binary, and the xtask binary: just build and just stand-in.
+# The run changes HOME, so the script keeps the login of gh: it sets GH_CONFIG_DIR to the folder of
+# the login before the change. A GH_TOKEN in the environment works too. When gh cannot read the
+# issues, the script stops with exit 2 before the first send.
 #
 #   1  the first send: the run posts the report, and its output and exit code are those of a run
 #   2  the issue: one issue holds the marker of the value, and has the label
@@ -58,12 +61,19 @@ coproc STAND_IN { "$xtask" serve tenants/unknown-value port 2> serve.log; }
 for _ in $(seq 1 100); do [ -s port ] && break; sleep 0.1; done
 [ -s port ] || die "the stand-in did not start; see $PWD/serve.log"
 
+# gh finds its login in the folder gh of the config folder of the home. The next line changes HOME,
+# so the folder stays where it is now. gh reads GH_TOKEN from the environment, and this script keeps it.
+export GH_CONFIG_DIR=${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}
 # the run sends from a state folder and a home of its own, so it reads no setting of this machine
 export XDG_STATE_HOME=$run/state HOME=$run/home
 mkdir -p "$HOME"
 export PALETTE_API="http://127.0.0.1:$(cat port)" PALETTE_API_KEY=live-check PALETTE_PROJECT=dev
 unset PALETTE_PROJECT_UID STRATA_QUIET CI
 export STRATA_REPORT=1 STRATA_REPORT_URL="$url"
+
+# the checks read the issues with gh, so a send with no login can only fail them
+gh issue list --repo "$repo" --label palette-drift --limit 1 > /dev/null 2> gh.err \
+  || die "gh cannot read the issues of $repo; log in with gh auth login, or set GH_TOKEN; see $PWD/gh.err"
 
 marker='<!-- strata-report: values ProfileType later-type -->'
 # issues_of_value: the issues of the label palette-drift whose first line is the marker, as JSON

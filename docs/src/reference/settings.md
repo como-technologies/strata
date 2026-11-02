@@ -19,7 +19,7 @@ line.
 | `STRATA_MAX_RETRY_AFTER` | `300` | The longest `Retry-After` wait, in seconds. A longer one is the error `retry-after-too-long`, while a retry remains. On the last attempt, the error is `api`. |
 | `STRATA_QUIET` | not set | Any value stops the progress messages, as `--quiet` does. Environment only. |
 | `STRATA_REPORT` | not set | `1` sends the [report of the unknown values](./report.md#send-the-report-by-itself) at the end of a run that wrote a line to the log. `0` sends nothing and asks nothing. Any other value sends nothing, and strata prints a warning. With no value, a run in a terminal asks one time. |
-| `STRATA_REPORT_URL` | the endpoint of the maintainers, when the release names one | The address that receives the report. A release that names no endpoint sends nothing and asks nothing until this variable names one. |
+| `STRATA_REPORT_URL` | the endpoint of the maintainers, which the release names | The address that receives the report. Set it to send to another endpoint. |
 | `CI` | not set | A value stops the question of the send. Pipelines set this variable. |
 | `XDG_STATE_HOME` | `~/.local/state` | The base of the state folder. Strata keeps its files in the folder `strata/` under it: the log of the unknown values and three small files. A path that is not absolute counts as not set. Environment only. See [The files](./report.md#the-files). |
 | `NO_COLOR` | not set | A value removes the color of the terminal report under `--color auto`, the default. `strata-preflight` reads it too. Environment only. |
