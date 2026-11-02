@@ -6,7 +6,7 @@ use std::io::IsTerminal;
 use std::process::ExitCode;
 
 use strata::api::{self, HttpApi, Palette, Retry};
-use strata::closed_set::unknown::{self, Hint, Watch, Watching};
+use strata::closed_set::unknown::{self, Hint, Watch, Watching, send};
 use strata::config::{self, Config};
 use strata::error::Result;
 use strata::ops;
@@ -55,6 +55,63 @@ pub(crate) fn watch_unknown(progress: Progress) -> Watching {
         None => watch,
     }
     .start()
+}
+
+/// At the end of a run, send the report of the log to the endpoint when the user turned the send
+/// on, or ask the user one time. The user turns the send on with `STRATA_REPORT=1` or by an
+/// answer of yes. A run in CI, a run without a terminal, and a run that saw no unknown value send
+/// nothing and ask nothing.
+///
+/// This never changes the exit code of the run. An error of the send is a warning, and
+/// `--quiet` hides it.
+pub(crate) fn send_unknown(watching: &Watching, progress: Progress) {
+    let terminal =
+        !progress.is_quiet() && std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+    let facts = send::Facts::of_run(watching.lines_written() > 0, terminal);
+    if facts.wrote && facts.setting_unreadable() {
+        progress.warn(&format!(
+            "{} must be 1 or 0, so strata sends nothing",
+            send::SETTING
+        ));
+    }
+    let go = match send::step(&facts) {
+        send::Step::Nothing => false,
+        send::Step::Send => true,
+        send::Step::Ask => ask_to_send(progress),
+    };
+    let (Some(endpoint), Some(log)) = (&facts.endpoint, unknown::log::path()) else {
+        return;
+    };
+    if !go {
+        return;
+    }
+    match ops::send_unknown_report(&log, endpoint) {
+        Ok(()) => progress.note(&format!(
+            "sent the report of the unknown values to {endpoint}"
+        )),
+        Err(e) => progress.warn(&e.to_string()),
+    }
+}
+
+/// Ask the user the question of the send, and keep the answer in the state folder so that strata
+/// asks one time. True when the answer is yes.
+fn ask_to_send(progress: Progress) -> bool {
+    let yes = strata::term::ask::yes_or_no(
+        &send::question(),
+        &mut std::io::stdin().lock(),
+        &mut std::io::stderr(),
+    );
+    let choice = if yes {
+        send::Choice::Yes
+    } else {
+        send::Choice::No
+    };
+    if let Some(file) = send::answer_path()
+        && let Err(e) = send::keep_answer(&file, choice)
+    {
+        progress.warn(&format!("could not keep the answer: {e}"));
+    }
+    yes
 }
 
 /// A client from the environment; `project` replaces `PALETTE_PROJECT_UID` or `PALETTE_PROJECT`

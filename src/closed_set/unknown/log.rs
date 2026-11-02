@@ -107,19 +107,31 @@ impl Line {
         if self.schema != SCHEMA {
             return Some(format!("the schema is not {SCHEMA}"));
         }
-        if self.value.is_empty()
-            || self.value.chars().count() > LONGEST_VALUE
-            || self.value.chars().any(char::is_control)
-        {
-            return Some(format!(
-                "the value is not a short word of {LONGEST_VALUE} characters or fewer"
-            ));
-        }
-        if !self.route.starts_with('/') || self.route.split('/').any(looks_like_uid) {
-            return Some("the route is not a template of a route".to_string());
-        }
-        None
+        value_fault(&self.value).or_else(|| route_fault(&self.route))
     }
+}
+
+/// What is wrong with `value` as the value of a closed set, or `None`. A value is a short word:
+/// it has [`LONGEST_VALUE`] characters or fewer, and no control character.
+pub(super) fn value_fault(value: &str) -> Option<String> {
+    if value.is_empty()
+        || value.chars().count() > LONGEST_VALUE
+        || value.chars().any(char::is_control)
+    {
+        return Some(format!(
+            "the value is not a short word of {LONGEST_VALUE} characters or fewer"
+        ));
+    }
+    None
+}
+
+/// What is wrong with `route` as the template of a route, or `None`. A template starts with `/`,
+/// and none of its words is a uid.
+pub(super) fn route_fault(route: &str) -> Option<String> {
+    if !route.starts_with('/') || route.split('/').any(looks_like_uid) {
+        return Some("the route is not a template of a route".to_string());
+    }
+    None
 }
 
 /// The fewest characters of a uid. A uid of Palette has 24 hexadecimal digits, and a UUID has more.

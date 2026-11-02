@@ -37,8 +37,10 @@ use std::sync::RwLock;
 use serde_json::{Value, json};
 
 mod palette;
+mod stand_in;
 
 pub use palette::*;
+pub use stand_in::*;
 
 // comment-only values, as the real ubuntu-aws pack ships: canonical form must be null
 const OS_VALUES: &str = "\n# Spectro Golden images include most of the hardening standards recommended by CIS benchmarking\n\n# Uncomment below section to\n# 1. Include custom files to be copied over to the nodes and/or\n# 2. Execute list of commands before or after kubeadm init/join is executed\n#\n# kubeadmconfig:\n#   preKubeadmCommands:\n#   - echo \"Executing pre kube admin config commands\"\n#   - update-ca-certificates";
@@ -1152,12 +1154,16 @@ pub fn isolate_git(command: &mut Command) -> &mut Command {
 }
 
 /// The settings of the machine that name a project or a tenant: the variables of strata, and those
-/// of the Terraform provider, which strata reads too.
-const MACHINE_SETTINGS: [&str; 4] = [
+/// of the Terraform provider, which strata reads too. It also holds the settings of the send of the
+/// report, and the variable `CI`, because a pipeline sets it.
+const MACHINE_SETTINGS: [&str; 7] = [
     "PALETTE_PROJECT_UID",
     "PALETTE_PROJECT",
     "SPECTROCLOUD_APIKEY",
     "SPECTROCLOUD_HOST",
+    "STRATA_REPORT",
+    "STRATA_REPORT_URL",
+    "CI",
 ];
 
 /// Give `command` an address that refuses connections, the home `home`, and no setting of the

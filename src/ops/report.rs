@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use crate::REPOSITORY;
 use crate::closed_set::unknown::Report;
-use crate::closed_set::unknown::log;
+use crate::closed_set::unknown::{log, send};
 use crate::error::{Error, Result};
 use crate::text::query_value;
 
@@ -52,20 +52,45 @@ pub fn unknown_log() -> Result<PathBuf> {
 /// `LogInvalid` when a line of the log is not a line of `strata-unknown/1`: nothing is reported
 /// and nothing is marked. `Io` when strata cannot read the log, or cannot write the mark.
 pub fn unknown_report(log: &Path, options: ReportOptions) -> Result<Report> {
+    let (report, total) = report_and_total(log, options.all)?;
+    if options.sent {
+        log::mark_sent(&log::sent_path(log), total)?;
+    }
+    Ok(report)
+}
+
+/// The report of the log at `log`, and the number of lines that the log holds. `all` reads the
+/// lines that the user marked as sent too.
+fn report_and_total(log: &Path, all: bool) -> Result<(Report, usize)> {
     let lines = log::read(log)?;
-    let sent = log::sent_path(log);
-    let marked = log::sent_count(&sent);
+    let marked = log::sent_count(&log::sent_path(log));
     // a mark past the end of the log belongs to a log that the user removed
-    let skip = if options.all || marked > lines.len() {
+    let skip = if all || marked > lines.len() {
         0
     } else {
         marked
     };
-    let report = Report::of(lines.iter().skip(skip));
-    if options.sent {
-        log::mark_sent(&sent, lines.len())?;
+    Ok((Report::of(lines.iter().skip(skip)), lines.len()))
+}
+
+/// Post the report of the lines that the user did not mark as sent to the endpoint `endpoint`,
+/// and mark those lines as sent after the endpoint took the report. A report with no line posts
+/// nothing.
+///
+/// This is the one place where strata marks a line by itself: the endpoint took the report, so
+/// the lines are sent. A send that fails marks nothing, and the next send holds the lines again.
+///
+/// # Errors
+///
+/// `LogInvalid` or `Io` as [`unknown_report`], and `Io` when strata cannot write the mark.
+/// `ReportSend` when the endpoint did not take the report: see [`send::post`].
+pub fn send_unknown_report(log: &Path, endpoint: &str) -> Result<()> {
+    let (report, total) = report_and_total(log, false)?;
+    if report.unknown.is_empty() {
+        return Ok(());
     }
-    Ok(report)
+    send::post(endpoint, &report)?;
+    log::mark_sent(&log::sent_path(log), total)
 }
 
 /// The address of a new issue of strata, with the title and the text `body` filled in.

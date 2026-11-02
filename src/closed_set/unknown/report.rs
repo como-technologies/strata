@@ -12,18 +12,28 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
 use schemars::JsonSchema;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use super::log::Line;
+use super::log::{Line, route_fault, value_fault};
 use crate::reference::version;
 
 /// The schema id of a report.
 pub const SCHEMA: &str = "strata-report/1";
 
+/// The most entries that the endpoint takes in one report.
+pub const MOST_ENTRIES: usize = 100;
+
+/// The most characters of the version of strata, of the Palette release, of the name of a set, and
+/// of an error code.
+const LONGEST_FIELD: usize = 64;
+
+/// The most characters of the template of a route.
+const LONGEST_ROUTE: usize = 200;
+
 /// The document `strata-report/1`: the values that Palette gave and that this release of strata
 /// does not know.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Report {
     /// The schema id of this document
     #[schemars(extend("const" = SCHEMA))]
@@ -34,13 +44,13 @@ pub struct Report {
 }
 
 /// One line of the log, and how many times the log holds it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Entry {
     /// The version of strata that read the value.
     pub strata: String,
     /// The Palette release, when strata knew it.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette: Option<String>,
     /// The name of the closed set, as `strata schema` names its definition.
     pub set: String,
@@ -49,10 +59,10 @@ pub struct Entry {
     /// The template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`.
     pub route: String,
     /// The status of a refusal of Palette. A value of a document has none.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<u16>,
     /// The error code of a refusal of Palette. A value of a document has none.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error_code: Option<String>,
     /// How many lines of the log are this entry.
     pub count: usize,
@@ -75,6 +85,28 @@ impl Report {
             schema: SCHEMA.to_string(),
             unknown,
         }
+    }
+
+    /// What is wrong with a report that arrives from outside, or `None`.
+    ///
+    /// The type refuses a field that the entry does not have. This check refuses the rest: another
+    /// schema, no entry or more than [`MOST_ENTRIES`], and an entry with a field that is not a
+    /// short word. A report that strata makes from its own log passes.
+    pub fn fault(&self) -> Option<String> {
+        if self.schema != SCHEMA {
+            return Some(format!("the schema is not {SCHEMA}"));
+        }
+        if self.unknown.is_empty() || self.unknown.len() > MOST_ENTRIES {
+            return Some(format!(
+                "the report has {} entries, and a report has 1 to {MOST_ENTRIES}",
+                self.unknown.len()
+            ));
+        }
+        self.unknown.iter().enumerate().find_map(|(at, entry)| {
+            entry
+                .fault()
+                .map(|fault| format!("entry {}: {fault}", at + 1))
+        })
     }
 
     /// The number of different values: a value of a set counts once, also when it has more than
@@ -103,6 +135,39 @@ impl Entry {
         }
     }
 
+    /// What is wrong with the entry, or `None`. Each field is a short word, and the route is the
+    /// template of a route.
+    fn fault(&self) -> Option<String> {
+        word_fault("strata", &self.strata, is_version_char)
+            .or_else(|| {
+                let palette = self.palette.as_deref()?;
+                word_fault("palette", palette, is_version_char)
+            })
+            .or_else(|| word_fault("set", &self.set, |c| c.is_ascii_alphanumeric()))
+            .or_else(|| value_fault(&self.value))
+            .or_else(|| route_fault(&self.route))
+            .or_else(|| {
+                (self.route.chars().count() > LONGEST_ROUTE)
+                    .then(|| format!("the route has more than {LONGEST_ROUTE} characters"))
+            })
+            .or_else(|| self.refusal_fault())
+            .or_else(|| (self.count == 0).then(|| "the count is 0".to_string()))
+    }
+
+    /// What is wrong with the status and the error code, or `None`.
+    fn refusal_fault(&self) -> Option<String> {
+        if self
+            .status
+            .is_some_and(|status| !(100..600).contains(&status))
+        {
+            return Some("the status is not an HTTP status".to_string());
+        }
+        let code = self.error_code.as_deref()?;
+        (code.chars().count() > LONGEST_FIELD || code.chars().any(char::is_control)).then(|| {
+            format!("the error code is not a short word of {LONGEST_FIELD} characters or fewer")
+        })
+    }
+
     /// True when `line` has the fields of this entry.
     fn is(&self, line: &Line) -> bool {
         self.strata == line.strata
@@ -113,6 +178,18 @@ impl Entry {
             && self.status == line.status
             && self.error_code == line.error_code
     }
+}
+
+/// What is wrong with the text `text` of the field `name`, or `None`. A field of this kind is not
+/// empty, has [`LONGEST_FIELD`] characters or fewer, and holds only characters that `allowed` names.
+fn word_fault(name: &str, text: &str, allowed: fn(char) -> bool) -> Option<String> {
+    (text.is_empty() || text.chars().count() > LONGEST_FIELD || !text.chars().all(allowed))
+        .then(|| format!("the {name} is not a short word of {LONGEST_FIELD} characters or fewer"))
+}
+
+/// True for a character of a version: a letter, a digit, or one of `.`, `-`, `+`, and `_`.
+fn is_version_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+' | '_')
 }
 
 /// The order of two lines: the set, the value, the route, the refusal, the Palette release, and

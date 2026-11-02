@@ -123,3 +123,5 @@ pub const TOOL_NAME: &str = "strata";
 pub const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The address of the repository of strata, where the link of `strata report` opens a new issue.
 pub(crate) const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
+/// The address of the book, with a slash at the end.
+pub const BOOK_URL: &str = "https://legendary-train-pzq9ojj.pages.github.io/";
