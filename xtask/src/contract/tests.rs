@@ -2169,6 +2169,41 @@ fn a_failed_request_for_the_vpcs_of_a_region_stops_the_search() {
 }
 
 #[test]
+fn a_region_that_palette_refuses_for_the_key_is_no_end_of_the_search() {
+    // an account that has not turned on a region gets a 4xx for its VPCs
+    let api = regions_with(&[
+        ("af-south-1", json!({"vpcs": []})),
+        ("us-west-2", json!({"vpcs": [{"vpcId": "vpc-9"}]})),
+    ])
+    .failing(
+        "/v1/clouds/aws/regions/af-south-1/vpcs?cloudAccountUid=acc1",
+        403,
+        "{}",
+    );
+    let probe = subject::Probe::new(&api, &api);
+    let facts = real_facts();
+    let template = request_of(&facts, "validate-security-groups").unwrap();
+    assert_eq!(
+        subject::find(&probe, &facts, template),
+        subject::Subject::Path(
+            "/v1/clouds/aws/securitygroups?cloudAccountUid=acc1&region=us-west-2&vpcId=vpc-9"
+                .to_string()
+        )
+    );
+    // when no region serves, the reason is the first refusal
+    let api = regions_with(&[("af-south-1", json!({"vpcs": []}))]).failing(
+        "/v1/clouds/aws/regions/af-south-1/vpcs?cloudAccountUid=acc1",
+        403,
+        "{}",
+    );
+    let probe = subject::Probe::new(&api, &api);
+    match subject::find(&probe, &facts, template) {
+        subject::Subject::Failed(failure) => assert_eq!(failure.status, Some(403)),
+        other => panic!("expected a failure, got {other:?}"),
+    }
+}
+
+#[test]
 fn the_registry_uid_is_the_subject_of_a_pack_in_a_registry_and_never_of_a_pack() {
     let api = MemoryApi::new().with(
         "/v1/packs",

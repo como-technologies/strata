@@ -14,6 +14,7 @@ use serde_json::Value;
 use strata::api::PaletteApi;
 use strata::error::Error;
 use strata::model::validation::PaletteRefusal;
+use strata_preflight::world::unreadable;
 
 use crate::facts::subjects::{DEPTH, Origin, request_of, source, unsourced};
 use crate::facts::{Fact, Scope, fill, names};
@@ -201,8 +202,10 @@ fn bind<A: PaletteApi>(
         bindings.insert((*param).to_string(), candidate);
         match bind(probe, facts, template, rest, bindings, depth) {
             Ok(()) => return Ok(()),
-            // the next value can still serve: a region with no VPC is no end of the search
-            Err(subject @ Subject::Missing(_)) => {
+            // the next value can still serve: a region with no VPC is no end of the search, and
+            // neither is a region that Palette refuses for this key, such as a region that the
+            // account has not turned on
+            Err(subject) if next_value_can_serve(&subject) => {
                 first_failure.get_or_insert(subject);
                 bindings.remove(*param);
             }
@@ -217,6 +220,18 @@ fn bind<A: PaletteApi>(
         Some(subject) => subject,
         None => Subject::Missing(no_source(param)),
     })
+}
+
+/// True when the next value of a placeholder can still give a subject, after `subject` stopped the
+/// first: the tenant has no object, or Palette refuses the request for this key with a 4xx that
+/// the run reads as an answer. A 401, a 429, a status of 5xx, or a failure of the network says
+/// nothing about the value, so it ends the search.
+fn next_value_can_serve(subject: &Subject) -> bool {
+    match subject {
+        Subject::Missing(_) => true,
+        Subject::Failed(failure) => failure.status.is_some_and(unreadable),
+        Subject::Path(_) => false,
+    }
 }
 
 /// The values that the tenant offers for the placeholder `param` of `template`, in order, or why

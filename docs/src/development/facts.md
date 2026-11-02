@@ -272,7 +272,8 @@ request. The table of the sources is `xtask/src/facts/subjects.rs`.
 A name can have more than one value. The regions are such a name. The run takes the first region
 that lets the rest of the request find its values. The security groups need a VPC, so the run asks
 the VPCs of each region in order, until one region lists a VPC. The skip reason then names the number
-of regions that the run tried. A request that fails stops the search.
+of regions that the run tried. A region that Palette refuses for the key, with a 4xx, is no end of
+the search. A 401, a 429, or a 5xx stops it.
 
 `{aws,gcp,azure}` lists the choices of a segment. The run sends one request for each choice, and
 joins the results in one entry:
