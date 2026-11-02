@@ -71,7 +71,7 @@ by the setting `STRATA_REPORT`. See
 
 A log that you edited can hold a line that strata did not write. A line with a field outside the
 list of [`strata-unknown/1`](../reference/documents.md#strata-unknown1) is one case. Another case
-is a route that is the path of a real request. `strata report` then stops with the error
+is a route that is not a template of a route, such as the path of a real request. `strata report` then stops with the error
 `log-invalid`, prints nothing, and marks nothing. The message gives the number of the line. See
 [Errors](../reference/errors.md).
 

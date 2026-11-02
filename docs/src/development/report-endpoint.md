@@ -24,7 +24,7 @@ The service checks each request in this order. A request that fails a check chan
 
 Check 4 is the type `Report` of the library. The send of strata and the endpoint use the same type,
 so the list of fields has one definition. A report has 1 to 100 entries. The check refuses a
-route that is the path of a real request, and a value of more than 64 characters. Check 5 comes
+route that is not a template of a route, and a value of more than 64 characters. Check 5 comes
 after the reads and before the writes, so a report that the limit refuses writes nothing.
 
 The answer is JSON: `{"ok":true,"opened":1,"updated":0}`, or `{"error":"..."}`. The message of an
@@ -91,7 +91,8 @@ Cloud Run sets the variables of the service. Only the token is required.
 | `PORT` | `8080` | The port. Cloud Run sets it. |
 
 Without `TRUST_FORWARDED_FOR=1`, the service uses the address of the connection. A client can send
-`X-Forwarded-For` to a service that no proxy fronts, and the limit of the rate would not hold.
+`X-Forwarded-For` to a service that no proxy fronts. Then each request has a sender of its own, and
+the limit of the rate does not hold.
 
 ## The settings of the service
 

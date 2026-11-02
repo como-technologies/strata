@@ -77,7 +77,7 @@ pub struct GitHub {
     agent: ureq::Agent,
 }
 
-// Written by hand: a derived `Debug` would print the token.
+// Written by hand: a derived `Debug` prints the token.
 impl fmt::Debug for GitHub {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GitHub")
@@ -201,7 +201,7 @@ impl Tracker for GitHub {
             }
         }
         // the last page was full: an issue of a value can be beyond it, and a merge that does not
-        // find it would open a second issue
+        // find it opens a second issue
         Err(TrackerError {
             message: format!(
                 "list the issues: more than {} issues have the label {}",

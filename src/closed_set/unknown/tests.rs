@@ -429,6 +429,7 @@ fn a_route_that_is_the_path_of_a_real_request_fails_the_read() {
         "/v1/spectroclusters/64F0000000000000000000A1/validate",
         "/v1/things/123e4567-e89b-12d3-a456-426614174000",
         "v1/packs",
+        "/packs",
         "",
     ] {
         let mut line = serde_json::to_value(full_line()).unwrap();
@@ -447,6 +448,41 @@ fn a_route_that_is_the_path_of_a_real_request_fails_the_read() {
         std::fs::write(&file, log_of(&[&line.to_string()])).unwrap();
         assert_eq!(read(&file).unwrap().len(), 1, "{route}");
     }
+}
+
+#[test]
+fn a_route_with_a_character_outside_the_closed_set_of_a_template_fails_the_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    for route in [
+        "/v1/packs\n\n@someone",
+        "/v1/packs\r",
+        "/v1/packs\t",
+        "/v1/pa cks",
+        "/v1/packs`x`",
+        "/v1/packs|x",
+        "/v1/@someone",
+        "/v1/[a](http://example.invalid)",
+        "/v1/<b>packs</b>",
+        "/v1/packs?x=1",
+        "/v1/packs#1",
+        "/v1/pàcks",
+        "/v1/packs\u{202e}",
+    ] {
+        let mut line = serde_json::to_value(full_line()).unwrap();
+        line["route"] = json!(route);
+        std::fs::write(&file, log_of(&[&line.to_string()])).unwrap();
+        let message = read(&file).unwrap_err().to_string();
+        assert!(
+            message.contains("the route is not a template of a route"),
+            "{route:?}: {message}"
+        );
+    }
+    // the characters of a template stay valid
+    let mut line = serde_json::to_value(full_line()).unwrap();
+    line["route"] = json!("/v1/clusterprofiles/{uid}/pack_a-b.c/{name}");
+    std::fs::write(&file, log_of(&[&line.to_string()])).unwrap();
+    assert_eq!(read(&file).unwrap().len(), 1);
 }
 
 #[test]

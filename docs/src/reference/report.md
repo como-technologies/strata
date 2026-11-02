@@ -39,7 +39,7 @@ A report is the document `strata-report/1`. It has the fields `schema` and `unkn
 | `palette` | The Palette release, when strata knows it. A key cannot read the release, so an entry of the command line has none. |
 | `set` | The name of the closed set, as `strata schema` names its definition, such as `ProfileType`. |
 | `value` | The text of the value. Strata cuts a value of more than 64 characters. |
-| `route` | The template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It is never the path of a real request. |
+| `route` | The template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It is never the path of a real request. It starts with `/v1/`, and holds only letters, digits, and the characters `/`, `_`, `-`, `.`, `{`, and `}`. |
 | `status` | The status of a refusal of Palette. An entry for a value of a document has none. |
 | `errorCode` | The error code of a refusal of Palette. An entry for a value of a document has none. |
 | `count` | How many lines of the log are this entry. |
@@ -64,7 +64,7 @@ other field. `strata report` also refuses the whole log when one line is not val
 valid in three cases:
 
 - It has a field outside the list.
-- Its route is the path of a real request.
+- Its route is not a template of a route. The `route` field in the table above gives the rule.
 - Its value is not a short word.
 
 The command then stops with the error `log-invalid`, prints nothing, and marks nothing. See
@@ -151,7 +151,7 @@ The next send holds those lines again.
 ## What the endpoint keeps
 
 The endpoint takes `strata-report/1` alone. It refuses a report with a field outside the list. It
-refuses a value of more than 64 characters, and a route that is the path of a real request. It
+refuses a value of more than 64 characters, and a route that is not a template of a route. It
 refuses a body of more than 64 KiB. See [The endpoint of the report](../development/report-endpoint.md) for the service.
 
 The endpoint keeps these things, and no other:

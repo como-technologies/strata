@@ -45,7 +45,7 @@ pub struct Settings {
     pub trust_forwarded: bool,
 }
 
-// Written by hand: a derived `Debug` would print the token.
+// Written by hand: a derived `Debug` prints the token.
 impl fmt::Debug for Settings {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Settings")

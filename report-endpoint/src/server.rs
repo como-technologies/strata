@@ -150,8 +150,8 @@ impl<T: Tracker> Service<T> {
 /// `X-Forwarded-For`, which the front end of Cloud Run adds, or else the address of the connection.
 ///
 /// A client can send `X-Forwarded-For` to a service that no proxy fronts, and then each request
-/// would have a sender of its own. So a service reads the header only when its settings say that a
-/// proxy sets it.
+/// has a sender of its own. So a service reads the header only when its settings say that a proxy
+/// sets it.
 fn sender_of(request: &tiny_http::Request, trust_forwarded: bool) -> String {
     let forwarded = request
         .headers()

@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use strata::BOOK_URL;
 use strata::closed_set::unknown::Report;
 use strata::reference::version;
-use strata::text::query_value;
+use strata::text::{markdown_cell, query_value};
 
 use crate::tracker::{Issue, Tracker, TrackerError};
 
@@ -152,7 +152,8 @@ fn marker(set: &str, value: &str) -> String {
 }
 
 /// `text` as a code span: the fence is longer than each run of backticks in the text, so a value
-/// cannot end the span. A pipe has a backslash, so a value cannot end a cell of a table.
+/// cannot end the span. [`markdown_cell`] writes the text, so a value cannot end a cell or a row of
+/// a table. This is a second guard: the check of the report refuses a line break first.
 fn code_span(text: &str) -> String {
     let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
     let fence = "`".repeat(longest + 1);
@@ -161,7 +162,7 @@ fn code_span(text: &str) -> String {
     } else {
         ""
     };
-    format!("{fence}{pad}{}{pad}{fence}", text.replace('|', "\\|"))
+    format!("{fence}{pad}{}{pad}{fence}", markdown_cell(text))
 }
 
 /// The items of `items` as code spans, in version order, or `none` when there is no item.
@@ -191,7 +192,7 @@ fn title(set: &str, value: &str) -> String {
 
 /// The body of the issue for the set `set` and the value `value`, with the state `state`.
 fn body(set: &str, value: &str, state: &State) -> String {
-    // the state is plain data, so it always serializes; an empty text would only drop the state
+    // the state is plain data, so it always serializes; an empty text only drops the state
     let json = serde_json::to_vec(state).unwrap_or_default();
     let page = format!("{BOOK_URL}development/facts.html#what-to-do-with-a-new-value");
     format!(

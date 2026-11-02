@@ -238,13 +238,18 @@ fn a_report_with_another_schema_no_entry_or_too_many_entries_is_refused() {
 
 #[test]
 fn an_entry_with_a_field_that_is_not_a_short_word_is_refused_and_the_message_names_the_field() {
-    let cases: [(&str, Change); 10] = [
+    let cases: [(&str, Change); 11] = [
         ("the value", |l| l.value = "x".repeat(65)),
         ("the value", |l| l.value = "a\nb".into()),
         ("the route", |l| {
             l.route = "/v1/clusterprofiles/64f0a1b2c3d4e5f6a7b8c9d0".into();
         }),
-        ("the route", |l| l.route = format!("/{}", "a".repeat(200))),
+        ("the route has more than 200", |l| {
+            l.route = format!("/v1/{}", "z/".repeat(100));
+        }),
+        ("the route is not a template", |l| {
+            l.route = "/v1/packs\n\n@someone".into();
+        }),
         ("the set", |l| l.set = "Profile Type".into()),
         ("the set", |l| l.set = String::new()),
         ("the strata", |l| l.strata = "0.26.0 <b>".into()),

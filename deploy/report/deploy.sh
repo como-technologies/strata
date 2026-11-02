@@ -15,7 +15,7 @@
 #   - The service account of Cloud Run can read the secret (roles/secretmanager.secretAccessor).
 #
 # The service takes one instance and 8 requests at a time. One instance keeps the limits of the
-# rate in one place, and a second instance would split the count of an issue.
+# rate in one place. A second instance splits the count of an issue.
 #
 # --project and --region replace the defaults, which are the project of the lab and us-central1.
 # --dry-run prints each gcloud command and runs none.

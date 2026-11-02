@@ -280,6 +280,48 @@ fn a_report_with_another_field_is_refused_and_nothing_is_written() {
 }
 
 #[test]
+fn a_route_that_is_not_a_template_is_refused_and_nothing_is_written() {
+    let (github, state) = stand_in_github();
+    let service = start_service(&github);
+    for route in [
+        "/v1/packs\n\n@someone read [this](http://example.invalid)",
+        "/v1/packs\r\n![x](http://example.invalid/x.png)",
+        "/v1/packs`x`",
+        "/v1/packs|x",
+        "/v1/@someone",
+        "/v1/pa cks",
+        "/v1/<b>packs</b>",
+        "/v1/packs\u{202e}",
+        "/other/packs",
+        "v1/packs",
+    ] {
+        let mut with = entry("later", 1);
+        with["route"] = json!(route);
+        let (status, answer) = raw_post(&service, "application/json", &report_text(&[with]));
+        assert_eq!(status, 422, "{route:?}");
+        assert!(
+            answer["error"]
+                .as_str()
+                .unwrap()
+                .contains("the route is not a template of a route"),
+            "{answer}"
+        );
+        assert!(!answer.to_string().contains("someone"), "{answer}");
+    }
+    assert!(
+        state.lock().unwrap().calls.is_empty(),
+        "the endpoint did not even read the issues"
+    );
+    // a second service has its own limit of the rate: the refusals above spent that of the first
+    let (status, _) = raw_post(
+        &start_service(&github),
+        "application/json",
+        &report_text(&[entry("later", 1)]),
+    );
+    assert_eq!(status, 200, "a template of a route passes");
+}
+
+#[test]
 fn a_request_that_is_not_json_or_not_a_report_is_refused_with_its_status() {
     let (github, state) = stand_in_github();
     let service = start_service(&github);

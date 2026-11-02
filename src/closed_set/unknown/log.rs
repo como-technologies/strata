@@ -102,7 +102,8 @@ impl Line {
 
     /// What is wrong with a line that has the right fields, or `None`. The type refuses a field
     /// that is not in [`FIELDS`]. This check refuses a value that no closed set has, and a route
-    /// that is the path of a real request. Strata never writes such a line.
+    /// that is not a template of a route, such as the path of a real request. Strata never writes
+    /// such a line.
     fn fault(&self) -> Option<String> {
         if self.schema != SCHEMA {
             return Some(format!("the schema is not {SCHEMA}"));
@@ -125,13 +126,26 @@ pub(super) fn value_fault(value: &str) -> Option<String> {
     None
 }
 
-/// What is wrong with `route` as the template of a route, or `None`. A template starts with `/`,
-/// and none of its words is a uid.
+/// What is wrong with `route` as the template of a route, or `None`. A template starts with
+/// [`ROUTE_PREFIX`], holds only the characters of [`is_route_char`], and none of its words is a uid.
 pub(super) fn route_fault(route: &str) -> Option<String> {
-    if !route.starts_with('/') || route.split('/').any(looks_like_uid) {
+    if !route.starts_with(ROUTE_PREFIX)
+        || !route.chars().all(is_route_char)
+        || route.split('/').any(looks_like_uid)
+    {
         return Some("the route is not a template of a route".to_string());
     }
     None
+}
+
+/// The start of each route that strata reads.
+const ROUTE_PREFIX: &str = "/v1/";
+
+/// True for a character of a route template: a letter or a digit of ASCII, or one of `/`, `_`, `-`,
+/// `.`, `{`, and `}`. So a template holds no space, no quote, no mark of markdown, and no line
+/// break.
+fn is_route_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '.' | '{' | '}')
 }
 
 /// The fewest characters of a uid. A uid of Palette has 24 hexadecimal digits, and a UUID has more.

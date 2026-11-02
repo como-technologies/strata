@@ -229,6 +229,29 @@ fn a_value_cannot_end_the_marker_a_code_span_or_a_cell() {
 }
 
 #[test]
+fn a_line_break_in_a_field_cannot_end_the_row_of_the_table() {
+    // the check of the report refuses these fields: this is the second guard
+    let mut tracker = Memory::default();
+    let mut bad = entry("ProfileType", "later", "0.26.0", 1);
+    bad["route"] = json!("/v1/x\n\n@someone [a](http://example.invalid)");
+    bad["errorCode"] = json!("Gone\n\n@someone");
+    bad["status"] = json!(409);
+    merge(&mut tracker, &report(&[bad])).unwrap();
+    let (_, text, _) = &tracker.issues[0];
+    for line in text.lines() {
+        assert!(!line.starts_with('@'), "{text}");
+    }
+    assert!(
+        text.contains("| Routes | `/v1/x  @someone [a](http://example.invalid)` |"),
+        "{text}"
+    );
+    assert!(
+        text.contains("| Refusals | `409 Gone  @someone` |"),
+        "{text}"
+    );
+}
+
+#[test]
 fn a_list_of_releases_keeps_the_newest_at_the_most_and_the_count_does_not_stop() {
     let mut tracker = Memory::default();
     let send = |tracker: &mut Memory, version: &str| {
