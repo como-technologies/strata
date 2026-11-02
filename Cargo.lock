@@ -2182,6 +2182,7 @@ dependencies = [
  "serde_yaml",
  "strata",
  "strata-preflight",
+ "strata-report-endpoint",
  "tempfile",
  "ureq",
 ]
