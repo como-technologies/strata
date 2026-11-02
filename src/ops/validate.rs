@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use super::repave::{Question, cluster_and_target, validate_body};
 use crate::api::codes::ValidateRoute;
 use crate::api::registry::{Registries, registry_entry};
-use crate::api::{Palette, PaletteApi, RawCluster};
+use crate::api::{CLUSTER_TEMPLATE, Palette, PaletteApi, RawCluster};
 use crate::error::{Error, Result};
 use crate::json::{arr, first_nonempty, str_at, value_at};
 use crate::model::validation::{PaletteRefusal, PaletteValidation, ProfileValidation};
@@ -167,7 +167,7 @@ pub(super) fn moved_template_bodies(
             let cloud_type =
                 first_nonempty(&[str_at(template, "/cloudType"), RawCluster::cloud_type(doc)]);
             let entries = packs.iter().map(|raw| {
-                let held = Pack::from_api(raw, &[]);
+                let held = Pack::from_api_with(raw, &[], None, CLUSTER_TEMPLATE);
                 pack_entry(&held, if is_moved(raw) { to } else { &held })
             });
             Some((

@@ -122,7 +122,8 @@ the stand-in serves, and they make the two rules of the stand-in too.
 
 The three places of a fact can agree with each other and still disagree with Palette. The contract
 run finds that. It asks a real tenant the requests of the facts, and compares each answer with the
-stand-in. A timer on kadomony runs it each week, and opens an issue for each fact that differs.
+stand-in. A timer on kadomony runs it each week. It opens an issue for each fact that differs, and for
+each closed set that holds a value which strata does not know.
 kadomony is the machine of the maintainers that holds the key of the lab tenant.
 
 The run sends GET requests only. It builds no cluster, and it changes nothing in the tenant.
@@ -138,13 +139,12 @@ For each fact of the kind `request`, the run does these steps:
    document of that cluster.
 3. It sends the request, and compares the answer with the documents of the stand-in.
 
-The comparison has three parts:
+The comparison has two parts:
 
 | Part | A difference is |
 | --- | --- |
 | The status | The tenant answers with a status of 4xx, other than 401 and 429. The stand-in answers 200. |
 | The type of a field | A field of `reads.fields` has a type that no document of the stand-in has there. Or each document of the stand-in has the field, and no place of the answer has it. |
-| The values of a closed set | A text at a field of `reads.values` is a text that neither the fact nor the stand-in names. |
 
 The run compares shapes. It never compares the values of two tenants. A `null` and a missing field
 are one type, `absent`. A field that some documents of the stand-in lack can be missing from the
@@ -154,7 +154,7 @@ The outcome of a fact is one of these:
 
 | Outcome | What it means |
 | --- | --- |
-| `same` | The answer has the status, the types, and the values of the stand-in. |
+| `same` | The answer has the status and the types of the stand-in. It can hold an unknown value. |
 | `differs` | The answer differs. The entry lists each difference. |
 | `skipped` | The run sent no request, or the tenant has no object to ask about. The entry gives the reason. |
 | `error` | The run could not check the fact. A 401, a 429, a status of 5xx, or a failure of the network is the cause. |
@@ -168,6 +168,21 @@ The run skips a fact in these cases:
 
 A skipped fact names its live checks in the entry. Run them in a live window to prove the fact.
 
+### The unknown values
+
+A fact can name the values of a closed set, by field, in `reads.values`. The run reads the text at
+each such field of the answer. A text that neither the fact nor the documents of the stand-in name
+is an unknown value: Palette gave a value that strata does not know.
+
+An unknown value is no difference. The status and the types can be the same, so the outcome stays
+`same`. The entry lists the values for each field, and the run counts each value one time in the
+summary. A new value makes the exit code 1.
+
+The library of strata finds the same values in the run of a user, and writes a note. See
+[The note for a value that Palette gives](../reference/compatibility.md#the-note-for-a-value-that-palette-gives).
+The contract run asks one real tenant on a schedule. The note comes from the tenants of the users,
+which the lab does not run.
+
 ### The result
 
 The result is the document `strata-contract/1`. `contract.sh` writes it to `contract.json`.
@@ -177,19 +192,20 @@ The result is the document `strata-contract/1`. `contract.sh` writes it to `cont
 | `schema` | `strata-contract/1`. |
 | `checkedAt` | The time of the run, in RFC 3339. |
 | `target` | The address of the tenant. The document holds no key. |
-| `summary` | The count of the entries with each outcome: `same`, `differs`, `skipped`, `error`. |
+| `summary` | The count of the entries with each outcome: `same`, `differs`, `skipped`, `error`. `unknownValues` counts each unknown value. |
 | `facts[]` | One entry for each fact of the kind `request`, in the order of the list. |
 | `facts[].id`, `request` | The id of the fact and its request. |
 | `facts[].outcome` | The outcome of the fact. |
 | `facts[].reason` | Why the run skipped the fact or could not check it. |
-| `facts[].differences[]` | Each difference: `kind` is `status`, `type`, `missing`, or `value`. `path` is the field. `expected` is what the stand-in has, and `found` is what the tenant has. |
+| `facts[].differences[]` | Each difference: `kind` is `status`, `type`, or `missing`. `path` is the field. `expected` is what the stand-in has, and `found` is what the tenant has. |
+| `facts[].unknownValues[]` | Each closed set that holds an unknown value. `set` is the field of `reads.values`. `known` is what the fact and the stand-in name, and `values` is what the tenant gave. The key is absent when the entry has none. |
 | `facts[].live`, `pages` | The live checks and the pages of the fact. |
 | `releases[]` | The latest release of each repository, when the run keeps a state file. See [The releases](#the-releases). |
 
 The run exits with one of these codes:
 
-- 0: each fact that the run checked is the same.
-- 1: a fact differs.
+- 0: each fact that the run checked is the same, and no value is unknown.
+- 1: a fact differs, or a value is unknown.
 - 2: the run could not check a fact or a release.
 
 A skipped fact does not change the code.
@@ -226,13 +242,19 @@ them in this way:
   marker `<!-- strata-contract: <fact id> -->`, and the script finds the issue by it.
 - The script updates the issue while the fact differs. It closes the issue with a comment when the
   fact is the same again.
+- A fact with an unknown value has one open issue for each closed set that holds one. The issue has
+  the title "Palette has a new value of" the field and the fact, the label `palette-drift`, and the
+  milestone `Backlog`. The first line of the body is the marker
+  `<!-- strata-contract: values <fact id> <field> -->`. The body lists each new value and each
+  value that the fact and the stand-in name. The script updates the issue while the value is there.
+  It closes the issue with a comment when the run checked the fact and found no new value.
 - A skipped fact and a fact that the run could not check keep their issues as they are.
 - A new release has one issue, "Prove the facts again on" the repository and the tag. A person
   closes it.
 
-The script exits with 0 when no fact differs and no release is new. It exits with 1 when it
-handled a fact that differs or a new release. It exits with 2 when a fact or a release could not
-be checked, or when a call to GitHub failed.
+The script exits with 0 when no fact differs, no value is unknown, and no release is new. It exits
+with 1 when it handled a fact that differs, an unknown value, or a new release. It exits with 2
+when a fact or a release could not be checked, or when a call to GitHub failed.
 
 The script reads the host layer of `scripts/ci/verify-report.sh`, so it holds no second copy of the
 functions that call GitHub. The contract script is not shipped, so it can read a file of the
@@ -278,8 +300,8 @@ report fails, the old tags stay. The next run then notes the new tag again, and 
 the issue of the release. A report that fails never loses the issue of a release.
 
 The job exits with 2, and the service shows a failure, when the run could not check a fact or a
-release. It also exits with 2 when the report could not write an issue. A fact that differs is no
-failure: the issue is the report.
+release. It also exits with 2 when the report could not write an issue. A fact that differs, or a
+value that is unknown, is no failure: the issue is the report.
 
 ### What to do with an issue
 
@@ -291,6 +313,30 @@ issue lists each difference, the live checks, and the pages of the fact. Do thes
 2. If Palette changed, change the stand-in, the fact, and the page together. See the next section.
 3. If Palette is wrong, tell the lead. The lead records the fault of Palette in the local findings
    log. Do not open an issue for it.
+
+### What to do with a new value
+
+An issue "Palette has a new value of" a field means that Palette gave a text which neither the fact
+nor the stand-in names. Strata reads such a text with no error and keeps it, but it does not tell
+the text apart from the values it knows. The issue lists each new value and the field. Do these
+steps for each new value:
+
+1. Prove the value again. Read the answer of the request by hand, or run a live check of the fact.
+   A value can come from one object of the lab tenant, such as a cluster that a person made by hand.
+2. Find the closed set of strata that reads the field. The files in `code` of the fact name it.
+   Most sets are `Open` values, so they keep the text of a value that they do not name.
+3. Decide, and write the decision down:
+   - Add the value to the closed set when strata must tell it apart. Add the variant with
+     `impl_closed_set!`, and add its text to the test of the sets in `tests/closed_set.rs`. Then
+     add the value to `reads.values` of the fact and to the page of the fact.
+   - Do not add the value when strata does not need to tell it apart. Add it to `reads.values` of
+     the fact so that the next run counts it as known. Write in the page of the fact why the set
+     stays as it is, and what each command does with the value.
+4. Run `cargo xtask facts --check` and `just docs-check`. The issue closes at the next run, when
+   the run checked the fact and found no new value.
+
+A person who sees the note on standard error has the same choice. The note names the type of the
+set, such as `PackState`, and the log has the route. The fact for that route names the field.
 
 ## When Palette changes
 

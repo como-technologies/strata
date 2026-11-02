@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use strata::api::{HttpApi, MemoryApi};
 use strata::config::Config;
 
-use super::document::{Contract, DifferenceKind, Outcome};
+use super::document::{Contract, DifferenceKind, Outcome, Unknown};
 use super::shape::{JsonType, Path as Field};
 use super::stand_in::StandIn;
 use super::{releases, run, subject};
@@ -533,7 +533,7 @@ fn a_field_that_the_stand_in_lacks_in_one_document_can_be_missing_from_the_answe
 }
 
 #[test]
-fn a_value_that_neither_the_fact_nor_the_stand_in_names_makes_the_fact_differ() {
+fn a_value_that_neither_the_fact_nor_the_stand_in_names_is_an_unknown_value_and_no_difference() {
     let (_root, stand_in) = stand_in(&documents("Running"));
     let contract = contract(&stand_in, &memory(&documents("Quarantined")));
     let entry = contract
@@ -541,12 +541,77 @@ fn a_value_that_neither_the_fact_nor_the_stand_in_names_makes_the_fact_differ() 
         .iter()
         .find(|e| e.id == "cluster-document")
         .unwrap();
-    assert_eq!(entry.outcome, Outcome::Differs);
-    let difference = &entry.differences[0];
-    assert_eq!(difference.kind, DifferenceKind::Value);
-    assert_eq!(difference.path, "status.state");
-    assert_eq!(difference.found, ["Quarantined"]);
-    assert_eq!(difference.expected, ["Provisioning", "Running"]);
+    assert_eq!(entry.outcome, Outcome::Same);
+    assert!(entry.differences.is_empty(), "{:?}", entry.differences);
+    assert_eq!(
+        entry.unknown_values,
+        [Unknown {
+            set: "status.state".to_string(),
+            known: vec!["Provisioning".to_string(), "Running".to_string()],
+            values: vec!["Quarantined".to_string()],
+        }]
+    );
+    // the listing reads the same closed set, and gives the same value
+    assert_eq!(contract.summary.differs, 0);
+    assert_eq!(contract.summary.unknown_values, 2);
+}
+
+#[test]
+fn the_exit_code_is_1_for_an_unknown_value_and_the_summary_counts_each_value() {
+    let (_root, stand_in) = stand_in(&documents("Running"));
+    assert_eq!(
+        contract(&stand_in, &memory(&documents("Running"))).exit_code(),
+        0
+    );
+
+    let mut two = documents("Running");
+    two[0].1 = json!([
+        {"metadata": {"name": "a", "uid": "c1"}, "spec": {"cloudType": "aws"},
+         "status": {"state": "Quarantined"}},
+        {"metadata": {"name": "b", "uid": "c2"}, "spec": {"cloudType": "aws"},
+         "status": {"state": "Hibernating"}},
+        {"metadata": {"name": "c", "uid": "c3"}, "spec": {"cloudType": "aws"},
+         "status": {"state": "Hibernating"}},
+    ]);
+    let contract = contract(&stand_in, &memory(&two));
+    let listing = contract
+        .facts
+        .iter()
+        .find(|e| e.id == "cluster-listing")
+        .unwrap();
+    assert_eq!(
+        listing.unknown_values[0].values,
+        ["Hibernating", "Quarantined"]
+    );
+    assert_eq!(
+        contract.summary.unknown_values, 2,
+        "each value counts one time"
+    );
+    assert_eq!(contract.summary.differs, 0);
+    assert_eq!(contract.exit_code(), 1);
+}
+
+#[test]
+fn the_document_writes_the_unknown_values_of_a_fact_and_the_count_in_the_summary() {
+    let (_root, stand_in) = stand_in(&documents("Running"));
+    let contract = contract(&stand_in, &memory(&documents("Quarantined")));
+    let document = serde_json::to_value(&contract).unwrap();
+    assert_eq!(document["summary"]["unknownValues"], 2);
+    let entries = document["facts"].as_array().unwrap();
+    let entry = entries
+        .iter()
+        .find(|e| e["id"] == "cluster-document")
+        .unwrap();
+    assert_eq!(
+        entry["unknownValues"],
+        json!([{"set": "status.state", "known": ["Provisioning", "Running"],
+                "values": ["Quarantined"]}])
+    );
+    let cloud_config = entries.iter().find(|e| e["id"] == "cloud-config").unwrap();
+    assert!(
+        cloud_config.get("unknownValues").is_none(),
+        "{cloud_config}"
+    );
 }
 
 #[test]
@@ -584,11 +649,14 @@ fn a_listing_that_fails_makes_the_fact_that_needs_it_an_error_and_the_exit_code_
 }
 
 #[test]
-fn an_error_wins_over_a_difference_in_the_exit_code() {
+fn an_error_wins_over_a_difference_and_an_unknown_value_in_the_exit_code() {
     let (_root, stand_in) = stand_in(&documents("Running"));
-    let api = memory(&documents("Quarantined")).failing("/v1/cloudconfigs/aws/cfg1", 500, "{}");
+    let mut changed = documents("Quarantined");
+    changed[1].1["metadata"]["uid"] = json!({"id": "c1"});
+    let api = memory(&changed).failing("/v1/cloudconfigs/aws/cfg1", 500, "{}");
     let contract = contract(&stand_in, &api);
-    assert_eq!(contract.summary.differs, 2);
+    assert_eq!(contract.summary.differs, 1);
+    assert!(contract.summary.unknown_values > 0);
     assert_eq!(contract.exit_code(), 2);
 }
 

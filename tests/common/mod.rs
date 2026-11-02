@@ -1166,7 +1166,7 @@ const MACHINE_SETTINGS: [&str; 4] = [
 /// The run makes no retry, and it gets no setting that names a tenant either. So a request fails
 /// at once, and the run reads only the `.palette.env` of `home`, not the one of the person who
 /// runs the tests.
-fn isolate_palette<'a>(command: &'a mut Command, home: &Path) -> &'a mut Command {
+pub fn isolate_palette<'a>(command: &'a mut Command, home: &Path) -> &'a mut Command {
     for key in MACHINE_SETTINGS {
         command.env_remove(key);
     }

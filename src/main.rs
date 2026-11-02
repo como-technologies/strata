@@ -104,6 +104,7 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<ExitCode> {
+    let _watching = cli::watch_unknown(cli.cmd.progress());
     match cli.cmd {
         Cmd::Compare(a) => cmd_compare(&a),
         Cmd::Snapshot(a) => cmd_snapshot(&a),

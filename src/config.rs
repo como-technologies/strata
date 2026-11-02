@@ -1,10 +1,12 @@
 //! Where Palette is and how to authenticate. Read from the environment, with `~/.palette.env` as
 //! the fallback, or built directly by a library user.
 
+use std::ffi::OsString;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use crate::TOOL_NAME;
 use crate::error::{Error, Result};
 
 /// The default Palette API base URL.
@@ -208,6 +210,31 @@ pub fn quiet_from_env() -> bool {
     std::env::var_os(QUIET_VAR).is_some()
 }
 
+/// The variable that names the base folder of the files that a program keeps for itself.
+const STATE_HOME_VAR: &str = "XDG_STATE_HOME";
+
+/// The folder where strata keeps the files of its own state: `$XDG_STATE_HOME/strata`, or
+/// `~/.local/state/strata` when the variable is not set. `None` when strata knows no home.
+///
+/// A relative `XDG_STATE_HOME` is no place, so strata skips it, as the XDG Base Directory
+/// Specification says. The folder can be missing: the code that writes a file creates it.
+pub fn state_dir() -> Option<PathBuf> {
+    state_dir_from(std::env::var_os(STATE_HOME_VAR), std::env::var_os("HOME"))
+}
+
+/// [`state_dir`] for the given values of `XDG_STATE_HOME` and `HOME`.
+fn state_dir_from(state_home: Option<OsString>, home: Option<OsString>) -> Option<PathBuf> {
+    let base = state_home
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| {
+            home.map(PathBuf::from)
+                .filter(|p| p.is_absolute())
+                .map(|h| h.join(".local/state"))
+        })?;
+    Some(base.join(TOOL_NAME))
+}
+
 fn env_nonempty(key: &str) -> Option<String> {
     std::env::var(key).ok().filter(|v| !v.is_empty())
 }
@@ -402,6 +429,51 @@ mod tests {
         assert!(shown.contains("<redacted>"), "{shown}");
         // Every other setting still prints, so the Debug keeps its use.
         assert!(shown.contains("api.example.com"), "{shown}");
+    }
+}
+
+#[cfg(test)]
+mod state_dir_tests {
+    use super::state_dir_from;
+    use std::ffi::OsString;
+    use std::path::PathBuf;
+
+    fn os(text: &str) -> Option<OsString> {
+        Some(OsString::from(text))
+    }
+
+    #[test]
+    fn the_state_home_decides_when_it_is_an_absolute_path() {
+        assert_eq!(
+            state_dir_from(os("/var/state"), os("/home/a")),
+            Some(PathBuf::from("/var/state/strata"))
+        );
+    }
+
+    #[test]
+    fn the_home_decides_when_the_state_home_is_not_set() {
+        assert_eq!(
+            state_dir_from(None, os("/home/a")),
+            Some(PathBuf::from("/home/a/.local/state/strata"))
+        );
+    }
+
+    #[test]
+    fn a_state_home_that_is_empty_or_relative_is_no_place() {
+        for bad in ["", "state", "./state"] {
+            assert_eq!(
+                state_dir_from(os(bad), os("/home/a")),
+                Some(PathBuf::from("/home/a/.local/state/strata")),
+                "{bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_program_that_knows_no_absolute_home_has_no_state_folder() {
+        assert_eq!(state_dir_from(None, None), None);
+        assert_eq!(state_dir_from(None, os("")), None);
+        assert_eq!(state_dir_from(os("state"), os("home")), None);
     }
 }
 

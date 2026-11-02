@@ -558,7 +558,7 @@ give the run profiles to read, and `just live-up` to give it a cluster.
 
 | Result | What it shows |
 |---|---|
-| `contract.json` | #390: for each fact of the kind `request`, the status, the type of each field, and the values of each closed set, against the stand-in. No result yet. |
+| `contract.json` | #390, #391: for each fact of the kind `request`, the status and the type of each field against the stand-in. It also lists each value of a closed set that the fact and the stand-in do not name. No result yet. |
 
 ## pending.sh
 

@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value};
 
-use crate::closed_set::{ClosedSet, Open};
+use crate::closed_set::{ClosedSet, Open, unknown};
 
 /// The null that a read gives for a value that is not there.
 static NULL: Value = Value::Null;
@@ -43,9 +43,14 @@ pub fn opt_str<'a>(v: &'a Value, ptr: &str) -> Option<&'a str> {
 /// there and not empty.
 ///
 /// A text that names no value of `T` stays as text in [`Open::Unknown`]: it is a value of a later
-/// release, and not an error.
-pub(crate) fn opt_set<T: ClosedSet>(v: &Value, ptr: &str) -> Option<Open<T>> {
-    opt_str(v, ptr).map(Open::from_text)
+/// release, and not an error. The watch of the thread tells a person about it: see
+/// [`unknown`]. `route` is the template of the route that gave `v`.
+pub(crate) fn opt_set<T: ClosedSet>(v: &Value, ptr: &str, route: &'static str) -> Option<Open<T>> {
+    let set = Open::from_text(opt_str(v, ptr)?);
+    if let Open::Unknown(text) = &set {
+        unknown::seen::<T>(text, route);
+    }
+    Some(set)
 }
 
 /// A copy of the text at the pointer `ptr` of `v`, when it is there and not empty.
@@ -255,12 +260,12 @@ mod tests {
     fn opt_set_reads_a_value_of_a_set_and_keeps_the_text_of_a_value_that_is_not_in_it() {
         use crate::model::oci_provider::OciProvider;
         let v = json!({"spec": {"providerType": "zarf", "later": "oras", "empty": ""}});
-        let zarf: Option<Open<OciProvider>> = opt_set(&v, "/spec/providerType");
+        let zarf: Option<Open<OciProvider>> = opt_set(&v, "/spec/providerType", "/v1/test");
         assert_eq!(zarf, Some(Open::Known(OciProvider::Zarf)));
-        let later: Option<Open<OciProvider>> = opt_set(&v, "/spec/later");
+        let later: Option<Open<OciProvider>> = opt_set(&v, "/spec/later", "/v1/test");
         assert_eq!(later, Some(Open::Unknown("oras".to_string())));
-        assert_eq!(opt_set::<OciProvider>(&v, "/spec/empty"), None);
-        assert_eq!(opt_set::<OciProvider>(&v, "/spec/gone"), None);
+        assert_eq!(opt_set::<OciProvider>(&v, "/spec/empty", "/v1/test"), None);
+        assert_eq!(opt_set::<OciProvider>(&v, "/spec/gone", "/v1/test"), None);
     }
 
     #[test]

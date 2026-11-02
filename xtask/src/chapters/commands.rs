@@ -1,10 +1,10 @@
 //! The chapters of the command pages.
 
 use super::DEV_ENV;
-use super::edits::RETAIN;
+use super::edits::{LATER_PROFILE_TYPE, RETAIN};
 use super::ids::{
-    A100, A110, A111, A111_PROD, A111_TENANT, A112, A130, AWS_STANDARD, DEV, LEGACY, PAYMENTS,
-    PAYMENTS_PROD, PROD, SEARCH,
+    A100, A110, A111, A111_PROD, A111_TENANT, A112, A130, A1112, AWS_STANDARD, DEV, LEGACY,
+    PAYMENTS, PAYMENTS_PROD, PROD, SEARCH,
 };
 use crate::book::Runner;
 use crate::tenant::Edit;
@@ -13,6 +13,7 @@ use serde_json::json;
 /// Run the chapters of the command pages.
 pub(super) fn run(r: &mut Runner) {
     list(r);
+    unknown_value(r);
     scope(r);
     snapshot(r);
     candidate(r);
@@ -74,6 +75,27 @@ fn list(r: &mut Runner) {
     );
     r.step("list-pack-json", 0, false, r#"strata list --pack cilium --json | jq -r '.profiles[] | .ref as $ref | .packs[] | select(.name | contains("cilium")) | "\($ref) \(.name) \(.version)"'"#);
     list_edge_cases(r);
+}
+
+/// The chapter `unknown-value`: a read that gives a value which this release of strata does not
+/// know. The profile has a profile type that a later Palette release could add.
+fn unknown_value(r: &mut Runner) {
+    r.chapter("unknown-value", DEV_ENV);
+    r.tenant(|t| t.projects(&[("dev", DEV)]));
+    r.profile(DEV, A1112, "1.1.12", "aws-stack@1.1.1", &[]);
+    r.tenant(|t| t.edit(DEV, A1112, LATER_PROFILE_TYPE));
+    r.step(
+        "unknown-value-note",
+        0,
+        true,
+        "strata list profiles --packs > /dev/null",
+    );
+    r.step(
+        "unknown-value-quiet",
+        0,
+        true,
+        "strata list profiles --packs --quiet > /dev/null",
+    );
 }
 
 /// The part of the chapter `list` for a draft, an imported cluster, and a cluster template.

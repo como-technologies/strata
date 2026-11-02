@@ -25,7 +25,8 @@ const USAGE: &str =
   --github URL    the address of the GitHub API (default https://api.github.com)
 
 The tenant is the one that PALETTE_API, PALETTE_API_KEY, and ~/.palette.env name.
-Exit 0 when each fact is the same, 1 when a fact differs, 2 when the run could not check.";
+Exit 0 when each fact is the same, 1 when a fact differs or a value is unknown, 2 when the run could
+not check.";
 
 /// The options of the run.
 pub(super) struct Options {
@@ -64,8 +65,8 @@ impl Options {
 
 /// Run the contract run with the arguments `args` after the word `contract`.
 ///
-/// The exit code is 0 when each fact the run checked is the same, and 1 when a fact differs. It is 2
-/// when the run could not check, or the arguments are wrong.
+/// The exit code is 0 when each fact the run checked is the same, and 1 when a fact differs or a
+/// value is unknown. It is 2 when the run could not check, or the arguments are wrong.
 pub fn command(args: &[&str]) -> ExitCode {
     if args == ["--help"] {
         println!("{USAGE}");
@@ -111,12 +112,13 @@ fn contract(options: &Options) -> Result<u8, String> {
     }
     let s = document.summary;
     eprintln!(
-        "contract: {} facts: {} same, {} differ, {} skipped, {} could not be checked",
+        "contract: {} facts: {} same, {} differ, {} skipped, {} could not be checked, {} unknown values",
         document.facts.len(),
         s.same,
         s.differs,
         s.skipped,
-        s.error
+        s.error,
+        s.unknown_values
     );
     for release in document.releases.iter().filter(|r| r.new) {
         eprintln!(

@@ -5,6 +5,7 @@
 use std::process::ExitCode;
 
 use strata::api::{self, HttpApi, Palette, Retry};
+use strata::closed_set::unknown::{self, Watch, Watching};
 use strata::config::{self, Config};
 use strata::error::Result;
 use strata::ops;
@@ -31,6 +32,18 @@ fn now_utc() -> String {
 
 fn progress(quiet: bool) -> Progress {
     Progress::new(quiet || config::quiet_from_env())
+}
+
+/// Watch the reads of the command for a value of a closed set that Palette gives and this release
+/// does not know. Each such value gets one note through `progress`, and one line in the log in the
+/// state folder. The watch ends when the guard drops.
+pub(crate) fn watch_unknown(progress: Progress) -> Watching {
+    let watch = Watch::new(progress);
+    match unknown::log::path() {
+        Some(file) => watch.logging_to(file),
+        None => watch,
+    }
+    .start()
 }
 
 /// A client from the environment; `project` replaces `PALETTE_PROJECT_UID` or `PALETTE_PROJECT`

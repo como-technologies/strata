@@ -32,6 +32,7 @@ schema states the shape of each open field: see
 | `strata-preflight-rules/1` | `preflight --rules --json` | `preflight --schema rules` (one section) |
 | `strata-preflight-ledger/1` | the ledger of runs | `preflight --schema ledger` |
 | `strata-preflight-promotion/1` | `preflight --promotion --json` | `preflight --schema promotion` |
+| `strata-unknown/1` | the log of the unknown values, one line for each value | none |
 
 ## strata-snapshot/1
 
@@ -736,3 +737,28 @@ runs of the ledger. See [Confidence and promotion](../commands/preflight/promoti
     `olderRuns`, as in `strata-preflight/1`. With no `release`, one entry for
     each engine and release.
 - `disagreements`: the rules with `advice`. The exit code is `1` when it is not `0`.
+
+## strata-unknown/1
+
+One line of the log of the unknown values. No command prints it. Strata appends it to
+`strata-unknown.jsonl` in the state folder of the user. It writes one line for each value of a
+closed set that Palette gives and this release does not know. See
+[The note for a value that Palette gives](compatibility.md#the-note-for-a-value-that-palette-gives).
+
+A line is one JSON object with only these fields:
+
+- `schema`: `strata-unknown/1`.
+- `strata`: the version of strata that read the value.
+- `palette`: the Palette release, when strata knows it. A key cannot read the release, so a line of
+  the command line has none.
+- `set`: the name of the closed set, as `strata schema` names its definition. Examples are
+  `PackState`, `OciProvider`, and `ProfileType`.
+- `value`: the text of the value. Strata cuts a value of more than 64 characters to 63 characters
+  and `…`. Each control character becomes `?`.
+- `route`: the template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It
+  never holds the uid of a real request.
+- `status` and `errorCode`: the status and the error code of a refusal of Palette. A line for a
+  value of a document has neither.
+
+A line holds no name, no uid, no host, no free text, and no value of a pack. A test fails on each
+other field.

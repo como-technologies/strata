@@ -6,9 +6,10 @@
 #
 # For each fact of the kind request that a GET can show, the run finds an object in the tenant. It
 # sends the request, and compares the answer with the documents that the stand-in serves for the
-# fact. It compares the status, the type of each field that strata reads, and the values of each
-# closed set. The run sends GET requests only, and builds nothing. A fact that needs a body or a
-# cluster names its live script in the result.
+# fact. It compares the status and the type of each field that strata reads. It also lists each
+# value of a closed set that neither the fact nor the stand-in names: strata does not know it. The
+# run sends GET requests only, and builds nothing. A fact that needs a body or a cluster names its
+# live script in the result.
 #
 # With --state FILE, the run also reads the latest release of the Palette SDK and of the Terraform
 # provider from GitHub. It notes a tag that the last run did not see. FILE keeps the tags.
@@ -17,8 +18,9 @@
 #
 # The tenant is the one that PALETTE_API, PALETTE_API_KEY, and ~/.palette.env name. The result is
 # the document strata-contract/1 in contract.json under runs/<UTC time>/contract/, or OUT.
-# Exit 0 when each fact the run checked is the same, 1 when a fact differs, and 2 when the run
-# could not check. contract-report.sh turns the result into issues.
+# Exit 0 when each fact the run checked is the same and no value is unknown, 1 when a fact differs
+# or a value is unknown, and 2 when the run could not check. contract-report.sh turns the result
+# into issues.
 set -uo pipefail
 
 live=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -44,12 +46,13 @@ code=0
 "$xtask" contract --out "$run/contract.json" "${args[@]+"${args[@]}"}" 2> "$run/contract.log" || code=$?
 cat "$run/contract.log" >&2
 
-# what the person reads first: each fact that differs or that the run could not check, and each
-# release that is new
+# what the person reads first: each fact that differs, each unknown value, each fact that the run
+# could not check, and each release that is new
 if command -v jq > /dev/null && [ -s "$run/contract.json" ]; then
   jq -r '
     (.facts[] | select(.outcome == "differs") | "differs: \(.id)",
       (.differences[] | "  \(.kind) \(.path): the stand-in has \(.expected | join(", ")); the tenant has \(.found | join(", "))")),
+    (.facts[] | .id as $id | .unknownValues[]? | "new value: \($id) \(.set): \(.values | join(", ")); the fact and the stand-in name \(.known | join(", "))"),
     (.facts[] | select(.outcome == "error") | "could not check: \(.id): \(.reason)"),
     (.releases[] | select(.new) | "new release: \(.repo) \(.tag), the last run saw \(.seen)"),
     (.releases[] | select(.error != null) | "could not read the release of \(.repo): \(.error)")

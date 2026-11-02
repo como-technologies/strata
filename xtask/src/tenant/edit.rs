@@ -26,6 +26,9 @@ pub enum Edit {
     /// Give the profile another cloud type, such as `gcp` for a profile that the body of an AWS
     /// create names. `spec.published.cloudType` changes, and the packs stay.
     CloudType(&'static str),
+    /// Give the published template a profile type that this release of strata does not know, as a
+    /// later Palette release can add one. `spec.published.type` changes, and the packs stay.
+    ProfileType(&'static str),
     /// Add one command to `kubeadmconfig.postKubeadmCommands` of the Kubernetes pack: a key that
     /// Palette repaves on.
     KubeadmCommand(&'static str),
@@ -121,6 +124,7 @@ impl Edit {
             Edit::Version(version) => doc["spec"]["version"] = json!(version),
             Edit::Name(name) => doc["metadata"]["name"] = json!(name),
             Edit::CloudType(cloud) => doc["spec"]["published"]["cloudType"] = json!(cloud),
+            Edit::ProfileType(kind) => doc["spec"]["published"]["type"] = json!(kind),
             Edit::KubeadmCommand(command) => {
                 for pack in packs_named(doc, "kubernetes") {
                     if let Some(values) = pack["values"].as_str() {
