@@ -119,9 +119,10 @@ run gcloud builds submit --project "$project" --config deploy/report/cloudbuild.
   --service-account "projects/$project/serviceAccounts/$build_account" \
   --substitutions "_IMAGE=$image" .
 # The service answers a report and then writes it to GitHub, so Cloud Run must keep the CPU on
-# after the answer (--no-cpu-throttling).
+# after the answer (--no-cpu-throttling). Cloud Run refuses a service with less than 512 MiB of
+# memory when the CPU stays on, so the memory is 512Mi.
 run gcloud run deploy "$service" --project "$project" --region "$region" --image "$image" \
-  --service-account "$service_account" --allow-unauthenticated --max-instances 1 --concurrency 8 --cpu 1 --memory 256Mi --timeout 60 \
+  --service-account "$service_account" --allow-unauthenticated --max-instances 1 --concurrency 8 --cpu 1 --memory 512Mi --timeout 60 \
   --no-cpu-throttling \
   --set-secrets "GITHUB_TOKEN=$secret:latest" --set-env-vars "GITHUB_REPOSITORY=$repository,TRUST_FORWARDED_FOR=1"
 
