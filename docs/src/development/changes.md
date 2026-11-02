@@ -119,3 +119,18 @@ To change a tool or a version:
 CI builds with the latest stable Rust. When Rust releases a new stable version,
 change `RUST_VERSION` in the same way. Then clippy finds the same lints in the
 container and in CI.
+
+## The code of Palette
+
+A session reads the code of Palette at `$HOME/palette`. `riff.toml` mounts it
+as the volume `strata-palette`. On the host of the lead, the volume holds a copy
+of nine repositories of Palette. On another host, the volume is empty. A session
+writes nothing to the copy.
+
+Read the route and the model in `hapi`, the API definitions. Read the behavior
+in `hubble`, the API server.
+
+The lead refreshes the copy, so it can be some hours old. When a session needs a
+newer copy, it asks the lead with `riff tell lead`. Rule 7 of
+[Write the documentation](./documentation.md) tells you to read the code first,
+and to cite none of it.
