@@ -12,7 +12,8 @@
 # report handled the issues, so a report that fails leaves the old tags. The script keeps the 12
 # newest runs.
 #
-# Exit 0 when the run and the issues are done, also when a fact differs: the issue is the report.
+# Exit 0 when the run and the issues are done, also when a fact differs or a value is unknown: the
+# issue is the report.
 # Exit 2 when the run could not check a fact or a release, or an issue could not be written.
 # The service shows that as a failure.
 set -uo pipefail

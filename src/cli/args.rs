@@ -87,6 +87,19 @@ impl Cmd {
             Cmd::Candidate(_) | Cmd::Preflight(_) | Cmd::Schema { .. } | Cmd::Snapshot(_) => None,
         }
     }
+
+    /// The progress notes of the command, as `--quiet` and `STRATA_QUIET` decide. A command that
+    /// reads nothing from Palette writes none.
+    pub(crate) fn progress(&self) -> Progress {
+        match self {
+            Cmd::Candidate(a) => a.quiet.progress(),
+            Cmd::Snapshot(a) => a.quiet.progress(),
+            Cmd::Preflight(_) | Cmd::Schema { .. } => Progress::silent(),
+            other => other
+                .out()
+                .map_or_else(Progress::silent, OutputArgs::progress),
+        }
+    }
 }
 
 #[derive(Args)]

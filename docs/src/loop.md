@@ -333,6 +333,20 @@ record of the cluster shows it. See
 [A cluster does not run its release](./use-cases/cluster-release.md) and
 [A published version is edited in place](./use-cases/edited-in-place.md#read-the-two-verdicts-as-a-pair).
 
+## A value that strata does not know
+
+Palette can add a value to a closed set between two runs of the loop, such as a new type of a
+profile. Each job of the loop reads the value with no error, and its exit code stays the same. The
+job also writes one note on standard error:
+
+```text
+{{#include output/unknown-value-note.txt}}
+```
+
+A job that passes `--quiet` hides the note. The note also adds one line to a log on the machine of
+the job. [The note for a value that Palette gives](./reference/compatibility.md#the-note-for-a-value-that-palette-gives)
+says what the note and the log hold.
+
 ## Palette behavior
 
 The live run of `just live-loop` runs this loop end to end against a tenant,

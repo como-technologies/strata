@@ -32,6 +32,8 @@ pub(super) const A119: &str = "64e0000000000000000000fc";
 // prod
 pub(super) const A1110: &str = "64e0000000000000000000fd";
 pub(super) const A1110_PROD: &str = "64e1000000000000000000fd";
+// aws-stack@1.1.12: the content of 1.1.1, with a profile type that this release does not know
+pub(super) const A1112: &str = "64e000000000000000000100";
 // aws-stack@1.1.11: the content of 1.1.1, with the CSI pack at 1.63.1, the one pin that is behind
 pub(super) const A1111: &str = "64e0000000000000000000ff";
 // aws-stack@1.3.0: the content of 1.1.1, made with no publish

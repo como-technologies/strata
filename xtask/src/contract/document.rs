@@ -9,7 +9,7 @@ pub const SCHEMA: &str = "strata-contract/1";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Outcome {
-    /// The answer of the tenant has the status, the types, and the values of the stand-in.
+    /// The answer of the tenant has the status and the types of the stand-in.
     Same,
     /// The answer of the tenant differs from the stand-in: the entry lists each difference.
     Differs,
@@ -30,8 +30,6 @@ pub enum DifferenceKind {
     Type,
     /// A field that each document of the stand-in has is missing from each answer.
     Missing,
-    /// A field holds a value that neither the fact nor the stand-in names.
-    Value,
 }
 
 /// One difference between an answer of the tenant and the stand-in.
@@ -41,10 +39,22 @@ pub struct Difference {
     pub kind: DifferenceKind,
     /// The field, as the fact writes it, or `status` for a status.
     pub path: String,
-    /// What the stand-in has: the types, or the values, or the status.
+    /// What the stand-in has: the types, or the status.
     pub expected: Vec<String>,
     /// What the tenant has, in the same form.
     pub found: Vec<String>,
+}
+
+/// The values of one closed set that the tenant gave and that neither the fact nor the stand-in
+/// names. Strata does not know such a value, so its answers for it can be wrong.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Unknown {
+    /// The field that holds the closed set, as the fact writes it in `reads.values`.
+    pub set: String,
+    /// The values that the fact and the stand-in name.
+    pub known: Vec<String>,
+    /// The values of the tenant that neither names, in order.
+    pub values: Vec<String>,
 }
 
 /// The entry of one fact.
@@ -63,14 +73,19 @@ pub struct Entry {
     /// Each difference, when the outcome is `differs`.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub differences: Vec<Difference>,
+    /// Each closed set of the fact that holds a value which neither the fact nor the stand-in
+    /// names. A value of this kind makes no difference: the status and the types can be the same.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unknown_values: Vec<Unknown>,
     /// The live checks of the fact, which prove it again.
     pub live: Vec<String>,
     /// The pages of the book that state the fact.
     pub pages: Vec<String>,
 }
 
-/// The count of each outcome.
+/// The count of each outcome, and of the unknown values.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Summary {
     /// The facts with the outcome `same`.
     pub same: usize,
@@ -80,6 +95,9 @@ pub struct Summary {
     pub skipped: usize,
     /// The facts with the outcome `error`.
     pub error: usize,
+    /// The values of a closed set that the tenant gave and that neither the fact nor the stand-in
+    /// names, in all the entries.
+    pub unknown_values: usize,
 }
 
 impl Summary {
@@ -91,6 +109,11 @@ impl Summary {
             differs: count(Outcome::Differs),
             skipped: count(Outcome::Skipped),
             error: count(Outcome::Error),
+            unknown_values: entries
+                .iter()
+                .flat_map(|e| &e.unknown_values)
+                .map(|u| u.values.len())
+                .sum(),
         }
     }
 }
@@ -136,13 +159,14 @@ pub struct Contract {
 }
 
 impl Contract {
-    /// The exit code of the run: 0 when each fact the run checked is the same, 1 when a fact
-    /// differs, and 2 when the run could not check a fact or a release.
+    /// The exit code of the run: 0 when each fact the run checked is the same and no value is
+    /// unknown, 1 when a fact differs or a value is unknown, and 2 when the run could not check a
+    /// fact or a release.
     pub fn exit_code(&self) -> u8 {
         if self.summary.error > 0 || self.releases.iter().any(|r| r.error.is_some()) {
             2
         } else {
-            u8::from(self.summary.differs > 0)
+            u8::from(self.summary.differs > 0 || self.summary.unknown_values > 0)
         }
     }
 }

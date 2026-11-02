@@ -33,3 +33,4 @@ pub(super) const MACRO_REGION: &[Edit] = &[Edit::Macro {
     pack: "csi-aws-ebs",
     name: "region",
 }];
+pub(super) const LATER_PROFILE_TYPE: &[Edit] = &[Edit::ProfileType("later-type")];

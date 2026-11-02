@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Report the facts that a contract run found different, and the releases that it found new, as
+# Report the facts that a contract run found different, the values that it found unknown, and the
+# releases that it found new, as
 # issues of the repository.
 #
 #   examples/live/contract-report.sh <contract.json> [--repo OWNER/REPO] [--label NAME]
@@ -13,6 +14,13 @@
 # run skipped or could not check keeps its issue as it is. Issues of facts that the document does
 # not list are left alone.
 #
+# A fact whose answer holds a value of a closed set that neither the fact nor the stand-in names
+# has one open issue for each such set. The title is "Palette has a new value of <set> in <fact
+# id>", and the issue has the label NAME too. The marker is <!-- strata-contract: values <fact id>
+# <set> -->. The script updates the issue while the value is there. It closes the issue when the
+# run checked the fact and found no such value. A set is the field that the fact names in
+# reads.values.
+#
 # A release with new set to true has one issue, which the script opens once. The marker is
 # <!-- strata-contract: release <repo> <tag> -->. The issue asks to prove the facts again on the
 # new release. A person closes it.
@@ -20,7 +28,8 @@
 # The label is created when the repository has none. --dry-run prints each issue body and what
 # the script does, and calls no host.
 #
-# Exit 0 when no fact differs and no release is new. Exit 1 when one does: the issues are handled.
+# Exit 0 when no fact differs, no value is unknown, and no release is new. Exit 1 when one is: the
+# issues are handled.
 # Exit 2 when the document is not a strata-contract/1 document, or holds a fact or a release that
 # the run could not check, or when a host call fails. The script prints what the host said. The
 # issues are handled first, so a scheduled job shows the state too. The weekly job keeps the tags
@@ -134,11 +143,63 @@ open_or_update() {
   fi
 }
 
+# ---- the unknown values ------------------------------------------------------------------------
+values_page="https://github.com/${repo:-OWNER/REPO}/blob/main/docs/src/development/facts.md#what-to-do-with-a-new-value"
+unknown=0
+
+# values_issues ID ENTRY: for each closed set of the fact ID that holds a value which neither the
+# fact nor the stand-in names, open or update one issue. For each set that holds no such value now,
+# close its open issue, when the run checked the fact. $unknown counts each value.
+values_issues() {
+  local id=$1 entry=$2 outcome prefix set_entry field number
+  local -a current=()
+  prefix="<!-- strata-contract: values $id "
+  while IFS= read -r set_entry <&4; do
+    field=$(jq -r .set <<<"$set_entry")
+    current+=("$field")
+    unknown=$((unknown + $(jq '.values | length' <<<"$set_entry")))
+    {
+      echo "$prefix$field -->"
+      jq -r --arg checked "$checked" --arg target "$target" --arg page "$values_page" --arg id "$id" \
+        --arg request "$(jq -r .request <<<"$entry")" --argjson live "$(jq -c .live <<<"$entry")" \
+        --argjson pages "$(jq -c .pages <<<"$entry")" '
+        "The contract run of \($checked) found that the tenant `\($target)` gives new values for `\(.set)` in the answer to `\($request)`. Neither the fact `\($id)` nor the stand-in names them.",
+        "",
+        "| New value |",
+        "| --- |",
+        (.values[] | "| `\(.)` |"),
+        "",
+        "The fact and the stand-in name: \(.known | join(", ")).",
+        "",
+        "Strata does not know these values, so its answers for them can be wrong.",
+        "Prove the fact again with its live checks: \(if ($live | length) > 0 then ($live | map("`\(.)`") | join(", ")) else "the fact has none" end).",
+        "The pages of the book that state the fact: \($pages | map("`docs/src/\(.)`") | join(", ")).",
+        "",
+        "Then add each value to the closed set of strata, or write why not. [What to do with a new value](\($page)) says how."
+      ' <<<"$set_entry"
+    } > "$work/body.md"
+    open_or_update "$prefix$field -->" "Palette has a new value of \`$field\` in \`$id\`" "$work/body.md" "$id $field"
+  done 4< <(jq -c '.unknownValues[]?' <<<"$entry")
+  [ -z "$dry" ] || return 0
+  outcome=$(jq -r .outcome <<<"$entry")
+  case "$outcome" in same|differs) ;; *) return 0 ;; esac
+  # the open issues of this fact, as: number, a tab, and the set that the marker names
+  while IFS=$'\t' read -r number field <&4; do
+    case " ${current[*]-} " in *" $field "*) continue ;; esac
+    host close_issue "$number" "No answer of the tenant holds a new value for \`$field\` in \`$id\` now (checked $checked)."
+    actions+=("closed #$number for $id $field")
+  done 4< <(jq -r --arg p "$prefix" '
+    .[] | ((.body // "") | split("\n")[0] | rtrimstr("\r")) as $first
+    | select($first | startswith($p))
+    | "\(.number)\t\($first | ltrimstr($p) | rtrimstr(" -->"))"' "$work/issues.json")
+}
+
 # ---- the facts ---------------------------------------------------------------------------------
 differs=0 same=0 skipped=0 errors=0
 while IFS= read -r entry <&3; do
   id=$(jq -r .id <<<"$entry")
   marker="<!-- strata-contract: $id -->"
+  values_issues "$id" "$entry"
   case "$(jq -r .outcome <<<"$entry")" in
     differs)
       differs=$((differs + 1))
@@ -202,12 +263,12 @@ EOF
 done 3< <(jq -c '.releases[]? | select(.new == true)' "$document")
 release_errors=$(jq '[.releases[]? | select(.error != null)] | length' "$document")
 
-line="$((differs + same + skipped + errors)) facts: $same same, $differs differ, $skipped skipped, $errors could not be checked"
+line="$((differs + same + skipped + errors)) facts: $same same, $differs differ, $skipped skipped, $errors could not be checked, $unknown unknown values"
 [ "$news" -eq 0 ] || line="$line; $news new release"
 for a in "${actions[@]+"${actions[@]}"}"; do
   line="$line; $a"
 done
 note "$line"
 if [ "$errors" -gt 0 ] || [ "$release_errors" -gt 0 ]; then exit 2; fi
-if [ "$differs" -gt 0 ] || [ "$news" -gt 0 ]; then exit 1; fi
+if [ "$differs" -gt 0 ] || [ "$unknown" -gt 0 ] || [ "$news" -gt 0 ]; then exit 1; fi
 exit 0

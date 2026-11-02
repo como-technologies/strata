@@ -480,6 +480,47 @@ of a registry in `strata-packs/1`, and the `type` of a profile in
 library, such as `ops::PackBuild`. Then a value of a later release gives an
 error, except in those two fields.
 
+### The note for a value that Palette gives
+
+A later Palette release can add a value to a closed set that strata reads from Palette. Strata
+keeps the text of such a value, and also writes a note. When a read of a document of Palette gives
+a value that this release does not know, strata writes one note on standard error:
+
+```text
+{{#include ../output/unknown-value-note.txt}}
+```
+
+A run writes the note one time for each set and value. The set is the name that `strata schema`
+gives to the definition of the set. These reads can give such a value:
+
+- the `state` of a pack version in the pack listing
+- the `providerType` of an OCI registry, and the provider type in a pack ref
+- the `type` of a profile version
+
+`--quiet` and `STRATA_QUIET` hide the note:
+
+```text
+{{#include ../output/unknown-value-quiet.txt}}
+```
+
+The note changes no output. Standard output, the exit code, and each JSON document stay the same.
+A value that strata reads from a record or from a report has no note. A later release of strata
+wrote it, and Palette did not give it.
+
+#### The log of the unknown values
+
+Strata also appends one line for each new value to the file `strata-unknown.jsonl`. The file is in
+the state folder of the user: `$XDG_STATE_HOME/strata/`, or `~/.local/state/strata/` when the
+variable is not set. A run adds one line for each set and value. `--quiet` hides the note and does
+not stop the log.
+
+The log needs no network. It stays on the machine, and no command sends it. A line holds only the
+fields of [`strata-unknown/1`](./documents.md#strata-unknown1). It holds no name, no uid, no host,
+no free text, and no value of a pack.
+
+The maintainers of strata find such values in a real tenant too, with the weekly contract run. See
+[What to do with a new value](../development/facts.md#what-to-do-with-a-new-value).
+
 ## The command line
 
 These do not change in a release, so a script can use them:

@@ -12,7 +12,7 @@ use super::cluster::{
 use super::pack::Pack;
 use super::variable::{Variable, hash_of};
 use super::{Consumers, SNAPSHOT_SCHEMA, Snapshot, Source, SubjectKind, Template, Tool, macros_of};
-use crate::api::{RawCluster, RawProfile};
+use crate::api::{CLUSTER_TEMPLATE, PROFILE_TEMPLATE, RawCluster, RawProfile};
 use crate::content::hash::{content_of, root_of};
 use crate::error::{Error, Result};
 use crate::json::{arr, first_nonempty, str_at, strings, text, text_map};
@@ -71,8 +71,22 @@ impl Snapshot {
     ///
     /// None at present: the build reads only `raw`, and a field that is not there is empty.
     pub fn from_raw(raw: &RawProfile, reference: &str, fetched_at: &str) -> Result<Snapshot> {
+        Self::from_raw_at(raw, reference, fetched_at, PROFILE_TEMPLATE)
+    }
+
+    /// [`Snapshot::from_raw`], for responses that came from the route with the template `route`.
+    ///
+    /// A cluster gives the responses of each profile that it runs, so the route is not always
+    /// `/v1/clusterprofiles/{uid}`. A value that this release does not know names the route in the
+    /// log of the unknown values.
+    pub(crate) fn from_raw_at(
+        raw: &RawProfile,
+        reference: &str,
+        fetched_at: &str,
+        route: &'static str,
+    ) -> Result<Snapshot> {
         let template = crate::api::recorded_template(&raw.profile);
-        Self::from_raw_template(raw, reference, fetched_at, template)
+        Self::from_raw_template(raw, reference, fetched_at, template, route)
     }
 
     /// Build a snapshot of an app profile from its raw API responses. Its consumers are app
@@ -102,7 +116,13 @@ impl Snapshot {
                 uid: text(prof, "/metadata/uid"),
             });
         }
-        Self::from_raw_template(raw, reference, fetched_at, Template::Draft)
+        Self::from_raw_template(
+            raw,
+            reference,
+            fetched_at,
+            Template::Draft,
+            PROFILE_TEMPLATE,
+        )
     }
 
     /// Build a snapshot of one template of a profile: [`Template::Published`] or
@@ -112,6 +132,7 @@ impl Snapshot {
         reference: &str,
         fetched_at: &str,
         template: Template,
+        route: &'static str,
     ) -> Result<Snapshot> {
         let prof = &raw.profile;
         let tpl_ptr = format!("/spec/{template}");
@@ -139,7 +160,7 @@ impl Snapshot {
                     .as_ref()
                     .filter(|_| !arr(pk, "/manifests").is_empty())
                     .map(|e| manifests_of_template(pk, e, template));
-                Pack::from_api_with(pk, &mpacks, given)
+                Pack::from_api_with(pk, &mpacks, given, route)
             })
             .collect();
         let source = Source {
@@ -243,7 +264,14 @@ impl Snapshot {
         let chosen = chosen_profiles(raw, &applied, profile)?;
         let parts = chosen
             .iter()
-            .map(|&i| Snapshot::from_raw(&raw.template_raw(&templates[i]), reference, fetched_at))
+            .map(|&i| {
+                Snapshot::from_raw_at(
+                    &raw.template_raw(&templates[i]),
+                    reference,
+                    fetched_at,
+                    CLUSTER_TEMPLATE,
+                )
+            })
             .collect::<Result<Vec<Snapshot>>>()?;
         let covered: Vec<AppliedProfile> = chosen.iter().map(|&i| applied[i].clone()).collect();
 

@@ -70,7 +70,7 @@ const APP_PROFILES: &str = "/v1/appProfiles";
 /// The collection of the app deployments: `/v1/appDeployments/{uid}`.
 const APP_DEPLOYMENTS: &str = "/v1/appDeployments";
 /// The collection of the packs: `/v1/packs/{uid}`, and the listing and the tags under it.
-const PACKS: &str = "/v1/packs";
+pub(crate) const PACKS: &str = "/v1/packs";
 /// The collection of the saved tag filters: `/v1/filters/tag/{uid}`.
 const TAG_FILTERS: &str = "/v1/filters/tag";
 /// The collection of the cloud configs: `/v1/cloudconfigs/{cloudType}/{uid}`.
@@ -93,6 +93,17 @@ const CLUSTER_GROUP_DASHBOARD: &str = "/v1/dashboard/clustergroups";
 const CLUSTER_NOTIFICATIONS: &str = "/v1/notifications/spectrocluster";
 /// The audit log.
 const AUDITS: &str = "/v1/audits";
+
+// The templates of the routes that give a value of a closed set, with `{uid}` for the segment that
+// varies. The log of the unknown values names the route of a read by its template, and never by
+// the uid of a real request. The pack listing is PACKS.
+
+/// The template of the route of a profile version: `GET /v1/clusterprofiles/{uid}`.
+pub(crate) const PROFILE_TEMPLATE: &str = "/v1/clusterprofiles/{uid}";
+/// The template of the route of a cluster: `GET /v1/spectroclusters/{uid}`.
+pub(crate) const CLUSTER_TEMPLATE: &str = "/v1/spectroclusters/{uid}";
+/// The template of the summary listing of the OCI registries: `GET /v1/registries/oci/summary`.
+pub(crate) const OCI_SUMMARY_TEMPLATE: &str = "/v1/registries/oci/summary";
 
 /// A route of Palette: `prefix`, then each segment of `segments`, each escaped by [`query_value`].
 ///

@@ -49,7 +49,7 @@ case "${1:-}" in
     command -v systemctl > /dev/null || die "systemctl is not installed"
     systemctl --user list-timers strata-contract.timer --no-pager || true
     if [ -f "$data/last.json" ] && command -v jq > /dev/null; then
-      jq -r '"the last run: \(.checkedAt), \(.summary.same) same, \(.summary.differs) differ, \(.summary.skipped) skipped, \(.summary.error) could not be checked"' "$data/last.json"
+      jq -r '"the last run: \(.checkedAt), \(.summary.same) same, \(.summary.differs) differ, \(.summary.skipped) skipped, \(.summary.error) could not be checked, \(.summary.unknownValues // 0) unknown values"' "$data/last.json"
     else
       echo "$script: no result in $data yet"
     fi

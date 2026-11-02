@@ -33,8 +33,9 @@ pub use connect::{connect_from_env, connect_with, project_uid_named};
 pub use http::{API_KEY_HEADER, HttpApi, PROJECT_UID_HEADER};
 pub use memory::MemoryApi;
 pub(crate) use palette::{
-    PACK_LISTING_PAGE, RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER,
-    named_entries, profile_versions, search_condition, search_filter, search_group,
+    CLUSTER_TEMPLATE, OCI_SUMMARY_TEMPLATE, PACK_LISTING_PAGE, PACKS, PROFILE_TEMPLATE,
+    RegistryKind, SEARCH_CLUSTER_PROFILES, SEARCH_TAGS, TIER_INSTALL_ORDER, named_entries,
+    profile_versions, search_condition, search_filter, search_group,
 };
 pub use palette::{
     Palette, VariablesRead, cloud_account_path, cloud_config_path, cluster_events_path,
