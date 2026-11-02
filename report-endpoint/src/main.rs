@@ -1,9 +1,9 @@
 //! The service of the endpoint of the report. Cloud Run starts it: see `deploy/report/`.
 
 use std::process::ExitCode;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use strata_report_endpoint::server::{Service, serve};
+use strata_report_endpoint::server::{MOST_AT_ONCE, Service, serve};
 use strata_report_endpoint::settings::Settings;
 use strata_report_endpoint::tracker::GitHub;
 
@@ -38,8 +38,9 @@ fn main() -> ExitCode {
     );
     serve(
         &server,
-        &Arc::new(Mutex::new(Service::new(tracker))),
+        &Arc::new(Service::new(tracker)),
         settings.trust_forwarded,
+        MOST_AT_ONCE,
     );
     ExitCode::SUCCESS
 }

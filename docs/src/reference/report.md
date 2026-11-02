@@ -131,13 +131,18 @@ as sent. The report is the document `strata-report/1` that `strata report --json
 nothing else. The post has one try and a timeout of 3 seconds. The run prints its output first, so
 a slow endpoint delays no output.
 
+The post also holds a key in the header `Idempotency-Key`: a hash of the report and of the number
+of lines before it. A second try of the same lines has the same key, so the endpoint counts them
+one time. The key holds no name, no uid, and no host.
+
 ```text
 {{#include ../output/unknown-value-send.txt}}
 ```
 
-When the endpoint takes the report, strata marks the lines as sent. The endpoint takes 100 entries
-in a report, so a long log goes in more than one report. Strata marks the lines of each report that
-the endpoint took. The next report holds only the lines that came after:
+When the endpoint takes the report, strata marks the lines as sent. A report has 100 entries or
+fewer and 20 different values or fewer, so a long log goes in more than one report. Strata marks
+the lines of each report that the endpoint took. The next report holds only the lines that came
+after:
 
 ```text
 {{#include ../output/unknown-value-send-marked.txt}}
@@ -147,6 +152,9 @@ A send never changes the output or the exit code of a run. When a report fails, 
 line of it. Strata writes a warning, such as
 `strata: warning: could not send the report to <address>: <reason>`. `--quiet` hides the warning.
 The next send holds those lines again.
+
+The endpoint opens 20 new issues in an hour for all senders. When the hour has no room, the
+endpoint answers 429 with the time to wait, and the next send after that time works.
 
 ## What the endpoint keeps
 
@@ -160,9 +168,11 @@ The endpoint keeps these things, and no other:
   the count of the lines and the count of the reports. It lists the releases of strata and of
   Palette, the routes, and the refusals that the reports named. It holds no report. A later report of the same
   value changes the issue, and opens no new one.
-- **A hash of the address of the sender, in memory, for one hour.** It limits the rate. The
-  process makes the salt of the hash when it starts, and writes the hash nowhere. A restart of the
-  service forgets it.
+- **A hash of the address of the sender, in memory, for one hour.** It limits the rate. An IPv6
+  address counts by its /64 network. The process makes the salt of the hash when it starts, and
+  writes the hash nowhere. A restart of the service forgets it.
+- **A hash of the key and the report, in memory, for one day.** A second try of the same lines
+  counts one time. The hash holds no text of the report.
 
 The service writes no address and no report to its log. The maintainers also exclude the request
 log of the platform, because that log holds the address. An issue stays until a maintainer deletes it.

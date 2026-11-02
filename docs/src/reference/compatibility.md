@@ -862,6 +862,14 @@ field, a value, an input, or an option is in the sections above.
   `ops::send_unknown_report` posts the report of the unmarked lines, and then marks them. The new
   method `Watching::lines_written` tells how many lines a watch wrote. `term::ask::yes_or_no` asks
   a question. `text::query_value` and `BOOK_URL` are now public.
+- `ops::unknown_report` only reads the log. It gives an `ops::UnsentReport`, with the `report` and
+  the count `lines` of the lines that it read. `ops::mark_reported` marks those lines as sent, and
+  the caller runs it after the report went out. `ops::ReportOptions` has the field `all` alone.
+- `closed_set::unknown::send::post` has the third argument `position`: the number of lines of the
+  log before the report. It puts the key of the send in the header `Idempotency-Key`, so the
+  endpoint counts a second try of the same lines one time. A report holds 20 different values or
+  fewer: see `closed_set::unknown::report::MOST_VALUES`. `Report::fault` refuses a count above
+  `MOST_COUNT`.
 
 ### For a user of the library of strata-preflight
 

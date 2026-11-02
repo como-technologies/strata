@@ -270,6 +270,22 @@ fn an_entry_with_a_field_that_is_not_a_short_word_is_refused_and_the_message_nam
 }
 
 #[test]
+fn an_entry_with_a_count_above_the_most_is_refused_and_the_most_itself_passes() {
+    use super::super::report::MOST_COUNT;
+    let mut report = report_of(&[line("a")]);
+    report.unknown[0].count = MOST_COUNT;
+    assert_eq!(report.fault(), None);
+    report.unknown[0].count = MOST_COUNT + 1;
+    let fault = report.fault().unwrap();
+    assert!(
+        fault.starts_with("entry 1: the count is more than"),
+        "{fault}"
+    );
+    report.unknown[0].count = usize::MAX;
+    assert!(report.fault().is_some());
+}
+
+#[test]
 fn a_report_document_with_another_field_does_not_parse() {
     let text = r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"S","value":"v","route":"/v1/packs","count":1,"uid":"x"}]}"#;
     let error = serde_json::from_str::<Report>(text)
@@ -311,7 +327,7 @@ fn answering(status: u16, body: &'static str) -> (String, std::thread::JoinHandl
 #[test]
 fn the_post_sends_the_report_as_json_with_the_user_agent_of_strata() {
     let (url, got) = answering(200, "{}");
-    post(&url, &report_of(&[line("a")])).unwrap();
+    post(&url, &report_of(&[line("a")]), 0).unwrap();
     let request = got.join().unwrap().to_ascii_lowercase();
     assert!(request.starts_with("post /path http/1.1"), "{request}");
     assert!(
@@ -328,13 +344,51 @@ fn the_post_sends_the_report_as_json_with_the_user_agent_of_strata() {
     );
 }
 
+/// The value of the header `Idempotency-Key` in `request`, a lower-case text of a request.
+fn key_of(request: &str) -> String {
+    request
+        .lines()
+        .find_map(|l| l.strip_prefix("idempotency-key: "))
+        .unwrap_or_default()
+        .to_string()
+}
+
+#[test]
+fn the_key_of_a_post_is_64_hex_characters_and_the_same_lines_at_the_same_place_give_the_same_key() {
+    let report = report_of(&[line("a"), line("b")]);
+    let mut keys = Vec::new();
+    for position in [0, 0, 7] {
+        let (url, got) = answering(200, "{}");
+        post(&url, &report, position).unwrap();
+        keys.push(key_of(&got.join().unwrap().to_ascii_lowercase()));
+    }
+    assert_eq!(keys[0].len(), super::KEY_LENGTH, "{keys:?}");
+    assert!(keys[0].bytes().all(|b| b.is_ascii_hexdigit()), "{keys:?}");
+    assert_eq!(keys[0], keys[1], "a second try has the key of the first");
+    assert_ne!(
+        keys[0], keys[2],
+        "the same lines at another place are another send"
+    );
+    let (url, got) = answering(200, "{}");
+    post(&url, &report_of(&[line("a")]), 0).unwrap();
+    assert_ne!(keys[0], key_of(&got.join().unwrap().to_ascii_lowercase()));
+}
+
+#[test]
+fn the_key_holds_no_text_of_the_report() {
+    let (url, got) = answering(200, "{}");
+    post(&url, &report_of(&[line("hunter2")]), 0).unwrap();
+    let request = got.join().unwrap().to_ascii_lowercase();
+    assert!(!key_of(&request).contains("hunter2"));
+}
+
 #[test]
 fn the_post_gives_the_status_and_the_start_of_the_answer_when_the_endpoint_refuses() {
     let (url, _) = answering(
         422,
         r#"{"error":"the entry has a field that is not in the schema"}"#,
     );
-    let error = post(&url, &report_of(&[line("a")])).unwrap_err();
+    let error = post(&url, &report_of(&[line("a")]), 0).unwrap_err();
     assert!(matches!(error, Error::ReportSend { .. }), "{error}");
     let text = error.to_string();
     assert!(
@@ -348,7 +402,7 @@ fn the_post_gives_the_status_and_the_start_of_the_answer_when_the_endpoint_refus
 #[test]
 fn the_post_follows_no_redirect() {
     let (url, _) = answering(307, "");
-    let error = post(&url, &report_of(&[line("a")]))
+    let error = post(&url, &report_of(&[line("a")]), 0)
         .unwrap_err()
         .to_string();
     assert!(error.contains("HTTP 307"), "{error}");
@@ -359,7 +413,7 @@ fn the_post_refuses_a_report_that_is_not_valid_before_it_calls_the_endpoint() {
     let mut report = report_of(&[line("a")]);
     report.unknown[0].value = "x".repeat(65);
     // nothing listens here: the error must come from the check, not from the connection
-    let error = post("http://127.0.0.1:9/", &report)
+    let error = post("http://127.0.0.1:9/", &report, 0)
         .unwrap_err()
         .to_string();
     assert!(
@@ -370,7 +424,7 @@ fn the_post_refuses_a_report_that_is_not_valid_before_it_calls_the_endpoint() {
 
 #[test]
 fn the_post_to_an_address_that_refuses_the_connection_is_an_error_of_the_send() {
-    let error = post("http://127.0.0.1:9/", &report_of(&[line("a")])).unwrap_err();
+    let error = post("http://127.0.0.1:9/", &report_of(&[line("a")]), 0).unwrap_err();
     assert!(matches!(error, Error::ReportSend { .. }), "{error}");
     assert_eq!(error.kind(), "report-send");
 }

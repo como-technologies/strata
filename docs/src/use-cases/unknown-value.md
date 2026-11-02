@@ -59,6 +59,9 @@ the values that came after:
 {{#include ../output/unknown-value-report-sent.txt}}
 ```
 
+Strata marks the lines after it printed the report or the link. A link that is too long gives an
+error and marks nothing, so `strata report --format markdown` still holds the lines.
+
 `strata report --all` holds each line of the log again:
 
 ```text

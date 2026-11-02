@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 use strata::closed_set::unknown::log::{FILE, SENT_FILE};
-use strata::ops::{ReportOptions, report_link, unknown_report};
+use strata::ops::{ReportOptions, mark_reported, report_link, unknown_report};
 
 use crate::common::{Run, isolate_palette, log_in, strata_bin};
 
@@ -355,6 +355,45 @@ fn link_of_a_report_that_is_too_long_for_an_address_says_to_paste_the_markdown()
 }
 
 #[test]
+fn a_link_that_is_too_long_marks_nothing_with_sent_so_the_markdown_still_holds_the_lines() {
+    let home = tempfile::tempdir().unwrap();
+    let lines: Vec<String> = (0..60)
+        .map(|n| {
+            line(
+                "ProfileType",
+                &format!("value-{n}"),
+                "/v1/clusterprofiles/{uid}",
+            )
+        })
+        .collect();
+    write_log(home.path(), &lines);
+    let run = report(home.path(), &["--link", "--sent"]);
+    assert_eq!(run.code, 2, "{}", run.err);
+    assert!(run.err.contains("too long for a link"), "{}", run.err);
+    assert!(
+        !log_in(home.path()).with_file_name(SENT_FILE).exists(),
+        "the user sent nothing, so strata marks nothing"
+    );
+    let markdown = report(home.path(), &["--format", "markdown"]);
+    assert_eq!(markdown.code, 0, "{}", markdown.err);
+    assert!(markdown.out.contains("value-59"), "{}", markdown.out);
+    assert!(!markdown.out.contains("gave no values"), "{}", markdown.out);
+}
+
+#[test]
+fn a_link_that_fits_is_printed_and_then_marked_with_sent() {
+    let home = tempfile::tempdir().unwrap();
+    write_log(home.path(), &two_values());
+    let run = report(home.path(), &["--link", "--sent"]);
+    assert_eq!(run.code, 0, "{}", run.err);
+    assert!(run.out.contains("/issues/new?title="), "{}", run.out);
+    assert_eq!(
+        std::fs::read_to_string(log_in(home.path()).with_file_name(SENT_FILE)).unwrap(),
+        "3\n"
+    );
+}
+
+#[test]
 fn link_does_not_take_a_format() {
     let home = tempfile::tempdir().unwrap();
     for more in [["--link", "--json"], ["--link", "--format=markdown"]] {
@@ -442,17 +481,13 @@ fn the_operations_read_a_log_by_its_path_and_mark_only_when_asked() {
     )
     .unwrap();
     let plain = unknown_report(&file, ReportOptions::default()).unwrap();
-    assert_eq!(plain.unknown.len(), 2);
-    assert!(!dir.path().join(SENT_FILE).exists());
-    let marked = unknown_report(
-        &file,
-        ReportOptions {
-            all: false,
-            sent: true,
-        },
-    )
-    .unwrap();
-    assert_eq!(marked, plain);
+    assert_eq!(plain.report.unknown.len(), 2);
+    assert_eq!(plain.lines, 3);
+    assert!(
+        !dir.path().join(SENT_FILE).exists(),
+        "the read writes no mark"
+    );
+    mark_reported(&file, plain.lines).unwrap();
     assert_eq!(
         std::fs::read_to_string(dir.path().join(SENT_FILE)).unwrap(),
         "3\n"
@@ -460,17 +495,11 @@ fn the_operations_read_a_log_by_its_path_and_mark_only_when_asked() {
     assert!(
         unknown_report(&file, ReportOptions::default())
             .unwrap()
+            .report
             .unknown
             .is_empty()
     );
-    let all = unknown_report(
-        &file,
-        ReportOptions {
-            all: true,
-            sent: false,
-        },
-    )
-    .unwrap();
+    let all = unknown_report(&file, ReportOptions { all: true }).unwrap();
     assert_eq!(all, plain);
 }
 

@@ -2031,11 +2031,12 @@ fn rule_7_says_to_read_the_code_of_palette_first_and_still_bars_a_citation() {
 
 // ---- the report of the unknown values ---------------------------------------------------------
 
-/// The pages that describe `strata report`.
-const REPORT_PAGES: [&str; 3] = [
+/// The pages that describe `strata report`, and the page of the endpoint that takes the report.
+const REPORT_PAGES: [&str; 4] = [
     "reference/report.md",
     "commands/report.md",
     "use-cases/unknown-value.md",
+    "development/report-endpoint.md",
 ];
 
 /// `text` without the code spans: the text between two backticks.

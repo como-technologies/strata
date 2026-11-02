@@ -690,7 +690,7 @@ not know. See [strata report](../commands/report.md) and
   the field `count`.
   - `strata`, `palette`, `set`, `value`, `route`, `status`, and `errorCode`: as in the line of the
     log. `palette`, `status`, and `errorCode` are absent when the line has none.
-  - `count`: how many lines of the log are this entry.
+  - `count`: how many lines of the log are this entry. The endpoint refuses a count above 1,000,000.
 
 The report has no `tool` block and no time, because the log has none. A log with no line gives
 `unknown: []`. An entry holds no name, no uid, no host, no free text, and no value of a pack.

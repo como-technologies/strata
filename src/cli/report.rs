@@ -11,18 +11,21 @@ use super::args::ReportArgs;
 
 pub(crate) fn cmd_report(a: &ReportArgs) -> Result<ExitCode> {
     let log = ops::unknown_log()?;
-    let options = ops::ReportOptions {
-        all: a.all,
-        sent: a.sent,
+    let read = ops::unknown_report(&log, ops::ReportOptions { all: a.all })?;
+    let report = &read.report;
+    let link = if a.link {
+        let body = MarkdownRenderer.render_report(report)?;
+        ops::report_link(report, &body)?
+    } else {
+        None
     };
-    let report = ops::unknown_report(&log, options)?;
-    if a.link {
-        let body = MarkdownRenderer.render_report(&report)?;
-        if let Some(link) = ops::report_link(&report, &body)? {
-            println!("{link}");
-            return Ok(ExitCode::SUCCESS);
-        }
+    match link {
+        Some(link) => println!("{link}"),
+        None => print!("{}", a.out.renderer().render_report(report)?),
     }
-    print!("{}", a.out.renderer().render_report(&report)?);
+    // the mark comes last: a report that fails to print, or a link that is too long, marks nothing
+    if a.sent {
+        ops::mark_reported(&log, read.lines)?;
+    }
     Ok(ExitCode::SUCCESS)
 }
