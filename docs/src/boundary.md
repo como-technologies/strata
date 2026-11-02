@@ -134,9 +134,9 @@ and of each wave, checks them.
 
 ## A pipeline that publishes
 
-Strata publishes nothing, and it sends nothing about your tenants. One report can
-leave your machine, and only you can send it: see
-[What strata can report](./reference/report.md).
+Strata publishes nothing. It sends nothing about your tenants unless you choose it. One
+report of the values that strata does not know can leave your machine: you send it by hand, or
+you set `STRATA_REPORT=1`. See [What strata can report](./reference/report.md).
 
 A pipeline that publishes has the other half of the work: it builds the packs,
 publishes the profile versions, fans a new version out to each repository that

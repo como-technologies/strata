@@ -1,0 +1,2 @@
+$ strata report
+Palette gave no values that this release of strata does not know

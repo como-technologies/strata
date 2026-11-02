@@ -15,6 +15,7 @@ use regex::Regex;
 use crate::checks::OutputState;
 use crate::contract::StandIn;
 use crate::files::{files_with_ext, output_dir};
+use crate::palette::REPORT_ENDPOINT;
 use crate::tenant::{Edit, PROJECT_LISTING, TENANT, Tenant};
 
 /// How many runners this process started, so that two runners of one process (two tests) work in
@@ -187,6 +188,11 @@ impl Runner {
             clock: Clock::new(),
             commit: Regex::new(r"(?m) in [0-9a-f]{7,40}$").expect("a pattern"),
         })
+    }
+
+    /// The address of the stand-in for the endpoint of the report.
+    fn report_endpoint(&self) -> String {
+        format!("http://127.0.0.1:{}{REPORT_ENDPOINT}", self.port)
     }
 
     fn serving(&self) -> bool {
@@ -472,6 +478,7 @@ impl Runner {
         c.env("LANG", "C.UTF-8");
         c.env("PALETTE_API", format!("http://127.0.0.1:{}", self.port));
         c.env("PALETTE_API_KEY", "docs-example-key");
+        c.env("STRATA_REPORT_URL", self.report_endpoint());
         c.env("STRATA_BIN", &self.strata);
         for (k, v) in &self.env {
             c.env(k, v);
@@ -679,7 +686,8 @@ impl Runner {
             "\nThe tenant of the chapter \"{chapter}\" is served on this machine. Export these, \
              and the commands of\nthe book run as the book prints them:\n\n\
              export PALETTE_API=http://127.0.0.1:{}\n\
-             export PALETTE_API_KEY=docs-example-key\n{scope}\n\n\
+             export PALETTE_API_KEY=docs-example-key\n\
+             export STRATA_REPORT_URL={}   # the stand-in for the endpoint of the report\n{scope}\n\n\
              # every project of this tenant, for a page that reads more than one:\n{}\n\n\
              They beat a ~/.palette.env that names a real tenant. When a page describes a change \
              to this\ntenant -- an edit in place, a version bump, a second publish under one name \
@@ -689,6 +697,7 @@ impl Runner {
              strata compare dev.json cluster:payments\n  strata consumers aws-stack@1.1.0\n\n\
              Nothing here reaches Palette, and nothing costs anything. Stop with Ctrl-C.",
             self.port,
+            self.report_endpoint(),
             others.join("\n")
         );
         loop {

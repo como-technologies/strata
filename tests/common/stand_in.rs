@@ -62,21 +62,8 @@ pub fn serve_routes(routes: BTreeMap<String, Value>) -> String {
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
-            let mut request = Vec::new();
-            let mut chunk = [0u8; 1024];
-            while !request.windows(4).any(|w| w == b"\r\n\r\n") {
-                match stream.read(&mut chunk) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => request.extend_from_slice(&chunk[..n]),
-                }
-            }
-            let text = String::from_utf8_lossy(&request).into_owned();
-            let path = text
-                .lines()
-                .next()
-                .and_then(|line| line.split_whitespace().nth(1))
-                .unwrap_or("/");
-            let (status, body) = match routes.get(path) {
+            let path = read_request(&mut stream).map_or_else(|| "/".to_string(), |r| r.path);
+            let (status, body) = match routes.get(&path) {
                 Some(doc) => ("200 OK", doc.to_string()),
                 None => ("404 Not Found", "{}".to_string()),
             };

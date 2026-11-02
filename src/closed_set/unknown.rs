@@ -14,7 +14,8 @@
 //! - It appends one line to the log: see [`log`]. `--quiet` does not stop the log.
 //!
 //! After the first note of a day, in a terminal, the watch adds a hint that `strata report` shows
-//! what the user can send: see [`hint`]. The report is made from the log: see [`report`].
+//! what the user can send: see [`hint`]. The report is made from the log: see [`report`]. A user
+//! who chose the send gets the report posted at the end of the run: see [`send`].
 //!
 //! The set is the name that `strata schema` gives to the definition of the set. The JSON
 //! documents do not change.

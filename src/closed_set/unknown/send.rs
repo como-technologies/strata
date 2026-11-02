@@ -114,12 +114,23 @@ impl Facts {
         }
     }
 
-    /// True when the setting has a text that is neither `1` nor `0`. The send is then off, and the
-    /// caller tells the user.
-    pub fn setting_unreadable(&self) -> bool {
-        self.setting
-            .as_deref()
-            .is_some_and(|text| Choice::from_text(text).is_none())
+    /// What the user must hear when the setting cannot do what it says, or `None`. A run that
+    /// wrote no line has nothing to send, so it says nothing. The caller prints the text as a
+    /// warning.
+    ///
+    /// A setting that is neither `1` nor `0` sends nothing. The setting `1` sends nothing when
+    /// the release names no endpoint and [`ADDRESS_SETTING`] is not set.
+    pub fn complaint(&self) -> Option<String> {
+        if !self.wrote {
+            return None;
+        }
+        match self.setting.as_deref().map(Choice::from_text) {
+            Some(None) => Some(format!("{SETTING} must be 1 or 0, so strata sends nothing")),
+            Some(Some(Choice::Yes)) if self.endpoint.is_none() => Some(format!(
+                "{SETTING} is 1, and this release names no endpoint: set {ADDRESS_SETTING}"
+            )),
+            _ => None,
+        }
     }
 }
 
@@ -168,7 +179,7 @@ pub fn keep_answer(file: &std::path::Path, choice: Choice) -> Result<()> {
 
 /// Post the report `report` to the endpoint `endpoint` as JSON, with one attempt.
 ///
-/// The attempt ends after [`TIMEOUT`]. The call follows no redirect, because the user named the
+/// The attempt ends after 3 seconds. The call follows no redirect, because the user named the
 /// address and no other.
 ///
 /// # Errors

@@ -11,7 +11,8 @@ of strata cannot see your tenant. They find the new value only when somebody tel
 
 **Follow along.** `just playground unknown-value` serves this tenant. Before you run the commands,
 set `XDG_STATE_HOME` to a new folder, so that the example keeps its own log:
-`export XDG_STATE_HOME=$(mktemp -d)`.
+`export XDG_STATE_HOME=$(mktemp -d)`. The playground also prints `STRATA_REPORT_URL`: it is a
+stand-in for the endpoint of the report, so the send in step 5 reaches no real endpoint.
 
 ## 1. The note
 
@@ -47,7 +48,7 @@ The markdown report is the text of the issue. Read it before you send it:
 
 `strata report --link` prints the address of a new issue with this text in its body. Open it in a
 browser. The browser shows the title and the body, and you send the issue from your own account.
-Strata sends nothing.
+With the link, strata sends nothing.
 
 ## 4. Mark the lines as sent
 
@@ -64,7 +65,34 @@ the values that came after:
 {{#include ../output/unknown-value-report-all.txt}}
 ```
 
-## 5. What the maintainers do
+## 5. Send the report by itself
+
+To skip the steps 3 and 4, let strata send the report. The send is off by default. Set the
+variable in the environment of the job or in `~/.palette.env`:
+
+```bash
+export STRATA_REPORT=1
+```
+
+At the end of a run that saw a new value, strata posts the report of the lines that you did not
+mark as sent. The post has one try and a timeout of 3 seconds. It never changes the output or
+the exit code of the run. When the endpoint takes the report, strata marks the lines as sent:
+
+```text
+{{#include ../output/unknown-value-send.txt}}
+```
+
+The report holds nothing new now:
+
+```text
+{{#include ../output/unknown-value-send-marked.txt}}
+```
+
+The page [What strata can report](../reference/report.md#send-the-report-by-itself) gives the
+question that a terminal asks one time, and what the endpoint keeps. A job in CI asks nothing: set
+`STRATA_REPORT=1` in the job when you want the send. Set `STRATA_REPORT=0` to stop it.
+
+## 6. What the maintainers do
 
 A maintainer proves the value in the lab. Then the maintainer adds the value to the closed set of
 strata, or writes why the set stays as it is. See

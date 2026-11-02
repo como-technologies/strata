@@ -19,7 +19,7 @@ use strata::ops;
 use strata::snapshot::Snapshot;
 
 use crate::support::{AT, cluster_files, fingerprint, profile_files, raw_profile, scratch, utf8};
-use crate::{candidate, canon, mask, palette, preflight, record, reference};
+use crate::{candidate, canon, mask, palette, preflight, record, reference, report};
 
 mod catalog;
 
@@ -38,7 +38,7 @@ struct Target {
 }
 
 /// Each target that reads bytes. The property tests of `properties.rs` build their input.
-const TARGETS: [Target; 14] = [
+const TARGETS: [Target; 15] = [
     Target {
         test: "candidate::a_candidate_file_loads_as_the_candidate_it_writes_or_is_refused_with_a_kind",
         run: candidate::file,
@@ -93,6 +93,11 @@ const TARGETS: [Target; 14] = [
         test: "palette::an_answer_of_palette_of_any_shape_gives_a_record_or_an_error_with_a_kind",
         run: palette::answers,
         seeds: answers,
+    },
+    Target {
+        test: "report::a_request_body_is_refused_with_a_status_or_is_a_report_that_writes_as_itself",
+        run: report::body,
+        seeds: report_bodies,
     },
     Target {
         test: "preflight::a_rule_file_loads_as_the_section_it_writes_or_is_refused_with_a_kind",
@@ -575,6 +580,28 @@ fn answers() -> Vec<Vec<u8>> {
         .iter()
         .map(|d| serde_json::to_vec(d).expect("a document is JSON"))
         .collect()
+}
+
+// ---- the report ------------------------------------------------------------------------------
+
+/// A report as `strata report --json` writes it, and the bodies that the endpoint refuses.
+const REPORT_CASES: [&str; 11] = [
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","palette":"4.7.1","set":"ProfileType","value":"later-type","route":"/v1/clusterprofiles/{uid}","count":2}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"PackState","value":"retired","route":"/v1/packs","status":409,"errorCode":"PackGone","count":1},{"strata":"0.27.0","set":"PackState","value":"retired","route":"/v1/packs","count":3}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","palette":"4.7.1","set":"OciProvider","value":"oras","route":"/v1/registries/oci/summary","status":404,"errorCode":"RegistryNotFound","count":1},{"strata":"0.26.1","set":"ProfileType","value":"later-type","route":"/v1/dashboard/clusterprofiles/metadata","count":7}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.27.0-rc.1","palette":"4.8.0","set":"PackState","value":"x","route":"/v1/packs","count":1}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[]}"#,
+    r#"{"schema":"strata-report/2","unknown":[{"strata":"0.26.0","set":"S","value":"v","route":"/v1/packs","count":1}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"S","value":"v","route":"/v1/packs","count":1,"uid":"64f0a1b2c3d4e5f6a7b8c9d0"}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"S","value":"v","route":"/v1/clusterprofiles/64f0a1b2c3d4e5f6a7b8c9d0","count":1}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"S","value":"a\nb","route":"/v1/packs","count":0}]}"#,
+    r#"{"schema":"strata-report/1","unknown":[{"strata":1}],"host":"h"}"#,
+    "not json",
+];
+
+/// The seeds of the body of a request: the cases above.
+fn report_bodies() -> Vec<Vec<u8>> {
+    REPORT_CASES.iter().map(|t| t.as_bytes().to_vec()).collect()
 }
 
 // ---- the files of the corpus ----------------------------------------------------------------

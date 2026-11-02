@@ -1,9 +1,9 @@
 # Settings
 
 Strata reads each variable from the environment. The key, the address, the
-project, `STRATA_RETRIES`, and `STRATA_MAX_RETRY_AFTER` also come from
-`~/.palette.env`, when the environment does not set them. A line of that file
-is `KEY=VALUE`. Strata accepts `export ` before the key, and quotes around the
+project, `STRATA_RETRIES`, `STRATA_MAX_RETRY_AFTER`, `STRATA_REPORT`, and
+`STRATA_REPORT_URL` also come from `~/.palette.env`, when the environment does not
+set them. A line of that file is `KEY=VALUE`. Strata accepts `export ` before the key, and quotes around the
 value. A line that starts with `#` is a comment. An empty value counts as no
 line.
 
@@ -18,13 +18,18 @@ line.
 | `STRATA_RETRIES` | `3` | The number of retries after HTTP 5xx, HTTP 429, or a transport error. Strata sends no other request again, and no 5xx that is a [refusal of Palette](./errors.md#refusals-that-strata-does-not-send-again). |
 | `STRATA_MAX_RETRY_AFTER` | `300` | The longest `Retry-After` wait, in seconds. A longer one is the error `retry-after-too-long`, while a retry remains. On the last attempt, the error is `api`. |
 | `STRATA_QUIET` | not set | Any value stops the progress messages, as `--quiet` does. Environment only. |
-| `XDG_STATE_HOME` | `~/.local/state` | The base of the state folder, where strata keeps its files in the folder `strata/`: the log of the unknown values and two small files beside it. A path that is not absolute counts as not set. Environment only. See [The files](./report.md#the-files). |
+| `STRATA_REPORT` | not set | `1` sends the [report of the unknown values](./report.md#send-the-report-by-itself) at the end of a run that wrote a line to the log. `0` sends nothing and asks nothing. Any other value sends nothing, and strata prints a warning. With no value, a run in a terminal asks one time. |
+| `STRATA_REPORT_URL` | the endpoint of the maintainers, when the release names one | The address that receives the report. A release that names no endpoint sends nothing and asks nothing until this variable names one. |
+| `CI` | not set | A value stops the question of the send. Pipelines set this variable. |
+| `XDG_STATE_HOME` | `~/.local/state` | The base of the state folder, where strata keeps its files in the folder `strata/`: the log of the unknown values and three small files beside it. A path that is not absolute counts as not set. Environment only. See [The files](./report.md#the-files). |
 | `NO_COLOR` | not set | A value removes the color of the terminal report under `--color auto`, the default. `strata-preflight` reads it too. Environment only. |
 | `CLICOLOR_FORCE` | not set | A value forces the color under `--color auto`, the default, also for a pipe. `NO_COLOR` has priority. Environment only. See [Report formats](./formats.md#colors). |
 | `STRATA_BIN` | `strata` on `PATH` | The binary that the scripts in `scripts/ci/` run. The live example and `examples/fetch-examples.sh` read it too. Their default is the build under `target/`. |
 
 A value that strata cannot read, such as `STRATA_RETRIES=lots`, is the error
-`invalid-setting`.
+`invalid-setting`. `STRATA_REPORT` is the one exception: a value other than `1` and `0`
+sends nothing, and strata prints a warning. A run that has read its result must not fail for
+a setting of the send.
 
 The wait before a retry starts at one second, doubles, and stops at 30 seconds.
 Strata obeys a `Retry-After` in seconds, and ignores one that gives a date.

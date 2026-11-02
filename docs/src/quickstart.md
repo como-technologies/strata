@@ -90,4 +90,4 @@ impact on running clusters.
 - [Commands](./commands/index.md): each command, its output, and its options.
 - [Palette gives a value that strata does not know](./use-cases/unknown-value.md): what to do when
   strata writes a note about a value that this release does not know, and how to tell the
-  maintainers.
+  maintainers, by hand or with the setting `STRATA_REPORT`.

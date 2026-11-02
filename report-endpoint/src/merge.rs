@@ -102,9 +102,7 @@ fn groups(report: &Report) -> Vec<Group> {
         one.routes.insert(entry.route.clone());
         one.refusals
             .extend(refusal(entry.status, entry.error_code.as_deref()));
-        let reports = group.state.reports;
         group.state.add(&one);
-        group.state.reports = reports;
     }
     found.into_values().collect()
 }

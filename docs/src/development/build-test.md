@@ -14,8 +14,8 @@ just bench             # the benchmarks of benches/, with the time of each
 
 `just --list` shows each recipe.
 
-`just lint` builds the rustdoc of `strata`, `strata-preflight`, `xtask`, and
-`strata-benches` two times. It fails on a warning of each build. The first build
+`just lint` builds the rustdoc of `strata`, `strata-preflight`, `xtask`,
+`strata-benches`, and `strata-report-endpoint` two times. It fails on a warning of each build. The first build
 documents the public items, and it warns when a public item links to a private
 item. The second build documents all items, so it reads the comments of the
 private items too.
@@ -47,7 +47,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/model/validation.rs` | The answer of Palette to a validate route, which a record and a comparison share. |
 | `src/model/repave.rs` | The reasons of Palette for a repave, and a repave that waits for approval. |
 | `src/model/cluster_template.rs` | The cluster templates of Palette, which link profile versions to clusters. |
-| `src/closed_set/` | The closed sets of a document. `mod.rs` holds the trait `ClosedSet`, its public macro `impl_closed_set`, and `Open`. `legend.rs` holds the legend of a document: the meaning of each value of a closed set, by its name in the documents. `strata-preflight` uses the macro and the legend for its own sets. `unknown.rs` holds what strata does with a value that a set does not name: the watch, the note, and the line of the log. `unknown/log.rs` holds the line and the read of the log, `unknown/report.rs` the report, and `unknown/hint.rs` the hint. |
+| `src/closed_set/` | The closed sets of a document. `mod.rs` holds the trait `ClosedSet`, its public macro `impl_closed_set`, and `Open`. `legend.rs` holds the legend of a document: the meaning of each value of a closed set, by its name in the documents. `strata-preflight` uses the macro and the legend for its own sets. `unknown.rs` holds what strata does with a value that a set does not name: the watch, the note, and the line of the log. `unknown/log.rs` holds the line and the read of the log. `unknown/report.rs` holds the report and its check, `unknown/hint.rs` the hint, and `unknown/send.rs` the send. |
 | `src/diff/` | The comparison of two snapshots. `mod.rs` holds the document and `compute`, and `leaf.rs` the comparison of a leaf. `pack.rs` compares the packs, `variables.rs` the variables, and `cluster.rs` the cluster records. `verify.rs` holds the verify report. `impact.rs` holds the impact of a change to a pack: the rules table and its levels. |
 | `src/render/` | The output: `terminal/`, `markdown.rs`, and `json.rs`. `terminal/lines.rs` paints the lines of a change for the terminal. `terminal/table.rs` holds the tables of the terminal: the width of each column, and the cells that match a query. A line that two renderers show is in the module of its command: `list.rs`, `behind.rs`, `consumers.rs`, `report.rs`, `same_release.rs`, or `verify.rs`. Other shared lines are in `notes.rs` for the notes of a comparison, in `changes.rs` for the lines of a change, or in `mod.rs`. `unified.rs` holds the unified diffs of `--full`. |
 | `src/candidate/` | The candidate file. `mod.rs` holds the format, `rules.rs` the check of the file, and `resolve.rs` the resolve of each layer. `pack.rs` finds the versions of a pack in the registries, and `presets.rs` holds the options of a pack template. `export.rs` reads the profile export of Palette as a candidate, and `gaps.rs` holds the rules that only the create of a profile version checks. |
@@ -55,7 +55,7 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `src/file.rs` | The read and the write of a file, with the path in each error. Each layer reads and writes its files with them. |
 | `src/text.rs` | The texts that a message builds. A list of names, such as `a, b, and c`. A text cut to a length. `-` for an empty text. A text in the cell of a markdown table. A text as a value in a query string. `strata-preflight` calls the public ones. |
 | `src/config.rs`, `src/error/` | The settings, and the error kinds with their exit codes. `error/class.rs` holds the class of a failure for a retry, and `error/json.rs` the JSON of an error. |
-| `src/term/` | The terminal: the color decision for a stream in `color.rs`, and the progress notes on standard error in `progress.rs`. `strata-preflight` uses the same decision. |
+| `src/term/` | The terminal. `color.rs` holds the color decision for a stream, and `progress.rs` the progress notes on standard error. `ask.rs` asks a question with a yes or no answer. `strata-preflight` uses the same decision. |
 | `src/content/` | The content that the hashes read. `canon.rs` holds the canonical form. `hash.rs` holds the content digest and the root of a record. |
 | `src/reference/` | What a ref means. `version.rs` holds the version order. |
 | `xtask/` | The development tools. `palette.rs` is the stand-in for the Palette API. `tenant/` builds the tenant of each chapter of the book, with one file for each kind of object. `chapters/` holds the chapters, with one file for each group of pages. `chapters/fields.rs` holds the documents that no page shows: see [The fields of the stand-in](./facts.md#the-fields-of-the-stand-in). `book.rs` is the runner that writes `docs/src/output/`. `checks.rs` holds the rules that the pages must keep, and `files.rs` holds the scans of a directory. `facts/` holds the list of the facts of Palette, and `src/facts/` holds the check of it: see [The facts of Palette](./facts.md). `src/contract/` holds the contract run, which compares the facts with a real tenant: see [The weekly contract run](./facts.md#the-weekly-contract-run). `size.rs` holds the tests of the size limits of [Write the code](./code.md#the-size-of-a-module), for `xtask` and for `src/`. |
@@ -63,7 +63,8 @@ The crate is edition 2024 and needs Rust 1.88 or later. `rust-version` in
 | `benches/` | `strata-benches`, a package of its own in the workspace: see [The benchmarks](#the-benchmarks). `src/` holds the generator of the input, and each other `*.rs` file is a benchmark. |
 | `adapter/` | The adapter for knurl, a package of its own: see [The knurl adapter](../automation/knurl.md). |
 | `preflight/` | `strata-preflight`, a package of its own in the workspace: see [How preflight works](../internals/preflight.md). `rule/` holds the rule format: `mod.rs` holds the rule and the catalog, `check.rs` the four kinds of check, and `validate.rs` the checks of the loader. `catalog.rs` and `rules/*.yaml` hold the catalog, and `jq.rs` holds the jq engine. `world/` holds the world. `probe/` holds the checks. `mod.rs` runs a check, and `backend.rs` holds the backends. `palette.rs` and `exec.rs` run a check of Palette and of a command. `outcome.rs` holds the answer. `run/` holds the run: `mod.rs` holds the run, `watch.rs` the watch, `verbose.rs` the lines of `--verbose`, and `rules.rs` the listing of the rules. `confidence.rs` and `evidence/runs.yaml` hold the confidence and the ledger, and `fixture.rs` and `rules/fixtures/` the fixtures of the tests. `report/` holds the report, and `html.rs` the page. In `report/`, `mod.rs` holds the document, `scorecard.rs` the counts, and `label.rs` the word, the color, and the class of a label. `terminal.rs` and `markdown.rs` hold the text forms, and `reproduce.rs` holds the lines to run by hand. `tests/closed_set.rs` of the package makes sure that each closed set of the rule format gives the text that serde writes. |
-| `fuzz/` | `strata-fuzz`, a package of its own in the workspace: the fuzz targets and the property tests of `strata` and `strata-preflight`, see [The fuzzing](#the-fuzzing). `src/` holds one module for each part, such as `mask.rs`, and `support.rs` holds what the targets share. `seed.rs` holds the table of the targets and their seed corpus, and `seed/catalog.rs` the seeds that come from the catalog of `strata-preflight`. `src/__fuzz__/<module>__<test>/` holds the corpus and the crashes of one target. The package has no code outside its tests. |
+| `report-endpoint/` | `strata-report-endpoint`, a package of its own in the workspace: the service that takes the report of the unknown values. `accept.rs` checks a request, and `limit.rs` limits the rate. `merge.rs` merges a report into the issues, and `tracker.rs` writes to GitHub. `server.rs` holds the rules and the loop. See [The endpoint of the report](./report-endpoint.md). No release carries it. |
+| `fuzz/` | `strata-fuzz`, a package of its own in the workspace: the fuzz targets and the property tests of `strata`, `strata-preflight`, and `strata-report-endpoint`, see [The fuzzing](#the-fuzzing). `src/` holds one module for each part, such as `mask.rs`, and `support.rs` holds what the targets share. `seed.rs` holds the table of the targets and their seed corpus, and `seed/catalog.rs` the seeds that come from the catalog of `strata-preflight`. `src/__fuzz__/<module>__<test>/` holds the corpus and the crashes of one target. The package has no code outside its tests. |
 
 `api/palette/tests.rs`, `candidate/tests.rs`, and `error/tests.rs` hold the unit
 tests of their directory. In `preflight/src/`, `probe/`, `report/`, `rule/`,
@@ -102,13 +103,14 @@ command directly. `cargo xtask` with no command prints its usage and exits `2`. 
 
 ## The tests
 
-`just test` runs five commands, one after the other:
+`just test` runs six commands, one after the other:
 
 - `cargo test`
 - `cargo test -p strata-preflight`
 - `cargo test -p xtask`
 - `cargo test -p strata-benches`
 - `cargo test -p strata-fuzz`
+- `cargo test -p strata-report-endpoint`
 
 The workspace builds only the root package by default. So `cargo test` alone
 does not run the tests of `xtask`, which hold the routes of the stand-in for
@@ -187,8 +189,8 @@ with one of two engines:
   So it finds the input that passes the next check of a parser.
 
 So `just test` runs each target on its corpus on every push, and a scheduled job
-fuzzes each target for a fixed time. A target calls the public API of `strata`
-and `strata-preflight`. The API does not grow for a target. A private parser,
+fuzzes each target for a fixed time. A target calls the public API of `strata`,
+`strata-preflight`, and `strata-report-endpoint`. The API does not grow for a target. A private parser,
 such as the mask, runs through the public read that calls it.
 
 The first column of each table is the name of the test, with the module of
@@ -209,6 +211,7 @@ not a fault. A panic is the only fault.
 | `record::a_raw_directory_of_a_profile_builds_a_record_or_is_refused_with_a_kind` | The files of a raw directory of a profile, in the order of their names, apart by a NUL byte | The directory loads and builds a record, or it gives an error with a kind. |
 | `record::a_raw_directory_of_a_cluster_builds_a_record_or_is_refused_with_a_kind` | The files of a raw directory of a cluster, in the order of their names, apart by a NUL byte | The same, for each profile that the cluster applies. |
 | `palette::an_answer_of_palette_of_any_shape_gives_a_record_or_an_error_with_a_kind` | A JSON document | Each request answers with the document. Each ref, each listing, and each read of one object gives a record or an error with a kind. |
+| `report::a_request_body_is_refused_with_a_status_or_is_a_report_that_writes_as_itself` | The body of a request to the endpoint of the report | The check gives a report or a refusal with the status 400, 413, 415, or 422. A report that it takes passes the check of the library, and it writes as a body that gives the same report. |
 | `preflight::a_rule_file_loads_as_the_section_it_writes_or_is_refused_with_a_kind` | A rule file | The file loads or gives an error with a kind. A section that loads writes as YAML that loads as the same section. |
 | `preflight::a_jq_program_compiles_and_runs_or_is_refused_with_a_kind` | A program, a NUL byte, and a JSON input | The program compiles with and without `$item`, and it reads as a template. It runs when it has no word that loops, because jq has no step limit. |
 | `preflight::a_world_file_gives_the_document_of_a_run_or_is_refused_with_a_kind` | A world file, as a fixture and as the body of a create | The file loads or gives an error with a kind. A world gives the document of a run for a new cluster and for an existing cluster. An existing cluster has an error exactly when its entity, or its `metadata`, is neither an object nor `null`. |

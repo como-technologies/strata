@@ -23,6 +23,7 @@ mod live_scripts;
 mod masked;
 mod presets;
 mod report;
+mod report_deploy;
 mod send;
 mod spawn;
 mod unknown;

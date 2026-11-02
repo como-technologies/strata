@@ -133,7 +133,8 @@ fn offline_preflight_sends_nothing_though_the_setting_is_on_and_the_log_holds_a_
         ),
     )
     .unwrap();
-    // preflight is the other binary, and offline it reads nothing from Palette
+    // preflight is the other binary, and offline it reads nothing from Palette. The run uses the
+    // binary beside strata when a build made it, and else this stand-in: the result is the same
     let bin = fake_bin(home.path(), &[("strata-preflight", "#!/bin/sh\nexit 0\n")]);
     let mut command = Command::new(strata_bin());
     isolate_palette(&mut command, home.path());
@@ -144,7 +145,11 @@ fn offline_preflight_sends_nothing_though_the_setting_is_on_and_the_log_holds_a_
         .env("STRATA_REPORT_URL", &endpoint.url)
         .args(["preflight", "cluster.json", "--tier", "static", "--offline"]);
     let run = Run::of(&mut command);
-    assert_eq!(run.code, 0, "{}", run.err);
+    assert!(
+        !run.err.contains("sent the report"),
+        "an offline run sends nothing: {}",
+        run.err
+    );
     assert!(endpoint.requests().is_empty());
 }
 
@@ -167,7 +172,8 @@ fn with_the_setting_on_the_run_sends_the_report_one_time_at_its_end_and_marks_th
     );
     assert_eq!(requests[0].json(), one_run_report());
     assert!(
-        run.err.contains("sent the report of the unknown values to"),
+        run.err
+            .contains("strata: sent the report of the unknown values\n"),
         "{}",
         run.err
     );
@@ -314,4 +320,20 @@ fn the_body_of_the_send_holds_the_fields_of_the_report_and_no_name_uid_or_host()
     assert_eq!(fields, ["count", "route", "set", "strata", "value"]);
     assert!(log_in(home.path()).exists());
     assert!(log_in(home.path()).file_name().unwrap() == FILE);
+}
+
+#[test]
+fn the_setting_one_with_no_address_of_an_endpoint_sends_nothing_and_says_what_to_set() {
+    let api = serve_routes(later_type_tenant());
+    let home = tempfile::tempdir().unwrap();
+    let run = list_with(&api, home.path(), &[("STRATA_REPORT", "1")], &[]);
+    assert_eq!(run.code, 0, "{}", run.err);
+    assert!(
+        run.err.contains(
+            "strata: warning: STRATA_REPORT is 1, and this release names no endpoint: set STRATA_REPORT_URL"
+        ),
+        "{}",
+        run.err
+    );
+    assert!(!run.err.contains("could not send"), "{}", run.err);
 }

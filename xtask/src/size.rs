@@ -1,6 +1,6 @@
 //! The size limits of `docs/src/development/code.md` for the Rust files of strata, xtask,
-//! strata-preflight, and strata-fuzz: a module file has at most 800 lines, and a function has at
-//! most 80 lines.
+//! strata-preflight, strata-fuzz, and strata-report-endpoint: a module file has at most 800 lines,
+//! and a function has at most 80 lines.
 
 use std::path::{Path, PathBuf};
 
@@ -107,6 +107,11 @@ fn fuzz_src() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../fuzz/src")
 }
 
+/// The directory of the source files of strata-report-endpoint.
+fn endpoint_src() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../report-endpoint/src")
+}
+
 #[test]
 fn no_module_file_of_strata_has_more_than_800_lines() {
     let long = long_modules(&strata_src());
@@ -152,6 +157,18 @@ fn no_module_file_of_strata_fuzz_has_more_than_800_lines() {
 #[test]
 fn no_function_of_strata_fuzz_has_more_than_80_lines() {
     let long = long_functions(&fuzz_src());
+    assert!(long.is_empty(), "divide these functions: {long:?}");
+}
+
+#[test]
+fn no_module_file_of_strata_report_endpoint_has_more_than_800_lines() {
+    let long = long_modules(&endpoint_src());
+    assert!(long.is_empty(), "divide these module files: {long:?}");
+}
+
+#[test]
+fn no_function_of_strata_report_endpoint_has_more_than_80_lines() {
+    let long = long_functions(&endpoint_src());
     assert!(long.is_empty(), "divide these functions: {long:?}");
 }
 

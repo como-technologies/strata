@@ -49,15 +49,15 @@ impl Limiter {
             }
         }
         let span = self.span;
+        if cost > self.limit {
+            return Err(span);
+        }
         let spent = self.seen.entry(key).or_default();
         while spent
             .front()
             .is_some_and(|at| now.duration_since(*at) >= span)
         {
             spent.pop_front();
-        }
-        if cost > self.limit {
-            return Err(span);
         }
         if spent.len() + cost > self.limit {
             // the sender can spend again when enough old requests have expired

@@ -1,8 +1,10 @@
 //! `strata report`: the report of the unknown values that the log holds, and the link that opens a
 //! new issue with it.
 //!
-//! Strata sends nothing. The report is text for the user to read, and the link is an address that
-//! the user opens in a browser. See [`crate::closed_set::unknown`] for the log.
+//! `strata report` sends nothing. The report is text for the user to read, and the link is an
+//! address that the user opens in a browser. [`send_unknown_report`] is the one function that
+//! posts the report, and the end of a run calls it only when the user chose the send: see
+//! [`crate::closed_set::unknown::send`]. See [`crate::closed_set::unknown`] for the log.
 
 use std::path::{Path, PathBuf};
 

@@ -68,28 +68,19 @@ pub(crate) fn send_unknown(watching: &Watching, progress: Progress) {
     let terminal =
         !progress.is_quiet() && std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
     let facts = send::Facts::of_run(watching.lines_written() > 0, terminal);
-    if facts.wrote && facts.setting_unreadable() {
-        progress.warn(&format!(
-            "{} must be 1 or 0, so strata sends nothing",
-            send::SETTING
-        ));
+    if let Some(complaint) = facts.complaint() {
+        progress.warn(&complaint);
     }
     let go = match send::step(&facts) {
         send::Step::Nothing => false,
         send::Step::Send => true,
         send::Step::Ask => ask_to_send(progress),
     };
-    let (Some(endpoint), Some(log)) = (&facts.endpoint, unknown::log::path()) else {
-        return;
-    };
-    if !go {
-        return;
-    }
-    match ops::send_unknown_report(&log, endpoint) {
-        Ok(()) => progress.note(&format!(
-            "sent the report of the unknown values to {endpoint}"
-        )),
-        Err(e) => progress.warn(&e.to_string()),
+    if let (true, Some(endpoint), Some(log)) = (go, &facts.endpoint, unknown::log::path()) {
+        match ops::send_unknown_report(&log, endpoint) {
+            Ok(()) => progress.note("sent the report of the unknown values"),
+            Err(e) => progress.warn(&e.to_string()),
+        }
     }
 }
 

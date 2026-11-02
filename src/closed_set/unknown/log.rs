@@ -1,9 +1,9 @@
 //! The log of the unknown values: one line in `strata-unknown.jsonl` for each value that strata
 //! noted.
 //!
-//! The log is a file of the user, in the state folder: see [`path`]. It never leaves the machine.
-//! Later stages of the self-report, `strata report` and the opt-in send, read only this file. A
-//! reader refuses a line that holds more than the fields below.
+//! The log is a file of the user, in the state folder: see [`path`]. The file never leaves the
+//! machine. `strata report` and the opt-in send read only this file, and they send the report of its
+//! lines, never the file. A reader refuses a line that holds more than the fields below.
 //!
 //! # The line
 //!

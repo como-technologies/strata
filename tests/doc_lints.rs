@@ -1,7 +1,7 @@
 //! The four clippy lints that keep the rules of "Comments" in `docs/src/development/code.md`.
 //!
 //! `just lint` runs clippy with `-D warnings`, so a lint that is on fails the run on a comment
-//! that breaks it. These tests make sure that the lints stay on for both packages, and that no
+//! that breaks it. These tests make sure that the lints stay on for each package, and that no
 //! file turns one off.
 
 use std::path::Path;
@@ -17,7 +17,11 @@ const DOC_LINTS: [&str; 4] = [
 ];
 
 /// The manifest of each package that has public documentation.
-const MANIFESTS: [&str; 2] = ["Cargo.toml", "preflight/Cargo.toml"];
+const MANIFESTS: [&str; 3] = [
+    "Cargo.toml",
+    "preflight/Cargo.toml",
+    "report-endpoint/Cargo.toml",
+];
 
 /// The lines of the table `[lints.clippy]` of the manifest `manifest`, in the root of the repository.
 fn clippy_lints(manifest: &str) -> Vec<String> {
@@ -50,7 +54,14 @@ fn no_source_file_turns_off_one_of_the_four_doc_lints() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let own = root.join("tests/doc_lints.rs");
     let mut found = Vec::new();
-    for dir in ["src", "tests", "preflight/src", "preflight/tests"] {
+    for dir in [
+        "src",
+        "tests",
+        "preflight/src",
+        "preflight/tests",
+        "report-endpoint/src",
+        "report-endpoint/tests",
+    ] {
         for file in walk(&root.join(dir)) {
             if file == own || file.extension().is_none_or(|e| e != "rs") {
                 continue;

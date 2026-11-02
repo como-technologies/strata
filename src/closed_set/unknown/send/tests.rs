@@ -82,12 +82,44 @@ fn the_setting_one_sends_and_the_setting_zero_does_not_whatever_the_answer_or_th
 fn a_setting_that_is_neither_one_nor_zero_sends_nothing_and_asks_nothing() {
     for text in ["yes", "true", "on", "2", "1 ", "report"] {
         let facts = setting(text);
-        assert!(facts.setting_unreadable(), "{text}");
+        assert_eq!(
+            facts.complaint().unwrap(),
+            "STRATA_REPORT must be 1 or 0, so strata sends nothing",
+            "{text}"
+        );
         assert_eq!(step(&facts), Step::Nothing, "{text}");
     }
-    assert!(!setting("1").setting_unreadable());
-    assert!(!setting("0").setting_unreadable());
-    assert!(!first_run().setting_unreadable());
+    assert_eq!(setting("1").complaint(), None);
+    assert_eq!(setting("0").complaint(), None);
+    assert_eq!(first_run().complaint(), None);
+    // a run that wrote no line has nothing to send, so it says nothing
+    let quiet = Facts {
+        wrote: false,
+        ..setting("yes")
+    };
+    assert_eq!(quiet.complaint(), None);
+}
+
+#[test]
+fn the_setting_one_with_no_endpoint_sends_nothing_and_names_the_setting_that_gives_one() {
+    let facts = Facts {
+        endpoint: None,
+        ..setting("1")
+    };
+    assert_eq!(step(&facts), Step::Nothing);
+    assert_eq!(
+        facts.complaint().unwrap(),
+        "STRATA_REPORT is 1, and this release names no endpoint: set STRATA_REPORT_URL"
+    );
+    // with no setting there is nothing to complain about: strata asks nothing and sends nothing
+    assert_eq!(
+        Facts {
+            endpoint: None,
+            ..first_run()
+        }
+        .complaint(),
+        None
+    );
 }
 
 #[test]

@@ -1603,6 +1603,7 @@ dependencies = [
  "sha2",
  "strata",
  "strata-preflight",
+ "strata-report-endpoint",
  "tempfile",
 ]
 

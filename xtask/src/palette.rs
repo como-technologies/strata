@@ -28,6 +28,9 @@
 //! header. To `Accept: application/json` the answer is `{"Reader":{}}`, as Palette gives it: see
 //! `export_reader`. Any other `Accept`, or none, gets the file.
 //!
+//! The route `POST /strata-report` is no route of Palette. It stands in for the endpoint of the
+//! report, so that a page can show the send of strata: see `REPORT_ENDPOINT`.
+//!
 //! When the file does not exist, the answer is HTTP 404 with the body that Palette gives. The
 //! server reads each file at each request, so the runner can change the tenant between two
 //! commands, and a page can show what Palette does after an edit in place.
@@ -98,8 +101,19 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     stream.flush()
 }
 
+/// The path of the stand-in for the endpoint of the report. The endpoint answers 200 for each
+/// request, as the real endpoint does for a report that it takes. It is no route of Palette, so it
+/// is no file of the tenant, and no fact names it.
+pub const REPORT_ENDPOINT: &str = "/strata-report";
+
+/// The answer of the stand-in for the endpoint of the report.
+const REPORT_TAKEN: &[u8] = br#"{"ok":true,"opened":1,"updated":0}"#;
+
 /// The status and the body that the files of the tenant give for `request`.
 fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
+    if request.target == REPORT_ENDPOINT {
+        return Ok((200, REPORT_TAKEN.to_vec()));
+    }
     if let Some(body) = export_reader(root, request) {
         return Ok((200, body));
     }
