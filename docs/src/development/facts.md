@@ -260,6 +260,46 @@ The script reads the host layer of `scripts/ci/verify-report.sh`, so it holds no
 functions that call GitHub. The contract script is not shipped, so it can read a file of the
 repository. The shipped report scripts stay copies on purpose.
 
+### The profiles of the run
+
+Some facts need a cluster profile. The run reads the first entry of
+`GET /v1/dashboard/clusterprofiles/metadata`. After `just live-down`, the project holds no
+profile, so the run finds no object and skips these facts.
+
+The project keeps a standing set of cluster profiles for the run. The set holds profiles only. It
+has no cluster, no AWS resource, no access key, and no registry. Make the set once, from the
+clone that the timer uses:
+
+```bash
+just contract-profiles up      # show the plan, and make the profiles after you say yes
+just contract-profiles down    # show the plan, and remove the profiles after you say yes
+just contract-profiles status  # list what the state holds; exit 1 when it holds nothing
+```
+
+`contract-profiles.sh` applies the module of [the live example](./live-example.md) with these
+variables:
+
+| Variable | Value | Reason |
+| --- | --- | --- |
+| `name_prefix` | `strata-contract` | The names of the set differ from the names of the live example. |
+| `cluster` | `false` | The set builds no cluster. |
+| `own_registries` | `false` | The module makes no ECR repository, no IAM user with its key, no Palette registry, and no profile that needs one. |
+| `cloud` | `aws` | The cloud `eks` makes a role in AWS. |
+
+The cluster group, the cluster template, and the registry kinds stay off, as their defaults say.
+The default of `own_registries` is `true`, and no recipe of the live example sets it. So the live
+example builds what it built before the switch.
+
+The set has a state of its own: the file `contract.tfstate` in `examples/live/terraform/`. `live-up`
+and `live-down` read `terraform.tfstate`. So `live-down` never removes the set, and `live-up`
+never sees it. The recipe needs the `terraform.tfvars` of the live example for the names in the
+tenant. It reads the key from `~/.palette.env` through `tf.sh`, and never prints it.
+
+The live scripts find their objects by the exact name or uid. The profiles of the set have other
+names, so they change no result of a live script. Each listing of the profiles in a live script
+matches by name or uid. A test of `tests/live_scripts.rs` reads the scripts and fails on a listing
+that does not.
+
 ### Run it
 
 ```bash

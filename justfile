@@ -339,6 +339,12 @@ live-contract *args: examples stand-in
 contract-report *args:
     examples/live/contract-report.sh {{args}}
 
+# The set has a state of its own, so live-down never removes it. See "The profiles of the run" in docs/src/development/facts.md.
+
+# Make, remove, or list the standing cluster profiles of the contract run: only profiles, no AWS resource, no registry, no cluster (#531)
+contract-profiles action:
+    examples/live/contract-profiles.sh {{action}}
+
 # The timer runs deploy/contract/weekly.sh of this checkout once a week. See "The weekly contract run" in docs/src/development/facts.md.
 
 # Install the weekly contract run on this machine as a systemd user timer (#390)

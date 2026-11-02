@@ -255,6 +255,12 @@ variable "aws_profile" {
   type        = string
 }
 
+variable "own_registries" {
+  description = "Make the example's own registries: the ECR repositories, an IAM user with its access key, the Palette registries, and the profiles that need them. With false, the module makes none of them. Only just contract-profiles sets it."
+  type        = bool
+  default     = true
+}
+
 variable "owned_pack_profile" {
   description = "Create the profile that pins the pack of the example's own registry; registry.sh sets it after the push"
   type        = bool

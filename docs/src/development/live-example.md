@@ -102,6 +102,7 @@ its end.
 | `terraform/` | The profiles and the clusters, and the variables that the scripts set. `main.tf` holds the profiles; `cloud-aws.tf`, `cloud-gcp.tf`, and `cloud-eks.tf` hold the cloud account, the clusters, and the infrastructure packs of each cloud. `iam/eks-controllers.json` is the EKS policy of Palette, for the role of `cloud-eks.tf`. |
 | `tofu-install.sh` | Installs the pinned OpenTofu. `just tofu-install` runs it, and `just tofu-uninstall` removes it. |
 | `tf.sh` | Runs `tofu` with the key and the Palette address that strata uses. |
+| `contract-profiles.sh` | The standing cluster profiles of the contract run (#531). It applies `terraform/` with the prefix `strata-contract`, no cluster, and `own_registries` off, in the state file `terraform/contract.tfstate`. See [The profiles of the run](./facts.md#the-profiles-of-the-run). |
 | `lib.sh` | What the scripts share: the usage text, the heading of a stage, the checks and their summary, the edits of the lab, the reads of `terraform.tfvars`, the applies, the wait for a cluster, and the baseline. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on the output of a failed command fails. |
 | `baseline.sh` | Checks that the example is at its baseline. Each script needs it before it starts and after it ends. |
 | `tenant.sh` | Read-only lookups: the names for `terraform.tfvars`, the state of a cluster and what holds it, the cluster listing itself, diagnostics, the repave check of Palette, and a pack digest from its Helm or OCI registry. |
@@ -486,8 +487,9 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | `region`, `az` | the region and a zone |
 | `ssh_key_name` | a key pair |
 | `oci_registry_name` | an OCI pack registry that you can log in to |
-| `aws_profile` | an AWS profile that can create an ECR repository and an IAM user in the account; every apply needs it |
+| `aws_profile` | an AWS profile that can create an ECR repository and an IAM user in the account; every apply needs a value, and the module reads the profile unless `own_registries` is `false` |
 | `oci_pack`, `oci_pack_version` | an add-on pack in that registry, and its version |
+| `own_registries` | optional; `true` by default. With `false`, the module makes no ECR repository, no IAM user, no Palette registry of its own, and no profile that needs one. Only `just contract-profiles` sets it |
 | `helm_registry_name`, `helm_chart`, `helm_chart_version` | optional; the default is `nginx` 25.1.5 from `Bitnami` |
 | `gcp_cloud_account_name`, `gcp_project` | for `cloud = "gcp"`: a GCP cloud account name, and a project it can use |
 | `gcp_region`, `gcp_zone`, `gcp_instance_type` | optional; the defaults are `us-east1`, `us-east1-b`, and `e2-standard-4` |

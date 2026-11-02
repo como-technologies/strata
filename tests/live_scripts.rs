@@ -4008,22 +4008,28 @@ fn terraform_file(name: &str) -> String {
     std::fs::read_to_string(live_script("terraform").join(name)).unwrap()
 }
 
-#[test]
-fn a_cluster_in_the_cluster_template_gets_a_time_zone_because_palette_refuses_it_without_one() {
+/// The default of the variable `name` in `variables.tf`, without the quotes of a text. `None` when
+/// the variable has no default.
+fn variable_default(name: &str) -> Option<String> {
     let variables = terraform_file("variables.tf");
     let declaration = variables
-        .split("variable \"cluster_timezone\" {")
+        .split(&format!("variable \"{name}\" {{"))
         .nth(1)
-        .expect("variables.tf declares cluster_timezone")
+        .unwrap_or_else(|| panic!("variables.tf declares {name}"))
         .split("\n}\n")
         .next()
         .unwrap();
-    let default = declaration
+    declaration
         .lines()
         .find_map(|l| l.trim().strip_prefix("default"))
         .and_then(|l| l.trim_start().strip_prefix('='))
-        .map(|l| l.trim().trim_matches('"'))
-        .expect("cluster_timezone has a default");
+        .map(|l| l.trim().trim_matches('"').to_string())
+}
+
+#[test]
+fn a_cluster_in_the_cluster_template_gets_a_time_zone_because_palette_refuses_it_without_one() {
+    let default = variable_default("cluster_timezone").expect("cluster_timezone has a default");
+    let default = default.as_str();
     assert!(
         !default.is_empty() && !default.contains(' '),
         "the default is a name of the IANA time zone database: {default:?}"
@@ -4046,6 +4052,544 @@ fn a_cluster_in_the_cluster_template_gets_a_time_zone_because_palette_refuses_it
             "{name}: the cluster in the template has a time zone, and the other clusters keep theirs"
         );
     }
+}
+
+// ---- the standing profiles of the contract run (#531) ----------------------------------------
+
+/// One `resource` or `data` block of the OpenTofu module of the live example.
+struct TfBlock {
+    file: String,
+    is_data: bool,
+    ty: String,
+    name: String,
+    body: String,
+}
+
+impl TfBlock {
+    /// The address of the block, such as `aws_ecr_repository.pack` or `data.aws_ami.ubuntu`.
+    fn address(&self) -> String {
+        let address = format!("{}.{}", self.ty, self.name);
+        if self.is_data {
+            format!("data.{address}")
+        } else {
+            address
+        }
+    }
+
+    /// The expression of the `count` or of the `for_each` of the block, if the block has one.
+    fn selector(&self) -> Option<&str> {
+        self.body.lines().find_map(|line| {
+            let line = line.strip_prefix("  ").filter(|l| !l.starts_with(' '))?;
+            let (key, expression) = line.split_once('=')?;
+            matches!(key.trim(), "count" | "for_each").then(|| expression.trim())
+        })
+    }
+
+    /// Whether the body of the block names the object at `address`, and not another object whose
+    /// address starts with the same text.
+    fn names(&self, address: &str) -> bool {
+        self.body.match_indices(address).any(|(at, _)| {
+            let before = self.body[..at].chars().next_back();
+            let after = self.body[at + address.len()..].chars().next();
+            !before.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.')
+                && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
+        })
+    }
+}
+
+/// The `resource` and `data` blocks of one file. A block starts at a line such as
+/// `resource "type" "name" {` and ends at the next line that is a `}` alone, as `tofu fmt` writes it.
+fn tf_blocks(file: &str, text: &str) -> Vec<TfBlock> {
+    let mut blocks = Vec::new();
+    let mut open: Option<TfBlock> = None;
+    for line in text.lines() {
+        if let Some(block) = open.as_mut() {
+            if line == "}" {
+                blocks.extend(open.take());
+            } else {
+                block.body.push_str(line);
+                block.body.push('\n');
+            }
+        } else if let [kind @ ("resource" | "data"), ty, name, "{"] =
+            line.split_whitespace().collect::<Vec<_>>().as_slice()
+        {
+            open = Some(TfBlock {
+                file: file.to_string(),
+                is_data: *kind == "data",
+                ty: ty.trim_matches('"').to_string(),
+                name: name.trim_matches('"').to_string(),
+                body: String::new(),
+            });
+        }
+    }
+    blocks
+}
+
+/// The name and the text of each file of the module, in the order of the names.
+fn terraform_files() -> Vec<(String, String)> {
+    let mut names: Vec<String> = std::fs::read_dir(live_script("terraform"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .filter(|name| name.ends_with(".tf"))
+        .collect();
+    names.sort();
+    names
+        .into_iter()
+        .map(|name| {
+            let text = terraform_file(&name);
+            (name, text)
+        })
+        .collect()
+}
+
+/// The expression that a line `  name = expression` gives to the local `name`.
+fn local_expression<'a>(files: &'a [(String, String)], name: &str) -> Option<&'a str> {
+    files
+        .iter()
+        .flat_map(|(_, text)| text.lines())
+        .find_map(|line| {
+            let (key, expression) = line.strip_prefix("  ")?.split_once('=')?;
+            (key.trim() == name).then(|| expression.trim())
+        })
+}
+
+/// Whether `expression` reads the variable `own_registries`, itself or through a local.
+fn reads_the_switch(files: &[(String, String)], expression: &str, seen: &mut Vec<String>) -> bool {
+    if expression.contains("var.own_registries") {
+        return true;
+    }
+    for (at, _) in expression.match_indices("local.") {
+        let local: String = expression[at + "local.".len()..]
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if seen.contains(&local) {
+            continue;
+        }
+        seen.push(local.clone());
+        if local_expression(files, &local).is_some_and(|e| reads_the_switch(files, e, seen)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// The blocks that make an AWS object or a Palette registry. The cloud account of an EKS cluster
+/// is the one exception: `cloud-eks.tf` counts it by `var.cloud`, and the standing set sets the
+/// cloud `aws`.
+fn registry_blocks(files: &[(String, String)]) -> Vec<TfBlock> {
+    files
+        .iter()
+        .flat_map(|(file, text)| tf_blocks(file, text))
+        .filter(|b| {
+            let makes = b.ty.starts_with("aws_")
+                || (!b.is_data && b.ty.starts_with("spectrocloud_registry_"));
+            makes && !(b.file == "cloud-eks.tf" && b.selector().is_some())
+        })
+        .collect()
+}
+
+/// The addresses of the blocks that make an AWS object or a Palette registry, and the faults: a
+/// block that does not count by the switch `own_registries`.
+fn registry_blocks_by_the_switch(files: &[(String, String)]) -> (Vec<String>, Vec<String>) {
+    let blocks = registry_blocks(files);
+    let faults = blocks
+        .iter()
+        .filter(|b| {
+            !b.selector()
+                .is_some_and(|s| reads_the_switch(files, s, &mut Vec::new()))
+        })
+        .map(|b| format!("{} ({})", b.address(), b.file))
+        .collect();
+    (blocks.iter().map(TfBlock::address).collect(), faults)
+}
+
+/// The addresses of the other blocks that name an object of `registry_blocks`, and the faults: a
+/// block that does not count by the switch.
+fn blocks_that_need_a_registry(files: &[(String, String)]) -> (Vec<String>, Vec<String>) {
+    let own: Vec<String> = registry_blocks(files)
+        .iter()
+        .map(TfBlock::address)
+        .collect();
+    let mut needing = Vec::new();
+    let mut faults = Vec::new();
+    for block in files.iter().flat_map(|(file, text)| tf_blocks(file, text)) {
+        if own.contains(&block.address()) || !own.iter().any(|a| block.names(a)) {
+            continue;
+        }
+        needing.push(block.address());
+        let by_the_switch = block
+            .selector()
+            .is_some_and(|s| reads_the_switch(files, s, &mut Vec::new()));
+        if !by_the_switch {
+            faults.push(format!("{} ({})", block.address(), block.file));
+        }
+    }
+    (needing, faults)
+}
+
+/// The files of the module with the first `from` of `file` changed to `to`.
+fn mutated(file: &str, from: &str, to: &str) -> Vec<(String, String)> {
+    terraform_files()
+        .into_iter()
+        .map(|(name, text)| {
+            let text = if name == file {
+                assert!(text.contains(from), "{file} holds {from:?}");
+                text.replacen(from, to, 1)
+            } else {
+                text
+            };
+            (name, text)
+        })
+        .collect()
+}
+
+#[test]
+fn each_aws_object_and_each_palette_registry_of_the_live_module_counts_by_own_registries() {
+    let (made, faults) = registry_blocks_by_the_switch(&terraform_files());
+    assert!(faults.is_empty(), "no count by the switch: {faults:?}");
+    for address in [
+        "data.aws_caller_identity.this",
+        "aws_ecr_repository.pack",
+        "aws_ecr_repository.dep",
+        "aws_ecr_repository.chart",
+        "aws_iam_user.registry",
+        "aws_iam_access_key.registry",
+        "aws_iam_user_policy.registry_read",
+        "data.aws_iam_policy_document.registry_read",
+        "spectrocloud_registry_oci.pack",
+        "spectrocloud_registry_oci.helm",
+        "aws_instance.kinds",
+        "spectrocloud_registry_helm.kinds_charts",
+        "spectrocloud_registry_oci.kinds",
+    ] {
+        assert!(made.iter().any(|a| a == address), "{address} in {made:?}");
+    }
+}
+
+#[test]
+fn a_resource_with_no_count_by_the_switch_fails_the_check_of_the_live_module() {
+    let files = mutated("registry.tf", "  count                = local.own\n", "");
+    let (_, faults) = registry_blocks_by_the_switch(&files);
+    assert_eq!(faults, ["aws_ecr_repository.pack (registry.tf)"]);
+
+    // the registry kinds count by `local.kinds`, which must read the switch too
+    let files = mutated(
+        "registry-kinds.tf",
+        "var.registry_kinds && var.own_registries",
+        "var.registry_kinds",
+    );
+    let (_, faults) = registry_blocks_by_the_switch(&files);
+    assert!(
+        faults.contains(&"aws_vpc.kinds (registry-kinds.tf)".to_string())
+            && faults.contains(&"spectrocloud_registry_oci.kinds (registry-kinds.tf)".to_string()),
+        "{faults:?}"
+    );
+}
+
+#[test]
+fn each_profile_that_needs_an_own_registry_counts_by_own_registries() {
+    let (needing, faults) = blocks_that_need_a_registry(&terraform_files());
+    assert!(faults.is_empty(), "no count by the switch: {faults:?}");
+    for address in [
+        "spectrocloud_cluster_profile.owned",
+        "spectrocloud_cluster_profile.dep",
+        "spectrocloud_cluster_profile.owned_helm",
+        "data.spectrocloud_pack.owned",
+        "data.spectrocloud_pack.requiring",
+        "data.spectrocloud_pack.dep",
+        "data.spectrocloud_pack.owned_chart",
+    ] {
+        assert!(
+            needing.iter().any(|a| a == address),
+            "{address} in {needing:?}"
+        );
+    }
+
+    let files = mutated(
+        "main.tf",
+        "count        = var.owned_chart_profile ? local.own : 0",
+        "count        = var.owned_chart_profile ? 1 : 0",
+    );
+    let (_, faults) = blocks_that_need_a_registry(&files);
+    assert_eq!(faults, ["data.spectrocloud_pack.owned_chart (main.tf)"]);
+}
+
+#[test]
+fn the_switch_own_registries_defaults_to_true_and_no_recipe_of_the_live_example_sets_it() {
+    let variables = terraform_file("variables.tf");
+    let declaration = variables
+        .split("variable \"own_registries\" {")
+        .nth(1)
+        .expect("variables.tf declares own_registries")
+        .split("\n}\n")
+        .next()
+        .unwrap();
+    assert!(declaration.contains("type        = bool"), "{declaration}");
+    assert_eq!(
+        variable_default("own_registries").as_deref(),
+        Some("true"),
+        "the default makes the registries, as the module did before the switch"
+    );
+
+    // A recipe sets a variable with -var, in the justfile or in a script. Only the script of the
+    // standing set turns the switch off.
+    assert!(
+        !repo_file("justfile").contains("own_registries"),
+        "the justfile sets no switch: the script does"
+    );
+    let mut setters = Vec::new();
+    for entry in std::fs::read_dir(live_script("")).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_some_and(|e| e == "sh")
+            && std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("own_registries")
+        {
+            setters.push(path.file_name().unwrap().to_string_lossy().into_owned());
+        }
+    }
+    assert_eq!(setters, ["contract-profiles.sh"]);
+    assert!(!terraform_file("terraform.tfvars.example").contains("own_registries"));
+}
+
+/// A tree with `contract-profiles.sh` and `tf.sh`, and a `tofu` that logs its arguments to
+/// `FAKE_LOG`. The state file of the set is where the script puts it in this tree.
+struct StandingSet {
+    dir: tempfile::TempDir,
+}
+
+impl StandingSet {
+    fn new() -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        let live = dir.path().join("tree/examples/live");
+        std::fs::create_dir_all(live.join("terraform")).unwrap();
+        for script in ["contract-profiles.sh", "tf.sh"] {
+            executable(
+                &live.join(script),
+                &repo_file(&format!("examples/live/{script}")),
+            );
+        }
+        fake_bin(dir.path(), &[("tofu", LOGGING_TOOL)]);
+        std::fs::create_dir(dir.path().join("home")).unwrap();
+        StandingSet { dir }
+    }
+
+    fn terraform(&self) -> PathBuf {
+        self.dir.path().join("tree/examples/live/terraform")
+    }
+
+    fn state(&self) -> PathBuf {
+        self.terraform().join("contract.tfstate")
+    }
+
+    fn run(&self, argument: &str, envs: &[(&str, &str)]) -> Output {
+        Command::new("bash")
+            .arg(
+                self.dir
+                    .path()
+                    .join("tree/examples/live/contract-profiles.sh"),
+            )
+            .arg(argument)
+            .env("PATH", path_with(&self.dir.path().join("bin")))
+            .env("HOME", self.dir.path().join("home"))
+            .env("PALETTE_API_KEY", "a-key-that-no-line-shows")
+            .env_remove("SPECTROCLOUD_APIKEY")
+            .env_remove("SPECTROCLOUD_HOST")
+            .env_remove("PALETTE_API")
+            .env("FAKE_LOG", self.dir.path().join("calls.log"))
+            .envs(envs.iter().copied())
+            .output_locked()
+            .unwrap()
+    }
+
+    fn calls(&self) -> Vec<String> {
+        std::fs::read_to_string(self.dir.path().join("calls.log"))
+            .unwrap_or_default()
+            .lines()
+            .map(String::from)
+            .collect()
+    }
+}
+
+/// The arguments that make the standing set: the prefix, the cloud, no cluster, and no own
+/// registry.
+const STANDING_VARIABLES: &str =
+    "-var name_prefix=strata-contract -var cloud=aws -var cluster=false -var own_registries=false";
+
+#[test]
+fn contract_profiles_up_applies_the_module_with_the_prefix_no_cluster_no_own_registry_and_a_state_of_its_own()
+ {
+    let set = StandingSet::new();
+    let o = set.run("up", &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    let chdir = format!("-chdir={}", set.terraform().display());
+    assert_eq!(
+        set.calls(),
+        [
+            format!("tofu {chdir} init -input=false"),
+            format!(
+                "tofu {chdir} apply -parallelism=1 -state={} {STANDING_VARIABLES}",
+                set.state().display()
+            ),
+        ]
+    );
+    for output in [&o.stdout, &o.stderr] {
+        assert!(!text(output).contains("a-key-that-no-line-shows"));
+    }
+
+    // The state is not terraform.tfstate, the file that tofu reads with no -state. live-up and
+    // live-down read that file, so they never read the set.
+    assert_ne!(set.state().file_name().unwrap(), "terraform.tfstate");
+    for name in ["live-up", "live-down", "live-profiles"] {
+        for line in recipe(name) {
+            assert!(
+                !line.contains("-state") && !line.contains("contract"),
+                "{name} reads the default state: {line}"
+            );
+        }
+    }
+    assert_eq!(
+        recipe("contract-profiles action"),
+        ["examples/live/contract-profiles.sh {{action}}"]
+    );
+}
+
+#[test]
+fn contract_profiles_down_destroys_what_up_made_with_the_same_variables_and_the_same_state() {
+    let set = StandingSet::new();
+    let o = set.run("down", &[]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(
+        set.calls(),
+        [format!(
+            "tofu -chdir={} destroy -parallelism=1 -state={} {STANDING_VARIABLES}",
+            set.terraform().display(),
+            set.state().display()
+        )]
+    );
+}
+
+#[test]
+fn contract_profiles_status_lists_the_state_and_exits_1_while_the_set_holds_no_resource() {
+    let set = StandingSet::new();
+    let o = set.run("status", &[]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(text(&o.stdout).contains("holds no resource"));
+    assert!(set.calls().is_empty(), "no state file: no call of tofu");
+
+    std::fs::write(set.state(), "{}").unwrap();
+    let o = set.run("status", &[("FAKE_OUT", "")]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(text(&o.stdout).contains("holds no resource"));
+
+    let o = set.run(
+        "status",
+        &[(
+            "FAKE_OUT",
+            "spectrocloud_cluster_profile.release\nspectrocloud_cluster_profile.addon\n",
+        )],
+    );
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert_eq!(
+        text(&o.stdout),
+        "spectrocloud_cluster_profile.release\nspectrocloud_cluster_profile.addon\n"
+    );
+    assert_eq!(
+        set.calls().last().unwrap(),
+        &format!(
+            "tofu -chdir={} state list -state={}",
+            set.terraform().display(),
+            set.state().display()
+        )
+    );
+}
+
+#[test]
+fn contract_profiles_sh_refuses_an_argument_that_is_not_up_down_or_status() {
+    let set = StandingSet::new();
+    let o = set.run("destroy", &[]);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(
+        text(&o.stderr).contains("up, down, or status"),
+        "{}",
+        text(&o.stderr)
+    );
+    assert!(set.calls().is_empty());
+}
+
+/// The statements of the live scripts that list the profiles of the project: a call of
+/// `strata list` for profiles, and a request of the listing route of Palette. A statement ends at
+/// the first line that does not end with a backslash.
+fn listings_of_profiles() -> Vec<(String, String)> {
+    let mut listings = Vec::new();
+    for entry in std::fs::read_dir(live_script("")).unwrap() {
+        let path = entry.unwrap().path();
+        if !path.extension().is_some_and(|e| e == "sh") {
+            continue;
+        }
+        let file = path.file_name().unwrap().to_string_lossy().into_owned();
+        let source = std::fs::read_to_string(&path).unwrap();
+        let mut lines = source.lines().filter(|l| !l.trim_start().starts_with('#'));
+        while let Some(line) = lines.next() {
+            let strata_list =
+                line.contains("$strata\" list ") || line.contains("$strata\\\" list ");
+            let others = ["list clusters", "list filters", "list projects"];
+            if !(strata_list && !others.iter().any(|o| line.contains(o))
+                || line.contains("/v1/dashboard/clusterprofiles"))
+            {
+                continue;
+            }
+            let mut statement = line.to_string();
+            let mut last = line;
+            while last.ends_with('\\') {
+                let Some(next) = lines.next() else { break };
+                statement.push('\n');
+                statement.push_str(next);
+                last = next;
+            }
+            listings.push((file.clone(), statement));
+        }
+    }
+    listings
+}
+
+#[test]
+fn each_live_script_that_lists_the_profiles_of_the_project_matches_them_by_name_or_uid() {
+    // The listing is saved, or checked with an exit code, and the next command reads it by uid or
+    // by name: baseline.sh selects by each name of the profile_names output, loop.sh by the uid
+    // of the release, and template.sh by the uid of the linked version.
+    let matched_later = [
+        ("baseline.sh", "list profiles --json >"),
+        ("loop.sh", "list --pack \"$pack\" --json"),
+        ("template.sh", "list profiles --packs --json"),
+    ];
+    let matches = [".name ==", ".uid ==", "index(", "grep -qE '^  $"];
+    let listings = listings_of_profiles();
+    let mut unmatched = Vec::new();
+    for (file, statement) in &listings {
+        let later = matched_later
+            .iter()
+            .any(|(f, needle)| f == file && statement.contains(needle));
+        if !later && !matches.iter().any(|m| statement.contains(m)) {
+            unmatched.push(format!("{file}: {statement}"));
+        }
+    }
+    assert!(
+        unmatched.is_empty(),
+        "no match by name or uid:\n{}",
+        unmatched.join("\n")
+    );
+    for (file, needle) in matched_later {
+        assert!(
+            listings
+                .iter()
+                .any(|(f, s)| f == file && s.contains(needle)),
+            "{file} lists the profiles with {needle:?}"
+        );
+    }
+    // a script that lists each profile of the project and counts them has no place in this list
+    assert!(listings.len() >= 20, "{} listings", listings.len());
 }
 
 #[test]

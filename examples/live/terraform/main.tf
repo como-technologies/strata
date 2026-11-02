@@ -295,14 +295,14 @@ resource "spectrocloud_cluster_profile" "addon" {
 # The profile that pins the pack of the example's own registry. It exists after registry.sh has
 # pushed the pack and Palette has read the registry: the pack lookup needs both.
 data "spectrocloud_pack" "owned" {
-  count        = var.owned_pack_profile ? 1 : 0
+  count        = var.owned_pack_profile ? local.own : 0
   name         = local.pack_name
   version      = var.owned_pack_version
-  registry_uid = spectrocloud_registry_oci.pack.id
+  registry_uid = spectrocloud_registry_oci.pack[0].id
 }
 
 resource "spectrocloud_cluster_profile" "owned" {
-  count        = var.owned_pack_profile ? 1 : 0
+  count        = var.owned_pack_profile ? local.own : 0
   name         = "${var.name_prefix}-owned"
   version      = "1.0.0"
   description  = "strata live example: a pack from the example's own registry; nothing runs it"
@@ -315,7 +315,7 @@ resource "spectrocloud_cluster_profile" "owned" {
     type         = "oci"
     tag          = var.owned_pack_tag
     uid          = data.spectrocloud_pack.owned[0].id
-    registry_uid = spectrocloud_registry_oci.pack.id
+    registry_uid = spectrocloud_registry_oci.pack[0].id
     values       = data.spectrocloud_pack.owned[0].values
   }
 
@@ -328,21 +328,21 @@ resource "spectrocloud_cluster_profile" "owned" {
 # requires strata-live-dep, alone or with that pack. Both packs exist after the pushes and the
 # sync.
 data "spectrocloud_pack" "requiring" {
-  count        = var.dep_profile == "none" ? 0 : 1
+  count        = var.dep_profile == "none" ? 0 : local.own
   name         = local.pack_name
   version      = "1.1.0"
-  registry_uid = spectrocloud_registry_oci.pack.id
+  registry_uid = spectrocloud_registry_oci.pack[0].id
 }
 
 data "spectrocloud_pack" "dep" {
-  count        = var.dep_profile == "both" ? 1 : 0
+  count        = var.dep_profile == "both" ? local.own : 0
   name         = local.dep_name
   version      = "1.0.0"
-  registry_uid = spectrocloud_registry_oci.pack.id
+  registry_uid = spectrocloud_registry_oci.pack[0].id
 }
 
 resource "spectrocloud_cluster_profile" "dep" {
-  count        = var.dep_profile == "none" ? 0 : 1
+  count        = var.dep_profile == "none" ? 0 : local.own
   name         = "${var.name_prefix}-dep"
   version      = "1.0.0"
   description  = "strata live example: a pack that requires another pack; nothing runs it"
@@ -355,7 +355,7 @@ resource "spectrocloud_cluster_profile" "dep" {
     type         = "oci"
     tag          = "1.1.0"
     uid          = data.spectrocloud_pack.requiring[0].id
-    registry_uid = spectrocloud_registry_oci.pack.id
+    registry_uid = spectrocloud_registry_oci.pack[0].id
     values       = data.spectrocloud_pack.requiring[0].values
   }
 
@@ -366,7 +366,7 @@ resource "spectrocloud_cluster_profile" "dep" {
       type         = "oci"
       tag          = "1.0.0"
       uid          = pack.value.id
-      registry_uid = spectrocloud_registry_oci.pack.id
+      registry_uid = spectrocloud_registry_oci.pack[0].id
       values       = pack.value.values
     }
   }
@@ -379,14 +379,14 @@ resource "spectrocloud_cluster_profile" "dep" {
 # The profile that pins the chart of the example's own OCI Helm registry, after registry.sh has
 # pushed it and Palette has read the registry.
 data "spectrocloud_pack" "owned_chart" {
-  count        = var.owned_chart_profile ? 1 : 0
+  count        = var.owned_chart_profile ? local.own : 0
   name         = local.chart_name
   version      = var.owned_chart_version
   registry_uid = spectrocloud_registry_oci.helm[0].id
 }
 
 resource "spectrocloud_cluster_profile" "owned_helm" {
-  count        = var.owned_chart_profile ? 1 : 0
+  count        = var.owned_chart_profile ? local.own : 0
   name         = "${var.name_prefix}-owned-helm"
   version      = "1.0.0"
   description  = "strata live example: a chart from the example's own OCI Helm registry; nothing runs it"

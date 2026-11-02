@@ -3,41 +3,67 @@
 # pushes the same version again, and pushes a new version, which no shared registry may see.
 # live-down removes it all: the repository with its images, the user that reads it, and the
 # registry.
+#
+# Each resource here counts by local.own. With own_registries false, the module makes no AWS
+# resource, no access key, and no registry. The standing set of the contract run is such a module
+# (just contract-profiles, #531). Each moved block keeps the state of a module that an earlier
+# version made.
 
 locals {
+  own           = var.own_registries ? 1 : 0
   pack_name     = "strata-live-pack"
   dep_name      = "strata-live-dep"
   chart_name    = "strata-live-chart"
-  registry_host = "${data.aws_caller_identity.this.account_id}.dkr.ecr.${var.region}.amazonaws.com"
+  registry_host = var.own_registries ? "${data.aws_caller_identity.this[0].account_id}.dkr.ecr.${var.region}.amazonaws.com" : ""
   registry_tags = {
     purpose      = "strata-live-example"
     "managed-by" = "opentofu"
   }
 }
 
-data "aws_caller_identity" "this" {}
+data "aws_caller_identity" "this" {
+  count = local.own
+}
 
 # Palette reads a pack at <base content path>/spectro-packs/archive/<name>:<version>, and ECR
 # holds one repository per name.
+moved {
+  from = aws_ecr_repository.pack
+  to   = aws_ecr_repository.pack[0]
+}
+
 resource "aws_ecr_repository" "pack" {
+  count                = local.own
   name                 = "${var.name_prefix}/spectro-packs/archive/${local.pack_name}"
   image_tag_mutability = "MUTABLE" # a push of one version again is what registry.sh tests
   force_delete         = true      # the images go with the repository at live-down
   tags                 = local.registry_tags
 }
 
-# The same account holds the example's own OCI Helm registry: one chart, at
-# <base content path>/<chart>, as helm push puts it.
 # The second pack of the pack registry: the one that strata-live-pack 1.1.0 requires (registry.sh,
 # step 6).
+moved {
+  from = aws_ecr_repository.dep
+  to   = aws_ecr_repository.dep[0]
+}
+
 resource "aws_ecr_repository" "dep" {
+  count                = local.own
   name                 = "${var.name_prefix}/spectro-packs/archive/${local.dep_name}"
   image_tag_mutability = "MUTABLE"
   force_delete         = true
   tags                 = local.registry_tags
 }
 
+# The same account holds the example's own OCI Helm registry: one chart, at
+# <base content path>/<chart>, as helm push puts it.
+moved {
+  from = aws_ecr_repository.chart
+  to   = aws_ecr_repository.chart[0]
+}
+
 resource "aws_ecr_repository" "chart" {
+  count                = local.own
   name                 = "${var.name_prefix}-helm/${local.chart_name}"
   image_tag_mutability = "MUTABLE"
   force_delete         = true
@@ -46,16 +72,30 @@ resource "aws_ecr_repository" "chart" {
 
 # The user Palette reads the repository with. The actions are the ones the Palette documentation
 # lists for an ECR pack registry: read only.
+moved {
+  from = aws_iam_user.registry
+  to   = aws_iam_user.registry[0]
+}
+
 resource "aws_iam_user" "registry" {
-  name = "${var.name_prefix}-registry"
-  tags = local.registry_tags
+  count = local.own
+  name  = "${var.name_prefix}-registry"
+  tags  = local.registry_tags
+}
+
+moved {
+  from = aws_iam_access_key.registry
+  to   = aws_iam_access_key.registry[0]
 }
 
 resource "aws_iam_access_key" "registry" {
-  user = aws_iam_user.registry.name
+  count = local.own
+  user  = aws_iam_user.registry[0].name
 }
 
 data "aws_iam_policy_document" "registry_read" {
+  count = local.own
+
   statement {
     actions = [
       "ecr:BatchCheckLayerAvailability",
@@ -78,21 +118,39 @@ data "aws_iam_policy_document" "registry_read" {
   }
 }
 
+moved {
+  from = aws_iam_user_policy.registry_read
+  to   = aws_iam_user_policy.registry_read[0]
+}
+
 resource "aws_iam_user_policy" "registry_read" {
+  count  = local.own
   name   = "read-packs"
-  user   = aws_iam_user.registry.name
-  policy = data.aws_iam_policy_document.registry_read.json
+  user   = aws_iam_user.registry[0].name
+  policy = data.aws_iam_policy_document.registry_read[0].json
 }
 
 # A new access key takes some seconds to work everywhere in AWS. Palette checks the key when the
 # registry is created, and refuses one it cannot use yet, so the registry waits.
+moved {
+  from = time_sleep.key
+  to   = time_sleep.key[0]
+}
+
 resource "time_sleep" "key" {
+  count           = local.own
   depends_on      = [aws_iam_access_key.registry, aws_iam_user_policy.registry_read]
   create_duration = "30s"
 }
 
 # The Palette registry over the repository.
+moved {
+  from = spectrocloud_registry_oci.pack
+  to   = spectrocloud_registry_oci.pack[0]
+}
+
 resource "spectrocloud_registry_oci" "pack" {
+  count              = local.own
   name               = "${var.name_prefix}-registry"
   type               = "ecr"
   endpoint           = local.registry_host
@@ -103,8 +161,8 @@ resource "spectrocloud_registry_oci" "pack" {
 
   credentials {
     credential_type = "secret"
-    access_key      = aws_iam_access_key.registry.id
-    secret_key      = aws_iam_access_key.registry.secret
+    access_key      = aws_iam_access_key.registry[0].id
+    secret_key      = aws_iam_access_key.registry[0].secret
     # The provider reads this block back whether or not it was given, so a plan without it
     # changes the registry every time.
     tls_config {
@@ -126,7 +184,7 @@ moved {
 }
 
 resource "spectrocloud_registry_oci" "helm" {
-  count              = var.owned_helm_registry ? 1 : 0
+  count              = var.owned_helm_registry ? local.own : 0
   name               = "${var.name_prefix}-helm-registry"
   type               = "ecr"
   endpoint           = local.registry_host
@@ -137,8 +195,8 @@ resource "spectrocloud_registry_oci" "helm" {
 
   credentials {
     credential_type = "secret"
-    access_key      = aws_iam_access_key.registry.id
-    secret_key      = aws_iam_access_key.registry.secret
+    access_key      = aws_iam_access_key.registry[0].id
+    secret_key      = aws_iam_access_key.registry[0].secret
     tls_config {
       insecure_skip_verify = false
     }

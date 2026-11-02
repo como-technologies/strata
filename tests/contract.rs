@@ -1394,6 +1394,10 @@ fn the_recipes_of_the_contract_run_call_the_scripts_that_exist() {
             "contract-report *args",
             "examples/live/contract-report.sh {{args}}",
         ),
+        (
+            "contract-profiles action",
+            "examples/live/contract-profiles.sh {{action}}",
+        ),
         ("contract-timer-install", "deploy/contract/timer.sh install"),
         ("contract-timer-remove", "deploy/contract/timer.sh remove"),
         ("contract-timer-status", "deploy/contract/timer.sh status"),

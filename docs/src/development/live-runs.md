@@ -560,6 +560,17 @@ give the run profiles to read, and `just live-up` to give it a cluster.
 |---|---|
 | `contract.json` | #390, #391: for each fact of the kind `request`, the status and the type of each field against the stand-in. It also lists each value of a closed set that the fact and the stand-in do not name. No result yet. |
 
+## contract-profiles.sh
+
+Read-write, with no cluster. `up` makes the standing cluster profiles of the contract run, and
+`down` deletes them. See [The profiles of the run](./facts.md#the-profiles-of-the-run). It has no
+checks. It needs the key and the `terraform.tfvars` of the live example.
+
+| Result | What it shows |
+|---|---|
+| `up` | #531: the plan holds cluster profiles only: no `aws_*` resource, no registry, no cluster. No result yet. |
+| `contract.json` of the next contract run | #531: the facts that need a cluster profile are `same` or `differs`, and none is `skipped` for want of a profile. No result yet. |
+
 ## pending.sh
 
 Read-write. It needs the example at its baseline with cluster A. Each stage
