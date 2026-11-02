@@ -15,8 +15,8 @@ use super::shape::{JsonType, Path as Field};
 use super::stand_in::StandIn;
 use super::{releases, run, subject};
 use crate::facts::subjects::{Origin, Read, SOURCES, floor, request_of, unsourced};
-use crate::facts::{Fact, Kind, Scope, expand};
-use crate::palette::serve_on;
+use crate::facts::{Fact, Kind, Scope, expand, fill};
+use crate::palette::{TENANT_ROUTES, serve_on};
 use crate::tenant::{TENANT, Tenant};
 
 /// The facts of a small list: the cluster listing, the document of a cluster, its cloud config, a
@@ -656,6 +656,41 @@ fn the_stand_in_refuses_a_request_for_a_saved_filter_that_names_a_project_with_e
             answered.as_ref().as_ref().err().and_then(|f| f.status),
             Some(403),
             "{path}"
+        );
+    }
+}
+
+#[test]
+fn the_stand_in_refuses_a_project_on_the_route_of_each_fact_of_the_scope_tenant_and_on_no_other() {
+    let facts = real_facts();
+    let (_dir, client, _tenant) = served_with_project(&[]);
+    let probe = subject::Probe::new(&client, &client);
+    for fact in facts.iter().filter(|f| f.kind == Kind::Request) {
+        let Some(template) = fact.get_path() else {
+            continue;
+        };
+        for (_, text) in expand(template) {
+            let path = fill(&text, |_| Ok::<_, ()>("x".to_string())).unwrap();
+            let answer = probe.get(Scope::Client, &path);
+            let refused = answer.as_ref().as_ref().is_err_and(|failure| {
+                failure.status == Some(403) && failure.code.as_deref() == Some(PROJECT_SCOPE_CODE)
+            });
+            assert_eq!(
+                refused,
+                fact.scope == Scope::Tenant,
+                "{}: the stand-in and the fact disagree on the scope of {path}",
+                fact.id
+            );
+        }
+    }
+    // a route of the stand-in that no fact of the scope tenant names refuses a project for nothing
+    for route in TENANT_ROUTES {
+        assert!(
+            facts
+                .iter()
+                .filter(|f| f.scope == Scope::Tenant)
+                .any(|f| f.get_path().is_some_and(|path| path.starts_with(route))),
+            "no fact of the scope tenant is under the route {route} of the stand-in"
         );
     }
 }

@@ -327,6 +327,11 @@ pub struct Reads {
     /// `status.state` and the states that strata tells apart. Palette gives no other value.
     #[serde(default)]
     pub values: BTreeMap<String, Vec<String>>,
+    /// The closed set of strata that a list of `values` is, by the same field: the name of its type,
+    /// such as `ClusterState`. The list and the type must agree, so a new value in one shows in
+    /// the check. A list that is a part of a set, or a set that has no type, names none.
+    #[serde(default)]
+    pub sets: BTreeMap<String, String>,
     /// The names that strata needs from a set that Palette can extend, by the field that holds
     /// them: `schema.properties[].name` and the properties that strata sends in a search. Each
     /// name must be in the answer. Another name is no fault.

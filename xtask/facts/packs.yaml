@@ -51,6 +51,9 @@ facts:
       values:
         "items[].spec.type": [spectro, helm, oci, manifest]
         "items[].spec.annotations.system_state": [deprecated, disabled, deleted]
+      sets:
+        "items[].spec.type": PackType
+        "items[].spec.annotations.system_state": PackState
     stand_in:
       - v1/packs
     live:
@@ -118,6 +121,8 @@ facts:
         - items[].status.sync.syncRecovery.message
       values:
         "items[].spec.providerType": [pack, helm, zarf]
+      sets:
+        "items[].spec.providerType": OciProvider
     stand_in:
       - v1/registries/oci/summary
     live:
@@ -679,6 +684,8 @@ facts:
         - spec.published.packs[].annotations.ociRegistryProviderType
       values:
         "items[].spec.providerType": [pack, helm, zarf]
+      sets:
+        "items[].spec.providerType": OciProvider
     stand_in: []
     live:
       - registry-kinds.sh:provider-types
@@ -1082,6 +1089,8 @@ facts:
         - items[].spec.annotations.system_disabledTimestamp
       values:
         "items[].spec.annotations.system_state": [deprecated, disabled, deleted]
+      sets:
+        "items[].spec.annotations.system_state": PackState
     stand_in: []
     live:
       - pack-states.sh:states-deprecated-says

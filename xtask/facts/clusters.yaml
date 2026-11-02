@@ -23,6 +23,8 @@ facts:
         - status.repave.state
       values:
         status.state: [Running, Provisioning, Pending, Importing, Deleting, Deleted, Error]
+      sets:
+        status.state: ClusterState
     stand_in:
       - v1/spectroclusters/{uid}
     live:

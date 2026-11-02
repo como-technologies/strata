@@ -48,6 +48,10 @@ facts:
         metadata.annotations.scope: [project, tenant, system]
         spec.published.type: [cluster, infra, add-on, system]
         "spec.published.packs[].annotations.ociRegistryProviderType": [pack, helm, zarf]
+      sets:
+        metadata.annotations.scope: ProfileScope
+        spec.published.type: ProfileType
+        "spec.published.packs[].annotations.ociRegistryProviderType": OciProvider
     stand_in:
       - v1/clusterprofiles/{uid}
     live:

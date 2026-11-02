@@ -11,7 +11,7 @@ use super::check::{NOT_FACTS, check as faults_of, route_matches, template_matche
 use super::cloud::CloudSources;
 use super::from_text;
 use super::model::load;
-use super::sets::SetRead;
+use super::sets::{Set, SetRead};
 use super::sources::{
     Sources, api_requests, book_rows, calls_of, query_names, rule_queries, rule_requests,
     section_headings, section_rows, shape,
@@ -76,6 +76,7 @@ fn world() -> Sources {
         )]),
         rule_queries: BTreeMap::new(),
         set_reads: Vec::new(),
+        closed_sets: Vec::new(),
     }
 }
 
@@ -905,7 +906,6 @@ fn profile_type_read() -> SetRead {
         set: "ProfileType".to_string(),
         fact: "profile-document",
         field: "spec.published.type",
-        values: ["cluster", "add-on"].map(String::from).to_vec(),
     }
 }
 
@@ -914,6 +914,10 @@ fn profile_type_read() -> SetRead {
 fn world_with_a_set_read() -> Sources {
     let mut sources = world();
     sources.set_reads = vec![profile_type_read()];
+    sources.closed_sets = vec![Set {
+        name: "ProfileType".to_string(),
+        values: ["cluster", "add-on"].map(String::from).to_vec(),
+    }];
     sources.cloud.code = BTreeMap::from([(
         "src/ops/list.rs".to_string(),
         "p.profile_type = template.and_then(|t| opt_set(t, \"/type\", PROFILE_TEMPLATE));"
@@ -921,8 +925,12 @@ fn world_with_a_set_read() -> Sources {
     )]);
     sources.facts[0].reads.values.insert(
         "spec.published.type".to_string(),
-        vec!["add-on".to_string()],
+        ["cluster", "add-on"].map(String::from).to_vec(),
     );
+    sources.facts[0]
+        .reads
+        .sets
+        .insert("spec.published.type".to_string(), "ProfileType".to_string());
     sources
 }
 
@@ -946,14 +954,72 @@ fn a_read_of_a_closed_set_whose_fact_lists_no_values_is_a_fault() {
 #[test]
 fn a_list_that_names_a_value_the_set_does_not_have_is_a_fault() {
     let mut sources = world_with_a_set_read();
-    sources.facts[0]
-        .reads
-        .values
-        .insert("spec.published.type".to_string(), vec!["edge".to_string()]);
+    sources.facts[0].reads.values.insert(
+        "spec.published.type".to_string(),
+        ["cluster", "add-on", "edge"].map(String::from).to_vec(),
+    );
     assert_one_fault(
         &sources,
-        "it lists `edge` at `spec.published.type`, and the set ProfileType of strata has no such value",
+        "it lists `edge` at `spec.published.type`, and the set ProfileType has no such value",
     );
+}
+
+#[test]
+fn a_set_with_a_value_that_the_list_lacks_is_a_fault_unless_only_strata_gives_the_value() {
+    let mut sources = world_with_a_set_read();
+    sources.facts[0].reads.values.insert(
+        "spec.published.type".to_string(),
+        vec!["cluster".to_string()],
+    );
+    assert_one_fault(
+        &sources,
+        "the set ProfileType has `add-on`, and the list at `spec.published.type` lacks it",
+    );
+    // a word of strata is the set alone: the list of a listing of packs has no `absent`
+    let mut sources = world_with_a_set_read();
+    sources.closed_sets = vec![Set {
+        name: "PackState".to_string(),
+        values: ["deprecated", "absent"].map(String::from).to_vec(),
+    }];
+    sources.set_reads.clear();
+    sources.cloud.code.clear();
+    sources.facts[0].reads.sets =
+        BTreeMap::from([("spec.published.type".to_string(), "PackState".to_string())]);
+    sources.facts[0].reads.values.insert(
+        "spec.published.type".to_string(),
+        vec!["deprecated".to_string()],
+    );
+    assert_eq!(faults_of(&sources), Vec::<String>::new());
+}
+
+#[test]
+fn a_fact_that_names_a_set_names_a_type_of_strata_and_a_field_with_a_list() {
+    let mut sources = world_with_a_set_read();
+    sources.facts[0]
+        .reads
+        .sets
+        .insert("spec.published.type".to_string(), "ProfileKind".to_string());
+    let found = faults_of(&sources);
+    assert!(
+        found
+            .iter()
+            .any(|m| m.contains("names ProfileKind at `spec.published.type`")
+                && m.contains("no closed set that `closed_sets()`")),
+        "{found:?}"
+    );
+    let mut sources = world_with_a_set_read();
+    sources.facts[0]
+        .reads
+        .sets
+        .insert("status.state".to_string(), "ProfileType".to_string());
+    assert_one_fault(&sources, "`reads.values` has no list there");
+}
+
+#[test]
+fn a_read_of_a_closed_set_whose_fact_does_not_name_the_set_is_a_fault() {
+    let mut sources = world_with_a_set_read();
+    sources.facts[0].reads.sets.clear();
+    assert_one_fault(&sources, "so `reads.sets` must name ProfileType there");
 }
 
 #[test]
@@ -1000,20 +1066,44 @@ fn each_read_of_the_code_of_strata_that_notes_an_unknown_value_has_its_list_in_a
             .unwrap_or_else(|| panic!("no fact `{}`", read.fact));
         let listed = &fact.reads.values[read.field];
         assert!(!listed.is_empty(), "{} at {}", read.set, read.field);
-        // the list of the fact is a part of the set: the set can hold a value that only strata gives
-        assert!(
-            listed.iter().all(|v| read.values.contains(v)),
-            "{} at {}: {listed:?} against {:?}",
-            read.set,
-            read.field,
-            read.values
-        );
+        assert_eq!(fact.reads.sets[read.field], read.set, "{}", fact.id);
     }
-    assert!(
-        sources
-            .set_reads
-            .iter()
-            .any(|r| r.set == "ProfileType" && r.values.contains(&"add-on".to_string()))
+    let profile_type = sources
+        .closed_sets
+        .iter()
+        .find(|s| s.name == "ProfileType")
+        .unwrap();
+    assert!(profile_type.values.contains(&"add-on".to_string()));
+}
+
+#[test]
+fn the_lists_of_the_closed_sets_of_strata_in_the_facts_name_their_type() {
+    let sources = Sources::read(&crate::repository(), None).0;
+    let named = |id: &str, field: &str| {
+        let fact = sources.facts.iter().find(|f| f.id == id).unwrap();
+        assert!(
+            fact.reads.values.contains_key(field),
+            "{id}: no list at {field}"
+        );
+        fact.reads.sets.get(field).map(String::as_str)
+    };
+    // the five lists that the issue names, and the sixth that the code of strata notes
+    assert_eq!(
+        named("cluster-document", "status.state"),
+        Some("ClusterState")
+    );
+    assert_eq!(named("pack-listing", "items[].spec.type"), Some("PackType"));
+    assert_eq!(
+        named("oci-registry-summary", "items[].spec.providerType"),
+        Some("OciProvider")
+    );
+    assert_eq!(
+        named("profile-document", "metadata.annotations.scope"),
+        Some("ProfileScope")
+    );
+    assert_eq!(
+        named("profile-document", "spec.published.type"),
+        Some("ProfileType")
     );
 }
 
