@@ -14,10 +14,11 @@ use std::sync::LazyLock;
 use chrono::NaiveDate;
 use regex::Regex;
 use serde_json::Value;
+use strata::api::Method;
 use strata::closed_set::ClosedSet;
 use strata::model::cloud::Cloud;
 use strata_preflight::fixture;
-use strata_preflight::rule::{Catalog, Check, Rule, Tier};
+use strata_preflight::rule::{Catalog, Check, ExecCheck, Rule, Tier};
 
 use super::model::{Fact, Kind};
 use super::sources::Sources;
@@ -167,7 +168,7 @@ pub fn read_rules(catalog: &Catalog) -> (CloudSources, Vec<String>) {
             of_the_lab: rule.engines.iter().any(|e| e == ENGINE_LAB),
             ..CloudRule::default()
         };
-        if let Some(Check::Exec { argv, .. }) = &rule.check {
+        if let Some(Check::Exec(ExecCheck { argv, .. })) = &rule.check {
             cloud.argv.clone_from(argv);
         }
         let fixtures = rule
@@ -192,7 +193,10 @@ fn programs_of(rule: &Rule) -> String {
     if let Some(check) = &rule.check {
         programs.push(check.expr().to_string());
         match check {
-            Check::Exec { argv, .. } => programs.extend(argv.iter().cloned()),
+            Check::Exec(exec) => {
+                programs.extend(exec.argv.iter().cloned());
+                programs.extend(exec.palette.iter().map(|read| read.path.clone()));
+            }
             Check::Palette(request) => {
                 programs.push(request.path.clone());
                 programs.extend(request.body.clone());
@@ -270,6 +274,7 @@ pub fn check(sources: &Sources) -> Vec<String> {
     bad.extend(calls_agree(sources));
     bad.extend(calls_read_only(sources));
     bad.extend(tables_proven(sources));
+    bad.extend(routes_beside(sources));
     bad.extend(literals_covered(sources));
     bad
 }
@@ -420,6 +425,44 @@ fn tables_proven(sources: &Sources) -> Vec<String> {
                     "fact `{id}`: the table holds `{value}`, and no rule of the fact does"
                 ));
             }
+        }
+    }
+    bad
+}
+
+/// The route of Palette beside a call starts with a method, and names the fields that it lacks.
+/// Each one is a field that the call reads: a route that lacks no field would answer the whole
+/// call, and the rule would not need the cloud. A table is no call, so it has no route.
+fn routes_beside(sources: &Sources) -> Vec<String> {
+    let mut bad = Vec::new();
+    for fact in clouds(sources) {
+        let Some(palette) = &fact.palette else {
+            continue;
+        };
+        let id = &fact.id;
+        let method = palette.route.split_once(' ').map(|(method, _)| method);
+        if !method.is_some_and(|m| Method::parse(m).is_some()) {
+            bad.push(format!(
+                "fact `{id}`: the route `{}` must start with a method",
+                palette.route
+            ));
+        }
+        if palette.lacks.is_empty() {
+            bad.push(format!(
+                "fact `{id}`: the route names no field that it lacks, so it would answer the whole call"
+            ));
+        }
+        for field in palette
+            .lacks
+            .iter()
+            .filter(|f| !fact.reads.fields.contains(f))
+        {
+            bad.push(format!(
+                "fact `{id}`: the route lacks `{field}`, and the fact does not read it"
+            ));
+        }
+        if fact.table.is_some() {
+            bad.push(format!("fact `{id}`: a table has no route of Palette"));
         }
     }
     bad

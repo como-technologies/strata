@@ -70,10 +70,32 @@ fn instance_types_answer() -> serde_json::Value {
     ]})
 }
 
+/// The VPC of the static placement in the answers of the VPC route and of the security group route.
+const VPC: &str = "vpc-0a1b2c3d";
+
+/// The answer of the VPC route for `us-east-2`: one VPC with a public subnet in `us-east-2a` and a
+/// private subnet in `us-east-2b`. A subnet has no key beside the five that Palette gives: it
+/// lists no free addresses and no tags.
+fn vpcs_answer() -> serde_json::Value {
+    json!({"vpcs": [{"vpcId": VPC, "name": "platform", "cidrBlock": "10.10.0.0/16", "subnets": [
+        {"subnetId": "subnet-0aaa", "name": "platform-public-a", "az": "us-east-2a", "isPrivate": false, "mapPublicIpOnLaunch": true},
+        {"subnetId": "subnet-0bbb", "name": "platform-private-b", "az": "us-east-2b", "isPrivate": true, "mapPublicIpOnLaunch": false},
+    ]}]})
+}
+
+/// The answer of the security group route for the VPC: the default group, and `payments-node`. An
+/// earlier cluster of the name `payments` left that group.
+fn security_groups_answer() -> serde_json::Value {
+    json!({"groups": [
+        {"groupId": "sg-0de4a017", "groupName": "default", "ownerId": "123456789012"},
+        {"groupId": "sg-0f00ba4e", "groupName": "payments-node", "ownerId": "123456789012"},
+    ]})
+}
+
 /// Write the answers that the live tier of `strata preflight` reads for `preflight_entity` in
 /// `project`. They are the cloud account, the property route, the regions, the instance types of
-/// the region, and the key pairs of the account. The validate route refuses the worker pool for
-/// its CPU.
+/// the region, the VPCs of the region, the security groups of the VPC, and the key pairs of the
+/// account. The validate route refuses the worker pool for its CPU.
 pub(super) fn preflight_routes(r: &mut Runner, project: &str) {
     r.answer(
         project,
@@ -94,6 +116,18 @@ pub(super) fn preflight_routes(r: &mut Runner, project: &str) {
         project,
         &format!("v1/clouds/aws/regions/us-east-2/instancetypes@cloudAccountUid={PLATFORM_AWS}"),
         &instance_types_answer(),
+    );
+    r.answer(
+        project,
+        &format!("v1/clouds/aws/regions/us-east-2/vpcs@cloudAccountUid={PLATFORM_AWS}"),
+        &vpcs_answer(),
+    );
+    r.answer(
+        project,
+        &format!(
+            "v1/clouds/aws/securitygroups@cloudAccountUid={PLATFORM_AWS}&region=us-east-2&vpcId={VPC}"
+        ),
+        &security_groups_answer(),
     );
     r.answer(
         project,
@@ -379,6 +413,24 @@ fn preflight_account(r: &mut Runner) {
         0,
         false,
         "strata preflight cluster-null.json --cloud aws --no-exec --tier palette --rule instance-offering --strict --quiet | sed -n '4p'",
+    );
+    // Two more rules read a list of the account (#393). A static VPC names the subnets of the pools.
+    // The VPC route lists subnet-0bbb in us-east-2b, and the pool says us-east-2a. The security
+    // group route lists payments-node, a group that an earlier cluster left in the VPC.
+    r.quiet(&format!(
+        r#"jq '.spec.cloudConfig.vpcId = "{VPC}" | .spec.machinepoolconfig[].cloudConfig.subnets = [{{"id": "subnet-0aaa", "az": "us-east-2a"}}, {{"id": "subnet-0bbb", "az": "us-east-2a"}}]' cluster.json > cluster-vpc.json"#
+    ));
+    r.step(
+        "preflight-subnets",
+        1,
+        false,
+        "strata preflight cluster-vpc.json --cloud aws --no-exec --tier palette --rule static-subnets --strict --quiet | sed -n '4,8p'",
+    );
+    r.step(
+        "preflight-security-group",
+        1,
+        false,
+        "strata preflight cluster-vpc.json --cloud aws --no-exec --tier palette --rule sg-name-collision --strict --quiet | sed -n '4,8p'",
     );
     r.quiet(
         r#"jq '.spec.cloudConfig.sshKeyName = "retired" | .spec.cloudConfig.vpcId = ""' cluster.json > cluster-key.json"#,

@@ -226,6 +226,80 @@ rules:
 }
 
 #[test]
+fn the_reproduce_lines_of_a_command_with_a_read_of_palette_send_the_request_then_judge_both_answers()
+ {
+    let section = r#"
+section: quotas
+title: Q
+rules:
+  - id: aws-quotas
+    title: t
+    engines: [aws]
+    tier: cloud
+    status: seen
+    what: w
+    check:
+      kind: exec
+      needs: [aws]
+      palette: {path: "/v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc"}
+      argv: [aws, service-quotas, get-service-quota]
+      expr: ".response.ok and .exec.exit == 0"
+"#;
+    let mut c = crate::rule::Catalog::default();
+    c.push(
+        crate::rule::Catalog::parse_section(section, std::path::Path::new("q.yaml")).unwrap(),
+        std::path::Path::new("q.yaml"),
+    )
+    .unwrap();
+    let subject = Subject {
+        cloud: "aws".into(),
+        release: None,
+        source: "c.json".into(),
+        name: "fred".into(),
+        cluster_uid: None,
+    };
+    let rule = c.rule("aws-quotas").unwrap();
+    let outcome = |request: Option<Call>| Outcome {
+        verdict: Verdict::Failed,
+        messages: vec![],
+        elapsed: Duration::from_millis(1),
+        ran: Ran::Exec {
+            line: "aws service-quotas get-service-quota".into(),
+            answer: Some("exit 0".into()),
+            request,
+        },
+    };
+    let call = Call::get(
+        "/v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc",
+        Some("HTTP 200"),
+    );
+    let lines = auto_reproduce(rule, &outcome(Some(call)), &subject, Some("out"));
+    assert_eq!(lines.len(), 3, "{lines:#?}");
+    assert!(
+        lines[0].starts_with("code=$(curl -s -o body.json"),
+        "{}",
+        lines[0]
+    );
+    assert!(
+        lines[0].contains("/instancetypes?cloudAccountUid=acc"),
+        "{}",
+        lines[0]
+    );
+    assert_eq!(lines[1], "aws service-quotas get-service-quota");
+    assert!(
+        lines[2].contains("--slurpfile body body.json"),
+        "{}",
+        lines[2]
+    );
+    assert!(lines[2].contains("'.response = {ok:"), "{}", lines[2]);
+    assert!(lines[2].contains(".exec = {exit: 0"), "{}", lines[2]);
+    // a command that sent no request shows the command and the program over `.exec` alone
+    let lines = auto_reproduce(rule, &outcome(None), &subject, Some("out"));
+    assert_eq!(lines.len(), 2, "{lines:#?}");
+    assert!(!lines[1].contains(".response ="), "{}", lines[1]);
+}
+
+#[test]
 fn the_reproduce_line_of_a_watch_reads_the_events_route_that_the_watch_reads() {
     let section = r"
 section: lifecycle

@@ -128,6 +128,8 @@ pub enum Ran {
         line: String,
         /// The exit code, as `exit 0`.
         answer: Option<String>,
+        /// The read of Palette that the check made before the command, when it has one.
+        request: Option<Call>,
     },
     /// The one request of a check of Palette.
     Request(Call),
@@ -155,10 +157,15 @@ impl Ran {
         }
     }
 
-    /// The requests of a check with `each`, one for each item, in the order of the list.
+    /// The requests of a check with `each`, one for each item, in the order of the list. For a
+    /// command with a read of Palette, the one request of the read.
     pub fn requests(&self) -> &[Call] {
         match self {
             Ran::Requests(calls) => calls,
+            Ran::Exec {
+                request: Some(call),
+                ..
+            } => std::slice::from_ref(call),
             Ran::Nothing | Ran::Exec { .. } | Ran::Request(_) => &[],
         }
     }

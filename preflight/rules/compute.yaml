@@ -177,7 +177,8 @@ rules:
       refuses a subnet with a route to an internet gateway, and the profile fails. With no subnet ids,
       CAPA takes the private subnets of the cluster. The check reads the route tables the named
       subnets are associated with, and flags a route to an `igw-`. A subnet with no association
-      uses the main route table, and this filter does not return it. This is a reading of the
+      uses the main route table, and this filter does not return it. The VPC route of Palette
+      lists no route table. So the check stays at the cloud tier. This is a reading of the
       documentation, not a run.
     check:
       kind: exec

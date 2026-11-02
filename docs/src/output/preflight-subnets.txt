@@ -1,0 +1,6 @@
+$ strata preflight cluster-vpc.json --cloud aws --no-exec --tier palette --rule static-subnets --strict --quiet | sed -n '4,8p'
+  PROBE FAIL    static-subnets               Each pool subnet exists, in the VPC and in the zone of the …     1 ms
+                subnet subnet-0bbb of pool cp-pool is in zone us-east-2b, not in us-east-2a
+                subnet subnet-0bbb of pool worker-pool is in zone us-east-2b, not in us-east-2a
+                ran: GET /v1/clouds/aws/regions/us-east-2/vpcs?cloudAccountUid=64f3000000000000000000a1 -> HTTP 200
+                reproduce: aws ec2 describe-subnets --region us-east-2 --subnet-ids subnet-0aaa subnet-0bbb --query 'Subnets[].[SubnetId,VpcId,AvailabilityZone]' --output table

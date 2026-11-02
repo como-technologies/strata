@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde_json::json;
 
 use super::super::check::check as faults_of;
-use super::super::model::Fact;
+use super::super::model::{Fact, PaletteRoute};
 use super::super::sources::Sources;
 use super::{
     Answer, CloudRule, CloudSources, command_words, documents, literals, read_code, read_rules,
@@ -843,4 +843,53 @@ fn the_catalog_holds_a_text_that_names_a_cloud_fact_in_a_cloud_tier_rule_alone()
         read.programs.len() > read.rules.len(),
         "the programs of every rule"
     );
+}
+
+#[test]
+fn a_route_of_palette_beside_a_call_names_the_fields_that_it_lacks() {
+    let mut sources = world();
+    sources.facts[0].palette = Some(PaletteRoute {
+        route: "GET /v1/clouds/aws/regions/{region}/instancetypes".to_string(),
+        lacks: vec!["Quota.Value".to_string()],
+    });
+    assert_eq!(faults_of(&sources), Vec::<String>::new());
+}
+
+#[test]
+fn a_route_of_palette_that_lacks_no_field_would_answer_the_whole_call() {
+    let mut sources = world();
+    sources.facts[0].palette = Some(PaletteRoute {
+        route: "GET /v1/clouds/aws/regions/{region}/instancetypes".to_string(),
+        lacks: vec![],
+    });
+    assert_one_fault(&sources, "names no field that it lacks");
+}
+
+#[test]
+fn a_route_of_palette_cannot_lack_a_field_that_the_call_does_not_read() {
+    let mut sources = world();
+    sources.facts[0].palette = Some(PaletteRoute {
+        route: "GET /v1/clouds/aws/regions/{region}/instancetypes".to_string(),
+        lacks: vec!["Quota.Unit".to_string()],
+    });
+    assert_one_fault(
+        &sources,
+        "the route lacks `Quota.Unit`, and the fact does not read it",
+    );
+}
+
+#[test]
+fn a_route_of_palette_starts_with_a_method_and_a_table_has_no_route() {
+    let mut sources = world();
+    sources.facts[0].palette = Some(PaletteRoute {
+        route: "/v1/clouds/aws/regions/{region}/instancetypes".to_string(),
+        lacks: vec!["Quota.Value".to_string()],
+    });
+    assert_one_fault(&sources, "must start with a method");
+    let mut sources = world();
+    sources.facts[2].palette = Some(PaletteRoute {
+        route: "GET /v1/clouds/aws/regions/{region}/availabilityzones".to_string(),
+        lacks: vec!["AvailabilityZones[].ZoneId".to_string()],
+    });
+    assert_one_fault(&sources, "a table has no route of Palette");
 }

@@ -1,0 +1,6 @@
+$ strata preflight cluster-vpc.json --cloud aws --no-exec --tier palette --rule sg-name-collision --strict --quiet | sed -n '4,8p'
+  PROBE FAIL    sg-name-collision            No security group of the cluster is in the VPC before the b…     1 ms
+                security group payments-node (sg-0f00ba4e) is in VPC vpc-0a1b2c3d already: Palette makes a group of that name for the cluster, and the create of it fails
+                ran: GET /v1/clouds/aws/securitygroups?cloudAccountUid=64f3000000000000000000a1&region=us-east-2&vpcId=vpc-0a1b2c3d -> HTTP 200
+                reproduce: aws ec2 describe-security-groups --region us-east-2 --filters Name=vpc-id,Values=vpc-0a1b2c3d Name=group-name,Values=payments-node --query 'SecurityGroups[].[GroupName,GroupId]' --output table
+                reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clouds/aws/securitygroups?cloudAccountUid=64f3000000000000000000a1&region=us-east-2&vpcId=vpc-0a1b2c3d")

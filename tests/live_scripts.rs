@@ -2128,85 +2128,181 @@ fn jq_exit(filter: &str, answer: &str) -> Option<i32> {
         .code()
 }
 
-/// The check `vpcs-route-shape` of the plan reads each subnet at any depth, because no run has
-/// shown the name of the list (#393). The answer of the route passes it. A subnet without a zone,
-/// and an answer without a subnet, fail it.
+/// The check `vpcs-route-keys` of the plan reads the exact keys of the VPC route (#393). The answer
+/// of the route passes it. These answers fail it: a subnet without a zone, a subnet with a tag, a VPC
+/// with another key, and an answer with no subnet.
 #[test]
-fn preflight_plan_tests_the_shape_of_the_vpc_route_at_any_depth() {
-    let filter = plan_filter("vpcs-route-shape");
+fn preflight_plan_reads_the_exact_keys_of_the_vpc_route() {
+    let filter = plan_filter("vpcs-route-keys");
     let subnet = r#"{"subnetId":"subnet-1","az":"us-east-2a","isPrivate":true,"mapPublicIpOnLaunch":false,"name":"a"}"#;
     for (answer, status) in [
-        (format!(r#"{{"vpcs":[{{"cidrBlock":"10.0.0.0/16","subnets":[{subnet}]}}]}}"#), Some(0)),
-        (format!(r#"[{{"subnets":[{subnet},{subnet}]}}]"#), Some(0)),
         (
-            r#"{"vpcs":[{"subnets":[{"subnetId":"subnet-1","isPrivate":true,"mapPublicIpOnLaunch":false,"name":"a"}]}]}"#.to_string(),
+            format!(
+                r#"{{"vpcs":[{{"vpcId":"vpc-1","name":"a","cidrBlock":"10.0.0.0/16","subnets":[{subnet}]}}]}}"#
+            ),
+            Some(0),
+        ),
+        // a public subnet has no isPrivate, and an empty name is omitted
+        (
+            r#"{"vpcs":[{"vpcId":"vpc-1","subnets":[{"subnetId":"subnet-1","az":"us-east-2a","mapPublicIpOnLaunch":true}]}]}"#.to_string(),
+            Some(0),
+        ),
+        (
+            r#"{"vpcs":[{"vpcId":"vpc-1","subnets":[{"subnetId":"subnet-1","isPrivate":true,"name":"a"}]}]}"#.to_string(),
             Some(1),
         ),
-        (r#"{"vpcs":[{"subnets":[]}]}"#.to_string(), Some(1)),
+        (
+            r#"{"vpcs":[{"vpcId":"vpc-1","subnets":[{"subnetId":"subnet-1","az":"us-east-2a","tags":[]}]}]}"#.to_string(),
+            Some(1),
+        ),
+        (
+            r#"{"vpcs":[{"vpcId":"vpc-1","subnets":[{"subnetId":"subnet-1","az":"us-east-2a","availableIpAddressCount":9}]}]}"#.to_string(),
+            Some(1),
+        ),
+        (
+            r#"{"vpcs":[{"subnets":[{"subnetId":"subnet-1","az":"us-east-2a"}]}]}"#.to_string(),
+            Some(1),
+        ),
+        (
+            r#"{"vpcs":[{"vpcId":"vpc-1","tags":{},"subnets":[{"subnetId":"subnet-1","az":"us-east-2a"}]}]}"#.to_string(),
+            Some(1),
+        ),
+        (r#"{"vpcs":[{"vpcId":"vpc-1","subnets":[]}]}"#.to_string(), Some(1)),
+        // the list is under `vpcs`, and not at any other depth
+        (format!(r#"[{{"vpcId":"vpc-1","subnets":[{subnet}]}}]"#), Some(5)),
         ("{}".to_string(), Some(1)),
     ] {
         assert_eq!(jq_exit(&filter, &answer), status, "{answer}");
     }
 }
 
-/// The check `zones-route-shape` needs the name, the state, and the id of each zone.
+/// The check `zones-route-keys` needs the name, the state, and the id of each zone, and no other
+/// key. The route lists no zone type, and `eks-unsupported-zone` reads it.
 #[test]
-fn preflight_plan_tests_the_shape_of_the_zone_route_at_any_depth() {
-    let filter = plan_filter("zones-route-shape");
+fn preflight_plan_reads_the_exact_keys_of_the_zone_route() {
+    let filter = plan_filter("zones-route-keys");
     for (answer, status) in [
         (
+            r#"{"zones":[{"name":"us-east-2a","state":"available","zoneId":"use2-az1"}]}"#,
+            Some(0),
+        ),
+        (
+            r#"{"zones":[{"name":"us-east-2a","state":"available","zoneId":"use2-az1","zoneType":"availability-zone"}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"zones":[{"name":"us-east-2a","zoneId":"use2-az1"}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"zones":[{"name":"us-east-2a","state":"available"}]}"#,
+            Some(1),
+        ),
+        (r#"{"zones":[]}"#, Some(1)),
+        // the list is under `zones`, and under no other name
+        (
             r#"{"azs":[{"name":"us-east-2a","state":"available","zoneId":"use2-az1"}]}"#,
-            Some(0),
-        ),
-        (
-            r#"[{"name":"us-east-2a","state":"available","zoneId":"use2-az1","zoneType":"availability-zone"}]"#,
-            Some(0),
-        ),
-        (
-            r#"{"azs":[{"name":"us-east-2a","zoneId":"use2-az1"}]}"#,
             Some(1),
         ),
-        (
-            r#"{"azs":[{"name":"us-east-2a","state":"available"}]}"#,
-            Some(1),
-        ),
-        (r#"{"azs":[]}"#, Some(1)),
     ] {
         assert_eq!(jq_exit(&filter, answer), status, "{answer}");
     }
 }
 
-/// The two checks with a `?` only record the keys of an entry, so a run shows whether the routes
-/// list the tags of a subnet and the type of a zone.
+/// The check `sgs-route-keys` needs the id and the name of each group. It allows `ownerId` and no
+/// other key.
 #[test]
-fn preflight_plan_records_the_keys_of_a_subnet_and_of_a_zone_and_fails_on_neither() {
+fn preflight_plan_reads_the_exact_keys_of_the_security_group_route() {
+    let filter = plan_filter("sgs-route-keys");
+    for (answer, status) in [
+        (
+            r#"{"groups":[{"groupId":"sg-1","groupName":"default","ownerId":"123456789012"}]}"#,
+            Some(0),
+        ),
+        (
+            r#"{"groups":[{"groupId":"sg-1","groupName":"default"}]}"#,
+            Some(0),
+        ),
+        (r#"{"groups":[{"groupName":"default"}]}"#, Some(1)),
+        (r#"{"groups":[{"groupId":"sg-1"}]}"#, Some(1)),
+        (
+            r#"{"groups":[{"groupId":"sg-1","groupName":"default","tags":[]}]}"#,
+            Some(1),
+        ),
+        (r#"{"groups":[]}"#, Some(1)),
+    ] {
+        assert_eq!(jq_exit(&filter, answer), status, "{answer}");
+    }
+}
+
+/// The check `instancetypes-cpu` needs each pool type of the entity in the list, with `cpu` as a
+/// number above 0. A type that the list lacks, and a type with no `cpu`, fail it.
+#[test]
+fn preflight_plan_needs_the_cpu_of_each_pool_type_in_the_instance_type_route() {
+    let filter = plan_filter("instancetypes-cpu");
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("clean.json"),
+        r#"{"spec":{"machinepoolconfig":[{"cloudConfig":{"instanceType":"t3.xlarge"}},{"cloudConfig":{"instanceType":"m5.large"}}]}}"#,
+    )
+    .unwrap();
+    for (answer, status) in [
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4},{"type":"m5.large","cpu":2}]}"#,
+            Some(0),
+        ),
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4},{"type":"m5.large"}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4},{"type":"m5.large","cpu":"2"}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4},{"type":"m5.large","cpu":0}]}"#,
+            Some(1),
+        ),
+    ] {
+        std::fs::write(dir.path().join("instancetypes.json"), answer).unwrap();
+        let out = Command::new("jq")
+            .arg("-e")
+            .arg("--slurpfile")
+            .arg("e")
+            .arg(dir.path().join("clean.json"))
+            .arg(&filter)
+            .arg(dir.path().join("instancetypes.json"))
+            .output_locked()
+            .unwrap();
+        assert_eq!(out.status.code(), status, "{answer}");
+    }
+}
+
+/// The four checks of the routes expect an exit code of 0. A key beside the known keys is a fault
+/// of the run, and not a note.
+#[test]
+fn preflight_plan_judges_each_check_of_the_routes() {
     let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
-    for id in ["vpcs-route-keys", "zones-route-keys"] {
+    for id in [
+        "instancetypes-cpu",
+        "vpcs-route-keys",
+        "zones-route-keys",
+        "sgs-route-keys",
+    ] {
         let line = script
             .lines()
             .find(|l| l.contains(&format!("check {id} ")))
             .unwrap_or_else(|| panic!("no check {id}"));
-        assert!(line.contains(&format!("check {id} ? ")), "{line}");
+        assert!(line.contains(&format!("check {id} 0 ")), "{line}");
     }
-    let keys = plan_filter("zones-route-keys");
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(
-        dir.path().join("zones.json"),
-        r#"{"azs":[{"name":"a","state":"available","zoneId":"use2-az1","zoneType":"availability-zone"}]}"#,
-    )
-    .unwrap();
-    let o = Command::new("jq")
-        .args(["-c", &keys])
-        .arg(dir.path().join("zones.json"))
-        .output_locked()
-        .unwrap();
-    assert_eq!(
-        text(&o.stdout).trim(),
-        r#"["name","state","zoneId","zoneType"]"#
-    );
 }
 
-/// The route checks run for the engines on AWS only, and the plan for GCP never calls them.
+/// The route checks of AWS run for the engines on AWS only, and the plan for GCP never calls them.
+/// The instance type check runs for every engine.
 #[test]
 fn preflight_plan_asks_the_list_routes_of_aws_for_aws_and_eks_only() {
     let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
@@ -2218,10 +2314,19 @@ fn preflight_plan_asks_the_list_routes_of_aws_for_aws_and_eks_only() {
     for route in [
         "/vpcs?cloudAccountUid=",
         "/availabilityzones?cloudAccountUid=",
+        "/securitygroups?cloudAccountUid=",
     ] {
         assert!(aws.contains(route), "{route}");
         assert!(!script[end..].contains(route), "{route} is asked for GCP");
     }
+    assert!(
+        !script[start..].contains("vpcs-route-shape") && !script.contains("zones-route-shape"),
+        "the checks of the shape at any depth are gone"
+    );
+    assert!(
+        script[..start].contains("check instancetypes-cpu "),
+        "every engine runs the instance type check"
+    );
 }
 
 #[test]

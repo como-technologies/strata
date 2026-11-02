@@ -14,14 +14,18 @@ rules:
       A build asks EC2 for the vCPUs of each pool, one VPC, one internet gateway, and a load
       balancer. Each zone adds an elastic IP and a NAT gateway. A quota that is short fails during
       the build with `VcpuLimitExceeded`, `VpcLimitExceeded`, `AddressLimitExceeded`, or
-      `NatGatewayLimitExceeded`. Palette reads no quota. The check reads one quota, the on-demand
-      standard vCPUs (`L-1216C47A`), and compares its value with the vCPUs the on-demand pools ask
-      for. It counts 4 vCPUs for an `xlarge` type, 4 for each multiple (`2xlarge` is 8), and 2 for a
-      smaller size. The vCPU count of a type is not in the entity. The check does not read the
+      `NatGatewayLimitExceeded`. Palette reads no quota, and no route of Palette lists one. The
+      check reads one quota, the on-demand standard vCPUs (`L-1216C47A`), from the tool of the
+      cloud. It compares the value with the vCPUs the on-demand pools ask for. The vCPUs of a type
+      are the field `cpu` of the instance type route of Palette. A pool whose type that route does
+      not list adds nothing, and `instance-offering` reports the type. The check does not read the
       usage, so a pass is not a proof. The other quotas are in the reproduce lines.
+    when: .entity.spec.cloudAccountUid != null
     check:
       kind: exec
       needs: [aws]
+      palette:
+        path: '/v1/clouds/{{ .accountKind }}/regions/{{ .entity.spec.cloudConfig.region }}/instancetypes?cloudAccountUid={{ .entity.spec.cloudAccountUid }}'
       argv:
         - aws
         - service-quotas
@@ -35,20 +39,21 @@ rules:
         - --output
         - json
       expr: |
-        def vcpus: (split(".") | .[1] // "") as $s
-          | if $s == "xlarge" then 4
-            elif ($s | test("^[0-9]+xlarge$")) then ($s | rtrimstr("xlarge") | tonumber) * 4
-            else 2 end;
         .entity.spec.cloudConfig.region as $r
-        | ([ .entity.spec.machinepoolconfig[]
-             | select((.cloudConfig.capacityType // "on-demand") != "spot")
-             | select((.poolConfig.size // 0) > 0)
-             | { name: .poolConfig.name, size: .poolConfig.size, type: (.cloudConfig.instanceType // ""), v: ((.cloudConfig.instanceType // "") | vcpus) } ]) as $pools
-        | ([ $pools[] | .size * .v ] | add // 0) as $need
-        | if .exec.exit != 0 then ["aws service-quotas get-service-quota failed: \(.exec.stderr | .[:200])"]
-          else (.exec.stdout.Quota.Value // 0) as $q
+        | if (.response.ok | not) then ["Palette cannot list the instance types of region \($r): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          elif ((.response.body.instanceTypes | type) != "array") then ["Palette gave no list of instance types for region \($r)"]
+          elif .exec.exit != 0 then ["aws service-quotas get-service-quota failed: \(.exec.stderr | .[:200])"]
+          else .response.body.instanceTypes as $types
+          | ([ .entity.spec.machinepoolconfig[]
+               | select((.cloudConfig.capacityType // "on-demand") != "spot")
+               | select((.poolConfig.size // 0) > 0)
+               | (.cloudConfig.instanceType // "") as $t
+               | { name: .poolConfig.name, size: .poolConfig.size, type: $t, cpu: ([ $types[] | select(.type == $t) | .cpu ] | first // null) } ]) as $pools
+          | ([ $pools[] | select(.cpu != null) | .size * .cpu ] | add // 0) as $need
+          | ([ $pools[] | select(.cpu == null) | .name ]) as $unknown
+          | (.exec.stdout.Quota.Value // 0) as $q
           | if $q < $need
-            then ["the on-demand vCPU quota L-1216C47A in \($r) is \($q), and the pools ask for \($need) vCPUs: \([ $pools[] | "\(.size) x \(.type)" ] | join(", "))"]
+            then ["the on-demand vCPU quota L-1216C47A in \($r) is \($q), and the pools ask for \($need) vCPUs: \([ $pools[] | select(.cpu != null) | "\(.size) x \(.type)" ] | join(", "))\(if ($unknown | length) > 0 then "; the instance type route lists no cpu for pool \($unknown | join(", ")), so it is not counted" else "" end)"]
             else [] end
           end
     reproduce:
@@ -64,9 +69,13 @@ rules:
         ref: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-resource-limits.html
       - kind: doc
         ref: https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html
+      - kind: source
+        note: the instance type route of Palette lists the vCPUs of each type in the field cpu, and no route lists a quota
     tests:
       - fault: fixtures/aws/vcpu-quota-low.json
         clean: fixtures/aws/vcpu-quota-clean.json
+      - fault: fixtures/aws/vcpu-quota-list-refused.json
+      - clean: fixtures/aws/vcpu-quota-type-not-listed.json
 
   - id: eks-quotas
     title: The EKS quotas cover the cluster and its node groups
@@ -150,14 +159,19 @@ rules:
     what: |
       A build asks the region for CPUs, in-use addresses, disk, and instance groups, and the project
       for networks, firewalls, and routers. A quota that is short fails with `QUOTA_EXCEEDED`, in an
-      event for GKE and in the machine status for GCP. Palette reads no quota. The check reads the
-      quotas of the region and compares the free `CPUS` (limit minus usage) with the CPUs the pools
-      ask for. It reads the count from the end of the machine type (`e2-standard-4` is 4) and counts 2
-      for a type with no number (`e2-medium`). A family with its own metric (`N2_CPUS`, `C3_CPUS`) has
-      its own limit, in the same output; the check does not read it.
+      event for GKE and in the machine status for GCP. Palette reads no quota, and no route of
+      Palette lists one. The check reads the quotas of the region from the tool of the cloud. It
+      compares the free `CPUS` (limit minus usage) with the CPUs the pools ask for. The CPUs of a
+      machine type are the field `cpu` of the instance type route of Palette. A pool whose type that
+      route does not list adds nothing, and `instance-offering` reports the type. A family with its
+      own metric (`N2_CPUS`, `C3_CPUS`) has its own limit, in the same output; the check does not
+      read it.
+    when: .entity.spec.cloudAccountUid != null
     check:
       kind: exec
       needs: [gcloud]
+      palette:
+        path: '/v1/clouds/{{ .accountKind }}/regions/{{ .entity.spec.cloudConfig.region }}/instancetypes?cloudAccountUid={{ .entity.spec.cloudAccountUid }}'
       argv:
         - gcloud
         - compute
@@ -169,17 +183,21 @@ rules:
         - --format
         - json
       expr: |
-        def cpus: if test("-[0-9]+$") then (split("-") | .[-1] | tonumber) else 2 end;
         .entity.spec.cloudConfig.region as $r
-        | ([ .entity.spec.machinepoolconfig[]
-             | select((.poolConfig.size // 0) > 0)
-             | { size: .poolConfig.size, type: (.cloudConfig.instanceType // ""), c: ((.cloudConfig.instanceType // "") | cpus) } ]) as $pools
-        | ([ $pools[] | .size * .c ] | add // 0) as $need
-        | if .exec.exit != 0 then ["gcloud compute regions describe failed: \(.exec.stderr | .[:200])"]
-          else ([ (.exec.stdout.quotas // [])[] | select(.metric == "CPUS") ] | .[0]) as $q
+        | if (.response.ok | not) then ["Palette cannot list the instance types of region \($r): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          elif ((.response.body.instanceTypes | type) != "array") then ["Palette gave no list of instance types for region \($r)"]
+          elif .exec.exit != 0 then ["gcloud compute regions describe failed: \(.exec.stderr | .[:200])"]
+          else .response.body.instanceTypes as $types
+          | ([ .entity.spec.machinepoolconfig[]
+               | select((.poolConfig.size // 0) > 0)
+               | (.cloudConfig.instanceType // "") as $t
+               | { name: .poolConfig.name, size: .poolConfig.size, type: $t, cpu: ([ $types[] | select(.type == $t) | .cpu ] | first // null) } ]) as $pools
+          | ([ $pools[] | select(.cpu != null) | .size * .cpu ] | add // 0) as $need
+          | ([ $pools[] | select(.cpu == null) | .name ]) as $unknown
+          | ([ (.exec.stdout.quotas // [])[] | select(.metric == "CPUS") ] | .[0]) as $q
           | if $q == null then ["no CPUS quota in the output of gcloud compute regions describe \($r)"]
             elif ($q.limit - $q.usage) < $need
-            then ["CPUS in \($r): limit \($q.limit), usage \($q.usage), free \($q.limit - $q.usage); the pools ask for \($need) CPUs: \([ $pools[] | "\(.size) x \(.type)" ] | join(", "))"]
+            then ["CPUS in \($r): limit \($q.limit), usage \($q.usage), free \($q.limit - $q.usage); the pools ask for \($need) CPUs: \([ $pools[] | select(.cpu != null) | "\(.size) x \(.type)" ] | join(", "))\(if ($unknown | length) > 0 then "; the instance type route lists no cpu for pool \($unknown | join(", ")), so it is not counted" else "" end)"]
             else [] end
           end
     reproduce:
@@ -268,15 +286,18 @@ rules:
     status: inferred
     what: |
       Azure refuses a virtual machine over the regional vCPU quota, or over the quota of the VM
-      family, with `OperationNotAllowed`. Palette checks no Azure quota; the docs leave the capacity
-      to the operator. The check sums the vCPUs of the pools and compares them with the free
-      `cores` of `az vm list-usage`. The world holds no vCPU count for a type, so the check reads
-      the number in the type name: `Standard_D4s_v3` is 4, `Standard_DS1_v2` is 1. That reading is
-      right for the common families and is not a catalog. On AKS the control plane pool has no
-      node. The family quota can be lower than the regional one; the reproduce line prints it.
+      family, with `OperationNotAllowed`. Palette checks no Azure quota, and no route of Palette
+      lists one; the docs leave the capacity to the operator. The check sums the vCPUs of the pools
+      and compares them with the free `cores` of `az vm list-usage`. The vCPUs of a size are the
+      field `cpu` of the instance type route of Palette. A pool whose size that route does not list
+      adds nothing. On AKS the control plane pool has no node. The family quota can be lower than
+      the regional one; the reproduce line prints it.
+    when: .entity.spec.cloudAccountUid != null
     check:
       kind: exec
       needs: [az]
+      palette:
+        path: '/v1/clouds/{{ .accountKind }}/regions/{{ .entity.spec.cloudConfig.location }}/instancetypes?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&subscriptionId={{ .entity.spec.cloudConfig.subscriptionId }}'
       argv:
         - az
         - vm
@@ -288,16 +309,21 @@ rules:
         - --output
         - json
       expr: |
-        def vcpus: sub("^(Standard_|Basic_)?[A-Za-z]+"; "") | sub("[^0-9].*$"; "") | if . == "" then 0 else tonumber end;
         .cloud as $cloud | .entity.spec.cloudConfig.location as $loc
-        | ([ .entity.spec.machinepoolconfig[] | select(($cloud == "aks" and (.poolConfig.isControlPlane // false)) | not)
-             | ((.cloudConfig.instanceType // "") | vcpus) * (.poolConfig.size // 0) ] | add // 0) as $need
-        | if .exec.exit != 0 then ["az vm list-usage failed: \(.exec.stderr | .[:200])"]
-          else ([ (.exec.stdout // [])[] | select(.name.value == "cores") ] | first) as $cores
-            | if $cores == null then ["az vm list-usage gave no cores row for \($loc)"]
-              else (($cores.limit // 0) - ($cores.currentValue // 0)) as $free
-                | if $need > $free then ["the pools ask for \($need) vCPUs in \($loc) (from the type names), and the regional quota has \($free) free of \($cores.limit) (\($cores.currentValue) in use): Azure refuses the machines with OperationNotAllowed; the family quota of each type can be lower still"] else [] end
-              end
+        | if (.response.ok | not) then ["Palette cannot list the instance types of region \($loc): \(.response.body.code // .response.status): \(.response.body.message // "")"]
+          elif ((.response.body.instanceTypes | type) != "array") then ["Palette gave no list of instance types for region \($loc)"]
+          elif .exec.exit != 0 then ["az vm list-usage failed: \(.exec.stderr | .[:200])"]
+          else .response.body.instanceTypes as $types
+          | ([ .entity.spec.machinepoolconfig[] | select(($cloud == "aks" and (.poolConfig.isControlPlane // false)) | not)
+               | (.cloudConfig.instanceType // "") as $t
+               | { name: .poolConfig.name, size: (.poolConfig.size // 0), cpu: ([ $types[] | select(.type == $t) | .cpu ] | first // null) } ]) as $pools
+          | ([ $pools[] | select(.cpu != null) | .size * .cpu ] | add // 0) as $need
+          | ([ $pools[] | select(.cpu == null and .size > 0) | .name ]) as $unknown
+          | ([ (.exec.stdout // [])[] | select(.name.value == "cores") ] | first) as $cores
+          | if $cores == null then ["az vm list-usage gave no cores row for \($loc)"]
+            else (($cores.limit // 0) - ($cores.currentValue // 0)) as $free
+              | if $need > $free then ["the pools ask for \($need) vCPUs in \($loc), and the regional quota has \($free) free of \($cores.limit) (\($cores.currentValue) in use): Azure refuses the machines with OperationNotAllowed; the family quota of each type can be lower still\(if ($unknown | length) > 0 then "; the instance type route lists no cpu for pool \($unknown | join(", ")), so it is not counted" else "" end)"] else [] end
+            end
           end
     reproduce:
       - "az vm list-usage --location {{ .entity.spec.cloudConfig.location }} --subscription {{ .entity.spec.cloudConfig.subscriptionId }} --query \"[?name.value=='cores' || contains(name.localizedValue, 'Family vCPUs')].[name.localizedValue,currentValue,limit]\" --output table"

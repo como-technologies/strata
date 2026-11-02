@@ -54,8 +54,9 @@ Each rule has a tier: where a check can find the fault.
 Strata calls no cloud API itself. A cloud rule runs `aws` or `gcloud` when the
 tool is on the machine, so the credentials stay where the person keeps them.
 When the tool is not there, the rule is `NOT CHECKED`, with the command to run
-by hand: the report names the check that did not run. Each call of a cloud is a fact
-of the list: see [The facts of the clouds](#the-facts-of-the-clouds).
+by hand: the report names the check that did not run. A cloud rule can also read one list from
+Palette before its command. That rule needs the key and the tool, and it is `NOT RUN` with no key.
+Each call of a cloud is a fact of the list: see [The facts of the clouds](#the-facts-of-the-clouds).
 
 ## Two levels: probe and preflight check
 
@@ -208,22 +209,36 @@ facts give the reason too.
 
 ### The routes of Palette beside the calls
 
-The scope of strata says: ask Palette first. A route of Palette that answers a rule replaces its
-call, and the rule moves to the palette tier. These routes answer a part of a call.
+The scope of strata says: ask Palette first. A route of Palette that lists each field of a call
+replaces the call, and the rule moves to the palette tier. A route that lists some fields gives them
+to the rule. The call stays for the other fields, and its fact names the fields that the route lacks.
 
-| Call | Route of Palette | What the rules still need from the cloud |
+| Call | Route of Palette | Result |
 | --- | --- | --- |
-| `ec2 describe-subnets` | `GET /v1/clouds/aws/regions/{region}/vpcs` | `static-subnets` reads the subnet, its VPC, and its zone, which the route lists. `subnet-ips` reads the free addresses, which the route does not list. |
-| `ec2 describe-availability-zones` | `GET /v1/clouds/aws/regions/{region}/availabilityzones` | `eks-unsupported-zone` reads the zone type. No run shows whether the route lists it. |
+| `ec2 describe-subnets` | `GET /v1/clouds/aws/regions/{region}/vpcs` | `static-subnets` reads the route and is in the palette tier. The route lists each subnet with `subnetId` and `az`, in the VPC entry that holds it. `subnet-ips` stays in the cloud tier, because the route lists no count of free addresses. `lb-subnet-tags` stays, because it lists no tag. |
+| `ec2 describe-security-groups` | `GET /v1/clouds/aws/securitygroups` | `sg-name-collision` reads the route and is in the palette tier. The route lists `groupId` and `groupName` for a VPC. |
+| `ec2 describe-availability-zones` | `GET /v1/clouds/aws/regions/{region}/availabilityzones` | `eks-unsupported-zone` stays in the cloud tier. The route lists `name`, `state`, and `zoneId`. It lists no zone type, and the rule reads the zone type. |
+| `ec2 describe-route-tables` | `GET /v1/clouds/aws/regions/{region}/vpcs` | `private-egress` and `eks-fargate-private` stay. The route lists `isPrivate` for a subnet, and no route. |
+| `ec2 describe-vpcs` | `GET /v1/clouds/aws/regions/{region}/vpcs` | `teardown-order` stays. It reads the tag of the cluster, and the route lists no tag. |
+| `service-quotas`, `compute regions describe`, `vm list-usage` | `GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes` | `aws-quotas`, `gcp-quotas`, and `azure-vcpu-quota` read `cpu` of the route for the vCPUs of a pool. They stay in the cloud tier, because no route lists a quota. |
+| `compute networks subnets list` | `GET /v1/clouds/gcp/projects/{project}/regions/{region}/networks` | `gke-secondary-ranges` stays. The route lists the `id` and the `name` of a subnet, and no address range. |
+| `kms describe-key` | `GET /v1/clouds/aws/regions/{region}/kmskeys/validate` | `kms` stays. The route tells whether the ARN is in the list of keys, and it reads no state. See [The KMS key route](./palette/validate-routes.md#the-kms-key-route). |
+| `ec2 describe-images` | `POST /v1/clouds/aws/regions/{region}/images` | `aws-ami` and `eks-launch-template` stay. The route takes the credentials of the account in its body, and finds an image by its name. `eks-launch-template` reads an image by id and its state. |
 | `iam list-attached-role-policies` | `POST /v1/clouds/aws/policyArns/validate` | The policies on the nodes role. The route tells whether a policy ARN exists. |
-| `kms describe-key` | `GET /v1/clouds/aws/regions/{region}/kmskeys/validate` | The state of the key. See [The KMS key route](./palette/validate-routes.md#the-kms-key-route). |
 | `services list` | `POST /v1/clouds/gcp/properties/validate` | The services that are on. The route reads the project and the zones. |
 
-No run shows the answer of the first two routes yet. The checks `vpcs-route-shape` and
-`zones-route-shape` of [the live run of the plan](../development/live-runs.md#preflight-plansh)
-ask them. When the first check shows the answer, `static-subnets` moves to the palette tier, and
-its call leaves the list. [What no route checks](./palette/validate-routes.md#what-no-route-checks)
-says that no route runs a quota, a policy, a permission, or a version check of a cloud.
+The three quota rules read the route and the tool in one check. The check asks Palette for the
+instance types of the region, then runs the command for the quota, and compares the two. The route
+lists the `cpu` of a type. A pool whose type the route does not list adds nothing to the vCPUs of the
+check. The AWS route omits some old instance families, and `instance-offering` reports a type
+that the region does not list.
+
+The checks `instancetypes-cpu`, `vpcs-route-keys`, `zones-route-keys`, and `sgs-route-keys` of
+[the live run of the plan](../development/live-runs.md#preflight-plansh) ask the routes, and
+expect the keys of each answer. A new key can be a field that a cloud rule reads. Then that rule
+can move to the palette tier.
+[What no route checks](./palette/validate-routes.md#what-no-route-checks) says that no route runs a
+quota, a policy, a permission, or a version check of a cloud.
 
 ### The tables of cloud facts
 
@@ -246,11 +261,11 @@ The rules hold these tables today:
 | --- | --- |
 | The zone ids that EKS takes no cluster subnet in | The list of the zones of each region shows each id. |
 | The default limit of managed policies for a role | The default quota of Service Quotas gives the figure. |
-| The vCPUs of a type, read from its name | The answer for three instance types and two machine types gives their vCPUs. |
 
-The vCPUs of an Azure size have no proof, because the lab has no account of Azure. A list of the
-names that a build needs is no table of cloud facts. Examples are the roles, the policies, the
-services, and the actions of the documentation of Palette. The evidence of the rule names the page.
+A rule does not read a vCPU count from the name of a type. The three quota rules read `cpu` from
+the instance type route of Palette. A list of the names that a build needs is no table of cloud
+facts. Examples are the roles, the policies, the services, and the actions of the documentation of
+Palette. The evidence of the rule names the page.
 
 ## The decisions
 

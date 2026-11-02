@@ -36,6 +36,35 @@ pub struct PaletteCheck {
     pub expr: String,
 }
 
+/// A command on this machine, as the rule file gives it. [`Check::Exec`] holds it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[schemars(inline)]
+pub struct ExecCheck {
+    /// The command and its arguments, each with `{{ jq }}` templates over the world.
+    pub argv: Vec<String>,
+    /// The tools the command needs, by name, checked on the PATH first.
+    #[serde(default)]
+    pub needs: Vec<String>,
+    /// Seconds before the command is stopped. Default 60.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout: Option<u64>,
+    /// A read of Palette that the check makes before the command. With no value, the check
+    /// reads no answer of Palette.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub palette: Option<PaletteRead>,
+    /// The program over the world with `.exec`, and with `.response` when `palette` is set.
+    pub expr: String,
+}
+
+/// A read of Palette that an exec check makes before its command: one `GET` request.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[schemars(inline)]
+pub struct PaletteRead {
+    /// The path, with `{{ jq }}` templates over the world, such as
+    /// `/v1/clouds/{{ .accountKind }}/regions/{{ .entity.spec.cloudConfig.region }}/instancetypes`.
+    pub path: String,
+}
+
 /// The check of a rule: how strata-preflight finds the fault. Each kind runs a jq program over
 /// the world document (see [`crate::world`]), and the kinds differ in what they add to it first.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -58,18 +87,10 @@ pub enum Check {
     /// world with `.exec` added: `{exit, stdout, stderr}`. `stdout` is JSON when it parses, and
     /// the text otherwise. The command runs when each tool of `needs` is on the PATH; when one is
     /// not, the result is `NOT CHECKED` with the command to run by hand.
-    Exec {
-        /// The command and its arguments, each with `{{ jq }}` templates over the world.
-        argv: Vec<String>,
-        /// The tools the command needs, by name, checked on the PATH first.
-        #[serde(default)]
-        needs: Vec<String>,
-        /// Seconds before the command is stopped. Default 60.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        timeout: Option<u64>,
-        /// The program over the world with `.exec`.
-        expr: String,
-    },
+    ///
+    /// With `palette`, the check reads Palette first, and the program also reads `.response`, as
+    /// in a check of Palette. The check is `NOT RUN` when no key is there.
+    Exec(ExecCheck),
     /// During a build: every `every` seconds, read the cluster, its summary, and its events, and
     /// run the program over the world with `.cluster`, `.summary`, `.events`, and `.elapsed`
     /// (seconds) added. A failure stops the watch with its evidence.
@@ -120,7 +141,7 @@ impl Check {
         match self {
             Check::Static { .. } => CheckKind::Static,
             Check::Palette(_) => CheckKind::Palette,
-            Check::Exec { .. } => CheckKind::Exec,
+            Check::Exec(_) => CheckKind::Exec,
             Check::Watch { .. } => CheckKind::Watch,
         }
     }
@@ -135,7 +156,7 @@ impl Check {
         match self {
             Check::Static { expr }
             | Check::Palette(PaletteCheck { expr, .. })
-            | Check::Exec { expr, .. }
+            | Check::Exec(ExecCheck { expr, .. })
             | Check::Watch { expr } => expr,
         }
     }

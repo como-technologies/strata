@@ -149,7 +149,9 @@ include them. `strata preflight --rules --json` lists the request of every rule.
 
 | Request | Read by | Gives |
 | --- | --- | --- |
-| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | `instance-offering` | The instance types of the region. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
+| `GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cloudAccountUid=` | `instance-offering`, `aws-quotas`, `gcp-quotas`, `azure-vcpu-quota` | The instance types of the region, with the `cpu` of each. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
+| `GET /v1/clouds/aws/regions/{region}/vpcs?cloudAccountUid=` | `static-subnets` | The VPCs of the account in the region, each with its subnets. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
+| `GET /v1/clouds/aws/securitygroups?cloudAccountUid=&region=&vpcId=` | `sg-name-collision` | The security groups of the VPC, as `groups[]`. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
 | `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `ssh-key-pair` | The key pairs of the account in the region. See [The list routes](../internals/palette/validate-routes.md#the-list-routes). |
 | `POST /v1/clouds/aws/regions/{region}/resourceGroups/validateCapacity?hrgArn=` | `dedicated-hosts` | The check of the free capacity of the hosts of a host resource group for an instance type. The body holds `cloudAccountUid`, `instanceType`, and `replicaCount`. The answer holds `isValid`, `availableCapacity`, and `message`. |
 | `GET /v1/clouds/aws/imageIds/{imageId}/volumeSize?region=&cloudAccountUid=` | `root-volume` | The size of the root snapshot of the AMI, as `sizeGB`. |

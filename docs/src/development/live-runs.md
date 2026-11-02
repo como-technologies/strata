@@ -1400,13 +1400,18 @@ types. The check passes on that answer (no result yet). For GCP, no run has
 shown the shape, and the check shows it (no result yet). The check `key-pairs-shape`
 expects `keyNames[]` with the key pair of the entity (no result yet).
 
-Four checks ask the list routes that can answer cloud rules (#393). The check
-`vpcs-route-shape` expects the VPC route to list each subnet with `subnetId`, `az`,
-`isPrivate`, `mapPublicIpOnLaunch`, and `name` (no result yet). The check `zones-route-shape`
-expects the zone route to list each zone with `name`, `state`, and `zoneId` (no result yet).
-The checks `vpcs-route-keys` and `zones-route-keys` record the keys of one entry (no result
-yet). They show whether the routes list what `static-subnets`, `lb-subnet-tags`, `subnet-ips`,
-and `eks-unsupported-zone` read. See
+Four checks ask the list routes that the rules read (#393). Each check expects the keys that
+the route gives, and no other key. A key beside them is a field that a rule of the cloud tier
+reads, such as the tags of a subnet. That rule can then move to Palette.
+
+| Check | What it expects |
+|---|---|
+| `instancetypes-cpu` | The instance type route lists each pool type of the entity with `cpu` as a number above 0. The quota rules count that number as the vCPUs. No result yet. |
+| `vpcs-route-keys` | The VPC route lists `vpcs[]` with `vpcId`, and each subnet with `subnetId` and `az`. A VPC has no key beside `cidrBlock`, `name`, `subnets`, and `vpcId`. A subnet has none beside `az`, `isPrivate`, `mapPublicIpOnLaunch`, `name`, and `subnetId`. No result yet. |
+| `zones-route-keys` | The zone route lists `zones[]` with `name`, `state`, and `zoneId`, and no other key. So it lists no zone type. No result yet. |
+| `sgs-route-keys` | The security group route lists `groups[]` with `groupId` and `groupName` for the first VPC of the region. A group has no key beside `groupId`, `groupName`, and `ownerId`. No result yet. |
+
+See
 [The routes of Palette beside the calls](../internals/preflight.md#the-routes-of-palette-beside-the-calls).
 
 A run that makes a fault

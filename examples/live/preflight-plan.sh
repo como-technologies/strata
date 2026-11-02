@@ -189,26 +189,27 @@ else
   record instance-offering not-made "$(cat offering-edit.err)"
   echo "instance-offering: $(cat offering-edit.err)" | tee -a steps.log
 fi
+# The quota rules count the vCPUs of a pool from the field cpu of the same route (#393)
+check instancetypes-cpu 0 "the instance type route lists each pool type of the entity with cpu as a number above 0, the vCPUs that aws-quotas, gcp-quotas, and azure-vcpu-quota count" -- \
+  jq -e --slurpfile e clean.json '[$e[0].spec.machinepoolconfig[].cloudConfig.instanceType] as $want | .instanceTypes as $t | all($want[]; . as $w | ([$t[] | select(.type == $w) | .cpu] | first | (type == "number" and . > 0)))' instancetypes.json
 case "$engine" in
   aws|eks)
     "$live/api.sh" get "/v1/clouds/aws/regions/$region/keypairs?cloudAccountUid=$A" > keypairs.json 2> keypairs.err
     check key-pairs-shape 0 "the key pair route lists keyNames[] for $region, and the key $ssh_key of the entity is in it" -- \
       jq -e --arg k "$ssh_key" '(.keyNames | index($k)) != null' keypairs.json
-    # Two list routes can answer the cloud rules static-subnets and eks-unsupported-zone (#393).
-    # The checks read the shape of each answer at any depth, because no run has shown the name of the
-    # list. static-subnets moves to the palette tier when the first check passes. The checks with a
-    # ? record the keys of an entry: they show whether the route lists the tags of a subnet and the
-    # type of a zone, which the other rules read
+    # Three list routes answer the rules static-subnets and sg-name-collision (#393). Each check
+    # reads the keys that the route gives, and fails on a key beside them. A new key can be a field
+    # that a cloud rule reads, such as the tags of a subnet. Then that rule can move to Palette
     "$live/api.sh" get "/v1/clouds/aws/regions/$region/vpcs?cloudAccountUid=$A" > vpcs.json 2> vpcs.err
-    check vpcs-route-shape 0 "the VPC route lists each subnet of $region with subnetId, az, isPrivate, mapPublicIpOnLaunch, and name" -- \
-      jq -e '[.. | objects | select(has("subnetId"))] as $s | ($s | length) > 0 and all($s[]; has("az") and has("isPrivate") and has("mapPublicIpOnLaunch") and has("name"))' vpcs.json
-    check vpcs-route-keys ? "the keys of a VPC and of a subnet in the VPC route: whether they list the id of the VPC, the tags, and the free addresses" -- \
-      jq -c '{vpc: ([.. | objects | select(has("subnets"))] | .[0] | keys), subnet: ([.. | objects | select(has("subnetId"))] | .[0] | keys)}' vpcs.json
+    check vpcs-route-keys 0 "the VPC route lists vpcs[] with vpcId, and each subnet with subnetId and az; a VPC has no key beside cidrBlock, name, subnets, and vpcId, and a subnet has none beside az, isPrivate, mapPublicIpOnLaunch, name, and subnetId" -- \
+      jq -e '(.vpcs | length) > 0 and all(.vpcs[]; has("vpcId") and ((keys - ["cidrBlock", "name", "subnets", "vpcId"]) | length) == 0) and ([.vpcs[] | (.subnets // [])[]] as $s | ($s | length) > 0 and all($s[]; has("subnetId") and has("az") and ((keys - ["az", "isPrivate", "mapPublicIpOnLaunch", "name", "subnetId"]) | length) == 0))' vpcs.json
     "$live/api.sh" get "/v1/clouds/aws/regions/$region/availabilityzones?cloudAccountUid=$A" > zones.json 2> zones.err
-    check zones-route-shape 0 "the zone route lists each zone of $region with name, state, and zoneId" -- \
-      jq -e '[.. | objects | select(has("zoneId"))] as $z | ($z | length) > 0 and all($z[]; has("name") and has("state"))' zones.json
-    check zones-route-keys ? "the keys of a zone in the zone route: whether it lists the zone type" -- \
-      jq -c '[.. | objects | select(has("zoneId"))] | .[0] | keys' zones.json
+    check zones-route-keys 0 "the zone route lists zones[] with name, state, and zoneId, and a zone has no key beside those three, so it lists no zone type" -- \
+      jq -e '(.zones | length) > 0 and all(.zones[]; has("name") and has("state") and has("zoneId") and ((keys - ["name", "state", "zoneId"]) | length) == 0)' zones.json
+    vpc=$(jq -r '.vpcs[0].vpcId // empty' vpcs.json 2> /dev/null)
+    "$live/api.sh" get "/v1/clouds/aws/securitygroups?cloudAccountUid=$A&region=$region&vpcId=$vpc" > sgs.json 2> sgs.err
+    check sgs-route-keys 0 "the security group route lists groups[] with groupId and groupName for the first VPC of $region, and a group has no key beside groupId, groupName, and ownerId" -- \
+      jq -e '(.groups | length) > 0 and all(.groups[]; has("groupId") and has("groupName") and ((keys - ["groupId", "groupName", "ownerId"]) | length) == 0)' sgs.json
     # ssh-key-pair names eks alone. The property route of aws refuses a key pair that the region
     # lacks (HTTP 500, AwsKeyPairNotFound). iaas-pod-identity sends it the key pair (#430)
     case "$engine" in

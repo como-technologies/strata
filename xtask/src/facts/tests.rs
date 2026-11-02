@@ -636,15 +636,23 @@ fn only_the_level_two_headings_are_sections() {
 }
 
 #[test]
-fn the_requests_of_the_rules_are_the_palette_checks_with_their_method_and_their_rules() {
+fn the_requests_of_the_rules_are_the_palette_checks_and_the_reads_of_a_command_check() {
     let rule = |id: &str, check: &str| {
         format!(
             "  - id: {id}\n    title: t\n    engines: [all]\n    tier: palette\n    status: seen\n    what: w\n    check:\n{check}\n"
         )
     };
     let section = format!(
-        "section: a\ntitle: A\nrules:\n{}{}{}{}",
+        "section: a\ntitle: A\nrules:\n{}{}{}{}{}{}",
         rule("static-rule", "      kind: static\n      expr: 'true'"),
+        rule(
+            "reads-then-runs",
+            "      kind: exec\n      argv: [aws, service-quotas]\n      palette:\n        path: /v1/clouds/{{ .accountKind }}/regions/{{ .region }}/instancetypes?cloudAccountUid=x\n      expr: 'true'"
+        ),
+        rule(
+            "runs-alone",
+            "      kind: exec\n      argv: [aws, ec2]\n      expr: 'true'"
+        ),
         rule(
             "reads-profile",
             "      kind: palette\n      path: /v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}\n      expr: 'true'"
@@ -666,6 +674,8 @@ fn the_requests_of_the_rules_are_the_palette_checks_with_their_method_and_their_
         ids,
         set(&[
             "static-rule",
+            "reads-then-runs",
+            "runs-alone",
             "reads-profile",
             "validates",
             "reads-profile-again"
@@ -677,6 +687,10 @@ fn the_requests_of_the_rules_are_the_palette_checks_with_their_method_and_their_
             (
                 "GET /v1/clusterprofiles/{}".to_string(),
                 set(&["reads-profile", "reads-profile-again"])
+            ),
+            (
+                "GET /v1/clouds/{}/regions/{}/instancetypes".to_string(),
+                set(&["reads-then-runs"])
             ),
             (
                 "POST /v1/spectroclusters/{}/validate".to_string(),

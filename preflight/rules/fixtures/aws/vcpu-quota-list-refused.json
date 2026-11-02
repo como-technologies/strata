@@ -1,0 +1,13 @@
+{
+  "_base": "vcpu-quota-clean.json",
+  "_note": "the instance type route answers 404, so the check cannot count the vCPUs of the pools",
+  "_patch": {
+    "_responses": {
+      "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1": {
+        "ok": false,
+        "status": 404,
+        "body": { "code": "ResourceNotFound", "message": "cloud account not found" }
+      }
+    }
+  }
+}

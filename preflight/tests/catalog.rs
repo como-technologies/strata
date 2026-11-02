@@ -10,7 +10,7 @@ use strata_preflight::catalog;
 use strata_preflight::fixture;
 use strata_preflight::jq::Jq;
 use strata_preflight::probe::{self, Call, FixtureBackend, Outcome, Verdict};
-use strata_preflight::rule::{Check, Evidence, EvidenceKind, PaletteCheck, Rule};
+use strata_preflight::rule::{Check, Evidence, EvidenceKind, ExecCheck, PaletteCheck, Rule};
 
 /// Run the check of `rule` on the fixture `doc`. The test fails when `when` does not hold on the
 /// fixture: a guard that hides the check passes every test.
@@ -944,6 +944,87 @@ fn instance_offering_fails_when_palette_refuses_or_gives_no_list_of_types() {
     }
 }
 
+/// The three quota rules count the vCPUs of a pool from the field `cpu` of the instance type route
+/// (#393), and not from the name of the type. Each sends one request beside its command. The quota
+/// still comes from the tool of the cloud.
+#[test]
+fn the_quota_rules_count_the_vcpus_of_a_pool_from_the_cpu_that_palette_lists() {
+    let catalog = catalog::builtin().unwrap();
+    for (id, fixture, ran, expected) in [
+        (
+            "aws-quotas",
+            "fixtures/aws/vcpu-quota-low.json",
+            "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1",
+            "the on-demand vCPU quota L-1216C47A in us-east-2 is 8.0, and the pools ask for 20 vCPUs: 1 x t3.xlarge, 2 x m5.2xlarge",
+        ),
+        (
+            "gcp-quotas",
+            "fixtures/gke/cpu-quota-low.json",
+            "GET /v1/clouds/gcp/regions/us-east1/instancetypes?cloudAccountUid=acc-gcp-1",
+            "CPUS in us-east1: limit 24.0, usage 20.0, free 4.0; the pools ask for 12 CPUs: 3 x e2-standard-4",
+        ),
+        (
+            "azure-vcpu-quota",
+            "fixtures/azure/vcpu-quota-low.json",
+            "GET /v1/clouds/azure/regions/eastus/instancetypes?cloudAccountUid=acc-azure-1&subscriptionId=11111111-2222-3333-4444-555555555555",
+            "the pools ask for 12 vCPUs in eastus, and the regional quota has 2 free of 10 (8 in use)",
+        ),
+    ] {
+        let rule = catalog.rule(id).unwrap();
+        let path = catalog::rules_dir().join(fixture);
+        let out = outcome_of(rule, fixture::load(&path).unwrap(), &Jq::new());
+        assert_eq!(out.verdict, Verdict::Failed, "{id}: {:?}", out.messages);
+        assert!(
+            out.messages[0].starts_with(expected),
+            "{id}: {:?}",
+            out.messages
+        );
+        assert_eq!(out.ran.requests().len(), 1, "{id}: one request of Palette");
+        assert_eq!(out.ran.requests()[0].ran(), ran, "{id}");
+    }
+}
+
+/// A pool whose type the instance type route does not list adds no vCPU, and the message of a
+/// short quota names that pool. A refused list is a failure that says so.
+#[test]
+fn a_quota_rule_names_a_pool_whose_type_the_route_does_not_list_and_a_list_that_palette_refuses() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("aws-quotas").unwrap();
+    let key = "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1";
+    let exec = "aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A --region us-east-2 --output json";
+    let path = catalog::rules_dir().join("fixtures/aws/vcpu-quota-type-not-listed.json");
+    let doc = fixture::load(&path).unwrap();
+    let out = outcome_of(rule, doc.clone(), &Jq::new());
+    assert_eq!(out.verdict, Verdict::Passed, "{:?}", out.messages);
+    let mut short = doc.clone();
+    short["_exec"][exec]["stdout"]["Quota"]["Value"] = serde_json::json!(2.0);
+    let out = outcome_of(rule, short, &Jq::new());
+    assert_eq!(out.messages.len(), 1, "{:?}", out.messages);
+    assert!(
+        out.messages[0].ends_with(
+            "the instance type route lists no cpu for pool worker-pool, so it is not counted"
+        ),
+        "{:?}",
+        out.messages
+    );
+    for (answer, expected) in [
+        (
+            serde_json::json!({"ok": false, "status": 403, "body": {"code": "AccessDenied", "message": "no"}}),
+            "Palette cannot list the instance types of region us-east-2: AccessDenied: no",
+        ),
+        (
+            serde_json::json!({"ok": true, "status": 200, "body": {}}),
+            "Palette gave no list of instance types for region us-east-2",
+        ),
+    ] {
+        let mut refused = doc.clone();
+        refused["_responses"][key] = answer;
+        let out = outcome_of(rule, refused, &Jq::new());
+        assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+        assert_eq!(out.messages, [expected]);
+    }
+}
+
 /// The message of `ssh-key-pair` names the key pair and the region, for EKS with a dynamic VPC
 /// (#143).
 #[test]
@@ -1125,9 +1206,15 @@ fn no_check_maps_the_engine_to_a_cloud_itself() {
                 .flatten()
                 .map(String::as_str)
                 .collect(),
-            Some(Check::Exec { argv, expr, .. }) => argv
+            Some(Check::Exec(ExecCheck {
+                argv,
+                palette,
+                expr,
+                ..
+            })) => argv
                 .iter()
                 .map(String::as_str)
+                .chain(palette.iter().map(|read| read.path.as_str()))
                 .chain([expr.as_str()])
                 .collect(),
             None => Vec::new(),

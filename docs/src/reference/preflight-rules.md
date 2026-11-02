@@ -90,7 +90,7 @@ each message is one failure; or an object `{pass, message}`.
 | --- | --- | --- |
 | `static` | `expr` | nothing |
 | `palette` | `method` (`GET`, `POST`), `path` (with `{{ jq }}` templates), `body` (a jq program that gives the body of a POST; default `.entity`), `each` (a jq program that gives a list; see [A request for each item](#a-request-for-each-item)), `expr` | `response`: `{ok, status, body}`. A 4xx is an answer with `ok: false` and its `V1Error` body; a 204 is `ok: true` with a `null` body. A 5xx or a transport error is `ERROR`. With `each`, `responses` instead. |
-| `exec` | `argv` (each with templates), `needs` (the tools, checked on the PATH), `timeout` (seconds, default 60), `expr` | `exec`: `{exit, stdout, stderr}`. `stdout` is JSON when it parses. A tool that is not there is `NOT CHECKED`. |
+| `exec` | `argv` (each with templates), `needs` (the tools, checked on the PATH), `timeout` (seconds, default 60), `palette` (a `path` with templates; see [A read of Palette before the command](#a-read-of-palette-before-the-command)), `expr` | `exec`: `{exit, stdout, stderr}`. `stdout` is JSON when it parses. A tool that is not there is `NOT CHECKED`. With `palette`, also `response`. |
 | `watch` | `expr` | `cluster`, `summary`, `events`, `elapsed` (seconds), on each reading |
 
 jq is jaq 3, which runs the programs of jq 1.7 with a small number of
@@ -213,7 +213,37 @@ them, or they need more than the body of the create. They stay in the catalog.
 | `pack-cloud-support` | All of it. No route refuses the fault: see [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). |
 | `template-outside`, the `edge-host-*` rules | They read a document of the tenant. No validate route answers them. |
 | `instance-offering`, `ssh-key-pair` | They read a list of the cloud account: the instance types of a region, and its key pairs. No route refuses the fault, and Palette owns the rule. For `ssh-key-pair`, the gap is an EKS cluster with a dynamic VPC or with no subnet id. |
+| `static-subnets`, `sg-name-collision` | They read a list of the cloud account: the VPCs of a region with their subnets, and the security groups of a VPC. No route refuses the fault, and Palette owns the rule. |
+| `aws-quotas`, `gcp-quotas`, `azure-vcpu-quota` | They read the `cpu` of the instance types of a region from Palette, and a quota from the cloud. No route of Palette lists a quota, and Palette owns the rule. |
 | `palette-validate`, `pack-dependency`, `ecr-oci-images`, `worker-cpu-floor`, `eks-public-subnet-mapping`, `iaas-pod-identity`, `sts-account-not-assumable`, `gcp-properties` | They call a route, and copy no answer of it. |
+
+## A read of Palette before the command
+
+A rule of the cloud tier can read one list from Palette, and then run the tool of the cloud. Ask
+Palette first: use this for the part of the answer that a route lists, and use the command for the
+rest. The key `palette` of an `exec` check holds the `path` of a `GET` request:
+
+```yaml
+check:
+  kind: exec
+  needs: [aws]
+  palette:
+    path: '/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/instancetypes?cloudAccountUid={{ .entity.spec.cloudAccountUid }}'
+  argv: [aws, service-quotas, get-service-quota, --service-code, ec2, --output, json]
+  expr: '...'
+```
+
+The program of `expr` reads `.response`, as a check of Palette does, and `.exec`. The templates of
+`argv` read the world alone. The check runs in this order:
+
+1. With no key, the result is `NOT RUN`, and no command runs.
+2. A tool in `needs` that is not there makes the result `NOT CHECKED`, and no request goes out.
+3. The request goes out. A 4xx is an answer in `.response`. A transport error, a 5xx, a 401, a 403, or a
+   429 is `ERROR`, and the report names the request.
+4. The command runs, and the program judges both answers.
+
+The report shows the command in `ran`, and the request in `requests[]`. The rule keeps the tier
+`cloud`, because it needs the tool.
 
 ## The world document
 

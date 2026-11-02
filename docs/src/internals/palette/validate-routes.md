@@ -475,13 +475,28 @@ of the rule read the key policy and call the route.
 
 ## The list routes
 
-Two routes list what the cloud account holds in a region. They refuse no cluster.
+Four routes list what the cloud account holds in a region. They refuse no cluster.
 Strata reads each list and compares it with the entity.
 
 | Route | Gives | Read by |
 | --- | --- | --- |
-| `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | Each instance type of the region: `type`, `category`, `cpu`, `memory`, `price`, `cost`, `supportedArchitectures[]`, and `nonSupportedZones` (an array, or `null`). | `instance-offering` |
+| `GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cloudAccountUid=` | Each instance type of the region: `type`, `category`, `cpu`, `memory`, `price`, `cost`, `supportedArchitectures[]`, and `nonSupportedZones` (an array, or `null`). | `instance-offering`, `aws-quotas`, `gcp-quotas`, `azure-vcpu-quota` |
 | `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `keyNames[]`: the key pairs of the account in the region. | `ssh-key-pair` |
+| `GET /v1/clouds/aws/regions/{region}/vpcs?cloudAccountUid=` | `vpcs[]`: each VPC of the account in the region, with `vpcId`, `name`, `cidrBlock`, and `subnets[]`. A subnet has `subnetId`, `name`, `az`, `isPrivate`, and `mapPublicIpOnLaunch`. | `static-subnets` |
+| `GET /v1/clouds/aws/securitygroups?cloudAccountUid=&region=&vpcId=` | `groups[]`: the security groups of the VPC, with `groupId`, `groupName`, and `ownerId`. | `sg-name-collision` |
+
+The VPC route lists no count of free addresses and no tag for a subnet. Its `isPrivate` is true when
+the route table of the subnet has no route to an internet gateway. A subnet belongs to the VPC entry
+that holds it, and the subnet has no field for its VPC. The zone route
+`GET /v1/clouds/aws/regions/{region}/availabilityzones?cloudAccountUid=` lists `zones[]` with `name`,
+`state`, and `zoneId`. It lists no zone type. No rule reads the zone route.
+
+For an AWS type, `cpu` is the count of vCPUs: a `t3.xlarge` gives 4. `memory` is in GiB. `gpu` is empty
+for each AWS type, also for a type with a GPU. The three quota rules count the vCPUs of a pool from
+`cpu`. The GCP and Azure routes give the same fields, and no run shows their numbers. The AWS route
+omits some old instance families, such as `m3` and `c3`. This comes from the code of Palette,
+and no run shows it. A rule reads no quota from these routes, because no route of Palette lists a
+quota.
 
 `type` of an entry names the instance type. An entry has no `name`.
 `nonSupportedZones` of a type is an array of the zones that do not offer it.
@@ -510,7 +525,8 @@ A run on AWS also shows the key pair route. `ssh-key-pair` finds the key pair of
 the clean entity in `keyNames`, and fails a name that is not there. A run shows
 the answer of the AWS instance type route: its body holds `instanceTypes` alone.
 No run shows the GCP answer of the instance type route. The rule reads `type`
-for GCP too, and the check `instance-types-shape` shows the GCP entry. The
+for GCP too, and the checks `instance-types-shape` and `instancetypes-cpu` show the GCP entry.
+No run shows the Azure answer, because the lab has no account of Azure. The
 stand-in of the book models the GCP answer: see
 [What no run covers](limits.md#what-no-run-covers).
 

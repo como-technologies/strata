@@ -77,6 +77,21 @@ pub struct Fact {
     pub call: Vec<String>,
     /// The table of cloud facts that a rule holds as text, when the fact proves one.
     pub table: Option<Table>,
+    /// The route of Palette that answers a part of the call of a fact of the kind `cloud`, and the
+    /// fields of the call that the route lacks.
+    pub palette: Option<PaletteRoute>,
+}
+
+/// A route of Palette beside the call of a cloud. The route lists a part of what a rule reads from
+/// the call. The rest of the call stays in the cloud tier, because the route lacks it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PaletteRoute {
+    /// The method and the path of the route, as the book writes it.
+    pub route: String,
+    /// The fields of `reads` that the route does not list. Each one is why the rule stays in the
+    /// cloud tier.
+    pub lacks: Vec<String>,
 }
 
 /// A table of cloud facts that a rule of strata-preflight holds as text, such as the zone ids that

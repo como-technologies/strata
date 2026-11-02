@@ -9,7 +9,7 @@ use regex::Regex;
 use strata::api::Method;
 use strata::closed_set::ClosedSet;
 use strata_preflight::catalog::builtin;
-use strata_preflight::rule::{Catalog, Check};
+use strata_preflight::rule::{Catalog, Check, ExecCheck};
 
 use super::cloud::{CloudSources, read_code, read_rules};
 use super::model::{DIRECTORY, Fact, load};
@@ -231,7 +231,8 @@ pub(super) fn book_rows(docs: &Path) -> BTreeMap<String, BTreeSet<String>> {
 }
 
 /// The id of each rule of `catalog`, and the rules that send each request of Palette, by the
-/// shape of the request. A rule sends one when its check is a [`Check::Palette`].
+/// shape of the request. A rule sends one when its check is a [`Check::Palette`], or when its
+/// [`Check::Exec`] has a read of Palette.
 pub(super) fn rule_requests(
     catalog: &Catalog,
 ) -> (BTreeSet<String>, BTreeMap<String, BTreeSet<String>>) {
@@ -239,9 +240,17 @@ pub(super) fn rule_requests(
     let mut requests: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for rule in catalog.rules() {
         ids.insert(rule.id.clone());
-        if let Some(Check::Palette(check)) = &rule.check {
+        let sent = match &rule.check {
+            Some(Check::Palette(check)) => Some(format!("{} {}", check.method, check.path)),
+            Some(Check::Exec(ExecCheck {
+                palette: Some(read),
+                ..
+            })) => Some(format!("{} {}", Method::Get, read.path)),
+            _ => None,
+        };
+        if let Some(sent) = sent {
             requests
-                .entry(shape(&format!("{} {}", check.method, check.path)))
+                .entry(shape(&sent))
                 .or_default()
                 .insert(rule.id.clone());
         }

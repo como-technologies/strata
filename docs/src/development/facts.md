@@ -53,6 +53,7 @@ An entry has these fields:
 | `rules` | The rules of strata-preflight that use the fact. |
 | `call` | Only a fact of the kind `cloud` has it: the read-only call of the tool of the cloud, as a list of words. `{name}` is a value of the lab. |
 | `table` | Only a fact of the kind `cloud` has it: the date of a table that a rule holds, and its values. See [The tables](#the-tables). |
+| `palette` | Only a fact of the kind `cloud` has it: the route of Palette that lists a part of the answer, and the fields that it lacks. See [Add a fact of a cloud](#add-a-fact-of-a-cloud). |
 
 A fact must have a code or a rule, because a fact that nothing uses is not a dependency.
 
@@ -114,7 +115,7 @@ the fact.
 | A page or an anchor of a fact is not in the book. | The book does not state the fact. |
 | An error code of a fact is on none of its pages. | The code has a typing fault, or the page lost it. |
 | A table of `reference/palette-api.md` lists a request that no fact has. | The book lists a request that the list does not hold. |
-| A rule of strata-preflight sends a request that no fact has, or a fact names the wrong rules. | The rules and the list disagree. |
+| A rule of strata-preflight sends a request that no fact has, or a fact names the wrong rules. The read of Palette that a command check makes first is such a request. | The rules and the list disagree. |
 | A `##` heading of `internals/palette/` is on no fact. | The book states a fact that the list does not hold. |
 | A file of strata that a fact names does not exist. | The fact points at nothing. |
 | An id is used twice, or two facts have one request. | The list holds a copy. |
@@ -125,6 +126,7 @@ the fact.
 | A table has no call, and a rule of its fact is for a cloud that the lab has. | The table has no contract check. |
 | A fact with no call names a rule that runs a command on a cloud of the lab. | The run would send no call for that rule. A row, a rule of another cloud, and a check of the lab itself are not such rules. |
 | A call is not a `list`, `describe`, `get`, `show`, or `simulate` operation. | The run sends each call every week, and must change nothing in the account. |
+| A `palette` route has no method, lacks no field, or lacks a field that the fact does not read. | The fact names a route that answers nothing, or the whole call. |
 
 Some headings of `internals/palette/` state no fact about Palette, such as "Where these answers
 come from". `NOT_FACTS` in `xtask/src/facts/check.rs` lists them.
@@ -418,6 +420,10 @@ A cloud fact has these fields beside the common fields:
 - `reads.fields` are the paths in the JSON that the command prints.
 - `rules` are the rules of the cloud tier that read the answer. Each rule of the cloud tier must be in
   a fact.
+- `palette` names a route of Palette that lists a part of the answer. `route` is the method and the
+  path. `lacks` lists the fields of `reads.fields` that the route does not list. Each one is the reason
+  why the rule stays in the cloud tier. A route that lacks no field would answer the rule, and the rule
+  would move to the palette tier.
 - `unchecked` gives the reason when the run cannot send the call: the lab has no account of the
   cloud, or the rule has no command.
 
@@ -492,8 +498,11 @@ has no call, and `unchecked` gives the reason.
    fixture holds the answer.
 4. Name the rule in `rules`, and the page `internals/preflight.md#the-calls-of-the-clouds` in
    `pages`.
-5. If the lab cannot send the call, write the reason in `unchecked`, and omit `call`.
-6. Run `cargo xtask facts --check`.
+5. Ask Palette first. If a route lists a field that the rule reads, read the route in the rule.
+   Use the call for the other fields. If the route lists every field, move the rule to the palette
+   tier, and remove the fact. If it lists some fields, write `palette` with the fields that it lacks.
+6. If the lab cannot send the call, write the reason in `unchecked`, and omit `call`.
+7. Run `cargo xtask facts --check`.
 
 For a table, add a fact with `table`. Write its call, the one field that lists the values, the date,
 and the values. Each text value must be in a program of the rule.
