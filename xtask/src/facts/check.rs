@@ -9,7 +9,7 @@ use regex::Regex;
 
 use super::cloud;
 use super::model::{Fact, Kind};
-use super::sources::{API_PAGE, FACT_PAGES, Sources, method_pattern, shape};
+use super::sources::{API_PAGE, FACT_PAGES, Sources, method_pattern, query_names, shape};
 
 /// The headings of `internals/palette/` that state nothing about Palette, each as `page#anchor`:
 /// they say how strata or the book works. Every other `##` heading needs a fact.
@@ -30,6 +30,7 @@ pub fn check(sources: &Sources) -> Vec<String> {
     bad.extend(codes_stated(sources));
     bad.extend(requests_listed(sources));
     bad.extend(rules_agree(sources));
+    bad.extend(queries_held(sources));
     bad.extend(sections_stated(sources));
     bad.extend(live_checks_exist(sources));
     bad.extend(stand_in_agrees(sources));
@@ -290,6 +291,36 @@ fn rules_agree(sources: &Sources) -> Vec<String> {
                 "fact `{}`: `rules` is {:?}, and the rules that send the request are {:?}",
                 fact.id, named, sent
             ));
+        }
+    }
+    bad
+}
+
+/// The request of a fact holds each query that its rules send in their paths. A rule sends the
+/// query that its route needs, so a request that lacks one is not the request that Palette gets.
+fn queries_held(sources: &Sources) -> Vec<String> {
+    let mut bad = Vec::new();
+    for fact in &sources.facts {
+        let Some(request) = &fact.request else {
+            continue;
+        };
+        let held = query_names(request);
+        for rule in &fact.rules {
+            let lacking: Vec<&str> = sources
+                .rule_queries
+                .get(rule)
+                .into_iter()
+                .flatten()
+                .filter(|name| !held.contains(*name))
+                .map(String::as_str)
+                .collect();
+            if !lacking.is_empty() {
+                bad.push(format!(
+                    "fact `{}`: the rule `{rule}` sends the query {} in its path, and the request `{request}` lacks it",
+                    fact.id,
+                    lacking.join(", ")
+                ));
+            }
         }
     }
     bad

@@ -43,7 +43,7 @@ An entry has these fields:
 | --- | --- |
 | `id` | The name of the fact: words with dashes. No two facts have one id. |
 | `kind` | `request`, `behavior`, `gap`, or `cloud`. See the next table. |
-| `request` | The method, the path, and the query of the request. A value of the query that varies is `{name}`, as in the path. Only a fact of the kind `request` has it. |
+| `request` | The method, the path, and the query of the request. A value of the query that varies is `{name}`, as in the path. The query holds each name that a rule of the fact sends in its path. Only a fact of the kind `request` has it. |
 | `scope` | Only a fact of the kind `request` has it: `client` or `tenant`. The default is `client`. The run sends a fact of the scope `tenant` with no project. See [The scope of a request](#the-scope-of-a-request). |
 | `reads` | What strata reads from the answer or depends on. `fields` are paths in the document: `[]` marks an array, and `*` marks the values of an object. `codes` are error codes of Palette. `values` are the values of a closed set, by field. `names` are the names that strata needs from a set that Palette can extend, by field. |
 | `stand_in` | The routes of the stand-in that imitate the fact, as paths with `{name}` for a segment that varies. Empty when the stand-in serves no document for it. |
@@ -86,8 +86,8 @@ The fourth lists each call of a cloud.
 1. Find the file of the part of the book that states the fact. Add the entry at the end of the
    file, or in the place that the book orders.
 2. Write the request exactly as the table of [Palette API requests](../reference/palette-api.md)
-   writes it. Write the query that strata sends, such as `?filterType=tag`. If the page has no row
-   for it, add the row first.
+   writes it. Write the query that strata sends, such as `?filterType=tag`. Add each name that a
+   rule of the fact sends in its path. If the page has no row for it, add the row first.
 3. Name the route of the stand-in. If the stand-in serves no document for the fact, leave `stand_in`
    empty.
 4. Name the live checks that prove the fact. Each name is a check that the script calls, and each
@@ -118,6 +118,7 @@ the fact.
 | An error code of a fact is on none of its pages. | The code has a typing fault, or the page lost it. |
 | A table of `reference/palette-api.md` lists a request that no fact has. | The book lists a request that the list does not hold. |
 | A rule of strata-preflight sends a request that no fact has, or a fact names the wrong rules. The read of Palette that a command check makes first is such a request. | The rules and the list disagree. |
+| A rule of a fact sends a query in its path, and the request of the fact lacks that query. | The fact does not state the request that the rule sends. Palette can refuse the request without the query. |
 | A `##` heading of `internals/palette/` is on no fact. | The book states a fact that the list does not hold. |
 | A GET fact reads a field that no document of the stand-in holds. | The contract run has no type to compare, and reports a difference for each tenant that gives the field. |
 | A file of strata that a fact names does not exist. | The fact points at nothing. |
@@ -201,18 +202,21 @@ A skipped fact names its live checks in the entry. Run them in a live window to 
 ### The query of a request
 
 The request of a fact has the query that strata sends, or that the stand-in serves the route with.
-The run asks the route in the same way. Three routes of AWS fail without their query, with HTTP 422.
+The run asks the route in the same way. Four routes of AWS fail without their query, with HTTP 422.
 See [The list routes](../internals/palette/validate-routes.md#the-list-routes):
 
 - The regions route needs `cloudAccountUid`.
 - The VPC route needs `cloudAccountUid`.
+- The key pair route needs `cloudAccountUid`.
 - The security group route needs `region` and `vpcId`. It takes `cloudAccountUid` too.
 
 The stand-in puts the query in the name of the file of the document, after an `@`, and serves a
 route with a query only with that query. A value of the query that varies is `{name}` in the request.
 The run takes the value from a listing of the tenant, as it takes the `{uid}` of a path. The fact
 `cloud-account-listing` gives the account of AWS. The fact `validate-aws-regions` gives its first
-region, and the fact `validate-vpcs` gives the first VPC of that region.
+region, and the fact `validate-vpcs` gives the first VPC of that region. When the run finds no value
+for a placeholder of the query, it skips the fact and gives the reason. It never sends the request
+without the query.
 
 ### The scope of a request
 

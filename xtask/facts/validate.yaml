@@ -678,7 +678,7 @@ facts:
   # The list routes
   - id: validate-instance-types
     kind: request
-    request: "GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cpuGtEq=0&memoryGtEq=0"
+    request: "GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cloudAccountUid={cloudAccountUid}&subscriptionId={subscriptionId}&cpuGtEq=0&memoryGtEq=0"
     reads:
       fields:
         - instanceTypes[].type
@@ -773,7 +773,7 @@ facts:
 
   - id: validate-key-pairs
     kind: request
-    request: "GET /v1/clouds/aws/regions/{region}/keypairs"
+    request: "GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid={cloudAccountUid}"
     reads:
       fields:
         - keyNames[]

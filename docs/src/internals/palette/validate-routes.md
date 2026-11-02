@@ -480,14 +480,14 @@ Strata reads each list and compares it with the entity.
 
 | Route | Gives | Read by |
 | --- | --- | --- |
-| `GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cloudAccountUid=&cpuGtEq=0&memoryGtEq=0` | Each instance type of the region: `type`, `category`, `cpu`, `memory`, `price`, `cost`, `supportedArchitectures[]`, and `nonSupportedZones` (an array, or `null`). | `instance-offering`, `aws-quotas`, `gcp-quotas`, `azure-vcpu-quota` |
+| `GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cloudAccountUid=&subscriptionId=&cpuGtEq=0&memoryGtEq=0` | Each instance type of the region: `type`, `category`, `cpu`, `memory`, `price`, `cost`, `supportedArchitectures[]`, and `nonSupportedZones` (an array, or `null`). | `instance-offering`, `aws-quotas`, `gcp-quotas`, `azure-vcpu-quota` |
 | `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `keyNames[]`: the key pairs of the account in the region. | `ssh-key-pair` |
 | `GET /v1/clouds/aws/regions?cloudAccountUid=` | `regions[].name`: the regions that the account has enabled. | `aws-region-not-enabled` |
 | `GET /v1/clouds/aws/regions/{region}/vpcs?cloudAccountUid=` | `vpcs[]`: each VPC of the account in the region, with `vpcId`, `name`, `cidrBlock`, and `subnets[]`. A subnet has `subnetId`, `name`, `az`, `isPrivate`, and `mapPublicIpOnLaunch`. | `static-subnets` |
 | `GET /v1/clouds/aws/securitygroups?cloudAccountUid=&region=&vpcId=` | `groups[]`: the security groups of the VPC, with `groupId`, `groupName`, and `ownerId`. | `sg-name-collision` |
 
 The query `cloudAccountUid` of the regions route is required. A request with no `cloudAccountUid`
-gets HTTP 422. The VPC route requires it too. The security group route requires `region` and
+gets HTTP 422. The VPC route and the key pair route require it too. The security group route requires `region` and
 `vpcId`, and a request with no query gets HTTP 422. The `vpcId` is the id of a VPC from the VPC
 listing of the same region.
 
@@ -505,8 +505,8 @@ The instance type route filters its answer. When the query does not say, it list
 more and 4 GiB of memory or more. A run shows it on AWS: `t3.small` and `t3.micro` are absent with
 no query, and the query `cpuGtEq=0&memoryGtEq=0` lists them. The code of Palette gives the same
 default to the GCP and Azure routes, and no run shows it there. Strata sends
-`cpuGtEq=0&memoryGtEq=0` with `cloudAccountUid`. For one engine, the four rules send the same
-query, so one request answers them.
+`cpuGtEq=0&memoryGtEq=0` with `cloudAccountUid`, and with `subscriptionId` for Azure. For one
+engine, the four rules send the same query, so one request answers them.
 
 The AWS route omits some old instance families, also with that query. A run shows that `m3.large` is
 absent. The AWS route lists only the types with up to 4 vCPUs and 8 GiB of memory for an account with

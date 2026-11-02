@@ -4,7 +4,7 @@ facts:
   # `strata preflight`" in reference/palette-api.md lists them. The stand-in serves none.
   - id: aws-host-capacity
     kind: request
-    request: 'POST /v1/clouds/aws/regions/{region}/resourceGroups/validateCapacity'
+    request: 'POST /v1/clouds/aws/regions/{region}/resourceGroups/validateCapacity?hrgArn={hrgArn}'
     reads:
       fields:
         - isValid
@@ -21,7 +21,7 @@ facts:
 
   - id: aws-image-volume-size
     kind: request
-    request: 'GET /v1/clouds/aws/imageIds/{imageId}/volumeSize'
+    request: 'GET /v1/clouds/aws/imageIds/{imageId}/volumeSize?region={region}&cloudAccountUid={cloudAccountUid}'
     reads:
       fields:
         - sizeGB
@@ -36,7 +36,7 @@ facts:
 
   - id: azure-region-list
     kind: request
-    request: 'GET /v1/clouds/azure/regions'
+    request: 'GET /v1/clouds/azure/regions?cloudAccountUid={cloudAccountUid}&subscriptionId={subscriptionId}'
     reads:
       fields:
         - regions[].name
@@ -51,7 +51,7 @@ facts:
 
   - id: azure-resource-group-list
     kind: request
-    request: 'GET /v1/clouds/azure/regions/{region}/subscriptions/{subscriptionId}/resourceGroups'
+    request: 'GET /v1/clouds/azure/regions/{region}/subscriptions/{subscriptionId}/resourceGroups?cloudAccountUid={cloudAccountUid}'
     reads:
       fields:
         - resourceGroupList[].name
@@ -66,7 +66,7 @@ facts:
 
   - id: azure-storage-account-list
     kind: request
-    request: 'GET /v1/clouds/azure/resourceGroups/{resourceGroup}/storageAccounts'
+    request: 'GET /v1/clouds/azure/resourceGroups/{resourceGroup}/storageAccounts?cloudAccountUid={cloudAccountUid}&subscriptionId={subscriptionId}'
     reads:
       fields:
         - accounts[].name
@@ -81,7 +81,7 @@ facts:
 
   - id: azure-network-list
     kind: request
-    request: 'GET /v1/clouds/azure/regions/{region}/subscriptions/{subscriptionId}/networks'
+    request: 'GET /v1/clouds/azure/regions/{region}/subscriptions/{subscriptionId}/networks?cloudAccountUid={cloudAccountUid}&resourceGroup={resourceGroup}'
     reads:
       fields:
         - virtualNetworkList[].name
@@ -199,7 +199,7 @@ facts:
 
   - id: vsphere-compute-resources
     kind: request
-    request: 'GET /v1/cloudaccounts/vsphere/{uid}/properties/computecluster/resources'
+    request: 'GET /v1/cloudaccounts/vsphere/{uid}/properties/computecluster/resources?datacenter={datacenter}&computecluster={computecluster}'
     reads:
       fields:
         - computecluster.datastores[]
