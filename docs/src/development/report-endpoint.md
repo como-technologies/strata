@@ -194,7 +194,7 @@ not deploy it, because a session has no account of Google.
    two reports, waits for the issue, and checks that one issue holds both. It also posts one report
    twice with one key, and checks that the issue counts it one time. Close the issue with a comment
    after you read it.
-6. Know three points of Cloud Run that a test cannot show. A live run showed each one:
+6. Know three points of Cloud Run that a test cannot show. A live run showed two of them:
    - **The last entry of `X-Forwarded-For` is the address of the client.** Valid reports with
      another forged first entry each count as one sender. The service refuses them at the limit
      with 429. A control with no forged header also gets 429. A bad body spends no limit, so the

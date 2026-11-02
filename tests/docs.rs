@@ -2119,9 +2119,9 @@ fn the_pages_of_the_report_keep_to_the_style_rules() {
     );
 }
 
-/// Step 6 of the deploy states the three points of Cloud Run as facts that a live run showed. The
-/// lab machine has no IPv6 route, so a failed `curl -6` shows a fault of the route of the machine,
-/// and the page says so.
+/// Step 6 of the deploy states the three points of Cloud Run as results. A live run gave two of
+/// them. The lab machine has no IPv6 route, so a failed `curl -6` shows a fault of the route of the
+/// machine, and the page says so.
 #[test]
 fn step_6_of_the_deploy_states_the_three_results_of_cloud_run() {
     let page = one_line(&read(&docs().join("development/report-endpoint.md")));
