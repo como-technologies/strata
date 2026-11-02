@@ -40,8 +40,10 @@ pub struct Fact {
     pub id: String,
     /// What the fact states.
     pub kind: Kind,
-    /// The method and the path of the request, such as `GET /v1/clusterprofiles/{uid}`. Only a
-    /// fact of the kind `request` has one.
+    /// The method and the path of the request, such as `GET /v1/clusterprofiles/{uid}`, with the
+    /// query that strata sends when the route needs one: `GET /v1/filters/metadata?filterType=tag`.
+    /// A value of the query that varies is `{name}`, as in the path. Only a fact of the kind
+    /// `request` has one.
     pub request: Option<String>,
     /// What strata reads from the answer or depends on.
     pub reads: Reads,
@@ -67,14 +69,15 @@ pub struct Fact {
 }
 
 impl Fact {
-    /// The method and the path of the request, such as `GET` and `/v1/clusterprofiles/{uid}`. None
-    /// when the fact has no request, or its request starts with a text that is no method.
+    /// The method and the path of the request, with its query, such as `GET` and
+    /// `/v1/clusterprofiles/{uid}`. None when the fact has no request, or its request starts with
+    /// a text that is no method.
     pub fn parts(&self) -> Option<(Method, &str)> {
         let (method, path) = self.request.as_deref()?.split_once(' ')?;
         Some((Method::parse(method)?, path))
     }
 
-    /// The path of the request, when its method is GET.
+    /// The path and the query of the request, when its method is GET.
     pub fn get_path(&self) -> Option<&str> {
         match self.parts()? {
             (Method::Get, path) => Some(path),
@@ -83,8 +86,9 @@ impl Fact {
     }
 }
 
-/// What strata reads from the answer of Palette, or depends on: the fields, the error codes, and
-/// the values of a closed set. A fact states at least one of the three.
+/// What strata reads from the answer of Palette, or depends on: the fields, the error codes, the
+/// values of a closed set, and the names that strata needs. A fact states at least one of the
+/// four.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Reads {
@@ -98,15 +102,26 @@ pub struct Reads {
     #[serde(default)]
     pub codes: Vec<String>,
     /// The values of a closed set that strata names, by the field that holds them:
-    /// `status.state` and the states that strata tells apart.
+    /// `status.state` and the states that strata tells apart. Palette gives no other value.
     #[serde(default)]
     pub values: BTreeMap<String, Vec<String>>,
+    /// The names that strata needs from a set that Palette can extend, by the field that holds
+    /// them: `schema.properties[].name` and the properties that strata sends in a search. Each
+    /// name must be in the answer. Another name is no fault.
+    #[serde(default)]
+    pub names: BTreeMap<String, Vec<String>>,
 }
 
 impl Reads {
-    /// True when the fact states no field, no code, and no value.
+    /// True when the fact states no field, no code, no value, and no name.
     pub fn is_empty(&self) -> bool {
-        self.fields.is_empty() && self.codes.is_empty() && self.values.is_empty()
+        self.codes.is_empty() && !self.reads_a_document()
+    }
+
+    /// True when the fact states a field, a value, or a name of the answer. A fact that states
+    /// error codes alone reads no document.
+    pub fn reads_a_document(&self) -> bool {
+        !(self.fields.is_empty() && self.values.is_empty() && self.names.is_empty())
     }
 }
 

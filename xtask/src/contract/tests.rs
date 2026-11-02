@@ -160,13 +160,23 @@ fn served(docs: &[(&str, Value)]) -> (tempfile::TempDir, HttpApi) {
 
 /// The run of `facts` against the tenant that `api` talks to.
 fn contract(stand_in: &StandIn, api: &impl strata::api::PaletteApi) -> Contract {
+    contract_of(&facts(), stand_in, api)
+}
+
+/// The run of the facts `facts`, in place of the small list.
+fn contract_of(facts: &[Fact], stand_in: &StandIn, api: &impl strata::api::PaletteApi) -> Contract {
     run(
-        &facts(),
+        facts,
         stand_in,
         api,
         "https://tenant.example",
         "2026-11-02T06:00:00Z",
     )
+}
+
+/// The facts of the repository.
+fn real_facts() -> Vec<Fact> {
+    crate::facts::load(&crate::repository()).expect("the list of the facts")
 }
 
 /// The outcome of the fact `id` in `contract`.
@@ -351,7 +361,7 @@ fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() 
             "the region and the account come from the lab",
         ),
     ];
-    let facts = crate::facts::load(&crate::repository()).expect("the list of the facts");
+    let facts = real_facts();
     let mut lacking = Vec::new();
     for fact in facts.iter().filter(|f| f.kind == Kind::Request) {
         let Some(template) = fact.get_path() else {
@@ -377,7 +387,7 @@ fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() 
 
 #[test]
 fn each_source_names_a_get_request_of_the_list_whose_own_placeholders_have_a_source() {
-    let facts = crate::facts::load(&crate::repository()).expect("the list of the facts");
+    let facts = real_facts();
     for source in subject::SOURCES {
         let request = subject::request_of(&facts, source.fact)
             .unwrap_or_else(|| panic!("`{}` is no GET request of the list", source.fact));
@@ -391,6 +401,90 @@ fn each_source_names_a_get_request_of_the_list_whose_own_placeholders_have_a_sou
             "{} is no pointer",
             source.pointer
         );
+    }
+}
+
+// ---- the query of a request ----------------------------------------------------------------
+
+/// The documents that answer the three requests which need a query, with the file names that the
+/// stand-in uses: the query follows an `@`. The cloud account of the regions comes from a listing.
+fn query_documents() -> Vec<(&'static str, Value)> {
+    vec![
+        (
+            "v1/filters/metadata@filterType=tag",
+            json!({"items": [{"metadata": {"name": "production", "uid": "f1"}}]}),
+        ),
+        (
+            "v1/filters/tag/f1",
+            json!({"spec": {"filterGroup": {"conjunction": "and",
+                "filters": [{"key": "env", "values": ["prod"]}]}}}),
+        ),
+        (
+            "v1/cloudaccounts/aws",
+            json!({"items": [{"metadata": {"uid": "acc1"}}]}),
+        ),
+        (
+            "v1/clouds/aws/regions@cloudAccountUid=acc1",
+            json!({"regions": [{"name": "us-east-2"}]}),
+        ),
+    ]
+}
+
+#[test]
+fn the_run_asks_the_tag_filters_and_the_regions_with_the_query_that_the_stand_in_serves() {
+    let docs = query_documents();
+    let (_root, stand_in) = stand_in(&docs);
+    let (_dir, api) = served(&docs);
+    let contract = contract_of(&real_facts(), &stand_in, &api);
+    for id in ["tag-filter-listing", "tag-filter", "validate-aws-regions"] {
+        let entry = contract.facts.iter().find(|e| e.id == id).unwrap();
+        assert_eq!(entry.outcome, Outcome::Same, "{id}: {entry:?}");
+    }
+    assert_eq!(contract.exit_code(), 0);
+}
+
+#[test]
+fn the_stand_in_serves_the_tag_filters_and_the_regions_only_with_their_query() {
+    // a request with no query finds no document. Palette refuses such a request too: 403 for the
+    // filters and 422 for the regions
+    let (_dir, api) = served(&query_documents());
+    let probe = subject::Probe::new(&api);
+    for path in ["/v1/filters/metadata", "/v1/clouds/aws/regions"] {
+        let answer = probe.get(path);
+        let failure = answer.as_ref().as_ref().unwrap_err();
+        assert_eq!(failure.status, Some(404), "{path}");
+    }
+}
+
+#[test]
+fn a_placeholder_in_the_query_gets_its_value_from_the_listing_of_the_tenant() {
+    let api = memory(&query_documents()[2..3]);
+    let probe = subject::Probe::new(&api);
+    let found = subject::find(
+        &probe,
+        &real_facts(),
+        "/v1/clouds/aws/regions?cloudAccountUid={cloudAccountUid}",
+    );
+    assert_eq!(
+        found,
+        subject::Subject::Path("/v1/clouds/aws/regions?cloudAccountUid=acc1".to_string())
+    );
+}
+
+#[test]
+fn a_tenant_with_no_aws_account_has_no_subject_for_the_regions_and_the_reason_says_why() {
+    let api = MemoryApi::new().with("/v1/cloudaccounts/aws", json!({"items": []}));
+    let probe = subject::Probe::new(&api);
+    match subject::find(
+        &probe,
+        &real_facts(),
+        "/v1/clouds/aws/regions?cloudAccountUid={cloudAccountUid}",
+    ) {
+        subject::Subject::Missing(why) => {
+            assert!(why.contains("/v1/cloudaccounts/aws"), "{why}");
+            assert!(why.contains("{cloudAccountUid}"), "{why}");
+        }
+        other => panic!("expected no subject, got {other:?}"),
     }
 }
 
@@ -621,6 +715,120 @@ fn a_value_that_only_the_stand_in_names_is_not_new() {
     let (_root, stand_in) = stand_in(&documents("Importing"));
     let contract = contract(&stand_in, &memory(&documents("Importing")));
     assert_eq!(outcome(&contract, "cluster-document"), Outcome::Same);
+}
+
+// ---- the names that strata needs -----------------------------------------------------------
+
+/// A fact for the search schema: the stand-in names `tags` and `environment`, and strata needs
+/// both. The fact reads the name as a name, and not as a closed set.
+const SCHEMA_FACT: &str = r#"
+- id: cluster-search-schema
+  kind: request
+  request: GET /v1/dashboard/spectroclusters/search/schema
+  reads:
+    fields: ["schema.properties[].name"]
+    names:
+      schema.properties[].name: [tags, environment]
+  stand_in: [v1/dashboard/spectroclusters/search/schema]
+  live: [fleet.sh:tag-search]
+  pages: [reference/palette-api.md#the-fleet]
+  code: [src/api/palette/listings.rs]
+"#;
+
+/// The search schema with the properties `names`.
+fn schema(names: &[&str]) -> Vec<(&'static str, Value)> {
+    let properties: Vec<Value> = names
+        .iter()
+        .map(|n| json!({"name": n, "type": "string"}))
+        .collect();
+    vec![(
+        "v1/dashboard/spectroclusters/search/schema",
+        json!({"schema": {"properties": properties}}),
+    )]
+}
+
+/// The run of `SCHEMA_FACT` against a tenant whose schema has the properties `names`.
+fn schema_run(names: &[&str]) -> Contract {
+    let facts: Vec<Fact> = serde_yaml::from_str(SCHEMA_FACT).expect("the fact is YAML");
+    let (_root, stand_in) = stand_in(&schema(&["tags", "environment"]));
+    contract_of(&facts, &stand_in, &memory(&schema(names)))
+}
+
+#[test]
+fn a_name_that_the_fact_does_not_list_is_no_difference_and_no_unknown_value() {
+    let contract = schema_run(&["clusterName", "tags", "environment", "cloudRegion"]);
+    assert_eq!(outcome(&contract, "cluster-search-schema"), Outcome::Same);
+    assert_eq!(contract.summary.unknown_values, 0);
+    assert_eq!(contract.exit_code(), 0);
+}
+
+#[test]
+fn a_name_that_strata_needs_and_the_answer_lacks_is_a_difference_that_lists_the_names_found() {
+    let contract = schema_run(&["clusterName", "tags"]);
+    let entry = &contract.facts[0];
+    assert_eq!(entry.outcome, Outcome::Differs);
+    let difference = &entry.differences[0];
+    assert_eq!(difference.kind, DifferenceKind::Name);
+    assert_eq!(difference.path, "schema.properties[].name");
+    assert_eq!(difference.expected, ["environment"]);
+    assert_eq!(difference.found, ["clusterName", "tags"]);
+    assert_eq!(contract.exit_code(), 1);
+}
+
+#[test]
+fn an_answer_with_no_value_at_the_field_of_the_names_has_nothing_to_compare() {
+    let contract = schema_run(&[]);
+    assert_eq!(outcome(&contract, "cluster-search-schema"), Outcome::Same);
+}
+
+#[test]
+fn a_set_of_names_alone_makes_the_fact_comparable() {
+    let mut facts: Vec<Fact> = serde_yaml::from_str(SCHEMA_FACT).expect("the fact is YAML");
+    facts[0].reads.fields.clear();
+    let (_root, stand_in) = stand_in(&schema(&["tags", "environment"]));
+    let contract = contract_of(&facts, &stand_in, &memory(&schema(&["tags"])));
+    assert_eq!(contract.facts[0].outcome, Outcome::Differs, "not skipped");
+}
+
+#[test]
+fn a_closed_set_still_counts_a_value_it_does_not_name_as_an_unknown_value() {
+    // the same schema, read as a closed set: another name is then new
+    let mut facts: Vec<Fact> = serde_yaml::from_str(SCHEMA_FACT).expect("the fact is YAML");
+    let names = std::mem::take(&mut facts[0].reads.names);
+    facts[0].reads.values = names;
+    let (_root, stand_in) = stand_in(&schema(&["tags", "environment"]));
+    let contract = contract_of(
+        &facts,
+        &stand_in,
+        &memory(&schema(&["tags", "cloudRegion"])),
+    );
+    assert_eq!(contract.facts[0].outcome, Outcome::Same);
+    assert_eq!(contract.facts[0].unknown_values[0].values, ["cloudRegion"]);
+}
+
+#[test]
+fn the_search_schema_and_the_kinds_of_the_audit_log_are_names_and_no_set_is_both() {
+    let facts = real_facts();
+    let reads = |id: &str| &facts.iter().find(|f| f.id == id).unwrap().reads;
+    assert!(
+        reads("cluster-search-schema")
+            .names
+            .contains_key("schema.properties[].name")
+    );
+    assert!(
+        reads("audit-log")
+            .names
+            .contains_key("items[].spec.resource.kind")
+    );
+    for fact in &facts {
+        for field in fact.reads.names.keys() {
+            assert!(
+                !fact.reads.values.contains_key(field),
+                "`{}` names `{field}` as names and as a closed set",
+                fact.id
+            );
+        }
+    }
 }
 
 #[test]
@@ -903,24 +1111,31 @@ fn a_refused_key_a_limit_of_the_rate_and_a_fault_of_the_server_are_not_a_differe
 
 // ---- the harvest of the book -----------------------------------------------------------------
 
-/// The harvest builds the tenant of every chapter. It needs the offline examples and the xtask
-/// binary, which `just examples` and `just stand-in` build; without them it has nothing to
-/// harvest and returns.
-#[test]
-fn the_harvest_of_the_book_gives_the_stand_in_a_document_for_each_route_of_a_fact() {
+/// The stand-in that the harvest of the book builds: the tenant of every chapter. It needs the
+/// offline examples and the xtask binary, which `just examples` and `just stand-in` build. Without
+/// them it has nothing to harvest, and a test that needs it returns.
+fn harvested() -> Option<StandIn> {
     let repo = crate::repository();
     let xtask = repo.join("target/debug/xtask");
     if crate::book::built_examples(&repo).is_err() || !xtask.is_file() {
-        return;
+        return None;
     }
     let into = tempfile::tempdir().unwrap();
     super::stand_in::harvest(&repo, &xtask, into.path()).unwrap();
-    let stand_in = StandIn::read(into.path());
-    let facts = crate::facts::load(&repo).expect("the list of the facts");
+    Some(StandIn::read(into.path()))
+}
+
+/// The harvest gives the stand-in a document for each route of a fact.
+#[test]
+fn the_harvest_of_the_book_gives_the_stand_in_a_document_for_each_route_of_a_fact() {
+    let Some(stand_in) = harvested() else {
+        return;
+    };
+    let facts = real_facts();
     let without: Vec<&str> = facts
         .iter()
         .filter(|f| f.kind == Kind::Request && !f.stand_in.is_empty())
-        .filter(|f| !f.reads.fields.is_empty() || !f.reads.values.is_empty())
+        .filter(|f| f.reads.reads_a_document())
         .filter(|f| stand_in.documents(&f.stand_in).is_empty())
         .map(|f| f.id.as_str())
         .collect();
@@ -928,6 +1143,144 @@ fn the_harvest_of_the_book_gives_the_stand_in_a_document_for_each_route_of_a_fac
         without.is_empty(),
         "no chapter of the book ends with a document for the routes of these facts: {without:?}"
     );
+}
+
+// ---- the fields that the stand-in holds ------------------------------------------------------
+
+#[test]
+fn a_field_that_a_fact_reads_and_no_document_of_the_stand_in_holds_is_reported() {
+    // the documents of the small tenant have no `status.fips.mode`
+    let (_root, stand_in) = stand_in(&documents("Running"));
+    assert_eq!(
+        stand_in.unheld_fields(&facts()),
+        ["fact `cluster-document`: no document of the stand-in holds the field `status.fips.mode`"]
+    );
+}
+
+#[test]
+fn a_document_that_holds_the_field_with_a_value_ends_the_report() {
+    let mut docs = documents("Running");
+    docs[1].1["status"]["fips"] = json!({"mode": "enabled"});
+    let (_root, stand_in) = stand_in(&docs);
+    assert_eq!(stand_in.unheld_fields(&facts()), Vec::<String>::new());
+}
+
+#[test]
+fn a_field_that_is_null_or_in_a_list_with_no_entry_is_not_held() {
+    let mut docs = documents("Running");
+    docs[1].1["status"]["fips"] = json!({"mode": null});
+    docs[1].1["spec"]["clusterProfileTemplates"] = json!([]);
+    let (_root, stand_in) = stand_in(&docs);
+    let bad = stand_in.unheld_fields(&facts());
+    assert_eq!(bad.len(), 2, "{bad:?}");
+    assert!(
+        bad.iter().any(|m| m.contains("`status.fips.mode`")),
+        "{bad:?}"
+    );
+    assert!(
+        bad.iter()
+            .any(|m| m.contains("`spec.clusterProfileTemplates[].name`")),
+        "{bad:?}"
+    );
+}
+
+#[test]
+fn a_post_fact_and_a_fact_with_no_document_of_the_stand_in_are_not_reported() {
+    // the search sends a body, so the run never compares it; the host and the summary have no
+    // document in the stand-in. Their fields are in no document, and no message follows.
+    let (_root, stand_in) = stand_in(&documents("Running"));
+    let bad = stand_in.unheld_fields(&facts());
+    for id in ["cluster-search", "edge-host-document", "cluster-summary"] {
+        assert!(!bad.iter().any(|m| m.contains(id)), "{id}: {bad:?}");
+    }
+}
+
+/// The types at `field` in the documents that the stand-in has for the fact `id`.
+fn held_types(stand_in: &StandIn, facts: &[Fact], id: &str, field: &str) -> Vec<JsonType> {
+    let fact = facts.iter().find(|f| f.id == id).expect("a fact");
+    let path = Field::parse(field);
+    let types: BTreeSet<JsonType> = stand_in
+        .documents(&fact.stand_in)
+        .iter()
+        .flat_map(|d| path.types(d))
+        .collect();
+    types.into_iter().collect()
+}
+
+/// The eight fields that a tenant gave as a string and that the stand-in never served (#530), and
+/// the registry whose sync recovered with no message.
+#[test]
+fn the_stand_in_of_the_book_serves_the_eight_fields_with_a_string_and_a_registry_with_no_message() {
+    let Some(stand_in) = harvested() else {
+        return;
+    };
+    let facts = real_facts();
+    for (id, field) in [
+        ("app-profile-document", "metadata.lastModifiedTimestamp"),
+        ("app-profile-tier-manifest", "spec.published.digest"),
+        ("oci-registry-summary", "items[].spec.providerType"),
+        ("audit-log", "items[].spec.actor.serviceName"),
+        ("audit-log", "items[].spec.contentMsg"),
+        ("profile-document", "metadata.annotations.projectUid"),
+        ("profile-document", "spec.published.packs[].manifests[].uid"),
+        ("profile-variables", "variables[].description"),
+    ] {
+        let types = held_types(&stand_in, &facts, id, field);
+        assert!(types.contains(&JsonType::String), "{id} {field}: {types:?}");
+    }
+    // a registry with `syncRecovery` and no `message` is there beside one with a message
+    let message = "items[].status.sync.syncRecovery.message";
+    assert_eq!(
+        held_types(&stand_in, &facts, "oci-registry-summary", message),
+        [JsonType::Absent, JsonType::String]
+    );
+}
+
+/// The fields that the API definition of Palette gives as a list, an object, or a boolean. A string
+/// there would make the next contract run report a false `type` difference.
+#[test]
+fn the_stand_in_of_the_book_serves_a_list_an_object_or_a_boolean_where_palette_does() {
+    let Some(stand_in) = harvested() else {
+        return;
+    };
+    let facts = real_facts();
+    for (id, field, expected) in [
+        ("cluster-listing", "spec.archType", JsonType::Array),
+        ("cluster-listing", "spec.tags", JsonType::Array),
+        ("cluster-listing", "spec.location", JsonType::Object),
+        (
+            "cluster-group-document",
+            "status.isActive",
+            JsonType::Boolean,
+        ),
+        (
+            "oci-registry-summary",
+            "items[].status.sync.isSyncSupported",
+            JsonType::Boolean,
+        ),
+        (
+            "profile-variables",
+            "variables[].required",
+            JsonType::Boolean,
+        ),
+    ] {
+        let types: Vec<_> = held_types(&stand_in, &facts, id, field)
+            .into_iter()
+            .filter(|t| *t != JsonType::Absent)
+            .collect();
+        assert_eq!(types, [expected], "{id} {field}");
+    }
+}
+
+/// The stand-in of the book holds each field that a fact reads.
+#[test]
+fn the_stand_in_of_the_book_holds_each_field_that_a_fact_reads() {
+    let Some(stand_in) = harvested() else {
+        return;
+    };
+    let facts = real_facts();
+    let bad = stand_in.unheld_fields(&facts);
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
 
 // ---- the command line ------------------------------------------------------------------------

@@ -78,8 +78,18 @@ pub(super) fn preflight_routes(r: &mut Runner, project: &str) {
     r.answer(
         project,
         &format!("v1/cloudaccounts/aws/{PLATFORM_AWS}"),
-        &json!({"kind": "aws", "metadata": {"name": "platform-aws", "uid": PLATFORM_AWS},
+        &json!({"kind": "aws",
+            "metadata": {"name": "platform-aws", "uid": PLATFORM_AWS,
+                "annotations": {"scope": "project"}},
             "spec": {"credentialType": "secret", "partition": "aws", "policyARNs": []}, "status": {"state": "Active"}}),
+    );
+    // the listing of the AWS accounts of the project: the contract run takes the account of the
+    // regions route from it
+    r.answer(
+        project,
+        "v1/cloudaccounts/aws",
+        &json!({"items": [{"kind": "aws",
+            "metadata": {"name": "platform-aws", "uid": PLATFORM_AWS}}]}),
     );
     // the property route of AWS answers 200 for a key pair that the region holds. The stand-in
     // serves an empty object, which a rule reads as `ok`. The regions of the account follow, with

@@ -475,13 +475,17 @@ of the rule read the key policy and call the route.
 
 ## The list routes
 
-Two routes list what the cloud account holds in a region. They refuse no cluster.
+Three routes list what the cloud account holds. They refuse no cluster.
 Strata reads each list and compares it with the entity.
 
 | Route | Gives | Read by |
 | --- | --- | --- |
 | `GET /v1/clouds/{aws,gcp}/regions/{region}/instancetypes?cloudAccountUid=` | Each instance type of the region: `type`, `category`, `cpu`, `memory`, `price`, `cost`, `supportedArchitectures[]`, and `nonSupportedZones` (an array, or `null`). | `instance-offering` |
 | `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `keyNames[]`: the key pairs of the account in the region. | `ssh-key-pair` |
+| `GET /v1/clouds/aws/regions?cloudAccountUid=` | `regions[].name`: the regions that the account has enabled. | `aws-region-not-enabled` |
+
+The query `cloudAccountUid` of the regions route is required. A request with no `cloudAccountUid`
+gets HTTP 422.
 
 `type` of an entry names the instance type. An entry has no `name`.
 `nonSupportedZones` of a type is an array of the zones that do not offer it.

@@ -40,8 +40,8 @@ An entry has these fields:
 | --- | --- |
 | `id` | The name of the fact: words with dashes. No two facts have one id. |
 | `kind` | `request`, `behavior`, or `gap`. See the next table. |
-| `request` | The method and the path of the request. Only a fact of the kind `request` has it. |
-| `reads` | What strata reads from the answer or depends on. `fields` are paths in the document: `[]` marks an array, and `*` marks the values of an object. `codes` are error codes of Palette. `values` are the values of a closed set, by field. |
+| `request` | The method, the path, and the query of the request. A value of the query that varies is `{name}`, as in the path. Only a fact of the kind `request` has it. |
+| `reads` | What strata reads from the answer or depends on. `fields` are paths in the document: `[]` marks an array, and `*` marks the values of an object. `codes` are error codes of Palette. `values` are the values of a closed set, by field. `names` are the names that strata needs from a set that Palette can extend, by field. |
 | `stand_in` | The routes of the stand-in that imitate the fact, as paths with `{name}` for a segment that varies. Empty when the stand-in serves no document for it. |
 | `live` | The live checks that prove the fact, each as `script.sh:check`. |
 | `unchecked` | Why no live check proves the fact. A fact has `live` or `unchecked`, and not both. |
@@ -76,7 +76,8 @@ proves, with the reason. The third lists each live check that a fact names, as t
 1. Find the file of the part of the book that states the fact. Add the entry at the end of the
    file, or in the place that the book orders.
 2. Write the request exactly as the table of [Palette API requests](../reference/palette-api.md)
-   writes it. If the page has no row for it, add the row first.
+   writes it. Write the query that strata sends, such as `?filterType=tag`. If the page has no row
+   for it, add the row first.
 3. Name the route of the stand-in. If the stand-in serves no document for the fact, leave `stand_in`
    empty.
 4. Name the live checks that prove the fact. Each name is a check that the script calls, and each
@@ -108,15 +109,17 @@ the fact.
 | A table of `reference/palette-api.md` lists a request that no fact has. | The book lists a request that the list does not hold. |
 | A rule of strata-preflight sends a request that no fact has, or a fact names the wrong rules. | The rules and the list disagree. |
 | A `##` heading of `internals/palette/` is on no fact. | The book states a fact that the list does not hold. |
+| A GET fact reads a field that no document of the stand-in holds. | The contract run has no type to compare, and reports a difference for each tenant that gives the field. |
 | A file of strata that a fact names does not exist. | The fact points at nothing. |
 | An id is used twice, or two facts have one request. | The list holds a copy. |
 
 Some headings of `internals/palette/` state no fact about Palette, such as "Where these answers
 come from". `NOT_FACTS` in `xtask/src/facts/check.rs` lists them.
 
-`cargo test -p xtask` makes every rule, except the two rules of the stand-in. `just test` runs it.
-`just docs-check` and `just docs-examples` run each chapter of the book, so they know the routes that
-the stand-in serves, and they make the two rules of the stand-in too.
+`cargo test -p xtask` makes every rule, except the two rules of the routes of the stand-in. `just test`
+runs it. It makes the rule of the fields too, when `just examples` has built the examples.
+`just docs-check` and `just docs-examples` run each chapter of the book, so they know the routes and
+the documents that the stand-in serves, and they make the three rules of the stand-in.
 
 ## The weekly contract run
 
@@ -136,15 +139,20 @@ For each fact of the kind `request`, the run does these steps:
    the book builds a tenant, and the run reads the documents of every chapter.
 2. It finds an object in the tenant. The first entry of a listing is the object. The `{uid}` of
    a cluster comes from the cluster listing, and the `{configUid}` of a cloud config comes from the
-   document of that cluster.
-3. It sends the request, and compares the answer with the documents of the stand-in.
+   document of that cluster. A value of the query comes from a listing too: the `{cloudAccountUid}`
+   of the regions route comes from `GET /v1/cloudaccounts/aws`.
+3. It sends the request with its query, and compares the answer with the documents of the stand-in.
 
-The comparison has two parts:
+The request has the query that strata sends, or that the stand-in serves the route with. Some routes
+need it. See [The query of a request](#the-query-of-a-request).
+
+The comparison has three parts:
 
 | Part | A difference is |
 | --- | --- |
 | The status | The tenant answers with a status of 4xx, other than 401 and 429. The stand-in answers 200. |
 | The type of a field | A field of `reads.fields` has a type that no document of the stand-in has there. Or each document of the stand-in has the field, and no place of the answer has it. |
+| The names | A name of `reads.names` is not in the answer, and the answer has a value at that field. |
 
 The run compares shapes. It never compares the values of two tenants. A `null` and a missing field
 are one type, `absent`. A field that some documents of the stand-in lack can be missing from the
@@ -162,11 +170,72 @@ The outcome of a fact is one of these:
 The run skips a fact in these cases:
 
 - The request is a POST. It sends a body, and the live checks of the fact send it.
-- The stand-in serves no document for the fact, or the fact reads no field and no value.
+- The stand-in serves no document for the fact, or the fact reads no field, no value, and no name.
 - The tenant has no object for a placeholder. An empty tenant skips most of the facts.
 - No source gives an object for a placeholder. `cloud-account` and the edge hosts are such facts.
 
 A skipped fact names its live checks in the entry. Run them in a live window to prove the fact.
+
+### The query of a request
+
+The request of a fact has the query that strata sends, or that the stand-in serves the route with.
+The run asks the route in the same way. Two routes fail without their query:
+
+- The filter listing needs `filterType=tag` in a project. See
+  [An imported cluster](../internals/palette/clusters.md#an-imported-cluster).
+- The regions route needs `cloudAccountUid`. See
+  [The list routes](../internals/palette/validate-routes.md#the-list-routes).
+
+The stand-in puts the query in the name of the file of the document, after an `@`, and serves each of
+these routes only with its query. A value of the query that varies is `{name}` in the request. The
+run takes the value from a listing of the tenant, as it takes the `{uid}` of a path. The fact
+`cloud-account-listing` gives the account of AWS.
+
+### The sets of values
+
+A fact lists a set of values under one of two keys of `reads`. The key says what the run does with
+the set:
+
+| Key | The set | The run reports |
+| --- | --- | --- |
+| `values` | A closed set. Palette gives no other value, and strata tells the values apart. | An unknown value, for a value that neither the fact nor the stand-in names. See [The unknown values](#the-unknown-values). |
+| `names` | The names that strata needs from a set that Palette can extend. | A difference of the kind `name`, for a name of the fact that the answer lacks. A name that the fact does not list is no difference. |
+
+A value that a closed set does not name is an unknown value and nothing else. It is not also a
+difference, so one new value opens one issue.
+
+The search schema is a set of names. The tenant has more properties than the three that strata
+sends in a search.
+The kinds of the audit log are names too. The log of the lab has the kinds `cloudaccount` and
+`registry`, and strata does not act on them. A set is in `values` unless strata ignores the values
+that it does not list.
+
+An answer with no value at the field of a set of names has nothing to compare, as a list with no
+entry has no type to compare. An audit log lists the writes of the tenant. A page that holds no entry
+of a kind that strata needs makes a difference. Create an entry of that kind, or remove the
+kind from the fact.
+
+### The fields of the stand-in
+
+The run compares the type of a field in the answer with the types in the documents of the stand-in.
+A field that no document holds has no type to compare. The run then reports a difference for each
+tenant that gives the field. So the check of the facts fails when a GET fact reads a field that no
+document of its stand-in holds. A document holds a field when it has a value there that is not
+`null`.
+
+A field that a tenant can omit needs two documents: one that holds it, and one that does not.
+The OCI registries are an example. A registry that recovered a sync has `syncRecovery` and no
+`message`. A registry that recovers has both.
+
+The chapters of the book build the documents. Some fields are in no page, such as the note of an
+audit entry. The chapter `fields` in `xtask/src/chapters/fields.rs` holds one document for each such
+field. It runs no command and writes no output. Add a document there when the check names a field
+that the other chapters omit.
+
+A document of this chapter holds only the fields that a fact reads. Read the API definition of the
+route before you add a field. The type of the field and each value must agree with it. A wrong type
+makes the next contract run report a false `type` difference. For example, `spec.archType` of the
+cluster listing is a list, not a text.
 
 ### The unknown values
 
@@ -197,7 +266,7 @@ The result is the document `strata-contract/1`. `contract.sh` writes it to `cont
 | `facts[].id`, `request` | The id of the fact and its request. |
 | `facts[].outcome` | The outcome of the fact. |
 | `facts[].reason` | Why the run skipped the fact or could not check it. |
-| `facts[].differences[]` | Each difference: `kind` is `status`, `type`, or `missing`. `path` is the field. `expected` is what the stand-in has, and `found` is what the tenant has. |
+| `facts[].differences[]` | Each difference: `kind` is `status`, `type`, `missing`, or `name`. `path` is the field. `expected` is what the stand-in has, and `found` is what the tenant has. For a `name`, `expected` lists the names that strata needs and the answer lacks, and `found` lists the names that the answer has. |
 | `facts[].unknownValues[]` | Each closed set that holds an unknown value. `set` is the field of `reads.values`. `known` is what the fact and the stand-in name, and `values` is what the tenant gave. The key is absent when the entry has none. |
 | `facts[].live`, `pages` | The live checks and the pages of the fact. |
 | `releases[]` | The latest release of each repository, when the run keeps a state file. See [The releases](#the-releases). |
@@ -255,6 +324,11 @@ them in this way:
 The script exits with 0 when no fact differs, no value is unknown, and no release is new. It exits
 with 1 when it handled a fact that differs, an unknown value, or a new release. It exits with 2
 when a fact or a release could not be checked, or when a call to GitHub failed.
+
+Each body links this page in the repository that the report writes to. That repository is `--repo`,
+or the repository that GitHub names for the checkout. A dry run calls no host, so it takes the
+repository from `--repo` or from the `origin` remote of the checkout. When it finds none, it says so,
+and the links name `OWNER/REPO`.
 
 The script reads the host layer of `scripts/ci/verify-report.sh`, so it holds no second copy of the
 functions that call GitHub. The contract script is not shipped, so it can read a file of the
@@ -350,8 +424,11 @@ issue lists each difference, the live checks, and the pages of the fact. Do thes
 
 1. Prove the fact again with its live checks. A difference can come from the tenant: an object
    that lacks a field, or a key that cannot read a route.
-2. If Palette changed, change the stand-in, the fact, and the page together. See the next section.
-3. If Palette is wrong, tell the lead. The lead records the fault of Palette in the local findings
+2. For a `name` difference, read the names that the tenant has. If Palette renamed a name that strata
+   needs, change the fact, the code, and the page together. If the tenant lacks the name, learn
+   why: an audit log lacks a kind when no entry has it.
+3. If Palette changed, change the stand-in, the fact, and the page together. See the next section.
+4. If Palette is wrong, tell the lead. The lead records the fault of Palette in the local findings
    log. Do not open an issue for it.
 
 ### What to do with a new value

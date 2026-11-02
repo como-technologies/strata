@@ -145,6 +145,8 @@ A change to Palette behavior in the stand-in needs a live run that shows it. It 
 fact in [the list of the facts of Palette](./facts.md), with the route of the stand-in and the
 live check.
 
+A field that a fact reads and no page shows goes in the chapter `fields`. See
+[The fields of the stand-in](./facts.md#the-fields-of-the-stand-in).
 ## The style rules
 
 Test each sentence: does it tell an expert something that the command, the

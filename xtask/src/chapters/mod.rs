@@ -13,6 +13,7 @@ mod commands;
 mod content;
 mod drift;
 mod edits;
+mod fields;
 mod fleet;
 mod ids;
 mod objects;
@@ -68,4 +69,5 @@ pub fn run(r: &mut Runner) {
     fleet::run(r);
     automation::run(r);
     preflight::run(r);
+    fields::run(r);
 }

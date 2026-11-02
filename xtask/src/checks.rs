@@ -8,6 +8,7 @@ use std::path::Path;
 
 use regex::Regex;
 
+use crate::contract::StandIn;
 use crate::files::{book, output_dir, pages};
 
 /// The use cases of the book, from the root of the repository.
@@ -27,12 +28,13 @@ pub struct OutputState {
 ///
 /// `chapters` maps the name of each chapter that the runner defined to its number of states.
 /// `states` names the chapter and the state of each output that the runner wrote. `routes` holds
-/// the route of each document that the stand-in served.
+/// the route of each document that the stand-in served, and `stand_in` holds the documents.
 pub fn check(
     repo: &Path,
     chapters: &BTreeMap<String, u32>,
     states: &BTreeSet<OutputState>,
     routes: &BTreeSet<String>,
+    stand_in: &StandIn,
 ) -> Vec<String> {
     let mut bad = Vec::new();
     bad.extend(release_tags(repo));
@@ -43,7 +45,19 @@ pub fn check(
     bad.extend(seeds(repo, states));
     bad.extend(cited_run_ids(repo));
     bad.extend(crate::facts::check(repo, Some(routes)));
+    bad.extend(fields_held(repo, stand_in));
     bad
+}
+
+/// Each field that a GET fact reads is in a document of the stand-in. The contract run compares
+/// the type of the field in the answer of a real tenant with the types in those documents. A
+/// field that no document holds has no type to compare, and the run then reports a difference
+/// for each tenant that gives the field.
+fn fields_held(repo: &Path, stand_in: &StandIn) -> Vec<String> {
+    // a list that cannot be read is reported by the check of the facts
+    crate::facts::load(repo)
+        .map(|facts| stand_in.unheld_fields(&facts))
+        .unwrap_or_default()
 }
 
 fn shown(repo: &Path, page: &Path) -> String {
@@ -390,6 +404,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_check_of_the_book_reports_a_field_that_no_document_of_the_stand_in_holds() {
+        // a cluster listing with no entry holds none of the fields that the fact reads
+        let tenant = std::env::temp_dir().join(format!("strata-fields-{}", std::process::id()));
+        let listing = tenant.join("tenant/v1/dashboard/spectroclusters");
+        std::fs::create_dir_all(&listing).unwrap();
+        std::fs::write(listing.join("meta.json"), "[]").unwrap();
+        let mut stand_in = StandIn::default();
+        stand_in.add_tenant(&tenant);
+        std::fs::remove_dir_all(&tenant).unwrap();
+        let repo = crate::repository();
+        let bad = fields_held(&repo, &stand_in);
+        assert!(
+            bad.contains(
+                &"fact `cluster-listing`: no document of the stand-in holds the field `metadata.name`"
+                    .to_string()
+            ),
+            "{bad:?}"
+        );
+        assert!(
+            fields_held(&repo, &StandIn::default()).is_empty(),
+            "a stand-in with no document has no field to hold"
+        );
+    }
+
+    #[test]
     fn each_check_reports_a_page_that_it_cannot_read() {
         let repo = std::env::temp_dir().join(format!("strata-checks-{}", std::process::id()));
         let use_cases = book(&repo).join(USE_CASES);
@@ -399,7 +438,13 @@ mod tests {
         // bytes that are not UTF-8, so the read of the page fails
         let broken = use_cases.join("broken.md");
         std::fs::write(&broken, [0xff, 0xfe]).unwrap();
-        let bad = check(&repo, &chapters(), &BTreeSet::new(), &BTreeSet::new());
+        let bad = check(
+            &repo,
+            &chapters(),
+            &BTreeSet::new(),
+            &BTreeSet::new(),
+            &StandIn::default(),
+        );
         std::fs::remove_dir_all(&repo).unwrap();
         // release_tags, links_resolve, follow_along_first, playgrounds, seeds, and cited_run_ids each
         // read the page

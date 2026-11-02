@@ -558,7 +558,7 @@ give the run profiles to read, and `just live-up` to give it a cluster.
 
 | Result | What it shows |
 |---|---|
-| `contract.json` | #390, #391: for each fact of the kind `request`, the status and the type of each field against the stand-in. It also lists each value of a closed set that the fact and the stand-in do not name. No result yet. |
+| `contract.json` | #390, #391, #530: for each fact of the kind `request`, the status and the type of each field against the stand-in. The run asks with the query that strata sends. It checks the names that strata needs, and lists each value of a closed set that the fact and the stand-in do not name. The facts `tag-filter-listing`, `tag-filter`, and `validate-aws-regions` show that the filter listing needs `filterType=tag` and the regions route needs `cloudAccountUid`. No result yet. |
 
 ## contract-profiles.sh
 

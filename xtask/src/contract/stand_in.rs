@@ -10,9 +10,10 @@ use std::path::Path;
 
 use serde_json::Value;
 
+use super::shape::{JsonType, Path as Field};
 use crate::book::{Mode, Runner};
 use crate::chapters;
-use crate::facts::route_matches;
+use crate::facts::{Fact, Kind, route_matches};
 use crate::files::files_under;
 use crate::palette::{is_refusal, route_of};
 
@@ -63,6 +64,36 @@ impl StandIn {
             .filter(|(route, _)| patterns.iter().any(|p| route_matches(p, route)))
             .flat_map(|(_, documents)| documents)
             .collect()
+    }
+
+    /// One message for each field that a GET fact of the kind `request` reads and that no document of
+    /// its stand-in holds. A document holds a field when it has a value there that is not `null`.
+    /// A fact whose route the stand-in does not serve has no message: the check of the routes
+    /// reports it.
+    pub fn unheld_fields(&self, facts: &[Fact]) -> Vec<String> {
+        let mut bad = Vec::new();
+        for fact in facts
+            .iter()
+            .filter(|f| f.kind == Kind::Request && f.get_path().is_some())
+        {
+            let documents = self.documents(&fact.stand_in);
+            if documents.is_empty() {
+                continue;
+            }
+            for field in &fact.reads.fields {
+                let path = Field::parse(field);
+                let held = documents
+                    .iter()
+                    .any(|d| path.types(d).iter().any(|t| *t != JsonType::Absent));
+                if !held {
+                    bad.push(format!(
+                        "fact `{}`: no document of the stand-in holds the field `{field}`",
+                        fact.id
+                    ));
+                }
+            }
+        }
+        bad
     }
 }
 
