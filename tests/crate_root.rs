@@ -1,12 +1,13 @@
-//! The crate root, `src/lib.rs`, and the old paths of the modules that moved to `model/`.
+//! The crate root, `src/lib.rs`, and the paths of the modules that moved to `model/`.
 //!
 //! `docs/src/development/code.md` says where a shared module goes: a type of Palette in `model/`,
 //! a read of Palette in `api/`, and a helper of the whole crate at the root. These tests keep the
 //! root to the modules that are neither.
 
-use std::any::TypeId;
 use std::collections::BTreeSet;
 use std::path::Path;
+
+use crate::common::walk;
 
 /// The modules of the crate root. Each is a layer of strata or a helper of the whole crate.
 /// No type of Palette is here: it goes in `model/`, and a read of Palette goes in `api/`.
@@ -75,52 +76,61 @@ fn each_file_and_directory_of_src_is_a_module_that_lib_declares() {
     assert_eq!(module_entries(), declared_modules());
 }
 
-/// True when the types `A` and `B` are one type.
-fn same_type<A: 'static, B: 'static>() -> bool {
-    TypeId::of::<A>() == TypeId::of::<B>()
+/// Each Rust file of `src/`, with its path under `src/` and its text.
+fn source_files() -> Vec<(String, String)> {
+    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    walk(&src)
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
+        .map(|path| {
+            let name = path.strip_prefix(&src).unwrap().display().to_string();
+            (name, std::fs::read_to_string(&path).unwrap())
+        })
+        .collect()
 }
 
 #[test]
-fn each_old_path_of_a_moved_module_names_the_type_of_its_new_path() {
-    assert!(same_type::<strata::cloud::Cloud, strata::model::cloud::Cloud>());
-    assert!(same_type::<
-        strata::cluster_template::ClusterTemplateRef,
-        strata::model::cluster_template::ClusterTemplateRef,
-    >());
-    assert!(same_type::<
-        strata::conjunction::Conjunction,
-        strata::model::conjunction::Conjunction,
-    >());
-    assert!(same_type::<
-        strata::content::layer::Layer,
-        strata::model::layer::Layer,
-    >());
-    assert!(same_type::<
-        strata::oci_provider::OciProvider,
-        strata::model::oci_provider::OciProvider,
-    >());
-    assert!(same_type::<
-        strata::pack_state::PackState,
-        strata::model::pack_state::PackState,
-    >());
-    assert!(same_type::<
-        strata::pack_type::PackType,
-        strata::model::pack_type::PackType,
-    >());
-    assert!(same_type::<
-        strata::profile_type::ProfileType,
-        strata::model::profile_type::ProfileType,
-    >());
-    assert!(same_type::<
-        strata::repave::PendingRepave,
-        strata::model::repave::PendingRepave,
-    >());
-    assert!(same_type::<
-        strata::scope::ProfileScope,
-        strata::model::scope::ProfileScope,
-    >());
-    assert!(same_type::<
-        strata::validation::ProfileValidation,
-        strata::model::validation::ProfileValidation,
-    >());
+fn no_file_of_src_keeps_the_old_path_of_a_module_that_moved_to_model() {
+    let model = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/model");
+    let modules: BTreeSet<String> = std::fs::read_dir(model)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .map(|name| name.trim_end_matches(".rs").to_string())
+        .filter(|name| name != "mod")
+        .collect();
+    let kept: Vec<String> = source_files()
+        .iter()
+        .flat_map(|(file, text)| {
+            text.lines()
+                .filter_map(|line| line.strip_prefix("pub use "))
+                .map(|path| path.trim_end_matches(';'))
+                .filter_map(|path| {
+                    path.strip_prefix("crate::model::")
+                        .or(path.strip_prefix("model::"))
+                })
+                .filter(|name| modules.contains(*name))
+                .map(move |name| format!("{file}: pub use model::{name}"))
+        })
+        .collect();
+    assert!(
+        kept.is_empty(),
+        "release 0.27.0 removed the old paths of the modules of model/: {kept:?}"
+    );
+}
+
+#[test]
+fn no_file_of_src_keeps_the_constants_of_a_cluster_state_that_release_0_27_0_removed() {
+    let kept: Vec<String> = source_files()
+        .into_iter()
+        .filter(|(_, text)| {
+            ["RUNNING_STATE", "ERROR_STATE", "DELETED_STATE"]
+                .iter()
+                .any(|name| text.contains(name))
+        })
+        .map(|(file, _)| file)
+        .collect();
+    assert!(
+        kept.is_empty(),
+        "`ClusterState::is` replaces the constants of a state: {kept:?}"
+    );
 }
