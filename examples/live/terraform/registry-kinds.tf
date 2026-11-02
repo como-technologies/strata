@@ -14,11 +14,11 @@
 # makes it and removes it through the API.
 
 locals {
-  kinds      = var.registry_kinds ? 1 : 0
+  kinds      = var.registry_kinds && var.own_registries ? 1 : 0
   kinds_user = "strata"
   # <public IP with dashes>.sslip.io resolves to the public IP, so Caddy can get a certificate for
   # each service name with no DNS zone of the example's own.
-  kinds_host = var.registry_kinds ? "${replace(aws_instance.kinds[0].public_ip, ".", "-")}.sslip.io" : ""
+  kinds_host = local.kinds == 1 ? "${replace(aws_instance.kinds[0].public_ip, ".", "-")}.sslip.io" : ""
   kinds_tags = { Name = "${var.name_prefix}-registry-kinds", purpose = "strata-live-example", managed-by = "opentofu" }
   kinds_oci  = toset(["pack", "helm", "zarf"])
 }
@@ -170,7 +170,7 @@ resource "spectrocloud_registry_helm" "kinds_charts_auth" {
 }
 
 resource "spectrocloud_registry_oci" "kinds" {
-  for_each           = var.registry_kinds ? local.kinds_oci : toset([])
+  for_each           = local.kinds == 1 ? local.kinds_oci : toset([])
   name               = "${var.name_prefix}-oci-${each.key}"
   type               = "basic"
   provider_type      = each.key

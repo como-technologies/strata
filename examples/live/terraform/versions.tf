@@ -25,10 +25,19 @@ terraform {
 }
 
 # The example's own OCI pack registry is an ECR repository in the account that aws_profile names.
-# The clusters use Palette's cloud account and need no AWS credential here.
+# The clusters use the cloud account of Palette and need no AWS credential here. An EKS cluster is
+# the exception: its cloud account is a role in the same account. With own_registries false and a
+# cloud other than eks, the module makes no AWS resource. The provider then reads no profile and
+# calls no account (#531).
+locals {
+  aws_needed = var.own_registries || var.cloud == "eks"
+}
+
 provider "aws" {
-  region  = var.region
-  profile = var.aws_profile
+  region                      = var.region
+  profile                     = local.aws_needed ? var.aws_profile : null
+  skip_credentials_validation = !local.aws_needed
+  skip_requesting_account_id  = !local.aws_needed
 }
 
 # Auth: SPECTROCLOUD_APIKEY rides the environment; examples/live/tf.sh sets it from

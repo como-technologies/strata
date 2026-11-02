@@ -56,7 +56,7 @@ output "owned_helm_registry_name" {
 }
 
 output "owned_chart_repository" {
-  value = aws_ecr_repository.chart.repository_url
+  value = try(aws_ecr_repository.chart[0].repository_url, "")
 }
 
 output "owned_chart_name" {
@@ -82,11 +82,11 @@ output "addon2_profile_name" {
 
 # The example's own OCI pack registry, for examples/live/registry.sh.
 output "owned_registry_uid" {
-  value = spectrocloud_registry_oci.pack.id
+  value = try(spectrocloud_registry_oci.pack[0].id, "")
 }
 
 output "owned_registry_name" {
-  value = spectrocloud_registry_oci.pack.name
+  value = try(spectrocloud_registry_oci.pack[0].name, "")
 }
 
 output "owned_registry_host" {
@@ -94,7 +94,7 @@ output "owned_registry_host" {
 }
 
 output "owned_repository" {
-  value = aws_ecr_repository.pack.repository_url
+  value = try(aws_ecr_repository.pack[0].repository_url, "")
 }
 
 output "owned_pack_name" {
@@ -111,7 +111,7 @@ output "dep_pack_name" {
 }
 
 output "owned_dep_repository" {
-  value = aws_ecr_repository.dep.repository_url
+  value = try(aws_ecr_repository.dep[0].repository_url, "")
 }
 
 output "dep_profile_uid" {
@@ -177,7 +177,7 @@ output "kinds_password" {
 }
 
 output "kinds_registries" {
-  value = var.registry_kinds ? merge(
+  value = local.kinds == 1 ? merge(
     {
       charts      = { uid = spectrocloud_registry_helm.kinds_charts[0].id, name = spectrocloud_registry_helm.kinds_charts[0].name }
       charts-auth = { uid = spectrocloud_registry_helm.kinds_charts_auth[0].id, name = spectrocloud_registry_helm.kinds_charts_auth[0].name }

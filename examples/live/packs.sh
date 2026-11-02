@@ -47,7 +47,8 @@ trap summary EXIT
 
 echo "== the packs the profiles use" | tee -a steps.log
 check list-packs 0 '#55: the profiles list the pack versions they pin' -- \
-  "$strata" list --packs
+  bash -c "\"$strata\" list --packs --json | jq -e --arg n '$(out profile_name)' \
+    '[.profiles[] | select(.name == \$n)] | length > 0 and all(.packs | length > 0)'"
 
 echo "== one pack version against another" | tee -a steps.log
 check compare-versions 1 "#55: pack:$reg/$pack@$old against @$new differs" -- \
