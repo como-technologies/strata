@@ -168,6 +168,7 @@ not make the checks that the route answers.
 | --- | --- | --- |
 | `gke-pool-multiple-3` | The size of a GKE worker pool is a multiple of 3. | `InvalidParam`, "Node pool size should be multiple of 3". A live run shows it: see [What the preflight runs show](../development/live-runs.md#what-the-preflight-runs-show). |
 | `profile-cloud-mismatch` | Each profile is of the cloud type of the cluster, or of `all`. | HTTP 500 and `ClusterProfilesNotSupported`. `palette-validate` reports the refusal. See [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). |
+| `eks-ami-type` | The AMI type of an EKS pool is an AL2023 type. | `UnsupportedAmiType` for the type `AL2_x86_64`, and `IsValidValue` for a type that is not known. `palette-validate` reports both refusals. See [The validate routes](../internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate). |
 
 A run with `--rule` and one of these ids is a `usage` error with exit `2`, because the
 id is not in the catalog.
@@ -179,19 +180,21 @@ The rule stays in the catalog until [`validate-route.sh`](../development/live-ru
 shows that the route refuses the fault. Then the part in the second column
 leaves the rule, and its fixtures leave with it.
 
-| Rule | The part that strata expects the route to answer |
-| --- | --- |
-| `vsphere-instance-floor` | All of it: the CPU, the memory, the disk, and the missing instance type. |
-| `eks-ami-type` | The AL2 type, and a type that is not known. |
-| `edge-two-node` | The Kubernetes pack that is not K3s. |
-| `ssh-key-format` | The vSphere and Edge engines. |
-| `azure-ssh-key` | The empty key. |
-| `pack-state` | The `disabled` and `deleted` states. |
-| `vsphere-static-ip-pool` | All of it. |
-| `vsphere-controlplane-endpoint` | The empty host. |
-| `edge-vip-multi-node` | The empty host. |
-| `azure-subnets-in-vnet` | The empty `vnetCidrBlock`. |
-| `ntp-servers` | The format of a server. |
+The lab of the live example has cloud accounts of AWS and GCP only. A case of
+another cloud has no live result, and the third column says why.
+
+| Rule | The part that strata expects the route to answer | Why the rule waits |
+| --- | --- | --- |
+| `vsphere-instance-floor` | All of it: the CPU, the memory, the disk, and the missing instance type. | The lab has no cloud account of vSphere. |
+| `edge-two-node` | The Kubernetes pack that is not K3s. | The lab has no cloud account of Edge. |
+| `ssh-key-format` | The vSphere and Edge engines. | The lab has no cloud account of vSphere or Edge. |
+| `azure-ssh-key` | The empty key. | The lab has no cloud account of Azure. |
+| `pack-state` | The `disabled` and `deleted` states. | No body can carry the pack. Palette refuses a new profile with such a pack: see [route-bodies.sh](../development/live-runs.md#route-bodiessh). |
+| `vsphere-static-ip-pool` | All of it. | The lab has no cloud account of vSphere. |
+| `vsphere-controlplane-endpoint` | The empty host. | The lab has no cloud account of vSphere. |
+| `edge-vip-multi-node` | The empty host. | The lab has no cloud account of Edge. |
+| `azure-subnets-in-vnet` | The empty `vnetCidrBlock`. | The lab has no cloud account of Azure. |
+| `ntp-servers` | The format of a server. | The lab has no cloud account of vSphere, Edge, or MAAS. |
 
 ### The gaps that preflight fills
 
@@ -200,7 +203,6 @@ them, or they need more than the body of the create. They stay in the catalog.
 
 | Rule | What stays |
 | --- | --- |
-| `eks-ami-type` | The hop limit of the instance metadata. |
 | `edge-two-node` | The count of the control plane hosts, and the priority of each. |
 | `ssh-key-format` | The MAAS engine. |
 | `vsphere-controlplane-endpoint` | The mapping of the dynamic DNS. |

@@ -516,7 +516,6 @@ const ISSUE_IDS: &[&str] = &[
     "instance-offering",
     "spot-capacity",
     "eks-worker-needed",
-    "eks-ami-type",
     "eks-launch-template",
     "eks-fargate-private",
     "aws-ami",
@@ -625,9 +624,14 @@ const ISSUE_IDS: &[&str] = &[
 const PENDING: &[&str] = &[];
 
 /// The rows of #91 that left the catalog, because the validate route of the cluster answers the
-/// check: `gke-pool-multiple-3` (#243) and `profile-cloud-mismatch` (#415). A call of the route
-/// replaces each one: see "A check that a validate route answers" in the rule format of the book.
-const ANSWERED_BY_THE_ROUTE: &[&str] = &["gke-pool-multiple-3", "profile-cloud-mismatch"];
+/// check: `gke-pool-multiple-3` (#243), `profile-cloud-mismatch` (#415), and `eks-ami-type`
+/// (#409). A call of the route replaces each one: see "A check that a validate route answers" in
+/// the rule format of the book.
+const ANSWERED_BY_THE_ROUTE: &[&str] = &[
+    "gke-pool-multiple-3",
+    "profile-cloud-mismatch",
+    "eks-ami-type",
+];
 
 #[test]
 fn a_check_that_the_validate_route_answers_is_not_a_rule_of_the_catalog() {
