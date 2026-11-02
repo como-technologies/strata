@@ -1176,6 +1176,61 @@ fn the_rows_of_the_checks_that_the_wave_11_live_window_ran_state_a_result() {
     }
 }
 
+/// A rule that waits for a call of the route says why (#409), and a rule that a live run showed the
+/// route answers waits no more. The lab has cloud accounts of AWS and GCP only, so the cases of the
+/// other clouds have no result.
+#[test]
+fn a_rule_that_waits_for_the_route_says_why_and_a_rule_that_the_route_answers_does_not_wait() {
+    let page = read(&docs().join("reference/preflight-rules.md"));
+    let answers = section(
+        &page,
+        "### The checks that the route answers",
+        Some("\n### "),
+    );
+    let waits = section(
+        &page,
+        "### The checks that wait for a call of the route",
+        Some("\n### "),
+    );
+    let gaps = section(&page, "### The gaps that preflight fills", Some("\n## "));
+    assert!(answers.contains("| `eks-ami-type` |"), "{answers}");
+    for (name, table) in [("waits", waits), ("gaps", gaps)] {
+        assert!(
+            !table.contains("`eks-ami-type`"),
+            "the rule eks-ami-type left the catalog, and the table {name} names it"
+        );
+    }
+    let rows = table_rows(waits);
+    assert!(!rows.is_empty(), "{waits}");
+    for row in rows {
+        assert!(
+            row.len() == 3 && !row[2].is_empty(),
+            "the rule {} waits with no reason: {row:?}",
+            row[0]
+        );
+    }
+
+    let runs = read(&docs().join("development/live-runs.md"));
+    let route = section(&runs, "## validate-route.sh", Some("\n## route-bodies.sh"));
+    for row in route
+        .lines()
+        .filter(|l| l.starts_with('|') && l.to_lowercase().contains("no result yet"))
+    {
+        assert!(
+            row.contains("the lab has no cloud account of"),
+            "a case with no result gives no reason: {row}"
+        );
+    }
+    let row = route
+        .lines()
+        .find(|l| l.starts_with("| `eks-ami-type-al2`"))
+        .expect("validate-route.sh has a row for the cases of eks-ami-type");
+    for needle in ["UnsupportedAmiType", "IsValidValue"] {
+        assert!(row.contains(needle), "{row}");
+    }
+    assert!(!row.to_lowercase().contains("no result yet"), "{row}");
+}
+
 // ---- the everyday loop -------------------------------------------------------------------------
 
 /// The text of `docs/src/loop.md`.

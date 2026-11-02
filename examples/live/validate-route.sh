@@ -109,9 +109,9 @@ fault vsphere-instance-floor-cpu vsphere 'cpu' "$type_of.numCPUs = 0"
 fault vsphere-instance-floor-memory vsphere 'memory|MiB' "$type_of.memoryMiB = 512"
 fault vsphere-instance-floor-disk vsphere 'disk|GiB' "$type_of.diskGiB = 10"
 fault vsphere-instance-floor-no-type vsphere '.' "del($type_of)"
-# eks-ami-type: the AL2 type, and a type that is not known
+# eks-ami-type left the catalog (#409): the route refuses the AL2 type and a type that is not known
 fault eks-ami-type-al2 eks 'UnsupportedAmiType' '.spec.machinepoolconfig[0].cloudConfig.amiType = "AL2_x86_64"'
-fault eks-ami-type-unknown eks 'ami' '.spec.machinepoolconfig[0].cloudConfig.amiType = "BOTTLEROCKET_x86_64"'
+fault eks-ami-type-unknown eks 'IsValidValue' '.spec.machinepoolconfig[0].cloudConfig.amiType = "BOTTLEROCKET_x86_64"'
 # edge-two-node: the Kubernetes pack that is not K3s. The body is the file of the case.
 fault edge-two-node-pxk edge 'TwoNodeClusterPackMissing' -
 # ssh-key-format: vSphere and Edge

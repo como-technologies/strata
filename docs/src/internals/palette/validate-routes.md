@@ -75,6 +75,13 @@ route answers this check before the create, and `pack-cloud-support` is a gap
 that preflight fills: see
 [The gaps that preflight fills](../../reference/preflight-rules.md#the-gaps-that-preflight-fills).
 
+A live run on an EKS body shows the check of the AMI type of a pool. The route
+takes the clean body. It refuses the type `AL2_x86_64` with
+`UnsupportedAmiType`, and a type that is not known, such as `BOTTLEROCKET_x86_64`,
+with `IsValidValue`. `palette-validate` reports each refusal with the message of
+Palette. So the rule `eks-ami-type` left the catalog: see
+[The checks that the route answers](../../reference/preflight-rules.md#the-checks-that-the-route-answers).
+
 For a disabled pack and a deleted pack, see [Pack states](./packs.md#pack-states).
 
 **Who calls it.** The console, in its create wizard. The Terraform provider,

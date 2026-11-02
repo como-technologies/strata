@@ -5017,10 +5017,13 @@ const ROUTE_REFUSALS: [(&str, &str); 12] = [
         "vsphere-instance-floor-no-type",
         "InvalidParam: instanceType should not be empty",
     ),
-    ("eks-ami-type-al2", "UnsupportedAmiType: AL2_x86_64"),
+    (
+        "eks-ami-type-al2",
+        "UnsupportedAmiType: AMI type 'AL2_x86_64' is not supported",
+    ),
     (
         "eks-ami-type-unknown",
-        "InvalidParam: Invalid parameter 'AmiType'",
+        "IsValidValue: Invalid amiType 'BOTTLEROCKET_x86_64' specified",
     ),
     (
         "ssh-key-format-vsphere",
@@ -5206,7 +5209,7 @@ fn validate_route_sh_sends_each_fault_to_the_route_and_expects_a_refusal_that_na
 
 #[test]
 fn validate_route_sh_fails_on_a_fault_that_the_route_takes_and_on_a_refusal_for_another_reason() {
-    // the route takes an AL2 type: the rule `eks-ami-type` must stay
+    // the route takes an AL2 type: its case fails
     let stage = validate_route_stage(&[("eks-ami-type-al2", "passed", "")]);
     let bodies = stage.path("bodies");
     let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
