@@ -247,8 +247,10 @@ impl Snapshot {
     ///
     /// # Errors
     ///
-    /// [`Error::ClusterProfileNotFound`] when `profile` names none of the applied profiles of the
-    /// cluster.
+    /// - [`Error::ClusterProfileNotFound`] when `profile` names none of the applied profiles of the
+    ///   cluster.
+    /// - [`Error::Serialize`] for a cluster group whose values have no canonical form, when strata
+    ///   cannot mask a password in them.
     pub fn from_cluster(
         raw: &RawCluster,
         profile: Option<&str>,
@@ -309,7 +311,7 @@ impl Snapshot {
             palette_validation: None,
             // a cluster record holds the digests in cluster.macroValues
             macro_values: None,
-            cluster: Some(cluster_source(raw, profile, covered, &packs)),
+            cluster: Some(cluster_source(raw, profile, covered, &packs)?),
         };
         Ok(Snapshot::assemble(source, variables, packs))
     }
@@ -354,13 +356,13 @@ fn cluster_source(
     profile: Option<&str>,
     covered: Vec<AppliedProfile>,
     packs: &[Pack],
-) -> ClusterSource {
+) -> Result<ClusterSource> {
     let pending_updates = raw
         .notifications
         .as_ref()
         .map(|n| PendingUpdate::read(n, &covered))
         .unwrap_or_default();
-    ClusterSource {
+    Ok(ClusterSource {
         uid: text(&raw.cluster, "/metadata/uid"),
         name: text(&raw.cluster, "/metadata/name"),
         profile: profile.map(str::to_string),
@@ -378,10 +380,10 @@ fn cluster_source(
             .as_ref()
             .map(|r| macro_digests(r, &covered, &macros_of(packs))),
         labels: text_map(&raw.cluster, "/metadata/labels"),
-        tiers: cluster_tiers(raw, &covered),
+        tiers: cluster_tiers(raw, &covered)?,
         pending: false,
         kind: SubjectKind::Cluster.into(),
         members: Vec::new(),
         profiles: covered,
-    }
+    })
 }

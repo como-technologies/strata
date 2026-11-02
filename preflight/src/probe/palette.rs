@@ -10,8 +10,8 @@ use strata::config::KEY_VARS;
 use strata::json::value_or_null;
 
 use super::backend::{Backend, Response};
-use super::judge;
 use super::outcome::{Call, Outcome, Ran, Verdict};
+use super::{judge, put_data};
 use crate::error::Error;
 use crate::jq::Jq;
 use crate::rule::{PaletteCheck, PaletteRead, Rule};
@@ -133,7 +133,7 @@ pub(super) fn run_palette(
         return match ask(rule, check, None, world, backend, jq) {
             Ok(Asked { call, response }) => {
                 let mut with = world.clone();
-                with["response"] = serde_json::to_value(&response).unwrap_or(Value::Null);
+                put_data(&mut with, "response", &response);
                 let mut out = judge(rule, &check.expr, &with, jq, started);
                 out.ran = Ran::Request(call);
                 out
@@ -178,8 +178,7 @@ pub(super) fn run_palette(
         }
     }
     let mut with = world.clone();
-    // a derived `Serialize` of plain data does not fail
-    with["responses"] = serde_json::to_value(&responses).unwrap_or(Value::Null);
+    put_data(&mut with, "responses", &responses);
     let mut out = judge(rule, &check.expr, &with, jq, started);
     out.ran = Ran::Requests(calls);
     out

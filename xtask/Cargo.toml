@@ -10,7 +10,7 @@ name = "xtask"
 path = "src/main.rs"
 
 [dependencies]
-# The contract run writes the time of the run into its document.
+# The facts of the clouds hold dates, and the check reads them.
 chrono = "0.4"
 regex = "1"
 serde = { version = "1", features = ["derive"] }

@@ -151,9 +151,17 @@ impl Error {
                 put(m, "found", found.as_str());
                 put(m, "supported", *supported);
             }
-            Error::SnapshotSchema { path, schema, .. } => {
+            Error::SnapshotSchema {
+                path,
+                schema,
+                field,
+                ..
+            } => {
                 put_path(m, path);
                 put(m, "schema", *schema);
+                if !field.is_empty() {
+                    put(m, "field", field.as_str());
+                }
             }
             Error::LogInvalid { path, line, .. } => {
                 put_path(m, path);
@@ -223,8 +231,13 @@ impl Error {
     /// Put the fields of a variant that a cluster causes.
     fn put_cluster_fields(&self, m: &mut Map<String, Value>) {
         match self {
-            Error::StaleRecord { cluster, profile } => {
+            Error::StaleRecord {
+                cluster,
+                name,
+                profile,
+            } => {
                 put(m, "cluster", cluster.as_str());
+                put(m, "name", name.as_str());
                 put(m, "profile", profile.as_str());
             }
             // `asked` is a part of the message, and no field adds to that

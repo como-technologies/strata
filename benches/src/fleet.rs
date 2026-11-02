@@ -12,10 +12,11 @@ use strata::snapshot::Snapshot;
 use tempfile::TempDir;
 
 use crate::FETCHED_AT;
-use crate::profile::{self, PROFILE_NAME, PROFILE_UID, PROFILE_VERSION};
+use crate::profile::{self, PROFILE_NAME, PROFILE_UID};
 use crate::real;
 use crate::routes::{
-    cluster_manifests_route, cluster_route, cluster_variables_route, profile_route,
+    cluster_manifests_route, cluster_route, cluster_template, cluster_variables_route,
+    profile_route,
 };
 
 /// The uid of the cluster `index`: 24 characters, as Palette writes a uid.
@@ -35,14 +36,6 @@ fn stack() -> Vec<Value> {
             profile::fixture(newest, family.name).pack_ref(&[])
         })
         .collect()
-}
-
-/// The profile template that a cluster applies, as `spec.clusterProfileTemplates` lists it.
-fn template(packs: Value) -> Value {
-    json!({
-        "uid": PROFILE_UID, "name": PROFILE_NAME, "profileVersion": PROFILE_VERSION,
-        "type": "cluster", "cloudType": "aws", "packs": packs,
-    })
 }
 
 /// A fleet to verify: the records of the clusters on disk, and the Palette that serves them.
@@ -65,8 +58,9 @@ impl VerifyFleet {
     pub fn new(clusters: usize) -> VerifyFleet {
         let dir = tempfile::tempdir().expect("a temporary directory");
         let packs = Value::Array(stack());
-        let mut api =
-            MemoryApi::new().with(profile_route(PROFILE_UID), profile::document(packs.clone()));
+        let profile = profile::document(packs);
+        let template = cluster_template(&profile);
+        let mut api = MemoryApi::new().with(profile_route(PROFILE_UID), profile);
         let mut records = Vec::with_capacity(clusters);
         let mut base: Option<Snapshot> = None;
         for index in 0..clusters {
@@ -74,7 +68,7 @@ impl VerifyFleet {
             let name = format!("cluster-{index}");
             let document = json!({
                 "metadata": {"uid": uid, "name": name},
-                "spec": {"cloudType": "aws", "clusterProfileTemplates": [template(packs.clone())]},
+                "spec": {"cloudType": "aws", "clusterProfileTemplates": [template.clone()]},
                 "status": {"state": "Running"},
             });
             let manifests = json!({"profiles": [{
@@ -139,12 +133,14 @@ pub fn consumer_fleet(clusters: usize) -> MemoryApi {
     profile["status"]["inUseClusterUids"] = json!(uids);
     profile["status"]["inUseClusters"] = Value::Array(named);
     let mut api = MemoryApi::new().with(profile_route(PROFILE_UID), profile);
+    // a cluster of the consumer fleet states the profile that it runs, and no pack
+    let template = cluster_template(&profile::document(json!([])));
     for (index, uid) in uids.iter().enumerate() {
         api = api.with(
             cluster_route(uid),
             json!({
                 "metadata": {"uid": uid, "name": format!("cluster-{index}")},
-                "spec": {"clusterProfileTemplates": [template(json!([]))]},
+                "spec": {"clusterProfileTemplates": [template]},
                 "status": {"state": "Running"},
             }),
         );

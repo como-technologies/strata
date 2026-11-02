@@ -49,7 +49,7 @@ use crate::error::{Error, Result};
 /// Each engine is a cloud type of Palette, except `edge`, which Palette names
 /// [`CLOUD_EDGE_NATIVE`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Engine {
+pub(crate) enum Engine {
     /// A cloud type of Palette: the engine has its text.
     Cloud(Cloud),
     /// An edge cluster. Its engine is `edge`.
@@ -84,7 +84,7 @@ impl Engine {
 /// Palette removed it in 2026, and the API has no route for it.
 ///
 /// A rule names an engine too: see [`crate::rule::engines`].
-pub const ENGINES: [Engine; 9] = [
+pub(crate) const ENGINES: [Engine; 9] = [
     Engine::Cloud(Cloud::Aws),
     Engine::Cloud(Cloud::Eks),
     Engine::Cloud(Cloud::Gcp),
@@ -448,11 +448,13 @@ const VALIDATE_NAME_SUFFIX: &str = "-preflight";
 /// `entity` is neither an object nor `null`: see `validate_body`.
 pub(crate) fn add_derived_fields(world: &mut Value) -> Result<()> {
     if let Some(cloud) = opt_text(world, "/cloud") {
-        world["accountKind"] = json!(account_kind(&cloud));
-        world["routeCloud"] = json!(route_cloud(&cloud));
+        set_at(world, &["accountKind"], json!(account_kind(&cloud)));
+        set_at(world, &["routeCloud"], json!(route_cloud(&cloud)));
     }
-    world["edgeHosts"] = edge_hosts(value_at(world, "/entity"));
-    world["validateBody"] = validate_body(world)?;
+    let hosts = edge_hosts(value_at(world, "/entity"));
+    set_at(world, &["edgeHosts"], hosts);
+    let body = validate_body(world)?;
+    set_at(world, &["validateBody"], body);
     Ok(())
 }
 
@@ -596,10 +598,11 @@ fn infer_engine(entity: &Value) -> Option<Engine> {
 /// the template holds it, and the name and the uid of each of its manifests.
 fn pack_entry(pack: &Value) -> Value {
     let mut entry = AppliedProfile::template_pack_value(pack);
-    entry["manifests"] = arr(pack, "/manifests")
+    let manifests = arr(pack, "/manifests")
         .iter()
         .map(|m| json!({"name": value_at(m, "/name"), "uid": value_at(m, "/uid")}))
         .collect();
+    set_at(&mut entry, &["manifests"], manifests);
     entry
 }
 

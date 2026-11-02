@@ -26,7 +26,7 @@ mod watch;
 
 use verbose::verbose_lines;
 
-pub use rules::{RULES_SCHEMA, list_rules, rules_document, rules_text};
+pub use rules::{list_rules, rules_document, rules_text};
 pub use watch::{WatchInputs, WatchOptions, reading, watch};
 
 /// What a run keeps of the catalog.

@@ -17,7 +17,7 @@
 use std::path::Path;
 
 use serde_json::Value;
-use strata::json::{opt_text, strings};
+use strata::json::{opt_text, set_at, strings};
 
 use crate::error::{Error, Result};
 
@@ -70,7 +70,7 @@ fn load_depth(path: &Path, depth: u32) -> Result<Value> {
             obj.remove(k);
         }
         for (k, v) in obj {
-            out[k] = v.clone();
+            set_at(&mut out, &[k.as_str()], v.clone());
         }
     }
     Ok(out)

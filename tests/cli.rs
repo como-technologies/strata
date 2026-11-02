@@ -204,6 +204,70 @@ fn each_command_that_reads_a_record_with_a_null_variable_name_names_the_field_an
     }
 }
 
+/// A record of a cluster, written to a file next to the profile records of `fx`.
+fn cluster_record(fx: &Fx) -> (PathBuf, serde_json::Value) {
+    let path = Path::new(&fx.a).with_file_name("cluster-a.json");
+    snapshot_from_raw(&fx.raw, "cluster-a", &path);
+    let record = read_json(&path);
+    (path, record)
+}
+
+#[test]
+fn a_field_inside_the_cluster_of_a_record_gives_its_own_path_in_snapshot_schema() {
+    let fx = fixtures();
+    let (_, record) = cluster_record(&fx);
+    let cases: [(&[&str], serde_json::Value, &str); 4] = [
+        (
+            &["profiles", "0", "version"],
+            serde_json::json!(7),
+            "source.cluster.profiles[0].version: invalid type: integer `7`, expected a string",
+        ),
+        (
+            &["name"],
+            serde_json::json!(5),
+            "source.cluster.name: invalid type: integer `5`, expected a string",
+        ),
+        (
+            &["labels"],
+            serde_json::json!("env=dev"),
+            "source.cluster.labels: invalid type: string \"env=dev\", expected a map",
+        ),
+        // a read error of strata 0.24 and before moves into `errors`, so the entry has the path
+        (
+            &["pendingRepaveError"],
+            serde_json::json!(7),
+            "source.cluster.errors.pendingRepave: invalid type: integer `7`, expected a string",
+        ),
+    ];
+    for (n, (keys, wrong, message)) in cases.into_iter().enumerate() {
+        let mut bad = record.clone();
+        let mut at = &mut bad["source"]["cluster"];
+        for key in keys {
+            at = match key.parse::<usize>() {
+                Ok(index) => &mut at[index],
+                Err(_) => &mut at[*key],
+            };
+        }
+        *at = wrong;
+        let file = Path::new(&fx.a).with_file_name(format!("bad-cluster-{n}.json"));
+        write_record(&file, &bad);
+        let file = file.to_str().unwrap();
+        for args in [
+            vec!["compare", file, fx.a.as_str()],
+            vec!["verify", file],
+            vec!["behind", file],
+        ] {
+            let r = run(&args);
+            assert_eq!(r.code, 2, "{args:?}: {}{}", r.out, r.err);
+            assert!(
+                r.err.contains(message) && r.err.contains("Take the record again."),
+                "{args:?}: {}",
+                r.err
+            );
+        }
+    }
+}
+
 #[test]
 fn identical_profiles_exit_zero() {
     let fx = fixtures();

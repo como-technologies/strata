@@ -11,6 +11,7 @@ use strata::config::{self, Config};
 use strata::error::Result;
 use strata::ops;
 use strata::term::progress::Progress;
+use strata::timestamp::now_utc;
 
 use args::ProjectArgs;
 
@@ -27,10 +28,6 @@ pub(crate) mod same_release;
 pub(crate) mod schema;
 pub(crate) mod snapshot;
 pub(crate) mod verify;
-
-fn now_utc() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
-}
 
 fn progress(quiet: bool) -> Progress {
     Progress::new(quiet || config::quiet_from_env())

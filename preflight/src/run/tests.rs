@@ -1,6 +1,7 @@
 use super::*;
 use crate::probe::FixtureBackend;
 use crate::report::Tool;
+use crate::run::rules::RULES_SCHEMA;
 use serde_json::json;
 use std::path::Path;
 use std::time::Duration;

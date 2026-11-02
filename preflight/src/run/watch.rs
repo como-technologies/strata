@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use strata::api::{Palette, PaletteApi};
-use strata::json::text_or;
+use strata::json::{set_at, text_or};
 use strata::model::cluster_state::ClusterState;
 use strata::snapshot::SubjectKind;
 use strata::term::color::Paint;
@@ -228,7 +228,7 @@ fn read_until_ended<A: PaletteApi>(
         }
         let mut world = base.clone();
         for (k, v) in read.as_object().into_iter().flatten() {
-            world[k] = v.clone();
+            set_at(&mut world, &[k.as_str()], v.clone());
         }
         let failed = judge_rules(rules, &world, jq, elapsed, inputs.selection, &mut last);
         note_reading(inputs, &state, elapsed, readings, failed);

@@ -81,9 +81,10 @@ registry, under another pack uid and digest. That is the pattern of
 {{#include ../output/packs-latest.txt}}
 ```
 
-`strata packs <name> --latest` gives the newest version in each registry, which
-is the question a bump asks: is the pin the current version? Without `--latest`
-the command lists every version. See [packs](../commands/packs.md).
+`strata packs <name> --latest` gives the version that `@latest` names in each
+registry. This is the question a bump asks: is the pin the current version?
+Without `--latest` the command lists every version. See
+[packs](../commands/packs.md).
 
 Each row is one build, and its four columns are words the later pages use. The
 **pack uid** is what the registry calls that build, and it is the identity a

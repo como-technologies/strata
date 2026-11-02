@@ -562,9 +562,15 @@ impl Snapshot {
     /// - [`Error::NotSnapshot`] for a file that is not a snapshot.
     /// - [`Error::Io`] when strata cannot read the file.
     pub fn load(path: &Path) -> Result<Snapshot> {
-        let mut snap: Snapshot = load_document(path, SNAPSHOT_SCHEMA, || {
+        let mut document = read_document(path, SNAPSHOT_SCHEMA, || {
             Error::NotSnapshot(path.to_path_buf())
         })?;
+        // the cluster is read apart, so that an error names the field inside it
+        let cluster = cluster::take_record(&mut document);
+        let mut snap: Snapshot = parse_document(path, SNAPSHOT_SCHEMA, document, "")?;
+        snap.source.cluster = cluster
+            .map(|cluster| parse_document(path, SNAPSHOT_SCHEMA, cluster, "source.cluster"))
+            .transpose()?;
         snap.fill_content();
         Ok(snap)
     }
@@ -602,7 +608,7 @@ pub(crate) fn load_document<T: DeserializeOwned>(
     schema: &'static str,
     not_one: impl FnOnce() -> Error,
 ) -> Result<T> {
-    parse_document(path, schema, read_document(path, schema, not_one)?)
+    parse_document(path, schema, read_document(path, schema, not_one)?, "")
 }
 
 /// Read the JSON of the document of the schema id `schema` at `path`, with its id checked. The
@@ -633,18 +639,24 @@ fn read_document(
 
 /// Read the fields of `document`, the JSON that [`read_document`] gave for the file at `path`.
 ///
-/// An error names the field that does not match, as `variables[0].name`.
+/// An error names the field that does not match, as `variables[0].name`. `parent` is the field that
+/// `document` is the value of, such as `source.cluster`, and empty text for the whole record.
 fn parse_document<T: DeserializeOwned>(
     path: &Path,
     schema: &'static str,
     document: Value,
+    parent: &str,
 ) -> Result<T> {
     serde_path_to_error::deserialize(document).map_err(|e| {
-        let at = e.path();
-        let field = if at.iter().next().is_none() {
-            String::new()
+        let inside = e.path();
+        let field = if inside.iter().next().is_none() {
+            parent.to_string()
+        } else if parent.is_empty() {
+            inside.to_string()
+        } else if inside.to_string().starts_with('[') {
+            format!("{parent}{inside}")
         } else {
-            at.to_string()
+            format!("{parent}.{inside}")
         };
         Error::SnapshotSchema {
             path: path.to_path_buf(),

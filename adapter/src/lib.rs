@@ -103,12 +103,9 @@ fn now() -> Now {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let text = chrono::DateTime::from_timestamp(seconds as i64, 0)
-        .unwrap_or_default()
-        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     Now {
         stamp: Timestamp(seconds),
-        text,
+        text: strata::timestamp::utc_text(seconds as i64),
     }
 }
 

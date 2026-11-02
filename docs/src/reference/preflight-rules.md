@@ -119,6 +119,12 @@ does not compile makes the rule `ERROR`, and the message names it. So does a
 program that gives no output, or `null`: a path that is not in the world is a
 wrong program, not a pass.
 
+strata-preflight adds one filter to jq: `semver_numbers`. It reads the input text as a
+version, as `strata` does, and gives the numbers that the version writes. `"4.10.3-rc.1"`
+gives `[4, 10, 3]`, and `"v4.10"` gives `[4, 10]`. A text that is no version gives `null`.
+A rule that compares two versions reads both with it, and compares the arrays. Do not split
+a version at the dots. A program with this filter does not run in the `jq` tool.
+
 ## A request for each item
 
 A rule over a list needs one request for each item. The items can be the

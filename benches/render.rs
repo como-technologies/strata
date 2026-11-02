@@ -17,11 +17,8 @@ fn render(c: &mut Criterion) {
     let diff = ops::compare(&before, &after, GENERATED_AT);
     let mut group = c.benchmark_group("render");
     group.sample_size(10);
-    for (name, format) in [
-        ("terminal", Format::Terminal),
-        ("markdown", Format::Markdown),
-        ("json", Format::Json),
-    ] {
+    for &format in Format::ALL {
+        let name = format.as_str();
         let renderer = renderer(format, Paint::off(), true);
         for (case, full) in [("summary", false), ("full", true)] {
             let text = renderer

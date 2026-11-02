@@ -14,6 +14,7 @@ use strata::reference::Ref;
 use strata::term::color::{ColorMode, Paint, Stream};
 use strata::term::progress::Progress;
 use strata::text::dash;
+use strata::timestamp::now_utc;
 use strata_preflight::confidence::{self, Ledger};
 use strata_preflight::error::{Error, Result};
 use strata_preflight::probe::LiveBackend;
@@ -156,10 +157,6 @@ fn main() -> ExitCode {
             ExitCode::from(2)
         }
     }
-}
-
-fn now_utc() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
 fn format_of(cli: &Cli) -> Format {

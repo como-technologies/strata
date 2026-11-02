@@ -152,6 +152,63 @@ fn a_pre_release_is_below_its_version_so_latest_keeps_one_version() {
 }
 
 #[test]
+fn latest_marks_the_version_that_a_pack_ref_records_and_not_a_pre_release_above_it() {
+    // the highest version is a pre-release, and Palette marks it: `pack:...@latest` skips it
+    let listing = packs_with(
+        &PackOptions::default(),
+        vec![
+            marked("pk-29", "1.29.0", false),
+            marked("pk-rc", "1.31.0-rc.1", true),
+        ],
+    );
+    let marks: Vec<(&str, bool, bool)> = listing.registries[0]
+        .versions
+        .iter()
+        .map(|v| (v.version.as_str(), v.latest, v.palette_latest))
+        .collect();
+    assert_eq!(
+        marks,
+        vec![("1.31.0-rc.1", false, true), ("1.29.0", true, false)]
+    );
+    let recorded = version::pick(["1.29.0", "1.31.0-rc.1"], |v| *v, LATEST);
+    assert_eq!(recorded, Some("1.29.0"));
+
+    // `--latest` keeps the version of `@latest` and the version of Palette
+    let kept = packs_with(
+        &PackOptions {
+            latest: true,
+            ..Default::default()
+        },
+        vec![
+            marked("pk-29", "1.29.0", false),
+            marked("pk-rc", "1.31.0-rc.1", true),
+        ],
+    );
+    let names: Vec<&str> = kept.registries[0]
+        .versions
+        .iter()
+        .map(|v| v.version.as_str())
+        .collect();
+    assert_eq!(names, ["1.31.0-rc.1", "1.29.0"]);
+
+    // a registry with pre-releases alone: the highest pre-release is the latest, as for a ref
+    let only = packs_with(
+        &PackOptions::default(),
+        vec![
+            marked("pk-1", "1.0.0-rc.1", false),
+            marked("pk-2", "1.0.0-rc.2", true),
+        ],
+    );
+    let latest: Vec<&str> = only.registries[0]
+        .versions
+        .iter()
+        .filter(|v| v.latest)
+        .map(|v| v.version.as_str())
+        .collect();
+    assert_eq!(latest, ["1.0.0-rc.2"]);
+}
+
+#[test]
 fn latest_keeps_the_version_of_palette_when_it_is_not_the_newest_and_names_it() {
     // a version with four numbers does not parse as a semantic version: strata puts it above
     // the versions that parse, and Palette marks another one

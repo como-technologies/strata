@@ -331,6 +331,9 @@ impl Tenant {
 }
 
 /// The template of a profile on a cluster, from the profile document: the published profile.
+///
+/// The stand-in keeps its own builder, and does not use `cluster_template` of the tests. The
+/// contract run holds the stand-in to Palette, and a helper of the tests has no such check.
 pub(super) fn template_of(d: &Value) -> Value {
     json!({
         "uid": d["metadata"]["uid"], "name": d["metadata"]["name"],

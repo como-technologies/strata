@@ -63,8 +63,13 @@ a variable. Here the values of the group hold `database.password`:
 {{#include ../../output/group-policy-values.txt}}
 ```
 
-The hash covers the mask, so a new password does not change the tier. A record
-of strata 0.19 or before holds each password in clear. `compare` and `verify`
+The hash covers the mask, so a new password does not change the tier. This holds
+for values with no canonical form too, such as a template with no quotes. The
+record then holds `values` as `null`, and `valuesHash` is the hash of the
+masked text. If strata cannot mask such values, the snapshot gives the error
+`serialize`. A record of strata 0.27.0 or before has the hash of the text with
+each password in clear, so its tier differs from a new record: take the record
+again. A record of strata 0.19 or before holds each password in clear. `compare` and `verify`
 write the mask over its values before they compare, so the record still
 compares. A secret under another key, such as a password in a URL, stays in
 clear.
