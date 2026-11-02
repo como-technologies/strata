@@ -121,3 +121,4 @@
 - [The live example](./development/live-example.md)
 - [Preflight: one cluster, end to end](./development/preflight-walkthrough.md)
 - [What the live example verifies](./development/live-runs.md)
+- [The facts of Palette](./development/facts.md)

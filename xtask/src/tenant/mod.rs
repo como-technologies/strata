@@ -21,9 +21,13 @@
 //! - `notifications.rs`: the notifications of a cluster, and the updates that wait for it.
 //! - `answers.rs`: the answers of the routes that check a change.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
+
+use crate::files::files_under;
+use crate::palette::route_of;
 
 mod answers;
 mod clusters;
@@ -104,6 +108,16 @@ impl Tenant {
         }
     }
 
+    /// The route of each document that the tenant holds now, in each project and at tenant scope.
+    /// A route has no project, no query, and no status of a refusal: see [`route_of`].
+    pub fn routes(&self) -> BTreeSet<String> {
+        files_under(&self.root, "json")
+            .iter()
+            .filter_map(|file| file.strip_prefix(&self.root).ok()?.to_str())
+            .filter_map(route_of)
+            .collect()
+    }
+
     /// The projects that the key can see, as `name=uid` pairs.
     pub fn projects(&self, pairs: &[(&str, &str)]) {
         let items: Vec<Value> = pairs
@@ -115,5 +129,32 @@ impl Tenant {
         }
         self.write(TENANT, PROJECT_LISTING, &json!({"items": items}));
         self.listings();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_routes_of_a_tenant_are_the_routes_of_its_documents_in_each_project() {
+        let dir = std::env::temp_dir().join(format!("strata-tenant-routes-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let tenant = Tenant::new(&dir, Path::new("/nowhere"));
+        tenant.put("p1", "v1/clusterprofiles/u1", &json!({}));
+        tenant.put("p2", "v1/clusterprofiles/u1", &json!({}));
+        tenant.put(TENANT, "v1/clusterprofiles/u2", &json!({}));
+        tenant.put("p1", "v1/packs@filters=spec.name=a&limit=100", &json!({}));
+        tenant.forbid("p1", "v1/spectroclusters/c1/config/rbacs");
+        let routes = tenant.routes();
+        std::fs::remove_dir_all(&dir).unwrap();
+        let want = [
+            "v1/clusterprofiles/u1",
+            "v1/clusterprofiles/u2",
+            "v1/packs",
+            "v1/spectroclusters/c1/config/rbacs",
+        ];
+        assert_eq!(routes, want.iter().map(|r| r.to_string()).collect());
     }
 }

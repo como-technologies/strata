@@ -391,6 +391,20 @@ fn file_for(root: &Path, project: Option<&str>, target: &str) -> Option<PathBuf>
     Some(root.join(scope).join(name + ".json"))
 }
 
+/// The route that the file `relative` answers, the inverse of [`file_for`]: `relative` is the path
+/// under the tenant directory, so its first part is the project or `tenant`. The route has no
+/// project, no query, and no status of a refusal. `None` for a file that no request reads.
+pub fn route_of(relative: &str) -> Option<String> {
+    let (_scope, name) = relative.split_once('/')?;
+    let name = name.strip_suffix(".json")?;
+    let name = REFUSALS
+        .iter()
+        .find_map(|status| name.strip_suffix(&format!(".{status}")))
+        .unwrap_or(name);
+    let path = name.split_once('@').map_or(name, |(path, _)| path);
+    Some(path.to_string())
+}
+
 /// The query without `startTime` and `endTime`. A command sends the real time, as `verify --who`
 /// sends the time of its record, and a file name cannot hold it. The server gives the full audit
 /// log of a resource, and the tenant logs a write only after a record.
@@ -434,6 +448,42 @@ mod tests {
                     "match": {"conjunction": "or", "values": [value]}}}}]}]}})
         .to_string()
         .into_bytes()
+    }
+
+    #[test]
+    fn the_route_of_a_file_has_no_project_no_query_and_no_status_of_a_refusal() {
+        for (file, route) in [
+            ("p1/v1/clusterprofiles/abc.json", "v1/clusterprofiles/abc"),
+            ("tenant/v1/packs@filters=a=b&limit=1.json", "v1/packs"),
+            (
+                "p1/v1/spectroclusters/c1/config/rbacs.403.json",
+                "v1/spectroclusters/c1/config/rbacs",
+            ),
+            (
+                "p1/v1/audits@resourceKind=clusterprofile&resourceUid=u1&limit=100.json",
+                "v1/audits",
+            ),
+        ] {
+            assert_eq!(route_of(file).as_deref(), Some(route), "{file}");
+        }
+        for file in ["p1/notes.txt", "v1.json", "p1/v1/packs.yaml"] {
+            assert_eq!(route_of(file), None, "{file}");
+        }
+    }
+
+    #[test]
+    fn the_route_of_the_file_that_answers_a_request_is_the_path_of_the_request() {
+        let root = Path::new("/r");
+        for target in [
+            "/v1/clusterprofiles/abc",
+            "/v1/packs?filters=a%3Db&limit=1",
+            "/v1/audits?resourceKind=clusterprofile&resourceUid=u1&startTime=2026-09-24T10:00:00Z",
+        ] {
+            let file = file_for(root, Some("p1"), target).unwrap();
+            let relative = file.strip_prefix(root).unwrap().to_str().unwrap();
+            let path = target.split('?').next().unwrap().trim_start_matches('/');
+            assert_eq!(route_of(relative).as_deref(), Some(path), "{target}");
+        }
     }
 
     #[test]

@@ -1,0 +1,272 @@
+schema: strata-facts/1
+facts:
+  - id: limit-release-route
+    kind: behavior
+    reads:
+      fields:
+        - version.installedVersion
+    live:
+      - release.sh:release-no-key
+      - release.sh:release-no-key-says
+      - release.sh:release-with-key
+      - release.sh:release-with-key-says
+    pages:
+      - internals/palette/limits.md#the-release-of-palette
+      - commands/preflight.md#options
+    code:
+      - preflight/src/main.rs
+
+  - id: limit-spectro-pack-digest
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].digest
+    live:
+      - eks.sh:release-digests
+      - gke.sh:release-digests
+    pages:
+      - internals/palette/limits.md#what-no-run-covers
+      - internals/palette/packs.md#the-digest-of-each-registry-kind
+    code:
+      - src/snapshot/pack.rs
+
+  - id: limit-edge-repave
+    kind: behavior
+    reads:
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+        - reasons[].pack.diffConfigKeys
+    unchecked: No run uses an Edge cluster. The public pages give a repave rule for Edge that differs from the table of impact levels.
+    pages:
+      - internals/palette/limits.md#what-no-run-covers
+      - reference/impact.md
+    code:
+      - src/diff/impact.rs
+      - src/ops/repave.rs
+
+  - id: limit-byoi-image-id
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].annotations.imageId
+        - spec.clusterProfileTemplates[].packs[].annotations.imageId
+        - packValues[].annotations.imageId
+    unchecked: No run gives an OS pack an imageId. So no run shows if Palette replaces the nodes for a new image, or which imageId a cluster copy holds.
+    pages:
+      - internals/palette/limits.md#what-no-run-covers
+      - use-cases/os-image.md
+      - reference/impact.md#a-new-machine-image
+    code:
+      - src/snapshot/pack.rs
+      - src/diff/mod.rs
+    rules:
+      - root-volume
+
+  - id: limit-cluster-group-config
+    kind: behavior
+    reads:
+      fields:
+        - spec.clustersConfig.endpointType
+        - spec.clustersConfig.values
+        - spec.clustersConfig.hostClustersConfig[].endpointConfig
+    unchecked: The run of cluster-group.sh changes the CPU limit alone. No run changes the endpoint or the values of a cluster group.
+    pages:
+      - internals/palette/limits.md#what-no-run-covers
+      - commands/snapshot/other-objects.md#the-config-that-a-cluster-group-gives
+    code:
+      - src/snapshot/policy.rs
+      - src/api/raw.rs
+
+  - id: limit-invalid-pack-create
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].isInvalid
+        - spec.published.packs[].inValidReason
+        - metadata.annotations.isInValid
+    unchecked: No run creates a cluster from a version with an invalid pack. A run shows the flag and the reason.
+    pages:
+      - internals/palette/limits.md#what-no-run-covers
+      - internals/palette/packs.md#a-tag-that-a-registry-deletes
+    code:
+      - src/snapshot/pack.rs
+      - src/render/notes.rs
+
+  - id: limit-validate-packs-dependency
+    kind: behavior
+    reads:
+      fields:
+        - packs.results[].name
+        - packs.results[].errors[].code
+        - packs.results[].errors[].message
+    unchecked: No run sends a pack with a missing required pack to this route. The run of registry.sh meets the refusal at the create of a profile.
+    pages:
+      - internals/palette/limits.md#what-no-run-covers
+      - internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks
+    code:
+      - src/ops/validate.rs
+      - src/model/validation.rs
+
+  - id: limit-import-validate-existing-name
+    kind: behavior
+    reads:
+      codes:
+        - ClusterProfileAlreadyExists
+    unchecked: A run shows the refusal of the name route alone. No run shows the answer of the import validate route to a name and a version that the project holds.
+    pages:
+      - internals/palette/limits.md#what-no-run-covers
+      - internals/palette/validate-routes.md#post-v1clusterprofilesimportvalidate
+    code:
+      - src/ops/validate.rs
+      - src/model/validation.rs
+      - src/api/codes.rs
+
+  - id: limit-forbidden-config-routes
+    kind: behavior
+    reads:
+      fields:
+        - code
+        - message
+    unchecked: No run shows an HTTP 403 body on the routes config/rbacs, config/namespaces, and repave/status. The stand-in of the book models the body with the code AccessDenied.
+    pages:
+      - internals/palette/limits.md#what-no-run-covers
+      - internals/palette/clusters.md#cluster-tiers
+      - commands/snapshot/cluster.md#the-policy-tier
+    code:
+      - src/api/palette/mod.rs
+      - src/api/palette/clusters.rs
+      - src/snapshot/policy.rs
+      - src/snapshot/cluster.rs
+
+  - id: limit-repave-variable-move
+    kind: behavior
+    reads:
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+        - reasons[].pack.diffConfigKeys
+    live: []
+    unchecked: No run applies a version that reads a profile variable in a field that repaves to a cluster. So no run shows which answer of the repave route the nodes follow.
+    pages:
+      - internals/palette/limits.md#what-no-run-covers
+      - internals/palette/profiles.md#a-variable-in-a-field-that-repaves
+    code:
+      - src/ops/repave.rs
+      - src/diff/mod.rs
+
+  - id: limit-install-order-profiles
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterProfileTemplates[].uid
+        - spec.clusterProfileTemplates[].name
+        - spec.clusterProfileTemplates[].profileVersion
+        - spec.clusterProfileTemplates[].type
+    live:
+      - template.sh:addon-order
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
+    code:
+      - src/snapshot/cluster.rs
+    rules:
+      - profile-order
+
+  - id: limit-retired-pack-pinned
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.annotations.system_state
+      values:
+        "items[].spec.annotations.system_state": [disabled, deleted]
+    unchecked: No run makes a profile that pins a pack before Palette retires the pack. A run shows the refusal of a new profile that pins a retired pack.
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - internals/palette/packs.md#pack-states
+    code:
+      - src/api/registry.rs
+    rules:
+      - pack-state
+
+  - id: limit-helm-oci-endpoint
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.endpoint
+    unchecked: The page states the rule from the source of Palette, and no run shows it.
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+    rules:
+      - helm-oci-endpoint
+
+  - id: limit-published-mask
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].values
+        - spec.clusterProfileTemplates[].packs[].values
+    unchecked: The page states the rule from the source of Palette, and no run shows it.
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - internals/palette/profiles.md#secrets-in-the-values
+      - use-cases/masked-value.md
+    code:
+      - src/snapshot/pack.rs
+      - src/api/mask.rs
+
+  - id: limit-repave-field-lists
+    kind: behavior
+    reads:
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+    live:
+      - repave.sh:k8s
+      - repave.sh:os-value
+      - repave.sh:csi-value
+      - eks.sh:k8s-bump-repave
+      - gke.sh:k8s-bump-repave
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - reference/impact.md
+    code:
+      - src/diff/impact.rs
+      - src/ops/repave.rs
+
+  - id: limit-notification-event-values
+    kind: behavior
+    reads:
+      fields:
+        - items[].action.events.*.packValues
+        - items[].action.events.*.passwordFields
+    unchecked: The page states the rule from the source of Palette, and no run shows it.
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - commands/snapshot/no-network.md#the-saved-answers-of-palette
+    code:
+      - src/api/raw.rs
+
+  - id: limit-instance-type-zones
+    kind: behavior
+    reads:
+      fields:
+        - instanceTypes[].nonSupportedZones
+    unchecked: The page states the rule from the source of Palette, and no run shows it.
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - internals/palette/validate-routes.md#the-list-routes
+    rules:
+      - instance-offering
+
+  - id: limit-eks-key-pair
+    kind: behavior
+    reads:
+      fields:
+        - keyNames[]
+    unchecked: The page states the rule from the source of Palette, and no run shows it. A run shows the key pair route and the property route of AWS.
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - internals/palette/validate-routes.md#the-list-routes
+    rules:
+      - ssh-key-pair

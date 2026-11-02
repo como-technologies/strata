@@ -8,12 +8,17 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use regex::Regex;
 
 use crate::checks::OutputState;
 use crate::files::{files_with_ext, output_dir};
 use crate::tenant::{Edit, PROJECT_LISTING, TENANT, Tenant};
+
+/// How many runners this process started, so that two runners of one process (two tests) work in
+/// two directories.
+static RUNNERS: AtomicU32 = AtomicU32::new(0);
 
 /// What the run is for.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -73,6 +78,9 @@ pub struct Runner {
     /// The name of each chapter that the run defined, and how many states it has. The playground
     /// and the page check read it, so no second list of the chapters can disagree with the runner.
     chapters: BTreeMap<String, u32>,
+    /// The route of each document that a tenant of the run held, kept when a chapter ends. The
+    /// check of the facts reads it: a route that the stand-in serves needs a fact.
+    routes: BTreeSet<String>,
     /// What each (project, uid, version) was seeded from, so two chapters cannot print two roots
     /// for one identity.
     seeded: BTreeMap<(String, String, String), (String, String)>,
@@ -83,7 +91,9 @@ pub struct Runner {
 impl Runner {
     /// Start the stand-in for Palette and prepare a run.
     pub fn start(repo: &Path, strata: &Path, xtask: &Path, mode: Mode) -> std::io::Result<Self> {
-        let work = std::env::temp_dir().join(format!("strata-book-{}", std::process::id()));
+        let number = RUNNERS.fetch_add(1, Ordering::Relaxed);
+        let work =
+            std::env::temp_dir().join(format!("strata-book-{}-{number}", std::process::id()));
         let _ = std::fs::remove_dir_all(&work);
         let tenant_dir = work.join(TENANT);
         let out = work.join("output");
@@ -143,6 +153,7 @@ impl Runner {
             mutated: 1,
             states: BTreeSet::new(),
             chapters: BTreeMap::new(),
+            routes: BTreeSet::new(),
             seeded: BTreeMap::new(),
             clock: Clock::new(),
             commit: Regex::new(r"(?m) in [0-9a-f]{7,40}$").expect("a pattern"),
@@ -185,6 +196,7 @@ impl Runner {
             .iter()
             .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
+        self.routes.extend(self.tenant.routes());
         self.tenant.clear();
     }
 
@@ -498,7 +510,8 @@ impl Runner {
                 names.join(" ")
             ));
         }
-        let problems = crate::checks::check(&self.repo, &self.chapters, &self.states);
+        self.routes.extend(self.tenant.routes());
+        let problems = crate::checks::check(&self.repo, &self.chapters, &self.states, &self.routes);
         if !problems.is_empty() {
             for problem in &problems {
                 eprintln!("docs-examples: {problem}");
@@ -701,97 +714,4 @@ pub fn die(message: &str) -> ! {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::os::unix::fs::PermissionsExt;
-
-    /// A runner whose stand-in is a script that writes a port and waits for the end of its input.
-    /// Only one test starts a runner, because each runner works in a directory of the process id.
-    fn runner(mode: Mode) -> Runner {
-        let repo = std::env::temp_dir().join(format!("strata-book-test-{}", std::process::id()));
-        std::fs::create_dir_all(&repo).expect("a directory");
-        let script = repo.join("stand-in");
-        std::fs::write(&script, "#!/bin/sh\necho 4242 > \"$3\"\ncat > /dev/null\n")
-            .expect("a script");
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).expect("a mode");
-        Runner::start(&repo, &repo.join("strata"), &script, mode).expect("a runner")
-    }
-
-    #[test]
-    fn a_served_run_writes_the_answer_of_the_chapter_it_builds_and_no_other() {
-        let mode = Mode::Serve {
-            chapter: "served".to_string(),
-            seed: 1,
-        };
-        let mut r = runner(mode);
-        let answer = serde_json::json!({"ok": true});
-        r.chapter("other", &[]);
-        r.answer("p", "v1/other", &answer);
-        assert!(!r.tenant.doc("p", "v1/other").exists());
-        r.chapter("served", &[]);
-        r.answer("p", "v1/served", &answer);
-        assert!(r.tenant.doc("p", "v1/served").is_file());
-        let _ = std::fs::remove_dir_all(r.repo.clone());
-    }
-
-    #[test]
-    fn a_playground_name_splits_into_its_chapter_and_its_state() {
-        assert_eq!(playground("loop"), ("loop", 1));
-        assert_eq!(playground("loop-3"), ("loop", 3));
-        assert_eq!(playground("os-image"), ("os-image", 1));
-        assert_eq!(playground("os-image-2"), ("os-image", 2));
-        assert_eq!(
-            playground("merge-gate-rollback"),
-            ("merge-gate-rollback", 1)
-        );
-        assert_eq!(playground("loop-12"), ("loop-12", 1));
-    }
-
-    #[test]
-    fn each_duration_that_preflight_prints_becomes_one_fixed_value() {
-        let clock = Clock::new();
-        let cases = [
-            (
-                "strata: static: bastion-cost: jq over the world -> 12 ms, NOTE: no bastion",
-                "strata: static: bastion-cost: jq over the world -> 1 ms, NOTE: no bastion",
-            ),
-            (
-                "strata: static: floating-tag: jq over the world -> [\"a\"], 3 ms, WARN",
-                "strata: static: floating-tag: jq over the world -> [\"a\"], 1 ms, WARN",
-            ),
-            (
-                "  WARN  floating-tag  No profile pins a tag    104 ms",
-                "  WARN  floating-tag  No profile pins a tag      1 ms",
-            ),
-            (
-                // a title of 60 characters leaves one space before a count of five digits
-                concat!(
-                    "  WARN  floating-tag  ",
-                    "No profile of the cluster pins a tag that moves to new image",
-                    " 12345 ms"
-                ),
-                concat!(
-                    "  WARN  floating-tag  ",
-                    "No profile of the cluster pins a tag that moves to new image",
-                    "     1 ms"
-                ),
-            ),
-            (
-                "| WARN | `floating-tag` | 7 ms | |",
-                "| WARN | `floating-tag` | 1 ms | |",
-            ),
-            ("\"elapsedMs\": 250,", "\"elapsedMs\": 1,"),
-            (
-                "strata: watch: Running after 3s, reading 1",
-                "strata: watch: Running after 0s, reading 1",
-            ),
-            (
-                "made at 2026-10-03T11:02:59Z",
-                "made at 2026-09-17T09:30:00Z",
-            ),
-        ];
-        for (from, to) in cases {
-            assert_eq!(clock.fixed(from), to, "{from}");
-        }
-    }
-}
+mod tests;

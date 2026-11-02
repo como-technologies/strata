@@ -1,0 +1,1326 @@
+schema: strata-facts/1
+facts:
+  # The requests of a profile version.
+  - id: profile-document
+    kind: request
+    request: GET /v1/clusterprofiles/{uid}
+    reads:
+      fields:
+        - metadata.uid
+        - metadata.name
+        - metadata.labels
+        - metadata.annotations.scope
+        - metadata.annotations.projectUid
+        - metadata.lastModifiedTimestamp
+        - spec.version
+        - spec.published.type
+        - spec.published.cloudType
+        - spec.published.packs[].name
+        - spec.published.packs[].layer
+        - spec.published.packs[].type
+        - spec.published.packs[].tag
+        - spec.published.packs[].version
+        - spec.published.packs[].packUid
+        - spec.published.packs[].registryUid
+        - spec.published.packs[].digest
+        - spec.published.packs[].values
+        - spec.published.packs[].params
+        - spec.published.packs[].annotations
+        - spec.published.packs[].isInvalid
+        - spec.published.packs[].inValidReason
+        - spec.published.packs[].manifests[].name
+        - spec.published.packs[].manifests[].uid
+        - spec.draft.type
+        - spec.draft.cloudType
+        - spec.draft.packs[].name
+        - spec.draft.packs[].type
+        - spec.draft.packs[].packUid
+        - spec.draft.packs[].manifests[].uid
+        - status.isPublished
+        - status.inUseClusters[].uid
+        - status.inUseClusters[].name
+        - status.inUseClusters[].projectUid
+        - status.inUseClusterUids
+        - status.inUseClusterTemplates[].uid
+        - status.inUseClusterTemplates[].name
+        - status.inUseClusterTemplates[].projectUid
+      values:
+        metadata.annotations.scope: [project, tenant, system]
+    stand_in:
+      - v1/clusterprofiles/{uid}
+    live:
+      - scope.sh:annotation-tenant
+      - scope.sh:annotation-project
+      - template.sh:release-names-template
+      - draft.sh:no-has-draft
+      - who.sh:edit-last-modified
+      - registry.sh:del-doc-fields
+    pages:
+      - reference/palette-api.md#a-profile-version
+      - internals/palette/profiles.md#the-scope-of-a-version
+      - internals/palette/profiles.md#drafts
+      - internals/palette/profiles.md#what-the-delete-of-a-version-checks
+    code:
+      - src/api/palette/profiles.rs
+      - src/model/scope.rs
+      - src/model/cluster_template.rs
+      - src/snapshot/build.rs
+      - src/ops/consumer_list.rs
+      - src/ops/consumers/mod.rs
+      - src/ops/list.rs
+    rules:
+      - consumers-empty-on-error
+      - template-outside
+      - variables-in-use
+
+  - id: profile-pack-manifests
+    kind: request
+    request: GET /v1/clusterprofiles/{uid}/packs/manifests
+    reads:
+      fields:
+        - spec.packs[].metadata.uid
+        - spec.packs[].metadata.name
+        - spec.packs[].spec.name
+        - spec.packs[].spec.version
+        - spec.packs[].spec.digest
+        - spec.packs[].spec.values
+        - spec.packs[].spec.manifests[].name
+        - spec.packs[].spec.manifests[].uid
+        - spec.packs[].spec.manifests[].digest
+        - spec.packs[].spec.manifests[].content
+    stand_in:
+      - v1/clusterprofiles/{uid}/packs/manifests
+    live:
+      - draft.sh:route-list
+    pages:
+      - reference/palette-api.md#a-profile-version
+      - internals/palette/profiles.md#drafts
+      - internals/palette/profiles.md#secrets-in-the-values
+    code:
+      - src/api/palette/profiles.rs
+      - src/api/palette/clusters.rs
+      - src/snapshot/pack.rs
+      - src/snapshot/build.rs
+      - src/api/mask.rs
+
+  - id: profile-variables
+    kind: request
+    request: GET /v1/clusterprofiles/{uid}/variables
+    reads:
+      fields:
+        - variables[].name
+        - variables[].defaultValue
+        - variables[].description
+        - variables[].displayName
+        - variables[].format
+        - variables[].hidden
+        - variables[].immutable
+        - variables[].inputType
+        - variables[].isSensitive
+        - variables[].options[].description
+        - variables[].options[].label
+        - variables[].options[].value
+        - variables[].regex
+        - variables[].required
+      codes:
+        - ResourceNotFound
+    stand_in:
+      - v1/clusterprofiles/{uid}/variables
+    live:
+      - verify.sh:addon-has-a-variable
+      - verify.sh:release-variables
+      - verify.sh:release-variables-empty
+      - verify.sh:missing-profile-variables
+      - verify.sh:missing-profile-not-found
+    pages:
+      - reference/palette-api.md#a-profile-version
+      - internals/palette/profiles.md#the-variables-route
+    code:
+      - src/api/palette/profiles.rs
+      - src/snapshot/variable.rs
+
+  - id: pack-of-draft
+    kind: request
+    request: GET /v1/packs/{uid}
+    reads:
+      fields:
+        - packValues[].packUid
+        - packValues[].schema[].name
+        - packValues[].schema[].format
+    stand_in: []
+    live: []
+    unchecked: No live run reads the pack of a draft. The page lists the mask of a draft under what no run covers.
+    pages:
+      - reference/palette-api.md#a-profile-version
+      - internals/palette/profiles.md#secrets-in-the-values
+    code:
+      - src/api/palette/listings.rs
+      - src/api/palette/profiles.rs
+      - src/api/mask.rs
+
+  - id: profile-manifest
+    kind: request
+    request: GET /v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}
+    reads:
+      fields:
+        - metadata.name
+        - metadata.uid
+        - spec.published.content
+        - spec.published.digest
+        - spec.draft.content
+        - spec.draft.digest
+    stand_in:
+      - v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}
+    live:
+      - draft.sh:route-entity
+    pages:
+      - reference/palette-api.md#a-profile-version
+      - internals/palette/profiles.md#drafts
+    code:
+      - src/api/palette/profiles.rs
+      - src/api/palette/clusters.rs
+      - src/snapshot/build.rs
+
+  - id: profile-listing
+    kind: request
+    request: GET /v1/dashboard/clusterprofiles/metadata
+    reads:
+      fields:
+        - items[].metadata.name
+        - items[].metadata.uid
+        - items[].spec.version
+        - items[].spec.cloudType
+    stand_in:
+      - v1/dashboard/clusterprofiles/metadata
+    live:
+      - scope.sh:listing-both
+      - draft.sh:unpublished-listed
+    pages:
+      - reference/palette-api.md#a-profile-version
+      - internals/palette/profiles.md#the-scope-of-a-version
+      - internals/palette/profiles.md#drafts
+    code:
+      - src/api/palette/listings.rs
+      - src/api/palette/mod.rs
+      - src/api/palette/profiles.rs
+
+  - id: profile-search
+    kind: request
+    request: POST /v1/dashboard/clusterprofiles
+    reads:
+      fields:
+        - items[].specSummary.versions[].uid
+        - listmeta.count
+    stand_in:
+      - v1/dashboard/clusterprofiles
+    live:
+      - scope.sh:search-tenant
+      - scope.sh:list-scope
+    pages:
+      - reference/palette-api.md#a-profile-version
+      - internals/palette/profiles.md#the-scope-of-a-version
+    code:
+      - src/api/palette/profiles.rs
+      - src/api/palette/mod.rs
+      - src/ops/list.rs
+
+  # The requests of the macros.
+  - id: cluster-resolved-values
+    kind: request
+    request: GET /v1/spectroclusters/{uid}/packs/resolvedValues
+    reads:
+      fields:
+        - profiles[].uid
+        - profiles[].resolved
+    stand_in:
+      - v1/spectroclusters/{uid}/packs/resolvedValues
+    live:
+      - macros.sh:macro-resolved-1
+      - macros.sh:change-resolved
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/profiles.md#macros
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/cluster.rs
+    rules:
+      - system-macros-hidden
+
+  - id: group-resolved-values
+    kind: request
+    request: GET /v1/clustergroups/{uid}/packs/resolvedValues
+    reads:
+      fields:
+        - profiles[].uid
+        - profiles[].resolved
+    stand_in:
+      - v1/clustergroups/{uid}/packs/resolvedValues
+    live:
+      - cluster-group.sh:group-macros
+      - cluster-group.sh:group-macro-values
+      - cluster-group.sh:group-macros-verify
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/profiles.md#macros
+    code:
+      - src/api/palette/clusters.rs
+      - src/snapshot/cluster.rs
+
+  - id: profile-resolved-values
+    kind: request
+    request: GET /v1/clusterprofiles/{uid}/packs/resolvedValues
+    reads:
+      fields:
+        - resolved
+    stand_in:
+      - v1/clusterprofiles/{uid}/packs/resolvedValues
+    live:
+      - macros.sh:base-profile-resolved
+      - macros.sh:macro-profile-resolved-1
+      - macros.sh:change-profile-resolved
+    pages:
+      - reference/palette-api.md#a-cluster
+      - internals/palette/profiles.md#macros
+    code:
+      - src/api/palette/profiles.rs
+      - src/snapshot/cluster.rs
+      - src/ops/live.rs
+      - src/ops/mod.rs
+
+  # The requests of the audit log and of the projects.
+  - id: audit-log
+    kind: request
+    request: GET /v1/audits
+    reads:
+      fields:
+        - items[].metadata.uid
+        - items[].metadata.creationTimestamp
+        - items[].spec.actionType
+        - items[].spec.actor.actorType
+        - items[].spec.actor.serviceName
+        - items[].spec.actor.user.uid
+        - items[].spec.actor.user.firstName
+        - items[].spec.actor.user.lastName
+        - items[].spec.actor.user.emailId
+        - items[].spec.contentMsg
+        - items[].spec.userMsg
+        - items[].spec.resource.kind
+        - items[].spec.resource.name
+        - items[].spec.resource.uid
+        - listmeta.continue
+      values:
+        items[].spec.actionType: [create, update, delete, activity, action]
+        items[].spec.resource.kind: [clusterprofile, appprofile, spectrocluster, edgehost, clustergroup]
+    stand_in:
+      - v1/audits
+    live:
+      - who.sh:edit-who-resource
+      - who.sh:edit-who-person
+      - who.sh:audits-none
+    pages:
+      - reference/palette-api.md#other-reads
+      - internals/palette/profiles.md#the-audit-log
+    code:
+      - src/api/palette/listings.rs
+      - src/api/audit.rs
+      - src/diff/verify.rs
+      - src/ops/verify.rs
+
+  - id: project-listing
+    kind: request
+    request: GET /v1/dashboard/projects/metadata
+    reads:
+      fields:
+        - items[].metadata.name
+        - items[].metadata.uid
+    stand_in:
+      - v1/dashboard/projects/metadata
+    live:
+      - preflight.sh:palette-key
+    pages:
+      - reference/palette-api.md#other-reads
+    code:
+      - src/api/palette/listings.rs
+      - src/api/palette/mod.rs
+      - src/ops/list.rs
+
+  # Edits in place.
+  - id: profile-edit-in-place
+    kind: behavior
+    reads:
+      fields:
+        - metadata.uid
+        - spec.version
+        - spec.published.packs[].manifests[].uid
+        - status.isPublished
+    stand_in: []
+    live:
+      - in-place.sh:api-edit
+      - in-place.sh:edit-kept-manifest-uid
+      - in-place.sh:verify-addon1
+    pages:
+      - internals/palette/profiles.md#edits-in-place
+    code:
+      - src/ops/verify.rs
+      - src/diff/verify.rs
+    rules:
+      - edit-in-place
+
+  - id: profile-variables-frozen
+    kind: behavior
+    reads:
+      fields:
+        - variables[].name
+        - status.inUseClusters[].uid
+    stand_in: []
+    live: []
+    unchecked: No run changes the variables of a version that a cluster uses. The page cites the public documentation.
+    pages:
+      - internals/palette/profiles.md#edits-in-place
+    code:
+      - src/api/palette/profiles.rs
+    rules:
+      - variables-in-use
+
+  - id: profile-reorder
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].name
+        - spec.published.packs[].layer
+    stand_in: []
+    live:
+      - order.sh:reorder-addon
+      - order.sh:addon-doc-reversed
+      - order.sh:addon-audited
+      - order.sh:reorder-release
+      - order.sh:release-doc-reversed
+      - order.sh:release-audited
+    pages:
+      - internals/palette/profiles.md#edits-in-place
+    code:
+      - src/render/notes.rs
+      - src/diff/mod.rs
+    rules:
+      - profile-order
+
+  # Secrets in the values.
+  - id: profile-secret-mask
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].values
+        - spec.packs[].spec.values
+      values:
+        spec.published.packs[].values: ["********"]
+    stand_in: []
+    live: []
+    unchecked: No live run shows the mask of a published pack. The page cites the public documentation.
+    pages:
+      - internals/palette/profiles.md#secrets-in-the-values
+    code:
+      - src/api/mask.rs
+      - src/diff/pack.rs
+
+  - id: profile-draft-secret
+    kind: behavior
+    reads:
+      fields:
+        - spec.draft.packs[].packUid
+        - spec.draft.packs[].values
+        - spec.packs[].spec.values
+    stand_in: []
+    live: []
+    unchecked: No live run shows a secret in clear in a draft. The page lists it under what no run covers.
+    pages:
+      - internals/palette/profiles.md#secrets-in-the-values
+    code:
+      - src/api/mask.rs
+      - src/api/palette/profiles.rs
+
+  # The export of a version.
+  - id: profile-export-file
+    kind: behavior
+    reads:
+      fields:
+        - metadata.name
+        - metadata.description
+        - metadata.labels
+        - spec.version
+        - spec.template.type
+        - spec.template.cloudType
+        - spec.template.packs[].name
+        - spec.template.packs[].type
+        - spec.template.packs[].layer
+        - spec.template.packs[].version
+        - spec.template.packs[].tag
+        - spec.template.packs[].values
+        - spec.template.packs[].manifests[].name
+        - spec.template.packs[].manifests[].content
+        - spec.template.packs[].registry.metadata.uid
+        - spec.template.packs[].registry.metadata.name
+        - spec.template.packs[].registry.metadata.kind
+        - spec.template.packs[].registry.metadata.isPrivate
+        - spec.template.packs[].registry.metadata.providerType
+        - spec.template.packs[].registry.metadata.isSyncSupported
+        - spec.variables[]
+    stand_in:
+      - v1/clusterprofiles/{uid}/export
+    live:
+      - export.sh:export-<name>
+      - export.sh:export-json-<name>
+      - export.sh:export-record-<name>
+      - export.sh:export-json-root-<name>
+    pages:
+      - internals/palette/profiles.md#the-export-of-a-version
+    code:
+      - src/candidate/export.rs
+
+  - id: profile-export-accept
+    kind: behavior
+    reads:
+      fields:
+        - Reader
+    stand_in: []
+    live:
+      - export.sh:export-accepts-json
+      - export.sh:export-accepts-json-no-file
+    pages:
+      - internals/palette/profiles.md#the-export-of-a-version
+    code:
+      - examples/live/api.sh
+
+  - id: profile-export-limit
+    kind: behavior
+    reads:
+      codes:
+        - TooManyRequests
+    stand_in: []
+    live:
+      - export.sh:export-limit
+    pages:
+      - internals/palette/profiles.md#the-export-of-a-version
+    code:
+      - examples/live/export.sh
+
+  # The audit log.
+  - id: audit-page-limit
+    kind: behavior
+    reads:
+      codes:
+        - InvalidLimit
+    stand_in: []
+    live:
+      - who.sh:audits-limit
+    pages:
+      - internals/palette/profiles.md#the-audit-log
+    code:
+      - src/api/palette/mod.rs
+      - src/api/codes.rs
+
+  - id: audit-resource-kind
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.resource.kind
+      values:
+        items[].spec.resource.kind: [clusterprofile, appprofile, spectrocluster, edgehost, clustergroup, virtualCluster]
+    stand_in: []
+    live:
+      - cluster-group.sh:member-audit-kind
+      - cluster-group.sh:member-audit-not-cluster
+    pages:
+      - internals/palette/profiles.md#the-audit-log
+    code:
+      - src/api/audit.rs
+      - src/api/palette/listings.rs
+
+  - id: audit-edit-in-place
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.actionType
+        - items[].spec.actor.actorType
+        - items[].spec.contentMsg
+    stand_in: []
+    live:
+      - who.sh:edit-who-says
+      - who.sh:edit-who-person
+      - who.sh:edit-who-json
+    pages:
+      - internals/palette/profiles.md#the-audit-log
+    code:
+      - src/diff/verify.rs
+      - src/ops/verify.rs
+
+  - id: audit-floating-tag
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.actionType
+        - items[].spec.actor.serviceName
+        - items[].spec.contentMsg
+    stand_in: []
+    live:
+      - registry.sh:floating-who
+      - registry.sh:floating-who-system
+      - registry.sh:floating-who-versions
+    pages:
+      - internals/palette/profiles.md#the-audit-log
+    code:
+      - src/diff/verify.rs
+      - src/ops/verify.rs
+
+  - id: audit-pack-pushed-again
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.actionType
+        - items[].spec.actor.serviceName
+        - items[].spec.contentMsg
+    stand_in: []
+    live:
+      - registry.sh:profile-who
+      - registry.sh:profile-who-system
+    pages:
+      - internals/palette/profiles.md#the-audit-log
+    code:
+      - src/diff/verify.rs
+      - src/ops/verify.rs
+
+  - id: audit-cluster-update
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.actionType
+        - items[].spec.actor.actorType
+        - items[].spec.actor.user.uid
+        - items[].spec.contentMsg
+    stand_in: []
+    live:
+      - who.sh:cluster-who
+      - who.sh:cluster-who-says
+      - who.sh:cluster-who-person
+      - who.sh:cluster-who-json
+    pages:
+      - internals/palette/profiles.md#the-audit-log
+    code:
+      - src/diff/verify.rs
+      - src/ops/verify.rs
+
+  - id: audit-bump-in-profile-log
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.resource.kind
+        - items[].spec.resource.uid
+    stand_in: []
+    live:
+      - in-place.sh:verify-a3-who
+      - in-place.sh:a3-who-names-profile
+    pages:
+      - internals/palette/profiles.md#the-audit-log
+    code:
+      - src/ops/verify.rs
+      - src/diff/verify.rs
+
+  - id: last-modified-timestamp
+    kind: behavior
+    reads:
+      fields:
+        - metadata.lastModifiedTimestamp
+    stand_in: []
+    live:
+      - who.sh:edit-last-modified
+    pages:
+      - internals/palette/profiles.md#the-audit-log
+    code:
+      - src/ops/live.rs
+      - src/diff/verify.rs
+
+  # Version bumps.
+  - id: version-bump-flag
+    kind: behavior
+    reads:
+      fields:
+        - metadata.uid
+        - spec.version
+    stand_in: []
+    live:
+      - in-place.sh:addon-uid-kept
+      - in-place.sh:addon1-overwritten
+      - in-place.sh:a4-matches-old-version
+      - in-place.sh:consumers-old-overwritten
+    pages:
+      - internals/palette/profiles.md#version-bumps
+    code:
+      - src/ops/verify.rs
+      - src/ops/consumers/mod.rs
+      - src/diff/verify.rs
+
+  - id: version-bump-clone
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].values
+        - spec.published.packs[].manifests[].name
+        - variables[].name
+    stand_in: []
+    live:
+      - in-place.sh:clone-carried-nothing
+      - in-place.sh:clone-same-content
+    pages:
+      - internals/palette/profiles.md#version-bumps
+    code:
+      - src/ops/same_release.rs
+      - src/ops/verify.rs
+
+  - id: version-string-as-given
+    kind: behavior
+    reads:
+      fields:
+        - spec.version
+    stand_in: []
+    live:
+      - version-states.sh:short-as-given
+      - version-states.sh:prefixed-as-given
+    pages:
+      - internals/palette/profiles.md#version-bumps
+    code:
+      - src/reference/version.rs
+    rules:
+      - version-string
+
+  - id: version-bump-skip-destroy
+    kind: behavior
+    reads:
+      codes:
+        - DeletionResourceInUseError
+    stand_in: []
+    live: []
+    unchecked: No check bumps a version with the flag on and no skip_destroy in the state. A failed run showed the error once, and each script now holds skip_destroy first.
+    pages:
+      - internals/palette/profiles.md#version-bumps
+    code:
+      - src/api/codes.rs
+    rules:
+      - provider-skip-destroy
+
+  - id: version-own-state
+    kind: behavior
+    reads:
+      fields:
+        - metadata.uid
+        - spec.version
+    stand_in: []
+    live:
+      - version-states.sh:new-uid
+      - version-states.sh:old-verifies
+      - version-states.sh:both-listed
+      - version-states.sh:plan-edit-in-place
+    pages:
+      - internals/palette/profiles.md#version-bumps
+    code:
+      - src/ops/verify.rs
+
+  # Drafts.
+  - id: draft-put
+    kind: behavior
+    reads:
+      fields:
+        - spec.draft.packs[].manifests[].uid
+        - spec.published.packs[].manifests[].uid
+    stand_in: []
+    live:
+      - draft.sh:api-draft
+      - draft.sh:version-holds
+      - draft.sh:version-record
+      - draft.sh:draft-template
+    pages:
+      - internals/palette/profiles.md#drafts
+    code:
+      - src/api/raw.rs
+      - src/snapshot/build.rs
+      - src/api/palette/profiles.rs
+
+  - id: draft-publish
+    kind: behavior
+    reads:
+      fields:
+        - spec.draft.packs[]
+        - spec.published.packs[]
+    stand_in: []
+    live:
+      - draft.sh:api-publish
+      - draft.sh:draft-after-publish
+      - draft.sh:version-after-publish
+      - draft.sh:no-draft-after-publish
+    pages:
+      - internals/palette/profiles.md#drafts
+    code:
+      - src/api/raw.rs
+      - src/snapshot/build.rs
+
+  - id: draft-document
+    kind: behavior
+    reads:
+      fields:
+        - spec.draft.packs[]
+        - spec.published.packs[]
+        - status.isPublished
+    stand_in: []
+    live:
+      - draft.sh:no-has-draft
+      - draft.sh:list-published
+      - draft.sh:unpublished-listed
+    pages:
+      - internals/palette/profiles.md#drafts
+    code:
+      - src/api/raw.rs
+      - src/ops/list.rs
+
+  # The lock of a cluster template.
+  - id: template-lock-whole-version
+    kind: behavior
+    reads:
+      codes:
+        - ClusterProfileUpdateValidationFailure
+    stand_in: []
+    live:
+      - template.sh:lock-edit
+      - template.sh:lock-edit-says
+      - template.sh:lock-verify
+    pages:
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
+    code:
+      - src/api/codes.rs
+      - src/ops/verify.rs
+    rules:
+      - template-lock-route
+
+  - id: template-lock-manifest-route
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.content
+        - spec.published.digest
+    stand_in: []
+    live:
+      - template.sh:lock-manifest-edit
+      - template.sh:lock-manifest-verify
+    pages:
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
+    code:
+      - src/ops/verify.rs
+      - src/snapshot/build.rs
+    rules:
+      - template-lock-route
+
+  - id: template-lock-cluster-create
+    kind: behavior
+    reads:
+      codes:
+        - ClusterCreateWithTemplateProfileForbidden
+      fields:
+        - status.inUseClusterTemplates[].uid
+    stand_in: []
+    live:
+      - template.sh:cluster-outside-template
+      - template.sh:refusal-says
+    pages:
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
+    code:
+      - src/model/cluster_template.rs
+    rules:
+      - template-outside
+
+  - id: template-lock-removed
+    kind: behavior
+    reads:
+      fields:
+        - status.inUseClusterTemplates[].uid
+    stand_in: []
+    live:
+      - template.sh:lock-gone
+      - template.sh:lock-gone-verify
+    pages:
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
+    code:
+      - src/model/cluster_template.rs
+      - src/ops/verify.rs
+    rules:
+      - template-lock-route
+
+  - id: template-cluster-document
+    kind: behavior
+    reads:
+      fields:
+        - spec.clusterTemplate.uid
+        - spec.clusterTemplate.projectUid
+    stand_in: []
+    live:
+      - template.sh:in-template-doc
+      - template.sh:in-template-names
+    pages:
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
+    code:
+      - src/model/cluster_template.rs
+
+  - id: template-cluster-repave-route
+    kind: behavior
+    reads:
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+    stand_in: []
+    live:
+      - template.sh:cluster-route
+      - template.sh:cluster-route-says
+    pages:
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
+    code:
+      - src/ops/repave.rs
+      - src/api/palette/clusters.rs
+
+  - id: template-repave-route
+    kind: behavior
+    reads:
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+        - reasons[].message
+        - reasons[].pack.current.name
+        - reasons[].pack.diffConfigKeys
+      codes:
+        - PackValuesUpdated
+    stand_in: []
+    live:
+      - template.sh:template-route
+      - template.sh:template-route-names
+      - template.sh:template-route-says
+      - template.sh:template-route-json
+    pages:
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
+    code:
+      - src/ops/repave.rs
+      - src/api/palette/clusters.rs
+      - src/model/repave.rs
+
+  - id: template-repave-cluster-choice
+    kind: behavior
+    reads:
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+    stand_in: []
+    live: []
+    unchecked: No run puts two clusters in one template. The page says that no live run checks the choice of the cluster.
+    pages:
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
+    code:
+      - src/ops/repave.rs
+
+  - id: template-repave-upgrade-now
+    kind: behavior
+    reads:
+      fields:
+        - isRepaveRequired
+    stand_in: []
+    live: []
+    unchecked: No run sends isUpgradeNow true. Strata sends false.
+    pages:
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
+    code:
+      - src/ops/repave.rs
+
+  - id: template-repave-no-cluster
+    kind: behavior
+    reads:
+      fields:
+        - isRepaveRequired
+    stand_in: []
+    live: []
+    unchecked: No run asks the route for a template with no cluster. The page says that no live run checks this answer.
+    pages:
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
+    code:
+      - src/ops/repave.rs
+
+  - id: template-cluster-time-zone
+    kind: behavior
+    reads:
+      codes:
+        - ShouldNotBeEmpty
+    stand_in: []
+    live: []
+    unchecked: No check sends a create with no time zone. The live example sets the time zone for the cluster in the template.
+    pages:
+      - internals/palette/profiles.md#a-cluster-in-a-cluster-template-needs-a-time-zone
+    code:
+      - examples/live/terraform/variables.tf
+      - examples/live/terraform/cloud-aws.tf
+
+  # What the create of a version checks.
+  - id: profile-create-rules
+    kind: behavior
+    reads:
+      codes:
+        - PackValuesYamlInvalid
+        - DisabledPacksForbidden
+    stand_in: []
+    live:
+      - validate-packs.sh:validate-not-yaml
+      - validate-packs.sh:validate-not-yaml-says
+      - validate-packs.sh:validate-disabled-mark
+      - validate-packs.sh:validate-disabled-mark-says
+    pages:
+      - internals/palette/profiles.md#what-the-create-of-a-version-checks
+      - internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks
+    code:
+      - src/api/codes.rs
+      - src/ops/validate.rs
+
+  - id: profile-create-changes-content
+    kind: behavior
+    reads:
+      fields:
+        - spec.published.packs[].layer
+        - spec.published.packs[].packUid
+    stand_in: []
+    live:
+      - validate-packs.sh:layer-create
+      - validate-packs.sh:layer-published
+      - validate-packs.sh:layer-root
+    pages:
+      - internals/palette/profiles.md#what-the-create-of-a-version-checks
+    code:
+      - src/candidate/resolve.rs
+      - src/candidate/mod.rs
+
+  # The gaps that strata fills.
+  - id: gap-type-layer
+    kind: gap
+    reads:
+      codes:
+        - ClusterProfilePackNotAllowed
+    stand_in: []
+    live: []
+    unchecked: No live run shows the create refusing this rule. Strata checks it before any request.
+    pages:
+      - internals/palette/profiles.md#the-gaps-that-strata-fills
+    code:
+      - src/candidate/gaps.rs
+      - src/api/codes.rs
+
+  - id: gap-core-layers
+    kind: gap
+    reads:
+      codes:
+        - ErrPackCoreLayersMissing
+    stand_in: []
+    live: []
+    unchecked: No live run shows the create refusing this rule. Strata checks it before any request.
+    pages:
+      - internals/palette/profiles.md#the-gaps-that-strata-fills
+    code:
+      - src/candidate/gaps.rs
+      - src/api/codes.rs
+
+  - id: gap-pack-cloud
+    kind: gap
+    reads:
+      codes:
+        - PackNotSupported
+    stand_in: []
+    live: []
+    unchecked: No live run shows the create refusing this rule. Strata checks it after the registry reads.
+    pages:
+      - internals/palette/profiles.md#the-gaps-that-strata-fills
+      - internals/palette/packs.md#a-pack-that-supports-a-cloud
+    code:
+      - src/candidate/gaps.rs
+      - src/model/cloud.rs
+      - src/api/codes.rs
+
+  - id: gap-pack-tag
+    kind: gap
+    reads:
+      codes:
+        - InvalidPackVersion
+    stand_in: []
+    live: []
+    unchecked: No live run shows the create refusing this rule. Strata checks the tag after the registry reads.
+    pages:
+      - internals/palette/profiles.md#the-gaps-that-strata-fills
+      - internals/palette/packs.md#a-pack-that-palette-makes-at-the-create
+    code:
+      - src/candidate/gaps.rs
+      - src/api/codes.rs
+
+  # What the delete of a version checks.
+  - id: profile-delete-in-use
+    kind: behavior
+    reads:
+      codes:
+        - DeletionResourceInUseError
+    stand_in: []
+    live:
+      - template.sh:release-delete
+      - template.sh:release-delete-says
+      - version-states.sh:destroy-refused
+      - version-states.sh:destroy-refused-says
+    pages:
+      - internals/palette/profiles.md#what-the-delete-of-a-version-checks
+    code:
+      - src/api/codes.rs
+      - src/ops/consumers/mod.rs
+
+  - id: profile-in-use-lists
+    kind: behavior
+    reads:
+      fields:
+        - status.inUseClusters[].uid
+        - status.inUseClusterUids
+        - status.inUseClusterTemplates[].uid
+    stand_in: []
+    live:
+      - template.sh:release-names-template
+      - template.sh:release-list-consumers-template
+      - verify.sh:consumers-release
+      - verify.sh:consumer-is-the-cluster
+    pages:
+      - internals/palette/profiles.md#what-the-delete-of-a-version-checks
+    code:
+      - src/ops/consumer_list.rs
+      - src/ops/consumers/mod.rs
+      - src/model/cluster_template.rs
+
+  - id: profile-in-use-empty-on-error
+    kind: behavior
+    reads:
+      fields:
+        - status.inUseClusters[].uid
+        - status.inUseClusterUids
+        - status.inUseClusterTemplates[].uid
+    stand_in: []
+    live: []
+    unchecked: No run makes a query of the three lists fail. No live check shows the empty lists.
+    pages:
+      - internals/palette/profiles.md#what-the-delete-of-a-version-checks
+    code:
+      - src/ops/consumers/mod.rs
+    rules:
+      - consumers-empty-on-error
+
+  # The variables route.
+  - id: profile-variables-missing-route
+    kind: behavior
+    reads:
+      fields:
+        - variables[]
+    stand_in: []
+    live: []
+    unchecked: No run uses an older Palette. The page says that such a Palette answers 404 for the route.
+    pages:
+      - internals/palette/profiles.md#the-variables-route
+    code:
+      - src/api/palette/profiles.rs
+
+  # A variable in a field that repaves.
+  - id: repave-variable-body
+    kind: behavior
+    reads:
+      fields:
+        - isRepaveRequired
+        - reasons[].code
+        - reasons[].pack.current.name
+        - reasons[].pack.diffConfigKeys
+      codes:
+        - PackValuesUpdated
+    stand_in: []
+    live:
+      - repave.sh:var-strata
+      - repave.sh:var-strata-answer
+      - repave.sh:var-none
+      - repave.sh:var-default
+      - repave.sh:var-control
+      - repave.sh:var-control-says
+    pages:
+      - internals/palette/profiles.md#a-variable-in-a-field-that-repaves
+    code:
+      - src/ops/repave.rs
+      - src/api/palette/clusters.rs
+
+  # Macros.
+  - id: project-macros
+    kind: behavior
+    reads:
+      fields:
+        - macros[].name
+        - macros[].value
+    stand_in:
+      - v1/projects/{uid}/macros
+    live:
+      - macros.sh:macro-set
+      - macros.sh:undo-macro
+    pages:
+      - internals/palette/profiles.md#macros
+    code:
+      - xtask/src/tenant/macros.rs
+    rules:
+      - macro-undeletable
+
+  - id: profile-has-user-macros
+    kind: behavior
+    reads:
+      fields:
+        - status.hasUserMacros
+    stand_in: []
+    live:
+      - macros.sh:base-flag
+      - macros.sh:macro-flag
+      - macros.sh:undo-flag
+    pages:
+      - internals/palette/profiles.md#macros
+    rules:
+      - macro-repave
+
+  - id: group-resolved-values-missing
+    kind: behavior
+    reads:
+      codes:
+        - ResourceNotFound
+    stand_in: []
+    live: []
+    unchecked: No check asks for a cluster group that Palette does not have.
+    pages:
+      - internals/palette/profiles.md#macros
+    code:
+      - src/api/palette/clusters.rs
+
+  - id: macro-change-quiet
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].resolved
+        - resolved
+    stand_in: []
+    live:
+      - macros.sh:change-version
+      - macros.sh:change-plain
+      - macros.sh:change-no-notification
+      - macros.sh:change-no-audit
+    pages:
+      - internals/palette/profiles.md#macros
+    code:
+      - src/snapshot/cluster.rs
+      - src/ops/verify.rs
+    rules:
+      - macro-silent
+
+  - id: macro-propagation
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].resolved
+    stand_in: []
+    live:
+      - macros.sh:propagation
+    pages:
+      - internals/palette/profiles.md#macros
+    code:
+      - src/snapshot/cluster.rs
+    rules:
+      - macro-silent
+
+  - id: macro-write-no-audit
+    kind: behavior
+    reads:
+      fields:
+        - items[].spec.resource.kind
+        - items[].spec.resource.name
+    stand_in: []
+    live:
+      - macro-repave.sh:audits-macro
+    pages:
+      - internals/palette/profiles.md#macros
+    code:
+      - src/diff/verify.rs
+    rules:
+      - macro-silent
+
+  - id: macro-repave-pending
+    kind: behavior
+    reads:
+      fields:
+        - status.repave.state
+        - spec.source
+        - spec.reasons[].code
+        - spec.reasons[].message
+        - spec.reasons[].pack.current.name
+        - spec.reasons[].pack.diffConfigKeys
+      codes:
+        - PackValuesUpdated
+      values:
+        status.repave.state: [Pending]
+    stand_in: []
+    live:
+      - macro-repave.sh:repave-record
+      - macro-repave.sh:repave-names
+      - macro-repave.sh:repave-verify
+    pages:
+      - internals/palette/profiles.md#macros
+    code:
+      - src/model/repave.rs
+      - src/snapshot/cluster.rs
+    rules:
+      - macro-repave
+
+  - id: macro-repave-refuses-update
+    kind: behavior
+    reads:
+      fields:
+        - status.repave.state
+    stand_in: []
+    live:
+      - macro-repave.sh:undo-accept
+      - macro-repave.sh:undo-accept-says
+    pages:
+      - internals/palette/profiles.md#macros
+    code:
+      - src/model/repave.rs
+    rules:
+      - macro-repave
+
+  - id: macro-delete-refused
+    kind: behavior
+    reads:
+      fields:
+        - macros[].name
+    stand_in: []
+    live:
+      - macro-repave.sh:undo-macro
+    pages:
+      - internals/palette/profiles.md#macros
+    code:
+      - src/snapshot/mod.rs
+    rules:
+      - macro-undeletable
+
+  - id: macro-repave-holds-delete
+    kind: behavior
+    reads:
+      fields:
+        - status.repave.state
+        - status.state
+      values:
+        status.state: [Deleting]
+    stand_in: []
+    live: []
+    unchecked: The teardown after the run showed the hold. No check asserts it.
+    pages:
+      - internals/palette/profiles.md#macros
+    code:
+      - src/model/repave.rs
+    rules:
+      - delete-pending-repave

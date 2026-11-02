@@ -1,0 +1,476 @@
+schema: strata-facts/1
+facts:
+  # The routes that only the rules of strata-preflight send: the table "The checks of
+  # `strata preflight`" in reference/palette-api.md lists them. The stand-in serves none.
+  - id: aws-host-capacity
+    kind: request
+    request: 'POST /v1/clouds/aws/regions/{region}/resourceGroups/validateCapacity'
+    reads:
+      fields:
+        - isValid
+        - availableCapacity
+        - message
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses a host resource group.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - dedicated-hosts
+
+  - id: aws-image-volume-size
+    kind: request
+    request: 'GET /v1/clouds/aws/imageIds/{imageId}/volumeSize'
+    reads:
+      fields:
+        - sizeGB
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run asks this route. The rule that reads it has no live result.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - root-volume
+
+  - id: azure-region-list
+    kind: request
+    request: 'GET /v1/clouds/azure/regions'
+    reads:
+      fields:
+        - regions[].name
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses Azure.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - azure-location
+
+  - id: azure-resource-group-list
+    kind: request
+    request: 'GET /v1/clouds/azure/regions/{region}/subscriptions/{subscriptionId}/resourceGroups'
+    reads:
+      fields:
+        - resourceGroupList[].name
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses Azure.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - azure-resource-group
+
+  - id: azure-storage-account-list
+    kind: request
+    request: 'GET /v1/clouds/azure/resourceGroups/{resourceGroup}/storageAccounts'
+    reads:
+      fields:
+        - accounts[].name
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses Azure.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - azure-storage-account
+
+  - id: azure-network-list
+    kind: request
+    request: 'GET /v1/clouds/azure/regions/{region}/subscriptions/{subscriptionId}/networks'
+    reads:
+      fields:
+        - virtualNetworkList[].name
+        - virtualNetworkList[].addressSpaces[]
+        - virtualNetworkList[].subnets[].name
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses Azure.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - azure-vnet-static
+
+  - id: maas-domain-list
+    kind: request
+    request: 'GET /v1/cloudaccounts/maas/{uid}/properties/domains'
+    reads:
+      fields:
+        - items[].name
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses MAAS.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - maas-domain
+
+  - id: maas-resource-pool-list
+    kind: request
+    request: 'GET /v1/cloudaccounts/maas/{uid}/properties/resourcePools'
+    reads:
+      fields:
+        - items[].name
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses MAAS.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - maas-resource-pool
+
+  - id: maas-tag-list
+    kind: request
+    request: 'GET /v1/cloudaccounts/maas/{uid}/properties/tags'
+    reads:
+      fields:
+        - items[].name
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses MAAS.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - maas-tags
+
+  - id: maas-zone-list
+    kind: request
+    request: 'GET /v1/cloudaccounts/maas/{uid}/properties/azs'
+    reads:
+      fields:
+        - items[].name
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses MAAS.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - maas-zones
+
+  - id: pcg-state
+    kind: request
+    request: 'GET /v1/overlords/{uid}'
+    reads:
+      fields:
+        - metadata.name
+        - spec.isSystem
+        - status.state
+        - status.isActive
+        - status.health.state
+      values:
+        status.state:
+          - Running
+        status.health.state:
+          - Healthy
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses MAAS or vSphere.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - pcg-running
+
+  - id: vsphere-datacenter-list
+    kind: request
+    request: 'GET /v1/cloudaccounts/vsphere/{uid}/properties/datacenters'
+    reads:
+      fields:
+        - items[].datacenter
+        - items[].computeclusters[]
+        - items[].folders[]
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses vSphere.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - vsphere-datacenter
+
+  - id: vsphere-compute-resources
+    kind: request
+    request: 'GET /v1/cloudaccounts/vsphere/{uid}/properties/computecluster/resources'
+    reads:
+      fields:
+        - computecluster.datastores[]
+        - computecluster.networks[]
+        - computecluster.resourcePools[]
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses vSphere.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - vsphere-compute-resources
+
+  - id: vsphere-ip-pool-list
+    kind: request
+    request: 'GET /v1/overlords/vsphere/{uid}/pools'
+    reads:
+      fields:
+        - items[].metadata.uid
+        - items[].metadata.name
+        - items[].spec.pool.start
+        - items[].spec.pool.end
+        - items[].spec.restrictToSingleCluster
+        - items[].status.allottedIps[]
+        - items[].status.inUse
+        - items[].status.associatedClusters[]
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses vSphere.
+    pages:
+      - reference/palette-api.md#the-checks-of-strata-preflight
+    rules:
+      - vsphere-ip-pool-capacity
+
+  # The gaps that preflight fills: one fact for each row of the table in
+  # reference/preflight-rules.md. The last row is a behavior: those rules call a route.
+  - id: preflight-gap-eks-hop-limit
+    kind: gap
+    reads:
+      fields:
+        - spec.machinepoolconfig[].cloudConfig.amiType
+      values:
+        spec.machinepoolconfig[].cloudConfig.amiType:
+          - AL2023_x86_64_STANDARD
+          - AL2023_x86_64_NEURON
+          - AL2023_x86_64_NVIDIA
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run shows that Palette ignores the hop limit of the instance metadata.
+    pages:
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+    rules:
+      - eks-ami-type
+
+  - id: preflight-gap-edge-two-node-hosts
+    kind: gap
+    reads:
+      fields:
+        - spec.cloudConfig.isTwoNodeCluster
+        - spec.machinepoolconfig[].poolConfig.isControlPlane
+        - spec.machinepoolconfig[].cloudConfig.edgeHosts[].twoNodeCandidatePriority
+      values:
+        spec.machinepoolconfig[].cloudConfig.edgeHosts[].twoNodeCandidatePriority:
+          - primary
+          - secondary
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run builds an Edge cluster.
+    pages:
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+    rules:
+      - edge-two-node
+
+  - id: preflight-gap-ssh-key-maas
+    kind: gap
+    reads:
+      fields:
+        - spec.cloudConfig.sshKeys[]
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses MAAS.
+    pages:
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+    rules:
+      - ssh-key-format
+
+  - id: preflight-gap-vsphere-ddns-mapping
+    kind: gap
+    reads:
+      fields:
+        - spec.cloudConfig.controlPlaneEndpoint.type
+        - spec.cloudConfig.controlPlaneEndpoint.host
+        - spec.cloudConfig.controlPlaneEndpoint.ddnsSearchDomain
+        - spec.cloudConfig.placement.datacenter
+        - spec.cloudConfig.placement.network.networkName
+      values:
+        spec.cloudConfig.controlPlaneEndpoint.type:
+          - VIP
+          - External
+          - DDNS
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses vSphere.
+    pages:
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+    rules:
+      - vsphere-controlplane-endpoint
+
+  - id: preflight-gap-edge-vip-hosts
+    kind: gap
+    reads:
+      fields:
+        - spec.machinepoolconfig[].cloudConfig.edgeHosts[]
+        - spec.cloudConfig.controlPlaneEndpoint.type
+        - spec.cloudConfig.controlPlaneEndpoint.host
+      values:
+        spec.cloudConfig.controlPlaneEndpoint.type:
+          - VIP
+          - External
+          - DDNS
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run builds an Edge cluster.
+    pages:
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+    rules:
+      - edge-vip-multi-node
+
+  - id: preflight-gap-azure-subnet-cidr
+    kind: gap
+    reads:
+      fields:
+        - spec.cloudConfig.vnetName
+        - spec.cloudConfig.vnetCidrBlock
+        - spec.cloudConfig.controlPlaneSubnet.cidrBlock
+        - spec.cloudConfig.workerSubnet.cidrBlock
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses Azure.
+    pages:
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+    rules:
+      - azure-subnets-in-vnet
+
+  - id: preflight-gap-ntp-none
+    kind: gap
+    reads:
+      fields:
+        - spec.cloudConfig.ntpServers[]
+        - spec.machinepoolconfig[].cloudConfig.edgeHosts[]
+    stand_in: []
+    code: []
+    live: []
+    unchecked: No run uses vSphere, MAAS, or Edge.
+    pages:
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+    rules:
+      - ntp-servers
+
+  - id: preflight-gap-pack-cloud-support
+    kind: gap
+    reads:
+      fields:
+        - cloudTypes[]
+        - profiles[].packs.results[].errors[]
+      values:
+        cloudTypes[]:
+          - all
+    stand_in: []
+    code: []
+    live:
+      - validate-route.sh:pack-cloud-support
+      - validate-route.sh:pack-cloud-support-says
+    pages:
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+    rules:
+      - pack-cloud-support
+      - palette-validate
+
+  - id: preflight-gap-tenant-documents
+    kind: gap
+    reads:
+      fields:
+        - status.inUseClusterTemplates[]
+        - status.inUseClusters[]
+        - status.state
+        - status.health.state
+        - spec.device.archType
+        - spec.device.cpu.cores
+        - spec.device.memory.sizeInMB
+        - spec.device.disks[].size
+        - spec.device.nics[].nicName
+      codes:
+        - ClusterCreateWithTemplateProfileForbidden
+      values:
+        status.state:
+          - ready
+          - unpaired
+        status.health.state:
+          - healthy
+    stand_in: []
+    code: []
+    live:
+      - template.sh:cluster-outside-template
+      - template.sh:refusal-says
+      - loop.sh:preflight-each
+    pages:
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
+    rules:
+      - template-outside
+      - edge-host-arch
+      - edge-host-duplicate
+      - edge-host-health
+      - edge-host-in-use
+      - edge-host-nic
+      - edge-host-resources
+
+  - id: preflight-gap-cloud-account-lists
+    kind: gap
+    reads:
+      fields:
+        - instanceTypes[].type
+        - instanceTypes[].nonSupportedZones[]
+        - keyNames[]
+        - spec.cloudConfig.sshKeyName
+        - spec.cloudConfig.vpcId
+    stand_in: []
+    code: []
+    live:
+      - loop.sh:preflight-offering
+      - loop.sh:preflight-key-pair
+    pages:
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+    rules:
+      - instance-offering
+      - ssh-key-pair
+
+  - id: preflight-gap-route-callers
+    kind: behavior
+    reads:
+      fields:
+        - profiles[].packs.results[].errors[]
+        - machinePools.results[].errors[]
+      codes:
+        - MachinePoolWithMinCpuRequired
+        - ClusterProfilesNotSupported
+        - AwsKeyPairNotFound
+    stand_in: []
+    code: []
+    live:
+      - loop.sh:preflight-live
+    pages:
+      - reference/preflight-rules.md#the-gaps-that-preflight-fills
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+      - internals/palette/validate-routes.md#the-list-routes
+    rules:
+      - palette-validate
+      - pack-dependency
+      - ecr-oci-images
+      - worker-cpu-floor
+      - eks-public-subnet-mapping
+      - iaas-pod-identity
+      - sts-account-not-assumable
+      - gcp-properties

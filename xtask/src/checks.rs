@@ -26,11 +26,13 @@ pub struct OutputState {
 /// Every rule. Returns the messages, so the caller decides what to do with them.
 ///
 /// `chapters` maps the name of each chapter that the runner defined to its number of states.
-/// `states` names the chapter and the state of each output that the runner wrote.
+/// `states` names the chapter and the state of each output that the runner wrote. `routes` holds
+/// the route of each document that the stand-in served.
 pub fn check(
     repo: &Path,
     chapters: &BTreeMap<String, u32>,
     states: &BTreeSet<OutputState>,
+    routes: &BTreeSet<String>,
 ) -> Vec<String> {
     let mut bad = Vec::new();
     bad.extend(release_tags(repo));
@@ -40,6 +42,7 @@ pub fn check(
     bad.extend(playgrounds(repo, chapters));
     bad.extend(seeds(repo, states));
     bad.extend(cited_run_ids(repo));
+    bad.extend(crate::facts::check(repo, Some(routes)));
     bad
 }
 
@@ -154,7 +157,7 @@ fn links_resolve(repo: &Path) -> Vec<String> {
 
 /// The anchor mdBook makes for each heading: lower case, spaces to dashes, and the punctuation
 /// that is not a dash dropped.
-fn anchors(text: &str) -> BTreeSet<String> {
+pub(crate) fn anchors(text: &str) -> BTreeSet<String> {
     text.lines()
         .filter_map(|l| {
             l.trim_start_matches('#')
@@ -396,7 +399,7 @@ mod tests {
         // bytes that are not UTF-8, so the read of the page fails
         let broken = use_cases.join("broken.md");
         std::fs::write(&broken, [0xff, 0xfe]).unwrap();
-        let bad = check(&repo, &chapters(), &BTreeSet::new());
+        let bad = check(&repo, &chapters(), &BTreeSet::new(), &BTreeSet::new());
         std::fs::remove_dir_all(&repo).unwrap();
         // release_tags, links_resolve, follow_along_first, playgrounds, seeds, and cited_run_ids each
         // read the page
