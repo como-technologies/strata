@@ -1,0 +1,151 @@
+{
+  "_base": "identity-clean.json",
+  "_note": "AWS raised the quota of the account to 30. The nodes role holds 30 managed policies, and the account adds one more",
+  "_patch": {
+    "_exec": {
+      "aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json": {
+        "exit": 0,
+        "stdout": {
+          "AttachedPolicies": [
+            {
+              "PolicyName": "nodes.cluster-api-provider-aws.sigs.k8s.io",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/nodes.cluster-api-provider-aws.sigs.k8s.io"
+            },
+            {
+              "PolicyName": "AmazonEKSWorkerNodePolicy",
+              "PolicyArn": "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy"
+            },
+            {
+              "PolicyName": "AmazonEKS_CNI_Policy",
+              "PolicyArn": "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+            },
+            {
+              "PolicyName": "AmazonEC2ContainerRegistryReadOnly",
+              "PolicyArn": "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+            },
+            {
+              "PolicyName": "extra-1",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-1"
+            },
+            {
+              "PolicyName": "extra-2",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-2"
+            },
+            {
+              "PolicyName": "extra-3",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-3"
+            },
+            {
+              "PolicyName": "extra-4",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-4"
+            },
+            {
+              "PolicyName": "extra-5",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-5"
+            },
+            {
+              "PolicyName": "extra-6",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-6"
+            },
+            {
+              "PolicyName": "extra-7",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-7"
+            },
+            {
+              "PolicyName": "extra-8",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-8"
+            },
+            {
+              "PolicyName": "extra-9",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-9"
+            },
+            {
+              "PolicyName": "extra-10",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-10"
+            },
+            {
+              "PolicyName": "extra-11",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-11"
+            },
+            {
+              "PolicyName": "extra-12",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-12"
+            },
+            {
+              "PolicyName": "extra-13",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-13"
+            },
+            {
+              "PolicyName": "extra-14",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-14"
+            },
+            {
+              "PolicyName": "extra-15",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-15"
+            },
+            {
+              "PolicyName": "extra-16",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-16"
+            },
+            {
+              "PolicyName": "extra-17",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-17"
+            },
+            {
+              "PolicyName": "extra-18",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-18"
+            },
+            {
+              "PolicyName": "extra-19",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-19"
+            },
+            {
+              "PolicyName": "extra-20",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-20"
+            },
+            {
+              "PolicyName": "extra-21",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-21"
+            },
+            {
+              "PolicyName": "extra-22",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-22"
+            },
+            {
+              "PolicyName": "extra-23",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-23"
+            },
+            {
+              "PolicyName": "extra-24",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-24"
+            },
+            {
+              "PolicyName": "extra-25",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-25"
+            },
+            {
+              "PolicyName": "extra-26",
+              "PolicyArn": "arn:aws:iam::123456789012:policy/extra-26"
+            }
+          ]
+        },
+        "stderr": ""
+      },
+      "aws service-quotas get-service-quota --service-code iam --quota-code L-0DA4ABF3 --region us-east-1 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Quota": {
+            "ServiceCode": "iam",
+            "QuotaCode": "L-0DA4ABF3",
+            "QuotaName": "Managed policies per role",
+            "Value": 30.0,
+            "Unit": "None",
+            "Adjustable": true,
+            "GlobalQuota": false
+          }
+        },
+        "stderr": ""
+      }
+    }
+  }
+}

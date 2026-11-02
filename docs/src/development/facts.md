@@ -123,7 +123,8 @@ the fact.
 | A file of strata that a fact names does not exist. | The fact points at nothing. |
 | An id is used twice, or two facts have one request. | The list holds a copy. |
 | A rule of the cloud tier is in no fact of the kind `cloud`. | The call of a cloud is not in the list. |
-| The call of a fact is not the command of its rules, or no fixture of the rules answers it. | The fact, the rule, and the stand-in disagree. |
+| The call of a fact is the command of none of its rules, or no fixture of the rules answers it. | The fact, the rule, and the stand-in disagree. |
+| The second command of a rule of the lab is the call of no fact that names the rule. | The contract run sends the calls of the list only, so nothing proves that command. |
 | Two facts send one call. | The list holds a copy. |
 | A rule or a file of strata holds a text that names a cloud fact, and no fact proves it. | A table of cloud facts has no contract check. See [The tables](#the-tables). |
 | A table has no call, and a rule of its fact is for a cloud that the lab has. | The table has no contract check. |
@@ -596,7 +597,7 @@ has no call, and `unchecked` gives the reason.
 
 ### Add a fact of a cloud
 
-1. Write the call in `clouds.yaml`. Its first words, up to the first flag, are the command of the rule.
+1. Write the call in `clouds.yaml`. Its first words, up to the first flag, are the command of the rule, or its second command (`also`).
 2. List the fields of the answer that the rule reads in `reads.fields`.
 3. Make sure that a fixture of the rule answers the call with those fields. The `_exec` entry of the
    fixture holds the answer.

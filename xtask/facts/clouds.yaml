@@ -78,7 +78,18 @@ facts:
       fields: ["AttachedPolicies[].PolicyArn"]
     pages:
       - internals/preflight.md#the-calls-of-the-clouds
-    rules: [global-policy-attach-silent, iam-ten-policies, ebs-csi-node-policy]
+    rules: [global-policy-attach-silent, iam-role-policy-quota, ebs-csi-node-policy]
+
+  # The quota of managed policies for a role in the lab account. AWS raises it on request, so the
+  # rule reads it, and uses the default of aws-policies-per-role-limit when it cannot.
+  - id: aws-policies-per-role-quota
+    kind: cloud
+    call: [aws, service-quotas, get-service-quota, --service-code, iam, --quota-code, L-0DA4ABF3, --region, us-east-1, --output, json]
+    reads:
+      fields: [Quota.Value]
+    pages:
+      - internals/preflight.md#the-calls-of-the-clouds
+    rules: [iam-role-policy-quota]
 
   # ANCHOR: example
   - id: aws-ec2-vcpu-quota
@@ -485,15 +496,16 @@ facts:
     rules: [eks-unsupported-zone]
 
   # The default limit of managed policies for a role. AWS raises it for an account on request, so
-  # the default quota is the one to prove, not the quota of the lab.
+  # the default quota is the one to prove, not the quota of the lab. The rule uses it when it cannot
+  # read the quota of the account.
   - id: aws-policies-per-role-limit
     kind: cloud
     call: [aws, service-quotas, get-aws-default-service-quota, --service-code, iam, --quota-code, L-0DA4ABF3, --region, us-east-1, --output, json]
     reads:
       fields: [Quota.Value]
     table:
-      as_of: "2026-09-29"
-      holds: ["10"]
+      as_of: "2026-11-02"
+      holds: ["20"]
     pages:
       - internals/preflight.md#the-tables-of-cloud-facts
-    rules: [iam-ten-policies]
+    rules: [iam-role-policy-quota]

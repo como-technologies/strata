@@ -195,7 +195,7 @@ these:
 | AWS | EKS | The Kubernetes versions, and the versions of an add-on |
 | AWS | CloudFormation | The status of the stack of the Cluster API provider |
 | AWS | KMS | The state of a key |
-| AWS | Service Quotas | The quota of vCPUs, and the quota of nodes for each node group |
+| AWS | Service Quotas | The quota of vCPUs, the quota of nodes for each node group, and the quota of managed policies for a role |
 | AWS | STS | The identity of the caller |
 | GCP | Resource Manager and IAM | The IAM policy of the project, and its service accounts |
 | GCP | Service Usage | The services that are on in the project |
@@ -265,7 +265,7 @@ The rules hold these tables today:
 | The table | How the contract run proves it |
 | --- | --- |
 | The zone ids that EKS takes no cluster subnet in | The list of the zones of each region shows each id. Each account sees its own zone ids. An id that the lab account lacks is a result that the account cannot check, and it is no difference. |
-| The default limit of managed policies for a role | The default quota of Service Quotas gives the figure. |
+| The default limit of managed policies for a role | The default quota of Service Quotas gives the figure. The rule `iam-role-policy-quota` reads the quota of the account, and uses this default when it cannot. |
 
 A rule does not read a vCPU count from the name of a type. The three quota rules read `cpu` from
 the instance type route of Palette. A list of the names that a build needs is no table of cloud

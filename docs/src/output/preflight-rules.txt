@@ -9,5 +9,5 @@ Identity and permissions
   capa-stack-update-denied         cloud    probe      warn      seen      aws,eks                The role of the cloud account can apply each change that Palette makes to the CAPA stack
   capa-stack-release-behind        cloud    probe      note      seen      aws,eks                The CAPA stack was last applied by the release of Palette that the tenant runs
   global-policy-attach-silent      cloud    probe      fail      source    aws,eks                Each additional policy of the cloud account is on the nodes role
-  iam-ten-policies                 cloud    probe      fail      source    aws,eks                The nodes role stays under 10 managed policies
+  iam-role-policy-quota            cloud    probe      fail      source    aws,eks                The nodes role stays under the IAM quota of managed policies
   ebs-csi-node-policy              cloud    probe      fail      seen      aws                    The nodes role holds AmazonEBSCSIDriverPolicy

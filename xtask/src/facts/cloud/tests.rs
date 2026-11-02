@@ -58,6 +58,7 @@ fn rule(lab: bool, argv: &[&str], answers: &[(&str, serde_json::Value)]) -> Clou
         lab,
         of_the_lab: false,
         argv: argv.iter().map(|w| (*w).to_string()).collect(),
+        also: Vec::new(),
         answers: answers
             .iter()
             .map(|(command, stdout)| Answer {
@@ -201,8 +202,50 @@ fn the_call_of_a_fact_is_the_command_of_each_of_its_rules() {
             .collect();
     assert_one_fault(
         &sources,
-        "the command of the rule `aws-quotas` is not `aws service-quotas get-service-quota`",
+        "no command of the rule `aws-quotas` is `aws service-quotas get-service-quota`",
     );
+}
+
+#[test]
+fn the_call_of_a_fact_can_be_the_second_command_of_its_rule() {
+    let mut sources = world();
+    let zones = [
+        "aws",
+        "ec2",
+        "describe-availability-zones",
+        "--region",
+        "us-east-2",
+    ];
+    sources.cloud.rules.get_mut("aws-quotas").unwrap().also =
+        zones.iter().map(|w| (*w).to_string()).collect();
+    // the fact of the zones names the rule, and the second command of the rule is its call
+    sources.facts[1].rules.push("aws-quotas".to_string());
+    assert_eq!(faults_of(&sources), Vec::<String>::new());
+    // a rule that its fact names with another call is a fault, whatever its second command is
+    sources.facts[1].call[2] = "describe-regions".to_string();
+    let found = faults_of(&sources);
+    assert!(
+        found.iter().any(
+            |f| f.contains("no command of the rule `aws-quotas` is `aws ec2 describe-regions`")
+        ),
+        "{found:#?}"
+    );
+}
+
+#[test]
+fn the_second_command_of_a_rule_of_the_lab_needs_a_fact_with_its_call() {
+    let mut sources = world();
+    sources.cloud.rules.get_mut("aws-quotas").unwrap().also = ["aws", "iam", "list-roles"]
+        .iter()
+        .map(|w| (*w).to_string())
+        .collect();
+    assert_one_fault(
+        &sources,
+        "the rule `aws-quotas` runs `aws iam list-roles` as its second command on a cloud of the lab, and no fact of the kind cloud has that call",
+    );
+    // a rule of a cloud that the lab lacks needs no fact: the contract run cannot send the call
+    sources.cloud.rules.get_mut("aws-quotas").unwrap().lab = false;
+    assert_eq!(faults_of(&sources), Vec::<String>::new());
 }
 
 #[test]
@@ -592,6 +635,18 @@ fn the_rules_of_the_cloud_tier_are_read_with_their_command_their_cloud_and_their
         ["aws", "service-quotas", "get-service-quota"]
     );
     assert!(read.programs["aws-quotas"].contains("L-1216C47A"));
+    // a rule with a second command holds both, and both are in its programs
+    let policies = &rules["iam-role-policy-quota"];
+    assert_eq!(
+        policies.argv[..3],
+        ["aws", "iam", "list-attached-role-policies"]
+    );
+    assert_eq!(
+        policies.also[..3],
+        ["aws", "service-quotas", "get-service-quota"]
+    );
+    assert!(rules["aws-quotas"].also.is_empty());
+    assert!(read.programs["iam-role-policy-quota"].contains("L-0DA4ABF3"));
     assert!(
         quota.answers.iter().all(|a| a.stdout.is_object()),
         "an answer has a document"

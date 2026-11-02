@@ -180,6 +180,13 @@ After 0.26.0, the library of `strata-preflight` changes in these ways:
   for a command that has a read of Palette.
 - `rule::PaletteRead` is a new type. A rule file takes `palette: { path: ... }` in the check of kind
   `exec`. The program of the check reads the answer as `.response`.
+- `rule::ExecCheck` has the new field `also: Vec<String>`, the second command of the check. A
+  struct literal must set it to `Vec::new()`. A rule file takes `also: [...]` in the check of kind
+  `exec`. The program of the check reads the output as `.also`.
+- `probe::Ran::Exec` has the new field `also: Option<String>`, the line of the second command. A
+  struct literal must set it to `None`, and a pattern with no `..` must name it. `probe::Ran::text`
+  gives both lines, with `; ` between them. `probe::Ran::answer` is still the exit code of the first
+  command.
 
 ## The documents
 
@@ -788,8 +795,25 @@ pre-release gives the other verdict: see
 ## Release 0.27.0: changes that need action
 
 Release 0.27.0 is a minor release, so it can change the API of the library. This
-section lists each change that can break code that uses a library. A change that
-only adds a field, a value, an input, or an option is in the sections above.
+section lists each change that can break a script, a program that reads a
+document, a CI pipeline, or code that uses a library. A change that only adds a
+field, a value, an input, or an option is in the sections above.
+
+### For a user of the command line or of a document
+
+- **`strata-preflight`: the rule `iam-ten-policies` is now `iam-role-policy-quota`.**
+  The old id held a number, and AWS changed the number. The default quota of managed
+  policies for a role is 20 now. It was 10.
+  - The rule reads the quota of the account from Service Quotas. It fails a role that
+    is over that quota. A role with 11 to 20 policies failed the old rule, and passes now.
+  - When the rule cannot read the quota, it uses the default 20. The message of a failure
+    says so.
+  - A script that reads `iam-ten-policies` in a report must read `iam-role-policy-quota`.
+    `--rule iam-ten-policies` is a `usage` error with exit `2`, because the id is not in the
+    catalog.
+  - The entry of the rule in `checks[]` holds both commands in `ran`, with `; ` between them.
+    Before, `ran` held the command that lists the policies of the role alone. `answer` is
+    still the exit code of that first command.
 
 ### For a user of the library of strata
 

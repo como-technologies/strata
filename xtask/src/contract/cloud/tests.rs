@@ -81,6 +81,7 @@ fn rules() -> BTreeMap<String, CloudRule> {
     let rule = |answers: Vec<Answer>| CloudRule {
         lab: true,
         argv: Vec::new(),
+        also: Vec::new(),
         of_the_lab: false,
         answers,
     };
@@ -684,6 +685,35 @@ fn the_run_of_the_list_against_the_fixtures_of_the_rules_finds_no_difference() {
     assert!(skipped.iter().any(|e| e.id == "azure-vm-usage"));
 }
 
+/// AWS gave 10 managed policies for a role by default, and gives 20 now (#540). The rule uses the
+/// default when it cannot read the quota of the account, so the table must hold what AWS gives.
+#[test]
+fn the_default_quota_of_the_managed_policies_for_a_role_is_20_and_the_run_finds_it_the_same() {
+    let facts = facts::load(&repo()).unwrap();
+    let rules = facts::cloud_rules().unwrap();
+    let find = |id: &str| facts.iter().find(|f| f.id == id).unwrap();
+    let limit = find("aws-policies-per-role-limit");
+    assert_eq!(limit.table.as_ref().unwrap().holds, ["20"]);
+    let run_with = |value: f64| {
+        let command = full_lab().words(&limit.call).unwrap().join(" ");
+        let answer = printed(json!({"Quota": {"Value": value, "Adjustable": true}}));
+        let backend = backend(&["aws"], json!({ command: answer }));
+        run(std::slice::from_ref(limit), &rules, &backend, &full_lab()).remove(0)
+    };
+    assert_eq!(run_with(20.0).outcome, Outcome::Same);
+    let older = run_with(10.0);
+    assert_eq!(older.outcome, Outcome::Differs);
+    assert_eq!(older.differences[0].expected, ["20"]);
+    // the fixtures of the rule answer the quota of the account with the same default
+    let quota = find("aws-policies-per-role-quota");
+    assert!(
+        documents(quota, &rules)
+            .iter()
+            .any(|document| document["Quota"]["Value"] == 20.0),
+        "no fixture of the rule gives the default quota"
+    );
+}
+
 #[test]
 fn a_field_that_changes_in_one_answer_makes_the_fact_differ_and_no_other_fact() {
     let facts = facts::load(&repo()).unwrap();
@@ -755,6 +785,7 @@ fn tool_fact(call: &[&str], fixture: Value) -> (Fact, BTreeMap<String, CloudRule
         lab: true,
         of_the_lab: false,
         argv: Vec::new(),
+        also: Vec::new(),
         answers: vec![Answer {
             command: call[0].to_string(),
             stdout: fixture,

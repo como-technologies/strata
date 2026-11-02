@@ -605,19 +605,21 @@ rules:
       - fault: fixtures/eks/nodes-policy-not-attached.json
         clean: fixtures/eks/identity-clean.json
 
-  - id: iam-ten-policies
-    title: The nodes role stays under 10 managed policies
+  - id: iam-role-policy-quota
+    title: The nodes role stays under the IAM quota of managed policies
     engines: [aws, eks]
     tier: cloud
     severity: fail
     status: source
     what: |
-      IAM attaches at most 10 managed policies to a role (the default quota; AWS raises it to 20 on
-      request). The CAPA stack attaches its own policies to the nodes role, and Palette attaches
-      each policy ARN of the cloud account on top. One over the quota fails the attach, and
-      `global-policy-attach-silent` says what Palette does then. The check counts the policies on
-      the nodes role plus the policy ARNs of the account that are not on it yet. Before the first
-      build, the role does not exist, and the check passes.
+      IAM limits the managed policies of a role. The default quota is 20, and AWS raises it for an
+      account on request. The CAPA stack attaches its own policies to the nodes role, and Palette
+      attaches each policy ARN of the cloud account on top. One over the quota fails the attach, and
+      `global-policy-attach-silent` says what Palette does then. The check counts the policies on the
+      nodes role plus the policy ARNs of the account that are not on it yet. It reads the quota of
+      the account from Service Quotas in `us-east-1`. When it cannot read the quota, it uses the
+      default 20, and the message says so. Before the first build, the role does not exist, and the
+      check passes.
       `POST /v1/clouds/aws/policyArns/validate` tells whether each policy ARN of the account exists. This
       check counts the policies of the nodes role, so it stays at the cloud tier.
     check:
@@ -631,19 +633,36 @@ rules:
         - "{{ (.account.spec.namePrefix // \"\") + \"nodes.cluster-api-provider-aws.sigs.k8s.io\" }}"
         - --output
         - json
+      also:
+        - aws
+        - service-quotas
+        - get-service-quota
+        - --service-code
+        - iam
+        - --quota-code
+        - L-0DA4ABF3
+        - --region
+        - us-east-1
+        - --output
+        - json
       expr: |
-        (.account.spec.policyARNs // []) as $plan
+        20 as $default
+        | (.account.spec.policyARNs // []) as $plan
+        | (if .also.exit == 0 and (.also.stdout | type) == "object" and (.also.stdout.Quota.Value | type) == "number"
+           then .also.stdout.Quota.Value else null end) as $account
         | if .exec.exit != 0 then
             if (.exec.stderr | test("NoSuchEntity")) then [] else ["aws iam list-attached-role-policies failed: \(.exec.stderr | .[:200])"] end
           else ([ (.exec.stdout.AttachedPolicies // [])[] | .PolicyArn ]) as $have
             | ([ $plan[] | select(. as $a | ($have | index($a)) == null) ] | length) as $more
-            | if (($have | length) + $more) > 10
-              then ["the nodes role has \($have | length) managed policies, and the cloud account adds \($more) more: \(($have | length) + $more) is over the IAM quota of 10 for a role"]
+            | ($account // $default) as $quota
+            | if (($have | length) + $more) > $quota
+              then ["the nodes role has \($have | length) managed policies, and the cloud account adds \($more) more: \(($have | length) + $more) is over the IAM quota of \($quota | round) for a role"
+                    + (if $account != null then "" else ". The check could not read the quota of the account (\(if .also.exit == 0 then "the answer has no number" else .also.stderr | .[:200] end)), so it used the default quota" end)]
               else [] end
           end
     reproduce:
       - "aws iam list-attached-role-policies --role-name {{ (.account.spec.namePrefix // \"\") }}nodes.cluster-api-provider-aws.sigs.k8s.io --query 'length(AttachedPolicies)'"
-      - "aws service-quotas get-service-quota --service-code iam --quota-code L-0DA4ABF3 --query Quota.Value"
+      - "aws service-quotas get-service-quota --service-code iam --quota-code L-0DA4ABF3 --region us-east-1 --query Quota.Value"
     fix:
       owner: palette
       text: Count the policies in the validate route.
@@ -653,8 +672,13 @@ rules:
       - kind: source
         note: Palette adds the additional policies of the global role to the nodes role
     tests:
-      - fault: fixtures/eks/nodes-ten-policies.json
+      - fault: fixtures/eks/nodes-policies-over-quota.json
         clean: fixtures/eks/identity-clean.json
+      - clean: fixtures/eks/nodes-policies-within-quota.json
+      - fault: fixtures/eks/nodes-policies-over-raised-quota.json
+        clean: fixtures/eks/nodes-policies-within-raised-quota.json
+      - fault: fixtures/eks/nodes-policies-quota-unread.json
+        clean: fixtures/eks/nodes-policies-quota-unread-within.json
 
   - id: ebs-csi-node-policy
     title: The nodes role holds AmazonEBSCSIDriverPolicy

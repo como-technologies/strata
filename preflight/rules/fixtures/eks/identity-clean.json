@@ -208,6 +208,21 @@
           ]
         },
         "stderr": ""
+      },
+      "aws service-quotas get-service-quota --service-code iam --quota-code L-0DA4ABF3 --region us-east-1 --output json": {
+        "exit": 0,
+        "stdout": {
+          "Quota": {
+            "ServiceCode": "iam",
+            "QuotaCode": "L-0DA4ABF3",
+            "QuotaName": "Managed policies per role",
+            "Value": 20.0,
+            "Unit": "None",
+            "Adjustable": true,
+            "GlobalQuota": false
+          }
+        },
+        "stderr": ""
       }
     }
   }

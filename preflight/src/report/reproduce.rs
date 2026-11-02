@@ -83,29 +83,42 @@ pub(super) fn auto_reproduce(
     lines
 }
 
-/// The lines of a command check: the `curl` of its read of Palette when it has one, the command,
-/// and the `jq` over the world with the answers. The program reads `.exec`, and `.response` after a
-/// read.
+/// The lines of a command check: the `curl` of its read of Palette when it has one, the command
+/// and the second command when it has one, and the `jq` over the world with the answers. The
+/// program reads `.exec`, `.also` after a second command, and `.response` after a read.
 fn exec_lines(expr: &str, outcome: &Outcome, dir: &str, lines: &mut Vec<String>) {
-    let Ran::Exec { line, request, .. } = &outcome.ran else {
+    let Ran::Exec {
+        line,
+        also,
+        request,
+        ..
+    } = &outcome.ran
+    else {
         return;
     };
-    let (flags, response) = match request {
+    let (mut flags, mut set) = match request {
         Some(call) => {
             lines.push(format!(
                 "code=$({})",
                 curl_line(" -o body.json -w '%{http_code}'", "", &call.path)
             ));
             (
-                "--arg code \"$code\" --slurpfile body body.json ",
+                "--arg code \"$code\" --slurpfile body body.json ".to_string(),
                 format!(".response = {RESPONSE_OF_CURL} | "),
             )
         }
-        None => ("", String::new()),
+        None => (String::new(), String::new()),
     };
     lines.push(line.clone());
+    flags.push_str("--argjson out \"$(<the output>)\" ");
+    set.push_str(".exec = {exit: 0, stdout: $out, stderr: \"\"} | ");
+    if let Some(also) = also {
+        lines.push(also.clone());
+        flags.push_str("--argjson also \"$(<the output of the second command>)\" ");
+        set.push_str(".also = {exit: 0, stdout: $also, stderr: \"\"} | ");
+    }
     lines.push(format!(
-        "jq {flags}--argjson out \"$(<the output>)\" '{response}.exec = {{exit: 0, stdout: $out, stderr: \"\"}} | {}' {dir}/world.json",
+        "jq {flags}'{set}{}' {dir}/world.json",
         one_line(expr)
     ));
 }

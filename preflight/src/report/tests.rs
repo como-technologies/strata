@@ -266,6 +266,7 @@ rules:
         ran: Ran::Exec {
             line: "aws service-quotas get-service-quota".into(),
             answer: Some("exit 0".into()),
+            also: None,
             request,
         },
     };
@@ -297,6 +298,64 @@ rules:
     let lines = auto_reproduce(rule, &outcome(None), &subject, Some("out"));
     assert_eq!(lines.len(), 2, "{lines:#?}");
     assert!(!lines[1].contains(".response ="), "{}", lines[1]);
+}
+
+#[test]
+fn the_reproduce_lines_of_a_command_with_a_second_command_run_both_and_judge_both_outputs() {
+    let section = r#"
+section: identity
+title: I
+rules:
+  - id: iam-role-policy-quota
+    title: t
+    engines: [aws]
+    tier: cloud
+    status: seen
+    what: w
+    check:
+      kind: exec
+      needs: [aws]
+      argv: [aws, iam, list-attached-role-policies]
+      also: [aws, service-quotas, get-service-quota]
+      expr: ".exec.exit == 0 and .also.exit == 0"
+"#;
+    let mut c = crate::rule::Catalog::default();
+    c.push(
+        crate::rule::Catalog::parse_section(section, std::path::Path::new("i.yaml")).unwrap(),
+        std::path::Path::new("i.yaml"),
+    )
+    .unwrap();
+    let subject = Subject {
+        cloud: "aws".into(),
+        release: None,
+        source: "c.json".into(),
+        name: "fred".into(),
+        cluster_uid: None,
+    };
+    let outcome = Outcome {
+        verdict: Verdict::Failed,
+        messages: vec![],
+        elapsed: Duration::from_millis(1),
+        ran: Ran::Exec {
+            line: "aws iam list-attached-role-policies".into(),
+            answer: Some("exit 0".into()),
+            also: Some("aws service-quotas get-service-quota".into()),
+            request: None,
+        },
+    };
+    let lines = auto_reproduce(
+        c.rule("iam-role-policy-quota").unwrap(),
+        &outcome,
+        &subject,
+        Some("out"),
+    );
+    assert_eq!(lines.len(), 3, "{lines:#?}");
+    assert_eq!(lines[0], "aws iam list-attached-role-policies");
+    assert_eq!(lines[1], "aws service-quotas get-service-quota");
+    assert!(lines[2].contains("--argjson out"), "{}", lines[2]);
+    assert!(lines[2].contains("--argjson also"), "{}", lines[2]);
+    assert!(lines[2].contains(".exec = {exit: 0"), "{}", lines[2]);
+    assert!(lines[2].contains(".also = {exit: 0"), "{}", lines[2]);
 }
 
 #[test]
