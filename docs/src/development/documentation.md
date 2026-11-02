@@ -38,11 +38,13 @@ cargo install mdbook mdbook-mermaid mdbook-gruvbox mdbook-lint
    [What the live example verifies](./live-runs.md). Neither page tells the
    reader which day a run happened on. `just docs-check` fails on a page that
    cites a run id.
-7. **Do not cite the code of Palette.** A page or a code comment states what
-   Palette does. It does not give a path, a line number, or a function name
-   from the code of Spectro Cloud. That code changes, and the reference becomes
-   wrong. Give the error code that Palette returns, or link the live run that
-   shows the behavior.
+7. **Read the code of Palette first.** Do it before you state what Palette does,
+   or write a check that depends on it. [The code of
+   Palette](./changes.md#the-code-of-palette) says where to find the latest
+   code. In a page, a code comment, or a commit message, cite no path, line
+   number, or function name from the code of Spectro Cloud. That code
+   changes, and the reference becomes wrong. Give the error code that Palette
+   returns, or link the live run that shows the behavior.
 
 ## Where a page goes
 

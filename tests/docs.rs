@@ -1974,3 +1974,61 @@ fn the_page_of_the_clusters_states_that_a_pool_with_no_override_has_no_override_
         assert!(page.contains(needle), "clusters.md lacks {needle:?}");
     }
 }
+
+/// A session of riff reads the code of Palette at `$HOME/palette`. `riff.toml` mounts the volume
+/// with a comment that says what it holds, and the book states where the copy is and how old it can
+/// be. A session that finds no mount cannot read the code that rule 7 tells it to read.
+#[test]
+fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() {
+    let riff = repo_file("riff.toml");
+    let lines: Vec<&str> = riff.lines().collect();
+    let volumes = lines
+        .iter()
+        .position(|line| *line == "[session.volumes]")
+        .expect("riff.toml has no [session.volumes] table");
+    let mount = lines
+        .iter()
+        .position(|line| *line == "strata-palette = \"$HOME/palette\"")
+        .expect("riff.toml does not mount strata-palette at $HOME/palette");
+    assert!(volumes < mount, "the mount is outside [session.volumes]");
+    assert!(
+        lines[volumes..mount]
+            .iter()
+            .rev()
+            .take_while(|line| line.starts_with('#'))
+            .any(|line| line.contains("code of Palette")),
+        "the mount has no comment that says what the volume holds"
+    );
+
+    let page = one_line(&read(&docs().join("development/changes.md")));
+    for needle in [
+        "A session reads the code of Palette at `$HOME/palette`.",
+        "On another host, the volume is empty.",
+        "so it can be some hours old.",
+        "it asks the lead with `riff tell lead`.",
+        "A session on the host itself, not in a container, has no `$HOME/palette`.",
+        "the copy comes from the clones in `~/repos/spectrocloud/`.",
+        "`palette-src-refresh`, in `~/.local/bin/`, pulls the clones and refreshes the copy.",
+        "A session on the host runs it first, then reads the clones.",
+    ] {
+        assert!(page.contains(needle), "changes.md lacks {needle:?}");
+    }
+}
+
+/// Rule 7 tells the author to read the code of Palette first, and still bars a citation of it. The
+/// rule is in the book and in `CLAUDE.md`, and the two must agree.
+#[test]
+fn rule_7_says_to_read_the_code_of_palette_first_and_still_bars_a_citation() {
+    let book = one_line(&read(&docs().join("development/documentation.md")));
+    let guide = one_line(&repo_file("CLAUDE.md"));
+    for (name, text) in [("documentation.md", &book), ("CLAUDE.md", &guide)] {
+        for needle in [
+            "7. **Read the code of Palette first.**",
+            "where to find the latest code.",
+            "no path, line number, or function name",
+        ] {
+            let found = text.to_lowercase().contains(&needle.to_lowercase());
+            assert!(found, "{name}: rule 7 lacks {needle:?}");
+        }
+    }
+}
