@@ -10,6 +10,10 @@ use serde_json::json;
 
 use super::ids::DEV;
 use crate::book::Runner;
+use crate::tenant::{
+    AUDITS, CLUSTER_LISTING, app_profile_route, app_tier_manifest_route, app_tiers_route,
+    group_route, pack_listing, profile_route, registry_summary_route, variables_route,
+};
 
 /// The uids of the objects of this chapter. No other chapter uses them.
 const CLUSTER: &str = "64f7000000000000000000a1";
@@ -32,7 +36,7 @@ pub(super) fn run(r: &mut Runner) {
 fn cluster_and_group(r: &mut Runner) {
     r.answer(
         DEV,
-        "v1/dashboard/spectroclusters/meta",
+        CLUSTER_LISTING,
         &json!([{
             "metadata": {"name": "ledger", "uid": CLUSTER,
                 "creationTimestamp": "2026-09-01T10:00:00.000Z",
@@ -49,7 +53,7 @@ fn cluster_and_group(r: &mut Runner) {
     );
     r.answer(
         DEV,
-        &format!("v1/clustergroups/{GROUP}"),
+        &group_route(GROUP),
         &json!({"metadata": {"name": "vclusters", "uid": GROUP},
             "spec": {"type": "hostCluster", "clusterProfileTemplates": [],
                 "clustersConfig": {"endpointType": "LoadBalancer"}},
@@ -59,7 +63,7 @@ fn cluster_and_group(r: &mut Runner) {
 
 /// An app profile with a container tier, whose manifest has a digest.
 fn app_profile(r: &mut Runner) {
-    let route = format!("v1/appProfiles/{APP_PROFILE}");
+    let route = app_profile_route(APP_PROFILE);
     r.answer(
         DEV,
         &route,
@@ -70,7 +74,7 @@ fn app_profile(r: &mut Runner) {
     );
     r.answer(
         DEV,
-        &format!("{route}/tiers"),
+        &app_tiers_route(APP_PROFILE),
         &json!({"spec": {"appTiers": [
             {"metadata": {"name": "worker", "uid": format!("{APP_PROFILE}1")},
                 "spec": {"type": "container", "version": "1.0.0",
@@ -84,7 +88,7 @@ fn app_profile(r: &mut Runner) {
     );
     r.answer(
         DEV,
-        &format!("{route}/tiers/{APP_PROFILE}2/manifests/{APP_PROFILE}3"),
+        &app_tier_manifest_route(APP_PROFILE, &format!("{APP_PROFILE}2"), &format!("{APP_PROFILE}3")),
         &json!({"metadata": {"name": "settings", "uid": format!("{APP_PROFILE}3")},
             "spec": {"published": {
                 "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: settings\n",
@@ -100,7 +104,7 @@ fn profile(r: &mut Runner) {
         "tag": "1.0.0", "version": "1.0.0", "manifests": manifests});
     r.answer(
         DEV,
-        &format!("v1/clusterprofiles/{PROFILE}"),
+        &profile_route(PROFILE),
         &json!({"metadata": {"name": "platform-policy", "uid": PROFILE,
                 "annotations": {"scope": "project", "projectUid": DEV}},
             "spec": {"version": "1.0.0",
@@ -110,7 +114,7 @@ fn profile(r: &mut Runner) {
     );
     r.answer(
         DEV,
-        &format!("v1/clusterprofiles/{PROFILE}/variables"),
+        &variables_route(PROFILE),
         &json!({"variables": [{
             "name": "owner", "displayName": "Owner",
             "description": "The team that owns the cluster", "defaultValue": "platform",
@@ -134,7 +138,7 @@ fn registries_and_packs(r: &mut Runner) {
         "syncRecovery": {"syncRecoveryState": "Recovering", "message": "sync interrupted"}});
     r.answer(
         DEV,
-        "v1/registries/oci/summary",
+        &registry_summary_route("oci"),
         &json!({"items": [
             {"metadata": {"uid": "64f7000000000000000000e2"}, "spec": {"providerType": "pack"},
                 "status": {"sync": recovered}},
@@ -144,7 +148,7 @@ fn registries_and_packs(r: &mut Runner) {
     );
     r.answer(
         DEV,
-        "v1/registries/pack/summary",
+        &registry_summary_route("pack"),
         &json!({"items": [
             {"metadata": {"uid": "64f7000000000000000000e4"}, "status": {"sync": recovered}},
             {"metadata": {"uid": "64f7000000000000000000e5"}, "status": {"sync": stopped}},
@@ -152,7 +156,7 @@ fn registries_and_packs(r: &mut Runner) {
     );
     r.answer(
         DEV,
-        "v1/packs@filters=spec.name=gloo&limit=100&offset=0",
+        &pack_listing("gloo"),
         &json!({"items": [{"metadata": {"uid": "64f7000000000000000000f1"},
                 "spec": {"name": "gloo", "version": "1.2.18",
                     "annotations": {"disabled": "true"}}}],
@@ -164,7 +168,7 @@ fn registries_and_packs(r: &mut Runner) {
 fn audit_log(r: &mut Runner) {
     r.answer(
         DEV,
-        "v1/audits",
+        AUDITS,
         &json!({"items": [
             {"metadata": {"uid": "64fa00000000000000000101",
                     "creationTimestamp": "2026-09-18T14:05:11.482Z"},

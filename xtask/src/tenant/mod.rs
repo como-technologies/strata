@@ -46,6 +46,11 @@ pub use routes::{
     AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, PROJECT_LISTING, exported_profile,
     rbacs_route,
 };
+// the routes that the chapter `fields` writes: each document there has the route of its kind
+pub(crate) use routes::{
+    CLUSTER_LISTING, app_profile_route, app_tier_manifest_route, app_tiers_route, group_route,
+    pack_listing, profile_route, registry_summary_route, variables_route,
+};
 
 /// The directory of the documents that Palette serves at tenant scope, with no `ProjectUid`.
 pub const TENANT: &str = "tenant";

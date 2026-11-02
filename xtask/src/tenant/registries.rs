@@ -8,7 +8,7 @@ use strata::reference::{LATEST, version};
 use super::Tenant;
 use super::routes::{
     REGISTRY_LISTING, manifests_route, pack_entity_route, pack_listing, profile_route,
-    variables_route,
+    registry_summary_route, variables_route,
 };
 
 /// The uid of the Public Repo pack registry, as Palette gives it.
@@ -116,7 +116,7 @@ impl Tenant {
         ] {
             self.write(
                 project,
-                &format!("v1/registries/{kind}/summary"),
+                &registry_summary_route(kind),
                 &json!({"items": [{"metadata": {"uid": uid}, "status": {"sync": sync}}]}),
             );
         }
