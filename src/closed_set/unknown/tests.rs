@@ -10,7 +10,7 @@ use super::hint::{FILE as HINT_FILE, TEXT};
 use super::log::{FIELDS, FILE, Line, SCHEMA, SENT_FILE, mark_sent, read, sent_count, sent_path};
 use super::{Hint, Report, Watch, note, seen, shown};
 use crate::api::registry::Registries;
-use crate::api::{CLUSTER_TEMPLATE, MemoryApi, PROFILE_TEMPLATE, Palette};
+use crate::api::{CLUSTER_TEMPLATE, MemoryApi, OCI_SUMMARY_TEMPLATE, PROFILE_TEMPLATE, Palette};
 use crate::json::opt_set;
 use crate::model::oci_provider::OciProvider;
 use crate::model::pack_state::PackState;
@@ -44,7 +44,7 @@ fn a_value_that_a_read_gives_and_the_set_does_not_name_is_one_line_of_the_log() 
     let dir = tempfile::tempdir().unwrap();
     let _watching = logging(dir.path()).start();
     let doc = json!({"spec": {"providerType": "oras"}});
-    let value = opt_set::<OciProvider>(&doc, "/spec/providerType", "/v1/registries/oci/summary");
+    let value = opt_set::<OciProvider>(&doc, "/spec/providerType", OCI_SUMMARY_TEMPLATE);
     // the read keeps the text, as it did before the watch
     assert_eq!(value.unwrap().as_str(), "oras");
     let lines = lines_of(&dir.path().join(FILE));
@@ -54,7 +54,7 @@ fn a_value_that_a_read_gives_and_the_set_does_not_name_is_one_line_of_the_log() 
     assert_eq!(line.strata, crate::TOOL_VERSION);
     assert_eq!(line.set, "OciProvider");
     assert_eq!(line.value, "oras");
-    assert_eq!(line.route, "/v1/registries/oci/summary");
+    assert_eq!(line.route, OCI_SUMMARY_TEMPLATE);
     assert_eq!(
         (
             line.palette.as_deref(),
@@ -173,12 +173,7 @@ fn a_value_shows_at_most_64_characters_and_no_control_character() {
 
 /// A line with each field set.
 fn full_line() -> Line {
-    let mut line = Line::new(
-        "OciProvider",
-        "oras",
-        "/v1/registries/oci/summary",
-        Some("4.10"),
-    );
+    let mut line = Line::new("OciProvider", "oras", OCI_SUMMARY_TEMPLATE, Some("4.10"));
     line.status = Some(200);
     line.error_code = Some("Code".to_string());
     line
@@ -293,7 +288,7 @@ fn a_provider_type_that_the_oci_summary_gives_names_the_oci_summary() {
     let dir = tempfile::tempdir().unwrap();
     let _watching = logging(dir.path()).start();
     let api = MemoryApi::new().with(
-        "/v1/registries/oci/summary",
+        OCI_SUMMARY_TEMPLATE,
         json!({"items": [{"metadata": {"uid": "r1"}, "spec": {"providerType": "oras"}}]}),
     );
     let palette = Palette::new(api);
@@ -303,7 +298,7 @@ fn a_provider_type_that_the_oci_summary_gives_names_the_oci_summary() {
     assert_eq!(lines.len(), 1, "{lines:?}");
     assert_eq!(
         (lines[0].set.as_str(), lines[0].route.as_str()),
-        ("OciProvider", "/v1/registries/oci/summary")
+        ("OciProvider", OCI_SUMMARY_TEMPLATE)
     );
 }
 
@@ -438,11 +433,7 @@ fn a_route_that_is_the_path_of_a_real_request_fails_the_read() {
         assert_eq!(read(&file).unwrap_err().kind(), "log-invalid", "{route:?}");
     }
     // the templates that strata writes stay valid
-    for route in [
-        PROFILE_TEMPLATE,
-        CLUSTER_TEMPLATE,
-        "/v1/registries/oci/summary",
-    ] {
+    for route in [PROFILE_TEMPLATE, CLUSTER_TEMPLATE, OCI_SUMMARY_TEMPLATE] {
         let mut line = serde_json::to_value(full_line()).unwrap();
         line["route"] = json!(route);
         std::fs::write(&file, log_of(&[&line.to_string()])).unwrap();
@@ -507,7 +498,7 @@ fn every_line_that_a_watch_writes_passes_the_read() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
     let _watching = logging(dir.path()).palette_release("4.10").start();
-    seen::<OciProvider>("oras", "/v1/registries/oci/summary");
+    seen::<OciProvider>("oras", OCI_SUMMARY_TEMPLATE);
     seen::<PackState>(&"é".repeat(100), PROFILE_TEMPLATE);
     seen::<PackState>("a\nb", CLUSTER_TEMPLATE);
     assert_eq!(read(&file).unwrap().len(), 3);
