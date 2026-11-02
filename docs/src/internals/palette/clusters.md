@@ -81,9 +81,17 @@ body holds them in `poolConfig`. Each pool of `spec.machinePoolConfig` of the
 cloud config holds them as fields of the pool. The cloud config of an AWS
 cluster also holds `overrideClusterAPIConfig` for the whole cluster, in
 `spec.clusterConfig`. So the `shape` tier keeps the override of the cluster in
-its cloud part, and the override of a pool in the pool. Stage 7 of
-[tiers.sh](../../development/live-runs.md#tierssh) sets both overrides on a pool
-of the live cluster, and shows where the cloud config holds each one.
+its cloud part, and the override of a pool in the pool.
+
+Stage 7 of [tiers.sh](../../development/live-runs.md#tierssh) shows where
+Palette holds each override of a pool. The PUT of the worker pool of the live
+cluster takes both overrides in its `poolConfig`. The cloud config then holds
+each one as a field of that pool in `spec.machinePoolConfig`. The cloud part
+holds neither: `spec.clusterConfig` has no value for `overrideClusterAPIConfig`
+or `overrideHealthCheckConfiguration`. An override of a pool does not reach the
+level of the cluster. A new record keeps both overrides in the `shape` tier of
+that pool alone. After the PUT of the pool as before, the cloud config holds
+neither override again.
 
 On a managed engine, the `spec.clusterConfig` of the cloud config also holds
 the control plane that the cloud runs. On EKS it holds `endpointAccess` and

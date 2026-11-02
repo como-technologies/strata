@@ -563,22 +563,24 @@ give the run profiles to read, and `just live-up` to give it a cluster.
 
 | Result | What it shows |
 |---|---|
-| `contract.json` | #390, #391, #530: for each fact of the kind `request`, the status and the type of each field against the stand-in. The run asks with the query that strata sends. It checks the names that strata needs, and lists each value of a closed set that the fact and the stand-in do not name. No result yet. |
-| `contract.json` | #393: for each fact of the kind `cloud`, the shape of the answer, and the values of its table, against the fixtures of the rules. No result yet. |
-| `contract.json` | #539: the facts `tag-filter-listing` and `tag-filter` are `same`, because the run sends them with no project. The fact `audit-log` is `same` for a page that lacks a kind that strata acts on and for a kind that strata ignores. The facts `validate-aws-regions`, `validate-vpcs`, and `validate-security-groups` are `same`, because the run sends the account, the region, and the VPC of the tenant. A zone id that the lab account lacks gives no difference: the entry says that the account cannot check it. No result yet. |
-| `contract.json` | #543: the fact `validate-key-pairs` is `same`, because the run sends the account of the tenant in the query `cloudAccountUid`. No result yet. |
-| `contract.json` | #540: the fact `aws-policies-per-role-limit` is `same`: the default quota of managed policies for a role is 20. The fact `aws-policies-per-role-quota` is `same`: the lab account gives the quota in `us-east-1` with the shape that the fixtures of `iam-role-policy-quota` hold. No result yet. |
+| `contract.json` | #390, #391, #530: for each fact of the kind `request`, the status and the type of each field against the stand-in. The run asks with the query that strata sends. It checks the names that strata needs, and lists each value of a closed set that the fact and the stand-in do not name. On the real tenant, no fact of this kind differs, and no value is unknown. |
+| `contract.json` | #393: for each fact of the kind `cloud`, the shape of the answer, and the values of its table, against the fixtures of the rules. Each call of AWS that the lab sends is `same`. The six calls of GCP cannot be checked, because `gcloud` needs a login on the machine. The calls for a GKE cluster and for an image are skipped, because the lab values name none. |
+| `contract.json` | #539: the fact `tag-filter-listing` is `same`, because the run sends it with no project. The fact `tag-filter` is skipped, because the tenant holds no saved filter. The fact `audit-log` is `same` for a page that lacks a kind that strata acts on and for a kind that strata ignores. The facts `validate-aws-regions` and `validate-security-groups` are `same`, because the run sends the account, the region, and the VPC of the tenant. A zone id that the lab account lacks gives no difference. The facts `eks-refused-zone-id-us-west-1` and `eks-refused-zone-id-ca-central-1` are skipped. The entry says that the account cannot check the value. |
+| `contract.json` | #543: the fact `validate-key-pairs` is `same`, because the run sends the account of the tenant in the query `cloudAccountUid`. |
+| `contract.json` | #540: the fact `aws-policies-per-role-limit` is `same`: the default quota of managed policies for a role is 20. The fact `aws-policies-per-role-quota` is `same`: the lab account gives the quota in `us-east-1` with the shape that the fixtures of `iam-role-policy-quota` hold. |
+| `contract.json` | #390, #393: the whole run on the real tenant, with the cloud calls and the lab account. It finds 120 facts: 47 are `same`, none `differs`, 67 are skipped, and 6 cannot be checked. The run skips a fact in three cases. The stand-in serves no document for it, its request sends a body, or the tenant has no object for its `{uid}`. |
 
 ## contract-profiles.sh
 
 Read-write, with no cluster. `up` makes the standing cluster profiles of the contract run, and
 `down` deletes them. See [The profiles of the run](./facts.md#the-profiles-of-the-run). It has no
-checks. It needs the key and the `terraform.tfvars` of the live example.
+checks. It needs the key, the `terraform.tfvars` of the live example, and AWS credentials.
+`AWS_PROFILE` selects the account.
 
 | Result | What it shows |
 |---|---|
-| `up` | #531: the plan holds cluster profiles only: no `aws_*` resource, no registry, no cluster. No result yet. |
-| `contract.json` of the next contract run | #531: the facts that need a cluster profile are `same` or `differs`, and none is `skipped` for want of a profile. No result yet. |
+| `up` | #531: the plan holds cluster profiles only: no `aws_*` resource, no registry, no cluster. It holds four profiles: two add-on profiles, and two versions of one profile of the type `cluster`. `up` makes the four. |
+| `contract.json` of the next contract run | #531: the facts that need a cluster profile are `same` or `differs`, and none is `skipped` for want of a profile. The facts `profile-listing`, `profile-document`, `profile-pack-manifests`, `profile-variables`, and `profile-resolved-values` are `same`. |
 
 ## report-send.sh
 
@@ -1051,15 +1053,15 @@ API, and removes it. It needs the example at its baseline with cluster A.
 | `limited-read`, `limited-status` | 0, 0 | #276: the second key does not read them: Palette answers HTTP 500, and not 403. `api.sh get-status` prints the status and the body, and exits `0`. No result yet for this form of the check: the earlier form used `api.sh get`, which exits `2`. |
 | `limited-code`, `limited-code-says`, `limited-message` | ?, 0, 0 | #276: the body holds the code `ResourceAccessDenied` and the message `Project '<project uid>' access denied`. The checks read the body that `limited-read` printed after its status line. |
 | `limited-record`, `limited-record-errors` | ? | #276: what strata makes of the answer. This is a record of cluster A that it reads with the second key, and the `errors` of its policy tier. Live, `strata snapshot` of cluster A with the second key writes no record. It exits `2`, and it prints the answer of Palette: HTTP 500, `ResourceAccessDenied`, `Project '<project uid>' access denied`. So no record holds `errors`, and `limited-record-errors` has no file to read (exit `2`). |
-| `pool-route`, `pool-before`, `pool-before-none` | 0 | #515: the route of the cloud config of cluster A, and a record of cluster A before the stage. The worker pool holds neither override, because Palette omits a field with no value. No result yet. |
-| `pool-world`, `pool-entity`, `pool-body` | ?, 0, 0 | #515: `strata preflight` with the static tier writes `entity.json` of cluster A. `pool-world` records its exit and judges none. The worker pool in it is the body of the PUT, with both overrides added to its `poolConfig`. No result yet. |
-| `pool-set`, `pool-read`, `pool-in-cloud-config` | 0 | #515: the PUT of the worker pool to `/v1/cloudconfigs/<cloud type>/<config uid>/machinePools/worker-pool` takes both overrides. The cloud config then holds each as a field of the pool in `spec.machinePoolConfig`. No result yet. |
-| `pool-cluster-level` | ? | #515: the values of `overrideClusterAPIConfig` and `overrideHealthCheckConfiguration` in `spec.clusterConfig` after the PUT. The check judges none. No result yet. |
-| `pool-record`, `pool-in-record` | 0 | #515: the `shape` tier of a new record keeps both overrides on the worker pool. It keeps them on no other pool and not in the cloud part. No result yet. |
-| `pool-compare`, `pool-compare-json`, `pool-compare-shape`, `pool-compare-says` | 0 | #515: `compare` of the record from before with the new record exits `0`. The `shape` tier differs at both overrides of the worker pool, and the report names `+ shape.pools[name=worker-pool].overrideHealthCheckConfiguration`. No result yet. |
-| `pool-verify`, `pool-verify-says` | 0 | #515: `verify` of the record from before exits `0` and names `shape CHANGED`. No result yet. |
-| `pool-undo`, `pool-after-read`, `pool-undone` | 0 | #515: the PUT of the worker pool as before the stage. The cloud config then holds neither override. No result yet. |
-| `pool-restored`, `pool-restored-says` | 0 | #515: `compare` of the record from before with cluster A exits `0` and names no change of the `shape` tier. No result yet. |
+| `pool-route`, `pool-before`, `pool-before-none` | 0 | #515: the route of the cloud config of cluster A, and a record of cluster A before the stage. The worker pool holds neither override, because Palette omits a field with no value. |
+| `pool-world`, `pool-entity`, `pool-body` | ?, 0, 0 | #515: `strata preflight` with the static tier writes `entity.json` of cluster A. `pool-world` records its exit, which is 0, and judges none. The worker pool in it is the body of the PUT, with both overrides added to its `poolConfig`. |
+| `pool-set`, `pool-read`, `pool-in-cloud-config` | 0 | #515: the PUT of the worker pool to `/v1/cloudconfigs/<cloud type>/<config uid>/machinePools/worker-pool` takes both overrides. The cloud config then holds each as a field of the pool in `spec.machinePoolConfig`. |
+| `pool-cluster-level` | ? | #515: the values of `overrideClusterAPIConfig` and `overrideHealthCheckConfiguration` in `spec.clusterConfig` after the PUT. The check judges none, and records 0. Both values are `null`: an override of a pool does not reach the cloud part of the cluster. |
+| `pool-record`, `pool-in-record` | 0 | #515: the `shape` tier of a new record keeps both overrides on the worker pool. It keeps them on no other pool and not in the cloud part. |
+| `pool-compare`, `pool-compare-json`, `pool-compare-shape`, `pool-compare-says` | 0 | #515: `compare` of the record from before with the new record exits `0`. The `shape` tier differs at both overrides of the worker pool, and the report names `+ shape.pools[name=worker-pool].overrideHealthCheckConfiguration`. |
+| `pool-verify`, `pool-verify-says` | 0 | #515: `verify` of the record from before exits `0` and names `shape CHANGED`. |
+| `pool-undo`, `pool-after-read`, `pool-undone` | 0 | #515: the PUT of the worker pool as before the stage. The cloud config then holds neither override. |
+| `pool-restored`, `pool-restored-says` | 0 | #515: `compare` of the record from before with cluster A exits `0` and names no change of the `shape` tier. |
 
 `spcHash` is its own for each cluster, so `compare` now reads `spcInfraHash`
 alone between two clusters. On the two records of the run, `compare` then says
@@ -1415,9 +1417,9 @@ The fault of `gcp-properties` is a project that the account cannot read.
 
 The check `instance-types-shape` expects `instanceTypes[]` with `type`, and
 `nonSupportedZones` as an array or `null`. A run showed that AWS gives `null` for most
-types. The check passes on that answer (no result yet). For GCP, no run has
+types. The check passes on that answer. For GCP, no run has
 shown the shape, and the check shows it (no result yet). The check `key-pairs-shape`
-expects `keyNames[]` with the key pair of the entity (no result yet).
+expects `keyNames[]` with the key pair of the entity. It passes on AWS.
 
 Five checks ask the list routes that the rules read (#393). Each check of a key list expects the
 keys that the route gives, and no other key. A key beside them is a field that a rule of the cloud
@@ -1426,32 +1428,35 @@ tier reads, such as the tags of a subnet. That rule can then move to Palette.
 A call by hand showed the default filter of the instance type route on AWS. With no query, the
 route lists no `t3.small` and no `t3.micro`. With `cpuGtEq=0&memoryGtEq=0`, it lists both, each with
 `cpu` 2. It lists no `m3.large` in both cases. The two checks `instancetypes-cpu` and
-`instancetypes-default-filter` show the filter on every engine of the plan (no result yet). The
+`instancetypes-default-filter` show the filter on every engine of the plan. The
 quota rules and `instance-offering` send the query.
+
+A run of the plan on AWS passes each check of the table. The runs on the other engines have no
+result yet.
 
 | Check | What it expects |
 |---|---|
-| `instancetypes-cpu` | The instance type route, asked with `cpuGtEq=0&memoryGtEq=0`, lists each pool type of the entity with `cpu` as a number above 0. The quota rules count that number as the vCPUs. The list holds a type under 2 vCPUs or 4 GiB, with `cpu` above 0. No result yet. |
-| `instancetypes-default-filter` | The route with no query for the filter lists no type under 2 vCPUs or 4 GiB. The query `cpuGtEq=0&memoryGtEq=0` lists more types, with a small type among them. No result yet. |
-| `vpcs-route-keys` | The VPC route lists `vpcs[]` with `vpcId`, and each subnet with `subnetId` and `az`. A VPC has no key beside `cidrBlock`, `name`, `subnets`, and `vpcId`. A subnet has none beside `az`, `isPrivate`, `mapPublicIpOnLaunch`, `name`, and `subnetId`. No result yet. |
-| `zones-route-keys` | The zone route lists `zones[]` with `name`, `state`, and `zoneId`, and no other key. So it lists no zone type. No result yet. |
-| `sgs-route-keys` | The security group route lists `groups[]` with `groupId` and `groupName` for the first VPC of the region. A group has no key beside `groupId`, `groupName`, and `ownerId`. No result yet. |
+| `instancetypes-cpu` | The instance type route, asked with `cpuGtEq=0&memoryGtEq=0`, lists each pool type of the entity with `cpu` as a number above 0. The quota rules count that number as the vCPUs. The list holds a type under 2 vCPUs or 4 GiB, with `cpu` above 0. |
+| `instancetypes-default-filter` | The route with no query for the filter lists no type under 2 vCPUs or 4 GiB. The query `cpuGtEq=0&memoryGtEq=0` lists more types, with a small type among them. |
+| `vpcs-route-keys` | The VPC route lists `vpcs[]` with `vpcId`, and each subnet with `subnetId` and `az`. A VPC has no key beside `cidrBlock`, `name`, `subnets`, and `vpcId`. A subnet has none beside `az`, `isPrivate`, `mapPublicIpOnLaunch`, `name`, and `subnetId`. |
+| `zones-route-keys` | The zone route lists `zones[]` with `name`, `state`, and `zoneId`, and no other key. So it lists no zone type. |
+| `sgs-route-keys` | The security group route lists `groups[]` with `groupId` and `groupName` for the first VPC of the region. A group has no key beside `groupId`, `groupName`, and `ownerId`. |
 
 See
 [The routes of Palette beside the calls](../internals/preflight.md#the-routes-of-palette-beside-the-calls).
 
 A run that makes a fault
 puts `caught` in the ledger, and the clean entity of the same run puts `passed`. The ledger holds
-both results of `instance-offering` and `ssh-key-pair` for AWS.
+both results of `instance-offering`, `ssh-key-pair`, and `iaas-pod-identity` for AWS.
 
 On AWS, the plan sends the key pair that the region lacks to `iaas-pod-identity`, because the
-property route of AWS refuses it. A call of the route by hand answered HTTP 500 with the code
+property route of AWS refuses it. The route answers HTTP 500 with the code
 `AwsKeyPairNotFound`: see [The property routes](../internals/palette/validate-routes.md#the-property-routes).
 A check reads a 5xx as an error, so the rule names that code in
 [`refusal_codes`](../reference/preflight-rules.md#a-refusal-at-a-5xx). The check
 `properties-key-pair` expects the report of the fault to fail the rule with `AwsKeyPairNotFound`,
-and not to give `ERROR` (no result yet). The step `fault-iaas-pod-identity` expects `caught` in the
-ledger (no result yet).
+and not to give `ERROR`. The step `fault-iaas-pod-identity` expects `caught` in the ledger. A run on
+AWS passes both.
 
 Part 3 of each run also runs the custom probes of the lab,
 `examples/live/preflight/lab-probes.yaml` (`lab-region`, `lab-name`), beside
@@ -1606,6 +1611,16 @@ and every rule of severity `fail` passed on the clean entities.
 IAM simulation on eks warns that `eks:CreateCluster` is `implicitDeny` on each
 resource of the build, for the role that built the #89 clusters. The rule now
 says that this is a warning to read.
+
+**aws, with the list routes.** The plan ran again on aws with the checks of the list routes. Each
+route gave the keys that its check expects. The instance type route dropped a type under 2 vCPUs or
+4 GiB when the query gave no filter. On the clean entity, 22 checks passed. The plan made six faults
+on purpose and caught five.
+
+The sixth fault was a key pair that the region lacks, for `iaas-pod-identity`. Palette answered
+HTTP 500 with `AwsKeyPairNotFound`, and a check read that 500 as an error. So 21 of the 22 steps
+passed. The rule now names the code in `refusal_codes`. The next run caught all six faults, and all
+22 steps passed. The ledger counts the catch of `iaas-pod-identity` as 1 of 1.
 
 **A custom probe on the tenant.** Each run since the build phase also runs the
 two custom probes of the lab. They are `lab-region` and `lab-name`, from

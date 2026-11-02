@@ -410,6 +410,10 @@ and `live-down` read `terraform.tfstate`. So `live-down` never removes the set, 
 never sees it. The recipe needs the `terraform.tfvars` of the live example for the names in the
 tenant. It reads the key from `~/.palette.env` through `tf.sh`, and never prints it.
 
+`just contract-profiles up` needs AWS credentials on the machine. The `aws` provider reads its
+default chain also when no resource uses it. So `up` needs the credentials, and it makes no AWS
+resource. `AWS_PROFILE=spectro-admin` gives them on kadomony.
+
 The live scripts find their objects by the exact name or uid. The profiles of the set have other
 names, so they change no result of a live script. Each listing of the profiles in a live script
 matches by name or uid. A test of `tests/live_scripts.rs` reads the scripts and fails on a listing
