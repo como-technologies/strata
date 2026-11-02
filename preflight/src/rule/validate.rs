@@ -92,6 +92,11 @@ fn check_tier_and_programs(rule: &Rule, check: &Check) -> std::result::Result<()
     {
         return Err("`each` is empty; drop it, or give a program".into());
     }
+    if let Check::Palette(PaletteCheck { refusal_codes, .. }) = check
+        && refusal_codes.iter().any(|code| code.trim().is_empty())
+    {
+        return Err("`refusal_codes` has an empty code; drop it, or give the code".into());
+    }
     Ok(())
 }
 
@@ -193,6 +198,7 @@ fn check_programs(rule: &Rule, jq: &Jq) -> std::result::Result<(), String> {
             body,
             each,
             expr,
+            ..
         })) => {
             let item = each.is_some();
             if let Some(each) = each {

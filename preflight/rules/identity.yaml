@@ -809,13 +809,16 @@ rules:
     what: |
       A Pod Identity cloud account serves EKS alone. `POST /v1/clouds/aws/properties/validate`
       refuses it for an AWS infrastructure cluster with `FeatureNotSupported`. The route also
-      refuses an SSH key pair that the account does not hold in the region, with
-      `AwsKeyPairNotFound`. The console calls the route; the create path of the API does not. The
-      world shows the same fact about the account in `.account.spec.credentialType`.
+      refuses an SSH key pair that the account does not hold in the region. Palette answers HTTP
+      500 with the code `AwsKeyPairNotFound`, and a live run shows it (#430). The check names that
+      code in `refusal_codes`, so the program reads the 500 as the answer of the route. The
+      console calls the route; the create path of the API does not. The world shows the same fact
+      about the account in `.account.spec.credentialType`.
     check:
       kind: palette
       method: POST
       path: /v1/clouds/aws/properties/validate
+      refusal_codes: [AwsKeyPairNotFound]
       body: '{cloudAccountUid: .entity.spec.cloudAccountUid, region: .entity.spec.cloudConfig.region, sshKeyName: (.entity.spec.cloudConfig.sshKeyName // "")}'
       expr: |
         if .response.ok then []

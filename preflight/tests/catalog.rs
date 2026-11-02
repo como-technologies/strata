@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use strata_preflight::catalog;
 use strata_preflight::fixture;
 use strata_preflight::jq::Jq;
-use strata_preflight::probe::{self, Call, FixtureBackend, Outcome, Verdict};
+use strata_preflight::probe::{self, Call, FixtureBackend, LiveBackend, Outcome, Verdict};
 use strata_preflight::rule::{Check, Evidence, EvidenceKind, ExecCheck, PaletteCheck, Rule};
 
 /// The request of the instance type route for the fixtures of the AWS, GCP, and Azure rules, as the
@@ -1170,6 +1170,53 @@ fn ssh_key_pair_leaves_aws_to_the_properties_route_that_iaas_pod_identity_calls(
             "Palette refuses the properties of the AWS cluster, the cloud account or the key pair: AwsKeyPairNotFound: Aws KeyPair 'strata-no-such-key' not found for region us-east-2; caused by: InvalidKeyPair.NotFound: The key pair 'strata-no-such-key' does not exist"
         ]
     );
+}
+
+/// The property route of AWS answers HTTP 500 for a key pair that the region lacks, and the live
+/// backend reads a 5xx as an error unless the check names its code. A run on AWS found that
+/// `iaas-pod-identity` was an `error` and never `failed` (#546). The rule names `AwsKeyPairNotFound`
+/// in `refusal_codes`, so the live backend and the fixture both read the 500 as the answer.
+#[test]
+fn iaas_pod_identity_fails_on_the_http_500_that_the_property_route_gives_for_a_key_pair() {
+    const ROUTE: &str = "POST /v1/clouds/aws/properties/validate";
+    const REFUSAL: &str = r#"{"code":"AwsKeyPairNotFound","message":"Aws KeyPair 'strata-no-such-key' not found for region us-east-2"}"#;
+    let catalog = catalog::builtin().unwrap();
+    let pod = catalog.rule("iaas-pod-identity").unwrap();
+    let Some(Check::Palette(PaletteCheck { refusal_codes, .. })) = &pod.check else {
+        panic!("iaas-pod-identity calls the property route");
+    };
+    assert_eq!(refusal_codes, &["AwsKeyPairNotFound"]);
+    let path = catalog::rules_dir().join("fixtures/aws/key-pair-not-found.json");
+    let (_, world) = FixtureBackend::split(fixture::load(&path).unwrap());
+    let jq = Jq::new();
+    let live = |rule: &Rule, status: u16, body: &str| {
+        let api = strata::api::MemoryApi::new().failing(ROUTE, status, body);
+        probe::run_check(rule, &world, &LiveBackend::new(Some(&api), false), &jq)
+    };
+    // the live backend: a 500 with the code is the answer, and the rule fails
+    let out = live(pod, 500, REFUSAL);
+    assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
+    assert_eq!(
+        out.messages,
+        [
+            "Palette refuses the properties of the AWS cluster, the cloud account or the key pair: AwsKeyPairNotFound: Aws KeyPair 'strata-no-such-key' not found for region us-east-2"
+        ]
+    );
+    // a 500 with another code is an error of the check, and not a catch
+    let out = live(pod, 500, r#"{"code":"InternalError","message":"boom"}"#);
+    assert_eq!(out.verdict, Verdict::Error, "{:?}", out.messages);
+    // the rule without the key reads the 500 as an error: the fault that the run found
+    let mut bare = pod.clone();
+    let Some(Check::Palette(check)) = &mut bare.check else {
+        unreachable!("checked above");
+    };
+    check.refusal_codes.clear();
+    let out = live(&bare, 500, REFUSAL);
+    assert_eq!(out.verdict, Verdict::Error, "{:?}", out.messages);
+    assert!(out.messages[0].contains("HTTP 500"), "{:?}", out.messages);
+    // the fixture keeps the same rule, so it cannot show a catch that a live run does not give
+    let out = outcome_of(&bare, fixture::load(&path).unwrap(), &jq);
+    assert_eq!(out.verdict, Verdict::Error, "{:?}", out.messages);
 }
 
 /// `ssh-key-pair` applies where `eks-public-subnet-mapping` does not. The property route of EKS

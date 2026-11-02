@@ -146,6 +146,45 @@ fn a_check_of_palette_with_each_reads_item_and_a_check_without_it_refuses_item()
 }
 
 #[test]
+fn a_check_of_palette_names_the_codes_of_a_5xx_that_it_reads_as_an_answer() {
+    let palette = |extra: &str| {
+        GOOD.replace("tier: static", "tier: palette").replace(
+                "check:\n      kind: static\n      expr: '[.entity.spec.machinepoolconfig[] | select(.poolConfig.size % 3 != 0) | .poolConfig.name]'",
+                &format!("check:\n      kind: palette\n      path: /v1/x\n{extra}      expr: 'true'"),
+            )
+    };
+    let refusal_codes = |text: &str| match Catalog::parse_section(text, Path::new("x.yaml"))
+        .unwrap()
+        .rules[0]
+        .check
+        .clone()
+    {
+        Some(Check::Palette(PaletteCheck { refusal_codes, .. })) => refusal_codes,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(
+        refusal_codes(&palette(
+            "      refusal_codes: [AwsKeyPairNotFound, Other]\n"
+        )),
+        ["AwsKeyPairNotFound", "Other"]
+    );
+    assert!(
+        refusal_codes(&palette("")).is_empty(),
+        "each 5xx is an error"
+    );
+    let err = Catalog::parse_section(
+        &palette("      refusal_codes: [AwsKeyPairNotFound, ' ']\n"),
+        Path::new("x.yaml"),
+    )
+    .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("`refusal_codes` has an empty code"),
+        "{err}"
+    );
+}
+
+#[test]
 fn a_program_that_runs_with_no_item_cannot_read_item_in_any_place() {
     let each = "      each: '[.entity.spec.profiles[]]'\n";
     let palette = |extra: &str, expr: &str| {
