@@ -18,11 +18,12 @@ pub(crate) mod cloud;
 mod model;
 mod sets;
 mod sources;
+pub(crate) mod subjects;
 #[cfg(test)]
 mod tests;
 
 pub use check::route_matches;
-pub use model::{Fact, Kind, Scope};
+pub use model::{Fact, Kind, Scope, expand, fill, names};
 use sources::Sources;
 
 /// Every fault of the list in the repository at `repo`, as messages.
@@ -32,6 +33,7 @@ use sources::Sources;
 pub fn check(repo: &Path, served: Option<&BTreeSet<String>>) -> Vec<String> {
     let (sources, mut bad) = Sources::read(repo, served.cloned());
     bad.extend(check::check(&sources));
+    bad.extend(subjects::check_table(&sources.facts));
     bad
 }
 

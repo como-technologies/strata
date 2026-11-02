@@ -12,7 +12,7 @@ use super::super::model::{Fact, PaletteRoute};
 use super::super::sources::Sources;
 use super::{
     Answer, CloudRule, CloudSources, answers_of, command_words, documents, literals, read_code,
-    read_rules,
+    read_rules, routes_beside,
 };
 
 /// A fact of a call that a rule sends, a table of zone ids, and a call that the lab cannot send.
@@ -937,33 +937,68 @@ fn the_catalog_holds_a_text_that_names_a_cloud_fact_in_a_cloud_tier_rule_alone()
     );
 }
 
+/// A fact of the kind request that states the route of the instance types.
+fn instance_types_request() -> Fact {
+    crate::facts::from_text(
+        "- id: validate-instance-types
+  kind: request
+  request: GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cloudAccountUid={cloudAccountUid}
+  reads:
+    fields: ['instanceTypes[].type']
+  pages: [reference/palette-api.md]
+  code: [src/lib.rs]
+",
+    )
+    .remove(0)
+}
+
+/// The route of the first cloud fact of the world: the fact that states it, or a route as text.
+fn route_of(fact: Option<&str>, route: Option<&str>, lacks: &[&str]) -> PaletteRoute {
+    PaletteRoute {
+        fact: fact.map(str::to_string),
+        route: route.map(str::to_string),
+        lacks: lacks.iter().map(|f| (*f).to_string()).collect(),
+    }
+}
+
 #[test]
 fn a_route_of_palette_beside_a_call_names_the_fields_that_it_lacks() {
     let mut sources = world();
-    sources.facts[0].palette = Some(PaletteRoute {
-        route: "GET /v1/clouds/aws/regions/{region}/instancetypes".to_string(),
-        lacks: vec!["Quota.Value".to_string()],
-    });
-    assert_eq!(faults_of(&sources), Vec::<String>::new());
+    sources.facts[0].palette = Some(route_of(
+        Some("validate-instance-types"),
+        None,
+        &["Quota.Value"],
+    ));
+    sources.facts.push(instance_types_request());
+    assert_eq!(routes_beside(&sources), Vec::<String>::new());
+    // a route that no fact states is written out
+    sources.facts[0].palette = Some(route_of(
+        None,
+        Some("GET /v1/clouds/aws/regions/{region}/availabilityzones"),
+        &["Quota.Value"],
+    ));
+    assert_eq!(routes_beside(&sources), Vec::<String>::new());
 }
 
 #[test]
 fn a_route_of_palette_that_lacks_no_field_would_answer_the_whole_call() {
     let mut sources = world();
-    sources.facts[0].palette = Some(PaletteRoute {
-        route: "GET /v1/clouds/aws/regions/{region}/instancetypes".to_string(),
-        lacks: vec![],
-    });
+    sources.facts[0].palette = Some(route_of(
+        None,
+        Some("GET /v1/clouds/aws/regions/{region}/availabilityzones"),
+        &[],
+    ));
     assert_one_fault(&sources, "names no field that it lacks");
 }
 
 #[test]
 fn a_route_of_palette_cannot_lack_a_field_that_the_call_does_not_read() {
     let mut sources = world();
-    sources.facts[0].palette = Some(PaletteRoute {
-        route: "GET /v1/clouds/aws/regions/{region}/instancetypes".to_string(),
-        lacks: vec!["Quota.Unit".to_string()],
-    });
+    sources.facts[0].palette = Some(route_of(
+        None,
+        Some("GET /v1/clouds/aws/regions/{region}/availabilityzones"),
+        &["Quota.Unit"],
+    ));
     assert_one_fault(
         &sources,
         "the route lacks `Quota.Unit`, and the fact does not read it",
@@ -973,17 +1008,57 @@ fn a_route_of_palette_cannot_lack_a_field_that_the_call_does_not_read() {
 #[test]
 fn a_route_of_palette_starts_with_a_method_and_a_table_has_no_route() {
     let mut sources = world();
-    sources.facts[0].palette = Some(PaletteRoute {
-        route: "/v1/clouds/aws/regions/{region}/instancetypes".to_string(),
-        lacks: vec!["Quota.Value".to_string()],
-    });
+    sources.facts[0].palette = Some(route_of(
+        None,
+        Some("/v1/clouds/aws/regions/{region}/availabilityzones"),
+        &["Quota.Value"],
+    ));
     assert_one_fault(&sources, "must start with a method");
     let mut sources = world();
-    sources.facts[2].palette = Some(PaletteRoute {
-        route: "GET /v1/clouds/aws/regions/{region}/availabilityzones".to_string(),
-        lacks: vec!["AvailabilityZones[].ZoneId".to_string()],
-    });
+    sources.facts[2].palette = Some(route_of(
+        None,
+        Some("GET /v1/clouds/aws/regions/{region}/availabilityzones"),
+        &["AvailabilityZones[].ZoneId"],
+    ));
     assert_one_fault(&sources, "a table has no route of Palette");
+}
+
+#[test]
+fn a_route_that_a_request_fact_states_is_named_and_not_written_again() {
+    let mut sources = world();
+    sources.facts.push(instance_types_request());
+    // the route of one cloud of the alternatives, with a query that differs
+    sources.facts[0].palette = Some(route_of(
+        None,
+        Some("GET /v1/clouds/aws/regions/{region}/instancetypes?cpuGtEq=0&memoryGtEq=0"),
+        &["Quota.Value"],
+    ));
+    let bad = routes_beside(&sources);
+    assert_eq!(bad.len(), 1, "{bad:?}");
+    assert!(
+        bad[0].contains("the fact `validate-instance-types` states the route"),
+        "{bad:?}"
+    );
+}
+
+#[test]
+fn the_fact_that_a_route_names_is_a_request_fact_with_a_get_request() {
+    let mut sources = world();
+    sources.facts[0].palette = Some(route_of(Some("missing"), None, &["Quota.Value"]));
+    let bad = routes_beside(&sources);
+    assert!(bad[0].contains("names the fact `missing`"), "{bad:?}");
+    // a cloud fact is no request fact
+    sources.facts[0].palette = Some(route_of(Some("azure-vm-usage"), None, &["Quota.Value"]));
+    assert!(routes_beside(&sources)[0].contains("names the fact `azure-vm-usage`"));
+    // a route names a fact or states a route
+    sources.facts[0].palette = Some(route_of(None, None, &["Quota.Value"]));
+    assert!(routes_beside(&sources)[0].contains("names a fact or states a route"));
+    sources.facts[0].palette = Some(route_of(
+        Some("validate-instance-types"),
+        Some("GET /v1/clouds/aws/regions/{region}/availabilityzones"),
+        &["Quota.Value"],
+    ));
+    assert!(routes_beside(&sources)[0].contains("names a fact or states a route"));
 }
 
 #[test]

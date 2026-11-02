@@ -10,11 +10,12 @@ use strata::api::codes::PROJECT_SCOPE_CODE;
 use strata::api::{HttpApi, MemoryApi, RawCluster, cloud_config_path};
 use strata::config::Config;
 
-use super::document::{Contract, DifferenceKind, Outcome, Unknown};
+use super::document::{Contract, DifferenceKind, Entry, Outcome, Unknown};
 use super::shape::{JsonType, Path as Field};
 use super::stand_in::StandIn;
 use super::{releases, run, subject};
-use crate::facts::{Fact, Kind, Scope};
+use crate::facts::subjects::{Origin, Read, SOURCES, floor, request_of, unsourced};
+use crate::facts::{Fact, Kind, Scope, expand};
 use crate::palette::serve_on;
 use crate::tenant::{TENANT, Tenant};
 
@@ -433,10 +434,6 @@ fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() 
             "app-deployment-document",
             "the fact has no listing of the deployments",
         ),
-        (
-            "validate-instance-types",
-            "the region and the account come from the lab",
-        ),
     ];
     let facts = real_facts();
     let mut lacking = Vec::new();
@@ -444,8 +441,13 @@ fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() 
         let Some(template) = fact.get_path() else {
             continue;
         };
+        // a request with alternatives is checked when one of its choices has a source for each
+        // placeholder: the choices of the other clouds skip with their reason
+        let sourced = expand(template)
+            .iter()
+            .any(|(_, text)| unsourced(text).is_empty());
         let named = NO_SUBJECT.iter().any(|(id, _)| *id == fact.id);
-        if !named && !fact.stand_in.is_empty() && !subject::unsourced(template).is_empty() {
+        if !named && !fact.stand_in.is_empty() && !sourced {
             lacking.push(fact.id.clone());
         }
     }
@@ -465,16 +467,25 @@ fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() 
 #[test]
 fn each_source_names_a_get_request_of_the_list_whose_own_placeholders_have_a_source() {
     let facts = real_facts();
-    for source in subject::SOURCES {
-        let request = subject::request_of(&facts, source.fact)
-            .unwrap_or_else(|| panic!("`{}` is no GET request of the list", source.fact));
+    for source in SOURCES {
+        let Origin::Fact { fact, read } = &source.origin else {
+            continue;
+        };
+        let request = request_of(&facts, fact)
+            .unwrap_or_else(|| panic!("`{fact}` is no GET request of the list"));
         assert!(
-            subject::unsourced(request).is_empty(),
-            "the request of `{}` has a placeholder with no source",
-            source.fact
+            unsourced(request).is_empty(),
+            "the request of `{fact}` has a placeholder with no source"
         );
-        if let subject::Read::Pointer(pointer) = source.read {
-            assert!(pointer.starts_with('/'), "{pointer} is no pointer");
+        match read {
+            Read::Pointer(pointer) => assert!(pointer.starts_with('/'), "{pointer} is no pointer"),
+            Read::Each { list, value } => {
+                assert!(
+                    list.starts_with('/') && value.starts_with('/'),
+                    "{list} {value}"
+                );
+            }
+            Read::CloudType => {}
         }
     }
 }
@@ -1184,7 +1195,7 @@ fn the_subject_of_the_security_groups_is_the_first_account_region_and_vpc() {
         );
     let probe = subject::Probe::new(&api, &api);
     let facts = real_facts();
-    let template = subject::request_of(&facts, "validate-security-groups").unwrap();
+    let template = request_of(&facts, "validate-security-groups").unwrap();
     assert_eq!(
         subject::find(&probe, &facts, template),
         subject::Subject::Path(
@@ -1211,7 +1222,7 @@ fn a_region_with_no_vpc_has_no_subject_for_the_security_groups_and_the_reason_sa
         );
     let probe = subject::Probe::new(&api, &api);
     let facts = real_facts();
-    let template = subject::request_of(&facts, "validate-security-groups").unwrap();
+    let template = request_of(&facts, "validate-security-groups").unwrap();
     match subject::find(&probe, &facts, template) {
         subject::Subject::Missing(why) => {
             assert!(why.contains("{vpcId}"), "{why}");
@@ -1270,7 +1281,7 @@ fn a_tenant_with_no_aws_account_has_no_subject_for_the_key_pairs_and_the_reason_
     let api = MemoryApi::new().with("/v1/cloudaccounts/aws", json!({"items": []}));
     let probe = subject::Probe::new(&api, &api);
     let facts = real_facts();
-    let template = subject::request_of(&facts, "validate-key-pairs").unwrap();
+    let template = request_of(&facts, "validate-key-pairs").unwrap();
     match subject::find(&probe, &facts, template) {
         subject::Subject::Missing(why) => {
             assert!(why.contains("{cloudAccountUid}"), "{why}");
@@ -2018,5 +2029,299 @@ fn a_profile_type_and_a_provider_that_the_fact_names_are_no_unknown_values() {
         entry.unknown_values.is_empty(),
         "{:?}",
         entry.unknown_values
+    );
+}
+
+// ---- the regions, the packs, and the alternatives of a request ------------------------------
+
+/// A tenant with one AWS account and the regions `regions`, with the VPCs of each region.
+fn regions_with(regions: &[(&str, Value)]) -> MemoryApi {
+    let names: Vec<Value> = regions
+        .iter()
+        .map(|(name, _)| json!({"name": name}))
+        .collect();
+    regions.iter().fold(
+        MemoryApi::new()
+            .with(
+                "/v1/cloudaccounts/aws",
+                json!({"items": [{"metadata": {"uid": "acc1"}}]}),
+            )
+            .with(
+                "/v1/clouds/aws/regions?cloudAccountUid=acc1",
+                json!({"regions": names}),
+            ),
+        |api, (name, vpcs)| {
+            api.with(
+                format!("/v1/clouds/aws/regions/{name}/vpcs?cloudAccountUid=acc1"),
+                vpcs.clone(),
+            )
+        },
+    )
+}
+
+#[test]
+fn the_security_groups_take_the_first_region_that_holds_a_vpc() {
+    let api = regions_with(&[
+        ("ap-southeast-1", json!({"vpcs": []})),
+        (
+            "us-east-2",
+            json!({"vpcs": [{"vpcId": "vpc-7"}, {"vpcId": "vpc-8"}]}),
+        ),
+        ("us-west-2", json!({"vpcs": [{"vpcId": "vpc-9"}]})),
+    ]);
+    let probe = subject::Probe::new(&api, &api);
+    let facts = real_facts();
+    let template = request_of(&facts, "validate-security-groups").unwrap();
+    // the region of the groups is the region of the VPC, and not the first region of the account
+    assert_eq!(
+        subject::find(&probe, &facts, template),
+        subject::Subject::Path(
+            "/v1/clouds/aws/securitygroups?cloudAccountUid=acc1&region=us-east-2&vpcId=vpc-7"
+                .to_string()
+        )
+    );
+    // the regions after the first that holds a VPC stay unasked
+    assert_eq!(
+        api.calls("/v1/clouds/aws/regions/us-west-2/vpcs?cloudAccountUid=acc1"),
+        0
+    );
+}
+
+#[test]
+fn the_reason_says_that_the_run_tried_each_region_when_no_region_holds_a_vpc() {
+    let api = regions_with(&[
+        ("us-east-2", json!({"vpcs": []})),
+        ("us-west-2", json!({"vpcs": []})),
+    ]);
+    let probe = subject::Probe::new(&api, &api);
+    let facts = real_facts();
+    let template = request_of(&facts, "validate-security-groups").unwrap();
+    match subject::find(&probe, &facts, template) {
+        subject::Subject::Missing(why) => {
+            assert!(why.contains("{vpcId}"), "{why}");
+            assert!(why.contains("us-east-2/vpcs"), "{why}");
+            assert!(
+                why.contains("the run tried 2 values for `{region}`"),
+                "{why}"
+            );
+        }
+        other => panic!("expected no subject, got {other:?}"),
+    }
+    assert_eq!(
+        api.calls("/v1/clouds/aws/regions/us-west-2/vpcs?cloudAccountUid=acc1"),
+        1
+    );
+}
+
+#[test]
+fn a_failed_request_for_the_vpcs_of_a_region_stops_the_search() {
+    let api = regions_with(&[
+        ("us-east-2", json!({"vpcs": []})),
+        ("us-west-2", json!({"vpcs": [{"vpcId": "vpc-9"}]})),
+    ])
+    .failing(
+        "/v1/clouds/aws/regions/us-east-2/vpcs?cloudAccountUid=acc1",
+        500,
+        "{}",
+    );
+    let probe = subject::Probe::new(&api, &api);
+    let facts = real_facts();
+    let template = request_of(&facts, "validate-security-groups").unwrap();
+    match subject::find(&probe, &facts, template) {
+        subject::Subject::Failed(failure) => assert_eq!(failure.status, Some(500)),
+        other => panic!("expected a failure, got {other:?}"),
+    }
+}
+
+#[test]
+fn the_registry_uid_is_the_subject_of_a_pack_in_a_registry_and_never_of_a_pack() {
+    let api = MemoryApi::new().with(
+        "/v1/packs",
+        json!({"items": [{"spec": {"name": "aws-ebs", "registryUid": "reg1"}}]}),
+    );
+    let probe = subject::Probe::new(&api, &api);
+    let facts = real_facts();
+    assert_eq!(
+        subject::find(&probe, &facts, "/v1/packs/{name}/registries/{uid}"),
+        subject::Subject::Path("/v1/packs/aws-ebs/registries/reg1".to_string())
+    );
+    // `{uid}` names a pack in this request, and the listing holds no uid of a pack
+    match subject::find(&probe, &facts, "/v1/packs/{uid}") {
+        subject::Subject::Missing(why) => {
+            assert_eq!(why, "the run has no way to find a value for `{uid}`");
+        }
+        other => panic!("expected no subject, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_pair_of_the_query_that_the_route_does_not_take_goes_out_of_the_request() {
+    let api = regions_with(&[("us-east-2", json!({"vpcs": []}))]);
+    let probe = subject::Probe::new(&api, &api);
+    let facts = real_facts();
+    let found = subject::find(
+        &probe,
+        &facts,
+        "/v1/clouds/aws/regions/{region}/instancetypes?cloudAccountUid={cloudAccountUid}&subscriptionId={subscriptionId}&cpuGtEq=0&memoryGtEq=0",
+    );
+    assert_eq!(
+        found,
+        subject::Subject::Path(
+            "/v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc1&cpuGtEq=0&memoryGtEq=0"
+                .to_string()
+        )
+    );
+}
+
+/// The documents behind `validate-instance-types` for AWS: the account, the regions, and the types
+/// of the first region. The stand-in serves the types only with the query that the rule sends.
+fn instance_type_documents() -> Vec<(&'static str, Value)> {
+    let mut docs: Vec<_> = aws_list_documents().into_iter().take(2).collect();
+    docs.push((
+        "v1/clouds/aws/regions/us-east-2/instancetypes@cloudAccountUid=acc1&cpuGtEq=0&memoryGtEq=0",
+        json!({"instanceTypes": [
+            {"type": "m5.large", "cpu": 2, "memory": 8, "nonSupportedZones": null}]}),
+    ));
+    docs
+}
+
+#[test]
+fn the_instance_types_are_asked_for_the_clouds_of_the_lab_and_the_other_clouds_skip_with_a_reason()
+{
+    let docs = instance_type_documents();
+    let (_root, stand_in) = stand_in(&docs);
+    let (_dir, api) = served(&docs);
+    let contract = contract_of(&real_facts(), &stand_in, &api);
+    let entry = contract
+        .facts
+        .iter()
+        .find(|e| e.id == "validate-instance-types")
+        .unwrap();
+    // the stand-in serves the route only with the query of the rule for AWS, so `same` shows that
+    // the request of the choice `aws` went out without the subscription
+    assert_eq!(entry.outcome, Outcome::Same, "{entry:?}");
+    let reason = entry.reason.as_deref().unwrap_or_default();
+    for cloud in ["gcp", "azure"] {
+        assert!(
+            reason.contains(&format!("{cloud}: the run has no way to find a value")),
+            "{reason}"
+        );
+    }
+    assert!(!reason.contains("aws:"), "{reason}");
+}
+
+/// An entry of a fact with the outcome `outcome`, the reason, and the difference at `field`.
+fn entry_with(outcome: Outcome, reason: Option<&str>, field: Option<&str>) -> Entry {
+    let mut entry = super::entry_of(&facts()[0], outcome, reason.map(str::to_string), Vec::new());
+    if let Some(field) = field {
+        entry.differences.push(super::Difference {
+            kind: DifferenceKind::Type,
+            path: field.to_string(),
+            expected: vec!["string".to_string()],
+            found: vec!["number".to_string()],
+        });
+    }
+    entry
+}
+
+#[test]
+fn a_fact_with_one_request_keeps_its_entry_and_with_more_it_takes_the_outcome_that_counts_most() {
+    let one = entry_with(Outcome::Skipped, Some("why"), None);
+    assert_eq!(
+        super::merge(vec![(String::new(), one)]).unwrap().reason,
+        Some("why".to_string())
+    );
+    let skipped = |why| entry_with(Outcome::Skipped, Some(why), None);
+    let same = entry_with(Outcome::Same, None, None);
+    let differs = entry_with(Outcome::Differs, None, Some("status"));
+    let error = entry_with(Outcome::Error, Some("broke"), None);
+    let merged = |parts: Vec<Entry>| {
+        let labels = ["aws", "gcp", "azure"];
+        super::merge(
+            parts
+                .into_iter()
+                .enumerate()
+                .map(|(i, e)| (labels[i].to_string(), e))
+                .collect(),
+        )
+        .unwrap()
+    };
+    // a request that is the same counts more than a request that the run skipped
+    let m = merged(vec![
+        same.clone(),
+        skipped("no account"),
+        skipped("no region"),
+    ]);
+    assert_eq!(m.outcome, Outcome::Same);
+    assert_eq!(
+        m.reason.as_deref(),
+        Some("gcp: no account; azure: no region")
+    );
+    // all skipped: the reasons say why, by cloud
+    let m = merged(vec![skipped("a"), skipped("b")]);
+    assert_eq!(m.outcome, Outcome::Skipped);
+    assert_eq!(m.reason.as_deref(), Some("aws: a; gcp: b"));
+    // an error counts more than a request that is the same, and a difference counts most
+    assert_eq!(
+        merged(vec![same.clone(), error.clone()]).outcome,
+        Outcome::Error
+    );
+    let m = merged(vec![same.clone(), error, differs.clone()]);
+    assert_eq!(m.outcome, Outcome::Differs);
+    assert_eq!(m.reason, None);
+    // a difference of a field names its cloud; a status names its request already
+    let m = merged(vec![
+        same,
+        entry_with(Outcome::Differs, None, Some("instanceTypes[].cpu")),
+        differs,
+    ]);
+    let paths: Vec<&str> = m.differences.iter().map(|d| d.path.as_str()).collect();
+    assert_eq!(paths, ["gcp: instanceTypes[].cpu", "azure: status"]);
+}
+
+// ---- the floor of a window with a cluster ---------------------------------------------------
+
+#[test]
+fn a_window_with_a_cluster_turns_a_skipped_fact_of_a_cluster_into_an_error() {
+    let (_root, stand_in) = stand_in(&documents("Running"));
+    let empty = MemoryApi::new().with("/v1/dashboard/spectroclusters/meta", json!([]));
+    let mut contract = contract(&stand_in, &empty);
+    // the weekly run: a tenant with no cluster skips the facts of a cluster, and the exit code is 0
+    assert_eq!(outcome(&contract, "cluster-document"), Outcome::Skipped);
+    assert_eq!(outcome(&contract, "cloud-config"), Outcome::Skipped);
+    assert_eq!(contract.exit_code(), 0);
+    contract.hold_floor(&floor(&facts()));
+    for id in ["cluster-document", "cloud-config"] {
+        let entry = contract.facts.iter().find(|e| e.id == id).unwrap();
+        assert_eq!(entry.outcome, Outcome::Error, "{id}");
+        let reason = entry.reason.as_deref().unwrap();
+        assert!(reason.starts_with("the window holds a cluster"), "{reason}");
+        assert!(reason.contains("the tenant has no object"), "{reason}");
+    }
+    assert_eq!(contract.summary.error, 2);
+    assert_eq!(contract.exit_code(), 2);
+    // a fact that takes no subject from a cluster is not in the floor
+    assert_eq!(outcome(&contract, "edge-host-document"), Outcome::Skipped);
+}
+
+#[test]
+fn the_floor_changes_nothing_when_the_run_checked_each_fact_of_the_cluster() {
+    let (_root, stand_in) = stand_in(&documents("Running"));
+    let mut contract = contract(&stand_in, &memory(&documents("Running")));
+    let before = serde_json::to_string(&contract).unwrap();
+    contract.hold_floor(&floor(&facts()));
+    assert_eq!(serde_json::to_string(&contract).unwrap(), before);
+    assert_eq!(outcome(&contract, "cluster-document"), Outcome::Same);
+}
+
+#[test]
+fn the_option_with_cluster_takes_no_value() {
+    use super::command::Options;
+    assert!(!Options::parse(&[]).unwrap().with_cluster);
+    assert!(Options::parse(&["--with-cluster"]).unwrap().with_cluster);
+    assert!(
+        Options::parse(&["--with-cluster", "--no-cloud"])
+            .unwrap()
+            .no_cloud
     );
 }

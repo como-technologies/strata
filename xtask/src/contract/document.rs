@@ -1,5 +1,7 @@
 //! The document that the contract run writes: `strata-contract/1`.
 
+use std::collections::BTreeSet;
+
 use serde::Serialize;
 
 use crate::facts::Kind;
@@ -176,6 +178,23 @@ impl Contract {
     /// Add `entries` after the entries that the document holds, and count them in the summary.
     pub fn add(&mut self, entries: Vec<Entry>) {
         self.facts.extend(entries);
+        self.summary = Summary::of(&self.facts);
+    }
+
+    /// Turn each skipped entry of `floor` into an error, and count the entries again.
+    ///
+    /// `floor` holds the ids of the facts that a window with a cluster must check. The run skipped
+    /// such a fact, so the cover fell: the entry says so, and the exit code is 2.
+    pub fn hold_floor(&mut self, floor: &BTreeSet<&str>) {
+        for entry in &mut self.facts {
+            if entry.outcome == Outcome::Skipped && floor.contains(entry.id.as_str()) {
+                let why = entry.reason.take().unwrap_or_default();
+                entry.outcome = Outcome::Error;
+                entry.reason = Some(format!(
+                    "the window holds a cluster, so the run must check this fact, and it skipped it: {why}"
+                ));
+            }
+        }
         self.summary = Summary::of(&self.facts);
     }
 

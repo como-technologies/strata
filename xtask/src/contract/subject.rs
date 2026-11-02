@@ -1,176 +1,22 @@
 //! The subject of a request: the object of the tenant that the run asks about.
 //!
 //! A request of a fact has a placeholder for the object, such as `{uid}` in
-//! `GET /v1/spectroclusters/{uid}`, or `{cloudAccountUid}` in the query of
-//! `GET /v1/clouds/aws/regions?cloudAccountUid={cloudAccountUid}`. The tenant of the run is not the
-//! tenant of the stand-in. So the run finds an object in the tenant: the first entry of the answer
-//! of another fact. That answer is the listing of the objects, or the document of an object that
-//! holds the value.
+//! `GET /v1/spectroclusters/{uid}`. The tenant of the run is not the tenant of the stand-in. So the
+//! run finds an object in the tenant: the first entry of the answer of another fact. The table of
+//! [`crate::facts::subjects`] says which fact gives which value. This module sends the requests
+//! that find the values, and keeps each answer.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use serde_json::Value;
-use strata::api::{PaletteApi, RawCluster};
+use strata::api::PaletteApi;
 use strata::error::Error;
-use strata::json::str_at;
 use strata::model::validation::PaletteRefusal;
 
-use crate::facts::{Fact, Scope};
-
-/// How the run reads the value of a placeholder from the answer of a fact.
-pub(super) enum Read {
-    /// The text at a JSON pointer. The first entry of a list is the subject.
-    Pointer(&'static str),
-    /// The cloud type of a cluster document. Strata reads it with one rule, so the run asks the
-    /// route of the cloud config as strata does.
-    CloudType,
-}
-
-impl Read {
-    /// The value in `document`, or empty when the document holds none.
-    fn value<'a>(&self, document: &'a Value) -> &'a str {
-        match self {
-            Read::Pointer(pointer) => str_at(document, pointer),
-            Read::CloudType => RawCluster::cloud_type(document),
-        }
-    }
-
-    /// What the document lacks when [`Read::value`] gives an empty text.
-    fn lacks(&self) -> String {
-        match self {
-            Read::Pointer(pointer) => format!("nothing at {pointer}"),
-            Read::CloudType => "no cloud type".to_string(),
-        }
-    }
-}
-
-/// Where the value of a placeholder comes from.
-pub(super) struct Source {
-    /// The start of the path that has the placeholder, before the query. With `param`, it names the
-    /// placeholder.
-    pub(super) prefix: &'static str,
-    /// The name of the placeholder.
-    pub(super) param: &'static str,
-    /// The id of the fact whose answer holds the value.
-    pub(super) fact: &'static str,
-    /// How to read the value from that answer.
-    pub(super) read: Read,
-}
-
-/// The shortest way to the subject of each request that the run sends. The first entry of a
-/// listing is the subject, so the placeholders of one request come from one object.
-pub(super) const SOURCES: &[Source] = &[
-    Source {
-        prefix: "/v1/spectroclusters/",
-        param: "uid",
-        fact: "cluster-listing",
-        read: Read::Pointer("/0/metadata/uid"),
-    },
-    Source {
-        prefix: "/v1/notifications/spectrocluster/",
-        param: "uid",
-        fact: "cluster-listing",
-        read: Read::Pointer("/0/metadata/uid"),
-    },
-    Source {
-        prefix: "/v1/cloudconfigs/",
-        param: "cloudType",
-        fact: "cluster-document",
-        read: Read::CloudType,
-    },
-    Source {
-        prefix: "/v1/cloudconfigs/",
-        param: "configUid",
-        fact: "cluster-document",
-        read: Read::Pointer("/spec/cloudConfigRef/uid"),
-    },
-    Source {
-        prefix: "/v1/filters/tag/",
-        param: "uid",
-        fact: "tag-filter-listing",
-        read: Read::Pointer("/items/0/metadata/uid"),
-    },
-    // the three AWS list routes ask for the account, the region, and the VPC. They take the first
-    // account, the first region of that account, and the first VPC of that region.
-    Source {
-        prefix: "/v1/clouds/aws/regions",
-        param: "cloudAccountUid",
-        fact: "cloud-account-listing",
-        read: Read::Pointer("/items/0/metadata/uid"),
-    },
-    Source {
-        prefix: "/v1/clouds/aws/regions/",
-        param: "region",
-        fact: "validate-aws-regions",
-        read: Read::Pointer("/regions/0/name"),
-    },
-    Source {
-        prefix: "/v1/clouds/aws/securitygroups",
-        param: "cloudAccountUid",
-        fact: "cloud-account-listing",
-        read: Read::Pointer("/items/0/metadata/uid"),
-    },
-    Source {
-        prefix: "/v1/clouds/aws/securitygroups",
-        param: "region",
-        fact: "validate-aws-regions",
-        read: Read::Pointer("/regions/0/name"),
-    },
-    Source {
-        prefix: "/v1/clouds/aws/securitygroups",
-        param: "vpcId",
-        fact: "validate-vpcs",
-        read: Read::Pointer("/vpcs/0/vpcId"),
-    },
-    Source {
-        prefix: "/v1/clustergroups/",
-        param: "uid",
-        fact: "cluster-group-listing",
-        read: Read::Pointer("/items/0/uid"),
-    },
-    Source {
-        prefix: "/v1/appProfiles/",
-        param: "uid",
-        fact: "app-profile-listing",
-        read: Read::Pointer("/appProfiles/0/metadata/uid"),
-    },
-    Source {
-        prefix: "/v1/appProfiles/",
-        param: "tierUid",
-        fact: "app-profile-tiers",
-        read: Read::Pointer("/spec/appTiers/0/metadata/uid"),
-    },
-    Source {
-        prefix: "/v1/appProfiles/",
-        param: "manifestUid",
-        fact: "app-profile-tiers",
-        read: Read::Pointer("/spec/appTiers/0/spec/manifests/0/uid"),
-    },
-    Source {
-        prefix: "/v1/packs/",
-        param: "name",
-        fact: "pack-listing",
-        read: Read::Pointer("/items/0/spec/name"),
-    },
-    Source {
-        prefix: "/v1/packs/",
-        param: "uid",
-        fact: "pack-listing",
-        read: Read::Pointer("/items/0/spec/registryUid"),
-    },
-    Source {
-        prefix: "/v1/clusterprofiles/",
-        param: "uid",
-        fact: "profile-listing",
-        read: Read::Pointer("/items/0/metadata/uid"),
-    },
-];
-
-/// The most facts that one subject chains. The security groups take the VPC, which takes the
-/// region, which takes the account.
-const DEPTH: usize = 3;
+use crate::facts::subjects::{DEPTH, Origin, request_of, source, unsourced};
+use crate::facts::{Fact, Scope, fill, names};
 
 /// Why a request failed.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -260,41 +106,42 @@ pub enum Subject {
     Failed(Failure),
 }
 
+/// The value of each placeholder of one request, by name. A name with no value is a pair that the
+/// route does not take, and the run leaves it out of the query.
+type Bindings = BTreeMap<String, Option<String>>;
+
 /// The path of `template` for a subject of the tenant: a value for each placeholder.
+///
+/// A placeholder with more than one value, such as the region, takes the first value that lets the
+/// rest of the request find its values. A request that lists the VPCs of that region needs a VPC,
+/// so the run tries the next region when one holds none.
 pub fn find<A: PaletteApi>(probe: &Probe<A>, facts: &[Fact], template: &str) -> Subject {
-    fill(probe, facts, template, 0)
+    fill_template(probe, facts, template, &Bindings::new(), 0)
 }
 
-/// The placeholders of `template` that no [`Source`] gives a value for.
-pub(super) fn unsourced(template: &str) -> Vec<String> {
-    placeholders(template)
-        .filter(|param| source(template, param).is_none())
-        .map(str::to_string)
-        .collect()
+/// The path of `template` when `bound` already holds the values of some placeholders.
+fn fill_template<A: PaletteApi>(
+    probe: &Probe<A>,
+    facts: &[Fact],
+    template: &str,
+    bound: &Bindings,
+    depth: usize,
+) -> Subject {
+    // no request goes out for a path that has a placeholder with no source
+    if let Some(param) = unsourced(template).first() {
+        return Subject::Missing(no_source(param));
+    }
+    let params = names(template);
+    let mut bindings = bound.clone();
+    match bind(probe, facts, template, &params, &mut bindings, depth) {
+        Ok(()) => Subject::Path(render(template, &bindings)),
+        Err(subject) => subject,
+    }
 }
 
-/// Why the run has no subject for a placeholder that no [`Source`] gives a value for.
+/// Why the run has no subject for a placeholder that no source gives a value for.
 fn no_source(param: &str) -> String {
     format!("the run has no way to find a value for `{{{param}}}`")
-}
-
-/// The names of the placeholders of `template`, in the path and in the query.
-fn placeholders(template: &str) -> impl Iterator<Item = &str> {
-    template
-        .split('{')
-        .skip(1)
-        .filter_map(|rest| Some(rest.split_once('}')?.0))
-}
-
-fn source(template: &str, param: &str) -> Option<&'static Source> {
-    SOURCES
-        .iter()
-        .find(|s| template.starts_with(s.prefix) && s.param == param)
-}
-
-/// The fact with the id `id`, when it has a request of the method GET.
-pub(super) fn request_of<'a>(facts: &'a [Fact], id: &str) -> Option<&'a str> {
-    facts.iter().find(|f| f.id == id)?.get_path()
 }
 
 /// The scope of the fact with the id `id`. A list that has no such fact gives the scope of the
@@ -306,53 +153,102 @@ fn scope_of(facts: &[Fact], id: &str) -> Scope {
         .map_or_else(Scope::default, |f| f.scope)
 }
 
-fn fill<A: PaletteApi>(probe: &Probe<A>, facts: &[Fact], template: &str, depth: usize) -> Subject {
-    // no request goes out for a path that has a placeholder with no source
-    if let Some(param) = unsourced(template).first() {
-        return Subject::Missing(no_source(param));
-    }
-    let mut path = String::new();
-    let mut rest = template;
-    // a placeholder has no `{` or `}` inside, so each one ends at the next `}`
-    while let Some((before, after)) = rest.split_once('{') {
-        let Some((param, tail)) = after.split_once('}') else {
-            break;
-        };
-        path.push_str(before);
-        match value(probe, facts, template, param, depth) {
-            Ok(text) => path.push_str(&text),
-            Err(subject) => return subject,
-        }
-        rest = tail;
-    }
-    path.push_str(rest);
-    Subject::Path(path)
+/// `template` with the value of each placeholder in `bindings`. The pair of a query for a name with
+/// no value goes out, and so does the `?` when no pair stays.
+fn render(template: &str, bindings: &Bindings) -> String {
+    let (path, query) = template.split_once('?').unwrap_or((template, ""));
+    let kept: Vec<&str> = query
+        .split('&')
+        .filter(|pair| !pair.is_empty())
+        .filter(|pair| {
+            let value = pair.split_once('=').map_or("", |(_, value)| value);
+            !matches!(names(value).as_slice(), [name] if matches!(bindings.get(*name), Some(None)))
+        })
+        .collect();
+    let text = if kept.is_empty() {
+        path.to_string()
+    } else {
+        format!("{path}?{}", kept.join("&"))
+    };
+    let filled = fill(&text, |name| match bindings.get(name) {
+        Some(Some(value)) => Ok(value.clone()),
+        _ => Err(name.to_string()),
+    });
+    // each name has a value: `bind` gave one to all
+    filled.unwrap_or(text)
 }
 
-/// The value of the placeholder `param` of `template`, or why the run has none.
-fn value<A: PaletteApi>(
+/// Give a value to each placeholder of `params`, in order, and keep the first choice that lets the
+/// rest find theirs. The error is why the first choice failed.
+fn bind<A: PaletteApi>(
+    probe: &Probe<A>,
+    facts: &[Fact],
+    template: &str,
+    params: &[&str],
+    bindings: &mut Bindings,
+    depth: usize,
+) -> Result<(), Subject> {
+    let Some((param, rest)) = params.split_first() else {
+        return Ok(());
+    };
+    if bindings.contains_key(*param) {
+        return bind(probe, facts, template, rest, bindings, depth);
+    }
+    let found = candidates(probe, facts, template, param, bindings, depth)?;
+    let tried = found.len();
+    let mut first_failure = None;
+    for candidate in found {
+        bindings.insert((*param).to_string(), candidate);
+        match bind(probe, facts, template, rest, bindings, depth) {
+            Ok(()) => return Ok(()),
+            // the next value can still serve: a region with no VPC is no end of the search
+            Err(subject @ Subject::Missing(_)) => {
+                first_failure.get_or_insert(subject);
+                bindings.remove(*param);
+            }
+            Err(other) => return Err(other),
+        }
+    }
+    Err(match first_failure {
+        // the first failure says why; the count says that the run tried the others
+        Some(Subject::Missing(why)) if tried > 1 => Subject::Missing(format!(
+            "{why}; the run tried {tried} values for `{{{param}}}`"
+        )),
+        Some(subject) => subject,
+        None => Subject::Missing(no_source(param)),
+    })
+}
+
+/// The values that the tenant offers for the placeholder `param` of `template`, in order, or why
+/// the run has none. `None` is a pair that the route does not take.
+fn candidates<A: PaletteApi>(
     probe: &Probe<A>,
     facts: &[Fact],
     template: &str,
     param: &str,
+    bindings: &Bindings,
     depth: usize,
-) -> Result<String, Subject> {
+) -> Result<Vec<Option<String>>, Subject> {
     let missing = |why: String| Subject::Missing(why);
     let Some(source) = source(template, param) else {
         return Err(missing(no_source(param)));
     };
-    let Some(request) = request_of(facts, source.fact).filter(|_| depth < DEPTH) else {
+    let Origin::Fact { fact, read } = &source.origin else {
+        return Ok(vec![None]);
+    };
+    let Some(request) = request_of(facts, fact).filter(|_| depth < DEPTH) else {
         return Err(missing(format!(
-            "the fact `{}` is not a request that finds a value for `{{{param}}}`",
-            source.fact
+            "the fact `{fact}` is not a request that finds a value for `{{{param}}}`"
         )));
     };
-    let path = match fill(probe, facts, request, depth + 1) {
+    // the request that lists the objects holds the values that are bound already: the VPCs of
+    // the region that this request names
+    let path = match fill_template(probe, facts, request, bindings, depth + 1) {
         Subject::Path(path) => path,
         other => return Err(other),
     };
     // the listing that holds the subject is sent in its own scope, as the run sends the fact
-    let answer = probe.get(scope_of(facts, source.fact), &path);
+    let answer = probe.get(scope_of(facts, fact), &path);
     let document = match answer.as_ref() {
         Ok(document) => document,
         Err(failure) => {
@@ -362,20 +258,30 @@ fn value<A: PaletteApi>(
             }));
         }
     };
-    let found = source.read.value(document);
+    let found: Vec<&str> = read
+        .values(document)
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .collect();
     if found.is_empty() {
         return Err(missing(format!(
             "the tenant has no object for `{{{param}}}`: the answer to GET {path} holds {}",
-            source.read.lacks()
+            read.lacks()
         )));
     }
-    if !found
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || "-._~:".contains(c))
-    {
+    let usable: Vec<Option<String>> = found
+        .into_iter()
+        .filter(|value| {
+            value
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-._~:".contains(c))
+        })
+        .map(|value| Some(value.to_string()))
+        .collect();
+    if usable.is_empty() {
         return Err(missing(format!(
             "the value for `{{{param}}}` has a character that a path cannot hold"
         )));
     }
-    Ok(found.to_string())
+    Ok(usable)
 }

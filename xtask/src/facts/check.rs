@@ -8,9 +8,10 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use super::cloud;
-use super::model::{Fact, Kind};
+use super::model::{Fact, Kind, Piece, is_placeholder, pieces, unread};
 use super::sets;
 use super::sources::{API_PAGE, FACT_PAGES, Sources, method_pattern, query_names, shape};
+use super::subjects;
 
 /// The headings of `internals/palette/` that state nothing about Palette, each as `page#anchor`:
 /// they say how strata or the book works. Every other `##` heading needs a fact.
@@ -26,6 +27,7 @@ pub fn check(sources: &Sources) -> Vec<String> {
     let mut bad = Vec::new();
     bad.extend(ids(&sources.facts));
     bad.extend(fields(&sources.facts));
+    bad.extend(placeholders_read(&sources.facts));
     bad.extend(pages_exist(sources));
     bad.extend(code_exists(sources));
     bad.extend(codes_stated(sources));
@@ -37,6 +39,37 @@ pub fn check(sources: &Sources) -> Vec<String> {
     bad.extend(stand_in_agrees(sources));
     bad.extend(cloud::check(sources));
     bad.extend(sets::check(sources));
+    bad.extend(subjects::check(&sources.facts));
+    bad
+}
+
+/// Each group in braces of a request and of a call is a `{name}` that the run reads. Only a request
+/// lists alternatives, as `{aws,gcp,azure}`. Any other group would reach the tenant or the tool as
+/// text, because no reader fills it. A route of the stand-in has its own check, `well_formed`.
+fn placeholders_read(facts: &[Fact]) -> Vec<String> {
+    let mut bad = Vec::new();
+    for fact in facts {
+        let id = &fact.id;
+        let request = fact.request.iter().map(|text| ("request", text));
+        let call = fact.call.iter().map(|text| ("call", text));
+        for (place, text) in request.chain(call.clone()) {
+            for group in unread(text) {
+                bad.push(format!(
+                    "fact `{id}`: the {place} holds `{group}`, and no reader fills it: a placeholder is `{{name}}`, with letters, digits, and `_`"
+                ));
+            }
+        }
+        for (place, text) in call {
+            if pieces(text)
+                .iter()
+                .any(|piece| matches!(piece, Piece::Alternatives(_)))
+            {
+                bad.push(format!(
+                    "fact `{id}`: the {place} lists alternatives, and only a request does"
+                ));
+            }
+        }
+    }
     bad
 }
 
@@ -420,19 +453,15 @@ pub fn route_matches(pattern: &str, route: &str) -> bool {
         && pattern
             .iter()
             .zip(&route)
-            .all(|(p, r)| (p.starts_with('{') && p.ends_with('}')) || p == r)
+            .all(|(p, r)| is_placeholder(p) || p == r)
 }
 
 /// A pattern of the stand-in is a path under `v1/`, with a whole segment as `{name}`.
 fn well_formed(pattern: &str) -> bool {
-    let plain = |text: &str| !text.is_empty() && !text.contains(['{', '}']);
     pattern.starts_with("v1/")
-        && pattern
-            .split('/')
-            .all(|segment| match segment.strip_prefix('{') {
-                Some(rest) => rest.strip_suffix('}').is_some_and(plain),
-                None => plain(segment),
-            })
+        && pattern.split('/').all(|segment| {
+            is_placeholder(segment) || (!segment.is_empty() && !segment.contains(['{', '}']))
+        })
 }
 
 /// Each route that the stand-in serves matches the `stand_in` of a fact, and each `stand_in`

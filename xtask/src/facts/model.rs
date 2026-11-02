@@ -110,11 +110,16 @@ pub struct Fact {
 
 /// A route of Palette beside the call of a cloud. The route lists a part of what a rule reads from
 /// the call. The rest of the call stays in the cloud tier, because the route lacks it.
+///
+/// A fact of the kind `request` states a route and its query one time, so the route names that
+/// fact. A route that no request fact states is written out. A route has exactly one of the two.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PaletteRoute {
-    /// The method and the path of the route, as the book writes it.
-    pub route: String,
+    /// The id of the fact of the kind `request` that states the route and its query.
+    pub fact: Option<String>,
+    /// The method and the path of a route that no fact states, as the book writes it.
+    pub route: Option<String>,
     /// The fields of `reads` that the route does not list. Each one is why the rule stays in the
     /// cloud tier.
     pub lacks: Vec<String>,
@@ -137,13 +142,161 @@ pub struct Table {
     pub per_account: bool,
 }
 
+/// The method and the rest of `request`, such as `GET` and `/v1/clusterprofiles/{uid}?filter=1`.
+/// None when `request` has no space, or starts with a text that is no method.
+pub fn split_request(request: &str) -> Option<(Method, &str)> {
+    let (method, rest) = request.split_once(' ')?;
+    Some((Method::parse(method)?, rest))
+}
+
+/// One part of a text of the list: a request, a route of the stand-in, or a word of a call.
+///
+/// A group in braces is a placeholder. The run finds the value of `{uid}` in the tenant, or in the
+/// lab. `{aws,gcp,azure}` lists the alternatives of a request, and the run sends one request for
+/// each.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Piece<'a> {
+    /// Text that stands as it is.
+    Text(&'a str),
+    /// `{name}`: a value that the run finds. A name is a letter, then letters, digits, and `_`.
+    Name(&'a str),
+    /// `{a,b}`: the names of the alternatives.
+    Alternatives(Vec<&'a str>),
+    /// A group in braces that is neither of the two, or a `{` with no `}`. It is the text from the
+    /// `{` to the `}`. The run reads no value for it, so the check of the list refuses it.
+    Unread(&'a str),
+}
+
+/// True when `name` is the name of a placeholder: a letter, then letters, digits, and `_`.
+fn is_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic())
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
+/// The parts of `text`, in order. This is the one reader of the placeholders of the list: the run
+/// of a request, the call of a cloud, and the check of the list all read through it.
+pub fn pieces(text: &str) -> Vec<Piece<'_>> {
+    let mut pieces = Vec::new();
+    let mut rest = text;
+    while let Some(open) = rest.find('{') {
+        if open > 0 {
+            pieces.push(Piece::Text(&rest[..open]));
+        }
+        let group = &rest[open..];
+        let Some(close) = group.find('}') else {
+            pieces.push(Piece::Unread(group));
+            return pieces;
+        };
+        let inner = &group[1..close];
+        let names: Vec<&str> = inner.split(',').collect();
+        pieces.push(if is_name(inner) {
+            Piece::Name(inner)
+        } else if names.len() > 1 && names.iter().all(|n| is_name(n)) {
+            Piece::Alternatives(names)
+        } else {
+            Piece::Unread(&group[..=close])
+        });
+        rest = &group[close + 1..];
+    }
+    if !rest.is_empty() {
+        pieces.push(Piece::Text(rest));
+    }
+    pieces
+}
+
+/// The name of each `{name}` in `text`, in order. An alternative list and an unread group give none.
+pub fn names(text: &str) -> Vec<&str> {
+    pieces(text)
+        .into_iter()
+        .filter_map(|piece| match piece {
+            Piece::Name(name) => Some(name),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The groups of `text` that no reader reads: see [`Piece::Unread`].
+pub fn unread(text: &str) -> Vec<&str> {
+    pieces(text)
+        .into_iter()
+        .filter_map(|piece| match piece {
+            Piece::Unread(group) => Some(group),
+            _ => None,
+        })
+        .collect()
+}
+
+/// True when `text` has a group in braces of any kind, also one that nothing reads.
+pub fn has_placeholder(text: &str) -> bool {
+    pieces(text)
+        .iter()
+        .any(|piece| !matches!(piece, Piece::Text(_)))
+}
+
+/// True when `segment` of a route is one `{name}` and nothing else.
+pub fn is_placeholder(segment: &str) -> bool {
+    matches!(pieces(segment).as_slice(), [Piece::Name(_)])
+}
+
+/// `text` with the value of each `{name}`. `value` gives the value of a name, and its error is the
+/// error of the fill. An alternative list and an unread group stay as they are: [`expand`] takes
+/// the alternatives first.
+///
+/// # Errors
+///
+/// The first error of `value`.
+pub fn fill<E>(text: &str, mut value: impl FnMut(&str) -> Result<String, E>) -> Result<String, E> {
+    let mut filled = String::new();
+    for piece in pieces(text) {
+        match piece {
+            Piece::Text(text) | Piece::Unread(text) => filled.push_str(text),
+            Piece::Name(name) => filled.push_str(&value(name)?),
+            Piece::Alternatives(names) => filled.push_str(&format!("{{{}}}", names.join(","))),
+        }
+    }
+    Ok(filled)
+}
+
+/// One text for each choice of the alternatives of `text`: the choices, and the text with them.
+/// A text with no alternative gives itself, with no choice. A text with two lists gives one text
+/// for each pair of choices.
+pub fn expand(text: &str) -> Vec<(Vec<&str>, String)> {
+    let mut expanded: Vec<(Vec<&str>, String)> = vec![(Vec::new(), String::new())];
+    for piece in pieces(text) {
+        expanded = match piece {
+            Piece::Text(text) | Piece::Unread(text) => expanded
+                .into_iter()
+                .map(|(choices, mut done)| {
+                    done.push_str(text);
+                    (choices, done)
+                })
+                .collect(),
+            Piece::Name(name) => expanded
+                .into_iter()
+                .map(|(choices, done)| (choices, format!("{done}{{{name}}}")))
+                .collect(),
+            Piece::Alternatives(names) => expanded
+                .into_iter()
+                .flat_map(|(choices, done)| {
+                    names.iter().map(move |name| {
+                        let mut choices = choices.clone();
+                        choices.push(*name);
+                        (choices, format!("{done}{name}"))
+                    })
+                })
+                .collect(),
+        };
+    }
+    expanded
+}
+
 impl Fact {
     /// The method and the path of the request, with its query, such as `GET` and
     /// `/v1/clusterprofiles/{uid}`. None when the fact has no request, or its request starts with
     /// a text that is no method.
     pub fn parts(&self) -> Option<(Method, &str)> {
-        let (method, path) = self.request.as_deref()?.split_once(' ')?;
-        Some((Method::parse(method)?, path))
+        split_request(self.request.as_deref()?)
     }
 
     /// The path and the query of the request, when its method is GET.

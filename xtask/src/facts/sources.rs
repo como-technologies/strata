@@ -12,7 +12,7 @@ use strata_preflight::catalog::builtin;
 use strata_preflight::rule::{Catalog, Check, ExecCheck, Rule};
 
 use super::cloud::{CloudSources, read_code, read_rules};
-use super::model::{DIRECTORY, Fact, load};
+use super::model::{DIRECTORY, Fact, load, split_request};
 use super::sets::{SetRead, reads};
 use crate::checks::anchors;
 use crate::files::{book, files_with_ext, pages};
@@ -143,7 +143,7 @@ fn flatten(request: &str) -> String {
 /// query.
 pub fn shape(request: &str) -> String {
     let flat = flatten(request);
-    let (method, path) = flat.split_once(' ').unwrap_or(("", flat.as_str()));
+    let (method, path) = split_request(&flat).map_or(("", flat.as_str()), |(m, p)| (m.as_str(), p));
     let path = path.split('?').next().unwrap_or(path);
     format!("{method} {path}")
 }

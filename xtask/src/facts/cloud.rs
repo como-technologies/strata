@@ -14,15 +14,14 @@ use std::sync::LazyLock;
 use chrono::NaiveDate;
 use regex::Regex;
 use serde_json::Value;
-use strata::api::Method;
 use strata::closed_set::ClosedSet;
 use strata::model::cloud::Cloud;
 use strata_preflight::fixture;
 use strata_preflight::probe::FixtureBackend;
 use strata_preflight::rule::{Catalog, Check, ExecCheck, Rule, Tier};
 
-use super::model::{Fact, Kind};
-use super::sources::Sources;
+use super::model::{Fact, Kind, PaletteRoute, expand, has_placeholder, split_request};
+use super::sources::{Sources, shape};
 use crate::files::{code_without_tests, files_under};
 
 #[cfg(test)]
@@ -130,7 +129,7 @@ pub struct CloudSources {
 pub fn command_words<'a>(words: impl IntoIterator<Item = &'a str>) -> Vec<&'a str> {
     words
         .into_iter()
-        .take_while(|w| !w.starts_with('-') && !w.contains('{'))
+        .take_while(|w| !w.starts_with('-') && !has_placeholder(w))
         .collect()
 }
 
@@ -450,9 +449,10 @@ fn tables_proven(sources: &Sources) -> Vec<String> {
     bad
 }
 
-/// The route of Palette beside a call starts with a method, and names the fields that it lacks.
-/// Each one is a field that the call reads: a route that lacks no field answers the whole
-/// call, and the rule needs no cloud. A table is no call, so it has no route.
+/// The route of Palette beside a call is a fact of the kind `request`, or a route that no such fact
+/// states. It names the fields that it lacks. Each one is a field that the call reads: a route
+/// that lacks no field answers the whole call, and the rule needs no cloud. A table is no call, so
+/// it has no route.
 fn routes_beside(sources: &Sources) -> Vec<String> {
     let mut bad = Vec::new();
     for fact in clouds(sources) {
@@ -460,13 +460,7 @@ fn routes_beside(sources: &Sources) -> Vec<String> {
             continue;
         };
         let id = &fact.id;
-        let method = palette.route.split_once(' ').map(|(method, _)| method);
-        if !method.is_some_and(|m| Method::parse(m).is_some()) {
-            bad.push(format!(
-                "fact `{id}`: the route `{}` must start with a method",
-                palette.route
-            ));
-        }
+        bad.extend(route_named(sources, id, palette));
         if palette.lacks.is_empty() {
             bad.push(format!(
                 "fact `{id}`: the route names no field that it lacks, so it answers the whole call"
@@ -486,6 +480,50 @@ fn routes_beside(sources: &Sources) -> Vec<String> {
         }
     }
     bad
+}
+
+/// The faults of the route of the fact `id`. A route names a fact of the kind `request` with a GET
+/// request, or it is a route with a method that no fact states: a request fact states its route and
+/// its query one time, and a cloud fact does not write them again.
+fn route_named(sources: &Sources, id: &str, palette: &PaletteRoute) -> Vec<String> {
+    match (&palette.fact, &palette.route) {
+        (Some(name), None) => {
+            let named = sources.facts.iter().find(|f| &f.id == name);
+            if named.is_some_and(|f| f.kind == Kind::Request && f.get_path().is_some()) {
+                return Vec::new();
+            }
+            vec![format!(
+                "fact `{id}`: the route names the fact `{name}`, and it is no fact of the kind request with a GET request"
+            )]
+        }
+        (None, Some(route)) => {
+            if split_request(route).is_none() {
+                return vec![format!(
+                    "fact `{id}`: the route `{route}` must start with a method"
+                )];
+            }
+            let stated = sources.facts.iter().find(|f| {
+                f.kind == Kind::Request
+                    && f.request.as_deref().is_some_and(|request| {
+                        expand(request)
+                            .iter()
+                            .any(|(_, text)| shape(text) == shape(route))
+                    })
+            });
+            stated
+                .map(|owner| {
+                    format!(
+                        "fact `{id}`: the fact `{}` states the route `{route}`: name that fact, and do not write the route again",
+                        owner.id
+                    )
+                })
+                .into_iter()
+                .collect()
+        }
+        _ => vec![format!(
+            "fact `{id}`: a route names a fact or states a route, and not both or none"
+        )],
+    }
 }
 
 /// The texts in `text` that name a cloud fact, each with its kind, once.

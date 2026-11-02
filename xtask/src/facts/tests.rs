@@ -1016,3 +1016,111 @@ fn each_read_of_the_code_of_strata_that_notes_an_unknown_value_has_its_list_in_a
             .any(|r| r.set == "ProfileType" && r.values.contains(&"add-on".to_string()))
     );
 }
+
+// ---- the placeholders of a text ------------------------------------------------------------------
+
+#[test]
+fn the_pieces_of_a_text_are_its_text_its_names_its_alternatives_and_its_unread_groups() {
+    use super::model::{Piece, pieces};
+    assert_eq!(
+        pieces("/v1/{aws,gcp}/regions/{region}/x?a={Account_1}&b={gcp-region}&c={"),
+        [
+            Piece::Text("/v1/"),
+            Piece::Alternatives(vec!["aws", "gcp"]),
+            Piece::Text("/regions/"),
+            Piece::Name("region"),
+            Piece::Text("/x?a="),
+            Piece::Name("Account_1"),
+            Piece::Text("&b="),
+            Piece::Unread("{gcp-region}"),
+            Piece::Text("&c="),
+            Piece::Unread("{"),
+        ]
+    );
+    assert_eq!(pieces("no placeholder"), [Piece::Text("no placeholder")]);
+    assert_eq!(pieces("{}"), [Piece::Unread("{}")]);
+    assert_eq!(
+        pieces("{1st}{a,}"),
+        [Piece::Unread("{1st}"), Piece::Unread("{a,}")]
+    );
+}
+
+#[test]
+fn one_reader_fills_the_names_of_a_request_and_of_a_call_with_the_same_result() {
+    use super::model::{fill, names};
+    // a capital letter was a name for the run of a request and none for the call of a cloud
+    let text = "/v1/{Region}/{region}/{vpc_id}";
+    assert_eq!(names(text), ["Region", "region", "vpc_id"]);
+    let filled = fill(text, |name| Ok::<_, String>(name.to_uppercase())).unwrap();
+    assert_eq!(filled, "/v1/REGION/REGION/VPC_ID");
+    let refused = fill(text, |name| {
+        if name == "region" {
+            Err(name.to_string())
+        } else {
+            Ok("x".to_string())
+        }
+    });
+    assert_eq!(refused, Err("region".to_string()));
+}
+
+#[test]
+fn the_alternatives_of_a_request_expand_to_one_text_for_each_choice() {
+    use super::model::expand;
+    let texts = expand("GET /v1/clouds/{aws,gcp}/regions/{region}/types");
+    assert_eq!(
+        texts,
+        [
+            (
+                vec!["aws"],
+                "GET /v1/clouds/aws/regions/{region}/types".to_string()
+            ),
+            (
+                vec!["gcp"],
+                "GET /v1/clouds/gcp/regions/{region}/types".to_string()
+            ),
+        ]
+    );
+    assert_eq!(
+        expand("GET /v1/x/{uid}"),
+        [(Vec::<&str>::new(), "GET /v1/x/{uid}".to_string())]
+    );
+    assert_eq!(expand("/{a,b}/{c,d}").len(), 4);
+}
+
+#[test]
+fn a_group_in_braces_that_no_reader_fills_is_a_fault() {
+    for (call, group) in [
+        ("{gcp-region}", "{gcp-region}"),
+        ("--region={", "{"),
+        ("{a,b}", "lists alternatives"),
+    ] {
+        let mut sources = world();
+        sources.facts[0].kind = super::model::Kind::Cloud;
+        sources.facts[0].request = None;
+        sources.facts[0].call = vec!["aws".to_string(), call.to_string()];
+        let found = faults_of(&sources);
+        assert!(
+            found
+                .iter()
+                .any(|m| m.contains(group) && m.contains("call")),
+            "{call}: {found:#?}"
+        );
+    }
+    let mut sources = world();
+    sources.facts[0].request = Some("GET /v1/clusterprofiles/{uid}?a={bad-name}".to_string());
+    let found = faults_of(&sources);
+    assert!(
+        found
+            .iter()
+            .any(|m| m.contains("the request holds `{bad-name}`")),
+        "{found:#?}"
+    );
+    // a name with a capital letter and the alternatives of a request are read
+    let mut sources = world();
+    sources.facts[0].request = Some("GET /v1/{aws,gcp}/x/{Uid}".to_string());
+    let found = faults_of(&sources);
+    assert!(
+        !found.iter().any(|m| m.contains("no reader fills it")),
+        "{found:#?}"
+    );
+}

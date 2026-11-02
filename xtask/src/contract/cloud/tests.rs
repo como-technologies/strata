@@ -181,6 +181,15 @@ fn a_value_that_the_lab_lacks_is_named_and_a_prefix_that_the_lab_lacks_is_empty(
 }
 
 #[test]
+fn a_name_with_a_capital_letter_is_a_name_of_the_call_as_it_is_of_a_request() {
+    let lab = lab_of(&[("STRATA_CONTRACT_REGION", "eu-west-1")]);
+    assert_eq!(words(&lab, &["{Region}"]).unwrap(), ["eu-west-1"]);
+    // the word with no name stays as it is, and so does a group that the list refuses
+    assert_eq!(words(&lab, &["{gcp-region}"]).unwrap(), ["{gcp-region}"]);
+    assert_eq!(words(&lab, &["{Other}"]), Err("Other".to_string()));
+}
+
+#[test]
 fn the_variable_of_a_value_is_its_name_in_upper_case_after_the_prefix() {
     assert_eq!(Lab::variable("role_arn"), "STRATA_CONTRACT_ROLE_ARN");
     let own = lab_of(&[("STRATA_CONTRACT_ROLE_ARN", "arn:aws:iam::1:role/r")]);
