@@ -90,7 +90,8 @@ The fourth lists each call of a cloud.
    writes it. Write the query that strata sends, such as `?filterType=tag`. Add each name that a
    rule of the fact sends in its path. If the page has no row for it, add the row first.
 3. Name the route of the stand-in. If the stand-in serves no document for the fact, leave `stand_in`
-   empty.
+   empty. A request with a placeholder needs a source in `xtask/src/facts/subjects.rs`. Without one,
+   the run skips the fact.
 4. Name the live checks that prove the fact. Each name is a check that the script calls. Each
    check has a row in [What the live example verifies](./live-runs.md). If no check proves the fact,
    write the reason in `unchecked`.
@@ -260,9 +261,8 @@ without the query.
 ### The placeholders of a request
 
 A request, a route of the stand-in, and the call of a cloud write a placeholder as `{name}`. A name is
-a letter, then letters, digits, and `_`. One reader in `xtask/src/facts/model.rs` reads the
-placeholders of all three, and the check of the list refuses a group in braces that the reader does
-not read. `{gcp-region}` is such a group.
+a letter, then letters, digits, and `_`. One reader reads the placeholders of all three: `pieces` in `xtask/src/facts/model.rs`. The check
+of the list refuses a group in braces that the reader does not read. `{gcp-region}` is such a group.
 
 The run finds the value of a name with a source. A source names the route of the requests that it
 serves, through the placeholder. So the `{uid}` of `/v1/packs/{name}/registries/{uid}` is a registry,
@@ -284,7 +284,7 @@ joins the results in one entry:
 
 A choice needs a source for each of its names. The lab holds an AWS account, so the choice `aws` of
 `validate-instance-types` goes out. The route of AWS takes no subscription, so the source of
-`{subscriptionId}` leaves that pair out of the query. The choices `gcp` and `azure` have no source
+`{subscriptionId}` omits that pair from the query. The choices `gcp` and `azure` have no source
 yet, and the reason says so.
 
 ### The scope of a request

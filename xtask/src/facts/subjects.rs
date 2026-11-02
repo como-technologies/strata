@@ -60,8 +60,8 @@ impl Read {
 pub(crate) enum Origin {
     /// The answer of the fact `fact`, read with `read`.
     Fact { fact: &'static str, read: Read },
-    /// The route takes no value of this kind. The run leaves the pair out of the query, as the rule
-    /// of strata-preflight leaves it out.
+    /// The route takes no value of this kind. The run omits the pair from the query, as the rule
+    /// of strata-preflight omits it.
     Omitted,
 }
 
@@ -295,7 +295,7 @@ fn requests(facts: &[Fact]) -> Vec<(&str, String)> {
         .collect()
 }
 
-/// A placeholder of a request has one source at most. Two sources would read one placeholder in two
+/// A placeholder of a request has one source at most. Two sources read one placeholder in two
 /// ways, as `{uid}` is a registry in `/v1/packs/{name}/registries/{uid}` and a pack in
 /// `/v1/packs/{uid}`.
 pub(crate) fn check(facts: &[Fact]) -> Vec<String> {

@@ -107,7 +107,7 @@ pub enum Subject {
 }
 
 /// The value of each placeholder of one request, by name. A name with no value is a pair that the
-/// route does not take, and the run leaves it out of the query.
+/// route does not take, and the run omits it from the query.
 type Bindings = BTreeMap<String, Option<String>>;
 
 /// The path of `template` for a subject of the tenant: a value for each placeholder.

@@ -44,7 +44,7 @@ pub fn check(sources: &Sources) -> Vec<String> {
 }
 
 /// Each group in braces of a request and of a call is a `{name}` that the run reads. Only a request
-/// lists alternatives, as `{aws,gcp,azure}`. Any other group would reach the tenant or the tool as
+/// lists alternatives, as `{aws,gcp,azure}`. Any other group reaches the tenant or the tool as
 /// text, because no reader fills it. A route of the stand-in has its own check, `well_formed`.
 fn placeholders_read(facts: &[Fact]) -> Vec<String> {
     let mut bad = Vec::new();

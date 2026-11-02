@@ -75,7 +75,7 @@ fn the_uid_of_a_registry_has_a_source_and_the_uid_of_a_pack_has_none() {
         }
         Origin::Omitted => panic!("the registry is in the listing"),
     }
-    // the registry uid would be a wrong value for a pack: the run sends no request
+    // the registry uid is a wrong value for a pack: the run sends no request
     assert!(source("/v1/packs/{uid}", "uid").is_none());
     assert_eq!(unsourced("/v1/packs/{uid}"), ["uid"]);
     assert!(unsourced("/v1/packs/{name}/registries/{uid}").is_empty());
