@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 
+use clap::ValueEnum;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -506,8 +507,8 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
     }
 }
 
-/// The report formats.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The report formats. The command line reads the name of a format in lower case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Format {
     /// Text for a terminal.
     Terminal,

@@ -100,7 +100,7 @@ struct Cli {
         default_value = "terminal",
         hide_possible_values = true
     )]
-    format: FormatArg,
+    format: Format,
     /// The same as --format json
     #[arg(long, conflicts_with = "format")]
     json: bool,
@@ -125,14 +125,6 @@ struct Cli {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum FormatArg {
-    Terminal,
-    Markdown,
-    Json,
-    Html,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum SchemaKind {
     /// The report of a run
     Report,
@@ -146,7 +138,7 @@ enum SchemaKind {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let json = cli.json || cli.format == FormatArg::Json;
+    let json = format_of(&cli) == Format::Json;
     match run_cli(cli) {
         Ok(code) => code,
         Err(e) => {
@@ -165,15 +157,7 @@ fn now_utc() -> String {
 }
 
 fn format_of(cli: &Cli) -> Format {
-    if cli.json {
-        return Format::Json;
-    }
-    match cli.format {
-        FormatArg::Terminal => Format::Terminal,
-        FormatArg::Markdown => Format::Markdown,
-        FormatArg::Json => Format::Json,
-        FormatArg::Html => Format::Html,
-    }
+    if cli.json { Format::Json } else { cli.format }
 }
 
 /// The color of one stream, by the rule of `strata`: `--color always` colors a pipe too (a `tee`

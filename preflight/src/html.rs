@@ -238,7 +238,7 @@ mod tests {
     use crate::confidence::{Confidence, Counts, NO_RUNS};
     use crate::probe::Call;
     use crate::report::*;
-    use crate::rule::{Fix, Level, Severity, Status, Tier};
+    use crate::rule::{Fix, Level, Owner, Severity, Status, Tier};
     use std::collections::BTreeMap;
 
     /// The report of one probe that failed, with no request.
@@ -406,7 +406,7 @@ mod tests {
         let mut report = report();
         let mut failed = report.checks[0].clone();
         failed.fix = Some(Fix {
-            owner: "palette".into(),
+            owner: Owner::Palette,
             text: "Check the zones.".into(),
         });
         failed.confidence = Some(Confidence::of("gke", "4.10", &counts, 0.7));

@@ -9,8 +9,12 @@ use std::path::Path;
 use serde_json::Value;
 use strata::closed_set::ClosedSet;
 use strata::closed_set::legend::{Described, legend};
+use strata_preflight::confidence::RunResult;
 use strata_preflight::probe::Verdict;
-use strata_preflight::rule::{Check, CheckKind, EvidenceKind, Level, Severity, Status, Tier};
+use strata_preflight::rule::{
+    Check, CheckKind, EvidenceKind, Level, Owner, Severity, Status, Tier,
+};
+use strata_preflight::world::cloud_list;
 
 #[path = "../../tests/common/closed_set.rs"]
 mod closed_set;
@@ -26,7 +30,7 @@ use closed_set::{
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value, because a file of an earlier release then
 /// stops loading.
-fn sets() -> [Set; 7] {
+fn sets() -> [Set; 9] {
     [
         set::<Tier>(&["static", "palette", "cloud", "watch", "race", "tool"]),
         set::<Level>(&["probe", "preflight"]),
@@ -34,6 +38,8 @@ fn sets() -> [Set; 7] {
         set::<Status>(&["seen", "source", "inferred", "proposed"]),
         set::<EvidenceKind>(&["run", "source", "doc", "report"]),
         set::<CheckKind>(&["static", "palette", "exec", "watch"]),
+        set::<Owner>(&["palette", "provider", "lab", "strata", "operator", "none"]),
+        set::<RunResult>(&["caught", "missed", "passed", "false-fail"]),
         set::<Verdict>(&[
             "passed",
             "failed",
@@ -105,4 +111,39 @@ fn the_kind_of_a_check_is_the_tag_that_the_rule_files_write() {
         assert_eq!(tag, Value::from(check.kind().as_str()), "{text}");
         assert_eq!(check.tier(), check.kind().tier(), "{text}");
     }
+}
+
+/// The text of a file of the repository, from the root.
+fn repo_file(path: &str) -> String {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    std::fs::read_to_string(root.join(path)).unwrap_or_else(|e| panic!("{path}: {e}"))
+}
+
+#[test]
+fn the_live_script_of_the_plan_accepts_the_results_that_the_ledger_knows() {
+    let script = repo_file("examples/live/preflight-plan.sh");
+    let results: Vec<&str> = script
+        .lines()
+        .map(str::trim)
+        .find_map(|line| line.strip_suffix(r#") results+=("$1|$2|$3") ;;"#))
+        .expect("the script has a case for the results that the ledger knows")
+        .split('|')
+        .collect();
+    let known: Vec<&str> = RunResult::ALL.iter().map(|r| r.as_str()).collect();
+    assert_eq!(results, known);
+}
+
+#[test]
+fn the_workflow_lists_the_engines_of_the_world_in_order() {
+    let workflow: serde_yaml::Value =
+        serde_yaml::from_str(&repo_file(".github/workflows/preflight.yml")).unwrap();
+    let description = workflow["on"]["workflow_call"]["inputs"]["cloud"]["description"]
+        .as_str()
+        .expect("the input `cloud` has a description");
+    let list = description
+        .strip_prefix("The engine of a file: ")
+        .and_then(|rest| rest.split_once(". "))
+        .map(|(list, _)| list.replace(", or ", ", "))
+        .expect("the description starts with the list of the engines");
+    assert_eq!(list, cloud_list());
 }

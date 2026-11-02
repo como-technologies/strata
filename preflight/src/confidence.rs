@@ -19,6 +19,7 @@ use std::path::Path;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use strata::closed_set::impl_closed_set;
 use strata::model::cloud::CLOUD_ALL;
 use strata::reference::version;
 
@@ -47,6 +48,13 @@ pub enum RunResult {
     /// A clean build, and the check failed. A wrong result.
     FalseFail,
 }
+
+impl_closed_set!(RunResult {
+    Caught => "caught",
+    Missed => "missed",
+    Passed => "passed",
+    FalseFail => "false-fail",
+});
 
 /// One rule in one run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]

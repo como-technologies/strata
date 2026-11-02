@@ -297,6 +297,27 @@ fn an_evidence_entry_names_a_kind_of_the_set_and_the_loader_refuses_another() {
 }
 
 #[test]
+fn a_fix_names_an_owner_of_the_set_and_the_loader_refuses_another() {
+    let with = |owner: &str| {
+        GOOD.replace(
+            "status: seen",
+            &format!("status: seen\n    fix:\n      owner: {owner}\n      text: change it"),
+        )
+    };
+    for owner in Owner::ALL {
+        let section = Catalog::parse_section(&with(owner.as_str()), Path::new("x.yaml"));
+        let fix = section.unwrap().rules[0].fix.clone().unwrap();
+        assert_eq!(fix.owner, *owner);
+        assert_eq!(fix.line(), format!("change it ({})", owner.as_str()));
+    }
+    let err = Catalog::parse_section(&with("everyone"), Path::new("x.yaml")).unwrap_err();
+    assert!(
+        err.to_string().contains("unknown variant `everyone`"),
+        "{err}"
+    );
+}
+
+#[test]
 fn a_catalog_refuses_one_id_two_times() {
     let mut c = Catalog::default();
     let s = Catalog::parse_section(GOOD, Path::new("a.yaml")).unwrap();
