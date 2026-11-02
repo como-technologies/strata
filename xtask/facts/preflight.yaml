@@ -237,7 +237,7 @@ facts:
       - vsphere-ip-pool-capacity
 
   # The gaps that preflight fills: one fact for each row of the table in
-  # reference/preflight-rules.md.
+  # reference/preflight-rules.md. The last row is a behavior: those rules call a route.
   - id: preflight-gap-eks-hop-limit
     kind: gap
     reads:
@@ -298,6 +298,8 @@ facts:
         - spec.cloudConfig.controlPlaneEndpoint.type
         - spec.cloudConfig.controlPlaneEndpoint.host
         - spec.cloudConfig.controlPlaneEndpoint.ddnsSearchDomain
+        - spec.cloudConfig.placement.datacenter
+        - spec.cloudConfig.placement.network.networkName
       values:
         spec.cloudConfig.controlPlaneEndpoint.type:
           - VIP
@@ -370,6 +372,7 @@ facts:
     reads:
       fields:
         - cloudTypes[]
+        - profiles[].packs.results[].errors[]
       values:
         cloudTypes[]:
           - all
@@ -380,8 +383,10 @@ facts:
       - validate-route.sh:pack-cloud-support-says
     pages:
       - reference/preflight-rules.md#the-gaps-that-preflight-fills
+      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
     rules:
       - pack-cloud-support
+      - palette-validate
 
   - id: preflight-gap-tenant-documents
     kind: gap
@@ -407,6 +412,8 @@ facts:
     stand_in: []
     code: []
     live:
+      - template.sh:cluster-outside-template
+      - template.sh:refusal-says
       - loop.sh:preflight-each
     pages:
       - reference/preflight-rules.md#the-gaps-that-preflight-fills
@@ -428,6 +435,7 @@ facts:
         - instanceTypes[].nonSupportedZones[]
         - keyNames[]
         - spec.cloudConfig.sshKeyName
+        - spec.cloudConfig.vpcId
     stand_in: []
     code: []
     live:
@@ -440,7 +448,7 @@ facts:
       - ssh-key-pair
 
   - id: preflight-gap-route-callers
-    kind: gap
+    kind: behavior
     reads:
       fields:
         - profiles[].packs.results[].errors[]

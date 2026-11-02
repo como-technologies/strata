@@ -69,7 +69,8 @@ pub struct Fact {
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Reads {
-    /// A field of the answer, as the path from the root of the document, with `[]` for an array:
+    /// A field of the answer, as the path from the root of the document, with `[]` for an array
+    /// and `*` for the values of an object:
     /// `spec.clusterProfileTemplates[].packs`.
     #[serde(default)]
     pub fields: Vec<String>,

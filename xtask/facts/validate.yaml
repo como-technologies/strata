@@ -56,6 +56,8 @@ facts:
     unchecked: Only the gke run of preflight-plan.sh shows it. The book lists no check of that run.
     pages:
       - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+      - reference/preflight-rules.md#the-checks-that-the-route-answers
+      - development/live-runs.md#what-the-preflight-runs-show
     rules:
       - palette-validate
 
@@ -66,7 +68,7 @@ facts:
         - FreemiumActiveClusterLimitExceeded
     stand_in: []
     live: []
-    unchecked: No live run shows it. The page states it from the code of Palette.
+    unchecked: No live run shows it. The limit holds for a trial tenant alone.
     pages:
       - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
     rules:
@@ -101,6 +103,7 @@ facts:
     unchecked: Only the aws and gcp runs of preflight-plan.sh show it. The book lists no check of those runs.
     pages:
       - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+      - development/live-runs.md#what-the-preflight-runs-show
     rules:
       - worker-cpu-floor
 
@@ -114,6 +117,7 @@ facts:
     unchecked: Only the eks run of preflight-plan.sh shows it. The book lists no check of that run.
     pages:
       - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
+      - development/live-runs.md#what-the-preflight-runs-show
     rules:
       - worker-cpu-floor
 
@@ -134,21 +138,8 @@ facts:
     rules:
       - palette-validate
 
-  - id: validate-create-pack-cloud-gap
-    kind: behavior
-    reads:
-      fields:
-        - profiles[].packs.results[].errors[]
-    stand_in: []
-    live:
-      - validate-route.sh:pack-cloud-support
-      - validate-route.sh:pack-cloud-support-says
-    pages:
-      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
-      - reference/preflight-rules.md#the-gaps-that-preflight-fills
-    rules:
-      - pack-cloud-support
-      - palette-validate
+  # The fact preflight-gap-pack-cloud-support in preflight.yaml holds the pack that this route
+  # takes and that the create refuses.
 
   - id: validate-create-variables
     kind: behavior
@@ -157,7 +148,7 @@ facts:
         - spec.profiles[].variables[]
     stand_in: []
     live: []
-    unchecked: No live run shows it. The page states it from the code of Palette.
+    unchecked: No live run shows how the route reads the variables.
     pages:
       - internals/palette/validate-routes.md#the-variables-of-the-body
     rules:
@@ -272,7 +263,7 @@ facts:
         - profiles[].packValues[].tag
     stand_in: []
     live: []
-    unchecked: The page states these facts from the code of Palette, not from a live run.
+    unchecked: No live run shows how Palette builds the target.
     pages:
       - internals/palette/validate-routes.md#post-v1spectroclustersuidvalidaterepave
     code:
@@ -293,13 +284,19 @@ facts:
         - reasons[].pack.diffConfigKeys
       codes:
         - PackUpgraded
+        - PackValuesUpdated
+        - PackAdded
+        - PackRemoved
     stand_in:
       - v1/spectroclusters/clusterTemplates/{uid}/validate/repave
-    live: []
-    unchecked: No live run uses a cluster that a cluster template governs.
+    live:
+      - template.sh:template-route
+      - template.sh:template-route-says
+      - template.sh:template-route-json
     pages:
       - reference/palette-api.md#a-cluster
       - commands/compare/repave.md#a-cluster-in-a-cluster-template
+      - internals/palette/profiles.md#the-lock-of-a-cluster-template
     code:
       - src/api/palette/clusters.rs
       - src/ops/repave.rs
@@ -529,7 +526,6 @@ facts:
       - v1/clusterprofiles/import/validate
     live:
       - validate-packs.sh:validate-accepts
-      - validate-packs.sh:validate-exists
       - validate-packs.sh:validate-disabled-mark
       - validate-packs.sh:validate-pack-twice
       - loop.sh:ask-candidate
@@ -590,7 +586,7 @@ facts:
         - ClusterProfileImportPackNotFound
     stand_in: []
     live: []
-    unchecked: No live run shows it. The page states it from the code of Palette.
+    unchecked: No live run shows it.
     pages:
       - internals/palette/validate-routes.md#post-v1clusterprofilesimportvalidate
       - reference/errors.md#refusals-that-strata-does-not-send-again
@@ -639,7 +635,7 @@ facts:
         - message
     stand_in: []
     live: []
-    unchecked: No live run calls the EKS property route. The page states it from the code of Palette.
+    unchecked: No live run calls the EKS property route.
     pages:
       - internals/palette/validate-routes.md#the-property-routes
     code: []
@@ -672,7 +668,7 @@ facts:
         - message
     stand_in: []
     live: []
-    unchecked: The page states these facts from the code of Palette, not from a live run.
+    unchecked: No live run calls the KMS key route.
     pages:
       - internals/palette/validate-routes.md#the-kms-key-route
       - internals/palette/validate-routes.md#the-property-routes
@@ -688,7 +684,7 @@ facts:
         - instanceTypes[].type
         - instanceTypes[].nonSupportedZones
     stand_in:
-      - v1/clouds/{cloud}/regions/{region}/instancetypes
+      - v1/clouds/aws/regions/{region}/instancetypes
     live:
       - loop.sh:preflight-offering
     pages:
@@ -706,7 +702,7 @@ facts:
         - instanceTypes[].nonSupportedZones
     stand_in: []
     live: []
-    unchecked: No run shows the GCP answer of this route. The stand-in of the book models it.
+    unchecked: No run shows the GCP answer of this route.
     pages:
       - internals/palette/validate-routes.md#the-list-routes
     rules:
@@ -733,10 +729,12 @@ facts:
     kind: behavior
     reads:
       fields:
+        - vpcId
+        - sshKeyName
         - keyNames[]
     stand_in: []
     live: []
-    unchecked: No live run shows it. The page states it from the code of Palette.
+    unchecked: No live run shows it.
     pages:
       - internals/palette/validate-routes.md#the-list-routes
     rules:
@@ -780,14 +778,9 @@ facts:
   - id: validate-no-route-checks
     kind: behavior
     reads:
-      values:
-        check-that-no-route-runs:
-          - policy
-          - permission
-          - cloud-api-off
-          - quota
-          - eks-zone-count
-          - gke-release-channel
+      fields:
+        - spec.machinepoolconfig[].cloudConfig.azs
+        - spec.cloudConfig.overrideClusterAPIConfig
     stand_in: []
     live: []
     unchecked: The page lists checks that no route runs. A live run cannot show every absence.

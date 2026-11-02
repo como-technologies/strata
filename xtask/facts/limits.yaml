@@ -21,7 +21,9 @@ facts:
     reads:
       fields:
         - spec.published.packs[].digest
-    unchecked: Every record of every run carries a pack-ref digest of a Spectro pack registry. No check asserts it.
+    live:
+      - eks.sh:release-digests
+      - gke.sh:release-digests
     pages:
       - internals/palette/limits.md#what-no-run-covers
       - internals/palette/packs.md#the-digest-of-each-registry-kind
@@ -42,21 +44,6 @@ facts:
     code:
       - src/diff/impact.rs
       - src/ops/repave.rs
-
-  - id: limit-fips-mode
-    kind: behavior
-    reads:
-      fields:
-        - tags[].tag
-        - tags[].version
-        - tags[].packUid
-    unchecked: No run uses a Palette in FIPS mode. The registry route then omits each version that is not FIPS compliant, and answers 404 when none is left.
-    pages:
-      - internals/palette/limits.md#what-no-run-covers
-      - internals/palette/packs.md#the-fips-rule
-    code:
-      - src/ops/packs.rs
-      - src/ops/behind.rs
 
   - id: limit-byoi-image-id
     kind: behavior
@@ -113,7 +100,7 @@ facts:
         - packs.results[].name
         - packs.results[].errors[].code
         - packs.results[].errors[].message
-    unchecked: No pack of the Public Repo lists a dependency. So no run sends a pack with a missing required pack to this route.
+    unchecked: No run sends a pack with a missing required pack to this route. The run of registry.sh meets the refusal at the create of a profile.
     pages:
       - internals/palette/limits.md#what-no-run-covers
       - internals/palette/validate-routes.md#post-v1clusterprofilesvalidatepacks
@@ -138,9 +125,10 @@ facts:
   - id: limit-forbidden-config-routes
     kind: behavior
     reads:
-      codes:
-        - AccessDenied
-    unchecked: No run shows an HTTP 403 body on these routes. The stand-in of the book gives the body AccessDenied.
+      fields:
+        - code
+        - message
+    unchecked: No run shows an HTTP 403 body on the routes config/rbacs, config/namespaces, and repave/status. The stand-in of the book models the body with the code AccessDenied.
     pages:
       - internals/palette/limits.md#what-no-run-covers
       - internals/palette/clusters.md#cluster-tiers
@@ -151,38 +139,6 @@ facts:
       - src/snapshot/policy.rs
       - src/snapshot/cluster.rs
 
-  - id: limit-no-role-key
-    kind: behavior
-    reads:
-      codes:
-        - ResourceAccessDenied
-    live:
-      - tiers.sh:limited-status
-      - tiers.sh:limited-code-says
-      - tiers.sh:limited-message
-    pages:
-      - internals/palette/limits.md#what-no-run-covers
-      - internals/palette/clusters.md#cluster-tiers
-      - commands/snapshot/cluster.md#the-policy-tier
-    code:
-      - src/api/palette/clusters.rs
-
-  - id: limit-imported-cluster
-    kind: behavior
-    reads:
-      fields:
-        - spec.clusterType
-        - specSummary.clusterType
-      values:
-        spec.clusterType: [AlloyMonitor, AlloyAssist, AlloyExtend]
-    unchecked: No run imports a cluster. The stand-in of the book models the three import types.
-    pages:
-      - internals/palette/limits.md#what-no-run-covers
-      - internals/palette/clusters.md#an-imported-cluster
-    code:
-      - src/ops/list.rs
-      - src/render/list.rs
-
   - id: limit-repave-variable-move
     kind: behavior
     reads:
@@ -190,30 +146,14 @@ facts:
         - isRepaveRequired
         - reasons[].code
         - reasons[].pack.diffConfigKeys
-    live:
-      - repave.sh:var-strata-answer
-      - repave.sh:var-none
-      - repave.sh:var-control
-      - repave.sh:var-control-says
+    live: []
+    unchecked: No run applies a version that reads a profile variable in a field that repaves to a cluster. So no run shows which answer of the repave route the nodes follow.
     pages:
       - internals/palette/limits.md#what-no-run-covers
       - internals/palette/profiles.md#a-variable-in-a-field-that-repaves
     code:
       - src/ops/repave.rs
       - src/diff/mod.rs
-
-  - id: limit-gcp-instance-types
-    kind: behavior
-    reads:
-      fields:
-        - instanceTypes[].type
-        - instanceTypes[].nonSupportedZones
-    unchecked: No run shows the GCP answer of the instance type route. The check of the shape has no GCP result yet.
-    pages:
-      - internals/palette/limits.md#what-no-run-covers
-      - internals/palette/validate-routes.md#the-list-routes
-    rules:
-      - instance-offering
 
   - id: limit-install-order-profiles
     kind: behavior
@@ -233,29 +173,14 @@ facts:
     rules:
       - profile-order
 
-  - id: limit-tier-install-order
-    kind: behavior
-    reads:
-      fields:
-        - spec.appTiers[].spec.installOrder
-    unchecked: The page states these rules from the source of Palette, and no run shows them. A run shows that Palette keeps the order of the create.
-    pages:
-      - internals/palette/limits.md#what-the-source-of-palette-says
-      - internals/palette/other-objects.md#app-profiles
-    code:
-      - src/api/palette/profiles.rs
-      - src/api/palette/mod.rs
-
   - id: limit-retired-pack-pinned
     kind: behavior
     reads:
       fields:
-        - spec.annotations.system_state
-      codes:
-        - ClusterProfileInvalidPackState
+        - items[].spec.annotations.system_state
       values:
-        spec.annotations.system_state: [deprecated, disabled, deleted]
-    unchecked: The page states the rule from the source of Palette, and no run shows it. A run shows the refusal of a new profile that pins a retired pack.
+        "items[].spec.annotations.system_state": [disabled, deleted]
+    unchecked: No run makes a profile that pins a pack before Palette retires the pack. A run shows the refusal of a new profile that pins a retired pack.
     pages:
       - internals/palette/limits.md#what-the-source-of-palette-says
       - internals/palette/packs.md#pack-states
@@ -263,19 +188,6 @@ facts:
       - src/api/registry.rs
     rules:
       - pack-state
-
-  - id: limit-template-option-presets
-    kind: behavior
-    reads:
-      fields:
-        - spec.template.parameters.inputParameters[].targetKey
-        - spec.template.parameters.inputParameters[].options
-    unchecked: The page states the rule from the source of Palette, and no run shows it. A run shows that no route gives the presets.
-    pages:
-      - internals/palette/limits.md#what-the-source-of-palette-says
-      - internals/palette/packs.md#the-presets-of-a-template-option
-    code:
-      - src/candidate/presets.rs
 
   - id: limit-helm-oci-endpoint
     kind: behavior
@@ -285,7 +197,6 @@ facts:
     unchecked: The page states the rule from the source of Palette, and no run shows it.
     pages:
       - internals/palette/limits.md#what-the-source-of-palette-says
-      - internals/palette/packs.md#the-digest-of-each-registry-kind
     rules:
       - helm-oci-endpoint
 
@@ -303,21 +214,6 @@ facts:
     code:
       - src/snapshot/pack.rs
       - src/api/mask.rs
-
-  - id: limit-draft-mask
-    kind: behavior
-    reads:
-      fields:
-        - spec.draft.packs[].values
-        - packValues[].schema[].name
-        - packValues[].schema[].format
-    unchecked: The page states the rule from the source of Palette, and no run shows it.
-    pages:
-      - internals/palette/limits.md#what-the-source-of-palette-says
-      - internals/palette/profiles.md#secrets-in-the-values
-    code:
-      - src/api/mask.rs
-      - src/api/palette/profiles.rs
 
   - id: limit-repave-field-lists
     kind: behavior
@@ -342,8 +238,8 @@ facts:
     kind: behavior
     reads:
       fields:
-        - action.events.*.packValues
-        - action.events.*.passwordFields
+        - items[].action.events.*.packValues
+        - items[].action.events.*.passwordFields
     unchecked: The page states the rule from the source of Palette, and no run shows it.
     pages:
       - internals/palette/limits.md#what-the-source-of-palette-says
@@ -374,15 +270,3 @@ facts:
       - internals/palette/validate-routes.md#the-list-routes
     rules:
       - ssh-key-pair
-
-  - id: limit-trial-cluster-limit
-    kind: behavior
-    reads:
-      codes:
-        - FreemiumActiveClusterLimitExceeded
-    unchecked: The page states the rule from the source of Palette, and no run shows it.
-    pages:
-      - internals/palette/limits.md#what-the-source-of-palette-says
-      - internals/palette/validate-routes.md#post-v1spectroclusterscloudtypevalidate
-    rules:
-      - palette-validate

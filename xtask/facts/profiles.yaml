@@ -10,6 +10,7 @@ facts:
         - metadata.name
         - metadata.labels
         - metadata.annotations.scope
+        - metadata.annotations.projectUid
         - metadata.lastModifiedTimestamp
         - spec.version
         - spec.published.type
@@ -53,9 +54,11 @@ facts:
       - template.sh:release-names-template
       - draft.sh:no-has-draft
       - who.sh:edit-last-modified
+      - registry.sh:del-doc-fields
     pages:
       - reference/palette-api.md#a-profile-version
       - internals/palette/profiles.md#the-scope-of-a-version
+      - internals/palette/profiles.md#drafts
       - internals/palette/profiles.md#what-the-delete-of-a-version-checks
     code:
       - src/api/palette/profiles.rs
@@ -114,7 +117,9 @@ facts:
         - variables[].immutable
         - variables[].inputType
         - variables[].isSensitive
-        - variables[].options[]
+        - variables[].options[].description
+        - variables[].options[].label
+        - variables[].options[].value
         - variables[].regex
         - variables[].required
       codes:
@@ -122,6 +127,7 @@ facts:
     stand_in:
       - v1/clusterprofiles/{uid}/variables
     live:
+      - verify.sh:addon-has-a-variable
       - verify.sh:release-variables
       - verify.sh:release-variables-empty
       - verify.sh:missing-profile-variables
@@ -162,6 +168,7 @@ facts:
         - spec.published.content
         - spec.published.digest
         - spec.draft.content
+        - spec.draft.digest
     stand_in:
       - v1/clusterprofiles/{uid}/packs/{packName}/manifests/{manifestUid}
     live:
@@ -328,8 +335,8 @@ facts:
         - items[].metadata.uid
     stand_in:
       - v1/dashboard/projects/metadata
-    live: []
-    unchecked: No check of a live script reads the project listing. The helper tenant.sh reads it to find the project.
+    live:
+      - preflight.sh:palette-key
     pages:
       - reference/palette-api.md#other-reads
     code:
@@ -393,7 +400,7 @@ facts:
       - internals/palette/profiles.md#edits-in-place
     code:
       - src/render/notes.rs
-      - src/ops/verify.rs
+      - src/diff/mod.rs
     rules:
       - profile-order
 
@@ -420,6 +427,7 @@ facts:
     reads:
       fields:
         - spec.draft.packs[].packUid
+        - spec.draft.packs[].values
         - spec.packs[].spec.values
     stand_in: []
     live: []
@@ -461,8 +469,8 @@ facts:
     live:
       - export.sh:export-<name>
       - export.sh:export-json-<name>
-      - export.sh:export-accepts-json
-      - export.sh:export-accepts-json-no-file
+      - export.sh:export-record-<name>
+      - export.sh:export-json-root-<name>
     pages:
       - internals/palette/profiles.md#the-export-of-a-version
     code:
@@ -480,7 +488,7 @@ facts:
     pages:
       - internals/palette/profiles.md#the-export-of-a-version
     code:
-      - src/candidate/export.rs
+      - examples/live/api.sh
 
   - id: profile-export-limit
     kind: behavior
@@ -493,7 +501,7 @@ facts:
     pages:
       - internals/palette/profiles.md#the-export-of-a-version
     code:
-      - src/candidate/export.rs
+      - examples/live/export.sh
 
   # The audit log.
   - id: audit-page-limit
@@ -690,7 +698,7 @@ facts:
         - DeletionResourceInUseError
     stand_in: []
     live: []
-    unchecked: No run bumps a version with the flag on and no skip_destroy. The run holds skip_destroy before the first bump.
+    unchecked: No check bumps a version with the flag on and no skip_destroy in the state. A failed run showed the error once, and each script now holds skip_destroy first.
     pages:
       - internals/palette/profiles.md#version-bumps
     code:
@@ -764,7 +772,6 @@ facts:
     live:
       - draft.sh:no-has-draft
       - draft.sh:list-published
-      - draft.sh:unpublished-create
       - draft.sh:unpublished-listed
     pages:
       - internals/palette/profiles.md#drafts
@@ -801,7 +808,6 @@ facts:
     live:
       - template.sh:lock-manifest-edit
       - template.sh:lock-manifest-verify
-      - template.sh:lock-manifest-back
     pages:
       - internals/palette/profiles.md#the-lock-of-a-cluster-template
     code:
@@ -908,7 +914,7 @@ facts:
         - reasons[].code
     stand_in: []
     live: []
-    unchecked: No run asks the template route twice. The page lists the choice of the cluster under what no run covers.
+    unchecked: No run puts two clusters in one template. The page says that no live run checks the choice of the cluster.
     pages:
       - internals/palette/profiles.md#the-lock-of-a-cluster-template
     code:
@@ -934,7 +940,7 @@ facts:
         - isRepaveRequired
     stand_in: []
     live: []
-    unchecked: No run asks the route for a template with no cluster. The page lists this answer under what no run covers.
+    unchecked: No run asks the route for a template with no cluster. The page says that no live run checks this answer.
     pages:
       - internals/palette/profiles.md#the-lock-of-a-cluster-template
     code:
@@ -951,7 +957,8 @@ facts:
     pages:
       - internals/palette/profiles.md#a-cluster-in-a-cluster-template-needs-a-time-zone
     code:
-      - src/snapshot/policy.rs
+      - examples/live/terraform/variables.tf
+      - examples/live/terraform/cloud-aws.tf
 
   # What the create of a version checks.
   - id: profile-create-rules
@@ -1159,7 +1166,7 @@ facts:
     pages:
       - internals/palette/profiles.md#macros
     code:
-      - src/snapshot/mod.rs
+      - xtask/src/tenant/macros.rs
     rules:
       - macro-undeletable
 
@@ -1175,10 +1182,8 @@ facts:
       - macros.sh:undo-flag
     pages:
       - internals/palette/profiles.md#macros
-    code:
-      - src/snapshot/mod.rs
     rules:
-      - macro-flag-scope
+      - macro-repave
 
   - id: group-resolved-values-missing
     kind: behavior
@@ -1252,6 +1257,8 @@ facts:
         - spec.source
         - spec.reasons[].code
         - spec.reasons[].message
+        - spec.reasons[].pack.current.name
+        - spec.reasons[].pack.diffConfigKeys
       codes:
         - PackValuesUpdated
       values:

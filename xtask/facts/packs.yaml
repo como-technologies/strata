@@ -55,7 +55,7 @@ facts:
       - v1/packs
     live:
       - packs.sh:packs-paged-listing
-      - packs.sh:packs-paged
+      - packs.sh:preset-listing
       - packs.sh:packs-palette-latest
       - packs.sh:arch-listing
       - packs.sh:pack-time-listing
@@ -65,6 +65,7 @@ facts:
       - internals/palette/packs.md#what-a-registry-answers-about-a-pack
       - internals/palette/packs.md#the-architectures-of-a-version
       - internals/palette/packs.md#the-version-that-palette-calls-the-latest
+      - internals/palette/packs.md#the-presets-of-a-template-option
     code:
       - src/api/palette/listings.rs
       - src/candidate/pack.rs
@@ -88,9 +89,9 @@ facts:
       - v1/packs/{name}/registries/{uid}
     live:
       - packs.sh:packs-newest
+      - packs.sh:packs-rev-floating-tag
       - pack-states.sh:states-disabled-says
-      - tag-only.sh:os-packs
-      - registry.sh:packs-two
+      - pack-states.sh:states-deleted-says
     pages:
       - reference/palette-api.md#other-reads
       - internals/palette/packs.md#what-a-registry-answers-about-a-pack
@@ -122,10 +123,11 @@ facts:
     live:
       - registry-kinds.sh:provider-types
       - verify.sh:registries-provider-type
-      - registry-kinds.sh:auth-packs-says
     pages:
       - reference/palette-api.md#other-reads
       - internals/palette/packs.md#the-sync-of-a-registry
+      - internals/palette/packs.md#the-digest-of-each-registry-kind
+      - internals/palette/packs.md#a-pack-that-palette-makes-at-the-create
     code:
       - src/api/palette/listings.rs
       - src/api/registry.rs
@@ -172,6 +174,7 @@ facts:
     live:
       - packs.sh:bitnami-sync
       - packs.sh:stale-current
+      - packs.sh:stale-json
     pages:
       - reference/palette-api.md#other-reads
       - internals/palette/packs.md#the-sync-of-a-registry
@@ -191,7 +194,7 @@ facts:
       - registry.sh:leaf-digest-is-push
       - registry.sh:profile-digest-is-push
       - registry.sh:chart-profile-digest
-      - packs.sh:verify-record
+      - registry-kinds.sh:charts-digest
     pages:
       - internals/palette/packs.md#the-pack-ref-digest
     code:
@@ -267,7 +270,7 @@ facts:
         - items[].status.sync.lastRunTime
     stand_in: []
     live: []
-    unchecked: A read by hand shows it. No script holds this read.
+    unchecked: The live runs page lists no registry that never completed a sync. No script holds this read.
     pages:
       - internals/palette/packs.md#the-sync-of-a-registry
     code:
@@ -280,7 +283,7 @@ facts:
         - OciSyncInProgress
     stand_in: []
     live: []
-    unchecked: The refusal shows only while a sync runs. No check starts a second sync on purpose. The script api.sh waits and asks again.
+    unchecked: No check asserts the refusal. One run got it by chance, and the script api.sh now waits and asks again.
     pages:
       - internals/palette/packs.md#the-sync-of-a-registry
     code:
@@ -392,6 +395,7 @@ facts:
       - internals/palette/packs.md#a-pack-that-moves-between-registries
     code:
       - src/ops/repave.rs
+      - src/model/repave.rs
 
   # ---- A pack version pushed again ---------------------------------------------------------------
 
@@ -404,8 +408,6 @@ facts:
         - items[].metadata.uid
     stand_in: []
     live:
-      - registry.sh:push-2-differs
-      - registry.sh:leaf-after
       - registry.sh:listing-follows
       - registry.sh:leaf-verify
     pages:
@@ -628,6 +630,7 @@ facts:
     code:
       - src/snapshot/pack.rs
       - src/diff/verify.rs
+      - src/ops/packs.rs
     rules:
       - no-digest-kinds
 
@@ -673,13 +676,13 @@ facts:
     reads:
       fields:
         - items[].spec.providerType
+        - spec.published.packs[].annotations.ociRegistryProviderType
       values:
         "items[].spec.providerType": [pack, helm, zarf]
     stand_in: []
     live:
       - registry-kinds.sh:provider-types
       - verify.sh:registries-provider-type
-      - verify.sh:registries-kinds
     pages:
       - internals/palette/packs.md#the-digest-of-each-registry-kind
     code:
@@ -756,6 +759,7 @@ facts:
       - internals/palette/packs.md#tag-names
     code:
       - src/ops/repave.rs
+      - src/model/repave.rs
 
   - id: tag-rename-published
     kind: behavior
@@ -771,7 +775,7 @@ facts:
     pages:
       - internals/palette/packs.md#tag-names
     code:
-      - src/diff/verify.rs
+      - src/diff/pack.rs
 
   - id: floating-tag-moves-profile
     kind: behavior
@@ -869,10 +873,10 @@ facts:
     reads:
       fields:
         - spec.packs[].metadata.uid
+        - spec.published.packs[].packUid
     stand_in: []
     live:
-      - in-place.sh:edit-kept-manifest-uid
-      - in-place.sh:clone-carried-nothing
+      - export.sh:export-minted-<name>
     pages:
       - internals/palette/packs.md#manifest-pack-uids
     code:
@@ -884,6 +888,7 @@ facts:
     kind: behavior
     reads:
       fields:
+        - items[].kind
         - items[].isPrivate
         - items[].status.sync.isSyncSupported
       values:
@@ -912,8 +917,7 @@ facts:
     stand_in: []
     live:
       - registry-kinds.sh:auth-no-digest
-      - registry-kinds.sh:auth-pin
-      - registry-kinds.sh:auth-candidate-minted
+      - registry-kinds.sh:auth-candidate-same
       - registry-kinds.sh:auth-candidate-again
       - registry-kinds.sh:auth-candidate-listed
     pages:
@@ -1024,7 +1028,6 @@ facts:
     stand_in: []
     live:
       - packs.sh:arch-listing
-      - packs.sh:arch-record
       - packs.sh:arch-behind
       - packs.sh:arch-behind-says
       - packs.sh:arch-behind-json
@@ -1207,9 +1210,8 @@ facts:
       codes:
         - ResourceNotFound
     stand_in: []
-    live:
-      - pack-states.sh:states-disabled
-      - pack-states.sh:states-deleted
+    live: []
+    unchecked: No check asserts the 404 answer. The checks of pack-states.sh read the tags of a retired version through the states query.
     pages:
       - internals/palette/packs.md#pack-states
       - internals/palette/packs.md#what-a-registry-answers-about-a-pack
@@ -1274,7 +1276,6 @@ facts:
       - packs.sh:os-annotations-ref
       - packs.sh:os-pack-registry
       - packs.sh:os-annotations-registry
-      - packs.sh:os-annotations
     pages:
       - internals/palette/packs.md#the-annotations-of-a-pack-reference
     code:

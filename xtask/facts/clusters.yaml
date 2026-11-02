@@ -63,6 +63,7 @@ facts:
       - internals/palette/clusters.md#cluster-copies
     code:
       - src/api/palette/clusters.rs
+      - src/api/raw.rs
     rules: []
 
   - id: cluster-variables
@@ -78,13 +79,13 @@ facts:
     live:
       - verify.sh:cluster-variables-endpoint
       - verify.sh:addon-copy-variables-hash
-      - cluster.sh:variables-before
       - cluster.sh:variables-after
     pages:
       - reference/palette-api.md#a-cluster
       - internals/palette/clusters.md#cluster-copies
     code:
       - src/api/palette/clusters.rs
+      - src/snapshot/cluster.rs
     rules: []
 
   - id: cluster-rbacs
@@ -100,9 +101,7 @@ facts:
       - v1/spectroclusters/{uid}/config/rbacs
     live:
       - tiers.sh:rbac-before
-      - tiers.sh:rbac-add
-      - tiers.sh:rbac-record
-      - tiers.sh:rbac-edit
+      - tiers.sh:rbac-in-record
     pages:
       - reference/palette-api.md#a-cluster
       - internals/palette/clusters.md#cluster-tiers
@@ -138,10 +137,19 @@ facts:
       fields:
         - metadata.name
         - metadata.uid
+        - metadata.creationTimestamp
+        - metadata.lastModifiedTimestamp
+        - metadata.deletionTimestamp
         - metadata.labels
+        - metadata.annotations
         - metadata.annotations.projectUid
         - spec.cloudType
+        - spec.cloudAccountUid
+        - spec.cloudRegion
         - spec.clusterType
+        - spec.archType
+        - spec.location
+        - spec.tags
         - status.state
     stand_in:
       - v1/dashboard/spectroclusters/meta
@@ -149,6 +157,7 @@ facts:
       - verify.sh:cluster-listing
       - verify.sh:listing-profile-fields
       - cluster.sh:listing-has-cluster
+      - fleet.sh:listing-labels
       - cluster-group.sh:member-not-in-listing
     pages:
       - reference/palette-api.md#a-cluster
@@ -187,9 +196,9 @@ facts:
         - items[].metadata.creationTimestamp
         - items[].action.actionType
         - items[].action.isDone
-        - items[].action.events[].profileUid
-        - items[].action.events[].type
-        - items[].action.events[].message
+        - items[].action.events.*.profileUid
+        - items[].action.events.*.type
+        - items[].action.events.*.message
         - listmeta.continue
     stand_in:
       - v1/notifications/spectrocluster/{uid}
@@ -321,6 +330,7 @@ facts:
       - v1/dashboard/spectroclusters/search/schema
     live:
       - fleet.sh:tag-search
+      - cluster-group.sh:search-profile-runs
       - cluster-group.sh:member-listed
     pages:
       - reference/palette-api.md#the-fleet
@@ -441,7 +451,6 @@ facts:
     live:
       - edge-host.sh:edit-host-own-uid
       - edge-host.sh:edit-host-copy
-      - edge-host.sh:edit-host-manifest-uid
     pages:
       - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
       - internals/palette/other-objects.md#edge-hosts
@@ -538,6 +547,7 @@ facts:
     code:
       - src/api/palette/clusters.rs
       - src/ops/consumers/reads.rs
+      - src/ops/list.rs
     rules: []
 
   - id: app-profile-document
@@ -547,6 +557,7 @@ facts:
       fields:
         - metadata.name
         - metadata.uid
+        - metadata.lastModifiedTimestamp
         - spec.version
         - status.inUseApps[].uid
         - status.inUseApps[].name
@@ -563,6 +574,7 @@ facts:
     code:
       - src/api/palette/profiles.rs
       - src/ops/consumers/app.rs
+      - src/ops/live.rs
     rules: []
 
   - id: app-deployment-document
@@ -579,7 +591,7 @@ facts:
     stand_in:
       - v1/appDeployments/{uid}
     live: []
-    unchecked: No run makes an app deployment. The page lists it under what no run covers.
+    unchecked: No run makes an app deployment, so no check reads this route.
     pages:
       - reference/palette-api.md#an-edge-host-a-cluster-group-and-an-app-profile
       - internals/palette/other-objects.md#app-profiles
@@ -822,7 +834,6 @@ facts:
         - spec.clusterConfig.timezone
         - metadata.labels
     live:
-      - tiers.sh:same-release
       - tiers.sh:same-applied
       - tiers.sh:differ-policy
       - tiers.sh:b-verify-says
@@ -842,9 +853,9 @@ facts:
         - profiles[].spec.packs[].spec.manifests[].metadata.uid
         - spec.clusterProfileTemplates[].uid
     live:
+      - verify.sh:cluster-runs-release
       - in-place.sh:a-owns-manifest-copy
       - in-place.sh:b-owns-manifest-copy
-      - in-place.sh:edit-kept-manifest-uid
     pages:
       - internals/palette/clusters.md#cluster-copies
     code:
@@ -927,22 +938,6 @@ facts:
       - src/api/palette/clusters.rs
       - src/ops/verify.rs
 
-  - id: cluster-variable-values
-    kind: behavior
-    reads:
-      fields:
-        - "[].profileUid"
-        - "[].variables[].name"
-        - "[].variables[].value"
-    live:
-      - verify.sh:cluster-variables-endpoint
-      - verify.sh:addon-copy-variables-hash
-    pages:
-      - internals/palette/clusters.md#cluster-copies
-    code:
-      - src/api/palette/clusters.rs
-      - src/snapshot/cluster.rs
-
   - id: cluster-variable-change
     kind: behavior
     reads:
@@ -967,12 +962,12 @@ facts:
       fields:
         - items[].action.actionType
         - items[].action.isDone
-        - items[].action.events[].profileUid
-        - items[].action.events[].type
-        - items[].action.events[].message
+        - items[].action.events.*.profileUid
+        - items[].action.events.*.type
+        - items[].action.events.*.message
       values:
         items[].action.actionType: [NotifyActionClusterProfileUpdate]
-        items[].action.events[].type: [PackManifestUpdate, PackValuesUpdate]
+        items[].action.events.*.type: [PackManifestUpdate, PackValuesUpdate]
     live:
       - pending.sh:addon-pending
       - pending.sh:addon-names
@@ -1000,7 +995,7 @@ facts:
     kind: behavior
     reads:
       fields:
-        - items[].action.events[].type
+        - items[].action.events.*.type
         - items[].action.isDone
     live: []
     unchecked: The page states it. No check shows that an event of a version or of an added or removed pack stays.
@@ -1014,7 +1009,7 @@ facts:
     reads:
       fields:
         - items[].action.isDone
-        - items[].action.events[]
+        - items[].action.events.*
     live:
       - pending.sh:values-undo
       - pending.sh:values-undo-none
@@ -1063,6 +1058,7 @@ facts:
       - order.sh:cluster-order-kept
       - order.sh:cluster-audited
       - order.sh:cluster-verify
+      - template.sh:addon-order
     pages:
       - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
     code:
@@ -1090,55 +1086,13 @@ facts:
       fields:
         - spec.published.packs[].values
     live: []
-    unchecked: No run establishes the install order of the packs. The page links the documentation of Palette.
+    unchecked: No run sets a priority other than 0. The check addon-order of template.sh shows only that packs of one priority start together.
     pages:
       - internals/palette/clusters.md#the-order-of-the-profiles-of-a-cluster
     code:
       - src/snapshot/pack.rs
 
   # ---- clusters.md: What the cluster listing answers
-
-  - id: cluster-listing-fields
-    kind: behavior
-    reads:
-      fields:
-        - metadata.name
-        - metadata.uid
-        - metadata.creationTimestamp
-        - metadata.lastModifiedTimestamp
-        - metadata.deletionTimestamp
-        - metadata.labels
-        - metadata.annotations
-        - spec.cloudType
-        - spec.cloudAccountUid
-        - spec.cloudRegion
-        - spec.clusterType
-        - spec.archType
-        - spec.location
-        - spec.tags
-        - status.state
-    live:
-      - verify.sh:cluster-listing
-      - verify.sh:listing-profile-fields
-    pages:
-      - internals/palette/clusters.md#what-the-cluster-listing-answers
-    code:
-      - src/ops/list.rs
-
-  - id: cluster-health-state
-    kind: behavior
-    reads:
-      fields:
-        - status.health.state
-      values:
-        status.health.state: [Healthy, UnHealthy]
-    live:
-      - knurl.sh:instance-<name>-health
-    pages:
-      - internals/palette/clusters.md#what-the-cluster-listing-answers
-    code:
-      - adapter/src/lib.rs
-      - preflight/src/run/watch.rs
 
   - id: cluster-listing-array
     kind: behavior
@@ -1268,7 +1222,6 @@ facts:
     live:
       - fleet.sh:listing-labels
       - fleet.sh:record-labels
-      - fleet.sh:label
       - fleet.sh:prod
       - fleet.sh:prod-row
     pages:
@@ -1284,7 +1237,6 @@ facts:
         - spec.filterGroup.conjunction
         - spec.filterGroup.filters[]
     live:
-      - fleet.sh:filter-create
       - fleet.sh:filters
       - fleet.sh:by-filter
     pages:
@@ -1324,7 +1276,7 @@ facts:
     kind: behavior
     reads:
       fields:
-        - items[].status.virtual.clusterGroup
+        - items[].metadata.uid
       values:
         schema.properties[].name: [environment]
     live:
@@ -1335,6 +1287,7 @@ facts:
       - internals/palette/clusters.md#an-imported-cluster
     code:
       - src/ops/consumers/reads.rs
+      - src/ops/list.rs
       - src/api/palette/clusters.rs
 
   # ---- clusters.md: A deleted cluster
@@ -1384,7 +1337,6 @@ facts:
         - metadata.deletionTimestamp
         - metadata.annotations.deleted
     live:
-      - cluster.sh:verify-deleted
       - cluster.sh:verify-deleted-says
     pages:
       - internals/palette/clusters.md#a-deleted-cluster
@@ -1397,7 +1349,7 @@ facts:
       values:
         status.state: [Pending, Provisioning, Running, Deleting, Deleted, Error, Importing, Adopting, Unknown, Paired, Pairing]
     live: []
-    unchecked: Runs show Running, Provisioning, Deleting, and Deleted. The page lists the other states from the API reference.
+    unchecked: Runs show Running, Provisioning, Deleting, and Deleted. No run shows the other states that the page lists.
     pages:
       - internals/palette/clusters.md#a-deleted-cluster
     code:
@@ -1671,7 +1623,6 @@ facts:
         - spec.clusterProfileTemplates
     live:
       - cluster-group.sh:group-record
-      - cluster-group.sh:group-members
       - cluster-group.sh:member-record
       - cluster-group.sh:member-runs-pin
     pages:
@@ -1743,7 +1694,7 @@ facts:
         - spec.clustersConfig.limitConfig.memory
         - spec.clustersConfig.limitConfig.memoryMiB
     live:
-      - cluster-group.sh:limit-verify-says
+      - cluster-group.sh:edit-group-raw
       - cluster-group.sh:limit-compare
       - cluster-group.sh:limit-compare-says
     pages:
@@ -1756,8 +1707,8 @@ facts:
     reads:
       fields:
         - spec.clustersConfig.limitConfig.cpu
-    live:
-      - cluster-group.sh:group-members
+    live: []
+    unchecked: The run makes a virtual cluster with a CPU limit of 3 cores. No check asserts that Palette sets no lower limit.
     pages:
       - internals/palette/other-objects.md#cluster-groups
     code:
@@ -1820,7 +1771,6 @@ facts:
       fields:
         - spec.appTiers[].spec.installOrder
     live:
-      - app-profile.sh:order-a-create
       - app-profile.sh:order-a-tiers
       - app-profile.sh:order-a-params
     pages:

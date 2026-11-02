@@ -41,7 +41,7 @@ An entry has these fields:
 | `id` | The name of the fact: words with dashes. No two facts have one id. |
 | `kind` | `request`, `behavior`, or `gap`. See the next table. |
 | `request` | The method and the path of the request. Only a fact of the kind `request` has it. |
-| `reads` | What strata reads from the answer or depends on. `fields` are paths in the document, `codes` are error codes of Palette, and `values` are the values of a closed set, by field. |
+| `reads` | What strata reads from the answer or depends on. `fields` are paths in the document: `[]` marks an array, and `*` marks the values of an object. `codes` are error codes of Palette. `values` are the values of a closed set, by field. |
 | `stand_in` | The routes of the stand-in that imitate the fact, as paths with `{name}` for a segment that varies. Empty when the stand-in serves no document for it. |
 | `live` | The live checks that prove the fact, each as `script.sh:check`. |
 | `unchecked` | Why no live check proves the fact. A fact has `live` or `unchecked`, and not both. |
