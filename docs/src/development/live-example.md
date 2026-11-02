@@ -103,7 +103,9 @@ its end.
 | `tofu-install.sh` | Installs the pinned OpenTofu. `just tofu-install` runs it, and `just tofu-uninstall` removes it. |
 | `tf.sh` | Runs `tofu` with the key and the Palette address that strata uses. |
 | `contract-profiles.sh` | The standing cluster profiles of the contract run (#531). It applies `terraform/` with the prefix `strata-contract`, no cluster, and `own_registries` off, in the state file `terraform/contract.tfstate`. See [The profiles of the run](./facts.md#the-profiles-of-the-run). |
-| `lib.sh` | What the scripts share: the usage text, the heading of a stage, the checks and their summary, the edits of the lab, the reads of `terraform.tfvars`, the applies, the wait for a cluster, and the baseline. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on the output of a failed command fails. |
+| `common.sh` | The functions `die` and `usage`. `lib.sh`, `contract.sh`, and `contract-profiles.sh` source it. It runs nothing and checks nothing, so a script that does not run strata can source it alone. |
+| `github.sh` | What the scripts read about GitHub: `remote_repo`, the project of the `origin` remote of a checkout, and the jq function `first_line`, the first line of the body of an issue, which holds its marker. `contract-report.sh`, `upstream.sh`, `drift-report.sh`, and `report-send.sh` source it. The scripts in `scripts/ci/` stand alone, so they do not. |
+| `lib.sh` | What the scripts share: the heading of a stage, the checks and their summary, the edits of the lab, the reads of `terraform.tfvars`, the applies, the wait for a cluster, and the baseline. It stops on a binary of strata that is older than the sources. With a `jq` older than 1.7, it makes `jq -e` exit with `4` on an empty input, so a check on the output of a failed command fails. |
 | `baseline.sh` | Checks that the example is at its baseline. Each script needs it before it starts and after it ends. |
 | `tenant.sh` | Read-only lookups: the names for `terraform.tfvars`, the state of a cluster and what holds it, the cluster listing itself, diagnostics, the repave check of Palette, and a pack digest from its Helm or OCI registry. |
 | `diagnose.sh` | Saves diagnostics for each cluster in the state. The scripts and `just live-up` and `just live-down` run it when an apply fails or a wait stops. |
@@ -562,7 +564,7 @@ just live-knurl                                                                #
 just live-who                                                                  # #69, stage 2 needs just live-up
 just live-draft                                                                # #155, needs just live-profiles
 just live-release                                                              # #146, needs only the key
-just live-contract                                                             # #390, #391, #393, needs the key and just examples; reads only, also the calls of the clouds
+just live-contract                                                             # #390, #391, #393, #576, needs the key and just examples; reads only, also the calls of the clouds; --with-cluster in a window with a cluster
 just live-validate-route BODIES                                                # #243, needs the key and a directory of bodies; no cluster
 just live-route-bodies BODIES                                                  # #408, #413, needs just live-profiles on AWS; tries four add-on profiles, runs validate-route.sh on those that Palette takes, deletes them
 just live-pending                                                              # #70, #276, needs just live-up

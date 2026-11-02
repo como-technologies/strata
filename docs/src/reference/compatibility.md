@@ -210,6 +210,11 @@ After 0.27.0, `render::Format` has `ALL`, `as_str`, and `from_text`, from one ta
 `strata-preflight`, the jq programs of a rule can call the new filter `semver_numbers`. It reads
 a text as a version, as `reference::version::numbers` does.
 
+After 0.27.0, two items are new, and both only add to the API. `reference::version::line` gives the
+release line of a version: its first numbers, joined by dots, such as `4.10` for `4.10.3-rc.1`.
+`probe::FixtureBackend::outputs` in `strata-preflight` gives the output of each command that a
+fixture holds under `_exec`, as `exec` answers them.
+
 ## The documents
 
 Each JSON document has a schema id, such as `strata-snapshot/1`. The id changes
@@ -854,6 +859,12 @@ field, a value, an input, or an option is in the sections above.
     record again.
   - A snapshot of such a group gives the error `serialize`, and writes no record, when strata
     cannot mask a password in the values. `save_dir` gave that error before.
+- **`verify-report.sh` and `upstream-report.sh` run when an open issue has no text in its
+  body.** GitHub gives `null` as the body of such an issue.
+  - `upstream-report.sh` stopped with a jq error on each version of jq. `verify-report.sh`
+    stopped on the jq of `ubuntu-latest`.
+  - Both scripts read the first line of such a body as an empty line now. They skip the issue
+    and do their usual work. No script of yours needs a change.
 - **`strata-preflight`: three rules read a version as `strata` does.** The rules are
   `capa-stack-release-behind`, `ccm-version`, and `edge-agent-version`.
   - `capa-stack-release-behind` stopped with an error for `--release 4.11.0-rc.1`. It compares

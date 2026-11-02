@@ -22,7 +22,8 @@ script=weekly
 note() { echo "$script: $*" >&2; }
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo=$(cd "$here/../.." && pwd)
-data=${STRATA_CONTRACT_DIR:-$HOME/.local/share/strata-contract}
+# shellcheck source=deploy/contract/folder.sh
+. "$here/folder.sh"
 keep=12
 run=$data/runs/$(date -u +%Y%m%dT%H%M%SZ)
 mkdir -p "$run" || exit 2
@@ -47,6 +48,8 @@ code=0
 OUT=$run examples/live/contract.sh --state "$state" || code=$?
 
 report=0
+# the count of same in the last run: a fall of it says that the cover fell
+before=$(jq -r '.summary.same // empty' "$data/last.json" 2> /dev/null || true)
 if [ -s "$run/contract.json" ]; then
   examples/live/contract-report.sh "$run/contract.json" || report=$?
   cp "$run/contract.json" "$data/last.json"
@@ -66,6 +69,11 @@ fi
 # keep the newest runs: the names are UTC times, so the name order is the time order
 ls -1d "$data"/runs/*/ 2> /dev/null | sort | head -n -"$keep" | while read -r old; do rm -rf "$old"; done
 
-note "the contract run exited $code and the report exited $report"
+summary=$(jq -r -f examples/live/contract-summary.jq "$run/contract.json" 2> /dev/null || echo "no summary in the result")
+note "the contract run exited $code and the report exited $report: $summary"
+same=$(jq -r '.summary.same // empty' "$run/contract.json" 2> /dev/null || true)
+if [ -n "$before" ] && [ -n "$same" ] && [ "$same" -lt "$before" ]; then
+  note "the cover fell: $same facts are the same, and the last run had $before"
+fi
 if [ "$code" -eq 2 ] || [ "$report" -eq 2 ]; then exit 2; fi
 exit 0

@@ -10,7 +10,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde_json::{Value, json};
-use strata::closed_set::unknown::log::FILE;
+use strata::TOOL_VERSION;
+use strata::closed_set::unknown::log::{FILE, Line, SCHEMA};
+use strata::closed_set::unknown::sighting::Sighting;
 
 use super::{
     PROFILE_LISTING, UID_A, UID_B, isolate_palette, profile_document, profile_route,
@@ -91,9 +93,56 @@ pub fn list_command(api: &str, home: &Path, more: &[&str]) -> Command {
     command
 }
 
+/// The command `strata report` with the arguments `more`. The run has a home of its own, `home`,
+/// and no state folder from the environment of the test.
+pub fn report_command(home: &Path, more: &[&str]) -> Command {
+    let mut command = strata_command();
+    isolate_palette(&mut command, home);
+    command
+        .env_remove("STRATA_QUIET")
+        .env_remove("XDG_STATE_HOME")
+        .arg("report")
+        .args(more);
+    command
+}
+
+/// The state folder of the run that used `home` as its home.
+pub fn state_in(home: &Path) -> PathBuf {
+    home.join(".local/state/strata")
+}
+
 /// The log of the run that used `home` as its home.
 pub fn log_in(home: &Path) -> PathBuf {
-    home.join(".local/state/strata").join(FILE)
+    state_in(home).join(FILE)
+}
+
+/// A line of the log, as strata writes it: the value `value` of the set `set`, which the route
+/// `route` gave to this release of strata.
+pub fn log_line(set: &str, value: &str, route: &str) -> String {
+    serde_json::to_string(&Line {
+        schema: SCHEMA.to_string(),
+        sighting: Sighting {
+            strata: TOOL_VERSION.to_string(),
+            set: set.to_string(),
+            value: value.to_string(),
+            route: route.to_string(),
+        },
+    })
+    .unwrap()
+}
+
+/// Write the file `file` with the lines `lines`, one on each row, and make its folder.
+pub fn write_lines(file: &Path, lines: &[String]) {
+    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+    let text: String = lines.iter().map(|l| format!("{l}\n")).collect();
+    std::fs::write(file, text).unwrap();
+}
+
+/// Write the log of the run that used `home` as its home, and give its path.
+pub fn write_log(home: &Path, lines: &[String]) -> PathBuf {
+    let file = log_in(home);
+    write_lines(&file, lines);
+    file
 }
 
 /// One request that the stand-in endpoint took.

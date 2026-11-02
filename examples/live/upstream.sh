@@ -23,6 +23,7 @@ set -uo pipefail
 script=upstream
 flag=false
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+. "$live/github.sh"
 [ -x "$strata" ] || die "no strata binary at $strata; run just build"
 for tool in aws oras jq tar gh; do
   command -v "$tool" > /dev/null || die "$tool is not installed"
@@ -46,7 +47,8 @@ export AWS_PROFILE PALETTE_PROJECT_UID
 for v in REG REG_NAME HOST REPO PACK REGION R AWS_PROFILE PALETTE_PROJECT_UID; do
   [ -n "${!v}" ] || die "the tofu output behind $v is empty; run just live-profiles"
 done
-GH_REPO=$(git -C "$live" remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')
+GH_REPO=$(remote_repo "$live")
+[ -n "$GH_REPO" ] || die "the remote origin of $live is not on GitHub, and the issues of this test are on GitHub"
 LABEL=strata-live-behind
 report=("$live/../../scripts/ci/upstream-report.sh")
 export STRATA_BIN="$strata"

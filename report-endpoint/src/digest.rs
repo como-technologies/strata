@@ -87,13 +87,14 @@ impl Counted {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+    use strata::closed_set::unknown::report::SCHEMA;
 
     use super::*;
 
     const DAY: Duration = Duration::from_secs(24 * 3600);
 
     fn report(value: &str) -> Report {
-        serde_json::from_value(json!({"schema": "strata-report/1", "unknown": [
+        serde_json::from_value(json!({"schema": SCHEMA, "unknown": [
             {"strata": "0.26.0", "set": "ProfileType", "value": value,
              "route": "/v1/packs", "count": 1}]}))
         .unwrap()

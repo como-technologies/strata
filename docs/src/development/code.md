@@ -201,7 +201,11 @@ ASD-STE100.
   directory of that target: see [The fuzzing](./build-test.md#the-fuzzing).
 - Each parser of text from a user or from Palette has a fuzz target in `fuzz/`.
 - Put a helper that two test files use in `tests/common/mod.rs`. Compare
-  against the `const` of the crate, not against a copy of its text.
+  against the `const` of the crate, not against a copy of its text. A test that
+  pins the text of a schema id on purpose can stay, with a comment that says so.
+- A test that runs a script in a tree of its own copies the script with
+  `copy_scripts`. It copies each file that the script sources too, such as
+  `examples/live/common.sh`.
 - The name of a test is a full sentence that states the behavior.
 - Start the binary of strata with `strata_command`, and give it to a script with `give_strata`.
   Both stop the send of the report: see

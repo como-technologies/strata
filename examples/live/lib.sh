@@ -19,12 +19,9 @@ flag=${flag:-false}
 # saved answer say. A script that tests the send, such as report-send.sh, sets it again.
 export STRATA_REPORT=0
 
-die() { echo "$script: $*" >&2; exit 2; }
-
-# usage: print the comment at the top of the script: from its second line to the line before
-# `set -uo pipefail`, without the leading `# `. The script sources this file before it checks its
-# arguments.
-usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+# `die` and `usage` are in common.sh. A script that runs no strata sources that file alone, because
+# the check for a stale binary below stops it.
+. "$live/common.sh"
 
 # stage N TITLE: print the heading of stage N, and succeed when this run reaches it. The script sets
 # `from` to the first stage of the run.

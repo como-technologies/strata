@@ -2,15 +2,17 @@
 //! with the rules has none.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 
 use serde_json::json;
+use strata_preflight::probe::{Backend, FixtureBackend};
 
 use super::super::check::check as faults_of;
 use super::super::model::{Fact, PaletteRoute};
 use super::super::sources::Sources;
 use super::{
-    Answer, CloudRule, CloudSources, command_words, documents, literals, read_code, read_rules,
-    without_tests,
+    Answer, CloudRule, CloudSources, answers_of, command_words, documents, literals, read_code,
+    read_rules, routes_beside,
 };
 
 /// A fact of a call that a rule sends, a table of zone ids, and a call that the lab cannot send.
@@ -49,7 +51,7 @@ const FACTS: &str = r#"
 "#;
 
 fn facts() -> Vec<Fact> {
-    serde_yaml::from_str(FACTS).expect("the facts are YAML")
+    crate::facts::from_text(FACTS)
 }
 
 /// A rule of the cloud tier with the words of its command and the answers of its fixtures.
@@ -695,14 +697,49 @@ fn the_code_that_the_scan_reads_has_no_test_module_no_test_file_and_no_comment()
 }
 
 #[test]
-fn an_item_for_the_tests_that_is_no_module_does_not_end_the_code_that_the_scan_reads() {
-    let text = "const A: &str = \"x\";\n#[cfg(test)]\nimpl Call {\n}\nconst B: &str = \"us-east-1\";\n#[cfg(test)]\n#[allow(dead_code)]\nmod tests;\nconst C: &str = \"eu-west-1\";\n";
-    let kept = without_tests(text);
-    assert!(kept.contains("const B"), "{kept}");
-    assert!(kept.contains("#[cfg(test)]\n#[allow(dead_code)]"), "{kept}");
-    // the module of tests ends the code, also when an attribute stands between them
-    let plain = "const A: &str = \"x\";\n#[cfg(test)]\nmod tests {\n    const R: &str = \"us-east-1\";\n}\n";
-    assert_eq!(without_tests(plain), "const A: &str = \"x\";");
+fn the_code_after_a_line_mod_tests_is_in_the_code_that_the_scan_reads() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(
+        src.join("lib.rs"),
+        "const A: &str = \"x\";\n#[cfg(test)]\nmod tests;\nconst B: &str = \"us-east-1\";\n",
+    )
+    .unwrap();
+    let (code, unread) = read_code(dir.path());
+    assert_eq!(unread, Vec::<String>::new());
+    assert_eq!(
+        code["src/lib.rs"],
+        "const A: &str = \"x\";\nconst B: &str = \"us-east-1\";"
+    );
+}
+
+#[test]
+fn the_scan_reads_the_code_after_the_line_mod_tests_of_the_files_of_strata() {
+    let (code, unread) = read_code(&crate::repository());
+    assert_eq!(unread, Vec::<String>::new());
+    // each of these files declares its module of tests above its code
+    for (file, item) in [
+        ("src/closed_set/unknown.rs", "const LONGEST_VALUE"),
+        ("src/closed_set/unknown/send.rs", "pub const SETTING"),
+    ] {
+        assert!(
+            code[file].contains(item),
+            "{file} lost the code after `mod tests;`"
+        );
+    }
+}
+
+#[test]
+fn a_file_of_the_code_that_is_no_rust_is_named_and_not_taken_for_clean() {
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    std::fs::write(src.join("broken.rs"), "fn {").unwrap();
+    let (code, unread) = read_code(dir.path());
+    assert!(code.is_empty());
+    assert_eq!(unread.len(), 1);
+    assert!(unread[0].starts_with("src/broken.rs: "), "{unread:?}");
 }
 
 #[test]
@@ -720,7 +757,7 @@ fn a_file_of_the_code_that_cannot_be_read_is_named_and_not_taken_for_clean() {
 
 #[test]
 fn the_code_of_strata_holds_no_text_that_names_a_cloud_fact() {
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let repo = crate::repository();
     let (code, unread) = read_code(&repo);
     assert_eq!(unread, Vec::<String>::new());
     assert!(
@@ -900,33 +937,68 @@ fn the_catalog_holds_a_text_that_names_a_cloud_fact_in_a_cloud_tier_rule_alone()
     );
 }
 
+/// A fact of the kind request that states the route of the instance types.
+fn instance_types_request() -> Fact {
+    crate::facts::from_text(
+        "- id: validate-instance-types
+  kind: request
+  request: GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cloudAccountUid={cloudAccountUid}
+  reads:
+    fields: ['instanceTypes[].type']
+  pages: [reference/palette-api.md]
+  code: [src/lib.rs]
+",
+    )
+    .remove(0)
+}
+
+/// The route of the first cloud fact of the world: the fact that states it, or a route as text.
+fn route_of(fact: Option<&str>, route: Option<&str>, lacks: &[&str]) -> PaletteRoute {
+    PaletteRoute {
+        fact: fact.map(str::to_string),
+        route: route.map(str::to_string),
+        lacks: lacks.iter().map(|f| (*f).to_string()).collect(),
+    }
+}
+
 #[test]
 fn a_route_of_palette_beside_a_call_names_the_fields_that_it_lacks() {
     let mut sources = world();
-    sources.facts[0].palette = Some(PaletteRoute {
-        route: "GET /v1/clouds/aws/regions/{region}/instancetypes".to_string(),
-        lacks: vec!["Quota.Value".to_string()],
-    });
-    assert_eq!(faults_of(&sources), Vec::<String>::new());
+    sources.facts[0].palette = Some(route_of(
+        Some("validate-instance-types"),
+        None,
+        &["Quota.Value"],
+    ));
+    sources.facts.push(instance_types_request());
+    assert_eq!(routes_beside(&sources), Vec::<String>::new());
+    // a route that no fact states is written out
+    sources.facts[0].palette = Some(route_of(
+        None,
+        Some("GET /v1/clouds/aws/regions/{region}/availabilityzones"),
+        &["Quota.Value"],
+    ));
+    assert_eq!(routes_beside(&sources), Vec::<String>::new());
 }
 
 #[test]
 fn a_route_of_palette_that_lacks_no_field_would_answer_the_whole_call() {
     let mut sources = world();
-    sources.facts[0].palette = Some(PaletteRoute {
-        route: "GET /v1/clouds/aws/regions/{region}/instancetypes".to_string(),
-        lacks: vec![],
-    });
+    sources.facts[0].palette = Some(route_of(
+        None,
+        Some("GET /v1/clouds/aws/regions/{region}/availabilityzones"),
+        &[],
+    ));
     assert_one_fault(&sources, "names no field that it lacks");
 }
 
 #[test]
 fn a_route_of_palette_cannot_lack_a_field_that_the_call_does_not_read() {
     let mut sources = world();
-    sources.facts[0].palette = Some(PaletteRoute {
-        route: "GET /v1/clouds/aws/regions/{region}/instancetypes".to_string(),
-        lacks: vec!["Quota.Unit".to_string()],
-    });
+    sources.facts[0].palette = Some(route_of(
+        None,
+        Some("GET /v1/clouds/aws/regions/{region}/availabilityzones"),
+        &["Quota.Unit"],
+    ));
     assert_one_fault(
         &sources,
         "the route lacks `Quota.Unit`, and the fact does not read it",
@@ -936,15 +1008,94 @@ fn a_route_of_palette_cannot_lack_a_field_that_the_call_does_not_read() {
 #[test]
 fn a_route_of_palette_starts_with_a_method_and_a_table_has_no_route() {
     let mut sources = world();
-    sources.facts[0].palette = Some(PaletteRoute {
-        route: "/v1/clouds/aws/regions/{region}/instancetypes".to_string(),
-        lacks: vec!["Quota.Value".to_string()],
-    });
+    sources.facts[0].palette = Some(route_of(
+        None,
+        Some("/v1/clouds/aws/regions/{region}/availabilityzones"),
+        &["Quota.Value"],
+    ));
     assert_one_fault(&sources, "must start with a method");
     let mut sources = world();
-    sources.facts[2].palette = Some(PaletteRoute {
-        route: "GET /v1/clouds/aws/regions/{region}/availabilityzones".to_string(),
-        lacks: vec!["AvailabilityZones[].ZoneId".to_string()],
-    });
+    sources.facts[2].palette = Some(route_of(
+        None,
+        Some("GET /v1/clouds/aws/regions/{region}/availabilityzones"),
+        &["AvailabilityZones[].ZoneId"],
+    ));
     assert_one_fault(&sources, "a table has no route of Palette");
+}
+
+#[test]
+fn a_route_that_a_request_fact_states_is_named_and_not_written_again() {
+    let mut sources = world();
+    sources.facts.push(instance_types_request());
+    // the route of one cloud of the alternatives, with a query that differs
+    sources.facts[0].palette = Some(route_of(
+        None,
+        Some("GET /v1/clouds/aws/regions/{region}/instancetypes?cpuGtEq=0&memoryGtEq=0"),
+        &["Quota.Value"],
+    ));
+    let bad = routes_beside(&sources);
+    assert_eq!(bad.len(), 1, "{bad:?}");
+    assert!(
+        bad[0].contains("the fact `validate-instance-types` states the route"),
+        "{bad:?}"
+    );
+}
+
+#[test]
+fn the_fact_that_a_route_names_is_a_request_fact_with_a_get_request() {
+    let mut sources = world();
+    sources.facts[0].palette = Some(route_of(Some("missing"), None, &["Quota.Value"]));
+    let bad = routes_beside(&sources);
+    assert!(bad[0].contains("names the fact `missing`"), "{bad:?}");
+    // a cloud fact is no request fact
+    sources.facts[0].palette = Some(route_of(Some("azure-vm-usage"), None, &["Quota.Value"]));
+    assert!(routes_beside(&sources)[0].contains("names the fact `azure-vm-usage`"));
+    // a route names a fact or states a route
+    sources.facts[0].palette = Some(route_of(None, None, &["Quota.Value"]));
+    assert!(routes_beside(&sources)[0].contains("names a fact or states a route"));
+    sources.facts[0].palette = Some(route_of(
+        Some("validate-instance-types"),
+        Some("GET /v1/clouds/aws/regions/{region}/availabilityzones"),
+        &["Quota.Value"],
+    ));
+    assert!(routes_beside(&sources)[0].contains("names a fact or states a route"));
+}
+
+#[test]
+fn the_answers_of_a_fixture_are_the_answers_that_preflight_runs() {
+    // the output of `describe-x` has no `stderr`, so preflight reads no output of the fixture
+    let world = json!({"_exec": {
+        "aws ec2 describe-x --output json": {"exit": 0, "stdout": {"x": 1}},
+        "aws ec2 describe-y --output json": {"exit": 0, "stdout": {"y": 1}, "stderr": ""},
+        "aws ec2 describe-z --output json": {"exit": 1, "stdout": "no", "stderr": "failed"},
+    }});
+    let (backend, _) = FixtureBackend::split(world.clone());
+    let run = |command: &str| {
+        let argv: Vec<String> = command.split(' ').map(str::to_string).collect();
+        backend.exec(&argv, Duration::from_secs(1)).is_ok()
+    };
+    let read: Vec<String> = answers_of(world).into_iter().map(|a| a.command).collect();
+    for command in [
+        "aws ec2 describe-x --output json",
+        "aws ec2 describe-y --output json",
+    ] {
+        assert_eq!(
+            read.iter().any(|c| c == command),
+            run(command),
+            "{command}: the facts and preflight read one answer"
+        );
+    }
+}
+
+#[test]
+fn a_fixture_whose_every_output_is_complete_gives_each_document_that_a_command_printed() {
+    let world = json!({"_exec": {
+        "aws ec2 describe-y --output json": {"exit": 0, "stdout": {"y": 1}, "stderr": ""},
+        "aws ec2 describe-z --output json": {"exit": 1, "stdout": "no", "stderr": "failed"},
+        "aws ec2 describe-w --output json": {"exit": 0, "stdout": "text", "stderr": ""},
+    }});
+    let answers = answers_of(world);
+    assert_eq!(answers.len(), 1, "{answers:?}");
+    assert_eq!(answers[0].command, "aws ec2 describe-y --output json");
+    assert_eq!(answers[0].stdout, json!({"y": 1}));
 }

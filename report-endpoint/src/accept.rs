@@ -101,6 +101,7 @@ pub fn parse(content_type: Option<&str>, body: &[u8]) -> Result<Report, Refusal>
 #[cfg(test)]
 mod tests {
     use serde_json::{Value, json};
+    use strata::closed_set::unknown::report::SCHEMA;
 
     use super::*;
 
@@ -112,7 +113,7 @@ mod tests {
     }
 
     fn report(entries: Vec<Value>) -> Vec<u8> {
-        json!({"schema": "strata-report/1", "unknown": entries})
+        json!({"schema": SCHEMA, "unknown": entries})
             .to_string()
             .into_bytes()
     }
@@ -158,7 +159,7 @@ mod tests {
                 "{refused:?}"
             );
         }
-        let top = json!({"schema": "strata-report/1", "unknown": [entry()], "host": "h"});
+        let top = json!({"schema": SCHEMA, "unknown": [entry()], "host": "h"});
         let refused = refusal(JSON, top.to_string().as_bytes());
         assert_eq!(refused.status, 422);
         assert!(
@@ -181,8 +182,10 @@ mod tests {
                 .to_string()
                 .into_bytes(),
             report((0..101).map(|_| entry()).collect()),
-            br#"{"schema":"strata-report/1"}"#.to_vec(),
-            br#"{"schema":"strata-report/1","unknown":[{"strata":1}]}"#.to_vec(),
+            json!({"schema": SCHEMA}).to_string().into_bytes(),
+            json!({"schema": SCHEMA, "unknown": [{"strata": 1}]})
+                .to_string()
+                .into_bytes(),
         ];
         for body in bodies {
             assert_eq!(

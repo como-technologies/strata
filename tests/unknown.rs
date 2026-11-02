@@ -14,12 +14,16 @@ use strata::term::progress::Progress;
 
 use crate::common::{
     LATER_TYPE, PROFILE_LISTING, Run, UID_A, UID_B, isolate_palette, later_type_tenant,
-    list_command, listed, listing, log_in, packs, profile_document, profile_route, serve_routes,
-    strata_command, template,
+    list_command, listed, listing, log_in, packs, profile_document, profile_route, report_command,
+    serve_routes, state_in, strata_command, template,
 };
 
 /// The note for that type, as a person reads it on standard error.
-const NOTE: &str = "strata: Palette gave the ProfileType value 'later-type', which this release of strata does not know";
+fn note() -> String {
+    format!(
+        "strata: Palette gave the ProfileType value '{LATER_TYPE}', which this release of strata does not know"
+    )
+}
 
 /// Run `strata list profiles --packs` with the arguments `more` against `api`.
 fn list(api: &str, home: &Path, more: &[&str]) -> Run {
@@ -41,7 +45,7 @@ fn a_read_of_a_document_with_an_unknown_value_writes_the_note_one_time() {
     let run = list(&api, home.path(), &[]);
     assert_eq!(run.code, 0, "{}", run.err);
     // two profiles give the type, and the run notes it one time
-    assert_eq!(run.err.matches(NOTE).count(), 1, "{}", run.err);
+    assert_eq!(run.err.matches(&note()).count(), 1, "{}", run.err);
     assert!(
         run.out.contains(LATER_TYPE),
         "the list shows the type: {}",
@@ -197,21 +201,15 @@ fn the_hint_does_not_show_when_standard_error_is_not_a_terminal_and_uses_up_no_d
     let home = tempfile::tempdir().unwrap();
     // the run reads its standard error through a pipe, as a script or a test does
     let run = list(&api, home.path(), &[]);
-    assert_eq!(run.err.matches(NOTE).count(), 1, "{}", run.err);
+    assert_eq!(run.err.matches(&note()).count(), 1, "{}", run.err);
     assert!(!run.err.contains("strata report"), "{}", run.err);
-    let state = home.path().join(".local/state/strata");
+    let state = state_in(home.path());
     assert!(
         !state.join(hint::FILE).exists(),
         "a run in a pipe wrote the time of a hint"
     );
     // the log has the line, and a report of the next command shows it
-    let mut command = strata_command();
-    isolate_palette(&mut command, home.path());
-    command
-        .env_remove("STRATA_QUIET")
-        .env_remove("XDG_STATE_HOME")
-        .args(["report", "--json"]);
-    let report = Run::of(&mut command);
+    let report = Run::of(&mut report_command(home.path(), &["--json"]));
     assert_eq!(report.code, 0, "{}", report.err);
     let document: Value = serde_json::from_str(&report.out).unwrap();
     assert_eq!(document["unknown"][0]["set"], "ProfileType");

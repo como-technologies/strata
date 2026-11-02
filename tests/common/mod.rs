@@ -672,6 +672,17 @@ pub fn live_script(name: &str) -> std::path::PathBuf {
         .join(name)
 }
 
+/// Copy each file of `files`, a path from the root of the repository, to the same path under
+/// `tree`, and make it executable. A test that runs a script in a tree of its own copies each file
+/// that the script sources too, such as `examples/live/common.sh`.
+pub fn copy_scripts(tree: &Path, files: &[&str]) {
+    for file in files {
+        let to = tree.join(file);
+        fs::create_dir_all(to.parent().unwrap()).unwrap();
+        executable(&to, &repo_file(file));
+    }
+}
+
 /// A stand-in that logs its name and its arguments to the file `FAKE_LOG`, prints `FAKE_OUT`, and
 /// exits with `FAKE_EXIT`. With `--out DIR`, it also writes `FAKE_OUT` to `DIR/report.md`, as
 /// `strata preflight` writes its report.
@@ -1169,6 +1180,21 @@ grep -q '[^[:space:]]' "$input" || exit 0
 jq "$@" < "$input"
 "#;
 
+/// A `jq` that acts as the jq of `ubuntu-latest`: `rtrimstr` stops with the error `endswith()
+/// requires string inputs` when its input is not a string. jq 1.7.1 gives the input back, so a
+/// filter that passes a null to `rtrimstr` runs there and stops on the runner. GitHub gives `null`
+/// as the body of an issue that a person opens with no text.
+///
+/// The stand-in puts the definition in a file `.jq` of a new `HOME`, and jq reads that file before
+/// the program. Each other part of a call goes to the next `jq` in `PATH`.
+pub const JQ_STRICT_TRIM: &str = r#"#!/usr/bin/env bash
+PATH=${PATH#"$(dirname "$0")":}
+home=$(mktemp -d)
+trap 'rm -rf "$home"' EXIT
+echo 'def rtrimstr($x): if endswith($x) and ($x|length) > 0 then .[:-($x|length)] else . end;' > "$home/.jq"
+HOME=$home jq "$@"
+"#;
+
 /// The lines of the file at `path`. The file must be there: a log that is missing is a fault of
 /// the test, not "no call".
 pub fn lines_of(path: &Path) -> Vec<String> {
@@ -1289,6 +1315,14 @@ pub fn snapshot_from_raw(raw: &Path, name: &str, out: &Path) {
         .output_locked()
         .unwrap();
     assert!(o.status.success(), "snapshot {name}: {}", text(&o.stderr));
+}
+
+/// The `kind` (a body or a comment) that a stand-in kept from the call with the 1-based number
+/// `call`, as `<kind>-<call>.md` under `dir`. [`FAKE_ISSUES_GH`] and the stand-in curl of the
+/// GitLab tests write the files.
+pub fn handed_in(dir: &Path, kind: &str, call: usize) -> String {
+    fs::read_to_string(dir.join(format!("{kind}-{call}.md")))
+        .unwrap_or_else(|_| panic!("no {kind} from call {call}"))
 }
 
 /// A `gh` for issues: logs each call, keeps each body file it is handed as body-<n>.md in call

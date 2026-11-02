@@ -162,7 +162,7 @@ if [ -z "$dry" ]; then
 fi
 
 # the second line of each issue of this script holds {generatedAt, pins} of its last update
-jq '[.[] | (.body // "") | split("\n") | select((.[0] | rtrimstr("\r") | startswith("<!-- strata-behind: ")))
+jq '[.[] | (.body // "") | split("\n") | select((.[0] // "" | rtrimstr("\r") | startswith("<!-- strata-behind: ")))
       | (.[1] // "" | rtrimstr("\r")) | select(startswith("<!-- strata-behind-state: "))
       | ltrimstr("<!-- strata-behind-state: ") | rtrimstr(" -->") | (try fromjson catch empty)]' \
   "$work/issues.json" > "$work/states.json"
@@ -189,7 +189,7 @@ fi
 # issue_for PACK REGISTRY -> the lowest open issue number whose body starts with their marker
 issue_for() {
   jq -r --arg m "<!-- strata-behind: $1 $2 -->" \
-    '[.[] | select(((.body // "") | split("\n")[0] | rtrimstr("\r")) == $m) | .number] | min // empty' \
+    '[.[] | select(((.body // "") | (split("\n")[0] // "") | rtrimstr("\r")) == $m) | .number] | min // empty' \
     "$work/issues.json"
 }
 

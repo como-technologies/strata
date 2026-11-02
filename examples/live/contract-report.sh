@@ -43,6 +43,8 @@
 # The host layer is the one of scripts/ci/verify-report.sh. This script reads its functions from
 # that file, so a change to the host layer reaches this script. This script is not shipped, so it
 # can read a file of the repository, which a shipped script cannot. Only GitHub is a host here.
+# The project of a checkout and the first line of a body come from github.sh, which upstream.sh
+# reads too.
 #
 # Needs jq, and gh logged in to the repository.
 set -Eeuo pipefail
@@ -61,6 +63,8 @@ case "$layer" in
   *) echo "$script: scripts/ci/verify-report.sh has no host layer to read" >&2; exit 2 ;;
 esac
 eval "$layer"
+# remote_repo, and the jq function that reads the first line of the body of an issue
+. "$here/github.sh"
 
 # ---- arguments ---------------------------------------------------------------------------------
 document=""
@@ -110,14 +114,6 @@ use_label() {
   fi
 }
 
-# remote_repo -> OWNER/REPO of the origin remote of the checkout in the current directory, when the
-# remote is on GitHub, or nothing. It reads a local file, so a dry run still calls no host.
-remote_repo() {
-  git remote get-url origin 2> /dev/null \
-    | sed -nE 's#^(https?|ssh|git)://([^/@]+@)?github\.com/([^/]+/[^/]+)$#\3#p; s#^[^/@:]+@github\.com:([^/]+/[^/]+)$#\1#p' \
-    | sed -E 's#\.git$##' || true
-}
-
 if [ -z "$dry" ]; then
   [ -n "$repo" ] || repo=$(host repo)
   [ -n "$repo" ] || die "could not determine the project; pass --repo"
@@ -140,8 +136,7 @@ page="https://github.com/${repo:-OWNER/REPO}/blob/main/docs/src/development/fact
 
 # issue_for MARKER -> the lowest open issue number whose body starts with MARKER
 issue_for() {
-  jq -r --arg m "$1" \
-    '[.[] | select(((.body // "") | split("\n")[0] | rtrimstr("\r")) == $m) | .number] | min // empty' \
+  jq -r --arg m "$1" "$first_line_jq"'[.[] | select(first_line == $m) | .number] | min // empty' \
     "$work/issues.json"
 }
 
@@ -179,7 +174,6 @@ open_or_update() {
 
 # ---- the unknown values ------------------------------------------------------------------------
 values_page="https://github.com/${repo:-OWNER/REPO}/blob/main/docs/src/development/facts.md#what-to-do-with-a-new-value"
-unknown=0
 
 # values_issues ID ENTRY: for each closed set of the fact ID that holds a value which neither the
 # fact nor the stand-in names, open or update one issue. For each set that holds no such value now,
@@ -191,7 +185,6 @@ values_issues() {
   while IFS= read -r set_entry <&4; do
     field=$(jq -r .set <<<"$set_entry")
     current+=("$field")
-    unknown=$((unknown + $(jq '.values | length' <<<"$set_entry")))
     {
       echo "$prefix$field -->"
       jq -r --arg checked "$checked" --arg target "$target" --arg page "$values_page" --arg id "$id" \
@@ -222,8 +215,8 @@ values_issues() {
     case " ${current[*]-} " in *" $field "*) continue ;; esac
     host close_issue "$number" "No answer of the tenant holds a new value for \`$field\` in \`$id\` now (checked $checked)."
     actions+=("closed #$number for $id $field")
-  done 4< <(jq -r --arg p "$prefix" '
-    .[] | ((.body // "") | split("\n")[0] | rtrimstr("\r")) as $first
+  done 4< <(jq -r --arg p "$prefix" "$first_line_jq"'
+    .[] | first_line as $first
     | select($first | startswith($p))
     | "\(.number)\t\($first | ltrimstr($p) | rtrimstr(" -->"))"' "$work/issues.json")
 }
@@ -261,7 +254,6 @@ cloud_body() {
   ' <<<"$1"
 }
 
-differs=0 same=0 skipped=0 errors=0
 while IFS= read -r entry <&3; do
   id=$(jq -r .id <<<"$entry")
   marker="<!-- strata-contract: $id -->"
@@ -270,7 +262,6 @@ while IFS= read -r entry <&3; do
   values_issues "$id" "$entry"
   case "$(jq -r .outcome <<<"$entry")" in
     differs)
-      differs=$((differs + 1))
       if [ "$kind" = cloud ]; then
         { echo "$marker"; cloud_body "$entry"; } > "$work/body.md"
         title="Cloud drift: \`$id\` differs from the fixtures of the rules"
@@ -281,7 +272,6 @@ while IFS= read -r entry <&3; do
       open_or_update "$marker" "$title" "$work/body.md" "$id"
       ;;
     same)
-      same=$((same + 1))
       if [ -n "$dry" ]; then
         note "dry run: closes the open issue for $id, if any"
         continue
@@ -292,8 +282,6 @@ while IFS= read -r entry <&3; do
       host close_issue "$number" "\`$id\` is the same as $against again (checked $checked)."
       actions+=("closed #$number for $id")
       ;;
-    skipped) skipped=$((skipped + 1)) ;;
-    *) errors=$((errors + 1)) ;;
   esac
 done 3< <(jq -c '.facts[]' "$document")
 use_label request
@@ -325,7 +313,9 @@ EOF
 done 3< <(jq -c '.releases[]? | select(.new == true)' "$document")
 release_errors=$(jq '[.releases[]? | select(.error != null)] | length' "$document")
 
-line="$((differs + same + skipped + errors)) facts: $same same, $differs differ, $skipped skipped, $errors could not be checked, $unknown unknown values"
+# the document holds the count of each outcome in `summary`, so the script counts nothing again
+read -r differs errors unknown < <(jq -r '.summary | [.differs, .error, (.unknownValues // 0)] | @tsv' "$document")
+line=$(jq -r -f "$here/contract-summary.jq" "$document")
 [ "$news" -eq 0 ] || line="$line; $news new release"
 for a in "${actions[@]+"${actions[@]}"}"; do
   line="$line; $a"

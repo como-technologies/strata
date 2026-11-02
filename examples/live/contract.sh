@@ -2,7 +2,7 @@
 # The contract run: ask a real tenant the requests of the facts of Palette, and compare each answer
 # with the stand-in. A weekly timer on kadomony runs it (deploy/contract/).
 #
-#   just live-contract [--state FILE] [--stand-in DIR] [--github URL] [--no-cloud]
+#   just live-contract [--state FILE] [--stand-in DIR] [--github URL] [--no-cloud] [--with-cluster]
 #
 # For each fact of the kind request that a GET can show, the run finds an object in the tenant. It
 # sends the request, and compares the answer with the documents that the stand-in serves for the
@@ -31,15 +31,14 @@ set -uo pipefail
 
 live=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 script=contract
-die() { echo "$script: $*" >&2; exit 2; }
-usage() { sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; }
+. "$live/common.sh"
 
 xtask=${XTASK_BIN:-$live/../../target/debug/xtask}
 args=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --state|--stand-in|--github) [ $# -ge 2 ] || die "$1 needs a value"; args+=("$1" "$2"); shift 2 ;;
-    --no-cloud) args+=("$1"); shift ;;
+    --no-cloud|--with-cluster) args+=("$1"); shift ;;
     -h|--help) usage; exit 0 ;;
     *) usage >&2; die "unknown argument $1" ;;
   esac

@@ -1,13 +1,13 @@
 //! The tests of the merge, with the issues in memory.
 
 use serde_json::json;
-use strata::closed_set::unknown::report::Report;
+use strata::closed_set::unknown::report::{Report, SCHEMA};
 
 use super::memory::Memory;
 use super::*;
 
 fn report(entries: &[serde_json::Value]) -> Report {
-    serde_json::from_value(json!({"schema": "strata-report/1", "unknown": entries})).unwrap()
+    serde_json::from_value(json!({"schema": SCHEMA, "unknown": entries})).unwrap()
 }
 
 fn entry(set: &str, value: &str, strata: &str, count: u64) -> serde_json::Value {

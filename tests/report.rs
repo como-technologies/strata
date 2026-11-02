@@ -9,49 +9,26 @@ use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use serde_json::{Value, json};
-use strata::closed_set::unknown::log::{FILE, SENT_FILE};
+use strata::TOOL_VERSION;
+use strata::closed_set::unknown::log::{FILE, SCHEMA as LOG_SCHEMA, SENT_FILE};
+use strata::closed_set::unknown::report::SCHEMA as REPORT_SCHEMA;
 use strata::ops::{ReportOptions, mark_reported, report_link, unknown_report};
 
-use crate::common::{Run, isolate_palette, log_in, strata_command};
-
-/// A line of the log, as strata writes it.
-fn line(set: &str, value: &str, route: &str) -> String {
-    json!({"schema": "strata-unknown/1", "strata": "0.26.0", "set": set, "value": value,
-        "route": route})
-    .to_string()
-}
-
-/// Write the log of `home` with the lines `lines`.
-fn write_log(home: &Path, lines: &[String]) {
-    let file = log_in(home);
-    std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-    std::fs::write(
-        file,
-        lines.iter().map(|l| format!("{l}\n")).collect::<String>(),
-    )
-    .unwrap();
-}
+use crate::common::{LATER_TYPE, Run, log_in, log_line, report_command, write_lines, write_log};
 
 /// The lines of a log with a value that two runs gave, and a value that one run gave.
 fn two_values() -> Vec<String> {
-    let type_line = line("ProfileType", "later-type", "/v1/clusterprofiles/{uid}");
+    let type_line = log_line("ProfileType", LATER_TYPE, "/v1/clusterprofiles/{uid}");
     vec![
         type_line.clone(),
-        line("PackState", "retired", "/v1/packs"),
+        log_line("PackState", "retired", "/v1/packs"),
         type_line,
     ]
 }
 
 /// Run `strata report` with the arguments `more` and a home of its own, `home`.
 fn report(home: &Path, more: &[&str]) -> Run {
-    let mut command = strata_command();
-    isolate_palette(&mut command, home);
-    command
-        .env_remove("STRATA_QUIET")
-        .env_remove("XDG_STATE_HOME")
-        .arg("report")
-        .args(more);
-    Run::of(&mut command)
+    Run::of(&mut report_command(home, more))
 }
 
 /// The text that a link holds, with each `%XX` read as a byte.
@@ -92,7 +69,7 @@ fn report_prints_each_line_of_the_log_once_with_its_count() {
     assert_eq!(rows.len(), 2, "{}", run.out);
     assert!(rows[0].starts_with("  PackState"), "{}", rows[0]);
     assert!(
-        rows[0].contains("1 time ") && rows[0].contains("strata 0.26.0"),
+        rows[0].contains("1 time ") && rows[0].contains(&format!("strata {TOOL_VERSION}")),
         "{}",
         rows[0]
     );
@@ -116,11 +93,11 @@ fn report_json_is_the_document_with_the_fields_of_the_log_and_a_count() {
     assert_eq!(
         document,
         json!({
-            "schema": "strata-report/1",
+            "schema": REPORT_SCHEMA,
             "unknown": [
-                {"strata": "0.26.0", "set": "PackState", "value": "retired",
+                {"strata": TOOL_VERSION, "set": "PackState", "value": "retired",
                     "route": "/v1/packs", "count": 1},
-                {"strata": "0.26.0", "set": "ProfileType", "value": "later-type",
+                {"strata": TOOL_VERSION, "set": "ProfileType", "value": LATER_TYPE,
                     "route": "/v1/clusterprofiles/{uid}", "count": 2},
             ],
         })
@@ -152,9 +129,9 @@ fn report_markdown_is_a_table_that_serves_as_the_body_of_an_issue() {
         run.out
     );
     assert!(
-        run.out.contains(
-            "| `ProfileType` | `later-type` | `/v1/clusterprofiles/{uid}` | 2 | 0.26.0 |"
-        ),
+        run.out.contains(&format!(
+            "| `ProfileType` | `{LATER_TYPE}` | `/v1/clusterprofiles/{{uid}}` | 2 | {TOOL_VERSION} |"
+        )),
         "{}",
         run.out
     );
@@ -166,7 +143,11 @@ fn report_markdown_writes_a_value_with_a_backtick_or_a_bar_in_a_code_span_that_i
     let home = tempfile::tempdir().unwrap();
     write_log(
         home.path(),
-        &[line("ProfileType", "late`r|x", "/v1/clusterprofiles/{uid}")],
+        &[log_line(
+            "ProfileType",
+            "late`r|x",
+            "/v1/clusterprofiles/{uid}",
+        )],
     );
     let run = report(home.path(), &["--format", "markdown"]);
     assert_eq!(run.code, 0, "{}", run.err);
@@ -189,7 +170,7 @@ fn report_stops_on_a_log_with_a_value_that_has_a_format_character() {
         let home = tempfile::tempdir().unwrap();
         write_log(
             home.path(),
-            &[line("ProfileType", value, "/v1/clusterprofiles/{uid}")],
+            &[log_line("ProfileType", value, "/v1/clusterprofiles/{uid}")],
         );
         let run = report(home.path(), &["--json"]);
         assert_eq!(run.code, 2, "{value:?}: {}", run.out);
@@ -217,7 +198,7 @@ fn report_of_a_log_that_is_not_there_says_that_palette_gave_no_value_and_exits_0
     let json = report(home.path(), &["--json"]);
     assert_eq!(
         serde_json::from_str::<Value>(&json.out).unwrap(),
-        json!({"schema": "strata-report/1", "unknown": []})
+        json!({"schema": REPORT_SCHEMA, "unknown": []})
     );
     assert!(
         !log_in(home.path()).exists(),
@@ -229,7 +210,7 @@ fn report_of_a_log_that_is_not_there_says_that_palette_gave_no_value_and_exits_0
 fn a_log_with_a_uid_in_a_line_fails_the_read_and_nothing_is_printed_or_marked() {
     let home = tempfile::tempdir().unwrap();
     let mut with_uid: Value =
-        serde_json::from_str(&line("PackState", "retired", "/v1/packs")).unwrap();
+        serde_json::from_str(&log_line("PackState", "retired", "/v1/packs")).unwrap();
     with_uid["uid"] = json!("64f0000000000000000000a1");
     let mut lines = two_values();
     lines.push(with_uid.to_string());
@@ -244,8 +225,9 @@ fn a_log_with_a_uid_in_a_line_fails_the_read_and_nothing_is_printed_or_marked() 
         assert_eq!(run.code, 2, "{more:?}: {}", run.err);
         assert_eq!(run.out, "", "{more:?}");
         assert!(
-            run.err
-                .contains("line 4 is not a line of strata-unknown/1: unknown field `uid`"),
+            run.err.contains(&format!(
+                "line 4 is not a line of {LOG_SCHEMA}: unknown field `uid`"
+            )),
             "{}",
             run.err
         );
@@ -312,16 +294,11 @@ fn link_sends_no_request() {
         vec!["--json"],
         vec!["--link", "--sent"],
     ] {
-        let mut command = strata_command();
-        isolate_palette(&mut command, home.path());
+        let mut command = report_command(home.path(), &more);
         command
-            .env_remove("STRATA_QUIET")
-            .env_remove("XDG_STATE_HOME")
             .env("PALETTE_API", format!("http://{address}"))
             .env("HTTPS_PROXY", format!("http://{address}"))
-            .env("HTTP_PROXY", format!("http://{address}"))
-            .arg("report")
-            .args(&more);
+            .env("HTTP_PROXY", format!("http://{address}"));
         let run = Run::of(&mut command);
         assert_eq!(run.code, 0, "{more:?}: {}", run.err);
     }
@@ -368,7 +345,7 @@ fn link_of_a_report_that_is_too_long_for_an_address_says_to_paste_the_markdown()
     let home = tempfile::tempdir().unwrap();
     let lines: Vec<String> = (0..60)
         .map(|n| {
-            line(
+            log_line(
                 "ProfileType",
                 &format!("value-{n}"),
                 "/v1/clusterprofiles/{uid}",
@@ -404,7 +381,7 @@ fn a_link_that_is_too_long_marks_nothing_with_sent_so_the_markdown_still_holds_t
     let home = tempfile::tempdir().unwrap();
     let lines: Vec<String> = (0..60)
         .map(|n| {
-            line(
+            log_line(
                 "ProfileType",
                 &format!("value-{n}"),
                 "/v1/clusterprofiles/{uid}",
@@ -454,13 +431,13 @@ fn sent_marks_the_lines_so_that_the_next_report_holds_only_the_new_lines() {
     write_log(home.path(), &two_values());
     // a report alone marks nothing: the user decides when the lines went out
     assert_eq!(report(home.path(), &[]).code, 0);
-    assert!(report(home.path(), &[]).out.contains("later-type"));
+    assert!(report(home.path(), &[]).out.contains(LATER_TYPE));
     assert!(!log_in(home.path()).with_file_name(SENT_FILE).exists());
 
     let first = report(home.path(), &["--sent"]);
     assert_eq!(first.code, 0, "{}", first.err);
     assert!(
-        first.out.contains("later-type"),
+        first.out.contains(LATER_TYPE),
         "the report still shows the lines"
     );
     assert_eq!(
@@ -475,17 +452,21 @@ fn sent_marks_the_lines_so_that_the_next_report_holds_only_the_new_lines() {
     );
     // a new line is the only line of the next report; --all holds each line again
     let mut lines = two_values();
-    lines.push(line("OciProvider", "oras", "/v1/registries/oci/summary"));
+    lines.push(log_line(
+        "OciProvider",
+        "oras",
+        "/v1/registries/oci/summary",
+    ));
     write_log(home.path(), &lines);
     let third = report(home.path(), &[]);
     assert!(
-        third.out.contains("oras") && !third.out.contains("later-type"),
+        third.out.contains("oras") && !third.out.contains(LATER_TYPE),
         "{}",
         third.out
     );
     let all = report(home.path(), &["--all"]);
     assert!(
-        all.out.contains("oras") && all.out.contains("later-type"),
+        all.out.contains("oras") && all.out.contains(LATER_TYPE),
         "{}",
         all.out
     );
@@ -507,7 +488,7 @@ fn a_mark_past_the_end_of_the_log_counts_for_nothing() {
     std::fs::write(log_in(home.path()).with_file_name(SENT_FILE), "10\n").unwrap();
     let run = report(home.path(), &[]);
     assert!(
-        run.out.contains("later-type"),
+        run.out.contains(LATER_TYPE),
         "a new log is reported whole: {}",
         run.out
     );
@@ -517,14 +498,7 @@ fn a_mark_past_the_end_of_the_log_counts_for_nothing() {
 fn the_operations_read_a_log_by_its_path_and_mark_only_when_asked() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
-    std::fs::write(
-        &file,
-        two_values()
-            .iter()
-            .map(|l| format!("{l}\n"))
-            .collect::<String>(),
-    )
-    .unwrap();
+    write_lines(&file, &two_values());
     let plain = unknown_report(&file, ReportOptions::default()).unwrap();
     assert_eq!(plain.report.unknown.len(), 2);
     assert_eq!(plain.lines, 3);
@@ -554,7 +528,8 @@ fn a_link_of_an_empty_report_is_none_and_a_long_one_is_a_usage_error() {
     assert_eq!(report_link(&empty, "").unwrap(), None);
     let lines: Vec<strata::closed_set::unknown::log::Line> = (0..2)
         .map(|n| {
-            serde_json::from_str(&line("PackState", &format!("value-{n}"), "/v1/packs")).unwrap()
+            serde_json::from_str(&log_line("PackState", &format!("value-{n}"), "/v1/packs"))
+                .unwrap()
         })
         .collect();
     let report = strata::closed_set::unknown::report::Report::of(&lines);

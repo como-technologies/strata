@@ -13,10 +13,8 @@
 //! describes.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::LazyLock;
 use std::time::Duration;
 
-use regex::Regex;
 use serde_json::Value;
 use strata_preflight::probe::{Backend, ExecOutput};
 
@@ -24,7 +22,7 @@ use super::compare;
 use super::document::{Difference, DifferenceKind, Entry, Outcome};
 use super::shape::Path;
 use crate::facts::cloud::{CloudRule, documents};
-use crate::facts::{Fact, Kind};
+use crate::facts::{Fact, Kind, fill};
 
 #[cfg(test)]
 mod tests;
@@ -121,22 +119,11 @@ impl Lab {
     /// The words of `call` with each `{name}` replaced by its value. The error is the name of the
     /// first value that the lab does not give.
     fn words(&self, call: &[String]) -> Result<Vec<String>, String> {
-        static PLACEHOLDER: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"\{([a-z_]+)\}").expect("a pattern"));
         call.iter()
             .map(|word| {
-                let mut missing = None;
-                let filled = PLACEHOLDER.replace_all(word, |found: &regex::Captures| {
-                    let name = &found[1];
-                    self.value(name).unwrap_or_else(|| {
-                        missing.get_or_insert_with(|| name.to_string());
-                        String::new()
-                    })
-                });
-                match missing {
-                    Some(name) => Err(name),
-                    None => Ok(filled.into_owned()),
-                }
+                fill(word, |name| {
+                    self.value(name).ok_or_else(|| name.to_string())
+                })
             })
             .collect()
     }

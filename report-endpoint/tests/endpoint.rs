@@ -5,7 +5,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use strata::closed_set::unknown::report::Report;
+use strata::closed_set::unknown::log::SCHEMA as LOG_SCHEMA;
+use strata::closed_set::unknown::report::{Report, SCHEMA as REPORT_SCHEMA};
 use strata::closed_set::unknown::send::post;
 use strata_report_endpoint::server::{MOST_AT_ONCE, Service, serve};
 use strata_report_endpoint::settings::{DEFAULT_LABEL, DEFAULT_MILESTONE};
@@ -221,7 +222,7 @@ fn start_service_with(github: &str, proxy: bool, most_at_once: usize) -> Running
 }
 
 fn report(entries: &[Value]) -> Report {
-    serde_json::from_value(json!({"schema": "strata-report/1", "unknown": entries})).unwrap()
+    serde_json::from_value(json!({"schema": REPORT_SCHEMA, "unknown": entries})).unwrap()
 }
 
 fn entry(value: &str, count: u64) -> Value {
@@ -325,7 +326,7 @@ fn the_service_writes_with_the_token_and_the_token_is_in_no_issue_and_no_answer(
 }
 
 fn report_text(entries: &[Value]) -> String {
-    json!({"schema": "strata-report/1", "unknown": entries}).to_string()
+    json!({"schema": REPORT_SCHEMA, "unknown": entries}).to_string()
 }
 
 #[test]
@@ -525,10 +526,12 @@ fn the_report_of_the_send_of_strata_passes_the_check_of_the_endpoint_for_each_se
     // the entries that strata makes from its own log pass: the client and the endpoint share one check
     let (github, _) = stand_in_github();
     let running = start_service(&github);
-    let lines: Vec<strata::closed_set::unknown::log::Line> = serde_json::from_str(
-        r#"[{"schema":"strata-unknown/1","strata":"0.26.0","set":"PackState","value":"retired","route":"/v1/packs"},
-            {"schema":"strata-unknown/1","strata":"0.26.0","set":"ProfileType","value":"later","route":"/v1/clusterprofiles/{uid}"}]"#,
-    )
+    let lines: Vec<strata::closed_set::unknown::log::Line> = serde_json::from_value(json!([
+        {"schema": LOG_SCHEMA, "strata": "0.26.0", "set": "PackState", "value": "retired",
+            "route": "/v1/packs"},
+        {"schema": LOG_SCHEMA, "strata": "0.26.0", "set": "ProfileType", "value": "later",
+            "route": "/v1/clusterprofiles/{uid}"},
+    ]))
     .unwrap();
     post(&running.address, &Report::of(&lines), 0).unwrap();
 }
@@ -817,7 +820,7 @@ fn write_log(dir: &std::path::Path, count: usize) -> std::path::PathBuf {
         .map(|n| {
             format!(
                 "{}\n",
-                json!({"schema": "strata-unknown/1", "strata": "0.26.0", "set": "ProfileType",
+                json!({"schema": LOG_SCHEMA, "strata": "0.26.0", "set": "ProfileType",
                     "value": format!("later-{n:03}"), "route": "/v1/packs"})
             )
         })
