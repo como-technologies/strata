@@ -397,6 +397,79 @@ fn the_answer_that_a_difference_lists_is_a_sample_of_ten_values() {
     assert_eq!(found.differences[0].found[10], "and 20 more");
 }
 
+/// The entry of the table of the zone ids that `holds` lists, when the account lists the zone ids
+/// `listed`. The table is one that each account sees for itself.
+fn account_entry(holds: &[&str], listed: &[&str]) -> Entry {
+    let mut fact = facts().remove(1);
+    let table = fact.table.as_mut().unwrap();
+    table.holds = holds.iter().map(|v| (*v).to_string()).collect();
+    table.per_account = true;
+    let backend = backend(&["aws"], json!({ZONES: printed(zones(listed))}));
+    run(&[fact], &rules(), &backend, &lab()).remove(0)
+}
+
+#[test]
+fn a_zone_id_that_the_account_does_not_have_is_no_difference_and_the_account_cannot_check_it() {
+    // the lab has usw1-az1 and usw1-az3 in us-west-1, and the table holds usw1-az2
+    let found = account_entry(&["usw1-az2"], &["usw1-az1", "usw1-az3"]);
+    assert_eq!(found.outcome, Outcome::Skipped, "{found:?}");
+    assert!(found.differences.is_empty(), "{found:?}");
+    let reason = found.reason.expect("the entry says why");
+    assert!(reason.contains("usw1-az2"), "{reason}");
+    assert!(reason.contains("cannot check"), "{reason}");
+}
+
+#[test]
+fn a_table_of_an_account_that_lists_some_of_its_values_is_the_same_and_names_the_others() {
+    let found = account_entry(&["use1-az2", "use1-az3"], &["use1-az1", "use1-az2"]);
+    assert_eq!(found.outcome, Outcome::Same, "{found:?}");
+    assert!(found.differences.is_empty(), "{found:?}");
+    let reason = found
+        .reason
+        .expect("the entry says what the account cannot check");
+    assert!(reason.contains("use1-az3"), "{reason}");
+    assert!(!reason.contains("use1-az2"), "{reason}");
+}
+
+#[test]
+fn a_table_of_an_account_that_lists_each_value_is_the_same_with_no_reason() {
+    let found = account_entry(&["use1-az3"], &["use1-az1", "use1-az3"]);
+    assert_eq!(found.outcome, Outcome::Same, "{found:?}");
+    assert_eq!(found.reason, None);
+}
+
+#[test]
+fn a_zone_id_that_the_account_cannot_check_leaves_the_exit_code_at_0() {
+    let mut contract = document();
+    contract.add(vec![account_entry(&["usw1-az2"], &["usw1-az1"])]);
+    assert_eq!(contract.summary.skipped, 1);
+    assert_eq!(contract.exit_code(), 0);
+}
+
+#[test]
+fn only_the_tables_of_the_zone_ids_are_tables_of_an_account() {
+    let facts = facts::load(&repo()).expect("the list of the facts");
+    let of_account: Vec<&str> = facts
+        .iter()
+        .filter(|f| f.table.as_ref().is_some_and(|t| t.per_account))
+        .map(|f| f.id.as_str())
+        .collect();
+    assert_eq!(
+        of_account,
+        [
+            "eks-refused-zone-id-us-east-1",
+            "eks-refused-zone-id-us-west-1",
+            "eks-refused-zone-id-ca-central-1"
+        ]
+    );
+    // a table of another fact keeps the check: a value that the answer lacks is a difference
+    assert!(
+        facts
+            .iter()
+            .any(|f| f.id == "aws-policies-per-role-limit" && f.table.is_some())
+    );
+}
+
 fn limit_fact(holds: &[&str]) -> Fact {
     let mut fact = facts().remove(1);
     fact.table.as_mut().unwrap().holds = holds.iter().map(|v| (*v).to_string()).collect();

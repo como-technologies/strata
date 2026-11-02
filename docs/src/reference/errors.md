@@ -15,7 +15,7 @@ the kind.
 | Kind | Cause | Fields |
 | --- | --- | --- |
 | `missing-credential` | No API key. | `variable`, `alternate` |
-| `api` | Palette answered with an error status. | `method`, `path`, `status` |
+| `api` | Palette answered with an error status. On a 401 or a 403, the message names the key. A 403 with the code `ProjectUidIsNotEmpty` names the tenant scope in its place: the route takes no project. | `method`, `path`, `status` |
 | `retry-after-too-long` | Palette asked for a longer wait than `STRATA_MAX_RETRY_AFTER`. | `method`, `path`, `status`, `retryAfter`, `limit` |
 | `invalid-setting` | A variable has a value that strata cannot read. | `variable`, `value` |
 | `pattern` | A record pattern is not valid, or matches no file. | `pattern` |

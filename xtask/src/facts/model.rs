@@ -34,6 +34,20 @@ pub enum Kind {
     Cloud,
 }
 
+/// The scope in which the contract run sends the request of a fact.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Scope {
+    /// The scope of the client: the project that it names, or the tenant when it names none. Most
+    /// routes take it.
+    #[default]
+    Client,
+    /// The tenant. The route is not an operation of the project scope, so Palette refuses a
+    /// request that names a project with HTTP 403 and the code `ProjectUidIsNotEmpty`. The run
+    /// sends such a request with no project, as strata does.
+    Tenant,
+}
+
 /// One fact of the list.
 ///
 /// A script reads the same fields from the JSON that `xtask facts` prints.
@@ -49,6 +63,10 @@ pub struct Fact {
     /// A value of the query that varies is `{name}`, as in the path. Only a fact of the kind
     /// `request` has one.
     pub request: Option<String>,
+    /// The scope in which the contract run sends the request. A route of the tenant says so, as
+    /// the saved tag filters do.
+    #[serde(default)]
+    pub scope: Scope,
     /// What strata reads from the answer or depends on. A fact of the kind `cloud` that no call
     /// proves needs no field here.
     #[serde(default)]
@@ -106,6 +124,11 @@ pub struct Table {
     pub as_of: String,
     /// The values of the table. The answer of the call lists each one at the field of `reads`.
     pub holds: Vec<String>,
+    /// True when each account sees its own values, as it sees its own zone ids. The answer of an
+    /// account can lack a value of the table, and that is no difference: the account cannot check
+    /// the value.
+    #[serde(default)]
+    pub per_account: bool,
 }
 
 impl Fact {

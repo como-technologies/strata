@@ -487,7 +487,9 @@ Strata reads each list and compares it with the entity.
 | `GET /v1/clouds/aws/securitygroups?cloudAccountUid=&region=&vpcId=` | `groups[]`: the security groups of the VPC, with `groupId`, `groupName`, and `ownerId`. | `sg-name-collision` |
 
 The query `cloudAccountUid` of the regions route is required. A request with no `cloudAccountUid`
-gets HTTP 422.
+gets HTTP 422. The VPC route requires it too. The security group route requires `region` and
+`vpcId`, and a request with no query gets HTTP 422. The `vpcId` is the id of a VPC from the VPC
+listing of the same region.
 
 The VPC route lists no count of free addresses and no tag for a subnet. Its `isPrivate` is true when
 the route table of the subnet has no route to an internet gateway. A subnet belongs to the VPC entry

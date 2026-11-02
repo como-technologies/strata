@@ -8,8 +8,8 @@
 #      cluster carry them, and list clusters --tag finds the cluster at tenant scope, with its
 #      project
 #   2  the label env=prod on cluster A, through the API, and a saved tag filter that selects it:
-#      list clusters --tag and --filter find cluster A, and a query that no cluster meets finds
-#      none
+#      list clusters --tag and --filter find cluster A, a query that no cluster meets finds
+#      none, and the saved filters refuse a request that names the project of cluster A
 #   3  snapshot filter:<name> --dir --prune: one record for the cluster, and a record of a
 #      cluster that left the set is removed
 #   4  the label removed: the next run removes the record of cluster A, which a commit shows
@@ -70,6 +70,17 @@ check filters 0 '#80: list filters names the filter, and what it selects' -- \
   bash -c "\"$strata\" list filters | grep -Eq '^  filter:$FILTER +$F +env=prod$'"
 check by-filter 0 '#80: list clusters --filter finds cluster A' -- \
   bash -c "\"$strata\" list clusters --filter $FILTER --json | jq -e --arg c $C '[.clusters[].uid] == [\$c] and .queryFilter.name == \"$FILTER\"'"
+# the saved filters belong to the tenant: a request that names the project of cluster A is refused,
+# also with the query filterType=tag. api.sh sends PALETTE_PROJECT_UID, and get-status prints the
+# status and the body of the refusal
+check filters-project 0 '#539: the listing of the saved filters, asked with the project of cluster A' -- \
+  "$live/api.sh" get-status '/v1/filters/metadata?filterType=tag'
+check filters-project-says 0 '#539: Palette answers HTTP 403 with the code ProjectUidIsNotEmpty' -- \
+  bash -c "head -n 1 filters-project.out | grep -qx 'HTTP 403' && sed 1d filters-project.out | jq -e '.code == \"ProjectUidIsNotEmpty\"'"
+check filter-project 0 "#539: the saved filter $FILTER, asked with the project of cluster A" -- \
+  "$live/api.sh" get-status "/v1/filters/tag/$F"
+check filter-project-says 0 '#539: Palette answers HTTP 403 with the code ProjectUidIsNotEmpty' -- \
+  bash -c "head -n 1 filter-project.out | grep -qx 'HTTP 403' && sed 1d filter-project.out | jq -e '.code == \"ProjectUidIsNotEmpty\"'"
 
 echo "== 3. a record of each cluster of the set" | tee -a steps.log
 mkdir -p fleet

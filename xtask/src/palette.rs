@@ -24,6 +24,10 @@
 //! first. When a profile of the body is of another cloud type, the answer is HTTP 500 with the
 //! code `ClusterProfilesNotSupported`, as Palette gives it: see `profile_cloud_refusal`.
 //!
+//! A route of the tenant, such as the saved tag filters under `/v1/filters`, refuses each request
+//! that names a project: HTTP 403 with the code `ProjectUidIsNotEmpty`, whatever the query, as
+//! Palette gives it: see `project_refusal`.
+//!
 //! The export route of a profile, `GET /v1/clusterprofiles/{uid}/export`, reads the `Accept`
 //! header. To `Accept: application/json` the answer is `{"Reader":{}}`, as Palette gives it: see
 //! `export_reader`. Any other `Accept`, or none, gets the file.
@@ -36,6 +40,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::{fs, thread};
+
+use strata::api::codes::PROJECT_SCOPE_CODE;
 
 use crate::tenant::{AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT, exported_profile};
 
@@ -98,8 +104,40 @@ fn answer(root: &Path, mut stream: TcpStream) -> std::io::Result<()> {
     stream.flush()
 }
 
+/// The routes that belong to the tenant: each path under them is not an operation of the project
+/// scope. The saved tag filters are such routes, for the listing and for one filter.
+const TENANT_ROUTES: &[&str] = &["/v1/filters"];
+
+/// The refusal of a request that names a project on a route of [`TENANT_ROUTES`]: HTTP 403 and the
+/// code [`PROJECT_SCOPE_CODE`], with each query. `None` for another request.
+fn project_refusal(request: &Request) -> Option<Vec<u8>> {
+    request
+        .project
+        .as_deref()
+        .filter(|project| !project.is_empty())?;
+    let path = request
+        .target
+        .split_once('?')
+        .map_or(request.target.as_str(), |(path, _)| path);
+    let on_tenant_route = TENANT_ROUTES.iter().any(|route| {
+        path.strip_prefix(route)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+    });
+    on_tenant_route.then(|| {
+        serde_json::json!({
+            "code": PROJECT_SCOPE_CODE,
+            "message": "Operation is not allowed in project scope and ProjectUid should be empty",
+        })
+        .to_string()
+        .into_bytes()
+    })
+}
+
 /// The status and the body that the files of the tenant give for `request`.
 fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
+    if let Some(body) = project_refusal(request) {
+        return Ok((403, body));
+    }
     if let Some(body) = export_reader(root, request) {
         return Ok((200, body));
     }

@@ -736,7 +736,7 @@ facts:
 
   - id: validate-vpcs
     kind: request
-    request: "GET /v1/clouds/aws/regions/{region}/vpcs"
+    request: "GET /v1/clouds/aws/regions/{region}/vpcs?cloudAccountUid={cloudAccountUid}"
     reads:
       fields:
         - vpcs[].vpcId
@@ -755,7 +755,7 @@ facts:
 
   - id: validate-security-groups
     kind: request
-    request: "GET /v1/clouds/aws/securitygroups"
+    request: "GET /v1/clouds/aws/securitygroups?cloudAccountUid={cloudAccountUid}&region={region}&vpcId={vpcId}"
     reads:
       fields:
         - groups[].groupId

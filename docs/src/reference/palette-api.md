@@ -64,8 +64,8 @@ same with its own document. See
 | --- | --- |
 | `GET /v1/dashboard/spectroclusters/search/schema` | The properties that the cluster search takes. `list` searches when it names `tags`, and the second reading of `consumers` when it names `clusterProfiles`. `list clusters`, `cluster:<name>`, and the second reading of `consumers` ask the search for the virtual clusters when it names `environment`. |
 | `POST /v1/dashboard/spectroclusters/search?limit=50` | The clusters that the body selects, every page, in the scope of the request: each with its labels, project, cloud, and profiles. The search gives a virtual cluster only when a condition asks for the environment `nested`, with its cluster group and its host cluster in `status.virtual`. `list clusters --tag` and `--filter`, and a `tag:` or `filter:` ref, send it at tenant scope, and again with that condition added. `list clusters` and `cluster:<name>` send it with that one condition, in their scope. The second reading of `consumers` sends `clusterProfiles eq <profile name>`, a name and not a uid, in the scope of the profile. When the search takes `environment`, it sends it again with that condition added. |
-| `GET /v1/filters/metadata?filterType=tag` | The name and the uid of each saved tag filter of the tenant. |
-| `GET /v1/filters/tag/{uid}` | One saved tag filter: `spec.filterGroup`, its conjunction and its conditions. |
+| `GET /v1/filters/metadata?filterType=tag` | The name and the uid of each saved tag filter of the tenant. A request that names a project gets HTTP 403. |
+| `GET /v1/filters/tag/{uid}` | One saved tag filter: `spec.filterGroup`, its conjunction and its conditions. A request that names a project gets HTTP 403. |
 
 The search takes no filter uid. So strata turns each condition of a saved
 filter into a condition of the search. The property is `tags`, with the values

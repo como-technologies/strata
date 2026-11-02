@@ -21,7 +21,7 @@ mod sources;
 mod tests;
 
 pub use check::route_matches;
-pub use model::{Fact, Kind};
+pub use model::{Fact, Kind, Scope};
 use sources::Sources;
 
 /// Every fault of the list in the repository at `repo`, as messages.

@@ -563,8 +563,9 @@ give the run profiles to read, and `just live-up` to give it a cluster.
 
 | Result | What it shows |
 |---|---|
-| `contract.json` | #390, #391, #530: for each fact of the kind `request`, the status and the type of each field against the stand-in. The run asks with the query that strata sends. It checks the names that strata needs, and lists each value of a closed set that the fact and the stand-in do not name. The facts `tag-filter-listing`, `tag-filter`, and `validate-aws-regions` show that the filter listing needs `filterType=tag` and the regions route needs `cloudAccountUid`. No result yet. |
+| `contract.json` | #390, #391, #530: for each fact of the kind `request`, the status and the type of each field against the stand-in. The run asks with the query that strata sends. It checks the names that strata needs, and lists each value of a closed set that the fact and the stand-in do not name. No result yet. |
 | `contract.json` | #393: for each fact of the kind `cloud`, the shape of the answer, and the values of its table, against the fixtures of the rules. No result yet. |
+| `contract.json` | #539: the facts `tag-filter-listing` and `tag-filter` are `same`, because the run sends them with no project. The fact `audit-log` is `same` for a page that lacks a kind that strata acts on and for a kind that strata ignores. The facts `validate-aws-regions`, `validate-vpcs`, and `validate-security-groups` are `same`, because the run sends the account, the region, and the VPC of the tenant. A zone id that the lab account lacks gives no difference: the entry says that the account cannot check it. No result yet. |
 
 ## contract-profiles.sh
 
@@ -1074,6 +1075,7 @@ cluster A.
 | `label`, `prod`, `prod-row` | 0 | #80: with the label `env=prod`, `--tag env=prod` finds cluster A alone |
 | `none` | 0 | #80: a query that no cluster meets finds none |
 | `filter-create`, `filters`, `by-filter` | 0 | #80: `list filters` names a saved tag filter and what it selects, and `list clusters --filter` finds cluster A |
+| `filters-project`, `filters-project-says`, `filter-project`, `filter-project-says` | 0 | #539: the saved filters belong to the tenant. `api.sh get-status` asks the listing with `filterType=tag`, and the filter by its uid, with the project of cluster A. Palette answers HTTP 403 with the code `ProjectUidIsNotEmpty` for both. No result yet. |
 | `set`, `set-files`, `set-record` | 0 | #80: `snapshot filter:<name> --dir --prune` writes one record, of cluster A, with the label. It removes the record of a cluster that left the set. It leaves a file that is not a record |
 | `set-tag` | 0 | #80: `snapshot tag:env=prod --dir` does the same |
 | `set-verify` | 0 | #80: the record that the set wrote verifies |

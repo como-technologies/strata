@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use crate::api::Method;
-use crate::api::codes::CreateRule;
+use crate::api::codes::{CreateRule, PROJECT_SCOPE_CODE};
 use crate::closed_set::ClosedSet;
 use crate::config::{KEY_VARS, MAX_RETRY_AFTER_VAR, PROJECT_NAME_VAR};
 use crate::model::pack_state::PackState;
@@ -33,8 +33,10 @@ pub enum Error {
         alternate: &'static str,
     },
     /// Palette answered with a non-2xx status. A 401 or a 403 is almost always the key, so the
-    /// message names where a key comes from; the body alone names nothing the reader can set.
-    #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body, BODY_IN_MESSAGE), key_hint(*status))]
+    /// message names where a key comes from; the body alone names nothing the reader can set. A 403
+    /// with the code `ProjectUidIsNotEmpty` is no fault of the key: the message says that the route
+    /// is of the tenant scope and that the request named a project.
+    #[error("{method} {path} failed with HTTP {status}: {}{}", cut(body, BODY_IN_MESSAGE), status_hint(*status, body))]
     Api {
         /// The request method.
         method: Method,
@@ -502,9 +504,17 @@ pub enum Error {
 }
 
 /// The hint of a 401 or a 403: the key is almost always the cause, so the message names where a
-/// key comes from. Empty for each other status.
-fn key_hint(status: u16) -> String {
-    if status == 401 || status == 403 {
+/// key comes from. A 403 with the code [`PROJECT_SCOPE_CODE`] is the exception: the key is right,
+/// and the message says that the route is of the tenant scope and that the request named a
+/// project. Empty for each other status.
+fn status_hint(status: u16, body: &str) -> String {
+    let names_project = status == 403
+        && crate::model::validation::PaletteRefusal::from_error_body(body)
+            .is_some_and(|refusal| refusal.code == PROJECT_SCOPE_CODE);
+    if names_project {
+        "; the route is of the tenant scope, and the request named a project: ask it with no project"
+            .to_string()
+    } else if status == 401 || status == 403 {
         format!(
             "; check {}, {}, or ~/{}: the key can be wrong, expired, or for another tenant",
             KEY_VARS[0],

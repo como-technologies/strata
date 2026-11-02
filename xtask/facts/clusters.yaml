@@ -390,6 +390,7 @@ facts:
   - id: tag-filter-listing
     kind: request
     request: GET /v1/filters/metadata?filterType=tag
+    scope: tenant
     reads:
       fields:
         - items[].metadata.name
@@ -399,6 +400,7 @@ facts:
     live:
       - fleet.sh:filters
       - fleet.sh:by-filter
+      - fleet.sh:filters-project-says
     pages:
       - reference/palette-api.md#the-fleet
       - internals/palette/clusters.md#an-imported-cluster
@@ -410,6 +412,7 @@ facts:
   - id: tag-filter
     kind: request
     request: GET /v1/filters/tag/{uid}
+    scope: tenant
     reads:
       fields:
         - spec.filterGroup.conjunction
@@ -419,6 +422,7 @@ facts:
     live:
       - fleet.sh:by-filter
       - fleet.sh:set
+      - fleet.sh:filter-project-says
     pages:
       - reference/palette-api.md#the-fleet
       - internals/palette/clusters.md#an-imported-cluster
