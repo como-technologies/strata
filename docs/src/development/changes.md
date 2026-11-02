@@ -130,6 +130,11 @@ writes nothing to the copy.
 Read the route and the model in `hapi`, the API definitions. Read the behavior
 in `hubble`, the API server.
 
+A session on the host itself, not in a container, has no `$HOME/palette`. On the
+host of the lead, the copy comes from the clones in `~/repos/spectrocloud/`. The
+script `palette-src-refresh`, in `~/.local/bin/`, pulls the clones and refreshes
+the copy. A session on the host runs it first, then reads the clones.
+
 The lead refreshes the copy, so it can be some hours old. When a session needs a
 newer copy, it asks the lead with `riff tell lead`. Rule 7 of
 [Write the documentation](./documentation.md) tells you to read the code first,

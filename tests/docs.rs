@@ -2006,6 +2006,10 @@ fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() 
         "On another host, the volume is empty.",
         "so it can be some hours old.",
         "it asks the lead with `riff tell lead`.",
+        "A session on the host itself, not in a container, has no `$HOME/palette`.",
+        "the copy comes from the clones in `~/repos/spectrocloud/`.",
+        "`palette-src-refresh`, in `~/.local/bin/`, pulls the clones and refreshes the copy.",
+        "A session on the host runs it first, then reads the clones.",
     ] {
         assert!(page.contains(needle), "changes.md lacks {needle:?}");
     }
