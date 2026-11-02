@@ -5,6 +5,7 @@
 //! request that fails a check gets an error status and a message, and changes nothing.
 
 use strata::closed_set::unknown::Report;
+use strata::closed_set::unknown::send::{KEY_HEADER, KEY_LENGTH};
 
 /// The most bytes that the body of a request has. A report has 100 entries at most, and an entry is
 /// a few hundred bytes.
@@ -25,6 +26,32 @@ impl Refusal {
             status,
             message: message.into(),
         }
+    }
+}
+
+/// The key of a send in the header `value`, or `None` when the request has no key.
+///
+/// The key is the hex of a SHA-256 digest: 64 characters of `0` to `9` and `a` to `f`. The same
+/// lines of the log give the same key, so a second try of a send has the key of the first.
+///
+/// # Errors
+///
+/// A [`Refusal`] with the status 400 when the key has another form. The message never repeats it.
+pub fn key(value: Option<&str>) -> Result<Option<&str>, Refusal> {
+    match value {
+        None => Ok(None),
+        Some(text)
+            if text.len() == KEY_LENGTH
+                && text
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) =>
+        {
+            Ok(Some(text))
+        }
+        Some(_) => Err(Refusal::new(
+            400,
+            format!("the {KEY_HEADER} must have {KEY_LENGTH} characters of 0 to 9 and a to f"),
+        )),
     }
 }
 
@@ -51,9 +78,15 @@ pub fn parse(content_type: Option<&str>, body: &[u8]) -> Result<Report, Refusal>
         ));
     }
     let report: Report = serde_json::from_slice(body).map_err(|e| match e.classify() {
-        serde_json::error::Category::Data => {
-            Refusal::new(422, format!("the report is not valid: {e}"))
-        }
+        // the message of serde_json holds the value of the field, so the refusal gives only the place
+        serde_json::error::Category::Data => Refusal::new(
+            422,
+            format!(
+                "the report is not valid: a field is missing, is not in the list, or has the wrong type, at line {} column {}",
+                e.line(),
+                e.column()
+            ),
+        ),
         _ => Refusal::new(400, "the body is not JSON"),
     })?;
     match report.fault() {
@@ -113,9 +146,7 @@ mod tests {
             let refused = refusal(JSON, &report(vec![with]));
             assert_eq!(refused.status, 422, "{field}");
             assert!(
-                refused
-                    .message
-                    .contains(&format!("unknown field `{field}`")),
+                refused.message.contains("is not in the list") && !refused.message.contains(field),
                 "{refused:?}"
             );
         }
@@ -123,7 +154,7 @@ mod tests {
         let refused = refusal(JSON, top.to_string().as_bytes());
         assert_eq!(refused.status, 422);
         assert!(
-            refused.message.contains("unknown field `host`"),
+            refused.message.contains("is not in the list") && !refused.message.contains("host"),
             "{refused:?}"
         );
     }
@@ -173,5 +204,64 @@ mod tests {
         with["secret-field"] = json!("hunter2");
         let refused = refusal(JSON, &report(vec![with]));
         assert!(!refused.message.contains("hunter2"), "{refused:?}");
+        assert!(!refused.message.contains("secret-field"), "{refused:?}");
+    }
+
+    #[test]
+    fn a_field_of_the_wrong_type_gets_a_fixed_text_with_the_line_and_the_column_and_no_value() {
+        // serde_json names the value of a field of the wrong type in its message
+        let wrong = [
+            ("count", json!("hunter2")),
+            ("strata", json!(["my-secret-token"])),
+            ("set", json!({"password": "hunter2"})),
+        ];
+        for (field, value) in wrong {
+            let mut with = entry();
+            with[field] = value;
+            let refused = refusal(JSON, &report(vec![with]));
+            assert_eq!(refused.status, 422, "{field}");
+            assert!(
+                refused
+                    .message
+                    .contains("has the wrong type, at line 1 column "),
+                "{refused:?}"
+            );
+            for secret in ["hunter2", "my-secret-token", "password"] {
+                assert!(!refused.message.contains(secret), "{refused:?}");
+            }
+        }
+        let top = br#"{"schema":7,"unknown":[]}"#;
+        let refused = refusal(JSON, top);
+        assert_eq!(refused.status, 422);
+        assert!(
+            refused.message.ends_with("at line 1 column 11"),
+            "{refused:?}"
+        );
+    }
+
+    #[test]
+    fn a_key_is_64_characters_of_lower_case_hex_and_no_key_is_none() {
+        let good = "0123456789abcdef".repeat(4);
+        assert_eq!(key(None), Ok(None));
+        assert_eq!(key(Some(&good)), Ok(Some(good.as_str())));
+        for bad in [
+            "",
+            "abc",
+            &good[1..],
+            &format!("{good}0"),
+            &good.replace('0', "g"),
+            &good.to_uppercase(),
+            &format!("{}\n", &good[1..]),
+        ] {
+            let refused = key(Some(bad)).unwrap_err();
+            assert_eq!(refused.status, 400, "{bad:?}");
+            assert!(
+                refused.message.starts_with("the Idempotency-Key must"),
+                "{refused:?}"
+            );
+            if !bad.is_empty() {
+                assert!(!refused.message.contains(bad), "{refused:?}");
+            }
+        }
     }
 }

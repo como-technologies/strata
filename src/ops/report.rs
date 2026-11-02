@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::REPOSITORY;
-use crate::closed_set::unknown::report::MOST_ENTRIES;
+use crate::closed_set::unknown::report::{MOST_ENTRIES, MOST_VALUES};
 use crate::closed_set::unknown::{Report, log, send};
 use crate::error::{Error, Result};
 use crate::text::query_value;
@@ -21,13 +21,20 @@ const ISSUE_TITLE: &str = "Values that Palette gave and strata does not know";
 /// more, so the link stays below that.
 const LONGEST_LINK: usize = 6000;
 
-/// Which lines of the log `strata report` reads, and what it does with them afterward.
+/// Which lines of the log `strata report` reads.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ReportOptions {
     /// `--all`: read each line of the log, also the lines that the user marked as sent.
     pub all: bool,
-    /// `--sent`: mark each line that the report reads as sent. A later report omits them.
-    pub sent: bool,
+}
+
+/// The report of the log, and the mark that the user can ask for after the report went out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnsentReport {
+    /// The report of the lines that the user did not mark as sent.
+    pub report: Report,
+    /// How many lines the log held when strata read it. [`mark_reported`] marks them as sent.
+    pub lines: usize,
 }
 
 /// The log of the user: see [`log::path`].
@@ -45,20 +52,34 @@ pub fn unknown_log() -> Result<PathBuf> {
 /// The report of the log at `log`: the lines after the mark of the last `--sent`, or every line
 /// with `all`.
 ///
-/// `strata report` marks a line only with `--sent`, because only the user knows that the report
-/// went out. A mark that is past the end of the log, such as after a new log, counts for nothing:
-/// the report then holds every line.
+/// This function only reads. `strata report` marks a line only with `--sent`, because only the
+/// user knows that the report went out. The caller prints the report, and then calls
+/// [`mark_reported`] with the field `lines`. A mark that is past the end of the log, such as after
+/// a new log, counts for nothing: the report then holds every line.
 ///
 /// # Errors
 ///
-/// `LogInvalid` when a line of the log is not a line of `strata-unknown/1`: nothing is reported
-/// and nothing is marked. `Io` when strata cannot read the log, or cannot write the mark.
-pub fn unknown_report(log: &Path, options: ReportOptions) -> Result<Report> {
+/// `LogInvalid` when a line of the log is not a line of `strata-unknown/1`: nothing is reported.
+/// `Io` when strata cannot read the log.
+pub fn unknown_report(log: &Path, options: ReportOptions) -> Result<UnsentReport> {
     let (lines, skip) = read_unsent(log, options.all)?;
-    if options.sent {
-        log::mark_sent(&log::sent_path(log), lines.len())?;
-    }
-    Ok(Report::of(lines.iter().skip(skip)))
+    Ok(UnsentReport {
+        report: Report::of(lines.iter().skip(skip)),
+        lines: lines.len(),
+    })
+}
+
+/// Mark the first `lines` lines of the log at `log` as sent. A later report omits them.
+///
+/// Call it after the report went out, so that a report that fails marks nothing. `lines` is the
+/// field of the [`UnsentReport`] that the report came from: a line that a run wrote after the read
+/// stays unmarked.
+///
+/// # Errors
+///
+/// `Io` when strata cannot write the mark.
+pub fn mark_reported(log: &Path, lines: usize) -> Result<()> {
+    log::mark_sent(&log::sent_path(log), lines)
 }
 
 /// The lines of the log at `log`, and how many of them the user marked as sent. `all` counts none
@@ -75,13 +96,14 @@ fn read_unsent(log: &Path, all: bool) -> Result<(Vec<log::Line>, usize)> {
     Ok((lines, skip))
 }
 
-/// How many of the first `lines` make a report of [`MOST_ENTRIES`] entries or fewer. At least one:
-/// a line is one entry.
+/// How many of the first `lines` make a report of [`MOST_ENTRIES`] entries or fewer, with
+/// [`MOST_VALUES`] different values or fewer. At least one: a line is one entry.
 fn first_chunk(lines: &[log::Line]) -> usize {
     let (mut fits, mut over) = (1, lines.len() + 1);
     while over - fits > 1 {
         let middle = fits + (over - fits) / 2;
-        if Report::of(&lines[..middle]).unknown.len() <= MOST_ENTRIES {
+        let report = Report::of(&lines[..middle]);
+        if report.unknown.len() <= MOST_ENTRIES && report.distinct_values() <= MOST_VALUES {
             fits = middle;
         } else {
             over = middle;
@@ -95,9 +117,9 @@ fn first_chunk(lines: &[log::Line]) -> usize {
 /// nothing.
 ///
 /// This is the one place where strata marks a line by itself: the endpoint took the report, so
-/// the lines are sent. The endpoint takes [`MOST_ENTRIES`] entries in a report, so a long log goes
-/// in more than one report. A report that fails marks nothing, and the next send holds its lines
-/// again.
+/// the lines are sent. A report has [`MOST_ENTRIES`] entries or fewer and [`MOST_VALUES`] values or
+/// fewer, so a long log goes in more than one report. A report that fails marks nothing, and the
+/// next send holds its lines again.
 ///
 /// # Errors
 ///
@@ -108,7 +130,7 @@ pub fn send_unknown_report(log: &Path, endpoint: &str) -> Result<()> {
     while done < lines.len() {
         let rest = &lines[done..];
         let take = first_chunk(rest);
-        send::post(endpoint, &Report::of(&rest[..take]))?;
+        send::post(endpoint, &Report::of(&rest[..take]), done)?;
         done += take;
         log::mark_sent(&log::sent_path(log), done)?;
     }

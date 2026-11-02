@@ -8,11 +8,21 @@
 use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, VecDeque};
 use std::hash::BuildHasher;
+use std::net::IpAddr;
 use std::time::{Duration, Instant};
 
-/// The most senders that a limiter holds. A flood from more addresses than this is refused until
-/// the old requests expire.
-const MOST_SENDERS: usize = 10_000;
+/// The most senders that a limiter holds. A new sender of a full table takes the place of the oldest
+/// sender. So a flood from many addresses cannot lock out a new sender.
+pub(crate) const MOST_SENDERS: usize = 10_000;
+
+/// Why a [`Limiter`] refused to spend.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Denied {
+    /// The sender spent the limit in the last span. A try after this time can work.
+    Wait(Duration),
+    /// The cost is above the limit itself, so no wait helps.
+    Over,
+}
 
 /// A limit of the requests in a span of time, for each sender.
 #[derive(Debug)]
@@ -38,53 +48,92 @@ impl Limiter {
     ///
     /// # Errors
     ///
-    /// The time to wait until the sender can spend `cost`, when it has spent too much in the last
-    /// span. Nothing is spent then.
-    pub fn allow(&mut self, sender: &str, cost: usize, now: Instant) -> Result<(), Duration> {
-        let key = self.salt.hash_one(sender);
-        if self.seen.len() >= MOST_SENDERS && !self.seen.contains_key(&key) {
-            let wait = self.forget_expired(now);
-            if self.seen.len() >= MOST_SENDERS {
-                return Err(wait.unwrap_or(self.span));
-            }
-        }
-        let span = self.span;
+    /// [`Denied::Wait`] with the time until the sender can spend `cost`, when it has spent too much
+    /// in the last span. [`Denied::Over`] when `cost` is above the limit, because no wait helps
+    /// then. Nothing is spent in either case.
+    pub fn allow(&mut self, sender: &str, cost: usize, now: Instant) -> Result<(), Denied> {
         if cost > self.limit {
-            return Err(span);
+            return Err(Denied::Over);
         }
-        let spent = self.seen.entry(key).or_default();
-        while spent
-            .front()
-            .is_some_and(|at| now.duration_since(*at) >= span)
-        {
-            spent.pop_front();
+        let wait = self.wait(sender, cost, now);
+        if !wait.is_zero() {
+            return Err(Denied::Wait(wait));
         }
-        if spent.len() + cost > self.limit {
-            // the sender can spend again when enough old requests have expired
-            let free_at = spent
-                .get(spent.len() + cost - self.limit - 1)
-                .copied()
-                .unwrap_or(now);
-            return Err((free_at + span).saturating_duration_since(now));
-        }
-        spent.extend(std::iter::repeat_n(now, cost));
+        self.spend(sender, cost, now);
         Ok(())
     }
 
-    /// Drop each sender whose requests are all older than the span. Gives the time until the
-    /// first of the others is free, or `None` when no sender is left.
-    fn forget_expired(&mut self, now: Instant) -> Option<Duration> {
+    /// How much the sender `sender` can spend at the time `now`.
+    pub fn room(&mut self, sender: &str, now: Instant) -> usize {
+        let key = self.salt.hash_one(sender);
+        let span = self.span;
+        let limit = self.limit;
+        self.seen.get_mut(&key).map_or(limit, |spent| {
+            expire(spent, span, now);
+            limit.saturating_sub(spent.len())
+        })
+    }
+
+    /// The time until the sender `sender` can spend `cost`, or zero when it can now. A `cost`
+    /// above the limit gives the whole span: it can never be spent.
+    pub fn wait(&mut self, sender: &str, cost: usize, now: Instant) -> Duration {
+        let key = self.salt.hash_one(sender);
+        let (limit, span) = (self.limit, self.span);
+        let Some(spent) = self.seen.get_mut(&key) else {
+            return if cost > limit { span } else { Duration::ZERO };
+        };
+        expire(spent, span, now);
+        if spent.len() + cost <= limit {
+            return Duration::ZERO;
+        }
+        // the sender can spend again when enough old requests have expired
+        let free_at = spent
+            .get((spent.len() + cost).saturating_sub(limit + 1))
+            .copied()
+            .unwrap_or(now);
+        (free_at + span).saturating_duration_since(now)
+    }
+
+    /// Spend `cost` for the sender `sender` at the time `now`, with no check of the limit. The
+    /// caller made sure that [`room`](Limiter::room) holds `cost`. A new sender of a full table
+    /// takes the place of the sender that spent last the longest time ago.
+    pub fn spend(&mut self, sender: &str, cost: usize, now: Instant) {
+        if cost == 0 {
+            return;
+        }
+        let key = self.salt.hash_one(sender);
+        if self.seen.len() >= MOST_SENDERS && !self.seen.contains_key(&key) {
+            self.forget_expired(now);
+            if self.seen.len() >= MOST_SENDERS {
+                self.forget_oldest();
+            }
+        }
+        self.seen
+            .entry(key)
+            .or_default()
+            .extend(std::iter::repeat_n(now, cost));
+    }
+
+    /// Drop each sender whose requests are all older than the span.
+    fn forget_expired(&mut self, now: Instant) {
         let span = self.span;
         self.seen.retain(|_, spent| {
             spent
                 .back()
                 .is_some_and(|at| now.duration_since(*at) < span)
         });
-        self.seen
-            .values()
-            .filter_map(|spent| spent.back())
-            .map(|at| (*at + span).saturating_duration_since(now))
-            .min()
+    }
+
+    /// Drop the sender whose last request is the oldest.
+    fn forget_oldest(&mut self) {
+        let oldest = self
+            .seen
+            .iter()
+            .min_by_key(|(_, spent)| spent.back().copied())
+            .map(|(key, _)| *key);
+        if let Some(key) = oldest {
+            self.seen.remove(&key);
+        }
     }
 
     /// How many senders the limiter holds.
@@ -93,94 +142,33 @@ impl Limiter {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const HOUR: Duration = Duration::from_secs(3600);
-
-    #[test]
-    fn a_sender_spends_its_limit_and_then_waits_until_the_oldest_request_expires() {
-        let mut limiter = Limiter::new(2, HOUR);
-        let start = Instant::now();
-        assert!(limiter.allow("a", 1, start).is_ok());
-        assert!(
-            limiter
-                .allow("a", 1, start + Duration::from_secs(60))
-                .is_ok()
-        );
-        let wait = limiter
-            .allow("a", 1, start + Duration::from_secs(120))
-            .unwrap_err();
-        assert_eq!(wait, HOUR - Duration::from_secs(120));
-        assert!(
-            limiter.allow("a", 1, start + HOUR).is_ok(),
-            "the first request expired"
-        );
-    }
-
-    #[test]
-    fn senders_do_not_share_a_limit_and_a_refused_request_spends_nothing() {
-        let mut limiter = Limiter::new(1, HOUR);
-        let now = Instant::now();
-        assert!(limiter.allow("a", 1, now).is_ok());
-        assert!(limiter.allow("b", 1, now).is_ok());
-        assert!(limiter.allow("a", 1, now).is_err());
-        assert!(limiter.allow("a", 1, now + HOUR).is_ok());
-    }
-
-    #[test]
-    fn a_cost_above_the_limit_is_refused_and_a_cost_spends_that_many_requests() {
-        let mut limiter = Limiter::new(3, HOUR);
-        let now = Instant::now();
-        assert!(limiter.allow("all", 4, now).is_err());
-        assert!(limiter.allow("all", 2, now).is_ok());
-        assert!(
-            limiter.allow("all", 2, now).is_err(),
-            "only one request is left"
-        );
-        assert!(limiter.allow("all", 1, now).is_ok());
-    }
-
-    #[test]
-    fn a_new_sender_of_a_full_table_waits_for_the_first_sender_to_be_free_and_no_longer() {
-        let mut limiter = Limiter::new(1, HOUR);
-        let start = Instant::now();
-        limiter.allow("first", 1, start).unwrap();
-        for n in 1..MOST_SENDERS {
-            limiter
-                .allow(&format!("sender-{n}"), 1, start + Duration::from_secs(600))
-                .unwrap();
-        }
-        let wait = limiter
-            .allow("one-more", 1, start + Duration::from_secs(700))
-            .unwrap_err();
-        assert_eq!(wait, HOUR - Duration::from_secs(700));
-    }
-
-    #[test]
-    fn the_limiter_holds_no_address_and_a_new_limiter_hashes_it_in_another_way() {
-        let mut one = Limiter::new(1, HOUR);
-        let mut two = Limiter::new(1, HOUR);
-        let now = Instant::now();
-        one.allow("203.0.113.7", 1, now).unwrap();
-        two.allow("203.0.113.7", 1, now).unwrap();
-        let held = |l: &Limiter| *l.seen.keys().next().unwrap();
-        assert_ne!(held(&one), held(&two), "the salt differs for each process");
-        let shown = format!("{one:?}");
-        assert!(!shown.contains("203.0.113.7"), "{shown}");
-    }
-
-    #[test]
-    fn a_flood_of_senders_is_refused_when_none_has_expired_and_accepted_when_the_old_ones_expire() {
-        let mut limiter = Limiter::new(1, HOUR);
-        let now = Instant::now();
-        for n in 0..MOST_SENDERS {
-            limiter.allow(&format!("sender-{n}"), 1, now).unwrap();
-        }
-        assert_eq!(limiter.senders(), MOST_SENDERS);
-        assert!(limiter.allow("one-more", 1, now).is_err());
-        assert!(limiter.allow("one-more", 1, now + HOUR).is_ok());
-        assert_eq!(limiter.senders(), 1, "the expired senders are gone");
+/// Drop the requests in `spent` that are `span` old or older at the time `now`.
+fn expire(spent: &mut VecDeque<Instant>, span: Duration, now: Instant) {
+    while spent
+        .front()
+        .is_some_and(|at| now.duration_since(*at) >= span)
+    {
+        spent.pop_front();
     }
 }
+
+/// The sender that the limit counts for the address `address`, as text.
+///
+/// A machine with an IPv6 address holds at least the 64-bit network of the address, and so it can
+/// send from 2^64 addresses. So the limit counts an IPv6 address by its /64 network. An IPv4
+/// address, an IPv4 address in the form of IPv6, and a text that is no address stay as they are.
+pub fn network_of(address: &str) -> String {
+    match address.parse::<IpAddr>() {
+        Ok(IpAddr::V6(v6)) => match v6.to_ipv4_mapped() {
+            Some(v4) => v4.to_string(),
+            None => {
+                let [a, b, c, d, ..] = v6.segments();
+                format!("{a:x}:{b:x}:{c:x}:{d:x}::/64")
+            }
+        },
+        _ => address.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests;

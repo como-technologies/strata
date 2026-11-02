@@ -595,8 +595,10 @@ report](./report-endpoint.md) says how the lead deploys the endpoint and runs th
 | Check | Expected exit | What it shows |
 |---|---|---|
 | `send-1`, `send-1-says`, `send-1-marked` | 0 | #397: a run with `STRATA_REPORT=1` exits as a run with no send, says that it sent the report, and marks the line as sent. No result yet. |
-| `issue`, `issue-new` | 0 | #397: one issue of the label `palette-drift` holds the marker of the value, and its first send gives the count 1. No result yet. |
+| `issue`, `issue-new` | 0 | #397: one issue of the label `palette-drift` holds the marker of the value, and its first send gives the count 1. The endpoint answers 202 and then writes the issue, so the script waits for it. No result yet. |
 | `send-2`, `issue-2` | 0 | #397: a second run posts the report again. Still one issue holds the value, and its count grew by one. No result yet. |
+| `repeat-1` | 0 | #552: the endpoint takes a report with a key and answers 202 before it writes the issue. The service keeps the CPU after the answer, so the issue changes. No result yet. |
+| `repeat-2`, `repeat-count` | 0 | #552: the same report with the same key gets 200 and `duplicate`, and the issue counts the report one time. No result yet. |
 
 ## pending.sh
 

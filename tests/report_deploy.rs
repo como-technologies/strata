@@ -39,6 +39,36 @@ fn calls(dir: &Path) -> Vec<String> {
         .collect()
 }
 
+/// The commands that `stderr` shows with the prefix `+ gcloud `, without the prefix.
+fn printed(stderr: &str) -> Vec<String> {
+    stderr
+        .lines()
+        .filter_map(|line| line.strip_prefix("+ gcloud "))
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn the_script_prints_the_words_of_each_gcloud_command_that_it_sends_also_a_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let run = deploy(dir.path(), &[]);
+    assert_eq!(run.code, 0, "{}", run.err);
+    let sent = calls(dir.path());
+    assert_eq!(sent.len(), 7, "{sent:?}");
+    assert_eq!(printed(&run.err), sent);
+}
+
+#[test]
+fn the_dry_run_prints_each_command_that_a_real_run_sends_and_the_reads_too() {
+    let real = tempfile::tempdir().unwrap();
+    assert_eq!(deploy(real.path(), &[]).code, 0);
+    let dry = tempfile::tempdir().unwrap();
+    let run = deploy(dry.path(), &["--dry-run"]);
+    assert_eq!(run.code, 0, "{}", run.err);
+    assert_eq!(printed(&run.err), calls(real.path()));
+    assert_eq!(calls(dry.path()), Vec::<String>::new());
+}
+
 #[test]
 fn a_dry_run_prints_each_gcloud_command_and_runs_none() {
     let dir = tempfile::tempdir().unwrap();
@@ -50,6 +80,11 @@ fn a_dry_run_prints_each_gcloud_command_and_runs_none() {
         "a dry run calls no gcloud"
     );
     for part in [
+        "gcloud secrets describe strata-report-token --project como-strata-test",
+        "gcloud artifacts repositories describe strata --project como-strata-test",
+        "gcloud logging sinks describe _Default --project como-strata-test",
+        "gcloud run services describe strata-report --project como-strata-test",
+        "--no-cpu-throttling",
         "gcloud builds submit --project como-strata-test --config deploy/report/cloudbuild.yaml",
         "gcloud run deploy strata-report --project como-strata-test --region us-central1",
         "--set-secrets GITHUB_TOKEN=strata-report-token:latest",

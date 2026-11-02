@@ -16,31 +16,85 @@ The service checks each request in this order. A request that fails a check chan
 | Order | Check | Answer when it fails |
 | --- | --- | --- |
 | 1 | The path is `/` and the method is `POST`. | 404 or 405 |
-| 2 | The sender made 10 requests or fewer in the last hour. | 429, with `Retry-After` |
-| 3 | The content type is JSON, and the body has 64 KiB or fewer. | 415, 413, or 400 |
-| 4 | The body is `strata-report/1`, with no field outside the list. Each value is a short word. | 422 |
-| 5 | The merge opens no more than 20 new issues in the last hour, for all senders. | 429, with `Retry-After` |
-| 6 | The tracker takes the issues. | 502 |
+| 2 | The content type is JSON, the body has 64 KiB or fewer, and a key has the right form. | 415, 413, or 400 |
+| 3 | The body is `strata-report/1`, with no field outside the list. Each value is a short word. | 422 |
+| 4 | The sender made 10 requests or fewer in the last hour. | 429, with `Retry-After` |
+| 5 | The service did not take this report in the last day. | 200, with `duplicate` |
+| 6 | The tracker lists the issues. | 502 |
+| 7 | The hour has room for at least one step of the report. | 429, with `Retry-After` |
 
-Check 4 is the type `Report` of the library. The send of strata and the endpoint use the same type,
+Check 3 is the type `Report` of the library. The send of strata and the endpoint use the same type,
 so the list of fields has one definition. A report has 1 to 100 entries. The check refuses a
-route that is not a template of a route, and a value of more than 64 characters. Check 5 comes
-after the reads and before the writes, so a report that the limit refuses writes nothing.
+route that is not a template of a route and a value of more than 64 characters. It also refuses a
+count of more than 1,000,000. Check 4 comes after checks 2 and 3, so a request that fails them spends no request of
+the sender.
 
-The answer is JSON: `{"ok":true,"opened":1,"updated":0}`, or `{"error":"..."}`. The message of an
-error never repeats a value of the body. A failure of the tracker goes to standard error with no
-address, and the sender gets a short sentence.
+A request that passes check 7 gets the answer 202, and the service writes the report after the
+answer. The answer is JSON: `{"ok":true,"opens":1,"updates":0}`, or `{"error":"..."}`. The message of
+an error never repeats a value of the body. A field of the wrong type gets a fixed text with the
+line and the column. A failure of the tracker goes to standard error with no address, and the
+sender gets a short sentence.
+
+## The key of a send
+
+The send of strata puts a key in the header `Idempotency-Key`. The key is 64 characters of hex: the
+digest of the report and of the number of lines before it in the log. A second try of the same
+lines has the same key. A request without a key is never a repeat.
+
+- Check 5 hashes the key and the content of the report together, and it keeps the hash for one
+  day. A request that has the hash gets 200 and `{"ok":true,"duplicate":true}`, and it changes
+  nothing. So a send that timed out and came again counts one time.
+- A key alone stops no other report, because the hash holds the content too.
+- Two reports of equal content from two senders on the same day, at the same place of their logs,
+  count one time. The counts show how often a value comes, and they are not exact.
+- When the tracker fails after the answer, the service forgets the hash. A second try of the
+  report then counts.
+
+## The limits
+
+Three limits protect the tracker. They hold for all senders together, except the first.
+
+| Limit | Value | What the service does over it |
+| --- | --- | --- |
+| Requests of one sender | 10 in an hour | Check 4 answers 429. |
+| New issues | 20 in an hour | The step waits. |
+| Writes: new issues and changes | 200 in an hour | The step waits. |
+
+A sender is an address. An IPv6 address counts by its /64 network, because one machine can send from
+all the addresses of its network. The table holds 10,000 senders. When more senders come, the oldest sender leaves the table. So a
+flood of addresses cannot lock out a new sender.
+
+A step is one set and one value of the report. The service keeps the steps that the new-issue limit
+and the write limit take, in the order of the set and the value. For each step it does not keep, the
+answer lists the numbers of the entries of the report, from 1, in `waiting`:
+`{"ok":true,"opens":20,"updates":0,"waiting":[21]}`. The service writes the other steps. Strata
+makes a report of 20 values or fewer, so an hour that no other sender used takes a whole report. When
+the limits keep no step, the answer is 429 with `Retry-After`, and the service writes nothing.
 
 The merge is not atomic. When the tracker fails in the middle of a report, the issues written so
-far stay, and the sender sends the report again. The retry can count a report twice. The counts
-show how often a value comes, and they are not exact.
+far stay. The sender has its answer by then, so the rest of the report is lost.
 
 The service reads at most 1000 issues of the label. When the label has more, the service answers
 502 and logs the cause. It does not open a second issue for a value that it cannot find. Close the
 issues of values that a release of strata names, or move them out of the label.
 
-Cloud Run takes 8 requests at a time for the one instance, so the service has 8 threads at most. A
-request reads its body in a thread of its own, and the rules run one at a time.
+## The locks and the threads
+
+The service has two locks. The first guards the limits and the hashes of the reports. It guards
+memory only, and no call to the tracker runs under it, so a request that a check refuses never waits
+for a merge. The second guards the tracker. One merge holds it from the read of the issues to the
+last write. A request that passed checks 1 to 4 waits for it, except a repeat: check 5 answers a
+repeat before the wait.
+
+The service answers before it writes, so a slow tracker cannot make a sender time out. Strata waits
+3 seconds for an answer. The read of the issues is the only call that comes before the answer.
+
+Each request has a thread that lives until its report is written, which is after its answer. So the
+limit of Cloud Run does not bound the threads. The service handles 32 requests at a time and answers
+503 with `Retry-After` to a request over that number.
+
+Cloud Run must keep the CPU after the answer. The deploy sets `--no-cpu-throttling`. Without it,
+Cloud Run can stop the write that follows the answer.
 
 ## The issue of a value
 
@@ -68,9 +122,14 @@ A maintainer proves the value in the lab, then follows
 
 ## What the service keeps
 
-The service keeps no address and no report. Its memory holds a hash of the address of each sender
-for one hour, with a salt that the process makes when it starts. It writes the hash nowhere. The
-tracker keeps the issues.
+The service keeps no address and no report. Its memory holds these things, each with a salt that
+the process makes when it starts:
+
+- A hash of the address of each sender, for one hour. An IPv6 address counts by its /64 network.
+- A hash of the key and the content of each report that it took, for one day.
+
+It writes the hashes nowhere, and a restart of the service forgets them. The tracker keeps the
+issues.
 
 The request log of Cloud Run holds the address of the sender, so the deploy excludes that log from
 Cloud Logging. The log of the container holds the start of the service and the failures of the
@@ -93,22 +152,6 @@ Cloud Run sets the variables of the service. Only the token is required.
 Without `TRUST_FORWARDED_FOR=1`, the service uses the address of the connection. A client can send
 `X-Forwarded-For` to a service that no proxy fronts. Then each request has a sender of its own, and
 the limit of the rate does not hold.
-
-## The settings of the service
-
-Cloud Run sets the variables of the service. Only the token is required.
-
-| Variable | Default | What it sets |
-| --- | --- | --- |
-| `GITHUB_TOKEN` | none, required | The token that writes issues: see [The token](#the-token). |
-| `GITHUB_REPOSITORY` | `como-technologies/strata` | The repository that gets the issues. |
-| `GITHUB_API` | `https://api.github.com` | The address of the API. A test points it at a stand-in. |
-| `REPORT_LABEL` | `palette-drift` | The label of each issue. |
-| `REPORT_MILESTONE` | `Backlog` | The milestone of a new issue, when the repository has it open. An empty value is no milestone. |
-| `PORT` | `8080` | The port. Cloud Run sets it. |
-
-The service reads the sender from the last entry of `X-Forwarded-For`, which the front end of
-Cloud Run adds. A request without the header gets the address of its connection.
 
 ## The token
 
@@ -138,11 +181,20 @@ not deploy it, because a session has no account of Google.
    `secretmanager`, and the secret `strata-report-token`. The service account of Cloud Run needs
    the role `roles/secretmanager.secretAccessor` on the secret.
 2. Run `just report-deploy --dry-run`, and read the commands.
-3. Run `just report-deploy`. The script builds the image on Cloud Build, deploys the service
-   `strata-report` with one instance, and prints the address.
+3. Run `just report-deploy`. The script builds the image on Cloud Build and deploys the service
+   `strata-report` with one instance and the CPU on after the answer. Then it prints the address.
 4. Run `just live-report-send ADDRESS` with the address that the script printed. The script sends
-   two reports and checks that one issue holds both. Close the issue with a comment after you read it.
-5. Name the address in the release: set the constant `ENDPOINT` in
+   two reports, waits for the issue, and checks that one issue holds both. It also posts one report
+   twice with one key, and checks that the issue counts it one time. Close the issue with a comment
+   after you read it.
+5. Make sure of three points that a test cannot show. Each point is a fact of Cloud Run:
+   - The last entry of `X-Forwarded-For` is the address of the client. Send 11 reports with another
+     first entry each time. The 11th must get 429.
+   - Cloud Run takes IPv6 for the service. Run `curl -6` against the address. If the connection
+     fails, the rule of the /64 network has no effect: state that on this page.
+   - Cloud Run buffers a slow body. Run `curl --limit-rate 100` with a report. Note when the answer
+     comes, and state the result on this page.
+6. Name the address in the release: set the constant `ENDPOINT` in
    `src/closed_set/unknown/send.rs`. Until then, a user must set `STRATA_REPORT_URL`.
 
 The deploy script reads no secret. `just report-deploy --project ID --region NAME` replaces the

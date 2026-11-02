@@ -46,6 +46,8 @@ struct Group {
     set: String,
     value: String,
     state: State,
+    /// The numbers of the entries of the report that this group sums, from 1.
+    entries: Vec<usize>,
 }
 
 /// The state of an issue: what the reports said, summed.
@@ -111,7 +113,7 @@ fn add_release(releases: &mut BTreeSet<String>, item: &str) {
 /// One group for each different set and value of `report`, in the order of the set and the value.
 fn groups(report: &Report) -> Vec<Group> {
     let mut found: BTreeMap<(&str, &str), Group> = BTreeMap::new();
-    for entry in &report.unknown {
+    for (at, entry) in report.unknown.iter().enumerate() {
         let group = found
             .entry((&entry.set, &entry.value))
             .or_insert_with(|| Group {
@@ -121,7 +123,9 @@ fn groups(report: &Report) -> Vec<Group> {
                     reports: 1,
                     ..State::default()
                 },
+                entries: Vec::new(),
             });
+        group.entries.push(at + 1);
         let mut one = State {
             lines: entry.count as u64,
             ..State::default()
@@ -260,6 +264,34 @@ impl Plan {
             .iter()
             .filter(|(_, issue)| issue.is_none())
             .count()
+    }
+
+    /// How many issues the merge will change.
+    pub fn updates(&self) -> usize {
+        self.steps.len() - self.new_issues()
+    }
+
+    /// True when the plan has no step.
+    pub fn is_empty(&self) -> bool {
+        self.steps.is_empty()
+    }
+
+    /// Keep the steps that `fits` takes, in the order of the plan, and drop the others. `fits` gets
+    /// true for a step that opens an issue, and false for a step that changes one.
+    ///
+    /// Gives the numbers of the entries of the dropped steps, from 1, in the order of the report.
+    /// They name the values that wait.
+    pub fn keep(&mut self, mut fits: impl FnMut(bool) -> bool) -> Vec<usize> {
+        let mut waiting = Vec::new();
+        self.steps.retain(|(group, issue)| {
+            let keep = fits(issue.is_none());
+            if !keep {
+                waiting.extend(&group.entries);
+            }
+            keep
+        });
+        waiting.sort_unstable();
+        waiting
     }
 }
 

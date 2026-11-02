@@ -48,10 +48,14 @@ Open the address in a browser, read each field, and send the issue from your own
 makes no request. A report that is too long for an address gives a `usage` error that says to
 paste the markdown report. `--link` takes no `--format` and no `--json`.
 
+With `--sent`, strata marks the lines after it printed the link. A link that is too long marks
+nothing, so `strata report --format markdown` still holds the lines.
+
 ## The lines that you sent
 
 A report holds each line of the log, unless you marked lines as sent. `--sent` prints the report
-and marks its lines as sent. The next report then holds only the new lines:
+and then marks its lines as sent. A report that fails to print marks nothing. The next report then
+holds only the new lines:
 
 ```text
 {{#include ../output/unknown-value-report-sent.txt}}

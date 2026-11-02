@@ -23,6 +23,14 @@ pub const SCHEMA: &str = "strata-report/1";
 /// The most entries that the endpoint takes in one report.
 pub const MOST_ENTRIES: usize = 100;
 
+/// The most different values that strata puts in one report. The endpoint opens this many new
+/// issues in an hour, so a report of this size fits an hour that no other sender used.
+pub const MOST_VALUES: usize = 20;
+
+/// The most lines that one entry counts. The check refuses a larger count, so a sender cannot set
+/// any count in an issue.
+pub const MOST_COUNT: usize = 1_000_000;
+
 /// The most characters of the version of strata, of the Palette release, of the name of a set, and
 /// of an error code.
 const LONGEST_FIELD: usize = 64;
@@ -91,7 +99,8 @@ impl Report {
     ///
     /// The type refuses a field that the entry does not have. This check refuses the rest: another
     /// schema, no entry or more than [`MOST_ENTRIES`], and an entry with a field that is not a
-    /// short word. A report that strata makes from its own log passes.
+    /// short word or with a count above [`MOST_COUNT`]. A report that strata makes from its own
+    /// log passes.
     pub fn fault(&self) -> Option<String> {
         if self.schema != SCHEMA {
             return Some(format!("the schema is not {SCHEMA}"));
@@ -152,6 +161,9 @@ impl Entry {
             })
             .or_else(|| self.refusal_fault())
             .or_else(|| (self.count == 0).then(|| "the count is 0".to_string()))
+            .or_else(|| {
+                (self.count > MOST_COUNT).then(|| format!("the count is more than {MOST_COUNT}"))
+            })
     }
 
     /// What is wrong with the status and the error code, or `None`.

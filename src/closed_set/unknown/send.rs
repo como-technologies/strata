@@ -21,6 +21,7 @@ use super::Report;
 use crate::BOOK_URL;
 use crate::closed_set::impl_texts;
 use crate::config::{in_ci, setting, state_dir};
+use crate::content::canon::sha256_hex;
 use crate::error::{Error, Result};
 use crate::file::{read_file, write_file};
 use crate::text::cut;
@@ -56,6 +57,12 @@ const TIMEOUT: Duration = Duration::from_secs(3);
 
 /// The most characters of an answer of the endpoint that an error shows.
 const LONGEST_ANSWER: usize = 200;
+
+/// The header that carries the key of a send: see [`post`].
+pub const KEY_HEADER: &str = "Idempotency-Key";
+
+/// How many characters the key of a send has: the hex of a SHA-256 digest.
+pub const KEY_LENGTH: usize = 64;
 
 /// The choice of the user: the text of the setting, and the text in the file of the answer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,12 +193,18 @@ pub fn keep_answer(file: &std::path::Path, choice: Choice) -> Result<()> {
 /// The attempt ends after 3 seconds. The call follows no redirect, because the user named the
 /// address and no other.
 ///
+/// `position` is the number of lines of the log before the first line of the report. The header
+/// [`KEY_HEADER`] holds the key: the hex of the SHA-256 digest of the position and the report. A
+/// second try of the same lines has the same key, so the endpoint counts them one time. Lines that
+/// came after, or a log that was marked since, give another key. The key holds no name, no uid, and
+/// no host.
+///
 /// # Errors
 ///
 /// `ReportSend` when strata cannot reach the endpoint, when the answer is not a status of 2xx, or
 /// when the report is not valid: see [`Report::fault`]. A report that strata made from its own log
 /// is valid.
-pub fn post(endpoint: &str, report: &Report) -> Result<()> {
+pub fn post(endpoint: &str, report: &Report, position: usize) -> Result<()> {
     let failed = |message: String| Error::ReportSend {
         endpoint: endpoint.to_string(),
         message,
@@ -206,9 +219,11 @@ pub fn post(endpoint: &str, report: &Report) -> Result<()> {
         .build()
         .into();
     let body = serde_json::to_string(report).map_err(|e| failed(e.to_string()))?;
+    let key = sha256_hex(&format!("{position}\n{body}"));
     let mut answer = agent
         .post(endpoint)
         .header("User-Agent", concat!("strata/", env!("CARGO_PKG_VERSION")))
+        .header(KEY_HEADER, &key)
         .content_type("application/json")
         .send(body)
         .map_err(|e| failed(e.to_string()))?;

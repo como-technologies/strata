@@ -48,6 +48,10 @@ use strata::api::codes::PROJECT_SCOPE_CODE;
 
 use crate::tenant::{AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, TENANT, exported_profile};
 
+mod report;
+pub use report::REPORT_ENDPOINT;
+use report::{REPORT_TAKEN, REPORT_TAKEN_STATUS};
+
 /// Serve `root` on a free port of 127.0.0.1, write the port to `port_file`, and never return.
 pub fn serve(root: &Path, port_file: &Path) -> std::io::Result<()> {
     // The runner holds the write end of this server's standard input. Whatever ends the runner --
@@ -136,21 +140,13 @@ fn project_refusal(request: &Request) -> Option<Vec<u8>> {
     })
 }
 
-/// The path of the stand-in for the endpoint of the report. The endpoint answers 200 for each
-/// request, as the real endpoint does for a report that it takes. It is no route of Palette, so it
-/// is no file of the tenant, and no fact names it.
-pub const REPORT_ENDPOINT: &str = "/strata-report";
-
-/// The answer of the stand-in for the endpoint of the report.
-const REPORT_TAKEN: &[u8] = br#"{"ok":true,"opened":1,"updated":0}"#;
-
 /// The status and the body that the files of the tenant give for `request`.
 fn served(root: &Path, request: &Request) -> std::io::Result<(u16, Vec<u8>)> {
     if let Some(body) = project_refusal(request) {
         return Ok((403, body));
     }
     if request.target == REPORT_ENDPOINT {
-        return Ok((200, REPORT_TAKEN.to_vec()));
+        return Ok((REPORT_TAKEN_STATUS, REPORT_TAKEN.to_vec()));
     }
     if let Some(body) = export_reader(root, request) {
         return Ok((200, body));

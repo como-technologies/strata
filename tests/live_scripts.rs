@@ -6985,6 +6985,26 @@ fi
 echo '{"profiles":[{"name":"aws-stack"}]}'
 "#;
 
+/// A `curl` that stands in for the endpoint: the first post changes the issue file and gets 202, and a
+/// second post gets 200 and `duplicate`. It writes down the arguments it got.
+const FAKE_CURL_SEND: &str = r#"#!/usr/bin/env bash
+echo "$*" >> "$FAKE_SEND/curl.log"
+out=""
+while [ $# -gt 0 ]; do case "$1" in -o) out=$2; shift 2 ;; *) shift ;; esac; done
+if [ -n "$FAKE_NO_POST" ]; then echo '{}' > "$out"; printf 500; exit 0; fi
+if [ "$(wc -l < "$FAKE_SEND/curl.log" | tr -d ' ')" = 1 ]; then
+  lines=$(sed -n 's/^| Lines | \([0-9]*\) |.*/\1/p' "$FAKE_SEND/body" 2>/dev/null)
+  lines=$(( ${lines:-0} + 1 ))
+  printf '%s\n| Lines | %s |\n' '<!-- strata-report: values ProfileType later-type -->' "$lines" > "$FAKE_SEND/body"
+  jq -n --rawfile body "$FAKE_SEND/body" '[{number: 7, state: "OPEN", body: $body}]' > "$FAKE_SEND/issues.json"
+  echo '{"ok":true,"opens":0,"updates":1}' > "$out"
+  printf 202
+else
+  echo '{"ok":true,"duplicate":true}' > "$out"
+  printf 200
+fi
+"#;
+
 /// A `gh` that lists the issues of `$FAKE_SEND/issues.json`.
 const FAKE_GH_SEND: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_SEND/gh.log"
@@ -6996,7 +7016,14 @@ esac
 /// Run `report-send.sh` with `args` in a root of its own. Gives the output, the result directory,
 /// and the root.
 fn report_send(args: &[&str], no_post: bool, root: &Path) -> (Output, PathBuf) {
-    let bin = fake_bin(root, &[("gh", FAKE_GH_SEND), ("xtask", FAKE_XTASK_SERVE)]);
+    let bin = fake_bin(
+        root,
+        &[
+            ("gh", FAKE_GH_SEND),
+            ("xtask", FAKE_XTASK_SERVE),
+            ("curl", FAKE_CURL_SEND),
+        ],
+    );
     executable(&root.join("bin/strata"), FAKE_STRATA_SEND);
     let out = root.join("out");
     let mut c = Command::new("bash");
@@ -7007,7 +7034,9 @@ fn report_send(args: &[&str], no_post: bool, root: &Path) -> (Output, PathBuf) {
         .env("XTASK_BIN", root.join("bin/xtask"))
         .env("STRATA_BIN", root.join("bin/strata"))
         .env("OUT", &out)
-        .env("TMPDIR", root);
+        .env("TMPDIR", root)
+        .env("WAIT_TRIES", "1")
+        .env("WAIT_SECONDS", "0");
     if no_post {
         c.env("FAKE_NO_POST", "1");
     }
@@ -7038,10 +7067,31 @@ fn report_send_sh_sends_twice_to_the_endpoint_and_checks_that_one_issue_holds_bo
         "issue-new",
         "send-2",
         "issue-2",
+        "repeat-1",
+        "repeat-2",
+        "repeat-count",
     ] {
         assert!(steps.contains(&format!("PASS  {id} ")), "{id}:\n{steps}");
     }
     assert!(steps.contains("the issue is o/r#7"), "{steps}");
+    // the repeat posts one report twice with one key of 64 hex characters
+    let curl = std::fs::read_to_string(dir.path().join("curl.log")).unwrap();
+    let posts: Vec<&str> = curl.lines().collect();
+    assert_eq!(posts.len(), 2, "{curl}");
+    let key = |post: &str| {
+        let after = post.split("Idempotency-Key: ").nth(1).unwrap();
+        after.split(' ').next().unwrap().to_string()
+    };
+    assert_eq!(key(posts[0]), key(posts[1]), "{curl}");
+    assert_eq!(key(posts[0]).len(), 64, "{curl}");
+    assert!(
+        posts[0].ends_with("https://report.example/"),
+        "the post goes to the endpoint: {curl}"
+    );
+    assert!(
+        steps.contains("waited 1 tries for lines_of_issue = 1"),
+        "{steps}"
+    );
     // the run served the chapter, and strata got the settings of the send and no other setting
     let xtask = std::fs::read_to_string(dir.path().join("xtask.log")).unwrap();
     assert!(xtask.contains("harvest tenants"), "{xtask}");
