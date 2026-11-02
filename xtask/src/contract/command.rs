@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use strata::api::connect_from_env;
+use strata::api::{connect_from_env, connect_with};
 use strata::config::Config;
 use strata::term::progress::Progress;
 use strata_preflight::probe::LiveBackend;
@@ -28,8 +28,9 @@ const USAGE: &str =
   --no-cloud      send no call of the tool of a cloud (aws, gcloud, az); without it, the run sends the
                   read-only calls of the facts of the kind cloud in the lab account
 
-The tenant is the one that PALETTE_API, PALETTE_API_KEY, and ~/.palette.env name. The lab account of a
-cloud is the one that the tool uses. STRATA_CONTRACT_<NAME> gives {name} in a call, such as the project.
+The tenant is the one that PALETTE_API, PALETTE_API_KEY, and ~/.palette.env name. The run sends a fact
+of the tenant scope with no project, as strata does. The lab account of a cloud is the one that the
+tool uses. STRATA_CONTRACT_<NAME> gives {name} in a call, such as the project.
 Exit 0 when each fact is the same, 1 when a fact differs or a value is unknown, 2 when the run could
 not check.";
 
@@ -97,10 +98,13 @@ fn contract(options: &Options) -> Result<u8, String> {
     let config = Config::from_env().map_err(|e| e.to_string())?;
     let palette = connect_from_env(Progress::silent()).map_err(|e| e.to_string())?;
     let checked_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    // the second client names no project, for the routes that refuse one
+    let tenant = connect_with(config.clone().without_project(), Progress::silent());
     let mut document = run(
         &facts,
         &stand_in,
         palette.api(),
+        tenant.api(),
         &config.base_url,
         &checked_at,
     );

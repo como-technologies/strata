@@ -80,8 +80,7 @@ pub fn project_uid_named(config: &Config, name: &str, progress: Progress) -> Res
     if let Some((_, uid)) = RESOLVED.get().filter(|(n, _)| n == name) {
         return Ok(uid.clone());
     }
-    let mut tenant = config.clone();
-    tenant.project_uid = None;
+    let tenant = config.clone().without_project();
     progress.note(&format!("looking up project {name}"));
     let uid = connect_with(tenant, progress).project_uid_named(name)?;
     // the cache holds one name: when it holds another, the next lookup of this name asks again

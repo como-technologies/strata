@@ -625,3 +625,60 @@ fn the_schema_of_an_error_document_names_the_keys_that_to_json_writes_for_every_
         }
     }
 }
+
+/// The `Display` of an `Api` error with `status` and `body`, for a route of the saved filters.
+fn api_message(status: u16, body: &str) -> String {
+    Error::Api {
+        method: Method::Get,
+        path: "/v1/filters/metadata?filterType=tag".into(),
+        status,
+        body: body.into(),
+        retry_after: None,
+    }
+    .to_string()
+}
+
+#[test]
+fn a_403_with_the_code_of_the_tenant_scope_names_the_scope_and_the_project_and_not_the_key() {
+    let body = format!(
+        r#"{{"code":"{PROJECT_SCOPE_CODE}","message":"Operation is not allowed in project scope and ProjectUid should be empty"}}"#
+    );
+    let text = api_message(403, &body);
+    assert!(
+        text.starts_with("GET /v1/filters/metadata?filterType=tag failed with HTTP 403: {"),
+        "{text}"
+    );
+    assert!(text.contains("the route is of the tenant scope"), "{text}");
+    assert!(text.contains("the request named a project"), "{text}");
+    for key in KEY_VARS {
+        assert!(!text.contains(key), "{text}");
+    }
+    assert!(!text.contains("the key can be wrong"), "{text}");
+}
+
+#[test]
+fn a_401_or_another_403_still_names_the_key() {
+    let tenant_scope = format!(r#"{{"code":"{PROJECT_SCOPE_CODE}"}}"#);
+    for (status, body) in [
+        (403, r#"{"code":"ResourceAccessDenied"}"#),
+        (403, "forbidden"),
+        (401, r#"{"code":"MissingAuthHeader"}"#),
+        // the code of the tenant scope is a refusal of a 403 alone
+        (401, tenant_scope.as_str()),
+    ] {
+        let text = api_message(status, body);
+        assert!(text.contains(KEY_VARS[0]), "{status} {body}: {text}");
+        assert!(
+            text.contains("the key can be wrong"),
+            "{status} {body}: {text}"
+        );
+        assert!(!text.contains("tenant scope"), "{status} {body}: {text}");
+    }
+}
+
+#[test]
+fn the_message_of_another_status_has_no_hint() {
+    let text = api_message(404, r#"{"code":"ResourceNotFound"}"#);
+    assert!(!text.contains("check "), "{text}");
+    assert!(!text.contains("tenant scope"), "{text}");
+}

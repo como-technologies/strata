@@ -40,17 +40,19 @@ use shape::{JsonType, Path};
 pub use stand_in::StandIn;
 use subject::{Probe, Subject};
 
-/// Ask the tenant that `api` talks to the request of each fact in `facts` of the kind `request`,
-/// and compare the answers with `stand_in`. `target` is the address of the tenant and
-/// `checked_at` the time of the run, for the document.
+/// Ask the tenant that `client` talks to the request of each fact in `facts` of the kind
+/// `request`, and compare the answers with `stand_in`. `tenant` talks to the same tenant and names
+/// no project: the run sends it each fact of the scope [`crate::facts::Scope::Tenant`]. `target` is
+/// the address of the tenant and `checked_at` the time of the run, for the document.
 pub fn run<A: PaletteApi>(
     facts: &[Fact],
     stand_in: &StandIn,
-    api: &A,
+    client: &A,
+    tenant: &A,
     target: &str,
     checked_at: &str,
 ) -> Contract {
-    let probe = Probe::new(api);
+    let probe = Probe::new(client, tenant);
     let entries: Vec<Entry> = facts
         .iter()
         .filter(|fact| fact.kind == Kind::Request)
@@ -109,7 +111,7 @@ fn check<A: PaletteApi>(
             return entry(Outcome::Error, Some(failure.message), Vec::new());
         }
     };
-    match probe.get(&path).as_ref() {
+    match probe.get(fact.scope, &path).as_ref() {
         Ok(found) => {
             let differences = compare(fact, &documents, found);
             let outcome = if differences.is_empty() {

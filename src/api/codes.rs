@@ -46,6 +46,13 @@ pub const PACK_MACRO_UNDEFINED_CODE: &str = "PackMacroUndefined";
 /// integration pack needs read-only has values other than its defaults.
 pub const PACK_FORBIDDEN_CODE: &str = "PackValuesOverrideForbidden";
 
+/// The code of the refusal of a request that names a project on a route of the tenant scope.
+///
+/// Palette answers HTTP 403, and the message says that the operation is not allowed in the project
+/// scope. The saved tag filters are such routes, with each query. The key is right: the request
+/// must name no project.
+pub const PROJECT_SCOPE_CODE: &str = "ProjectUidIsNotEmpty";
+
 /// The code of the error for a move that a pack does not allow.
 ///
 /// A pack of the body is above the highest version that a cluster can move to from the version it

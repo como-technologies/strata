@@ -5,12 +5,14 @@
 //! sends it in the lab account and compares the shape of the answer with the answers that the
 //! fixtures of the rules hold. The fixtures are the stand-in of a cloud: the tests of the catalog
 //! assume them. A fact with a table also checks that the answer lists each value that a rule holds.
+//! A table of values that each account sees for itself lacks a value that this account does not
+//! have: the account cannot check that value, and it is no difference.
 //!
 //! The call names the values of the lab as `{name}`. The environment gives them, so no value of the
 //! lab is in the repository. The run sends no call that changes anything: each call lists or
 //! describes.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::LazyLock;
 use std::time::Duration;
 
@@ -196,15 +198,45 @@ fn check(fact: &Fact, expected: &[&Value], backend: &dyn Backend, lab: &Lab) -> 
     };
     match answer(backend, &words) {
         Ok(found) => {
-            let differences = differences(fact, expected, &found);
-            let outcome = if differences.is_empty() {
-                Outcome::Same
-            } else {
-                Outcome::Differs
-            };
-            entry(outcome, None, differences)
+            let (outcome, reason, differences) = judged(fact, expected, &found);
+            entry(outcome, reason, differences)
         }
         Err(reason) => failed(reason),
+    }
+}
+
+/// The outcome, the reason, and the differences of a call that answered with `found`.
+///
+/// A table of values that each account sees for itself, such as the zone ids, is no difference
+/// when the answer lacks a value: the account cannot check that value. When the account lists
+/// none of the values, it cannot check the fact, and the outcome is `skipped`.
+fn judged(
+    fact: &Fact,
+    expected: &[&Value],
+    found: &Value,
+) -> (Outcome, Option<String>, Vec<Difference>) {
+    let differences = differences(fact, expected, found);
+    if !differences.is_empty() {
+        return (Outcome::Differs, None, differences);
+    }
+    let Some(table) = fact.table.as_ref().filter(|table| table.per_account) else {
+        return (Outcome::Same, None, differences);
+    };
+    let field = fact.reads.fields.first().map_or("", String::as_str);
+    let (_, lacking) = listing(field, &table.holds, found);
+    let names = lacking.join(", ");
+    if lacking.is_empty() {
+        (Outcome::Same, None, differences)
+    } else if lacking.len() == table.holds.len() {
+        let reason = format!(
+            "the account lists none of the values of the table ({names}). Each account sees its own values, so it cannot check them"
+        );
+        (Outcome::Skipped, Some(reason), differences)
+    } else {
+        let reason = format!(
+            "the account cannot check {names}. Each account sees its own values, and it lists the others"
+        );
+        (Outcome::Same, Some(reason), differences)
     }
 }
 
@@ -222,26 +254,35 @@ fn answer(backend: &dyn Backend, words: &[String]) -> Result<Value, String> {
     }
 }
 
-/// Each difference between the answer `found` and the fixtures `expected`, or the table.
+/// Each difference between the answer `found` and the fixtures `expected`, or the table. A table
+/// of an account has none: see [`judged`].
 fn differences(fact: &Fact, expected: &[&Value], found: &Value) -> Vec<Difference> {
     match &fact.table {
+        Some(table) if table.per_account => Vec::new(),
         Some(table) => table_differences(fact, &table.holds, found),
         None => compare(fact, expected, found),
     }
 }
 
-/// The difference when the answer does not list each value of the table. The field of the fact is
-/// the field that lists the values. A value is listed when it is equal to a listed text or number.
-fn table_differences(fact: &Fact, holds: &[String], found: &Value) -> Vec<Difference> {
-    let Some(field) = fact.reads.fields.first() else {
-        return Vec::new();
-    };
+/// The values that the answer `found` lists at `field`, and the values of `holds` that it does not
+/// list. A value is listed when it is equal to a listed text or number.
+fn listing(field: &str, holds: &[String], found: &Value) -> (BTreeSet<String>, Vec<String>) {
     let listed = Path::parse(field).scalars(found);
-    let missing: Vec<String> = holds
+    let lacking = holds
         .iter()
         .filter(|value| !listed.contains(value.as_str()))
         .cloned()
         .collect();
+    (listed, lacking)
+}
+
+/// The difference when the answer does not list each value of the table. The field of the fact is
+/// the field that lists the values.
+fn table_differences(fact: &Fact, holds: &[String], found: &Value) -> Vec<Difference> {
+    let Some(field) = fact.reads.fields.first() else {
+        return Vec::new();
+    };
+    let (listed, missing) = listing(field, holds, found);
     if missing.is_empty() {
         return Vec::new();
     }

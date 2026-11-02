@@ -6,6 +6,7 @@ use std::net::TcpListener;
 use std::path::Path;
 
 use serde_json::{Value, json};
+use strata::api::codes::PROJECT_SCOPE_CODE;
 use strata::api::{HttpApi, MemoryApi};
 use strata::config::Config;
 
@@ -13,7 +14,7 @@ use super::document::{Contract, DifferenceKind, Outcome, Unknown};
 use super::shape::{JsonType, Path as Field};
 use super::stand_in::StandIn;
 use super::{releases, run, subject};
-use crate::facts::{Fact, Kind};
+use crate::facts::{Fact, Kind, Scope};
 use crate::palette::serve_on;
 use crate::tenant::{TENANT, Tenant};
 
@@ -147,15 +148,30 @@ fn stand_in(docs: &[(&str, Value)]) -> (tempfile::TempDir, StandIn) {
     (root, stand_in)
 }
 
-/// A client of the stand-in server on a tenant that holds `docs`.
-fn served(docs: &[(&str, Value)]) -> (tempfile::TempDir, HttpApi) {
+/// The address of the stand-in server on a tenant that holds `docs`.
+fn serving(docs: &[(&str, Value)]) -> (tempfile::TempDir, String) {
     let dir = tempfile::tempdir().unwrap();
     write_tenant(dir.path(), docs);
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
     let root = dir.path().to_path_buf();
     std::thread::spawn(move || serve_on(&root, &listener));
+    (dir, url)
+}
+
+/// A client of the stand-in server on a tenant that holds `docs`.
+fn served(docs: &[(&str, Value)]) -> (tempfile::TempDir, HttpApi) {
+    let (dir, url) = serving(docs);
     (dir, HttpApi::new(Config::new(url, "a-key")))
+}
+
+/// Two clients of the stand-in server on a tenant that holds `docs`: one that names the project
+/// `p1`, as the environment of a run does, and one that names no project.
+fn served_with_project(docs: &[(&str, Value)]) -> (tempfile::TempDir, HttpApi, HttpApi) {
+    let (dir, url) = serving(docs);
+    let config = Config::new(url, "a-key").with_project("p1");
+    let tenant = HttpApi::new(config.clone().without_project());
+    (dir, HttpApi::new(config), tenant)
 }
 
 /// The run of `facts` against the tenant that `api` talks to.
@@ -163,12 +179,23 @@ fn contract(stand_in: &StandIn, api: &impl strata::api::PaletteApi) -> Contract 
     contract_of(&facts(), stand_in, api)
 }
 
-/// The run of the facts `facts`, in place of the small list.
+/// The run of the facts `facts`, in place of the small list, with one client for both scopes.
 fn contract_of(facts: &[Fact], stand_in: &StandIn, api: &impl strata::api::PaletteApi) -> Contract {
+    contract_with(facts, stand_in, api, api)
+}
+
+/// The run of the facts `facts` with a client that names a project and a client that names none.
+fn contract_with<A: strata::api::PaletteApi>(
+    facts: &[Fact],
+    stand_in: &StandIn,
+    client: &A,
+    tenant: &A,
+) -> Contract {
     run(
         facts,
         stand_in,
-        api,
+        client,
+        tenant,
         "https://tenant.example",
         "2026-11-02T06:00:00Z",
     )
@@ -259,7 +286,7 @@ fn the_texts_of_a_field_omit_a_value_that_is_no_text_and_an_empty_text() {
 #[test]
 fn the_subject_of_a_request_comes_from_the_first_entry_of_a_listing() {
     let api = memory(&documents("Running"));
-    let probe = subject::Probe::new(&api);
+    let probe = subject::Probe::new(&api, &api);
     let found = subject::find(&probe, &facts(), "/v1/spectroclusters/{uid}");
     assert_eq!(
         found,
@@ -270,7 +297,7 @@ fn the_subject_of_a_request_comes_from_the_first_entry_of_a_listing() {
 #[test]
 fn the_placeholders_of_a_cloud_config_come_from_the_document_of_the_cluster() {
     let api = memory(&documents("Running"));
-    let probe = subject::Probe::new(&api);
+    let probe = subject::Probe::new(&api, &api);
     let found = subject::find(&probe, &facts(), "/v1/cloudconfigs/{cloudType}/{configUid}");
     assert_eq!(
         found,
@@ -281,7 +308,7 @@ fn the_placeholders_of_a_cloud_config_come_from_the_document_of_the_cluster() {
 #[test]
 fn a_listing_is_read_once_for_all_the_requests_that_use_it() {
     let api = memory(&documents("Running"));
-    let probe = subject::Probe::new(&api);
+    let probe = subject::Probe::new(&api, &api);
     for _ in 0..3 {
         subject::find(&probe, &facts(), "/v1/spectroclusters/{uid}");
     }
@@ -295,7 +322,7 @@ fn a_listing_is_read_once_for_all_the_requests_that_use_it() {
 #[test]
 fn a_tenant_with_no_cluster_has_no_subject_and_the_reason_says_what_the_listing_held() {
     let api = MemoryApi::new().with("/v1/dashboard/spectroclusters/meta", json!([]));
-    let probe = subject::Probe::new(&api);
+    let probe = subject::Probe::new(&api, &api);
     match subject::find(&probe, &facts(), "/v1/spectroclusters/{uid}") {
         subject::Subject::Missing(why) => {
             assert!(why.contains("/v1/dashboard/spectroclusters/meta"), "{why}");
@@ -308,7 +335,7 @@ fn a_tenant_with_no_cluster_has_no_subject_and_the_reason_says_what_the_listing_
 #[test]
 fn a_listing_that_fails_is_a_failure_to_find_and_not_a_missing_object() {
     let api = MemoryApi::new().failing("/v1/dashboard/spectroclusters/meta", 403, "{}");
-    let probe = subject::Probe::new(&api);
+    let probe = subject::Probe::new(&api, &api);
     match subject::find(&probe, &facts(), "/v1/spectroclusters/{uid}") {
         subject::Subject::Failed(failure) => assert_eq!(failure.status, Some(403)),
         other => panic!("expected a failure, got {other:?}"),
@@ -319,7 +346,7 @@ fn a_listing_that_fails_is_a_failure_to_find_and_not_a_missing_object() {
 fn a_value_that_a_path_cannot_hold_is_no_subject() {
     let listing = json!([{"metadata": {"uid": "a/b"}}]);
     let api = MemoryApi::new().with("/v1/dashboard/spectroclusters/meta", listing);
-    let probe = subject::Probe::new(&api);
+    let probe = subject::Probe::new(&api, &api);
     assert!(matches!(
         subject::find(&probe, &facts(), "/v1/spectroclusters/{uid}"),
         subject::Subject::Missing(_)
@@ -359,14 +386,6 @@ fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() 
         (
             "validate-key-pairs",
             "the region and the account come from the lab",
-        ),
-        (
-            "validate-vpcs",
-            "the region and the account come from the lab",
-        ),
-        (
-            "validate-security-groups",
-            "the region, the account, and the VPC come from the lab",
         ),
     ];
     let facts = real_facts();
@@ -453,12 +472,13 @@ fn the_run_asks_the_tag_filters_and_the_regions_with_the_query_that_the_stand_in
 
 #[test]
 fn the_stand_in_serves_the_tag_filters_and_the_regions_only_with_their_query() {
-    // a request with no query finds no document. Palette refuses such a request too: 403 for the
-    // filters and 422 for the regions
+    // a request with no query finds no document: the stand-in serves the query that strata sends.
+    // Palette lists each filter of each type when the query has no `filterType`, and refuses the
+    // regions with HTTP 422
     let (_dir, api) = served(&query_documents());
-    let probe = subject::Probe::new(&api);
+    let probe = subject::Probe::new(&api, &api);
     for path in ["/v1/filters/metadata", "/v1/clouds/aws/regions"] {
-        let answer = probe.get(path);
+        let answer = probe.get(Scope::Client, path);
         let failure = answer.as_ref().as_ref().unwrap_err();
         assert_eq!(failure.status, Some(404), "{path}");
     }
@@ -467,7 +487,7 @@ fn the_stand_in_serves_the_tag_filters_and_the_regions_only_with_their_query() {
 #[test]
 fn a_placeholder_in_the_query_gets_its_value_from_the_listing_of_the_tenant() {
     let api = memory(&query_documents()[2..3]);
-    let probe = subject::Probe::new(&api);
+    let probe = subject::Probe::new(&api, &api);
     let found = subject::find(
         &probe,
         &real_facts(),
@@ -482,7 +502,7 @@ fn a_placeholder_in_the_query_gets_its_value_from_the_listing_of_the_tenant() {
 #[test]
 fn a_tenant_with_no_aws_account_has_no_subject_for_the_regions_and_the_reason_says_why() {
     let api = MemoryApi::new().with("/v1/cloudaccounts/aws", json!({"items": []}));
-    let probe = subject::Probe::new(&api);
+    let probe = subject::Probe::new(&api, &api);
     match subject::find(
         &probe,
         &real_facts(),
@@ -494,6 +514,121 @@ fn a_tenant_with_no_aws_account_has_no_subject_for_the_regions_and_the_reason_sa
         }
         other => panic!("expected no subject, got {other:?}"),
     }
+}
+
+// ---- the scope of a route ------------------------------------------------------------------
+
+/// The outcomes of the two entries of the saved tag filters in `contract`.
+fn filter_outcomes(contract: &Contract) -> [Outcome; 2] {
+    [
+        outcome(contract, "tag-filter-listing"),
+        outcome(contract, "tag-filter"),
+    ]
+}
+
+#[test]
+fn the_two_facts_of_the_saved_tag_filters_say_that_their_route_is_of_the_tenant_scope() {
+    let facts = real_facts();
+    for id in ["tag-filter-listing", "tag-filter"] {
+        let fact = facts.iter().find(|f| f.id == id).unwrap();
+        assert_eq!(fact.scope, Scope::Tenant, "{id}");
+    }
+}
+
+#[test]
+fn the_run_asks_the_saved_tag_filters_with_no_project() {
+    // the tenant holds the filters at tenant scope, and the stand-in refuses a request for them
+    // that names a project, as Palette does
+    let docs = query_documents();
+    let (_root, stand_in) = stand_in(&docs);
+    let (_dir, client, tenant) = served_with_project(&docs);
+    let contract = contract_with(&real_facts(), &stand_in, &client, &tenant);
+    assert_eq!(filter_outcomes(&contract), [Outcome::Same, Outcome::Same]);
+}
+
+#[test]
+fn the_run_that_asks_the_saved_tag_filters_with_the_project_gets_the_refusal_of_palette() {
+    // the fault of the first contract run against a real tenant: the same facts with the scope of
+    // the client are sent with the project, and the stand-in answers HTTP 403
+    let docs = query_documents();
+    let (_root, stand_in) = stand_in(&docs);
+    let (_dir, client, tenant) = served_with_project(&docs);
+    let mut facts = real_facts();
+    for fact in facts.iter_mut().filter(|f| f.scope == Scope::Tenant) {
+        fact.scope = Scope::Client;
+    }
+    let contract = contract_with(&facts, &stand_in, &client, &tenant);
+    assert_eq!(
+        filter_outcomes(&contract),
+        [Outcome::Differs, Outcome::Error]
+    );
+    let listing = contract
+        .facts
+        .iter()
+        .find(|e| e.id == "tag-filter-listing")
+        .unwrap();
+    assert_eq!(listing.differences[0].kind, DifferenceKind::Status);
+    assert_eq!(listing.differences[0].found, ["403"]);
+    let filter = contract
+        .facts
+        .iter()
+        .find(|e| e.id == "tag-filter")
+        .unwrap();
+    let reason = filter.reason.as_deref().unwrap_or_default();
+    assert!(reason.contains(PROJECT_SCOPE_CODE), "{reason}");
+}
+
+#[test]
+fn the_stand_in_refuses_a_request_for_a_saved_filter_that_names_a_project_with_each_query() {
+    let (_dir, client, tenant) = served_with_project(&query_documents());
+    let probe = subject::Probe::new(&client, &tenant);
+    for path in [
+        "/v1/filters/metadata?filterType=tag",
+        "/v1/filters/metadata",
+        "/v1/filters/tag/f1",
+    ] {
+        let refused = probe.get(Scope::Client, path);
+        let failure = refused.as_ref().as_ref().unwrap_err();
+        assert_eq!(failure.status, Some(403), "{path}");
+        assert!(failure.message.contains(PROJECT_SCOPE_CODE), "{path}");
+        // the same request with no project reaches the filters
+        let answered = probe.get(Scope::Tenant, path);
+        assert_ne!(
+            answered.as_ref().as_ref().err().and_then(|f| f.status),
+            Some(403),
+            "{path}"
+        );
+    }
+}
+
+#[test]
+fn the_stand_in_answers_a_request_that_names_a_project_on_another_route_as_before() {
+    let (_dir, client, _tenant) = served_with_project(&[]);
+    let refused = subject::Probe::new(&client, &client).get(Scope::Client, "/v1/cloudaccounts/aws");
+    let failure = refused.as_ref().as_ref().unwrap_err();
+    assert_eq!(failure.status, Some(404));
+}
+
+#[test]
+fn a_listing_that_holds_the_subject_of_a_fact_of_the_tenant_is_sent_with_no_project() {
+    // `tag-filter` takes its uid from `tag-filter-listing`. Both are of the tenant scope, so the
+    // listing is sent with the client that names no project, also when it finds a subject
+    let (_dir, client, tenant) = served_with_project(&query_documents());
+    let probe = subject::Probe::new(&client, &tenant);
+    let found = subject::find(&probe, &real_facts(), "/v1/filters/tag/{uid}");
+    assert_eq!(
+        found,
+        subject::Subject::Path("/v1/filters/tag/f1".to_string())
+    );
+}
+
+#[test]
+fn an_answer_is_kept_for_each_scope_of_the_same_path() {
+    let (_dir, client, tenant) = served_with_project(&query_documents());
+    let probe = subject::Probe::new(&client, &tenant);
+    let path = "/v1/filters/tag/f1";
+    assert!(probe.get(Scope::Client, path).is_err());
+    assert!(probe.get(Scope::Tenant, path).is_ok());
 }
 
 // ---- the outcome of a fact -----------------------------------------------------------------
@@ -815,18 +950,13 @@ fn a_closed_set_still_counts_a_value_it_does_not_name_as_an_unknown_value() {
 }
 
 #[test]
-fn the_search_schema_and_the_kinds_of_the_audit_log_are_names_and_no_set_is_both() {
+fn the_search_schema_is_a_set_of_names_and_no_set_is_both() {
     let facts = real_facts();
     let reads = |id: &str| &facts.iter().find(|f| f.id == id).unwrap().reads;
     assert!(
         reads("cluster-search-schema")
             .names
             .contains_key("schema.properties[].name")
-    );
-    assert!(
-        reads("audit-log")
-            .names
-            .contains_key("items[].spec.resource.kind")
     );
     for fact in &facts {
         for field in fact.reads.names.keys() {
@@ -836,6 +966,200 @@ fn the_search_schema_and_the_kinds_of_the_audit_log_are_names_and_no_set_is_both
                 fact.id
             );
         }
+    }
+}
+
+// ---- the kinds of the audit log ------------------------------------------------------------
+
+/// A page of the audit log with one entry for each kind of `kinds`. Each entry holds each field
+/// that the fact `audit-log` reads.
+fn audit_page(kinds: &[&str]) -> Vec<(&'static str, Value)> {
+    let entry = |kind: &str| {
+        json!({
+            "metadata": {"uid": "a1", "creationTimestamp": "2026-11-02T06:00:00Z"},
+            "spec": {
+                "actionType": "update",
+                "actor": {"actorType": "user", "serviceName": "hubble",
+                    "user": {"uid": "u1", "firstName": "Ada", "lastName": "Lovelace",
+                        "emailId": "ada@example.com"}},
+                "contentMsg": "a change",
+                "userMsg": "a note",
+                "resource": {"kind": kind, "name": "payments", "uid": "r1"},
+            },
+        })
+    };
+    let items: Vec<Value> = kinds.iter().map(|kind| entry(kind)).collect();
+    vec![(
+        "v1/audits",
+        json!({"items": items, "listmeta": {"continue": ""}}),
+    )]
+}
+
+/// The run of the fact `audit-log` against a stand-in that holds the kinds that strata acts on
+/// and a tenant whose page holds the kinds `kinds`.
+fn audit_run(kinds: &[&str]) -> Contract {
+    let acts_on = [
+        "clusterprofile",
+        "appprofile",
+        "spectrocluster",
+        "edgehost",
+        "clustergroup",
+    ];
+    let (_root, stand_in) = stand_in(&audit_page(&acts_on));
+    let facts: Vec<Fact> = real_facts()
+        .into_iter()
+        .filter(|f| f.id == "audit-log")
+        .collect();
+    contract_of(&facts, &stand_in, &memory(&audit_page(kinds)))
+}
+
+#[test]
+fn a_page_of_the_audit_log_that_holds_no_kind_that_strata_acts_on_is_no_difference() {
+    // the log of the lab holds events of a profile now, and none of the app profiles, the edge
+    // hosts, or the cluster groups
+    let contract = audit_run(&["clusterprofile"]);
+    assert_eq!(outcome(&contract, "audit-log"), Outcome::Same);
+    assert!(contract.facts[0].differences.is_empty());
+    assert_eq!(contract.exit_code(), 0);
+}
+
+#[test]
+fn a_kind_of_the_audit_log_that_strata_does_not_act_on_is_no_difference_and_no_unknown_value() {
+    // the lab holds the events of a cloud account and of a registry
+    let contract = audit_run(&["clusterprofile", "cloudaccount", "registry"]);
+    assert_eq!(outcome(&contract, "audit-log"), Outcome::Same);
+    assert!(contract.facts[0].differences.is_empty());
+    assert!(contract.facts[0].unknown_values.is_empty());
+    assert_eq!(contract.exit_code(), 0);
+}
+
+#[test]
+fn the_fact_of_the_audit_log_reads_the_type_of_the_kind_and_lists_no_kind() {
+    let facts = real_facts();
+    let reads = &facts.iter().find(|f| f.id == "audit-log").unwrap().reads;
+    assert!(
+        reads
+            .fields
+            .iter()
+            .any(|f| f == "items[].spec.resource.kind")
+    );
+    assert!(reads.names.is_empty(), "{:?}", reads.names);
+    assert!(
+        !reads.values.contains_key("items[].spec.resource.kind"),
+        "{:?}",
+        reads.values
+    );
+}
+
+#[test]
+fn a_kind_of_the_audit_log_that_is_not_text_is_still_a_difference() {
+    let mut page = audit_page(&["clusterprofile"]);
+    page[0].1["items"][0]["spec"]["resource"]["kind"] = json!(7);
+    let (_root, stand_in) = stand_in(&audit_page(&["clusterprofile"]));
+    let facts: Vec<Fact> = real_facts()
+        .into_iter()
+        .filter(|f| f.id == "audit-log")
+        .collect();
+    let contract = contract_of(&facts, &stand_in, &memory(&page));
+    assert_eq!(outcome(&contract, "audit-log"), Outcome::Differs);
+    assert_eq!(
+        contract.facts[0].differences[0].path,
+        "items[].spec.resource.kind"
+    );
+}
+
+// ---- the list routes of AWS ----------------------------------------------------------------
+
+/// The documents that answer the routes behind `validate-security-groups`, with the file names of
+/// the stand-in: the account, its regions, the VPCs of a region, and the groups of a VPC.
+fn aws_list_documents() -> Vec<(&'static str, Value)> {
+    vec![
+        (
+            "v1/cloudaccounts/aws",
+            json!({"items": [{"metadata": {"uid": "acc1"}}]}),
+        ),
+        (
+            "v1/clouds/aws/regions@cloudAccountUid=acc1",
+            json!({"regions": [{"name": "us-east-2"}, {"name": "us-west-2"}]}),
+        ),
+        (
+            "v1/clouds/aws/regions/us-east-2/vpcs@cloudAccountUid=acc1",
+            json!({"vpcs": [{"vpcId": "vpc-1",
+                "subnets": [{"subnetId": "subnet-1", "az": "us-east-2a"}]}]}),
+        ),
+        (
+            "v1/clouds/aws/securitygroups@cloudAccountUid=acc1&region=us-east-2&vpcId=vpc-1",
+            json!({"groups": [{"groupId": "sg-1", "groupName": "default", "ownerId": "1"}]}),
+        ),
+    ]
+}
+
+#[test]
+fn the_security_groups_are_asked_with_the_account_the_region_and_the_vpc_of_the_tenant() {
+    let docs = aws_list_documents();
+    let (_root, stand_in) = stand_in(&docs);
+    let (_dir, api) = served(&docs);
+    let contract = contract_of(&real_facts(), &stand_in, &api);
+    // the stand-in serves the groups only with the three values of the query, so the outcome
+    // `same` shows that the run sent all of them
+    for id in ["validate-security-groups", "validate-vpcs"] {
+        let entry = contract.facts.iter().find(|e| e.id == id).unwrap();
+        assert_eq!(entry.outcome, Outcome::Same, "{id}: {entry:?}");
+    }
+    assert_eq!(contract.exit_code(), 0);
+}
+
+#[test]
+fn the_subject_of_the_security_groups_is_the_first_account_region_and_vpc() {
+    let api = MemoryApi::new()
+        .with(
+            "/v1/cloudaccounts/aws",
+            json!({"items": [{"metadata": {"uid": "acc1"}}]}),
+        )
+        .with(
+            "/v1/clouds/aws/regions?cloudAccountUid=acc1",
+            json!({"regions": [{"name": "us-east-2"}, {"name": "us-west-2"}]}),
+        )
+        .with(
+            "/v1/clouds/aws/regions/us-east-2/vpcs?cloudAccountUid=acc1",
+            json!({"vpcs": [{"vpcId": "vpc-1"}, {"vpcId": "vpc-2"}]}),
+        );
+    let probe = subject::Probe::new(&api, &api);
+    let facts = real_facts();
+    let template = subject::request_of(&facts, "validate-security-groups").unwrap();
+    assert_eq!(
+        subject::find(&probe, &facts, template),
+        subject::Subject::Path(
+            "/v1/clouds/aws/securitygroups?cloudAccountUid=acc1&region=us-east-2&vpcId=vpc-1"
+                .to_string()
+        )
+    );
+}
+
+#[test]
+fn a_region_with_no_vpc_has_no_subject_for_the_security_groups_and_the_reason_says_why() {
+    let api = MemoryApi::new()
+        .with(
+            "/v1/cloudaccounts/aws",
+            json!({"items": [{"metadata": {"uid": "acc1"}}]}),
+        )
+        .with(
+            "/v1/clouds/aws/regions?cloudAccountUid=acc1",
+            json!({"regions": [{"name": "us-east-2"}]}),
+        )
+        .with(
+            "/v1/clouds/aws/regions/us-east-2/vpcs?cloudAccountUid=acc1",
+            json!({"vpcs": []}),
+        );
+    let probe = subject::Probe::new(&api, &api);
+    let facts = real_facts();
+    let template = subject::request_of(&facts, "validate-security-groups").unwrap();
+    match subject::find(&probe, &facts, template) {
+        subject::Subject::Missing(why) => {
+            assert!(why.contains("{vpcId}"), "{why}");
+            assert!(why.contains("/vpcs/0/vpcId"), "{why}");
+        }
+        other => panic!("expected no subject, got {other:?}"),
     }
 }
 
@@ -1058,7 +1382,14 @@ fn a_release_that_cannot_be_read_is_an_error_and_keeps_the_old_tag() {
     let (_empty, empty) = github(&[]);
     let contract = Contract {
         releases: releases::read(&empty, &state).unwrap(),
-        ..run(&[], &StandIn::default(), &MemoryApi::new(), "t", "now")
+        ..run(
+            &[],
+            &StandIn::default(),
+            &MemoryApi::new(),
+            &MemoryApi::new(),
+            "t",
+            "now",
+        )
     };
     assert_eq!(contract.exit_code(), 2);
 }

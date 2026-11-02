@@ -453,6 +453,7 @@ facts:
     table:
       as_of: "2026-09-29"
       holds: [use1-az3]
+      per_account: true
     pages:
       - internals/preflight.md#the-tables-of-cloud-facts
     rules: [eks-unsupported-zone]
@@ -465,6 +466,7 @@ facts:
     table:
       as_of: "2026-09-29"
       holds: [usw1-az2]
+      per_account: true
     pages:
       - internals/preflight.md#the-tables-of-cloud-facts
     rules: [eks-unsupported-zone]
@@ -477,6 +479,7 @@ facts:
     table:
       as_of: "2026-09-29"
       holds: [cac1-az3]
+      per_account: true
     pages:
       - internals/preflight.md#the-tables-of-cloud-facts
     rules: [eks-unsupported-zone]

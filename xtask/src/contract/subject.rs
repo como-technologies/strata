@@ -16,7 +16,7 @@ use strata::api::PaletteApi;
 use strata::error::Error;
 use strata::json::str_at;
 
-use crate::facts::Fact;
+use crate::facts::{Fact, Scope};
 
 /// Where the value of a placeholder comes from.
 pub(super) struct Source {
@@ -64,11 +64,37 @@ pub(super) const SOURCES: &[Source] = &[
         fact: "tag-filter-listing",
         pointer: "/items/0/metadata/uid",
     },
+    // the three AWS list routes ask for the account, the region, and the VPC. They take the first
+    // account, the first region of that account, and the first VPC of that region.
     Source {
         prefix: "/v1/clouds/aws/regions",
         param: "cloudAccountUid",
         fact: "cloud-account-listing",
         pointer: "/items/0/metadata/uid",
+    },
+    Source {
+        prefix: "/v1/clouds/aws/regions/",
+        param: "region",
+        fact: "validate-aws-regions",
+        pointer: "/regions/0/name",
+    },
+    Source {
+        prefix: "/v1/clouds/aws/securitygroups",
+        param: "cloudAccountUid",
+        fact: "cloud-account-listing",
+        pointer: "/items/0/metadata/uid",
+    },
+    Source {
+        prefix: "/v1/clouds/aws/securitygroups",
+        param: "region",
+        fact: "validate-aws-regions",
+        pointer: "/regions/0/name",
+    },
+    Source {
+        prefix: "/v1/clouds/aws/securitygroups",
+        param: "vpcId",
+        fact: "validate-vpcs",
+        pointer: "/vpcs/0/vpcId",
     },
     Source {
         prefix: "/v1/clustergroups/",
@@ -114,7 +140,8 @@ pub(super) const SOURCES: &[Source] = &[
     },
 ];
 
-/// The most requests that one subject takes: the document of a cluster, and its listing.
+/// The most facts that one subject chains. The security groups take the VPC, which takes the
+/// region, which takes the account.
 const DEPTH: usize = 3;
 
 /// Why a request failed.
@@ -144,29 +171,38 @@ pub type Answer = Rc<Result<Value, Failure>>;
 
 /// A tenant that the run asks. It keeps each answer, so the listing that finds a subject is read
 /// once for all the facts that use it.
+///
+/// It holds two clients of the tenant. `client` names the project of the environment, if any.
+/// `tenant` names no project, for the facts of the scope [`Scope::Tenant`]: Palette refuses a
+/// request that names a project on such a route.
 pub struct Probe<'a, A> {
-    api: &'a A,
-    answers: RefCell<BTreeMap<String, Answer>>,
+    client: &'a A,
+    tenant: &'a A,
+    answers: RefCell<BTreeMap<(Scope, String), Answer>>,
 }
 
 impl<'a, A: PaletteApi> Probe<'a, A> {
-    /// A probe of the tenant that `api` talks to.
-    pub fn new(api: &'a A) -> Self {
+    /// A probe of the tenant that `client` and `tenant` talk to.
+    pub fn new(client: &'a A, tenant: &'a A) -> Self {
         Probe {
-            api,
+            client,
+            tenant,
             answers: RefCell::new(BTreeMap::new()),
         }
     }
 
-    /// The answer to `GET path`.
-    pub fn get(&self, path: &str) -> Answer {
-        if let Some(known) = self.answers.borrow().get(path) {
+    /// The answer to `GET path`, sent in `scope`.
+    pub fn get(&self, scope: Scope, path: &str) -> Answer {
+        let key = (scope, path.to_string());
+        if let Some(known) = self.answers.borrow().get(&key) {
             return Rc::clone(known);
         }
-        let answer = Rc::new(self.api.get_json(path).map_err(|e| Failure::of(&e)));
-        self.answers
-            .borrow_mut()
-            .insert(path.to_string(), Rc::clone(&answer));
+        let api = match scope {
+            Scope::Client => self.client,
+            Scope::Tenant => self.tenant,
+        };
+        let answer = Rc::new(api.get_json(path).map_err(|e| Failure::of(&e)));
+        self.answers.borrow_mut().insert(key, Rc::clone(&answer));
         answer
     }
 }
@@ -219,6 +255,15 @@ pub(super) fn request_of<'a>(facts: &'a [Fact], id: &str) -> Option<&'a str> {
     facts.iter().find(|f| f.id == id)?.get_path()
 }
 
+/// The scope of the fact with the id `id`. A list that has no such fact gives the scope of the
+/// client: [`request_of`] finds no request for it, so the run sends none.
+fn scope_of(facts: &[Fact], id: &str) -> Scope {
+    facts
+        .iter()
+        .find(|f| f.id == id)
+        .map_or_else(Scope::default, |f| f.scope)
+}
+
 fn fill<A: PaletteApi>(probe: &Probe<A>, facts: &[Fact], template: &str, depth: usize) -> Subject {
     // no request goes out for a path that has a placeholder with no source
     if let Some(param) = unsourced(template).first() {
@@ -264,7 +309,8 @@ fn value<A: PaletteApi>(
         Subject::Path(path) => path,
         other => return Err(other),
     };
-    let answer = probe.get(&path);
+    // the listing that holds the subject is sent in its own scope, as the run sends the fact
+    let answer = probe.get(scope_of(facts, source.fact), &path);
     let document = match answer.as_ref() {
         Ok(document) => document,
         Err(failure) => {

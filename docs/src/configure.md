@@ -14,7 +14,9 @@ name before it runs any command, so a name your key cannot see stops
 `strata list projects` too.
 
 On HTTP 401 or HTTP 403, strata names the key in the error. Check
-`PALETTE_API_KEY`, `SPECTROCLOUD_APIKEY`, and `~/.palette.env`.
+`PALETTE_API_KEY`, `SPECTROCLOUD_APIKEY`, and `~/.palette.env`. A 403 with the code
+`ProjectUidIsNotEmpty` is the exception. The key is right: the route is of the tenant scope, and the
+request named a project. The error says so.
 
 Put the values in `~/.palette.env` to keep them out of the shell history.
 Strata reads a variable from that file when the environment does not set it:

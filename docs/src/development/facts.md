@@ -44,6 +44,7 @@ An entry has these fields:
 | `id` | The name of the fact: words with dashes. No two facts have one id. |
 | `kind` | `request`, `behavior`, `gap`, or `cloud`. See the next table. |
 | `request` | The method, the path, and the query of the request. A value of the query that varies is `{name}`, as in the path. Only a fact of the kind `request` has it. |
+| `scope` | Only a fact of the kind `request` has it: `client` or `tenant`. The default is `client`. The run sends a fact of the scope `tenant` with no project. See [The scope of a request](#the-scope-of-a-request). |
 | `reads` | What strata reads from the answer or depends on. `fields` are paths in the document: `[]` marks an array, and `*` marks the values of an object. `codes` are error codes of Palette. `values` are the values of a closed set, by field. `names` are the names that strata needs from a set that Palette can extend, by field. |
 | `stand_in` | The routes of the stand-in that imitate the fact, as paths with `{name}` for a segment that varies. Empty when the stand-in serves no document for it. |
 | `live` | The live checks that prove the fact, each as `script.sh:check`. |
@@ -52,7 +53,7 @@ An entry has these fields:
 | `code` | The files of strata that use the fact. |
 | `rules` | The rules of strata-preflight that use the fact. |
 | `call` | Only a fact of the kind `cloud` has it: the read-only call of the tool of the cloud, as a list of words. `{name}` is a value of the lab. |
-| `table` | Only a fact of the kind `cloud` has it: the date of a table that a rule holds, and its values. See [The tables](#the-tables). |
+| `table` | Only a fact of the kind `cloud` has it: the date of a table that a rule holds, its values, and `per_account` for a table whose values each account sees for itself. See [The tables](#the-tables). |
 | `palette` | Only a fact of the kind `cloud` has it: the route of Palette that lists a part of the answer, and the fields that it lacks. See [Add a fact of a cloud](#add-a-fact-of-a-cloud). |
 
 A fact must have a code or a rule, because a fact that nothing uses is not a dependency.
@@ -158,11 +159,13 @@ For each fact of the kind `request`, the run does these steps:
 2. It finds an object in the tenant. The first entry of a listing is the object. The `{uid}` of
    a cluster comes from the cluster listing, and the `{configUid}` of a cloud config comes from the
    document of that cluster. A value of the query comes from a listing too: the `{cloudAccountUid}`
-   of the regions route comes from `GET /v1/cloudaccounts/aws`.
+   of the regions route comes from `GET /v1/cloudaccounts/aws`. The security groups take the first
+   account, the first region of that account, and the first VPC of that region.
 3. It sends the request with its query, and compares the answer with the documents of the stand-in.
 
 The request has the query that strata sends, or that the stand-in serves the route with. Some routes
-need it. See [The query of a request](#the-query-of-a-request).
+need it. See [The query of a request](#the-query-of-a-request). The run sends the request in the
+scope of the fact. See [The scope of a request](#the-scope-of-a-request).
 
 The comparison has three parts:
 
@@ -197,17 +200,31 @@ A skipped fact names its live checks in the entry. Run them in a live window to 
 ### The query of a request
 
 The request of a fact has the query that strata sends, or that the stand-in serves the route with.
-The run asks the route in the same way. Two routes fail without their query:
+The run asks the route in the same way. Three routes of AWS fail without their query, with HTTP 422.
+See [The list routes](../internals/palette/validate-routes.md#the-list-routes):
 
-- The filter listing needs `filterType=tag` in a project. See
-  [An imported cluster](../internals/palette/clusters.md#an-imported-cluster).
-- The regions route needs `cloudAccountUid`. See
-  [The list routes](../internals/palette/validate-routes.md#the-list-routes).
+- The regions route needs `cloudAccountUid`.
+- The VPC route needs `cloudAccountUid`.
+- The security group route needs `region` and `vpcId`. It takes `cloudAccountUid` too.
 
-The stand-in puts the query in the name of the file of the document, after an `@`, and serves each of
-these routes only with its query. A value of the query that varies is `{name}` in the request. The
-run takes the value from a listing of the tenant, as it takes the `{uid}` of a path. The fact
-`cloud-account-listing` gives the account of AWS.
+The stand-in puts the query in the name of the file of the document, after an `@`, and serves a
+route with a query only with that query. A value of the query that varies is `{name}` in the request.
+The run takes the value from a listing of the tenant, as it takes the `{uid}` of a path. The fact
+`cloud-account-listing` gives the account of AWS. The fact `validate-aws-regions` gives its first
+region, and the fact `validate-vpcs` gives the first VPC of that region.
+
+### The scope of a request
+
+A request names a project with the header `ProjectUid`, or names none. The run asks with the project
+of `~/.palette.env`. A route of the tenant is not an operation of the project scope. Palette refuses
+a request that names a project: HTTP 403, with the code `ProjectUidIsNotEmpty`. The refusal is the
+same with each query. The saved tag filters are such routes. See
+[An imported cluster](../internals/palette/clusters.md#an-imported-cluster).
+
+A fact of such a route has `scope: tenant`. The run sends the request with a second client of the
+same tenant that names no project, as strata does. The run sends the listing that finds the subject
+in that scope too: the `{uid}` of `tag-filter` comes from `tag-filter-listing`. A fact with no
+`scope` has the scope `client`, and the run sends it with the project.
 
 ### The sets of values
 
@@ -223,15 +240,16 @@ A value that a closed set does not name is an unknown value and nothing else. It
 difference, so one new value opens one issue.
 
 The search schema is a set of names. The tenant has more properties than the three that strata
-sends in a search.
-The kinds of the audit log are names too. The log of the lab has the kinds `cloudaccount` and
-`registry`, and strata does not act on them. A set is in `values` unless strata ignores the values
-that it does not list.
+sends in a search. A set is in `values` unless strata ignores the values that it does not list.
+
+The kinds of the audit log are in neither set. The fact `audit-log` reads the type of
+`items[].spec.resource.kind` and lists no kind. An audit log lists the writes of the tenant, so a page
+can hold no entry of a kind that strata acts on. It can also hold a kind that strata ignores, such as
+`cloudaccount` or `registry`. Neither is a difference or an unknown value. The fact
+`audit-resource-kind` lists the kinds that strata acts on.
 
 An answer with no value at the field of a set of names has nothing to compare, as a list with no
-entry has no type to compare. An audit log lists the writes of the tenant. A page that holds no entry
-of a kind that strata needs makes a difference. Create an entry of that kind, or remove the
-kind from the fact.
+entry has no type to compare.
 
 ### The fields of the stand-in
 
@@ -283,7 +301,7 @@ The result is the document `strata-contract/1`. `contract.sh` writes it to `cont
 | `facts[]` | One entry for each fact of the kind `request`, in the order of the list. Then one for each fact of the kind `cloud`. |
 | `facts[].id`, `kind`, `request` | The id of the fact, its kind, and its request. For a fact of the kind `cloud`, the request is the call. |
 | `facts[].outcome` | The outcome of the fact. |
-| `facts[].reason` | Why the run skipped the fact or could not check it. |
+| `facts[].reason` | Why the run skipped the fact or could not check it. It also names the values of a table that the account cannot check, when it can check the others. |
 | `facts[].differences[]` | Each difference: `kind` is `status`, `type`, `missing`, `name`, or `table`. `path` is the field. `expected` is what the stand-in has, and `found` is what the tenant has. For a `name`, `expected` lists the names that strata needs and the answer lacks, and `found` lists the names that the answer has. For a table, `expected` is the values that the answer lacks. |
 | `facts[].unknownValues[]` | Each closed set that holds an unknown value. `set` is the field of `reads.values`. `known` is what the fact and the stand-in name, and `values` is what the tenant gave. The key is absent when the entry has none. |
 | `facts[].live`, `pages`, `rules` | The live checks, the pages, and the rules of the fact. Only a fact of the kind `cloud` has `rules`. |
@@ -538,7 +556,8 @@ For each cloud fact, the run does these steps:
 3. It compares the answer with the fixtures of the rules, as it does for a request of Palette.
    See [what the run compares](#what-the-run-compares). A field that each fixture has, and the
    answer lacks, is a difference.
-4. For a table, it checks that the answer lists each value of the table.
+4. For a table, it checks that the answer lists each value of the table. For a table of an account,
+   it checks the values that the account lists. See [The tables](#the-tables).
 
 The outcomes and the exit code are those of the requests of Palette. The run sends each call with a
 time limit of two minutes. The document keeps the differences and the reasons, and no answer.
@@ -553,6 +572,14 @@ one field in `reads.fields` is the field of the answer that lists them.
 The run checks the table in this way. Each value must be equal to a text or a number that the
 answer lists at the field. A value that the answer does not list is a difference of the kind
 `table`. The difference names the missing values and ten of the listed values.
+
+Each account sees its own values in some tables. An account has its own zone ids: the lab account
+has `usw1-az1` and `usw1-az3` in `us-west-1`, and not `usw1-az2`. A fact of such a table has
+`per_account: true`. A value that the answer lacks is then no difference, because the account
+cannot check it. When the answer lists some values, the outcome is `same`, and the reason names the
+values that the account cannot check. When the answer lists none, the outcome is `skipped`, and the
+reason says that the account cannot check the table. A table with no `per_account` keeps the check:
+a value that the answer lacks is a difference.
 
 The check of the list finds a table that has no fact. It reads the programs and the arguments of
 each rule of any tier, and the code of strata. It finds these texts:

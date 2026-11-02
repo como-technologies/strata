@@ -76,7 +76,8 @@ pub struct Entry {
     pub request: String,
     /// What the run found.
     pub outcome: Outcome,
-    /// Why the run skipped the fact, or could not check it.
+    /// Why the run skipped the fact, or could not check it. It also names the values of a table that
+    /// the account cannot check, when it can check the others.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     /// Each difference, when the outcome is `differs`.
