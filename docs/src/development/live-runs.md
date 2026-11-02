@@ -570,6 +570,7 @@ give the run profiles to read, and `just live-up` to give it a cluster.
 | `contract.json` | #554 (no result yet: the last contract run came before this item): the fact `profile-document` is `same` for the first profile of the listing. It has no unknown value for the type of the profile or for the provider of a pack ref. A type or a provider that the fact does not name is an unknown value. The fact `cloud-config` reads the cloud type of a cluster as strata does. A cluster that names its cloud type in the kind of its cloud config only still gives a subject. |
 | `contract.json` | #540: the fact `aws-policies-per-role-limit` is `same`: the default quota of managed policies for a role is 20. The fact `aws-policies-per-role-quota` is `same`: the lab account gives the quota in `us-east-1` with the shape that the fixtures of `iam-role-policy-quota` hold. |
 | `contract.json` | #390, #393: the whole run on the real tenant, with the cloud calls and the lab account. It finds 120 facts: 47 are `same`, none `differs`, 67 are skipped, and 6 cannot be checked. [The facts page](./facts.md#what-the-run-compares) lists the cases where the run skips a fact. |
+| `contract.json` | #567 (no result yet: the last contract run came before this item): with a cluster up that had no repave, the fact `cluster-repave-status` is `skipped`. The reason names the code `ResourceNotFound`, which Palette gives for that cluster with HTTP 404. No fact differs. |
 
 ## contract-profiles.sh
 

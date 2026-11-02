@@ -627,6 +627,10 @@ opens no notification for it.
 resolved values on each side. It names no macro, so nothing in the record says
 that a macro caused it.
 
+A cluster that had no repave has no record. For that cluster the route gives
+HTTP 404 with the code `ResourceNotFound`. It is the answer of Palette for a
+tenant with no such object, as an empty listing is.
+
 While the repave waits, Palette refuses an update of the cluster profiles:
 `Cluster update failure as cluster repave is pending for approval`. Palette also
 refuses to delete a macro that a cluster reads.

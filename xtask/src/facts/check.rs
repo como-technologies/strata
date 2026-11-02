@@ -77,6 +77,11 @@ fn fields(facts: &[Fact]) -> Vec<String> {
             }
             _ => {}
         }
+        if !fact.absent_codes.is_empty() && fact.get_path().is_none() {
+            bad.push(format!(
+                "fact `{id}`: only a fact with a GET request has `absent_codes`"
+            ));
+        }
         bad.extend(proof(fact));
     }
     bad
@@ -202,11 +207,11 @@ fn code_exists(sources: &Sources) -> Vec<String> {
         .collect()
 }
 
-/// Each error code that a fact reads is on one of its pages.
+/// Each error code that a fact reads, or takes for an absent object, is on one of its pages.
 fn codes_stated(sources: &Sources) -> Vec<String> {
     let mut bad = Vec::new();
     for fact in &sources.facts {
-        for code in &fact.reads.codes {
+        for code in fact.reads.codes.iter().chain(&fact.absent_codes) {
             let stated = fact.pages.iter().any(|page| {
                 sources
                     .texts

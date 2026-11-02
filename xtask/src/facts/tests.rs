@@ -379,6 +379,29 @@ fn an_error_code_that_no_page_of_the_fact_has_is_a_fault() {
 }
 
 #[test]
+fn an_absent_code_is_stated_on_a_page_of_the_fact_like_an_error_code_that_it_reads() {
+    let mut sources = world();
+    sources.facts[0].absent_codes = vec!["ClusterProfilePackNotAllowed".to_string()];
+    assert_eq!(faults_of(&sources), Vec::<String>::new());
+    sources.facts[0].absent_codes = vec!["ErrNowhere".to_string()];
+    assert_one_fault(&sources, "no page of the fact has the code `ErrNowhere`");
+}
+
+#[test]
+fn a_fact_with_no_get_request_that_names_an_absent_code_is_a_fault() {
+    let mut sources = world();
+    sources.facts[0].absent_codes = vec!["ClusterProfilePackNotAllowed".to_string()];
+    sources.facts[0].request = Some("POST /v1/clusterprofiles/{uid}".to_string());
+    let found = faults_of(&sources);
+    assert!(
+        found
+            .iter()
+            .any(|m| m.contains("only a fact with a GET request has `absent_codes`")),
+        "{found:#?}"
+    );
+}
+
+#[test]
 fn a_section_of_the_fact_pages_that_no_fact_names_is_a_fault() {
     let mut sources = world();
     sources

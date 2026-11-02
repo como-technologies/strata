@@ -67,6 +67,12 @@ pub struct Fact {
     /// the saved tag filters do.
     #[serde(default)]
     pub scope: Scope,
+    /// The error codes that mean the tenant has no such object, such as `ResourceNotFound`. The
+    /// route gives the record of an object that a cluster can lack. The contract run skips the
+    /// fact when Palette answers HTTP 404 with one of these codes. A 404 with another code is a
+    /// difference. Only a fact with a GET request has them, and a page of the fact states each one.
+    #[serde(default)]
+    pub absent_codes: Vec<String>,
     /// What strata reads from the answer or depends on. A fact of the kind `cloud` that no call
     /// proves needs no field here.
     #[serde(default)]

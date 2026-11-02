@@ -9,7 +9,9 @@
 //! serves for the fact. It compares the status and the type of each field that strata reads. It
 //! checks that the answer holds each name that strata needs from a set that Palette can extend. It
 //! also lists each value of a closed set that neither the fact nor the stand-in names: strata does
-//! not know such a value. It compares shapes, and never the values of two tenants.
+//! not know such a value. It compares shapes, and never the values of two tenants. A fact can name
+//! the error codes that mean the tenant has no such object. The run skips the fact for an HTTP 404
+//! with one of them.
 //!
 //! The result is the document `strata-contract/1`, with one entry for each fact. The run changes
 //! nothing in the tenant: it sends GET requests only. The [`cloud`] module adds the entry of each
@@ -124,19 +126,26 @@ fn check<A: PaletteApi>(
                 ..entry(outcome, None, differences)
             }
         }
-        Err(failure) => match failure.status.filter(|status| unreadable(*status)) {
-            Some(status) => entry(
-                Outcome::Differs,
-                None,
-                vec![Difference {
-                    kind: DifferenceKind::Status,
-                    path: format!("GET {template}"),
-                    expected: vec!["200".to_string()],
-                    found: vec![status.to_string()],
-                }],
-            ),
-            None => entry(Outcome::Error, Some(failure.message.clone()), Vec::new()),
-        },
+        Err(failure) => {
+            if let Some(code) = failure.absent(&fact.absent_codes) {
+                return skipped(&format!(
+                    "the tenant has no such object: Palette answers HTTP 404 with the code `{code}`"
+                ));
+            }
+            match failure.status.filter(|status| unreadable(*status)) {
+                Some(status) => entry(
+                    Outcome::Differs,
+                    None,
+                    vec![Difference {
+                        kind: DifferenceKind::Status,
+                        path: format!("GET {template}"),
+                        expected: vec!["200".to_string()],
+                        found: vec![status.to_string()],
+                    }],
+                ),
+                None => entry(Outcome::Error, Some(failure.message.clone()), Vec::new()),
+            }
+        }
     }
 }
 

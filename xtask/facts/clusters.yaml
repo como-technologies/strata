@@ -271,6 +271,8 @@ facts:
   - id: cluster-repave-status
     kind: request
     request: GET /v1/spectroclusters/{uid}/repave/status
+    absent_codes:
+      - ResourceNotFound
     reads:
       fields:
         - spec.source
@@ -287,6 +289,7 @@ facts:
       - macro-repave.sh:repave-names
     pages:
       - reference/palette-api.md#a-cluster
+      - internals/palette/profiles.md#macros
     code:
       - src/api/palette/clusters.rs
       - src/model/repave.rs
