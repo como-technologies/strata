@@ -401,6 +401,7 @@ mod tests {
             passed: 9,
             false_fail: 0,
             runs: vec![],
+            older: vec![],
         };
         let mut report = report();
         let mut failed = report.checks[0].clone();

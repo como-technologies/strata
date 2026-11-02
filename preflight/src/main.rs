@@ -40,7 +40,7 @@ struct Cli {
     /// The engine of a file: aws, eks, gcp, gke, azure, aks, maas, edge, vsphere; a cluster names its own
     #[arg(long, value_name = "CLOUD")]
     cloud: Option<String>,
-    /// The Palette release, such as 4.10; with none, a rule of one release applies
+    /// The Palette release, such as 4.10; with none, a rule of one release applies; --promotion counts only the runs of this release
     #[arg(long, value_name = "RELEASE")]
     release: Option<String>,
     /// Records of the profiles, as files or a pattern in quotes; with none, read from Palette
@@ -267,7 +267,7 @@ fn print_rules(cli: &Cli, catalog: &Catalog, tiers: &[Tier]) -> Result<ExitCode>
 /// the ledger.
 fn print_promotion(cli: &Cli, catalog: &Catalog) -> Result<ExitCode> {
     let ledger = ledger_of(cli)?;
-    let report = confidence::promotion(catalog, &ledger);
+    let report = confidence::promotion(catalog, &ledger, cli.release.as_deref());
     if format_of(cli) == Format::Json {
         print_json(&serde_json::to_value(&report)?, cli.compact)?;
     } else {
@@ -490,22 +490,14 @@ fn write_out(
 fn promotion_text(report: &confidence::PromotionReport) -> String {
     let mut out = String::new();
     out.push_str(&format!(
-        "{:<32} {:<8} {:<10} {:<10} {:<8} confidence (engine release: catch, clean)\n",
+        "{:<32} {:<8} {:<10} {:<10} {:<8} confidence (engine release: catch, clean, older runs)\n",
         "rule", "tier", "level", "earned", "advice"
     ));
     for r in &report.rules {
         let conf: Vec<String> = r
             .confidence
             .iter()
-            .map(|c| {
-                format!(
-                    "{} {}: {}, {}",
-                    c.engine,
-                    dash(&c.release),
-                    c.catch.text(),
-                    c.clean.text()
-                )
-            })
+            .map(|c| format!("{} {}: {}", c.engine, dash(&c.release), c.text()))
             .collect();
         out.push_str(&format!(
             "{:<32} {:<8} {:<10} {:<10} {:<8} {}\n",

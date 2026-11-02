@@ -262,19 +262,13 @@ fn confidence_of(
             continue;
         }
         let counts = ledger.counts_for(&rule.id, &world.cloud, world.release.as_deref());
-        if counts.caught + counts.missed + counts.passed + counts.false_fail == 0 {
-            continue;
-        }
         let bar = rule.promotion.as_ref().map_or(0.8, |p| p.bar);
-        out.insert(
-            rule.id.clone(),
-            Confidence::of(
-                &world.cloud,
-                world.release.as_deref().unwrap_or(""),
-                &counts,
-                bar,
-            ),
-        );
+        let release = world.release.as_deref().unwrap_or("");
+        let confidence = Confidence::of(&world.cloud, release, &counts, bar);
+        // a rule with no run on this release still shows the runs of older releases
+        if confidence.has_runs() || confidence.older_runs > 0 {
+            out.insert(rule.id.clone(), confidence);
+        }
     }
     out
 }

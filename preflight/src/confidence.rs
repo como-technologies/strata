@@ -9,7 +9,11 @@
 //!
 //! A probe becomes a preflight check when both bounds reach the bar, `0.8` today. With no wrong
 //! result, that is 14 correct runs of each kind, because `0.05^(1/14) = 0.807`.
+//!
+//! When a report names a Palette release, only the runs of that release count. A run of an older
+//! release, and a run with no release, count for nothing, and the report says how many there are.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -144,43 +148,71 @@ impl Ledger {
         out
     }
 
-    /// The counts of one rule on one engine, over every release, and on one release when
-    /// `release` is given.
+    /// The counts of one rule on one engine. With `release`, only the runs of that release count.
+    /// With none, every run counts.
+    ///
+    /// A run of an older release, and a run with no release, are in the `older` runs of the
+    /// counts. A run of a later release is in no count.
     pub fn counts_for(&self, rule: &str, engine: &str, release: Option<&str>) -> Counts {
         let mut total = Counts::default();
         for ((e, r), c) in self.counts(rule) {
             if e != engine {
                 continue;
             }
-            if let Some(want) = release
-                && !r.is_empty()
-                && !same_minor(&r, want)
-            {
-                continue;
+            match release.map(|want| standing(&r, want)) {
+                None | Some(Standing::Same) => {
+                    total.caught += c.caught;
+                    total.missed += c.missed;
+                    total.passed += c.passed;
+                    total.false_fail += c.false_fail;
+                    total.runs.extend(c.runs);
+                }
+                Some(Standing::Older) => total.older.extend(c.runs),
+                Some(Standing::Later) => {}
             }
-            total.caught += c.caught;
-            total.missed += c.missed;
-            total.passed += c.passed;
-            total.false_fail += c.false_fail;
-            total.runs.extend(c.runs);
         }
-        total.runs.sort();
-        total.runs.dedup();
+        for ids in [&mut total.runs, &mut total.older] {
+            ids.sort();
+            ids.dedup();
+        }
         total
     }
 }
 
-/// True when `a` and `b` are one release for the counts: a patch does not reset them.
+/// Where the release of a run stands against the release that a report names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Standing {
+    /// The same release: a patch does not make another release.
+    Same,
+    /// An older release, or no release.
+    Older,
+    /// A later release.
+    Later,
+}
+
+/// The release line of `v`: its first two numbers, so `4.10` for `4.10.3-rc.1`. None when `v` does
+/// not parse as a version.
+fn line_of(v: &str) -> Option<String> {
+    let numbers = version::numbers(v)?;
+    let [major, minor] = [0, 1].map(|i| numbers.get(i).copied().unwrap_or(0));
+    Some(format!("{major}.{minor}"))
+}
+
+/// Place `run`, the release of a run, against `want`, the release that a report names.
 ///
-/// A version that parses names a release by its first two numbers, so `4.10.3` and `4.10` are one
-/// release, and so are `4` and `4.0`. A text that does not parse is the same release only as the
-/// same text.
-fn same_minor(a: &str, b: &str) -> bool {
-    let line = |numbers: &[u64]| [0, 1].map(|i| numbers.get(i).copied().unwrap_or(0));
-    match (version::numbers(a), version::numbers(b)) {
-        (Some(x), Some(y)) => line(&x) == line(&y),
-        (None, None) => a == b,
-        _ => false,
+/// A version that parses names a release by its line, so `4.10.3` and `4.10` are one release, and
+/// so are `4` and `4.0`. [`version::compare`] orders two lines. A text that does not parse is the
+/// same release only as the same text. A run with no release, and a text that no order places,
+/// are older: they prove nothing for the release that the report names.
+fn standing(run: &str, want: &str) -> Standing {
+    match (line_of(run), line_of(want)) {
+        (Some(r), Some(w)) => match version::compare(&r, &w) {
+            Ordering::Less => Standing::Older,
+            Ordering::Equal => Standing::Same,
+            Ordering::Greater => Standing::Later,
+        },
+        (None, None) if run == want => Standing::Same,
+        _ => Standing::Older,
     }
 }
 
@@ -199,6 +231,10 @@ pub struct Counts {
     /// The run ids.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runs: Vec<String>,
+    /// The ids of the runs that the counts omit because their release is older than the
+    /// release asked, or because they have no release. Empty when no release is asked.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub older: Vec<String>,
 }
 
 /// One rate with its counts and its bound.
@@ -254,12 +290,25 @@ pub struct Confidence {
     /// The run ids behind the counts.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub runs: Vec<String>,
+    /// The runs of older releases, and the runs with no release, that the counts omit. It is
+    /// `0` when no release is asked.
+    #[serde(default)]
+    pub older_runs: u32,
 }
 
 impl Confidence {
-    /// `catch 14/14 (81%), clean 9/9 (72%)`: the two rates, as a report shows them.
+    /// `catch 14/14 (81%), clean 9/9 (72%)`: the two rates, as a report shows them. With no run
+    /// of this release, it is `no runs`. With runs of older releases, it ends with `older runs 3`.
     pub fn text(&self) -> String {
-        format!("catch {}, clean {}", self.catch.text(), self.clean.text())
+        let rates = if self.has_runs() {
+            format!("catch {}, clean {}", self.catch.text(), self.clean.text())
+        } else {
+            NO_RUNS.to_string()
+        };
+        match self.older_runs {
+            0 => rates,
+            n => format!("{rates}, older runs {n}"),
+        }
     }
 
     /// From the counts.
@@ -276,6 +325,7 @@ impl Confidence {
             bar,
             meets_bar,
             runs: counts.runs.clone(),
+            older_runs: counts.older.len() as u32,
         }
     }
 
@@ -415,7 +465,11 @@ fn ln_gamma(x: f64) -> f64 {
 pub struct PromotionReport {
     /// The schema id.
     pub schema: String,
-    /// One entry for each rule with a check.
+    /// The release whose runs count. With none, every run counts.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub release: Option<String>,
+    /// One entry for each rule with a check. With a release, a rule that does not apply to it has
+    /// no entry.
     pub rules: Vec<PromotionEntry>,
     /// The rules whose level disagrees with the ledger.
     pub disagreements: u32,
@@ -453,18 +507,21 @@ impl PromotionReport {
 }
 
 /// Compare the level of each rule with what the ledger proves.
-pub fn promotion(catalog: &Catalog, ledger: &Ledger) -> PromotionReport {
+///
+/// With `release`, only the runs of that release count, so a rule that no run proved on that
+/// release is a probe. A rule that does not apply to the release has no entry. With none, every
+/// run counts.
+pub fn promotion(catalog: &Catalog, ledger: &Ledger, release: Option<&str>) -> PromotionReport {
     let mut rules = Vec::new();
     let mut disagreements = 0;
-    for rule in catalog.rules().filter(|r| r.check.is_some()) {
+    let checks = catalog
+        .rules()
+        .filter(|r| r.check.is_some() && r.applies_to_release(release));
+    for rule in checks {
         let bar = rule.promotion.as_ref().map_or(0.8, |p| p.bar);
-        let mut confidence: Vec<Confidence> = ledger
-            .counts(&rule.id)
-            .iter()
-            .map(|((e, r), c)| Confidence::of(e, r, c, bar))
-            .collect();
-        confidence.sort_by(|a, b| (&a.engine, &a.release).cmp(&(&b.engine, &b.release)));
-        let earned = earned_level(rule, ledger, &named_engines(rule, &confidence), bar);
+        let confidence = rule_confidence(ledger, &rule.id, release, bar);
+        let engines = named_engines(rule, &confidence);
+        let earned = earned_level(rule, ledger, &engines, release, bar);
         let advice = match (rule.level, earned) {
             (Level::Probe, Level::Preflight) => "promote",
             (Level::Preflight, Level::Probe) => "demote",
@@ -485,9 +542,33 @@ pub fn promotion(catalog: &Catalog, ledger: &Ledger) -> PromotionReport {
     }
     PromotionReport {
         schema: PROMOTION_SCHEMA.to_string(),
+        release: release.map(str::to_string),
         rules,
         disagreements,
     }
+}
+
+/// The confidence of one rule, in the order of the engine and the release. With `release`, one
+/// entry for each engine that has a run of the rule, on that release. With none, one entry for
+/// each engine and release that has a run.
+fn rule_confidence(
+    ledger: &Ledger,
+    rule: &str,
+    release: Option<&str>,
+    bar: f64,
+) -> Vec<Confidence> {
+    let counts = ledger.counts(rule);
+    let Some(want) = release else {
+        return counts
+            .iter()
+            .map(|((e, r), c)| Confidence::of(e, r, c, bar))
+            .collect();
+    };
+    let engines: BTreeSet<&String> = counts.keys().map(|(e, _)| e).collect();
+    engines
+        .into_iter()
+        .map(|e| Confidence::of(e, want, &ledger.counts_for(rule, e, Some(want)), bar))
+        .collect()
 }
 
 /// The engines the rule names: `all` is each engine that the ledger has a run of, in
@@ -510,8 +591,15 @@ fn named_engines(rule: &Rule, confidence: &[Confidence]) -> Vec<String> {
     }
 }
 
-/// The level that the ledger proves for `rule` on `engines`: a preflight check, or a probe.
-fn earned_level(rule: &Rule, ledger: &Ledger, engines: &[String], bar: f64) -> Level {
+/// The level that the ledger proves for `rule` on `engines`, from the runs of `release` when it is
+/// given: a preflight check, or a probe.
+fn earned_level(
+    rule: &Rule,
+    ledger: &Ledger,
+    engines: &[String],
+    release: Option<&str>,
+    bar: f64,
+) -> Level {
     // the first rule of a promotion: a live run shows the fault. A rule from the source or a
     // reading stays a probe, whatever the plan runs count, until a build shows the fault
     if rule.status != Status::Seen {
@@ -520,13 +608,13 @@ fn earned_level(rule: &Rule, ledger: &Ledger, engines: &[String], bar: f64) -> L
     let static_rule = rule.effective_tier() == Tier::Static;
     let proven = !engines.is_empty()
         && engines.iter().all(|e| {
-            let c = ledger.counts_for(&rule.id, e, None);
+            let c = ledger.counts_for(&rule.id, e, release);
             if static_rule {
                 // a static rule is deterministic: one run that made the fault and one clean run
                 // prove it
                 c.caught >= 1 && c.missed == 0 && c.passed >= 1 && c.false_fail == 0
             } else {
-                Confidence::of(e, "", &c, bar).meets_bar
+                Confidence::of(e, release.unwrap_or(""), &c, bar).meets_bar
             }
         });
     if proven {
@@ -537,259 +625,4 @@ fn earned_level(rule: &Rule, ledger: &Ledger, engines: &[String], bar: f64) -> L
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn close(a: f64, b: f64) -> bool {
-        (a - b).abs() < 0.005
-    }
-
-    #[test]
-    fn the_bound_with_no_wrong_result_is_the_table_of_the_issue() {
-        for (n, want) in [
-            (3, 0.37),
-            (5, 0.55),
-            (10, 0.74),
-            (14, 0.81),
-            (20, 0.86),
-            (30, 0.90),
-        ] {
-            let b = lower_bound(n, n, 0.95).unwrap();
-            assert!(close(b, want), "{n} of {n}: {b}");
-        }
-        assert_eq!(lower_bound(0, 0, 0.95), None);
-        assert_eq!(lower_bound(0, 5, 0.95), Some(0.0));
-    }
-
-    #[test]
-    fn the_bound_with_a_miss_uses_the_beta_quantile() {
-        // 13 of 14: the one-sided 95% Clopper-Pearson lower bound is 0.703, under the bar of 0.8
-        let b = lower_bound(13, 14, 0.95).unwrap();
-        assert!(close(b, 0.703), "{b}");
-        // 9 of 10 is 0.606
-        let b = lower_bound(9, 10, 0.95).unwrap();
-        assert!(close(b, 0.606), "{b}");
-        // 19 of 20 is about 0.78, so one miss in 20 runs is under the bar
-        let b = lower_bound(19, 20, 0.95).unwrap();
-        assert!(close(b, 0.784), "{b}");
-        // 1 of 2
-        let b = lower_bound(1, 2, 0.95).unwrap();
-        assert!(close(b, 0.0253), "{b}");
-    }
-
-    #[test]
-    fn the_regularized_beta_matches_known_values() {
-        assert!(close(regularized_beta(0.5, 1.0, 1.0), 0.5));
-        assert!(close(regularized_beta(0.5, 2.0, 2.0), 0.5));
-        assert!(close(regularized_beta(0.2, 2.0, 3.0), 0.1808));
-    }
-
-    fn ledger(text: &str) -> Ledger {
-        Ledger::parse(text, Path::new("runs.yaml")).unwrap()
-    }
-
-    const RUNS: &str = r#"
-schema: strata-preflight-ledger/1
-runs:
-  - run: r1
-    engine: gke
-    release: "4.10"
-    results:
-      - {rule: gke-pool-multiple-3, result: caught}
-      - {rule: gke-api-off, result: caught}
-  - run: r2
-    engine: gke
-    release: "4.10.3"
-    results:
-      - {rule: gke-pool-multiple-3, result: passed}
-      - {rule: gke-api-off, result: missed}
-      - {rule: gke-no-gpu, result: caught}
-      - {rule: gke-no-gpu, result: passed}
-"#;
-
-    #[test]
-    fn the_counts_join_the_patches_of_one_release() {
-        let l = ledger(RUNS);
-        let c = l.counts_for("gke-pool-multiple-3", "gke", Some("4.10"));
-        assert_eq!((c.caught, c.passed, c.missed), (1, 1, 0));
-        assert_eq!(c.runs, vec!["r1", "r2"]);
-        let c = l.counts_for("gke-pool-multiple-3", "gke", Some("4.11"));
-        assert_eq!(c.caught + c.passed, 0, "another release has no run");
-        let c = l.counts_for("gke-pool-multiple-3", "eks", None);
-        assert_eq!(c.caught + c.passed, 0, "another engine has no run");
-    }
-
-    #[test]
-    fn a_release_is_its_first_two_numbers_as_version_reads_them() {
-        for (a, b) in [
-            ("4.10.3", "4.10"),
-            ("4", "4.0"),
-            ("4.01", "4.1"),
-            ("v4.10", "4.10.0"),
-            ("4.10.3-rc.1", "4.10"),
-        ] {
-            assert!(same_minor(a, b), "{a} is the release {b}");
-            assert!(same_minor(b, a), "{b} is the release {a}");
-        }
-        for (a, b) in [("4.10", "4.1"), ("4.10.3", "4.11"), ("4", "4.1")] {
-            assert!(!same_minor(a, b), "{a} is not the release {b}");
-        }
-    }
-
-    #[test]
-    fn a_text_that_is_no_version_is_the_release_of_the_same_text_only() {
-        assert!(same_minor("dev", "dev"));
-        assert!(!same_minor("beta", "dev"));
-        assert!(!same_minor("dev", "4.10"));
-        assert!(!same_minor("4.10", "dev"));
-        assert!(!same_minor("4.10.3.1", "4.10"));
-    }
-
-    #[test]
-    fn a_run_of_another_release_text_does_not_count() {
-        let l = ledger(
-            r#"
-schema: strata-preflight-ledger/1
-runs:
-  - {run: r1, engine: gke, release: beta, results: [{rule: gke-api-off, result: caught}]}
-  - {run: r2, engine: gke, release: "4", results: [{rule: gke-api-off, result: caught}]}
-"#,
-        );
-        let c = l.counts_for("gke-api-off", "gke", Some("dev"));
-        assert_eq!(c.caught, 0, "a run at beta is no run at dev");
-        let c = l.counts_for("gke-api-off", "gke", Some("4.0"));
-        assert_eq!(c.runs, vec!["r2"], "the release 4 is the release 4.0");
-    }
-
-    #[test]
-    fn confidence_reads_the_bar() {
-        let c = Counts {
-            caught: 14,
-            missed: 0,
-            passed: 14,
-            false_fail: 0,
-            runs: vec![],
-        };
-        let conf = Confidence::of("gke", "4.10", &c, 0.8);
-        assert!(conf.meets_bar);
-        assert_eq!(conf.catch.text(), "14/14 (81%)");
-        let c = Counts {
-            caught: 14,
-            missed: 0,
-            passed: 13,
-            false_fail: 1,
-            runs: vec![],
-        };
-        assert!(!Confidence::of("gke", "4.10", &c, 0.8).meets_bar);
-        let none = Confidence::of("gke", "4.10", &Counts::default(), 0.8);
-        assert_eq!(none.catch.text(), NO_RUNS);
-        assert_eq!(none.weakest_bound(), None);
-    }
-
-    #[test]
-    fn a_ledger_of_another_schema_is_refused() {
-        let err = Ledger::parse("schema: other/1\nruns: []\n", Path::new("l.yaml")).unwrap_err();
-        assert!(err.to_string().contains("schema is 'other/1'"), "{err}");
-    }
-
-    #[test]
-    fn a_promotion_counts_the_clouds_a_rule_names_and_not_the_lab() {
-        let section = r#"
-section: tools
-title: T
-rules:
-  - id: cloud-cli-auth
-    title: t
-    engines: [aws, lab]
-    tier: cloud
-    status: seen
-    what: w
-    check: {kind: exec, argv: [aws], expr: "true"}
-"#;
-        let mut catalog = Catalog::default();
-        catalog
-            .push(
-                Catalog::parse_section(section, Path::new("t.yaml")).unwrap(),
-                Path::new("t.yaml"),
-            )
-            .unwrap();
-        let mut runs = String::from("schema: strata-preflight-ledger/1\nruns:\n");
-        for i in 0..14 {
-            runs.push_str(&format!(
-                "  - run: r{i}\n    engine: aws\n    release: \"\"\n    results:\n      - {{rule: cloud-cli-auth, result: caught, note: f}}\n      - {{rule: cloud-cli-auth, result: passed, note: c}}\n"
-            ));
-        }
-        let report = promotion(&catalog, &ledger(&runs));
-        let rule = report
-            .rules
-            .iter()
-            .find(|r| r.id == "cloud-cli-auth")
-            .unwrap();
-        assert_eq!(
-            rule.earned,
-            Level::Preflight,
-            "14 correct runs of each kind on aws, and no run of the lab is needed"
-        );
-        assert_eq!(rule.advice, "promote");
-    }
-
-    #[test]
-    fn promotion_compares_the_level_with_the_ledger() {
-        let section = r#"
-section: compute
-title: Compute
-rules:
-  - id: gke-pool-multiple-3
-    title: t
-    engines: [gke]
-    tier: static
-    status: seen
-    what: w
-    check: {kind: static, expr: "true"}
-  - id: gke-api-off
-    title: t
-    engines: [gke]
-    tier: cloud
-    status: seen
-    what: w
-    check: {kind: exec, argv: [gcloud], expr: "true"}
-  - id: gke-no-gpu
-    title: t
-    engines: [gke]
-    tier: static
-    status: source
-    what: w
-    check: {kind: static, expr: "true"}
-"#;
-        let mut catalog = Catalog::default();
-        catalog
-            .push(
-                Catalog::parse_section(section, Path::new("c.yaml")).unwrap(),
-                Path::new("c.yaml"),
-            )
-            .unwrap();
-        let report = promotion(&catalog, &ledger(RUNS));
-        let pool = report
-            .rules
-            .iter()
-            .find(|r| r.id == "gke-pool-multiple-3")
-            .unwrap();
-        assert_eq!(
-            pool.earned,
-            Level::Preflight,
-            "a static rule with one fault and one clean run is proven"
-        );
-        assert_eq!(pool.advice, "promote");
-        let api = report.rules.iter().find(|r| r.id == "gke-api-off").unwrap();
-        assert_eq!(api.earned, Level::Probe, "a miss, and no clean run");
-        assert_eq!(api.advice, "");
-        let gpu = report.rules.iter().find(|r| r.id == "gke-no-gpu").unwrap();
-        assert_eq!(
-            gpu.earned,
-            Level::Probe,
-            "the runs count, and no live run shows the fault: status source"
-        );
-        assert_eq!(report.disagreements, 1);
-        assert_eq!(report.exit_code(), 1);
-    }
-}
+mod tests;

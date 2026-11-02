@@ -153,6 +153,24 @@ After 0.25.0, the library of `strata-preflight` changes in these ways:
   value in these cases. One case panicked: a base or a `_patch` that is not an
   object, in a file with a key such as `_note`.
 
+After 0.26.0, the library of `strata-preflight` changes in these ways:
+
+- `confidence::promotion` takes a third argument, `release: Option<&str>`. Give
+  `None` to get the result of 0.26.0. With a release, it counts only the runs of
+  that release, and a rule that does not apply to the release has no entry.
+- `confidence::Ledger::counts_for` counts a run with no release for no release.
+  Release 0.26.0 counted such a run for each release. A run of an older release
+  is not in the counts either. The ids of these runs are in the new field
+  `confidence::Counts::older`.
+- `confidence::Counts` has the field `older: Vec<String>`, and
+  `confidence::Confidence` has the field `older_runs: u32`.
+  `confidence::PromotionReport` has the field `release: Option<String>`. A struct
+  literal must set each new field.
+- `confidence::Confidence::text` gives `no runs` when the counts hold no run. It
+  ends with `older runs <n>` when `older_runs` is not `0`.
+- A `report::CheckResult` has a `confidence` for a rule that has runs of older
+  releases only. It holds no run of the release, and its `older_runs` is not `0`.
+
 ## The documents
 
 Each JSON document has a schema id, such as `strata-snapshot/1`. The id changes
@@ -177,6 +195,12 @@ that the listing gives no type has the `type` `spectro`, where 0.21.0 wrote
 empty text. The schema now gives the field the pack types. A record of a
 cluster omits a label whose value is not text, where 0.21.0 kept it with
 empty text. The labels are outside the root, so no root changes.
+
+After 0.26.0, two documents have new fields, and both keep their ids.
+`confidence` of a check in `strata-preflight/1` has `olderRuns`, the number of runs
+of older releases that the counts omit. `strata-preflight-promotion/1` has
+`release`, and `olderRuns` in each entry of `confidence`. `olderRuns` is `0` when
+the run names no `--release`. A reader that ignores unknown fields reads both.
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
@@ -590,6 +614,31 @@ gave `usage`, and the exit code `2` stays. The message is
 `strata-preflight` also finds the uid of `PALETTE_PROJECT` as `strata` does. It
 warns when `PALETTE_PROJECT_UID` is set and the two name two projects. A quiet
 run does neither.
+
+After 0.26.0, `strata-preflight` counts only the runs of the release that you
+name with `--release`. This changes the level of a rule on that release:
+
+- `strata-preflight --promotion --release 4.11` counts the runs of `4.11` alone.
+  A rule that no run proved on `4.11` is a probe. When the rule file says
+  `level: preflight`, the advice is `demote`, and the exit code is `1`. After a
+  run on `4.11` is in the ledger, the rule is a preflight check again.
+- A run with no release counts for no release. Release 0.26.0 counted it for each
+  release. The ledger of the lab has no release in its runs, so with `--release`
+  the lab proves no rule. The rule `gke-no-release-channel` is `demote` for each
+  release until the ledger holds a run of the lab with a release.
+- The report of a check shows the same counts. A rule with runs of older releases
+  only shows `no runs, older runs <n>`. Release 0.26.0 showed the counts of those
+  runs.
+- A rule whose `releases` range does not include the release has no entry in the
+  promotion report.
+- With no `--release`, each run counts, as in 0.26.0. The level that a rule file
+  states, the exit code of a check, and `--strict` do not change.
+
+Do these steps in a gate of CI. Write the Palette release in `release:` of each
+run that you add to a ledger of your own. Add `--release` to `--promotion`, and
+run it after each upgrade of Palette. [The runs of one
+release](../commands/preflight/promotion.md#the-runs-of-one-release) shows the
+steps.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later

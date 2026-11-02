@@ -249,6 +249,80 @@ fn preflight_report(r: &mut Runner) {
         false,
         "strata preflight --promotion | tail -n 2",
     );
+    // The runs of the lab have no release, so a named release counts none of them (#392).
+    r.step(
+        "preflight-promotion-release",
+        1,
+        false,
+        "strata preflight --promotion --release 4.10 | grep -E '^(rule  |gke-no-release-channel)'",
+    );
+    preflight_promotion_upgrade(r);
+}
+
+/// The rule of a company that a run on 4.11 promoted.
+const LANDING_ZONE: &str = r#"section: landing-zone
+title: The landing zone
+rules:
+  - id: example-region
+    title: The cluster is in an allowed region
+    engines: [aws]
+    tier: static
+    level: preflight
+    promotion:
+      runs: ["20261001T090000Z"]
+    status: seen
+    what: The landing zone holds us-east-2 and eu-west-1.
+    check:
+      kind: static
+      expr: |
+        .entity.spec.cloudConfig.region as $r
+        | if (["us-east-2", "eu-west-1"] | index($r)) != null then []
+          else ["region \($r) is not in the landing zone"] end
+"#;
+
+/// A ledger of one run of the rule `example-region`: the run made the fault, and a clean run
+/// passed. `run` is the run id, and `release` is the Palette release of the run.
+fn landing_zone_run(run: &str, release: &str) -> String {
+    format!(
+        "schema: strata-preflight-ledger/1\nruns:\n  - run: {run}\n    engine: aws\n    release: \"{release}\"\n    results:\n      - {{rule: example-region, result: caught}}\n      - {{rule: example-region, result: passed}}\n"
+    )
+}
+
+/// The part of the chapter `preflight` for the level of a rule after a Palette upgrade (#392).
+fn preflight_promotion_upgrade(r: &mut Runner) {
+    r.write_file("landing-zone.yaml", LANDING_ZONE);
+    r.write_file(
+        "runs-4-11.yaml",
+        &landing_zone_run("20261001T090000Z", "4.11.0"),
+    );
+    r.write_file(
+        "runs-4-12.yaml",
+        &landing_zone_run("20261101T090000Z", "4.12.0"),
+    );
+    let promotion = |release: &str, ledgers: &str| {
+        format!(
+            "strata preflight --promotion --release {release} --probes landing-zone.yaml {ledgers} | grep -E '^(rule  |example-region)'"
+        )
+    };
+    // the runs are of 4.11 alone: the rule is a preflight check on 4.11 and a probe on 4.12
+    r.step(
+        "preflight-promotion-upgrade",
+        0,
+        false,
+        &promotion("4.11", "--ledger runs-4-11.yaml"),
+    );
+    r.step(
+        "preflight-promotion-upgrade",
+        1,
+        false,
+        &promotion("4.12", "--ledger runs-4-11.yaml"),
+    );
+    r.step(
+        "preflight-promotion-run",
+        0,
+        false,
+        &promotion("4.12", "--ledger runs-4-11.yaml --ledger runs-4-12.yaml"),
+    );
 }
 
 /// The part of the chapter `preflight` for a rule over a list.
