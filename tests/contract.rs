@@ -54,6 +54,14 @@ fn document(facts: Vec<Value>, releases: Vec<Value>) -> Value {
 
 // ---- contract-report.sh ------------------------------------------------------------------------
 
+/// The files that a copy of the repository needs to run contract-report.sh: the script, the host
+/// layer that it reads from verify-report.sh, and the file that it sources.
+const REPORT_FILES: [&str; 3] = [
+    "examples/live/contract-report.sh",
+    "scripts/ci/verify-report.sh",
+    "examples/live/github.sh",
+];
+
 /// The stand-in `gh` and the files it reads, for contract-report.sh.
 struct Report {
     dir: tempfile::TempDir,
@@ -78,6 +86,11 @@ impl Report {
             .map(|(number, marker)| json!({"number": number, "title": "t", "body": format!("{marker}\nold")}))
             .collect();
         self.put("issues.json", &Value::Array(list).to_string());
+    }
+
+    /// Run the script with the stand-in `jq` `stand_in`: see [`JQ_STRICT_TRIM`].
+    fn use_jq(&self, stand_in: &str) {
+        executable(&self.dir.path().join("bin/jq"), stand_in);
     }
 
     /// The path of a contract document that holds `document`.
@@ -127,13 +140,11 @@ impl Report {
 
     /// The body that the call with this 1-based number was handed.
     fn body(&self, number: usize) -> String {
-        std::fs::read_to_string(self.dir.path().join(format!("body-{number}.md")))
-            .unwrap_or_else(|_| panic!("no body from call {number}"))
+        handed_in(self.dir.path(), "body", number)
     }
 
     fn comment(&self, number: usize) -> String {
-        std::fs::read_to_string(self.dir.path().join(format!("comment-{number}.md")))
-            .unwrap_or_else(|_| panic!("no comment from call {number}"))
+        handed_in(self.dir.path(), "comment", number)
     }
 }
 
@@ -465,6 +476,58 @@ fn contract_report_updates_the_issue_of_a_set_that_still_holds_a_new_value() {
 }
 
 #[test]
+fn contract_report_goes_on_when_an_open_issue_has_no_text_in_its_body() {
+    // GitHub gives `"body": null` for an issue that a person opens with no text. The second jq
+    // stops on a null in `rtrimstr`, as the jq of ubuntu-latest does.
+    for (jq, stand_in) in [
+        ("the jq of the machine", None),
+        ("the jq of ubuntu-latest", Some(JQ_STRICT_TRIM)),
+    ] {
+        let r = Report::new();
+        if let Some(stand_in) = stand_in {
+            r.use_jq(stand_in);
+        }
+        r.put(
+            "issues.json",
+            &json!([
+                {"number": 3, "title": "t", "body": null},
+                {"number": 4, "title": "t", "body": ""},
+                {"number": 7, "title": "t", "body": format!("{VALUES_MARKER}\nold")},
+                {"number": 9, "title": "t", "body": "<!-- strata-contract: values cluster-listing status.state -->\nold"},
+            ])
+            .to_string(),
+        );
+        let o = r.report(
+            &document(
+                vec![
+                    new_state("cluster-document", &["Hibernating"]),
+                    entry("cluster-listing", "same", json!([])),
+                ],
+                vec![],
+            ),
+            &[],
+        );
+        assert_eq!(o.status.code(), Some(1), "{jq}: {}", text(&o.stderr));
+        let calls = r.calls();
+        assert!(
+            calls.iter().any(|c| c.starts_with("issue edit 7 ")),
+            "{jq}: {calls:?}"
+        );
+        assert!(
+            calls.iter().any(|c| c.starts_with("issue close 9 ")),
+            "{jq}: {calls:?}"
+        );
+        assert!(
+            calls.iter().all(|c| !c.starts_with("issue close 3 ")
+                && !c.starts_with("issue close 4 ")
+                && !c.starts_with("issue edit 3 ")
+                && !c.starts_with("issue edit 4 ")),
+            "{jq}: an issue with no text is not touched: {calls:?}"
+        );
+    }
+}
+
+#[test]
 fn contract_report_closes_the_issue_of_a_set_that_holds_no_new_value_now() {
     let r = Report::new();
     r.open_issues(&[
@@ -772,6 +835,135 @@ fn contract_report_dry_run_says_when_the_project_is_unknown() {
     }
 }
 
+/// Run the function `call` of github.sh in the directory `cwd`, and give what it prints.
+fn github_sh(cwd: &Path, call: &str) -> String {
+    github_sh_on(cwd, call, &std::env::var("PATH").unwrap())
+}
+
+/// Run the function `call` of github.sh in the directory `cwd`, with the `PATH` `path`.
+fn github_sh_on(cwd: &Path, call: &str, path: &str) -> String {
+    let mut command = Command::new("bash");
+    command
+        .arg("-c")
+        .arg(format!(". {}; {call}", live_script("github.sh").display()))
+        .current_dir(cwd)
+        .env("PATH", path);
+    let o = isolate_git(&mut command).output_locked().unwrap();
+    assert!(o.status.success(), "{call}: {}", text(&o.stderr));
+    text(&o.stdout)
+}
+
+#[test]
+fn remote_repo_gives_the_project_of_each_form_of_a_github_remote_and_nothing_for_another_host() {
+    // upstream.sh and contract-report.sh read the remote with this function, so they agree
+    for (url, project) in [
+        (
+            "git@github.com:como-technologies/strata.git",
+            "como-technologies/strata",
+        ),
+        (
+            "https://github.com/como-technologies/strata.git",
+            "como-technologies/strata",
+        ),
+        (
+            "ssh://git@github.com/como-technologies/strata.git",
+            "como-technologies/strata",
+        ),
+        (
+            "https://brett@github.com/como-technologies/strata",
+            "como-technologies/strata",
+        ),
+        ("https://gitlab.com/o/r.git", ""),
+    ] {
+        let dir = checkout(Some(url));
+        assert_eq!(
+            github_sh(dir.path(), "remote_repo"),
+            if project.is_empty() {
+                String::new()
+            } else {
+                format!("{project}\n")
+            },
+            "{url}"
+        );
+    }
+    assert_eq!(github_sh(checkout(None).path(), "remote_repo"), "");
+}
+
+#[test]
+fn remote_repo_reads_the_checkout_that_it_is_given_and_not_the_current_directory() {
+    let named = checkout(Some("git@github.com:acme/strata.git"));
+    let here = checkout(Some("git@github.com:other/fork.git"));
+    assert_eq!(
+        github_sh(
+            here.path(),
+            &format!("remote_repo {}", named.path().display())
+        ),
+        "acme/strata\n"
+    );
+    assert_eq!(github_sh(here.path(), "remote_repo"), "other/fork\n");
+}
+
+#[test]
+fn the_first_line_of_a_body_ends_before_the_return_and_a_body_with_no_text_has_an_empty_one() {
+    let issues = json!([
+        {"number": 1, "body": "<!-- marker -->\r\nrest of the body"},
+        {"number": 2, "body": "<!-- marker -->"},
+        {"number": 3, "body": null},
+        {"number": 4, "body": ""},
+    ]);
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("issues.json"), issues.to_string()).unwrap();
+    // the jq of ubuntu-latest stops on a null in `rtrimstr`: the line is never null
+    let bin = fake_bin(dir.path(), &[("jq", JQ_STRICT_TRIM)]);
+    for (jq, path) in [
+        ("the jq of the machine", std::env::var("PATH").unwrap()),
+        ("the jq of ubuntu-latest", path_with(&bin)),
+    ] {
+        let lines = github_sh_on(
+            dir.path(),
+            "jq -c \"$first_line_jq\"'[.[] | first_line]' issues.json",
+            &path,
+        );
+        assert_eq!(
+            lines.trim(),
+            r#"["<!-- marker -->","<!-- marker -->","",""]"#,
+            "{jq}"
+        );
+    }
+}
+
+#[test]
+fn the_live_scripts_read_the_remote_and_the_first_line_of_a_body_in_github_sh_alone() {
+    // a script that parses them again can disagree with the others, as the two sed programs did
+    let mut checked = 0;
+    for file in std::fs::read_dir(live_script("")).unwrap() {
+        let path = file.unwrap().path();
+        if path.extension().is_none_or(|e| e != "sh") || path.ends_with("github.sh") {
+            continue;
+        }
+        let script = std::fs::read_to_string(&path).unwrap();
+        for (copy, what) in [
+            ("remote get-url", "reads the remote"),
+            (r#"split("\n")[0]"#, "reads the first line of a body"),
+        ] {
+            assert!(
+                !script.contains(copy),
+                "{} {what} again: use github.sh",
+                path.display()
+            );
+        }
+        checked += 1;
+    }
+    assert!(checked > 20, "the scan found {checked} scripts");
+    for name in ["contract-report.sh", "upstream.sh"] {
+        let script = repo_file(&format!("examples/live/{name}"));
+        assert!(
+            script.contains("github.sh") && script.contains("remote_repo"),
+            "{name} reads the remote with github.sh"
+        );
+    }
+}
+
 #[test]
 fn contract_report_links_the_page_of_the_project_that_it_writes_to() {
     // with no option, the host names the project of the checkout, and the issue links that project
@@ -902,14 +1094,7 @@ fn contract_report_exits_2_when_a_host_call_fails_and_not_1() {
 fn contract_report_reads_the_host_layer_of_verify_report_and_stops_when_it_is_not_there() {
     // a copy of the repository with the two scripts, and a verify-report.sh with no host layer
     let tree = tempfile::tempdir().unwrap();
-    for file in [
-        "examples/live/contract-report.sh",
-        "scripts/ci/verify-report.sh",
-    ] {
-        let to = tree.path().join(file);
-        std::fs::create_dir_all(to.parent().unwrap()).unwrap();
-        std::fs::copy(Path::new(env!("CARGO_MANIFEST_DIR")).join(file), &to).unwrap();
-    }
+    copy_scripts(tree.path(), &REPORT_FILES);
     let copy = |dir: &Path| {
         Command::new("bash")
             .arg(dir.join("examples/live/contract-report.sh"))
@@ -1575,14 +1760,7 @@ exit "${FAKE_REPORT_EXIT:-0}"
     /// holds v1, and keeps v2 in the state.
     fn with_the_real_report(&self) {
         let tree = self.dir.path().join("repo");
-        for file in [
-            "examples/live/contract-report.sh",
-            "scripts/ci/verify-report.sh",
-        ] {
-            let to = tree.join(file);
-            std::fs::create_dir_all(to.parent().unwrap()).unwrap();
-            executable(&to, &repo_file(file));
-        }
+        copy_scripts(&tree, &REPORT_FILES);
         executable(
             &tree.join("examples/live/contract.sh"),
             r#"#!/usr/bin/env bash

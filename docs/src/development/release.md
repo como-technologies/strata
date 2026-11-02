@@ -16,6 +16,17 @@
    reason, because each one says which build produced it. It refuses when a file
    it must rewrite already holds uncommitted changes, so the commit is the
    version and nothing else.
+
+   Some outputs of the book print the version of strata, such as the column
+   `strata` of `strata report`. The recipe builds the new version, runs
+   `just docs-examples`, and adds the outputs that change to the commit. So
+   `just docs-check` passes on the release commit without a manual step. The
+   step needs `jq`.
+
+   The recipe commits nothing when an output that does not name the old version
+   changes. The book was not current before the release in that case. Restore
+   the files that the recipe rewrote. Run `just docs-examples` and commit the
+   outputs. Then run the recipe again.
 2. Tag the commit:
 
    ```bash

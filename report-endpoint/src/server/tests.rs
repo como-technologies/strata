@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
+use strata::closed_set::unknown::report::SCHEMA;
 
 use super::*;
 use crate::limit::MOST_SENDERS;
@@ -16,7 +17,7 @@ fn entry(value: &str) -> Value {
 }
 
 fn body(entries: &[Value]) -> Vec<u8> {
-    json!({"schema": "strata-report/1", "unknown": entries})
+    json!({"schema": SCHEMA, "unknown": entries})
         .to_string()
         .into_bytes()
 }
