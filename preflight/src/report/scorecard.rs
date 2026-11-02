@@ -101,7 +101,7 @@ pub(crate) fn bound_text(bound: Option<f64>) -> String {
     bound.map_or_else(|| NO_RUNS.to_string(), percent)
 }
 
-/// `N check(s) did not run: reason (count); reason (count)`.
+/// `N checks did not run: reason (count); reason (count)`.
 pub(crate) fn not_run_text(reasons: &BTreeMap<String, u32>) -> String {
     let n: u32 = reasons.values().sum();
     let why: Vec<String> = reasons.iter().map(|(r, c)| format!("{r} ({c})")).collect();
