@@ -714,6 +714,27 @@ fn the_default_quota_of_the_managed_policies_for_a_role_is_20_and_the_run_finds_
     );
 }
 
+/// `gcloud` omits the key `secondaryIpRanges` for a subnet that has no secondary range (#550).
+/// The fixtures of the rule show a subnet with the key and a subnet without it, so an answer that
+/// lacks the key is no difference.
+#[test]
+fn a_subnet_with_no_secondary_range_is_no_difference_when_gcloud_omits_the_key() {
+    let facts = facts::load(&repo()).unwrap();
+    let rules = facts::cloud_rules().unwrap();
+    let subnets = facts.iter().find(|f| f.id == "gcp-subnets").unwrap();
+    let backend = fixtures_backend(&facts, &rules, |fact, mut document| {
+        if fact.id == subnets.id {
+            for subnet in document.as_array_mut().unwrap() {
+                subnet.as_object_mut().unwrap().remove("secondaryIpRanges");
+            }
+        }
+        document
+    });
+    let entry = run(std::slice::from_ref(subnets), &rules, &backend, &full_lab()).remove(0);
+    assert_eq!(entry.outcome, Outcome::Same, "{:?}", entry.differences);
+    assert!(entry.differences.is_empty(), "{:?}", entry.differences);
+}
+
 #[test]
 fn a_field_that_changes_in_one_answer_makes_the_fact_differ_and_no_other_fact() {
     let facts = facts::load(&repo()).unwrap();
