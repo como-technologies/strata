@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use regex::Regex;
 
 use crate::checks::OutputState;
+use crate::contract::StandIn;
 use crate::files::{files_with_ext, output_dir};
 use crate::tenant::{Edit, PROJECT_LISTING, TENANT, Tenant};
 
@@ -105,6 +106,9 @@ pub struct Runner {
     /// The route of each document that a tenant of the run held, kept when a chapter ends. The
     /// check of the facts reads it: a route that the stand-in serves needs a fact.
     routes: BTreeSet<String>,
+    /// The documents of each tenant of the run, kept when a chapter ends. The check of the facts
+    /// reads them: a field that a fact reads needs a document that holds it.
+    documents: StandIn,
     /// What each (project, uid, version) was seeded from, so two chapters cannot print two roots
     /// for one identity.
     seeded: BTreeMap<(String, String, String), (String, String)>,
@@ -178,6 +182,7 @@ impl Runner {
             states: BTreeSet::new(),
             chapters: BTreeMap::new(),
             routes: BTreeSet::new(),
+            documents: StandIn::default(),
             seeded: BTreeMap::new(),
             clock: Clock::new(),
             commit: Regex::new(r"(?m) in [0-9a-f]{7,40}$").expect("a pattern"),
@@ -227,8 +232,14 @@ impl Runner {
             .iter()
             .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
-        self.routes.extend(self.tenant.routes());
+        self.note_tenant();
         self.tenant.clear();
+    }
+
+    /// Keep the routes and the documents that the tenant holds now, for the check of the facts.
+    fn note_tenant(&mut self) {
+        self.routes.extend(self.tenant.routes());
+        self.documents.add_tenant(self.tenant.root());
     }
 
     /// A tenant helper ran, so the output of the next step needs a later seed.
@@ -545,8 +556,14 @@ impl Runner {
                 names.join(" ")
             ));
         }
-        self.routes.extend(self.tenant.routes());
-        let problems = crate::checks::check(&self.repo, &self.chapters, &self.states, &self.routes);
+        self.note_tenant();
+        let problems = crate::checks::check(
+            &self.repo,
+            &self.chapters,
+            &self.states,
+            &self.routes,
+            &self.documents,
+        );
         if !problems.is_empty() {
             for problem in &problems {
                 eprintln!("docs-examples: {problem}");

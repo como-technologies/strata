@@ -30,6 +30,13 @@ pub(super) const EDGE_HOSTS: &str = "v1/edgehosts";
 pub(super) const APP_PROFILES: &str = "v1/appProfiles";
 /// The pack registries of a scope, `GET /v1/registries/metadata`.
 pub(super) const REGISTRY_LISTING: &str = "v1/registries/metadata";
+/// The cluster listing, `GET /v1/dashboard/spectroclusters/meta`.
+pub(crate) const CLUSTER_LISTING: &str = "v1/dashboard/spectroclusters/meta";
+
+/// The last sync of each registry of the kind `kind`, `GET /v1/registries/{kind}/summary`.
+pub(crate) fn registry_summary_route(kind: &str) -> String {
+    format!("v1/registries/{kind}/summary")
+}
 
 /// The file of a listing or a search that strata reads by pages: `path` with the page of
 /// strata.
@@ -40,7 +47,7 @@ pub(super) fn paged(path: &str) -> String {
 }
 
 /// The document of the profile version `uid`, `GET /v1/clusterprofiles/{uid}`.
-pub(super) fn profile_route(uid: &str) -> String {
+pub(crate) fn profile_route(uid: &str) -> String {
     format!("{PROFILES}/{uid}")
 }
 
@@ -50,7 +57,7 @@ pub(super) fn manifests_route(uid: &str) -> String {
 }
 
 /// The variables of the profile version `uid`, `GET /v1/clusterprofiles/{uid}/variables`.
-pub(super) fn variables_route(uid: &str) -> String {
+pub(crate) fn variables_route(uid: &str) -> String {
     format!("{}/variables", profile_route(uid))
 }
 
@@ -91,7 +98,7 @@ pub(super) fn notifications_route(uid: &str) -> String {
 }
 
 /// The document of the cluster group `uid`, `GET /v1/clustergroups/{uid}`.
-pub(super) fn group_route(uid: &str) -> String {
+pub(crate) fn group_route(uid: &str) -> String {
     format!("{GROUPS}/{uid}")
 }
 
@@ -102,8 +109,19 @@ pub(super) fn virtual_clusters_file(uid: &str) -> String {
 }
 
 /// The document of the app profile `uid`, `GET /v1/appProfiles/{uid}`.
-pub(super) fn app_profile_route(uid: &str) -> String {
+pub(crate) fn app_profile_route(uid: &str) -> String {
     format!("{APP_PROFILES}/{uid}")
+}
+
+/// The tiers of the app profile `uid`, `GET /v1/appProfiles/{uid}/tiers`.
+pub(crate) fn app_tiers_route(uid: &str) -> String {
+    format!("{}/tiers", app_profile_route(uid))
+}
+
+/// The manifest `manifest` of the tier `tier` of the app profile `uid`,
+/// `GET /v1/appProfiles/{uid}/tiers/{tier}/manifests/{manifest}`.
+pub(crate) fn app_tier_manifest_route(uid: &str, tier: &str, manifest: &str) -> String {
+    format!("{}/{tier}/manifests/{manifest}", app_tiers_route(uid))
 }
 
 /// The macros of the project `project`, `GET /v1/projects/{project}/macros`.
@@ -134,7 +152,7 @@ pub fn exported_profile(path: &str) -> Option<&str> {
 
 /// The versions of the pack `name` in each registry, as the server names the file of
 /// `GET /v1/packs?filters=spec.name={name}&limit=100&offset=0`: the first page of the listing.
-pub(super) fn pack_listing(name: &str) -> String {
+pub(crate) fn pack_listing(name: &str) -> String {
     format!("v1/packs@filters=spec.name={name}&limit=100&offset=0")
 }
 

@@ -310,6 +310,7 @@ facts:
         - listmeta.continue
       values:
         items[].spec.actionType: [create, update, delete, activity, action]
+      names:
         items[].spec.resource.kind: [clusterprofile, appprofile, spectrocluster, edgehost, clustergroup]
     stand_in:
       - v1/audits

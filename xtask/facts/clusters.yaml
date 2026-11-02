@@ -251,6 +251,23 @@ facts:
     rules:
       - account-missing
 
+  - id: cloud-account-listing
+    kind: request
+    request: GET /v1/cloudaccounts/aws
+    reads:
+      fields:
+        - items[].metadata.uid
+    stand_in:
+      - v1/cloudaccounts/aws
+    live: []
+    unchecked: Only the contract run sends it, to find the account for the query of the regions route. The run reports an error when the route fails.
+    pages:
+      - reference/palette-api.md#other-reads
+      - development/facts.md#the-weekly-contract-run
+    code:
+      - xtask/src/contract/subject.rs
+    rules: []
+
   - id: cluster-repave-status
     kind: request
     request: GET /v1/spectroclusters/{uid}/repave/status
@@ -324,7 +341,7 @@ facts:
       fields:
         - schema.properties[].name
         - schema.properties[].type
-      values:
+      names:
         schema.properties[].name: [tags, clusterProfiles, environment]
     stand_in:
       - v1/dashboard/spectroclusters/search/schema
@@ -372,7 +389,7 @@ facts:
 
   - id: tag-filter-listing
     kind: request
-    request: GET /v1/filters/metadata
+    request: GET /v1/filters/metadata?filterType=tag
     reads:
       fields:
         - items[].metadata.name

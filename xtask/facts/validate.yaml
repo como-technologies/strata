@@ -806,14 +806,14 @@ facts:
 
   - id: validate-aws-regions
     kind: request
-    request: "GET /v1/clouds/aws/regions"
+    request: "GET /v1/clouds/aws/regions?cloudAccountUid={cloudAccountUid}"
     reads:
       fields:
         - regions[].name
     stand_in:
       - v1/clouds/aws/regions
     live: []
-    unchecked: No run shows the answer of this route.
+    unchecked: No script of the live example shows the answer of this route. The contract run asks it each week.
     pages:
       - internals/palette/validate-routes.md#the-list-routes
     code: []

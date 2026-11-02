@@ -32,6 +32,8 @@ pub enum DifferenceKind {
     Type,
     /// A field that each document of the stand-in has is missing from each answer.
     Missing,
+    /// A name that strata needs is not in the answer, and the answer has a value at its field.
+    Name,
     /// The answer of a cloud does not list a value of a table that a rule holds.
     Table,
 }
@@ -43,9 +45,10 @@ pub struct Difference {
     pub kind: DifferenceKind,
     /// The field, as the fact writes it, or `status` for a status.
     pub path: String,
-    /// What the stand-in has: the types, or the status.
+    /// What the stand-in has: the types, or the status. For a name, the names that strata needs
+    /// and that the answer lacks.
     pub expected: Vec<String>,
-    /// What the tenant has, in the same form.
+    /// What the tenant has, in the same form. For a name, the names that the answer has.
     pub found: Vec<String>,
 }
 

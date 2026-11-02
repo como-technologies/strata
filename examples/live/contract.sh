@@ -59,7 +59,7 @@ if command -v jq > /dev/null && [ -s "$run/contract.json" ]; then
   jq -r '
     (.facts[] | select(.outcome == "differs") | (if .kind == "cloud" then ["the fixtures have", "the cloud has"] else ["the stand-in has", "the tenant has"] end) as $who
       | "differs: \(.id)",
-      (.differences[] | "  \(.kind) \(.path): \($who[0]) \(.expected | join(", ")); \($who[1]) \(.found | join(", "))")),
+      (.differences[] | if .kind == "name" then "  name \(.path): the answer lacks \(.expected | join(", ")); \($who[1]) \(.found | join(", "))" else "  \(.kind) \(.path): \($who[0]) \(.expected | join(", ")); \($who[1]) \(.found | join(", "))" end)),
     (.facts[] | .id as $id | .unknownValues[]? | "new value: \($id) \(.set): \(.values | join(", ")); the fact and the stand-in name \(.known | join(", "))"),
     (.facts[] | select(.outcome == "error") | "could not check: \(.id): \(.reason)"),
     (.releases[] | select(.new) | "new release: \(.repo) \(.tag), the last run saw \(.seen)"),

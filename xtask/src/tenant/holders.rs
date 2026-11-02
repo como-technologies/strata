@@ -7,8 +7,8 @@ use super::macros::Pinner;
 use super::profiles::template_of;
 use super::registries::PUBLIC_REPO;
 use super::routes::{
-    EDGE_HOSTS, app_profile_route, cluster_route, group_route, manifest_route, manifests_route,
-    paged, profile_route, virtual_clusters_file,
+    EDGE_HOSTS, app_profile_route, app_tier_manifest_route, app_tiers_route, cluster_route,
+    group_route, manifest_route, manifests_route, paged, profile_route, virtual_clusters_file,
 };
 use super::{TENANT, Tenant};
 
@@ -181,7 +181,7 @@ impl Tenant {
         );
         self.write(
             project,
-            &format!("{}/tiers", app_profile_route(uid)),
+            &app_tiers_route(uid),
             &json!({"spec": {"appTiers": [
                 web,
                 {"metadata": {"name": "config", "uid": format!("{uid}2")},
@@ -192,7 +192,7 @@ impl Tenant {
         );
         self.write(
             project,
-            &format!("{}/tiers/{uid}2/manifests/{uid}3", app_profile_route(uid)),
+            &app_tier_manifest_route(uid, &format!("{uid}2"), &format!("{uid}3")),
             &json!({"metadata": {"name": "config", "uid": format!("{uid}3")},
                 "spec": {"published": {
                     "content": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: shop\ndata:\n  mode: live\n"}}}),

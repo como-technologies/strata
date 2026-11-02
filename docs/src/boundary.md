@@ -134,10 +134,14 @@ and of each wave, checks them.
 
 ## A pipeline that publishes
 
-Strata publishes nothing. A pipeline that publishes has the other half of the
-work: it builds the packs, publishes the profile versions, fans a new version
-out to each repository that pins it, and applies the clusters. Strata is the
-check at each step of that pipeline:
+Strata publishes nothing, and it sends nothing about your tenants. One report can
+leave your machine, and only you can send it: see
+[What strata can report](./reference/report.md).
+
+A pipeline that publishes has the other half of the work: it builds the packs,
+publishes the profile versions, fans a new version out to each repository that
+pins it, and applies the clusters. Strata is the check at each step of that
+pipeline:
 
 | Step of the pipeline | The question | Strata |
 | --- | --- | --- |

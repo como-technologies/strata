@@ -1,9 +1,11 @@
 //! The subject of a request: the object of the tenant that the run asks about.
 //!
 //! A request of a fact has a placeholder for the object, such as `{uid}` in
-//! `GET /v1/spectroclusters/{uid}`. The tenant of the run is not the tenant of the stand-in. So the
-//! run finds an object in the tenant: the first entry of the answer of another fact. That answer
-//! is the listing of the objects, or the document of an object that holds the value.
+//! `GET /v1/spectroclusters/{uid}`, or `{cloudAccountUid}` in the query of
+//! `GET /v1/clouds/aws/regions?cloudAccountUid={cloudAccountUid}`. The tenant of the run is not the
+//! tenant of the stand-in. So the run finds an object in the tenant: the first entry of the answer
+//! of another fact. That answer is the listing of the objects, or the document of an object that
+//! holds the value.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -18,7 +20,8 @@ use crate::facts::Fact;
 
 /// Where the value of a placeholder comes from.
 pub(super) struct Source {
-    /// The start of the path that has the placeholder. With `param`, it names the placeholder.
+    /// The start of the path that has the placeholder, before the query. With `param`, it names the
+    /// placeholder.
     pub(super) prefix: &'static str,
     /// The name of the placeholder.
     pub(super) param: &'static str,
@@ -59,6 +62,12 @@ pub(super) const SOURCES: &[Source] = &[
         prefix: "/v1/filters/tag/",
         param: "uid",
         fact: "tag-filter-listing",
+        pointer: "/items/0/metadata/uid",
+    },
+    Source {
+        prefix: "/v1/clouds/aws/regions",
+        param: "cloudAccountUid",
+        fact: "cloud-account-listing",
         pointer: "/items/0/metadata/uid",
     },
     Source {
@@ -191,11 +200,12 @@ fn no_source(param: &str) -> String {
     format!("the run has no way to find a value for `{{{param}}}`")
 }
 
-/// The names of the placeholders of `template`.
+/// The names of the placeholders of `template`, in the path and in the query.
 fn placeholders(template: &str) -> impl Iterator<Item = &str> {
     template
-        .split('/')
-        .filter_map(|s| s.strip_prefix('{')?.strip_suffix('}'))
+        .split('{')
+        .skip(1)
+        .filter_map(|rest| Some(rest.split_once('}')?.0))
 }
 
 fn source(template: &str, param: &str) -> Option<&'static Source> {
@@ -214,18 +224,22 @@ fn fill<A: PaletteApi>(probe: &Probe<A>, facts: &[Fact], template: &str, depth: 
     if let Some(param) = unsourced(template).first() {
         return Subject::Missing(no_source(param));
     }
-    let mut segments = Vec::new();
-    for segment in template.split('/') {
-        let Some(param) = segment.strip_prefix('{').and_then(|s| s.strip_suffix('}')) else {
-            segments.push(segment.to_string());
-            continue;
+    let mut path = String::new();
+    let mut rest = template;
+    // a placeholder has no `{` or `}` inside, so each one ends at the next `}`
+    while let Some((before, after)) = rest.split_once('{') {
+        let Some((param, tail)) = after.split_once('}') else {
+            break;
         };
+        path.push_str(before);
         match value(probe, facts, template, param, depth) {
-            Ok(text) => segments.push(text),
+            Ok(text) => path.push_str(&text),
             Err(subject) => return subject,
         }
+        rest = tail;
     }
-    Subject::Path(segments.join("/"))
+    path.push_str(rest);
+    Subject::Path(path)
 }
 
 /// The value of the placeholder `param` of `template`, or why the run has none.

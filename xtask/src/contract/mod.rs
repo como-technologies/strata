@@ -6,9 +6,10 @@
 //!
 //! For each fact of the kind `request` that a read-only request can show, the run finds an object in
 //! the tenant and sends the request. It compares the answer with the documents that the stand-in
-//! serves for the fact. It compares the status and the type of each field that strata reads. It also
-//! lists each value of a closed set that neither the fact nor the stand-in names: strata does not
-//! know such a value. It compares shapes, and never the values of two tenants.
+//! serves for the fact. It compares the status and the type of each field that strata reads. It
+//! checks that the answer holds each name that strata needs from a set that Palette can extend. It
+//! also lists each value of a closed set that neither the fact nor the stand-in names: strata does
+//! not know such a value. It compares shapes, and never the values of two tenants.
 //!
 //! The result is the document `strata-contract/1`, with one entry for each fact. The run changes
 //! nothing in the tenant: it sends GET requests only. The [`cloud`] module adds the entry of each
@@ -36,7 +37,7 @@ mod tests;
 pub use command::{command, harvest_command};
 use document::{Contract, Difference, DifferenceKind, Entry, Outcome, SCHEMA, Summary, Unknown};
 use shape::{JsonType, Path};
-use stand_in::StandIn;
+pub use stand_in::StandIn;
 use subject::{Probe, Subject};
 
 /// Ask the tenant that `api` talks to the request of each fact in `facts` of the kind `request`,
@@ -92,8 +93,10 @@ fn check<A: PaletteApi>(
     if method != Method::Get {
         return skipped("the request sends a body: its live checks send it");
     }
-    if fact.reads.fields.is_empty() && fact.reads.values.is_empty() {
-        return skipped("the fact reads no field and no value: it reads the code of a refusal");
+    if !fact.reads.reads_a_document() {
+        return skipped(
+            "the fact reads no field, no value, and no name: it reads the code of a refusal",
+        );
     }
     let documents = stand_in.documents(&fact.stand_in);
     if documents.is_empty() {
@@ -136,13 +139,42 @@ fn check<A: PaletteApi>(
 }
 
 /// Each difference between the answer `found` of the tenant and the documents `expected` of the
-/// stand-in, for the fields that `fact` reads.
+/// stand-in, for the fields and the names that `fact` reads.
 fn compare(fact: &Fact, expected: &[&Value], found: &Value) -> Vec<Difference> {
     let mut differences = Vec::new();
     for field in &fact.reads.fields {
         let path = Path::parse(field);
         let wanted: BTreeSet<JsonType> = expected.iter().flat_map(|d| path.types(d)).collect();
         differences.extend(type_difference(field, &wanted, &path.types(found)));
+    }
+    differences.extend(missing_names(fact, found));
+    differences
+}
+
+/// The difference of each set of names of `fact` for which the answer `found` of the tenant lacks
+/// a name that strata needs.
+///
+/// Palette can add names to such a set, and strata ignores them. So an extra name is no
+/// difference. An answer with no value at the field has nothing to compare, as a list with no
+/// entry has no type to compare.
+fn missing_names(fact: &Fact, found: &Value) -> Vec<Difference> {
+    let mut differences = Vec::new();
+    for (field, names) in &fact.reads.names {
+        let present = Path::parse(field).texts(found);
+        let lacking: Vec<String> = names
+            .iter()
+            .filter(|name| !present.contains(*name))
+            .cloned()
+            .collect();
+        if present.is_empty() || lacking.is_empty() {
+            continue;
+        }
+        differences.push(Difference {
+            kind: DifferenceKind::Name,
+            path: field.clone(),
+            expected: lacking,
+            found: present.into_iter().collect(),
+        });
     }
     differences
 }

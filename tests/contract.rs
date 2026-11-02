@@ -88,10 +88,16 @@ impl Report {
     }
 
     fn run(&self, args: &[&str]) -> Output {
+        self.run_in(&std::env::current_dir().unwrap(), args)
+    }
+
+    /// Run the script in the directory `dir`, as the person does in a checkout.
+    fn run_in(&self, dir: &Path, args: &[&str]) -> Output {
         std::fs::write(self.dir.path().join("gh.log"), "").unwrap();
         Command::new("bash")
             .arg(live_script("contract-report.sh"))
             .args(args)
+            .current_dir(dir)
             .env("PATH", path_with(&self.dir.path().join("bin")))
             .env("FAKE_VERIFY", self.dir.path())
             .env_remove("GITHUB_REPOSITORY")
@@ -698,6 +704,124 @@ fn contract_report_dry_run_prints_each_body_and_calls_no_host() {
     );
 }
 
+/// The link to the page of the book that each body holds, for the repository `repo`.
+fn page_link(repo: &str) -> String {
+    format!(
+        "https://github.com/{repo}/blob/main/docs/src/development/facts.md#the-weekly-contract-run"
+    )
+}
+
+/// A directory that is a git checkout with the remote `origin` at `url`, or with no remote.
+fn checkout(url: Option<&str>) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    git(dir.path(), &["init", "-q", "-b", "main"]);
+    if let Some(url) = url {
+        git(dir.path(), &["remote", "add", "origin", url]);
+    }
+    dir
+}
+
+#[test]
+fn contract_report_dry_run_links_the_page_of_the_project_of_the_checkout_and_calls_no_host() {
+    for url in [
+        "https://github.com/acme/strata.git",
+        "git@github.com:acme/strata.git",
+        "ssh://git@github.com/acme/strata",
+        "https://user:token@github.com/acme/strata",
+    ] {
+        let r = Report::new();
+        let doc = r.document(&document(vec![differing("cluster-document")], vec![]));
+        let dir = checkout(Some(url));
+        let o = r.run_in(dir.path(), &[doc.to_str().unwrap(), "--dry-run"]);
+        assert_eq!(o.status.code(), Some(1), "{url}: {}", text(&o.stderr));
+        let out = text(&o.stdout);
+        assert!(out.contains(&page_link("acme/strata")), "{url}: {out}");
+        assert!(!out.contains("OWNER/REPO"), "{url}: {out}");
+        assert!(r.calls().is_empty(), "{url}: {:?}", r.calls());
+    }
+}
+
+#[test]
+fn contract_report_dry_run_names_the_project_of_the_option_before_the_checkout() {
+    let r = Report::new();
+    let doc = r.document(&document(vec![differing("cluster-document")], vec![]));
+    let dir = checkout(Some("https://github.com/acme/strata.git"));
+    let o = r.run_in(
+        dir.path(),
+        &[doc.to_str().unwrap(), "--dry-run", "--repo", "other/fork"],
+    );
+    assert!(text(&o.stdout).contains(&page_link("other/fork")));
+    assert!(!text(&o.stdout).contains("acme/strata"));
+}
+
+#[test]
+fn contract_report_dry_run_says_when_the_project_is_unknown() {
+    // a checkout with no remote, and a remote that is not on GitHub
+    for url in [None, Some("https://gitlab.example/acme/strata.git")] {
+        let r = Report::new();
+        let doc = r.document(&document(vec![differing("cluster-document")], vec![]));
+        let dir = checkout(url);
+        let o = r.run_in(dir.path(), &[doc.to_str().unwrap(), "--dry-run"]);
+        assert_eq!(o.status.code(), Some(1), "{url:?}: {}", text(&o.stderr));
+        assert!(text(&o.stdout).contains(&page_link("OWNER/REPO")));
+        assert!(
+            text(&o.stderr).contains("dry run: the project is unknown"),
+            "{url:?}: {}",
+            text(&o.stderr)
+        );
+    }
+}
+
+#[test]
+fn contract_report_links_the_page_of_the_project_that_it_writes_to() {
+    // with no option, the host names the project of the checkout, and the issue links that project
+    let r = Report::new();
+    let doc = r.document(&document(vec![differing("cluster-document")], vec![]));
+    let o = r.run(&[doc.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    assert!(r.call("issue list").contains("--repo o/r"));
+    let n = r
+        .calls()
+        .iter()
+        .position(|c| c.starts_with("issue create"))
+        .unwrap()
+        + 1;
+    assert!(r.body(n).contains(&page_link("o/r")), "{}", r.body(n));
+    assert!(!r.body(n).contains("OWNER/REPO"));
+}
+
+#[test]
+fn contract_report_names_a_name_that_strata_needs_and_the_answer_lacks() {
+    let r = Report::new();
+    let lacking = entry(
+        "cluster-search-schema",
+        "differs",
+        json!([{"kind": "name", "path": "schema.properties[].name",
+                "expected": ["environment"], "found": ["clusterName", "tags"]}]),
+    );
+    let o = r.report(&document(vec![lacking], vec![]), &[]);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stderr));
+    let n = r
+        .calls()
+        .iter()
+        .position(|c| c.starts_with("issue create"))
+        .unwrap()
+        + 1;
+    let body = r.body(n);
+    assert!(
+        body.contains("| Difference | Field | Expected | Found |"),
+        "{body}"
+    );
+    assert!(
+        body.contains("| name | `schema.properties[].name` | environment | clusterName, tags |"),
+        "{body}"
+    );
+    assert!(
+        body.contains("For a `name`, it is the names that strata needs and the answer lacks"),
+        "{body}"
+    );
+}
+
 #[test]
 fn contract_report_touches_no_issue_for_a_document_of_another_schema() {
     let r = Report::new();
@@ -1206,6 +1330,27 @@ fn contract_sh_names_each_unknown_value_with_the_values_that_the_fact_names() {
     assert!(
         text(&o.stderr).contains(
             "new value: cluster-document status.state: Hibernating, Quarantined; the fact and the stand-in name Provisioning, Running"
+        ),
+        "{}",
+        text(&o.stderr)
+    );
+}
+
+#[test]
+fn contract_sh_names_the_names_that_the_answer_lacks_and_not_as_a_stand_in_difference() {
+    let r = Run::new();
+    let lacking = entry(
+        "cluster-search-schema",
+        "differs",
+        json!([{"kind": "name", "path": "schema.properties[].name",
+                "expected": ["environment"], "found": ["clusterName", "tags"]}]),
+    );
+    let doc = document(vec![lacking], vec![]);
+    std::fs::write(r.dir.path().join("document.json"), doc.to_string()).unwrap();
+    let o = r.contract(&[], "1");
+    assert!(
+        text(&o.stderr).contains(
+            "  name schema.properties[].name: the answer lacks environment; the tenant has clusterName, tags"
         ),
         "{}",
         text(&o.stderr)

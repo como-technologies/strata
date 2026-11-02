@@ -3,6 +3,7 @@
 use serde::Serialize;
 
 use super::Renderer;
+use crate::closed_set::unknown::Report;
 use crate::diff::Diff;
 use crate::error::Result;
 use crate::ops::{Chain, ConsumersReport, Listing, PackListing, VerifySummary};
@@ -58,6 +59,10 @@ impl Renderer for JsonRenderer {
     }
 
     fn render_set(&self, r: &crate::ops::SetReport) -> Result<String> {
+        self.document(r)
+    }
+
+    fn render_report(&self, r: &Report) -> Result<String> {
         self.document(r)
     }
 }

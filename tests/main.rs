@@ -22,6 +22,7 @@ mod fuzz;
 mod live_scripts;
 mod masked;
 mod presets;
+mod report;
 mod spawn;
 mod unknown;
 mod unsynced;

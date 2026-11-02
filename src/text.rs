@@ -123,6 +123,22 @@ pub fn markdown_cell(s: &str) -> String {
     s.replace('|', "\\|").replace('\n', " ")
 }
 
+/// `text` as a value in a query string: each byte that is not a letter, a digit, or one of
+/// `-._~:` becomes `%XX`, so a time with `+00:00` keeps its `+`.
+///
+/// A route of Palette and the link to a new issue of strata build their queries here.
+pub(crate) fn query_value(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for b in text.bytes() {
+        if b.is_ascii_alphanumeric() || b"-._~:".contains(&b) {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

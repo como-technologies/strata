@@ -14,7 +14,8 @@ Each release has the tag `v<version>`. The crate builds with Rust 1.88 or later.
 The crate is not on crates.io, so a dependency names the tag: see
 [The library](../automation/library.md#add-the-dependency).
 
-Three sections list the changes that need action:
+Four sections list the changes that need action:
+[Release 0.27.0](#release-0270-changes-that-need-action),
 [Release 0.26.0](#release-0260-changes-that-need-action),
 [Release 0.25.0](#release-0250-changes-that-need-action), and
 [Release 0.24.0](#release-0240-changes-that-need-action). They cover the command
@@ -527,6 +528,10 @@ The log needs no network. It stays on the machine, and no command sends it. A li
 fields of [`strata-unknown/1`](./documents.md#strata-unknown1). It holds no name, no uid, no host,
 no free text, and no value of a pack.
 
+[`strata report`](../commands/report.md) reads the log and prints a report that you can read and
+send. In a terminal, the note can end with a hint to run it. The hint shows one time in a day at
+most. See [What strata can report](./report.md).
+
 The maintainers of strata find such values in a real tenant too, with the weekly contract run. See
 [What to do with a new value](../development/facts.md#what-to-do-with-a-new-value).
 
@@ -777,6 +782,28 @@ field that it does not know. `scripts/ci/merge-gate.sh` reads `versionMove`, and
 it does not sort the versions as text now. A move between a version and its
 pre-release gives the other verdict: see
 [Release 0.26.0](#release-0260-changes-that-need-action).
+
+## Release 0.27.0: changes that need action
+
+Release 0.27.0 is a minor release, so it can change the API of the library. This
+section lists each change that can break code that uses a library. A change that
+only adds a field, a value, an input, or an option is in the sections above.
+
+### For a user of the library of strata
+
+- `render::Renderer` has the new required method `render_report`. It renders
+  the values that `strata report` shows, a `closed_set::unknown::Report`. Code
+  outside the crate with an `impl Renderer` does not build until it has the
+  method. Add `fn render_report(&self, r: &Report) -> Result<String>` to each
+  such `impl`. To keep the output of strata, call `render_report` of
+  `TerminalRenderer`, `MarkdownRenderer`, or `JsonRenderer`. A program that only
+  calls a renderer does not change.
+- `error::Error` has the new variant `LogInvalid`, with the fields `path`,
+  `line`, and `message`. `ops::unknown_report` gives it for a line of the log of
+  the unknown values that is not a line of `strata-unknown/1`. `Error` is not
+  `#[non_exhaustive]`, so a `match` on `Error` with no wildcard arm does not
+  build. Add a `_` arm, or name `Error::LogInvalid { .. }`. `Error::kind` gives
+  `log-invalid` for it, and `Error::to_json` gives the same kind.
 
 ## Release 0.26.0: changes that need action
 

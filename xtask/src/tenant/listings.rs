@@ -6,8 +6,8 @@ use std::path::Path;
 use serde_json::{Map, Value, json};
 
 use super::routes::{
-    CLUSTER_SEARCH_PATH, CLUSTERS, GROUPS, PROFILE_SEARCH_PATH, PROFILES, PROJECT_LISTING,
-    cluster_route, paged, profile_route, virtual_clusters_file,
+    CLUSTER_LISTING, CLUSTER_SEARCH_PATH, CLUSTERS, GROUPS, PROFILE_SEARCH_PATH, PROFILES,
+    PROJECT_LISTING, cluster_route, paged, profile_route, virtual_clusters_file,
 };
 use super::{TENANT, Tenant};
 use crate::files::files_with_ext;
@@ -216,7 +216,7 @@ impl Tenant {
             .filter(|c| !nested(c))
             .map(cluster_row)
             .collect();
-        self.write(scope, "v1/dashboard/spectroclusters/meta", &json!(rows));
+        self.write(scope, CLUSTER_LISTING, &json!(rows));
     }
 
     /// The cluster search of one scope, with `rows` as its clusters, and the schema of the search.

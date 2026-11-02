@@ -54,7 +54,8 @@ flowchart TB
 ```
 
 Strata publishes nothing, and it deletes nothing. The pipeline of the team does
-each write, and it decides what to do with each answer.
+each write, and it decides what to do with each answer. Strata sends nothing about
+your tenants either. See [What strata can report](./reference/report.md).
 
 ## The jobs and their commands
 
@@ -346,6 +347,11 @@ job also writes one note on standard error:
 A job that passes `--quiet` hides the note. The note also adds one line to a log on the machine of
 the job. [The note for a value that Palette gives](./reference/compatibility.md#the-note-for-a-value-that-palette-gives)
 says what the note and the log hold.
+
+A person who sees the note can run `strata report` on that machine. It prints the values of the
+log, and a link that opens a new issue of strata with them. Strata sends nothing: you read the
+report, and you decide whether to send it. See
+[Palette gives a value that strata does not know](./use-cases/unknown-value.md).
 
 ## Palette behavior
 

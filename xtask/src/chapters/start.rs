@@ -24,6 +24,7 @@ fn help(r: &mut Runner) {
         "verify",
         "consumers",
         "behind",
+        "report",
         "schema",
         "preflight",
     ] {

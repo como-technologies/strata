@@ -28,6 +28,7 @@ schema states the shape of each open field: see
 | `strata-packs/1` | `packs --json` | `packs` |
 | `strata-behind/1` | `behind --json` | `behind` |
 | `strata-set/1` | `snapshot --dir --json` for a `tag:` or `filter:` set | `set` |
+| `strata-report/1` | `report --json` | `report` |
 | `strata-preflight/1` | `preflight --json` | `preflight --schema report` |
 | `strata-preflight-rules/1` | `preflight --rules --json` | `preflight --schema rules` (one section) |
 | `strata-preflight-ledger/1` | the ledger of runs | `preflight --schema ledger` |
@@ -676,6 +677,23 @@ The report of `snapshot tag:<key>=<value> --dir DIR` or
   - `root`: the root of the record that strata wrote. `error`, in place of
     `root`: why strata could not record the cluster. See [Errors](./errors.md).
 - `removed[]`: with `--prune`, each record file that strata removed.
+
+## strata-report/1
+
+The report of `strata report`: the values that Palette gave and that this release of strata does
+not know. See [strata report](../commands/report.md) and
+[What strata can report](./report.md).
+
+- `schema`: `strata-report/1`.
+- `unknown[]`: one entry for each different line of the log, in the order of `set`, `value`, and
+  `route`. An entry has the fields of [`strata-unknown/1`](#strata-unknown1) except `schema`, and
+  the field `count`.
+  - `strata`, `palette`, `set`, `value`, `route`, `status`, and `errorCode`: as in the line of the
+    log. `palette`, `status`, and `errorCode` are absent when the line has none.
+  - `count`: how many lines of the log are this entry.
+
+The report has no `tool` block and no time, because the log has none. A log with no line gives
+`unknown: []`. An entry holds no name, no uid, no host, no free text, and no value of a pack.
 
 
 ## strata-preflight/1

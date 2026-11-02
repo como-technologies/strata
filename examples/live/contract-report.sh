@@ -118,6 +118,14 @@ use_label() {
   fi
 }
 
+# remote_repo -> OWNER/REPO of the origin remote of the checkout in the current directory, when the
+# remote is on GitHub, or nothing. It reads a local file, so a dry run still calls no host.
+remote_repo() {
+  git remote get-url origin 2> /dev/null \
+    | sed -nE 's#^(https?|ssh|git)://([^/@]+@)?github\.com/([^/]+/[^/]+)$#\3#p; s#^[^/@:]+@github\.com:([^/]+/[^/]+)$#\1#p' \
+    | sed -E 's#\.git$##' || true
+}
+
 if [ -z "$dry" ]; then
   [ -n "$repo" ] || repo=$(host repo)
   [ -n "$repo" ] || die "could not determine the project; pass --repo"
@@ -130,6 +138,10 @@ if [ -z "$dry" ]; then
     jq -s 'add' "$work/issues.json" "$work/cloud-issues.json" > "$work/all-issues.json"
     mv "$work/all-issues.json" "$work/issues.json"
   fi
+else
+  # a dry run asks no host, so the links name the project of the checkout
+  [ -n "$repo" ] || repo=$(remote_repo)
+  [ -n "$repo" ] || note "dry run: the project is unknown, so the links name OWNER/REPO; pass --repo"
 fi
 
 page="https://github.com/${repo:-OWNER/REPO}/blob/main/docs/src/development/facts.md#the-weekly-contract-run"
@@ -230,9 +242,11 @@ palette_body() {
   jq -r --arg checked "$checked" --arg target "$target" --arg page "$page" '
     "The contract run of \($checked) found that the tenant `\($target)` answers `\(.request)` in another way than the stand-in.",
     "",
-    "| Difference | Field | The stand-in has | The tenant has |",
+    "| Difference | Field | Expected | Found |",
     "| --- | --- | --- | --- |",
     (.differences[] | "| \(.kind) | `\(.path)` | \(.expected | join(", ")) | \(.found | join(", ")) |"),
+    "",
+    "Expected is what the stand-in has. For a `name`, it is the names that strata needs and the answer lacks. Found is what the tenant has.",
     "",
     "Prove the fact again with its live checks: \(if (.live | length) > 0 then (.live | map("`\(.)`") | join(", ")) else "the fact has none" end).",
     "The pages of the book that state the fact: \(.pages | map("`docs/src/\(.)`") | join(", ")).",

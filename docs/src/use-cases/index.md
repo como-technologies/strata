@@ -155,6 +155,13 @@ and a whole team.
   end: check the body of the create, build it, watch it stand up, check a
   change, remove it; or a customer asks how ready an estate is to start.
 
+**9. When strata is out of date.** Palette changes between two releases of strata, and a
+maintainer cannot see your tenant.
+
+- [Palette gives a value that strata does not know](./unknown-value.md): a job writes a note that
+  Palette gave a value of a closed set which this release does not name, and you decide whether to
+  tell the maintainers.
+
 ## The examples
 
 The pages use one team and one profile, `aws-stack`, with real pack data from the

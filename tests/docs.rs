@@ -1757,10 +1757,6 @@ fn compatibility_has_a_section_for_release_0_26_0_above_release_0_25_0_and_links
     assert!(newer < older, "release 0.26.0 comes above release 0.25.0");
 
     let opening = &page[..page.find("\n## The documents").unwrap()];
-    assert!(
-        one_line(opening).contains("Three sections list the changes that need action"),
-        "the opening does not name three sections"
-    );
     for anchor in [
         "(#release-0260-changes-that-need-action)",
         "(#release-0250-changes-that-need-action)",
@@ -2030,5 +2026,134 @@ fn rule_7_says_to_read_the_code_of_palette_first_and_still_bars_a_citation() {
             let found = text.to_lowercase().contains(&needle.to_lowercase());
             assert!(found, "{name}: rule 7 lacks {needle:?}");
         }
+    }
+}
+
+// ---- the report of the unknown values ---------------------------------------------------------
+
+/// The pages that describe `strata report`.
+const REPORT_PAGES: [&str; 3] = [
+    "reference/report.md",
+    "commands/report.md",
+    "use-cases/unknown-value.md",
+];
+
+/// `text` without the code spans: the text between two backticks.
+fn without_code(text: &str) -> String {
+    text.split('`')
+        .enumerate()
+        .filter(|(n, _)| n % 2 == 0)
+        .map(|(_, part)| part)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// A sentence has 25 words at most, and a paragraph, a list item, or a table row has six
+/// sentences at most. The pages use none of the words that "The style rules" refuse, and no
+/// phrasal verb that the reviews named.
+#[test]
+fn the_pages_of_the_report_keep_to_the_style_rules() {
+    let refused = [
+        "may", "might", "should", "would", "ensure", "ensures", "isn't", "doesn't", "can't",
+        "won't", "don't", "it's", "that's",
+    ];
+    let phrasal = [
+        "set up",
+        "look up",
+        "carry out",
+        "leave out",
+        "leaves out",
+        "turn on",
+        "turn off",
+        "turns on",
+        "turns off",
+        "go on",
+        "goes on",
+        "stays out",
+        "stay out",
+        "read back",
+    ];
+    let mut faults = Vec::new();
+    for page in REPORT_PAGES {
+        let text = read(&docs().join(page));
+        for block in blocks_of(&text) {
+            let found = block_sentences(&block);
+            faults.extend(
+                found
+                    .iter()
+                    .filter(|s| words(s) > 25)
+                    .map(|s| format!("{page}: {} words: {}", words(s), s.trim())),
+            );
+            if !block.starts_with('|') && found.len() > 6 {
+                faults.push(format!("{page}: {} sentences: {block}", found.len()));
+            }
+            let prose = without_code(&block).to_lowercase();
+            for word in prose.split(|c: char| !(c.is_alphanumeric() || c == '\'')) {
+                if refused.contains(&word) {
+                    faults.push(format!("{page}: the word {word:?} in: {block}"));
+                }
+            }
+            for phrase in phrasal {
+                if one_line(&prose).contains(phrase) {
+                    faults.push(format!("{page}: the phrase {phrase:?} in: {block}"));
+                }
+            }
+        }
+    }
+    assert!(
+        faults.is_empty(),
+        "{} faults:\n{}",
+        faults.len(),
+        faults.join("\n")
+    );
+}
+
+/// `strata report` adds two changes that break code outside the crate: a required method of the
+/// public trait `Renderer`, and a variant of `Error`, which is not `#[non_exhaustive]`. The section
+/// of release 0.27.0 sits above the one of release 0.26.0. The opening of the page links to all
+/// four sections, and the section gives the action for each change.
+#[test]
+fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_of_the_report() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let newer = page
+        .find("\n## Release 0.27.0: changes that need action\n")
+        .expect("the page has no section for release 0.27.0");
+    let older = page
+        .find("\n## Release 0.26.0: changes that need action\n")
+        .expect("the page has no section for release 0.26.0");
+    assert!(newer < older, "release 0.27.0 comes above release 0.26.0");
+
+    let opening = &page[..page.find("\n## The documents").unwrap()];
+    assert!(
+        one_line(opening).contains("Four sections list the changes that need action"),
+        "the opening does not name four sections"
+    );
+    for anchor in [
+        "(#release-0270-changes-that-need-action)",
+        "(#release-0260-changes-that-need-action)",
+        "(#release-0250-changes-that-need-action)",
+        "(#release-0240-changes-that-need-action)",
+    ] {
+        assert!(opening.contains(anchor), "the opening lacks {anchor}");
+    }
+
+    let release = section(
+        &page,
+        "## Release 0.27.0: changes that need action",
+        Some("\n## "),
+    );
+    let library = section(release, "### For a user of the library of strata\n", None);
+    let renderer = block(library, "`render::Renderer`");
+    for needed in ["`render_report`", "required", "Add `fn render_report"] {
+        assert!(renderer.contains(needed), "the item lacks {needed:?}");
+    }
+    let error = block(library, "`error::Error`");
+    for needed in [
+        "`LogInvalid`",
+        "`#[non_exhaustive]`",
+        "wildcard arm",
+        "Add a `_` arm",
+    ] {
+        assert!(error.contains(needed), "the item lacks {needed:?}");
     }
 }

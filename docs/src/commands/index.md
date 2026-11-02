@@ -50,6 +50,7 @@ flowchart LR
 | Find the clusters that use a version | `strata consumers` | [consumers](./consumers.md) |
 | Find the pack versions that records pin behind a newer one | `strata behind` | [behind](./behind.md) |
 | Check that Palette can build a cluster, before the build | `strata preflight` | [preflight](./preflight.md) |
+| Print the values that Palette gave and that this release does not know | `strata report` | [report](./report.md) |
 | Get the JSON Schema of a document | `strata schema` | [schema](./schema.md) |
 
 ## Refs
@@ -81,14 +82,14 @@ details.
 | `1` | different | a pair fails | a record drifted, or is unverified | a cluster or an edge host uses it | a pin is behind |
 | `2` | error | error | strata cannot check a record | nothing found, and a reading failed | strata cannot check a pin |
 
-`list`, `packs`, `snapshot`, `candidate`, and `schema` exit `0`, or `2` on an
+`list`, `packs`, `snapshot`, `candidate`, `report`, and `schema` exit `0`, or `2` on an
 error.
 Treat `2` as a failed job. It never means "no change".
 
 ## Output formats
 
-`compare`, `same-release`, `verify`, `consumers`, `behind`, `list`, and `packs`
-take the same options:
+`compare`, `same-release`, `verify`, `consumers`, `behind`, `list`, `packs`, and
+`report` take the same options:
 
 | Option | Output |
 | --- | --- |

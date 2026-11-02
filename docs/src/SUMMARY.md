@@ -38,6 +38,7 @@
   - [The rules and the custom probes](./commands/preflight/rules.md)
   - [The watch](./commands/preflight/watch.md)
   - [Confidence and promotion](./commands/preflight/promotion.md)
+- [report](./commands/report.md)
 - [schema](./commands/schema.md)
 
 # Use cases
@@ -71,6 +72,7 @@
 - [A publish fans out to what pins it](./use-cases/publish-fan-out.md)
 - [Find the fleet from Palette](./use-cases/fleet.md)
 - [Can Palette build this cluster?](./use-cases/stop-a-build.md)
+- [Palette gives a value that strata does not know](./use-cases/unknown-value.md)
 
 # Automation
 
@@ -96,6 +98,7 @@
 - [The candidate file](./reference/candidate-file.md)
 - [Palette API requests](./reference/palette-api.md)
 - [Versions and compatibility](./reference/compatibility.md)
+- [What strata can report](./reference/report.md)
 - [The rule format](./reference/preflight-rules.md)
 
 # How it works

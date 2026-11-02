@@ -1,0 +1,112 @@
+# What strata can report
+
+Strata publishes nothing by itself. It reads your tenant, and it writes files on your machine.
+One thing can leave the machine, and only you can send it. It is a report of the values that
+Palette gave and that your release of strata does not know. You read the report, and you decide
+whether to send it. [`strata report`](../commands/report.md) prints it, and sends no request.
+
+## Why a report exists
+
+Palette can add a value to a closed set between two releases of strata, such as a new type of a
+profile. Strata reads the value with no error, and it writes a note. The maintainers of strata
+test each release against their own tenant. They cannot see your tenants, your clouds, or your
+Palette release. A report tells them that a release of strata is out of date in one place.
+
+A report states that strata is out of date: a value or a shape that strata does not know. It is
+never a report of a fault of Palette, or of how a team uses Palette.
+
+## How a report is made
+
+1. A run reads a document of Palette, and the document holds a value that the release does not
+   know. Strata writes the note on standard error, and it appends one line to the log. See
+   [The note for a value that Palette gives](./compatibility.md#the-note-for-a-value-that-palette-gives).
+2. `strata report` reads the log. It merges equal lines, and it counts them.
+3. You read the report. To send it, you open the link of `strata report --link`, or you paste
+   `strata report --format markdown` in a new issue of strata.
+
+Each step is on your machine until you open the link or paste the text. The log stays in the state
+folder, and no command sends it.
+
+## The fields of a report
+
+A report is the document `strata-report/1`. It has the fields `schema` and `unknown`. The field
+`unknown` has one entry for each different line of the log. An entry has only these fields:
+
+| Field | What it holds |
+| --- | --- |
+| `strata` | The version of strata that read the value. |
+| `palette` | The Palette release, when strata knows it. A key cannot read the release, so an entry of the command line has none. |
+| `set` | The name of the closed set, as `strata schema` names its definition, such as `ProfileType`. |
+| `value` | The text of the value. Strata cuts a value of more than 64 characters. |
+| `route` | The template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It is never the path of a real request. |
+| `status` | The status of a refusal of Palette. An entry for a value of a document has none. |
+| `errorCode` | The error code of a refusal of Palette. An entry for a value of a document has none. |
+| `count` | How many lines of the log are this entry. |
+
+These are the fields of [`strata-unknown/1`](./documents.md#strata-unknown1), the line of the log,
+and the field `count`. The report has no time and no `tool` block, because the log has none.
+[`strata-report/1`](./documents.md#strata-report1) gives the JSON.
+
+## What strata never reports
+
+A report never holds one of these:
+
+- The name or the uid of a profile, a cluster, a project, a registry, or any other object.
+- The address of Palette, the name of a host, or the name of a machine.
+- The API key, the tenant, or the project.
+- The text of a document or of an error message from Palette.
+- The name, the values, or the manifests of a pack.
+- A time, or the name of the person who ran strata.
+
+Two rules keep this true. A line of the log has a fixed list of fields, and a test fails on each
+other field. `strata report` also refuses the whole log when one line is not valid. A line is not
+valid in three cases:
+
+- It has a field outside the list.
+- Its route is the path of a real request.
+- Its value is not a short word.
+
+The command then stops with the error `log-invalid`, prints nothing, and marks nothing. See
+[Errors](./errors.md).
+
+## Send a report
+
+`strata report --link` prints the address of a new issue of strata. The title and the body are
+filled in with the report as markdown. Open the address in a browser, read each field, and send
+the issue from your own account. Strata sends nothing itself.
+
+When the report is too long for an address, `strata report --link` stops with a `usage` error. Run
+`strata report --format markdown`, and paste the text in a new issue.
+
+A maintainer proves the value in the lab. Then the maintainer adds it to the closed set of
+strata, or writes why not. See [What to do with a new value](../development/facts.md#what-to-do-with-a-new-value).
+
+## The lines that you sent
+
+The log is a file of yours, and no report changes it. A report holds each line of the log, unless
+you marked lines as sent. `strata report --sent` prints the report and marks its lines as sent.
+The next report then holds only the lines that came after. `strata report --all` holds each line
+again.
+
+Strata never marks a line by itself, because only you know that the report went out.
+
+## The files
+
+All files are in the state folder: `$XDG_STATE_HOME/strata/`, or `~/.local/state/strata/` when the
+variable is not set. See [Settings](./settings.md).
+
+| File | What it holds |
+| --- | --- |
+| `strata-unknown.jsonl` | The log: one line of `strata-unknown/1` for each new value in a run. |
+| `strata-unknown.sent` | The number of lines of the log that you marked as sent. |
+| `strata-unknown.hint` | The time of the last hint, as a time in RFC 3339. |
+
+Delete a file to start again. A mark that is past the end of the log counts for nothing, so a new
+log is reported whole.
+
+## The hint
+
+The note of an unknown value can end with the words `strata report` shows what you can send. This
+hint shows one time in a day at most. It shows only when standard error is a terminal. It never
+shows with `--quiet` or `STRATA_QUIET`, and a run that hides the hint does not use up the day. A
+job in CI runs with no terminal, so it prints no hint.

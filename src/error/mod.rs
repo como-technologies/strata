@@ -463,6 +463,17 @@ pub enum Error {
         /// The deserialization error.
         source: serde_json::Error,
     },
+    /// A line of the log of the unknown values is not a line of `strata-unknown/1`. A reader of the
+    /// log stops at the first such line, so a report holds only the fields of the schema.
+    #[error("{}: line {line} is not a line of {}: {message}", path.display(), crate::closed_set::unknown::log::SCHEMA)]
+    LogInvalid {
+        /// The log.
+        path: PathBuf,
+        /// The number of the line, from 1.
+        line: usize,
+        /// What is wrong with the line.
+        message: String,
+    },
     /// A snapshot without `source.uid` cannot be verified.
     #[error("snapshot has no source.uid to verify against")]
     NoUid,
@@ -704,6 +715,7 @@ impl Error {
             Error::NotSnapshot(_) => "not-snapshot",
             Error::UnsupportedSchema { .. } => "unsupported-schema",
             Error::SnapshotSchema { .. } => "snapshot-schema",
+            Error::LogInvalid { .. } => "log-invalid",
             Error::NoUid => "no-uid",
             Error::Io { .. } => "io",
             Error::EmptyFile(_) => "empty-file",
