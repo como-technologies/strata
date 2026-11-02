@@ -4,9 +4,9 @@
 use std::collections::BTreeMap;
 
 use super::{CheckResult, Options, SectionScore, Summary, percent};
-use crate::confidence::{Confidence, NO_RUNS};
+use crate::confidence::{Confidence, NO_RUNS, runs_to_reach};
 use crate::probe::Verdict;
-use crate::rule::{Catalog, Level, Severity, Status};
+use crate::rule::{Catalog, DEFAULT_BAR, Level, Severity, Status};
 use strata::text::plural;
 
 /// The scorecard: one line for each section that has a row for this engine.
@@ -225,7 +225,8 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
 pub(crate) fn scorecard_legend(sections: &[SectionScore]) -> String {
     let promoted: u32 = sections.iter().map(|s| s.preflight).sum();
     let checks: u32 = sections.iter().map(|s| s.with_check).sum();
+    let (bar, runs) = (percent(DEFAULT_BAR), runs_to_reach(DEFAULT_BAR));
     format!(
-        "runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: {promoted} of {checks} checks."
+        "runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of {bar}, which is {runs} correct runs of {runs} on the engine; every other rule is a probe. Promoted here: {promoted} of {checks} checks."
     )
 }

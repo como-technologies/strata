@@ -22,6 +22,12 @@ use crate::report::{self, Assembly, Options, Report};
 use crate::rule::{Catalog, Check, Rule, Tier};
 use crate::world::World;
 
+/// The seconds between two readings of a watch, when the run gives none.
+pub const DEFAULT_EVERY_SECS: u64 = 30;
+
+/// The longest watch in seconds, when the run gives none.
+pub const DEFAULT_LIMIT_SECS: u64 = 3600;
+
 /// The settings of a watch.
 #[derive(Debug, Clone)]
 pub struct WatchOptions {
@@ -36,8 +42,8 @@ pub struct WatchOptions {
 impl Default for WatchOptions {
     fn default() -> Self {
         WatchOptions {
-            every: Duration::from_secs(30),
-            limit: Duration::from_secs(3600),
+            every: Duration::from_secs(DEFAULT_EVERY_SECS),
+            limit: Duration::from_secs(DEFAULT_LIMIT_SECS),
             stop_at_first: true,
         }
     }

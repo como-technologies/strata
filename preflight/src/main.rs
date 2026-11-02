@@ -19,7 +19,9 @@ use strata_preflight::error::{Error, Result};
 use strata_preflight::probe::LiveBackend;
 use strata_preflight::report::{self, Format, Report};
 use strata_preflight::rule::{self, Catalog, Tier};
-use strata_preflight::run::{self, Selection, WatchOptions};
+use strata_preflight::run::{
+    self, DEFAULT_EVERY_SECS, DEFAULT_LIMIT_SECS, Selection, WatchOptions,
+};
 use strata_preflight::world::World;
 use strata_preflight::{TOOL_NAME, catalog};
 
@@ -71,10 +73,10 @@ struct Cli {
     #[arg(long)]
     watch: bool,
     /// With --watch: seconds between two readings
-    #[arg(long, value_name = "SECONDS", default_value = "30")]
+    #[arg(long, value_name = "SECONDS", default_value_t = DEFAULT_EVERY_SECS)]
     every: u64,
     /// With --watch: the longest watch, in seconds
-    #[arg(long, value_name = "SECONDS", default_value = "3600")]
+    #[arg(long, value_name = "SECONDS", default_value_t = DEFAULT_LIMIT_SECS)]
     limit: u64,
     /// List the rules, with the level and the tier of each, and run nothing
     #[arg(long)]

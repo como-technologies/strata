@@ -107,6 +107,9 @@ pub struct Options {
     pub out_dir: Option<String>,
 }
 
+/// The readiness that the page of a run marks on each bar when the run gave no `--ready`.
+pub(crate) const DEFAULT_GATE: f64 = 0.8;
+
 impl Options {
     /// The tiers that ran, as each form of the report writes them after `tiers`: `static,
     /// palette`. `, strict` follows them when a failed probe counts as a failed check.

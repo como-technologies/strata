@@ -22,6 +22,12 @@ fn the_bound_with_no_wrong_result_is_the_table_of_the_issue() {
 }
 
 #[test]
+fn the_fewest_correct_runs_that_reach_a_bar_come_from_the_bar() {
+    assert_eq!(runs_to_reach(crate::rule::DEFAULT_BAR), 14);
+    assert_eq!(runs_to_reach(0.9), 29);
+}
+
+#[test]
 fn the_bound_with_a_miss_uses_the_beta_quantile() {
     // 13 of 14: the one-sided 95% Clopper-Pearson lower bound is 0.703, under the bar of 0.8
     let b = lower_bound(13, 14, 0.95).unwrap();

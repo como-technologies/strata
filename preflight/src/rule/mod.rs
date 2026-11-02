@@ -365,8 +365,11 @@ pub struct Promotion {
     pub runs: Vec<String>,
 }
 
+/// The 95% lower bound that a rule must reach for a promotion when it names no bar of its own.
+pub(crate) const DEFAULT_BAR: f64 = 0.8;
+
 fn default_bar() -> f64 {
-    0.8
+    DEFAULT_BAR
 }
 
 /// A pair of fixtures: one that holds the fault, and one that is clean.
@@ -442,6 +445,12 @@ pub struct Rule {
 }
 
 impl Rule {
+    /// The 95% lower bound that the runs of this rule must reach for a promotion: the bar of its
+    /// promotion, or the default bar of a promotion.
+    pub fn bar(&self) -> f64 {
+        self.promotion.as_ref().map_or(DEFAULT_BAR, |p| p.bar)
+    }
+
     /// True when the rule applies to `engine`.
     pub fn applies_to(&self, engine: &str) -> bool {
         self.engines

@@ -27,7 +27,9 @@ mod watch;
 use verbose::verbose_lines;
 
 pub use rules::{RULES_SCHEMA, list_rules, rules_document, rules_text};
-pub use watch::{WatchInputs, WatchOptions, reading, watch};
+pub use watch::{
+    DEFAULT_EVERY_SECS, DEFAULT_LIMIT_SECS, WatchInputs, WatchOptions, reading, watch,
+};
 
 /// What a run keeps of the catalog.
 #[derive(Debug, Clone)]
@@ -262,7 +264,7 @@ fn confidence_of(
             continue;
         }
         let counts = ledger.counts_for(&rule.id, &world.cloud, world.release.as_deref());
-        let bar = rule.promotion.as_ref().map_or(0.8, |p| p.bar);
+        let bar = rule.bar();
         let release = world.release.as_deref().unwrap_or("");
         let confidence = Confidence::of(&world.cloud, release, &counts, bar);
         // a rule with no run on this release still shows the runs of older releases
