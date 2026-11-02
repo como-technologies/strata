@@ -7103,14 +7103,14 @@ esac
 "#;
 
 /// A `strata` that stands in for the send: a run appends a line to the log, and "posts" to the
-/// endpoint by changing the issue file, which a `gh` lists. It writes down the settings it got. The
-/// schema id in its log line is text on purpose: a script cannot read the `const` of the crate.
+/// endpoint by changing the issue file, which a `gh` lists. It writes down the settings it got.
+/// The schema id of its log line is `FAKE_SCHEMA`, which the test sets from the `const` of the crate.
 const FAKE_STRATA_SEND: &str = r#"#!/usr/bin/env bash
 [ "$1" != "--version" ] || { echo "strata 0.26.0"; exit 0; }
 echo "$STRATA_REPORT $STRATA_REPORT_URL $PALETTE_API $PALETTE_PROJECT $XDG_STATE_HOME $HOME $*" >> "$FAKE_SEND/strata.log"
 log="$XDG_STATE_HOME/strata/strata-unknown.jsonl"
 mkdir -p "$(dirname "$log")"
-echo '{"schema":"strata-unknown/1"}' >> "$log"
+echo "{\"schema\":\"$FAKE_SCHEMA\"}" >> "$log"
 if [ -z "$FAKE_NO_POST" ]; then
   lines=$(sed -n 's/^| Lines | \([0-9]*\) |.*/\1/p' "$FAKE_SEND/body" 2>/dev/null)
   lines=$(( ${lines:-0} + 1 ))
@@ -7192,6 +7192,7 @@ fn report_send(args: &[&str], no_post: bool, root: &Path, login: GhLogin) -> (Ou
         .args(args)
         .env("PATH", path_with(&bin))
         .env("FAKE_SEND", root)
+        .env("FAKE_SCHEMA", strata::closed_set::unknown::log::SCHEMA)
         .env("XTASK_BIN", root.join("bin/xtask"))
         .env("STRATA_BIN", root.join("bin/strata"))
         .env("OUT", &out)
