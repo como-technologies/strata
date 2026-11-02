@@ -414,7 +414,7 @@ impl World {
 ///
 /// A 404 is one case, and the 403 of a project key on an object of the tenant is another. The
 /// world holds `null`, and a rule says so. A 401 is the key itself, and a 429 the rate: the run
-/// stops with the error that names it. The contract run of xtask uses the same test: a 401, a 429,
+/// stops with the error that names it. The contract run of xtask uses the same test. A 401, a 429,
 /// or a 5xx says nothing about a fact, and another 4xx is the answer of Palette to the request.
 pub fn unreadable(status: u16) -> bool {
     (400..500).contains(&status) && !matches!(status, 401 | 429)

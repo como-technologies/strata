@@ -21,7 +21,7 @@ line.
 | `STRATA_REPORT` | not set | `1` sends the [report of the unknown values](./report.md#send-the-report-by-itself) at the end of a run that wrote a line to the log. `0` sends nothing and asks nothing. Any other value sends nothing, and strata prints a warning. With no value, a run in a terminal asks one time. |
 | `STRATA_REPORT_URL` | the endpoint of the maintainers, when the release names one | The address that receives the report. A release that names no endpoint sends nothing and asks nothing until this variable names one. |
 | `CI` | not set | A value stops the question of the send. Pipelines set this variable. |
-| `XDG_STATE_HOME` | `~/.local/state` | The base of the state folder, where strata keeps its files in the folder `strata/`: the log of the unknown values and three small files beside it. A path that is not absolute counts as not set. Environment only. See [The files](./report.md#the-files). |
+| `XDG_STATE_HOME` | `~/.local/state` | The base of the state folder. Strata keeps its files in the folder `strata/` under it: the log of the unknown values and three small files. A path that is not absolute counts as not set. Environment only. See [The files](./report.md#the-files). |
 | `NO_COLOR` | not set | A value removes the color of the terminal report under `--color auto`, the default. `strata-preflight` reads it too. Environment only. |
 | `CLICOLOR_FORCE` | not set | A value forces the color under `--color auto`, the default, also for a pipe. `NO_COLOR` has priority. Environment only. See [Report formats](./formats.md#colors). |
 | `STRATA_BIN` | `strata` on `PATH` | The binary that the scripts in `scripts/ci/` run. The live example and `examples/fetch-examples.sh` read it too. Their default is the build under `target/`. |

@@ -1314,7 +1314,7 @@ fn a_day_of_work_gives_each_step_what_you_do_what_strata_tells_you_and_where_it_
 
     let names = command_words();
     let rows = table_rows(part);
-    assert_eq!(rows.len(), 9, "the table of the day has nine steps");
+    assert_eq!(rows.len(), 10, "the table of the day has ten steps");
     for row in rows {
         assert_eq!(row.len(), 3, "a row has three cells: {row:?}");
         for cell in &row {
@@ -1386,7 +1386,7 @@ fn the_jobs_and_their_commands_keep_each_command_and_each_link_of_the_table_of_t
         .find(|l| l.starts_with('|'))
         .expect("the section has a table");
     assert_eq!(header, "| When | Who | The question | What runs | Page |");
-    assert_eq!(table_rows(part).len(), 11, "the table has eleven jobs");
+    assert_eq!(table_rows(part).len(), 12, "the table has twelve jobs");
 
     let spans = code_spans(part);
     for command in [
@@ -1402,6 +1402,7 @@ fn the_jobs_and_their_commands_keep_each_command_and_each_link_of_the_table_of_t
         "consumers",
         "same-release",
         "verify --who",
+        "report --link",
     ] {
         assert!(
             spans.iter().any(|s| s.starts_with(command)),
@@ -1420,6 +1421,7 @@ fn the_jobs_and_their_commands_keep_each_command_and_each_link_of_the_table_of_t
         "(./automation/upstream-issues.md)",
         "(./use-cases/find-a-pack.md)",
         "(./use-cases/retire.md)",
+        "(./use-cases/unknown-value.md)",
     ] {
         assert!(part.contains(link), "the table does not link {link}");
     }
@@ -2198,5 +2200,640 @@ fn the_section_of_release_0_27_0_gives_the_new_path_for_each_removed_old_path() 
     assert!(
         !opening.contains("They stay for one minor release"),
         "the page says that the constants of a state stay"
+    );
+}
+
+// ---- the release notes and the text at the end of Wave 13 --------------------------------------
+
+/// One part of the section of release 0.27.0 in compatibility.md, as one line. The part starts at
+/// the heading `heading` and ends at the next heading of its level.
+fn release_0_27_0_part(heading: &str) -> String {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let release = section(
+        &page,
+        "## Release 0.27.0: changes that need action",
+        Some("\n## "),
+    );
+    one_line(section(release, heading, Some("\n### ")))
+}
+
+/// The section of release 0.27.0 said nothing of the rule `eks-ami-type` and of five changes of
+/// `strata-preflight` that can break a script or a pipeline. Each one has its action.
+#[test]
+fn the_section_of_release_0_27_0_names_each_change_of_strata_preflight_that_can_break_a_script() {
+    let part = release_0_27_0_part("### For a user of the command line or of a document\n");
+    for needle in [
+        // the rule that left the catalog
+        "**`strata-preflight`: the rule `eks-ami-type` is gone.**",
+        "`--rule eks-ami-type` is a `usage` error with exit `2`, because the id is not in the catalog.",
+        "With `--strict`, such a pool gave exit `1`, and now it gives exit `0`.",
+        "A run of your ledger that names `eks-ami-type` counts for no rule.",
+        "A run of your ledger that names `iam-ten-policies` counts for no rule. Rename it in `rule:`.",
+        // the five changes
+        "**`strata-preflight --promotion --release` counts only the runs of that release.**",
+        "`gke-no-release-channel` is `demote` for each release below 4.11.",
+        "`--promotion --release 4.10` gave exit `0` in 0.26.0, and it gives exit `1` now.",
+        "A rule with older runs alone shows `no runs, older runs <n>`.",
+        "`static-subnets` and `sg-name-collision` are in the `palette` tier.** `--tier cloud` does not run them.",
+        "`aws-quotas`, `gcp-quotas`, and `azure-vcpu-quota` need the key and `spec.cloudAccountUid`.**",
+        "A run with no key shows `NOT RUN` for them, and the readiness falls.",
+        "A pool whose type the route does not list fails the rule.",
+        "`instance-offering` sends `cpuGtEq=0&memoryGtEq=0`.** A small type, such as `t3.small`, no longer fails the rule.",
+        // the command and the message that the draft of the review marked
+        "**`strata report` is a new command.**",
+        "Write `strata compare report <B>` for such a ref.",
+        "**`api`: the message for a 403 with `ProjectUidIsNotEmpty` changed.**",
+    ] {
+        assert!(
+            part.contains(needle),
+            "the part of the command line lacks {needle:?}"
+        );
+    }
+}
+
+/// The rule `gke-no-release-channel` has the range `<4.11`, so the section says "below 4.11", and
+/// the example of the page uses a release in that range.
+#[test]
+fn compatibility_says_that_gke_no_release_channel_is_demoted_below_4_11_only() {
+    let rules = repo_file("preflight/rules/kubernetes.yaml");
+    let rule = section(
+        &rules,
+        "  - id: gke-no-release-channel\n",
+        Some("\n  - id: "),
+    );
+    assert!(rule.contains("releases: \"<4.11\""), "{rule}");
+
+    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    assert!(
+        page.contains("`gke-no-release-channel` is `demote` for each release below 4.11, the range of the rule."),
+        "the page does not give the range of the rule"
+    );
+    for old in [
+        "is `demote` for each release until the ledger holds a run of the lab with a release",
+        "`strata-preflight --promotion --release 4.11` counts the runs of `4.11` alone.",
+    ] {
+        assert!(!page.contains(old), "the page still says {old:?}");
+    }
+}
+
+/// The section lacked six changes of the library `strata-preflight` that do not build, and the
+/// text of the 5xx said that each 5xx other than a named code is an error.
+#[test]
+fn the_section_of_release_0_27_0_names_each_change_of_the_library_of_strata_preflight() {
+    let part = release_0_27_0_part("### For a user of the library of strata-preflight\n");
+    for needle in [
+        "The list [After 0.26.0](#the-rust-library) gives the details.",
+        "`confidence::promotion` has a third argument, `release: Option<&str>`.",
+        "Give `None` for the result of 0.26.0.",
+        "`confidence::Ledger::counts_for` counts a run with no release for no release.",
+        "`confidence::Counts` has the new field `older: Vec<String>`",
+        "`confidence::Confidence` has the new field `older_runs: u32`",
+        "`confidence::PromotionReport` has the new field `release: Option<String>`.",
+        "`confidence::Confidence::text` gives `no runs` for no run. It ends with `older runs <n>` when `older_runs` is not `0`.",
+        "`rule::Check::Exec` holds a `rule::ExecCheck`.",
+        "`Check::Exec(ExecCheck { argv, needs, timeout, palette: None, also: Vec::new(), expr })`",
+        "`probe::Ran::Exec` has the new fields `also: Option<String>` and `request: Option<probe::Call>`.",
+        "The catalog has no `eks-ami-type`, and `iam-ten-policies` is `iam-role-policy-quota`.",
+        "`Catalog::rule(\"iam-ten-policies\")` gives `None`.",
+    ] {
+        assert!(
+            part.contains(needle),
+            "the part of the library of strata-preflight lacks {needle:?}"
+        );
+    }
+}
+
+/// A refusal of a validate route with HTTP 500 is an answer with no code in the list, for both
+/// backends. The text said that `&[]` gives the result of 0.26.0, and that each 5xx other than a
+/// named code is an error. Both are false for the refusal of a validate route.
+#[test]
+fn compatibility_says_that_a_refusal_of_a_validate_route_is_an_answer_with_no_code_in_the_list() {
+    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    let want = "So is a refusal of a validate route, such as `POST /v1/spectroclusters/{cloud}/validate`, as in 0.26.0.";
+    assert_eq!(
+        page.matches(want).count(),
+        2,
+        "the Rust library and the section of release 0.27.0 must each state {want:?}"
+    );
+    for needle in [
+        "For `LiveBackend`, `&[]` gives the result of 0.26.0.",
+        "For `FixtureBackend`, an entry with another 5xx is now an error, where 0.26.0 gave a `Response`",
+        "is still `ERROR`, except a refusal of a validate route such as `POST /v1/spectroclusters/{cloud}/validate`.",
+        "or for a refusal of a validate route.",
+    ] {
+        assert!(page.contains(needle), "the page lacks {needle:?}");
+    }
+    for old in [
+        "Give `&[]` to get the result of 0.26.0.",
+        "and an error for each other 5xx.",
+        "Give `&[]` for the result of 0.26.0. A 5xx whose `code` is in the list is a `Response` with `ok: false`. Each other 5xx is an error.",
+        "A 5xx with a code that the check does not name is still `ERROR`. The loader",
+        "the check would read the refusal",
+    ] {
+        assert!(!page.contains(old), "the page still says {old:?}");
+    }
+}
+
+/// Each row of `live-runs.md` that has no result gives its reason. A reason follows `no result yet`
+/// after a colon, or after the words `for this form of the check`.
+#[test]
+fn each_row_of_live_runs_with_no_result_gives_its_reason() {
+    let page = one_line(&read(&docs().join("development/live-runs.md")));
+    let lower = page.to_lowercase();
+    let mut found = 0;
+    for (at, _) in lower.match_indices("no result yet") {
+        found += 1;
+        let rest = &page[at + "no result yet".len()..];
+        assert!(
+            rest.starts_with(": ") || rest.starts_with(" for this form of the check: "),
+            "a place with no result gives no reason: {}",
+            &page[at.saturating_sub(120)..(at + 60).min(page.len())]
+        );
+    }
+    assert!(found > 0, "the page has no row without a result");
+}
+
+/// The rows that the end-of-wave review named for #390, #391, #530, #393, #539, #543, #540, #531,
+/// and #515 have their results. The rows that wait for the endpoint of the report, the live run of
+/// the fleet, and the other engines of the plan say what they wait for.
+#[test]
+fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for() {
+    let page = read(&docs().join("development/live-runs.md"));
+    let none = |row: &str| !row.to_lowercase().contains("no result yet");
+    let contract = section(&page, "## contract.sh", Some("\n## "));
+    for item in ["#390", "#393", "#530", "#539", "#540", "#543"] {
+        let rows: Vec<&str> = contract
+            .lines()
+            .filter(|l| l.starts_with("| `contract.json` | ") && l.contains(item))
+            .collect();
+        assert!(!rows.is_empty(), "contract.sh has no row for {item}");
+        assert!(rows.iter().all(|r| none(r)), "{item}: {rows:?}");
+    }
+    let profiles = section(&page, "## contract-profiles.sh", Some("\n## "));
+    for row in profiles.lines().filter(|l| l.contains("#531")) {
+        assert!(none(row), "{row}");
+    }
+    let tiers = section(&page, "## tiers.sh", Some("\n## "));
+    let pool: Vec<&str> = tiers
+        .lines()
+        .filter(|l| l.starts_with("| `pool-"))
+        .collect();
+    assert_eq!(pool.len(), 9, "{pool:?}");
+    assert!(pool.iter().all(|r| none(r)), "{pool:?}");
+    let plan = section(&page, "## preflight-plan.sh", Some("\n## "));
+    for name in [
+        "instancetypes-cpu",
+        "instancetypes-default-filter",
+        "vpcs-route-keys",
+        "zones-route-keys",
+        "sgs-route-keys",
+    ] {
+        let row = plan
+            .lines()
+            .find(|l| l.starts_with(&format!("| `{name}` |")))
+            .unwrap_or_else(|| panic!("preflight-plan.sh has no row for {name}"));
+        assert!(none(row), "{row}");
+    }
+
+    let waits = |section_name: &str, anchor: &str, reason: &str| {
+        let part = section(&page, section_name, Some("\n## "));
+        let rows: Vec<&str> = part.lines().filter(|l| l.contains(anchor)).collect();
+        assert!(!rows.is_empty(), "{section_name} has no row for {anchor}");
+        for row in rows {
+            assert!(row.contains(reason), "{row}");
+        }
+    };
+    let endpoint = "No result yet: the lead has not deployed the endpoint of the report.";
+    for check in [
+        "`send-1`",
+        "`issue`",
+        "`send-2`",
+        "`repeat-1`",
+        "`repeat-2`",
+    ] {
+        waits("## report-send.sh", &format!("| {check}"), endpoint);
+    }
+    waits(
+        "## fleet.sh",
+        "| `filters-project`",
+        "No result yet: no live window has run `just live-fleet`",
+    );
+    assert!(
+        one_line(plan).contains(
+            "The other engines have no result yet: the live window ran the plan on AWS alone."
+        ),
+        "the section of the plan does not say why the other engines have no result"
+    );
+}
+
+/// The default filter of the GCP and Azure instance type routes, and the annotation `freeCredit`
+/// of an AWS account, come from the code of Palette. No run shows them, so `limits.md` states them
+/// and `validate-routes.md` links there. A fact of `limits.yaml` holds each one.
+#[test]
+fn the_rules_of_the_instance_type_routes_that_only_the_code_of_palette_gives_are_in_limits() {
+    let limits = one_line(&read(&docs().join("internals/palette/limits.md")));
+    for needle in [
+        "**The default filter of the GCP and Azure instance type routes.** They list only the types with 2 vCPUs or more and 4 GiB of memory or more, when the query does not say. Strata sends `cpuGtEq=0&memoryGtEq=0` to each route.",
+        "**An AWS account with the annotation `freeCredit` set to `true`.** The AWS instance type route lists only the types with up to 4 vCPUs and 8 GiB of memory for such an account.",
+    ] {
+        assert!(limits.contains(needle), "limits.md lacks {needle:?}");
+    }
+
+    let routes = one_line(&read(&docs().join("internals/palette/validate-routes.md")));
+    for old in [
+        "The code of Palette gives the same default to the GCP and Azure routes",
+        "freeCredit",
+        "A run shows that `m3.large` is absent.",
+        "This comes from the code of Palette, and no run shows it.",
+    ] {
+        assert!(
+            !routes.contains(old),
+            "validate-routes.md still says {old:?}"
+        );
+    }
+    for needle in [
+        "A call by hand shows that `m3.large` is absent.",
+        "No run shows this default on GCP and Azure: see [What the source of Palette says](limits.md#what-the-source-of-palette-says).",
+    ] {
+        assert!(
+            routes.contains(needle),
+            "validate-routes.md lacks {needle:?}"
+        );
+    }
+
+    let facts = repo_file("xtask/facts/limits.yaml");
+    for id in [
+        "limit-instance-type-default-filter",
+        "limit-instance-type-free-credit",
+    ] {
+        let fact = section(&facts, &format!("  - id: {id}\n"), Some("\n  - id: "));
+        assert!(
+            fact.contains(
+                "unchecked: The page states the rule from the source of Palette, and no run shows it."
+            ),
+            "{fact}"
+        );
+    }
+}
+
+/// The sentences of the book that the review at the end of Wave 13 found over the limits. A
+/// sentence has the limit of its entry, and a block has six sentences at most.
+#[test]
+fn the_sentences_that_the_review_at_the_end_of_wave_13_named_keep_to_the_limits() {
+    let blocks = [
+        (
+            "quickstart.md",
+            "[Palette gives a value that strata does not know]",
+            25,
+        ),
+        (
+            "use-cases/index.md",
+            "[Palette gives a value that strata does not know]",
+            25,
+        ),
+        ("reference/settings.md", "| `XDG_STATE_HOME` |", 25),
+        (
+            "commands/preflight/tiers.md",
+            "Palette lists some facts of a cloud account",
+            25,
+        ),
+        (
+            "internals/preflight.md",
+            "When a report names a release",
+            25,
+        ),
+        (
+            "internals/preflight.md",
+            "A rule that no run proved on the release",
+            25,
+        ),
+        (
+            "reference/preflight-rules.md",
+            "| `palette` | `method`,",
+            25,
+        ),
+        ("reference/preflight-rules.md", "| `exec` | `argv`,", 25),
+        ("development/live-example.md", "| `aws_profile` |", 25),
+        (
+            "development/facts.md",
+            "Strata depends on facts about Palette.",
+            25,
+        ),
+        ("development/facts.md", "| `table` | Only a fact", 25),
+        ("development/facts.md", "| `palette` | Only a fact", 25),
+        (
+            "development/facts.md",
+            "Name the live checks that prove the fact.",
+            20,
+        ),
+        (
+            "development/facts.md",
+            "`just docs-check` and `just docs-examples` run each chapter",
+            25,
+        ),
+        (
+            "development/facts.md",
+            "The stand-in puts the query in the name",
+            25,
+        ),
+        (
+            "development/facts.md",
+            "An answer with no value at the field",
+            25,
+        ),
+        (
+            "development/facts.md",
+            "A fact can name the values of a closed set",
+            25,
+        ),
+        (
+            "development/facts.md",
+            "Prove the fact again with its live checks.",
+            20,
+        ),
+        ("development/facts.md", "Prove the value again.", 20),
+        (
+            "reference/report.md",
+            "The note of an unknown value can end with",
+            25,
+        ),
+    ];
+    for (page, anchor, limit) in blocks {
+        let text = read(&docs().join(page));
+        let block = block(&text, anchor);
+        let found = block_sentences(&block);
+        assert!(
+            block.starts_with('|') || found.len() <= 6,
+            "{page}: {} sentences in the block of {anchor:?}",
+            found.len()
+        );
+        for sentence in found {
+            assert!(
+                words(&sentence) <= limit,
+                "{page}: {} words in a sentence of {limit} at most: {sentence}",
+                words(&sentence)
+            );
+        }
+    }
+}
+
+/// The paragraphs that the review at the end of Wave 13 found over six sentences.
+#[test]
+fn the_paragraphs_that_the_review_at_the_end_of_wave_13_named_have_six_sentences_or_fewer() {
+    let blocks = [
+        (
+            "commands/preflight/tiers.md",
+            "Some rules need a fact that Palette lists",
+        ),
+        ("commands/preflight/tiers.md", "The request has the query"),
+        (
+            "development/facts.md",
+            "The stand-in puts the query in the name",
+        ),
+        (
+            "development/facts.md",
+            "The run takes the value from a listing",
+        ),
+        (
+            "development/facts.md",
+            "A request names a project with the header",
+        ),
+        (
+            "development/facts.md",
+            "A route of the tenant is not an operation",
+        ),
+        ("development/facts.md", "Each account sees its own values"),
+        ("development/facts.md", "When the answer lists some values"),
+        (
+            "internals/palette/clusters.md",
+            "**Saved tag filters** belong to the tenant",
+        ),
+        (
+            "internals/palette/clusters.md",
+            "The query takes `tag`, `meta`, or `resource`.",
+        ),
+        (
+            "internals/palette/validate-routes.md",
+            "A run on AWS also shows the key pair route.",
+        ),
+        (
+            "internals/palette/validate-routes.md",
+            "No run shows the GCP answer",
+        ),
+        (
+            "internals/preflight.md",
+            "A new Palette release sets the counts",
+        ),
+        ("internals/preflight.md", "When a report names a release"),
+        (
+            "reference/preflight-rules.md",
+            "The binary carries the ledger of the lab.",
+        ),
+        (
+            "reference/preflight-rules.md",
+            "`4.10.3` and `4.10` are one release",
+        ),
+    ];
+    for (page, anchor) in blocks {
+        let found = sentences(&block(&read(&docs().join(page)), anchor)).len();
+        assert!(
+            found <= 6,
+            "{page}: {found} sentences in the block of {anchor:?}"
+        );
+    }
+}
+
+/// The phrasal verbs that the review at the end of Wave 13 named. Each file below held one, and a
+/// line break can fall inside the phrase. `just --list` prints the comments of the justfile.
+#[test]
+fn the_phrasal_verbs_of_the_review_at_the_end_of_wave_13_are_gone() {
+    for (file, phrase) in [
+        ("src/cli/args.rs", "filled in"),
+        ("docs/src/commands/report.md", "filled in"),
+        ("docs/src/reference/report.md", "filled in"),
+        ("docs/src/reference/report.md", "use up"),
+        (
+            "docs/src/reference/preflight-rules.md",
+            "no request goes out",
+        ),
+        (
+            "docs/src/reference/preflight-rules.md",
+            "The request goes out",
+        ),
+        ("docs/src/development/report-endpoint.md", "goes through"),
+        ("docs/src/development/report-endpoint.md", "move them out"),
+        ("docs/src/development/report-endpoint.md", "logged in"),
+        ("docs/src/development/facts.md", "turns the result into"),
+        ("docs/src/development/facts.md", "stay off"),
+        ("docs/src/development/facts.md", "no one is logged in"),
+        ("docs/src/development/facts.md", "write the decision down"),
+        (
+            "docs/src/development/live-runs.md",
+            "logged in to the repository",
+        ),
+        ("docs/src/development/live-runs.md", "puts the pool back"),
+        ("docs/src/development/live-runs.md", "puts them back"),
+        ("justfile", "logged in"),
+        ("justfile", "puts the pool back"),
+    ] {
+        assert!(
+            !one_line(&repo_file(file)).contains(phrase),
+            "{file} still holds {phrase:?}"
+        );
+    }
+}
+
+/// The public rustdoc that the review at the end of Wave 13 named: each sentence has 25 words at
+/// most, and none has a word or a phrasal verb that the review refused.
+#[test]
+fn the_public_rustdoc_that_the_review_at_the_end_of_wave_13_named_keeps_to_25_words() {
+    let comments = [
+        (
+            "preflight/src/probe/backend.rs",
+            "The answer of Palette to one request.",
+        ),
+        (
+            "preflight/src/world/mod.rs",
+            "True for each 4xx on a read of the world",
+        ),
+        ("src/closed_set/unknown.rs", "After the first note of a day"),
+        (
+            "src/closed_set/unknown.rs",
+            "A watch with no log shows no hint",
+        ),
+        ("src/closed_set/unknown/hint.rs", "When and where the hint"),
+        (
+            "src/closed_set/unknown/log.rs",
+            "comes from an answer of status 2xx",
+        ),
+        ("src/ops/report.rs", "This function only reads."),
+        ("src/ops/report.rs", "The address of a new issue of strata."),
+        ("src/snapshot/pack.rs", "Build one pack from its ref"),
+        ("src/term/ask.rs", "Write `question` to `out`"),
+        (
+            "src/error/mod.rs",
+            "Palette answered with a non-2xx status.",
+        ),
+    ];
+    for (file, anchor) in comments {
+        let text = comment(&repo_file(file), anchor);
+        for sentence in sentences(&text) {
+            assert!(
+                words(&sentence) <= 25,
+                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
+                words(&sentence)
+            );
+        }
+        for phrase in [" would ", " may ", "went out", "filled in", "use up"] {
+            assert!(
+                !text.contains(phrase),
+                "{file}: the comment of {anchor:?} holds {phrase:?}"
+            );
+        }
+    }
+}
+
+/// The review found four lines with the word "would" in the diff of #553. The word is gone from
+/// each one.
+#[test]
+fn the_four_lines_with_would_that_the_review_of_553_named_are_gone() {
+    for (file, anchor) in [
+        (
+            "docs/src/reference/compatibility.md",
+            "The loader refuses a code in `refusal_codes`",
+        ),
+        (
+            "preflight/src/probe/backend.rs",
+            "An entry of `_responses` with a status that is not 2xx",
+        ),
+        (
+            "preflight/src/rule/tests.rs",
+            "a 5xx with another code is sent again",
+        ),
+        (
+            "preflight/tests/catalog.rs",
+            "A refusal at a 5xx is read one time.",
+        ),
+    ] {
+        let text = repo_file(file);
+        let at = text
+            .find(anchor)
+            .unwrap_or_else(|| panic!("{file} lacks {anchor:?}"));
+        let near = &text[at..(at + 700).min(text.len())];
+        assert!(!near.contains(" would "), "{file}: {near}");
+    }
+}
+
+/// The everyday loop shows the report in its two tables, its seed, and its live run, and it says
+/// that a yes to the question also starts the send.
+#[test]
+fn the_everyday_loop_shows_the_report_in_its_tables_its_seed_and_its_live_run() {
+    let text = the_loop();
+    assert!(
+        one_line(&text).contains(
+            "unless a person chooses the send, with `STRATA_REPORT=1` or a yes to its one question."
+        ),
+        "loop.md does not say how a person chooses the send"
+    );
+    assert!(
+        !text.contains("unless a person sets `STRATA_REPORT=1`"),
+        "loop.md still says that only the setting starts the send"
+    );
+
+    let day = section(&text, "## A day of work", Some("\n## "));
+    assert!(
+        table_rows(day).iter().any(|row| row[0]
+            == "A job writes a note about a value that strata does not know"
+            && row[1].contains("Strata sends nothing unless you choose the send.")),
+        "the day of work has no row for the note"
+    );
+    let jobs = section(&text, "## The jobs and their commands", Some("\n## "));
+    let row = table_rows(jobs)
+        .into_iter()
+        .find(|row| row[0] == "A note of an unknown value")
+        .expect("the table of the jobs has no row for the note");
+    assert!(
+        row[3].contains("`report --link`") && row[3].contains("`STRATA_REPORT=1`"),
+        "{row:?}"
+    );
+    assert!(row[4].contains("(./use-cases/unknown-value.md)"), "{row:?}");
+
+    let unknown = section(&text, "## A value that strata does not know", Some("\n## "));
+    assert!(
+        unknown.contains(
+            "**Follow along.** `just playground unknown-value` serves a tenant with such a value."
+        ),
+        "the section of the note has no seed"
+    );
+    assert!(
+        one_line(&text).contains("a read of the log of the unknown values"),
+        "the live run of the loop does not read the log"
+    );
+}
+
+/// `loop.sh` reads the log of the unknown values with `strata report`. The log is in the run
+/// directory, and the book has a row for the check with the item #396.
+#[test]
+fn loop_sh_has_the_check_report_log_and_the_book_has_its_row() {
+    let script = repo_file("examples/live/loop.sh");
+    let state = script
+        .find("export XDG_STATE_HOME=$PWD/state")
+        .expect("loop.sh sets XDG_STATE_HOME to a folder of the run");
+    let first = script.find("  check ").expect("loop.sh has a check");
+    assert!(state < first, "the folder is set after the first check");
+    assert!(
+        script.contains("check report-log 0 \"#396: strata report reads the log of the unknown values that this run wrote\" -- \"$strata\" report"),
+        "loop.sh has no check report-log"
+    );
+
+    let page = read(&docs().join("development/live-runs.md"));
+    let part = section(&page, "## loop.sh", Some("\n## "));
+    let row = part
+        .lines()
+        .find(|l| l.starts_with("| `report-log` |"))
+        .expect("the section of loop.sh has no row for report-log");
+    assert!(
+        row.contains("| 0 | #396:") && row.contains("No result yet:"),
+        "{row}"
     );
 }

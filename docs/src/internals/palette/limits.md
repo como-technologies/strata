@@ -203,6 +203,11 @@ makes no claim that depends on them.
 - **The zones that do not offer an instance type.** A type that the list does
   not mark can still fail in the cloud. See
   [The list routes](validate-routes.md#the-list-routes).
+- **The default filter of the GCP and Azure instance type routes.** They list only the types with
+  2 vCPUs or more and 4 GiB of memory or more, when the query does not say. Strata sends
+  `cpuGtEq=0&memoryGtEq=0` to each route.
+- **An AWS account with the annotation `freeCredit` set to `true`.** The AWS instance type route
+  lists only the types with up to 4 vCPUs and 8 GiB of memory for such an account.
 - **The key pairs of an account.** The property route of EKS checks the key pair
   only with a `vpcId`, so `ssh-key-pair` reads the list for EKS. See
   [The list routes](validate-routes.md#the-list-routes).

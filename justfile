@@ -336,7 +336,7 @@ live-release: build
 live-contract *args: examples stand-in
     examples/live/contract.sh {{args}}
 
-# Open, update, and close the issues of a contract run (#390): one for each fact that differs, one for each new release. Needs gh logged in. --dry-run calls no host.
+# Open, update, and close the issues of a contract run (#390): one for each fact that differs, one for each new release. Needs a `gh` login. --dry-run calls no host.
 contract-report *args:
     examples/live/contract-report.sh {{args}}
 
@@ -362,11 +362,11 @@ contract-timer-status:
 
 # The lead runs this on kadomony after the merge. The script reads no secret: see "The endpoint of the report" in docs/src/development/report-endpoint.md.
 
-# Build the image of the endpoint of the report, and deploy it to Cloud Run in the project of the lab (#397). Needs gcloud logged in. --dry-run prints the gcloud commands and runs none.
+# Build the image of the endpoint of the report, and deploy it to Cloud Run in the project of the lab (#397). Needs a `gcloud` login. --dry-run prints the gcloud commands and runs none.
 report-deploy *args:
     deploy/report/deploy.sh {{args}}
 
-# Send one report to the deployed endpoint of the report, twice, and check that one issue of the label palette-drift holds both (#397). It serves the stand-in tenant of the book, and reads and writes no Palette tenant. Needs gh logged in, and the address that report-deploy printed.
+# Send one report to the deployed endpoint of the report, twice, and check that one issue of the label palette-drift holds both (#397). It serves the stand-in tenant of the book, and reads and writes no Palette tenant. Needs a `gh` login, and the address that report-deploy printed.
 live-report-send *args: examples stand-in
     examples/live/report-send.sh {{args}}
 
@@ -436,7 +436,7 @@ live-tiers: build
 live-tiers-limited: build
     examples/live/tiers.sh 6
 
-# The pool override test: an override on a machine pool of cluster A, the shape tier of a new record, and compare of a record from before (#515). Needs live-up; sets both overrides on the worker pool through the API, and puts the pool back.
+# The pool override test (#515): an override on a machine pool of cluster A. It checks the shape tier of a new record, and compare of an older record. Needs live-up; sets both overrides on the worker pool through the API, and then restores the pool.
 live-tiers-pool: build
     examples/live/tiers.sh 7
 

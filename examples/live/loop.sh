@@ -22,7 +22,8 @@
 #      writer in the command and in the issue of the nightly job. Cluster A keeps its copy while
 #      an update waits for it. The stage undoes the edit
 #   8  an incident: which versions carry a pack, and which clusters run the release
-#   9  the retire: nothing runs the next version, so the gate is open
+#   9  the retire: nothing runs the next version, so the gate is open. Then strata report reads the
+#      log of the unknown values that the run wrote
 #
 # Needs the live example at its baseline with cluster A (just live-up), the strata release binary,
 # git, jq, and the key as verify.sh needs it. Each change is undone, so the script leaves the
@@ -39,6 +40,9 @@ case "$from" in 1|2|3|4|5|6|7|8|9) ;; *) usage; exit 2 ;; esac
 run=${OUT:-$live/runs/$(date -u +%Y%m%dT%H%M%SZ)/loop}
 mkdir -p "$run" && cd "$run" || exit 2
 export STRATA_QUIET=1
+# the log of the unknown values goes to the run directory, not to the state folder of the user (an
+# absolute path, as XDG_STATE_HOME needs)
+export XDG_STATE_HOME=$PWD/state
 
 load_outputs
 C=$(out cluster_uid)
@@ -234,6 +238,7 @@ fi
 
 if stage 9 "the retire"; then
   check retire 0 "#81: nothing runs $NAME@1.0.1: the retire gate is open" -- "$strata" consumers "$NEXT"
+  check report-log 0 "#396: strata report reads the log of the unknown values that this run wrote" -- "$strata" report
   check baseline 0 'the example is at its baseline' -- "$live/baseline.sh"
 
   echo

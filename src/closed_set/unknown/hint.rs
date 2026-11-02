@@ -25,7 +25,7 @@ pub fn path() -> Option<PathBuf> {
     Some(state_dir()?.join(FILE))
 }
 
-/// When and where the hint may show.
+/// When and where the hint can show.
 #[derive(Debug, Clone)]
 pub struct Hint {
     file: PathBuf,

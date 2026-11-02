@@ -332,7 +332,7 @@ impl<A: PaletteApi> LiveBackend<'_, A> {
 /// are "there"; with no list, every tool is.
 ///
 /// An entry of `_responses` with a status that is not 2xx is a [`Response`] only when
-/// [`LiveBackend`] would read that status as an answer. Else it is the error that the live
+/// [`LiveBackend`] reads that status as an answer. Else it is the error that the live
 /// backend gives, so a fixture cannot show a catch that a live run does not give.
 pub struct FixtureBackend {
     responses: BTreeMap<String, Response>,

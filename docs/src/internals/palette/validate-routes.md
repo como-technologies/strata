@@ -509,17 +509,20 @@ for each AWS type, also for a type with a GPU. The three quota rules count the v
 `cpu`. The GCP and Azure routes give the same fields, and no run shows their numbers.
 
 The instance type route filters its answer. When the query does not say, it lists only the types with 2 vCPUs or
-more and 4 GiB of memory or more. A run shows it on AWS: `t3.small` and `t3.micro` are absent with
-no query, and the query `cpuGtEq=0&memoryGtEq=0` lists them. The code of Palette gives the same
-default to the GCP and Azure routes, and no run shows it there. Strata sends
-`cpuGtEq=0&memoryGtEq=0` with `cloudAccountUid`, and with `subscriptionId` for Azure. For one
-engine, the four rules send the same query, so one request answers them.
+more and 4 GiB of memory or more. A run shows it on AWS: with no query, the route lists no type
+under those limits. The query `cpuGtEq=0&memoryGtEq=0` lists more types. A call by hand showed that
+`t3.small` and `t3.micro` are absent with no query, and listed with that query. No run shows this
+default on GCP and Azure: see
+[What the source of Palette says](limits.md#what-the-source-of-palette-says).
 
-The AWS route omits some old instance families, also with that query. A run shows that `m3.large` is
-absent. The AWS route lists only the types with up to 4 vCPUs and 8 GiB of memory for an account with
-the annotation `freeCredit` set to `true`. This comes from the code of Palette, and no run shows it. A quota rule
-fails for a pool whose type the route does not list, because it cannot count the vCPUs of that pool.
-A rule reads no quota from these routes, because no route of Palette lists a quota.
+Strata sends `cpuGtEq=0&memoryGtEq=0` with `cloudAccountUid`, and with `subscriptionId` for Azure.
+For one engine, the four rules send the same query, so one request answers them.
+
+The AWS route omits some old instance families, also with that query. A call by hand shows that
+`m3.large` is absent. A quota rule fails for a pool whose type the route does not list, because it
+cannot count the vCPUs of that pool. A rule reads no quota from these routes, because no route of
+Palette lists a quota. Some accounts see fewer types: see
+[What the source of Palette says](limits.md#what-the-source-of-palette-says).
 
 `type` of an entry names the instance type. An entry has no `name`.
 `nonSupportedZones` of a type is an array of the zones that do not offer it.
@@ -547,6 +550,7 @@ sends the key pair to that route, so `ssh-key-pair` does not name AWS.
 A run on AWS also shows the key pair route. `ssh-key-pair` finds the key pair of
 the clean entity in `keyNames`, and fails a name that is not there. A run shows
 the answer of the AWS instance type route: its body holds `instanceTypes` alone.
+
 No run shows the GCP answer of the instance type route. The rule reads `type`
 for GCP too, and the checks `instance-types-shape` and `instancetypes-cpu` show the GCP entry.
 No run shows the Azure answer, because the lab has no account of Azure. The

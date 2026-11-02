@@ -398,6 +398,37 @@ fn only_the_cluster_validate_route_has_its_refusal_with_http_500_as_an_answer() 
     );
 }
 
+#[test]
+fn a_fixture_reads_the_refusal_of_the_cluster_validate_route_with_http_500_as_an_answer_with_no_codes()
+ {
+    let refusal = json!({"code": "ClusterProfilesNotSupported", "message": "not supported"});
+    let (b, _) = fixture(json!({"_responses": {
+        "POST /v1/spectroclusters/aws/validate":
+            {"ok": false, "status": 500, "body": refusal},
+        "POST /v1/clouds/aws/account/validate":
+            {"ok": false, "status": 500, "body": refusal}}}));
+    let body = json!({});
+    let answer = b
+        .palette(
+            Method::Post,
+            "/v1/spectroclusters/aws/validate",
+            Some(&body),
+            &[],
+        )
+        .unwrap();
+    assert_eq!((answer.ok, answer.status), (false, 500));
+    // the same body from another route is an error, as on a live run
+    assert!(
+        b.palette(
+            Method::Post,
+            "/v1/clouds/aws/account/validate",
+            Some(&body),
+            &[]
+        )
+        .is_err()
+    );
+}
+
 /// What the property route of AWS answers for a key pair that the region lacks: HTTP 500 and this
 /// code.
 const KEY_PAIR_REFUSAL: &str =

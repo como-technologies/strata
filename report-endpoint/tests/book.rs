@@ -101,7 +101,7 @@ fn the_page_states_the_limits_and_the_most_requests_at_once_of_the_code() {
         threads.contains(&format!("handles {MOST_AT_ONCE} requests at a time")),
         "{threads}"
     );
-    let request = section(&page, "What a request goes through");
+    let request = section(&page, "The checks of a request");
     assert!(
         request.contains(&format!(
             "| 4 | The sender made {REQUESTS_PER_HOUR} requests or fewer in the last hour."

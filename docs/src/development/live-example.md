@@ -487,7 +487,7 @@ $EDITOR examples/live/terraform/terraform.tfvars
 | `region`, `az` | the region and a zone |
 | `ssh_key_name` | a key pair |
 | `oci_registry_name` | an OCI pack registry that you can log in to |
-| `aws_profile` | an AWS profile that can create an ECR repository and an IAM user in the account; every apply needs a value, and the module reads the profile unless `own_registries` is `false` |
+| `aws_profile` | an AWS profile that can create an ECR repository and an IAM user in the account. Every apply needs a value. The module reads the profile unless `own_registries` is `false` and the cloud is not `eks` |
 | `oci_pack`, `oci_pack_version` | an add-on pack in that registry, and its version |
 | `own_registries` | optional; `true` by default. With `false`, the module makes no ECR repository, no IAM user, no Palette registry of its own, and no profile that needs one. Only `just contract-profiles` sets it |
 | `helm_registry_name`, `helm_chart`, `helm_chart_version` | optional; the default is `nginx` 25.1.5 from `Bitnami` |

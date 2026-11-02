@@ -53,7 +53,7 @@ pub fn unknown_log() -> Result<PathBuf> {
 /// with `all`.
 ///
 /// This function only reads. `strata report` marks a line only with `--sent`, because only the
-/// user knows that the report went out. The caller prints the report, and then calls
+/// user knows when the user sent the report. The caller prints the report, and then calls
 /// [`mark_reported`] with the field `lines`. A mark that is past the end of the log, such as after
 /// a new log, counts for nothing: the report then holds every line.
 ///
@@ -137,7 +137,7 @@ pub fn send_unknown_report(log: &Path, endpoint: &str) -> Result<()> {
     Ok(())
 }
 
-/// The address of a new issue of strata, with the title and the text `body` filled in.
+/// The address of a new issue of strata. The address holds the title and the text `body`.
 ///
 /// The user reads each field in the browser before the user sends it. `body` is the report as
 /// markdown. `None` when the report is empty, because there is nothing to send.

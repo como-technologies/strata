@@ -2563,12 +2563,14 @@ case "$*" in
 esac
 "#;
 
-/// A `strata` for a stage. It logs its arguments to `$FAKE_STRATA/calls`, and answers from
+/// A `strata` for a stage. It logs its arguments to `$FAKE_STRATA/calls` and `XDG_STATE_HOME` to
+/// `$FAKE_STRATA/state`, and answers from
 /// `$FAKE_STRATA/rules`: the first line `GLOB<TAB>EXIT<TAB>FILE` whose GLOB matches the arguments
 /// prints FILE, or writes it to the file of `-o`, and exits EXIT. A fourth field `err` prints FILE
 /// to standard error and writes no file. With no match it exits 0.
 const FAKE_STRATA_STAGE: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_STRATA/calls"
+echo "${XDG_STATE_HOME-}" >> "$FAKE_STRATA/state"
 out=""; prev=""
 for a in "$@"; do [ "$prev" = -o ] && out=$a; prev=$a; done
 while IFS=$'\t' read -r glob code file stream; do
@@ -6833,6 +6835,29 @@ fn loop_sh_stage_7_asks_the_nightly_job_to_put_the_writer_of_an_edit_in_the_issu
             .lines()
             .any(|l| l == "verify releases/addon.json --quiet --format markdown --who"),
         "{calls}"
+    );
+}
+
+#[test]
+fn loop_sh_stage_9_reads_the_log_of_the_unknown_values_from_a_state_folder_in_the_run() {
+    let mut stage = lab_stage();
+    stage.strata(
+        "report",
+        0,
+        "Palette gave no values that this release of strata does not know\n",
+    );
+    // the last check of the stage runs the baseline script, which this test does not serve
+    let (_, steps) = stage.run("loop.sh", &["9"]);
+    passed(&steps, &["retire", "report-log"]);
+    let calls = std::fs::read_to_string(stage.path("strata/calls")).unwrap();
+    assert!(calls.lines().any(|l| l == "report"), "{calls}");
+    // every call of strata in the run sees the one folder, an absolute path in the run directory
+    let state = std::fs::read_to_string(stage.path("strata/state")).unwrap();
+    let want = stage.path("out").join("state");
+    assert!(
+        state.lines().all(|l| Path::new(l) == want),
+        "want {} in every call: {state}",
+        want.display()
     );
 }
 

@@ -124,8 +124,8 @@ states `each`.
 
 ## A rule over the list of an account
 
-Palette lists some facts of a cloud account in one request: the instance types
-of a region, its key pairs, its VPCs with their subnets, and the security groups
+Palette lists some facts of a cloud account in one request. Examples are the instance
+types of a region, its key pairs, its VPCs with their subnets, and the security groups
 of a VPC. The tool of the cloud gives the same answer, but it needs the
 credentials of the cloud on your machine. These rules need the key of Palette
 alone. See
@@ -182,7 +182,9 @@ Some rules need a fact that Palette lists, and a fact that only the cloud gives.
 from the field `cpu` of the instance type route. They compare the sum with the
 quota that the tool of the cloud reads, because no route of Palette lists a
 quota. These rules are in the `cloud` tier. They need the key and the tool, and
-the report shows the command and the request. The request has the query
+the report shows the command and the request.
+
+The request has the query
 `cpuGtEq=0&memoryGtEq=0`, so the route lists the small types too. A pool whose
 type the route still does not list fails the rule. The message names the pool and
 the type. [The rule format](../../reference/preflight-rules.md#a-read-of-palette-before-the-command)

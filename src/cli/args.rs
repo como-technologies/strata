@@ -453,7 +453,7 @@ pub(crate) struct ListArgs {
 
 #[derive(Args)]
 pub(crate) struct ReportArgs {
-    /// Print a link that opens a new issue of strata with the report filled in
+    /// Print a link that opens a new issue of strata with the report in its body
     #[arg(long, conflicts_with_all = ["format", "json"])]
     pub(crate) link: bool,
     /// Report each line of the log, also the lines that you marked as sent

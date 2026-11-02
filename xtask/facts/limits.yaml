@@ -259,6 +259,34 @@ facts:
     rules:
       - instance-offering
 
+  - id: limit-instance-type-default-filter
+    kind: behavior
+    reads:
+      fields:
+        - instanceTypes[].cpu
+        - instanceTypes[].memory
+    unchecked: The page states the rule from the source of Palette, and no run shows it.
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - internals/palette/validate-routes.md#the-list-routes
+    rules:
+      - gcp-quotas
+      - azure-vcpu-quota
+
+  - id: limit-instance-type-free-credit
+    kind: behavior
+    reads:
+      fields:
+        - instanceTypes[].cpu
+        - instanceTypes[].memory
+    unchecked: The page states the rule from the source of Palette, and no run shows it.
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - internals/palette/validate-routes.md#the-list-routes
+    rules:
+      - aws-quotas
+      - instance-offering
+
   - id: limit-eks-key-pair
     kind: behavior
     reads:
