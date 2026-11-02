@@ -1,0 +1,8 @@
+$ strata report --format markdown
+Palette gave 1 value that this release of strata does not know.
+
+The table is the output of `strata report`, the document `strata-report/1`.
+
+| set | value | route | count | strata | Palette | status | error code |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `ProfileType` | `later-type` | `/v1/clusterprofiles/{uid}` | 2 | 0.26.0 | - | - | - |

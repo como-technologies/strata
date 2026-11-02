@@ -2,10 +2,11 @@
 //!
 //! The shared parts are the connection, the progress notes, the time, and the exit code.
 
+use std::io::IsTerminal;
 use std::process::ExitCode;
 
 use strata::api::{self, HttpApi, Palette, Retry};
-use strata::closed_set::unknown::{self, Watch, Watching};
+use strata::closed_set::unknown::{self, Hint, Watch, Watching};
 use strata::config::{self, Config};
 use strata::error::Result;
 use strata::ops;
@@ -21,6 +22,7 @@ pub(crate) mod consumers;
 pub(crate) mod list;
 pub(crate) mod packs;
 pub(crate) mod preflight;
+pub(crate) mod report;
 pub(crate) mod same_release;
 pub(crate) mod schema;
 pub(crate) mod snapshot;
@@ -36,11 +38,20 @@ fn progress(quiet: bool) -> Progress {
 
 /// Watch the reads of the command for a value of a closed set that Palette gives and this release
 /// does not know. Each such value gets one note through `progress`, and one line in the log in the
-/// state folder. The watch ends when the guard drops.
+/// state folder. In a terminal, the first note of a day also gets a hint to run `strata report`.
+/// The watch ends when the guard drops.
 pub(crate) fn watch_unknown(progress: Progress) -> Watching {
     let watch = Watch::new(progress);
-    match unknown::log::path() {
+    let watch = match unknown::log::path() {
         Some(file) => watch.logging_to(file),
+        None => watch,
+    };
+    match unknown::hint::path() {
+        Some(file) => watch.hinting(Hint::new(
+            file,
+            chrono::Utc::now(),
+            std::io::stderr().is_terminal(),
+        )),
         None => watch,
     }
     .start()

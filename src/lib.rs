@@ -121,3 +121,5 @@ pub use error::{Error, Result};
 pub const TOOL_NAME: &str = "strata";
 /// The crate version, recorded in every document.
 pub const TOOL_VERSION: &str = env!("CARGO_PKG_VERSION");
+/// The address of the repository of strata, where the link of `strata report` opens a new issue.
+pub(crate) const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");

@@ -17,6 +17,7 @@ strata schema diff > diff.schema.json
 | `list` | `strata-list/1`: `list --json` |
 | `packs` | `strata-packs/1`: `packs --json` |
 | `set` | `strata-set/1`: `snapshot --dir --json` for a set of clusters |
+| `report` | `strata-report/1`: `report --json` |
 | `candidate` | the candidate file |
 
 ```text

@@ -58,6 +58,8 @@ pub(crate) enum Cmd {
     Packs(PacksArgs),
     /// Check that Palette can build a cluster, before the build; runs strata-preflight
     Preflight(PreflightArgs),
+    /// Print the values that Palette gave and this release does not know, to read and send
+    Report(ReportArgs),
     /// Make sure that two or more records are one release
     SameRelease(SameReleaseArgs),
     /// Print the JSON Schema of a document or of the candidate file
@@ -82,6 +84,7 @@ impl Cmd {
             Cmd::Consumers(a) => Some(&a.out),
             Cmd::List(a) => Some(&a.out),
             Cmd::Packs(a) => Some(&a.out),
+            Cmd::Report(a) => Some(&a.out),
             Cmd::SameRelease(a) => Some(&a.out),
             Cmd::Verify(a) => Some(&a.out),
             Cmd::Candidate(_) | Cmd::Preflight(_) | Cmd::Schema { .. } | Cmd::Snapshot(_) => None,
@@ -448,6 +451,21 @@ pub(crate) struct ListArgs {
     pub(crate) out: OutputArgs,
 }
 
+#[derive(Args)]
+pub(crate) struct ReportArgs {
+    /// Print a link that opens a new issue of strata with the report filled in
+    #[arg(long, conflicts_with_all = ["format", "json"])]
+    pub(crate) link: bool,
+    /// Report each line of the log, also the lines that you marked as sent
+    #[arg(long)]
+    pub(crate) all: bool,
+    /// Mark the lines of the report as sent, so that the next report omits them
+    #[arg(long)]
+    pub(crate) sent: bool,
+    #[command(flatten)]
+    pub(crate) out: OutputArgs,
+}
+
 /// Differences `same-release` can be told to accept.
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum Allow {
@@ -468,6 +486,7 @@ pub(crate) enum SchemaKind {
     List,
     Packs,
     Set,
+    Report,
     Candidate,
 }
 

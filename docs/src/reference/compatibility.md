@@ -518,6 +518,10 @@ The log needs no network. It stays on the machine, and no command sends it. A li
 fields of [`strata-unknown/1`](./documents.md#strata-unknown1). It holds no name, no uid, no host,
 no free text, and no value of a pack.
 
+[`strata report`](../commands/report.md) reads the log and prints a report that you can read and
+send. In a terminal, the note can end with a hint to run it. The hint shows one time in a day at
+most. See [What strata can report](./report.md).
+
 The maintainers of strata find such values in a real tenant too, with the weekly contract run. See
 [What to do with a new value](../development/facts.md#what-to-do-with-a-new-value).
 

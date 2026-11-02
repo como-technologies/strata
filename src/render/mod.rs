@@ -7,6 +7,7 @@ mod json;
 mod list;
 mod markdown;
 pub(crate) mod notes;
+mod report;
 mod same_release;
 mod terminal;
 mod unified;
@@ -15,6 +16,7 @@ mod verify;
 use clap::ValueEnum;
 use serde_json::Value;
 
+use crate::closed_set::unknown::Report;
 use crate::diff::Diff;
 use crate::error::{MESSAGE_AT, Result};
 use crate::json::opt_str;
@@ -105,6 +107,13 @@ pub trait Renderer {
     ///
     /// The errors of [`Renderer::render`].
     fn render_set(&self, r: &SetReport) -> Result<String>;
+
+    /// The values of closed sets that Palette gave and this release of strata does not know.
+    ///
+    /// # Errors
+    ///
+    /// The errors of [`Renderer::render`].
+    fn render_report(&self, r: &Report) -> Result<String>;
 }
 
 /// The parts of a packs note that are there, joined with commas. None when no part is there.

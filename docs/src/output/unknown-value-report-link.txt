@@ -1,0 +1,2 @@
+$ strata report --link | cut -c 1-150
+https://github.com/como-technologies/strata/issues/new?title=Values%20that%20Palette%20gave%20and%20strata%20does%20not%20know&body=Palette%20gave%201

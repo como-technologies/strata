@@ -17,6 +17,7 @@ use cli::consumers::cmd_consumers;
 use cli::list::cmd_list;
 use cli::packs::cmd_packs;
 use cli::preflight::cmd_preflight;
+use cli::report::cmd_report;
 use cli::same_release::cmd_same_release;
 use cli::schema::cmd_schema;
 use cli::snapshot::cmd_snapshot;
@@ -116,6 +117,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Cmd::List(a) => cmd_list(&a),
         Cmd::Packs(a) => cmd_packs(&a),
         Cmd::Preflight(a) => cmd_preflight(&a),
+        Cmd::Report(a) => cmd_report(&a),
         Cmd::Schema { kind } => cmd_schema(kind),
     }
 }
@@ -137,6 +139,7 @@ mod tests {
             "list",
             "packs",
             "preflight",
+            "report",
             "same-release",
             "schema",
             "snapshot",

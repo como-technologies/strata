@@ -1,7 +1,7 @@
 //! The operations the CLI exposes, without argument parsing, printing, or exit codes.
 //!
 //! This module takes a snapshot and compares two. Each other command has a module of its own:
-//! `verify`, `same_release`, `consumers`, `list`, and `packs`.
+//! `verify`, `same_release`, `consumers`, `list`, `packs`, and `report`.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -24,6 +24,7 @@ mod list;
 mod live;
 mod packs;
 mod repave;
+mod report;
 mod same_release;
 mod source;
 mod validate;
@@ -36,6 +37,7 @@ pub use fleet::*;
 pub use list::*;
 pub use packs::*;
 pub use repave::*;
+pub use report::*;
 pub use same_release::*;
 pub use source::*;
 pub use validate::*;

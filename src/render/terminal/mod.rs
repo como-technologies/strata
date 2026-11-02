@@ -13,6 +13,7 @@ use super::notes::{
     DiffNote, TierLine, diff_notes, invalid_pack_sentences, pack_order_note, tier_line,
     variables_comparable,
 };
+use super::report::{entry_origin, report_heading};
 use super::same_release::{
     chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word,
 };
@@ -21,6 +22,7 @@ use super::verify::{
 };
 use super::{Renderer, count_of, entry_error, key_line, palette_line, short};
 use crate::closed_set::ClosedSet;
+use crate::closed_set::unknown::Report;
 use crate::diff::Diff;
 use crate::error::Result;
 use crate::model::cluster_state::ClusterState;
@@ -302,6 +304,36 @@ impl Renderer for TerminalRenderer {
         }
         for path in &r.removed {
             out.push_str(&format!("removed {}\n", path.display()));
+        }
+        Ok(out)
+    }
+
+    fn render_report(&self, r: &Report) -> Result<String> {
+        let p = &self.paint;
+        let mut out = format!("{}\n", p.bold(&report_heading(r)));
+        let rows: Vec<Vec<String>> = r
+            .unknown
+            .iter()
+            .map(|e| {
+                vec![
+                    e.set.clone(),
+                    e.value.clone(),
+                    e.route.clone(),
+                    count_of(e.count, "time"),
+                    entry_origin(e),
+                ]
+            })
+            .collect();
+        if !rows.is_empty() {
+            out.push('\n');
+        }
+        let widths = column_widths(&rows);
+        for row in &rows {
+            out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
+                1 => p.bold(cell),
+                4 => p.dim(cell),
+                _ => cell.to_string(),
+            }));
         }
         Ok(out)
     }

@@ -1474,6 +1474,7 @@ fn schema_subcommand_prints_json_schema() {
         ("list", "strata-list/1"),
         ("packs", "strata-packs/1"),
         ("set", "strata-set/1"),
+        ("report", "strata-report/1"),
         ("candidate", ""),
     ] {
         let v = schema(kind);

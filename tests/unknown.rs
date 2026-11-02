@@ -11,6 +11,7 @@ use std::process::Command;
 use serde_json::{Value, json};
 use strata::api::MemoryApi;
 use strata::closed_set::unknown::Watch;
+use strata::closed_set::unknown::hint;
 use strata::closed_set::unknown::log::{FIELDS, FILE, Line, SCHEMA};
 use strata::ops::{ListKind, ListOptions};
 use strata::term::progress::Progress;
@@ -278,4 +279,32 @@ fn a_watch_on_a_read_of_the_library_logs_the_route_template_and_no_uid() {
         !text.contains(UID_A) && !text.contains("payments-prod"),
         "{text}"
     );
+}
+
+#[test]
+fn the_hint_does_not_show_when_standard_error_is_not_a_terminal_and_uses_up_no_day() {
+    let api = serve(tenant());
+    let home = tempfile::tempdir().unwrap();
+    // the run reads its standard error through a pipe, as a script or a test does
+    let run = list(&api, home.path(), &[]);
+    assert_eq!(run.err.matches(NOTE).count(), 1, "{}", run.err);
+    assert!(!run.err.contains("strata report"), "{}", run.err);
+    let state = home.path().join(".local/state/strata");
+    assert!(
+        !state.join(hint::FILE).exists(),
+        "a run in a pipe wrote the time of a hint"
+    );
+    // the log has the line, and a report of the next command shows it
+    let mut command = Command::new(strata_bin());
+    isolate_palette(&mut command, home.path());
+    command
+        .env_remove("STRATA_QUIET")
+        .env_remove("XDG_STATE_HOME")
+        .args(["report", "--json"]);
+    let report = Run::of(&mut command);
+    assert_eq!(report.code, 0, "{}", report.err);
+    let document: Value = serde_json::from_str(&report.out).unwrap();
+    assert_eq!(document["unknown"][0]["set"], "ProfileType");
+    assert_eq!(document["unknown"][0]["value"], LATER_TYPE);
+    assert_eq!(document["unknown"][0]["route"], "/v1/clusterprofiles/{uid}");
 }

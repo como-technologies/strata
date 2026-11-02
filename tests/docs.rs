@@ -2032,3 +2032,82 @@ fn rule_7_says_to_read_the_code_of_palette_first_and_still_bars_a_citation() {
         }
     }
 }
+
+// ---- the report of the unknown values ---------------------------------------------------------
+
+/// The pages that describe `strata report`.
+const REPORT_PAGES: [&str; 3] = [
+    "reference/report.md",
+    "commands/report.md",
+    "use-cases/unknown-value.md",
+];
+
+/// `text` without the code spans: the text between two backticks.
+fn without_code(text: &str) -> String {
+    text.split('`')
+        .enumerate()
+        .filter(|(n, _)| n % 2 == 0)
+        .map(|(_, part)| part)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// A sentence has 25 words at most, and a paragraph, a list item, or a table row has six
+/// sentences at most. The pages use none of the words that "The style rules" refuse, and no
+/// phrasal verb that the reviews named.
+#[test]
+fn the_pages_of_the_report_keep_to_the_style_rules() {
+    let refused = [
+        "may", "might", "should", "would", "ensure", "ensures", "isn't", "doesn't", "can't",
+        "won't", "don't", "it's", "that's",
+    ];
+    let phrasal = [
+        "set up",
+        "look up",
+        "carry out",
+        "leave out",
+        "leaves out",
+        "turn on",
+        "turn off",
+        "turns on",
+        "turns off",
+        "go on",
+        "goes on",
+        "stays out",
+        "stay out",
+        "read back",
+    ];
+    let mut faults = Vec::new();
+    for page in REPORT_PAGES {
+        let text = read(&docs().join(page));
+        for block in blocks_of(&text) {
+            let found = block_sentences(&block);
+            faults.extend(
+                found
+                    .iter()
+                    .filter(|s| words(s) > 25)
+                    .map(|s| format!("{page}: {} words: {}", words(s), s.trim())),
+            );
+            if !block.starts_with('|') && found.len() > 6 {
+                faults.push(format!("{page}: {} sentences: {block}", found.len()));
+            }
+            let prose = without_code(&block).to_lowercase();
+            for word in prose.split(|c: char| !(c.is_alphanumeric() || c == '\'')) {
+                if refused.contains(&word) {
+                    faults.push(format!("{page}: the word {word:?} in: {block}"));
+                }
+            }
+            for phrase in phrasal {
+                if one_line(&prose).contains(phrase) {
+                    faults.push(format!("{page}: the phrase {phrase:?} in: {block}"));
+                }
+            }
+        }
+    }
+    assert!(
+        faults.is_empty(),
+        "{} faults:\n{}",
+        faults.len(),
+        faults.join("\n")
+    );
+}
