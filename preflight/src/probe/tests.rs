@@ -261,7 +261,7 @@ fn a_check_with_each_is_an_error_when_each_gives_no_list_or_a_request_fails() {
     );
     assert_eq!(out.verdict, Verdict::Error);
     assert!(
-        out.messages[0].contains("GET /v1/edgehosts/h2"),
+        out.messages[0].contains(&format!("GET {}", edge_host_route("h2"))),
         "{:?}",
         out.messages
     );
