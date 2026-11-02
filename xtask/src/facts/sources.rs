@@ -9,7 +9,7 @@ use regex::Regex;
 use strata::api::Method;
 use strata::closed_set::ClosedSet;
 use strata_preflight::catalog::builtin;
-use strata_preflight::rule::{Catalog, Check, ExecCheck};
+use strata_preflight::rule::{Catalog, Check, ExecCheck, Rule};
 
 use super::cloud::{CloudSources, read_code, read_rules};
 use super::model::{DIRECTORY, Fact, load};
@@ -61,6 +61,8 @@ pub struct Sources {
     pub rule_ids: BTreeSet<String>,
     /// The rules that send each request of Palette, by the shape of the request.
     pub rule_requests: BTreeMap<String, BTreeSet<String>>,
+    /// The names of the query that each rule sends in its path, by the id of the rule.
+    pub rule_queries: BTreeMap<String, BTreeSet<String>>,
     /// The rules of the cloud tier and the code of strata, for the facts of the clouds.
     pub cloud: CloudSources,
 }
@@ -103,6 +105,7 @@ impl Sources {
         match builtin() {
             Ok(catalog) => {
                 (sources.rule_ids, sources.rule_requests) = rule_requests(&catalog);
+                sources.rule_queries = rule_queries(&catalog);
                 let (cloud, unread) = read_rules(&catalog);
                 sources.cloud = cloud;
                 bad.extend(unread);
@@ -123,15 +126,38 @@ fn read_text(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_default()
 }
 
-/// The shape of a request: the method, and the path with each placeholder as `{}` and with no
-/// query. The book writes `{uid}` and `<name>`, the rules of preflight write `{{ .expr }}`, and
-/// the shape is the same for all three.
-pub fn shape(request: &str) -> String {
+/// A request with each placeholder as `{}`. The book writes `{uid}` and `<name>`, the rules of
+/// preflight write `{{ .expr }}`, and the text is the same for all three. A program of a rule can
+/// hold a `?` or an `&`, so a caller splits the path and the query after this replace.
+fn flatten(request: &str) -> String {
     static PLACEHOLDER: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"\{\{.*?\}\}|\{[^}]*\}|<[^>]*>").expect("a pattern"));
-    let (method, path) = request.split_once(' ').unwrap_or(("", request));
+    PLACEHOLDER.replace_all(request, "{}").into_owned()
+}
+
+/// The shape of a request: the method, and the path with each placeholder as `{}` and with no
+/// query.
+pub fn shape(request: &str) -> String {
+    let flat = flatten(request);
+    let (method, path) = flat.split_once(' ').unwrap_or(("", flat.as_str()));
     let path = path.split('?').next().unwrap_or(path);
-    format!("{method} {}", PLACEHOLDER.replace_all(path, "{}"))
+    format!("{method} {path}")
+}
+
+/// The name of each parameter in the query of a request, such as `cloudAccountUid` in
+/// `GET /v1/clouds/aws/regions?cloudAccountUid={cloudAccountUid}`. A request with no query has
+/// none.
+pub(super) fn query_names(request: &str) -> BTreeSet<String> {
+    let flat = flatten(request);
+    let Some((_, query)) = flat.split_once('?') else {
+        return BTreeSet::new();
+    };
+    query
+        .split('&')
+        .filter_map(|pair| pair.split('=').next())
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 /// The pattern of the method of a request: each value of [`Method`], so the pattern follows the
@@ -230,9 +256,22 @@ pub(super) fn book_rows(docs: &Path) -> BTreeMap<String, BTreeSet<String>> {
     rows
 }
 
+/// The request of Palette that `rule` sends, as the method and the path with its query. A rule
+/// sends one when its check is a [`Check::Palette`], or when its [`Check::Exec`] has a read of
+/// Palette.
+fn request_sent(rule: &Rule) -> Option<String> {
+    match &rule.check {
+        Some(Check::Palette(check)) => Some(format!("{} {}", check.method, check.path)),
+        Some(Check::Exec(ExecCheck {
+            palette: Some(read),
+            ..
+        })) => Some(format!("{} {}", Method::Get, read.path)),
+        _ => None,
+    }
+}
+
 /// The id of each rule of `catalog`, and the rules that send each request of Palette, by the
-/// shape of the request. A rule sends one when its check is a [`Check::Palette`], or when its
-/// [`Check::Exec`] has a read of Palette.
+/// shape of the request.
 pub(super) fn rule_requests(
     catalog: &Catalog,
 ) -> (BTreeSet<String>, BTreeMap<String, BTreeSet<String>>) {
@@ -240,15 +279,7 @@ pub(super) fn rule_requests(
     let mut requests: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for rule in catalog.rules() {
         ids.insert(rule.id.clone());
-        let sent = match &rule.check {
-            Some(Check::Palette(check)) => Some(format!("{} {}", check.method, check.path)),
-            Some(Check::Exec(ExecCheck {
-                palette: Some(read),
-                ..
-            })) => Some(format!("{} {}", Method::Get, read.path)),
-            _ => None,
-        };
-        if let Some(sent) = sent {
+        if let Some(sent) = request_sent(rule) {
             requests
                 .entry(shape(&sent))
                 .or_default()
@@ -256,4 +287,14 @@ pub(super) fn rule_requests(
         }
     }
     (ids, requests)
+}
+
+/// The names of the query that each rule of `catalog` sends in its path, by the id of the rule.
+/// A rule that sends no request, or a request with no query, has none.
+pub(super) fn rule_queries(catalog: &Catalog) -> BTreeMap<String, BTreeSet<String>> {
+    catalog
+        .rules()
+        .filter_map(|rule| Some((rule.id.clone(), query_names(&request_sent(rule)?))))
+        .filter(|(_, names)| !names.is_empty())
+        .collect()
 }

@@ -383,10 +383,6 @@ fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() 
             "validate-instance-types",
             "the region and the account come from the lab",
         ),
-        (
-            "validate-key-pairs",
-            "the region and the account come from the lab",
-        ),
     ];
     let facts = real_facts();
     let mut lacking = Vec::new();
@@ -1158,6 +1154,64 @@ fn a_region_with_no_vpc_has_no_subject_for_the_security_groups_and_the_reason_sa
         subject::Subject::Missing(why) => {
             assert!(why.contains("{vpcId}"), "{why}");
             assert!(why.contains("/vpcs/0/vpcId"), "{why}");
+        }
+        other => panic!("expected no subject, got {other:?}"),
+    }
+}
+
+/// The documents behind `validate-key-pairs`: the account, its regions, and the key pairs of the
+/// first region. The stand-in serves the key pairs only with the account in the query.
+fn key_pair_documents() -> Vec<(&'static str, Value)> {
+    let mut docs: Vec<_> = aws_list_documents().into_iter().take(2).collect();
+    docs.push((
+        "v1/clouds/aws/regions/us-east-2/keypairs@cloudAccountUid=acc1",
+        json!({"keyNames": ["strata-lab"]}),
+    ));
+    docs
+}
+
+#[test]
+fn the_key_pairs_are_asked_with_the_account_of_the_tenant() {
+    let docs = key_pair_documents();
+    let (_root, stand_in) = stand_in(&docs);
+    let (_dir, api) = served(&docs);
+    let contract = contract_of(&real_facts(), &stand_in, &api);
+    // the stand-in answers the route only with `cloudAccountUid`, as Palette answers HTTP 422 with
+    // no query, so the outcome `same` shows that the run sent it
+    let entry = contract
+        .facts
+        .iter()
+        .find(|e| e.id == "validate-key-pairs")
+        .unwrap();
+    assert_eq!(entry.outcome, Outcome::Same, "{entry:?}");
+    assert_eq!(
+        entry.request,
+        "GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid={cloudAccountUid}"
+    );
+}
+
+#[test]
+fn the_stand_in_serves_the_key_pairs_only_with_the_account() {
+    let (_dir, api) = served(&key_pair_documents());
+    let probe = subject::Probe::new(&api, &api);
+    let bare = probe.get(Scope::Client, "/v1/clouds/aws/regions/us-east-2/keypairs");
+    assert_eq!(bare.as_ref().as_ref().unwrap_err().status, Some(404));
+    let asked = probe.get(
+        Scope::Client,
+        "/v1/clouds/aws/regions/us-east-2/keypairs?cloudAccountUid=acc1",
+    );
+    assert!(asked.is_ok());
+}
+
+#[test]
+fn a_tenant_with_no_aws_account_has_no_subject_for_the_key_pairs_and_the_reason_says_why() {
+    let api = MemoryApi::new().with("/v1/cloudaccounts/aws", json!({"items": []}));
+    let probe = subject::Probe::new(&api, &api);
+    let facts = real_facts();
+    let template = subject::request_of(&facts, "validate-key-pairs").unwrap();
+    match subject::find(&probe, &facts, template) {
+        subject::Subject::Missing(why) => {
+            assert!(why.contains("{cloudAccountUid}"), "{why}");
         }
         other => panic!("expected no subject, got {other:?}"),
     }

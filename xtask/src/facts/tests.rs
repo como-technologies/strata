@@ -11,8 +11,8 @@ use super::check::{NOT_FACTS, check as faults_of, route_matches, template_matche
 use super::cloud::CloudSources;
 use super::model::{Fact, load};
 use super::sources::{
-    Sources, api_requests, book_rows, calls_of, rule_requests, section_headings, section_rows,
-    shape,
+    Sources, api_requests, book_rows, calls_of, query_names, rule_queries, rule_requests,
+    section_headings, section_rows, shape,
 };
 
 /// A request fact that is right in the world of [`world`].
@@ -77,6 +77,7 @@ fn world() -> Sources {
             "GET /v1/clusterprofiles/{}".to_string(),
             set(&["template-outside"]),
         )]),
+        rule_queries: BTreeMap::new(),
     }
 }
 
@@ -296,6 +297,43 @@ fn the_rules_of_a_request_fact_are_the_rules_that_send_the_request() {
 }
 
 #[test]
+fn a_request_that_lacks_a_query_of_the_path_of_its_rules_is_a_fault() {
+    let mut sources = world();
+    sources.rule_queries.insert(
+        "template-outside".to_string(),
+        set(&["cloudAccountUid", "region"]),
+    );
+    sources.facts[0].request = Some("GET /v1/clusterprofiles/{uid}?region={region}".to_string());
+    assert_one_fault(
+        &sources,
+        "fact `profile-document`: the rule `template-outside` sends the query cloudAccountUid in its path",
+    );
+}
+
+#[test]
+fn a_request_that_holds_each_query_of_the_path_of_its_rules_has_no_fault() {
+    let mut sources = world();
+    sources.rule_queries.insert(
+        "template-outside".to_string(),
+        set(&["cloudAccountUid", "region"]),
+    );
+    // the request can hold a query that no rule sends, as the filter of the instance types does
+    sources.facts[0].request = Some(
+        "GET /v1/clusterprofiles/{uid}?region={region}&cloudAccountUid={cloudAccountUid}&limit=0"
+            .to_string(),
+    );
+    assert_eq!(faults_of(&sources), Vec::<String>::new());
+}
+
+#[test]
+fn a_rule_that_sends_no_query_asks_nothing_of_the_request_of_its_fact() {
+    let mut sources = world();
+    sources.facts[0].request = Some("GET /v1/clusterprofiles/{uid}".to_string());
+    assert!(sources.rule_queries.is_empty());
+    assert_eq!(faults_of(&sources), Vec::<String>::new());
+}
+
+#[test]
 fn a_rule_that_does_not_exist_is_a_fault() {
     let mut sources = world();
     sources.rule_ids.clear();
@@ -442,6 +480,32 @@ fn the_shape_of_a_request_ignores_the_names_of_the_placeholders_and_the_query() 
         "GET /v1/clouds/{}/regions/{}/instancetypes"
     );
     assert_ne!(shape("GET /v1/packs"), shape("POST /v1/packs"));
+}
+
+#[test]
+fn the_names_of_the_query_of_a_request_are_the_same_in_the_book_the_list_and_the_rules() {
+    let same = [
+        "GET /v1/clouds/aws/regions?cloudAccountUid={cloudAccountUid}&region={region}",
+        "GET /v1/clouds/aws/regions?cloudAccountUid=&region=",
+        "GET /v1/clouds/aws/regions?region=<region>&cloudAccountUid=x",
+        "GET /v1/clouds/aws/regions?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&region={{ .entity.spec.cloudConfig.region }}",
+    ];
+    for request in same {
+        assert_eq!(
+            query_names(request),
+            set(&["cloudAccountUid", "region"]),
+            "{request}"
+        );
+    }
+    assert!(query_names("GET /v1/clouds/aws/regions").is_empty());
+    assert!(query_names("GET /v1/clouds/aws/regions?").is_empty());
+}
+
+#[test]
+fn a_program_of_a_rule_that_holds_a_question_mark_or_an_ampersand_makes_no_query() {
+    let request = "GET /v1/x/{{ .a? // .b & .c }}/y?region={{ .r }}&limit={{ .l }}";
+    assert_eq!(query_names(request), set(&["region", "limit"]));
+    assert_eq!(shape(request), "GET /v1/x/{}/y");
 }
 
 #[test]
@@ -698,6 +762,10 @@ fn the_requests_of_the_rules_are_the_palette_checks_and_the_reads_of_a_command_c
             ),
         ])
     );
+    assert_eq!(
+        rule_queries(&catalog),
+        BTreeMap::from([("reads-then-runs".to_string(), set(&["cloudAccountUid"]))])
+    );
 }
 
 // ---- the list of the repository ------------------------------------------------------------------
@@ -716,6 +784,38 @@ fn repo() -> PathBuf {
 fn the_list_of_the_repository_agrees_with_the_book_the_live_scripts_and_the_rules() {
     let found = super::check(&repo(), None);
     assert!(found.is_empty(), "{}", found.join("\n"));
+}
+
+#[test]
+fn the_request_of_each_fact_holds_the_query_that_its_rules_send() {
+    // the facts whose request lacked a query of the path of their rules, with the names that the
+    // rules send
+    const QUERIES: &[(&str, &[&str])] = &[
+        ("validate-key-pairs", &["cloudAccountUid"]),
+        ("aws-image-volume-size", &["cloudAccountUid", "region"]),
+        ("aws-host-capacity", &["hrgArn"]),
+        ("azure-region-list", &["cloudAccountUid", "subscriptionId"]),
+        ("azure-resource-group-list", &["cloudAccountUid"]),
+        (
+            "azure-storage-account-list",
+            &["cloudAccountUid", "subscriptionId"],
+        ),
+        ("azure-network-list", &["cloudAccountUid", "resourceGroup"]),
+        (
+            "vsphere-compute-resources",
+            &["computecluster", "datacenter"],
+        ),
+        (
+            "validate-instance-types",
+            &["cloudAccountUid", "cpuGtEq", "memoryGtEq", "subscriptionId"],
+        ),
+    ];
+    let facts = super::load(&repo()).expect("the list of the facts");
+    for (id, names) in QUERIES {
+        let fact = facts.iter().find(|f| f.id == *id).expect(id);
+        let request = fact.request.as_deref().expect(id);
+        assert_eq!(query_names(request), set(names), "{id}");
+    }
 }
 
 #[test]
