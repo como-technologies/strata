@@ -64,8 +64,8 @@ three cases:
 
 - It has a field outside the list.
 - Its route is not a template of a route. The `route` field in the table above gives the rule.
-- Its value is not a short word: it is empty, it has more than 64 characters, it has a space, or it
-  has a character other than printable ASCII.
+- Its value is not a short word. It is empty, or it has more than 64 characters. Or it has a space,
+  or a character other than printable ASCII.
 
 The command then stops with the error `log-invalid`, prints nothing, and marks nothing. See
 [Errors](./errors.md).

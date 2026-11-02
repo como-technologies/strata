@@ -879,7 +879,7 @@ field, a value, an input, or an option is in the sections above.
   - The table of `strata report --format markdown` has the columns `set`, `value`, `route`,
     `count`, and `strata`. It had `Palette`, `status`, and `error code` too.
   - The issue of the endpoint has no row `Releases of Palette` and no row `Refusals`.
-- **A value of the log and of the report is one word of printable ASCII.** Release 0.27.0 kept
+- **A value of the log and of the report is one printable ASCII word.** Release 0.27.0 kept
   each character that is not a control character.
   - Strata writes a `?` for each space, and for each character that is not printable ASCII.
     Examples are a zero width space and a letter that is not ASCII. No value of a closed set of
