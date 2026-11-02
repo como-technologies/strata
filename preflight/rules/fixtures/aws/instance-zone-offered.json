@@ -3,7 +3,7 @@
   "_note": "the type t3.xlarge is listed in the region, and its nonSupportedZones names a zone that no pool uses",
   "_patch": {
     "_responses": {
-      "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1": {
+      "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1&cpuGtEq=0&memoryGtEq=0": {
         "ok": true,
         "status": 200,
         "body": {

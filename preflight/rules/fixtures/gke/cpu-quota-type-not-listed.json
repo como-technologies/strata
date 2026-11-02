@@ -1,0 +1,13 @@
+{
+  "_base": "cpu-quota-clean.json",
+  "_note": "the pool names n1-standard-1, which the instance type route does not list, so the check cannot count the CPUs of that pool; the region has 72 free CPUs",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          { "poolConfig": { "name": "worker-pool" }, "cloudConfig": { "instanceType": "n1-standard-1" } }
+        ]
+      }
+    }
+  }
+}

@@ -1400,13 +1400,20 @@ types. The check passes on that answer (no result yet). For GCP, no run has
 shown the shape, and the check shows it (no result yet). The check `key-pairs-shape`
 expects `keyNames[]` with the key pair of the entity (no result yet).
 
-Four checks ask the list routes that the rules read (#393). Each check expects the keys that
-the route gives, and no other key. A key beside them is a field that a rule of the cloud tier
-reads, such as the tags of a subnet. That rule can then move to Palette.
+Five checks ask the list routes that the rules read (#393). Each check of a key list expects the
+keys that the route gives, and no other key. A key beside them is a field that a rule of the cloud
+tier reads, such as the tags of a subnet. That rule can then move to Palette.
+
+A call by hand showed the default filter of the instance type route on AWS. With no query, the
+route lists no `t3.small` and no `t3.micro`. With `cpuGtEq=0&memoryGtEq=0`, it lists both, each with
+`cpu` 2. It lists no `m3.large` in both cases. The two checks `instancetypes-cpu` and
+`instancetypes-default-filter` show the filter on every engine of the plan (no result yet). The
+quota rules and `instance-offering` send the query.
 
 | Check | What it expects |
 |---|---|
-| `instancetypes-cpu` | The instance type route lists each pool type of the entity with `cpu` as a number above 0. The quota rules count that number as the vCPUs. No result yet. |
+| `instancetypes-cpu` | The instance type route, asked with `cpuGtEq=0&memoryGtEq=0`, lists each pool type of the entity with `cpu` as a number above 0. The quota rules count that number as the vCPUs. The list holds a type under 2 vCPUs or 4 GiB, with `cpu` above 0. No result yet. |
+| `instancetypes-default-filter` | The route with no query for the filter lists no type under 2 vCPUs or 4 GiB. The query `cpuGtEq=0&memoryGtEq=0` lists more types, with a small type among them. No result yet. |
 | `vpcs-route-keys` | The VPC route lists `vpcs[]` with `vpcId`, and each subnet with `subnetId` and `az`. A VPC has no key beside `cidrBlock`, `name`, `subnets`, and `vpcId`. A subnet has none beside `az`, `isPrivate`, `mapPublicIpOnLaunch`, `name`, and `subnetId`. No result yet. |
 | `zones-route-keys` | The zone route lists `zones[]` with `name`, `state`, and `zoneId`, and no other key. So it lists no zone type. No result yet. |
 | `sgs-route-keys` | The security group route lists `groups[]` with `groupId` and `groupName` for the first VPC of the region. A group has no key beside `groupId`, `groupName`, and `ownerId`. No result yet. |

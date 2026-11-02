@@ -124,7 +124,7 @@ the fact.
 | Two facts send one call. | The list holds a copy. |
 | A rule or a file of strata holds a text that names a cloud fact, and no fact proves it. | A table of cloud facts has no contract check. See [The tables](#the-tables). |
 | A table has no call, and a rule of its fact is for a cloud that the lab has. | The table has no contract check. |
-| A fact with no call names a rule that runs a command on a cloud of the lab. | The run would send no call for that rule. A row, a rule of another cloud, and a check of the lab itself are not such rules. |
+| A fact with no call names a rule that runs a command on a cloud of the lab. | The run sends no call for that rule. A row, a rule of another cloud, and a check of the lab itself are not such rules. |
 | A call is not a `list`, `describe`, `get`, `show`, or `simulate` operation. | The run sends each call every week, and must change nothing in the account. |
 | A `palette` route has no method, lacks no field, or lacks a field that the fact does not read. | The fact names a route that answers nothing, or the whole call. |
 
@@ -422,8 +422,8 @@ A cloud fact has these fields beside the common fields:
   a fact.
 - `palette` names a route of Palette that lists a part of the answer. `route` is the method and the
   path. `lacks` lists the fields of `reads.fields` that the route does not list. Each one is the reason
-  why the rule stays in the cloud tier. A route that lacks no field would answer the rule, and the rule
-  would move to the palette tier.
+  why the rule stays in the cloud tier. A route that lacks no field answers the rule, and the rule moves to
+  the palette tier.
 - `unchecked` gives the reason when the run cannot send the call: the lab has no account of the
   cloud, or the rule has no command.
 

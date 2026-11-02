@@ -2025,7 +2025,7 @@ fn preflight_plan_makes_the_fault_of_instance_offering_from_the_instance_type_ro
         ("gke", "gcp", "us-east1"),
     ] {
         let path = format!(
-            "get /v1/clouds/{account_kind}/regions/{region}/instancetypes?cloudAccountUid=acc-1"
+            "get /v1/clouds/{account_kind}/regions/{region}/instancetypes?cloudAccountUid=acc-1&cpuGtEq=0&memoryGtEq=0"
         );
         let (o, asked) = offering_edit(engine, account_kind, region, answer);
         assert!(o.status.success(), "{engine}: {}", text(&o.stderr));
@@ -2236,7 +2236,9 @@ fn preflight_plan_reads_the_exact_keys_of_the_security_group_route() {
 }
 
 /// The check `instancetypes-cpu` needs each pool type of the entity in the list, with `cpu` as a
-/// number above 0. A type that the list lacks, and a type with no `cpu`, fail it.
+/// number above 0, and a type under 2 vCPUs or 4 GiB with `cpu` above 0. A type that the list
+/// lacks, a type with no `cpu`, and a list with no small type fail it: the query of the rules lifts
+/// the default filter of Palette, so the list holds the small types.
 #[test]
 fn preflight_plan_needs_the_cpu_of_each_pool_type_in_the_instance_type_route() {
     let filter = plan_filter("instancetypes-cpu");
@@ -2248,23 +2250,43 @@ fn preflight_plan_needs_the_cpu_of_each_pool_type_in_the_instance_type_route() {
     .unwrap();
     for (answer, status) in [
         (
-            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4},{"type":"m5.large","cpu":2}]}"#,
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":2,"memory":8},{"type":"t3.small","cpu":2,"memory":2}]}"#,
             Some(0),
         ),
+        // a type under 2 vCPUs is small too
         (
-            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4}]}"#,
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":2,"memory":8},{"type":"e2-micro","cpu":1,"memory":8}]}"#,
+            Some(0),
+        ),
+        // the default filter of Palette: no type under 2 vCPUs or 4 GiB is in the list
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":2,"memory":8}]}"#,
+            Some(1),
+        ),
+        // a pool type that the list lacks
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"t3.small","cpu":2,"memory":2}]}"#,
+            Some(1),
+        ),
+        // a small type with no cpu, or with 0
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":2,"memory":8},{"type":"t3.small","memory":2}]}"#,
             Some(1),
         ),
         (
-            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4},{"type":"m5.large"}]}"#,
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":2,"memory":8},{"type":"t3.small","cpu":0,"memory":2}]}"#,
             Some(1),
         ),
         (
-            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4},{"type":"m5.large","cpu":"2"}]}"#,
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","memory":8},{"type":"t3.small","cpu":2,"memory":2}]}"#,
             Some(1),
         ),
         (
-            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4},{"type":"m5.large","cpu":0}]}"#,
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":"2","memory":8},{"type":"t3.small","cpu":2,"memory":2}]}"#,
+            Some(1),
+        ),
+        (
+            r#"{"instanceTypes":[{"type":"t3.xlarge","cpu":4,"memory":16},{"type":"m5.large","cpu":0,"memory":8},{"type":"t3.small","cpu":2,"memory":2}]}"#,
             Some(1),
         ),
     ] {
@@ -2282,13 +2304,57 @@ fn preflight_plan_needs_the_cpu_of_each_pool_type_in_the_instance_type_route() {
     }
 }
 
-/// The four checks of the routes expect an exit code of 0. A key beside the known keys is a fault
+/// The check `instancetypes-default-filter` expects the answer of the route with no query to hold no
+/// type under 2 vCPUs or 4 GiB, and the answer with the query `cpuGtEq=0&memoryGtEq=0` to hold one,
+/// and to be longer. A route that ignores the filter, and a query that lifts nothing, fail it.
+#[test]
+fn preflight_plan_shows_the_default_filter_of_the_instance_type_route() {
+    let filter = plan_filter("instancetypes-default-filter");
+    let list = |types: &[&str]| format!(r#"{{"instanceTypes":[{}]}}"#, types.join(","));
+    let big = r#"{"type":"t3.xlarge","cpu":4,"memory":16}"#;
+    let small_memory = r#"{"type":"t3.small","cpu":2,"memory":2}"#;
+    let small_cpu = r#"{"type":"e2-micro","cpu":1,"memory":8}"#;
+    let dir = tempfile::tempdir().unwrap();
+    for (default, all, status) in [
+        (list(&[big]), list(&[big, small_memory]), Some(0)),
+        (list(&[big]), list(&[big, small_cpu]), Some(0)),
+        // the route ignores the filter: the answer with no query holds a small type
+        (
+            list(&[big, small_memory]),
+            list(&[big, small_memory]),
+            Some(1),
+        ),
+        (list(&[big, small_cpu]), list(&[big, small_cpu]), Some(1)),
+        // the query lifts nothing
+        (list(&[big]), list(&[big]), Some(1)),
+        // the answer with the query is not longer
+        (list(&[big, big]), list(&[big, small_memory]), Some(1)),
+        // an empty answer
+        (list(&[]), list(&[big, small_memory]), Some(1)),
+    ] {
+        std::fs::write(dir.path().join("instancetypes-default.json"), &default).unwrap();
+        std::fs::write(dir.path().join("instancetypes.json"), &all).unwrap();
+        let out = Command::new("jq")
+            .arg("-e")
+            .arg("--slurpfile")
+            .arg("all")
+            .arg(dir.path().join("instancetypes.json"))
+            .arg(&filter)
+            .arg(dir.path().join("instancetypes-default.json"))
+            .output_locked()
+            .unwrap();
+        assert_eq!(out.status.code(), status, "{default} against {all}");
+    }
+}
+
+/// The five checks of the routes expect an exit code of 0. A key beside the known keys is a fault
 /// of the run, and not a note.
 #[test]
 fn preflight_plan_judges_each_check_of_the_routes() {
     let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
     for id in [
         "instancetypes-cpu",
+        "instancetypes-default-filter",
         "vpcs-route-keys",
         "zones-route-keys",
         "sgs-route-keys",

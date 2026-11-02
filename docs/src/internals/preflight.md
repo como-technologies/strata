@@ -229,11 +229,16 @@ to the rule. The call stays for the other fields, and its fact names the fields 
 
 The three quota rules read the route and the tool in one check. The check asks Palette for the
 instance types of the region, then runs the command for the quota, and compares the two. The route
-lists the `cpu` of a type. A pool whose type the route does not list adds nothing to the vCPUs of the
-check. The AWS route omits some old instance families, and `instance-offering` reports a type
-that the region does not list.
+lists the `cpu` of a type.
 
-The checks `instancetypes-cpu`, `vpcs-route-keys`, `zones-route-keys`, and `sgs-route-keys` of
+When the query says nothing, the route drops each type with fewer than 2 vCPUs or less than 4 GiB of
+memory. The check sends `cpuGtEq=0&memoryGtEq=0`, so the route lists the small types too.
+`instance-offering` sends the same query, so one request answers the four rules. A pool whose type
+the route still does not list, such as an old family, fails the check. The check cannot count the
+vCPUs of that pool.
+
+The checks `instancetypes-cpu`, `instancetypes-default-filter`, `vpcs-route-keys`,
+`zones-route-keys`, and `sgs-route-keys` of
 [the live run of the plan](../development/live-runs.md#preflight-plansh) ask the routes, and
 expect the keys of each answer. A new key can be a field that a cloud rule reads. Then that rule
 can move to the palette tier.

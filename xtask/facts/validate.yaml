@@ -678,17 +678,19 @@ facts:
   # The list routes
   - id: validate-instance-types
     kind: request
-    request: "GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes"
+    request: "GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cpuGtEq=0&memoryGtEq=0"
     reads:
       fields:
         - instanceTypes[].type
         - instanceTypes[].cpu
+        - instanceTypes[].memory
         - instanceTypes[].nonSupportedZones
     stand_in:
       - v1/clouds/aws/regions/{region}/instancetypes
     live:
       - loop.sh:preflight-offering
       - preflight-plan.sh:instancetypes-cpu
+      - preflight-plan.sh:instancetypes-default-filter
     pages:
       - internals/palette/validate-routes.md#the-list-routes
       - reference/palette-api.md#the-checks-of-strata-preflight
@@ -705,10 +707,12 @@ facts:
       fields:
         - instanceTypes[].type
         - instanceTypes[].cpu
+        - instanceTypes[].memory
         - instanceTypes[].nonSupportedZones
     stand_in: []
     live:
       - preflight-plan.sh:instancetypes-cpu
+      - preflight-plan.sh:instancetypes-default-filter
     pages:
       - internals/palette/validate-routes.md#the-list-routes
     rules:
@@ -721,6 +725,7 @@ facts:
       fields:
         - instanceTypes[].type
         - instanceTypes[].cpu
+        - instanceTypes[].memory
     stand_in: []
     live: []
     unchecked: The lab has no account of Azure.

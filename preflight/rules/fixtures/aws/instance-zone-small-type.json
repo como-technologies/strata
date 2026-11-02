@@ -1,0 +1,25 @@
+{
+  "_base": "instance-zone-offered.json",
+  "_note": "the worker pool names t3.small, a type under 4 GiB that the route lists only when the query lifts its default filter; the type is offered in the zone of the pool",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          { "poolConfig": { "name": "worker-pool" }, "cloudConfig": { "instanceType": "t3.small" } }
+        ]
+      }
+    },
+    "_responses": {
+      "GET /v1/clouds/aws/regions/us-east-2/instancetypes?cloudAccountUid=acc-aws-1&cpuGtEq=0&memoryGtEq=0": {
+        "ok": true,
+        "status": 200,
+        "body": {
+          "instanceTypes": [
+            { "category": "General purpose", "cpu": 2, "memory": 2, "price": 0.0208, "type": "t3.small", "cost": { "price": [{ "onDemand": 0.0208, "os": "linux" }] }, "nonSupportedZones": null, "supportedArchitectures": ["x86_64"] },
+            { "category": "General purpose", "cpu": 4, "memory": 16, "price": 0.1664, "type": "t3.xlarge", "cost": { "price": [{ "onDemand": 0.1664, "os": "linux" }] }, "nonSupportedZones": ["us-east-2c"], "supportedArchitectures": ["x86_64"] }
+          ]
+        }
+      }
+    }
+  }
+}

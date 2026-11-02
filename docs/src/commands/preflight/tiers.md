@@ -179,8 +179,10 @@ Some rules need a fact that Palette lists, and a fact that only the cloud gives.
 from the field `cpu` of the instance type route. They compare the sum with the
 quota that the tool of the cloud reads, because no route of Palette lists a
 quota. These rules are in the `cloud` tier. They need the key and the tool, and
-the report shows the command and the request. A pool whose type the route does
-not list adds nothing. [The rule format](../../reference/preflight-rules.md#a-read-of-palette-before-the-command)
+the report shows the command and the request. The request has the query
+`cpuGtEq=0&memoryGtEq=0`, so the route lists the small types too. A pool whose
+type the route still does not list fails the rule. The message names the pool and
+the type. [The rule format](../../reference/preflight-rules.md#a-read-of-palette-before-the-command)
 states the key `palette` of the check.
 
 ## A rule over the property route of a cloud

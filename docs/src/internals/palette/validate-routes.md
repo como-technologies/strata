@@ -480,7 +480,7 @@ Strata reads each list and compares it with the entity.
 
 | Route | Gives | Read by |
 | --- | --- | --- |
-| `GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cloudAccountUid=` | Each instance type of the region: `type`, `category`, `cpu`, `memory`, `price`, `cost`, `supportedArchitectures[]`, and `nonSupportedZones` (an array, or `null`). | `instance-offering`, `aws-quotas`, `gcp-quotas`, `azure-vcpu-quota` |
+| `GET /v1/clouds/{aws,gcp,azure}/regions/{region}/instancetypes?cloudAccountUid=&cpuGtEq=0&memoryGtEq=0` | Each instance type of the region: `type`, `category`, `cpu`, `memory`, `price`, `cost`, `supportedArchitectures[]`, and `nonSupportedZones` (an array, or `null`). | `instance-offering`, `aws-quotas`, `gcp-quotas`, `azure-vcpu-quota` |
 | `GET /v1/clouds/aws/regions/{region}/keypairs?cloudAccountUid=` | `keyNames[]`: the key pairs of the account in the region. | `ssh-key-pair` |
 | `GET /v1/clouds/aws/regions/{region}/vpcs?cloudAccountUid=` | `vpcs[]`: each VPC of the account in the region, with `vpcId`, `name`, `cidrBlock`, and `subnets[]`. A subnet has `subnetId`, `name`, `az`, `isPrivate`, and `mapPublicIpOnLaunch`. | `static-subnets` |
 | `GET /v1/clouds/aws/securitygroups?cloudAccountUid=&region=&vpcId=` | `groups[]`: the security groups of the VPC, with `groupId`, `groupName`, and `ownerId`. | `sg-name-collision` |
@@ -493,10 +493,20 @@ that holds it, and the subnet has no field for its VPC. The zone route
 
 For an AWS type, `cpu` is the count of vCPUs: a `t3.xlarge` gives 4. `memory` is in GiB. `gpu` is empty
 for each AWS type, also for a type with a GPU. The three quota rules count the vCPUs of a pool from
-`cpu`. The GCP and Azure routes give the same fields, and no run shows their numbers. The AWS route
-omits some old instance families, such as `m3` and `c3`. This comes from the code of Palette,
-and no run shows it. A rule reads no quota from these routes, because no route of Palette lists a
-quota.
+`cpu`. The GCP and Azure routes give the same fields, and no run shows their numbers.
+
+The route filters its answer. When the query does not say, it lists only the types with 2 vCPUs or
+more and 4 GiB of memory or more. A run shows it on AWS: `t3.small` and `t3.micro` are absent with
+no query, and the query `cpuGtEq=0&memoryGtEq=0` lists them. The code of Palette gives the same
+default to the GCP and Azure routes, and no run shows it there. Strata sends
+`cpuGtEq=0&memoryGtEq=0` with `cloudAccountUid`. For one engine, the four rules send the same
+query, so one request answers them.
+
+The AWS route omits some old instance families, also with that query. A run shows that `m3.large` is
+absent. The AWS route lists only the types with up to 4 vCPUs and 8 GiB of memory for an account with
+the annotation `freeCredit` set to `true`. This comes from the code of Palette, and no run shows it. A quota rule
+fails for a pool whose type the route does not list, because it cannot count the vCPUs of that pool.
+A rule reads no quota from these routes, because no route of Palette lists a quota.
 
 `type` of an entry names the instance type. An entry has no `name`.
 `nonSupportedZones` of a type is an array of the zones that do not offer it.

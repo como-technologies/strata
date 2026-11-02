@@ -1,6 +1,6 @@
 {
   "_base": "vcpu-quota-clean.json",
-  "_note": "the worker pool names m3.large, which the instance type route does not list, so the check counts the 4 vCPUs of the control plane pool alone, and the quota is 8",
+  "_note": "the worker pool names m3.large, which the instance type route does not list, so the check cannot count the vCPUs of that pool; the control plane pool asks for 4 vCPUs, and the quota is 8",
   "_patch": {
     "entity": {
       "spec": {

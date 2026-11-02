@@ -1,0 +1,13 @@
+{
+  "_base": "vcpu-quota-clean.json",
+  "_note": "the worker pool asks for 20 x t3.small, and the on-demand vCPU quota is 64: the pools ask for 44 (1 x t3.xlarge, 20 x t3.small)",
+  "_patch": {
+    "entity": {
+      "spec": {
+        "machinepoolconfig": [
+          { "poolConfig": { "name": "worker-pool", "size": 20 }, "cloudConfig": { "instanceType": "t3.small" } }
+        ]
+      }
+    }
+  }
+}

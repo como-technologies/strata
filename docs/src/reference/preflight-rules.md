@@ -228,7 +228,7 @@ check:
   kind: exec
   needs: [aws]
   palette:
-    path: '/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/instancetypes?cloudAccountUid={{ .entity.spec.cloudAccountUid }}'
+    path: '/v1/clouds/aws/regions/{{ .entity.spec.cloudConfig.region }}/instancetypes?cloudAccountUid={{ .entity.spec.cloudAccountUid }}&cpuGtEq=0&memoryGtEq=0'
   argv: [aws, service-quotas, get-service-quota, --service-code, ec2, --output, json]
   expr: '...'
 ```

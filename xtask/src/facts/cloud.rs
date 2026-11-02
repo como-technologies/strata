@@ -288,7 +288,7 @@ fn clouds(sources: &Sources) -> impl Iterator<Item = &Fact> {
 /// with no table is a rule of the cloud tier. A table can name a rule of any tier.
 ///
 /// A fact with no call and no table cannot name a rule that runs a command on a cloud of the lab:
-/// the contract run would send nothing for that rule. The rule of a row, with no command, the rule of
+/// the contract run sends nothing for that rule. The rule of a row, with no command, the rule of
 /// a cloud that the lab lacks, and the rule that checks the lab itself are not such rules.
 fn rules_named(sources: &Sources) -> Vec<String> {
     let named: BTreeSet<&String> = clouds(sources).flat_map(|f| &f.rules).collect();
@@ -431,8 +431,8 @@ fn tables_proven(sources: &Sources) -> Vec<String> {
 }
 
 /// The route of Palette beside a call starts with a method, and names the fields that it lacks.
-/// Each one is a field that the call reads: a route that lacks no field would answer the whole
-/// call, and the rule would not need the cloud. A table is no call, so it has no route.
+/// Each one is a field that the call reads: a route that lacks no field answers the whole
+/// call, and the rule needs no cloud. A table is no call, so it has no route.
 fn routes_beside(sources: &Sources) -> Vec<String> {
     let mut bad = Vec::new();
     for fact in clouds(sources) {
@@ -449,7 +449,7 @@ fn routes_beside(sources: &Sources) -> Vec<String> {
         }
         if palette.lacks.is_empty() {
             bad.push(format!(
-                "fact `{id}`: the route names no field that it lacks, so it would answer the whole call"
+                "fact `{id}`: the route names no field that it lacks, so it answers the whole call"
             ));
         }
         for field in palette

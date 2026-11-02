@@ -114,7 +114,7 @@ pub(super) fn preflight_routes(r: &mut Runner, project: &str) {
     );
     r.answer(
         project,
-        &format!("v1/clouds/aws/regions/us-east-2/instancetypes@cloudAccountUid={PLATFORM_AWS}"),
+        &format!("v1/clouds/aws/regions/us-east-2/instancetypes@cloudAccountUid={PLATFORM_AWS}&cpuGtEq=0&memoryGtEq=0"),
         &instance_types_answer(),
     );
     r.answer(

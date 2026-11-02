@@ -722,9 +722,17 @@ Palette lists the fields that these rules read, or a part of them:
     smaller one. Now it counts the `cpu` that the route lists, so the sum can differ from 0.26.0.
   - The three rules need the key and the field `spec.cloudAccountUid`. A run with no key shows
     `NOT RUN` for them. Before, a run with the tool and no key checked the quota.
-  - A pool whose type the route does not list adds nothing. The message of a short quota names the
-    pool.
+  - Each rule sends the query `cpuGtEq=0&memoryGtEq=0` with `cloudAccountUid`. When the query says
+    nothing, the route lists only the types with 2 vCPUs or more and 4 GiB of memory or more. The
+    query lifts that filter, so a pool of `t3.small` counts.
+  - A pool whose type the route still does not list, such as an old family, fails the rule. The
+    message names the pool and the type. Before, the rule counted the vCPUs of that pool from the
+    name of the type. The message of a short quota counts the listed pools alone.
   - When Palette answers with an error, the rule fails and gives the code of Palette.
+
+After 0.26.0, `instance-offering` sends the same query: `cpuGtEq=0&memoryGtEq=0`. The list holds the
+small types now: the types with fewer than 2 vCPUs or less than 4 GiB of memory. Before, the rule
+reported such a type as not in the list of the region.
 
 The terminal text and the markdown can change in any release. The candidate
 file rejects fields that it does not know. So a file with a field from a later
