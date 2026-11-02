@@ -1111,24 +1111,31 @@ fn a_refused_key_a_limit_of_the_rate_and_a_fault_of_the_server_are_not_a_differe
 
 // ---- the harvest of the book -----------------------------------------------------------------
 
-/// The harvest builds the tenant of every chapter. It needs the offline examples and the xtask
-/// binary, which `just examples` and `just stand-in` build; without them it has nothing to
-/// harvest and returns.
-#[test]
-fn the_harvest_of_the_book_gives_the_stand_in_a_document_for_each_route_of_a_fact() {
+/// The stand-in that the harvest of the book builds: the tenant of every chapter. It needs the
+/// offline examples and the xtask binary, which `just examples` and `just stand-in` build. Without
+/// them it has nothing to harvest, and a test that needs it returns.
+fn harvested() -> Option<StandIn> {
     let repo = crate::repository();
     let xtask = repo.join("target/debug/xtask");
     if crate::book::built_examples(&repo).is_err() || !xtask.is_file() {
-        return;
+        return None;
     }
     let into = tempfile::tempdir().unwrap();
     super::stand_in::harvest(&repo, &xtask, into.path()).unwrap();
-    let stand_in = StandIn::read(into.path());
+    Some(StandIn::read(into.path()))
+}
+
+/// The harvest gives the stand-in a document for each route of a fact.
+#[test]
+fn the_harvest_of_the_book_gives_the_stand_in_a_document_for_each_route_of_a_fact() {
+    let Some(stand_in) = harvested() else {
+        return;
+    };
     let facts = real_facts();
     let without: Vec<&str> = facts
         .iter()
         .filter(|f| f.kind == Kind::Request && !f.stand_in.is_empty())
-        .filter(|f| !f.reads.fields.is_empty() || !f.reads.values.is_empty())
+        .filter(|f| f.reads.reads_a_document())
         .filter(|f| stand_in.documents(&f.stand_in).is_empty())
         .map(|f| f.id.as_str())
         .collect();
@@ -1188,17 +1195,53 @@ fn a_post_fact_and_a_fact_with_no_document_of_the_stand_in_are_not_reported() {
     }
 }
 
+/// The types at `field` in the documents that the stand-in has for the fact `id`.
+fn held_types(stand_in: &StandIn, facts: &[Fact], id: &str, field: &str) -> Vec<JsonType> {
+    let fact = facts.iter().find(|f| f.id == id).expect("a fact");
+    let path = Field::parse(field);
+    let types: BTreeSet<JsonType> = stand_in
+        .documents(&fact.stand_in)
+        .iter()
+        .flat_map(|d| path.types(d))
+        .collect();
+    types.into_iter().collect()
+}
+
+/// The eight fields that a tenant gave as a string and that the stand-in never served (#530), and
+/// the registry whose sync recovered with no message.
+#[test]
+fn the_stand_in_of_the_book_serves_the_eight_fields_with_a_string_and_a_registry_with_no_message() {
+    let Some(stand_in) = harvested() else {
+        return;
+    };
+    let facts = real_facts();
+    for (id, field) in [
+        ("app-profile-document", "metadata.lastModifiedTimestamp"),
+        ("app-profile-tier-manifest", "spec.published.digest"),
+        ("oci-registry-summary", "items[].spec.providerType"),
+        ("audit-log", "items[].spec.actor.serviceName"),
+        ("audit-log", "items[].spec.contentMsg"),
+        ("profile-document", "metadata.annotations.projectUid"),
+        ("profile-document", "spec.published.packs[].manifests[].uid"),
+        ("profile-variables", "variables[].description"),
+    ] {
+        let types = held_types(&stand_in, &facts, id, field);
+        assert!(types.contains(&JsonType::String), "{id} {field}: {types:?}");
+    }
+    // a registry with `syncRecovery` and no `message` is there beside one with a message
+    let message = "items[].status.sync.syncRecovery.message";
+    assert_eq!(
+        held_types(&stand_in, &facts, "oci-registry-summary", message),
+        [JsonType::Absent, JsonType::String]
+    );
+}
+
 /// The stand-in of the book holds each field that a fact reads.
 #[test]
 fn the_stand_in_of_the_book_holds_each_field_that_a_fact_reads() {
-    let repo = crate::repository();
-    let xtask = repo.join("target/debug/xtask");
-    if crate::book::built_examples(&repo).is_err() || !xtask.is_file() {
+    let Some(stand_in) = harvested() else {
         return;
-    }
-    let into = tempfile::tempdir().unwrap();
-    super::stand_in::harvest(&repo, &xtask, into.path()).unwrap();
-    let stand_in = StandIn::read(into.path());
+    };
     let facts = real_facts();
     let bad = stand_in.unheld_fields(&facts);
     assert!(bad.is_empty(), "{}", bad.join("\n"));
