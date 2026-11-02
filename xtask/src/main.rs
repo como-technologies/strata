@@ -13,7 +13,7 @@
 //! xtask facts --check            exit 1 when the list does not agree with the book and the scripts
 //! xtask contract [OPTIONS]       ask a real tenant the requests of the facts, and compare the answers
 //!                                with the stand-in; `xtask contract --help` names the options
-//! xtask harvest DIR            write the tenant of every chapter to DIR, for xtask contract --stand-in
+//! xtask harvest DIR              write the tenant of every chapter to DIR, for xtask contract --stand-in
 //! ```
 
 mod book;

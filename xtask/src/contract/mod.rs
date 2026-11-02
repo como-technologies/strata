@@ -17,6 +17,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 use strata::api::{Method, PaletteApi};
+use strata_preflight::world::unreadable;
 
 use crate::facts::{Fact, Kind};
 
@@ -109,7 +110,7 @@ fn check<A: PaletteApi>(
             };
             entry(outcome, None, differences)
         }
-        Err(failure) => match failure.status.filter(|status| refuses(*status)) {
+        Err(failure) => match failure.status.filter(|status| unreadable(*status)) {
             Some(status) => entry(
                 Outcome::Differs,
                 None,
@@ -123,13 +124,6 @@ fn check<A: PaletteApi>(
             None => entry(Outcome::Error, Some(failure.message.clone()), Vec::new()),
         },
     }
-}
-
-/// True when a status is the answer of Palette to this request, and not a fault of the call.
-/// A key that Palette does not accept (401), a limit of the rate (429), and a fault of the server
-/// (5xx) say nothing about the fact. The run could not check it.
-fn refuses(status: u16) -> bool {
-    (400..500).contains(&status) && status != 401 && status != 429
 }
 
 /// Each difference between the answer `found` of the tenant and the documents `expected` of the
