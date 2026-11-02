@@ -1,7 +1,7 @@
 //! The endpoint of the report: a small service that takes the report of the values that strata
 //! does not know, and merges the reports into one issue for each set and value.
 //!
-//! A user of strata turns the send on, and strata posts the document `strata-report/1` here: see
+//! A user of strata chooses the send, and strata posts the document `strata-report/1` here: see
 //! `strata::closed_set::unknown::send`. The endpoint does four things for each request, in this
 //! order:
 //!

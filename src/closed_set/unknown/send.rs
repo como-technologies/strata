@@ -1,6 +1,6 @@
 //! The opt-in send of the report to the endpoint of the maintainers.
 //!
-//! Strata sends nothing by default. A user turns the send on, and nothing else does. At the end of
+//! Strata sends nothing by default. A user chooses the send, and nothing else does. At the end of
 //! a run that wrote a line to the log, strata decides with [`step`]:
 //!
 //! - The setting `STRATA_REPORT` decides first. `1` sends, and `0` sends nothing. The environment
@@ -28,7 +28,7 @@ use crate::text::cut;
 #[cfg(test)]
 mod tests;
 
-/// The setting that turns the send on (`1`) or off (`0`).
+/// The setting that chooses the send (`1`) or refuses it (`0`).
 pub const SETTING: &str = "STRATA_REPORT";
 
 /// The setting that names the address of the endpoint, in place of [`ENDPOINT`].
@@ -136,7 +136,7 @@ impl Facts {
 
 /// What the end of a run does, from the facts of the run.
 ///
-/// A setting that is neither `1` nor `0` sends nothing: the user did not turn the send on.
+/// A setting that is neither `1` nor `0` sends nothing: the user did not choose the send.
 pub fn step(facts: &Facts) -> Step {
     if !facts.wrote || facts.endpoint.is_none() {
         return Step::Nothing;
