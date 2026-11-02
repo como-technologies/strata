@@ -34,10 +34,12 @@ use std::process::{Command, Output};
 
 use serde_json::{Value, json};
 
+mod answer;
 mod palette;
 mod process;
 mod stand_in;
 
+pub use answer::*;
 pub use palette::*;
 pub use process::*;
 pub use stand_in::*;
@@ -118,9 +120,6 @@ fn write_profile(
 
 /// The uid every cluster fixture carries: the fixtures are one cluster at different moments.
 pub const CLUSTER_UID: &str = "c1a5000000000000000000c1";
-
-/// The uid of the fixture a, `lab-profile@1.2.0`, and of each fixture made from a.
-pub const UID_A: &str = "64f0000000000000000000a1";
 
 /// The uid of the fixture b, `lab-profile@1.3.0`.
 pub const UID_B: &str = "64f0000000000000000000b2";

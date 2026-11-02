@@ -14,8 +14,8 @@ use strata::term::progress::Progress;
 use crate::common;
 use common::{
     DRAFT_PROFILE_UID, DRAFT_RULES, PUBLISHED_RULES, RULES_UID, manifest_content, manifest_entity,
-    manifest_route, no_manifests, no_template, no_variables, pack_route, profile_document,
-    profile_route, serve_profile, snapshot_of, template,
+    manifest_route, manifests_answer, no_manifests, no_template, no_variables, pack_route,
+    profile_document, profile_route, serve_profile, snapshot_of, template,
 };
 
 const PACK: &str = "64f0000000000000000000e1";
@@ -42,8 +42,8 @@ fn profile_doc(published: Value, draft: Option<Value>) -> Value {
 /// The answer of `packs/manifests` for the pack `grafana` with the uid `uid`: its values in
 /// clear, as Palette serves a draft.
 fn grafana_manifests(uid: &str) -> Value {
-    json!({"spec": {"packs": [{"metadata": {"name": "grafana", "uid": uid},
-        "spec": {"name": "grafana", "version": "1.0.0", "values": VALUES}}]}})
+    manifests_answer(vec![json!({"metadata": {"name": "grafana", "uid": uid},
+        "spec": {"name": "grafana", "version": "1.0.0", "values": VALUES}})])
 }
 
 /// Make sure that no file in `dir`, which `save_dir` wrote, holds SECRET.
@@ -224,11 +224,20 @@ fn draft_with_manifests() -> MemoryApi {
         template_with_manifests(PUBLISHED_VALUES),
         Some(template_with_manifests(DRAFT_VALUES)),
     );
-    let manifests = json!({"spec": {"packs": [
-        served("grafana", PACK, DRAFT_VALUES,
-               json!({"name": "dash", "uid": DASH, "content": PUBLISHED_DASH})),
-        served("team-rules", RULES_PACK, "",
-               json!({"name": "rules", "uid": RULES_UID, "content": PUBLISHED_RULES}))]}});
+    let manifests = manifests_answer(vec![
+        served(
+            "grafana",
+            PACK,
+            DRAFT_VALUES,
+            json!({"name": "dash", "uid": DASH, "content": PUBLISHED_DASH}),
+        ),
+        served(
+            "team-rules",
+            RULES_PACK,
+            "",
+            json!({"name": "rules", "uid": RULES_UID, "content": PUBLISHED_RULES}),
+        ),
+    ]);
     serve_profile(
         MemoryApi::new(),
         DRAFT_PROFILE_UID,

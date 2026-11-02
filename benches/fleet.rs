@@ -9,7 +9,7 @@ use strata::ops::{self, RecordStatus, VerifyOptions};
 use strata::reference::Ref;
 use strata::term::progress::Progress;
 use strata_benches::GENERATED_AT;
-use strata_benches::fleet::{VerifyFleet, consumer_fleet};
+use strata_benches::fleet::{VerifyFleet, all_running, consumer_fleet};
 use strata_benches::profile::PROFILE_UID;
 
 /// The sizes of a fleet.
@@ -64,12 +64,7 @@ fn consumers(c: &mut Criterion) {
         };
         let report = run();
         assert_eq!(report.count, clusters);
-        assert!(
-            report
-                .consumers
-                .iter()
-                .all(|c| c.error.is_none() && c.state == "Running")
-        );
+        assert!(all_running(&report));
         group.bench_with_input(
             BenchmarkId::from_parameter(format!("{clusters}_clusters")),
             &clusters,

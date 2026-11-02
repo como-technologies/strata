@@ -15,12 +15,17 @@ use serde_yaml::Value as Yaml;
 use strata::api::{MemoryApi, Palette, RawCluster, ReadErrors};
 use strata::term::progress::Progress;
 
-use crate::support::{
-    AT, UID, answer, fingerprint, manifests_route, pack_route, profile_route, scratch, utf8,
-    variables_route,
+use crate::routes::{
+    PackFixture, manifests_answer, no_manifests, no_template, no_variables, pack_route,
+    profile_document, serve_profile, template,
 };
+use crate::support::{AT, UID, answer, fingerprint, scratch, utf8};
 
 /// The text that Palette writes over a secret.
+///
+/// This is a second text of the const of strata, on purpose. The check states the rule on its own,
+/// and it fails when strata changes the text that a record and a raw directory hold. The library
+/// does not make its const public for a target.
 const MASKED: &str = "********";
 
 /// The format that marks a field of a pack schema as a secret.
@@ -37,28 +42,19 @@ fn draft_api(values: &str, fields: &[String]) -> MemoryApi {
         .iter()
         .map(|name| json!({"name": name, "format": PASSWORD_FORMAT}))
         .collect();
-    MemoryApi::new()
-        .with(
-            profile_route(),
-            json!({
-                "metadata": {"uid": UID, "name": "demo"},
-                "spec": {"version": "1.0.0", "draft": {"cloudType": "aws", "type": "add-on", "packs": [{
-                    "name": "pack", "layer": "addon", "type": "spectro", "tag": "1.0.0",
-                    "version": "1.0.0", "packUid": "p1", "registryUid": "r1", "values": values,
-                }]}},
-            }),
-        )
-        .with(
-            manifests_route(),
-            json!({"spec": {"packs": [{
-                "metadata": {"name": "pack", "uid": "p1"}, "spec": {"values": values},
-            }]}}),
-        )
-        .with(variables_route(), json!({"variables": []}))
-        .with(
-            pack_route("p1"),
-            json!({"packValues": [{"packUid": "p1", "schema": schema}]}),
-        )
+    let pack = PackFixture::new("pack", "addon", "1.0.0", "p1", "r1", "", values);
+    let draft = template("aws", "add-on", json!([pack.pack_ref(&[])]));
+    serve_profile(
+        MemoryApi::new(),
+        UID,
+        profile_document(UID, "demo", "1.0.0", no_template(), Some(draft)),
+        manifests_answer(vec![pack.pack_manifests(Vec::new())]),
+        no_variables(),
+    )
+    .with(
+        pack_route("p1"),
+        json!({"packValues": [{"packUid": "p1", "schema": schema}]}),
+    )
 }
 
 /// The values of the draft pack of the profile that [`draft_api`] serves, after the read of the
@@ -225,7 +221,7 @@ fn save_cluster(values: &str, other: Option<Value>) -> Option<std::path::PathBuf
             "metadata": {"uid": UID, "name": "demo"},
             "spec": {"clustersConfig": {"values": values}},
         }),
-        manifests: json!({"spec": {"packs": []}}),
+        manifests: no_manifests(),
         variables: json!([]),
         variables_unavailable: false,
         project_uid: None,

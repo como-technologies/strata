@@ -9,10 +9,16 @@
 //!
 //! A target calls the public API of the packages, as a program that uses them does. The
 //! directory of each target is `src/__fuzz__/<module>__<test>/`, which is where bolero looks.
+//!
+//! - [`answer`] checks an answer and a ref. It is the file that `tests/fuzz.rs` uses, so no second
+//!   check of an answer exists.
+//! - [`routes`] names the routes of Palette, and builds the documents of a profile. It is the file
+//!   that the tests and the benchmarks use, so no second list of the routes exists.
 #![cfg(any(test, doc))]
 
 mod candidate;
 mod canon;
+mod config;
 mod mask;
 mod palette;
 mod preflight;
@@ -22,3 +28,9 @@ mod reference;
 mod report;
 mod seed;
 mod support;
+
+#[path = "../../tests/common/answer.rs"]
+pub mod answer;
+
+#[path = "../../tests/common/palette.rs"]
+pub mod routes;

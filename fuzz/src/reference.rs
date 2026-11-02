@@ -4,26 +4,14 @@ use std::cmp::Ordering;
 
 use strata::reference::{Ref, version};
 
+use crate::answer::ref_fault;
 use crate::support::{parts, utf8};
 
 /// Parse `text` as a ref that names no file. Return true when the ref is not a plain uid, so the
-/// parser found a shape in the text.
+/// parser found a shape in the text. The text of the ref must parse as the same ref: see
+/// [`ref_fault`].
 fn ref_of(text: &str) -> bool {
-    let r = Ref::parse_with(text, |_| false);
-    let said = r.to_string();
-    assert!(
-        !said.is_empty() || text.is_empty(),
-        "{text:?} printed as nothing"
-    );
-    // The text of a ref parses as the same ref. So a ref in a record, a message, or a script names
-    // the same thing each time that a person or strata reads it. A check of the printed text alone
-    // is not enough: `cluster:c1@pending/` is the uid `c1@pending`, which prints as the text of the
-    // update that waits for `c1`.
-    let again = Ref::parse_with(&said, |_| false);
-    assert_eq!(
-        again, r,
-        "{text:?} is {r:?}, and it printed as {said:?}, which parses as another ref"
-    );
+    let r = ref_fault(text).unwrap_or_else(|fault| panic!("{fault}"));
     !matches!(r, Ref::Uid(_))
 }
 

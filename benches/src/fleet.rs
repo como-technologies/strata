@@ -8,6 +8,9 @@ use std::path::PathBuf;
 
 use serde_json::{Value, json};
 use strata::api::{MemoryApi, RawCluster, ReadErrors};
+use strata::closed_set::ClosedSet;
+use strata::model::cluster_state::ClusterState;
+use strata::ops::ConsumersReport;
 use strata::snapshot::Snapshot;
 use tempfile::TempDir;
 
@@ -69,7 +72,7 @@ impl VerifyFleet {
             let document = json!({
                 "metadata": {"uid": uid, "name": name},
                 "spec": {"cloudType": "aws", "clusterProfileTemplates": [template.clone()]},
-                "status": {"state": "Running"},
+                "status": {"state": ClusterState::Running.as_str()},
             });
             let manifests = json!({"profiles": [{
                 "metadata": {"name": PROFILE_NAME, "uid": PROFILE_UID},
@@ -141,9 +144,18 @@ pub fn consumer_fleet(clusters: usize) -> MemoryApi {
             json!({
                 "metadata": {"uid": uid, "name": format!("cluster-{index}")},
                 "spec": {"clusterProfileTemplates": [template]},
-                "status": {"state": "Running"},
+                "status": {"state": ClusterState::Running.as_str()},
             }),
         );
     }
     api
+}
+
+/// True when each consumer in `report` is a cluster that runs and that strata read with no error.
+/// Both checks of a consumer fleet, the benchmark and the test of the generator, use it.
+pub fn all_running(report: &ConsumersReport) -> bool {
+    report
+        .consumers
+        .iter()
+        .all(|c| c.error.is_none() && ClusterState::Running.is(&c.state))
 }

@@ -11,7 +11,7 @@ use serde_yaml::{Mapping, Value as Yaml};
 
 use crate::canon::{canon_is_idempotent, record};
 use crate::mask::{fields_of, mask_and_check};
-use crate::record::{compares_equal_to_itself, writes_and_reads_again};
+use crate::record::{compares_equal, writes_and_reads_again};
 use crate::reference::order_laws;
 
 /// The bytes of an input, read as one choice after the other. A choice past the end of the bytes is
@@ -141,11 +141,15 @@ fn the_root_does_not_change_when_the_order_of_the_keys_changes() {
 }
 
 #[test]
-fn the_comparison_of_a_record_with_itself_is_empty() {
+fn the_comparison_of_two_records_of_one_profile_is_empty() {
     bolero::check!().for_each(|bytes| {
-        let values = values_of(bytes);
-        let record = record(&values, &values).expect("a profile of one pack builds");
-        compares_equal_to_itself(&record);
+        let tree = tree(&mut Choices(bytes), 3);
+        let (forward, backward) = (yaml(&tree), yaml(&reversed(&tree)));
+        let build = |values: &str| record(values, values).expect("a profile of one pack builds");
+        let first = build(&forward);
+        // a second build of the same text, and a build of the text with its keys in another order
+        compares_equal(&first, &build(&forward));
+        compares_equal(&first, &build(&backward));
     });
 }
 
