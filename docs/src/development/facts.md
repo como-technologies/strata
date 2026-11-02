@@ -424,7 +424,9 @@ and the links name `OWNER/REPO`.
 
 The script reads the host layer of `scripts/ci/verify-report.sh`, so it holds no second copy of the
 functions that call GitHub. The contract script is not shipped, so it can read a file of the
-repository. The shipped report scripts stay copies on purpose.
+repository. The shipped report scripts stay copies on purpose. The script also reads
+`examples/live/github.sh`. That file holds the project of a checkout and the first line of the body
+of an issue, so `upstream.sh` and the other live scripts read the remote in the same way.
 
 ### The profiles of the run
 
