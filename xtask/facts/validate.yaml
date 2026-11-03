@@ -714,39 +714,6 @@ facts:
       - gcp-quotas
       - azure-vcpu-quota
 
-  - id: validate-instance-types-gcp
-    kind: behavior
-    reads:
-      fields:
-        - instanceTypes[].type
-        - instanceTypes[].cpu
-        - instanceTypes[].memory
-        - instanceTypes[].nonSupportedZones
-    stand_in: []
-    live:
-      - preflight-plan.sh:instancetypes-cpu
-      - preflight-plan.sh:instancetypes-default-filter
-    pages:
-      - internals/palette/validate-routes.md#the-list-routes
-    rules:
-      - instance-offering
-      - gcp-quotas
-
-  - id: validate-instance-types-azure
-    kind: behavior
-    reads:
-      fields:
-        - instanceTypes[].type
-        - instanceTypes[].cpu
-        - instanceTypes[].memory
-    stand_in: []
-    live: []
-    unchecked: The lab has no account of Azure.
-    pages:
-      - internals/palette/validate-routes.md#the-list-routes
-    rules:
-      - azure-vcpu-quota
-
   - id: validate-vpcs
     kind: request
     request: "GET /v1/clouds/aws/regions/{region}/vpcs?cloudAccountUid={cloudAccountUid}"

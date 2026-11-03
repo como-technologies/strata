@@ -498,6 +498,11 @@ gets HTTP 422. The VPC route and the key pair route require it too. The security
 `vpcId`, and a request with no query gets HTTP 422. The `vpcId` is the id of a VPC from the VPC
 listing of the same region.
 
+The regions route lists the regions that answer a dry run with the key of the account. AWS can still
+refuse the VPCs of a region of the list. A region can also lack the metadata of its instance types.
+Both cases give HTTP 500: see
+[What the source of Palette says](limits.md#what-the-source-of-palette-says).
+
 The VPC route lists no count of free addresses and no tag for a subnet. Its `isPrivate` is true when
 the route table of the subnet has no route to an internet gateway. A subnet belongs to the VPC entry
 that holds it, and the subnet has no field for its VPC. The zone route

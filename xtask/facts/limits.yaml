@@ -298,3 +298,27 @@ facts:
       - internals/palette/validate-routes.md#the-list-routes
     rules:
       - ssh-key-pair
+
+  - id: limit-vpcs-region-refused
+    kind: behavior
+    reads:
+      codes:
+        - AwsVpcsReadError
+    unchecked: The page states the answer from the source of Palette, and no run shows it. The lab account has no region that AWS refuses.
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - internals/palette/validate-routes.md#the-list-routes
+    code:
+      - xtask/src/contract/subject.rs
+
+  - id: limit-instance-types-without-metadata
+    kind: behavior
+    reads:
+      codes:
+        - CloudInstanceMetadataNotFound
+    unchecked: The page states the answer from the source of Palette, and no run shows it. The lab account has no region without metadata.
+    pages:
+      - internals/palette/limits.md#what-the-source-of-palette-says
+      - internals/palette/validate-routes.md#the-list-routes
+    rules:
+      - instance-offering

@@ -322,13 +322,14 @@ pub struct Reads {
     /// page of the fact.
     #[serde(default)]
     pub codes: Vec<String>,
-    /// The values of a closed set that strata names, by the field that holds them:
-    /// `status.state` and the states that strata tells apart. Palette gives no other value.
+    /// The values of a closed set, by the field that holds them: `status.state` and the states of a
+    /// cluster. Palette gives no other value. The list names a value that strata does not act on, too.
     #[serde(default)]
     pub values: BTreeMap<String, Vec<String>>,
     /// The closed set of strata that a list of `values` is, by the same field: the name of its type,
     /// such as `ClusterState`. The list and the type must agree, so a new value in one shows in
-    /// the check. A list that is a part of a set, or a set that has no type, names none.
+    /// the check. Only a word that `STRATA_ONLY` or `PALETTE_ONLY` names is in one and not in the
+    /// other. A list that is a part of a set, or a set that has no type, names none.
     #[serde(default)]
     pub sets: BTreeMap<String, String>,
     /// The names that strata needs from a set that Palette can extend, by the field that holds

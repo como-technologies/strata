@@ -46,7 +46,9 @@ pub use routes::{
     AUDITS, CLUSTER_SEARCH_PATH, PROFILE_SEARCH_PATH, PROJECT_LISTING, cluster_validate_route,
     empty_audit_log, exported_profile, rbacs_route, validated_cloud,
 };
-// the routes that the chapter `fields` writes: each document there has the route of its kind
+// the routes and the sync answers that the chapter `fields` writes: each document there has the
+// route and the answer of its kind
+pub(crate) use registries::{RegistrySync, registry_sync};
 pub(crate) use routes::{
     CLUSTER_LISTING, app_profile_route, app_tier_manifest_route, app_tiers_route, group_route,
     pack_listing, profile_route, registry_summary_route, variables_route,

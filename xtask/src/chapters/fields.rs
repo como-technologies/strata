@@ -12,14 +12,16 @@
 
 use serde_json::json;
 use strata::closed_set::ClosedSet;
+use strata::json::set_at;
 use strata::model::cluster_state::ClusterState;
 use strata::model::scope::ProfileScope;
 
 use super::ids::DEV;
 use crate::book::Runner;
 use crate::tenant::{
-    AUDITS, CLUSTER_LISTING, app_profile_route, app_tier_manifest_route, app_tiers_route,
-    group_route, pack_listing, profile_route, registry_summary_route, variables_route,
+    AUDITS, CLUSTER_LISTING, RegistrySync, app_profile_route, app_tier_manifest_route,
+    app_tiers_route, group_route, pack_listing, profile_route, registry_summary_route,
+    registry_sync, variables_route,
 };
 
 /// The uids of the objects of this chapter. No other chapter uses them.
@@ -138,13 +140,9 @@ fn profile(r: &mut Runner) {
 /// The summary of the registries of each kind: a registry whose sync stopped has a message, and a
 /// registry whose sync is complete has none. A pack version that Spectro Cloud marks `disabled`.
 fn registries_and_packs(r: &mut Runner) {
-    let recovered = json!({"isSyncSupported": true, "status": "Completed",
-        "lastRunTime": "2026-09-17T09:00:00.000Z", "lastSyncedTime": "2026-09-17T09:00:00.000Z",
-        "syncRecovery": {"syncRecoveryState": "Recovered"}});
-    let stopped = json!({"isSyncSupported": true, "status": "InProgress",
-        "message": "sync in progress",
-        "lastRunTime": "2026-09-17T09:00:00.000Z", "lastSyncedTime": "2026-08-29T00:00:11.032Z",
-        "syncRecovery": {"syncRecoveryState": "Recovering", "message": "sync interrupted"}});
+    let recovered = registry_sync(RegistrySync::Complete);
+    let mut stopped = registry_sync(RegistrySync::Stopped);
+    set_at(&mut stopped, &["message"], json!("sync in progress"));
     r.answer(
         DEV,
         &registry_summary_route("oci"),
