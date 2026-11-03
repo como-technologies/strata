@@ -240,6 +240,11 @@ memory. The check sends `cpuGtEq=0&memoryGtEq=0`, so the route lists the small t
 the route still does not list, such as an old family, fails the check. The check cannot count the
 vCPUs of that pool.
 
+A rule file has no shared jq definition, so each of the four rules writes the lookup: the two
+messages of a refusal, and the read of `cpu` for a pool. A test in `preflight/tests/catalog.rs` fails
+when a fifth rule reads the route. Then add one section of jq definitions to the catalog, and move
+the lookup into it.
+
 The checks `instancetypes-cpu`, `instancetypes-default-filter`, `vpcs-route-keys`,
 `zones-route-keys`, and `sgs-route-keys` of
 [the live run of the plan](../development/live-runs.md#preflight-plansh) ask the routes, and
@@ -268,7 +273,7 @@ The rules hold these tables today:
 | The table | How the contract run proves it |
 | --- | --- |
 | The zone ids that EKS takes no cluster subnet in | The list of the zones of each region shows each id. Each account sees its own zone ids. An id that the lab account lacks is a result that the account cannot check, and it is no difference. |
-| The default limit of managed policies for a role | The default quota of Service Quotas gives the figure. The rule `iam-role-policy-quota` reads the quota of the account, and uses this default when it cannot. |
+| The default limit of managed policies for a role | The default quota of Service Quotas gives the figure. The rule `iam-role-policy-quota` reads the quota of the account, and uses this default when it cannot. The test of the list finds the figure as a whole word in the program of the rule. |
 
 A rule does not read a vCPU count from the name of a type. The three quota rules read `cpu` from
 the instance type route of Palette. A list of the names that a build needs is no table of cloud

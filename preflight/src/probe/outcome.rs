@@ -124,21 +124,50 @@ impl Call {
     }
 }
 
+/// One command that an exec check ran: its line as a person types it, and its exit code.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Invocation {
+    /// The command line.
+    pub line: String,
+    /// The exit code. None when the command did not run or did not start.
+    pub exit: Option<i32>,
+}
+
+impl Invocation {
+    /// A command that has no exit code: it did not run, or it did not start.
+    pub fn not_run(line: impl Into<String>) -> Invocation {
+        Invocation {
+            line: line.into(),
+            exit: None,
+        }
+    }
+
+    /// A command that ran and ended with the exit code `exit`.
+    pub fn ended(line: impl Into<String>, exit: i32) -> Invocation {
+        Invocation {
+            line: line.into(),
+            exit: Some(exit),
+        }
+    }
+
+    /// The exit code as the report writes it: `exit 0`.
+    fn answer(&self) -> Option<String> {
+        self.exit.map(|exit| format!("exit {exit}"))
+    }
+}
+
 /// What a check ran, with the answer to it.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum Ran {
     /// A static check, a check that did not run, or a check with `each` over an empty list.
     #[default]
     Nothing,
-    /// The command of a check that runs a program, as a person runs it by hand. The answer is
-    /// `exit 0`, and none when the command did not start.
+    /// The commands of a check that runs a program, as a person runs them by hand.
     Exec {
-        /// The command line.
-        line: String,
-        /// The exit code of the first command, as `exit 0`.
-        answer: Option<String>,
-        /// The line of the second command, when the check has one.
-        also: Option<String>,
+        /// The command.
+        first: Invocation,
+        /// The second command, when the check has one.
+        also: Option<Invocation>,
         /// The read of Palette that the check made before the command, when it has one.
         request: Option<Call>,
     },
@@ -153,17 +182,26 @@ impl Ran {
     /// a check that made none, or one for each item.
     pub fn text(&self) -> Option<String> {
         match self {
-            Ran::Exec { line, also, .. } => Some(by_hand(line, also.as_deref())),
+            Ran::Exec { first, also, .. } => Some(by_hand(
+                &first.line,
+                also.as_ref().map(|also| also.line.as_str()),
+            )),
             Ran::Request(call) => Some(call.ran()),
             Ran::Nothing | Ran::Requests(_) => None,
         }
     }
 
-    /// The answer to that one request or command: `HTTP 200`, or `exit 0`.
-    pub fn answer(&self) -> Option<&str> {
+    /// The answer to that one request or command: `HTTP 200`, or `exit 0`. For two commands it is
+    /// the exit code of each, in the order of [`Ran::text`], with `; ` between them:
+    /// `exit 0; exit 254`. None when a command has no exit code.
+    pub fn answer(&self) -> Option<String> {
         match self {
-            Ran::Exec { answer, .. } => answer.as_deref(),
-            Ran::Request(call) => call.answer.as_deref(),
+            Ran::Exec { first, also, .. } => std::iter::once(first)
+                .chain(also)
+                .map(Invocation::answer)
+                .collect::<Option<Vec<_>>>()
+                .map(|answers| answers.join("; ")),
+            Ran::Request(call) => call.answer.clone(),
             Ran::Nothing | Ran::Requests(_) => None,
         }
     }

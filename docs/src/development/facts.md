@@ -132,6 +132,7 @@ the fact.
 | Two facts send one call. | The list holds a copy. |
 | A rule or a file of strata holds a text that names a cloud fact, and no fact proves it. | A table of cloud facts has no contract check. See [The tables](#the-tables). |
 | A table has no call, and a rule of its fact is for a cloud that the lab has. | The table has no contract check. |
+| A value of a table is in no program of the rules of its fact. A number must be there as a whole word. | The table and the rule disagree: one of them changed, and the other did not. |
 | A fact with no call names a rule that runs a command on a cloud of the lab. | The run sends no call for that rule. A row, a rule of another cloud, and a check of the lab itself are not such rules. |
 | A call is not a `list`, `describe`, `get`, `show`, or `simulate` operation. | The run sends each call every week, and must change nothing in the account. |
 | A `palette` route has no method, lacks no field, or lacks a field that the fact does not read. | The fact names a route that answers nothing, or the whole call. |
@@ -765,7 +766,8 @@ has no call, and `unchecked` gives the reason.
 7. Run `cargo xtask facts --check`.
 
 For a table, add a fact with `table`. Write its call, the one field that lists the values, the date,
-and the values. Each text value must be in a program of the rule.
+and the values. Each value must be in a program of the rule. A number must be a whole word
+there, so `20` is not in `200`. The check fails when a rule holds another default than the table.
 
 ### The issues of the clouds
 

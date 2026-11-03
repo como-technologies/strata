@@ -8,7 +8,7 @@ use serde_json::Value;
 use strata::config::KEY_VARS;
 
 use super::backend::{Backend, ExecOutput};
-use super::outcome::{Outcome, Ran, Verdict, by_hand};
+use super::outcome::{Invocation, Outcome, Ran, Verdict, by_hand};
 use super::palette::{Asked, read as read_palette};
 use super::{judge, put_data};
 use crate::error::{Error, Result};
@@ -51,9 +51,8 @@ pub(super) fn run_exec(
             ),
         );
         out.ran = Ran::Exec {
-            line,
-            answer: None,
-            also: also_line,
+            first: Invocation::not_run(line),
+            also: also_line.map(Invocation::not_run),
             request: None,
         };
         return out;
@@ -73,14 +72,16 @@ pub(super) fn run_exec(
     match run_commands(backend, &argv, &also, limit) {
         Ok((output, second)) => {
             put_data(&mut with, "exec", &output);
-            if let Some(second) = second {
-                put_data(&mut with, "also", &second);
+            if let Some(second) = &second {
+                put_data(&mut with, "also", second);
             }
             let mut out = judge(rule, &check.expr, &with, jq, started);
             out.ran = Ran::Exec {
-                line,
-                answer: Some(format!("exit {}", output.exit)),
-                also: also_line,
+                first: Invocation::ended(line, output.exit),
+                // the second command has a line and an output together, or neither
+                also: also_line
+                    .zip(second)
+                    .map(|(line, second)| Invocation::ended(line, second.exit)),
                 request,
             };
             out
@@ -88,9 +89,8 @@ pub(super) fn run_exec(
         Err(e) => {
             let mut out = Outcome::new(Verdict::Error, vec![e.to_string()], started);
             out.ran = Ran::Exec {
-                line,
-                answer: None,
-                also: also_line,
+                first: Invocation::not_run(line),
+                also: also_line.map(Invocation::not_run),
                 request,
             };
             out

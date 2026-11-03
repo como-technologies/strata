@@ -705,8 +705,7 @@ fn an_exec_check_needs_its_tool_and_reads_the_output() {
     assert_eq!(
         out.ran,
         Ran::Exec {
-            line: "aws ec2 describe-subnets --region us-east-2".into(),
-            answer: Some("exit 0".into()),
+            first: Invocation::ended("aws ec2 describe-subnets --region us-east-2", 0),
             also: None,
             request: None,
         }
@@ -765,8 +764,7 @@ fn an_exec_check_with_a_read_gives_the_program_the_response_and_the_output() {
     assert_eq!(
         out.ran,
         Ran::Exec {
-            line: "aws service-quotas us-east-2".into(),
-            answer: Some("exit 0".into()),
+            first: Invocation::ended("aws service-quotas us-east-2", 0),
             also: None,
             request: Some(Call::get(
                 "/v1/clouds/aws/regions/us-east-2/instancetypes",
@@ -821,13 +819,12 @@ fn an_exec_check_with_a_second_command_gives_the_program_both_outputs() {
         QUOTA: {"exit": 0, "stdout": {"Quota": {"Value": 30.0}}, "stderr": ""}}}));
     let out = run_check(&exec_with_a_second_command(), &w, &b, &jq);
     assert_eq!(out.messages, vec!["35 policies, and the quota is 30.0"]);
-    // the report shows both commands as a person types them, and the exit code of the first
+    // the report shows both commands as a person types them, and the exit code of each
     assert_eq!(
         out.ran,
         Ran::Exec {
-            line: POLICIES.into(),
-            answer: Some("exit 0".into()),
-            also: Some(QUOTA.into()),
+            first: Invocation::ended(POLICIES, 0),
+            also: Some(Invocation::ended(QUOTA, 0)),
             request: None,
         }
     );
@@ -846,6 +843,46 @@ fn an_exec_check_whose_second_command_fails_gives_the_program_the_exit_code() {
     let out = run_check(&exec_with_a_second_command(), &w, &b, &jq);
     assert_eq!(out.verdict, Verdict::Failed, "{:?}", out.messages);
     assert_eq!(out.messages, vec!["21 policies, and the quota is 20"]);
+}
+
+#[test]
+fn the_answer_of_an_exec_check_with_a_second_command_holds_the_exit_code_of_each_command() {
+    let jq = Jq::new();
+    let (b, w) = fixture(json!({"region": "us-east-2", "_exec": {
+        POLICIES: {"exit": 0, "stdout": {"Count": 21}, "stderr": ""},
+        QUOTA: {"exit": 254, "stdout": "", "stderr": "AccessDeniedException"}}}));
+    let out = run_check(&exec_with_a_second_command(), &w, &b, &jq);
+    assert_eq!(
+        out.ran,
+        Ran::Exec {
+            first: Invocation::ended(POLICIES, 0),
+            also: Some(Invocation::ended(QUOTA, 254)),
+            request: None,
+        }
+    );
+    assert_eq!(out.ran.answer().as_deref(), Some("exit 0; exit 254"));
+    // the second command exits 254, and a shell gives the exit code of the last command of `a; b`
+    // alone: the answer shows both, so a failed read of the quota does not show as `exit 0`
+    assert_eq!(
+        out.ran.text().as_deref(),
+        Some("aws iam list-attached-role-policies; aws service-quotas us-east-2")
+    );
+}
+
+#[test]
+fn the_answer_of_a_command_is_its_exit_code_and_none_when_a_command_did_not_start() {
+    let one = Ran::Exec {
+        first: Invocation::ended(POLICIES, 1),
+        also: None,
+        request: None,
+    };
+    assert_eq!(one.answer().as_deref(), Some("exit 1"));
+    let not_started = Ran::Exec {
+        first: Invocation::ended(POLICIES, 0),
+        also: Some(Invocation::not_run(QUOTA)),
+        request: None,
+    };
+    assert_eq!(not_started.answer(), None);
 }
 
 #[test]
@@ -893,8 +930,7 @@ fn an_exec_check_with_a_read_and_no_tool_asks_palette_nothing() {
     assert_eq!(
         out.ran,
         Ran::Exec {
-            line: "aws service-quotas us-east-2".into(),
-            answer: None,
+            first: Invocation::not_run("aws service-quotas us-east-2"),
             also: None,
             request: None,
         }

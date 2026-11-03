@@ -941,6 +941,21 @@ field, a value, an input, or an option is in the sections above.
   - A line of an older log with a space, or with such a character, is not valid now.
     `strata report` stops with the error `log-invalid`. Delete the line, or delete the file
     `strata-unknown.jsonl`.
+- **`strata-preflight`: `answer` of a check with a second command has the exit code of each command.**
+  Only `iam-role-policy-quota` has a second command.
+  - `answer` was `exit 0`, the exit code of the first command alone. A failed read of the quota
+    also showed `exit 0`. It is `exit 0; exit 254` now, in the order of `ran`.
+  - A script that compares `answer` of this rule with `exit 0` must read both codes.
+  - The lines of `reproduce` for `.exec` and `.also` hold the exit codes that the commands gave.
+    They held `exit: 0` for both.
+- **`strata-preflight`: the ledger of the binary counts the 13 clean runs of `iam-ten-policies` for `iam-role-policy-quota`.**
+  - The runs named the old id, so they counted for no rule. A clean build that passes the quota of
+    10 also passes the quota of 20. The confidence of the rule in the report counts them now.
+    `--promotion` counts them on `aws` and on `eks`.
+  - The ledger no longer holds runs of `eks-ami-type`, `profile-cloud-mismatch`, and
+    `gke-pool-multiple-3`. These rules left the catalog, so the runs counted for no rule.
+  - A ledger that you give with `--ledger` keeps its own ids. Rename the old ids as the
+    [release 0.27.0](#release-0270-changes-that-need-action) item of the rule says.
 
 ### For a user of the library of strata
 
@@ -975,6 +990,14 @@ field, a value, an input, or an option is in the sections above.
   engines, and the document of `preflight --rules --json` holds its schema id in `schema`.
 - A program in a rule can call the new jq filter `semver_numbers`. A rule file that you give
   with `--probes` can use it. It runs in `strata-preflight` only, and not in the `jq` tool.
+- `probe::Ran::Exec` has the fields `first: probe::Invocation`, `also: Option<probe::Invocation>`,
+  and `request: Option<probe::Call>`. It had `line`, `answer`, and `also: Option<String>`.
+  - `probe::Invocation` is new. It holds the `line` of a command and its `exit: Option<i32>`.
+    A literal with `line: l` and `answer: Some("exit 0".into())` becomes
+    `first: Invocation::ended(l, 0)`. A literal with `answer: None` becomes
+    `first: Invocation::not_run(l)`. The same two calls build the value of `also`.
+  - `probe::Ran::answer` gives an `Option<String>` in place of an `Option<&str>`. For two
+    commands it holds the exit code of each, such as `exit 0; exit 254`.
 
 ## Release 0.27.0: changes that need action
 
