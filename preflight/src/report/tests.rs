@@ -746,7 +746,7 @@ rules:
         "{text}"
     );
     assert!(
-        text.contains("no errors; readiness 0%: 0 of 1 checks passed"),
+        text.contains("no errors; readiness 0%: 0 of 1 check passed"),
         "{text}"
     );
     let md = markdown(&report);
@@ -756,7 +756,7 @@ rules:
     );
     assert!(md.contains("Reproduce by hand"), "{md}");
     assert!(md.contains("1 probe failed; "), "{md}");
-    assert!(md.contains("(0 of 1 checks passed)"), "{md}");
+    assert!(md.contains("(0 of 1 check passed)"), "{md}");
     let json: Value =
         serde_json::from_str(&render(&report, Format::Json, true, &Paint::off())).unwrap();
     assert_eq!(json["schema"], REPORT_SCHEMA);
@@ -899,4 +899,41 @@ fn a_check_with_one_request_keeps_its_ran_and_answer_and_has_no_requests() {
         text.contains("ran: GET /v1/edgehosts/h2 -> HTTP 404\n"),
         "{text}"
     );
+}
+
+/// A noun of the summary agrees with its count, also when the count is 1 or 0 (#589): the rules,
+/// the checks, and the verb of the rules.
+#[test]
+fn the_summary_of_a_run_of_one_rule_agrees_each_noun_with_its_count() {
+    let outcome = Outcome {
+        verdict: Verdict::Passed,
+        messages: vec![],
+        elapsed: Duration::from_millis(1),
+        ran: Ran::Nothing,
+    };
+    let report = report_of_edge_host_in_use(None, "/v1/edgehosts/h2", outcome);
+    let text = render(&report, Format::Terminal, false, &Paint::off());
+    assert!(
+        text.contains("\n1 rule applies; 1 ran: 1 passed, "),
+        "{text}"
+    );
+    assert!(text.contains("1 of 1 check passed"), "{text}");
+    let markdown = render(&report, Format::Markdown, false, &Paint::off());
+    assert!(markdown.contains("(1 of 1 check passed)"), "{markdown}");
+
+    let mut none = report;
+    none.summary.rules = 0;
+    none.summary.ran = 0;
+    none.summary.passed = 0;
+    let text = render(&none, Format::Terminal, false, &Paint::off());
+    assert!(text.contains("\nno rules apply; 0 ran: "), "{text}");
+    assert!(text.contains("0 of 0 checks passed"), "{text}");
+
+    let mut many = none;
+    many.summary.rules = 2;
+    many.summary.ran = 2;
+    many.summary.passed = 2;
+    let text = render(&many, Format::Terminal, false, &Paint::off());
+    assert!(text.contains("\n2 rules apply; 2 ran: "), "{text}");
+    assert!(text.contains("2 of 2 checks passed"), "{text}");
 }

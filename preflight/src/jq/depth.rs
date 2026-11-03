@@ -4,6 +4,8 @@
 //! hundreds of levels overflows the stack of the thread. That is not an error, and it has no exit
 //! code. [`depth`] counts the levels from the text, with no recursion of its own.
 
+use super::comment::skip_comment;
+
 /// The most levels of nesting that a program can have. The deepest program of the catalog has
 /// fewer than half of this number.
 pub(super) const MAX_DEPTH: usize = 64;
@@ -192,26 +194,6 @@ fn keyword(program: &str, start: usize, end: usize) -> Option<Word> {
     let name =
         program[..start].ends_with(['.', '$']) || program[end..].trim_start().starts_with(':');
     if lowers && name { None } else { Some(*word) }
-}
-
-/// Read a comment: the `#` is read. jaq ends a comment at the end of the first line that does not end
-/// with an odd number of backslashes. It does not count a `\r` before the `\n`.
-fn skip_comment(chars: &mut impl Iterator<Item = (usize, char)>) {
-    // the backslashes that end the text so far, and those before a `\r` that ends it
-    let (mut backslashes, mut before_cr, mut cr) = (0, 0, false);
-    for (_, c) in chars {
-        match c {
-            '\n' => {
-                if (if cr { before_cr } else { backslashes }) % 2 == 0 {
-                    return;
-                }
-                (backslashes, cr) = (0, false);
-            }
-            '\r' => (before_cr, backslashes, cr) = (backslashes, 0, true),
-            '\\' => (backslashes, cr) = (backslashes + 1, false),
-            _ => (backslashes, cr) = (0, false),
-        }
-    }
 }
 
 #[cfg(test)]

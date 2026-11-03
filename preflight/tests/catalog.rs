@@ -5,17 +5,27 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use strata_preflight::catalog;
 use strata_preflight::fixture;
 use strata_preflight::jq::Jq;
 use strata_preflight::probe::{self, Call, FixtureBackend, LiveBackend, Outcome, Verdict};
-use strata_preflight::rule::{Check, Evidence, EvidenceKind, ExecCheck, PaletteCheck, Rule};
+use strata_preflight::report;
+use strata_preflight::rule::{
+    Catalog, Check, Evidence, EvidenceKind, ExecCheck, PaletteCheck, Rule,
+};
 
 #[path = "../../tests/common/walk.rs"]
 mod walk;
 
 use walk::walk;
+
+// The lock of the tests of strata: a process that a test starts takes it.
+#[path = "../../tests/common/process.rs"]
+#[allow(dead_code)]
+mod process;
+use process::CommandExt;
 
 /// The request of the instance type route for the fixtures of the AWS, GCP, and Azure rules, as the
 /// rules send it. Its query lifts the default filter of Palette, which drops each type with fewer
@@ -1721,6 +1731,247 @@ fn the_rules_that_read_a_version_read_a_pre_release_a_v_and_build_data_as_strata
     assert_eq!(agent("v4.7.0-rc.1"), Verdict::Failed);
     for current in ["v4.10.0-rc.1", "4.10.16+build.2", "4.11"] {
         assert_eq!(agent(current), Verdict::Passed, "{current}");
+    }
+}
+
+/// A text that is no version reads as it did in release 0.27.0: the rule keeps the first two
+/// parts between the dots. The verdicts below are those of release 0.27.0. Only a `v` and build
+/// data read another way.
+#[test]
+fn a_version_that_does_not_parse_reads_in_ccm_version_and_edge_agent_version_as_in_release_0_27_0()
+{
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    let verdict = |id: &str, doc: serde_json::Value| {
+        let rule = catalog.rules().find(|r| r.id == id).unwrap();
+        outcome_of(rule, doc, &jq).verdict
+    };
+
+    // the floor of AWS is 1.27
+    let ccm = |version: &str| {
+        let mut doc = fixture::load(&fixture_path("aws", "k8s-1-26.json")).unwrap();
+        doc["profiles"][0]["packs"][1]["version"] = serde_json::json!(version);
+        verdict("ccm-version", doc)
+    };
+    for (version, expected) in [
+        ("1.26.x", Verdict::Failed),
+        ("1.26.15.1", Verdict::Failed),
+        ("1.x", Verdict::Failed),
+        ("LTS__1.26", Verdict::Failed),
+        ("v1.26.15", Verdict::Failed),
+        ("1.27.x", Verdict::Passed),
+        ("1.28.x", Verdict::Passed),
+    ] {
+        assert_eq!(ccm(version), expected, "ccm-version, {version}");
+    }
+
+    // the release is 4.10 in this fixture, and the agent of the host cp-1 is 4.7.16
+    let agent = |version: &str| {
+        let mut doc = fixture::load(&fixture_path("edge", "agent-old.json")).unwrap();
+        doc["_responses"]["GET /v1/edgehosts/edge-host-cp-1"]["body"]["status"]["health"]["agentVersion"] =
+            serde_json::json!(version);
+        verdict("edge-agent-version", doc)
+    };
+    for (version, expected) in [
+        ("4.10.x", Verdict::Passed),
+        ("4.10.4.1", Verdict::Passed),
+        ("4.9.x", Verdict::Failed),
+        ("4.7.4.1", Verdict::Failed),
+        // a `v` is part of the version now, and the numbers read as they are written
+        ("v4.10.4", Verdict::Passed),
+    ] {
+        assert_eq!(agent(version), expected, "edge-agent-version, {version}");
+    }
+}
+
+/// The folder and the files of a run of the `jq` tool over a line of `reproduce`. `world.json`,
+/// `entity.json`, and `body.json` hold an empty object, so that every line finds its files.
+fn folder_for_reproduce() -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    for file in ["world.json", "entity.json", "body.json"] {
+        std::fs::write(dir.path().join(file), "{}").unwrap();
+    }
+    dir
+}
+
+/// Run a line of `reproduce` that starts with `jq` in the folder. A person fills the three
+/// placeholders of a line, and the test fills them with `null` and `0`.
+fn run_reproduce_line(line: &str, dir: &Path) -> std::process::Output {
+    let line = line
+        .replace("\"$(<the output>)\"", "null")
+        .replace("\"$(<the output of the second command>)\"", "null")
+        .replace("<the exit code>", "0");
+    Command::new("bash")
+        .args(["-c", &line])
+        .current_dir(dir)
+        .env("code", "200")
+        .output_locked()
+        .unwrap()
+}
+
+/// The lines of `reproduce` of one rule on a fixture, as the report prints them for the
+/// directory `out`.
+fn reproduce_lines(
+    catalog: &Catalog,
+    rule: &Rule,
+    doc: serde_json::Value,
+    out: &Path,
+    jq: &Jq,
+) -> Vec<String> {
+    let outcome = outcome_of(rule, doc.clone(), jq);
+    let engine = rule.engines.first().map_or("aws", String::as_str);
+    let report = report::assemble(
+        report::Assembly {
+            catalog,
+            outcomes: vec![(rule, outcome)],
+            confidence: Default::default(),
+            world: &FixtureBackend::split(doc).1,
+            subject: report::Subject {
+                cloud: if engine == "all" { "aws" } else { engine }.to_string(),
+                release: None,
+                source: "fixture".into(),
+                name: String::new(),
+                cluster_uid: None,
+            },
+            options: report::Options {
+                tiers: vec![],
+                strict: false,
+                ready: None,
+                out_dir: Some(out.display().to_string()),
+            },
+            generated_at: "2026-01-01T00:00:00Z".into(),
+        },
+        jq,
+    );
+    report
+        .checks
+        .into_iter()
+        .flat_map(|c| c.reproduce)
+        .collect()
+}
+
+/// A person runs a line of `reproduce` in the `jq` tool, so each program of such a line must
+/// compile there. The tool exits with 3 for a program that does not compile. `ccm-version` and
+/// `capa-stack-release-behind` named `semver_numbers`, and `macro-silent` named `matches`: the
+/// tool has neither.
+#[test]
+fn each_jq_line_of_reproduce_in_the_catalog_compiles_in_the_jq_tool() {
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    let dir = folder_for_reproduce();
+    let mut checked = BTreeSet::new();
+    let mut failures = Vec::new();
+    for rule in catalog.rules() {
+        let Some(fault) = rule.tests.iter().find_map(|t| t.fault.as_ref()) else {
+            continue;
+        };
+        let doc = fixture::load(fault).unwrap();
+        let out = dir.path();
+        for line in reproduce_lines(&catalog, rule, doc, out, &jq) {
+            if !line.starts_with("jq ") {
+                continue;
+            }
+            let ran = run_reproduce_line(&line, dir.path());
+            checked.insert(rule.id.clone());
+            if ran.status.code() == Some(3) {
+                failures.push(format!(
+                    "{}: {line}\n{}",
+                    rule.id,
+                    String::from_utf8_lossy(&ran.stderr)
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+    for id in ["ccm-version", "capa-stack-release-behind", "macro-silent"] {
+        assert!(checked.contains(id), "no jq line of {id} was compiled");
+    }
+}
+
+/// The definition in front of a program that names `semver_numbers` gives the answer of the
+/// filter of the engine. The line is the one that a report prints for a static rule.
+#[test]
+fn the_definition_of_semver_numbers_in_a_reproduce_line_gives_the_answer_of_the_engine() {
+    let section = r#"
+section: kubernetes
+title: K
+rules:
+  - id: numbers-only
+    title: t
+    engines: [aws]
+    tier: static
+    status: seen
+    what: w
+    check: {kind: static, expr: "semver_numbers"}
+"#;
+    let mut catalog = Catalog::default();
+    let file = Path::new("k.yaml");
+    catalog
+        .push(Catalog::parse_section(section, file).unwrap(), file)
+        .unwrap();
+    let rule = catalog.rule("numbers-only").unwrap();
+    let jq = Jq::new();
+    let dir = folder_for_reproduce();
+    let lines = reproduce_lines(&catalog, rule, serde_json::json!({}), dir.path(), &jq);
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert!(
+        lines[0].starts_with("jq 'def semver_numbers: "),
+        "{}",
+        lines[0]
+    );
+
+    let texts = [
+        "4.10.3-rc.1",
+        "v4.10",
+        "1.0.1+2",
+        "LTS__24.x",
+        "",
+        "1.26.x",
+        "1.26.15.1",
+        "1.x",
+        "LTS__1.26",
+        "v1.26.15",
+        "4.10.x",
+        "vv1.0",
+        "v",
+        "1",
+        "01.02",
+        "1.2.3+b-1",
+        "1.0.0-rc-1",
+        "1.0.0-rc.1+b.2",
+        "1.0-a+b",
+        "1.0-",
+        "1.0+",
+        "1.0.0+b+c",
+        "1.0.0-rc..1",
+        "1..2",
+        ".1",
+        "1.2.",
+        " 1.0",
+        "1.0\n",
+        "1.0.0-\u{3b1}",
+        "\u{663}.\u{664}",
+        "+1",
+        "-1",
+        "1,0",
+    ];
+    let inputs = texts
+        .iter()
+        .map(|t| serde_json::json!(t))
+        .chain([serde_json::json!(4), serde_json::Value::Null]);
+    for input in inputs {
+        std::fs::write(dir.path().join("world.json"), input.to_string()).unwrap();
+        let tool = run_reproduce_line(&lines[0], dir.path());
+        let engine = jq.first("t", "semver_numbers", &input, None);
+        if tool.status.success() {
+            let answer: serde_json::Value = serde_json::from_slice(&tool.stdout).unwrap();
+            assert_eq!(answer, engine.unwrap(), "{input}");
+        } else {
+            assert!(
+                engine.is_err(),
+                "{input}: the tool failed, the engine gave {engine:?}"
+            );
+        }
     }
 }
 

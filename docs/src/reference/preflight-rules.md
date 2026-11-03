@@ -124,7 +124,9 @@ strata-preflight adds one filter to jq: `semver_numbers`. It reads the input tex
 version, as `strata` does, and gives the numbers that the version writes. `"4.10.3-rc.1"`
 gives `[4, 10, 3]`, and `"v4.10"` gives `[4, 10]`. A text that is no version gives `null`.
 A rule that compares two versions reads both with it, and compares the arrays. Do not split
-a version at the dots. A program with this filter does not run in the `jq` tool.
+a version at the dots. A program with this filter does not run in the `jq` tool. The report writes a
+`reproduce` line for such a program with a definition of the filter in front. So the line runs
+in the tool.
 
 ## A request for each item
 

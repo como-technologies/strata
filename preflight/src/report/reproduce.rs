@@ -4,6 +4,7 @@ use strata::api::{API_KEY_HEADER, Method, PROJECT_UID_HEADER, cluster_events_pat
 use strata::config::{DEFAULT_BASE_URL, KEY_VARS, PROJECT_VARS, URL_VARS};
 
 use super::Subject;
+use crate::jq;
 use crate::probe::{Invocation, Outcome, Ran};
 use crate::rule::{Check, ExecCheck, PaletteCheck, Rule};
 
@@ -25,7 +26,7 @@ pub(super) fn auto_reproduce(
     let mut lines = Vec::new();
     match &rule.check {
         Some(Check::Static { expr }) => {
-            lines.push(format!("jq '{}' {dir}/world.json", one_line(expr)));
+            lines.push(format!("jq '{}' {dir}/world.json", tool_program("", expr)));
         }
         // a request for each item: the lines show each request. A POST body depends on the item,
         // so a POST rule gets its lines from its own `reproduce`. A rule with its own lines for
@@ -54,7 +55,7 @@ pub(super) fn auto_reproduce(
                 (Method::Post, Some(program)) => {
                     lines.push(format!(
                         "jq '{}' {dir}/world.json > request.json",
-                        one_line(program)
+                        tool_program("", program)
                     ));
                     " -X POST -H 'Content-Type: application/json' --data @request.json".to_string()
                 }
@@ -68,8 +69,8 @@ pub(super) fn auto_reproduce(
                 curl_line(" -o body.json -w '%{http_code}'", &data, path)
             ));
             lines.push(format!(
-                "jq --arg code \"$code\" --slurpfile body body.json '.response = {RESPONSE_OF_CURL} | {}' {dir}/world.json",
-                one_line(expr)
+                "jq --arg code \"$code\" --slurpfile body body.json '{}' {dir}/world.json",
+                tool_program(&format!(".response = {RESPONSE_OF_CURL} | "), expr)
             ));
         }
         Some(Check::Exec(ExecCheck { expr, .. })) => exec_lines(expr, outcome, dir, &mut lines),
@@ -118,8 +119,8 @@ fn exec_lines(expr: &str, outcome: &Outcome, dir: &str, lines: &mut Vec<String>)
         set.push_str(&output_in_world("also", "also", also));
     }
     lines.push(format!(
-        "jq {flags}'{set}{}' {dir}/world.json",
-        one_line(expr)
+        "jq {flags}'{}' {dir}/world.json",
+        tool_program(&set, expr)
     ));
 }
 
@@ -148,6 +149,17 @@ fn curl_line(options: &str, data: &str, path: &str) -> String {
         project = PROJECT_VARS[0],
         url = URL_VARS[0]
     )
+}
+
+/// The program of a `jq` line, for single quotes: `prefix` and `program` on one line. A comment
+/// goes, because the join puts the rest of the program in it. The `jq` tool lacks the filters
+/// that the engine adds, so a definition of each filter that `program` names goes in front.
+fn tool_program(prefix: &str, program: &str) -> String {
+    one_line(&format!(
+        "{}{prefix}{}",
+        jq::tool_definitions(program),
+        jq::without_comments(program)
+    ))
 }
 
 fn one_line(expr: &str) -> String {
@@ -181,5 +193,19 @@ mod tests {
         assert!(line.find(" -o body.json").unwrap() < headers, "{line}");
         assert!(line.find(" -X POST").unwrap() > headers, "{line}");
         assert!(line.ends_with("/v1/y\""), "{line}");
+    }
+
+    #[test]
+    fn a_program_that_names_semver_numbers_starts_with_its_definition_and_another_does_not() {
+        let line = tool_program(".x = 1 | ", "semver_numbers");
+        assert!(line.starts_with("def semver_numbers: "), "{line}");
+        assert!(line.ends_with("; .x = 1 | semver_numbers"), "{line}");
+        assert_eq!(tool_program("", ".a | length"), ".a | length");
+    }
+
+    #[test]
+    fn a_program_with_a_comment_gives_one_line_with_no_comment() {
+        assert_eq!(tool_program("", "1 # a note\n  | 2\n"), "1 | 2");
+        assert_eq!(tool_program("", "'a' # it's"), "'\\''a'\\''");
     }
 }

@@ -250,7 +250,8 @@ After 0.27.0, the library of `strata-preflight` changes in these ways:
   [The world document](./preflight-rules.md#the-world-document). A rule or a custom probe can
   read it.
 - `run::watch` ends when the document of the cluster has `metadata.isDeleted`, also when its state
-  is not `Deleted`. Before, it read until the limit.
+  is not `Deleted`. Before, it read until the limit, and the report held an error for each rule
+  that passed.
 
 After 0.27.0, `timestamp` is a public module of `strata`. `timestamp::now_utc` gives the time
 now as RFC 3339 in UTC, with whole seconds. `timestamp::utc_text` writes a number of seconds
@@ -841,18 +842,22 @@ reported such a type as not in the list of the region.
 After 0.26.0, the message of `api` for a 403 with the code `ProjectUidIsNotEmpty` says that the
 route is of the tenant scope. The kind `api` and the exit code `2` stay.
 
-After 0.27.0, the text of `strata-preflight` agrees each noun with its count. The report said
+After 0.27.0, the counts of the summary of `strata-preflight` agree each noun with the count. The
+message of a rule is outside this change: it can still write `2 key pair(s)`. The report said
 `1 probe(s) failed`, and now it says `1 probe failed`, `2 probes failed`, or `no probes failed`. The
-same holds for the warnings, the notes, the errors, the readings of a watch, and the events of
-`--verbose`.
+same holds for the warnings, the notes, the errors, the rules, the checks, the readings of a
+watch, and the events of `--verbose`. A run of one rule says `1 rule applies` and
+`0 of 1 check passed`.
 
 `summary.verdict` in the JSON changes in the same way, for example `FAIL: 2 checks failed: a, b`.
 `--promotion` says `1 level disagrees with the ledger`, `2 levels disagree with the ledger`, or
 `no levels disagree with the ledger`.
-A script must read `summary.exitCode`, and not the text. The exit codes do not change.
+A script must read `summary.exitCode`, and not the text. These words change no exit code.
 
 After 0.27.0, a watch of `strata-preflight` ends when the document of the cluster has
-`metadata.isDeleted`, also when `status.state` is not `Deleted`. Before, it read until the limit.
+`metadata.isDeleted`, also when `status.state` is not `Deleted`. Before, it read until the limit,
+and each rule that passed became an error with exit `2`. Now the exit code is `0` when no counted
+rule failed, as it is for the state `Deleted`.
 The terminal form of `strata consumers` and `strata list` colors a cluster state as
 `strata-preflight --verbose` does. Green is `Running`, yellow is a build, and red is `Error`,
 `Deleting`, or `Deleted`.
@@ -965,6 +970,8 @@ field, a value, an input, or an option is in the sections above.
     error, and the message names it.
   - `ccm-version` and `edge-agent-version` read a `v` before a version, and build data after
     it. A version with one of them can give another result than before.
+  - A text that is no version reads as it did in 0.27.0. Examples are `1.26.x`, `1.26.15.1`, and
+    `4.10.x`. The two rules read the first two parts between the dots.
 - **`strata-unknown/1` and `strata-report/1` lose the fields `palette`, `status`, and `errorCode`.**
   No release of strata wrote them. A log or a report of 0.27.0 never held them.
   - A line or an entry with one of these fields is not valid now. `strata report` stops with the
@@ -1017,16 +1024,42 @@ field, a value, an input, or an option is in the sections above.
   says "moved to another registry" in place of "pinned to another registry". The text is for a
   reader, and no script needs a change.
 - **Some descriptions in `strata schema` and in `strata-preflight --schema` have new words.** The
-  doc comments of public items feed them. No key, type, or id changes, and no script needs a
-  change.
+  doc comments of public items feed them. No key or id changes. One type changes: see the item
+  for `fix.owner` below. No other change needs a change in a script.
   - `strata schema behind`: the description of `newer` in a pin.
   - `strata schema consumers`: the description of the definition `ClustersRead`.
   - `strata schema diff` and `strata schema verify-summary`: the description of `tagRenamed` in
     a pack.
+  - `strata schema packs`: the descriptions of `latest` and `paletteLatest` in a pack build.
   - `strata-preflight --schema report`: the descriptions of the verdicts `not-run` and
-    `skipped`.
+    `skipped`, and of `answer` and `requests` in a check.
   - `strata-preflight --schema rules`: the descriptions of the checks `palette`, `exec`, and
     `watch`, and of `check` and `when` in a rule.
+  - `strata-preflight --schema report` and `--schema rules`: the description of `owner` in a fix.
+- **`strata-preflight`: the `owner` of a fix is one of six values.** The values are `palette`,
+  `provider`, `lab`, `strata`, `operator`, and `none`. In 0.27.0 the owner was free text.
+  - A rule file of `--probes` with another owner stops the run with the error `catalog` and
+    exit `2`. A file with `owner: team-network` ran in 0.27.0. Use `operator`, and name the team
+    in the text of the fix.
+  - `fix.owner` in `strata-preflight/1` and in `strata-preflight-rules/1` is a list of six
+    values in the schema, and no longer a `string`. The ids stay, because the catalog writes
+    only the six values.
+  - `report::Report` refuses a report of 0.27.0 with another owner. Only a custom probe writes
+    such an owner. Change it in the file of the report before you read the file again.
+- **`strata-preflight --watch`: a deleted cluster ends the watch.** In 0.27.0, a cluster with
+  `metadata.isDeleted` and the state `Deleting` read until the limit. Then each rule that passed
+  became an error, and the exit code was `2`.
+  - The watch ends at the first reading now. The exit code is `0` when no counted rule failed,
+    as it was for the state `Deleted`.
+  - A pipeline that gated on exit `2` for such a cluster passes now.
+- **`strata-preflight`: the words of a count and of four messages change.** A script must read
+  `summary.exitCode`, and not the text.
+  - `summary.verdict`, `subject.source` of a watch, and the last line of `--promotion` agree each
+    noun with its count. An example is `4 readings` in place of `4 reading(s)`.
+  - The terminal form and the markdown of a report change in the same way. The summary says
+    `1 rule applies` and `0 of 1 check passed`.
+  - The messages of `aws-quotas`, `gcp-quotas`, and `azure-vcpu-quota` have new words. A long
+    sentence of each is now two short sentences or more.
 
 ### For a user of the library of strata
 
@@ -1069,6 +1102,19 @@ field, a value, an input, or an option is in the sections above.
   engines, and the document of `preflight --rules --json` holds its schema id in `schema`.
 - A program in a rule can call the new jq filter `semver_numbers`. A rule file that you give
   with `--probes` can use it. It runs in `strata-preflight` only, and not in the `jq` tool.
+  - The report writes a `reproduce` line for such a program with a definition of the filter in
+    front. So the line runs in the `jq` tool.
+- `probe::is_answer` has a second argument. Change `is_answer(status)` to
+  `is_answer(status, Reader::Check)`.
+- `world::unreadable` is gone. Change `unreadable(status)` to `is_answer(status, Reader::World)`.
+- `probe::palette_error_line` is gone. Call
+  `strata::model::validation::PaletteRefusal::from_error_body` in its place.
+- `catalog::LEDGER` is private. Call `catalog::builtin_ledger()`, which gives a
+  `Result<confidence::Ledger>`. The library example of 0.27.0 called
+  `Ledger::parse(catalog::LEDGER, ...)`, and a program that copied it must change that call.
+- `rule::Fix::owner` is a `rule::Owner`, and no longer a `String`. `Owner::as_str` gives the
+  text. A literal with `owner: "operator".into()` becomes `owner: Owner::Operator`. A rule file
+  with another owner fails at load: see the item for `fix.owner` above.
 - `probe::Ran::Exec` has the fields `first: probe::Invocation`, `also: Option<probe::Invocation>`,
   and `request: Option<probe::Call>`. It had `line`, `answer`, and `also: Option<String>`.
   - `probe::Invocation` is new. It holds the `line` of a command and its `exit: Option<i32>`.

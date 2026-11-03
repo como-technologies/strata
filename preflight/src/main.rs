@@ -499,8 +499,8 @@ fn promotion_text(report: &confidence::PromotionReport) -> String {
     }
     let n = report.disagreements as usize;
     out.push_str(&format!(
-        "\n{} rules with a check; {} {} the ledger\n",
-        report.rules.len(),
+        "\n{} with a check; {} {} the ledger\n",
+        count_of(report.rules.len(), "rule"),
         count_of(n, "level"),
         plural(n, "disagrees with", "disagree with")
     ));

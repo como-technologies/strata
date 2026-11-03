@@ -3465,6 +3465,16 @@ fn the_section_of_release_0_28_0_names_each_schema_description_that_has_new_word
             "/$defs/PackDiff/properties/tagRenamed/description",
             "because the tag name differs. The same name, layer, type, version,",
         ),
+        (
+            "packs",
+            "/$defs/PackBuild/properties/latest/description",
+            "True for the version that `pack:<name>@latest` records.",
+        ),
+        (
+            "packs",
+            "/$defs/PackBuild/properties/paletteLatest/description",
+            "Palette marks the highest version by the order of semantic versions",
+        ),
     ] {
         let document = schema(kind);
         let description = document
@@ -3479,11 +3489,13 @@ fn the_section_of_release_0_28_0_names_each_schema_description_that_has_new_word
     let command_line = release_0_28_0_part("### For a user of the command line or of a document\n");
     for needle in [
         "**Some descriptions in `strata schema` and in `strata-preflight --schema` have new words.**",
-        "No key, type, or id changes, and no script needs a change.",
+        "No key or id changes. One type changes: see the item for `fix.owner` below.",
         "`strata schema behind`: the description of `newer` in a pin.",
         "`strata schema consumers`: the description of the definition `ClustersRead`.",
         "`strata schema diff` and `strata schema verify-summary`: the description of `tagRenamed` in a pack.",
-        "`strata-preflight --schema report`: the descriptions of the verdicts `not-run` and `skipped`.",
+        "`strata-preflight --schema report`: the descriptions of the verdicts `not-run` and `skipped`, and of `answer` and `requests` in a check.",
+        "`strata schema packs`: the descriptions of `latest` and `paletteLatest` in a pack build.",
+        "`strata-preflight --schema report` and `--schema rules`: the description of `owner` in a fix.",
         "`strata-preflight --schema rules`: the descriptions of the checks `palette`, `exec`, and `watch`, and of `check` and `when` in a rule.",
     ] {
         assert!(
@@ -4037,5 +4049,96 @@ fn the_rows_of_the_live_window_of_wave_14_state_their_results() {
         "No result yet: the endpoint had the label `palette-drift` until #574.",
     ] {
         assert!(!page.contains(old), "live-runs.md still holds {old:?}");
+    }
+}
+
+// ---- the review of Wave 14: the end-of-wave findings of #589 --------------------------------------
+
+/// A1, A2, A3, A4, A6, and S4: the section of release 0.28.0 names each change of
+/// `strata-preflight` that the review found. Each item gives its action.
+#[test]
+fn the_section_of_release_0_28_0_names_each_change_of_strata_preflight_that_the_review_found() {
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document");
+    for needle in [
+        // A6: a text that is no version reads as it did in 0.27.0
+        "A text that is no version reads as it did in 0.27.0. Examples are `1.26.x`, `1.26.15.1`, and `4.10.x`.",
+        // A2 and S4: the owner is a closed set, and the description list holds the five items
+        "**`strata-preflight`: the `owner` of a fix is one of six values.**",
+        "A rule file of `--probes` with another owner stops the run with the error `catalog` and exit `2`.",
+        "Use `operator`, and name the team in the text of the fix.",
+        "`fix.owner` in `strata-preflight/1` and in `strata-preflight-rules/1` is a list of six values in the schema",
+        "`report::Report` refuses a report of 0.27.0 with another owner.",
+        "No key or id changes. One type changes",
+        "`strata schema packs`: the descriptions of `latest` and `paletteLatest` in a pack build.",
+        "the descriptions of the verdicts `not-run` and `skipped`, and of `answer` and `requests` in a check.",
+        // A3: the exit code of a deleted cluster
+        "**`strata-preflight --watch`: a deleted cluster ends the watch.**",
+        "the exit code was `2`",
+        "The exit code is `0` when no counted rule failed, as it was for the state `Deleted`.",
+        // A4: the words of a count and of four messages
+        "**`strata-preflight`: the words of a count and of four messages change.**",
+        "`summary.verdict`, `subject.source` of a watch, and the last line of `--promotion`",
+        "The messages of `aws-quotas`, `gcp-quotas`, and `azure-vcpu-quota` have new words.",
+    ] {
+        assert!(
+            command_line.contains(needle),
+            "the part of the command line lacks {needle:?}"
+        );
+    }
+    let preflight = release_0_28_0_part("### For a user of the library of strata-preflight");
+    for needle in [
+        "Change `is_answer(status)` to `is_answer(status, Reader::Check)`.",
+        "Change `unreadable(status)` to `is_answer(status, Reader::World)`.",
+        "`strata::model::validation::PaletteRefusal::from_error_body` in its place.",
+        "Call `catalog::builtin_ledger()`",
+        "`Ledger::parse(catalog::LEDGER, ...)`",
+        "`rule::Fix::owner` is a `rule::Owner`",
+        "`Owner::as_str` gives the text.",
+        "with a definition of the filter in front. So the line runs in the `jq` tool.",
+    ] {
+        assert!(
+            preflight.contains(needle),
+            "the strata-preflight part lacks {needle:?}"
+        );
+    }
+}
+
+/// S1: the sentence about the nouns names the counts of the summary, and says that the message of a
+/// rule is outside it. The messages of the rules keep `(s)`.
+#[test]
+fn compatibility_says_that_the_message_of_a_rule_is_outside_the_agreement_of_the_nouns() {
+    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    for needle in [
+        "After 0.27.0, the counts of the summary of `strata-preflight` agree each noun with the count.",
+        "The message of a rule is outside this change: it can still write `2 key pair(s)`.",
+        "the rules, the checks, the readings of a watch, and the events of `--verbose`.",
+    ] {
+        assert!(page.contains(needle), "the page lacks {needle:?}");
+    }
+    assert!(
+        !page.contains("After 0.27.0, the text of `strata-preflight` agrees each noun"),
+        "the old sentence names the whole text of the tool"
+    );
+}
+
+/// A3: the page of the watch gives the exit code of a deleted cluster.
+#[test]
+fn the_page_of_the_watch_gives_the_exit_code_of_a_deleted_cluster() {
+    let page = one_line(&read(&docs().join("commands/preflight/watch.md")));
+    assert!(
+        page.contains("A deleted cluster gives exit `0` when no counted rule failed."),
+        "{page}"
+    );
+}
+
+/// S4: the page of the custom probes names the fault of an owner that is not one of the six.
+#[test]
+fn the_page_of_the_custom_probes_names_the_fault_of_an_owner_that_is_not_one_of_six() {
+    let page = one_line(&read(&docs().join("commands/preflight/rules.md")));
+    for needle in [
+        "A file with a `fix.owner` that is not one of six values fails in the same way.",
+        "Use `operator`, and name the team in the text of the fix.",
+    ] {
+        assert!(page.contains(needle), "the page lacks {needle:?}");
     }
 }

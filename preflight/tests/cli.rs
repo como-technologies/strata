@@ -713,7 +713,7 @@ fn no_description_of_a_schema_holds_the_markup_of_a_rustdoc_link() {
     );
 }
 
-/// The split of long sentences in the doc comments gave seven descriptions new words. The section
+/// The split of long sentences in the doc comments gave some descriptions new words. The section
 /// of release 0.28.0 in `compatibility.md` names them, and a test of the root package reads that
 /// page.
 #[test]
@@ -754,6 +754,26 @@ fn the_schemas_hold_the_new_words_of_the_descriptions_that_the_release_notes_nam
             "rules",
             "/$defs/Rule/properties/when/description",
             "Use `.before != null` for a rule on a change.",
+        ),
+        (
+            "report",
+            "/$defs/CheckResult/properties/answer/description",
+            "A check with a second command has the exit code of each command",
+        ),
+        (
+            "report",
+            "/$defs/CheckResult/properties/requests/description",
+            "has one entry, the read of Palette, beside `ran` and `answer`.",
+        ),
+        (
+            "report",
+            "/$defs/Fix/properties/owner/description",
+            "The owner of the fix. A rule file writes it as",
+        ),
+        (
+            "rules",
+            "/$defs/Fix/properties/owner/description",
+            "The owner of the fix. A rule file writes it as",
         ),
     ] {
         let (code, out, err) = run(&["--schema", kind], dir.path());
@@ -997,4 +1017,80 @@ fn the_text_of_the_promotion_agrees_the_noun_and_the_verb_with_the_count_of_leve
         out.contains(" rules with a check; 1 level disagrees with the ledger\n"),
         "{out}"
     );
+}
+
+/// The owner of a fix was a `string` in 0.27.0. It is one of six values now, in the report and in
+/// the rules, and the section of release 0.28.0 in `compatibility.md` says so.
+#[test]
+fn the_schemas_give_the_owner_of_a_fix_six_values() {
+    let dir = tempfile::tempdir().unwrap();
+    for kind in ["report", "rules"] {
+        let (code, out, err) = run(&["--schema", kind], dir.path());
+        assert_eq!(code, 0, "{kind}: {err}");
+        let schema: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(
+            schema["$defs"]["Fix"]["properties"]["owner"]["$ref"], "#/$defs/Owner",
+            "{kind}"
+        );
+        assert!(
+            schema["$defs"]["Fix"]["properties"]["owner"]
+                .get("type")
+                .is_none(),
+            "{kind}: the owner is no longer a string"
+        );
+        let values: Vec<&str> = schema["$defs"]["Owner"]["oneOf"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v["const"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            values,
+            ["palette", "provider", "lab", "strata", "operator", "none"],
+            "{kind}"
+        );
+    }
+}
+
+/// A file of `--probes` with an owner that is not one of the six stops the run with the error
+/// `catalog` and exit 2. Release 0.27.0 took any text.
+#[test]
+fn a_probes_file_with_an_owner_that_is_not_one_of_six_stops_the_run_with_the_error_catalog() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("entity.json"), ENTITY).unwrap();
+    let probe = |owner: &str| {
+        format!(
+            "section: custom\ntitle: Custom\nrules:\n  - id: team-tag\n    title: The tag of the team\n    engines: [aws]\n    tier: static\n    status: seen\n    what: The entity names a team.\n    check: {{kind: static, expr: '[\"no team tag\"]'}}\n    fix: {{owner: {owner}, text: Ask the team.}}\n"
+        )
+    };
+    let run_with = |owner: &str| {
+        let file = dir.path().join(format!("probe-{owner}.yaml"));
+        std::fs::write(&file, probe(owner)).unwrap();
+        run(
+            &[
+                "entity.json",
+                "--cloud",
+                "aws",
+                "--offline",
+                "--probes",
+                file.to_str().unwrap(),
+                "--rule",
+                "team-tag",
+                "--quiet",
+                "--json",
+            ],
+            dir.path(),
+        )
+    };
+    let (code, out, err) = run_with("team-network");
+    assert_eq!(code, 2, "{out}{err}");
+    let error: serde_json::Value = serde_json::from_str(&err).unwrap();
+    assert_eq!(error["error"]["kind"], "catalog", "{err}");
+    let message = error["error"]["message"].as_str().unwrap();
+    assert!(
+        message.contains("unknown variant `team-network`"),
+        "{message}"
+    );
+    let (code, out, err) = run_with("operator");
+    assert_eq!(code, 0, "{out}{err}");
 }

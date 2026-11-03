@@ -246,7 +246,7 @@ rules:
           ($fs | semver_numbers) as $floor
           | [ (.profiles // [])[] | .packs[] | select(.layer == "k8s")
               | .version as $v
-              | ($v | semver_numbers // [] | .[:2]) as $p
+              | ($v | semver_numbers // (split(".") | .[:2] | map(try tonumber catch 0)) | .[:2]) as $p
               | select(($p | length) == 2)
               | select(($p[0] < $floor[0]) or ($p[0] == $floor[0] and $p[1] < $floor[1]))
               | "pack \(.name)@\($v) on \($c) is under Kubernetes \($fs), the floor of the external cloud controller: Palette installs none, and a values `cloud-provider: external` leaves the nodes uninitialized" ]

@@ -451,7 +451,7 @@ rules:
       each: .edgeHosts
       path: /v1/edgehosts/{{ $item.host.hostUid }}
       expr: |
-        def mm: semver_numbers // [] | .[:2];
+        def mm: semver_numbers // (split(".") | .[:2] | map(sub("[^0-9].*$"; "") | if . == "" then 0 else tonumber end)) | .[:2];
         .release as $rel
         | [ .responses[] | .item.host.hostUid as $u | .response as $r
           | if ($r.ok | not) then "Palette cannot read edge host \($u): \($r.body.code // $r.status): \($r.body.message // "")"
