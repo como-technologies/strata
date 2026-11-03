@@ -16,8 +16,12 @@ In this example, `dev` has `aws-stack@1.1.5`, whose CSI pack has no digest, and
 **Who runs this.** A person who records a release, and the scheduled verify job.
 The job is [Drift issues](../automation/drift-issues.md).
 
-**Follow along.** `just playground no-digest` serves this tenant on this
+<div class="playground-demo">
+
+`just playground no-digest` serves this tenant on this
 machine, with no key and no cost.
+
+</div>
 
 ## 1. The record says which pack has no digest
 

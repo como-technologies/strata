@@ -100,6 +100,25 @@ state more than its calls of `serve_here`. `just docs-check` fails on a page
 that gives `just playground` with a chapter that the runner does not start. It
 also fails on a state that the chapter does not have.
 
+## A playground demo has one look
+
+Each place that sends a reader to the playground uses one callout, so the reader
+sees a demo as a demo on each page:
+
+```markdown
+<div class="playground-demo">
+
+`just playground loop-1` serves this tenant on this machine, with no key and no cost.
+
+</div>
+```
+
+`docs/playground.css` styles the box and writes its label, "Playground demo". So do
+not write the label on a page. Do not name the class `playground`: mdBook reserves it,
+and it puts a run button in each element of that class. `just docs-check` fails on a `just playground`
+outside a callout, and on a callout that does not name the recipe. It skips the
+pages of `development/`, which describe the recipe to a maintainer.
+
 ## Add an output
 
 `xtask` runs each command against a local stand-in for the Palette API, which is

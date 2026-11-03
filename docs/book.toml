@@ -25,7 +25,7 @@ edit-url-template = "https://github.com/como-technologies/strata/edit/main/docs/
 additional-js = ["mermaid.min.js", "mermaid-init.js", "gruvbox/gruvbox.js", "gruvbox/mermaid-gruvbox.js"]
 default-theme = "gruvbox"
 preferred-dark-theme = "gruvbox"
-additional-css = ["gruvbox/css/variables.css", "gruvbox/highlight.css"]
+additional-css = ["gruvbox/css/variables.css", "gruvbox/highlight.css", "playground.css"]
 
 [output.html.redirect]
 # The page was development/walkthrough.md before its name said preflight.

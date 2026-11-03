@@ -16,8 +16,12 @@ gives it the format `password`. The secret of `prod` is not the secret of
 **Who runs this.** A person who promotes a release, and the scheduled verify
 job. The job is [Drift issues](../automation/drift-issues.md).
 
-**Follow along.** `just playground masked-value` serves this tenant on this
+<div class="playground-demo">
+
+`just playground masked-value` serves this tenant on this
 machine, with no key and no cost.
+
+</div>
 
 ## 1. The record holds the mask
 

@@ -1,371 +1,219 @@
 # The everyday loop
 
-Strata is one loop, and each command is one step of it. A team reviews a change,
-and the pipeline publishes it. A record in the repository keeps the content that
-the team approved. From then on, each step compares Palette with that record.
-Each difference reaches a person as a comment, a gate that fails, or an issue.
+Palette builds a cluster from a published profile version. After a team approves
+a version, its content can still change, and its name and number stay the same.
+Strata keeps a copy of the approved content in your repository, and it tells you
+when Palette holds something else.
 
-A name and a version do not tell you the content. Palette can update a
-published version after its publish, and the name stays. So the record holds the
-content, and not only the name. A record in Git, checked against Palette, shows
-each change after the approval.
-[Where each part belongs](./boundary.md) gives the reasons.
+Strata runs in your pipeline and at your terminal. It reads Palette and writes
+files. It publishes nothing and deletes nothing, so each write stays in your
+pipeline.
+
+## When to reach for strata
+
+Start from the question that you have.
+
+| Your question | What answers it |
+| --- | --- |
+| Is this cluster healthy? Is it behind its profile? Who changed this object? | Palette: [health alerts](https://docs.spectrocloud.com/clusters/cluster-management/health-alerts/), [update notifications](https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/update-cluster-profile/), and [the audit log](https://docs.spectrocloud.com/audit-logs/). |
+| How do I publish a version, or build or upgrade a cluster? | Palette, through your pipeline or [the Terraform provider](https://registry.terraform.io/providers/spectrocloud/spectrocloud/latest/docs). Strata does none of this. |
+| What does this change do to my clusters, before I merge it? | `strata compare`. It names each pack that changes, and the impact, such as a repave. |
+| Does Palette still hold what we approved? | `strata verify`. |
+| Does this cluster run the release that we approved? | `strata compare`. |
+| Do `dev` and `prod` hold one release? | `strata same-release`. |
+| Can Palette build this cluster? | `strata preflight`. It checks the body of the create and asks Palette, before the build starts. |
+
+[Where each part belongs](./boundary.md) gives each feature of Palette, and what
+strata adds beside it.
+
+**Your own tooling stays.** Your pipeline still publishes, and your scripts still
+decide what happens next. Strata gives them an exit code: `0` for the same, `1`
+for a difference, and `2` for no answer.
+
+**You can write this check yourself, but a comparison of names is not enough.**
+A name and a number stay when the content changes. So the check must mask each
+password, put the content in one order, hash it, and keep the copy. It must also
+say what changed, and what the change does to a cluster. Strata is that part of a
+pipeline.
+
+## Start from nothing
+
+Add one part at a time. Each part works alone, so you can stop after any step
+and keep what you have. The order starts with the part that you see on each change.
+
+<div class="playground-demo">
+
+`just playground quickstart` serves a tenant on this machine, with no key and no
+cost. It holds the names below, so you can do steps 1 and 2 with no Palette account.
+
+</div>
+
+### 1. Connect to your tenant
+
+```bash
+export PALETTE_API_KEY=...        # the API key
+strata list projects              # test the key: the projects that it can see
+export PALETTE_PROJECT=dev        # one name from that list
+strata list                       # the refs in that project
+```
+
+[Install](./install.md) and [Configure](./configure.md) give the rest.
+
+### 2. Record what you run today
+
+Use your own names from `strata list`.
+
+```bash
+mkdir -p releases
+strata snapshot aws-stack@1.1.0 -o releases/dev.json
+git add releases && git commit -m "Record the release of dev"
+
+strata verify releases/dev.json                     # exit 1 when somebody changes it
+strata compare releases/dev.json cluster:payments   # does the cluster run it?
+```
+
+The record is a file with the content of the version and its root, which is one
+digest of that content. These commands change nothing in Palette. You now hold a
+copy of what you run, in Git.
+
+### 3. Comment on each pull request
+
+Add this job first. It shows what a change does when a person reviews it. It reads
+Palette and writes one comment, and it blocks nothing.
+
+1. Copy
+   [`examples/ci/github/strata.yml`](https://github.com/como-technologies/strata/blob/main/examples/ci/github/strata.yml)
+   to `.github/workflows/strata.yml`. For GitLab, see [GitLab CI](./automation/gitlab.md).
+2. Keep the job `comment`, and delete the other jobs. Each step below puts a job back.
+3. Set `a` to the record of your default branch, and `b` to what the pull request
+   proposes. `b` is a candidate file. It is a version in Palette when your pipeline
+   publishes each pull request as a version.
+4. Set the secrets that the top of the file names, such as `PALETTE_API_KEY`.
+
+To see the comment first, run the script with `--dry-run`. It reads Palette and
+posts nothing:
+
+```bash
+scripts/ci/pr-comment.sh releases/dev.json aws-stack@1.1.1 --dry-run
+```
+
+Each pull request then gets one comment, with each pack that changes and its
+impact. See [Pull request comments](./automation/pr-comments.md).
+
+### 4. Check each night
+
+A pull request shows the changes that go through a review. This job finds the
+others, such as an edit in place. Keep the job `verify` and the `schedule` in the
+same file.
+
+To see the result first, run the script with `--dry-run`. It reads Palette and
+opens no issue:
+
+```bash
+scripts/ci/verify-report.sh 'releases/**/*.json' --dry-run
+```
+
+The job keeps one open issue for each record that drifted. It closes the issue
+when the record passes again. See [Drift issues](./automation/drift-issues.md).
+
+### 5. Add the gates that you need
+
+Add each row when you need it. Each job is in the same file.
+
+| Add this when | The job or the command | Read |
+| --- | --- | --- |
+| A merge must stop when Palette changed after the review, or when a pin moves back. | the job `gate`, as a required check | [The merge gate](./automation/merge-gate.md) |
+| A publish must hold the content that the reviewer read. | `strata same-release`, after the publish | [Review a change before you publish it](./use-cases/review.md) |
+| You copy a release to `prod`. | the job `promote-gate` | [Promote a release to another project](./use-cases/promote.md) |
+| You delete old versions. | the job `retire-gate` | [Retire a version](./use-cases/retire.md) |
+| You want an issue when a pack that you pin has a newer version. | the job `upstream` | [Upstream issues](./automation/upstream-issues.md) |
+| A build fails late, after the work in the cloud starts. | the job `preflight` | [Can Palette build this cluster?](./use-cases/stop-a-build.md) |
 
 ## A day of work
 
-Each row is one thing that you do, and what strata tells you then.
-[The jobs and their commands](#the-jobs-and-their-commands) gives the command and
-the page of each job.
+When the jobs run, most days are quiet. This section follows one day, in the
+order that a team meets each answer.
 
-| You do this | Strata tells you | Where it runs |
-| --- | --- | --- |
-| You open a pull request that changes a profile | What changes in each pack, and its impact level, such as a repave. Palette says if it accepts the packs. | the job of the pull request |
-| You merge | When Palette changed after the review, or the merge moves a pin back, the gate fails, and the merge stops. | the merge gate |
-| The pipeline publishes the version | When Palette holds other content than the content that you reviewed, the job fails. | the job after the merge |
-| You move a cluster to the version | Palette says if the move replaces the nodes, before the move. | the pull request of the move |
-| You copy the release to `prod` | When `prod` holds other content than `dev`, the job fails. | the promotion gate, on demand |
-| You write a new cluster | When Palette cannot build it, the pull request says why, before the build. | the job of the pull request, and the pipeline before the build |
-| Each night, with no person at work | An issue opens when somebody changes a version or a cluster outside a review, or when a pack that you pin has a newer version. | the jobs of the night |
-| A pack has a security fault | Each profile and each cluster that carries the pack, what changed, and who changed it. | a person at a terminal |
-| You delete an old version | When a cluster or a template still uses it, the gate stays closed. | the retire gate, on demand |
-| A job writes a note about a value that strata does not know | The value, the route that gave it, and a link that opens an issue of strata. Strata sends nothing unless you choose the send. | a person at a terminal, on the machine of the job |
+### In the morning
 
-The chart shows the steps of one change. An arrow goes from a step to the step
-that it leads to. An issue of the night leads to a pull request.
+The night job has run. No open issue with the label `strata-drift` means that
+each record passed.
 
-```mermaid
-flowchart TB
-  subgraph you["You, in a pull request"]
-    pr["Change a profile:<br/>a comment shows what changes"]
-    move["Move a cluster:<br/>Palette says if the move replaces the nodes"]
-    newc["Write a new cluster on the release:<br/>can Palette build it?"]
-  end
-  subgraph pipe["Your pipeline"]
-    merge["The merge:<br/>Palette is the same as in the pull request"]
-    make["The version in Palette:<br/>the content that you reviewed"]
-    prod["The copy to prod:<br/>prod holds what dev holds"]
-  end
-  subgraph night["Each night"]
-    drift["A change outside a review:<br/>an issue"]
-    newer["A newer pack version:<br/>an issue"]
-  end
-  pr --> merge --> make --> move
-  make --> prod --> newc
-  make --> drift --> pr
-  make --> newer --> pr
-```
-
-Strata publishes nothing, and it deletes nothing. The pipeline of the team does
-each write, and it decides what to do with each answer. Strata sends nothing about
-your tenants either, unless a person chooses the send, with `STRATA_REPORT=1` or a yes to its one
-question. See [What strata can report](./reference/report.md).
-
-## The jobs and their commands
-
-This table is for the person who writes the pipeline. Each row gives the command
-of a job and the page that describes it.
-
-| When | Who | The question | What runs | Page |
-| --- | --- | --- | --- | --- |
-| A change | the author, in a pull request | Does Palette accept the packs? What does this change do to the clusters? | `snapshot --from-candidate --validate`, then `pr-comment.sh`: `snapshot --from-candidate` and `compare` | [Review a change](./use-cases/review.md) |
-| The merge button | the merge gate | Do the records after the merge still hold? | `merge-gate.sh` | [The merge gate](./automation/merge-gate.md) |
-| The publish | the pipeline of the team | Does Palette hold what the reviewer approved? | `snapshot`, then `same-release` | [Review a change](./use-cases/review.md) |
-| The move of a cluster | the pipeline of the team | Does the move repave the nodes? Does Palette accept the packs? | `compare cluster:<name> <version> --repave` and `--validate`, and `pr-comment.sh --repave` on the pull request of the move | [Ask Palette if the change repaves](./commands/compare/repave.md), [Ask Palette if it accepts the packs](./commands/compare/validate.md) |
-| A promotion | a person, on demand | Do the projects hold one release? | `same-release` | [Promote a release](./use-cases/promote.md) |
-| Before a build | the pipeline, and the person who writes the cluster | Can Palette build this cluster? | `preflight`: the static tier on the pull request, with `pr-comment.sh --preflight` for its comment, the live tier before the build, and the watch during it | [Can Palette build this cluster?](./use-cases/stop-a-build.md) |
-| Each night | a scheduled job | Did a version change under its record? | `verify-report.sh`, and `--who` for the writer of a change | [Drift issues](./automation/drift-issues.md) |
-| Each night | a scheduled job | Which clusters are the fleet? | `snapshot filter:<name> --dir --prune` | [Find the fleet](./use-cases/fleet.md) |
-| Each night | a scheduled job | Does the registry have newer versions of what we pin? | `upstream-report.sh` | [Upstream issues](./automation/upstream-issues.md) |
-| An incident | a person at a terminal | Who carries this pack, who runs it, what changed, and who changed it? | `list --pack`, `consumers`, `compare`, `verify --who` | [Find the profiles that carry a pack](./use-cases/find-a-pack.md) |
-| The end of a version | a person, on demand | Does anything still use it? | `consumers` | [Retire a version](./use-cases/retire.md) |
-| A note of an unknown value | a person, on demand | Which values of Palette does this release not know? | `report`, `report --link`, and `report --sent`; `STRATA_REPORT=1` in the job for the send | [Palette gives a value that strata does not know](./use-cases/unknown-value.md) |
-
-## One change, from the pull request to the retire
-
-This section follows one team through one change. The tenant has the projects
-`dev` and `prod`. Each runs `aws-stack@1.0.0` on a cluster `payments`, and the
-cluster in `prod` has the label `env=prod`. The saved tag filter `production`
-selects that label. The repository of the team has `main`, with a record of
-each project.
-
-**Follow along.** `just playground loop-1` serves this tenant on this machine,
-with no key and no cost. The tenant changes as the day goes on, so this page
-has five seeds. Each section names the one it needs.
-
-### 1. The change
-
-A developer writes `aws-stack@1.1.0` as a candidate file on a branch. Palette
-does not hold that version yet. The author asks Palette if it accepts the packs
-of the candidate. The command changes nothing in Palette, and it writes the
-record of the candidate:
-
-```text
-{{#include output/loop-candidate.txt}}
-```
-
-[Ask Palette before you publish](./commands/candidate.md#ask-palette-before-you-publish)
-gives the three routes that check the candidate. The job of the pull request
-compares the record with the record of what `dev` runs, and posts the comment:
-
-```text
-{{#include output/loop-review.txt}}
-```
-
-The result line counts the packs that changed, and the rest of the comment names
-each one with its impact. The maximum impact is
-`repave`, so the job adds the label `repave`, and the rules of the team can ask
-for a second approver.
-
-Palette answers two more questions about a change on a cluster: does it repave
-the nodes, and does it accept the packs? It answers for a version that it holds.
-The candidate is not in Palette yet, so these questions come in
-[step 3](#3-the-publish), after the publish.
-
-### 2. The merge
-
-The merge gate answers for the records after the merge, not for the branch as
-it was when somebody opened it:
-
-```text
-{{#include output/loop-merge.txt}}
-```
-
-### 3. The publish
-
-**Follow along.** `just playground loop-2` is the tenant after the pipeline
-published `aws-stack@1.1.0` in `dev`.
-
-The pipeline publishes the candidate, records the published version, and asks
-whether it is the version that the reviewer read:
-
-```text
-{{#include output/loop-publish.txt}}
-```
-
-`IDENTICAL`: the root of the published version is the root of the candidate.
-The check is by content, not by a tag or a name.
-
-Palette holds the version now, so the pipeline asks it two questions about the
-move of `payments`. Does the move repave the nodes? Does Palette accept the
-packs?
-
-```text
-{{#include output/loop-ask-repave.txt}}
-{{#include output/loop-ask-validate.txt}}
-```
-
-Each `palette` line is the answer of Palette. Strata compares no value for it.
-The two commands exit `1`, because the roots differ. The pipeline reads the
-answers, and the team decides. [Ask Palette if the change repaves](./commands/compare/repave.md)
-and [Ask Palette if it accepts the packs](./commands/compare/validate.md) give
-the codes and the options.
-
-The pull request that moves `payments` can ask the same question. With
-`--repave`, `pr-comment.sh` puts the answer of Palette in the comment, and the
-label `repave` follows that answer. The table of impacts decides when Palette
-gives no answer. The note below says which one decided:
-
-```text
-{{#include output/loop-ask-repave-comment.txt}}
-```
-
-[Ask Palette if the change repaves](./automation/pr-comments.md#ask-palette-if-the-change-repaves)
-gives the rule for the label.
-
-`dev` moves `payments` to the new version, and the cluster runs it:
-
-```text
-{{#include output/loop-cluster.txt}}
-```
-
-### 4. The promotion
-
-`prod` gets the version, and the promotion gate asks whether the two projects
-hold one release:
-
-```text
-{{#include output/loop-promote.txt}}
-```
-
-### 5. Before a build
-
-**Follow along.** `just playground loop-3` is the tenant after the promotion.
-It also holds the cloud account of `prod`, and it answers the validate routes of Palette.
-
-`prod` builds a new cluster, `ledger`, on the release that the promotion gave
-it. The team writes the body of the create in `cluster.json`, as in
-[Can Palette build this cluster?](./use-cases/stop-a-build.md). The output shows
-the name, the profile in `prod`, and the pools:
-
-```text
-{{#include output/loop-body.txt}}
-```
-
-The static tier needs no key. It reads the file and the records, so the pull
-request can run it:
-
-```text
-{{#include output/loop-preflight-static.txt}}
-```
-
-A pipeline runs the same command through `preflight.sh`, which reads its options
-from variables. See [On another host](./automation/preflight.md#on-another-host).
-
-The pull request can also show the report. `pr-comment.sh --preflight` posts
-`report.md` as a comment of its own, with the marker `<!-- strata-preflight -->`,
-and updates it on each push. On GitHub, the reusable workflow
-`preflight-comment.yml` does the same in a second job. See
-[The report as a comment](./automation/preflight.md#the-report-as-a-comment).
-
-```text
-{{#include output/loop-preflight-comment.txt}}
-```
-
-Before the build, the live tier asks the validate routes of Palette. They check
-the body and create nothing. Here Palette refuses the worker pool: one
-`t3.xlarge` has fewer cores than the packs need. `--strict` makes the exit code
-`1`:
-
-```text
-{{#include output/loop-preflight-live.txt}}
-```
-
-The live tier also reads the instance types of the region, and sends the key
-pair to the property route. The type, its zone, and the key pair of this body
-are correct, so `instance-offering` and `iaas-pod-identity` pass.
-
-A rule over a list, such as `template-outside`, makes one request for each
-profile of the body. This body has one profile, so the rule makes one request.
-See [A rule over a list](./commands/preflight/tiers.md#a-rule-over-a-list).
-
-The fix is a second worker. Change the file, and ask again.
-
-**Follow along.** `just playground loop-4` is the tenant where Palette finds no
-fault in the new body.
-
-```text
-{{#include output/loop-preflight-fix.txt}}
-{{#include output/loop-preflight-clean.txt}}
-```
-
-The pipeline builds the cluster on exit `0` only.
-[Can Palette build this cluster?](./use-cases/stop-a-build.md) gives the rest:
-the watch during the build, the tiers, and how a probe becomes a check.
-
-### 6. The night
-
-**Follow along.** `just playground loop-4` is the tenant after the promotion
-and the fix.
-
-The fleet comes from Palette, not from a list that a person keeps. The job
-records each cluster that the filter `production` selects, and commits the
-directory:
-
-```text
-{{#include output/loop-fleet.txt}}
-```
-
-**Follow along.** `just playground loop-5` is the tenant after a person edits
-`aws-stack@1.1.0` in `prod` in place, through the API, outside the review of
-the team.
-
-The scheduled verify finds the edit, and keeps one issue open for it:
+This morning, one record drifted:
 
 ```text
 {{#include output/loop-nightly.txt}}
 ```
 
-`--who` adds who wrote the change, from the audit log of Palette:
+Somebody edited `aws-stack@1.1.0` in `prod`, outside a review. Ask who:
 
 ```text
 {{#include output/loop-who.txt}}
 ```
 
-The scheduled job takes the same option. With `--who`, the issue lists the
-writes, so the person who reads it knows whom to ask. The workflow input is
-`who`, and the GitLab variable is `STRATA_WHO`. See
-[Name who changed the record](./automation/drift-issues.md#name-who-changed-the-record).
+Then decide. [What to do](./use-cases/edited-in-place.md#what-to-do) gives the
+choices.
+
+A second night job opens an issue when a pack that you pin has a newer version.
+That is a decision for a person, not a fault. See
+[Upstream issues](./automation/upstream-issues.md).
+
+### You change a profile
+
+You write the new version as a candidate on a branch, and you open a pull
+request. The job posts one comment. This is its result line:
 
 ```text
-{{#include output/loop-nightly-who.txt}}
+{{#include output/loop-review.txt}}
 ```
 
-The other scheduled job finds the pins that the registry has passed. This is a
-decision for a person, not an error, so it is a separate job. It reads the
-records of `dev`, because Palette answers in the project of the connection:
+The comment names each pack and its impact. The maximum impact here is `repave`,
+so the job adds the label `repave`. Your rules can then ask for a second approver.
+
+### You merge
+
+The merge gate checks the records after the merge, not the branch as it was when
+you opened it. It stops the merge when Palette changed after the review, or when
+the merge moves a pin back:
 
 ```text
-{{#include output/loop-upstream.txt}}
+{{#include output/loop-merge.txt}}
 ```
 
-The job also asks Palette if it accepts the move of each pin to the newest
-version. The last lines show the bump column of each issue. Here Palette accepts
-each move. When Palette refuses a move, the column says `palette refuses`, with
-the code and the clusters. `--no-impact` skips the question. See
-[Palette accepts the move, or refuses it](./commands/behind.md#palette-accepts-the-move-or-refuses-it).
+### The pipeline publishes
 
-### 7. The incident
-
-A pack has a security problem. A person asks which versions carry it, in each
-project, and which clusters run them:
+Your pipeline publishes the candidate. Then it records the published version, and
+asks if that is what the reviewer read:
 
 ```text
-{{#include output/loop-incident.txt}}
-{{#include output/loop-consumers.txt}}
+{{#include output/loop-publish.txt}}
 ```
 
-### 8. The retire
+`IDENTICAL` means that the content is the same, by its digest, and not by a tag or
+a name. A difference fails the job.
 
-Nothing runs `aws-stack@1.0.0` now. The retire gate is open:
+### You move a cluster
+
+Before the move, ask Palette if the move replaces the nodes:
 
 ```text
-{{#include output/loop-retire.txt}}
+{{#include output/loop-ask-repave.txt}}
 ```
 
-## Behind is not different
+The `palette` line is the answer of Palette. Your team decides what to do with it.
 
-Palette tells a cluster that an update of its profile waits. That is a
-different question from the one that the record answers:
+### Some days
 
-| Palette says | The record says | What happened |
+| What happens | What you run | Read |
 | --- | --- | --- |
-| an update waits | the release drifted, the cluster did not | somebody changed the published version; the cluster keeps its copy until a person accepts the update |
-| no update waits | the cluster drifted | somebody changed the cluster, such as a value overridden on it; nothing in Palette waits for it |
-| no update waits | nothing drifted | the cluster runs the approved release |
+| You copy the release to `prod`. | `strata same-release releases/dev.json releases/prod.json` | [Promote a release to another project](./use-cases/promote.md) |
+| You write a new cluster. | `strata preflight cluster.json --cloud eks` | [Can Palette build this cluster?](./use-cases/stop-a-build.md) |
+| A pack has a security fault. | `strata list --pack <name>`, then `strata consumers <name>@<version>` | [Find the profiles that carry a pack](./use-cases/find-a-pack.md) |
+| You delete an old version. | `strata consumers <name>@<version>` | [Retire a version](./use-cases/retire.md) |
+| A job writes a note about a value that strata does not know. | `strata report` | [Palette gives a value that strata does not know](./use-cases/unknown-value.md) |
 
-A value that a person overrides on a cluster opens no notification. Only the
-record of the cluster shows it. See
-[A cluster does not run its release](./use-cases/cluster-release.md) and
-[A published version is edited in place](./use-cases/edited-in-place.md#read-the-two-verdicts-as-a-pair).
+## See all of it
 
-## A value that strata does not know
-
-Palette can add a value to a closed set between two runs of the loop, such as a new type of a
-profile. Each job of the loop reads the value with no error, and its exit code stays the same. The
-job also writes one note on standard error:
-
-```text
-{{#include output/unknown-value-note.txt}}
-```
-
-**Follow along.** `just playground unknown-value` serves a tenant with such a value.
-
-A job that passes `--quiet` hides the note. The note also adds one line to a log on the machine of
-the job. [The note for a value that Palette gives](./reference/compatibility.md#the-note-for-a-value-that-palette-gives)
-says what the note and the log hold.
-
-A person who sees the note can run `strata report` on that machine. It prints the values of the
-log, and a link that opens a new issue of strata with them. Strata sends nothing unless you
-choose it: you read the report, and you decide whether to send it by hand, by the setting
-`STRATA_REPORT`, or by a yes to its one question. See
-[Palette gives a value that strata does not know](./use-cases/unknown-value.md).
-
-## Palette behavior
-
-The live run of `just live-loop` runs this loop end to end against a tenant,
-with the records in a git repository. It covers the comment, the merge gate, the
-publish, and the questions to Palette about a move. It covers `preflight` on the
-body of a cluster, the nightly jobs, and a value overridden on a cluster. It
-covers an edit in place, an incident, a retire, and a read of the log of the
-unknown values. See
-[What the live example verifies](./development/live-runs.md#loopsh).
+[One change, start to end](./walkthrough.md) follows one change through each step,
+with the output of each command and a playground for each step. It also has the
+table of each job, for the person who writes the pipeline.

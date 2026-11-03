@@ -22,7 +22,7 @@ that strata adds beside it. Strata does not answer the first question again.
 
 | Palette feature | It answers | What strata adds |
 | --- | --- | --- |
-| [Update notifications](https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/update-cluster-profile/) | Is the cluster behind its profile? "Cluster profile changes will generate an update notification on all the clusters that are created from the profile." | Does the content of the cluster match the release that the team approved? A value that a person sets on a cluster ([Update a cluster](https://docs.spectrocloud.com/clusters/cluster-management/cluster-updates/)) is a change of the cluster and not of the profile, so no update waits for it: see [Behind is not different](./loop.md#behind-is-not-different). |
+| [Update notifications](https://docs.spectrocloud.com/profiles/cluster-profiles/modify-cluster-profiles/update-cluster-profile/) | Is the cluster behind its profile? "Cluster profile changes will generate an update notification on all the clusters that are created from the profile." | Does the content of the cluster match the release that the team approved? A value that a person sets on a cluster ([Update a cluster](https://docs.spectrocloud.com/clusters/cluster-management/cluster-updates/)) is a change of the cluster and not of the profile, so no update waits for it: see [Behind is not different](./walkthrough.md#behind-is-not-different). |
 | [The audit log](https://docs.spectrocloud.com/audit-logs/) and [its API](https://docs.spectrocloud.com/api/v1/v-1-audits-list/) | Who changed a resource, and when. | What the content was before and after. An entry names the change, such as the packs whose values changed, and the record holds the values. `verify --who` reads the log beside the record. |
 | [The lock of a cluster template](https://docs.spectrocloud.com/cluster-templates/) | "Once a cluster profile version is linked to a cluster template, that version of the cluster profile becomes immutable." | A version that no template links: "Cluster templates can be used to deploy new clusters only." A cluster that exists runs versions outside a template. The lock covers the route of the whole version, and an edit through the route of one manifest changes a linked version, so `verify` covers both ([The lock of a cluster template](./internals/palette/profiles.md#the-lock-of-a-cluster-template)). |
 | [Variables in use](https://docs.spectrocloud.com/profiles/cluster-profiles/create-cluster-profiles/define-profile-variables/modify-cluster-profile-variables/) | A change to the variables of a version that a cluster uses: "you must create a new version of your cluster profile before you can modify the variables". | A change to the packs, the values, or the manifests of that version, which the update request of the API takes ([Update a cluster profile](https://docs.spectrocloud.com/api/v1/v-1-cluster-profiles-update/)). |
@@ -60,7 +60,7 @@ Strata adds four things beside Palette:
    Strata adds three answers beside it: whether a published version changed
    since its record, whether a cluster differs from the approved release, and
    whether two clusters on one release differ. `verify` and `compare` give
-   them, and the scheduled jobs of [The everyday loop](./loop.md) keep them in
+   them, and the scheduled jobs of [The everyday loop](./loop.md#4-check-each-night) keep them in
    front of a person.
 4. **A copy of the approved content in the repository of the team.** Palette
    exports a profile as a file by hand

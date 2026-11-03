@@ -22,9 +22,13 @@ labeled `env=dev`, and the project `prod` has `payments` and `ledger`, labeled
 **Who runs this.** A scheduled job that keeps the records of the fleet, and a
 person who asks which clusters are production.
 
-**Follow along.** `just playground fleet-1` serves this tenant on this machine,
+<div class="playground-demo">
+
+`just playground fleet-1` serves this tenant on this machine,
 with no key and no cost. The label of `ledger` changes in step 4, so this page
 has two seeds. Each section names the one it needs.
+
+</div>
 
 ## 1. Find the clusters of a label
 
@@ -91,9 +95,13 @@ See [`strata-set/1`](../reference/documents.md#strata-set1) for each field.
 
 ## 4. The fleet changes
 
-**Follow along.** `just playground fleet-2` is the same tenant after the
+<div class="playground-demo">
+
+`just playground fleet-2` is the same tenant after the
 automation relabels `ledger` as `env=retired`. Stop the first seed, and export
 what this one prints.
+
+</div>
 
 ```text
 {{#include ../output/fleet-snapshot-again.txt}}

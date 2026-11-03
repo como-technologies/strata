@@ -1,0 +1,25 @@
+/* A demo that runs on the playground: `just playground <chapter>`. Each one looks the same on each
+   page, and this file writes its label, so no page words it in another way. The rule is in
+   docs/src/development/documentation.md, and `just docs-check` holds it.
+
+   The class is not `playground`: the JavaScript of mdBook reserves that name for a Rust playground,
+   and it puts a run button in each element of that class. */
+.playground-demo {
+    margin: 1.5em 0;
+    padding: 0.8em 1.1em 0.3em;
+    border: 1px solid var(--links);
+    border-left: 8px solid var(--links);
+    border-radius: 6px;
+    background: var(--quote-bg);
+}
+
+.playground-demo::before {
+    content: "\25B6\00A0 Playground demo";
+    display: block;
+    margin-bottom: 0.6em;
+    color: var(--links);
+    font-size: 0.8em;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}

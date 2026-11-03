@@ -9,11 +9,15 @@ of strata cannot see your tenant. They find the new value only when somebody tel
 
 **Who runs this.** A person, when the note shows in a terminal or in the log of a job.
 
-**Follow along.** `just playground unknown-value` serves this tenant. Before you run the commands,
+<div class="playground-demo">
+
+`just playground unknown-value` serves this tenant. Before you run the commands,
 set `XDG_STATE_HOME` to a new folder, so that the example keeps its own log:
 `export XDG_STATE_HOME=$(mktemp -d)`. This release names the real endpoint of the maintainers. The
 playground also prints `STRATA_REPORT_URL`, the address of a stand-in on your machine. Export it, so
 that the send in step 5 reaches no real endpoint.
+
+</div>
 
 ## 1. The note
 

@@ -26,8 +26,12 @@ The pipeline, on each pull request and before each build. The engineer who
 scopes a migration, on the first call with a customer: how ready is this estate
 to start?
 
-**Follow along.** `just playground preflight` serves this tenant on this
+<div class="playground-demo">
+
+`just playground preflight` serves this tenant on this
 machine, with no key and no cost. Each command below runs against it.
+
+</div>
 
 ## 1. Can it be built?
 
@@ -197,7 +201,7 @@ gives the steps when a delete does not end.
 lab that runs this story on a real tenant: `just live-watch --build --down`
 builds a cluster and streams the watch of step 3 to the terminal.
 
-[The everyday loop](../loop.md#5-before-a-build) puts this check between the
+[One change, start to end](../walkthrough.md#5-before-a-build) puts this check between the
 promotion of a release and the build of a cluster on it.
 
 ## What the runs show

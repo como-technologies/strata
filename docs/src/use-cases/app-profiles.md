@@ -19,10 +19,14 @@ In this example, `dev` has the app profile `shop@1.0.0`, with the helm tier
 **Who runs this.** The scheduled verify job, and a person who reviews a change
 of an application.
 
-**Follow along.** `just playground app-profiles-1` serves this tenant on this
+<div class="playground-demo">
+
+`just playground app-profiles-1` serves this tenant on this
 machine, with no key and no cost. A person updates the app profile in steps 3
 and 4, and a team deploys it in step 5, so this page has four seeds. Each
 section names the one it needs.
+
+</div>
 
 ## 1. Record the app profile
 
@@ -54,9 +58,13 @@ is in the record. When you accept that, say so:
 
 ## 3. A person updates the app profile
 
-**Follow along.** `just playground app-profiles-2` is the same tenant after a
+<div class="playground-demo">
+
+`just playground app-profiles-2` is the same tenant after a
 person changes the replicas of the `web` tier. Stop the first seed, and export
 what this one prints.
+
+</div>
 
 ```text
 {{#include ../output/app-verify.txt}}
@@ -68,9 +76,13 @@ changed.
 
 ## 4. A person changes the install order of a tier
 
-**Follow along.** `just playground app-profiles-3` is the same tenant after a
+<div class="playground-demo">
+
+`just playground app-profiles-3` is the same tenant after a
 person gives the `web` tier the install order `1`, so that it installs after
 `config`.
+
+</div>
 
 ```text
 {{#include ../output/app-order-compare.txt}}
@@ -91,8 +103,12 @@ Before the team deploys `shop@1.0.0`, no deployment uses it:
 
 Exit `0`: a delete can go on.
 
-**Follow along.** `just playground app-profiles-4` is the same tenant after a
+<div class="playground-demo">
+
+`just playground app-profiles-4` is the same tenant after a
 team deploys `shop@1.0.0` as `shop-dev`.
+
+</div>
 
 ```text
 {{#include ../output/app-consumers.txt}}

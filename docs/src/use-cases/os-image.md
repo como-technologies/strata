@@ -18,9 +18,13 @@ pack that names its image.
 **Who runs this.** The scheduled verify job finds this. The job is
 [Drift issues](../automation/drift-issues.md).
 
-**Follow along.** `just playground os-image-1` serves this tenant on this
+<div class="playground-demo">
+
+`just playground os-image-1` serves this tenant on this
 machine, with no key and no cost. `just playground os-image-2` serves it after
 the edit of the image.
+
+</div>
 
 ## 1. Record the version
 
@@ -34,9 +38,13 @@ annotation, because an annotation can hold a secret.
 
 ## 2. A person gives the OS pack another image
 
-**Follow along.** `just playground os-image-2` is the same tenant after a
+<div class="playground-demo">
+
+`just playground os-image-2` is the same tenant after a
 person gave the OS pack another `imageId`. Stop the first seed, and export what
 this one prints. Keep the record from step 1.
+
+</div>
 
 ```text
 {{#include ../output/os-image-verify.txt}}

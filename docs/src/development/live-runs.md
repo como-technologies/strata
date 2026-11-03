@@ -1257,7 +1257,7 @@ exits `1` when the order did not change.
 
 ## loop.sh
 
-The everyday loop, end to end: [The everyday loop](../loop.md) tells it. The
+The everyday loop, end to end: [One change, start to end](../walkthrough.md) tells it. The
 records are in a git repository that the script builds, and every script of CI
 runs in it. It changes cluster A and the add-on version through the API, and
 undoes each change. Stages 2 to 4 only ask Palette: the questions and the body

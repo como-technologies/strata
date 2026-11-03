@@ -23,9 +23,13 @@ applies a cluster writes the record, and no recipe ships for that one: it is one
 record with every other one: see [Drift issues](../automation/drift-issues.md),
 which ships `scripts/ci/verify-report.sh`.
 
-**Follow along.** `just playground cluster-release` serves this tenant on this machine,
+<div class="playground-demo">
+
+`just playground cluster-release` serves this tenant on this machine,
 with no key and no cost. Nothing on this page changes the tenant, so one seed
 serves every step.
+
+</div>
 
 Record the release first. Every step below compares a cluster against this file:
 

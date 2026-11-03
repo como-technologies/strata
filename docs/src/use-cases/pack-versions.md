@@ -18,9 +18,13 @@ registry and hashes it as it hashes that pack inside a profile.
 posts the same comparison on a pull request: see
 [Pull request comments](../automation/pr-comments.md).
 
-**Follow along.** `just playground packs` serves this tenant on this machine,
+<div class="playground-demo">
+
+`just playground packs` serves this tenant on this machine,
 with no key and no cost. Nothing on this page changes the tenant, so one seed
 serves every step.
+
+</div>
 
 ## 1. Compare two versions
 

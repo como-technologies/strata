@@ -21,8 +21,12 @@ shape Palette gives.
 
 **Who runs this.** A person at a terminal, working out why two roots differ.
 
-**Follow along.** `just playground manifest-pack` serves this tenant on this machine,
+<div class="playground-demo">
+
+`just playground manifest-pack` serves this tenant on this machine,
 with no key and no cost.
+
+</div>
 
 ## 1. Record the version in each project
 

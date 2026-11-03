@@ -25,9 +25,13 @@ A job finds it in `verify.invalidPacks` of `strata verify --json`, or in
 [Drift issues](../automation/drift-issues.md) does not find it: the status of
 the record is `unchanged`, so the job opens no issue.
 
-**Follow along.** `just playground invalid-pack-1` serves this tenant on this
+<div class="playground-demo">
+
+`just playground invalid-pack-1` serves this tenant on this
 machine, with no key and no cost. `just playground invalid-pack-2` serves it
 after the registry deleted the tag.
+
+</div>
 
 ## 1. Record the version
 
@@ -39,9 +43,13 @@ Each pack is valid, so the record has no `invalid` field.
 
 ## 2. The registry deletes the tag
 
-**Follow along.** `just playground invalid-pack-2` is the same tenant after the
+<div class="playground-demo">
+
+`just playground invalid-pack-2` is the same tenant after the
 registry deleted the tag. Stop the first seed, and export what this one prints.
 Keep the record from step 1.
+
+</div>
 
 ```text
 {{#include ../output/invalid-pack-verify.txt}}
