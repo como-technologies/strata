@@ -11,7 +11,7 @@ use strata::api::codes::PROJECT_SCOPE_CODE;
 use strata::api::{HttpApi, MemoryApi, RawCluster, cloud_config_path};
 use strata::config::Config;
 
-use super::document::{Contract, DifferenceKind, Entry, Outcome, Unknown};
+use super::document::{Contract, DifferenceKind, Entry, Outcome, SCHEMA, Unknown};
 use super::shape::{JsonType, Path as Field};
 use super::stand_in::StandIn;
 use super::{releases, run, subject};
@@ -787,7 +787,7 @@ fn the_document_has_one_entry_for_each_fact_of_the_kind_request_and_none_for_ano
             "cluster-summary",
         ]
     );
-    assert_eq!(contract.schema, "strata-contract/1");
+    assert_eq!(contract.schema, SCHEMA);
     let s = contract.summary;
     assert_eq!(s.same + s.differs + s.skipped + s.error, ids.len());
 }
@@ -1506,7 +1506,7 @@ fn the_document_names_the_schema_the_target_and_the_live_checks_of_each_fact() {
     let (_root, stand_in) = stand_in(&documents("Running"));
     let contract = contract(&stand_in, &memory(&documents("Running")));
     let document = serde_json::to_value(&contract).unwrap();
-    assert_eq!(document["schema"], "strata-contract/1");
+    assert_eq!(document["schema"], SCHEMA);
     assert_eq!(document["target"], "https://tenant.example");
     assert_eq!(document["checkedAt"], "2026-11-02T06:00:00Z");
     assert_eq!(document["summary"]["same"], 3);
@@ -1560,7 +1560,7 @@ fn the_first_run_keeps_the_latest_tag_of_each_repository_and_notes_no_new_releas
         Some("2026-10-29T09:20:20Z")
     );
     let kept: Value = serde_json::from_str(&std::fs::read_to_string(&state).unwrap()).unwrap();
-    assert_eq!(kept["schema"], "strata-contract-state/1");
+    assert_eq!(kept["schema"], releases::STATE_SCHEMA);
     assert_eq!(kept["releases"]["spectrocloud/palette-sdk-go"], "v4.10.b");
 }
 
@@ -1630,7 +1630,7 @@ fn a_state_file_of_another_schema_is_refused_before_any_request() {
     let state = dir.path().join("state.json");
     std::fs::write(&state, r#"{"schema": "other/1", "releases": {}}"#).unwrap();
     let error = releases::read("http://127.0.0.1:1", &state).unwrap_err();
-    assert!(error.contains("strata-contract-state/1"), "{error}");
+    assert!(error.contains(releases::STATE_SCHEMA), "{error}");
 }
 
 // ---- the types -------------------------------------------------------------------------------

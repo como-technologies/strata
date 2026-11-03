@@ -6912,7 +6912,7 @@ fn loop_sh_stage_5_asks_palette_about_the_bump_of_each_pin_that_the_nightly_job_
         if let Some(validation) = validation {
             bump["paletteValidation"] = validation;
         }
-        serde_json::json!({"schema": "strata-behind/1", "generatedAt": "2026-09-26T06:00:00Z",
+        serde_json::json!({"schema": strata::ops::BEHIND_SCHEMA, "generatedAt": "2026-09-26T06:00:00Z",
             "pins": [{"name": "kubernetes", "layer": "k8s", "registry": "Public Repo",
                 "registryUid": "reg-public", "version": "1.35.3", "tag": "1.35.3",
                 "behind": true, "newer": [{"version": "1.37.0"}],
@@ -6951,9 +6951,12 @@ fn loop_sh_stage_7_asks_the_nightly_job_to_put_the_writer_of_an_edit_in_the_issu
     stage.strata(
         "verify --summary --quiet --format json *",
         1,
-        r#"{"schema":"strata-verify-summary/1","records":[{"path":"releases/addon.json",
+        &format!(
+            r#"{{"schema":"{}","records":[{{"path":"releases/addon.json",
             "status":"drifted","name":"strata-live-addon","version":"1.0.0","uid":"ad-1",
-            "recordedAt":"2026-09-26T06:00:00Z"}]}"#,
+            "recordedAt":"2026-09-26T06:00:00Z"}}]}}"#,
+            strata::ops::VERIFY_SUMMARY_SCHEMA
+        ),
     );
     // the check of the record, with and without --who: the report is the same for this test
     stage.strata(

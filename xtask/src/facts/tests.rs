@@ -10,7 +10,7 @@ use strata_preflight::rule::Catalog;
 use super::check::{NOT_FACTS, check as faults_of, route_matches, template_matches};
 use super::cloud::CloudSources;
 use super::from_text;
-use super::model::load;
+use super::model::{SCHEMA, load};
 use super::sets::{Set, SetRead};
 use super::sources::{
     Sources, api_requests, book_rows, calls_of, query_names, rule_queries, rule_requests,
@@ -569,12 +569,8 @@ fn write(dir: &Path, name: &str, text: &str) {
 fn the_files_of_the_list_give_their_facts_in_the_order_of_the_names() {
     let temp = tempfile::tempdir().unwrap();
     let dir = temp.path();
-    write(
-        dir,
-        "b.yaml",
-        &format!("schema: strata-facts/1\nfacts:{FACT}"),
-    );
-    write(dir, "a.yaml", "schema: strata-facts/1\nfacts: []\n");
+    write(dir, "b.yaml", &format!("schema: {SCHEMA}\nfacts:{FACT}"));
+    write(dir, "a.yaml", &format!("schema: {SCHEMA}\nfacts: []\n"));
     let (loaded, bad) = load(dir);
     assert!(bad.is_empty(), "{bad:?}");
     assert_eq!(loaded.len(), 1);
@@ -588,7 +584,7 @@ fn a_file_with_a_field_that_the_schema_lacks_is_an_error_that_names_the_file() {
     write(
         dir,
         "a.yaml",
-        "schema: strata-facts/1\nfacts:\n  - id: x\n    kind: behavior\n    color: red\n",
+        &format!("schema: {SCHEMA}\nfacts:\n  - id: x\n    kind: behavior\n    color: red\n"),
     );
     let (_, bad) = load(dir);
     assert!(bad[0].starts_with("a.yaml: "), "{bad:?}");
@@ -599,12 +595,12 @@ fn a_file_with_a_field_that_the_schema_lacks_is_an_error_that_names_the_file() {
 fn a_file_that_cannot_be_read_does_not_hide_the_facts_of_the_other_files() {
     let temp = tempfile::tempdir().unwrap();
     let dir = temp.path();
-    write(dir, "a.yaml", "schema: strata-facts/1\nfacts: [{broken\n");
     write(
         dir,
-        "b.yaml",
-        &format!("schema: strata-facts/1\nfacts:{FACT}"),
+        "a.yaml",
+        &format!("schema: {SCHEMA}\nfacts: [{{broken\n"),
     );
+    write(dir, "b.yaml", &format!("schema: {SCHEMA}\nfacts:{FACT}"));
     let (loaded, bad) = load(dir);
     assert_eq!(loaded.len(), 1);
     assert_eq!(bad.len(), 1);
@@ -617,7 +613,7 @@ fn a_file_with_another_schema_is_an_error() {
     let dir = temp.path();
     write(dir, "a.yaml", "schema: strata-facts/2\nfacts: []\n");
     let (_, bad) = load(dir);
-    assert!(bad[0].contains("must be `strata-facts/1`"), "{bad:?}");
+    assert!(bad[0].contains(&format!("must be `{SCHEMA}`")), "{bad:?}");
 }
 
 #[test]
@@ -860,7 +856,7 @@ fn the_request_of_each_fact_holds_the_query_that_its_rules_send() {
 fn the_list_of_the_repository_prints_as_json_for_a_script() {
     let json = super::print(&crate::repository()).unwrap();
     let document: serde_json::Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(document["schema"], "strata-facts/1");
+    assert_eq!(document["schema"], SCHEMA);
     let facts = document["facts"].as_array().unwrap();
     assert!(!facts.is_empty());
     for fact in facts {

@@ -33,6 +33,7 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 use serde_json::{Value, json};
+use strata::closed_set::unknown::send::{ADDRESS_SETTING, SETTING};
 
 mod answer;
 pub mod closed_set;
@@ -1073,9 +1074,7 @@ pub const REFUSED: &str = "http://127.0.0.1:9";
 /// sends sets `STRATA_REPORT=1` and `STRATA_REPORT_URL` after this call, with the address of its
 /// stand-in.
 pub fn without_report(command: &mut Command) -> &mut Command {
-    command
-        .env("STRATA_REPORT", "0")
-        .env("STRATA_REPORT_URL", REFUSED)
+    command.env(SETTING, "0").env(ADDRESS_SETTING, REFUSED)
 }
 
 /// The strata binary as a command that can send no report: see [`without_report`].

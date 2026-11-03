@@ -13,9 +13,9 @@ use strata::ops::{ListKind, ListOptions};
 use strata::term::progress::Progress;
 
 use crate::common::{
-    LATER_TYPE, PROFILE_LISTING, Run, UID_A, UID_B, isolate_palette, later_type_tenant,
-    list_command, listed, listing, log_in, packs, profile_document, profile_route, report_command,
-    serve_routes, state_in, strata_command, template,
+    LATER_TYPE, PROFILE_LISTING, PROFILE_TEMPLATE, Run, UID_A, UID_B, isolate_palette,
+    later_type_tenant, list_command, listed, listing, log_in, packs, profile_document,
+    profile_route, report_command, serve_routes, state_in, strata_command, template,
 };
 
 /// The note for that type, as a person reads it on standard error.
@@ -105,7 +105,7 @@ fn each_run_adds_one_line_to_the_log_in_the_state_folder_also_with_quiet() {
     assert_eq!(line.sighting.strata, strata::TOOL_VERSION);
     assert_eq!(line.sighting.set, "ProfileType");
     assert_eq!(line.sighting.value, LATER_TYPE);
-    assert_eq!(line.sighting.route, "/v1/clusterprofiles/{uid}");
+    assert_eq!(line.sighting.route, PROFILE_TEMPLATE);
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn a_watch_on_a_read_of_the_library_logs_the_route_template_and_no_uid() {
     drop(watching);
     let lines = lines_of(&file);
     assert_eq!(lines.len(), 1, "{lines:?}");
-    assert_eq!(lines[0].sighting.route, "/v1/clusterprofiles/{uid}");
+    assert_eq!(lines[0].sighting.route, PROFILE_TEMPLATE);
     let text = std::fs::read_to_string(&file).unwrap();
     assert!(
         !text.contains(UID_A) && !text.contains("payments-prod"),
@@ -214,5 +214,5 @@ fn the_hint_does_not_show_when_standard_error_is_not_a_terminal_and_uses_up_no_d
     let document: Value = serde_json::from_str(&report.out).unwrap();
     assert_eq!(document["unknown"][0]["set"], "ProfileType");
     assert_eq!(document["unknown"][0]["value"], LATER_TYPE);
-    assert_eq!(document["unknown"][0]["route"], "/v1/clusterprofiles/{uid}");
+    assert_eq!(document["unknown"][0]["route"], PROFILE_TEMPLATE);
 }

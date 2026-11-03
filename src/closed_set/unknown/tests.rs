@@ -11,7 +11,7 @@ use super::log::{
     FIELDS, FILE, Line, SCHEMA, SENT_FILE, Valid, mark_sent, read, read_valid, sent_count,
     sent_path,
 };
-use super::report::{Entry, Report};
+use super::report::{Entry, Report, SCHEMA as REPORT_SCHEMA};
 use super::sighting::shown;
 use super::{Watch, note, seen};
 use crate::api::registry::Registries;
@@ -297,7 +297,7 @@ fn a_document_with_a_uid_and_a_name_writes_neither_to_the_log() {
         assert!(!text.contains(secret), "the log holds `{secret}`: {text}");
     }
     let line = &lines_of(&file)[0];
-    assert_eq!(line.sighting.route, "/v1/clusterprofiles/{uid}");
+    assert_eq!(line.sighting.route, PROFILE_TEMPLATE);
     assert_eq!(line.sighting.value, "later-type");
 }
 
@@ -352,7 +352,7 @@ fn a_provider_type_on_the_pack_ref_of_a_cluster_names_the_cluster_route() {
     assert_eq!(pack.registry_provider_type.unwrap().as_str(), "oras");
     let lines = lines_of(&dir.path().join(FILE));
     assert_eq!(lines.len(), 1, "{lines:?}");
-    assert_eq!(lines[0].sighting.route, "/v1/spectroclusters/{uid}");
+    assert_eq!(lines[0].sighting.route, CLUSTER_TEMPLATE);
 }
 
 // ---- the read of the log ---------------------------------------------------------------------
@@ -472,7 +472,8 @@ fn a_log_fails_the_read_for_each_field_that_the_list_does_not_name() {
 fn a_line_that_is_not_json_or_has_a_field_of_the_wrong_type_fails_the_read() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
-    for bad in ["not json", "[1, 2]", r#"{"schema": "strata-unknown/1"}"#] {
+    let only_the_schema = json!({"schema": SCHEMA}).to_string();
+    for bad in ["not json", "[1, 2]", only_the_schema.as_str()] {
         std::fs::write(&file, log_of(&[bad])).unwrap();
         let error = read(&file).unwrap_err();
         assert_eq!(error.kind(), "log-invalid", "{bad}");
@@ -492,7 +493,7 @@ fn a_line_of_another_schema_fails_the_read() {
     std::fs::write(&file, log_of(&[&other.to_string()])).unwrap();
     let message = read(&file).unwrap_err().to_string();
     assert!(
-        message.contains("the schema is not strata-unknown/1"),
+        message.contains(&format!("the schema is not {SCHEMA}")),
         "{message}"
     );
 }
@@ -632,7 +633,7 @@ fn the_report_holds_each_different_line_once_with_its_count() {
         line_of("PackState", "retired", "0.27.0"),
     ];
     let report = Report::of(&lines);
-    assert_eq!(report.schema, "strata-report/1");
+    assert_eq!(report.schema, REPORT_SCHEMA);
     let found: Vec<(&str, &str, &str, usize)> = report
         .unknown
         .iter()
@@ -701,7 +702,7 @@ fn two_lines_with_one_version_order_and_two_texts_are_two_entries_and_the_equal_
 fn lines_that_differ_in_the_route_are_separate_entries() {
     let base = line_of("A", "x", "0.26.0");
     let mut other = base.clone();
-    other.sighting.route = "/v1/clusterprofiles/{uid}".to_string();
+    other.sighting.route = PROFILE_TEMPLATE.to_string();
     let report = Report::of(&[base.clone(), other, base]);
     assert_eq!(report.unknown.len(), 2);
     assert_eq!(report.unknown.iter().map(|e| e.count).sum::<usize>(), 3);
@@ -751,7 +752,14 @@ fn at(hours: i64) -> DateTime<Utc> {
 
 #[test]
 fn the_hint_names_strata_report_and_what_the_user_can_send() {
-    assert_eq!(TEXT, "`strata report` shows what you can send");
+    // the book quotes the words of the hint, so the page and the const must agree
+    let page = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/src/reference/report.md"),
+    )
+    .unwrap();
+    let page = page.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(page.contains(TEXT), "reference/report.md lacks {TEXT:?}");
+    assert!(TEXT.starts_with("`strata report` "), "{TEXT}");
 }
 
 #[test]

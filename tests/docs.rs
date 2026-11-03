@@ -728,7 +728,7 @@ fn the_faults_of_a_block_name_a_sentence_over_the_limit_and_a_block_over_the_mos
         "{faults:?}"
     );
 
-    let many = vec!["A short one."; MOST_SENTENCES + 1].join(" ");
+    let many = ["A short one."; MOST_SENTENCES + 1].join(" ");
     assert_eq!(block_faults("page.md", &many).len(), 1);
     assert!(
         block_faults("page.md", &format!("| {many} |")).is_empty(),

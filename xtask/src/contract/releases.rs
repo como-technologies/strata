@@ -27,7 +27,7 @@ pub const REPOSITORIES: [&str; 2] = [
 pub const GITHUB: &str = "https://api.github.com";
 
 /// The schema id of the state file.
-const STATE_SCHEMA: &str = "strata-contract-state/1";
+pub(super) const STATE_SCHEMA: &str = "strata-contract-state/1";
 
 /// How long a request to GitHub can take.
 const TIMEOUT: Duration = Duration::from_secs(30);

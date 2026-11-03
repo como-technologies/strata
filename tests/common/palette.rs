@@ -46,6 +46,10 @@ pub fn profile_route(uid: &str) -> String {
     format!("/v1/clusterprofiles/{uid}")
 }
 
+/// The template of the route of a profile version, with the text `{uid}` for the segment that varies.
+/// The log of the unknown values names a read by this template, and never by a real uid.
+pub const PROFILE_TEMPLATE: &str = "/v1/clusterprofiles/{uid}";
+
 /// The pack manifests of the profile version `uid`.
 pub fn manifests_route(uid: &str) -> String {
     format!("/v1/clusterprofiles/{uid}/packs/manifests")

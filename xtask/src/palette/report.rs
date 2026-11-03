@@ -46,7 +46,7 @@ mod tests {
 
     #[test]
     fn the_stand_in_for_the_endpoint_of_the_report_answers_as_the_real_endpoint_does() {
-        let report = json!({"schema": "strata-report/1", "unknown": [{
+        let report = json!({"schema": strata::closed_set::unknown::report::SCHEMA, "unknown": [{
             "strata": "0.26.0", "set": "ProfileType", "value": "later",
             "route": "/v1/clusterprofiles/{uid}", "count": 1}]})
         .to_string()

@@ -3409,7 +3409,7 @@ impl Report {
             .collect();
         self.put(
             "summary.json",
-            &serde_json::json!({"schema": "strata-verify-summary/1", "records": records})
+            &serde_json::json!({"schema": strata::ops::VERIFY_SUMMARY_SCHEMA, "records": records})
                 .to_string(),
         );
         self.put("summary.exit", &exit.to_string());
@@ -4204,7 +4204,7 @@ impl Report {
         });
         self.put(
             "report.json",
-            &serde_json::json!({"schema": "strata-behind/1", "tool": {"name": "strata", "version": "0.11.0"},
+            &serde_json::json!({"schema": strata::ops::BEHIND_SCHEMA, "tool": {"name": "strata", "version": "0.11.0"},
                 "generatedAt": "2026-09-26T06:00:00Z", "records": ["releases/dev.json"],
                 "pins": [csi, k8s], "summary": {"pins": 2, "behind": 1, "floating": 0, "errors": 0, "arrived": 0}})
             .to_string(),
@@ -4278,7 +4278,7 @@ fn upstream_report_opens_one_issue_per_pack_behind_names_what_arrived_and_closes
     let strata_call = &u.log("strata.log")[0];
     assert!(strata_call.contains("--since "), "{strata_call}");
     let previous = read_json(&u.dir.path().join("since-used.json"));
-    assert_eq!(previous["schema"], "strata-behind/1");
+    assert_eq!(previous["schema"], strata::ops::BEHIND_SCHEMA);
     assert_eq!(previous["generatedAt"], "2026-09-26T06:00:00Z");
     assert_eq!(previous["pins"][0]["newer"][0]["version"], "1.65.0");
     let calls = u.log("gh.log");
@@ -4608,7 +4608,7 @@ fn upstream_report_keeps_the_report_of_the_run_in_the_file_that_save_names() {
     let kept: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&saved).expect("the report is kept"))
             .unwrap();
-    assert_eq!(kept["schema"], "strata-behind/1");
+    assert_eq!(kept["schema"], strata::ops::BEHIND_SCHEMA);
     assert_eq!(kept["summary"]["behind"], 1);
 }
 

@@ -15,9 +15,9 @@ use strata::closed_set::unknown::send::{ADDRESS_SETTING, ANSWER_FILE, ENDPOINT, 
 use strata::ops::Sent;
 
 use crate::common::{
-    Answer, Endpoint, LATER_TYPE, REFUSED, Run, fake_bin, give_strata, isolate_palette,
-    later_type_tenant, list_command, log_in, log_line, path_with, report_command, serve_routes,
-    state_in, strata_command, through_proxy, walk, write_log,
+    Answer, Endpoint, LATER_TYPE, PROFILE_TEMPLATE, REFUSED, Run, fake_bin, give_strata,
+    isolate_palette, later_type_tenant, list_command, log_in, log_line, path_with, report_command,
+    serve_routes, state_in, strata_command, through_proxy, walk, write_log,
 };
 
 /// The report that one run of `list` sends: one value, seen once.
@@ -28,7 +28,7 @@ fn one_run_report() -> Value {
             "strata": strata::TOOL_VERSION,
             "set": "ProfileType",
             "value": LATER_TYPE,
-            "route": "/v1/clusterprofiles/{uid}",
+            "route": PROFILE_TEMPLATE,
             "count": 1,
         }],
     })
@@ -106,10 +106,7 @@ fn the_setting_zero_sends_nothing_also_when_the_user_said_yes_before() {
     let home = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(state_in(home.path())).unwrap();
     std::fs::write(state_in(home.path()).join(ANSWER_FILE), "1\n").unwrap();
-    let env = [
-        ("STRATA_REPORT", "0"),
-        ("STRATA_REPORT_URL", endpoint.url.as_str()),
-    ];
+    let env = [(SETTING, "0"), (ADDRESS_SETTING, endpoint.url.as_str())];
     let run = list_with(&api, home.path(), &env, &[]);
     assert_eq!(run.code, 0, "{}", run.err);
     assert!(endpoint.requests().is_empty());
@@ -120,15 +117,13 @@ fn a_setting_that_is_not_one_or_zero_sends_nothing_and_says_so() {
     let api = serve_routes(later_type_tenant());
     let endpoint = Endpoint::answering(Answer::Status(200));
     let home = tempfile::tempdir().unwrap();
-    let env = [
-        ("STRATA_REPORT", "yes"),
-        ("STRATA_REPORT_URL", endpoint.url.as_str()),
-    ];
+    let env = [(SETTING, "yes"), (ADDRESS_SETTING, endpoint.url.as_str())];
     let run = list_with(&api, home.path(), &env, &[]);
     assert_eq!(run.code, 0, "{}", run.err);
     assert!(
-        run.err
-            .contains("strata: warning: STRATA_REPORT must be 1 or 0, so strata sends nothing"),
+        run.err.contains(&format!(
+            "strata: warning: {SETTING} must be 1 or 0, so strata sends nothing"
+        )),
         "{}",
         run.err
     );
@@ -170,10 +165,7 @@ fn with_the_setting_on_the_run_sends_the_report_one_time_at_its_end_and_marks_th
     let api = serve_routes(later_type_tenant());
     let endpoint = Endpoint::answering(Answer::Status(200));
     let home = tempfile::tempdir().unwrap();
-    let env = [
-        ("STRATA_REPORT", "1"),
-        ("STRATA_REPORT_URL", endpoint.url.as_str()),
-    ];
+    let env = [(SETTING, "1"), (ADDRESS_SETTING, endpoint.url.as_str())];
     let run = list_with(&api, home.path(), &env, &[]);
     assert_eq!(run.code, 0, "{}", run.err);
     let requests = endpoint.requests();
@@ -207,7 +199,7 @@ fn the_setting_in_the_palette_env_file_turns_the_send_on() {
     let home = tempfile::tempdir().unwrap();
     std::fs::write(
         home.path().join(".palette.env"),
-        format!("STRATA_REPORT=1\nSTRATA_REPORT_URL={}\n", endpoint.url),
+        format!("{SETTING}=1\n{ADDRESS_SETTING}={}\n", endpoint.url),
     )
     .unwrap();
     // the file is the only setting here, so the guard of the tests is off. The proxy takes any
@@ -227,8 +219,8 @@ fn a_run_that_saw_no_unknown_value_sends_nothing() {
     isolate_palette(&mut command, home.path());
     command
         .env_remove("XDG_STATE_HOME")
-        .env("STRATA_REPORT", "1")
-        .env("STRATA_REPORT_URL", &endpoint.url)
+        .env(SETTING, "1")
+        .env(ADDRESS_SETTING, &endpoint.url)
         .args(["schema", "report"]);
     let run = Run::of(&mut command);
     assert_eq!(run.code, 0, "{}", run.err);
@@ -245,7 +237,7 @@ fn an_error_of_the_send_does_not_change_the_exit_code_or_the_output_and_marks_no
     // an address that refuses the connection, and one that answers 503
     for url in [REFUSED, refusing.url.as_str()] {
         let home = tempfile::tempdir().unwrap();
-        let env = [("STRATA_REPORT", "1"), ("STRATA_REPORT_URL", url)];
+        let env = [(SETTING, "1"), (ADDRESS_SETTING, url)];
         let run = list_with(&api, home.path(), &env, &[]);
         assert_eq!(run.code, plain.code, "{}", run.err);
         assert_eq!(run.out, plain.out);
@@ -275,16 +267,9 @@ fn a_log_with_a_value_of_release_0_27_0_that_is_not_one_word_does_not_stop_the_s
     // release 0.27.0 wrote a value with a space, and its endpoint took it
     write_log(
         home.path(),
-        &[log_line(
-            "ProfileType",
-            "two words",
-            "/v1/clusterprofiles/{uid}",
-        )],
+        &[log_line("ProfileType", "two words", PROFILE_TEMPLATE)],
     );
-    let env = [
-        ("STRATA_REPORT", "1"),
-        ("STRATA_REPORT_URL", endpoint.url.as_str()),
-    ];
+    let env = [(SETTING, "1"), (ADDRESS_SETTING, endpoint.url.as_str())];
     let run = list_with(&api, home.path(), &env, &[]);
     assert_eq!(run.code, 0, "{}", run.err);
     // the send skips the line, and sends the value of this run
@@ -327,10 +312,7 @@ fn quiet_hides_the_line_about_a_skipped_line_as_it_hides_the_note_of_the_send() 
         home.path(),
         &[log_line("ProfileType", "two words", "/v1/packs")],
     );
-    let env = [
-        ("STRATA_REPORT", "1"),
-        ("STRATA_REPORT_URL", endpoint.url.as_str()),
-    ];
+    let env = [(SETTING, "1"), (ADDRESS_SETTING, endpoint.url.as_str())];
     let quiet = list_with(&api, home.path(), &env, &["--quiet"]);
     assert_eq!(quiet.code, 0);
     assert_eq!(quiet.err, "", "--quiet hides the line");
@@ -346,10 +328,7 @@ fn a_send_that_fails_says_the_error_and_not_the_skipped_lines() {
         home.path(),
         &[log_line("ProfileType", "two words", "/v1/packs")],
     );
-    let env = [
-        ("STRATA_REPORT", "1"),
-        ("STRATA_REPORT_URL", refusing.url.as_str()),
-    ];
+    let env = [(SETTING, "1"), (ADDRESS_SETTING, refusing.url.as_str())];
     let run = list_with(&api, home.path(), &env, &[]);
     assert_eq!(run.code, 0, "{}", run.err);
     assert!(run.err.contains("could not send the report"), "{}", run.err);
@@ -363,15 +342,9 @@ fn the_next_send_holds_the_lines_that_a_failed_send_left() {
     let refusing = Endpoint::answering(Answer::Status(500));
     let taking = Endpoint::answering(Answer::Status(200));
     let home = tempfile::tempdir().unwrap();
-    let failed = [
-        ("STRATA_REPORT", "1"),
-        ("STRATA_REPORT_URL", refusing.url.as_str()),
-    ];
+    let failed = [(SETTING, "1"), (ADDRESS_SETTING, refusing.url.as_str())];
     assert_eq!(list_with(&api, home.path(), &failed, &[]).code, 0);
-    let taken = [
-        ("STRATA_REPORT", "1"),
-        ("STRATA_REPORT_URL", taking.url.as_str()),
-    ];
+    let taken = [(SETTING, "1"), (ADDRESS_SETTING, taking.url.as_str())];
     assert_eq!(list_with(&api, home.path(), &taken, &[]).code, 0);
     let requests = taking.requests();
     assert_eq!(requests.len(), 1, "{requests:?}");
@@ -384,10 +357,7 @@ fn an_endpoint_that_does_not_answer_delays_the_run_by_a_few_seconds_at_most() {
     let api = serve_routes(later_type_tenant());
     let silent = Endpoint::answering(Answer::Silence);
     let home = tempfile::tempdir().unwrap();
-    let env = [
-        ("STRATA_REPORT", "1"),
-        ("STRATA_REPORT_URL", silent.url.as_str()),
-    ];
+    let env = [(SETTING, "1"), (ADDRESS_SETTING, silent.url.as_str())];
     let start = Instant::now();
     let run = list_with(&api, home.path(), &env, &[]);
     assert_eq!(run.code, 0, "{}", run.err);
@@ -404,10 +374,7 @@ fn the_body_of_the_send_holds_the_fields_of_the_report_and_no_name_uid_or_host()
     let api = serve_routes(later_type_tenant());
     let endpoint = Endpoint::answering(Answer::Status(200));
     let home = tempfile::tempdir().unwrap();
-    let env = [
-        ("STRATA_REPORT", "1"),
-        ("STRATA_REPORT_URL", endpoint.url.as_str()),
-    ];
+    let env = [(SETTING, "1"), (ADDRESS_SETTING, endpoint.url.as_str())];
     assert_eq!(list_with(&api, home.path(), &env, &[]).code, 0);
     let body = &endpoint.requests()[0].body;
     for secret in [
@@ -457,7 +424,7 @@ fn a_run_of_the_tests_sends_nothing_though_the_home_and_a_saved_answer_turn_the_
     // the home sends: its file turns the send on and names an address, and the user said yes
     std::fs::write(
         home.path().join(".palette.env"),
-        "STRATA_REPORT=1\nSTRATA_REPORT_URL=https://report.example/\n",
+        format!("{SETTING}=1\n{ADDRESS_SETTING}=https://report.example/\n"),
     )
     .unwrap();
     std::fs::create_dir_all(state_in(home.path())).unwrap();
@@ -719,10 +686,7 @@ fn a_run_says_that_the_endpoint_holds_back_lines_and_quiet_hides_the_line() {
     let api = serve_routes(later_type_tenant());
     let endpoint = Endpoint::answering(holding_back(r#"{"ok":true,"waiting":[1]}"#));
     let home = tempfile::tempdir().unwrap();
-    let env = [
-        ("STRATA_REPORT", "1"),
-        ("STRATA_REPORT_URL", endpoint.url.as_str()),
-    ];
+    let env = [(SETTING, "1"), (ADDRESS_SETTING, endpoint.url.as_str())];
     let run = list_with(&api, home.path(), &env, &[]);
     assert_eq!(run.code, 0, "{}", run.err);
     assert!(

@@ -78,7 +78,7 @@ fn a_custom_probes_file_runs_beside_the_catalog_and_strict_counts_it() {
         "a failed probe does not change the exit code: {err}"
     );
     let doc: serde_json::Value = serde_json::from_str(&out).unwrap();
-    assert_eq!(doc["schema"], "strata-preflight/1");
+    assert_eq!(doc["schema"], strata_preflight::report::REPORT_SCHEMA);
     let probe = doc["checks"]
         .as_array()
         .unwrap()

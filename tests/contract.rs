@@ -1,6 +1,9 @@
 //! The scripts around the contract run: contract.sh, contract-report.sh, and the weekly timer of
 //! deploy/contract/. No network and no tenant: the commands outside this repository are
 //! recording stand-ins. The comparison itself is tested in `xtask/src/contract/`.
+//!
+//! The document `strata-contract/1` belongs to `xtask`, which the tests of this package cannot
+//! import. So these tests pin its id on purpose.
 
 use crate::common;
 
@@ -1026,7 +1029,7 @@ fn contract_report_names_a_name_that_strata_needs_and_the_answer_lacks() {
 fn contract_report_touches_no_issue_for_a_document_of_another_schema() {
     let r = Report::new();
     let o = r.report(
-        &json!({"schema": "strata-verify-summary/1", "records": []}),
+        &json!({"schema": strata::ops::VERIFY_SUMMARY_SCHEMA, "records": []}),
         &[],
     );
     assert_eq!(o.status.code(), Some(2));

@@ -1,4 +1,8 @@
 //! Library-level tests for the operations, with an in-memory Palette API.
+//!
+//! A test of the document that an operation writes compares its schema id with the `const` of the
+//! crate. A test of a refusal pins the id on purpose: it writes the text of a document of a later
+//! version, such as `strata-snapshot/2`, and reads the message that names both ids.
 
 use crate::common;
 
@@ -858,7 +862,7 @@ fn verify_many_checks_each_record_in_its_own_scope_and_counts_the_outcomes() {
         &ops::VerifyOptions::default(),
         &Progress::silent(),
     );
-    assert_eq!(s.schema, "strata-verify-summary/1");
+    assert_eq!(s.schema, ops::VERIFY_SUMMARY_SCHEMA);
     let statuses: Vec<RecordStatus> = s.records.iter().map(|r| r.status).collect();
     assert_eq!(
         statuses,
@@ -1064,7 +1068,7 @@ fn same_release_passes_when_every_root_is_equal() {
         Policy::Exact,
         "t1",
     );
-    assert_eq!(c.schema, "strata-chain/1");
+    assert_eq!(c.schema, ops::CHAIN_SCHEMA);
     assert!(c.same);
     assert_eq!(c.exit_code(), 0);
     assert_eq!(c.pairs.len(), 2, "consecutive pairs in the order given");
@@ -2464,7 +2468,7 @@ fn consumers_lists_each_cluster_with_name_project_and_state_from_its_own_project
         }))
     };
     let r = ops::consumers(&Ref::Uid(UID_B.into()), connect, "t1", &Progress::silent()).unwrap();
-    assert_eq!(r.schema, "strata-consumers/1");
+    assert_eq!(r.schema, ops::CONSUMERS_SCHEMA);
     assert_eq!(
         (
             r.profile.uid.as_str(),
@@ -3577,7 +3581,7 @@ fn list_names_each_profile_and_cluster_as_a_ref_in_sorted_order() {
         Ok(Palette::new(api.clone()))
     };
     let l = ops::list(&ListOptions::default(), connect, "t1", &Progress::silent()).unwrap();
-    assert_eq!(l.schema, "strata-list/1");
+    assert_eq!(l.schema, ops::LIST_SCHEMA);
     assert_eq!(
         (l.project_uid.as_str(), l.project_name.as_str()),
         ("p1", "lab")
@@ -6679,7 +6683,7 @@ fn the_exact_tag_leads_the_floating_tags_above_it_whatever_their_length() {
 fn packs_lists_what_a_registry_offers_newest_first_with_the_tags_of_each_version() {
     let api = serve_registry(vec![], &[("reg-public", public_entity())]);
     let l = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
-    assert_eq!(l.schema, "strata-packs/1");
+    assert_eq!(l.schema, ops::PACKS_SCHEMA);
     assert_eq!(l.registries.len(), 1, "only the registry that has it");
     let r = &l.registries[0];
     assert_eq!(
@@ -8686,7 +8690,7 @@ fn the_diff_and_the_summary_hold_the_read_errors_of_a_cluster_in_errors_and_not_
         .render(&diff, &older, &current, false)
         .unwrap();
     let json: Value = serde_json::from_str(&json).unwrap();
-    assert_eq!(json["schema"], "strata-diff/1");
+    assert_eq!(json["schema"], strata::diff::DIFF_SCHEMA);
     in_errors(&json["a"]["cluster"]);
     in_errors(&json["b"]["cluster"]);
 
@@ -8696,7 +8700,7 @@ fn the_diff_and_the_summary_hold_the_read_errors_of_a_cluster_in_errors_and_not_
         .failing(repave_route(), 403, "forbidden")
         .failing(notifications_route(), 404, "not found");
     let summary = serde_json::to_value(common::verify_summary(&older, &live)).unwrap();
-    assert_eq!(summary["schema"], "strata-verify-summary/1");
+    assert_eq!(summary["schema"], ops::VERIFY_SUMMARY_SCHEMA);
     let row = &summary["records"][0];
     assert_eq!(row["status"], "drifted", "{row}");
     in_errors(&row["diff"]["a"]["cluster"]);
@@ -14004,7 +14008,7 @@ fn behind_names_the_newer_versions_of_each_pin_and_the_impact_of_the_bump() {
         write("next.json", &new),
     ];
     let r = behind_of(&api, &records, &WITH_IMPACT);
-    assert_eq!(r.schema, "strata-behind/1");
+    assert_eq!(r.schema, ops::BEHIND_SCHEMA);
     assert_eq!(
         (r.summary.pins, r.summary.behind, r.summary.errors),
         (2, 1, 0)
