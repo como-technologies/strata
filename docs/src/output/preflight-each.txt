@@ -1,5 +1,5 @@
 $ strata preflight cluster-addon.json --cloud aws --no-exec --tier palette --rule template-outside --strict --quiet | sed -n '4,9p'
-  PROBE FAIL    template-outside             No profile of the entity is linked to a cluster template         1 ms  catch no runs, clean 11/11 (76%)
+  PROBE FAIL    template-outside             No profile of the entity is linked to a cluster template         1 ms  catch no runs, clean 12/12 (78%)
                 profile 64e0000000000000000000b2 (aws-stack) is linked to the cluster template aws-standard, and the entity names no clusterTemplate: Palette refuses the create with ClusterCreateWithTemplateProfileForbidden
                 ran: GET /v1/clusterprofiles/64e0000000000000000000c3 -> HTTP 200
                 ran: GET /v1/clusterprofiles/64e0000000000000000000b2 -> HTTP 200
