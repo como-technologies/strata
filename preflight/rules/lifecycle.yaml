@@ -381,7 +381,7 @@ rules:
       kind: static
       expr: |
         def macro: test("\\{\\{\\s*\\.spectro\\.macro\\.");
-        def names: [ matches("\\.spectro\\.macro\\.[A-Za-z0-9_.-]+"; "g")[] | .[0].string | ltrimstr(".spectro.macro.") ] | unique | join(", ");
+        def names: [ match("\\.spectro\\.macro\\.[A-Za-z0-9_.-]+"; "g") | .string | ltrimstr(".spectro.macro.") ] | unique | join(", ");
         [ .profiles[]? | .packs[]? | . as $p | ($p | tostring) as $t
           | select($t | macro)
           | "pack \($p.name)@\($p.version) reads the macro(s) \($t | names): a new value reaches the cluster in 11 to 13 minutes, with no notification and no audit entry" ]

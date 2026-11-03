@@ -1,6 +1,6 @@
 //! The markdown form of a report: a pull request comment.
 
-use strata::text::markdown_cell;
+use strata::text::{markdown_cell, plural};
 
 use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
 use super::{CheckResult, Report, SectionScore, pct};
@@ -12,13 +12,14 @@ pub fn markdown(r: &Report) -> String {
     let mut out = String::new();
     let s = &r.summary;
     let probes = count_of(s.probe_failed as usize, "probe");
+    let checks = plural(s.applies() as usize, "check", "checks");
     out.push_str(&format!(
         "## strata-preflight: {} cluster `{}`\n\n",
         r.subject.cloud,
         r.subject.name_or_dash()
     ));
     out.push_str(&format!(
-        "**{}** — source `{}`, Palette {}, tiers {}. {} ran: {} passed, {} failed, {probes} failed; {} did not run, {} not checked; readiness **{}** ({} of {} checks passed).\n\n",
+        "**{}** — source `{}`, Palette {}, tiers {}. {} ran: {} passed, {} failed, {probes} failed; {} did not run, {} not checked; readiness **{}** ({} of {} {checks} passed).\n\n",
         s.verdict,
         r.subject.source,
         r.subject.release_text(),

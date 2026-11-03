@@ -10,6 +10,9 @@ rule of severity `fail` at the preflight level, or any failed probe with
 `--strict`. Any other failed probe, or a warning, is in the report, and the
 watch continues.
 
+A deleted cluster gives exit `0` when no counted rule failed. It ends the watch at the first
+reading, also when its state is not `Deleted`.
+
 With `--out`, `world.json` holds the last reading: the conditions and the events
 the rules saw. A build that cannot finish stops in minutes, not at the timeout
 of the client.

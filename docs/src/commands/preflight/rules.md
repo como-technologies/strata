@@ -53,6 +53,11 @@ compile, reads `$item` where the check has no item, or nests more than 64
 levels. See
 [A request for each item](../../reference/preflight-rules.md#a-request-for-each-item).
 
+A file with a `fix.owner` that is not one of six values fails in the same way. The values are
+`palette`, `provider`, `lab`, `strata`, `operator`, and `none`. Release 0.27.0 accepted any text.
+Use `operator`, and name the team in the text of the fix. See
+[Release 0.28.0](../../reference/compatibility.md#release-0280-changes-that-need-action).
+
 A level is a bracket, an `if`, a `def`, or an operator in a chain such as
 `a | b | c`. The words `and`, `or`, `try`, `catch`, `reduce`, `foreach`, `as`, and
 `label` are operators too. A comment is no level. The programs of the catalog

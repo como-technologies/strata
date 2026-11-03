@@ -379,6 +379,22 @@ fn the_rules_listing_names_each_rule_of_the_engine() {
 }
 
 #[test]
+fn the_footer_of_the_rules_listing_agrees_each_noun_with_its_count() {
+    let c = catalog();
+    let rules = list_rules(&c, Some("eks"), None, &[]);
+    let footer = |rules: &[Rule]| rules_text(&c, rules).lines().last().unwrap().to_string();
+    assert_eq!(
+        footer(&rules[..1]),
+        "1 rule: 1 with a check, no preflight checks, 1 probe"
+    );
+    assert!(
+        footer(&rules).starts_with("4 rules: "),
+        "{}",
+        footer(&rules)
+    );
+}
+
+#[test]
 fn a_watch_stops_at_the_first_counted_failure_with_the_evidence() {
     // the rule is a probe: it counts, and ends the watch, with --strict
     let section = r#"
@@ -616,11 +632,11 @@ rules:
         Path::new("p.yaml"),
     )
     .unwrap();
-    // the limit is zero. A watch that does not end at the first reading ends at the limit
-    // with an error for the rule that passed
-    for (is_deleted, verdict, state) in [
-        (true, Verdict::Passed, "Deleting"),
-        (false, Verdict::Error, "Deleting"),
+    // the limit is zero. A watch that does not end at the first reading ends at the limit.
+    // The rule that passed is an error then, and the exit code is 2
+    for (is_deleted, verdict, state, exit_code) in [
+        (true, Verdict::Passed, "Deleting", 0),
+        (false, Verdict::Error, "Deleting", 2),
     ] {
         let api = strata::api::MemoryApi::new().with(
             cluster_route("c1"),
@@ -650,6 +666,10 @@ rules:
             report.checks[0].verdict, verdict,
             "isDeleted {is_deleted}: {:?}",
             report.checks[0].messages
+        );
+        assert_eq!(
+            report.summary.exit_code, exit_code,
+            "isDeleted {is_deleted}: the exit code"
         );
     }
 }

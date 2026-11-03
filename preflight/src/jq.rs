@@ -22,8 +22,11 @@ use strata::reference::version;
 
 use crate::error::{Error, Result};
 
+mod comment;
 mod depth;
 use depth::{MAX_DEPTH, depth};
+
+pub(crate) use comment::without_comments;
 
 type Filter = jaq_core::Filter<data::JustLut<Val>>;
 
@@ -56,12 +59,32 @@ impl Default for Jq {
     }
 }
 
+/// The name of the filter that this crate adds to the standard library of jq.
+const SEMVER_NUMBERS: &str = "semver_numbers";
+
+/// The definition of [`SEMVER_NUMBERS`] in jq, for the `jq` tool, which has no such filter. It
+/// gives the same answer as [`semver_numbers`], and a test compares the two on a table of texts.
+/// The regular expression is the grammar that [`version::numbers`] parses: an optional `v`, one to
+/// three numbers, an optional pre-release after `-`, and optional build data after `+`. A number
+/// of 20 digits or more is outside the table, because the tool reads a number as a double.
+const SEMVER_NUMBERS_DEF: &str = r#"def semver_numbers: ltrimstr("v") | if test("\\A[0-9]+(\\.[0-9]+){0,2}(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?\\z") then split("+")[0] | split("-")[0] | split(".") | map(tonumber) else null end; "#;
+
+/// The definitions of the filters that `program` names and the `jq` tool lacks, to put in front
+/// of the program. Empty when it names none.
+pub(crate) fn tool_definitions(program: &str) -> &'static str {
+    if program.contains(SEMVER_NUMBERS) {
+        SEMVER_NUMBERS_DEF
+    } else {
+        ""
+    }
+}
+
 /// The filters that this crate adds to the standard library of jq.
 ///
 /// A rule reads a version with one of them, so that the one module of `strata` that parses a
 /// version parses it: see [`semver_numbers`].
 fn added_funs() -> impl Iterator<Item = Fun<data::JustLut<Val>>> {
-    [run(("semver_numbers", v(0), |cv| {
+    [run((SEMVER_NUMBERS, v(0), |cv| {
         bome(semver_numbers(&cv.1))
     }))]
     .into_iter()

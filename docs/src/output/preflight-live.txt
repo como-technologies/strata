@@ -25,7 +25,7 @@ Quotas and limits
                 ran: POST /v1/spectroclusters/aws/validate -> HTTP 200
                 reproduce: jq '.validateBody' $OUT/world.json > request.json
                 reproduce: code=$(curl -s -o body.json -w '%{http_code}' -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" -X POST -H 'Content-Type: application/json' --data @request.json "${PALETTE_API:-https://api.spectrocloud.com}/v1/spectroclusters/aws/validate")
-                reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then [] # a refusal of the whole entity is palette-validate'\''s else [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | select((.message // "") | test("CPU|memory|cores"; "i")) | "pool \($n): \(.message)" ] end' $OUT/world.json
+                reproduce: jq --arg code "$code" --slurpfile body body.json '.response = {ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)} | .response as $r | if ($r.ok | not) then [] else [ ($r.body.machinePools.results // [])[] | .name as $n | (.errors // [])[] | select((.message // "") | test("CPU|memory|cores"; "i")) | "pool \($n): \(.message)" ] end' $OUT/world.json
                 fix: Call the validate route at plan time. (provider)
   NOT CHECKED   vcluster-min                 A virtual cluster has 3 cores or more                            1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand

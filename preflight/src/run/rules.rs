@@ -2,6 +2,7 @@
 
 use serde_json::{Value, json};
 use strata::closed_set::ClosedSet;
+use strata::render::count_of;
 
 use crate::report::Tool;
 use crate::rule::{Catalog, Level, Rule, Tier};
@@ -71,10 +72,10 @@ pub fn rules_text(catalog: &Catalog, rules: &[Rule]) -> String {
     let probes = rules.iter().filter(|r| r.level == Level::Probe).count();
     let checks = rules.iter().filter(|r| r.check.is_some()).count();
     out.push_str(&format!(
-        "\n{} rules: {} with a check, {} preflight checks, {probes} probes\n",
-        rules.len(),
-        checks,
-        rules.len() - probes
+        "\n{}: {checks} with a check, {}, {}\n",
+        count_of(rules.len(), "rule"),
+        count_of(rules.len() - probes, "preflight check"),
+        count_of(probes, "probe")
     ));
     out
 }

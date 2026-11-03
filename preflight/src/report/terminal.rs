@@ -1,7 +1,7 @@
 //! The terminal form of a report.
 
 use strata::term::color::Paint;
-use strata::text::cut;
+use strata::text::{cut, plural};
 
 use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
 use super::{CheckResult, Report, pct};
@@ -93,9 +93,12 @@ fn summary_lines(r: &Report, paint: &Paint) -> String {
     let warnings = count_of(s.warned as usize, "warning");
     let notes = count_of(s.noted as usize, "note");
     let errors = count_of(s.errors as usize, "error");
+    let rules = count_of(s.rules as usize, "rule");
+    let apply = plural(s.rules as usize, "applies", "apply");
+    let checks = plural(s.applies() as usize, "check", "checks");
     out.push_str(&format!(
-        "\n{} rules apply; {} ran: {} passed, {} failed, {probes} failed, {warnings}, {notes}; {} did not run, {} not checked, {} do not apply, {errors}; readiness {}: {} of {} checks passed\n",
-        s.rules, s.ran, s.passed, s.failed, s.not_run, s.not_checked, s.skipped, pct(s.readiness), s.passed, s.applies()
+        "\n{rules} {apply}; {} ran: {} passed, {} failed, {probes} failed, {warnings}, {notes}; {} did not run, {} not checked, {} do not apply, {errors}; readiness {}: {} of {} {checks} passed\n",
+        s.ran, s.passed, s.failed, s.not_run, s.not_checked, s.skipped, pct(s.readiness), s.passed, s.applies()
     ));
     if s.not_run > 0 {
         out.push_str(&format!(

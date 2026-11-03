@@ -6,7 +6,7 @@ use serde_json::Value;
 use strata::api::{cluster_events_path, cluster_summary_path, subject_path};
 use strata::closed_set::ClosedSet;
 use strata::json::{arr, str_at, text_or};
-use strata::render::paint_state;
+use strata::render::{count_of, paint_state};
 use strata::snapshot::SubjectKind;
 use strata::term::color::Paint;
 use strata::text::{cut, plural};
@@ -112,7 +112,7 @@ pub(super) fn reading_lines(
 fn reading_header(uid: &str, read: &Value, paint: &Paint) -> String {
     let state = text_or(read, "/cluster/status/state", UNKNOWN);
     format!(
-        "{} state {}, health {}, {} events",
+        "{} state {}, health {}, {}",
         paint.dim(&format!(
             "watch: read GET {}, GET {}, GET {}:",
             subject_path(SubjectKind::Cluster, uid),
@@ -121,7 +121,7 @@ fn reading_header(uid: &str, read: &Value, paint: &Paint) -> String {
         )),
         paint_state(paint, state),
         text_or(read, "/summary/status/health/state", UNKNOWN),
-        arr(read, "/events").len()
+        count_of(arr(read, "/events").len(), "event")
     )
 }
 
@@ -248,6 +248,14 @@ mod tests {
                 EVENTS_SHOWN + 1,
                 "the newest events and the count"
             );
+        }
+    }
+
+    #[test]
+    fn the_first_line_of_a_reading_agrees_its_noun_with_the_count_of_events() {
+        for (n, tail) in [(0, ", no events"), (1, ", 1 event"), (2, ", 2 events")] {
+            let line = reading_header("u", &reading_with_events(n), &Paint::off());
+            assert!(line.ends_with(tail), "{line}");
         }
     }
 }
