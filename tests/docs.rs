@@ -652,6 +652,93 @@ fn words(sentence: &str) -> usize {
         .count()
 }
 
+/// The most words in a sentence of a description. "The style rules" of `documentation.md` give it.
+const MOST_WORDS: usize = 25;
+
+/// The most words in a sentence of a procedure. "The style rules" of `documentation.md` give it.
+const MOST_WORDS_IN_A_PROCEDURE: usize = 20;
+
+/// The most sentences in a paragraph, a list item, or a table cell.
+const MOST_SENTENCES: usize = 6;
+
+/// The faults of the sentences `found`, which `place` holds: one line for each sentence of more
+/// than `limit` words.
+fn word_faults(place: &str, found: &[String], limit: usize) -> Vec<String> {
+    found
+        .iter()
+        .filter(|s| words(s) > limit)
+        .map(|s| {
+            let count = words(s);
+            format!(
+                "{place}: {count} words in a sentence of {limit} at most: {}",
+                s.trim()
+            )
+        })
+        .collect()
+}
+
+/// The faults of the block `block`, which `place` holds. A sentence of more than `MOST_WORDS` words
+/// is a fault. A block that is no table row and has more than `MOST_SENTENCES` sentences is one too.
+fn block_faults(place: &str, block: &str) -> Vec<String> {
+    let found = block_sentences(block);
+    let mut faults = word_faults(place, &found, MOST_WORDS);
+    if !block.starts_with('|') && found.len() > MOST_SENTENCES {
+        faults.push(format!("{place}: {} sentences: {block}", found.len()));
+    }
+    faults
+}
+
+/// The faults of the text `text`, which `place` holds: a sentence of more than `MOST_WORDS` words.
+fn sentence_faults(place: &str, text: &str) -> Vec<String> {
+    word_faults(place, &sentences(text), MOST_WORDS)
+}
+
+/// Stop the test when `faults` has an entry. The message has each fault on a line of its own.
+fn assert_no_faults(faults: &[String]) {
+    assert!(
+        faults.is_empty(),
+        "{} faults:\n{}",
+        faults.len(),
+        faults.join("\n")
+    );
+}
+
+/// Stop the test when a comment that `comments` names has a sentence of more than `MOST_WORDS`
+/// words. Each entry is a file and the start of a comment in it.
+fn assert_comments_keep_to_the_limit(comments: &[(&str, &str)]) {
+    let faults: Vec<String> = comments
+        .iter()
+        .flat_map(|(file, anchor)| sentence_faults(file, &comment(file, anchor)))
+        .collect();
+    assert_no_faults(&faults);
+}
+
+#[test]
+fn the_faults_of_a_block_name_a_sentence_over_the_limit_and_a_block_over_the_most_sentences() {
+    let at_limit = format!("{}.", vec!["word"; MOST_WORDS].join(" "));
+    let over = format!("{}.", vec!["word"; MOST_WORDS + 1].join(" "));
+    assert!(block_faults("page.md", &at_limit).is_empty());
+    let faults = block_faults("page.md", &over);
+    assert_eq!(faults.len(), 1, "{faults:?}");
+    assert!(
+        faults[0].starts_with(&format!(
+            "page.md: {} words in a sentence of {MOST_WORDS} at most: ",
+            MOST_WORDS + 1
+        )),
+        "{faults:?}"
+    );
+
+    let many = vec!["A short one."; MOST_SENTENCES + 1].join(" ");
+    assert_eq!(block_faults("page.md", &many).len(), 1);
+    assert!(
+        block_faults("page.md", &format!("| {many} |")).is_empty(),
+        "a table row has no limit of sentences"
+    );
+
+    let procedure = word_faults("page.md", &sentences(&at_limit), MOST_WORDS_IN_A_PROCEDURE);
+    assert_eq!(procedure.len(), 1, "a procedure has a shorter limit");
+}
+
 /// The style review of Wave 11 found sentences over the limits of "The style rules". The pages
 /// are in `docs/src/`, and the other files are in the repository. A procedure has 20 words at most,
 /// and a description has 25.
@@ -661,62 +748,78 @@ fn the_sentences_that_the_style_review_of_wave_11_named_keep_to_the_limits() {
         (
             "automation/preflight.md",
             "checks the signature of `SHA256SUMS`, installs the two binaries,",
-            25,
+            MOST_WORDS,
         ),
-        ("automation/preflight.md", "markdown to the job summary", 25),
+        (
+            "automation/preflight.md",
+            "markdown to the job summary",
+            MOST_WORDS,
+        ),
         (
             "automation/preflight.md",
             "reads one variable for each input",
-            25,
+            MOST_WORDS,
         ),
-        ("development/build-test.md", "names it. For each option", 25),
+        (
+            "development/build-test.md",
+            "names it. For each option",
+            MOST_WORDS,
+        ),
         (
             "reference/documents.md",
             "`actorType` and `action`, as Palette",
-            25,
+            MOST_WORDS,
         ),
         (
             "automation/gitlab.md",
             "downloads one release. When `cosign` 3 or later is on the",
-            25,
+            MOST_WORDS,
         ),
-        ("automation/gitlab.md", "To require the check, install", 20),
+        (
+            "automation/gitlab.md",
+            "To require the check, install",
+            MOST_WORDS_IN_A_PROCEDURE,
+        ),
         (
             "automation/pr-comments.md",
             "The workflow installs the release binary",
-            25,
+            MOST_WORDS,
         ),
         (
             "development/live-runs.md",
             "makes a checkout of the caller",
-            25,
+            MOST_WORDS,
         ),
         (
             "development/live-runs.md",
             "#419: with `CLUSTER`, the record of the cluster",
-            25,
+            MOST_WORDS,
         ),
         (
             "development/live-runs.md",
             "#158: `verify-report.sh --who` puts",
-            25,
+            MOST_WORDS,
         ),
         (
             "automation/library.md",
             "`with_palette` adds the profiles",
-            25,
+            MOST_WORDS,
         ),
         (
             "use-cases/edited-in-place.md",
             "Then the issue also lists each write",
-            20,
+            MOST_WORDS_IN_A_PROCEDURE,
         ),
         (
             "use-cases/no-digest.md",
             "Then give `--allow-no-digest`",
-            20,
+            MOST_WORDS_IN_A_PROCEDURE,
         ),
-        ("use-cases/no-digest.md", "Give `--allow no-digest` to", 20),
+        (
+            "use-cases/no-digest.md",
+            "Give `--allow no-digest` to",
+            MOST_WORDS_IN_A_PROCEDURE,
+        ),
     ];
     for (page, anchor, limit) in sentences_to_check {
         let text = read(&docs().join(page));
@@ -725,23 +828,16 @@ fn the_sentences_that_the_style_review_of_wave_11_named_keep_to_the_limits() {
             .iter()
             .find(|s| s.contains(anchor.split(". ").last().unwrap()))
             .unwrap_or_else(|| panic!("{page}: no sentence holds {anchor:?}"));
-        assert!(
-            words(sentence) <= limit,
-            "{page}: {} words in a sentence of {limit} at most: {sentence}",
-            words(sentence)
-        );
+        assert_no_faults(&word_faults(page, std::slice::from_ref(sentence), limit));
     }
 
     // the cells of the table of the drop-ins: one short sentence for each trigger
     let table = repo_file("examples/ci/README.md");
     for row in ["| `github/strata.yml` |", "| `gitlab/strata.yml` |"] {
-        for sentence in sentences(&block(&table, row)) {
-            assert!(
-                words(&sentence) <= 25,
-                "examples/ci/README.md: {} words: {sentence}",
-                words(&sentence)
-            );
-        }
+        assert_no_faults(&sentence_faults(
+            "examples/ci/README.md",
+            &block(&table, row),
+        ));
     }
 }
 
@@ -790,7 +886,7 @@ fn the_blocks_that_the_style_review_of_wave_11_named_have_six_sentences_or_fewer
     for (page, anchor) in blocks {
         let found = sentences(&block(&read(&docs().join(page)), anchor)).len();
         assert!(
-            found <= 6,
+            found <= MOST_SENTENCES,
             "{page}: {found} sentences in the block of {anchor:?}"
         );
     }
@@ -939,15 +1035,7 @@ fn the_rust_comments_that_the_style_review_of_wave_11_named_keep_to_25_words() {
             "The comment of a file of the repository that holds",
         ),
     ];
-    for (file, anchor) in comments {
-        for sentence in sentences(&comment(file, anchor)) {
-            assert!(
-                words(&sentence) <= 25,
-                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
-                words(&sentence)
-            );
-        }
-    }
+    assert_comments_keep_to_the_limit(&comments);
 }
 
 /// The review of Wave 11 named phrasal verbs and "would" for a fact. Each file below held one.
@@ -1034,24 +1122,10 @@ fn the_pages_that_wave_8_touched_keep_to_25_words_and_six_sentences() {
     let mut faults = Vec::new();
     for page in WAVE_8_PAGES {
         for block in blocks_of(&read(&docs().join(page))) {
-            let found = block_sentences(&block);
-            faults.extend(
-                found
-                    .iter()
-                    .filter(|s| words(s) > 25)
-                    .map(|s| format!("{page}: {} words: {}", words(s), s.trim())),
-            );
-            if !block.starts_with('|') && found.len() > 6 {
-                faults.push(format!("{page}: {} sentences: {block}", found.len()));
-            }
+            faults.extend(block_faults(page, &block));
         }
     }
-    assert!(
-        faults.is_empty(),
-        "{} faults:\n{}",
-        faults.len(),
-        faults.join("\n")
-    );
+    assert_no_faults(&faults);
 }
 
 /// The Rust comments that the style review of Wave 8 named: the crate doc and the comments of the
@@ -1073,15 +1147,7 @@ fn the_rust_comments_that_the_style_review_of_wave_8_named_keep_to_25_words() {
             "such a pair is `unknown-upstream`",
         ),
     ];
-    for (file, anchor) in comments {
-        for sentence in sentences(&comment(file, anchor)) {
-            assert!(
-                words(&sentence) <= 25,
-                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
-                words(&sentence)
-            );
-        }
-    }
+    assert_comments_keep_to_the_limit(&comments);
 }
 
 /// The legend of a pair status is plain words for a reader without the book. Each sentence has 25
@@ -1092,13 +1158,7 @@ fn the_legend_of_a_pair_status_keeps_to_25_words_and_has_no_semicolon() {
     assert!(!legend.is_empty());
     for (status, text) in legend {
         assert!(!text.contains(';'), "{status}: {text}");
-        for sentence in sentences(&text) {
-            assert!(
-                words(&sentence) <= 25,
-                "{status}: {} words in a sentence of 25 at most: {sentence}",
-                words(&sentence)
-            );
-        }
+        assert_no_faults(&sentence_faults(&status, &text));
     }
 }
 
@@ -1511,52 +1571,54 @@ fn the_blocks_that_the_review_at_the_end_of_wave_12_named_keep_to_the_limits() {
         (
             "commands/preflight/rules.md",
             "A file with a program that cannot run",
-            25,
+            MOST_WORDS,
         ),
         (
             "commands/preflight/watch.md",
             "`--watch cluster:UID` reads",
-            25,
+            MOST_WORDS,
         ),
-        ("commands/preflight/watch.md", "`--verbose` prints", 25),
+        (
+            "commands/preflight/watch.md",
+            "`--verbose` prints",
+            MOST_WORDS,
+        ),
         (
             "commands/preflight/watch.md",
             "To see a watch on a real build",
-            25,
+            MOST_WORDS,
         ),
         (
             "commands/preflight/tiers.md",
             "A run sends each request one time",
-            25,
+            MOST_WORDS,
         ),
-        ("commands/preflight/tiers.md", "So `palette-validate`", 25),
-        ("internals/hashes.md", "The JSON is also YAML", 25),
-        ("internals/hashes.md", "These are DEL", 25),
+        (
+            "commands/preflight/tiers.md",
+            "So `palette-validate`",
+            MOST_WORDS,
+        ),
+        ("internals/hashes.md", "The JSON is also YAML", MOST_WORDS),
+        ("internals/hashes.md", "These are DEL", MOST_WORDS),
         (
             "development/documentation.md",
             "Find the chapter of the page",
-            20,
+            MOST_WORDS_IN_A_PROCEDURE,
         ),
         (
             "reference/refs.md",
             "`snapshot --raw-dir` takes a profile or a cluster",
-            25,
+            MOST_WORDS,
         ),
     ];
     for (page, anchor, limit) in blocks {
         let found = sentences(&block(&read(&docs().join(page)), anchor));
         assert!(
-            found.len() <= 6,
+            found.len() <= MOST_SENTENCES,
             "{page}: {} sentences in the block of {anchor:?}",
             found.len()
         );
-        for sentence in found {
-            assert!(
-                words(&sentence) <= limit,
-                "{page}: {} words in a sentence of {limit} at most: {sentence}",
-                words(&sentence)
-            );
-        }
+        assert_no_faults(&word_faults(page, &found, limit));
     }
 }
 
@@ -1588,15 +1650,7 @@ fn the_comments_of_the_ci_drop_ins_that_the_review_named_keep_to_25_words() {
         ),
         ("examples/ci/gitlab/strata.yml", "needed to read Palette"),
     ];
-    for (file, anchor) in comments {
-        for sentence in sentences(&comment(file, anchor)) {
-            assert!(
-                words(&sentence) <= 25,
-                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
-                words(&sentence)
-            );
-        }
-    }
+    assert_comments_keep_to_the_limit(&comments);
 }
 
 /// Each place that says which version `@latest` picks says that a pre-release is not the pick.
@@ -1730,13 +1784,7 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_12_named_keeps_to_25_wo
     ];
     for (file, anchor) in comments {
         let text = comment(file, anchor);
-        for sentence in sentences(&text) {
-            assert!(
-                words(&sentence) <= 25,
-                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
-                words(&sentence)
-            );
-        }
+        assert_no_faults(&sentence_faults(file, &text));
         for phrase in ["read back", "them back", "spelled out"] {
             assert!(
                 !text.contains(phrase),
@@ -2145,16 +2193,7 @@ fn the_pages_of_the_report_keep_to_the_style_rules() {
     for page in REPORT_PAGES {
         let text = read(&docs().join(page));
         for block in blocks_of(&text) {
-            let found = block_sentences(&block);
-            faults.extend(
-                found
-                    .iter()
-                    .filter(|s| words(s) > 25)
-                    .map(|s| format!("{page}: {} words: {}", words(s), s.trim())),
-            );
-            if !block.starts_with('|') && found.len() > 6 {
-                faults.push(format!("{page}: {} sentences: {block}", found.len()));
-            }
+            faults.extend(block_faults(page, &block));
             let prose = without_code(&block).to_lowercase();
             for word in prose.split(|c: char| !(c.is_alphanumeric() || c == '\'')) {
                 if refused.contains(&word) {
@@ -2168,12 +2207,7 @@ fn the_pages_of_the_report_keep_to_the_style_rules() {
             }
         }
     }
-    assert!(
-        faults.is_empty(),
-        "{} faults:\n{}",
-        faults.len(),
-        faults.join("\n")
-    );
+    assert_no_faults(&faults);
 }
 
 /// Step 6 of the deploy states the three points of Cloud Run as results. A live run gave two of
@@ -2585,78 +2619,98 @@ fn the_sentences_that_the_review_at_the_end_of_wave_13_named_keep_to_the_limits(
         (
             "quickstart.md",
             "[Palette gives a value that strata does not know]",
-            25,
+            MOST_WORDS,
         ),
         (
             "use-cases/index.md",
             "[Palette gives a value that strata does not know]",
-            25,
+            MOST_WORDS,
         ),
-        ("reference/settings.md", "| `XDG_STATE_HOME` |", 25),
+        ("reference/settings.md", "| `XDG_STATE_HOME` |", MOST_WORDS),
         (
             "commands/preflight/tiers.md",
             "Palette lists some facts of a cloud account",
-            25,
+            MOST_WORDS,
         ),
         (
             "internals/preflight.md",
             "When a report names a release",
-            25,
+            MOST_WORDS,
         ),
         (
             "internals/preflight.md",
             "A rule that no run proved on the release",
-            25,
+            MOST_WORDS,
         ),
         (
             "reference/preflight-rules.md",
             "| `palette` | `method`,",
-            25,
+            MOST_WORDS,
         ),
-        ("reference/preflight-rules.md", "| `exec` | `argv`,", 25),
-        ("development/live-example.md", "| `aws_profile` |", 25),
+        (
+            "reference/preflight-rules.md",
+            "| `exec` | `argv`,",
+            MOST_WORDS,
+        ),
+        (
+            "development/live-example.md",
+            "| `aws_profile` |",
+            MOST_WORDS,
+        ),
         (
             "development/facts.md",
             "Strata depends on facts about Palette.",
-            25,
+            MOST_WORDS,
         ),
-        ("development/facts.md", "| `table` | Only a fact", 25),
-        ("development/facts.md", "| `palette` | Only a fact", 25),
+        (
+            "development/facts.md",
+            "| `table` | Only a fact",
+            MOST_WORDS,
+        ),
+        (
+            "development/facts.md",
+            "| `palette` | Only a fact",
+            MOST_WORDS,
+        ),
         (
             "development/facts.md",
             "Name the live checks that prove the fact.",
-            20,
+            MOST_WORDS_IN_A_PROCEDURE,
         ),
         (
             "development/facts.md",
             "`just docs-check` and `just docs-examples` run each chapter",
-            25,
+            MOST_WORDS,
         ),
         (
             "development/facts.md",
             "The stand-in puts the query in the name",
-            25,
+            MOST_WORDS,
         ),
         (
             "development/facts.md",
             "An answer with no value at the field",
-            25,
+            MOST_WORDS,
         ),
         (
             "development/facts.md",
             "A fact can name the values of a closed set",
-            25,
+            MOST_WORDS,
         ),
         (
             "development/facts.md",
             "Prove the fact again with its live checks.",
-            20,
+            MOST_WORDS_IN_A_PROCEDURE,
         ),
-        ("development/facts.md", "Prove the value again.", 20),
+        (
+            "development/facts.md",
+            "Prove the value again.",
+            MOST_WORDS_IN_A_PROCEDURE,
+        ),
         (
             "reference/report.md",
             "The note of an unknown value can end with",
-            25,
+            MOST_WORDS,
         ),
     ];
     for (page, anchor, limit) in blocks {
@@ -2664,17 +2718,11 @@ fn the_sentences_that_the_review_at_the_end_of_wave_13_named_keep_to_the_limits(
         let block = block(&text, anchor);
         let found = block_sentences(&block);
         assert!(
-            block.starts_with('|') || found.len() <= 6,
+            block.starts_with('|') || found.len() <= MOST_SENTENCES,
             "{page}: {} sentences in the block of {anchor:?}",
             found.len()
         );
-        for sentence in found {
-            assert!(
-                words(&sentence) <= limit,
-                "{page}: {} words in a sentence of {limit} at most: {sentence}",
-                words(&sentence)
-            );
-        }
+        assert_no_faults(&word_faults(page, &found, limit));
     }
 }
 
@@ -2738,7 +2786,7 @@ fn the_paragraphs_that_the_review_at_the_end_of_wave_13_named_have_six_sentences
     for (page, anchor) in blocks {
         let found = sentences(&block(&read(&docs().join(page)), anchor)).len();
         assert!(
-            found <= 6,
+            found <= MOST_SENTENCES,
             "{page}: {found} sentences in the block of {anchor:?}"
         );
     }
@@ -2818,13 +2866,7 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_13_named_keeps_to_25_wo
     ];
     for (file, anchor) in comments {
         let text = comment(file, anchor);
-        for sentence in sentences(&text) {
-            assert!(
-                words(&sentence) <= 25,
-                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
-                words(&sentence)
-            );
-        }
+        assert_no_faults(&sentence_faults(file, &text));
         for phrase in [" would ", " may ", "went out", "filled in", "use up"] {
             assert!(
                 !text.contains(phrase),
@@ -3349,7 +3391,7 @@ fn no_table_cell_of_the_book_holds_more_than_six_sentences() {
         for block in blocks_of(&read(path)).iter().filter(|b| b.starts_with('|')) {
             for cell in block.trim_matches('|').split('|') {
                 let count = sentences(cell.trim()).len();
-                if count > 6 {
+                if count > MOST_SENTENCES {
                     faults.push(format!(
                         "{}: {count} sentences: {}",
                         path.display(),
@@ -3359,12 +3401,7 @@ fn no_table_cell_of_the_book_holds_more_than_six_sentences() {
             }
         }
     }
-    assert!(
-        faults.is_empty(),
-        "{} faults:\n{}",
-        faults.len(),
-        faults.join("\n")
-    );
+    assert_no_faults(&faults);
 }
 
 /// The top of the everyday loop said "one step of a day" for rows that are not steps of each day.
@@ -3474,27 +3511,17 @@ fn each_comment_sentence_in_the_fuzz_package_has_25_words_at_most() {
         .filter(|p| p.extension().is_some_and(|e| e == "rs"))
     {
         for block in comment_blocks(&read(path), "//") {
-            faults.extend(
-                sentences(&block)
-                    .into_iter()
-                    .filter(|s| words(s) > 25)
-                    .map(|s| format!("{}: {} words: {}", path.display(), words(&s), s.trim())),
-            );
+            faults.extend(sentence_faults(&path.display().to_string(), &block));
         }
     }
-    assert!(
-        faults.is_empty(),
-        "{} faults:\n{}",
-        faults.len(),
-        faults.join("\n")
-    );
+    assert_no_faults(&faults);
 }
 
 /// The review at the end of Wave 12 named comments of internal code with a sentence over
 /// 25 words. Each sentence of each comment has 25 words at most now.
 #[test]
 fn the_internal_comments_that_the_review_at_the_end_of_wave_12_named_keep_to_25_words() {
-    for (file, anchor) in [
+    assert_comments_keep_to_the_limit(&[
         ("tests/ci_scripts.rs", "A `curl` for the GitLab REST API"),
         (
             "tests/common/mod.rs",
@@ -3519,15 +3546,7 @@ fn the_internal_comments_that_the_review_at_the_end_of_wave_12_named_keep_to_25_
             "backwards DIFF: the pins that the merge result moves back",
         ),
         ("Cargo.toml", "It is the profile that the tool"),
-    ] {
-        for sentence in sentences(&comment(file, anchor)) {
-            assert!(
-                words(&sentence) <= 25,
-                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
-                words(&sentence)
-            );
-        }
-    }
+    ]);
 }
 
 /// The review at the end of Wave 12 named modal and phrasal verbs in internal comments. The
@@ -3794,20 +3813,10 @@ fn each_comment_sentence_in_the_files_that_wave_13_wrote_has_25_words_at_most() 
             "#"
         };
         for block in comment_blocks(&read(&path), mark) {
-            faults.extend(
-                sentences(&block)
-                    .into_iter()
-                    .filter(|s| words(s) > 25)
-                    .map(|s| format!("{}: {} words: {}", path.display(), words(&s), s.trim())),
-            );
+            faults.extend(sentence_faults(&path.display().to_string(), &block));
         }
     }
-    assert!(
-        faults.is_empty(),
-        "{} faults:\n{}",
-        faults.len(),
-        faults.join("\n")
-    );
+    assert_no_faults(&faults);
 }
 
 // ---- the text findings of the review at the end of Wave 13, in Wave 14 ---------------------------
@@ -4066,7 +4075,10 @@ fn the_what_of_each_rule_that_the_review_named_has_six_sentences_or_fewer_in_a_p
         assert!(paragraphs.len() > 1, "{id}: one paragraph");
         for paragraph in paragraphs {
             let found = sentences(&one_line(paragraph)).len();
-            assert!(found <= 6, "{id}: {found} sentences in: {paragraph}");
+            assert!(
+                found <= MOST_SENTENCES,
+                "{id}: {found} sentences in: {paragraph}"
+            );
         }
     }
 }
