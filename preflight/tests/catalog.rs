@@ -1759,3 +1759,36 @@ fn the_ledger_ends_with_the_run_of_the_plan_of_the_live_window_of_wave_14() {
     let times: BTreeSet<&str> = ledger.runs.iter().map(|r| r.run.as_str()).collect();
     assert_eq!(times.len(), ledger.runs.len(), "each run has its own id");
 }
+
+/// A user reads the message of a failed quota rule in the report. Each sentence of it has 25 words
+/// at most. The review at the end of Wave 13 found five messages of 28 to 37 words in one sentence.
+#[test]
+fn each_sentence_in_a_message_of_the_quota_rules_has_25_words_at_most() {
+    let catalog = catalog::builtin().unwrap();
+    for (id, fixture) in [
+        ("aws-quotas", "fixtures/aws/vcpu-quota-low.json"),
+        ("aws-quotas", "fixtures/aws/vcpu-quota-type-not-listed.json"),
+        ("gcp-quotas", "fixtures/gke/cpu-quota-low.json"),
+        ("gcp-quotas", "fixtures/gke/cpu-quota-type-not-listed.json"),
+        ("azure-vcpu-quota", "fixtures/azure/vcpu-quota-low.json"),
+        (
+            "azure-vcpu-quota",
+            "fixtures/azure/vcpu-quota-small-size.json",
+        ),
+        (
+            "azure-vcpu-quota",
+            "fixtures/azure/vcpu-quota-size-not-listed.json",
+        ),
+    ] {
+        let rule = catalog.rule(id).unwrap();
+        let path = catalog::rules_dir().join(fixture);
+        let out = outcome_of(rule, fixture::load(&path).unwrap(), &Jq::new());
+        assert_eq!(out.verdict, Verdict::Failed, "{id}: {:?}", out.messages);
+        for message in &out.messages {
+            for sentence in message.split(". ") {
+                let words = sentence.split_whitespace().count();
+                assert!(words <= 25, "{id}: {words} words in: {sentence}");
+            }
+        }
+    }
+}
