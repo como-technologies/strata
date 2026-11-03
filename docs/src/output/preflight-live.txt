@@ -3,11 +3,11 @@ strata-preflight: aws cluster payments (cluster.json), Palette release not given
 
 Identity and permissions
   NOT RUN       3 checks did not run: --no-exec: the command did not run (3)
-  PROBE PASS    account-missing              The cloud account of the entity exists, and is of the cloud…     1 ms  catch 10/10 (74%), clean 12/12 (78%)
-  PROBE PASS    iaas-pod-identity            The property route accepts the cloud account and the key pa…     1 ms  catch 2/2 (22%), clean 12/12 (78%)
+  PROBE PASS    account-missing              The cloud account of the entity exists, and is of the cloud…     1 ms  catch 11/11 (76%), clean 13/13 (79%)
+  PROBE PASS    iaas-pod-identity            The property route accepts the cloud account and the key pa…     1 ms  catch 3/3 (37%), clean 13/13 (79%)
 
 Cloud services and APIs
-  PROBE PASS    aws-region-not-enabled       The region of the cluster is enabled for the AWS account         1 ms  catch no runs, clean 12/12 (78%)
+  PROBE PASS    aws-region-not-enabled       The region of the cluster is enabled for the AWS account         1 ms  catch no runs, clean 13/13 (79%)
   NOT CHECKED   aws-s3-irsa-bucket           The IRSA bucket of an AWS cluster can be made                    1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: kubectl get awscluster -A -o jsonpath='{.items[*].spec.s3Bucket.name}'   # on the management cluster, during the build: the bucket CAPA asks for
@@ -20,7 +20,7 @@ Quotas and limits
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: aws service-quotas get-service-quota --service-code vpc --quota-code L-E79EC296 --region us-east-2 --query Quota.Value
                 reproduce: aws ec2 describe-security-groups --region us-east-2 --filters Name=tag-key,Values=sigs.k8s.io/cluster-api-provider-aws/role --query 'SecurityGroups[].[GroupId,GroupName,length(IpPermissions),length(IpPermissionsEgress)]' --output table   # the groups CAPA made, during or after the build
-  PROBE FAIL    worker-cpu-floor             The workers have the CPU the packs need                          1 ms  catch 10/10 (74%), clean 12/12 (78%)
+  PROBE FAIL    worker-cpu-floor             The workers have the CPU the packs need                          1 ms  catch 11/11 (76%), clean 13/13 (79%)
                 pool worker-pool: A minimum allocation of '4.1' CPU cores is required across all worker nodes
                 ran: POST /v1/spectroclusters/aws/validate -> HTTP 200
                 reproduce: jq '.validateBody' $OUT/world.json > request.json
@@ -33,16 +33,16 @@ Quotas and limits
                 reproduce: curl -s -H "ApiKey: $PALETTE_API_KEY" -H "ProjectUid: $PALETTE_PROJECT_UID" "${PALETTE_API:-https://api.spectrocloud.com}/v1/clustergroups/<uid>" | jq .spec.clustersConfig.limitConfig
 
 Networking
-  PROBE PASS    aws-dynamic-cidr-overlap     The pod and service CIDRs stay outside the VPC of dynamic p…     1 ms  catch no runs, clean 12/12 (78%)
-  PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs, clean 12/12 (78%)
-  PROBE PASS    api-endpoint-reach           The pilot can reach the API server of the cluster                1 ms  catch 10/10 (74%), clean 12/12 (78%)
-  PROBE PASS    proxy-no-proxy               NO_PROXY holds the CIDRs of the cluster                          1 ms  catch no runs, clean 12/12 (78%)
+  PROBE PASS    aws-dynamic-cidr-overlap     The pod and service CIDRs stay outside the VPC of dynamic p…     1 ms  catch no runs, clean 13/13 (79%)
+  PROBE PASS    aws-local-zone-letter        Each zone of dynamic placement ends in its own letter            1 ms  catch no runs, clean 13/13 (79%)
+  PROBE PASS    api-endpoint-reach           The pilot can reach the API server of the cluster                1 ms  catch 11/11 (76%), clean 13/13 (79%)
+  PROBE PASS    proxy-no-proxy               NO_PROXY holds the CIDRs of the cluster                          1 ms  catch no runs, clean 13/13 (79%)
   NOT CHECKED   registry-https               A registry name answers over HTTPS before Palette takes it       1 ms
                 no check in strata-preflight; the reproduce lines say what to run by hand
                 reproduce: curl -s -o /dev/null -w '%{http_code}\n' https://<registry host>/v2/
 
 Compute and pools
-  PROBE PASS    instance-offering            The instance type is offered in each zone of the pool            1 ms  catch 6/6 (61%), clean 5/6 (42%)
+  PROBE PASS    instance-offering            The instance type is offered in each zone of the pool            1 ms  catch 7/7 (65%), clean 6/7 (48%)
   NOT CHECKED   spot-capacity                Spot capacity is short                                           1 ms
                 a race: no check before the build finds it; the watch finds its effect
   NOTE          bastion-cost                 CAPA makes a bastion for each AWS cluster                        1 ms
@@ -69,7 +69,7 @@ Images and registries
   WARN          floating-tag                 No profile pins a pack under a floating tag                      1 ms
                 profile aws-stack: pack ubuntu-aws is pinned under the floating tag LTS__24.x
                 reproduce: jq '[ .profiles[] | .source.name as $p | .packs[] | select((.tag // "") | test("\\.x$|^x$")) | "profile \($p): pack \(.name) is pinned under the floating tag \(.tag)" ]' $OUT/world.json
-  PROBE PASS    pack-dependency              Each pack of the profiles finds the packs it requires            1 ms  catch no runs, clean 12/12 (78%)
+  PROBE PASS    pack-dependency              Each pack of the profiles finds the packs it requires            1 ms  catch no runs, clean 13/13 (79%)
   NOT CHECKED   image-tag-not-digest         An image of a pack is named by a digest                          1 ms
                 a race: no check before the build finds it; the watch finds its effect
                 reproduce: crane digest <image>
@@ -101,7 +101,7 @@ Profiles and packs
   NOT CHECKED   template-lock-route          The lock of a cluster template covers each route of an edit      1 ms
                 a race: no check before the build finds it; the watch finds its effect
                 reproduce: strata verify <record.json> --who
-  PROBE PASS    template-outside             No profile of the entity is linked to a cluster template         1 ms  catch no runs, clean 12/12 (78%)
+  PROBE PASS    template-outside             No profile of the entity is linked to a cluster template         1 ms  catch no runs, clean 13/13 (79%)
   PROBE PASS    variables-in-use             The variable definitions of a version in use stay as they a…     1 ms
   PROBE PASS    version-string               Each profile version is MAJOR.MINOR.PATCH                        1 ms
   PROBE PASS    macro-flag-scope             The content of a profile reads no macro                          1 ms
@@ -117,7 +117,7 @@ Lifecycle: update, repave, delete
                 a race: no check before the build finds it; the watch finds its effect
 
 The Palette platform
-  PROBE FAIL    palette-validate             The validate route of Palette for the cloud type passes          1 ms  catch 10/10 (74%), clean 12/12 (78%)
+  PROBE FAIL    palette-validate             The validate route of Palette for the cloud type passes          1 ms  catch 11/11 (76%), clean 13/13 (79%)
                 pool worker-pool: MachinePoolWithMinCpuRequired: A minimum allocation of '4.1' CPU cores is required across all worker nodes
                 ran: POST /v1/spectroclusters/aws/validate -> HTTP 200
                 reproduce: jq '.validateBody' $OUT/world.json > request.json
@@ -167,18 +167,18 @@ Teardown and leftovers
 Section scorecard
   section                      rows seen check preflight runs weakest  ran pass fail not run not checked ready
   Identity and permissions       13    6    12         0    7      0%    2    2    0       3           0   40%
-  Cloud services and APIs         2    0     1         0    1     78%    1    1    0       0           1  100%
-  Quotas and limits               4    2     2         0    2     74%    1    0    1       1           2    0%
+  Cloud services and APIs         2    0     1         0    1     79%    1    1    0       0           1  100%
+  Quotas and limits               4    2     2         0    2     76%    1    0    1       1           2    0%
   Networking                     12    2    10         0    5     22%    4    4    0       0           1  100%
-  Compute and pools               6    1     5         0    2     42%    1    1    0       0           1  100%
-  Kubernetes version and engi…    3    1     3         0    1     78%    1    1    0       0           0  100%
+  Compute and pools               6    1     5         0    2     48%    1    1    0       0           1  100%
+  Kubernetes version and engi…    3    1     3         0    1     79%    1    1    0       0           0  100%
   Storage and CSI                 4    2     4         0    0 no runs    0    0    0       1           0    0%
   Images and registries          16   11     9         0    3     22%    6    5    1       0           7   83%
-  Profiles and packs              8    5     6         0    1     78%    3    3    0       0           2  100%
+  Profiles and packs              8    5     6         0    1     79%    3    3    0       0           2  100%
   Lifecycle: update, repave, …   10    6     8         0    4     22%    1    1    0       0           2  100%
   The Palette platform           11    9     6         0    3     22%    1    0    1       0           5    0%
   Client tools                    9    9     4         0    0 no runs    0    0    0       3           0    0%
-  Teardown and leftovers          6    6     3         0    1     74%    1    1    0       2           3   33%
+  Teardown and leftovers          6    6     3         0    1     76%    1    1    0       2           3   33%
 runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: 0 of 73 checks.
 
 104 rules apply; 22 ran: 19 passed, 0 failed, 2 probes failed, 1 warning, 2 notes; 10 did not run, 24 not checked, 41 do not apply, no errors; readiness 59%: 19 of 32 checks passed

@@ -1,5 +1,5 @@
 $ strata preflight cluster-gcp.json --cloud aws --no-exec --tier palette --rule palette-validate --strict --quiet | sed -n '4,8p'
-  PROBE FAIL    palette-validate             The validate route of Palette for the cloud type passes          1 ms  catch 10/10 (74%), clean 12/12 (78%)
+  PROBE FAIL    palette-validate             The validate route of Palette for the cloud type passes          1 ms  catch 11/11 (76%), clean 13/13 (79%)
                 Palette refused the entity: ClusterProfilesNotSupported: Cluster profiles 'gcp-stack' are not supported with 'aws' environment
                 ran: POST /v1/spectroclusters/aws/validate -> HTTP 500
                 reproduce: jq '.validateBody' $OUT/world.json > request.json
