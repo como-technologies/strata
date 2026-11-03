@@ -72,12 +72,15 @@ by itself. See [Send the report by itself](../reference/report.md#send-the-repor
 
 ## A line that is not valid
 
-A log that you edited can hold a line that strata did not write. Three faults make a line not
+A log that you edited can hold a line that strata did not write. These faults make a line not
 valid:
 
 - A field outside the list of [`strata-unknown/1`](../reference/documents.md#strata-unknown1).
+- A field that is missing, or that has the wrong type.
+- A `schema` that is not `strata-unknown/1`, or a `strata` or a `set` that is not a short word.
 - A route that is not a template of a route, such as the path of a real request.
-- A value with a space, or with a character other than printable ASCII.
+- A value that is empty, that has more than 64 characters, or that has a space or a character other
+  than printable ASCII.
 
 `strata report` then stops with the error `log-invalid`, prints nothing, and marks nothing. The
 message gives the number of the line. See [Errors](../reference/errors.md).

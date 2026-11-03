@@ -973,9 +973,10 @@ field, a value, an input, or an option is in the sections above.
   - A text that is no version reads as it did in 0.27.0. Examples are `1.26.x`, `1.26.15.1`, and
     `4.10.x`. The two rules read the first two parts between the dots.
 - **`strata-unknown/1` and `strata-report/1` lose the fields `palette`, `status`, and `errorCode`.**
-  No release of strata wrote them. A log or a report of 0.27.0 never held them.
+  No release of strata wrote them. A log or a report of a command of 0.27.0 never held them.
   - A line or an entry with one of these fields is not valid now. `strata report` stops with the
-    error `log-invalid`, and the endpoint answers 422. Only a log that a person edited has one.
+    error `log-invalid`, and the endpoint answers 422. Only a log that a person edited, or the log
+    of a program that called `Watch::palette_release`, has one.
   - The table of `strata report --format markdown` has the columns `set`, `value`, `route`,
     `count`, and `strata`. It had `Palette`, `status`, and `error code` too.
   - The issue of the endpoint has no row `Releases of Palette` and no row `Refusals`.
@@ -990,6 +991,13 @@ field, a value, an input, or an option is in the sections above.
   - A line of an older log with a space, or with such a character, is not valid now.
     `strata report` stops with the error `log-invalid`. Delete the line, or delete the file
     `strata-unknown.jsonl`.
+  - The endpoint of 0.27.0 took a report with such a value. The endpoint of 0.28.0 answers 422 for
+    the whole report. A client of 0.27.0 then marks no line, so it sends the same report at each
+    run. No other value of that log reaches the endpoint.
+  - After the update, the send of a run reads the same log and stops with `log-invalid`. It sends
+    nothing, and the run writes a warning. `--quiet` hides the warning, and the exit code stays `0`.
+    So a job with `STRATA_REPORT=1` and `--quiet` sends no value from then on, and shows no sign.
+    Delete the line to send again.
 - **`strata-preflight`: `answer` of a check with a second command has the exit code of each command.**
   Only `iam-role-policy-quota` has a second command.
   - `answer` was `exit 0`, the exit code of the first command alone. A failed read of the quota

@@ -56,8 +56,7 @@ impl Counted {
     /// Remember that the service took the report with the hash `digest` at the time `now`.
     pub fn note(&mut self, digest: u64, now: Instant) {
         if self.taken.len() >= MOST_KEPT && !self.taken.contains_key(&digest) {
-            let span = self.span;
-            self.taken.retain(|_, at| now.duration_since(*at) < span);
+            self.forget_expired(now);
             if self.taken.len() >= MOST_KEPT {
                 let oldest = self
                     .taken
@@ -70,6 +69,12 @@ impl Counted {
             }
         }
         self.taken.insert(digest, now);
+    }
+
+    /// Drop each hash that is a span old or older at the time `now`.
+    pub fn forget_expired(&mut self, now: Instant) {
+        let span = self.span;
+        self.taken.retain(|_, at| now.duration_since(*at) < span);
     }
 
     /// Forget the report with the hash `digest`, so that a second try of it counts. The merge calls

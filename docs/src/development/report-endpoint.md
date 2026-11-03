@@ -67,8 +67,9 @@ A sender is an address. An IPv6 address counts by its /64 network, because one m
 all the addresses of its network. The table holds 10,000 senders. When more senders come, the oldest
 sender leaves the table. So a flood of addresses cannot lock out a new sender.
 
-The service also drops each sender whose hour is over. It does this when a request comes, one time
-in a minute at most.
+The service also drops each sender whose hour is over, and each hash of a report whose day is over.
+It does this when a request comes, one time in a minute at most. A request that a check refuses
+also does it.
 
 A step is one set and one value of the report. The service keeps the steps that the new-issue limit
 and the write limit take, in the order of the set and the value. For each step it does not keep, the
@@ -149,9 +150,11 @@ The service keeps no address and no report. Its memory holds these things, each 
 the process makes when it starts:
 
 - A hash of the address of each sender, for one hour. An IPv6 address counts by its /64 network.
-  The service drops an old hash when a request comes, one time in a minute at most. So a hash
-  can stay a minute after its hour, and longer when no request comes.
 - A hash of the key and the content of each report that it took, for one day.
+
+The service drops an old hash of either kind when a request comes, one time in a minute at most. A
+request that a check refuses also drops it. So a hash can stay a minute after its hour or its day,
+and longer when no request comes.
 
 It writes the hashes nowhere, and a restart of the service forgets them. The tracker keeps the
 issues.

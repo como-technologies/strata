@@ -4142,3 +4142,121 @@ fn the_page_of_the_custom_probes_names_the_fault_of_an_owner_that_is_not_one_of_
         assert!(page.contains(needle), "the page lacks {needle:?}");
     }
 }
+
+// ---- the review of Wave 14: the end-of-wave findings of #590 --------------------------------------
+
+/// S3: the pages of the log do not count the faults of a line. Each page names a field that is
+/// missing, a field of the wrong type, and a word that is not a word. The tests of `tests/report.rs`
+/// show that each fault gives `log-invalid`.
+#[test]
+fn the_pages_of_the_log_list_each_fault_of_a_line_and_count_none() {
+    let pages = [
+        (
+            "commands/report.md",
+            "These faults make a line not valid:",
+            "A field that is missing, or that has the wrong type.",
+        ),
+        (
+            "reference/report.md",
+            "A line is not valid in these cases:",
+            "A field is missing, or it has the wrong type.",
+        ),
+    ];
+    for (page, lead, item) in pages {
+        let text = one_line(&read(&docs().join(page)));
+        for needle in [lead, item, "`strata-unknown/1`, or", "is not a short word."] {
+            assert!(text.contains(needle), "{page} lacks {needle:?}");
+        }
+        for old in [
+            "Three faults make a line",
+            "A line is not valid in three cases",
+        ] {
+            assert!(!text.contains(old), "{page} still holds {old:?}");
+        }
+    }
+    let errors = one_line(&read(&docs().join("reference/errors.md")));
+    assert!(
+        errors.contains("a field outside the list, a missing field, or a field of the wrong type."),
+        "errors.md lacks the missing field"
+    );
+}
+
+/// A5: the item of the value says what a report of a client of 0.27.0 gets. It also says what the
+/// send of a run does after the update. The page of the report states the rule of the endpoint.
+#[test]
+fn compatibility_says_what_a_client_of_0_27_0_gets_for_a_value_that_is_not_one_word() {
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document");
+    for needle in [
+        "The endpoint of 0.27.0 took a report with such a value. The endpoint of 0.28.0 answers 422 \
+         for the whole report.",
+        "A client of 0.27.0 then marks no line, so it sends the same report at each run.",
+        "No other value of that log reaches the endpoint.",
+        "After the update, the send of a run reads the same log and stops with `log-invalid`.",
+        "`--quiet` hides the warning, and the exit code stays `0`.",
+        "So a job with `STRATA_REPORT=1` and `--quiet` sends no value from then on, and shows no sign.",
+    ] {
+        assert!(
+            command_line.contains(needle),
+            "the part of the command line lacks {needle:?}"
+        );
+    }
+    let reference = one_line(&read(&docs().join("reference/report.md")));
+    assert!(
+        reference.contains(
+            "It refuses a value that is not one word of 64 printable ASCII characters or fewer, \
+             with no space."
+        ),
+        "report.md lacks the rule of the value for the endpoint"
+    );
+}
+
+/// A9: a program that called `Watch::palette_release` wrote the field `palette`. So the item does not
+/// say that only a person edited such a log.
+#[test]
+fn compatibility_says_that_a_program_of_the_library_can_have_written_the_field_palette() {
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document");
+    for needle in [
+        "A log or a report of a command of 0.27.0 never held them.",
+        "Only a log that a person edited, or the log of a program that called \
+         `Watch::palette_release`, has one.",
+    ] {
+        assert!(
+            command_line.contains(needle),
+            "the part of the command line lacks {needle:?}"
+        );
+    }
+    for old in [
+        "A log or a report of 0.27.0 never held them.",
+        "Only a log that a person edited has one.",
+    ] {
+        assert!(
+            !command_line.contains(old),
+            "the part of the command line still holds {old:?}"
+        );
+    }
+}
+
+/// D2: the pages of the endpoint state the sweep as the code does it. It drops the hash of a sender
+/// and the hash of a report, and a request that a check refuses also runs it. The tests of
+/// `report-endpoint/src/server/tests.rs` show the code.
+#[test]
+fn the_pages_of_the_endpoint_say_that_the_sweep_drops_both_hashes_also_for_a_refused_request() {
+    let service = one_line(&read(&docs().join("development/report-endpoint.md")));
+    for needle in [
+        "The service also drops each sender whose hour is over, and each hash of a report whose day \
+         is over. It does this when a request comes, one time in a minute at most. A request that \
+         a check refuses also does it.",
+        "The service drops an old hash of either kind when a request comes, one time in a minute at \
+         most. A request that a check refuses also drops it.",
+    ] {
+        assert!(
+            service.contains(needle),
+            "report-endpoint.md lacks {needle:?}"
+        );
+    }
+    let reference = one_line(&read(&docs().join("reference/report.md")));
+    assert!(
+        reference.contains("The service drops it soon after the day."),
+        "report.md lacks the end of the hash of a report"
+    );
+}

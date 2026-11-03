@@ -39,7 +39,7 @@ A report is the document `strata-report/1`. It has the fields `schema` and `unkn
 | `strata` | The version of strata that read the value. |
 | `set` | The name of the closed set, as `strata schema` names its definition, such as `ProfileType`. |
 | `value` | The text of the value. It is one word of printable ASCII, from `!` to `~`, with no space. Strata writes a `?` for each space and for each other character, such as a control character or a zero width space. Strata cuts a value of more than 64 characters, and ends it with `...`. |
-| `route` | The template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It is never the path of a real request. It starts with `/v1/`, and holds only letters, digits, and the characters `/`, `_`, `-`, `.`, `{`, and `}`. |
+| `route` | The template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It is never the path of a real request. It starts with `/v1/`, and holds only letters, digits, and the characters `/`, `_`, `-`, `.`, `{`, and `}`. It has 200 characters or fewer. |
 | `count` | How many lines of the log are this entry. |
 
 These are the fields of [`strata-unknown/1`](./documents.md#strata-unknown1), the line of the log,
@@ -61,9 +61,11 @@ A report never holds one of these:
 Two rules keep this true. A line of the log has a fixed list of fields, and a test fails on each
 other field. The report and the endpoint refuse a field outside the list in the same way.
 `strata report` also refuses the whole log when one line is not valid. A line is not valid in
-three cases:
+these cases:
 
 - It has a field outside the list.
+- A field is missing, or it has the wrong type.
+- Its `schema` is not `strata-unknown/1`, or its `strata` or `set` is not a short word.
 - Its route is not a template of a route. The `route` field in the table above gives the rule.
 - Its value is not a short word. It is empty, or it has more than 64 characters. Or it has a space,
   or a character other than printable ASCII.
@@ -174,8 +176,8 @@ endpoint answers 429 with the time to wait, and the next send after that time wo
 ## What the endpoint keeps
 
 The endpoint takes `strata-report/1` alone. It refuses a report with a field outside the list. It
-refuses a value of more than 64 characters, and a route that is not a template of a route. It
-refuses a body of more than 64 KiB. See [The endpoint of the report](../development/report-endpoint.md) for the service.
+refuses a value that is not one word of 64 printable ASCII characters or fewer, with no space. It
+refuses a route that is not a template of a route, and a body of more than 64 KiB. See [The endpoint of the report](../development/report-endpoint.md) for the service.
 
 The endpoint keeps these things, and no other:
 
@@ -188,7 +190,7 @@ The endpoint keeps these things, and no other:
   writes the hash nowhere. The service drops an old hash soon after the hour, and a restart
   forgets it.
 - **A hash of the key and the report, in memory, for one day.** A second try of the same lines
-  counts one time. The hash holds no text of the report.
+  counts one time. The hash holds no text of the report. The service drops it soon after the day.
 
 The service writes no address and no report to its log. The maintainers also exclude the request
 log of the platform, because that log holds the address. An issue stays until a maintainer deletes it.

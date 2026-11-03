@@ -15,11 +15,6 @@ use std::time::{Duration, Instant};
 /// sender. So a flood from many addresses cannot lock out a new sender.
 pub(crate) const MOST_SENDERS: usize = 10_000;
 
-/// How many times in each span the limiter drops the senders that expired. The hash of a sender that
-/// does not come again leaves the table at a request after its span ends. The wait is one
-/// `span / SWEEPS_PER_SPAN` at most.
-const SWEEPS_PER_SPAN: u32 = 60;
-
 /// Why a [`Limiter`] refused to spend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Denied {
@@ -36,8 +31,6 @@ pub struct Limiter {
     span: Duration,
     salt: RandomState,
     seen: HashMap<u64, VecDeque<Instant>>,
-    /// The time of the last sweep of the expired senders.
-    swept: Option<Instant>,
 }
 
 impl Limiter {
@@ -48,7 +41,6 @@ impl Limiter {
             span,
             salt: RandomState::new(),
             seen: HashMap::new(),
-            swept: None,
         }
     }
 
@@ -109,7 +101,6 @@ impl Limiter {
         if cost == 0 {
             return;
         }
-        self.sweep(now);
         let key = self.salt.hash_one(sender);
         if self.seen.len() >= MOST_SENDERS && !self.seen.contains_key(&key) {
             self.forget_expired(now);
@@ -123,23 +114,9 @@ impl Limiter {
             .extend(std::iter::repeat_n(now, cost));
     }
 
-    /// Drop each sender whose requests are all older than the span, at most one time in each
-    /// `span / SWEEPS_PER_SPAN`. So a sender that does not come again leaves the table, and a request
-    /// does not read the whole table.
-    fn sweep(&mut self, now: Instant) {
-        let every = self.span / SWEEPS_PER_SPAN;
-        if self
-            .swept
-            .is_some_and(|at| now.saturating_duration_since(at) < every)
-        {
-            return;
-        }
-        self.forget_expired(now);
-        self.swept = Some(now);
-    }
-
-    /// Drop each sender whose requests are all older than the span.
-    fn forget_expired(&mut self, now: Instant) {
+    /// Drop each sender whose requests are all older than the span at the time `now`. The service
+    /// calls it one time in a minute at most, so a sender that does not come again leaves the table.
+    pub fn forget_expired(&mut self, now: Instant) {
         let span = self.span;
         self.seen.retain(|_, spent| {
             spent
