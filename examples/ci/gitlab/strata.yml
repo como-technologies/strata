@@ -23,6 +23,10 @@
 #                     gate. The drift and upstream reports need it too.
 #   STRATA_TOKEN      a token that can read the strata releases, while that repository is private.
 #
+# STRATA_REPORT: "1" in the variables of a job sends the report at the end of a run that wrote a
+# line to the log. The log is in the state folder of the runner, so save the folder when the runner
+# does not stay. docs/src/automation/scripts.md says more.
+#
 # The jobs run on a merge request pipeline. Turn on "Pipelines must succeed" in the project's
 # merge request settings, so the merge button waits for strata-merge-gate.
 

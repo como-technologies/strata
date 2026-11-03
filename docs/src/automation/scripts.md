@@ -91,6 +91,13 @@ fields.
 Strata writes progress messages to standard error. `--quiet` stops them.
 [Settings](../reference/settings.md) names the variable that does the same.
 
+## Send the report of a new value
+
+`STRATA_REPORT=1` in a job sends the report at the end of a run that wrote a line to the log. The
+log is in the state folder of the runner, so save the folder when the runner does not stay. A
+reusable workflow of GitHub gets no variable from the workflow of the caller, so set the variable in
+a job of your own. See [The files](../reference/report.md#the-files).
+
 ## The scripts in this repository
 
 Each release carries these beside the binaries, so a CI job downloads one

@@ -157,6 +157,22 @@ After 0.25.0, the library of `strata-preflight` changes in these ways:
   value in these cases. One case panicked: a base or a `_patch` that is not an
   object, in a file with a key such as `_note`.
 
+After 0.26.0, the library of `strata` changes in these ways.
+[Release 0.27.0](#release-0270-changes-that-need-action) gives the action for each one:
+
+- `closed_set::unknown` is new. It holds the log of the values that strata does not know, the report
+  of those values, and the send. Its `Report` and `report::Entry` refuse a field that they do not
+  list.
+- `ops::unknown_report`, `ops::send_unknown_report`, and `term::ask::yes_or_no` are new.
+- `render::Renderer` has the new required method `render_report`.
+- `error::Error` has the new variants `LogInvalid` and `ReportSend`.
+- `api::codes::is_refusal_code` is new. `Error::class` gives `Terminal` to a 5xx with
+  `AwsKeyPairNotFound` or `FeatureNotSupported`, where 0.26.0 gave `Transient`.
+- The old paths of the types of Palette are gone: use `strata::model::<module>`. The constants
+  `ops::RUNNING_STATE`, `ops::ERROR_STATE`, and `ops::DELETED_STATE` are gone too.
+- The `Display` of `Error::Api` for a 403 with the code `ProjectUidIsNotEmpty` has new words. The
+  kind and the exit code stay.
+
 After 0.26.0, the library of `strata-preflight` changes in these ways:
 
 - `confidence::promotion` takes a third argument, `release: Option<&str>`. Give
@@ -175,15 +191,15 @@ After 0.26.0, the library of `strata-preflight` changes in these ways:
 - A `report::CheckResult` has a `confidence` for a rule that has runs of older
   releases only. It holds no run of the release, and its `older_runs` is not `0`.
 - `rule::Check::Exec` holds a `rule::ExecCheck` in place of the four fields. A pattern that names
-  `argv`, `needs`, `timeout`, or `expr` must read them from the `ExecCheck`. `ExecCheck` has the
-  new field `palette: Option<rule::PaletteRead>`, the `GET` request that the check sends before its
-  command. A struct literal must set it to `None`.
+  `argv`, `needs`, `timeout`, or `expr` must read them from the `ExecCheck`. `ExecCheck` is new. It
+  has the field `palette: Option<rule::PaletteRead>`, the `GET` request that the check sends before
+  its command. A struct literal must set it to `None`.
 - `probe::Ran::Exec` has the new field `request: Option<probe::Call>`. A struct literal must set it
   to `None`, and a pattern with no `..` must name it. `probe::Ran::requests` gives the one request
   for a command that has a read of Palette.
 - `rule::PaletteRead` is a new type. A rule file takes `palette: { path: ... }` in the check of kind
   `exec`. The program of the check reads the answer as `.response`.
-- `rule::ExecCheck` has the new field `also: Vec<String>`, the second command of the check. A
+- `rule::ExecCheck` has the field `also: Vec<String>`, the second command of the check. A
   struct literal must set it to `Vec::new()`. A rule file takes `also: [...]` in the check of kind
   `exec`. The program of the check reads the output as `.also`.
 - `probe::Ran::Exec` has the new field `also: Option<String>`, the line of the second command. A
@@ -278,11 +294,13 @@ empty text. The schema now gives the field the pack types. A record of a
 cluster omits a label whose value is not text, where 0.21.0 kept it with
 empty text. The labels are outside the root, so no root changes.
 
-After 0.26.0, two documents have new fields, and both keep their ids.
+After 0.26.0, three documents have new fields, and each keeps its id.
 `confidence` of a check in `strata-preflight/1` has `olderRuns`, the number of runs
 of older releases that the counts omit. `strata-preflight-promotion/1` has
 `release`, and `olderRuns` in each entry of `confidence`. `olderRuns` is `0` when
-the run names no `--release`. A reader that ignores unknown fields reads both.
+the run names no `--release`. `strata-preflight-rules/1` has the new keys `refusal_codes` in a
+check of kind `palette`, and `palette` and `also` in a check of kind `exec`. A reader that ignores
+unknown fields reads all three.
 
 After 0.22.1, the descriptions of `method` in `preflight --schema rules` come
 from the library of strata. The values `GET` and `POST`, and the default
@@ -820,6 +838,9 @@ After 0.26.0, `instance-offering` sends the same query: `cpuGtEq=0&memoryGtEq=0`
 small types now: the types with fewer than 2 vCPUs or less than 4 GiB of memory. Before, the rule
 reported such a type as not in the list of the region.
 
+After 0.26.0, the message of `api` for a 403 with the code `ProjectUidIsNotEmpty` says that the
+route is of the tenant scope. The kind `api` and the exit code `2` stay.
+
 After 0.27.0, the text of `strata-preflight` agrees each noun with its count. The report said
 `1 probe(s) failed`, and now it says `1 probe failed`, `2 probes failed`, or `no probes failed`. The
 same holds for the warnings, the notes, the errors, the readings of a watch, and the events of
@@ -1032,6 +1053,14 @@ field, a value, an input, or an option is in the sections above.
   `closed_set::unknown::hint::path`, and `closed_set::unknown::send::answer_path` give the files.
 - `text::code_span` is new. It writes a text as a code span of markdown, with a fence that the text
   cannot end.
+- **A correction to the section of release 0.27.0.** The module `closed_set::unknown` is new in
+  0.27.0, and so are `ops::unknown_report`, `ops::ReportOptions`, and `term::ask`. Release 0.26.0
+  has none of them.
+  - That section says that `Report` and `report::Entry` "now implement `Deserialize`". They are
+    new, and they refuse a field that they do not list. The document `strata-report/1` is new too.
+  - It says that `ops::unknown_report` "only reads" the log, that `send::post` "has the third
+    argument", and that `ReportOptions` "has the field `all` alone". These words compare with a
+    state inside the wave. A program that moves from 0.26.0 has no earlier form of them.
 
 ### For a user of the library of strata-preflight
 

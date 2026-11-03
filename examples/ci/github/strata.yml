@@ -15,6 +15,11 @@
 #                       gate. The drift and upstream reports need it too.
 #   STRATA_READ_TOKEN   a token that can read the strata repository, while it is private.
 #
+# STRATA_REPORT=1 sends the report at the end of a run that wrote a line to the log. A called
+# workflow gets no variable from this file, so set it in a job of your own that runs strata. The log
+# is in the state folder of the runner, so save the folder when the runner does not stay.
+# docs/src/automation/scripts.md says more.
+#
 # A token does not give access to a reusable workflow of a private repository. While the strata
 # repository is private, its access setting must also allow your repository. In the strata
 # repository, open Settings, Actions, General, Access. Select "Accessible from repositories in the

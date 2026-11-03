@@ -35,6 +35,8 @@ schema states the shape of each open field: see
 | `strata-preflight-promotion/1` | `preflight --promotion --json` | `preflight --schema promotion` |
 | `strata-unknown/1` | the log of the unknown values, one line for each value | none |
 
+`strata schema report` and `strata preflight --schema report` print two different schemas.
+
 ## strata-snapshot/1
 
 A record of one profile version, cluster, edge host, cluster group, app
