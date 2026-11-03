@@ -569,7 +569,7 @@ give the run profiles to read, and `just live-up` to give it a cluster.
 | `contract.json` | #539: the fact `tag-filter-listing` is `same`, because the run sends it with no project. The fact `tag-filter` is skipped, because the tenant holds no saved filter. The fact `audit-log` is `same` for a page that lacks a kind that strata acts on and for a kind that strata ignores. |
 | `contract.json` | #539: the facts `validate-aws-regions` and `validate-security-groups` are `same`, because the run sends the account, the region, and the VPC of the tenant. A zone id that the lab account lacks gives no difference. The facts `eks-refused-zone-id-us-west-1` and `eks-refused-zone-id-ca-central-1` are skipped. The entry says that the account cannot check the value. |
 | `contract.json` | #543: the fact `validate-key-pairs` is `same`, because the run sends the account of the tenant in the query `cloudAccountUid`. |
-| `contract.json` | #595: the four facts of a region are `same`: `validate-vpcs`, `validate-security-groups`, `validate-key-pairs`, and `validate-instance-types`. The run takes one region for all of them, the first region that lists a VPC. The lab has no region that AWS refuses, so that region is the first of the list. No result yet: the next live window runs it after the merge. |
+| `contract.json` | #595: the four facts of a region are `same`: `validate-vpcs`, `validate-security-groups`, `validate-key-pairs`, and `validate-instance-types`. The run takes one region for all of them, the first region that lists a VPC. The lab has no region that AWS refuses, so that region is the first of the list. The whole run finds 120 facts: 54 `same`, none `differs`, 66 skipped, none that the run cannot check, and 0 unknown values. `just contract-report --dry-run runs/contract.json` exits 0 and opens no issue. |
 | `contract.json` | #554: with a cluster up, the fact `profile-document` is `same` for the first profile of the listing. The run has 0 unknown values, also for the type of the profile and for the provider of a pack ref. A type or a provider that the fact does not name is an unknown value. The fact `cloud-config` reads the cloud type of a cluster as strata does. A cluster that names its cloud type in the kind of its cloud config only still gives a subject. |
 | `contract.json` | #540: the fact `aws-policies-per-role-limit` is `same`: the default quota of managed policies for a role is 20. The fact `aws-policies-per-role-quota` is `same`: the lab account gives the quota in `us-east-1` with the shape that the fixtures of `iam-role-policy-quota` hold. |
 | `contract.json` | #390, #393: the whole run on the real tenant, with the cloud calls and the lab account. It finds 120 facts: 47 are `same`, none `differs`, 67 are skipped, and 6 cannot be checked. [The facts page](./facts.md#what-the-run-compares) lists the cases where the run skips a fact. |
@@ -613,8 +613,11 @@ read the issues, the script stops with exit `2` before the first send.
 The script reads the repository from the `Cargo.toml` of the root. It reads the start of the row
 `Lines` from one variable, `lines_row`. A test of the endpoint makes sure that the service writes
 this row and the marker of the issue. The checks `issue`, `issue-new`, `issue-2`, and
-`repeat-count` use these reads (#593). No result yet: the lead runs `just live-report-send` after the
-deploy.
+`repeat-count` use these reads (#593).
+
+`just live-report-send` passes on the deployed service. The checks `send-1`, `send-1-says`,
+`send-1-marked`, `issue`, `send-2`, `issue-2`, `repeat-1`, `repeat-2`, and `repeat-count` pass. The
+check `issue-new` did not run, because the issue of the value was open.
 
 ## pending.sh
 

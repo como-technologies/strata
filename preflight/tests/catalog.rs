@@ -2052,7 +2052,7 @@ fn the_ledger_ends_with_the_run_of_the_plan_of_the_live_window_of_wave_14() {
     use strata_preflight::confidence::RunResult;
     let ledger = catalog::builtin_ledger().unwrap();
     let run = ledger.runs.last().unwrap();
-    assert_eq!(run.run, "20261103T015608Z");
+    assert_eq!(run.run, "20261103T125248Z");
     assert_eq!(run.engine, "aws");
     assert_eq!(run.release, "");
     let count = |result: RunResult| run.results.iter().filter(|r| r.result == result).count();
