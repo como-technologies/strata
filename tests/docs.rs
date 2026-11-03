@@ -3857,8 +3857,8 @@ fn the_passive_sentences_and_the_ing_forms_that_the_review_named_in_the_new_book
 }
 
 /// The paragraph of a `what` in a rule file has six sentences or fewer. A user reads the message
-/// of a rule and not its `what`, so only a rule author feels the length. The review named ten rules
-/// whose `what` had one long paragraph. A blank line divides it now.
+/// of a rule and not its `what`, so only a rule author feels the length. The review named eleven
+/// rules whose `what` had one long paragraph. A blank line divides it now.
 #[test]
 fn the_what_of_each_rule_that_the_review_named_has_six_sentences_or_fewer_in_a_paragraph() {
     let named = [
@@ -3872,6 +3872,7 @@ fn the_what_of_each_rule_that_the_review_named_has_six_sentences_or_fewer_in_a_p
         ("networking", "eks-unsupported-zone"),
         ("networking", "subnet-ips"),
         ("networking", "private-egress"),
+        ("networking", "static-subnets"),
     ];
     for (section, id) in named {
         let text = repo_file(&format!("preflight/rules/{section}.yaml"));
