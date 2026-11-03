@@ -6,13 +6,15 @@
 //!
 //! For each fact of the kind `request` that a read-only request can show, the run finds an object in
 //! the tenant and sends the request. It compares the answer with the documents that the stand-in
-//! serves for the fact. It compares the status and the type of each field that strata reads. It
-//! checks that the answer holds each name that strata needs from a set that Palette can extend. It
-//! also lists each value of a closed set that neither the fact nor the stand-in names: strata does
-//! not know such a value. It compares shapes, and never the values of two tenants. A fact can name
-//! the error codes that mean the tenant has no such object. The run skips the fact for an HTTP 404
-//! with one of them. A request with alternatives, such as `{aws,gcp,azure}`, goes out once for each
-//! choice, and the entry of the fact joins the results.
+//! serves for the fact. It compares the status and the type of each field that strata reads.
+//!
+//! The run checks that the answer holds each name that strata needs from a set that Palette can
+//! extend. It also lists each value of a closed set that neither the fact nor the stand-in names:
+//! strata does not know such a value. It compares shapes, and never the values of two tenants.
+//!
+//! A fact can name the error codes that mean the tenant has no such object. The run skips the fact
+//! for an HTTP 404 with one of them. The run sends a request with alternatives, such as
+//! `{aws,gcp,azure}`, once for each choice. The entry of the fact joins the results.
 //!
 //! The result is the document `strata-contract/1`, with one entry for each fact. The run changes
 //! nothing in the tenant: it sends GET requests only. The [`cloud`] module adds the entry of each
@@ -94,8 +96,8 @@ fn entry_of(
 
 /// The entry of one fact.
 ///
-/// A request with alternatives, such as `{aws,gcp}`, goes out once for each choice. The entry of
-/// the fact joins the entries of its requests: see [`merge`].
+/// The run sends a request with alternatives, such as `{aws,gcp}`, once for each choice. The entry
+/// of the fact joins the entries of its requests: see [`merge`].
 fn check<A: PaletteApi>(
     probe: &Probe<A>,
     facts: &[Fact],

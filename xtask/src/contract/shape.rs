@@ -105,8 +105,8 @@ impl Path {
         found
     }
 
-    /// The text of each value that this path reaches in `doc`. A value that is no text, or has no
-    /// characters, is omitted.
+    /// The text of each value that this path reaches in `doc`. The function omits a value that is
+    /// no text, or has no characters.
     pub fn texts(&self, doc: &Value) -> BTreeSet<String> {
         self.collect(doc, |value| match value {
             Some(Value::String(text)) if !text.is_empty() => Some(text.clone()),

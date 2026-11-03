@@ -2156,55 +2156,107 @@ fn the_page_of_the_report_states_the_address_of_the_endpoint_that_the_release_na
     );
 }
 
+/// The words that "The style rules" refuse: the modal verbs, "ensure", the future "will", and the
+/// contractions.
+const REFUSED_WORDS: [&str; 14] = [
+    "may", "might", "should", "would", "will", "ensure", "ensures", "isn't", "doesn't", "can't",
+    "won't", "don't", "it's", "that's",
+];
+
+/// The phrasal verbs that the reviews named, in the forms that a sentence uses. Each one has a
+/// plain verb: "omit" for "leave out", "send" for "go out", "continue" for "go on".
+const PHRASAL_VERBS: [&str; 57] = [
+    "set up",
+    "look up",
+    "carry out",
+    "leave out",
+    "leaves out",
+    "left out",
+    "turn on",
+    "turn off",
+    "turns on",
+    "turns off",
+    "turned on",
+    "turned off",
+    "go on",
+    "goes on",
+    "went on",
+    "go out",
+    "goes out",
+    "went out",
+    "go down",
+    "goes down",
+    "go up",
+    "goes up",
+    "stays out",
+    "stay out",
+    "read back",
+    "filled in",
+    "use up",
+    "logged in",
+    "goes through",
+    "stay off",
+    "put back",
+    "write down",
+    "writes down",
+    "wrote down",
+    "written down",
+    "write out",
+    "writes out",
+    "written out",
+    "hold back",
+    "holds back",
+    "held back",
+    "stand in for",
+    "stands in for",
+    "stood in for",
+    "pass over",
+    "passes over",
+    "give back",
+    "gives back",
+    "gave back",
+    "find out",
+    "finds out",
+    "found out",
+    "carries out",
+    "carried out",
+    "looks up",
+    "looked up",
+    "sets up",
+];
+
+/// The idioms that the reviews named. "The style rules" refuse an idiom and a figure of speech.
+const IDIOMS: [&str; 2] = ["went stale", "by design"];
+
+/// The faults of the prose of `block`, which `place` holds: a word that "The style rules" refuse, a
+/// phrasal verb, or an idiom. A code span is no prose.
+fn wording_faults(place: &str, block: &str) -> Vec<String> {
+    let prose = without_code(block).to_lowercase();
+    let mut faults = Vec::new();
+    for word in prose.split(|c: char| !(c.is_alphanumeric() || c == '\'')) {
+        if REFUSED_WORDS.contains(&word) {
+            faults.push(format!("{place}: the word {word:?} in: {block}"));
+        }
+    }
+    for phrase in PHRASAL_VERBS.iter().chain(&IDIOMS) {
+        if has_phrase(&prose, phrase) {
+            faults.push(format!("{place}: the phrase {phrase:?} in: {block}"));
+        }
+    }
+    faults
+}
+
 /// A sentence has 25 words at most, and a paragraph, a list item, or a table row has six
-/// sentences at most. The pages use none of the words that "The style rules" refuse, and no
-/// phrasal verb that the reviews named.
+/// sentences at most. The pages use none of the words that "The style rules" refuse, no phrasal
+/// verb, and no idiom that the reviews named.
 #[test]
 fn the_pages_of_the_report_keep_to_the_style_rules() {
-    let refused = [
-        "may", "might", "should", "would", "ensure", "ensures", "isn't", "doesn't", "can't",
-        "won't", "don't", "it's", "that's",
-    ];
-    let phrasal = [
-        "set up",
-        "look up",
-        "carry out",
-        "leave out",
-        "leaves out",
-        "turn on",
-        "turn off",
-        "turns on",
-        "turns off",
-        "go on",
-        "goes on",
-        "stays out",
-        "stay out",
-        "read back",
-        "filled in",
-        "use up",
-        "logged in",
-        "goes out",
-        "goes through",
-        "stay off",
-        "put back",
-        "write down",
-    ];
     let mut faults = Vec::new();
     for page in REPORT_PAGES {
         let text = read(&docs().join(page));
         for block in blocks_of(&text) {
             faults.extend(block_faults(page, &block));
-            let prose = without_code(&block).to_lowercase();
-            for word in prose.split(|c: char| !(c.is_alphanumeric() || c == '\'')) {
-                if refused.contains(&word) {
-                    faults.push(format!("{page}: the word {word:?} in: {block}"));
-                }
-            }
-            for phrase in phrasal {
-                if has_phrase(&prose, phrase) {
-                    faults.push(format!("{page}: the phrase {phrase:?} in: {block}"));
-                }
-            }
+            faults.extend(wording_faults(page, &block));
         }
     }
     assert_no_faults(&faults);
@@ -2891,11 +2943,11 @@ fn the_four_lines_with_would_that_the_review_of_553_named_are_gone() {
         ),
         (
             "preflight/src/rule/tests.rs",
-            "a 5xx with another code is sent again",
+            "the library sends a 5xx with another code again",
         ),
         (
             "preflight/tests/catalog.rs",
-            "A refusal at a 5xx is read one time.",
+            "The check reads a refusal at a 5xx one time.",
         ),
     ] {
         let text = repo_file(file);
@@ -3474,7 +3526,7 @@ fn compatibility_names_each_hash_that_the_canonical_text_moves_and_what_same_rel
     }
 }
 
-/// The list of "The order of versions" left out three cases that follow from the rule. Two
+/// The list of "The order of versions" omitted three cases that follow from the rule. Two
 /// versions can be one. A version that does not parse is above each version that parses.
 /// `strata list` uses the same order. The section also says that no live run shows how Palette
 /// orders a version with four numbers, so the reader knows whose order it is.
@@ -3784,36 +3836,76 @@ const SWEPT_FILES: [&str; 49] = [
     "xtask/src/tenant/mod.rs",
 ];
 
-/// The review at the end of Wave 13 found 112 comment sentences of 26 words or more in the code
-/// that Wave 13 wrote. Each sentence of each comment in those files has 25 words at most now. The
-/// next wave cannot add one without a failure here.
-#[test]
-fn each_comment_sentence_in_the_files_that_wave_13_wrote_has_25_words_at_most() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+/// The files that the review of #598 named for a comment that Wave 14 wrote. The sweep of the
+/// words reads them beside the files above.
+const NAMED_FILES: [&str; 20] = [
+    "examples/live/api.sh",
+    "fuzz/src/palette.rs",
+    "fuzz/src/record.rs",
+    "scripts/ci/merge-gate.sh",
+    "src/api/raw.rs",
+    "src/candidate/pack.rs",
+    "src/candidate/pack/served.rs",
+    "src/candidate/resolve.rs",
+    "src/diff/pack.rs",
+    "src/ops/consumers/mod.rs",
+    "src/ops/mod.rs",
+    "src/render/terminal/mod.rs",
+    "src/snapshot/cluster/tests.rs",
+    "src/snapshot/policy.rs",
+    "src/term/ask.rs",
+    "tests/workflows.rs",
+    "xtask/Cargo.toml",
+    "xtask/src/tenant/registries.rs",
+    "preflight/src/jq/comment.rs",
+    "preflight/src/confidence.rs",
+];
+
+/// A file with comments in the tree of `root`, by the extension that it has.
+fn has_comments(path: &Path) -> bool {
     let comment_files = ["rs", "sh", "yml", "yaml", "toml", "service", "timer"];
+    let name = path.file_name().and_then(|n| n.to_str());
+    !path.to_string_lossy().contains("/target/")
+        && (name == Some("Dockerfile")
+            || path
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| comment_files.contains(&e)))
+}
+
+/// The files that Wave 13 wrote or changed: each file of `SWEPT_DIRECTORIES` that has comments,
+/// and each file of `SWEPT_FILES`.
+fn swept_files() -> Vec<PathBuf> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut files: Vec<PathBuf> = SWEPT_DIRECTORIES
         .iter()
         .flat_map(|dir| walk(&root.join(dir)))
-        .filter(|p| !p.to_string_lossy().contains("/target/"))
-        .filter(|p| {
-            let name = p.file_name().and_then(|n| n.to_str());
-            name == Some("Dockerfile")
-                || p.extension()
-                    .and_then(|e| e.to_str())
-                    .is_some_and(|e| comment_files.contains(&e))
-        })
+        .filter(|p| has_comments(p))
         .collect();
     files.extend(SWEPT_FILES.iter().map(|file| root.join(file)));
     assert!(files.len() > 100, "the sweep found {} files", files.len());
+    files
+}
+
+/// The comment blocks of a file of the tree: `//` in a Rust file, and `#` in any other.
+fn comment_blocks_of_path(path: &Path) -> Vec<String> {
+    let mark = if path.extension().is_some_and(|e| e == "rs") {
+        "//"
+    } else {
+        "#"
+    };
+    comment_blocks(&read(path), mark)
+}
+
+/// The review at the end of Wave 13 found 112 comment sentences of 26 words or more in the code
+/// that Wave 13 wrote. Each sentence of each comment in those files has 25 words at most now, and
+/// each block has six sentences at most. The next wave cannot add one without a failure here.
+#[test]
+fn each_comment_sentence_in_the_files_that_wave_13_wrote_has_25_words_at_most() {
     let mut faults = Vec::new();
-    for path in files {
-        let mark = if path.extension().is_some_and(|e| e == "rs") {
-            "//"
-        } else {
-            "#"
-        };
-        for block in comment_blocks(&read(&path), mark) {
-            faults.extend(sentence_faults(&path.display().to_string(), &block));
+    for path in swept_files() {
+        for block in comment_blocks_of_path(&path) {
+            faults.extend(block_faults(&path.display().to_string(), &block));
         }
     }
     assert_no_faults(&faults);
@@ -4062,6 +4154,7 @@ fn the_what_of_each_rule_that_the_review_named_has_six_sentences_or_fewer_in_a_p
         ("networking", "subnet-ips"),
         ("networking", "private-egress"),
         ("networking", "static-subnets"),
+        ("kubernetes", "pack-cloud-support"),
     ];
     for (section, id) in named {
         let text = repo_file(&format!("preflight/rules/{section}.yaml"));
@@ -4674,4 +4767,636 @@ fn the_page_of_the_endpoint_names_the_root_manifest_for_the_repository() {
         "report-endpoint.md names another manifest"
     );
     assert!(!service.contains("report-endpoint/Cargo.toml"));
+}
+
+// ---- the review of Wave 14: the end-of-wave findings of #598 -----------------------------------
+
+/// Two comments that are descriptions in the JSON Schema of a document, with words that the scan
+/// refuses. A new word in one changes the schema, and `compatibility.md` names such a change. So
+/// the scan skips a block that holds one of these phrases.
+const SCHEMA_DESCRIPTIONS: [(&str, &str); 2] = [
+    ("preflight/src/rule/mod.rs", "so that it can go up"),
+    ("preflight/src/rule/mod.rs", "is filled in the report"),
+];
+
+/// S6: the comments of the swept files and of the named files use no refused word, no phrasal
+/// verb, and no idiom. This file holds those words in its own data, so the scan skips it.
+#[test]
+fn the_comments_of_the_swept_files_use_no_refused_word_no_phrasal_verb_and_no_idiom() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let own = root.join("tests/docs.rs");
+    let mut files = swept_files();
+    files.extend(NAMED_FILES.iter().map(|file| root.join(file)));
+    let mut faults = Vec::new();
+    for path in files.into_iter().filter(|p| *p != own) {
+        let place = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .display()
+            .to_string();
+        for block in comment_blocks_of_path(&path) {
+            let schema = SCHEMA_DESCRIPTIONS
+                .iter()
+                .any(|(file, phrase)| *file == place && block.contains(phrase));
+            if !schema {
+                faults.extend(wording_faults(&place, &block));
+            }
+        }
+    }
+    assert_no_faults(&faults);
+}
+
+/// S5: the sentences and the blocks that the review named in the book keep to the limits of "The
+/// style rules". A sentence has 25 words at most, and 20 in a step of a procedure. A paragraph,
+/// a list item, or a table row has six sentences at most. The fix also removes a passive clause.
+#[test]
+fn the_text_of_the_book_that_the_review_of_wave_14_named_keeps_to_the_limits() {
+    let blocks = [
+        (
+            "commands/snapshot/other-objects.md",
+            "A record of strata 0.27.0 or before",
+        ),
+        (
+            "commands/snapshot/other-objects.md",
+            "The hash covers the mask, so a new password",
+        ),
+        ("development/live-example.md", "| `github.sh` |"),
+        ("development/live-example.md", "| `lib.sh` |"),
+        (
+            "internals/palette/limits.md",
+            "A region that AWS refuses for the VPC route",
+        ),
+        (
+            "internals/preflight.md",
+            "A rule file has no shared jq definition",
+        ),
+        (
+            "reference/preflight-rules.md",
+            "`count_of` writes the input count",
+        ),
+        (
+            "reference/preflight-rules.md",
+            "Write the noun in the singular.",
+        ),
+        (
+            "reference/preflight-rules.md",
+            "`packFacts` holds three fields",
+        ),
+        (
+            "reference/preflight-rules.md",
+            "`state` is the `system_state` of the pack",
+        ),
+    ];
+    let mut faults = Vec::new();
+    for (page, anchor) in blocks {
+        let text = read(&docs().join(page));
+        faults.extend(block_faults(page, &block(&text, anchor)));
+    }
+
+    // a step of the procedure has 20 words at most in a sentence
+    let page = "development/report-endpoint.md";
+    let step = block(
+        &read(&docs().join(page)),
+        "Move the issues of an older service",
+    );
+    faults.extend(word_faults(
+        page,
+        &sentences(&step),
+        MOST_WORDS_IN_A_PROCEDURE,
+    ));
+
+    // the paragraph of the watch has long text before the sentence, so only the sentence counts
+    let page = "use-cases/stop-a-build.md";
+    let text = read(&docs().join(page));
+    let paragraph = block(&text, "If Palette deletes the cluster");
+    let found = sentences(&paragraph);
+    let sentence = found
+        .iter()
+        .find(|s| s.contains("If Palette deletes the cluster"))
+        .expect("the sentence of the deleted cluster");
+    faults.extend(word_faults(
+        page,
+        std::slice::from_ref(sentence),
+        MOST_WORDS,
+    ));
+    assert_no_faults(&faults);
+
+    let build_test = one_line(&read(&docs().join("development/build-test.md")));
+    assert!(!build_test.contains("the record that was read"));
+    assert!(build_test.contains("the record that strata read"));
+}
+
+/// S6 and S7: the words that the review named in the comments are gone, and the words that came in
+/// their place are there. A row has the file, the old words, and the new words. The scan above
+/// keeps the old words out of the swept files. This test names the places that the review found.
+#[test]
+fn the_comments_that_the_review_of_wave_14_named_say_what_the_code_does_in_plain_words() {
+    let rows = [
+        (
+            "report-endpoint/src/merge.rs",
+            "How many issues the merge will change.",
+            "How many issues the merge changes.",
+        ),
+        (
+            "src/snapshot/cluster.rs",
+            "so the error would name the parent",
+            "so the error names the parent",
+        ),
+        (
+            "tests/common/mod.rs",
+            "so a run that sends would post there",
+            "so a run that sends posts there",
+        ),
+        (
+            "tests/common/mod.rs",
+            "gives the input back",
+            "returns the input",
+        ),
+        ("tests/send.rs", "would have sent it", "has a line to send"),
+        (
+            "tests/send.rs",
+            "request that would go to another address",
+            "request for another address",
+        ),
+        (
+            "tests/workflows.rs",
+            "would name a number",
+            "names a number",
+        ),
+        (
+            "src/ops/report.rs",
+            "after the report went out",
+            "after strata sent the report",
+        ),
+        (
+            "xtask/src/contract/mod.rs",
+            "goes out once for each choice",
+            "once for each choice",
+        ),
+        (
+            "xtask/src/contract/subject.rs",
+            "goes out, and so does the `?`",
+            "drops the `?` when no pair stays",
+        ),
+        (
+            "xtask/src/contract/tests.rs",
+            "the request of the choice `aws` went out",
+            "the run sent the request of the choice `aws`",
+        ),
+        (
+            "report-endpoint/src/lib.rs",
+            "The values that the limits hold back wait.",
+            "The limits make some values wait.",
+        ),
+        (
+            "report-endpoint/src/server.rs",
+            "whose values the limits hold back",
+            "whose values the limits make wait",
+        ),
+        (
+            "tests/dev_scripts.rs",
+            "A `just` that stands in for the recipe",
+            "A stand-in `just` for the recipe",
+        ),
+        (
+            "tests/dev_scripts.rs",
+            "writes down the setting",
+            "records the setting",
+        ),
+        (
+            "xtask/src/facts/cloud/tests.rs",
+            "no fact states is written out",
+            "no fact states uses the field `route`",
+        ),
+        (
+            "xtask/src/facts/model.rs",
+            "states is written out",
+            "has its method and path in the field `route`",
+        ),
+        (
+            "preflight/tests/catalog.rs",
+            "goes down as the catalog grows. It never goes up.",
+            "falls as the catalog grows. It never rises.",
+        ),
+        ("tests/live_scripts.rs", "passes over", "skips"),
+        (
+            "xtask/src/facts/subjects.rs",
+            "or goes on from it",
+            "or continues from it",
+        ),
+        (
+            "xtask/src/facts/subjects/tests.rs",
+            "a text that goes on in the middle of a segment",
+            "a path that extends the route inside a segment",
+        ),
+        // S7: the passive clauses that the review named
+        (
+            "fuzz/src/record.rs",
+            "A record that is compared with itself",
+            "A record that strata compares with itself",
+        ),
+        (
+            "fuzz/src/record.rs",
+            "no pack is added, removed, or changed",
+            "both records hold the same packs",
+        ),
+        (
+            "fuzz/src/record.rs",
+            "the record that it was read as",
+            "the record that the read gives",
+        ),
+        (
+            "fuzz/src/palette.rs",
+            "is read by every route that fits it",
+            "Every route that fits it reads a document",
+        ),
+        (
+            "src/api/raw.rs",
+            "Variable values are omitted.",
+            "The result omits variable values.",
+        ),
+        (
+            "src/error/mod.rs",
+            "was given something else",
+            "got something else",
+        ),
+        (
+            "src/ops/consumers/mod.rs",
+            "(whose uid and project are used;",
+            "(strata uses its uid",
+        ),
+        (
+            "src/ops/consumers/mod.rs",
+            "Each one is read in its own project",
+            "Strata reads each one in its own project",
+        ),
+        (
+            "src/term/ask.rs",
+            "an answer that cannot be read is a no",
+            "an answer that strata cannot read is a no",
+        ),
+        (
+            "tests/ci_scripts.rs",
+            "The two lists are written in two files",
+            "Two files hold the two lists",
+        ),
+        (
+            "tests/ci_scripts.rs",
+            "any comment body it is handed",
+            "any comment body that the script gives it",
+        ),
+        (
+            "xtask/src/book.rs",
+            "that this run's output was written into",
+            "that this run's output goes into",
+        ),
+        (
+            "xtask/src/contract/tests.rs",
+            "is skipped before the run needs a subject",
+            "The run skips a fact with no document of the stand-in",
+        ),
+        (
+            "xtask/src/facts/cloud.rs",
+            "fixture that cannot be read",
+            "fixture that the function cannot read",
+        ),
+        // S7: the "-ing" forms that the review named
+        (
+            "report-endpoint/tests/book.rs",
+            "closing an issue",
+            "a closed issue",
+        ),
+        ("tests/dev_scripts.rs", "Serving it", "A serve of it"),
+        (
+            "xtask/src/book.rs",
+            "Nothing matching is an error",
+            "A pattern that matches no line is an error",
+        ),
+        (
+            "xtask/src/book.rs",
+            "stops being printed",
+            "no longer prints",
+        ),
+        // S7: the messages of more than 25 words
+        (
+            "xtask/src/facts/sets.rs",
+            "has no such value: add it",
+            "has no such value. Add it to the type, or take it from the list.",
+        ),
+        (
+            "xtask/src/facts/sets.rs",
+            "lacks it: add it",
+            "lacks it. Add it to the list",
+        ),
+        (
+            "preflight/tests/catalog.rs",
+            "does not: with a fifth copy",
+            "does not. With a fifth copy",
+        ),
+    ];
+    for (file, old, new) in rows {
+        assert!(!holds_phrase(file, old), "{file} still holds {old:?}");
+        assert!(holds_phrase(file, new), "{file} lacks {new:?}");
+    }
+}
+
+/// True when `text` starts a numbered item of a help comment: `1. text`, or `1  text`.
+fn starts_help_item(text: &str) -> bool {
+    let number = text.chars().take_while(char::is_ascii_digit).count();
+    list_marker(text) > 0 || (number > 0 && text[number..].starts_with("  "))
+}
+
+/// The paragraphs of the comment at the top of a script, from its second line to the line `set -`.
+/// The help of the script prints that comment. A blank comment line ends a paragraph, and so does
+/// the start of a numbered item.
+fn help_paragraphs(script: &str) -> Vec<String> {
+    let mut paragraphs = Vec::new();
+    let mut current = String::new();
+    for line in repo_file(script).lines().skip(1) {
+        let Some(text) = line.strip_prefix('#') else {
+            break;
+        };
+        let text = text.trim();
+        if (text.is_empty() || starts_help_item(text)) && !current.is_empty() {
+            paragraphs.push(std::mem::take(&mut current));
+        }
+        if !text.is_empty() {
+            if !current.is_empty() {
+                current.push(' ');
+            }
+            current.push_str(text);
+        }
+    }
+    paragraphs.push(current);
+    paragraphs
+}
+
+/// S7: a paragraph of the comment at the top of a script has six sentences at most. The scripts
+/// below print that comment as their help, so a user reads each paragraph.
+#[test]
+fn each_paragraph_of_the_help_comment_of_the_scripts_that_the_review_named_has_six_sentences_or_fewer()
+ {
+    let mut faults = Vec::new();
+    for script in [
+        "deploy/contract/weekly.sh",
+        "examples/live/contract-report.sh",
+        "examples/live/contract.sh",
+        "examples/live/preflight-plan.sh",
+        "examples/live/report-send.sh",
+        "scripts/ci/merge-gate.sh",
+    ] {
+        for paragraph in help_paragraphs(script) {
+            let found = sentences(&paragraph).len();
+            if found > MOST_SENTENCES {
+                faults.push(format!("{script}: {found} sentences: {paragraph}"));
+            }
+        }
+    }
+    assert_no_faults(&faults);
+}
+
+/// S8: the walkthrough of the preflight quotes no line of the output of strata that `just
+/// docs-check` does not read. The last line of the output names the two failed checks, and the
+/// page says so with no quote.
+#[test]
+fn the_walkthrough_of_the_preflight_quotes_no_line_of_the_report_that_the_book_does_not_include() {
+    let output = read(&docs().join("output/preflight-strict.txt"));
+    assert_eq!(
+        output.lines().last(),
+        Some("FAIL: 2 checks failed: worker-cpu-floor, palette-validate")
+    );
+    let page = one_line(&read(&docs().join("development/preflight-walkthrough.md")));
+    for old in [
+        "`FAIL: 2 checks failed`",
+        "`ran: POST /v1/spectroclusters/aws/validate -> HTTP 200`",
+    ] {
+        assert!(!page.contains(old), "the walkthrough still quotes {old}");
+    }
+    assert!(page.contains("The last line names the two failed checks"));
+}
+
+/// The outputs of the book do not name the folder of the run that wrote them: the runner writes
+/// `~` for its home folder. A name with the number of a process changes at each run.
+#[test]
+fn no_output_of_the_book_names_the_folder_of_the_runner() {
+    let outputs = docs().join("output");
+    let mut found = Vec::new();
+    for file in walk(&outputs) {
+        if read(&file).contains("strata-book-") {
+            found.push(file.display().to_string());
+        }
+    }
+    assert!(found.is_empty(), "the folder of the runner is in {found:?}");
+    let report = read(&outputs.join("unknown-value-report-invalid.txt"));
+    assert!(report.contains("strata: ~/.local/state/strata/strata-unknown.jsonl: line 1 is not"));
+}
+
+/// S9: a page includes the output of each step that the wave added to what a user sees. A row has
+/// the page, the output, and the words that the output must hold. Each output is a step of a
+/// chapter of the runner.
+#[test]
+fn each_step_that_the_wave_added_to_what_a_user_sees_has_an_output_in_the_book() {
+    let rows = [
+        // a pre-release above a release: the two marks are on two versions
+        (
+            "commands/packs.md",
+            "packs-pre-release",
+            "latest in Palette",
+        ),
+        (
+            "commands/packs.md",
+            "packs-pre-release-json",
+            "\"version\":\"1.22.0-rc.1\",\"latest\":false,\"paletteLatest\":true",
+        ),
+        (
+            "commands/packs.md",
+            "packs-pre-release-json",
+            "\"version\":\"1.21.1\",\"latest\":true,\"paletteLatest\":null",
+        ),
+        // the values of a group with no canonical form
+        (
+            "commands/snapshot/other-objects.md",
+            "group-template-values",
+            "{\"values\":null,\"valuesHash\":\"",
+        ),
+        (
+            "commands/snapshot/other-objects.md",
+            "group-template-verify",
+            "is unchanged since",
+        ),
+        // the error of a field inside the cluster of a record
+        (
+            "reference/errors.md",
+            "tiers-edited-verify",
+            "source.cluster.profiles[0].version: invalid type: null, expected a string",
+        ),
+        // the error of a line of the log that a person edited
+        (
+            "commands/report.md",
+            "unknown-value-report-invalid",
+            "line 1 is not a line of strata-unknown/1",
+        ),
+        // a rule that runs two commands, and the second one fails
+        (
+            "reference/preflight-rules.md",
+            "preflight-second-command",
+            "-> exit 0; exit 254",
+        ),
+        // the three ends of a watch
+        (
+            "commands/preflight/watch.md",
+            "preflight-watch-error",
+            "OK: each counted check passed",
+        ),
+        (
+            "commands/preflight/watch.md",
+            "preflight-watch-is-deleted",
+            "OK: the cluster is gone; no counted check failed",
+        ),
+        (
+            "commands/preflight/watch.md",
+            "preflight-watch-gone",
+            "OK: the cluster is gone; no counted check failed",
+        ),
+        // the gate with a strata that is older than the script
+        (
+            "automation/merge-gate.md",
+            "merge-gate-older-strata",
+            "merge-gate: strata is older than this script: it writes no versionMove",
+        ),
+    ];
+    for (page, output, words) in rows {
+        let text = read(&docs().join("output").join(format!("{output}.txt")));
+        assert!(text.contains(words), "{output}.txt lacks {words:?}: {text}");
+        let include = format!("{{{{#include ../output/{output}.txt}}}}");
+        let nested = include.replace("../output", "../../output");
+        let source = read(&docs().join(page));
+        assert!(
+            source.contains(&include) || source.contains(&nested),
+            "{page} does not include {output}.txt"
+        );
+    }
+}
+
+/// S9: the hash of the values of a group with no canonical form is the hash of the masked text,
+/// as the page says. The page shows the record that the runner took of such a group.
+#[test]
+fn the_hash_that_the_book_shows_for_values_with_no_canonical_form_covers_the_masked_text() {
+    use sha2::{Digest, Sha256};
+    let text = read(&docs().join("output/group-template-values.txt"));
+    let masked = "database:\n  password: '********'\nhost: {{ .spectro.var.host }}";
+    let hash = hex::encode(Sha256::digest(masked.as_bytes()));
+    assert!(
+        text.contains(&format!("\"valuesHash\":\"{hash}\"")),
+        "{text}"
+    );
+    assert!(!text.contains("s3cr3t"));
+}
+
+/// S9: the mark of Palette follows the highest version of a pack in the stand-in, as the page of
+/// the packs says. The version `1.22.0-rc.1` is above `1.21.1`, so the output marks `1.22.0-rc.1`
+/// as the latest of Palette, and `1.21.1` as the latest of strata.
+#[test]
+fn the_page_of_the_packs_gives_the_pre_release_above_the_release_as_the_case() {
+    let page = one_line(&read(&docs().join("commands/packs.md")));
+    for needle in [
+        "The highest version is a pre-release, such as `1.22.0-rc.1` above `1.21.1`: `@latest` skips it, and Palette marks the highest version.",
+        "The JSON gives `latest` on the version that strata picks, and `paletteLatest` on the version that Palette marks.",
+    ] {
+        assert!(page.contains(needle), "packs.md lacks {needle:?}");
+    }
+    let example = read(&docs().join("output/packs-pre-release.txt"));
+    let lines: Vec<&str> = example.lines().collect();
+    assert!(
+        lines[2].trim_start().starts_with("1.22.0-rc.1 ")
+            && lines[2].ends_with("latest in Palette")
+    );
+    assert!(lines[3].trim_start().starts_with("1.21.1 ") && !lines[3].contains("Palette"));
+    let live = repo_file("examples/live/packs.sh");
+    assert!(
+        !live.contains("so the newest version of a pack is"),
+        "packs.sh says what the output refutes"
+    );
+}
+
+/// S9: the table of the colors gives the color of each cluster state, as `paint_state` paints it.
+#[test]
+fn the_table_of_colors_gives_the_color_of_each_cluster_state() {
+    use strata::closed_set::ClosedSet;
+    use strata::model::cluster_state::ClusterState;
+    use strata::term::color::{ColorMode, Paint, Stream};
+    let on = Paint::resolve(ColorMode::Always, Stream::Stdout);
+    let page = read(&docs().join("reference/formats.md"));
+    let table = section(&page, "### Colors", Some("Strata decides the color"));
+    let row_of = |color: &str| {
+        table
+            .lines()
+            .find(|l| l.starts_with(&format!("| {color} |")))
+            .unwrap_or_else(|| panic!("the table has no row for {color}"))
+    };
+    let states = ClusterState::ALL
+        .iter()
+        .map(|s| s.as_str())
+        .chain([strata::ops::UNKNOWN_STATE]);
+    for state in states {
+        let painted = strata::render::paint_state(&on, state);
+        let color = [
+            ("green", on.green(state)),
+            ("yellow", on.yellow(state)),
+            ("red", on.red(state)),
+        ]
+        .into_iter()
+        .find(|(_, text)| *text == painted)
+        .map(|(name, _)| name)
+        .unwrap_or_else(|| panic!("{state} has no color"));
+        assert!(
+            row_of(color).contains(&format!("`{state}`")),
+            "the row {color} lacks the state {state}"
+        );
+    }
+    assert!(
+        one_line(table).contains("A state that strata does not know has no color."),
+        "the table lacks the state with no color"
+    );
+}
+
+/// S9: the comment of the recipe `live-contract` names each option of the contract run that the
+/// help of the run lists. `just --list` prints the last comment line before a recipe.
+#[test]
+fn the_comment_of_the_recipe_live_contract_names_each_option_of_the_run() {
+    let justfile = repo_file("justfile");
+    let comment = justfile
+        .lines()
+        .take_while(|line| !line.starts_with("live-contract "))
+        .last()
+        .expect("the recipe live-contract has a comment");
+    for option in ["--no-cloud", "--with-cluster", "--state"] {
+        assert!(
+            comment.contains(option),
+            "the comment lacks {option}: {comment}"
+        );
+    }
+    assert!(
+        comment.contains("--with-cluster holds the floor"),
+        "{comment}"
+    );
+}
+
+/// S10: `CONTRIBUTING.md` states the rule of the commit messages that the repository keeps: one
+/// line, no prefix, and the release commit as the one exception. `just version` writes that commit.
+#[test]
+fn contributing_asks_for_a_commit_message_with_no_prefix_and_names_the_release_commit() {
+    let page = one_line(&repo_file("CONTRIBUTING.md"));
+    for needle in [
+        "One line in Simplified Technical English (ASD-STE100), with no prefix such as `feat:` or `fix:`.",
+        "The squash merge takes the title of the pull request as the subject, so the title follows the same rule.",
+        "The release commit `chore: release X.Y.Z`, which `just version` writes, is the one exception.",
+    ] {
+        assert!(page.contains(needle), "CONTRIBUTING.md lacks {needle:?}");
+    }
+    assert!(!page.contains("Conventional Commits"));
+    assert!(
+        repo_file("scripts/dev/set-version.sh")
+            .contains("git commit -q -m \"chore: release $new\"")
+    );
 }

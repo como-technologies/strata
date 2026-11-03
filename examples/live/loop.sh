@@ -14,9 +14,9 @@
 #   4  before a build: strata preflight runs the static tier and the tier of Palette on the body
 #      of a create on the release. The comment of the pull request holds the static report. The
 #      stage creates nothing
-#   5  the nightly jobs: every record verifies, and the fleet of a label is recorded. The registry
-#      has newer versions of what the records pin. The stage asks Palette whether it accepts the
-#      move to each of them
+#   5  the nightly jobs: every record verifies, and the script records the fleet of a label. The
+#      registry has newer versions of what the records pin. The stage asks Palette whether it
+#      accepts the move to each of them
 #   6  behind is not different: a value that a person overrides on cluster A opens no
 #      notification. The record of the cluster reports the drift. The stage undoes the override
 #   7  an edit of a published version in place: the nightly job opens an issue. --who names the

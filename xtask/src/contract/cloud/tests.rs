@@ -681,7 +681,7 @@ fn the_run_of_the_list_against_the_fixtures_of_the_rules_finds_no_difference() {
         })
         .collect();
     assert_eq!(wrong, Vec::<String>::new());
-    // the facts that the lab cannot send are skipped with their reason
+    // the run skips the facts that the lab cannot send, with their reason
     let skipped: Vec<&Entry> = entries
         .iter()
         .filter(|e| e.outcome == Outcome::Skipped)

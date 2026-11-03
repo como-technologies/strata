@@ -144,7 +144,7 @@ const OLDER_ERRORS: [(&str, ClusterRead); 2] = [
 /// the entry. [`take_record`] refuses it first, and names the older field.
 ///
 /// The move works on the JSON and not on a struct with `#[serde(flatten)]`. Serde loses the path
-/// of a field inside a flatten, so the error would name the parent.
+/// of a field inside a flatten, so the error names the parent.
 pub(super) fn move_older_errors(cluster: &mut Value) {
     let Some(fields) = cluster.as_object_mut() else {
         return;

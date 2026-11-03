@@ -415,8 +415,9 @@ fn a_value_with_a_slash_is_one_segment_of_the_path_with_the_escape_of_the_librar
 #[test]
 fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() {
     // The requests whose placeholders no source gives. The run skips them with a reason. A new
-    // fact that the stand-in serves, with a placeholder, must have a source or be named here with
-    // the reason. A fact with no document of the stand-in is skipped before the run needs a subject.
+    // fact that the stand-in serves, with a placeholder, must have a source, or this list must name
+    // it with the reason. The run skips a fact with no document of the stand-in before it needs a
+    // subject.
     const NO_SUBJECT: &[(&str, &str)] = &[
         (
             "cloud-account",
@@ -445,7 +446,7 @@ fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() 
         let Some(template) = fact.get_path() else {
             continue;
         };
-        // a request with alternatives is checked when one of its choices has a source for each
+        // the run checks a request with alternatives when one of its choices has a source for each
         // placeholder. The choices of the other clouds skip with their reason
         let sourced = expand(template)
             .iter()
@@ -639,8 +640,8 @@ fn the_run_asks_the_saved_tag_filters_with_no_project() {
 
 #[test]
 fn the_run_that_asks_the_saved_tag_filters_with_the_project_gets_the_refusal_of_palette() {
-    // the fault of the first contract run against a real tenant: the same facts with the scope of
-    // the client are sent with the project. The stand-in answers HTTP 403
+    // the fault of the first contract run against a real tenant: it sent the facts of the scope of
+    // the client with the project. The stand-in answers HTTP 403
     let docs = query_documents();
     let (_root, stand_in) = stand_in(&docs);
     let (_dir, client, tenant) = served_with_project(&docs);
@@ -738,7 +739,7 @@ fn the_stand_in_answers_a_request_that_names_a_project_on_another_route_as_befor
 #[test]
 fn a_listing_that_holds_the_subject_of_a_fact_of_the_tenant_is_sent_with_no_project() {
     // `tag-filter` takes its uid from `tag-filter-listing`. Both are of the tenant scope, so the
-    // listing is sent with the client that names no project, also when it finds a subject
+    // run sends the listing with the client that names no project, also when it finds a subject
     let (_dir, client, tenant) = served_with_project(&query_documents());
     let probe = subject::Probe::new(&client, &tenant);
     let found = subject::find(&probe, &real_facts(), "/v1/filters/tag/{uid}");
@@ -847,7 +848,7 @@ fn a_skipped_fact_does_not_change_the_exit_code() {
 
 #[test]
 fn a_run_that_checked_no_fact_exits_2_and_not_0() {
-    // the stand-in serves no document, so each fact is skipped and the run sends no request
+    // the stand-in serves no document, so the run skips each fact and sends no request
     let contract = contract(&StandIn::default(), &memory(&documents("Running")));
     assert_eq!(contract.summary.same + contract.summary.differs, 0);
     assert!(contract.summary.skipped > 0);
@@ -2420,7 +2421,7 @@ fn the_instance_types_are_asked_for_the_clouds_of_the_lab_and_the_other_clouds_s
         .find(|e| e.id == "validate-instance-types")
         .unwrap();
     // the stand-in serves the route only with the query of the rule for AWS. So `same` shows that
-    // the request of the choice `aws` went out without the subscription
+    // the run sent the request of the choice `aws` without the subscription
     assert_eq!(entry.outcome, Outcome::Same, "{entry:?}");
     let reason = entry.reason.as_deref().unwrap_or_default();
     for cloud in ["gcp", "azure"] {

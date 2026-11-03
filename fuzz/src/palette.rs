@@ -1,9 +1,9 @@
 //! The targets of the answers of Palette that the reads of strata take: a document, and an error.
 //!
-//! One answer serves each request. A document of the shape of a profile, a cluster, a listing, or
-//! a search is read by every route that fits it. An error, with a status and a body, is read by
-//! every route too. The targets read the answer by each ref and by each listing, and check the
-//! record that a read gives.
+//! One answer serves each request. Every route that fits it reads a document of the shape of a
+//! profile, a cluster, a listing, or a search. Every route reads an error, with a status and a
+//! body, too. The targets read the answer by each ref and by each listing, and check the record
+//! that a read gives.
 
 use serde_json::{Value, json};
 use strata::Error;
@@ -162,7 +162,7 @@ fn check_routes(status: u16, body: &str, refusal: Option<&PaletteRefusal>) {
 }
 
 /// Make sure that the class of the error `status` `body` follows the rule of the retry. A 5xx with
-/// the code of a refusal by design stays. Another 5xx or a 429 passes. Each other status stays.
+/// the code of an intended refusal stays. Another 5xx or a 429 passes. Each other status stays.
 #[track_caller]
 fn check_class(error: &Error, status: u16, refusal: Option<&PaletteRefusal>) {
     let server = (500..600).contains(&status);

@@ -21,7 +21,7 @@ use strata::text::{code_cell, code_span, query_value};
 
 use crate::tracker::{Issue, Tracker, TrackerError};
 
-/// The most releases and routes that one issue lists. More are dropped, so that a sender
+/// The most releases and routes that one issue lists. The merge drops more, so that a sender
 /// cannot make the body of an issue grow.
 pub const MOST_LISTED: usize = 20;
 
@@ -223,7 +223,7 @@ impl Plan {
             .count()
     }
 
-    /// How many issues the merge will change.
+    /// How many issues the merge changes.
     pub fn updates(&self) -> usize {
         self.steps.len() - self.new_issues()
     }
@@ -252,7 +252,7 @@ impl Plan {
     }
 }
 
-/// Find the issue of each set and value of `report`. Nothing is written.
+/// Find the issue of each set and value of `report`. It writes nothing.
 ///
 /// # Errors
 ///

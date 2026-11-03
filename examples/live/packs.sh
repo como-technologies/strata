@@ -122,9 +122,10 @@ check packs-cloud-none-says 0 '#54: and it says so' -- \
   grep -q 'no version of kubernetes supports no-such-cloud' packs-cloud-none.out
 check packs-json 0 '#54: --json writes strata-packs/1' -- \
   bash -c "\"$strata\" packs $pack --registry '$reg' --latest --json | jq -e '.schema == \"strata-packs/1\" and (.registries[0].versions[0].tags | length > 0)'"
-# strata orders versions by semantic version, as Palette does, so the newest version of a pack is
-# the version that the listing marks. cert-manager has rebuilds, such as 1.19.3-rev1, which are
-# below their base for strata and for Palette (#489)
+# strata orders versions by semantic version, as Palette does, so the highest version of a pack is
+# the version that the listing marks. It is the newest version for strata too, unless it is a
+# pre-release, so the check passes while neither pack has a pre-release at the top. cert-manager
+# has rebuilds, such as 1.19.3-rev1, which are below their base for strata and for Palette (#489)
 newest_is_marked='[.registries[0].versions[]] | (map(select(.paletteLatest)) | length == 1) and (map(select(.latest)) == map(select(.paletteLatest)))'
 check packs-palette-latest 0 '#124, #489: the listing marks one version of the registry as the latest of Palette, and it is the newest version of strata, also for cert-manager with its -rev versions' -- \
   bash -c "for name in kubernetes cert-manager; do \"$strata\" packs \$name --registry '$reg' --json | jq -e '$newest_is_marked' > /dev/null || exit 1; done"

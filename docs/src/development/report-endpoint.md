@@ -142,7 +142,7 @@ list holds 20 items at most. The state of an older service can hold the lists `p
 - A person writes notes in a comment. The next report writes the body again.
 
 The lab and the users can both see a new value. Then the weekly contract run opens its issue, and
-the service opens another. This is by design, because the two issues answer two questions: what
+the service opens another. This is correct, because the two issues answer two questions: what
 the lab sees, and what users see.
 
 - The run writes one issue for a fact and a set, with all the new values of the set. It closes the
@@ -225,12 +225,12 @@ not deploy it, because a session has no account of Google.
 2. Make the two accounts, with the commands of [Make the two accounts](#make-the-two-accounts). A
    person who owns the project does this one time.
 3. Run `just report-deploy --dry-run`, and read the commands.
-4. Move the issues of an older service to the label of this one, one time: see
-   [Move the issues to the label of the service](#move-the-issues-to-the-label-of-the-service).
+4. Move the issues of an older service to the label of this one, one time.
+   See [Move the issues to the label of the service](#move-the-issues-to-the-label-of-the-service).
    Run `just report-deploy`. The script builds the image on Cloud Build as `strata-report-build`.
-   Then it deploys the service `strata-report` as `strata-report`, with one instance, 512 MiB of
-   memory, and the CPU on after the answer. Then it prints the address. When an account is missing,
-   the script stops with a message that names it.
+   Then it deploys the service `strata-report`, with one instance, 512 MiB of memory, and the CPU
+   on after the answer. Then it prints the address, or stops with a message that names a missing
+   account.
 5. Run `just live-report-send ADDRESS` with the address that the script printed. The script sends
    two reports, waits for the issue, and checks that one issue holds both. It also posts one report
    twice with one key, and checks that the issue counts it one time. Close the issue with a comment

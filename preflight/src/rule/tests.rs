@@ -197,7 +197,7 @@ fn a_check_of_palette_cannot_name_a_code_that_the_library_does_not_list_as_a_ref
     let listed =
         "AwsKeyPairNotFound, FeatureNotSupported, OperationForbidden, ClusterProfilesNotSupported";
     assert!(Catalog::parse_section(&palette(listed), Path::new("x.yaml")).is_ok());
-    // a 5xx with another code is sent again, so the check reads it only after the retries
+    // the library sends a 5xx with another code again, so the check reads it only after the retries
     let err = Catalog::parse_section(
         &palette("AwsKeyPairNotFound, InternalError"),
         Path::new("x.yaml"),

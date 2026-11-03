@@ -38,8 +38,10 @@ writes under `docs/src/output/`.
 
 ## Commit messages
 
-One line, in the Conventional Commits form: `feat:`, `fix:`, `docs:`, `test:`,
-`ci:`, `build:` or `chore:`.
+One line in Simplified Technical English (ASD-STE100), with no prefix such as
+`feat:` or `fix:`. The squash merge takes the title of the pull request as the
+subject, so the title follows the same rule. The release commit
+`chore: release X.Y.Z`, which `just version` writes, is the one exception.
 
 ## Releases
 

@@ -2,22 +2,23 @@
 # The test plan of #91 for one engine, in two parts. In the first part, each rule that the lab can
 # make fails when it must. In the second part, a clean entity passes. Each part runs
 # `strata preflight` with the static and the live tiers, and the cloud tier with the tools of this
-# machine. No cluster is built; the profiles of the live example are enough (just live-profiles,
-# with the cloud of the engine). Each result goes to the ledger of the runs,
-# preflight/evidence/runs.yaml, which the confidence of each rule is counted from.
+# machine. The plan builds no cluster; the profiles of the live example are enough (just
+# live-profiles, with the cloud of the engine). Each result goes to the ledger of the runs,
+# preflight/evidence/runs.yaml, from which strata-preflight counts the confidence of each rule.
 #
 #   examples/live/preflight-plan.sh ENGINE [--build [--down]]
 #
 #   1  the clean entity of the engine, from examples/live/preflight/ENGINE.json and the tenant: the
 #      cloud account, the release profile, the region, and the zone of terraform.tfvars
 #   2  each fault on purpose: one edit of the clean entity, and strata preflight --rule ID must
-#      FAIL on it, in seconds. The ledger gets `caught`, or `missed`. Three rules read a list of the
-#      cloud account from Palette (#143): instance-offering, ssh-key-pair on eks, and
-#      gcp-properties on gcp. The fault of instance-offering is a type that the instance type route
-#      lists with a zone in nonSupportedZones. The value of nonSupportedZones is null for a type
-#      that each zone offers. The script reads the type from the route itself. On aws, the
-#      property route refuses a key pair that the region lacks, and iaas-pod-identity sends the key
-#      pair to it (#430)
+#      FAIL on it, in seconds. The ledger gets `caught`, or `missed`.
+#
+#      Three rules read a list of the cloud account from Palette (#143): instance-offering,
+#      ssh-key-pair on eks, and gcp-properties on gcp. The fault of instance-offering is a type
+#      that the instance type route lists with a zone in nonSupportedZones. The value of
+#      nonSupportedZones is null for a type that each zone offers. The script reads the type from
+#      the route itself. On aws, the property route refuses a key pair that the region lacks, and
+#      iaas-pod-identity sends the key pair to it (#430)
 #   3  the clean entity: every tier, and each rule of severity fail that ran must PASS. The ledger
 #      gets `passed`, or `false-fail`
 #   4  with --build only: the apply of cluster A through the provider, and strata preflight --watch
@@ -32,11 +33,11 @@
 #      cluster stays: run just live-down after
 #
 # Needs live-profiles with cloud = ENGINE in terraform.tfvars, or -var cloud=ENGINE. A switch of the
-# cloud needs `just live-down` first, or the apply is refused with ClusterProfileAlreadyExists. It
-# also needs the strata and strata-preflight binaries, jq, the key as verify.sh needs it, and the
+# cloud needs `just live-down` first, or Palette refuses the apply with ClusterProfileAlreadyExists.
+# It also needs the strata and strata-preflight binaries, jq, the key as verify.sh needs it, and the
 # tool of the cloud (aws, gcloud). PALETTE_RELEASE names the Palette release for the ledger, when
-# known; a tenant key cannot read it. Results go under runs/<UTC time>/preflight-plan/, or OUT.
-# Exit 0 only when no check fails.
+# known; a tenant key cannot read it. Results go under runs/<UTC time>/preflight-plan/, or OUT. Exit
+# 0 only when no check fails.
 set -uo pipefail
 script=preflight-plan
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
@@ -134,10 +135,12 @@ resize='def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .pool
 # offering_edit: print the jq edit of the clean entity. The edit puts the first pool in a zone that
 # does not offer the type of the pool, according to the instance type route. The script reads the
 # route for the region and the account of the entity, with the account_kind that create_body set.
+#
 # The query is the one that the rules send. It lifts the default filter of Palette: see
-# instancetypes-default-filter. The script keeps the answer in instancetypes.json. The edit takes
-# the first type that has a zone in nonSupportedZones. Exit 1, with the reason, when the route
-# lists none.
+# instancetypes-default-filter. The script keeps the answer in instancetypes.json.
+#
+# The edit takes the first type that has a zone in nonSupportedZones. Exit 1, with the reason, when
+# the route lists none.
 offering_edit() {
   local pair
   "$live/api.sh" get "/v1/clouds/$account_kind/regions/$region/instancetypes?cloudAccountUid=$A&cpuGtEq=0&memoryGtEq=0" > instancetypes.json || { echo "api.sh get failed: $(tail -n 1 instancetypes.json)" >&2; return 1; }
@@ -282,7 +285,7 @@ if [ -n "$build" ]; then
   fi
   echo "Palette lists cluster $C; the watch starts while the apply runs" | tee -a steps.log
   # the watch streams to the terminal, one line for each rule at each reading, and to watch.err.
-  # The tee is a pipe, so the color is asked for when the terminal is there
+  # The tee is a pipe, so the tool asks for the color when the terminal is there
   plan_color=never; [ -t 2 ] && plan_color=always
   "$strata" preflight "cluster:$C" --cloud "$engine" "${release_arg[@]}" --json --verbose --color "$plan_color" \
     --watch --every 30 --limit 5400 --out out-watch > watch.report.json 2> >(tee watch.err >&2)

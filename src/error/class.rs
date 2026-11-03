@@ -27,7 +27,7 @@ impl Error {
     pub fn class(&self) -> FailureClass {
         match self {
             Error::Transport { .. } | Error::RetryAfterTooLong { .. } => FailureClass::Transient,
-            // A refusal by design that Palette answers with a 5xx stays while the inputs stay.
+            // An intended refusal that Palette answers with a 5xx stays while the inputs stay.
             Error::Api { status, body, .. } if (500..600).contains(status) && is_refusal(body) => {
                 FailureClass::Terminal
             }
@@ -49,7 +49,7 @@ impl Error {
     }
 }
 
-/// True when the body of a Palette error is JSON with a `code` of a refusal by design.
+/// True when the body of a Palette error is JSON with a `code` of an intended refusal.
 ///
 /// [`is_refusal_code`] says which codes these are. They are the refusals of the other routes. They
 /// are also the errors of the import validate route that match no pack to a registry, and the

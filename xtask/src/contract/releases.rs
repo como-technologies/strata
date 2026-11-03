@@ -1,4 +1,4 @@
-//! The latest release of each repository that Palette is built from.
+//! The latest release of each repository that Palette builds from.
 //!
 //! A new release of the Palette SDK or of the Terraform provider can change what Palette does.
 //! The run reads the latest release of each repository from GitHub, and compares its tag with the
@@ -70,12 +70,12 @@ impl State {
 }
 
 /// Read the latest release of each repository from the GitHub API at `base`, and compare each tag
-/// with the state in `state_file`. Keep the tags that were read in the state file.
+/// with the state in `state_file`. Keep the tags that the function read in the state file.
 ///
 /// # Errors
 ///
-/// A message when the state file cannot be read or written. A release that cannot be read is an
-/// entry with an `error`, and the state keeps its old tag.
+/// A message when the function cannot read or write the state file. A release that the function
+/// cannot read is an entry with an `error`, and the state keeps its old tag.
 pub fn read(base: &str, state_file: &Path) -> Result<Vec<Release>, String> {
     let mut state = State::load(state_file)?;
     let releases: Vec<Release> = REPOSITORIES

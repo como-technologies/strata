@@ -1,0 +1,2 @@
+$ strata verify runs/payments-edited.json
+strata: 'runs/payments-edited.json' does not match strata-snapshot/1: source.cluster.profiles[0].version: invalid type: null, expected a string. Take the record again.

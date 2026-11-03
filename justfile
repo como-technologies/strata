@@ -332,7 +332,7 @@ live-scope: build
 live-release: build
     examples/live/release.sh
 
-# The contract run (#390, #393): ask the real tenant the requests of the facts of Palette, and compare each answer with the stand-in. It sends GET requests only, and the read-only calls of the clouds in the lab account (--no-cloud sends none). Needs the key and just examples; --state FILE also reads the latest releases of the Palette SDK and the Terraform provider.
+# The contract run (#390, #393): ask the real tenant the requests of the facts of Palette, and compare each answer with the stand-in. It sends GET requests only, and the read-only calls of the clouds in the lab account (--no-cloud sends none). --with-cluster holds the floor of a window with a cluster: a skipped fact of the floor is an error. Needs the key and just examples; --state FILE also reads the latest releases of the Palette SDK and the Terraform provider.
 live-contract *args: examples stand-in
     examples/live/contract.sh {{args}}
 
@@ -463,7 +463,7 @@ live-down:
 
 # The recipe refuses a dirty tree or a tag that exists. Push the tag to start the release workflow.
 
-# Set the version everywhere it is written, and write again the outputs of the book that print it, for example: just version 1.2.3
+# Set the version everywhere it appears, and write the outputs of the book that print it again, for example: just version 1.2.3
 version VERSION:
     scripts/dev/set-version.sh {{VERSION}}
 

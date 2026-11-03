@@ -71,7 +71,7 @@ fn assert_no_send_and_no_question(env: &[(&str, &str)]) {
     let home = tempfile::tempdir().unwrap();
     let run = list_unguarded(&api, home.path(), &trap, env);
     assert_eq!(run.code, 0, "{}", run.err);
-    // the run wrote a line, so a run with the setting on would have sent it
+    // the run wrote a line, so a run with the setting on has a line to send
     assert!(
         run.err.contains("Palette gave the ProfileType"),
         "{}",
@@ -181,7 +181,7 @@ fn with_the_setting_on_the_run_sends_the_report_one_time_at_its_end_and_marks_th
         "{}",
         run.err
     );
-    // the endpoint took the report, so the line is sent: a report after the run is empty
+    // the endpoint took the report, so the run sent the line: a report after the run is empty
     let sent = std::fs::read_to_string(state_in(home.path()).join(SENT_FILE)).unwrap();
     assert_eq!(sent.trim(), "1");
     // the next run sends only the line that it wrote
@@ -203,7 +203,7 @@ fn the_setting_in_the_palette_env_file_turns_the_send_on() {
     )
     .unwrap();
     // the file is the only setting here, so the guard of the tests is off. The proxy takes any
-    // request that would go to another address than the one in the file.
+    // request for another address than the one in the file.
     let trap = trap();
     let run = list_unguarded(&api, home.path(), &trap, &[]);
     assert_eq!(run.code, 0, "{}", run.err);
@@ -517,7 +517,7 @@ fn a_log_of_more_than_20_values_goes_in_reports_of_20_values_and_each_report_mar
     assert_eq!(entries_of(&endpoint), expected);
     let sent = std::fs::read_to_string(state_in(home.path()).join(SENT_FILE)).unwrap();
     assert_eq!(sent.trim(), "250");
-    // nothing is left, so a second send posts nothing
+    // nothing remains, so a second send posts nothing
     strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
     assert_eq!(endpoint.requests().len(), 13);
 }
@@ -561,7 +561,7 @@ fn a_report_that_fails_in_the_middle_leaves_the_mark_after_the_reports_that_were
         MOST_VALUES.to_string(),
         "only the first report was taken"
     );
-    // the next send holds the 230 lines that are left
+    // the next send holds the 230 lines that remain
     let taking = Endpoint::answering(Answer::Status(200));
     strata::ops::send_unknown_report(&log, &taking.url).unwrap();
     let mut expected = vec![MOST_VALUES; 11];
@@ -569,7 +569,7 @@ fn a_report_that_fails_in_the_middle_leaves_the_mark_after_the_reports_that_were
     assert_eq!(entries_of(&taking), expected);
 }
 
-/// The answer of an endpoint that takes the report and holds back the entries `waiting`.
+/// The answer of an endpoint that takes the report and makes the entries `waiting` wait.
 fn holding_back(waiting: &'static str) -> Answer {
     Answer::Body(202, waiting)
 }
@@ -625,7 +625,7 @@ fn the_next_send_after_a_value_waited_holds_that_value_and_the_lines_after_it() 
 
 #[test]
 fn a_send_whose_first_value_waits_marks_nothing_and_posts_no_second_report() {
-    // 250 values are 13 reports. The endpoint holds back the first value of the first report.
+    // 250 values are 13 reports. The first value of the first report waits at the endpoint.
     let endpoint = Endpoint::answering(holding_back(r#"{"ok":true,"waiting":[1]}"#));
     let home = tempfile::tempdir().unwrap();
     let log = long_log(home.path(), 250);

@@ -546,7 +546,7 @@ fn a_5xx_with_a_named_code_is_an_error_for_a_check_that_does_not_name_it() {
         )
         .is_ok()
     );
-    // the answer is kept, and a check that names no code reads the 500 as an error
+    // the backend keeps the answer, and a check that names no code reads the 500 as an error
     let err = b
         .palette(Method::Post, PROPERTIES, Some(&body), &codes(&["Other"]))
         .unwrap_err();

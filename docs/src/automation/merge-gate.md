@@ -106,6 +106,14 @@ record. See [A published version is edited in place](../use-cases/edited-in-plac
 last line says `not verified` and why, in place of the count of records that
 did not verify. See [Settings](../reference/settings.md).
 
+A strata that is older than the script writes no `versionMove`. Then no pin reads
+as backward, and the gate is green. So the script stops with exit `2` before it
+checks anything. Here `STRATA_BIN` names an older strata:
+
+```text
+{{#include ../output/merge-gate-older-strata.txt}}
+```
+
 The gate checks the record at the merge. A published version can change after
 that. Run `strata verify` on the record again in the job that builds the
 cluster.

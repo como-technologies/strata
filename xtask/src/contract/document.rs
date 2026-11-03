@@ -149,7 +149,7 @@ impl Summary {
     }
 }
 
-/// The latest release of a repository that Palette is built from, and whether it is new.
+/// The latest release of a repository that Palette builds from, and whether it is new.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Release {

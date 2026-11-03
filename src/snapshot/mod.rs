@@ -346,7 +346,7 @@ impl Source {
         }
     }
 
-    /// The uid a reader looks up: the cluster's for a cluster snapshot, else the profile's.
+    /// The uid a reader searches for: the cluster's for a cluster snapshot, else the profile's.
     pub fn shown_uid(&self) -> &str {
         match (&self.pack, &self.cluster) {
             (Some(p), _) => &p.pack_uid,
@@ -568,7 +568,7 @@ impl Snapshot {
         let mut document = read_document(path, SNAPSHOT_SCHEMA, || {
             Error::NotSnapshot(path.to_path_buf())
         })?;
-        // the cluster is read apart, so that an error names the field inside it
+        // strata reads the cluster apart, so that an error names the field inside it
         let cluster = cluster::take_record(path, &mut document)?;
         let mut snap: Snapshot = parse_document(path, SNAPSHOT_SCHEMA, document, "")?;
         snap.source.cluster = cluster

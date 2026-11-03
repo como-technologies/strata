@@ -70,9 +70,9 @@ check filters 0 '#80: list filters names the filter, and what it selects' -- \
   bash -c "\"$strata\" list filters | grep -Eq '^  filter:$FILTER +$F +env=prod$'"
 check by-filter 0 '#80: list clusters --filter finds cluster A' -- \
   bash -c "\"$strata\" list clusters --filter $FILTER --json | jq -e --arg c $C '[.clusters[].uid] == [\$c] and .queryFilter.name == \"$FILTER\"'"
-# the saved filters belong to the tenant: a request that names the project of cluster A is refused,
-# also with the query filterType=tag. api.sh sends PALETTE_PROJECT_UID, and get-status prints the
-# status and the body of the refusal
+# the saved filters belong to the tenant: Palette refuses a request that names the project of
+# cluster A, also with the query filterType=tag. api.sh sends PALETTE_PROJECT_UID, and get-status
+# prints the status and the body of the refusal
 check filters-project 0 '#539: the listing of the saved filters, asked with the project of cluster A' -- \
   "$live/api.sh" get-status '/v1/filters/metadata?filterType=tag'
 check filters-project-says 0 '#539: Palette answers HTTP 403 with the code ProjectUidIsNotEmpty' -- \

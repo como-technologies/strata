@@ -368,6 +368,21 @@ fn palette_latest(r: &mut Runner) {
         false,
         "strata packs cert-manager --json | jq -c '.registries[0].versions[:2][] | {version, latest, paletteLatest}'",
     );
+    r.serve_here(); // state 1: cert-manager has a rebuild below its newest version
+    // A pre-release above the newest version: Palette marks it, and strata does not
+    r.tenant(|t| t.copy_pack_version(DEV, "cert-manager", "1.21.1", "1.22.0-rc.1"));
+    r.step(
+        "packs-pre-release",
+        0,
+        false,
+        "strata packs cert-manager --latest",
+    );
+    r.step(
+        "packs-pre-release-json",
+        0,
+        false,
+        "strata packs cert-manager --latest --json | jq -c '.registries[0].versions[] | {version, latest, paletteLatest}'",
+    );
 }
 
 /// The chapter `behind-pre-release`: a pipeline publishes a pre-release of the next version.

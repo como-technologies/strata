@@ -193,7 +193,7 @@ struct Running {
 }
 
 impl Running {
-    /// Wait until the merge of the last report is written. The service answers 202 first.
+    /// Wait until the service writes the merge of the last report. The service answers 202 first.
     fn settle(&self) {
         self.service.wait_for_merge();
     }
@@ -892,7 +892,7 @@ fn a_log_of_5_values_where_the_hour_has_room_for_3_marks_3_and_the_next_hour_sen
     let mark = std::fs::read_to_string(dir.path().join(SENT_FILE)).unwrap();
     assert_eq!(mark.trim(), "3", "the 2 values that wait are not marked");
     assert_eq!(state.lock().unwrap().issues.len(), 3);
-    // the next hour: the second service has its own limits, and it takes the 2 lines that are left
+    // the next hour: the second service has its own limits, and it takes the 2 lines that remain
     let next = start_service(&github);
     let sent = strata::ops::send_unknown_report(&log, &next.address).unwrap();
     next.settle();

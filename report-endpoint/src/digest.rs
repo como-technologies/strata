@@ -34,7 +34,7 @@ impl Counted {
     }
 
     /// The hash of the key `key` and the report `report`. `None` when the report does not
-    /// serialize: it always does, so a report with no hash is never taken for a repeat.
+    /// serialize: it always does, so the service never takes a report with no hash for a repeat.
     pub fn digest(&self, key: &str, report: &Report) -> Option<u64> {
         let text = serde_json::to_vec(report).ok()?;
         Some(self.salt.hash_one((key, text)))

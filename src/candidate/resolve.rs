@@ -314,9 +314,9 @@ fn tags_of(entity: &Value, pack_uid: &str) -> Vec<String> {
 
 /// The tag of the layer `l`, from the `tags` that the registry gives for its pack.
 ///
-/// Palette stores the tag a profile was authored with. This tag can be the version itself rather
-/// than one of the registry's tag names. A Terraform-built profile pins `24.04` where the
-/// registry says `LTS__24.x`. Accept both. Anything else is a typo.
+/// Palette stores the tag that the author gave the profile. This tag can be the version itself
+/// rather than one of the registry's tag names. A profile that Terraform builds pins `24.04` where
+/// the registry says `LTS__24.x`. Accept both. Anything else is a typo.
 ///
 /// # Errors
 ///

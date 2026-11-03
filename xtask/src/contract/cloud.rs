@@ -5,6 +5,7 @@
 //! sends it in the lab account and compares the shape of the answer with the answers that the
 //! fixtures of the rules hold. The fixtures are the stand-in of a cloud: the tests of the catalog
 //! assume them. A fact with a table also checks that the answer lists each value that a rule holds.
+//!
 //! A table of values that each account sees for itself can hold a value that this account does not
 //! have. The account cannot check that value. The lack of that value is no difference.
 //!
@@ -46,7 +47,7 @@ struct Parameter {
     name: &'static str,
     /// The variables that the tool of the cloud reads too, in the order of use.
     from: &'static [&'static str],
-    /// The value when nothing gives one. None means that the call is skipped.
+    /// The value when nothing gives one. None means that the run skips the call.
     default: Option<&'static str>,
 }
 
@@ -252,7 +253,7 @@ fn differences(fact: &Fact, expected: &[&Value], found: &Value) -> Vec<Differenc
 }
 
 /// The values that the answer `found` lists at `field`, and the values of `holds` that it does not
-/// list. A value is listed when it is equal to a listed text or number.
+/// list. A value counts as listed when it equals a text or a number in the answer.
 fn listing(field: &str, holds: &[String], found: &Value) -> (BTreeSet<String>, Vec<String>) {
     let listed = Path::parse(field).scalars(found);
     let lacking = holds

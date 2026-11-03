@@ -679,7 +679,7 @@ mod tests {
 
     #[test]
     fn values_with_a_password_that_strata_cannot_mask_give_no_hash_and_an_error() {
-        // a block scalar has no line to change, and a key that is a map cannot be written again
+        // a block scalar has no line to change, and strata cannot write a key that is a map again
         let config =
             json!({"values": "adminPassword: |\n  s3cr3t\nhost: {{ .spectro.var.host }}\n"});
         assert!(matches!(

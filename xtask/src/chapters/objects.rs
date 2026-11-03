@@ -63,6 +63,16 @@ fn cluster_tiers(r: &mut Runner) {
         "tiers-same",
         r"^(runs/|root |  variables|  cluster tiers)",
     );
+    // a person edits the record: the version of a profile in the cluster is null
+    r.quiet(
+        "jq '.source.cluster.profiles[0].version = null' runs/payments.json > runs/payments-edited.json",
+    );
+    r.step(
+        "tiers-edited-verify",
+        2,
+        true,
+        "strata verify runs/payments-edited.json",
+    );
     cluster_tiers_change(r);
     cluster_tiers_verify(r);
     cluster_tiers_forbidden(r);
@@ -403,6 +413,47 @@ fn cluster_groups_policy(r: &mut Runner) {
         0,
         false,
         "strata compare runs/dev-group.json clustergroup:dev-group",
+    );
+    cluster_groups_template(r);
+}
+
+/// The part of the chapter `cluster-groups` where the values hold a template with no quotes. Such
+/// values have no canonical form, and a new password changes no tier.
+fn cluster_groups_template(r: &mut Runner) {
+    let values = |password: &str| {
+        json!(format!(
+            "database:\n  password: {password}\nhost: {{{{ .spectro.var.host }}}}\n"
+        ))
+    };
+    r.tenant(|t| {
+        t.cluster_group_field(
+            DEV,
+            DEV_GROUP,
+            "/spec/clustersConfig/values",
+            values("s3cr3t"),
+        )
+    });
+    r.quiet("strata snapshot clustergroup:dev-group -o runs/dev-group-template.json");
+    r.step(
+        "group-template-values",
+        0,
+        false,
+        "jq -c '.source.cluster.tiers.policy.fields | {values, valuesHash}' runs/dev-group-template.json",
+    );
+    // a person gives the group a new password, and the record still verifies
+    r.tenant(|t| {
+        t.cluster_group_field(
+            DEV,
+            DEV_GROUP,
+            "/spec/clustersConfig/values",
+            values("an0ther"),
+        )
+    });
+    r.step(
+        "group-template-verify",
+        0,
+        false,
+        "strata verify runs/dev-group-template.json",
     );
 }
 

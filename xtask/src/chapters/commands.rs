@@ -135,6 +135,12 @@ fn unknown_value(r: &mut Runner) {
     );
     // the send marked the line that it sent, so the report holds nothing new
     r.step("unknown-value-send-marked", 0, false, "strata report");
+    // a person edits the log: the value of each line gets a space
+    let log = "$HOME/.local/state/strata/strata-unknown.jsonl";
+    r.quiet(&format!(
+        "sed 's/later-type/later type/' {log} > {log}.edited && mv {log}.edited {log}"
+    ));
+    r.step("unknown-value-report-invalid", 2, true, "strata report");
 }
 
 /// The part of the chapter `list` for a draft, an imported cluster, and a cluster template.

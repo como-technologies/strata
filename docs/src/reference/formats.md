@@ -52,12 +52,15 @@ does change it.
 | bold yellow | `UNVERIFIED`, the other notes, and `variables CHANGED` |
 | blue | `IDENTITY`, and a renamed tag |
 | magenta | `UPSTREAM` |
-| yellow | `AUTHORED`, `cluster-wide`, the `~` of a changed pack, and the pack-order note |
+| yellow | `AUTHORED`, `cluster-wide`, the `~` of a changed pack, the pack-order note, and the cluster states `Provisioning`, `Pending`, `Importing`, and `unknown` |
 | dim yellow | `IMAGES` and `CHARTS`: details of `AUTHORED`, so `AUTHORED` reads as the flag |
 | cyan | `in-place`, and the `@@` line of a unified diff |
-| red | old values, and the `-` of a removed line |
-| green | new values, and the `+` of an added line |
+| red | old values, the `-` of a removed line, and the cluster states `Error`, `Deleting`, and `Deleted` |
+| green | new values, the `+` of an added line, and the cluster state `Running` |
 | dim | `sync`, `none`, unchanged packs, uids, and roots |
+
+`strata list`, `strata consumers`, and `strata-preflight --verbose` color a
+cluster state. A state that strata does not know has no color.
 
 Strata decides the color in this order:
 

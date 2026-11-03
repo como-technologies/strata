@@ -58,7 +58,7 @@ fn latest_keeps_a_version_that_spectro_cloud_retired_and_picks_none_when_the_reg
     let api = tags_for(&["1.29.0"]);
     assert_eq!(picked(&api, &entries, LATEST).as_deref(), Some("1.30.0"));
 
-    // the registry serves no version: only the retired one is left
+    // the registry serves no version: only the retired one remains
     let api = MemoryApi::new();
     assert_eq!(picked(&api, &entries, LATEST).as_deref(), Some("1.30.0"));
     assert_eq!(picked(&api, &entries[1..], LATEST), None);

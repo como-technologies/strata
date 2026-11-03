@@ -1297,7 +1297,7 @@ fn a_group_in_braces_that_no_reader_fills_is_a_fault() {
             .any(|m| m.contains("the request holds `{bad-name}`")),
         "{found:#?}"
     );
-    // a name with a capital letter and the alternatives of a request are read
+    // the function reads a name with a capital letter and the alternatives of a request
     let mut sources = world();
     sources.facts[0].request = Some("GET /v1/{aws,gcp}/x/{Uid}".to_string());
     let found = faults_of(&sources);

@@ -18,6 +18,18 @@ cluster is gone:
 {{#include ../../output/preflight-watch-gone.txt}}
 ```
 
+The same holds when `metadata.isDeleted` is true and the state is still `Running`:
+
+```text
+{{#include ../../output/preflight-watch-is-deleted.txt}}
+```
+
+A cluster in the state `Error` ends the watch too. This run has no `--limit`:
+
+```text
+{{#include ../../output/preflight-watch-error.txt}}
+```
+
 A failed rule or an error keeps its own words, also for a deleted cluster. A cluster that is not
 gone gives `OK: each counted check passed`.
 

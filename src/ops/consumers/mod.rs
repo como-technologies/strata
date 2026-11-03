@@ -344,12 +344,12 @@ impl ConsumersReport {
 /// List the clusters that use a profile version, with each cluster's name, project, and state.
 ///
 /// The report also holds the edge hosts bound to the version and the cluster templates that link
-/// it. The profile comes from a uid, `<name>@<version>`, or a profile record (whose uid and
-/// project are used; the list is always fetched live). Names and projects come from the profile's
-/// `status.inUseClusters`. Each cluster is then read in its own project for its state, with one
-/// client per project from `connect`. A cluster that cannot be read is listed with state
-/// `unknown` and its error; it still counts. Then each cluster the key can list is read for the
-/// profiles it applies: see [`consumers_with`] to read the list alone.
+/// it. The profile comes from a uid, `<name>@<version>`, or a profile record (strata uses its uid
+/// and project, and always fetches the list live). Names and projects come from the profile's
+/// `status.inUseClusters`. Strata then reads each cluster in its own project for its state, with
+/// one client per project from `connect`. The report lists a cluster that strata cannot read with
+/// state `unknown` and its error, and the cluster still counts. Then strata reads each cluster the
+/// key can list for the profiles it applies: see [`consumers_with`] to read the list alone.
 ///
 /// `connect` gives a client for a project uid, with `None` for the configured scope.
 /// `generated_at` is the time of the report, in RFC 3339.
@@ -575,8 +575,8 @@ fn target_of(reference: &Ref) -> Result<Target> {
     }
 }
 
-/// The clusters that the profile document `doc` names as users of the profile `uid`. Each one is
-/// read in its own project for its state and the version that it runs.
+/// The clusters that the profile document `doc` names as users of the profile `uid`. Strata reads
+/// each one in its own project for its state and the version that it runs.
 fn listed_consumers<A, F>(
     doc: &Value,
     uid: &str,

@@ -75,8 +75,8 @@ impl Failure {
 /// The answer of a request: the document, or the failure.
 pub type Answer = Rc<Result<Value, Failure>>;
 
-/// A tenant that the run asks. It keeps each answer, so the listing that finds a subject is read
-/// once for all the facts that use it.
+/// A tenant that the run asks. It keeps each answer, so the run reads the listing that finds a
+/// subject once for all the facts that use it.
 ///
 /// It holds two clients of the tenant. `client` names the project of the environment, if any.
 /// `tenant` names no project, for the facts of the scope [`Scope::Tenant`]: Palette refuses a
@@ -172,8 +172,8 @@ fn scope_of(facts: &[Fact], id: &str) -> Scope {
         .map_or_else(Scope::default, |f| f.scope)
 }
 
-/// `template` with the value of each placeholder in `bindings`. The pair of a query for a name with
-/// no value goes out, and so does the `?` when no pair stays.
+/// `template` with the value of each placeholder in `bindings`. The function drops a pair of the
+/// query when its name has no value, and drops the `?` when no pair stays.
 fn render(template: &str, bindings: &Bindings) -> String {
     let (path, query) = template.split_once('?').unwrap_or((template, ""));
     let kept: Vec<&str> = query
@@ -329,13 +329,13 @@ fn listed<A: PaletteApi>(
             "the fact `{fact}` is not a request that finds a value for `{{{param}}}`"
         )));
     };
-    // the request that lists the objects holds the values that are bound already: the VPCs of
+    // the request that lists the objects holds the values that the run bound already: the VPCs of
     // the region that this request names
     let path = match fill_template(probe, facts, request, bindings, depth + 1) {
         Subject::Path(path) => path,
         other => return Err(other),
     };
-    // the listing that holds the subject is sent in its own scope, as the run sends the fact
+    // the run sends the listing that holds the subject in its own scope, as it sends the fact
     let answer = probe.get(scope_of(facts, fact), &path);
     let document = match answer.as_ref() {
         Ok(document) => document,

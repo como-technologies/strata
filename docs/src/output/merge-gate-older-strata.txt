@@ -1,0 +1,2 @@
+$ STRATA_BIN=./older-strata scripts/ci/merge-gate.sh "releases/*.json" --base main
+merge-gate: strata is older than this script: it writes no versionMove, so no backward pin shows

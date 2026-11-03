@@ -6,9 +6,11 @@
 //!
 //! The rules run under two locks. The `rules` lock guards the limits and the reports taken. It
 //! guards memory only. No call to the tracker runs under it, so a request that a check refuses
-//! never waits for a merge. The `tracker` lock serves one merge at a time. A merge reads the
-//! issues, answers the sender, and then writes. So the sender gets its answer before the slow part,
-//! and it does not leave and send the same report again.
+//! never waits for a merge.
+//!
+//! The `tracker` lock serves one merge at a time. A merge reads the issues, answers the sender, and
+//! then writes. So the sender gets its answer before the slow part, and it does not leave and send
+//! the same report again.
 
 use std::io::Read;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -41,7 +43,7 @@ pub const NEW_ISSUES_PER_HOUR: usize = MOST_VALUES;
 /// limit with this one.
 pub const WRITES_PER_HOUR: usize = 200;
 
-/// The requests that the service handles at once, at most. A merge goes on after its answer, so
+/// The requests that the service handles at once, at most. A merge continues after its answer, so
 /// the limit of Cloud Run does not bound the threads: this limit does. A request over it gets 503.
 pub const MOST_AT_ONCE: usize = 32;
 
@@ -129,8 +131,8 @@ impl Answer {
         }
     }
 
-    /// The answer for a report that the service takes: the merge goes on after this answer.
-    /// `waiting` holds the numbers of the entries whose values the limits hold back.
+    /// The answer for a report that the service takes: the merge continues after this answer.
+    /// `waiting` holds the numbers of the entries whose values the limits make wait.
     fn taken(plan: &Plan, waiting: &[usize]) -> Answer {
         let mut body = json!({"ok": true, "opens": plan.new_issues(), "updates": plan.updates()});
         if !waiting.is_empty() {
@@ -207,7 +209,7 @@ struct Checked {
     digest: Option<u64>,
 }
 
-/// The answer to write now, and the merge that goes on after it.
+/// The answer to write now, and the merge that continues after it.
 #[derive(Debug)]
 pub struct Admitted<'a, T: Tracker> {
     /// The answer to write to the sender.
@@ -235,8 +237,8 @@ impl<T: Tracker> Admitted<'_, T> {
     /// Write the report to the tracker. Call it after the answer went to the sender. A request that
     /// the service refused has nothing to write.
     ///
-    /// When the tracker fails, the report is lost to the maintainers. The service forgets that it
-    /// took the report, so a second try of it counts.
+    /// When the tracker fails, the maintainers lose the report. The service forgets that it took
+    /// the report, so a second try of it counts.
     pub fn finish(self) {
         let Some(Later {
             service,
@@ -337,7 +339,7 @@ impl<T: Tracker> Service<T> {
         digest.is_some_and(|digest| self.rules().counted.seen(digest, now))
     }
 
-    /// Wait until no merge goes on. A test calls it after an answer of 202, to read the tracker.
+    /// Wait until no merge runs. A test calls it after an answer of 202, to read the tracker.
     pub fn wait_for_merge(&self) {
         drop(self.tracker.lock().unwrap_or_else(PoisonError::into_inner));
     }
@@ -539,10 +541,10 @@ impl Drop for Busy {
     }
 }
 
-/// Answer the requests of `server` until `server` is unblocked.
+/// Answer the requests of `server` until the caller unblocks `server`.
 ///
 /// Each request runs in a thread of its own, so a sender that reads slowly holds no one else. A
-/// thread lives until its report is written, which is after its answer, so Cloud Run does not count
+/// thread lives until it writes its report, which is after its answer, so Cloud Run does not count
 /// it. The service handles `most_at_once` requests at a time, and it answers 503 to a request over
 /// that number: see [`MOST_AT_ONCE`]. The rules of the checks never wait for a merge: see the page
 /// of this module. `trust_forwarded` is the setting of the same name: see

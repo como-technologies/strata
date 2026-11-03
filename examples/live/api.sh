@@ -125,8 +125,8 @@
 #       for each status, so that a check can read a refusal and the status that Palette gives it.
 #   api.sh packs-where [--name NAME] [JQ_OPTION...] JQ_FILTER
 #       Print the first pack of the packs of the project for which JQ_FILTER is true. JQ_FILTER
-#       is a jq condition on the pack, and the output is one line of JSON. The listing is read a
-#       page at a time, and the read stops at the first match. NAME limits the listing to the
+#       is a jq condition on the pack, and the output is one line of JSON. The script reads the
+#       listing a page at a time, and it stops at the first match. NAME limits the listing to the
 #       packs of that name. The options go to jq, such as --arg r REGISTRY_UID. Exit 0 when a pack
 #       matches, 1 when none does, and 2 when Palette refuses a page.
 #   api.sh probe-profile NAME REGISTRY_UID VERSION
@@ -368,7 +368,7 @@ profiles_body() {
     [ "$uid" = "$exclude" ] && continue
     call GET "/v1/clusterprofiles/$uid" > "$dir/profile" || exit 2
     call GET "/v1/clusterprofiles/$uid/packs/manifests" > "$dir/manifests" || exit 2
-    # each pack's current values and manifest contents, as the cluster should run them
+    # each pack's current values and manifest contents, as the cluster runs them
     jq -c --slurpfile m "$dir/manifests" --slurpfile copies "$dir/copy-uids" '
       ([($m[0].spec.packs // [])[] | {key: .spec.name, value: (.spec.manifests // [])}] | from_entries) as $ms
       | .metadata.uid as $p

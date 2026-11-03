@@ -5,8 +5,8 @@
 #                         [--no-verify] [--allow-rollback] [--allow-no-digest]
 #
 # A branch that sat for a day compares against a base that moved. This script merges the target
-# branch into the checkout first, so every answer is about the merge result: what the records will
-# be after the merge button, not what they were when the branch started. Run it as the check that
+# branch into the checkout first, so every answer is about the merge result: what the records are
+# after the merge button, not what they were when the branch started. Run it as the check that
 # the merge button waits for.
 #
 # It reports three things, and exits 1 on any of them:
@@ -15,6 +15,7 @@
 #   2. The merge result moves a pin backwards: the target branch has a later version of a pack, or
 #      of the profile, than the merge result. A branch that carries an older pin replaces what
 #      another merge request pinned, and a cluster built from it gets the older release.
+#
 #      A rollback moves a pin backwards too, and only the author knows which one it is, so the
 #      author says so. A commit on the branch carries the line
 #
@@ -22,13 +23,16 @@
 #
 #      The line must name the record and the release that the merge result pins. The other way
 #      is that the job runs with --allow-rollback. A job does that for a merge request with the
-#      rollback label. A declared rollback is reported and passes. Every other backwards pin is
-#      red. The report gives the evidence. It says whether the target branch pinned that release
+#      rollback label. The gate reports a declared rollback, and it passes. Every other backwards
+#      pin is red.
+#
+#      The report gives the evidence. It says whether the target branch pinned that release
 #      before, and whether the branch wrote its record before or after the target branch moved.
 #   3. A record of the merge result does not verify: the profile or cluster it names changed in
-#      Palette, or is gone. A cluster built from it does not get what the record says. A record
-#      that holds a pack with no upstream digest is unverified, and red too. A change of the
-#      archive of that pack does not show. --allow-no-digest accepts it, as verify does.
+#      Palette, or is gone. A cluster built from it does not get what the record says.
+#
+#      A record that holds a pack with no upstream digest is unverified, and red too. A change of
+#      the archive of that pack does not show. --allow-no-digest accepts it, as verify does.
 #      --no-verify, or no Palette key where strata looks for one (PALETTE_API_KEY,
 #      SPECTROCLOUD_APIKEY, or ~/.palette.env), omits this check, and the last line says so.
 #

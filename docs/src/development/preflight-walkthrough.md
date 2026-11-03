@@ -60,11 +60,11 @@ $P ~/cluster-broken.json --cloud aws --verbose --strict; echo "exit $?"
 
 Two rules fail: `worker-cpu-floor` and `palette-validate`, both with Palette's
 own words, "A minimum allocation of '4.1' CPU cores is required across all
-worker nodes. Current allocation : '4' CPU cores". Under each, `ran: POST
-/v1/spectroclusters/aws/validate -> HTTP 200` and a `reproduce:` line with the
-`curl` that shows the same answer. The last line is `FAIL: 2 checks failed`,
-and the exit is `1`: with `--strict` a failed probe stops a pipeline. Through
-the provider, this fault comes after a full apply of 20 minutes.
+worker nodes. Current allocation : '4' CPU cores". Under each, a `ran:` line
+shows the request and its status, and a `reproduce:` line shows the `curl` that
+gives the same answer. The last line names the two failed checks, and the exit
+is `1`: with `--strict` a failed probe stops a pipeline. Through the provider,
+this fault comes after a full apply of 20 minutes.
 
 Other edits that fail the same way: `.spec.cloudAccountUid =
 "000000000000000000000000"` (`account-missing`),

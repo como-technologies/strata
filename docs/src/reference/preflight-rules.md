@@ -132,9 +132,11 @@ A smart tag such as `1.32.x` is no version. To keep its first two parts between 
 that reads `.version` or `.tag`, unless `semver_numbers //` comes first.
 
 `count_of` writes the input count with a noun. `2 | count_of("key pair")` gives `2 key pairs`.
-`1` gives `1 key pair`, and `0` gives `no key pairs`. Write the noun in the singular. Use it for
-each count in a message. A test of the catalog refuses `(s)` after a noun. The input must be a
-whole number of zero or more.
+`1` gives `1 key pair`, and `0` gives `no key pairs`.
+
+Write the noun in the singular. Use it for each count in a message. A test of the
+catalog refuses `(s)` after a noun. The input must be a whole number of zero or
+more.
 
 A program with one of these filters does not run in the `jq` tool. The report writes a
 `reproduce` line for such a program with a definition of each filter in front. So the line runs
@@ -351,6 +353,13 @@ command in the same order, such as `exit 0; exit 254`. The lines in `reproduce` 
 codes in the world. A fixture holds an output for each command under `_exec`, and a fixture that
 lacks one makes the check `ERROR`.
 
+Here the second command of `iam-role-policy-quota` fails with exit 254. A script named `aws` in
+`tools/` answers for the tool. The rule uses the default quota of 20, and the message says so:
+
+```text
+{{#include ../output/preflight-second-command.txt}}
+```
+
 ## The world document
 
 ```text
@@ -382,7 +391,9 @@ map the engine itself.
 `packFacts` holds three fields for each pack in `packs`, from the rules of strata for a pack
 that a profile pins. `supportsCloud` is true when the cloud types of the pack include
 `routeCloud`. A pack with no cloud type supports each cloud. It is `null` for a world with no
-engine. `state` is the `system_state` of the pack, or empty text. `retired` is true for
+engine.
+
+`state` is the `system_state` of the pack, or empty text. `retired` is true for
 `disabled` and `deleted`. A rule reads these fields, and does not write the rules again.
 
 `edgeHosts` is the list of the edge hosts of the entity, in the order of the

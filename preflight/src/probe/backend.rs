@@ -69,7 +69,7 @@ pub trait Backend {
     fn exec(&self, argv: &[String], timeout: Duration) -> Result<ExecOutput>;
     /// True when a Palette check can run: a key is there.
     fn has_palette(&self) -> bool;
-    /// True when no command may run (`--no-exec`): each exec check is then `NOT RUN`.
+    /// True when no command can run (`--no-exec`): each exec check is then `NOT RUN`.
     fn exec_off(&self) -> bool {
         false
     }
@@ -101,7 +101,7 @@ pub fn is_answer(status: u16, reader: Reader) -> bool {
 }
 
 /// True when a 5xx is the answer of a check: the `code` of its body is one that the check names in
-/// `refusal_codes`. Palette answers some refusals by design with HTTP 500, and a retry gets the
+/// `refusal_codes`. Palette answers some intended refusals with HTTP 500, and a retry gets the
 /// same refusal. A 5xx with another code, or with no code, is an error.
 fn is_named_refusal(status: u16, error: &Value, refusal_codes: &[String]) -> bool {
     (500..600).contains(&status)
@@ -158,8 +158,8 @@ enum Kept {
 
 impl Kept {
     /// Make sure that a check that names `refusal_codes` reads this answer: the error that Palette
-    /// gave, when it does not. An answer that was kept for a check that named its code is an error
-    /// for a check that does not.
+    /// gave, when it does not. An answer that the backend kept for a check that named its code is
+    /// an error for a check that does not.
     fn read_by(&self, method: Method, path: &str, refusal_codes: &[String]) -> Result<()> {
         match self {
             Kept::Answer { status, text, body }
@@ -362,7 +362,7 @@ pub struct FixtureBackend {
 }
 
 impl FixtureBackend {
-    /// Read the answers out of a fixture, and give back the world without them.
+    /// Read the answers out of a fixture, and return the world without them.
     pub fn split(mut fixture: Value) -> (FixtureBackend, Value) {
         let take = |doc: &mut Value, key: &str| doc.as_object_mut().and_then(|o| o.remove(key));
         let responses = take(&mut fixture, "_responses")

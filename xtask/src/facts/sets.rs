@@ -154,7 +154,7 @@ fn agree(id: &str, field: &str, list: &[String], set: &Set) -> Vec<String> {
         .filter(|value| !set.values.contains(value) && !palette_only(value))
         .map(|value| {
             format!(
-                "fact `{id}`: it lists `{value}` at `{field}`, and the set {name} has no such value: add it to the type, name it in `PALETTE_ONLY` when Palette gives it and strata does not act on it, or take it from the list"
+                "fact `{id}`: it lists `{value}` at `{field}`, and the set {name} has no such value. Add it to the type, or take it from the list. When Palette gives it and strata does not act on it, name it in `PALETTE_ONLY`"
             )
         });
     let lacking = set
@@ -163,7 +163,7 @@ fn agree(id: &str, field: &str, list: &[String], set: &Set) -> Vec<String> {
         .filter(|value| !list.contains(value) && !strata_only(value))
         .map(|value| {
             format!(
-                "fact `{id}`: the set {name} has `{value}`, and the list at `{field}` lacks it: add it to the list, or name it in `STRATA_ONLY` when only strata gives it"
+                "fact `{id}`: the set {name} has `{value}`, and the list at `{field}` lacks it. Add it to the list, or name it in `STRATA_ONLY` when only strata gives it"
             )
         });
     extra.chain(lacking).collect()

@@ -1,4 +1,4 @@
-//! What the list is compared with: the book, the live scripts, the rules of strata-preflight,
+//! What the list compares with: the book, the live scripts, the rules of strata-preflight,
 //! and the files of strata. A check reads these values, so a test can give it any of them.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -73,8 +73,8 @@ pub struct Sources {
 }
 
 impl Sources {
-    /// Read the list and what it is compared with, in the repository at `repo`. The messages are
-    /// about the files of the list that cannot be read.
+    /// Read the list and what it compares with, in the repository at `repo`. The messages are
+    /// about the files of the list that the function cannot read.
     pub fn read(repo: &Path, served: Option<BTreeSet<String>>) -> (Sources, Vec<String>) {
         let (facts, mut bad) = load(&repo.join(DIRECTORY));
         let docs = book(repo);
@@ -127,8 +127,8 @@ impl Sources {
     }
 }
 
-/// The text of a file, or an empty text for a file that cannot be read. A check reports the
-/// missing thing that the text must hold.
+/// The text of a file, or an empty text for a file that the function cannot read. A check reports
+/// the missing thing that the text must hold.
 fn read_text(path: &Path) -> String {
     std::fs::read_to_string(path).unwrap_or_default()
 }

@@ -189,8 +189,45 @@ pub(super) fn run(r: &mut Runner) {
     preflight_report(r);
     preflight_each(r);
     preflight_account(r);
+    preflight_second_command(r);
     preflight_clouds(r);
     preflight_gone(r);
+}
+
+/// A script named `aws` for a rule that runs two commands. The nodes role holds 21 policies, and
+/// Service Quotas refuses the read of the quota with exit 254, as the tool does.
+const AWS_TWO_COMMANDS: &str = r#"#!/bin/sh
+case "$1 $2" in
+  "iam list-attached-role-policies")
+    printf '{"AttachedPolicies": ['
+    n=1
+    while [ "$n" -le 21 ]; do
+      [ "$n" -gt 1 ] && printf ', '
+      printf '{"PolicyName": "p%s", "PolicyArn": "arn:aws:iam::123456789012:policy/p%s"}' "$n" "$n"
+      n=$((n + 1))
+    done
+    printf ']}\n'
+    ;;
+  "service-quotas get-service-quota")
+    echo "An error occurred (AccessDeniedException) when calling the GetServiceQuota operation" >&2
+    exit 254
+    ;;
+esac
+"#;
+
+/// The part of the chapter `preflight` for a rule of the cloud tier that runs two commands.
+fn preflight_second_command(r: &mut Runner) {
+    // The rule reads the policies of the nodes role, and then the quota of the account. The
+    // second command fails, so the rule uses the default quota of 20 and says so (#143).
+    r.quiet("mkdir tools");
+    r.write_file("tools/aws", AWS_TWO_COMMANDS);
+    r.quiet("chmod +x tools/aws");
+    r.step(
+        "preflight-second-command",
+        0,
+        false,
+        "PATH=\"$PWD/tools:$PATH\" strata preflight cluster.json --cloud aws --tier cloud --rule iam-role-policy-quota --quiet | sed -n '4,9p'",
+    );
 }
 
 /// The part of the chapter `preflight` for a cluster that Palette holds, and a change of its worker
@@ -501,8 +538,25 @@ fn preflight_clouds(r: &mut Runner) {
 /// The part of the chapter `preflight` for a watch of a cluster that Palette deleted. It is the
 /// last part, because the steps before it read the cluster.
 fn preflight_gone(r: &mut Runner) {
-    // Palette deletes the cluster and keeps its document. The watch ends at its first reading.
     r.serve_here();
+    // The cluster is in the state Error. The watch has no limit, and it ends at its first reading.
+    r.tenant(|t| t.cluster_field(DEV, PAYMENTS, "/status/state", json!("Error")));
+    r.step(
+        "preflight-watch-error",
+        0,
+        false,
+        &format!("strata preflight cluster:{PAYMENTS} --watch --quiet | tail -n 3"),
+    );
+    // Palette marks the cluster deleted, and its state is still Running. The watch ends too.
+    r.tenant(|t| t.cluster_field(DEV, PAYMENTS, "/status/state", json!("Running")));
+    r.tenant(|t| t.cluster_field(DEV, PAYMENTS, "/metadata/isDeleted", json!(true)));
+    r.step(
+        "preflight-watch-is-deleted",
+        0,
+        false,
+        &format!("strata preflight cluster:{PAYMENTS} --watch --quiet | tail -n 3"),
+    );
+    // Palette deletes the cluster and keeps its document. The watch ends at its first reading.
     r.tenant(|t| t.delete_cluster(DEV, PAYMENTS, "2026-09-17T11:05:00Z"));
     r.step(
         "preflight-watch-gone",

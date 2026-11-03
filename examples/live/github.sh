@@ -20,5 +20,5 @@ remote_repo() {
 #
 #   jq "$first_line_jq"'.[] | select(first_line == $marker)'
 #
-# The variable is exported, so a `bash -c` of a check has it too.
+# The script exports the variable, so a `bash -c` of a check has it too.
 export first_line_jq='def first_line: (.body // "") | (split("\n")[0] // "") | rtrimstr("\r");'

@@ -70,7 +70,7 @@ fn tag_release_tags_the_cargo_version_once_and_only_on_a_clean_tree() {
 
 // ---- set-version.sh ------------------------------------------------------------------------
 
-/// A `just` that stands in for the recipe `docs-examples`. It writes the version of `Cargo.toml`
+/// A stand-in `just` for the recipe `docs-examples`. It writes the version of `Cargo.toml`
 /// in the output of the book that names a version, as a build of that version does.
 /// `FAKE_STALE` makes it change an output that names no version, and `FAKE_JUST_EXIT` makes it fail.
 const FAKE_JUST_DOCS: &str = r#"#!/usr/bin/env bash
@@ -421,9 +421,9 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
     if !built.exists() || !stand_in.exists() {
         return;
     }
-    // The LAST chapter. Serving it builds every chapter before it. A statement that changes the
+    // The LAST chapter. A serve of it builds every chapter before it. A statement that changes the
     // tenant outside a guarded helper then runs with no tenant to change, and it kills the run.
-    // Serving an early chapter builds none of them. This is why an earlier form of this test
+    // A serve of an early chapter builds none of them. This is why an earlier form of this test
     // passed while `just playground packs` failed for eleven chapters.
     let last = "automation";
     let dir = tempfile::tempdir().unwrap();
@@ -543,7 +543,7 @@ fn the_examples_fetch_orders_plain_versions_as_strata_does() {
 fn the_examples_fetch_stops_the_send_of_the_report_whatever_the_machine_says() {
     let dir = tempfile::tempdir().unwrap();
     let log = dir.path().join("send.log");
-    // a strata that writes down the setting it got, and then runs the real one
+    // a strata that records the setting it got, and then runs the real one
     let wrapper = dir.path().join("strata");
     executable(
         &wrapper,

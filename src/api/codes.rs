@@ -20,7 +20,7 @@ use crate::model::validation::PaletteRefusal;
 ///
 /// The routes are the delete of an object, an operation on an object, and the update of a profile.
 /// Two more are a listing and the property route of AWS. Palette gives these errors the response
-/// type of a server fault, so a refusal by design arrives as a 5xx. A retry gets the same refusal.
+/// type of a server fault, so an intended refusal arrives as a 5xx. A retry gets the same refusal.
 ///
 /// The property route of AWS refuses a Pod Identity account with `FeatureNotSupported`, and a key
 /// pair that the region lacks with `AwsKeyPairNotFound`. A live run shows the second answer. No

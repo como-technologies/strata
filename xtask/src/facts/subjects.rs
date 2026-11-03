@@ -90,7 +90,7 @@ pub(crate) enum Origin {
 /// A source of the value of one placeholder, for the requests that start from one route.
 pub(crate) struct Source {
     /// The route of the request, through the placeholder when it is in the path. A request is
-    /// served when its path is this route, or goes on from it by whole segments. So the source
+    /// served when its path is this route, or continues from it by whole segments. So the source
     /// for `{uid}` of `/v1/packs/{name}/registries/{uid}` serves no request of `/v1/packs/{uid}`,
     /// where `{uid}` names a pack.
     pub(crate) route: &'static str,

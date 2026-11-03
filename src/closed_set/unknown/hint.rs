@@ -60,8 +60,8 @@ impl Hint {
     /// True when the file holds no time, holds a time that is not valid, or holds a time in the
     /// future. Also true when the file holds a time that is a day old or older.
     fn due(&self) -> bool {
-        // a file that cannot be read has no time that counts: the hint shows, and the file
-        // is written again
+        // a file that strata cannot read has no time that counts: the hint shows, and strata
+        // writes the file again
         let last = read_file(&self.file)
             .ok()
             .and_then(|text| DateTime::parse_from_rfc3339(text.trim()).ok());

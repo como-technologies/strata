@@ -23,10 +23,10 @@ fn listed_states() -> String {
 /// What one registry serves of one pack, from its entries in the pack listing and its own answer.
 ///
 /// Palette applies the FIPS rule of the tenant to the answer of the registry, and not to the
-/// listing. So a version with no tag in the answer is a version that Palette does not serve, and a
-/// profile that pins it is refused with `PackForbidden`. A version that Spectro Cloud retired as
-/// disabled or deleted has no tag in the plain answer either, and stays in the list: its state
-/// says why Palette refuses it.
+/// listing. So a version with no tag in the answer is a version that Palette does not serve, and
+/// Palette refuses a profile that pins it with `PackForbidden`. A version that Spectro Cloud
+/// retired as disabled or deleted has no tag in the plain answer either, and stays in the list: its
+/// state says why Palette refuses it.
 pub(crate) struct Served<'a> {
     /// The entries of the listing that the registry serves, in the order of the listing.
     pub(crate) entries: Vec<&'a Value>,

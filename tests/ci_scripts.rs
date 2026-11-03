@@ -229,7 +229,7 @@ fn the_ci_drop_ins_name_the_version_this_repository_is_at() {
 }
 
 /// The release workflow installs what it published and runs each script the installer installed.
-/// The two lists are written in two files, so they can disagree. The check named
+/// Two files hold the two lists, so they can disagree. The check named
 /// `install-strata.sh`, which the installer never installs, shows this: the first release to run
 /// the check failed on it. This test holds the two lists together.
 #[test]
@@ -290,7 +290,7 @@ impl Listed {
         };
         match self {
             Listed::Script(name) => {
-                // `  scripts/ci/NAME <ref>... [--a] [--b X]`, and the indented lines that go on
+                // `  scripts/ci/NAME <ref>... [--a] [--b X]`, and the indented lines that continue
                 let mut in_usage = false;
                 for line in help_of(name).lines() {
                     let begins =
@@ -1019,8 +1019,8 @@ fn the_gitlab_job_of_the_upstream_report_keeps_an_artifact_only_when_it_saves_a_
 
 // ---- pr-comment.sh ---------------------------------------------------------------------------
 
-/// A `gh` that records every invocation and saves any comment body it is handed. It answers the
-/// two listings that the script reads from files that the test controls.
+/// A `gh` that records every invocation and saves any comment body that the script gives it. It
+/// answers the two listings that the script reads from files that the test controls.
 const FAKE_GH: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 args="$*"
@@ -1670,7 +1670,7 @@ fn pr_comment_repave_reads_the_table_below_may_repave_when_palette_says_no_repav
         "{}",
         text(&o.stderr)
     );
-    // at may-repave, the answer of Palette settles the label
+    // at `may-repave`, the answer of Palette settles the label
     let o = h.run_repave(
         &[
             &cluster,
@@ -2324,8 +2324,8 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
 }
 
 /// `STRATA_QUIET` stops the progress messages of the binary of strata. The notes of a script state
-/// its result, and one of them tells that the signature is not checked. So no script reads the
-/// variable.
+/// its result, and one of them tells that the script did not check the signature. So no script
+/// reads the variable.
 #[test]
 fn install_strata_prints_its_notes_when_strata_quiet_is_set() {
     let r = release();
@@ -2743,7 +2743,7 @@ fn install_strata_requires_a_bundle_in_the_release_when_asked_to() {
     );
     assert!(!d.join("here/strata").exists());
 
-    // without the option, the install goes on and says what it did not check
+    // without the option, the install continues and says what it did not check
     let o = install_signed(d, &[]);
     assert!(o.status.success(), "{}", text(&o.stderr));
     assert!(

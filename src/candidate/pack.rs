@@ -167,9 +167,9 @@ fn pack_not_found(name: &str, version: &str, registry: String, unsynced: Vec<Str
 /// The version of the pack `name` that `version` names in the registry `uid`, from the listing
 /// `entries` of the pack. `version` can be [`LATEST`]. None when the registry has no such version.
 ///
-/// An exact version is looked up in each entry of the listing. Palette refuses a profile that pins
-/// a version that it does not serve, and `snapshot --validate` asks it. [`LATEST`] is picked from
-/// [`Served`], the list that `packs` marks. So the two name the same version, also when the
+/// Strata finds an exact version in each entry of the listing. Palette refuses a profile that pins
+/// a version that it does not serve, and `snapshot --validate` asks it. Strata picks [`LATEST`]
+/// from [`Served`], the list that `packs` marks. So the two name the same version, also when the
 /// highest version of the listing has no tag.
 ///
 /// # Errors

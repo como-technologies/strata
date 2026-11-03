@@ -113,7 +113,20 @@ fn merge_gate(r: &mut Runner) {
         true,
         r#"scripts/ci/merge-gate.sh "releases/*.json" --base main"#,
     );
+    // a strata that is older than the gate: the schema of its comparison has no versionMove
+    r.write_file("older-strata", OLDER_STRATA);
+    r.quiet("chmod +x older-strata");
+    r.step(
+        "merge-gate-older-strata",
+        2,
+        true,
+        r#"STRATA_BIN=./older-strata scripts/ci/merge-gate.sh "releases/*.json" --base main"#,
+    );
 }
+
+/// A script for `STRATA_BIN` that answers as strata 0.26.0 does: its schema of the comparison
+/// names no `versionMove`.
+const OLDER_STRATA: &str = "#!/bin/sh\necho '{\"title\": \"Diff\", \"type\": \"object\"}'\n";
 
 /// The chapter `merge-gate-rollback`: a branch that restores the version that dev ran before.
 fn merge_gate_rollback(r: &mut Runner) {

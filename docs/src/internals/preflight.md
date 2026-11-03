@@ -240,10 +240,10 @@ memory. The check sends `cpuGtEq=0&memoryGtEq=0`, so the route lists the small t
 the route still does not list, such as an old family, fails the check. The check cannot count the
 vCPUs of that pool.
 
-A rule file has no shared jq definition, so each of the four rules writes the lookup: the two
-messages of a refusal, and the read of `cpu` for a pool. A test in `preflight/tests/catalog.rs` fails
-when a fifth rule reads the route. Then add one section of jq definitions to the catalog, and move
-the lookup into it.
+A rule file has no shared jq definition, so each of the four rules writes the lookup. The lookup is
+the two messages of a refusal, and the read of `cpu` for a pool. A test in
+`preflight/tests/catalog.rs` fails when a fifth rule reads the route. Then add one section of jq
+definitions to the catalog, and move the lookup into it.
 
 The checks `instancetypes-cpu`, `instancetypes-default-filter`, `vpcs-route-keys`,
 `zones-route-keys`, and `sgs-route-keys` of

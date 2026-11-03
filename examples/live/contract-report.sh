@@ -7,18 +7,20 @@
 #
 # Reads the document strata-contract/1 that contract.sh writes. A fact with the outcome differs
 # has one open issue labeled NAME (default palette-drift). The script finds the issue by the marker
-# <!-- strata-contract: <fact id> --> on the first line of its body. The first run that finds the
-# difference opens the issue in the milestone NAME (default Backlog). Each later run updates the
-# issue. The first run where the fact is the same again closes it with a comment. A fact that the
-# run skipped or could not check keeps its issue as it is. Issues of facts that the document does
-# not list are left alone.
+# <!-- strata-contract: <fact id> --> on the first line of its body.
+#
+# The first run that finds the difference opens the issue in the milestone NAME (default Backlog).
+# Each later run updates the issue. The first run where the fact is the same again closes it with a
+# comment. A fact that the run skipped or could not check keeps its issue as it is. The script
+# changes no issue of a fact that the document does not list.
 #
 # The answer of a fact can hold a value of a closed set that neither the fact nor the stand-in
 # names. The fact then has one open issue for each such set. The title is "Palette has a new
 # value of <set> in <fact id>", and the issue has the label NAME too. The marker is <!--
-# strata-contract: values <fact id> <set> -->. The script updates the issue while the value is
-# there. It closes the issue when the run checked the fact and found no such value. A set is the
-# field that the fact names in reads.values.
+# strata-contract: values <fact id> <set> -->.
+#
+# The script updates the issue while the value is there. It closes the issue when the run checked
+# the fact and found no such value. A set is the field that the fact names in reads.values.
 #
 # A fact of the kind cloud is a call of the tool of a cloud. Its issue has the label of
 # --cloud-label (default cloud-drift) and the marker of its id. It says that the answer of the cloud
@@ -29,19 +31,21 @@
 # <!-- strata-contract: release <repo> <tag> -->. The issue asks to prove the facts again on the
 # new release. A person closes it.
 #
-# Each label is created when the repository has none. --dry-run prints each issue body and what
-# the script does, and calls no host.
+# The script creates each label when the repository has none. --dry-run prints each issue body and
+# what the script does, and calls no host.
 #
 # Exit 0 when no fact differs, no value is unknown, and no release is new. Exit 1 when one is: the
-# issues are handled.
-# Exit 3 when the document holds a fact or a release that the run could not check. The issues are
-# handled first, so a scheduled job shows the state too, and this exit says that they are done.
+# script handled the issues.
+#
+# Exit 3 when the document holds a fact or a release that the run could not check. The script
+# handles the issues first, so a scheduled job shows the state too, and this exit says that it did.
+#
 # Exit 2 when the document is not a strata-contract/1 document, or when a host call fails. The
 # script prints what the host said. The weekly job keeps the tags of the releases when the exit is
 # not 2. A release issue that a person closed then does not open again.
 #
 # The host layer is the one of scripts/ci/verify-report.sh. This script reads its functions from
-# that file, so a change to the host layer reaches this script. This script is not shipped, so it
+# that file, so a change to the host layer reaches this script. No release ships this script, so it
 # can read a file of the repository, which a shipped script cannot. Only GitHub is a host here.
 # The project of a checkout and the first line of a body come from github.sh, which upstream.sh
 # reads too.
@@ -118,7 +122,7 @@ if [ -z "$dry" ]; then
   [ -n "$repo" ] || repo=$(host repo)
   [ -n "$repo" ] || die "could not determine the project; pass --repo"
   host open_issues > "$work/issues.json"
-  # the issues of the calls of the clouds have their own label, so they are listed apart
+  # the issues of the calls of the clouds have their own label, so the script lists them apart
   if jq -e '[.facts[]? | select(.kind == "cloud" and (.outcome == "differs" or .outcome == "same"))] | length > 0' "$document" > /dev/null; then
     use_label cloud
     host open_issues > "$work/cloud-issues.json"

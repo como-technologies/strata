@@ -203,7 +203,7 @@ fn an_older_field_that_is_not_text_gives_an_error_that_names_the_key_of_the_file
             assert!(message.ends_with("Take the record again."), "{message}");
         }
     }
-    // the older field is wrong also when `errors` holds the entry that the move would keep
+    // the older field is wrong also when `errors` holds the entry that the move keeps
     let both = json!({
         "pendingRepaveError": 7,
         "errors": {"pendingRepave": "HTTP 403: newer"},
