@@ -15,10 +15,18 @@ use strata::api::PaletteApi;
 use strata::error::Error;
 use strata::model::validation::PaletteRefusal;
 use strata::text::query_value;
-use strata_preflight::probe::{Reader, is_answer};
 
-use crate::facts::subjects::{DEPTH, Origin, request_of, source, unsourced};
+use crate::facts::subjects::{DEPTH, Origin, Read, request_of, source, unsourced};
 use crate::facts::{Fact, Scope, fill, names};
+
+/// The status of the answer of Palette to a read of the VPCs of a region that AWS refuses.
+const VPCS_READ_STATUS: u16 = 500;
+
+/// The code of the answer of Palette to a read of the VPCs of a region that AWS refuses. Palette
+/// gives the same status and a code of its own to a region with no metadata of its instance types,
+/// `CloudInstanceMetadataNotFound`. That answer ends the entry of the one fact that asks for the
+/// types, and the search of a region does not read it.
+const VPCS_READ_ERROR: &str = "AwsVpcsReadError";
 
 /// Why a request failed.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,6 +61,14 @@ impl Failure {
     pub fn absent<'a>(&self, absent: &'a [String]) -> Option<&'a str> {
         let code = self.code.as_deref().filter(|_| self.status == Some(404))?;
         absent.iter().map(String::as_str).find(|a| *a == code)
+    }
+
+    /// True when AWS refused the read of the VPCs of a region: HTTP 500 with the code
+    /// [`VPCS_READ_ERROR`]. The list of the regions holds only the regions that answer a dry run with
+    /// the key of the account. A region that is off is not in it. AWS can still refuse the read for
+    /// a region of the list, and another region can serve.
+    fn refused_region(&self) -> bool {
+        self.status == Some(VPCS_READ_STATUS) && self.code.as_deref() == Some(VPCS_READ_ERROR)
     }
 }
 
@@ -114,9 +130,10 @@ type Bindings = BTreeMap<String, Option<String>>;
 
 /// The path of `template` for a subject of the tenant: a value for each placeholder.
 ///
-/// A placeholder with more than one value, such as the region, takes the first value that lets the
-/// rest of the request find its values. A request that lists the VPCs of that region needs a VPC,
-/// so the run tries the next region when one holds none.
+/// A placeholder with more than one value, such as the region, takes the first value that holds
+/// what its source asks. The rest of the request must find its values for that value too. A region
+/// holds a VPC, so each request of a region takes the first region that lists one. The run tries
+/// the next region when one holds none, and when AWS refuses the read of its VPCs.
 pub fn find<A: PaletteApi>(probe: &Probe<A>, facts: &[Fact], template: &str) -> Subject {
     fill_template(probe, facts, template, &Bindings::new(), 0)
 }
@@ -201,11 +218,12 @@ fn bind<A: PaletteApi>(
     let mut first_failure = None;
     for candidate in found {
         bindings.insert((*param).to_string(), candidate);
-        match bind(probe, facts, template, rest, bindings, depth) {
+        let served = holds(probe, facts, template, param, bindings, depth)
+            .and_then(|()| bind(probe, facts, template, rest, bindings, depth));
+        match served {
             Ok(()) => return Ok(()),
-            // the next value can still serve: a region with no VPC is no end of the search.
-            // Neither is a region that Palette refuses for this key, such as a region that the
-            // account has not enabled
+            // the next value can still serve: a region with no VPC is no end of the search. Neither
+            // is a region that AWS refuses
             Err(subject) if next_value_can_serve(&subject) => {
                 first_failure.get_or_insert(subject);
                 bindings.remove(*param);
@@ -213,28 +231,63 @@ fn bind<A: PaletteApi>(
             Err(other) => return Err(other),
         }
     }
+    let tried_note = format!("the run tried {tried} values for `{{{param}}}`");
     Err(match first_failure {
         // the first failure says why; the count says that the run tried the others
-        Some(Subject::Missing(why)) if tried > 1 => Subject::Missing(format!(
-            "{why}; the run tried {tried} values for `{{{param}}}`"
-        )),
+        Some(Subject::Missing(why)) if tried > 1 => {
+            Subject::Missing(format!("{why}; {tried_note}"))
+        }
+        Some(Subject::Failed(failure)) if tried > 1 => Subject::Failed(Failure {
+            message: format!("{}; {tried_note}", failure.message),
+            ..failure
+        }),
         Some(subject) => subject,
         None => Subject::Missing(no_source(param)),
     })
 }
 
 /// True when the next value of a placeholder can still give a subject, after `subject` stopped the
-/// first. This is the case when the tenant has no object. It is also the case when Palette refuses
-/// the request for this key with a 4xx that the run reads as an answer. A 401, a 429, a status of
-/// 5xx, or a failure of the network says nothing about the value, so it ends the search.
+/// first. This is the case when the tenant has no object. It is also the case when AWS refuses the
+/// read of the VPCs of a region: see [`Failure::refused_region`]. Palette gives no 4xx for that
+/// read, so any other failure says something about the route and not about the value. A 401, a 429,
+/// another status, or a failure of the network ends the search.
 fn next_value_can_serve(subject: &Subject) -> bool {
     match subject {
         Subject::Missing(_) => true,
-        Subject::Failed(failure) => failure
-            .status
-            .is_some_and(|status| is_answer(status, Reader::World)),
+        Subject::Failed(failure) => failure.refused_region(),
         Subject::Path(_) => false,
     }
+}
+
+/// Ok when the value just bound to `param` holds what its source asks of an entry. A source with no
+/// such ask serves each value. See [`Hold`](crate::facts::subjects::Hold).
+fn holds<A: PaletteApi>(
+    probe: &Probe<A>,
+    facts: &[Fact],
+    template: &str,
+    param: &str,
+    bindings: &Bindings,
+    depth: usize,
+) -> Result<(), Subject> {
+    let Some(Origin::Fact {
+        read: Read::Each {
+            holds: Some(hold), ..
+        },
+        ..
+    }) = source(template, param).map(|s| &s.origin)
+    else {
+        return Ok(());
+    };
+    listed(
+        probe,
+        facts,
+        hold.fact,
+        &hold.read(),
+        hold.param,
+        bindings,
+        depth,
+    )
+    .map(drop)
 }
 
 /// The values that the tenant offers for the placeholder `param` of `template`, in order, or why
@@ -247,13 +300,30 @@ fn candidates<A: PaletteApi>(
     bindings: &Bindings,
     depth: usize,
 ) -> Result<Vec<Option<String>>, Subject> {
-    let missing = |why: String| Subject::Missing(why);
     let Some(source) = source(template, param) else {
-        return Err(missing(no_source(param)));
+        return Err(Subject::Missing(no_source(param)));
     };
     let Origin::Fact { fact, read } = &source.origin else {
         return Ok(vec![None]);
     };
+    Ok(listed(probe, facts, fact, read, param, bindings, depth)?
+        .into_iter()
+        .map(Some)
+        .collect())
+}
+
+/// The values of `param` in the answer of the fact `fact`, read with `read`, in order. The request
+/// of the fact takes the values in `bindings`.
+fn listed<A: PaletteApi>(
+    probe: &Probe<A>,
+    facts: &[Fact],
+    fact: &str,
+    read: &Read,
+    param: &str,
+    bindings: &Bindings,
+    depth: usize,
+) -> Result<Vec<String>, Subject> {
+    let missing = |why: String| Subject::Missing(why);
     let Some(request) = request_of(facts, fact).filter(|_| depth < DEPTH) else {
         return Err(missing(format!(
             "the fact `{fact}` is not a request that finds a value for `{{{param}}}`"
@@ -288,8 +358,5 @@ fn candidates<A: PaletteApi>(
         )));
     }
     // the library escapes a value of a route as this call does, so the run sends what strata sends
-    Ok(found
-        .into_iter()
-        .map(|value| Some(query_value(value)))
-        .collect())
+    Ok(found.into_iter().map(query_value).collect())
 }

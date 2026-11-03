@@ -211,6 +211,13 @@ makes no claim that depends on them.
 - **The key pairs of an account.** The property route of EKS checks the key pair
   only with a `vpcId`, so `ssh-key-pair` reads the list for EKS. See
   [The list routes](validate-routes.md#the-list-routes).
+- **A region that AWS refuses for the VPC route.** The regions route lists only the regions that
+  answer a dry run of an EC2 call with the key of the account. A region that is off is not in the
+  list. The order of the list can change from one request to the next. AWS can still refuse the read
+  of the VPCs of a listed region. The VPC route then answers HTTP 500 with the code
+  `AwsVpcsReadError`, and not a 4xx. See [The list routes](validate-routes.md#the-list-routes).
+- **A region with no metadata of its instance types.** The instance type route answers HTTP 500 with
+  the code `CloudInstanceMetadataNotFound`. The rule `instance-offering` then reports the code.
 - **The cluster limit of the tenant.** A trial tenant has a limit, and
   `palette-validate` reports the refusal: see
   [The checks of the route](validate-routes.md#post-v1spectroclusterscloudtypevalidate).

@@ -23,6 +23,29 @@ pub(super) const CHART: &str = "podinfo";
 pub(super) const OCI_CSI_DIGEST: &str =
     "sha256:a746e14689085b14531566f9c9cfb2bc7716e96a394547ef50a1c52eab510c9e";
 
+/// The last sync of a registry, in the summary listing of its kind.
+#[derive(Clone, Copy)]
+pub(crate) enum RegistrySync {
+    /// The sync is complete.
+    Complete,
+    /// The sync stopped before its end and recovers, as the Bitnami registry of the tenant gives
+    /// it. The copy of the registry is the copy of the last complete sync.
+    Stopped,
+}
+
+/// The status of the last sync, as the summary listing gives it. The chapters share this one
+/// answer. A caller that needs a note of its own adds it to the result.
+pub(crate) fn registry_sync(sync: RegistrySync) -> Value {
+    match sync {
+        RegistrySync::Complete => json!({"isSyncSupported": true, "status": "Completed",
+            "lastRunTime": "2026-09-17T09:00:00.000Z", "lastSyncedTime": "2026-09-17T09:00:00.000Z",
+            "syncRecovery": {"syncRecoveryState": "Recovered"}}),
+        RegistrySync::Stopped => json!({"isSyncSupported": true, "status": "InProgress",
+            "lastRunTime": "2026-09-17T09:00:00.000Z", "lastSyncedTime": "2026-08-29T00:00:11.032Z",
+            "syncRecovery": {"syncRecoveryState": "Recovering", "message": "sync interrupted"}}),
+    }
+}
+
 impl Tenant {
     /// A Helm registry that is private, `charts-auth`. Palette does not sync it, so the pack
     /// listing has no chart of it until a profile pins one.
@@ -101,23 +124,15 @@ impl Tenant {
                 {"name": "Public Repo", "uid": PUBLIC_REPO, "kind": "pack"},
                 {"name": "Palette Registry", "uid": PALETTE_REGISTRY, "kind": "oci"}]}),
         );
-        // the last sync of each registry, as v1RegistrySyncStatus gives it in the summary listing
-        // of its kind. The sync of the OCI registry stopped before its end and recovers, as the
-        // Bitnami registry of the tenant gives it. Its copy is the copy of the last complete sync
-        let synced = json!({"isSyncSupported": true, "status": "Completed",
-            "lastRunTime": "2026-09-17T09:00:00.000Z", "lastSyncedTime": "2026-09-17T09:00:00.000Z",
-            "syncRecovery": {"syncRecoveryState": "Recovered"}});
-        let stopped = json!({"isSyncSupported": true, "status": "InProgress",
-            "lastRunTime": "2026-09-17T09:00:00.000Z", "lastSyncedTime": "2026-08-29T00:00:11.032Z",
-            "syncRecovery": {"syncRecoveryState": "Recovering", "message": "sync interrupted"}});
         for (kind, uid, sync) in [
-            ("pack", PUBLIC_REPO, &synced),
-            ("oci", PALETTE_REGISTRY, &stopped),
+            ("pack", PUBLIC_REPO, RegistrySync::Complete),
+            ("oci", PALETTE_REGISTRY, RegistrySync::Stopped),
         ] {
             self.write(
                 project,
                 &registry_summary_route(kind),
-                &json!({"items": [{"metadata": {"uid": uid}, "status": {"sync": sync}}]}),
+                &json!({"items": [{"metadata": {"uid": uid},
+                    "status": {"sync": registry_sync(sync)}}]}),
             );
         }
         let packs = self.repo.join("examples/packs");
@@ -325,6 +340,7 @@ fn csi_entity_in_oci(entity: &Value) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::files::files_under;
 
     /// A listing item of csi-aws-ebs with `values` when `kept`, as the stand-in keeps the content
     /// of a few versions only.
@@ -385,6 +401,37 @@ mod tests {
         let mut listing = json!({"items": [item("1.65.0", false)]});
         add_csi_to_oci(&mut listing);
         assert_eq!(listing["items"].as_array().map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn the_summaries_of_the_tenant_hold_the_sync_answer_of_registry_sync() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), &crate::repository());
+        tenant.registries("dev");
+        for (kind, sync) in [
+            ("pack", RegistrySync::Complete),
+            ("oci", RegistrySync::Stopped),
+        ] {
+            let summary = tenant.read("dev", &registry_summary_route(kind));
+            assert_eq!(summary["items"][0]["status"]["sync"], registry_sync(sync));
+        }
+    }
+
+    #[test]
+    fn no_other_file_of_xtask_writes_the_sync_answer_of_a_registry() {
+        let sources = crate::repository().join("xtask/src");
+        let copies: Vec<_> = files_under(&sources, "rs")
+            .into_iter()
+            .filter(|file| !file.ends_with("tenant/registries.rs"))
+            .filter(|file| {
+                std::fs::read_to_string(file).is_ok_and(|text| text.contains("syncRecoveryState"))
+            })
+            .collect();
+        assert!(
+            copies.is_empty(),
+            "a second copy of the sync answer: {copies:?}. Call `registry_sync`, and add a note \
+             to the result"
+        );
     }
 
     #[test]

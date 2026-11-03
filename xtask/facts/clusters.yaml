@@ -22,7 +22,7 @@ facts:
         - status.fips.mode
         - status.repave.state
       values:
-        status.state: [Running, Provisioning, Pending, Importing, Deleting, Deleted, Error]
+        status.state: [Running, Provisioning, Pending, Importing, Deleting, Deleted, Error, Adopting, Unknown, Paired, Pairing]
       sets:
         status.state: ClusterState
     stand_in:
@@ -1374,6 +1374,8 @@ facts:
     reads:
       values:
         status.state: [Pending, Provisioning, Running, Deleting, Deleted, Error, Importing, Adopting, Unknown, Paired, Pairing]
+      sets:
+        status.state: ClusterState
     live: []
     unchecked: Runs show Running, Provisioning, Deleting, and Deleted. No run shows the other states that the page lists.
     pages:

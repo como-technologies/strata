@@ -272,10 +272,19 @@ and the `{uid}` of `/v1/packs/{uid}` is a pack. The pack has no source, and the 
 request. The table of the sources is `xtask/src/facts/subjects.rs`.
 
 A name can have more than one value, such as the regions. The run takes the first region
-that lets the rest of the request find its values. The security groups need a VPC, so the run asks
-the VPCs of each region in order, until one region lists a VPC. The skip reason then names the number
-of regions that the run tried. A region that Palette refuses for the key, with a 4xx, is no end of
-the search. A 401, a 429, or a 5xx stops it.
+that holds a VPC. The security groups need that VPC. The key pairs, the instance types, and the VPCs
+take the same region, so one region answers all the facts of a region. The run asks the VPCs of each
+region in order, until one region lists a VPC. The skip reason then names the number of regions that
+the run tried.
+
+AWS can refuse the read of the VPCs of a region that the list holds. Palette then answers HTTP 500
+with the code `AwsVpcsReadError`. That region is no end of the search. Any other failure stops it,
+also a 4xx, because Palette gives no 4xx for this read.
+
+If AWS refuses each region, the facts of a region are `error`. The reason names the first refusal and
+the number of regions. The code `CloudInstanceMetadataNotFound` is HTTP 500 too. It ends only the
+fact of the instance types, with the outcome `error`. See
+[What the source of Palette says](../internals/palette/limits.md#what-the-source-of-palette-says).
 
 `{aws,gcp,azure}` lists the choices of a segment. The run sends one request for each choice, and
 joins the results in one entry:
@@ -289,6 +298,11 @@ A choice needs a source for each of its names. The lab holds an AWS account, so 
 choice `aws` of `validate-instance-types`. The route of AWS takes no subscription, so the source
 of `{subscriptionId}` omits that pair from the query. The choices `gcp` and `azure` have no source
 yet, and the reason says so.
+
+One fact lists the fields of a route that more than one cloud serves. The three clouds give an
+instance type in one model, so `validate-instance-types` lists its fields one time. A rule of one
+cloud can read fewer of them. Only `instance-offering` reads `nonSupportedZones`, and it has no
+engine for Azure. No fact of one cloud repeats the list.
 
 ### The scope of a request
 
@@ -339,7 +353,7 @@ the set:
 
 | Key | The set | The run reports |
 | --- | --- | --- |
-| `values` | A closed set. Palette gives no other value, and strata tells the values apart. | An unknown value, for a value that neither the fact nor the stand-in names. See [The unknown values](#the-unknown-values). |
+| `values` | A closed set. Palette gives no other value. The list names each value that Palette gives, also a value that strata does not act on. | An unknown value, for a value that neither the fact nor the stand-in names. See [The unknown values](#the-unknown-values). |
 | `names` | The names that strata needs from a set that Palette can extend. | A difference of the kind `name`, for a name of the fact that the answer lacks. A name that the fact does not list is no difference. |
 
 A value that a closed set does not name is an unknown value and nothing else. It is not also a
@@ -400,6 +414,10 @@ as `status.state` to `ClusterState`. The check compares the list with the values
 A value that one has and the other lacks is a fault, so a new state in the type shows in the check.
 A word that only strata gives is in the type and not in the list, such as the pack state `absent`.
 `STRATA_ONLY` in `xtask/src/facts/sets.rs` names it. A list that is a part of a set names no type.
+
+A state that Palette gives and strata does not act on is in the list, not in the type. An example is
+the cluster state `Adopting`. `PALETTE_ONLY` in the same file names it. The check fails when the type
+gets such a state and `PALETTE_ONLY` still names it.
 
 The run reads one object for each fact, such as the first profile of the listing. It finds a new
 value when that object holds it.

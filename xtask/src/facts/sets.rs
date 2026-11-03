@@ -32,6 +32,16 @@ const STRATA_ONLY: &[(&str, &str)] = &[
     ("ProfileType", "pack"),
 ];
 
+/// The values of a closed set that Palette gives and strata does not act on. The type lacks them on
+/// purpose, so the list of a fact names them and the type does not. Each is the set and the value.
+/// Palette gives four more states of a cluster than `ClusterState` holds.
+const PALETTE_ONLY: &[(&str, &str)] = &[
+    ("ClusterState", "Adopting"),
+    ("ClusterState", "Unknown"),
+    ("ClusterState", "Paired"),
+    ("ClusterState", "Pairing"),
+];
+
 /// A closed set of strata: the name of its type and each value, as the documents name it.
 #[derive(Clone, Debug)]
 pub struct Set {
@@ -133,16 +143,18 @@ fn named(sources: &Sources) -> Vec<String> {
 }
 
 /// One message for each value that the `list` of the fact `id` at `field` and the `set` do not
-/// share. A word of strata is the set alone: [`STRATA_ONLY`].
+/// share. A word of strata is the set alone: [`STRATA_ONLY`]. A value that Palette gives and the type
+/// lacks is the list alone: [`PALETTE_ONLY`].
 fn agree(id: &str, field: &str, list: &[String], set: &Set) -> Vec<String> {
     let name = &set.name;
     let strata_only = |value: &str| STRATA_ONLY.contains(&(name.as_str(), value));
+    let palette_only = |value: &str| PALETTE_ONLY.contains(&(name.as_str(), value));
     let extra = list
         .iter()
-        .filter(|value| !set.values.contains(value))
+        .filter(|value| !set.values.contains(value) && !palette_only(value))
         .map(|value| {
             format!(
-                "fact `{id}`: it lists `{value}` at `{field}`, and the set {name} has no such value: add it to the type, or take it from the list"
+                "fact `{id}`: it lists `{value}` at `{field}`, and the set {name} has no such value: add it to the type, name it in `PALETTE_ONLY` when Palette gives it and strata does not act on it, or take it from the list"
             )
         });
     let lacking = set
@@ -172,7 +184,25 @@ pub fn check(sources: &Sources) -> Vec<String> {
         bad.extend(listed(sources, read));
     }
     bad.extend(named(sources));
+    bad.extend(palette_only_held(&sources.closed_sets));
     bad
+}
+
+/// The words of [`PALETTE_ONLY`] that a type holds now. A type that gets such a value needs no
+/// entry, and the list must keep the value.
+fn palette_only_held(sets: &[Set]) -> Vec<String> {
+    PALETTE_ONLY
+        .iter()
+        .filter(|(name, value)| {
+            sets.iter()
+                .any(|set| set.name == *name && set.values.iter().any(|v| v == value))
+        })
+        .map(|(name, value)| {
+            format!(
+                "`PALETTE_ONLY` names `{value}` of {name}, and the type has it now: take it from `PALETTE_ONLY`"
+            )
+        })
+        .collect()
 }
 
 /// The faults of the list of one read.

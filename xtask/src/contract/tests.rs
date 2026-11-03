@@ -218,9 +218,11 @@ fn outcome(contract: &Contract, id: &str) -> Outcome {
         .outcome
 }
 
+/// A client of the documents `docs`, by route. A route names its query after an `@`, as the file of
+/// the stand-in does.
 fn memory(docs: &[(&str, Value)]) -> MemoryApi {
     docs.iter().fold(MemoryApi::new(), |api, (route, doc)| {
-        api.with(format!("/{route}"), doc.clone())
+        api.with(format!("/{}", route.replace('@', "?")), doc.clone())
     })
 }
 
@@ -481,7 +483,7 @@ fn each_source_names_a_get_request_of_the_list_whose_own_placeholders_have_a_sou
         );
         match read {
             Read::Pointer(pointer) => assert!(pointer.starts_with('/'), "{pointer} is no pointer"),
-            Read::Each { list, value } => {
+            Read::Each { list, value, .. } => {
                 assert!(
                     list.starts_with('/') && value.starts_with('/'),
                     "{list} {value}"
@@ -1297,10 +1299,11 @@ fn a_region_with_no_vpc_has_no_subject_for_the_security_groups_and_the_reason_sa
     }
 }
 
-/// The documents behind `validate-key-pairs`: the account, its regions, and the key pairs of the
-/// first region. The stand-in serves the key pairs only with the account in the query.
+/// The documents behind `validate-key-pairs`: the account, its regions, the VPCs of the first region,
+/// and the key pairs of that region. The stand-in serves the key pairs only with the account in the
+/// query.
 fn key_pair_documents() -> Vec<(&'static str, Value)> {
-    let mut docs: Vec<_> = aws_list_documents().into_iter().take(2).collect();
+    let mut docs: Vec<_> = aws_list_documents().into_iter().take(3).collect();
     docs.push((
         "v1/clouds/aws/regions/us-east-2/keypairs@cloudAccountUid=acc1",
         json!({"keyNames": ["strata-lab"]}),
@@ -2099,6 +2102,11 @@ fn a_profile_type_and_a_provider_that_the_fact_names_are_no_unknown_values() {
 
 // ---- the regions, the packs, and the alternatives of a request ------------------------------
 
+/// The path that answers the VPCs of `region` for the account `acc1`.
+fn vpcs_path(region: &str) -> String {
+    format!("/v1/clouds/aws/regions/{region}/vpcs?cloudAccountUid=acc1")
+}
+
 /// A tenant with one AWS account and the regions `regions`, with the VPCs of each region.
 fn regions_with(regions: &[(&str, Value)]) -> MemoryApi {
     let names: Vec<Value> = regions
@@ -2115,12 +2123,7 @@ fn regions_with(regions: &[(&str, Value)]) -> MemoryApi {
                 "/v1/clouds/aws/regions?cloudAccountUid=acc1",
                 json!({"regions": names}),
             ),
-        |api, (name, vpcs)| {
-            api.with(
-                format!("/v1/clouds/aws/regions/{name}/vpcs?cloudAccountUid=acc1"),
-                vpcs.clone(),
-            )
-        },
+        |api, (name, vpcs)| api.with(vpcs_path(name), vpcs.clone()),
     )
 }
 
@@ -2198,18 +2201,20 @@ fn a_failed_request_for_the_vpcs_of_a_region_stops_the_search() {
     }
 }
 
+/// The answer of Palette when AWS refuses the read of the VPCs of a region. The test keeps its own
+/// copy of the code, as Palette writes it, so a change of the code of the search shows.
+const VPCS_REFUSED: &str =
+    r#"{"code":"AwsVpcsReadError","message":"Failed to read vpcs for region 'af-south-1'"}"#;
+
 #[test]
-fn a_region_that_palette_refuses_for_the_key_is_no_end_of_the_search() {
-    // an account that has not turned on a region gets a 4xx for its VPCs
+fn a_region_that_aws_refuses_is_no_end_of_the_search() {
+    // the listing holds the regions that answer a dry run with the key. A region that is off is
+    // not in it. AWS can still refuse the VPCs of a region of the listing
     let api = regions_with(&[
         ("af-south-1", json!({"vpcs": []})),
         ("us-west-2", json!({"vpcs": [{"vpcId": "vpc-9"}]})),
     ])
-    .failing(
-        "/v1/clouds/aws/regions/af-south-1/vpcs?cloudAccountUid=acc1",
-        403,
-        "{}",
-    );
+    .failing(vpcs_path("af-south-1"), 500, VPCS_REFUSED);
     let probe = subject::Probe::new(&api, &api);
     let facts = real_facts();
     let template = request_of(&facts, "validate-security-groups").unwrap();
@@ -2220,16 +2225,132 @@ fn a_region_that_palette_refuses_for_the_key_is_no_end_of_the_search() {
                 .to_string()
         )
     );
-    // when no region serves, the reason is the first refusal
-    let api = regions_with(&[("af-south-1", json!({"vpcs": []}))]).failing(
-        "/v1/clouds/aws/regions/af-south-1/vpcs?cloudAccountUid=acc1",
-        403,
-        "{}",
-    );
+    // when no region serves, the reason is the first refusal, and it counts the regions
+    let api = regions_with(&[
+        ("af-south-1", json!({"vpcs": []})),
+        ("me-south-1", json!({"vpcs": []})),
+    ])
+    .failing(vpcs_path("af-south-1"), 500, VPCS_REFUSED)
+    .failing(vpcs_path("me-south-1"), 500, VPCS_REFUSED);
     let probe = subject::Probe::new(&api, &api);
     match subject::find(&probe, &facts, template) {
-        subject::Subject::Failed(failure) => assert_eq!(failure.status, Some(403)),
+        subject::Subject::Failed(failure) => {
+            assert_eq!(failure.status, Some(500));
+            assert_eq!(failure.code.as_deref(), Some("AwsVpcsReadError"));
+            assert!(failure.message.contains("af-south-1"), "{failure:?}");
+            assert!(
+                failure
+                    .message
+                    .contains("the run tried 2 values for `{region}`"),
+                "{failure:?}"
+            );
+        }
         other => panic!("expected a failure, got {other:?}"),
+    }
+}
+
+#[test]
+fn a_failure_that_is_not_the_refusal_of_aws_for_the_vpcs_of_a_region_ends_the_search() {
+    // Palette gives no 4xx for the read of the VPCs of a region. A 4xx says that the route or the
+    // key changed, and the next region cannot tell otherwise. The same holds for the code of a
+    // region with no metadata of its instance types, and for a 500 with no code
+    let facts = real_facts();
+    let template = request_of(&facts, "validate-security-groups").unwrap();
+    for (status, body) in [
+        (403, "{}"),
+        (404, r#"{"code":"ResourceNotFound"}"#),
+        (500, r#"{"code":"CloudInstanceMetadataNotFound"}"#),
+        (500, "{}"),
+    ] {
+        let api = regions_with(&[
+            ("af-south-1", json!({"vpcs": []})),
+            ("us-west-2", json!({"vpcs": [{"vpcId": "vpc-9"}]})),
+        ])
+        .failing(vpcs_path("af-south-1"), status, body);
+        let probe = subject::Probe::new(&api, &api);
+        match subject::find(&probe, &facts, template) {
+            subject::Subject::Failed(failure) => assert_eq!(failure.status, Some(status)),
+            other => panic!("HTTP {status} {body}: expected a failure, got {other:?}"),
+        }
+        assert_eq!(
+            api.calls(&vpcs_path("us-west-2")),
+            0,
+            "HTTP {status} {body}"
+        );
+    }
+    // the same code with another status is no refusal of AWS either
+    let api = regions_with(&[
+        ("af-south-1", json!({"vpcs": []})),
+        ("us-west-2", json!({"vpcs": [{"vpcId": "vpc-9"}]})),
+    ])
+    .failing(vpcs_path("af-south-1"), 502, VPCS_REFUSED);
+    let probe = subject::Probe::new(&api, &api);
+    assert!(matches!(
+        subject::find(&probe, &facts, template),
+        subject::Subject::Failed(_)
+    ));
+}
+
+/// The documents of a tenant with one account and two regions. The second region has a VPC with its
+/// groups, its key pairs, and its instance types. The tests refuse the VPCs of the first region.
+fn refused_region_documents() -> Vec<(&'static str, Value)> {
+    let mut docs = aws_list_documents();
+    docs.extend(key_pair_documents().split_off(3));
+    docs.extend(instance_type_documents().split_off(3));
+    docs
+}
+
+#[test]
+fn a_region_that_aws_refuses_gives_each_fact_of_a_region_the_next_region() {
+    let docs = refused_region_documents();
+    let (_root, stand_in) = stand_in(&docs);
+    // the first region of the listing is the region that AWS refuses
+    let mut live = docs.clone();
+    live[1] = (
+        "v1/clouds/aws/regions@cloudAccountUid=acc1",
+        json!({"regions": [{"name": "af-south-1"}, {"name": "us-east-2"}]}),
+    );
+    let api = memory(&live).failing(vpcs_path("af-south-1"), 500, VPCS_REFUSED);
+    let contract = contract_of(&real_facts(), &stand_in, &api);
+    for id in [
+        "validate-vpcs",
+        "validate-security-groups",
+        "validate-key-pairs",
+        "validate-instance-types",
+    ] {
+        let entry = contract.facts.iter().find(|e| e.id == id).unwrap();
+        assert_eq!(entry.outcome, Outcome::Same, "{id}: {entry:?}");
+    }
+    assert_eq!(contract.exit_code(), 0);
+}
+
+#[test]
+fn when_aws_refuses_each_region_the_facts_of_a_region_all_end_in_the_one_error() {
+    let docs = refused_region_documents();
+    let (_root, stand_in) = stand_in(&docs);
+    let mut live = docs.clone();
+    live[1] = (
+        "v1/clouds/aws/regions@cloudAccountUid=acc1",
+        json!({"regions": [{"name": "af-south-1"}, {"name": "us-east-2"}]}),
+    );
+    let api = memory(&live)
+        .failing(vpcs_path("af-south-1"), 500, VPCS_REFUSED)
+        .failing(vpcs_path("us-east-2"), 500, VPCS_REFUSED);
+    let contract = contract_of(&real_facts(), &stand_in, &api);
+    for id in [
+        "validate-vpcs",
+        "validate-security-groups",
+        "validate-key-pairs",
+        "validate-instance-types",
+    ] {
+        let entry = contract.facts.iter().find(|e| e.id == id).unwrap();
+        assert_eq!(entry.outcome, Outcome::Error, "{id}: {entry:?}");
+        let reason = entry.reason.as_deref().unwrap_or_default();
+        assert!(reason.contains("AwsVpcsReadError"), "{id}: {reason}");
+        assert!(
+            reason.contains("the run tried 2 values for `{region}`"),
+            "{id}: {reason}"
+        );
     }
 }
 
@@ -2256,7 +2377,7 @@ fn the_registry_uid_is_the_subject_of_a_pack_in_a_registry_and_never_of_a_pack()
 
 #[test]
 fn a_pair_of_the_query_that_the_route_does_not_take_goes_out_of_the_request() {
-    let api = regions_with(&[("us-east-2", json!({"vpcs": []}))]);
+    let api = regions_with(&[("us-east-2", json!({"vpcs": [{"vpcId": "vpc-1"}]}))]);
     let probe = subject::Probe::new(&api, &api);
     let facts = real_facts();
     let found = subject::find(
@@ -2273,10 +2394,11 @@ fn a_pair_of_the_query_that_the_route_does_not_take_goes_out_of_the_request() {
     );
 }
 
-/// The documents behind `validate-instance-types` for AWS: the account, the regions, and the types
-/// of the first region. The stand-in serves the types only with the query that the rule sends.
+/// The documents behind `validate-instance-types` for AWS: the account, the regions, the VPCs of the
+/// first region, and the types of that region. The stand-in serves the types only with the query that
+/// the rule sends.
 fn instance_type_documents() -> Vec<(&'static str, Value)> {
-    let mut docs: Vec<_> = aws_list_documents().into_iter().take(2).collect();
+    let mut docs: Vec<_> = aws_list_documents().into_iter().take(3).collect();
     docs.push((
         "v1/clouds/aws/regions/us-east-2/instancetypes@cloudAccountUid=acc1&cpuGtEq=0&memoryGtEq=0",
         json!({"instanceTypes": [

@@ -793,6 +793,38 @@ fn the_list_of_the_repository_agrees_with_the_book_the_live_scripts_and_the_rule
 }
 
 #[test]
+fn the_fields_of_the_instance_type_route_of_the_three_clouds_are_in_one_fact() {
+    let (facts, bad) = load(&crate::repository().join("xtask/facts"));
+    assert!(bad.is_empty(), "{bad:?}");
+    let route = facts
+        .iter()
+        .find(|fact| fact.id == "validate-instance-types")
+        .unwrap();
+    // one request names the three clouds, so no fact of a cloud repeats its fields
+    assert!(
+        route
+            .get_path()
+            .unwrap()
+            .contains("/clouds/{aws,gcp,azure}/"),
+        "{:?}",
+        route.request
+    );
+    let copies: Vec<&str> = facts
+        .iter()
+        .filter(|fact| fact.id != route.id)
+        .filter(|fact| {
+            route
+                .reads
+                .fields
+                .iter()
+                .all(|f| fact.reads.fields.contains(f))
+        })
+        .map(|fact| fact.id.as_str())
+        .collect();
+    assert_eq!(copies, Vec::<&str>::new());
+}
+
+#[test]
 fn the_request_of_each_fact_holds_the_query_that_its_rules_send() {
     // the facts whose request lacked a query of the path of their rules, with the names that the
     // rules send
@@ -990,6 +1022,70 @@ fn a_set_with_a_value_that_the_list_lacks_is_a_fault_unless_only_strata_gives_th
         vec!["deprecated".to_string()],
     );
     assert_eq!(faults_of(&sources), Vec::<String>::new());
+}
+
+/// The world of [`world_with_a_set_read`] with the set `ClusterState` and its list in the fact: the
+/// type holds two states, and the list holds `list`.
+fn world_with_a_cluster_state_list(list: &[&str]) -> Sources {
+    let mut sources = world_with_a_set_read();
+    sources.closed_sets = vec![Set {
+        name: "ClusterState".to_string(),
+        values: ["Running", "Error"].map(String::from).to_vec(),
+    }];
+    sources.set_reads.clear();
+    sources.cloud.code.clear();
+    sources.facts[0].reads.sets = BTreeMap::from([(
+        "spec.published.type".to_string(),
+        "ClusterState".to_string(),
+    )]);
+    sources.facts[0].reads.values.insert(
+        "spec.published.type".to_string(),
+        list.iter().map(|v| (*v).to_string()).collect(),
+    );
+    sources
+}
+
+#[test]
+fn a_list_may_name_a_state_that_palette_gives_and_the_type_lacks_when_palette_only_names_it() {
+    // `Adopting` is a state of Palette that strata does not act on
+    let sources = world_with_a_cluster_state_list(&["Running", "Error", "Adopting"]);
+    assert_eq!(faults_of(&sources), Vec::<String>::new());
+    // a state that no table names is still a fault
+    let sources = world_with_a_cluster_state_list(&["Running", "Error", "Hibernating"]);
+    assert_one_fault(
+        &sources,
+        "it lists `Hibernating` at `spec.published.type`, and the set ClusterState has no such value",
+    );
+}
+
+#[test]
+fn a_state_of_palette_only_that_the_type_holds_now_is_a_fault() {
+    let mut sources = world_with_a_cluster_state_list(&["Running", "Error", "Adopting"]);
+    sources.closed_sets[0].values.push("Adopting".to_string());
+    assert_one_fault(
+        &sources,
+        "`PALETTE_ONLY` names `Adopting` of ClusterState, and the type has it now",
+    );
+}
+
+#[test]
+fn the_two_lists_of_the_states_of_a_cluster_name_the_same_states_and_the_type_holds_a_part() {
+    let sources = Sources::read(&crate::repository(), None).0;
+    let list = |id: &str| -> BTreeSet<String> {
+        let fact = sources.facts.iter().find(|f| f.id == id).unwrap();
+        assert_eq!(fact.reads.sets["status.state"], "ClusterState", "{id}");
+        fact.reads.values["status.state"].iter().cloned().collect()
+    };
+    let document = list("cluster-document");
+    assert_eq!(document, list("cluster-state-values"));
+    let held = sources
+        .closed_sets
+        .iter()
+        .find(|s| s.name == "ClusterState")
+        .unwrap();
+    assert!(held.values.iter().all(|v| document.contains(v)));
+    // Palette gives the four states that strata does not act on
+    assert_eq!(document.len(), held.values.len() + 4);
 }
 
 #[test]

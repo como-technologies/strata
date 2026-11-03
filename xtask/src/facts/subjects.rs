@@ -23,10 +23,11 @@ pub(crate) enum Read {
     /// The text at a JSON pointer. The first entry of a list is the subject.
     Pointer(&'static str),
     /// The text at `value` in each entry of the array at `list`. The run tries the entries in
-    /// order, until the rest of the request finds its values.
+    /// order, until the rest of the request finds its values, and the entry holds what `holds` asks.
     Each {
         list: &'static str,
         value: &'static str,
+        holds: Option<Hold>,
     },
     /// The cloud type of a cluster document. Strata reads it with one rule, so the run asks the
     /// route of the cloud config as strata does.
@@ -38,7 +39,7 @@ impl Read {
     pub(crate) fn values<'a>(&self, document: &'a Value) -> Vec<&'a str> {
         match self {
             Read::Pointer(pointer) => vec![str_at(document, pointer)],
-            Read::Each { list, value } => arr(document, list)
+            Read::Each { list, value, .. } => arr(document, list)
                 .iter()
                 .map(|entry| str_at(entry, value))
                 .collect(),
@@ -50,9 +51,30 @@ impl Read {
     pub(crate) fn lacks(&self) -> String {
         match self {
             Read::Pointer(pointer) => format!("nothing at {pointer}"),
-            Read::Each { list, value } => format!("nothing at {value} in each entry of {list}"),
+            Read::Each { list, value, .. } => format!("nothing at {value} in each entry of {list}"),
             Read::CloudType => "no cloud type".to_string(),
         }
+    }
+}
+
+/// What an entry of a list must hold before the run takes it. The answer of a fact has a value at
+/// `pointer`. The run finds the answer with the values bound so far. The regions need a VPC, so the
+/// facts of one region all take the first region that holds one.
+#[derive(Clone, Copy)]
+pub(crate) struct Hold {
+    /// The name of the placeholder that the value serves. The reason of a run that finds none names
+    /// it.
+    pub(crate) param: &'static str,
+    /// The fact that gives the value.
+    pub(crate) fact: &'static str,
+    /// The JSON pointer of the value in the answer of the fact.
+    pub(crate) pointer: &'static str,
+}
+
+impl Hold {
+    /// How the run reads the value in the answer of the fact.
+    pub(crate) const fn read(&self) -> Read {
+        Read::Pointer(self.pointer)
     }
 }
 
@@ -84,9 +106,24 @@ pub(crate) const CLUSTER_LISTING: &str = "cluster-listing";
 /// The id of the fact that gives the document of a cluster.
 const CLUSTER_DOCUMENT: &str = "cluster-document";
 
+/// The first VPC of a region. The security groups need it. The facts of one region need it too, so
+/// the run takes for all of them the first region that holds a VPC.
+const FIRST_VPC: Hold = Hold {
+    param: "vpcId",
+    fact: "validate-vpcs",
+    pointer: "/vpcs/0/vpcId",
+};
+
+/// The regions of the account, in order. A region serves when it holds a VPC.
+const REGIONS: Read = Read::Each {
+    list: "/regions",
+    value: "/name",
+    holds: Some(FIRST_VPC),
+};
+
 /// The shortest way to the subject of each request that the run sends. The first entry of a
 /// listing is the subject, so the placeholders of one request come from one object. The regions are
-/// the exception: the run tries each region in order.
+/// the exception: the run tries each region in order, until one holds a VPC.
 pub(crate) const SOURCES: &[Source] = &[
     Source {
         route: "/v1/spectroclusters/{uid}",
@@ -150,10 +187,7 @@ pub(crate) const SOURCES: &[Source] = &[
         param: "region",
         origin: Origin::Fact {
             fact: "validate-aws-regions",
-            read: Read::Each {
-                list: "/regions",
-                value: "/name",
-            },
+            read: REGIONS,
         },
     },
     Source {
@@ -169,18 +203,15 @@ pub(crate) const SOURCES: &[Source] = &[
         param: "region",
         origin: Origin::Fact {
             fact: "validate-aws-regions",
-            read: Read::Each {
-                list: "/regions",
-                value: "/name",
-            },
+            read: REGIONS,
         },
     },
     Source {
         route: "/v1/clouds/aws/securitygroups",
         param: "vpcId",
         origin: Origin::Fact {
-            fact: "validate-vpcs",
-            read: Read::Pointer("/vpcs/0/vpcId"),
+            fact: FIRST_VPC.fact,
+            read: FIRST_VPC.read(),
         },
     },
     Source {
@@ -355,13 +386,21 @@ fn stale(table: &[Source], facts: &[Fact]) -> Vec<String> {
                 source.param, source.route
             ));
         }
-        if let Origin::Fact { fact, .. } = &source.origin
-            && request_of(facts, fact).is_none()
-        {
-            bad.push(format!(
-                "the source for `{{{}}}` of `{}` reads the fact `{fact}`, and it is no GET request of the list",
-                source.param, source.route
-            ));
+        if let Origin::Fact { fact, read } = &source.origin {
+            let held = match read {
+                Read::Each {
+                    holds: Some(hold), ..
+                } => Some(hold.fact),
+                _ => None,
+            };
+            for named in std::iter::once(*fact).chain(held) {
+                if request_of(facts, named).is_none() {
+                    bad.push(format!(
+                        "the source for `{{{}}}` of `{}` reads the fact `{named}`, and it is no GET request of the list",
+                        source.param, source.route
+                    ));
+                }
+            }
         }
     }
     bad
