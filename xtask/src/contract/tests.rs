@@ -218,9 +218,11 @@ fn outcome(contract: &Contract, id: &str) -> Outcome {
         .outcome
 }
 
+/// A client of the documents `docs`, by route. A route names its query after an `@`, as the file of
+/// the stand-in does.
 fn memory(docs: &[(&str, Value)]) -> MemoryApi {
     docs.iter().fold(MemoryApi::new(), |api, (route, doc)| {
-        api.with(format!("/{route}"), doc.clone())
+        api.with(format!("/{}", route.replace('@', "?")), doc.clone())
     })
 }
 
@@ -2100,6 +2102,11 @@ fn a_profile_type_and_a_provider_that_the_fact_names_are_no_unknown_values() {
 
 // ---- the regions, the packs, and the alternatives of a request ------------------------------
 
+/// The path that answers the VPCs of `region` for the account `acc1`.
+fn vpcs_path(region: &str) -> String {
+    format!("/v1/clouds/aws/regions/{region}/vpcs?cloudAccountUid=acc1")
+}
+
 /// A tenant with one AWS account and the regions `regions`, with the VPCs of each region.
 fn regions_with(regions: &[(&str, Value)]) -> MemoryApi {
     let names: Vec<Value> = regions
@@ -2116,12 +2123,7 @@ fn regions_with(regions: &[(&str, Value)]) -> MemoryApi {
                 "/v1/clouds/aws/regions?cloudAccountUid=acc1",
                 json!({"regions": names}),
             ),
-        |api, (name, vpcs)| {
-            api.with(
-                format!("/v1/clouds/aws/regions/{name}/vpcs?cloudAccountUid=acc1"),
-                vpcs.clone(),
-            )
-        },
+        |api, (name, vpcs)| api.with(vpcs_path(name), vpcs.clone()),
     )
 }
 
@@ -2199,14 +2201,10 @@ fn a_failed_request_for_the_vpcs_of_a_region_stops_the_search() {
     }
 }
 
-/// The answer of Palette when AWS refuses the read of the VPCs of a region.
+/// The answer of Palette when AWS refuses the read of the VPCs of a region. The test keeps its own
+/// copy of the code, as Palette writes it, so a change of the code of the search shows.
 const VPCS_REFUSED: &str =
     r#"{"code":"AwsVpcsReadError","message":"Failed to read vpcs for region 'af-south-1'"}"#;
-
-/// The path that answers the VPCs of `region` for the account `acc1`.
-fn vpcs_path(region: &str) -> String {
-    format!("/v1/clouds/aws/regions/{region}/vpcs?cloudAccountUid=acc1")
-}
 
 #[test]
 fn a_region_that_aws_refuses_is_no_end_of_the_search() {
@@ -2302,13 +2300,6 @@ fn refused_region_documents() -> Vec<(&'static str, Value)> {
     docs
 }
 
-/// A client of the documents `docs`, which name a query after an `@`, as the stand-in does.
-fn memory_of_files(docs: &[(&str, Value)]) -> MemoryApi {
-    docs.iter().fold(MemoryApi::new(), |api, (route, doc)| {
-        api.with(format!("/{}", route.replace('@', "?")), doc.clone())
-    })
-}
-
 #[test]
 fn a_region_that_aws_refuses_gives_each_fact_of_a_region_the_next_region() {
     let docs = refused_region_documents();
@@ -2319,7 +2310,7 @@ fn a_region_that_aws_refuses_gives_each_fact_of_a_region_the_next_region() {
         "v1/clouds/aws/regions@cloudAccountUid=acc1",
         json!({"regions": [{"name": "af-south-1"}, {"name": "us-east-2"}]}),
     );
-    let api = memory_of_files(&live).failing(vpcs_path("af-south-1"), 500, VPCS_REFUSED);
+    let api = memory(&live).failing(vpcs_path("af-south-1"), 500, VPCS_REFUSED);
     let contract = contract_of(&real_facts(), &stand_in, &api);
     for id in [
         "validate-vpcs",
@@ -2342,7 +2333,7 @@ fn when_aws_refuses_each_region_the_facts_of_a_region_all_end_in_the_one_error()
         "v1/clouds/aws/regions@cloudAccountUid=acc1",
         json!({"regions": [{"name": "af-south-1"}, {"name": "us-east-2"}]}),
     );
-    let api = memory_of_files(&live)
+    let api = memory(&live)
         .failing(vpcs_path("af-south-1"), 500, VPCS_REFUSED)
         .failing(vpcs_path("us-east-2"), 500, VPCS_REFUSED);
     let contract = contract_of(&real_facts(), &stand_in, &api);
