@@ -123,7 +123,7 @@ rules:
           end
     reproduce:
       - "aws service-quotas get-service-quota --service-code eks --quota-code L-1194D53C --region {{ .entity.spec.cloudConfig.region }} --query Quota.Value; aws eks list-clusters --region {{ .entity.spec.cloudConfig.region }} --query 'length(clusters)'   # clusters for each region, and the usage"
-      - "aws service-quotas get-service-quota --service-code eks --quota-code L-6D54EA21 --region {{ .entity.spec.cloudConfig.region }} --query Quota.Value   # managed node groups for each cluster; the entity has {{ [ .entity.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not) ] | length }} worker pool(s)"
+      - "aws service-quotas get-service-quota --service-code eks --quota-code L-6D54EA21 --region {{ .entity.spec.cloudConfig.region }} --query Quota.Value   # managed node groups for each cluster; the entity has {{ [ .entity.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not) ] | length | count_of(\"worker pool\") }}"
       - "aws service-quotas get-service-quota --service-code eks --quota-code L-BD136A63 --region {{ .entity.spec.cloudConfig.region }} --query Quota.Value   # nodes for each managed node group"
     fix:
       owner: palette

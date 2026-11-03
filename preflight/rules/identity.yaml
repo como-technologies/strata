@@ -871,7 +871,7 @@ rules:
         | if (.response.ok | not) then ["Palette cannot list the key pairs of region \($c.region): \(.response.body.code // .response.status): \(.response.body.message // "")"]
           else (.response.body.keyNames // []) as $names
             | if ($names | index($c.sshKeyName)) == null
-              then ["sshKeyName \($c.sshKeyName) is not a key pair of the account in region \($c.region); Palette lists \($names | length) key pair(s)"]
+              then ["sshKeyName \($c.sshKeyName) is not a key pair of the account in region \($c.region); Palette lists \($names | length | count_of("key pair"))"]
               else [] end
           end
     reproduce:

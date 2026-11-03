@@ -189,7 +189,7 @@ rules:
         .entity.spec.profiles[0].uid as $u
         | if (.response.ok | not) then ["Palette cannot read profile \($u): \(.response.body.code // .response.status)"]
           elif ((.response.body.status.inUseClusters // []) | length) > 0
-          then ["profile \(.response.body.metadata.name // $u) is in use by \(.response.body.status.inUseClusters | length) cluster(s) (\([ .response.body.status.inUseClusters[] | .name // .uid ] | join(", "))): a change of its variable definitions is refused; make a new version"]
+          then ["profile \(.response.body.metadata.name // $u) is in use by \(.response.body.status.inUseClusters | length | count_of("cluster")) (\([ .response.body.status.inUseClusters[] | .name // .uid ] | join(", "))): a change of its variable definitions is refused; make a new version"]
           else [] end
     reproduce:
       - "curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/clusterprofiles/{{ .entity.spec.profiles[0].uid }}\" | jq '.status.inUseClusters'"

@@ -633,10 +633,20 @@ rules:
     )
     .unwrap();
     // the limit is zero. A watch that does not end at the first reading ends at the limit.
-    // The rule that passed is an error then, and the exit code is 2
-    for (is_deleted, verdict, state, exit_code) in [
-        (true, Verdict::Passed, "Deleting", 0),
-        (false, Verdict::Error, "Deleting", 2),
+    // The rule that passed is an error then, and the exit code is 2. A cluster that is gone gives
+    // the verdict a message of its own, also with the state `Deleted`.
+    let gone = "OK: the cluster is gone; no counted check failed";
+    for (is_deleted, verdict, state, exit_code, words) in [
+        (true, Verdict::Passed, "Deleting", 0, gone),
+        (true, Verdict::Passed, "Deleted", 0, gone),
+        (false, Verdict::Passed, "Deleted", 0, gone),
+        (
+            false,
+            Verdict::Error,
+            "Deleting",
+            2,
+            "ERROR: 1 check could not answer: agent-egress",
+        ),
     ] {
         let api = strata::api::MemoryApi::new().with(
             cluster_route("c1"),
@@ -671,7 +681,56 @@ rules:
             report.summary.exit_code, exit_code,
             "isDeleted {is_deleted}: the exit code"
         );
+        assert_eq!(
+            report.summary.verdict, words,
+            "isDeleted {is_deleted}, state {state}: the verdict"
+        );
     }
+}
+
+#[test]
+fn a_cluster_that_runs_ends_the_watch_with_the_verdict_that_each_counted_check_passed() {
+    let section = r#"
+section: platform
+title: P
+rules:
+  - id: agent-egress
+    title: t
+    engines: [all]
+    tier: watch
+    status: source
+    what: w
+    check: {kind: watch, expr: "true"}
+"#;
+    let mut c = Catalog::default();
+    c.push(
+        Catalog::parse_section(section, Path::new("p.yaml")).unwrap(),
+        Path::new("p.yaml"),
+    )
+    .unwrap();
+    let api = strata::api::MemoryApi::new().with(
+        cluster_route("c1"),
+        json!({"metadata": {"uid": "c1", "isDeleted": false}, "status": {"state": "Running"}}),
+    );
+    let mut w = world(3);
+    w.cluster_uid = Some("c1".into());
+    let (report, _) = watch(WatchInputs {
+        catalog: &c,
+        world: &w,
+        palette: &Palette::new(&api),
+        ledger: &Ledger::default(),
+        selection: &Selection::default(),
+        options: &WatchOptions::default(),
+        now: "t",
+        progress: &Progress::silent(),
+        verbose: false,
+        paint: Paint::off(),
+        sleep: &|_| {},
+        out_dir: None,
+    })
+    .unwrap();
+    assert_eq!(report.summary.exit_code, 0);
+    assert_eq!(report.summary.verdict, "OK: each counted check passed");
 }
 
 #[test]

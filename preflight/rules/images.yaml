@@ -503,11 +503,12 @@ rules:
     check:
       kind: static
       expr: |
-        def series: {"18.04": "bionic", "20.04": "focal", "22.04": "jammy", "24.04": "noble"};
+        def series: {"bionic": [18, 4], "focal": [20, 4], "jammy": [22, 4], "noble": [24, 4]};
         [ .profiles[] | .source.name as $prof | .packs[] | select(.layer == "os")
           | if (.name | startswith("ubuntu-maas")) then
-              ((.version // .tag // "") | split(".") | .[:2] | join(".")) as $v
-              | if (series | has($v)) then empty else "OS pack \(.name)@\(.version) of profile \($prof): Palette maps Ubuntu 18.04, 20.04, 22.04, and 24.04 to a MAAS base image, and refuses \($v) with \"unsupported image\"" end
+              (.version // .tag // "") as $text
+              | ($text | semver_numbers // (split(".") | map(tonumber? // 0)) | .[:2]) as $v
+              | if (series | any(.[]; . == $v)) then empty else "OS pack \(.name)@\(.version) of profile \($prof): Palette maps Ubuntu 18.04, 20.04, 22.04, and 24.04 to a MAAS base image, and refuses \($text) with \"unsupported image\"" end
             elif .name == "generic-byoi" then
               ((.valuesCanon.pack // {}) as $s | [ ("osImageOverride", "osName", "osVersion") | select(($s[.] // "") == "") ]) as $missing
               | if ($missing | length) > 0 then "OS pack generic-byoi of profile \($prof) lacks pack.\($missing | join(", pack.")): Palette refuses it with \"generic-byoi pack requires osImageOverride, osName, osVersion\"" else empty end

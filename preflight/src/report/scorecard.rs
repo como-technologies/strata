@@ -124,6 +124,7 @@ pub(super) fn summarize(
     checks: &[CheckResult],
     sections: &[SectionScore],
     options: &Options,
+    cluster_gone: bool,
 ) -> Summary {
     let count = |f: &dyn Fn(&CheckResult) -> bool| checks.iter().filter(|c| f(c)).count() as u32;
     let ran = sections.iter().map(|s| s.ran).sum();
@@ -160,7 +161,7 @@ pub(super) fn summarize(
         exit_code: 0,
         verdict: String::new(),
     };
-    let (exit_code, verdict) = exit_and_verdict(checks, &counted, options.ready);
+    let (exit_code, verdict) = exit_and_verdict(checks, &counted, options.ready, cluster_gone);
     Summary {
         exit_code,
         verdict,
@@ -169,8 +170,14 @@ pub(super) fn summarize(
 }
 
 /// The exit code and the verdict line of a run, from its counts. `ready` is the readiness that the
-/// run needs.
-fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64>) -> (u8, String) {
+/// run needs. `cluster_gone` is true when a watch ended because Palette deleted the cluster: an
+/// `OK` verdict then says so.
+fn exit_and_verdict(
+    checks: &[CheckResult],
+    summary: &Summary,
+    ready: Option<f64>,
+    cluster_gone: bool,
+) -> (u8, String) {
     let Summary {
         ran,
         failed,
@@ -222,7 +229,12 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
             ),
         )
     } else if ran == 0 {
-        (0, "OK: no check ran".to_string())
+        let gone = if cluster_gone {
+            "the cluster is gone; "
+        } else {
+            ""
+        };
+        (0, format!("OK: {gone}no check ran"))
     } else {
         let probes = if probe_failed > 0 {
             format!(
@@ -232,7 +244,12 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
         } else {
             String::new()
         };
-        (0, format!("OK: each counted check passed{probes}"))
+        let passed = if cluster_gone {
+            "the cluster is gone; no counted check failed"
+        } else {
+            "each counted check passed"
+        };
+        (0, format!("OK: {passed}{probes}"))
     }
 }
 

@@ -2986,7 +2986,7 @@ fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup
         "A script that read the name from `error.cluster` must read `error.name`.",
         "**The policy `valuesHash` of a group with a password in values of no canonical form changes.**",
         "A record of 0.27.0 or before of a group with a password differs in the `policy` tier from a new record of the same group.",
-        "**`strata-preflight`: three rules read a version as `strata` does.**",
+        "**`strata-preflight`: seven rules read a version as `strata` does.**",
     ] {
         assert!(
             command_line.contains(needle),
@@ -4207,8 +4207,8 @@ fn the_section_of_release_0_28_0_names_each_change_of_strata_preflight_that_the_
         "**`strata-preflight --watch`: a deleted cluster ends the watch.**",
         "the exit code was `2`",
         "The exit code is `0` when no counted rule failed, as it was for the state `Deleted`.",
-        // A4: the words of a count and of four messages
-        "**`strata-preflight`: the words of a count and of four messages change.**",
+        // A4: the words of a count and of the messages of the rules
+        "**`strata-preflight`: the words of a count and of the messages of the rules change.**",
         "`summary.verdict`, `subject.source` of a watch, and the last line of `--promotion`",
         "The messages of `aws-quotas`, `gcp-quotas`, and `azure-vcpu-quota` have new words.",
     ] {
@@ -4235,32 +4235,117 @@ fn the_section_of_release_0_28_0_names_each_change_of_strata_preflight_that_the_
     }
 }
 
-/// S1: the sentence about the nouns names the counts of the summary, and says that the message of a
-/// rule is outside it. The messages of the rules keep `(s)`.
+/// S1: the sentence about the nouns names the whole text of the tool, and the rules write no
+/// `(s)`. The page states the new words of the messages (#594).
 #[test]
-fn compatibility_says_that_the_message_of_a_rule_is_outside_the_agreement_of_the_nouns() {
+fn compatibility_says_that_the_whole_text_of_the_tool_agrees_each_noun_with_its_count() {
     let page = one_line(&read(&docs().join("reference/compatibility.md")));
     for needle in [
-        "After 0.27.0, the counts of the summary of `strata-preflight` agree each noun with the count.",
-        "The message of a rule is outside this change: it can still write `2 key pair(s)`.",
-        "the rules, the checks, the readings of a watch, and the events of `--verbose`.",
+        "After 0.27.0, the text of `strata-preflight` agrees each noun with its count.",
+        "It holds for the events of `--verbose` and for the message of each rule too.",
+        "A message that wrote `2 key pair(s)` now writes `2 key pairs`.",
+        "The messages of 17 rules wrote `(s)` after a noun.",
+        "A count of zero reads `no`, as the summary does.",
+        "`eks-fargate-private` says `the route table of 2 subnets (a, b) sends 0.0.0.0/0 to igw-1`.",
+        "`pvc-lb-leftover` says `1 EBS volume ... is available` or `2 EBS volumes ... are available`.",
+        "`leftovers-before-build` says `1 instance ... is still in` and `left it`",
+        "`edge-host-duplicate` says `is in the pools a, b`.",
+        "`2 | count_of(\"key pair\")` gives `2 key pairs`",
     ] {
         assert!(page.contains(needle), "the page lacks {needle:?}");
     }
-    assert!(
-        !page.contains("After 0.27.0, the text of `strata-preflight` agrees each noun"),
-        "the old sentence names the whole text of the tool"
-    );
+    for old in [
+        "After 0.27.0, the counts of the summary of `strata-preflight` agree each noun with the count.",
+        "The message of a rule is outside this change: it can still write `2 key pair(s)`.",
+    ] {
+        assert!(!page.contains(old), "the page still holds {old:?}");
+    }
 }
 
-/// A3: the page of the watch gives the exit code of a deleted cluster.
+/// S1: each rule that the page of the compatibility names for the new nouns exists in the
+/// catalog.
 #[test]
-fn the_page_of_the_watch_gives_the_exit_code_of_a_deleted_cluster() {
-    let page = one_line(&read(&docs().join("commands/preflight/watch.md")));
-    assert!(
-        page.contains("A deleted cluster gives exit `0` when no counted rule failed."),
-        "{page}"
+fn the_rules_that_compatibility_names_for_the_new_nouns_are_rules_of_the_catalog() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let item = section(
+        &page,
+        "  - The rules are `aws-region-not-enabled`",
+        Some("\n  - Six messages"),
     );
+    let ids: Vec<&str> = item
+        .split('`')
+        .skip(1)
+        .step_by(2)
+        .filter(|word| word.contains('-'))
+        .collect();
+    assert_eq!(ids.len(), 17, "{ids:?}");
+    let catalog: String = [
+        "cloud-services",
+        "compute",
+        "identity",
+        "lifecycle",
+        "networking",
+        "profiles",
+        "quotas",
+        "storage",
+        "teardown",
+    ]
+    .map(|name| repo_file(&format!("preflight/rules/{name}.yaml")))
+    .concat();
+    for id in ids {
+        assert!(
+            catalog.contains(&format!("  - id: {id}\n")),
+            "the rule {id} is not in the catalog"
+        );
+    }
+}
+
+/// A3: the page of the watch gives the exit code of a deleted cluster, and the words of its
+/// verdict. The output of the page comes from the stand-in (#594).
+#[test]
+fn the_page_of_the_watch_gives_the_exit_code_and_the_verdict_of_a_deleted_cluster() {
+    let page = one_line(&read(&docs().join("commands/preflight/watch.md")));
+    for needle in [
+        "A deleted cluster gives exit `0` when no counted rule failed.",
+        "The last line of the report says that the cluster is gone:",
+        "{{#include ../../output/preflight-watch-gone.txt}}",
+        "A failed rule or an error keeps its own words, also for a deleted cluster.",
+        "A cluster that is not gone gives `OK: each counted check passed`.",
+    ] {
+        assert!(page.contains(needle), "{page}");
+    }
+    let output = read(&docs().join("output/preflight-watch-gone.txt"));
+    assert_eq!(
+        output.lines().last(),
+        Some("OK: the cluster is gone; no counted check failed")
+    );
+    let compat = one_line(&read(&docs().join("reference/compatibility.md")));
+    for needle in [
+        "It was `OK: each counted check passed`, and it is `OK: the cluster is gone; no counted check failed` now.",
+        "A watch with no check that ran says `OK: the cluster is gone; no check ran`.",
+        "`report::Assembly` has the new field `cluster_gone: bool`.",
+    ] {
+        assert!(compat.contains(needle), "the page lacks {needle:?}");
+    }
+}
+
+/// C4: the page of the compatibility names the seven rules that read a version as `strata` does.
+/// It says what the four new ones change (#594).
+#[test]
+fn compatibility_names_the_four_rules_that_cut_a_version_at_the_dots_and_what_changes() {
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document");
+    for needle in [
+        "`gke-version-not-offered`, `eks-version-not-offered`, `eks-addon-version`, and `maas-os-image`.",
+        "The text `v1.32.1` gave the line `v1.32`, and `1.32+build.5` gave `1.32+build`.",
+        "Both texts give the line `1.32`, as `1.32.1` did.",
+        "`maas-os-image` reads the numbers 22 and 4 as Ubuntu 22.04, so the text `22.4` passes now.",
+        "The six rules that cut a text read the first two parts between the dots.",
+    ] {
+        assert!(
+            command_line.contains(needle),
+            "the part of the command line lacks {needle:?}"
+        );
+    }
 }
 
 /// S4: the page of the custom probes names the fault of an owner that is not one of the six.

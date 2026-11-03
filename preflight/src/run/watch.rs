@@ -117,6 +117,8 @@ struct Ended {
     readings: u32,
     /// The state of the cluster at the last reading.
     state: String,
+    /// True when the last reading shows a cluster that Palette deleted.
+    gone: bool,
     /// The world with the last reading in it.
     world: Value,
 }
@@ -186,6 +188,7 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
                 ready: None,
                 out_dir: inputs.out_dir.map(str::to_string),
             },
+            cluster_gone: ended.gone,
             generated_at: inputs.now.to_string(),
         },
         &jq,
@@ -249,9 +252,10 @@ fn read_until_ended<A: PaletteApi>(
             }
         }
         // a cluster that runs ends the watch: a failure it read on past is in the report
+        let gone = ClusterState::is_gone(value_at(&read, "/cluster"));
         let ends = (failed && options.stop_at_first)
             || ClusterState::Running.is(&state)
-            || ClusterState::is_gone(value_at(&read, "/cluster"))
+            || gone
             || ClusterState::Error.is(&state);
         let at_limit = !ends && elapsed >= options.limit;
         if at_limit {
@@ -262,6 +266,7 @@ fn read_until_ended<A: PaletteApi>(
                 last,
                 readings,
                 state,
+                gone,
                 world,
             });
         }

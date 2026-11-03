@@ -27,7 +27,7 @@
 //!       expr: |
 //!         [ .entity.spec.machinepoolconfig[]
 //!           | select((.cloudConfig.azs // []) | unique | length < 2)
-//!           | "pool \(.poolConfig.name) names \((.cloudConfig.azs // []) | unique | length) zone(s); EKS needs 2" ]
+//!           | "pool \(.poolConfig.name) names \((.cloudConfig.azs // []) | unique | length | count_of("zone")); EKS needs 2" ]
 //!     fix:
 //!       owner: palette
 //!       text: Check the count of distinct zones in the EKS validate route.

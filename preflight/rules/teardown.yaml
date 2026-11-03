@@ -139,7 +139,7 @@ rules:
         if .exec.exit != 0 then ["aws ec2 describe-instances failed: \(.exec.stderr | tostring | .[:200])"]
         else ([ (.exec.stdout.Reservations // [])[] | (.Instances // [])[] ]) as $i
              | if ($i | length) == 0 then []
-               else ["\($i | length) instance(s) of a cluster named \(.entity.metadata.name // "?") are still in \(.entity.spec.cloudConfig.region // "?"): \($i | map(.InstanceId) | join(", ")); a run before left them, and the build must find 0"] end
+               else ["\($i | length | count_of("instance")) of a cluster named \(.entity.metadata.name // "?") \(if ($i | length) == 1 then "is" else "are" end) still in \(.entity.spec.cloudConfig.region // "?"): \($i | map(.InstanceId) | join(", ")); a run before left \(if ($i | length) == 1 then "it" else "them" end), and the build must find 0"] end
         end
     reproduce:
       aws:

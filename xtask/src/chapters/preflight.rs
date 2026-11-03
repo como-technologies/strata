@@ -190,6 +190,7 @@ pub(super) fn run(r: &mut Runner) {
     preflight_each(r);
     preflight_account(r);
     preflight_clouds(r);
+    preflight_gone(r);
 }
 
 /// The part of the chapter `preflight` for a cluster that Palette holds, and a change of its worker
@@ -494,5 +495,19 @@ fn preflight_clouds(r: &mut Runner) {
         0,
         false,
         "strata preflight gcp-cluster.json --cloud gcp --no-exec --tier palette --rule gcp-properties --verbose --color never 2>&1 > /dev/null | grep 'POST'",
+    );
+}
+
+/// The part of the chapter `preflight` for a watch of a cluster that Palette deleted. It is the
+/// last part, because the steps before it read the cluster.
+fn preflight_gone(r: &mut Runner) {
+    // Palette deletes the cluster and keeps its document. The watch ends at its first reading.
+    r.serve_here();
+    r.tenant(|t| t.delete_cluster(DEV, PAYMENTS, "2026-09-17T11:05:00Z"));
+    r.step(
+        "preflight-watch-gone",
+        0,
+        false,
+        &format!("strata preflight cluster:{PAYMENTS} --watch --limit 1 --quiet | tail -n 3"),
     );
 }

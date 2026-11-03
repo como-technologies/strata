@@ -301,7 +301,7 @@ rules:
         | if .exec.exit != 0 then ["aws ec2 describe-volumes failed: \(.exec.stderr | .[:200])"]
           else ([ (.exec.stdout.Volumes // [])[] | select((.State // "") == "available") ]) as $free
             | if ($free | length) == 0 then []
-              else ["\($free | length) EBS volume(s) with the tag kubernetes.io/cluster/\($n) are available and attached to no node: the in-cluster cleanup did not run, and each costs money until deleted: \([ $free[] | "\(.VolumeId) (\(.Size // "?") GiB)" ] | join(", "))"]
+              else ["\($free | length | count_of("EBS volume")) with the tag kubernetes.io/cluster/\($n) \(if ($free | length) == 1 then "is" else "are" end) available and attached to no node: the in-cluster cleanup did not run, and each costs money until deleted: \([ $free[] | "\(.VolumeId) (\(.Size // "?") GiB)" ] | join(", "))"]
               end
           end
     reproduce:

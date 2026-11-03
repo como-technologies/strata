@@ -83,14 +83,14 @@ rules:
             elif test("releaseChannel:\\s*extended"; "i") then "EXTENDED"
             else "REGULAR" end;
         def offers($want; $exact): [ .[] | select(if $exact then (. == $want or startswith($want + "-")) else startswith($want + ".") end) ];
-        def minors: [ .[] | split(".") | .[:2] | join(".") ] | unique;
+        def minors: [ .[] | semver_numbers // split(".") | .[:2] | map(tostring) | join(".") ] | unique;
         if .exec.exit != 0 then ["gcloud container get-server-config failed: \(.exec.stderr | .[:200])"]
         else
           k8s as $v
           | if $v == null then [] else
-            ($v | split(".")) as $parts
+            ($v | semver_numbers // split(".")) as $parts
             | (($parts | length) >= 3) as $exact
-            | (if $exact then $v else ($parts[:2] | join(".")) end) as $want
+            | ($parts | if $exact then . else .[:2] end | map(tostring) | join(".")) as $want
             | channel as $ch
             | ([ (.exec.stdout.channels // [])[] | select(.channel == $ch) | (.validVersions // [])[] ]) as $in_channel
             | (.exec.stdout.validMasterVersions // []) as $master
@@ -144,7 +144,7 @@ rules:
         else
           k8s as $v
           | if $v == null then [] else
-            ($v | split(".") | .[:2] | join(".")) as $want
+            ($v | semver_numbers // split(".") | .[:2] | map(tostring) | join(".")) as $want
             | ([ (.exec.stdout.clusterVersions // [])[] | .clusterVersion ]) as $offered
             | .entity.spec.cloudConfig.region as $r
             | if ($offered | index($want)) != null then []
@@ -189,7 +189,7 @@ rules:
         - eks
         - describe-addon-versions
         - --kubernetes-version
-        - "{{ [ (.profiles // [])[] | .packs[] | select(.layer == \"k8s\") | .version ] | .[0] | split(\".\") | .[:2] | join(\".\") }}"
+        - "{{ [ (.profiles // [])[] | .packs[] | select(.layer == \"k8s\") | .version ] | .[0] | semver_numbers // split(\".\") | .[:2] | map(tostring) | join(\".\") }}"
         - --addon-name
         - "{{ if (.account.spec.credentialType // \"\") == \"pod-identity\" then \"eks-pod-identity-agent\" else (.entity.spec.cloudConfig.addons[0].name // \"?\") end }}"
         - --region
@@ -199,7 +199,7 @@ rules:
       expr: |
         def pod_identity: (.account.spec.credentialType // "") == "pod-identity";
         def addon: if pod_identity then "eks-pod-identity-agent" else (.entity.spec.cloudConfig.addons[0].name // "?") end;
-        def k8s: [ (.profiles // [])[] | .packs[] | select(.layer == "k8s") | .version ] | .[0] | split(".") | .[:2] | join(".");
+        def k8s: [ (.profiles // [])[] | .packs[] | select(.layer == "k8s") | .version ] | .[0] | semver_numbers // split(".") | .[:2] | map(tostring) | join(".");
         if .exec.exit != 0 then ["aws eks describe-addon-versions failed: \(.exec.stderr | .[:200])"]
         else
           addon as $a | k8s as $k | .entity.spec.cloudConfig.region as $r
@@ -213,7 +213,7 @@ rules:
             else [] end
         end
     reproduce:
-      - "aws eks describe-addon-versions --kubernetes-version {{ [ (.profiles // [])[] | .packs[] | select(.layer == \"k8s\") | .version ] | .[0] | split(\".\") | .[:2] | join(\".\") }} --addon-name <addon> --region {{ .entity.spec.cloudConfig.region }} --query 'addons[].addonVersions[].[addonVersion,compatibilities[0].defaultVersion]' --output table"
+      - "aws eks describe-addon-versions --kubernetes-version {{ [ (.profiles // [])[] | .packs[] | select(.layer == \"k8s\") | .version ] | .[0] | semver_numbers // split(\".\") | .[:2] | map(tostring) | join(\".\") }} --addon-name <addon> --region {{ .entity.spec.cloudConfig.region }} --query 'addons[].addonVersions[].[addonVersion,compatibilities[0].defaultVersion]' --output table"
     fix:
       owner: palette
       text: Ask eks:DescribeAddonVersions in the EKS validate route, for each addon and for the pod identity agent.

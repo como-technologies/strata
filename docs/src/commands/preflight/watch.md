@@ -11,7 +11,15 @@ rule of severity `fail` at the preflight level, or any failed probe with
 watch continues.
 
 A deleted cluster gives exit `0` when no counted rule failed. It ends the watch at the first
-reading, also when its state is not `Deleted`.
+reading, also when its state is not `Deleted`. The last line of the report says that the
+cluster is gone:
+
+```text
+{{#include ../../output/preflight-watch-gone.txt}}
+```
+
+A failed rule or an error keeps its own words, also for a deleted cluster. A cluster that is not
+gone gives `OK: each counted check passed`.
 
 With `--out`, `world.json` holds the last reading: the conditions and the events
 the rules saw. A build that cannot finish stops in minutes, not at the timeout

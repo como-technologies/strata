@@ -120,12 +120,24 @@ does not compile makes the rule `ERROR`, and the message names it. So does a
 program that gives no output, or `null`: a path that is not in the world is a
 wrong program, not a pass.
 
-strata-preflight adds one filter to jq: `semver_numbers`. It reads the input text as a
-version, as `strata` does, and gives the numbers that the version writes. `"4.10.3-rc.1"`
-gives `[4, 10, 3]`, and `"v4.10"` gives `[4, 10]`. A text that is no version gives `null`.
-A rule that compares two versions reads both with it, and compares the arrays. Do not split
-a version at the dots. A program with this filter does not run in the `jq` tool. The report writes a
-`reproduce` line for such a program with a definition of the filter in front. So the line runs
+strata-preflight adds two filters to jq: `semver_numbers` and `count_of`.
+
+`semver_numbers` reads the input text as a version, as `strata` does, and gives the numbers
+that the version writes. `"4.10.3-rc.1"` gives `[4, 10, 3]`, and `"v4.10"` gives `[4, 10]`. A
+text that is no version gives `null`. A rule that compares two versions reads both with it, and
+compares the arrays. Do not split a version at the dots.
+
+A smart tag such as `1.32.x` is no version. To keep its first two parts between the dots, write
+`semver_numbers // split(".")`. A test of the catalog refuses a split at the dots in a rule
+that reads `.version` or `.tag`, unless `semver_numbers //` comes first.
+
+`count_of` writes the input count with a noun. `2 | count_of("key pair")` gives `2 key pairs`.
+`1` gives `1 key pair`, and `0` gives `no key pairs`. Write the noun in the singular. Use it for
+each count in a message. A test of the catalog refuses `(s)` after a noun. The input must be a
+whole number of zero or more.
+
+A program with one of these filters does not run in the `jq` tool. The report writes a
+`reproduce` line for such a program with a definition of each filter in front. So the line runs
 in the tool.
 
 ## A request for each item

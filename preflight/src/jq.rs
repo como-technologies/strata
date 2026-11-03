@@ -12,13 +12,14 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use jaq_core::load::{Arena, File, Loader};
-use jaq_core::native::{Fun, bome, run, v};
-use jaq_core::{Compiler, Ctx, ValR, Vars, data};
+use jaq_core::native::{Fun, bome, run, unary, v};
+use jaq_core::{Compiler, Ctx, Error as JaqError, ValR, Vars, data};
 use jaq_json::Val;
 use jaq_std::ValT;
 use serde_json::Value;
 
 use strata::reference::version;
+use strata::render::count_of;
 
 use crate::error::{Error, Result};
 
@@ -69,24 +70,36 @@ const SEMVER_NUMBERS: &str = "semver_numbers";
 /// of 20 digits or more is outside the table, because the tool reads a number as a double.
 const SEMVER_NUMBERS_DEF: &str = r#"def semver_numbers: ltrimstr("v") | if test("\\A[0-9]+(\\.[0-9]+){0,2}(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?\\z") then split("+")[0] | split("-")[0] | split(".") | map(tonumber) else null end; "#;
 
+/// The name of the filter that gives a count with its noun: see [`count_of_filter`].
+const COUNT_OF: &str = "count_of";
+
+/// The definition of [`COUNT_OF`] in jq, for the `jq` tool, which has no such filter. It gives
+/// the same words as [`count_of`], and a test compares the two on a table of counts.
+const COUNT_OF_DEF: &str = r#"def count_of($noun): if . == 0 then "no \($noun)s" elif . == 1 then "1 \($noun)" else "\(.) \($noun)s" end; "#;
+
 /// The definitions of the filters that `program` names and the `jq` tool lacks, to put in front
 /// of the program. Empty when it names none.
-pub(crate) fn tool_definitions(program: &str) -> &'static str {
-    if program.contains(SEMVER_NUMBERS) {
-        SEMVER_NUMBERS_DEF
-    } else {
-        ""
-    }
+pub(crate) fn tool_definitions(program: &str) -> String {
+    [
+        (SEMVER_NUMBERS, SEMVER_NUMBERS_DEF),
+        (COUNT_OF, COUNT_OF_DEF),
+    ]
+    .into_iter()
+    .filter(|(name, _)| program.contains(name))
+    .map(|(_, definition)| definition)
+    .collect()
 }
 
 /// The filters that this crate adds to the standard library of jq.
 ///
-/// A rule reads a version with one of them, so that the one module of `strata` that parses a
-/// version parses it: see [`semver_numbers`].
+/// A rule reads a version with `semver_numbers`, so that the one module of `strata` that parses a
+/// version parses it. A rule writes a count with `count_of_filter`, so that its words are those
+/// of the reports.
 fn added_funs() -> impl Iterator<Item = Fun<data::JustLut<Val>>> {
-    [run((SEMVER_NUMBERS, v(0), |cv| {
-        bome(semver_numbers(&cv.1))
-    }))]
+    [
+        run((SEMVER_NUMBERS, v(0), |cv| bome(semver_numbers(&cv.1)))),
+        run((COUNT_OF, v(1), |cv| unary(cv, count_of_filter))),
+    ]
     .into_iter()
 }
 
@@ -101,6 +114,19 @@ fn semver_numbers(input: &Val) -> ValR<Val> {
         .map_or(Val::Null, |numbers| {
             numbers.into_iter().map(|n| Val::from(n as usize)).collect()
         }))
+}
+
+/// `count_of`: the count in the input and its noun, as [`count_of`] writes them.
+///
+/// `2 | count_of("key pair")` gives `2 key pairs`. `1` gives `1 key pair`, and `0` gives
+/// `no key pairs`. The noun is in the singular: the filter adds the `s`. The input must be a
+/// number that is not negative, and `noun` must be a text.
+fn count_of_filter(count: Val, noun: Val) -> ValR<Val> {
+    let Some(n) = count.as_isize().and_then(|n| usize::try_from(n).ok()) else {
+        return Err(JaqError::typ(count, "non-negative integer"));
+    };
+    let noun = std::str::from_utf8(noun.try_as_utf8_bytes()?).map_err(JaqError::str)?;
+    Ok(Val::from(count_of(n, noun)))
 }
 
 impl Jq {
@@ -371,6 +397,39 @@ mod tests {
         assert_eq!(numbers(json!("")), Value::Null);
         // a value that is no text is an error of the program
         let err = jq.run("t", "semver_numbers", &json!(4), None).unwrap_err();
+        assert!(err.to_string().contains("the program failed"), "{err}");
+    }
+
+    #[test]
+    fn count_of_writes_a_count_and_its_noun_as_the_reports_do() {
+        let jq = Jq::new();
+        let words = |count: Value, noun: &str| {
+            jq.first("t", &format!("count_of(\"{noun}\")"), &count, None)
+                .expect("the filter runs")
+        };
+        assert_eq!(words(json!(0), "key pair"), json!("no key pairs"));
+        assert_eq!(words(json!(1), "key pair"), json!("1 key pair"));
+        assert_eq!(words(json!(2), "key pair"), json!("2 key pairs"));
+        assert_eq!(words(json!(12), "CPU"), json!("12 CPUs"));
+        assert_eq!(
+            words(json!(0), "free m5.large slot"),
+            json!("no free m5.large slots")
+        );
+        // the count comes from a program
+        let program = r#"[.a, .b] | map(length) as [$x, $y] | "\($x | count_of("host")), \($y | count_of("pool"))""#;
+        let out = jq
+            .first("t", program, &json!({"a": [1], "b": [1, 2]}), None)
+            .unwrap();
+        assert_eq!(out, json!("1 host, 2 pools"));
+        // a count that is not a whole number of zero or more is an error of the program
+        for bad in [json!(-1), json!(1.5), json!("2"), Value::Null] {
+            let err = jq.run("t", "count_of(\"host\")", &bad, None).unwrap_err();
+            assert!(
+                err.to_string().contains("the program failed"),
+                "{bad}: {err}"
+            );
+        }
+        let err = jq.run("t", "count_of(1)", &json!(2), None).unwrap_err();
         assert!(err.to_string().contains("the program failed"), "{err}");
     }
 

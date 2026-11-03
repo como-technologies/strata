@@ -428,6 +428,9 @@ pub struct Assembly<'a> {
     pub subject: Subject,
     /// The options.
     pub options: Options,
+    /// True when a watch ended because Palette deleted the cluster. The verdict of a run that
+    /// passed then says that the cluster is gone.
+    pub cluster_gone: bool,
     /// The time.
     pub generated_at: String,
 }
@@ -487,7 +490,7 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
         });
     }
     let sections = scorecard(a.catalog, &checks);
-    let summary = summarize(&checks, &sections, &a.options);
+    let summary = summarize(&checks, &sections, &a.options, a.cluster_gone);
     Report {
         schema: REPORT_SCHEMA.to_string(),
         tool: Tool::current(),
