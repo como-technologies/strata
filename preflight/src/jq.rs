@@ -119,14 +119,26 @@ fn semver_numbers(input: &Val) -> ValR<Val> {
 /// `count_of`: the count in the input and its noun, as [`count_of`] writes them.
 ///
 /// `2 | count_of("key pair")` gives `2 key pairs`. `1` gives `1 key pair`, and `0` gives
-/// `no key pairs`. The noun is in the singular: the filter adds the `s`. The input must be a
-/// number that is not negative, and `noun` must be a text.
+/// `no key pairs`. The noun is in the singular: the filter adds the `s`. A number that is not a
+/// whole number of zero or more, such as `-1` or `0.5`, gives the number and the plural noun:
+/// `-1 CPUs`. A rule can find such a number in a document of Palette, and the words of its
+/// message must not turn that fault into an error. The input must be a number, and `noun` must
+/// be a text.
 fn count_of_filter(count: Val, noun: Val) -> ValR<Val> {
-    let Some(n) = count.as_isize().and_then(|n| usize::try_from(n).ok()) else {
-        return Err(JaqError::typ(count, "non-negative integer"));
+    let Some(value) = count.as_f64() else {
+        return Err(JaqError::typ(count, "number"));
     };
     let noun = std::str::from_utf8(noun.try_as_utf8_bytes()?).map_err(JaqError::str)?;
-    Ok(Val::from(count_of(n, noun)))
+    // `0.0` and `1.0` read as `0` and `1`, as the definition for the tool does with `==`
+    let whole = match count.as_isize() {
+        Some(n) => usize::try_from(n).ok(),
+        None if value == 0.0 || value == 1.0 => Some(value as usize),
+        None => None,
+    };
+    Ok(Val::from(match whole {
+        Some(n) => count_of(n, noun),
+        None => format!("{count} {noun}s"),
+    }))
 }
 
 impl Jq {
@@ -421,8 +433,16 @@ mod tests {
             .first("t", program, &json!({"a": [1], "b": [1, 2]}), None)
             .unwrap();
         assert_eq!(out, json!("1 host, 2 pools"));
-        // a count that is not a whole number of zero or more is an error of the program
-        for bad in [json!(-1), json!(1.5), json!("2"), Value::Null] {
+        // a number that is not a whole number of zero or more is a fault that a rule can find,
+        // so the words write it and its plural noun
+        assert_eq!(words(json!(-1), "CPU"), json!("-1 CPUs"));
+        assert_eq!(words(json!(0.5), "CPU"), json!("0.5 CPUs"));
+        assert_eq!(words(json!(1.5), "host"), json!("1.5 hosts"));
+        assert_eq!(words(json!(-1.5), "host"), json!("-1.5 hosts"));
+        assert_eq!(words(json!(0.0), "host"), json!("no hosts"));
+        assert_eq!(words(json!(1.0), "host"), json!("1 host"));
+        // a value that is no number is an error of the program
+        for bad in [json!("2"), Value::Null, json!([1]), json!(true)] {
             let err = jq.run("t", "count_of(\"host\")", &bad, None).unwrap_err();
             assert!(
                 err.to_string().contains("the program failed"),

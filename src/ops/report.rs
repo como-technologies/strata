@@ -100,10 +100,33 @@ fn marked_lines(log: &Path, lines: usize, all: bool) -> usize {
     if all || marked > lines { 0 } else { marked }
 }
 
+/// A line of the log that is valid, and its place: how many lines of the log that are not blank
+/// come before it. The mark counts the same lines. So the place of the first line that stays
+/// unsent is the new mark.
+struct Placed<'a> {
+    place: usize,
+    line: &'a log::Line,
+}
+
+/// The valid lines of `rows` from the line `from` on. Also the numbers of all the lines that are
+/// not valid, from 1.
+fn unsent_lines(rows: &[log::Row], from: usize) -> (Vec<Placed<'_>>, Vec<usize>) {
+    let mut lines = Vec::new();
+    let mut invalid = Vec::new();
+    for (place, row) in rows.iter().enumerate() {
+        match row {
+            log::Row::Valid(line) if place >= from => lines.push(Placed { place, line }),
+            log::Row::Valid(_) => {}
+            log::Row::Invalid { number } => invalid.push(*number),
+        }
+    }
+    (lines, invalid)
+}
+
 /// How many of `lines` come before the first line of a value that waits. `waiting` holds the
 /// numbers of the entries of `report` that wait at the endpoint, from 1. All of `lines` when
 /// none waits.
-fn lines_before_waiting(lines: &[log::Line], report: &Report, waiting: &[usize]) -> usize {
+fn lines_before_waiting(lines: &[Placed], report: &Report, waiting: &[usize]) -> usize {
     let held: BTreeSet<(&str, &str)> = waiting
         .iter()
         .filter_map(|number| report.unknown.get(number.checked_sub(1)?))
@@ -111,17 +134,25 @@ fn lines_before_waiting(lines: &[log::Line], report: &Report, waiting: &[usize])
         .collect();
     lines
         .iter()
-        .position(|line| held.contains(&(line.sighting.set.as_str(), line.sighting.value.as_str())))
+        .position(|placed| {
+            let sighting = &placed.line.sighting;
+            held.contains(&(sighting.set.as_str(), sighting.value.as_str()))
+        })
         .unwrap_or(lines.len())
+}
+
+/// The report of `lines`.
+fn report_of(lines: &[Placed]) -> Report {
+    Report::of(lines.iter().map(|placed| placed.line))
 }
 
 /// How many of the first `lines` make a report of [`MOST_ENTRIES`] entries or fewer, with
 /// [`MOST_VALUES`] different values or fewer. At least one: a line is one entry.
-fn first_chunk(lines: &[log::Line]) -> usize {
+fn first_chunk(lines: &[Placed]) -> usize {
     let (mut fits, mut over) = (1, lines.len() + 1);
     while over - fits > 1 {
         let middle = fits + (over - fits) / 2;
-        let report = Report::of(&lines[..middle]);
+        let report = report_of(&lines[..middle]);
         if report.unknown.len() <= MOST_ENTRIES && report.distinct_values() <= MOST_VALUES {
             fits = middle;
         } else {
@@ -134,7 +165,8 @@ fn first_chunk(lines: &[log::Line]) -> usize {
 /// What [`send_unknown_report`] did.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Sent {
-    /// How many lines the send marked as sent: the lines of the reports that the endpoint took.
+    /// How many lines the send marked as sent: the valid lines of the reports that the endpoint
+    /// took.
     pub marked: usize,
     /// How many lines wait at the endpoint for now, with the lines after them. The hour has no
     /// room for the values of these lines. The next send holds them again.
@@ -152,36 +184,41 @@ pub struct Sent {
 /// values or fewer, so a long log goes in more than one report. A report that fails marks nothing,
 /// and the next send holds its lines again.
 ///
-/// A line that is not valid is no line of the report, and it stops nothing. The mark counts the
-/// valid lines only, and the field `skipped` of the result names the others. When the values of
-/// some entries wait at the endpoint, the send marks the lines before the first line of such a
-/// value, and stops. The next send holds that line and the lines after it. So a line after it that
-/// the endpoint took counts again.
+/// A line that is not valid is no line of the report, and it stops nothing. The mark counts each
+/// line that is not blank, valid or not, as the mark of release 0.27.0 did. So the send skips an
+/// invalid line and still counts it, and the field `skipped` of the result names it. When the
+/// values of some entries wait at the endpoint, the send marks the lines before the first line of
+/// such a value, and stops. The next send holds that line and the lines after it. So a line after
+/// it that the endpoint took counts again.
 ///
 /// # Errors
 ///
 /// `Io` as [`unknown_report`], and `Io` when strata cannot write the mark. `ReportSend` when the
 /// endpoint did not take a report: see [`send::post`].
 pub fn send_unknown_report(log: &Path, endpoint: &str) -> Result<Sent> {
-    let log::Valid { lines, invalid } = log::read_valid(log)?;
-    let mut done = marked_lines(log, lines.len(), false);
+    let rows = log::read_rows(log)?;
+    let mut done = marked_lines(log, rows.len(), false);
+    let (unsent, skipped) = unsent_lines(&rows, done);
+    let mut rest = &unsent[..];
     let mut sent = Sent {
-        skipped: invalid,
+        skipped,
         ..Sent::default()
     };
-    while done < lines.len() {
-        let rest = &lines[done..];
+    while !rest.is_empty() {
         let take = first_chunk(rest);
-        let report = Report::of(&rest[..take]);
+        let report = report_of(&rest[..take]);
         let waiting = send::post(endpoint, &report, done)?;
         let taken = lines_before_waiting(&rest[..take], &report, &waiting);
         if taken > 0 {
-            done += taken;
+            // the mark passes each line that is not valid between the last line that went and the
+            // next line that stays
+            done = rest.get(taken).map_or(rows.len(), |next| next.place);
+            rest = &rest[taken..];
             sent.marked += taken;
             log::mark_sent(&log::sent_path(log), done)?;
         }
         if taken < take {
-            sent.waiting = lines.len() - done;
+            sent.waiting = rest.len();
             break;
         }
     }

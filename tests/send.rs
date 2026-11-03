@@ -15,7 +15,7 @@ use strata::closed_set::unknown::send::{ADDRESS_SETTING, ANSWER_FILE, ENDPOINT, 
 use strata::ops::Sent;
 
 use crate::common::{
-    Answer, Endpoint, LATER_TYPE, PROFILE_TEMPLATE, REFUSED, Run, fake_bin, give_strata,
+    Answer, Endpoint, LATER_TYPE, PROFILE_TEMPLATE, REFUSED, Request, Run, fake_bin, give_strata,
     isolate_palette, later_type_tenant, list_command, log_in, log_line, path_with, report_command,
     serve_routes, state_in, strata_command, through_proxy, walk, write_log,
 };
@@ -289,9 +289,8 @@ fn a_log_with_a_value_of_release_0_27_0_that_is_not_one_word_does_not_stop_the_s
         "{}",
         run.err
     );
-    // the mark counts the valid lines: the log has two lines, and one is valid
-    let sent = std::fs::read_to_string(state_in(home.path()).join(SENT_FILE)).unwrap();
-    assert_eq!(sent.trim(), "1");
+    // the mark counts each line that is not blank, valid or not: the log has two lines
+    assert_eq!(mark_in(home.path()).as_deref(), Some("2"));
     // `strata report` still stops on the line
     let mut command = report_command(home.path(), &["--json"]);
     let report = Run::of(&mut command);
@@ -506,6 +505,28 @@ fn entries_of(endpoint: &Endpoint) -> Vec<usize> {
         .collect()
 }
 
+/// The values that the report in `request` holds, in the order of the report.
+fn values_of(request: &Request) -> Vec<String> {
+    request.json()["unknown"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["value"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// Write a log that has a line for each of `values`, and mark its first `mark` lines as sent, as
+/// release 0.27.0 did. A value with a space is a line that this release cannot read.
+fn marked_log(home: &Path, values: &[&str], mark: usize) -> std::path::PathBuf {
+    let lines: Vec<String> = values
+        .iter()
+        .map(|value| log_line("ProfileType", value, "/v1/packs"))
+        .collect();
+    let log = write_log(home, &lines);
+    std::fs::write(state_in(home).join(SENT_FILE), format!("{mark}\n")).unwrap();
+    log
+}
+
 #[test]
 fn a_log_of_more_than_20_values_goes_in_reports_of_20_values_and_each_report_marks_its_lines() {
     let endpoint = Endpoint::answering(Answer::Status(200));
@@ -569,6 +590,74 @@ fn a_report_that_fails_in_the_middle_leaves_the_mark_after_the_reports_that_were
     assert_eq!(entries_of(&taking), expected);
 }
 
+/// Release 0.27.0 sent a line with a space, and its mark counted the line. The send of this release
+/// skips such a line, and the mark must still count it. A mark of 0.27.0 and a mark of this release
+/// mean the same: the number of lines that are not blank, valid or not.
+#[test]
+fn a_mark_of_release_0_27_0_covers_the_lines_it_counted_also_when_the_send_skips_one_of_them() {
+    // case A: 0.27.0 sent the first 2 lines, and the third line stayed unsent
+    let home = tempfile::tempdir().unwrap();
+    let log = marked_log(
+        home.path(),
+        &["alpha", "two words", "gamma", "new-run-type"],
+        2,
+    );
+    let endpoint = Endpoint::answering(Answer::Status(200));
+    let sent = strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
+    assert_eq!(endpoint.requests().len(), 1);
+    assert_eq!(
+        values_of(&endpoint.requests()[0]),
+        ["gamma", "new-run-type"]
+    );
+    assert_eq!(sent.marked, 2);
+    assert_eq!(sent.skipped, [2]);
+    assert_eq!(mark_in(home.path()).as_deref(), Some("4"));
+
+    // case B: 0.27.0 sent the 2 lines of the log, and the run wrote one line
+    let home = tempfile::tempdir().unwrap();
+    let log = marked_log(home.path(), &["alpha", "two words", "new-run-type"], 2);
+    let endpoint = Endpoint::answering(Answer::Status(200));
+    let sent = strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
+    assert_eq!(endpoint.requests().len(), 1, "the line of the run is sent");
+    assert_eq!(values_of(&endpoint.requests()[0]), ["new-run-type"]);
+    assert_eq!(sent.marked, 1);
+    assert_eq!(mark_in(home.path()).as_deref(), Some("3"));
+
+    // case C: 0.27.0 sent the 3 lines of the log, and only one of them is valid here
+    let home = tempfile::tempdir().unwrap();
+    let values = ["alpha", "two words", "three more words", "new-run-type"];
+    let log = marked_log(home.path(), &values, 3);
+    let endpoint = Endpoint::answering(Answer::Status(200));
+    strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
+    assert_eq!(endpoint.requests().len(), 1);
+    assert_eq!(
+        values_of(&endpoint.requests()[0]),
+        ["new-run-type"],
+        "the mark is not read as the mark of a removed log"
+    );
+    assert_eq!(mark_in(home.path()).as_deref(), Some("4"));
+}
+
+#[test]
+fn a_line_that_is_not_valid_between_two_reports_and_at_the_end_is_counted_by_the_mark() {
+    let home = tempfile::tempdir().unwrap();
+    let values: Vec<String> = (0..21).map(|n| format!("later-{n:03}")).collect();
+    let mut lines: Vec<&str> = values.iter().map(String::as_str).collect();
+    // 21 values go in two reports. The invalid lines come between the two and at the end.
+    lines.insert(20, "two words");
+    lines.push("three more words");
+    let log = marked_log(home.path(), &lines, 0);
+    let endpoint = Endpoint::answering(Answer::Status(200));
+    let sent = strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
+    assert_eq!(entries_of(&endpoint), [MOST_VALUES, 1]);
+    assert_eq!(sent.marked, 21);
+    assert_eq!(sent.skipped, [21, 23]);
+    assert_eq!(mark_in(home.path()).as_deref(), Some("23"));
+    // the next send has nothing to post
+    strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
+    assert_eq!(endpoint.requests().len(), 2);
+}
+
 /// The answer of an endpoint that takes the report and makes the entries `waiting` wait.
 fn holding_back(waiting: &'static str) -> Answer {
     Answer::Body(202, waiting)
@@ -612,14 +701,7 @@ fn the_next_send_after_a_value_waited_holds_that_value_and_the_lines_after_it() 
     let sent = strata::ops::send_unknown_report(&log, &taking.url).unwrap();
     assert_eq!(sent.marked, 2);
     assert_eq!(sent.waiting, 0);
-    let report = taking.requests()[0].json();
-    let values: Vec<&str> = report["unknown"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|entry| entry["value"].as_str().unwrap())
-        .collect();
-    assert_eq!(values, ["later-003", "later-004"]);
+    assert_eq!(values_of(&taking.requests()[0]), ["later-003", "later-004"]);
     assert_eq!(mark_in(home.path()).as_deref(), Some("5"));
 }
 

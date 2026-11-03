@@ -1786,6 +1786,54 @@ fn a_version_that_does_not_parse_reads_in_ccm_version_and_edge_agent_version_as_
     }
 }
 
+/// Two of the seven rules read a text that is no version in another way than release 0.27.0, and
+/// `compatibility.md` says so (#608). `maas-os-image` reads the first two parts as numbers, so
+/// `22.4.x` and `22.4.1.1` pass. `capa-stack-release-behind` stops with an error for a tag of four
+/// numbers, which it compared before. A tag such as `1.26.x` was an error before too.
+#[test]
+fn maas_os_image_reads_the_first_two_parts_as_numbers_and_capa_stops_on_a_tag_of_four_numbers() {
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    let maas = catalog.rule("maas-os-image").unwrap();
+    for version in ["22.4.x", "22.4.1.1"] {
+        let mut doc = fixture::load(&fixture_path("maas", "clean.json")).unwrap();
+        doc["profiles"][0]["packs"][0]["version"] = serde_json::json!(version);
+        let outcome = outcome_of(maas, doc, &jq);
+        assert_eq!(
+            outcome.verdict,
+            Verdict::Passed,
+            "{version}: {:?}",
+            outcome.messages
+        );
+    }
+
+    let capa = catalog.rule("capa-stack-release-behind").unwrap();
+    for tag in ["1.26.15.1", "1.26.x"] {
+        let mut doc = fixture::load(&fixture_path("eks", "capa-release-behind.json")).unwrap();
+        doc["release"] = serde_json::json!("1.26");
+        let command = doc["_exec"]
+            .as_object_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|(line, _)| line.starts_with("aws iam list-role-tags --role-name controllers"))
+            .unwrap()
+            .1;
+        command["stdout"]["Tags"][0]["Value"] = serde_json::json!(tag);
+        let outcome = outcome_of(capa, doc, &jq);
+        assert_eq!(
+            outcome.verdict,
+            Verdict::Error,
+            "{tag}: {:?}",
+            outcome.messages
+        );
+        let message = outcome.messages.join("\n");
+        assert!(
+            message.contains(&format!("holds {tag}, and that is no version")),
+            "{message}"
+        );
+    }
+}
+
 /// The folder and the files of a run of the `jq` tool over a line of `reproduce`. `world.json`,
 /// `entity.json`, and `body.json` hold an empty object, so that every line finds its files.
 fn folder_for_reproduce() -> tempfile::TempDir {
@@ -1981,11 +2029,14 @@ fn the_definition_of_semver_numbers_in_a_reproduce_line_gives_the_answer_of_the_
 }
 
 /// The definition in front of a program that names `count_of` gives the words of the filter of the
-/// engine. The engine refuses a count that is not a whole number of zero or more. The table has
-/// none, because the definition of the tool does not refuse it.
+/// engine. The table has numbers that are not whole numbers of zero or more too. The engine writes
+/// the number and the plural noun, as the definition does.
 #[test]
 fn the_definition_of_count_of_in_a_reproduce_line_gives_the_answer_of_the_engine() {
-    let counts = [0, 1, 2, 3, 10, 11, 100, 12345, 1_000_000].map(|n| serde_json::json!(n));
+    let whole =
+        [0, 1, 2, 3, 10, 11, 100, 12345, 1_000_000, -1, -2, -100].map(|n| serde_json::json!(n));
+    let fractions = [0.5, -0.5, 1.5, 2.5, 0.0, 1.0].map(|n| serde_json::json!(n));
+    let counts = whole.into_iter().chain(fractions);
     assert_the_tool_gives_the_answer_of_the_engine(
         r#"count_of("key pair")"#,
         "jq 'def count_of($noun): ",
@@ -2299,6 +2350,25 @@ fn writes_a_plural_in_brackets(line: &str) -> bool {
         line.match_indices(mark)
             .any(|(at, _)| !line[..at].ends_with("http"))
     })
+}
+
+/// Palette types `numCPUs` as an integer of 32 bits, so a body with `-1` parses. The rule exists
+/// to catch a count under 1, so it must give its message for `-1` and for `0.5`, with exit `0`.
+/// Release 0.28.0 stopped with an error: the filter `count_of` refused the number.
+#[test]
+fn vsphere_instance_floor_names_a_pool_with_a_cpu_count_under_zero_or_not_whole() {
+    let catalog = catalog::builtin().unwrap();
+    let rule = catalog.rule("vsphere-instance-floor").unwrap();
+    let fault = catalog::rules_dir().join("fixtures/vsphere/cpu-negative.json");
+    let (verdict, messages) = verdict(rule, &fault, &Jq::new());
+    assert_eq!(verdict, Verdict::Failed, "{messages:?}");
+    assert_eq!(
+        messages,
+        [
+            "pool cp-pool has 0.5 CPUs; the converter needs 1 or more, and the tutorials use 4",
+            "pool worker-pool has -1 CPUs; the converter needs 1 or more, and the tutorials use 4",
+        ]
+    );
 }
 
 /// The review at the end of Wave 14 found 22 places that wrote `2 key pair(s)`. A message agrees

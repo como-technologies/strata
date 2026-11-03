@@ -149,9 +149,9 @@ as sent. The report is the document `strata-report/1` that `strata report --json
 nothing else. The post has one try and a timeout of 3 seconds. The run prints its output first, so
 a slow endpoint delays no output.
 
-The post also holds a key in the header `Idempotency-Key`: a hash of the report and of the number
-of valid lines before it. A second try of the same lines has the same key, so the endpoint counts them
-one time. The key holds no name, no uid, and no host.
+The post also holds a key in the header `Idempotency-Key`. The key is a hash of the report and of
+the number of lines of the log before it. A second try of the same lines has the same key, so the
+endpoint counts them one time. The key holds no name, no uid, and no host.
 
 ```text
 {{#include ../output/unknown-value-send.txt}}
@@ -167,11 +167,16 @@ after:
 ```
 
 A line of the log that is not valid does not stop the send. Strata skips the line and sends the
-valid lines. The mark counts the valid lines only. Strata writes a warning that gives the count of
+valid lines. The mark counts each line that is not blank, valid or not, as it did in release 0.27.0.
+So a skipped line is under the mark after the send. Strata writes a warning that gives the count of
 the skipped lines and the number of the first one.
 
 `strata report` still stops on such a line. Delete the line to stop the warning. `--quiet` hides
 the warning.
+
+A line that you delete before the mark moves the mark. The next line moves up, and the mark covers
+it, so the send skips it. For each line that you delete before the mark, lower the number in the
+file `strata-unknown.sent` by 1.
 
 A send never changes the output or the exit code of a run. When a report fails, strata marks no
 line of it. Strata writes a warning, such as
@@ -205,7 +210,8 @@ The endpoint keeps these things, and no other:
   writes the hash nowhere. The service drops an old hash soon after the hour, and a restart
   forgets it.
 - **A hash of the key and the report, in memory, for one day.** A second try of the same lines
-  counts one time. The hash holds no text of the report. The service drops it soon after the day.
+  counts one time. The service keeps the hash only for a report that it took whole. The hash holds
+  no text of the report. The service drops it soon after the day.
 
 The service writes no address and no report to its log. The maintainers also exclude the request
 log of the platform, because that log holds the address. An issue stays until a maintainer deletes it.

@@ -334,6 +334,44 @@ fn a_count_above_the_most_is_refused_and_changes_nothing() {
 }
 
 #[test]
+fn a_second_try_with_the_key_of_a_report_that_has_a_value_that_waits_gets_a_new_plan() {
+    let limits = Limits {
+        new_issues: 3,
+        ..wide()
+    };
+    let service = Service::with_limits(Memory::default(), limits);
+    let now = Instant::now();
+    let report = body(&values(5));
+    let first = service.handle(&keyed("a", &key(1), &report), now);
+    assert_eq!(
+        first.body,
+        json!({"ok": true, "opens": 3, "updates": 0, "waiting": [4, 5]})
+    );
+    // the same key and the same report: the entries 4 and 5 still wait, so the answer says so
+    let again = service.handle(&keyed("a", &key(1), &report), now);
+    assert_eq!(again.status, 202, "{}", again.body);
+    assert_eq!(
+        again.body,
+        json!({"ok": true, "opens": 0, "updates": 3, "waiting": [4, 5]})
+    );
+    // the hour is over: the entries open, and the report is whole
+    let later = now + Duration::from_secs(3600);
+    let opened = service.handle(&keyed("a", &key(1), &report), later);
+    assert_eq!(
+        opened.body,
+        json!({"ok": true, "opens": 2, "updates": 3}),
+        "the entries that waited open"
+    );
+    assert_eq!(issues(&service), 5);
+    // a report that the service took whole is a repeat of the key
+    let repeat = service.handle(&keyed("a", &key(1), &report), later);
+    assert_eq!(
+        (repeat.status, repeat.body),
+        (200, json!({"ok": true, "duplicate": true}))
+    );
+}
+
+#[test]
 fn a_second_try_with_the_key_of_the_first_counts_once_and_a_new_key_counts_again() {
     let service = Service::new(Memory::default());
     let now = Instant::now();

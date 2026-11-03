@@ -135,8 +135,10 @@ that reads `.version` or `.tag`, unless `semver_numbers //` comes first.
 `1` gives `1 key pair`, and `0` gives `no key pairs`.
 
 Write the noun in the singular. Use it for each count in a message. A test of the
-catalog refuses `(s)` after a noun. The input must be a whole number of zero or
-more.
+catalog refuses `(s)` after a noun. A number that is not a whole number of zero or more
+writes the number and the plural noun: `-1 | count_of("CPU")` gives `-1 CPUs`. A count that
+Palette gives can be such a number, and a message must not fail on it. The input must be a
+number.
 
 A program with one of these filters does not run in the `jq` tool. The report writes a
 `reproduce` line for such a program with a definition of each filter in front. So the line runs

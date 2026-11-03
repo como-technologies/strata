@@ -4334,7 +4334,7 @@ fn the_section_of_release_0_28_0_names_each_change_of_strata_preflight_that_the_
     let command_line = release_0_28_0_part("### For a user of the command line or of a document");
     for needle in [
         // A6: a text that is no version reads as it did in 0.27.0
-        "A text that is no version reads as it did in 0.27.0. Examples are `1.26.x`, `1.26.15.1`, and `4.10.x`.",
+        "A text that is no version reads as it did in 0.27.0 in the five rules that cut it. Examples are `1.26.x` and `4.10.x`.",
         // A2 and S4: the owner is a closed set, and the description list holds the five items
         "**`strata-preflight`: the `owner` of a fix is one of six values.**",
         "A rule file of `--probes` with another owner stops the run with the error `catalog` and exit `2`.",
@@ -4480,7 +4480,7 @@ fn compatibility_names_the_four_rules_that_cut_a_version_at_the_dots_and_what_ch
         "The text `v1.32.1` gave the line `v1.32`, and `1.32+build.5` gave `1.32+build`.",
         "Both texts give the line `1.32`, as `1.32.1` did.",
         "`maas-os-image` reads the numbers 22 and 4 as Ubuntu 22.04, so the text `22.4` passes now.",
-        "The six rules that cut a text read the first two parts between the dots.",
+        "These rules read the first two parts between the dots.",
     ] {
         assert!(
             command_line.contains(needle),
@@ -4631,7 +4631,11 @@ fn the_pages_of_the_report_say_that_the_send_skips_a_line_that_is_not_valid() {
     for needle in [
         "The send of a run does not stop on such a line: see [What a run sends](#what-a-run-sends).",
         "A line of the log that is not valid does not stop the send. Strata skips the line and sends \
-         the valid lines. The mark counts the valid lines only.",
+         the valid lines. The mark counts each line that is not blank, valid or not, as it did in \
+         release 0.27.0.",
+        "A line that you delete before the mark moves the mark. The next line moves up, and the mark \
+         covers it, so the send skips it. For each line that you delete before the mark, lower the \
+         number in the file `strata-unknown.sent` by 1.",
         "`strata report` still stops on such a line. Delete the line to stop the warning. `--quiet` \
          hides the warning.",
     ] {
@@ -4654,6 +4658,24 @@ fn the_pages_of_the_report_say_that_the_send_skips_a_line_that_is_not_valid() {
             !compatibility.contains(old),
             "compatibility.md still holds {old:?}"
         );
+    }
+    // the mark keeps its meaning of release 0.27.0 (#608)
+    for needle in [
+        "so a mark of 0.27.0 and a mark of this release mean the same",
+        "A line that you delete before the mark moves the mark.",
+    ] {
+        assert!(
+            compatibility.contains(needle),
+            "compatibility.md lacks {needle:?}"
+        );
+    }
+    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    for old in [
+        "counts the valid lines only",
+        "the number of valid lines before it",
+    ] {
+        assert!(!page.contains(old), "compatibility.md still holds {old:?}");
+        assert!(!reference.contains(old), "report.md still holds {old:?}");
     }
 }
 
@@ -5398,5 +5420,51 @@ fn contributing_asks_for_a_commit_message_with_no_prefix_and_names_the_release_c
     assert!(
         repo_file("scripts/dev/set-version.sh")
             .contains("git commit -q -m \"chore: release $new\"")
+    );
+}
+
+// ---- the review of Wave 14: the last results state what the code does (#608) --------------------
+
+/// R4 to R6: three sentences of the book say what the code does. The tests of the rules and of the
+/// commands show the code: `preflight/tests/catalog.rs` and `src/ops/packs/tests.rs`.
+#[test]
+fn the_pages_state_what_the_rules_the_packs_option_and_the_watch_do() {
+    let compatibility = release_0_28_0_part("### For a user of the command line or of a document");
+    for needle in [
+        "A text that is no version reads as it did in 0.27.0 in the five rules that cut it.",
+        "`maas-os-image` reads the first two parts of such a text as numbers. So `22.4.x` and \
+         `22.4.1.1` pass now, and they failed before.",
+        "`capa-stack-release-behind` compared a tag with four numbers, such as `1.26.15.1`. It stops \
+         with an error now, and the message names the tag.",
+        "A `--release` that is no version is still an error, and the message names it.",
+    ] {
+        assert!(
+            compatibility.contains(needle),
+            "compatibility.md lacks {needle:?}"
+        );
+    }
+    for old in [
+        "Examples are `1.26.x`, `1.26.15.1`, and `4.10.x`.",
+        "A `--release` or a tag that is no version is still an error",
+    ] {
+        assert!(
+            !compatibility.contains(old),
+            "compatibility.md still holds {old:?}"
+        );
+    }
+
+    let packs = one_line(&read(&docs().join("commands/packs.md")));
+    assert!(
+        packs.contains("`latest` marks the highest of them that is not a pre-release."),
+        "packs.md lacks the pre-release in the mark of `--cloud`"
+    );
+
+    let use_case = one_line(&read(&docs().join("use-cases/stop-a-build.md")));
+    assert!(
+        use_case.contains(
+            "If Palette deletes the cluster, the watch ends at once. The exit code is `0` when no \
+             counted rule failed, and the last line then says that the cluster is gone"
+        ),
+        "stop-a-build.md lacks the condition of exit 0"
     );
 }

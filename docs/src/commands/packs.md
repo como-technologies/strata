@@ -87,7 +87,7 @@ the version that Palette marks. They are two versions:
 | Option | Function |
 | --- | --- |
 | `--registry NAME` | Only this registry, by its name or its uid. |
-| `--cloud TYPE` | Keep the versions that support this cloud, such as `aws`. `latest` marks the highest of them. |
+| `--cloud TYPE` | Keep the versions that support this cloud, such as `aws`. `latest` marks the highest of them that is not a pre-release. |
 | `--latest` | Only the version that `@latest` names in each registry, and the version that Palette calls the latest when it is a different one. |
 
 A version supports a cloud by the rule of Palette for a pack in a profile: see

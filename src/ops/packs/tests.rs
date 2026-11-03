@@ -151,6 +151,26 @@ fn a_pre_release_is_below_its_version_so_latest_keeps_one_version() {
     assert_eq!(order, ["1.30.0", "1.30.0-rc.1", "1.29.0"]);
 }
 
+/// With `--cloud`, `latest` marks the highest version that is not a pre-release, of the versions
+/// that support the cloud. A pre-release above the release has no mark (#608).
+#[test]
+fn latest_with_cloud_marks_the_highest_version_that_is_not_a_pre_release() {
+    let listing = packs_for(
+        "aws",
+        vec![
+            version("pk-rc", "1.31.0-rc.1", &["aws"]),
+            version("pk-29", "1.29.0", &["aws"]),
+            version("pk-gcp", "1.30.0", &["gcp"]),
+        ],
+    );
+    let marks: Vec<(&str, bool)> = listing.registries[0]
+        .versions
+        .iter()
+        .map(|v| (v.version.as_str(), v.latest))
+        .collect();
+    assert_eq!(marks, vec![("1.31.0-rc.1", false), ("1.29.0", true)]);
+}
+
 #[test]
 fn latest_marks_the_version_that_a_pack_ref_records_and_not_a_pre_release_above_it() {
     // the highest version is a pre-release, and Palette marks it: `pack:...@latest` skips it
