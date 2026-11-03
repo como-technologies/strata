@@ -2,12 +2,11 @@
 # The writes to Palette that the live example's scripts make outside OpenTofu.
 #
 #   api.sh edit PROFILE_UID FROM TO
-#       Replace the text FROM with TO in the one pack values or manifest that contains it, in a
-#       published profile version, in place: PUT the version, keeping each manifest's uid, then
-#       publish it. This is an edit
-#       through the API, which Palette accepts whatever the Spectro Cloud provider's
-#       immutable-clusterprofiles flag says. Exit 2 when no place, or more than one, contains
-#       FROM.
+#       Replace the text FROM with TO in the one pack values or manifest that contains it. This
+#       changes a published profile version in place. PUT the version with the uid that each
+#       manifest already has, then publish it. This is an edit through the API, which Palette
+#       accepts whatever the Spectro Cloud provider's immutable-clusterprofiles flag says. Exit 2
+#       when no place, or more than one, contains FROM.
 #   api.sh draft PROFILE_UID FROM TO
 #       The change of api.sh edit, with no publish: PUT the version only. Palette writes the
 #       change to the draft of the version, and the published template stays.
@@ -18,7 +17,7 @@
 #       version, with no publish: POST /v1/clusterprofiles only. Print the uid of the new profile.
 #       Each manifest goes with no uid, so the new profile gets its own manifests.
 #   api.sh create-tenant-copy PROFILE_UID NAME
-#       Create and publish the profile NAME at tenant scope, with the version, the packs, the
+#       Create and publish the profile NAME at tenant scope. It has the version, the packs, the
 #       values, and the manifests of a published version of the project. The create is a POST
 #       of /v1/clusterprofiles with no ProjectUid header, and the publish a PATCH of
 #       /v1/clusterprofiles/{uid}/publish. Print the uid of the new profile. Palette lists a
@@ -31,28 +30,30 @@
 #       /v1/clusterprofiles/{uid}/packs/{pack}/manifests/{manifest uid}, then publish. Exit 2
 #       unless exactly one manifest holds FROM.
 #   api.sh reorder PROFILE_UID
-#       Reverse the order of the packs of a published profile version, in place: PUT the version
+#       Reverse the order of the packs of a published profile version, in place. PUT the version
 #       with the same packs, values, and manifests in the other order, then publish it. Nothing
 #       else changes.
 #   api.sh reorder-cluster CLUSTER_UID
-#       PUT the profiles of a cluster in the other order, with the uids it already has and each
-#       pack's values and manifests as api.sh apply sends them, and without resolveNotification.
+#       PUT the profiles of a cluster in the other order. Send the uids that the cluster already
+#       has, and each pack's values and manifests as api.sh apply sends them. Send no
+#       resolveNotification.
 #   api.sh retag PROFILE_UID PACK FROM_TAG TO_TAG
-#       Rename the tag of one pack in a published profile version, in place, keeping its pack uid,
-#       values, and manifests: PUT the version, then publish it. Exit 2 when the version has no
-#       such pack under FROM_TAG.
+#       Rename the tag of one pack in a published profile version, in place. The pack uid, values,
+#       and manifests stay. PUT the version, then publish it. Exit 2 when the version has no such
+#       pack under FROM_TAG.
 #   api.sh apply CLUSTER_UID [--keep-notification]
-#       Accept the waiting update of every profile a cluster runs: PUT the cluster's profiles with
+#       Accept the waiting update of every profile a cluster runs. PUT the cluster's profiles with
 #       the uids it already has, each pack's values and manifests read from its profile, with
 #       resolveNotification=true. As the Spectro Cloud provider does, each manifest keeps the uid of
 #       the cluster's own copy, so the content lands in that copy. --keep-notification sends the
-#       same PUT without resolveNotification; in the recorded runs Palette changed the cluster's
+#       same PUT without resolveNotification. In the recorded runs Palette changed the cluster's
 #       copy either way.
 #   api.sh override CLUSTER_UID FROM TO
-#       Replace the text FROM with TO in the values and manifests that a cluster runs, as a person
-#       who overrides a value on the cluster does: the PUT of the cluster's profiles, with the
-#       content of each profile and the one change, and without resolveNotification. The profile
-#       keeps what it holds. Exit 2 unless exactly one value or manifest holds FROM.
+#       Replace the text FROM with TO in the values and manifests that a cluster runs. A person
+#       who overrides a value on the cluster makes the same change. The request is a PUT of the
+#       cluster's profiles, with the content of each profile and the one change, and without
+#       resolveNotification. The profile keeps what it holds. Exit 2 unless exactly one value or
+#       manifest holds FROM.
 #   api.sh attach CLUSTER_UID PROFILE_UID
 #       The same PUT with PROFILE_UID added, which puts that profile on the cluster.
 #   api.sh detach CLUSTER_UID PROFILE_UID
@@ -77,9 +78,10 @@
 #   api.sh filter-delete UID
 #   api.sh app-profile-create NAME [ORDER...]
 #       Make an app profile NAME@1.0.0 with one manifest tier, and print its uid. With ORDERs,
-#       make one manifest tier for each ORDER in its place: tier1 with the install order of the
-#       first ORDER, tier2 with the second, and so on. The content of a tier does not name the
-#       app profile, so two app profiles with the same number of ORDERs have the same tiers.
+#       make one manifest tier for each ORDER in its place. The tiers are tier1 with the install
+#       order of the first ORDER, tier2 with the second, and so on. The content of a tier does not
+#       name the app profile, so two app profiles with the same number of ORDERs have the same
+#       tiers.
 #   api.sh app-profile-edit UID FROM TO
 #       Replace FROM with TO in the manifest of the app profile, by a plain update.
 #   api.sh app-profile-order UID ORDER
@@ -94,18 +96,18 @@
 #       with OciSyncInProgress: then wait, and ask again. Exit 2 when Palette refuses the request
 #       for five minutes, or when the sync does not end in five minutes.
 #   api.sh sync KIND REGISTRY_UID
-#       The same for a registry of KIND: oci-ecr, oci-basic (an OCI registry with basic auth),
-#       helm, or pack (a Spectro pack registry).
+#       The same for a registry of KIND. KIND is oci-ecr, oci-basic (an OCI registry with basic
+#       auth), helm, or pack (a Spectro pack registry).
 #   KINDS_PASSWORD=... api.sh pack-registry-create NAME ENDPOINT USER
 #       Make a Spectro pack registry over ENDPOINT with basic auth, and print its uid.
 #   api.sh pack-registry-delete REGISTRY_UID
 #       Remove a Spectro pack registry.
 #   api.sh pin-profile NAME REGISTRY_UID TYPE PACK VERSION [VALUES_FILE [LAYER [TAG [CLOUD]]]]
-#       Make and publish an add-on profile NAME@1.0.0 that pins PACK at VERSION by name, with no
-#       pack uid, as the console does for a registry that Palette does not synchronize, and with
-#       the values of VALUES_FILE, or none. An empty VALUES_FILE gives no values. The pack has
-#       the layer LAYER, or addon, and the tag TAG, such as the floating tag 1.0.x, or VERSION.
-#       The profile has the cloud type CLOUD, or all. Prints its uid.
+#       Make and publish an add-on profile NAME@1.0.0 that pins PACK at VERSION by name. The pin
+#       has no pack uid, as the console does for a registry that Palette does not synchronize.
+#       The profile has the values of VALUES_FILE, or none: an empty VALUES_FILE gives no values.
+#       The pack has the layer LAYER, or addon, and the tag TAG, such as the floating tag 1.0.x,
+#       or VERSION. The profile has the cloud type CLOUD, or all. Prints its uid.
 #   api.sh patch PATH JSON
 #       PATCH one document of the API with the body JSON, such as
 #       /v1/spectroclusters/<uid>/clusterConfig/timezone '{"timezone": "America/Chicago"}'.
@@ -114,19 +116,19 @@
 #       '{"rbacs": []}'. The body replaces the document.
 #   api.sh post PATH JSON
 #       POST the body JSON to a search of the API, such as /v1/dashboard/edgehosts/search, or to
-#       a validate route, such as /v1/clusterprofiles/validate/packs, and print the answer. A
-#       POST to another path can create something: use a search path or a validate path only.
+#       a validate route, such as /v1/clusterprofiles/validate/packs. Print the answer. A POST
+#       to another path can create something: use a search path or a validate path only.
 #   api.sh post-status PATH BODY_FILE
-#       The request of `post`, for a validate path, with the body in the file BODY_FILE: the body
-#       for a real cluster is longer than one argument can be. It prints the HTTP status as
-#       `HTTP <code>` on the first line and the answer after it. It exits 0 for each status, so
-#       that a check can read a refusal and the status that Palette gives it.
+#       The request of `post`, for a validate path, with the body in the file BODY_FILE. The
+#       reason is that the body for a real cluster is longer than one argument can be. It prints
+#       the HTTP status as `HTTP <code>` on the first line and the answer after it. It exits 0
+#       for each status, so that a check can read a refusal and the status that Palette gives it.
 #   api.sh packs-where [--name NAME] [JQ_OPTION...] JQ_FILTER
-#       Print the first pack of the packs of the project for which JQ_FILTER, a jq condition on the
-#       pack, is true: one line of JSON. The listing is read a page at a time, and the read stops
-#       at the first match. NAME limits the listing to the packs of that name. The options go to
-#       jq, such as --arg r REGISTRY_UID. Exit 0 when a pack matches, 1 when none does, and 2
-#       when Palette refuses a page.
+#       Print the first pack of the packs of the project for which JQ_FILTER is true. JQ_FILTER
+#       is a jq condition on the pack, and the output is one line of JSON. The listing is read a
+#       page at a time, and the read stops at the first match. NAME limits the listing to the
+#       packs of that name. The options go to jq, such as --arg r REGISTRY_UID. Exit 0 when a pack
+#       matches, 1 when none does, and 2 when Palette refuses a page.
 #   api.sh probe-profile NAME REGISTRY_UID VERSION
 #       Ask Palette to create an add-on profile that pins one pack version, with the values the
 #       registry lists for it. When Palette creates it, delete it at once, print `accepted`, and

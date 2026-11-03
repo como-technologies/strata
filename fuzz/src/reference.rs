@@ -27,8 +27,8 @@ fn the_text_of_a_ref_parses_as_a_ref_that_prints_the_same_text() {
     });
 }
 
-/// Make sure that [`version::compare`] orders `a`, `b`, and `c` as a total preorder: each version
-/// equals itself, the order of two versions reverses with them, and it is transitive. Two
+/// Make sure that [`version::compare`] orders `a`, `b`, and `c` as a total preorder. Each version
+/// equals itself. The order of two versions reverses with them. The order is transitive. Two
 /// spellings of one version, such as `1.0.1` and `1.0.1+2`, compare equal.
 pub(crate) fn order_laws(a: &str, b: &str, c: &str) {
     let cmp = version::compare;

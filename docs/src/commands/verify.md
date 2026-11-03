@@ -42,7 +42,7 @@ the draft, with no `@draft` in the ref, and `verify` gives it the same verdicts.
 
 `DRIFT` says that the object changed, but not who changed it.
 `--who` reads that from the audit log of Palette. For a record that drifted,
-strata reads each write to the object of the record since the record was taken.
+strata reads each write to the object of the record since strata took the record.
 The object is the profile, the app profile, the cluster, the edge host, or the
 cluster group. Palette has who and when. The record has what the content was.
 

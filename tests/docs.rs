@@ -796,25 +796,38 @@ fn the_blocks_that_the_style_review_of_wave_11_named_have_six_sentences_or_fewer
     }
 }
 
-/// The comment that holds the first comment line with `anchor`. The comment is the lines around it
-/// that start with `//`, up to a blank comment line. The result is one line without the marks.
-fn comment(text: &str, anchor: &str) -> String {
-    let lines: Vec<&str> = text.lines().collect();
-    let body = |i: usize| {
-        let line = lines[i].trim_start();
-        let marks = line.starts_with("//");
-        let words = line.trim_start_matches('/').trim_start_matches('!').trim();
-        (marks && !words.is_empty()).then_some(words)
-    };
-    let at = (0..lines.len())
-        .find(|&i| body(i).is_some() && lines[i].contains(anchor))
-        .unwrap_or_else(|| panic!("no comment line holds {anchor:?}"));
-    let from = (0..=at).rev().take_while(|&i| body(i).is_some()).last();
-    let to = (at..lines.len()).take_while(|&i| body(i).is_some()).last();
-    let text: Vec<&str> = (from.unwrap_or(at)..=to.unwrap_or(at))
-        .filter_map(body)
-        .collect();
-    text.join(" ")
+/// The comment blocks of a file. A block is a run of lines that start with `mark`, up to a line
+/// that is not one or a blank comment line. It is one line, without the marks. `///` and `//!` are
+/// `//` with one more mark.
+fn comment_blocks(text: &str, mark: &str) -> Vec<String> {
+    let mut blocks = Vec::new();
+    let mut run: Vec<&str> = Vec::new();
+    for line in text.lines().map(str::trim_start) {
+        let words = line
+            .strip_prefix(mark)
+            .map(|rest| rest.trim_start_matches(['/', '!']).trim());
+        match words {
+            Some(words) if !words.is_empty() => run.push(words),
+            _ if !run.is_empty() => blocks.push(std::mem::take(&mut run).join(" ")),
+            _ => {}
+        }
+    }
+    blocks.extend((!run.is_empty()).then(|| run.join(" ")));
+    blocks
+}
+
+/// The comment blocks of a file of the repository: `//` in a Rust file, and `#` in any other.
+fn comments_of(file: &str) -> Vec<String> {
+    let mark = if file.ends_with(".rs") { "//" } else { "#" };
+    comment_blocks(&repo_file(file), mark)
+}
+
+/// The comment of a file of the repository that holds `anchor`.
+fn comment(file: &str, anchor: &str) -> String {
+    comments_of(file)
+        .into_iter()
+        .find(|block| block.contains(anchor))
+        .unwrap_or_else(|| panic!("{file}: no comment holds {anchor:?}"))
 }
 
 /// The style review of Wave 11 found comments in the Rust files with a sentence over the limit of
@@ -884,11 +897,11 @@ fn the_rust_comments_that_the_style_review_of_wave_11_named_keep_to_25_words() {
         ("tests/docs.rs", "The sentences of `block`."),
         (
             "tests/docs.rs",
-            "The comment that holds the first comment line",
+            "The comment of a file of the repository that holds",
         ),
     ];
     for (file, anchor) in comments {
-        for sentence in sentences(&comment(&repo_file(file), anchor)) {
+        for sentence in sentences(&comment(file, anchor)) {
             assert!(
                 words(&sentence) <= 25,
                 "{file}: {} words in a comment sentence of 25 at most: {sentence}",
@@ -1022,7 +1035,7 @@ fn the_rust_comments_that_the_style_review_of_wave_8_named_keep_to_25_words() {
         ),
     ];
     for (file, anchor) in comments {
-        for sentence in sentences(&comment(&repo_file(file), anchor)) {
+        for sentence in sentences(&comment(file, anchor)) {
             assert!(
                 words(&sentence) <= 25,
                 "{file}: {} words in a comment sentence of 25 at most: {sentence}",
@@ -1032,8 +1045,8 @@ fn the_rust_comments_that_the_style_review_of_wave_8_named_keep_to_25_words() {
     }
 }
 
-/// The legend of a pair status is plain words for a reader without the book: each sentence has 25
-/// words at most, and no sentence is a fragment after a semicolon.
+/// The legend of a pair status is plain words for a reader without the book. Each sentence has 25
+/// words at most. No sentence is a fragment after a semicolon.
 #[test]
 fn the_legend_of_a_pair_status_keeps_to_25_words_and_has_no_semicolon() {
     let legend = strata::closed_set::legend::legend::<strata::ops::PairStatus>();
@@ -1425,7 +1438,7 @@ fn the_jobs_and_their_commands_keep_each_command_and_each_link_of_the_table_of_t
 }
 
 /// The heading "Who runs what, and when" became two sections. `just docs-check` fails a link to a
-/// heading that a page does not have, so this test needs only the headings and the two new links.
+/// heading that a page does not have. So this test needs only the headings and the two new links.
 #[test]
 fn the_everyday_loop_has_the_two_new_sections_and_the_quick_start_and_the_commands_link_them() {
     let text = the_loop();
@@ -1522,22 +1535,6 @@ fn the_phrasal_verbs_of_the_review_at_the_end_of_wave_12_are_gone_from_the_book(
     }
 }
 
-/// The comment blocks of a YAML file: each run of lines that start with `#`. A block is one line,
-/// without the marks.
-fn yaml_comments(text: &str) -> Vec<String> {
-    let mut blocks = Vec::new();
-    let mut run: Vec<&str> = Vec::new();
-    for line in text.lines().map(str::trim_start) {
-        match line.strip_prefix('#').map(str::trim) {
-            Some(words) if !words.is_empty() => run.push(words),
-            _ if !run.is_empty() => blocks.push(std::mem::take(&mut run).join(" ")),
-            _ => {}
-        }
-    }
-    blocks.extend((!run.is_empty()).then(|| run.join(" ")));
-    blocks
-}
-
 /// A user copies the drop-ins of the CI systems, so their comments are user text. The review at the
 /// end of Wave 12 named three comments that are over the limit: each sentence of them has 25 words
 /// at most.
@@ -1552,11 +1549,7 @@ fn the_comments_of_the_ci_drop_ins_that_the_review_named_keep_to_25_words() {
         ("examples/ci/gitlab/strata.yml", "needed to read Palette"),
     ];
     for (file, anchor) in comments {
-        let block = yaml_comments(&repo_file(file))
-            .into_iter()
-            .find(|block| block.contains(anchor))
-            .unwrap_or_else(|| panic!("{file}: no comment holds {anchor:?}"));
-        for sentence in sentences(&block) {
+        for sentence in sentences(&comment(file, anchor)) {
             assert!(
                 words(&sentence) <= 25,
                 "{file}: {} words in a comment sentence of 25 at most: {sentence}",
@@ -1696,7 +1689,7 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_12_named_keeps_to_25_wo
         ),
     ];
     for (file, anchor) in comments {
-        let text = comment(&repo_file(file), anchor);
+        let text = comment(file, anchor);
         for sentence in sentences(&text) {
             assert!(
                 words(&sentence) <= 25,
@@ -2761,7 +2754,7 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_13_named_keeps_to_25_wo
         ),
     ];
     for (file, anchor) in comments {
-        let text = comment(&repo_file(file), anchor);
+        let text = comment(file, anchor);
         for sentence in sentences(&text) {
             assert!(
                 words(&sentence) <= 25,
@@ -2885,6 +2878,18 @@ fn loop_sh_has_the_check_report_log_and_the_book_has_its_row() {
 
 // ---- the cleanup of Wave 12, in Wave 14 ---------------------------------------------------------
 
+/// One part of the section of release 0.28.0 in compatibility.md, as one line. The part starts at
+/// the heading `heading` and ends at the next heading of its level.
+fn release_0_28_0_part(heading: &str) -> String {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let release = section(
+        &page,
+        "## Release 0.28.0: changes that need action",
+        Some("\n## "),
+    );
+    one_line(section(release, heading, Some("\n### ")))
+}
+
 /// The section of release 0.28.0 sits above the one of release 0.27.0. It gives the action for
 /// each change of the cleanup that can break a script, a document reader, or a program that uses a
 /// library: the mark `latest`, the path of `snapshot-schema`, the field `cluster` of
@@ -3006,6 +3011,420 @@ fn the_section_of_release_0_28_0_names_each_non_exhaustive_type_of_the_send() {
         assert!(
             library.contains(&format!("`closed_set::unknown::send::{name}`")),
             "the section of release 0.28.0 does not name {name}"
+        );
+    }
+}
+
+// ---- the text findings of the review at the end of Wave 12, in Wave 14 ---------------------------
+
+/// The review at the end of Wave 12 named passive sentences and "-ing" forms in the book and in
+/// the legend of a status. Each row has the words that went, and the words that came.
+#[test]
+fn the_passive_sentences_and_the_ing_forms_that_the_review_at_the_end_of_wave_12_named_are_gone() {
+    let sentences = [
+        (
+            "docs/src/automation/merge-gate.md",
+            "was edited in place after the record was written",
+            "A person edited the profile that the record names in place, after strata wrote the record.",
+        ),
+        (
+            "docs/src/commands/verify.md",
+            "since the record was taken",
+            "since strata took the record",
+        ),
+        (
+            "docs/src/development/code.md",
+            "A record file is read first",
+            "Strata reads a record file first",
+        ),
+        (
+            "docs/src/development/build-test.md",
+            "The document reads or is refused",
+            "Strata reads the document or refuses it with a kind, and writes the same document again.",
+        ),
+        (
+            "docs/src/development/build-test.md",
+            "a rule of another tier than `static` is not run",
+            "so the benchmark runs only the rules of the tier `static`",
+        ),
+        (
+            "docs/src/development/build-test.md",
+            "called a workflow asking for it",
+            "called a workflow that asked for it",
+        ),
+        (
+            "docs/src/internals/palette/packs.md",
+            "is refused at creation",
+            "Palette refuses the create of a profile that holds the requiring pack",
+        ),
+        (
+            "docs/src/internals/palette/packs.md",
+            "is pushed beside",
+            "When a person pushes `1.0.1` beside `1.0.0`",
+        ),
+        (
+            "docs/src/internals/palette/profiles.md",
+            "in the other order is accepted",
+            "Palette accepts a `PUT` of a published version",
+        ),
+        (
+            "docs/src/reference/compatibility.md",
+            "A field that is false, empty, or zero is omitted",
+            "Strata omits a field that is false, empty, or zero",
+        ),
+        (
+            "docs/src/reference/compatibility.md",
+            "A 5xx that is not a refusal is not kept",
+            "The backend keeps no 5xx that is not a refusal",
+        ),
+        (
+            "docs/src/use-cases/publish-fan-out.md",
+            "written against a level below that keeps moving",
+            "A job wrote each one against the level below",
+        ),
+        (
+            "docs/src/development/live-runs.md",
+            "running for 37 minutes",
+            "its EC2 instances ran for 37 minutes",
+        ),
+        (
+            "docs/src/development/live-runs.md",
+            "This read as Palette refusing the cluster",
+            "This looked like a refusal from Palette, but it was not one.",
+        ),
+        (
+            "src/ops/same_release.rs",
+            "pinned to another registry",
+            "a pack moved to another registry",
+        ),
+    ];
+    for (file, old, new) in sentences {
+        let text = one_line(&repo_file(file));
+        assert!(!text.contains(old), "{file} still holds {old:?}");
+        assert!(text.contains(new), "{file} lacks {new:?}");
+    }
+}
+
+/// A table cell is a paragraph for the reader, so it has six sentences at most. The test of Wave 8
+/// skips the rows of a table, and the module map of `build-test.md` held cells of 14 sentences.
+#[test]
+fn no_table_cell_of_the_book_holds_more_than_six_sentences() {
+    let mut faults = Vec::new();
+    for path in walk(&docs())
+        .iter()
+        .filter(|p| p.extension().is_some_and(|e| e == "md"))
+    {
+        for block in blocks_of(&read(path)).iter().filter(|b| b.starts_with('|')) {
+            for cell in block.trim_matches('|').split('|') {
+                let count = sentences(cell.trim()).len();
+                if count > 6 {
+                    faults.push(format!(
+                        "{}: {count} sentences: {}",
+                        path.display(),
+                        cell.trim()
+                    ));
+                }
+            }
+        }
+    }
+    assert!(
+        faults.is_empty(),
+        "{} faults:\n{}",
+        faults.len(),
+        faults.join("\n")
+    );
+}
+
+/// The top of the everyday loop said "one step of a day" for rows that are not steps of each day.
+/// It said "replaces the nodes" in two senses, and "makes the version" where the intro says
+/// "publishes". It said "Nobody works". The chart said that it puts each step in its lane, and it
+/// holds one change.
+#[test]
+fn the_top_of_the_everyday_loop_says_what_a_row_is_and_uses_one_word_for_each_thing() {
+    let text = the_loop();
+    for (old, new) in [
+        (
+            "Each row is one step of a day.",
+            "Each row is one thing that you do, and what strata tells you then.",
+        ),
+        (
+            "and if the change replaces the nodes. Palette says if it accepts the packs.",
+            "and its impact level, such as a repave. Palette says if it accepts the packs.",
+        ),
+        (
+            "| The pipeline makes the version in Palette |",
+            "| The pipeline publishes the version |",
+        ),
+        ("| Nobody works |", "| Each night, with no person at work |"),
+        (
+            "The chart puts each step in its lane.",
+            "The chart shows the steps of one change.",
+        ),
+        (
+            "Palette says if the nodes change",
+            "Palette says if the move replaces the nodes",
+        ),
+        (
+            "Write a new cluster:<br/>",
+            "Write a new cluster on the release:<br/>",
+        ),
+    ] {
+        let page = one_line(&text);
+        assert!(!page.contains(old), "loop.md still holds {old:?}");
+        assert!(page.contains(new), "loop.md lacks {new:?}");
+    }
+}
+
+/// The canonical text of a string moves more hashes than the item of release 0.26.0 names. The
+/// general paragraph names each one, and the section of release 0.28.0 corrects the item.
+#[test]
+fn compatibility_names_each_hash_that_the_canonical_text_moves_and_what_same_release_says() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let general = one_line(section(
+        &page,
+        "One root changes after 0.25.0 with no new id.",
+        Some("One saved directory changes after 0.25.0"),
+    ));
+    for needle in [
+        "Each hash that covers such a character changes. These are `valuesHash`, `contentHash`, `variablesHash`, `hash.authored` and `hash.node` of a pack, `contentDigest`, and the `hash` of a tier. So the `root` changes.",
+        "The policy tier of a cluster sorts its role bindings, their subjects, and its namespaces by the same text",
+        "`same-release` of such a pair gives `different` and exit `1`.",
+    ] {
+        assert!(general.contains(needle), "the paragraph lacks {needle:?}");
+    }
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document\n");
+    for needle in [
+        "**The root item of release 0.26.0 names four hashes. Four more hashes change with it.**",
+        "They are `contentDigest`, `hash.authored` and `hash.node` of a pack, and the `hash` of a tier.",
+        "gives `different` and exit `1`.",
+    ] {
+        assert!(
+            command_line.contains(needle),
+            "the section of release 0.28.0 lacks {needle:?}"
+        );
+    }
+}
+
+/// The list of "The order of versions" left out three cases that follow from the rule. Two
+/// versions can be one. A version that does not parse is above each version that parses.
+/// `strata list` uses the same order. The section also says that no live run shows how Palette
+/// orders a version with four numbers, so the reader knows whose order it is.
+#[test]
+fn the_order_of_versions_names_the_equal_versions_and_the_version_that_does_not_parse() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let order = one_line(section(
+        &page,
+        "### The order of versions",
+        Some("\n## Release 0.28.0"),
+    ));
+    for needle in [
+        "Two versions that differ only by a `v`, a missing `.0`, or build data are one version.",
+        "`1.2` equals `1.2.0`, and `v1.2.3` equals `1.2.3`.",
+        "`<name>@latest` gives `profile-name-ambiguous`",
+        "A version that does not parse is above each version that parses.",
+        "`behind` names no three-number version as newer than the pin `1.2.3.4`.",
+        "`strata list` orders the profiles by the same order.",
+        "The order of a version that does not parse is the order of strata. No live run shows how Palette orders such a version.",
+    ] {
+        assert!(order.contains(needle), "the section lacks {needle:?}");
+    }
+}
+
+/// The fuzz package is the newest code, and the review at the end of Wave 12 found 42 comment
+/// sentences in it over the limit. Each sentence of each comment in `fuzz/` has 25 words at most,
+/// so the next wave cannot add one.
+#[test]
+fn each_comment_sentence_in_the_fuzz_package_has_25_words_at_most() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut faults = Vec::new();
+    for path in walk(&root.join("fuzz"))
+        .iter()
+        .filter(|p| p.extension().is_some_and(|e| e == "rs"))
+    {
+        for block in comment_blocks(&read(path), "//") {
+            faults.extend(
+                sentences(&block)
+                    .into_iter()
+                    .filter(|s| words(s) > 25)
+                    .map(|s| format!("{}: {} words: {}", path.display(), words(&s), s.trim())),
+            );
+        }
+    }
+    assert!(
+        faults.is_empty(),
+        "{} faults:\n{}",
+        faults.len(),
+        faults.join("\n")
+    );
+}
+
+/// The review at the end of Wave 12 named comments of internal code with a sentence over
+/// 25 words. Each sentence of each comment has 25 words at most now.
+#[test]
+fn the_internal_comments_that_the_review_at_the_end_of_wave_12_named_keep_to_25_words() {
+    for (file, anchor) in [
+        ("tests/ci_scripts.rs", "A `curl` for the GitLab REST API"),
+        (
+            "tests/common/mod.rs",
+            "Assemble a cluster that runs the profile fixtures",
+        ),
+        (
+            "tests/workflows.rs",
+            "The build of the public items does not read",
+        ),
+        (".github/workflows/fuzz.yml", "A crash fails that job"),
+        (
+            "preflight/src/main.rs",
+            "The color of one stream, by the rule of",
+        ),
+        ("src/api/palette/mod.rs", "The walk ends at a page"),
+        (
+            "src/reference/version.rs",
+            "Of two pre-releases, the first identifier",
+        ),
+        (
+            "scripts/ci/merge-gate.sh",
+            "backwards DIFF: the pins that the merge result moves back",
+        ),
+        ("Cargo.toml", "It is the profile that the tool"),
+    ] {
+        for sentence in sentences(&comment(file, anchor)) {
+            assert!(
+                words(&sentence) <= 25,
+                "{file}: {} words in a comment sentence of 25 at most: {sentence}",
+                words(&sentence)
+            );
+        }
+    }
+}
+
+/// The review at the end of Wave 12 named modal and phrasal verbs in internal comments. The
+/// phrases are gone, and the echo of the fuzz workflow gives one instruction in each sentence.
+#[test]
+fn the_modal_and_phrasal_verbs_that_the_review_at_the_end_of_wave_12_named_are_gone() {
+    for (file, old) in [
+        ("Cargo.toml", "would also build"),
+        ("tests/verify.rs", "a request would give missing-credential"),
+        ("preflight/tests/cli.rs", "where the directory should be"),
+        ("tests/common/process.rs", "a file that it will run"),
+        ("src/reference/mod.rs", "falls through"),
+        ("src/config.rs", "fall through"),
+        ("preflight/src/main.rs", "goes out one time"),
+        ("tests/ci_scripts.rs", "steps aside"),
+        (
+            "xtask/src/tenant/clusters.rs",
+            "take it out of the consumers",
+        ),
+        ("src/content/canon.rs", "read back as itself"),
+    ] {
+        let comments = comments_of(file).join(" ");
+        assert!(!comments.contains(old), "{file} still holds {old:?}");
+    }
+    let fuzz = repo_file(".github/workflows/fuzz.yml");
+    assert!(
+        fuzz.contains("directory of the target. Run \\`cargo test -p strata-fuzz\\`."),
+        "the echo of fuzz.yml does not give two sentences"
+    );
+}
+
+/// The gate prints some of its text to a user, as the message of `die`. So its comments and its
+/// messages keep to the rule of the style: no modal verb.
+#[test]
+fn the_merge_gate_script_holds_no_modal_verb() {
+    let script = repo_file("scripts/ci/merge-gate.sh");
+    for modal in ["may", "might", "should", "would"] {
+        assert!(
+            !script
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|word| word.eq_ignore_ascii_case(modal)),
+            "scripts/ci/merge-gate.sh holds {modal:?}"
+        );
+    }
+}
+
+/// The gate stops with exit 2 for a strata that is older than the script, and the legend of the
+/// status `registry-move` has new words. The page of the gate and the section of release 0.28.0
+/// say both.
+#[test]
+fn the_book_says_that_the_gate_stops_for_an_older_strata_and_the_legend_of_registry_move_changed() {
+    let gate = one_line(&read(&docs().join("automation/merge-gate.md")));
+    assert!(
+        gate.contains(
+            "It stops when strata is older than the script, because that strata writes no `versionMove`."
+        ),
+        "the page of the gate does not say it"
+    );
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document\n");
+    for needle in [
+        "**`merge-gate.sh` stops with exit `2` when strata is older than the script.**",
+        "A local run or a custom job must use the strata of the same release.",
+        "**The legend text of the status `registry-move` of `same-release` changes.**",
+        "says \"moved to another registry\" in place of \"pinned to another registry\"",
+    ] {
+        assert!(
+            command_line.contains(needle),
+            "the section of release 0.28.0 lacks {needle:?}"
+        );
+    }
+    let legend = strata::closed_set::legend::legend::<strata::ops::PairStatus>();
+    assert!(
+        legend["registry-move"].contains("a pack moved to another registry"),
+        "{}",
+        legend["registry-move"]
+    );
+}
+
+/// The doc comments of public items feed the `description` of `strata schema` and of
+/// `strata-preflight --schema`. The split of long sentences gave some of them new words. The
+/// section of release 0.28.0 names each one, and the schema holds the new words. The test of
+/// `preflight/tests/cli.rs` holds the words of `strata-preflight`.
+#[test]
+fn the_section_of_release_0_28_0_names_each_schema_description_that_has_new_words() {
+    for (kind, pointer, new_words) in [
+        (
+            "behind",
+            "/$defs/Pin/properties/newer/description",
+            "A version for none of the clouds of the pinned version is not one to move to either.",
+        ),
+        (
+            "consumers",
+            "/$defs/ClustersRead/description",
+            "It gives an empty list on an error too.",
+        ),
+        (
+            "diff",
+            "/$defs/PackDiff/properties/tagRenamed/description",
+            "because the tag name differs. The same name, layer, type, version,",
+        ),
+        (
+            "verify-summary",
+            "/$defs/PackDiff/properties/tagRenamed/description",
+            "because the tag name differs. The same name, layer, type, version,",
+        ),
+    ] {
+        let document = schema(kind);
+        let description = document
+            .pointer(pointer)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_else(|| panic!("{kind} has no description at {pointer}"));
+        assert!(
+            one_line(description).contains(new_words),
+            "{kind} {pointer}: {description}"
+        );
+    }
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document\n");
+    for needle in [
+        "**Some descriptions in `strata schema` and in `strata-preflight --schema` have new words.**",
+        "No key, type, or id changes, and no script needs a change.",
+        "`strata schema behind`: the description of `newer` in a pin.",
+        "`strata schema consumers`: the description of the definition `ClustersRead`.",
+        "`strata schema diff` and `strata schema verify-summary`: the description of `tagRenamed` in a pack.",
+        "`strata-preflight --schema report`: the descriptions of the verdicts `not-run` and `skipped`.",
+        "`strata-preflight --schema rules`: the descriptions of the checks `palette`, `exec`, and `watch`, and of `check` and `when` in a rule.",
+    ] {
+        assert!(
+            command_line.contains(needle),
+            "the section of release 0.28.0 lacks {needle:?}"
         );
     }
 }

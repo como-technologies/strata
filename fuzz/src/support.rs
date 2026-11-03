@@ -1,5 +1,6 @@
-//! The parts that the targets share: the check of an answer, the documents of a profile, a
-//! Palette that answers each request with one document or one error, and the files of one input.
+//! The parts that the targets share are the check of an answer and the documents of a profile.
+//! They also share a Palette that answers each request with one document or one error, and the
+//! files of one input.
 
 use std::cell::{Cell, RefCell};
 use std::fs;
@@ -76,14 +77,14 @@ pub(crate) fn raw_profile(values: &str, manifest_content: &str) -> RawProfile {
 }
 
 /// The most requests that one document can cause. A read of a listing sends one request for each
-/// page, and a read of a document of thousands of items sends a few for each item. A loop that
-/// does not stop sends more: with this limit it is a panic that a fuzzer reports, and not a run
-/// that never ends.
+/// page. A read of a document of thousands of items sends a few for each item. A loop that does
+/// not stop sends more. With this limit, it is a panic that a fuzzer reports, and not a run that
+/// never ends.
 const REQUEST_LIMIT: usize = 200_000;
 
 /// A Palette that answers each request, a GET or a POST, with one document, or with one HTTP
-/// error. A target gives it a document of any shape, or a status and a body of any text, and
-/// strata must read the answer or refuse it with a kind.
+/// error. A target gives it a document of any shape, or a status and a body of any text. Strata
+/// must read the answer or refuse it with a kind.
 pub(crate) struct Everywhere {
     reply: Reply,
     asked: Cell<usize>,
@@ -155,8 +156,8 @@ thread_local! {
 }
 
 /// An empty directory for the files of one input. The directory is the same on each call in a
-/// thread: a call empties it, and a target makes no directory for each of its thousands of inputs.
-/// So a caller finishes with the files of one call before it makes the next call.
+/// thread. A call empties it, and a target makes no directory for each of its thousands of
+/// inputs. So a caller finishes with the files of one call before it makes the next call.
 pub(crate) fn scratch() -> PathBuf {
     SCRATCH.with(|cell| {
         let mut dir = cell.borrow_mut();
@@ -184,9 +185,9 @@ pub(crate) fn parts(bytes: &[u8]) -> impl Iterator<Item = &[u8]> {
     bytes.split(|&b| b == 0)
 }
 
-/// The first eight bytes of the SHA-256 digest of `bytes`, as a number: a fixed rule that does not
-/// change with the Rust version, for the name of a corpus file and for the choice of the fields of
-/// a mask.
+/// The first eight bytes of the SHA-256 digest of `bytes`, as a number. The number comes from a
+/// fixed rule that does not change with the Rust version. It serves for the name of a corpus file
+/// and for the choice of the fields of a mask.
 pub(crate) fn fingerprint(bytes: &[u8]) -> u64 {
     let digest = Sha256::digest(bytes);
     let head = <[u8; 8]>::try_from(&digest[..8]).expect("a SHA-256 digest has 32 bytes");
@@ -212,7 +213,7 @@ fn saved_files(save: impl FnOnce(&Path)) -> Vec<String> {
 }
 
 /// The files of a raw directory of a profile, in the order of the parts of an input. They are the
-/// files that `save_dir` writes for a profile that holds each document, so a file that a later
+/// files that `save_dir` writes for a profile that holds each document. So a file that a later
 /// version of strata adds is a part of each input.
 pub(crate) fn profile_files() -> &'static [String] {
     static FILES: OnceLock<Vec<String>> = OnceLock::new();

@@ -14,21 +14,22 @@
 #      FAIL on it, in seconds. The ledger gets `caught`, or `missed`. Three rules read a list of the
 #      cloud account from Palette (#143): instance-offering, ssh-key-pair on eks, and
 #      gcp-properties on gcp. The fault of instance-offering is a type that the instance type route
-#      lists with a zone in nonSupportedZones (null for a type that each zone offers), read from the
-#      route itself. On aws, the property route refuses a key pair that the region lacks, and
-#      iaas-pod-identity sends the key pair to it (#430)
+#      lists with a zone in nonSupportedZones. The value of nonSupportedZones is null for a type
+#      that each zone offers. The script reads the type from the route itself. On aws, the
+#      property route refuses a key pair that the region lacks, and iaas-pod-identity sends the key
+#      pair to it (#430)
 #   3  the clean entity: every tier, and each rule of severity fail that ran must PASS. The ledger
 #      gets `passed`, or `false-fail`
 #   4  with --build only: the apply of cluster A through the provider, and strata preflight --watch
-#      on it from the moment Palette lists it, until it is Running or a stuck state. The ledger
-#      gets `passed` for each watch rule that passed
+#      on it, from the moment Palette lists it. The watch runs until the cluster is Running or a
+#      stuck state. The ledger gets `passed` for each watch rule that passed
 #   5  with --build only, once the cluster is Running (the provider can return before that): strata
-#      preflight on cluster:UID, the cluster as Palette holds it, which
-#      is the entity the provider sent; and on cluster:UID with a change of the instance type of
-#      the worker pool, which the rules on a change must fail. The ledger gets both
+#      preflight on cluster:UID. This is the cluster as Palette holds it, which is the entity the
+#      provider sent. Then strata preflight on cluster:UID with a change of the instance type of
+#      the worker pool. The rules on a change must fail on it. The ledger gets both
 #   6  with --build --down only: the destroy, the delete of the versions outside the state, and
-#      the inventory of the cloud, which must be 0 on every line. Without --down the cluster
-#      stays: run just live-down after
+#      the inventory of the cloud. The inventory must be 0 on every line. Without --down the
+#      cluster stays: run just live-down after
 #
 # Needs live-profiles with cloud = ENGINE in terraform.tfvars (or -var cloud=ENGINE; a switch of
 # the cloud needs `just live-down` first, or the apply is refused with ClusterProfileAlreadyExists),

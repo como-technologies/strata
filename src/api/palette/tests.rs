@@ -286,6 +286,27 @@ fn latest_resolves_to_the_highest_version_that_is_not_a_pre_release() {
 }
 
 #[test]
+fn latest_takes_a_version_that_does_not_parse_above_each_version_that_parses_and_ties_two_equal_versions()
+ {
+    // `1.2.3.4` does not parse as a version, so it is above `2.0.0`, as the book says
+    let listing = json!({"items": [
+        {"metadata": {"name": "four", "uid": "u1"}, "spec": {"version": "2.0.0"}},
+        {"metadata": {"name": "four", "uid": "u2"}, "spec": {"version": "1.2.3.4"}},
+        {"metadata": {"name": "two", "uid": "u3"}, "spec": {"version": "1.2"}},
+        {"metadata": {"name": "two", "uid": "u4"}, "spec": {"version": "1.2.0"}},
+    ]});
+    let api = MemoryApi::new()
+        .with("/v1/dashboard/clusterprofiles/metadata", listing)
+        .with("/v1/clusterprofiles/u3", json!({"metadata": {"uid": "u3"}}))
+        .with("/v1/clusterprofiles/u4", json!({"metadata": {"uid": "u4"}}));
+    let p = Palette::new(api);
+    assert_eq!(p.resolve_latest("four").unwrap(), "u2");
+    // `1.2` and `1.2.0` are one version, so no uid is the latest
+    let err = p.resolve_latest("two").unwrap_err();
+    assert_eq!(err.kind(), "profile-name-ambiguous", "{err}");
+}
+
+#[test]
 fn an_item_with_no_version_or_no_uid_is_not_a_version_of_the_name() {
     // the one parse keeps each item of the listing. A resolve skips an item with no version or
     // no uid, so a name with no other item is profile-not-found, not an empty uid.

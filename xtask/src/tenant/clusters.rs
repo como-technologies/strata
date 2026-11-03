@@ -259,7 +259,7 @@ impl Tenant {
         self.write(project, &cluster_variables_route(uid), &json!(variables));
     }
 
-    /// Name the cluster as a consumer of its profiles, and take it out of the consumers of the
+    /// Name the cluster as a consumer of its profiles, and remove it from the consumers of the
     /// profiles that it left.
     fn bind_profiles(&self, project: &str, uid: &str, name: &str, profiles: &[&str]) {
         // a cluster that moved to other versions is no longer a consumer of the ones it left

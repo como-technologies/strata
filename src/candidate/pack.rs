@@ -192,7 +192,7 @@ fn holding_registry<A: PaletteApi>(
             registries.unsynced_names(visible)?,
         )),
         several => {
-            // by name, so the message reads the same on every run: Palette lists the
+            // by name, so the message reads the same on every run. Palette lists the
             // registries in the order it likes, and a live run saw both orders
             let mut registries: Vec<String> = several.iter().map(|(n, _)| n.clone()).collect();
             registries.sort();
@@ -206,8 +206,8 @@ fn holding_registry<A: PaletteApi>(
 }
 
 /// A candidate with one layer, the pack `name` at `version` in the registry `registry_uid`, with
-/// the values that the registry ships: the same path a candidate file takes. `reference` is the
-/// path that the candidate reports.
+/// the values that the registry ships. This is the same path a candidate file takes. `reference`
+/// is the path that the candidate reports.
 fn one_layer_candidate(
     name: &str,
     version: &str,

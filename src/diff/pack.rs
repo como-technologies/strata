@@ -176,8 +176,8 @@ pub struct PackDiff {
     /// same.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub minted_uid_only: bool,
-    /// True when `IDENTITY` moved only because the tag name differs: the same name, layer, type,
-    /// version, `packUid`, and `registryUid`, pinned under another of the registry's names for
+    /// True when `IDENTITY` moved only because the tag name differs. The same name, layer, type,
+    /// version, `packUid`, and `registryUid` are pinned under another of the registry's names for
     /// that version, exact (`LTS__24.04`) or floating (`LTS__24.x`). Palette pins the `packUid`
     /// when the profile is saved, so a cluster runs the same build, and the impact omits the
     /// rename. `AUTHORED` and `UPSTREAM` still count.

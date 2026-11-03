@@ -411,7 +411,7 @@ record kept the value, and the tier sorted first. Palette gives an integer, so
 no record changes in practice.
 
 A field can also become absent, and that keeps the id as well. For most fields
-absent is a value. A field that is false, empty, or zero is omitted, and each
+absent is a value. Strata omits a field that is false, empty, or zero, and each
 such field says so at its own definition in
 [JSON documents](./documents.md). Eight fields are different. For these,
 absent means unknown: `source.consumers`, `rootLive`, `maxImpact`,
@@ -442,12 +442,18 @@ One root changes after 0.25.0 with no new id. The canonical text of a string
 now writes `\uXXXX` for these characters: DEL, U+0080 to U+009F, U+2028,
 U+2029, U+FFFE, and U+FFFF. A YAML parser does not read them again as
 themselves: see [The canonical form](../internals/hashes.md#the-canonical-form).
-Each hash that covers such a character changes: `valuesHash`, `contentHash`,
-`variablesHash`, and so the `root`. `verify` of an older record that holds such
-a character shows a change. A record with none of them keeps each hash.
+Each hash that covers such a character changes. These are `valuesHash`,
+`contentHash`, `variablesHash`, `hash.authored` and `hash.node` of a pack,
+`contentDigest`, and the `hash` of a tier. So the `root` changes.
+
+The policy tier of a cluster sorts its role bindings, their subjects, and its
+namespaces by the same text, so their order can change too. `verify` of an older
+record that holds such a character shows a change. A record with none of them
+keeps each hash.
 
 `compare`, `same-release`, and the gates show the change for two records of one
-release that two releases took. [Release 0.26.0](#release-0260-changes-that-need-action)
+release that two releases took. `same-release` of such a pair gives `different`
+and exit `1`. [Release 0.26.0](#release-0260-changes-that-need-action)
 gives the action.
 
 One saved directory changes after 0.25.0, with no new id. Some values of a
@@ -726,7 +732,7 @@ After 0.25.0, a run sends each request one time. The backend keeps the answer of
 each request, by its method, its path, and its body. The four rules that ask the
 validate route send one request. The six rules that read each edge host send one
 request for each host. `template-outside` reads the profile that the world read.
-A 5xx that is not a refusal is not kept, and the next rule asks again.
+The backend keeps no 5xx that is not a refusal, and the next rule asks again.
 
 After 0.25.0, `strata-preflight` refuses a `--release` that is not a version, such
 as `4.11.x`. The error kind is `usage`, the exit code is `2`, and the command
@@ -865,6 +871,21 @@ results change:
   `--latest` adds the version of Palette only when it is not the highest. This
   can happen for a version that does not parse.
 
+Three more results follow from the order:
+
+- **Two versions that differ only by a `v`, a missing `.0`, or build data are one
+  version.** `1.2` equals `1.2.0`, and `v1.2.3` equals `1.2.3`. When a profile
+  holds both, `<name>@latest` gives `profile-name-ambiguous`. `versionMove` is absent
+  for such a pair.
+- **A version that does not parse is above each version that parses.** Examples
+  are `1.2.3.4` and `1.0.0-a_b`. So `<name>@latest` gives `1.2.3.4` in place of
+  `2.0.0`, and `strata packs` lists it first. `behind` names no three-number
+  version as newer than the pin `1.2.3.4`.
+- **`strata list` orders the profiles by the same order.**
+
+The order of a version that does not parse is the order of strata. No live run
+shows how Palette orders such a version.
+
 `strata-diff/1` has the new field `versionMove`, in the document and in each
 entry of `packs[]`. It is `forward` when side B has the higher version, and `back`
 when side B has the lower. It is absent when a side has no version, and when the
@@ -956,6 +977,35 @@ field, a value, an input, or an option is in the sections above.
     `gke-pool-multiple-3`. These rules left the catalog, so the runs counted for no rule.
   - A ledger that you give with `--ledger` keeps its own ids. Rename the old ids as the
     [release 0.27.0](#release-0270-changes-that-need-action) item of the rule says.
+- **The root item of release 0.26.0 names four hashes. Four more hashes change with it.**
+  They are `contentDigest`, `hash.authored` and `hash.node` of a pack, and the `hash` of a
+  tier. The characters are those of that item.
+  - `same-release` of a record of 0.25.0 and a record of 0.26.0 or later for one raw
+    directory gives `different` and exit `1`. It names the pack and says that the authored
+    hash differs.
+  - The action stays the same: take both records with one release. See
+    [Release 0.26.0](#release-0260-changes-that-need-action).
+- **`merge-gate.sh` stops with exit `2` when strata is older than the script.** The strata of
+  0.25.0 writes no `versionMove`. With it, the script of 0.26.0 or later found no backward pin and
+  the gate was green.
+  - The script reads the schema of the comparison, `strata schema diff`, and looks for the field.
+    It compares no version numbers.
+  - The reusable workflows and the GitLab job install the script and the binary from one tag, so
+    they do not change. A local run or a custom job must use the strata of the same release.
+- **The legend text of the status `registry-move` of `same-release` changes.** `legend.status`
+  says "moved to another registry" in place of "pinned to another registry". The text is for a
+  reader, and no script needs a change.
+- **Some descriptions in `strata schema` and in `strata-preflight --schema` have new words.** The
+  doc comments of public items feed them. No key, type, or id changes, and no script needs a
+  change.
+  - `strata schema behind`: the description of `newer` in a pin.
+  - `strata schema consumers`: the description of the definition `ClustersRead`.
+  - `strata schema diff` and `strata schema verify-summary`: the description of `tagRenamed` in
+    a pack.
+  - `strata-preflight --schema report`: the descriptions of the verdicts `not-run` and
+    `skipped`.
+  - `strata-preflight --schema rules`: the descriptions of the checks `palette`, `exec`, and
+    `watch`, and of `check` and `when` in a rule.
 
 ### For a user of the library of strata
 

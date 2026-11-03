@@ -482,11 +482,11 @@ fn held_snapshot<A: PaletteApi>(
 
 /// The two sides of a comparison, each as [`snapshot_for`] reads it.
 ///
-/// When one side is a cluster group, and the other is a cluster ref that selects no profile, the
-/// cluster side holds only the profiles that the group pins: the question is whether the member
-/// runs the pin, and not what else it runs. So the other side is taken first. `connect` gives the
-/// [`Palette`] for each side that a request answers, and `fetched_at` is the time of the read, in
-/// RFC 3339.
+/// One side can be a cluster group, and the other side a cluster ref that selects no profile. The
+/// cluster side then holds only the profiles that the group pins. The question is whether the
+/// member runs the pin, and not what else it runs. So the other side is taken first. `connect`
+/// gives the [`Palette`] for each side that a request answers, and `fetched_at` is the time of the
+/// read, in RFC 3339.
 ///
 /// # Errors
 ///

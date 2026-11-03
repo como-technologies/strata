@@ -18,8 +18,8 @@ use crate::error::{Error, Result};
 /// The answer of Palette to one request.
 ///
 /// A 2xx is `ok`, a 4xx is an answer with its `V1Error` body, and a 204 is `ok` with a `null`
-/// body. A refusal of the cluster validate route with HTTP 500 is an answer too, and so is a 5xx
-/// with a code that the check names in `refusal_codes`.
+/// body. A refusal of the cluster validate route with HTTP 500 is an answer too. So is a 5xx with
+/// a code that the check names in `refusal_codes`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Response {
     /// True for a 2xx.

@@ -192,7 +192,7 @@ impl Consumer {
 ///
 /// They come from the cluster search of Palette, or from each cluster the key can list, each read
 /// for the profiles it applies. Palette computes the consumer list of a profile when it is asked,
-/// in the projects the key can read, and gives an empty list on an error too. The second reading
+/// in the projects the key can read. It gives an empty list on an error too. The second reading
 /// finds a consumer that the list omits.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -346,7 +346,7 @@ impl ConsumersReport {
 /// The report also holds the edge hosts bound to the version and the cluster templates that link
 /// it. The profile comes from a uid, `<name>@<version>`, or a profile record (whose uid and
 /// project are used; the list is always fetched live). Names and projects come from the profile's
-/// `status.inUseClusters`; each cluster is then read in its own project for its state, with one
+/// `status.inUseClusters`. Each cluster is then read in its own project for its state, with one
 /// client per project from `connect`. A cluster that cannot be read is listed with state
 /// `unknown` and its error; it still counts. Then each cluster the key can list is read for the
 /// profiles it applies: see [`consumers_with`] to read the list alone.
@@ -379,9 +379,10 @@ where
 /// [`consumers`] with options.
 ///
 /// `list_only` reads the consumer list that Palette computes, and no other cluster. It costs one
-/// request per consumer, where the second reading costs one per 50 clusters that the cluster
-/// search names and one per cluster that the list omits (one per cluster of the fleet when the
-/// search takes no profile), but it does not find a consumer that the list omits.
+/// request per consumer. The second reading costs one request per 50 clusters that the cluster
+/// search names, and one per cluster that the list omits. When the search takes no profile, the
+/// second reading costs one request per cluster of the fleet. But `list_only` does not find a
+/// consumer that the list omits.
 ///
 /// An app profile, by ref or by record, gives its app deployments.
 ///
@@ -483,8 +484,8 @@ fn uid_of_ref<A: PaletteApi>(
 
 /// Mark the consumers that link a cluster template, and give each one the name of its project.
 fn link_and_name<A: PaletteApi>(list: &mut Vec<Consumer>, doc: &Value, home: &Palette<A>) {
-    // Palette refuses the delete of a version that a cluster template links, in any project, and
-    // the profile document names each such template, so they cost no request (#147)
+    // Palette refuses the delete of a version that a cluster template links, in any project. The
+    // profile document names each such template, so they cost no request (#147)
     linked_templates(list, doc);
     // a uid names no project to a reader, so give each row the project's name as well
     name_consumer_projects(list, home);
@@ -574,7 +575,7 @@ fn target_of(reference: &Ref) -> Result<Target> {
     }
 }
 
-/// The clusters that the profile document `doc` names as users of the profile `uid`, each one
+/// The clusters that the profile document `doc` names as users of the profile `uid`. Each one is
 /// read in its own project for its state and the version that it runs.
 fn listed_consumers<A, F>(
     doc: &Value,

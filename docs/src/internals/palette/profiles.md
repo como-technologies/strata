@@ -30,10 +30,11 @@ version of your cluster profile before you can modify the variables"
 ([Modify cluster profile variables](https://docs.spectrocloud.com/profiles/cluster-profiles/create-cluster-profiles/define-profile-variables/modify-cluster-profile-variables/)).
 The packs, the values, and the manifests have no such rule.
 
-A reorder is an edit in place too. A `PUT` of a published version with the same
-packs, values, and manifests in the other order is accepted. Palette stores it
-in the new order, and audits it as an update of the profile. It accepts the
-reorder for the four infrastructure layers of a version a cluster runs as well.
+A reorder is an edit in place too. Palette accepts a `PUT` of a published
+version with the same packs, values, and manifests in the other order. Palette
+stores it in the new order, and audits it as an update of the profile. It
+accepts the reorder for the four infrastructure layers of a version a cluster
+runs as well.
 In that reorder, the CSI layer is first and the OS layer is last. `verify` on a
 record from before reports `DRIFT` and
 `note: pack order changed between the two profiles`.

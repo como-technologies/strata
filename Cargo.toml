@@ -2,12 +2,14 @@
 members = [".", "xtask", "preflight", "fuzz", "benches", "report-endpoint"]
 # `cargo build` and `cargo test` at the root stay about strata alone. The development tooling in
 # xtask/ builds when a recipe asks for it, and it never reaches a release. The preflight tool in
-# preflight/ is a package of its own, `strata-preflight`: the release carries it as a second
-# binary, `just build` builds it, and another repository can depend on it by name. The fuzz targets
-# in fuzz/ are tests of both, and `just test` runs them. The benchmarks in benches/ are the package
-# `strata-benches`: `just bench` builds them, and no release carries them. The endpoint of the report
-# in report-endpoint/ is the package `strata-report-endpoint`: a service on Cloud Run that no release
-# carries, and `just test` runs its tests.
+# preflight/ is a package of its own, `strata-preflight`. The release carries it as a second
+# binary, `just build` builds it, and another repository can depend on it by name. The fuzz
+# targets in fuzz/ are tests of both, and `just test` runs them.
+#
+# The benchmarks in benches/ are the package `strata-benches`: `just bench` builds them, and no
+# release carries them. The endpoint of the report in report-endpoint/ is the package
+# `strata-report-endpoint`. It is a service on Cloud Run that no release carries, and `just test`
+# runs its tests.
 default-members = ["."]
 
 # Edition 2024 needs 1.85, and the `if let` chains in this workspace need 1.88, which is where they
@@ -41,7 +43,7 @@ publish = false
 # module each could not show that.
 autotests = false
 # benches/ is the package strata-benches, with a Cargo.toml of its own. Without this line, cargo
-# would also build each file of benches/ as a benchmark of this package.
+# also builds each file of benches/ as a benchmark of this package.
 autobenches = false
 
 [lib]
@@ -91,8 +93,8 @@ strip = true
 lto = "thin"
 
 # The profile that `cargo bolero` builds the fuzz targets with. It is the profile that the tool
-# expects: optimized, and one unit of code generation for each crate, so the coverage counters of
-# libFuzzer cover the whole crate. See `just fuzz`.
+# expects. The profile is optimized and has one unit of code generation for each crate, so the
+# coverage counters of libFuzzer cover the whole crate. See `just fuzz`.
 [profile.fuzz]
 inherits = "dev"
 opt-level = 3

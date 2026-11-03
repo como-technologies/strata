@@ -18,7 +18,7 @@ use crate::term::progress::Progress;
 /// `GET /v1/appDeployments/{uid}` in its own project for its state and the version its copy names.
 /// Palette refuses the delete of an app profile while a deployment uses it, as it does for a
 /// cluster profile. The dashboard route of the app deployments filters no profile, and an app
-/// profile binds to no edge host, so the report has no second reading and no edge hosts.
+/// profile binds to no edge host. So the report has no second reading and no edge hosts.
 ///
 /// `id` is a uid, or a name when `version` is given. `scope` is the project uid of the app
 /// profile, and `None` is the configured scope. `connect` gives a client for a project uid, with

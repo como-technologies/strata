@@ -7,8 +7,8 @@ use crate::snapshot::{CONTENT_DIGEST, Pack};
 
 /// The content digest: what a version is, without the ids that Palette gives. It covers the
 /// variables hash and, for each pack in order, the key, the version, the upstream hash, and the
-/// authored hash. It omits the tag, the pack uid, the registry uid, and the pack type, so it
-/// is equal for two publishes of one definition and for a copy of a pack to another registry.
+/// authored hash. It omits the tag, the pack uid, the registry uid, and the pack type. So it is
+/// equal for two publishes of one definition and for a copy of a pack to another registry.
 pub(crate) fn content_of(variables_hash: &str, packs: &[Pack]) -> String {
     sha256_hex(&canonical_json(&json!({
         // The key keeps this digest apart from every other one, and gives the encoding a version.

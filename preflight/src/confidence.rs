@@ -1,8 +1,8 @@
 //! Confidence is a count of runs, never an estimate.
 //!
 //! For each rule, per engine and Palette release, the ledger holds the runs that made the fault on
-//! purpose and the runs of a clean build, and what the check answered in each. From the counts
-//! come two rates and their 95% lower bounds (Clopper-Pearson, one side):
+//! purpose. It also holds the runs of a clean build, and what the check answered in each. From the
+//! counts come two rates and their 95% lower bounds (Clopper-Pearson, one side):
 //!
 //! - **catch rate**: of the runs that made the fault, the runs in which the check found it;
 //! - **clean-pass rate**: of the runs of a clean build, the runs in which the check passed.

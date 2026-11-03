@@ -20,20 +20,22 @@
 #
 #        Rollback: <record> to <name>@<version>
 #
-#      which must name the record and the release that the merge result pins, or the job runs
-#      with --allow-rollback, which is what a job does for a merge request with the rollback
-#      label. A declared rollback is reported and passes. Every other backwards pin is red, and
-#      the report gives the evidence: whether the target branch pinned that release before, and
-#      whether the branch wrote its record before or after the target branch moved.
+#      The line must name the record and the release that the merge result pins. The other way
+#      is that the job runs with --allow-rollback. A job does that for a merge request with the
+#      rollback label. A declared rollback is reported and passes. Every other backwards pin is
+#      red. The report gives the evidence. It says whether the target branch pinned that release
+#      before, and whether the branch wrote its record before or after the target branch moved.
 #   3. A record of the merge result does not verify: the profile or cluster it names changed in
 #      Palette, or is gone. A cluster built from it does not get what the record says. A record
-#      that holds a pack with no upstream digest is unverified, and red too: a change of the
+#      that holds a pack with no upstream digest is unverified, and red too. A change of the
 #      archive of that pack does not show. --allow-no-digest accepts it, as verify does.
 #      --no-verify, or no Palette key where strata looks for one (PALETTE_API_KEY,
 #      SPECTROCLOUD_APIKEY, or ~/.palette.env), omits this check, and the last line says so.
 #
 # Exit 0 when the merge result is clear, 1 when the gate is red, and 2 when the script could not
 # run at all. A record that strata could not check is red, not 2: the gate fails closed.
+# A strata that is older than this script gives 2 too. It writes no versionMove, so no pin
+# reads as backward.
 # Needs strata (or STRATA_BIN), git, and jq. The target branch is --base, or the
 # CI variable of the merge request: CI_MERGE_REQUEST_TARGET_BRANCH_NAME on GitLab, GITHUB_BASE_REF
 # on GitHub.
@@ -67,6 +69,15 @@ done
 git rev-parse --is-inside-work-tree > /dev/null 2>&1 || die "not a git checkout"
 
 strata=${STRATA_BIN:-strata}
+command -v "$strata" > /dev/null || die "no strata on the PATH: install it, or set STRATA_BIN"
+# A strata that is older than this script writes no versionMove. Then no pin reads as backward, and
+# the gate is green. The schema of the comparison names the field, so a schema without it shows
+# an older strata. The script compares no version numbers.
+schema=$("$strata" schema diff 2> /dev/null) || schema=""
+case $schema in
+  *'"versionMove"'*) ;;
+  *) die "strata is older than this script: it writes no versionMove, so no backward pin shows" ;;
+esac
 # the key where strata looks for it: the environment, then ~/.palette.env
 has_key() {
   [ -n "${PALETTE_API_KEY:-${SPECTROCLOUD_APIKEY:-}}" ] && return 0
@@ -141,8 +152,8 @@ done < <(records_matching)
 [ ${#files[@]} -gt 0 ] || die "no record in the merge result matches: ${patterns[*]}"
 
 # backwards DIFF: the pins that the merge result moves back, one line each. Strata orders the
-# versions as Palette does, and says the direction of each move in `versionMove`: a pre-release is
-# below its version, which no text order of the shell knows.
+# versions as Palette does, and says the direction of each move in `versionMove`. The reason is
+# that a pre-release is below its version, which no text order of the shell knows.
 backwards() {
   jq -r '(select(.versionMove == "back") | ["the profile", .a.version, .b.version] | @tsv),
          (.packs[] | select(.status == "changed" and .versionMove == "back")

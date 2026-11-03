@@ -69,7 +69,7 @@ pub struct PackRefusal<'a> {
     pub version: &'a str,
 }
 
-/// A refusal in the answer of `validate/packs` for a profile version: the pack `pack` cannot move
+/// A refusal in the answer of `validate/packs` for a profile version. The pack `pack` cannot move
 /// to the version `to` on `clusters`, which run the version of the profile.
 #[derive(Debug, Clone, Copy)]
 pub struct UpgradeRefusal<'a> {

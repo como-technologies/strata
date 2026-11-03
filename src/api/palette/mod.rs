@@ -347,8 +347,9 @@ impl<A: PaletteApi> Palette<A> {
     /// Give each item of a listing that Palette pages by `offset` to `each`, every page. `fetch`
     /// reads the page at an offset. `each` returns false to stop the walk. Palette gives at most
     /// `page` items on a page, and `listmeta.count` the number of items. The walk ends at a page
-    /// that is short, when the offset reaches the count, or at a page that starts with the item
-    /// that the page before it started with: Palette gave the same page again.
+    /// that is short, or when the offset reaches the count. It also ends at a page that starts
+    /// with the item that the page before it started with, because Palette gave the same page
+    /// again.
     pub(crate) fn each_offset_page(
         &self,
         page: usize,

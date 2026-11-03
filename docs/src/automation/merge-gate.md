@@ -93,9 +93,9 @@ repository, where the next person can read why.
 
 ### A record that the published version no longer matches
 
-The merge is clean and no pin moves back, but the gate is still red. The
-profile that the record names was edited in place after the record was written.
-See [A published version is edited in place](../use-cases/edited-in-place.md).
+The merge is clean and no pin moves back, but the gate is still red. A
+person edited the profile that the record names in place, after strata wrote the
+record. See [A published version is edited in place](../use-cases/edited-in-place.md).
 
 ```text
 {{#include ../output/merge-gate-drifted.txt}}
@@ -131,7 +131,7 @@ needs the history, so a job that clones with a depth gives it `GIT_DEPTH: 0` or
 | --- | --- |
 | `0` | The merge result is clear. |
 | `1` | The gate is red. The job fails, and the merge button waits. |
-| `2` | The script could not run. It found no target branch, no git checkout, or no branch of that name on the remote. It also stops when no record matches or when strata could not read a record. |
+| `2` | The script could not run. It found no target branch, no git checkout, or no branch of that name on the remote. It also stops when no record matches or when strata could not read a record. It stops when strata is older than the script, because that strata writes no `versionMove`. |
 
 A record that strata could not check is red, and not `2`. The report marks it
 `ERROR`.

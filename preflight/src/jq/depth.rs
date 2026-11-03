@@ -133,8 +133,8 @@ impl Levels {
 
 /// The depth of `program`: how many calls jaq makes to read one part of it inside another.
 ///
-/// A bracket opens a level. So does each operator of a chain such as `a | b | c`, because jaq
-/// reads the rest of the chain inside the call that read the operator. The words `and`, `or`,
+/// A bracket opens a level. So does each operator of a chain such as `a | b | c`. This is because
+/// jaq reads the rest of the chain inside the call that read the operator. The words `and`, `or`,
 /// `try`, `catch`, `reduce`, `foreach`, `as`, and `label` are operators too. An `if` and a `def`
 /// open a level like a bracket, and `end` and `;` close it.
 ///

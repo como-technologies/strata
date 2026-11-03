@@ -39,7 +39,7 @@ fn write_string(s: &str, out: &mut String) {
     }
 }
 
-/// True for a character that JSON writes as it is, and that a YAML parser does not read back as
+/// True for a character that JSON writes as it is, and that a YAML parser does not read again as
 /// itself in a double-quoted text.
 ///
 /// The parser reads U+0085, U+2028, and U+2029 as a line break, and folds it. It refuses DEL, the

@@ -56,8 +56,8 @@ pub fn answer_fault<E: Refusal>(error: &E) -> Option<String> {
 ///
 /// The text that the ref prints parses as the same ref. So a ref in a record, a message, or a
 /// script names the same thing each time that a person or strata reads it. A check of the printed
-/// text alone is not enough: `cluster:c1@pending/` is the uid `c1@pending`, which prints as the
-/// text of the update that waits for `c1`.
+/// text alone is not enough. The text `cluster:c1@pending/` is the uid `c1@pending`, which prints
+/// as the text of the update that waits for `c1`.
 ///
 /// # Errors
 ///

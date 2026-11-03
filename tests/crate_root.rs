@@ -1,8 +1,8 @@
 //! The crate root, `src/lib.rs`, and the paths of the modules that moved to `model/`.
 //!
-//! `docs/src/development/code.md` says where a shared module goes: a type of Palette in `model/`,
-//! a read of Palette in `api/`, and a helper of the whole crate at the root. These tests keep the
-//! root to the modules that are neither.
+//! `docs/src/development/code.md` says where a shared module goes. A type of Palette goes in
+//! `model/`, a read of Palette in `api/`, and a helper of the whole crate at the root. These tests
+//! keep the root to the modules that are neither.
 
 use std::collections::BTreeSet;
 use std::path::Path;

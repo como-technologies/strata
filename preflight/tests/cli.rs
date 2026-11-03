@@ -317,7 +317,7 @@ fn the_color_follows_the_order_of_strata_for_each_stream() {
 fn out_names_the_path_in_the_error_when_it_cannot_write_and_makes_the_directory_when_it_can() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
-    // a file where the directory should be
+    // a file in the place of the directory
     std::fs::write(dir.path().join("taken"), "x").unwrap();
     let (code, _, err) = run(
         &[
@@ -711,6 +711,61 @@ fn no_description_of_a_schema_holds_the_markup_of_a_rustdoc_link() {
         schema["$defs"]["Method"]["oneOf"][0]["description"],
         "A read of a document: `PaletteApi::get_json`."
     );
+}
+
+/// The split of long sentences in the doc comments gave seven descriptions new words. The section
+/// of release 0.28.0 in `compatibility.md` names them, and a test of the root package reads that
+/// page.
+#[test]
+fn the_schemas_hold_the_new_words_of_the_descriptions_that_the_release_notes_name() {
+    let dir = tempfile::tempdir().unwrap();
+    for (kind, pointer, new_words) in [
+        (
+            "report",
+            "/$defs/Verdict/oneOf/3/description",
+            "the check did not run. The tier was not asked",
+        ),
+        (
+            "report",
+            "/$defs/Verdict/oneOf/4/description",
+            "The cause is another release or a `when` that is not true.",
+        ),
+        (
+            "rules",
+            "/$defs/Check/oneOf/1/description",
+            "runs one time for each item of a list. The program runs one time",
+        ),
+        (
+            "rules",
+            "/$defs/Check/oneOf/2/description",
+            "is on the PATH. When one is not, the result is `NOT CHECKED`",
+        ),
+        (
+            "rules",
+            "/$defs/Check/oneOf/3/description",
+            "During a build, every `every` seconds: read the cluster",
+        ),
+        (
+            "rules",
+            "/$defs/Rule/properties/check/description",
+            "A rule with none is a row of the catalog. The report prints it",
+        ),
+        (
+            "rules",
+            "/$defs/Rule/properties/when/description",
+            "Use `.before != null` for a rule on a change.",
+        ),
+    ] {
+        let (code, out, err) = run(&["--schema", kind], dir.path());
+        assert_eq!(code, 0, "{kind}: {err}");
+        let schema: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let description = schema
+            .pointer(pointer)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_else(|| panic!("{kind} has no description at {pointer}"));
+        let one_line = description.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(one_line.contains(new_words), "{kind} {pointer}: {one_line}");
+    }
 }
 
 #[test]

@@ -43,8 +43,8 @@ pub(super) fn verbose_lines(rule: &Rule, o: &Outcome, paint: &Paint) -> Vec<Stri
     lines
 }
 
-/// What a check ran, for its line of `--verbose`: its request or command, the count of the requests
-/// of a check with `each`, or the program alone.
+/// What a check ran, for its line of `--verbose`. This is its request or command, the count of the
+/// requests of a check with `each`, or the program alone.
 fn what_ran(o: &Outcome) -> String {
     match (o.ran.text(), o.ran.requests().len()) {
         (Some(ran), _) => ran,
@@ -92,9 +92,9 @@ pub(super) fn program_lines(rules: &[&Rule], paint: &Paint) -> Vec<String> {
         .collect()
 }
 
-/// The lines of `--verbose` for one reading: the three requests it made and what they gave, then
-/// each condition that changed since the reading before, then each event new since it, the
-/// newest 15 at most.
+/// The lines of `--verbose` for one reading: the three requests it made and what they gave. Then
+/// each condition that changed since the reading before. Then each event new since it, the newest
+/// 15 at most.
 pub(super) fn reading_lines(
     uid: &str,
     read: &Value,

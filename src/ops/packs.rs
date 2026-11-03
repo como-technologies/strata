@@ -339,7 +339,7 @@ fn pack_registry<A: PaletteApi>(
         .filter(|e| has_tag(&tags, e) || crate::api::registry::retired_state(e).is_some())
         .collect();
     // every version of this pack that the registry offers, counted before --cloud and
-    // --latest cut the list: the heading states the inventory, not the rows that survived a
+    // --latest cut the list. The heading states the inventory, not the rows that survived a
     // flag
     let versions_offered = mine
         .iter()

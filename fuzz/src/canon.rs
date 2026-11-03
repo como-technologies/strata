@@ -28,8 +28,8 @@ pub(crate) fn pack(snapshot: &Snapshot) -> &Pack {
         .expect("a profile of one pack has a record of one pack")
 }
 
-/// Make sure that the canonical form of `values` is stable: the record is the same each time, and
-/// the canonical form, written as text and read again, is itself.
+/// Make sure that the canonical form of `values` is stable. The record is the same each time. The
+/// canonical form, written as text and read again, is itself.
 pub(crate) fn canon_is_idempotent(values: &str) -> bool {
     let Some(first) = record(values, "") else {
         return false;

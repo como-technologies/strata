@@ -134,7 +134,8 @@ impl Ref {
         if is_file(Path::new(text)) {
             return Ref::Snapshot(PathBuf::from(text));
         }
-        // a prefix with nothing valid after it is no ref of its kind, so the text falls through
+        // a prefix with nothing valid after it is no ref of its kind, so the text goes to the
+        // next rule
         let prefixed = pack_ref(text)
             .or_else(|| cluster_ref(text))
             .or_else(|| edge_host_ref(text))

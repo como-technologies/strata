@@ -1,8 +1,8 @@
 //! The regression cases of the targets: the inputs that made a target fail, kept in `crashes/`.
 
-/// A crash that a fuzzer found, or a bug that a review found, kept as a regression case: the
-/// target, the name of the file in `crashes/`, and the input. Each case is a bug that has a fix
-/// and a unit test in `src/` or in `preflight/src/`.
+/// A crash that a fuzzer found, or a bug that a review found, kept as a regression case. A case
+/// has the target, the name of the file in `crashes/`, and the input. Each case is a bug that has
+/// a fix and a unit test in `src/` or in `preflight/src/`.
 pub(super) fn cases() -> Vec<(&'static str, &'static str, Vec<u8>)> {
     let draft = "mask::a_draft_pack_keeps_no_secret_in_clear_and_nothing_else_changes";
     let palette =
@@ -17,8 +17,9 @@ pub(super) fn cases() -> Vec<(&'static str, &'static str, Vec<u8>)> {
         format!("{}{middle}{}", open.repeat(3000), close.repeat(3000)).into_bytes()
     };
     vec![
-        // The mask of a draft cut the values of a user at a byte that is not a `char` boundary,
-        // for text that has a multi-byte letter where a variable of the profile has a dot.
+        // The mask of a draft cut the values of a user at a byte that is not a `char` boundary.
+        // This happened for text that has a multi-byte letter where a variable of the profile has
+        // a dot.
         (
             draft,
             "wave-3-mask-slices-a-char",
