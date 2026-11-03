@@ -3029,8 +3029,8 @@ fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup
 }
 
 /// Review of Wave 14, D4, C2, and A7. `latest` of `strata packs` is the version that
-/// `pack:<name>@latest` records, of the versions that the listing keeps. The ref picks from each
-/// version of the registry, so `--cloud` and a highest version with no tag give two versions. The
+/// `pack:<name>@latest` records, of the versions that the listing keeps. The listing and the ref
+/// pick from the versions that the registry serves, so only `--cloud` gives two versions. The
 /// mark of Palette is on the highest version, and strata marks the same one unless it is a
 /// pre-release.
 #[test]
@@ -3041,8 +3041,9 @@ fn the_book_states_the_cases_where_latest_is_not_the_version_that_the_ref_record
         "`latest` marks one of the versions that the listing keeps.",
         "With `--cloud`, the listing keeps the versions that support that cloud.",
         "`strata packs <name> --cloud gcp` marks `1.0.0`, and `pack:<name>@latest` records `2.0.0`.",
-        "The listing omits a version that has no tag in the answer of Palette, unless Spectro Cloud retired it.",
-        "If `1.30.0` has no tag and `1.29.0` has one, `latest` marks `1.29.0`, and the ref records `1.30.0`.",
+        "**`pack:<name>@latest` picks from the versions that the registry serves.**",
+        "If `1.30.0` has no tag and `1.29.0` has one, the ref records `1.29.0`. Release 0.27.0 recorded `1.30.0`.",
+        "An exact version, such as `pack:<name>@1.30.0`, reads the whole listing as before.",
     ] {
         assert!(
             command_line.contains(needle),
@@ -3065,7 +3066,8 @@ fn the_book_states_the_cases_where_latest_is_not_the_version_that_the_ref_record
         "A registry that has no version that is not a pre-release gives its highest pre-release.",
         "With `--cloud`, the listing keeps the versions of that cloud.",
         "If `aws` has `2.0.0` and `gcp` has `1.0.0`, `--cloud gcp` marks `1.0.0`, and the ref records `2.0.0`.",
-        "The listing omits a version that has no tag in the answer of Palette, unless Spectro Cloud retired it.",
+        "The listing and the ref pick from one list: the versions that the registry serves.",
+        "If `1.30.0` has no tag and `1.29.0` has one, the mark and the ref give `1.29.0`.",
         "So the highest version is the version that Palette marks. Strata marks the same version, unless that version is a pre-release:",
     ] {
         assert!(packs.contains(needle), "packs.md lacks {needle:?}");
@@ -3093,13 +3095,47 @@ fn the_book_states_the_cases_where_latest_is_not_the_version_that_the_ref_record
     for needle in [
         "of the versions that the listing keeps.",
         "when the registry's copy has no version that is not a pre-release.",
-        "when `--cloud` cuts the list, and when the highest version has no tag",
+        "So it can record another version when `--cloud` cuts the list.",
     ] {
         assert!(
             description.contains(needle),
             "the description of latest lacks {needle:?}: {description}"
         );
     }
+}
+
+/// Review of Wave 14, A13. The paragraph of `strata packs` in "The order of versions" states release
+/// 0.25.0. It points at release 0.28.0, which changes `latest`.
+#[test]
+fn the_older_paragraph_of_strata_packs_points_at_the_change_of_latest_in_release_0_28_0() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let order = one_line(section(&page, "### The order of versions", Some("\n### ")));
+    let item = section(
+        &order,
+        "**`strata packs` lists a pre-release below its version.**",
+        Some("Three more results"),
+    );
+    assert!(
+        item.contains(
+            "Release 0.28.0 changes `latest`: see [the section of release 0.28.0](#release-0280-changes-that-need-action)."
+        ),
+        "the older paragraph lacks the pointer: {item}"
+    );
+    assert!(
+        page.contains("\n## Release 0.28.0: changes that need action\n"),
+        "the pointer needs the heading of the section"
+    );
+}
+
+/// Review of Wave 14, A11. A value that is not text in an older read error names the older key, as
+/// the file holds it. The book says so where it gives the older fields.
+#[test]
+fn the_book_says_that_an_older_read_error_that_is_not_text_names_the_older_key() {
+    let documents = one_line(&read(&docs().join("reference/documents.md")));
+    assert!(
+        documents.contains("Strata reads them into `errors`, and a value that is not text gives `snapshot-schema` with the older key in `field`, such as `source.cluster.pendingRepaveError`."),
+        "documents.md lacks the older key"
+    );
 }
 
 /// Review of Wave 14, D3 and A8. Only a group with a password in values of no canonical form gets

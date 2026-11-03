@@ -248,11 +248,11 @@ fn latest_with_cloud_marks_the_highest_version_of_that_cloud_and_the_ref_records
     assert_eq!(marked, ["2.0.0"]);
 }
 
-/// Review of Wave 14, A7. `packs` omits a version with no tag, and `pack:<name>@latest` picks from
-/// the whole listing. So when the highest version has no tag, the mark and the ref name two
-/// versions. The book says so.
+/// Review of Wave 14, A7. `packs` omits a version with no tag, so the mark is on the highest
+/// version that the registry serves. `pack:<name>@latest` picks from the same list: see the test
+/// of `picked_in` in `candidate::pack`.
 #[test]
-fn latest_marks_the_highest_version_that_has_a_tag_and_the_ref_records_a_version_with_no_tag() {
+fn latest_marks_the_highest_version_that_has_a_tag() {
     let api = nginx_api(
         vec![nginx("pk-30", "1.30.0", ""), nginx("pk-29", "1.29.0", "")],
         &[tag("pk-29", "1.29.0", "1.29.0")],
@@ -265,18 +265,6 @@ fn latest_marks_the_highest_version_that_has_a_tag_and_the_ref_records_a_version
         .map(|v| (v.version.as_str(), v.latest))
         .collect();
     assert_eq!(marks, [("1.29.0", true)]);
-
-    // the ref picks from the listing, which holds the version with no tag
-    let listed = crate::candidate::pack::versions_of(&Palette::new(&api), "nginx").unwrap();
-    let recorded = version::pick(
-        listed.iter(),
-        |e| e["spec"]["version"].as_str().unwrap(),
-        LATEST,
-    );
-    assert_eq!(
-        recorded.map(|e| text(e, "/spec/version")).as_deref(),
-        Some("1.30.0")
-    );
 }
 
 /// Review of Wave 14, A7. The words said that the marks differ when the registry has another
@@ -473,11 +461,6 @@ fn a_registry_with_no_digest_for_each_version_says_no_digests_in_the_heading_als
         markdown.starts_with(&format!("### {}\n", lines[0])),
         "{markdown}"
     );
-}
-
-#[test]
-fn the_states_query_names_each_state_that_a_listing_gives_and_not_absent() {
-    assert_eq!(listed_states(), "deprecated,disabled,deleted");
 }
 
 /// The path of the tags request with the states query, for `nginx` in the Public Repo.

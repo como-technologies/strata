@@ -301,9 +301,8 @@ for a case that is rare. [Release 0.28.0](#release-0280-changes-that-need-action
 action for each one.
 
 - In `strata-packs/1`, `latest` marks the version that `pack:<name>@latest` records. Before, it
-  marked the highest version. The two differ only for a pre-release above the release, for
-  `--cloud`, and for a version with no tag. The field stays a flag, and `paletteLatest` keeps
-  the mark of Palette.
+  marked the highest version. The two differ only for a pre-release above the release, and for
+  `--cloud`. The field stays a flag, and `paletteLatest` keeps the mark of Palette.
 - In `strata-preflight/1`, `answer` of the check `iam-role-policy-quota` has the exit code of
   each command, such as `exit 0; exit 254`. It was `exit 0`. Only this rule has a second
   command, and `summary.exitCode` is the field that a script must read.
@@ -914,7 +913,8 @@ results change:
   highest version by the new order. A live check compares it with the version
   that Palette marks with `latestVersion`. `paletteLatest` stays in the document.
   `--latest` adds the version of Palette only when it is not the highest. This
-  can happen for a version that does not parse.
+  can happen for a version that does not parse. Release 0.28.0 changes `latest`:
+  see [the section of release 0.28.0](#release-0280-changes-that-need-action).
 
 Three more results follow from the order:
 
@@ -953,18 +953,23 @@ field, a value, an input, or an option is in the sections above.
   it marked the highest version, also when that version was a pre-release.
   - The two differ when the highest version is a pre-release and the registry has a version that
     is not a pre-release. An example is `1.31.0-rc.1` above `1.29.0`. `latest` marks `1.29.0` now.
-  - `latest` marks one of the versions that the listing keeps. In two cases, that is not the
-    version that the ref records, because the ref picks from each version of the registry.
-    - With `--cloud`, the listing keeps the versions that support that cloud. An example is `2.0.0`
-      for `aws` and `1.0.0` for `gcp`. `strata packs <name> --cloud gcp` marks `1.0.0`, and
-      `pack:<name>@latest` records `2.0.0`.
-    - The listing omits a version that has no tag in the answer of Palette, unless Spectro Cloud
-      retired it. If `1.30.0` has no tag and `1.29.0` has one, `latest` marks `1.29.0`, and the
-      ref records `1.30.0`. Release 0.27.0 had this difference too.
+  - `latest` marks one of the versions that the listing keeps. With `--cloud`, that is not
+    always the version that the ref records, because the ref ignores `--cloud`. With `--cloud`,
+    the listing keeps the versions that support that cloud. An example is `2.0.0` for `aws` and
+    `1.0.0` for `gcp`. `strata packs <name> --cloud gcp` marks `1.0.0`, and
+    `pack:<name>@latest` records `2.0.0`.
   - `paletteLatest` stays on the version that Palette marks. `--latest` keeps that version
     too, and the terminal output marks it `latest in Palette`.
   - A script that reads the highest version must read the first entry of `versions[]`. The
     list is in the order of Semantic Versioning, from the highest.
+- **`pack:<name>@latest` picks from the versions that the registry serves.** Release 0.27.0
+  picked from each version of the pack listing. `strata packs` omits a version with no tag in the
+  answer of the registry, unless Spectro Cloud retired it. Palette does not serve such a version.
+  Now the ref and the listing use that one list.
+  - If `1.30.0` has no tag and `1.29.0` has one, the ref records `1.29.0`. Release 0.27.0
+    recorded `1.30.0`. `latest` marks `1.29.0` in both releases.
+  - A FIPS tenant gives no tag to a version that is not FIPS compliant.
+  - An exact version, such as `pack:<name>@1.30.0`, reads the whole listing as before.
 - **The message of `snapshot-schema` names the field inside the cluster of a record.** It
   named `source.cluster` for each such field. Now it names `source.cluster.profiles[0].version`,
   for example. The error document has the new key `field`, which holds the same path. A script
@@ -1144,9 +1149,8 @@ field, a value, an input, or an option is in the sections above.
 - `error::Error::StaleRecord` has the new field `name: String`. A literal must set it, and a
   pattern with no `..` must name it. The field `cluster` holds the uid.
 - `ops::PackBuild::latest` is true for the version that `pack:<name>@latest` records, of the
-  versions that the listing keeps. It was true for the highest version. With `--cloud`, and for
-  a version with no tag, the ref can record another version. See the first item of the previous
-  list.
+  versions that the listing keeps. It was true for the highest version. With `--cloud`, the
+  ref can record another version. See the first item of the previous list.
 - `timestamp` and `render::Format::ALL` are new: see [The Rust library](#the-rust-library).
 - `closed_set::unknown::log::Line` and `closed_set::unknown::report::Entry` hold one
   `closed_set::unknown::sighting::Sighting`. It has the fields `strata`, `set`, `value`, and

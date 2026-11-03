@@ -28,16 +28,16 @@ pre-release gives its highest pre-release. `strata behind` does not name a
 pre-release as a newer version of a pin that is not a pre-release: see
 [A pre-release](./behind.md#a-pre-release).
 
-The ref picks from each version of the registry, and the listing keeps fewer
-versions in two cases. The mark and the ref then give two versions:
+The listing and the ref pick from one list: the versions that the registry
+serves. A version that has no tag in the answer of the registry is not in the
+list, unless Spectro Cloud retired it. Palette does not serve such a version.
+If `1.30.0` has no tag and `1.29.0` has one, the mark and the ref give `1.29.0`.
+See [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
 
-- With `--cloud`, the listing keeps the versions of that cloud. If `aws` has
-  `2.0.0` and `gcp` has `1.0.0`, `--cloud gcp` marks `1.0.0`, and the ref
-  records `2.0.0`.
-- The listing omits a version that has no tag in the answer of Palette, unless
-  Spectro Cloud retired it. Palette does not serve such a version. If `1.30.0`
-  has no tag and `1.29.0` has one, the mark is on `1.29.0`, and the ref records
-  `1.30.0`.
+The ref ignores `--cloud`, so that option can make the mark and the ref differ.
+With `--cloud`, the listing keeps the versions of that cloud. If `aws` has
+`2.0.0` and `gcp` has `1.0.0`, `--cloud gcp` marks `1.0.0`, and the ref
+records `2.0.0`.
 
 Palette marks one version of each pack in each registry as the latest. Palette
 orders by semantic version, and strata does too: a pre-release or a rebuild such
@@ -161,9 +161,11 @@ Palette applies the FIPS rule of the tenant to the answer of the registry, and
 not to the listing. So in a FIPS tenant, the listing holds a version that
 Palette refuses in a profile, and the registry gives that version no tag.
 Strata omits each version that has no tag in the answer of the registry,
-unless Spectro Cloud retired it as `disabled` or `deleted`. When no version
-of the pack is FIPS compliant, the registry answers 404, and strata shows no
-version of that registry. The count of versions in the heading does not
+unless Spectro Cloud retired it as `disabled` or `deleted`.
+`pack:<name>@latest` skips such a version too.
+
+When no version of the pack is FIPS compliant, the registry answers 404, and
+strata shows no version of that registry. The count of versions in the heading does not
 include a version that strata omits. See
 [The FIPS rule](../internals/palette/packs.md#the-fips-rule).
 

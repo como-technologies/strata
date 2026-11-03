@@ -8,8 +8,9 @@ use serde_json::Value;
 
 use crate::api::registry::{Registries, pack_type_of, registry_layer};
 use crate::api::{Palette, PaletteApi};
-use crate::closed_set::{ClosedSet, Open};
-use crate::error::{Error, Result, found};
+use crate::candidate::pack::Served;
+use crate::closed_set::Open;
+use crate::error::{Error, Result};
 use crate::json::{arr, opt_text, strings, text};
 use crate::model::cloud::supports;
 use crate::model::pack_state::PackState;
@@ -94,9 +95,8 @@ pub struct PackBuild {
     /// True for the version that `pack:<name>@latest` records, of the versions that the listing
     /// keeps. That is the highest version that is not a pre-release, or the highest pre-release
     /// when the registry's copy has no version that is not a pre-release. See [`version::pick`].
-    /// The ref picks from each version of the registry. So it can record another version when
-    /// `--cloud` cuts the list, and when the highest version has no tag, because the listing omits
-    /// that version.
+    /// The ref picks from the versions that the registry serves, as the listing does, and it ignores
+    /// `--cloud`. So it can record another version when `--cloud` cuts the list.
     pub latest: bool,
     /// True for the version that Palette calls the latest of the registry's copy. Palette marks the
     /// highest version by the order of semantic versions, also when it is a pre-release. So it can
@@ -168,28 +168,6 @@ fn architectures_of(entry: &Value) -> Vec<String> {
     found.sort();
     found.dedup();
     found
-}
-
-/// The value of the `states` query that asks Palette for the tags of the retired versions of a
-/// pack: each state that a listing gives. With it, Palette answers with the versions in these
-/// states only.
-fn listed_states() -> String {
-    let listed = PackState::ALL.iter().filter(|s| s.listed());
-    listed.map(|s| s.as_str()).collect::<Vec<_>>().join(",")
-}
-
-/// Join the tag rows of the `answers` of one registry, and keep each row one time.
-///
-/// A deprecated version is in the answer with no query and in the answer with the states query,
-/// so its rows come two times.
-fn merged_tags(answers: &[Value]) -> Vec<Value> {
-    let mut seen = std::collections::BTreeSet::new();
-    answers
-        .iter()
-        .flat_map(|a| arr(a, "/tags"))
-        .filter(|t| seen.insert((text(t, "/packUid"), text(t, "/version"), text(t, "/tag"))))
-        .cloned()
-        .collect()
 }
 
 /// List what the registries offer for one pack.
@@ -328,30 +306,25 @@ fn pack_registry<A: PaletteApi>(
     progress: &Progress,
 ) -> Result<(Option<PackRegistry>, Architectures)> {
     progress.note(&format!("reading the tags of {name} in {registry}"));
-    let answers = tag_answers(palette, name, uid, &mine)?;
-    let tags_unavailable = answers.is_empty();
-    let layer = registry_layer(mine[0], &answers).unwrap_or_default();
-    let tags = merged_tags(&answers);
-    // Palette applies the FIPS rule of the tenant to its registry route, and not to the
-    // listing. So a version with no tag in the answer is a version that Palette does not
-    // serve. Omit it, unless Spectro Cloud retired it as disabled or deleted. A 404 is
-    // the same answer: the route serves no version, for example when no version of the pack
-    // is FIPS compliant
-    let mine: Vec<&Value> = mine
-        .into_iter()
-        .filter(|e| has_tag(&tags, e) || crate::api::registry::retired_state(e).is_some())
-        .collect();
+    let first = mine[0];
+    let served = Served::read(palette, name, uid, mine)?;
+    let tags_unavailable = served.answers.is_empty();
+    let layer = registry_layer(first, &served.answers).unwrap_or_default();
     // every version of this pack that the registry offers, counted before --cloud and
     // --latest cut the list. The heading states the inventory, not the rows that survived a
     // flag
-    let versions_offered = mine
+    let versions_offered = served
+        .entries
         .iter()
         .filter_map(|e| opt_text(e, "/spec/version"))
         .collect::<std::collections::BTreeSet<_>>()
         .len();
-    let no_digests = mine.iter().all(|e| text(e, "/spec/digest").is_empty());
-    let state = common_state(&mine);
-    let (versions, architectures) = pack_builds(&mine, &tags, options);
+    let no_digests = served
+        .entries
+        .iter()
+        .all(|e| text(e, "/spec/digest").is_empty());
+    let state = common_state(&served.entries);
+    let (versions, architectures) = pack_builds(&served, options);
     let copy = (!versions.is_empty()).then(|| PackRegistry {
         registry: registry.to_string(),
         registry_uid: uid.to_string(),
@@ -363,30 +336,6 @@ fn pack_registry<A: PaletteApi>(
         no_digests,
     });
     Ok((copy, architectures))
-}
-
-/// The answers of the tag route of one registry for the pack `name`, with the tag rows. The
-/// answer is empty when Palette answers 404.
-///
-/// The registry's own answer holds the tags, which the listing does not. With no query, the
-/// answer does not include the disabled and the deleted versions, and Palette answers 404 when it
-/// has no version. So a registry with a retired version in `mine` gets a second request with the
-/// states query. A registry that answers 404 to both keeps only the disabled and the deleted
-/// versions of the listing, with no tags. The other registries still answer.
-fn tag_answers<A: PaletteApi>(
-    palette: &Palette<A>,
-    name: &str,
-    uid: &str,
-    mine: &[&Value],
-) -> Result<Vec<Value>> {
-    let mut answers = vec![found(palette.pack_tags(name, uid, None))?];
-    if mine
-        .iter()
-        .any(|e| crate::api::registry::retired_state(e).is_some())
-    {
-        answers.push(found(palette.pack_tags(name, uid, Some(&listed_states())))?);
-    }
-    Ok(answers.into_iter().flatten().collect())
 }
 
 /// The one state of the registry, when every version of the pack in `mine` has the same one.
@@ -405,14 +354,10 @@ fn common_state(mine: &[&Value]) -> Option<Open<PackState>> {
 ///
 /// `--cloud` drops a version before strata reads its architectures. `--latest` cuts the list
 /// after that, so `behind` still sees what a version drops.
-fn pack_builds(
-    mine: &[&Value],
-    tags: &[Value],
-    options: &PackOptions,
-) -> (Vec<PackBuild>, Architectures) {
+fn pack_builds(served: &Served, options: &PackOptions) -> (Vec<PackBuild>, Architectures) {
     let mut versions: Vec<PackBuild> = Vec::new();
     let mut architectures = Architectures::new();
-    for &e in mine {
+    for &e in &served.entries {
         let version = text(e, "/spec/version");
         if versions.iter().any(|v| v.version == version) {
             continue; // the paged listing repeats a version
@@ -430,7 +375,7 @@ fn pack_builds(
             digest: text(e, "/spec/digest"),
             kind: pack_type_of(e),
             cloud_types,
-            tags: tag_names(tags, e),
+            tags: tag_names(served, e),
             latest: false,
             palette_latest: text(e, PALETTE_LATEST) == "true",
             state: crate::api::registry::pack_state(e),
@@ -455,35 +400,14 @@ fn pack_builds(
 ///
 /// A tag row names every tag above it, so the row with the most of them is the most exact. A
 /// registry that names none leaves the tags of one version in name order.
-fn tag_names(tags: &[Value], e: &Value) -> Vec<String> {
-    let mut rows: Vec<(usize, String)> = tag_rows(tags, e)
+fn tag_names(served: &Served, e: &Value) -> Vec<String> {
+    let mut rows: Vec<(usize, String)> = served
+        .tag_rows(e)
         .into_iter()
         .map(|t| (arr(t, "/parentTags").len(), text(t, "/tag")))
         .collect();
     rows.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
     rows.into_iter().map(|(_, tag)| tag).collect()
-}
-
-/// The tag rows of the registry answer that point at the listing entry `e`.
-fn tag_rows<'a>(tags: &'a [Value], e: &Value) -> Vec<&'a Value> {
-    tags.iter().filter(|t| points_at(t, e)).collect()
-}
-
-/// True when a tag row of the registry answer points at the listing entry `e`.
-fn has_tag(tags: &[Value], e: &Value) -> bool {
-    tags.iter().any(|t| points_at(t, e))
-}
-
-/// True when the tag row `t` points at the listing entry `e`. A tag row names its version and the
-/// build that it points at. Match on either: a registry that answers with one of the two still
-/// says enough.
-fn points_at(t: &Value, e: &Value) -> bool {
-    let v = text(t, "/version");
-    if v.is_empty() {
-        text(t, "/packUid") == text(e, "/metadata/uid")
-    } else {
-        v == text(e, "/spec/version")
-    }
 }
 
 #[cfg(test)]

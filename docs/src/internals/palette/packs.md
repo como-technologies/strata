@@ -642,9 +642,10 @@ whose annotation `fips` is `true` or `unknown`:
 | `POST /v1/packs/search` | applied, but the answer has one row for each pack name, and no list of versions |
 | A new profile that pins another version | Palette refuses it with `PackForbidden` |
 
-Strata uses the registry answer, and does not copy the rule. `strata packs` and
-`strata behind` omit a listed version that has no tag in the registry
-answer. A version that Spectro Cloud retired as `disabled` or `deleted` stays.
+Strata uses the registry answer, and does not copy the rule. `strata packs`,
+`strata behind`, and `pack:<name>@latest` use the versions that the registry
+answer serves, and omit a listed version that has no tag in it. A version that
+Spectro Cloud retired as `disabled` or `deleted` stays.
 A 404 is an answer with no version, so a pack with no FIPS compliant version
 has no version to offer. Then `behind` says that the pinned version is absent.
 See [strata packs](../../commands/packs.md#what-to-expect).
@@ -652,8 +653,8 @@ See [strata packs](../../commands/packs.md#what-to-expect).
 The live tenant has the mode `none`, and its Palette does not run in FIPS mode.
 No listed version has the annotation `fips`, and the registry answer gives each
 version its tags, except a disabled or a deleted version. So no live run shows
-the rule. A test with the memory client shows `packs` and `behind` in a FIPS
-tenant.
+the rule. A test with the memory client shows `packs`, `behind`, and
+`pack:<name>@latest` in a FIPS tenant.
 
 ## The annotations of a pack reference
 

@@ -114,8 +114,8 @@ registry takes a new version. A job pins both sides.
 {{#include ../output/pack-record.txt}}
 ```
 
-`pack:<name>@latest` takes the highest version in the registry that is not a
-pre-release. The record is a snapshot like any other: keep it, and `verify` reads
+`pack:<name>@latest` takes the highest version that the registry serves and that is
+not a pre-release. The record is a snapshot like any other: keep it, and `verify` reads
 the registry again.
 
 ```text
@@ -151,7 +151,7 @@ pack, compare the profile versions: [Review a change before you publish it](./re
 
 ## Palette behavior
 
-For `@latest`, strata takes the highest version of the registry that is not a
+For `@latest`, strata takes the highest version that the registry serves and that is not a
 pre-release, in the order of Palette. `strata packs` lists the versions newest
 first, with the tags that point at each. Two registries can hold one pack name.
 See
