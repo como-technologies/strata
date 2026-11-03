@@ -1037,9 +1037,9 @@ pub fn verify_summary_with(
 
 // ---- the processes -----------------------------------------------------------------------------
 
-/// The strata binary that cargo built for the tests. It is private: a test starts it with
-/// [`strata_command`], or gives it to a script with [`give_strata`], so that no run of the tests
-/// can send the report to the endpoint of the release.
+/// The strata binary that cargo built for the tests. It is private. A test starts it with
+/// [`strata_command`], or gives it to a script with [`give_strata`]. So no run of the tests can
+/// send the report to the endpoint of the release.
 fn strata_bin() -> &'static Path {
     Path::new(env!("CARGO_BIN_EXE_strata"))
 }
@@ -1052,8 +1052,8 @@ pub const REFUSED: &str = "http://127.0.0.1:9";
 ///
 /// The release names the address of the real endpoint, so a run that sends would post there. The
 /// setting `0` makes the run send nothing, whatever `~/.palette.env` or a saved answer say, because
-/// the environment has priority. The address is the second guard: a test that turns the send on
-/// and gives no address of its own posts to [`REFUSED`], and never to the real endpoint. A test that
+/// the environment has priority. The address is the second guard. A test that enables the send and
+/// gives no address of its own posts to [`REFUSED`], and never to the real endpoint. A test that
 /// sends sets `STRATA_REPORT=1` and `STRATA_REPORT_URL` after this call, with the address of its
 /// stand-in.
 pub fn without_report(command: &mut Command) -> &mut Command {
@@ -1126,7 +1126,7 @@ pub fn path_with(bin: &Path) -> String {
 
 /// A `jq` that acts as jq 1.6, which the jq of Debian 12 is: `jq -e` exits with 0 when its input
 /// is empty. jq 1.7 and later exit with 4. A call with `-s` or `-n` always has an input value, so
-/// it gets no fault. Each other call goes to the next `jq` in `PATH`, so a test shows the fault
+/// it gets no fault. Each other call goes to the next `jq` in `PATH`. So a test shows the fault
 /// with the jq of the CI and of the session image.
 ///
 /// The input is the last argument when it is a file, and else the standard input.
@@ -1186,9 +1186,9 @@ pub fn isolate_git(command: &mut Command) -> &mut Command {
         .env("GIT_COMMITTER_EMAIL", "t@example.com")
 }
 
-/// The settings of the machine that name a project or a tenant: the variables of strata, and those
-/// of the Terraform provider, which strata reads too. It also holds the variable `CI`, because a
-/// pipeline sets it.
+/// The settings of the machine that name a project or a tenant. They are the variables of strata
+/// and those of the Terraform provider, which strata also reads. It also holds the variable `CI`,
+/// because a pipeline sets it.
 const MACHINE_SETTINGS: [&str; 5] = [
     "PALETTE_PROJECT_UID",
     "PALETTE_PROJECT",
@@ -1197,8 +1197,8 @@ const MACHINE_SETTINGS: [&str; 5] = [
     "CI",
 ];
 
-/// Give `command` an address that refuses connections, the home `home`, no setting of the machine
-/// that names a project, and no send of the report: see [`without_report`].
+/// Give `command` an address that refuses connections and the home `home`. It gets no setting of
+/// the machine that names a project, and no send of the report: see [`without_report`].
 ///
 /// The run makes no retry, and it gets no setting that names a tenant either. So a request fails
 /// at once, and the run reads only the `.palette.env` of `home`, not the one of the person who
@@ -1294,8 +1294,8 @@ pub fn handed_in(dir: &Path, kind: &str, call: usize) -> String {
         .unwrap_or_else(|_| panic!("no {kind} from call {call}"))
 }
 
-/// A `gh` for issues: logs each call, keeps each body file it is handed as body-<n>.md in call
-/// order, lists the open issues from issues.json, and numbers a new issue from 41 up.
+/// A `gh` for issues. It logs each call, and keeps each body file it is handed as `body-<n>.md` in
+/// call order. It lists the open issues from issues.json. It numbers a new issue from 41 up.
 pub const FAKE_ISSUES_GH: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 echo "$*" >> "$FAKE_VERIFY/gh.log"

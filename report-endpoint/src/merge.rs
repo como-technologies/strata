@@ -1,10 +1,10 @@
 //! The merge of a report into the issues of the tracker.
 //!
-//! A set and a value have one issue. Its first line is a marker, `<!-- strata-report: values <set>
-//! <value> -->`, and the second line holds the state of the issue: the count of the lines, the
-//! count of the reports, and the releases and routes that the reports named. The state is the
-//! hex of a JSON document, so no text of a report can end the comment. The visible table of the
-//! issue shows the same state.
+//! A set and a value have one issue. Its first line is a marker,
+//! `<!-- strata-report: values <set> <value> -->`. The second line holds the state of the issue.
+//! That is the count of the lines, the count of the reports, and the releases and routes that the
+//! reports named. The state is the hex of a JSON document, so no text of a report can end the
+//! comment. The visible table of the issue shows the same state.
 //!
 //! A report that names a value again changes the body of its issue. It opens no issue and writes no
 //! comment. An issue that a maintainer closed gets the new count too, and stays closed: users of an

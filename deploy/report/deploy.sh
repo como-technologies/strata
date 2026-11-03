@@ -5,7 +5,7 @@
 #
 # The lead runs this on kadomony after the merge, with a gcloud login. The script builds the image
 # on Cloud Build, and deploys it as the service strata-report. Then it prints the address of the
-# service. The script reads no secret: the token of GitHub stays in Secret Manager, and Cloud Run
+# service. The script reads no secret. The token of GitHub stays in Secret Manager, and Cloud Run
 # gives it to the service as GITHUB_TOKEN when the service starts.
 #
 # The service and the build each run as an account of their own. The default compute account of the

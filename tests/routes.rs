@@ -2,8 +2,8 @@
 //!
 //! A test writes the route that Palette serves, and does not build it with the code under test:
 //! see the head of that file. The file then repeats each route that strata builds. This test is
-//! the only place that compares the two, so a change of a route in the library fails here, and
-//! the file is the one to change.
+//! the only place that compares the two, so a change of a route in the library fails here. The
+//! file is the one to change.
 
 use crate::common::{
     cloud_account_route, cloud_config_route, cluster_events_route, cluster_route,

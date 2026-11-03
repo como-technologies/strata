@@ -36,7 +36,7 @@ strata-preflight = { path = "../preflight" }
 [dev-dependencies]
 tempfile = "3"
 # A test compares the answer of the stand-in for the endpoint of the report with the answer of the
-# real service, so the stand-in cannot go stale.
+# real service. This way, the stand-in cannot go stale.
 strata-report-endpoint = { path = "../report-endpoint" }
 
 [lints.rust]

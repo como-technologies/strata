@@ -94,7 +94,7 @@ fn every_use_case_is_in_the_navigation_and_the_list_in_one_order() {
 }
 
 /// The version badge in the README is static, because shields.io cannot read a private
-/// repository: a badge that asks it for the version renders "repo not found". Static means it can
+/// repository. A badge that asks it for the version renders "repo not found". Static means it can
 /// drift, so the drift is a test failure instead of a wrong number on the front page.
 #[test]
 fn the_readme_version_badge_is_the_version_in_cargo_toml() {
@@ -281,7 +281,7 @@ fn release_section(page: &str, release: &str) -> String {
     ))
 }
 
-/// The changes of Wave 11 were in a few paragraphs, and the page had no section that tells a
+/// The changes of Wave 11 were in a few paragraphs. The page had no section that tells a
 /// reader of the release notes what to do. The section sits above the one of release 0.24.0, and
 /// the opening of the page links to both.
 #[test]
@@ -320,7 +320,7 @@ fn compatibility_has_a_section_for_release_0_25_0_above_release_0_24_0_and_links
 
 /// Each reusable workflow that installs strata runs the action of `cosign` and checks the
 /// signature. A caller whose organization limits the actions, or whose runner is not on GitHub,
-/// failed at that step with no word of it in the page. The section names each workflow, the
+/// failed at that step. The page had no word of it. The section names each workflow, the
 /// action to allow, and the `strata-version` that has the option which the workflows give.
 #[test]
 fn the_section_of_release_0_25_0_names_each_workflow_that_checks_the_signature_and_what_a_caller_does()
@@ -376,7 +376,7 @@ fn schema_kinds() -> Vec<String> {
 
 /// The rename of the two read errors reached `strata-diff/1` and `strata-verify-summary/1`, which
 /// carry the record of a cluster too. The page named only the record. A document that strata
-/// only writes has no older place to read, so the page names each one, with the id rule that
+/// only writes has no older place to read. So the page names each one, with the id rule that
 /// allows the move.
 #[test]
 fn the_page_names_each_document_that_carries_the_record_of_a_cluster_with_the_rename_of_its_errors()
@@ -796,23 +796,62 @@ fn the_blocks_that_the_style_review_of_wave_11_named_have_six_sentences_or_fewer
     }
 }
 
-/// The comment blocks of a file. A block is a run of lines that start with `mark`, up to a line
-/// that is not one or a blank comment line. It is one line, without the marks. `///` and `//!` are
-/// `//` with one more mark.
+/// The comment blocks of a file. A block is a run of lines that start with `mark`. A line that is
+/// not one, a blank comment line, a list item, a literal line, or a fence ends the run. A block is
+/// one line, without the marks. `///` and `//!` are `//` with one more mark.
+///
+/// A literal line has two spaces or more after the mark, as a table or a usage text has. It is a
+/// block of its own. A fenced block of code in a comment is not prose, so no block holds it. A
+/// shebang is not a comment.
 fn comment_blocks(text: &str, mark: &str) -> Vec<String> {
-    let mut blocks = Vec::new();
-    let mut run: Vec<&str> = Vec::new();
-    for line in text.lines().map(str::trim_start) {
-        let words = line
-            .strip_prefix(mark)
-            .map(|rest| rest.trim_start_matches(['/', '!']).trim());
-        match words {
-            Some(words) if !words.is_empty() => run.push(words),
-            _ if !run.is_empty() => blocks.push(std::mem::take(&mut run).join(" ")),
-            _ => {}
+    fn end_block(blocks: &mut Vec<String>, run: &mut Vec<&str>) {
+        if !run.is_empty() {
+            blocks.push(std::mem::take(run).join(" "));
         }
     }
-    blocks.extend((!run.is_empty()).then(|| run.join(" ")));
+    fn is_list_item(line: &str) -> bool {
+        let digits = line.trim_start_matches(|c: char| c.is_ascii_digit());
+        line.starts_with("- ")
+            || line.starts_with("* ")
+            || (digits.len() < line.len() && (digits.starts_with(". ") || digits.starts_with(") ")))
+    }
+    let mut blocks = Vec::new();
+    let mut run: Vec<&str> = Vec::new();
+    let mut fenced = false;
+    for (at, line) in text.lines().enumerate() {
+        let line = line.trim_start();
+        let rest = line
+            .strip_prefix(mark)
+            .filter(|_| !(at == 0 && line.starts_with("#!")));
+        let Some(rest) = rest else {
+            end_block(&mut blocks, &mut run);
+            fenced = false;
+            continue;
+        };
+        let rest = rest.trim_start_matches(['/', '!']);
+        let words = rest.trim();
+        if words.starts_with("```") {
+            end_block(&mut blocks, &mut run);
+            fenced = !fenced;
+            continue;
+        }
+        if fenced {
+            continue;
+        }
+        if words.is_empty() {
+            end_block(&mut blocks, &mut run);
+            continue;
+        }
+        let literal = rest.starts_with("  ");
+        if literal || is_list_item(words) {
+            end_block(&mut blocks, &mut run);
+        }
+        run.push(words);
+        if literal {
+            end_block(&mut blocks, &mut run);
+        }
+    }
+    end_block(&mut blocks, &mut run);
     blocks
 }
 
@@ -1187,7 +1226,7 @@ fn the_rows_of_the_checks_that_the_wave_11_live_window_ran_state_a_result() {
     }
 }
 
-/// A rule that waits for a call of the route says why (#409), and a rule that a live run showed the
+/// A rule that waits for a call of the route says why (#409). A rule that a live run showed the
 /// route answers waits no more. The lab has cloud accounts of AWS and GCP only, so the cases of the
 /// other clouds have no result.
 #[test]
@@ -1600,8 +1639,8 @@ fn the_merge_step_of_a_day_of_work_says_that_the_gate_fails_and_each_step_names_
     }
 }
 
-/// The packages of the rustdoc builds of `just lint`, in the order of the recipe, as the list
-/// that a sentence gives: "`a`, `b`, and `c`".
+/// The packages of the rustdoc builds of `just lint`, in the order of the recipe. They are the
+/// list that a sentence gives: "`a`, `b`, and `c`".
 fn rustdoc_packages() -> String {
     let mut packages: Vec<String> = Vec::new();
     for line in recipe("lint").iter().filter(|l| l.contains("cargo doc")) {
@@ -1617,8 +1656,8 @@ fn rustdoc_packages() -> String {
     format!("{}, and `{last}`", first.join(", "))
 }
 
-/// The book states what the code does: the rustdoc of `just lint`, the property of the version
-/// order, and the save of the group values of a cluster.
+/// The book states what the code does. It states the rustdoc of `just lint`, the property of the
+/// version order, and the save of the group values of a cluster.
 #[test]
 fn build_test_states_the_rustdoc_packages_the_version_order_and_the_save_of_a_cluster() {
     let page = one_line(&read(&docs().join("development/build-test.md")));
@@ -1641,8 +1680,8 @@ fn build_test_states_the_rustdoc_packages_the_version_order_and_the_save_of_a_cl
     );
 }
 
-/// The public items show their comments to each user of the library, so each sentence of the
-/// comments that the review at the end of Wave 12 named has 25 words at most, and none has a
+/// The public items show their comments to each user of the library. So each sentence of the
+/// comments that the review at the end of Wave 12 named has 25 words at most. None has a
 /// phrasal verb that the review named.
 #[test]
 fn the_public_rustdoc_that_the_review_at_the_end_of_wave_12_named_keeps_to_25_words() {
@@ -1785,8 +1824,9 @@ fn compatibility_has_a_section_for_release_0_26_0_above_release_0_25_0_and_links
 }
 
 /// The review of the end of Wave 12 found four changes that the page stated with no action, or
-/// did not state: the directory of a cluster group, the root of a canonical text, the verdict of
-/// the merge gate, and the artifact of the GitLab job. Each one has its action in the section.
+/// did not state. Two are the directory of a cluster group and the root of a canonical text. Two
+/// are the verdict of the merge gate and the artifact of the GitLab job. Each one has its action in
+/// the section.
 #[test]
 fn the_section_of_release_0_26_0_gives_the_action_for_the_directory_the_root_the_gate_and_the_job()
 {
@@ -1915,7 +1955,7 @@ fn the_row_of_packs_palette_latest_states_the_result_of_the_live_window_of_wave_
 }
 
 /// The pages of `behind` that depend on the order of versions of Palette link the section that
-/// shows it live: the page of the command at "A pre-release", and step 4 of the use case.
+/// shows it live. They are the page of the command at "A pre-release", and step 4 of the use case.
 #[test]
 fn the_behind_pages_link_the_version_that_palette_calls_the_latest_from_the_pre_release() {
     let link = "(../internals/palette/packs.md#the-version-that-palette-calls-the-latest)";
@@ -1965,7 +2005,7 @@ fn the_page_of_the_clusters_states_that_a_pool_with_no_override_has_no_override_
 }
 
 /// A session of riff reads the code of Palette at `$HOME/palette`. `riff.toml` mounts the volume
-/// with a comment that says what it holds, and the book states where the copy is and how old it can
+/// with a comment that says what it holds. The book states where the copy is and how old it can
 /// be. A session that finds no mount cannot read the code that rule 7 tells it to read.
 #[test]
 fn riff_mounts_the_code_of_palette_and_the_book_says_where_a_session_finds_it() {
@@ -2024,8 +2064,8 @@ fn rule_7_says_to_read_the_code_of_palette_first_and_still_bars_a_citation() {
 
 // ---- the report of the unknown values ---------------------------------------------------------
 
-/// The pages that describe `strata report`, the page of the endpoint that takes the report, and the
-/// page of the facts, which holds the contract report.
+/// The pages that describe `strata report`. They include the page of the endpoint that takes the
+/// report. The page of the facts holds the contract report.
 const REPORT_PAGES: [&str; 5] = [
     "reference/report.md",
     "commands/report.md",
@@ -2137,7 +2177,7 @@ fn the_pages_of_the_report_keep_to_the_style_rules() {
 }
 
 /// Step 6 of the deploy states the three points of Cloud Run as results. A live run gave two of
-/// them. The lab machine has no IPv6 route, so a failed `curl -6` shows a fault of the route of the
+/// them. The lab machine has no IPv6 route. So a failed `curl -6` shows a fault of the route of the
 /// machine, and the page says so.
 #[test]
 fn step_6_of_the_deploy_states_the_three_results_of_cloud_run() {
@@ -2169,10 +2209,11 @@ fn step_6_of_the_deploy_states_the_three_results_of_cloud_run() {
     assert!(repo_file("deploy/report/deploy.sh").contains("--concurrency 8"));
 }
 
-/// `strata report` adds two changes that break code outside the crate: a required method of the
-/// public trait `Renderer`, and a variant of `Error`, which is not `#[non_exhaustive]`. The section
-/// of release 0.27.0 sits above the one of release 0.26.0. The opening of the page links to all
-/// four sections, and the section gives the action for each change.
+/// `strata report` adds two changes that break code outside the crate. One is a required method of
+/// the public trait `Renderer`. The other is a variant of `Error`, which is not
+/// `#[non_exhaustive]`. The section of release 0.27.0 sits above the one of release 0.26.0. The
+/// opening of the page links to all four sections, and the section gives the action for each
+/// change.
 #[test]
 fn the_section_of_release_0_27_0_gives_the_action_for_the_two_breaking_changes_of_the_report() {
     let page = read(&docs().join("reference/compatibility.md"));
@@ -2335,8 +2376,8 @@ fn compatibility_says_that_gke_no_release_channel_is_demoted_below_4_11_only() {
     }
 }
 
-/// The section lacked six changes of the library `strata-preflight` that do not build, and the
-/// text of the 5xx said that each 5xx other than a named code is an error.
+/// The section lacked six changes of the library `strata-preflight` that do not build. The text of
+/// the 5xx said that each 5xx other than a named code is an error.
 #[test]
 fn the_section_of_release_0_27_0_names_each_change_of_the_library_of_strata_preflight() {
     let part = release_0_27_0_part("### For a user of the library of strata-preflight\n");
@@ -2422,7 +2463,7 @@ fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for()
     let none = |row: &str| !row.to_lowercase().contains("no result yet");
     let contract = section(&page, "## contract.sh", Some("\n## "));
     for item in [
-        "#390", "#393", "#530", "#539", "#540", "#543", "#554", "#567",
+        "#390", "#393", "#530", "#539", "#540", "#543", "#554", "#567", "#576",
     ] {
         let rows: Vec<&str> = contract
             .lines()
@@ -2468,13 +2509,13 @@ fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for()
     for check in ["`send-1`", "`send-2`", "`repeat-1`", "`repeat-2`"] {
         has_result("## report-send.sh", &format!("| {check}"));
     }
-    // #574 gave the endpoint a label of its own, so the check `issue` waits for a live run with it
+    // #574 gave the endpoint a label of its own, and a live run found the issue under it
     let send = section(&page, "## report-send.sh", Some("\n## "));
     let issue = send
         .lines()
         .find(|l| l.starts_with("| `issue`"))
         .expect("report-send.sh has no row for issue");
-    assert!(!none(issue), "{issue}");
+    assert!(none(issue), "{issue}");
     assert!(issue.contains("`unknown-value`"), "{issue}");
     has_result("## fleet.sh", "| `filters-project`");
     has_result("## loop.sh", "| `report-log`");
@@ -2743,8 +2784,8 @@ fn the_phrasal_verbs_of_the_review_at_the_end_of_wave_13_are_gone() {
     }
 }
 
-/// The public rustdoc that the review at the end of Wave 13 named: each sentence has 25 words at
-/// most, and none has a word or a phrasal verb that the review refused.
+/// The public rustdoc that the review at the end of Wave 13 named. Each sentence has 25 words at
+/// most. None has a word or a phrasal verb that the review refused.
 #[test]
 fn the_public_rustdoc_that_the_review_at_the_end_of_wave_13_named_keeps_to_25_words() {
     let comments = [
@@ -2824,8 +2865,8 @@ fn the_four_lines_with_would_that_the_review_of_553_named_are_gone() {
     }
 }
 
-/// The everyday loop shows the report in its two tables, its seed, and its live run, and it says
-/// that a yes to the question also starts the send.
+/// The everyday loop shows the report in its two tables, its seed, and its live run. It says that
+/// a yes to the question also starts the send.
 #[test]
 fn the_everyday_loop_shows_the_report_in_its_tables_its_seed_and_its_live_run() {
     let text = the_loop();
@@ -2914,8 +2955,9 @@ fn release_0_28_0_part(heading: &str) -> String {
 
 /// The section of release 0.28.0 sits above the one of release 0.27.0. It gives the action for
 /// each change of the cleanup that can break a script, a document reader, or a program that uses a
-/// library: the mark `latest`, the path of `snapshot-schema`, the field `cluster` of
-/// `stale-record`, the hash of the values of a group, and the items of the two libraries.
+/// library. The changes are the mark `latest`, the path of `snapshot-schema`, and the field
+/// `cluster` of `stale-record`. They also include the hash of the values of a group, and the items
+/// of the two libraries.
 #[test]
 fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup() {
     let page = read(&docs().join("reference/compatibility.md"));
@@ -2986,7 +3028,7 @@ fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup
     }
 }
 
-/// Review of Wave 13, A12: the rule of the ids says that a new field keeps the id, and the two
+/// Review of Wave 13, A12. The rule of the ids says that a new field keeps the id. The two
 /// documents of the unknown values are the exception. The page of the versions says so.
 #[test]
 fn the_page_of_the_versions_says_that_the_two_documents_of_the_unknown_values_refuse_a_new_field() {
@@ -3448,5 +3490,551 @@ fn the_section_of_release_0_28_0_names_each_schema_description_that_has_new_word
             command_line.contains(needle),
             "the section of release 0.28.0 lacks {needle:?}"
         );
+    }
+}
+
+// ---- the comments that Wave 13 wrote, in Wave 14 ------------------------------------------------
+
+/// A table, a usage text, a list, a fenced block, and a shebang are not sentences. The sweep of
+/// the sentence length must not join them with the prose around them.
+#[test]
+fn a_literal_line_a_list_item_a_fence_and_a_shebang_are_not_joined_into_a_sentence() {
+    let script = "#!/usr/bin/env bash\n# The first line of the text.\n# It has two lines.\n#\n\
+                  #   script start   do the first thing\n#   script stop    do the second thing\n\
+                  # 1. The first step\n# 2. The second step\n# ```\n# a command in a fence\n# ```\n\
+                  # The last line.\n";
+    assert_eq!(
+        comment_blocks(script, "#"),
+        [
+            "The first line of the text. It has two lines.",
+            "script start   do the first thing",
+            "script stop    do the second thing",
+            "1. The first step",
+            "2. The second step",
+            "The last line.",
+        ]
+    );
+    let rust = "/// Item one.\n/// - a\n/// - b\n//! Inner.\ncode(); // a trailing remark\n";
+    assert_eq!(
+        comment_blocks(rust, "//"),
+        ["Item one.", "- a", "- b Inner."]
+    );
+}
+
+/// The directories that Wave 13 wrote. Each file in them is new since release 0.26.0.
+const SWEPT_DIRECTORIES: [&str; 7] = [
+    "deploy/contract",
+    "deploy/report",
+    "report-endpoint",
+    "src/closed_set/unknown",
+    "xtask/facts",
+    "xtask/src/contract",
+    "xtask/src/facts",
+];
+
+/// The files that Wave 13 wrote or changed, outside the directories above.
+const SWEPT_FILES: [&str; 49] = [
+    "examples/live/contract-report.sh",
+    "examples/live/contract.sh",
+    "examples/live/github.sh",
+    "examples/live/preflight-plan.sh",
+    "examples/live/report-send.sh",
+    "examples/live/tiers.sh",
+    "preflight/src/catalog.rs",
+    "preflight/src/probe/backend.rs",
+    "preflight/src/probe/tests.rs",
+    "preflight/src/report/reproduce.rs",
+    "preflight/src/rule/mod.rs",
+    "preflight/src/rule/validate.rs",
+    "preflight/src/run/tests.rs",
+    "preflight/src/world/packs.rs",
+    "preflight/src/world/tests.rs",
+    "preflight/tests/catalog.rs",
+    "preflight/tests/cli.rs",
+    "scripts/dev/set-version.sh",
+    "src/api/codes.rs",
+    "src/cli/mod.rs",
+    "src/cli/report.rs",
+    "src/closed_set/unknown.rs",
+    "src/error/class.rs",
+    "src/error/mod.rs",
+    "src/model/cluster_state.rs",
+    "src/ops/report.rs",
+    "src/render/report.rs",
+    "src/term/ask.rs",
+    "src/text.rs",
+    "tests/ci_scripts.rs",
+    "tests/cli.rs",
+    "tests/common/answer.rs",
+    "tests/common/closed_set.rs",
+    "tests/common/mod.rs",
+    "tests/common/stand_in.rs",
+    "tests/contract.rs",
+    "tests/dev_scripts.rs",
+    "tests/docs.rs",
+    "tests/live_scripts.rs",
+    "tests/report.rs",
+    "tests/report_deploy.rs",
+    "tests/routes.rs",
+    "tests/send.rs",
+    "xtask/Cargo.toml",
+    "xtask/src/book.rs",
+    "xtask/src/chapters/fields.rs",
+    "xtask/src/files.rs",
+    "xtask/src/palette.rs",
+    "xtask/src/tenant/mod.rs",
+];
+
+/// The review at the end of Wave 13 found 112 comment sentences of 26 words or more in the code
+/// that Wave 13 wrote. Each sentence of each comment in those files has 25 words at most now. The
+/// next wave cannot add one without a failure here.
+#[test]
+fn each_comment_sentence_in_the_files_that_wave_13_wrote_has_25_words_at_most() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let comment_files = ["rs", "sh", "yml", "yaml", "toml", "service", "timer"];
+    let mut files: Vec<PathBuf> = SWEPT_DIRECTORIES
+        .iter()
+        .flat_map(|dir| walk(&root.join(dir)))
+        .filter(|p| !p.to_string_lossy().contains("/target/"))
+        .filter(|p| {
+            let name = p.file_name().and_then(|n| n.to_str());
+            name == Some("Dockerfile")
+                || p.extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| comment_files.contains(&e))
+        })
+        .collect();
+    files.extend(SWEPT_FILES.iter().map(|file| root.join(file)));
+    assert!(files.len() > 100, "the sweep found {} files", files.len());
+    let mut faults = Vec::new();
+    for path in files {
+        let mark = if path.extension().is_some_and(|e| e == "rs") {
+            "//"
+        } else {
+            "#"
+        };
+        for block in comment_blocks(&read(&path), mark) {
+            faults.extend(
+                sentences(&block)
+                    .into_iter()
+                    .filter(|s| words(s) > 25)
+                    .map(|s| format!("{}: {} words: {}", path.display(), words(&s), s.trim())),
+            );
+        }
+    }
+    assert!(
+        faults.is_empty(),
+        "{} faults:\n{}",
+        faults.len(),
+        faults.join("\n")
+    );
+}
+
+// ---- the text findings of the review at the end of Wave 13, in Wave 14 ---------------------------
+
+/// True when `file` holds `phrase` in its text, or in its comments. A comment that wraps holds its
+/// phrase on two lines with a mark between them, so the comments are joined without the marks.
+fn holds_phrase(file: &str, phrase: &str) -> bool {
+    one_line(&repo_file(file)).contains(phrase) || comments_of(file).join(" ").contains(phrase)
+}
+
+/// The review named refused words and phrasal verbs in the comments of internal code. Each row has
+/// the words that went, and the words that came.
+#[test]
+fn the_refused_words_and_the_phrasal_verbs_that_the_review_named_in_internal_comments_are_gone() {
+    for (file, old, new) in [
+        (
+            "report-endpoint/src/merge.rs",
+            "What a merge will do",
+            "What a merge does, found with the reads alone.",
+        ),
+        (
+            "report-endpoint/src/merge.rs",
+            "How many issues the merge will open.",
+            "How many issues the merge opens.",
+        ),
+        (
+            "src/closed_set/unknown/hint.rs",
+            "Else it would show on every run",
+            "Else the hint shows on each run.",
+        ),
+        (
+            "src/closed_set/unknown/hint.rs",
+            "would show the hint on every run",
+            "because the hint then shows on each run",
+        ),
+        (
+            "xtask/src/contract/tests.rs",
+            "there would make the next contract run",
+            "there makes the next contract run report a false `type` difference.",
+        ),
+        (
+            "src/closed_set/unknown/tests.rs",
+            "use up the day",
+            "must not record the time",
+        ),
+        (
+            "preflight/src/probe/tests.rs",
+            "a request that goes out is an error",
+            "a request that the check sends is an error",
+        ),
+        (
+            "xtask/src/contract/subject.rs",
+            "no request goes out for a path",
+            "the run sends no request for a path",
+        ),
+        (
+            "src/file.rs",
+            "A log goes through here",
+            "A log uses this function.",
+        ),
+        (
+            "tests/report.rs",
+            "when the lines went out",
+            "when the user sent the lines",
+        ),
+        (
+            "src/closed_set/unknown/send/tests.rs",
+            "parses back to the same document",
+            "parses to the same document",
+        ),
+        (
+            "tests/doc_lints.rs",
+            "the lints stay on for each package",
+            "the lints stay active for each package, and that no file disables one",
+        ),
+        (
+            "tests/live_scripts.rs",
+            "turns the switch off",
+            "sets the switch to `false`",
+        ),
+        (
+            "tests/live_scripts.rs",
+            "stands in for the send",
+            "A stand-in `strata` for the send",
+        ),
+        (
+            "tests/live_scripts.rs",
+            "writes down the settings",
+            "It records the settings that it got.",
+        ),
+        (
+            "tests/report_deploy.rs",
+            "stands in, and writes down each call",
+            "a stand-in `gcloud` on the `PATH` records each call",
+        ),
+        (
+            "xtask/src/palette.rs",
+            "It stands in for the endpoint",
+            "It is a stand-in for the endpoint",
+        ),
+        (
+            "xtask/src/contract/mod.rs",
+            "finds out whether",
+            "tells whether",
+        ),
+        (
+            "deploy/contract/weekly.sh",
+            "turns the result into issues",
+            "writes the result as issues",
+        ),
+        (
+            "examples/live/contract.sh",
+            "turns the result into issues",
+            "writes the result as issues",
+        ),
+        (
+            "deploy/contract/timer.sh",
+            "is logged in",
+            "the timer runs only while the user has a session",
+        ),
+        (
+            "deploy/contract/timer.sh",
+            "no one is logged in",
+            "when the user has no session",
+        ),
+        (
+            "deploy/report/deploy.sh",
+            "gcloud logged in",
+            "a gcloud login",
+        ),
+        (
+            "examples/live/contract-report.sh",
+            "gh logged in",
+            "a gh login for the repository",
+        ),
+        (
+            "examples/live/report-send.sh",
+            "gh logged in",
+            "a gh login to read the issue",
+        ),
+        (
+            "examples/live/contract-profiles.sh",
+            "kinds stay off",
+            "It makes no cluster group, no cluster template, and no registry kind",
+        ),
+    ] {
+        assert!(!holds_phrase(file, old), "{file} still holds {old:?}");
+        assert!(holds_phrase(file, new), "{file} lacks {new:?}");
+    }
+}
+
+/// The review named passive sentences and "-ing" forms in the new sentences of the book. Each row
+/// has the words that went, and the words that came.
+#[test]
+fn the_passive_sentences_and_the_ing_forms_that_the_review_named_in_the_new_book_text_are_gone() {
+    for (file, old, new) in [
+        (
+            "docs/src/reference/report.md",
+            "## How a report is made",
+            "## How strata makes a report",
+        ),
+        (
+            "docs/src/reference/report.md",
+            "Delete the file to be asked again.",
+            "To get the question again, delete the file.",
+        ),
+        (
+            "docs/src/reference/report.md",
+            "Or the run has `--quiet` or `STRATA_QUIET`.",
+            "- The run has `--quiet` or `STRATA_QUIET`.",
+        ),
+        (
+            "docs/src/reference/report.md",
+            "a new log is reported whole",
+            "so the report of a new log holds each line",
+        ),
+        (
+            "docs/src/development/facts.md",
+            "can stop agreeing with each other",
+            "can then disagree with each other, or with Palette",
+        ),
+        (
+            "docs/src/development/facts.md",
+            "No one knows how the fact is proved.",
+            "No one knows how to prove the fact.",
+        ),
+        (
+            "docs/src/development/facts.md",
+            "The code has a typing fault",
+            "The fact spells the code wrong, or the page lost it.",
+        ),
+        (
+            "docs/src/development/facts.md",
+            "An id is used twice",
+            "Two facts have one id, or one request.",
+        ),
+        (
+            "docs/src/development/facts.md",
+            "The label is created when the repository has none.",
+            "The script creates the label when the repository has none.",
+        ),
+        (
+            "docs/src/development/facts.md",
+            "when a fact or a release could not be checked",
+            "when the run could not check a fact or a release",
+        ),
+        (
+            "docs/src/development/facts.md",
+            "The contract script is not shipped",
+            "No release ships the contract script",
+        ),
+        (
+            "docs/src/development/report-endpoint.md",
+            "the send and the endpoint are tested together",
+            "so one test covers the send and the endpoint",
+        ),
+        (
+            "docs/src/reference/documents.md",
+            "when `--release` is given",
+            "`release`, when the run names `--release`",
+        ),
+    ] {
+        let text = one_line(&repo_file(file));
+        assert!(!text.contains(old), "{file} still holds {old:?}");
+        assert!(text.contains(new), "{file} lacks {new:?}");
+    }
+}
+
+/// The paragraph of a `what` in a rule file has six sentences or fewer. A user reads the message
+/// of a rule and not its `what`, so only a rule author feels the length. The review named ten rules
+/// whose `what` had one long paragraph. A blank line divides it now.
+#[test]
+fn the_what_of_each_rule_that_the_review_named_has_six_sentences_or_fewer_in_a_paragraph() {
+    let named = [
+        ("quotas", "aws-quotas"),
+        ("quotas", "gcp-quotas"),
+        ("quotas", "azure-vcpu-quota"),
+        ("identity", "iam-role-policy-quota"),
+        ("identity", "iaas-pod-identity"),
+        ("compute", "instance-offering"),
+        ("compute", "eks-fargate-private"),
+        ("networking", "eks-unsupported-zone"),
+        ("networking", "subnet-ips"),
+        ("networking", "private-egress"),
+    ];
+    for (section, id) in named {
+        let text = repo_file(&format!("preflight/rules/{section}.yaml"));
+        let file: serde_yaml::Value = serde_yaml::from_str(&text).unwrap();
+        let what = file["rules"]
+            .as_sequence()
+            .and_then(|rules| rules.iter().find(|rule| rule["id"] == id))
+            .and_then(|rule| rule["what"].as_str())
+            .unwrap_or_else(|| panic!("{section}.yaml has no rule {id} with a `what`"));
+        let paragraphs: Vec<&str> = what.split("\n\n").collect();
+        assert!(paragraphs.len() > 1, "{id}: one paragraph");
+        for paragraph in paragraphs {
+            let found = sentences(&one_line(paragraph)).len();
+            assert!(found <= 6, "{id}: {found} sentences in: {paragraph}");
+        }
+    }
+}
+
+/// The review found gaps between the report of the unknown values and the pages that a team reads
+/// to run a pipeline. A job sends the report with one variable, and a script needs the schema.
+#[test]
+fn the_pages_of_a_pipeline_name_the_setting_of_the_report_the_log_and_the_schema() {
+    let setting = "`STRATA_REPORT=1` in a job sends the report at the end of a run that wrote a line \
+                   to the log. The log is in the state folder of the runner, so save the folder when \
+                   the runner does not stay.";
+    let scripts = one_line(&read(&docs().join("automation/scripts.md")));
+    assert!(scripts.contains(setting), "scripts.md lacks the setting");
+    let use_case = one_line(&read(&docs().join("use-cases/unknown-value.md")));
+    assert!(
+        use_case.contains(
+            "The log is in the state folder of the runner, so save the folder when the runner does \
+             not stay."
+        ),
+        "the use case lacks the log of the runner"
+    );
+    assert!(
+        !use_case.contains("copy the log from its state folder"),
+        "a hosted runner is gone after the job"
+    );
+    for drop_in in [
+        "examples/ci/github/strata.yml",
+        "examples/ci/gitlab/strata.yml",
+    ] {
+        let comments = comments_of(drop_in).join(" ");
+        assert!(comments.contains("STRATA_REPORT"), "{drop_in}: no setting");
+        assert!(
+            comments.contains("state folder of the runner"),
+            "{drop_in}: no log of the runner"
+        );
+    }
+    for page in ["reference/report.md", "commands/report.md"] {
+        let text = one_line(&read(&docs().join(page)));
+        assert!(
+            text.contains("`strata schema report` prints its JSON Schema."),
+            "{page} lacks the schema of the report"
+        );
+    }
+    let documents = one_line(&read(&docs().join("reference/documents.md")));
+    assert!(
+        documents.contains(
+            "`strata schema report` and `strata preflight --schema report` print two different \
+             schemas."
+        ),
+        "documents.md lacks the sentence on the two schemas"
+    );
+}
+
+/// The table of files of the live example names each script that a recipe runs, and the list of
+/// recipes holds `just live-report-send`.
+#[test]
+fn the_live_example_lists_the_contract_scripts_the_send_script_and_the_recipe_of_the_send() {
+    let page = read(&docs().join("development/live-example.md"));
+    for script in ["contract.sh", "contract-report.sh", "report-send.sh"] {
+        assert!(
+            page.contains(&format!("| `{script}` |")),
+            "the table of files lacks {script}"
+        );
+        assert!(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("examples/live")
+                .join(script)
+                .exists(),
+            "{script} is not a live script"
+        );
+    }
+    assert!(
+        page.contains(
+            "just live-report-send URL                                                      # #397, \
+             needs the address of the endpoint and a `gh` login; reads no tenant"
+        ),
+        "the list of recipes lacks just live-report-send"
+    );
+}
+
+/// The section of "The command line" says that the message of `api` for a 403 with the code
+/// `ProjectUidIsNotEmpty` changed after 0.26.0. Release 0.26.0 listed its own message change in
+/// the same way. The library of `strata` has a paragraph "After 0.26.0". Each statement compares
+/// with 0.26.0. The section of release 0.27.0 is published, so the section of 0.28.0 holds the
+/// correction.
+#[test]
+fn compatibility_compares_each_change_of_the_wave_with_release_0_26_0() {
+    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    for needle in [
+        "After 0.26.0, the message of `api` for a 403 with the code `ProjectUidIsNotEmpty` says that \
+         the route is of the tenant scope. The kind `api` and the exit code `2` stay.",
+        "After 0.26.0, the library of `strata` changes in these ways.",
+        "`closed_set::unknown` is new.",
+        "Its `Report` and `report::Entry` refuse a field that they do not list.",
+        "`ExecCheck` is new. It has the field `palette: Option<rule::PaletteRead>`",
+        "`rule::ExecCheck` has the field `also: Vec<String>`",
+        "After 0.26.0, three documents have new fields, and each keeps its id.",
+        "`strata-preflight-rules/1` has the new keys `refusal_codes` in a check of kind `palette`, and \
+         `palette` and `also` in a check of kind `exec`.",
+    ] {
+        assert!(page.contains(needle), "compatibility.md lacks {needle:?}");
+    }
+    for old in [
+        "`ExecCheck` has the new field `palette",
+        "`rule::ExecCheck` has the new field `also",
+        "After 0.26.0, two documents have new fields",
+    ] {
+        assert!(!page.contains(old), "compatibility.md still holds {old:?}");
+    }
+    let library = release_0_28_0_part("### For a user of the library of strata\n");
+    for needle in [
+        "**A correction to the section of release 0.27.0.**",
+        "The module `closed_set::unknown` is new in 0.27.0",
+        "Release 0.26.0 has none of them.",
+        "That section says that `Report` and `report::Entry` \"now implement `Deserialize`\".",
+    ] {
+        assert!(
+            library.contains(needle),
+            "the section of 0.28.0 lacks {needle:?}"
+        );
+    }
+}
+
+/// The live window of Wave 14 gave results for rows that said "no result yet". The book states
+/// each one as a fact, with no run id and no date.
+#[test]
+fn the_rows_of_the_live_window_of_wave_14_state_their_results() {
+    let page = one_line(&read(&docs().join("development/live-runs.md")));
+    for needle in [
+        "#576: with a cluster up, `just live-contract --with-cluster` exits 0. The run finds 120 \
+         facts: 63 `same`, none `differs`, 57 skipped, none that the run cannot check, and 0 \
+         unknown values.",
+        "No fact of the floor is an `error`.",
+        "its reason names `ResourceNotFound` with HTTP 404.",
+        "`just contract-report --dry-run runs/contract.json` exits 0 and opens no issue.",
+        "#576: the fact `validate-security-groups` is `same`, and it was `same` before #576.",
+        "so no live run shows the search past the first region. The tests show the search. No live \
+         run shows a first region with no VPC.",
+        "the choices `gcp` and `azure` have no way to find a value for `{region}`.",
+        "The check `issue` passes. The service found the issue of the value under the label \
+         `unknown-value`",
+        "it did not run, because the issue of the value was open.",
+    ] {
+        assert!(page.contains(needle), "live-runs.md lacks {needle:?}");
+    }
+    for old in [
+        "#576, no result yet",
+        "No result yet: the endpoint had the label `palette-drift` until #574.",
+    ] {
+        assert!(!page.contains(old), "live-runs.md still holds {old:?}");
     }
 }

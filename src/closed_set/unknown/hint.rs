@@ -57,8 +57,8 @@ impl Hint {
         Some(TEXT)
     }
 
-    /// True when the file holds no time, holds a time that is not valid, holds a time in the
-    /// future, or holds a time that is a day old or older.
+    /// True when the file holds no time, holds a time that is not valid, or holds a time in the
+    /// future. Also true when the file holds a time that is a day old or older.
     fn due(&self) -> bool {
         // a file that cannot be read has no time that counts: the hint shows, and the file
         // is written again

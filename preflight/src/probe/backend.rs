@@ -108,9 +108,9 @@ fn is_named_refusal(status: u16, error: &Value, refusal_codes: &[String]) -> boo
         && opt_str(error, "/code").is_some_and(|code| refusal_codes.iter().any(|c| c == code))
 }
 
-/// True when the check reads the HTTP error `status` as the answer of the route: a 4xx that is no
-/// key or rate error, a refusal of a validate route, or a 5xx that the check names. `error` is the
-/// body of the Palette error, parsed, or `None` when it is not JSON.
+/// True when the check reads the HTTP error `status` as the answer of the route. That is a 4xx
+/// that is no key or rate error, a refusal of a validate route, or a 5xx that the check names.
+/// `error` is the body of the Palette error, parsed, or `None` when it is not JSON.
 fn reads_error(
     method: Method,
     path: &str,
@@ -410,9 +410,9 @@ impl Backend for FixtureBackend {
             .ok_or_else(|| Error::Input {
                 message: format!("the fixture has no answer for {key} under _responses"),
             })?;
-        // An HTTP error is an answer on the live backend only when `reads_error` says so: a 4xx
-        // that is no key or rate error, a refusal of a validate route, or a 5xx that the check
-        // names. The fixture keeps the same rule for each status that is not 2xx, so a fixture
+        // An HTTP error is an answer on the live backend only when `reads_error` says so. That is
+        // a 4xx that is no key or rate error, a refusal of a validate route, or a 5xx that the
+        // check names. The fixture keeps the same rule for each status that is not 2xx. A fixture
         // cannot show a catch that a live run does not give. A 401, a 403, and a 429 are errors.
         let status = response.status;
         if !(200..300).contains(&status)

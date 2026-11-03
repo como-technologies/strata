@@ -4,8 +4,8 @@ use super::count_of;
 use crate::closed_set::unknown::report::{Report, SCHEMA};
 use crate::text::{code_span, dash, markdown_cell};
 
-/// `Palette gave 2 values that this release of strata does not know`, or `Palette gave no values
-/// that this release of strata does not know` for an empty report.
+/// For example, the heading is `Palette gave 2 values that this release of strata does not know`.
+/// For an empty report, it is `Palette gave no values that this release of strata does not know`.
 pub(crate) fn report_heading(r: &Report) -> String {
     format!(
         "Palette gave {} that this release of strata does not know",

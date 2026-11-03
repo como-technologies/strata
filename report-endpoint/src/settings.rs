@@ -50,8 +50,8 @@ pub struct Settings {
     /// The milestone of a new issue: `REPORT_MILESTONE`. An empty value is no milestone.
     pub milestone: Option<String>,
     /// True when the service reads the sender from `X-Forwarded-For`: `TRUST_FORWARDED_FOR=1`.
-    /// Only a service behind the front end of Cloud Run sets it, because a client can send the header
-    /// to a service that is not behind a proxy.
+    /// Only a service behind the front end of Cloud Run sets it. This is because a client can send
+    /// the header to a service that is not behind a proxy.
     pub trust_forwarded: bool,
 }
 

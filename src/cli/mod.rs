@@ -55,10 +55,10 @@ pub(crate) fn watch_unknown(progress: Progress) -> Watching {
     .start()
 }
 
-/// At the end of a run, send the report of the log to the endpoint when the user chose the send,
-/// or ask the user one time. The user chooses the send with `STRATA_REPORT=1` or by an answer of
-/// yes. A run in CI, a run without a terminal, and a run that saw no unknown value send nothing and
-/// ask nothing.
+/// At the end of a run, send the report of the log to the endpoint when the user chose the send.
+/// Otherwise, ask the user one time. The user chooses the send with `STRATA_REPORT=1` or by an
+/// answer of yes. A run in CI, a run without a terminal, and a run that saw no unknown value send
+/// nothing and ask nothing.
 ///
 /// This never changes the exit code of the run. An error of the send is a warning, and
 /// `--quiet` hides it.

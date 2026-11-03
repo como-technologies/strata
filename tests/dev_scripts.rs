@@ -137,7 +137,7 @@ fn committed(dir: &Path, file: &str) -> String {
 
 #[test]
 fn set_version_writes_the_outputs_of_the_book_that_print_the_version_in_the_release_commit() {
-    // the outputs of the book print the version of strata, so `just docs-check` failed on the
+    // the outputs of the book print the version of strata. `just docs-check` failed on the
     // release commit until a person wrote them again by hand
     let dir = release_tree("0.9.9");
     let (o, calls) = set_version(dir.path(), "0.9.10", &[]);
@@ -412,7 +412,7 @@ fn fuzz_refuses_a_name_that_no_target_has_and_a_call_with_no_name() {
 
 /// The playground: `xtask playground CHAPTER` builds the tenant of one chapter, serves it, and
 /// waits. The test needs the offline examples and the xtask binary, which `just examples` and
-/// `just stand-in` build; without them it has nothing to serve and returns.
+/// `just stand-in` build. Without them, it has nothing to serve and returns.
 #[test]
 fn the_playground_serves_the_tenant_of_one_chapter() {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -421,9 +421,9 @@ fn the_playground_serves_the_tenant_of_one_chapter() {
     if !built.exists() || !stand_in.exists() {
         return;
     }
-    // The LAST chapter. Serving it builds every chapter before it, so a statement that changes
-    // the tenant outside a guarded helper runs with no tenant to change and kills the run.
-    // Serving an early chapter builds none of them, which is why an earlier form of this test
+    // The LAST chapter. Serving it builds every chapter before it. A statement that changes the
+    // tenant outside a guarded helper then runs with no tenant to change, and it kills the run.
+    // Serving an early chapter builds none of them. This is why an earlier form of this test
     // passed while `just playground packs` failed for eleven chapters.
     let last = "automation";
     let dir = tempfile::tempdir().unwrap();
@@ -559,9 +559,10 @@ fn the_examples_fetch_stops_the_send_of_the_report_whatever_the_machine_says() {
     assert!(runs.iter().all(|setting| setting == "0"), "{runs:?}");
 }
 
-/// The scripts of this repository that run the binary of strata, but not the drop-ins that a
-/// pipeline of a user runs: those obey the settings of the user. `adapter/scripts/by-hand.sh` is
-/// not in the list: it serves two chapters of the book, and their tenants hold no unknown value.
+/// The scripts of this repository that run the binary of strata. The list omits the drop-ins that
+/// a pipeline of a user runs, because they obey the settings of the user. It also omits
+/// `adapter/scripts/by-hand.sh`: it serves two chapters of the book, and their tenants hold no
+/// unknown value.
 fn scripts_that_run_strata() -> Vec<std::path::PathBuf> {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
     let own = ["examples", "deploy", "scripts/dev"];

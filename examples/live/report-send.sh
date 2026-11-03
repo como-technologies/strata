@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The send of the report (#397): strata posts the report of one unknown value to the endpoint that
-# runs on Cloud Run, and the endpoint merges the reports into one issue of the label unknown-value.
+# runs on Cloud Run. The endpoint merges the reports into one issue of the label unknown-value.
 #
 #   just live-report-send URL [--repo OWNER/REPO]
 #
@@ -31,7 +31,7 @@ script=report-send
 . "$live/github.sh"
 
 url=""
-# the label of the issues of the endpoint, and the repository of its manifest: the endpoint has the
+# the label of the issues of the endpoint, and the repository of its manifest. The endpoint has the
 # same two texts as its defaults, and a test of the endpoint makes sure that they agree
 label=unknown-value
 repo=$(sed -n 's|^repository = "https://github.com/\(.*\)"$|\1|p' "$live/../../report-endpoint/Cargo.toml")

@@ -11,9 +11,9 @@ use strata::model::pack_state::PackState;
 /// `supportsCloud`, `state`, and `retired`.
 ///
 /// `supportsCloud` is true when the cloud types of the pack include the cloud type of the engine
-/// (`routeCloud`), by the rule of Palette for the create of a profile. It is `null` when the world
-/// has no engine. `state` is the `system_state` of the pack, or empty text for a pack that has
-/// none. `retired` is true for a state that a profile cannot pin: `disabled` and `deleted`.
+/// (`routeCloud`). That is the rule of Palette for the create of a profile. It is `null` when the
+/// world has no engine. `state` is the `system_state` of the pack, or empty text for a pack that
+/// has none. `retired` is true for a state that a profile cannot pin: `disabled` and `deleted`.
 pub(super) fn pack_facts(world: &Value) -> Value {
     let route_cloud = opt_str(world, "/routeCloud");
     let facts: Map<String, Value> = value_at(world, "/packs")

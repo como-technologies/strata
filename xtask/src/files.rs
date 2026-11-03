@@ -141,9 +141,9 @@ impl<'ast> Visit<'ast> for TestLines {
 }
 
 /// The lines of the Rust file `text` that are no comment and no test code. An item for the tests
-/// (`#[cfg(test)]`, or `#[test]`) is out at any place of the file: an inline module, a line
-/// `mod tests;`, or a function. The code after such an item stays. A file that is not Rust is an
-/// error.
+/// (`#[cfg(test)]`, or `#[test]`) is out at any place of the file. It can be an inline module, a
+/// line `mod tests;`, or a function. The code after such an item stays. A file that is not Rust
+/// is an error.
 pub fn code_without_tests(text: &str) -> Result<String, syn::Error> {
     let mut tests = TestLines::default();
     tests.visit_file(&parse_file(text)?);

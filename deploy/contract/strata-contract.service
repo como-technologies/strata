@@ -12,8 +12,8 @@ Type=oneshot
 WorkingDirectory=@REPO@
 # the profile of the cloud account that the checks of the clouds use
 Environment=AWS_PROFILE=spectro-admin
-# the values of the lab account that a call of a cloud names, one STRATA_CONTRACT_NAME=value in each
-# line (the project, the role, the region); a lab that gives none skips those calls
+# the values of the lab account that a call of a cloud names (the project, the role, the region).
+# Each line is one STRATA_CONTRACT_NAME=value. A lab that gives none skips those calls
 EnvironmentFile=-%h/.config/strata-contract/lab.env
 # a user service starts with a short PATH: cargo and just are in the home of the user
 Environment=PATH=%h/.cargo/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin

@@ -59,9 +59,10 @@ pub fn key(value: Option<&str>) -> Result<Option<&str>, Refusal> {
 ///
 /// # Errors
 ///
-/// A [`Refusal`] with the status 415 when the content type is not JSON, 413 when the body is
-/// longer than [`MOST_BYTES`], 400 when the body is not JSON, and 422 when it is JSON that is not
-/// a valid report: a field outside the list, another schema, or a field that is not a short word.
+/// A [`Refusal`] with the status 415 when the content type is not JSON, and 413 when the body is
+/// longer than [`MOST_BYTES`]. It has the status 400 when the body is not JSON. It has the status
+/// 422 when the body is JSON that is not a valid report. A report is not valid with a field
+/// outside the list, with another schema, or with a field that is not a short word.
 pub fn parse(content_type: Option<&str>, body: &[u8]) -> Result<Report, Refusal> {
     let json = content_type.is_some_and(|text| {
         text.split(';')

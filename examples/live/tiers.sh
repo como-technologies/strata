@@ -71,9 +71,9 @@ rbacs() {
        return 2 ;;
   esac
 }
-# put_rbacs [SUBJECT]: PUT the role bindings of cluster A as they were before stage 5, and, with
-# SUBJECT, one more binding of the user SUBJECT to the cluster role view. The PUT replaces each
-# binding of the cluster.
+# put_rbacs [SUBJECT]: PUT the role bindings of cluster A as they were before stage 5. With SUBJECT,
+# the PUT also holds one more binding of the user SUBJECT to the cluster role view. The PUT
+# replaces each binding of the cluster.
 put_rbacs() {
   local body
   body=$(jq -c --arg s "${1:-}" '{rbacs: ([.items[]? | {spec: {bindings: .spec.bindings}}]
@@ -206,8 +206,8 @@ pool_route() {
   "$live/api.sh" get "/v1/spectroclusters/$C" \
     | jq -er '"/v1/cloudconfigs/\(.spec.cloudConfigRef.kind // .spec.cloudType)/\(.spec.cloudConfigRef.uid)"'
 }
-# put_pool FILE: PUT the machine pool worker-pool of the cloud config with the entity in FILE, a
-# pair {cloudConfig, poolConfig}, as the create body holds a pool
+# put_pool FILE: PUT the machine pool worker-pool of the cloud config with the entity in FILE. The
+# entity is a pair {cloudConfig, poolConfig}, as the create body holds a pool
 put_pool() { "$live/api.sh" put "$pool_cc/machinePools/worker-pool" "$(cat "$1")"; }
 # The text of both overrides: a YAML comment. It sets no value, so no machine of the pool changes.
 pool_override=$'# strata tiers.sh stage 7: this text sets no value\n'

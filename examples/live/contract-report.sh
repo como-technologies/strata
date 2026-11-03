@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Report the facts that a contract run found different, the values that it found unknown, and the
-# releases that it found new, as
-# issues of the repository.
+# Report the result of a contract run as issues of the repository. The issues name the facts that
+# differ, the values that are unknown, and the releases that are new.
 #
 #   examples/live/contract-report.sh <contract.json> [--repo OWNER/REPO] [--label NAME]
 #                                     [--cloud-label NAME] [--milestone NAME] [--dry-run]
@@ -14,16 +13,17 @@
 # run skipped or could not check keeps its issue as it is. Issues of facts that the document does
 # not list are left alone.
 #
-# A fact whose answer holds a value of a closed set that neither the fact nor the stand-in names
-# has one open issue for each such set. The title is "Palette has a new value of <set> in <fact
-# id>", and the issue has the label NAME too. The marker is <!-- strata-contract: values <fact id>
-# <set> -->. The script updates the issue while the value is there. It closes the issue when the
-# run checked the fact and found no such value. A set is the field that the fact names in
-# reads.values.
+# The answer of a fact can hold a value of a closed set that neither the fact nor the stand-in
+# names. The fact then has one open issue for each such set. The title is "Palette has a new
+# value of <set> in <fact id>", and the issue has the label NAME too. The marker is <!--
+# strata-contract: values <fact id> <set> -->. The script updates the issue while the value is
+# there. It closes the issue when the run checked the fact and found no such value. A set is the
+# field that the fact names in reads.values.
 #
 # A fact of the kind cloud is a call of the tool of a cloud. Its issue has the label of
 # --cloud-label (default cloud-drift) and the marker of its id. It says that the answer of the cloud
-# differs from the answers that the fixtures of the rules hold, or lacks a value of a table.
+# differs from the answers that the fixtures of the rules hold. Or it says that the answer lacks a
+# value of a table.
 #
 # A release with new set to true has one issue, which the script opens once. The marker is
 # <!-- strata-contract: release <repo> <tag> -->. The issue asks to prove the facts again on the
@@ -38,7 +38,7 @@
 # handled first, so a scheduled job shows the state too, and this exit says that they are done.
 # Exit 2 when the document is not a strata-contract/1 document, or when a host call fails. The
 # script prints what the host said. The weekly job keeps the tags of the releases when the exit is
-# not 2, so a release issue that a person closed does not open again.
+# not 2. A release issue that a person closed then does not open again.
 #
 # The host layer is the one of scripts/ci/verify-report.sh. This script reads its functions from
 # that file, so a change to the host layer reaches this script. This script is not shipped, so it
@@ -151,8 +151,8 @@ ensure_label() {
 }
 
 actions=()
-# open_or_update MARKER TITLE BODYFILE WHAT: the issue of MARKER gets the title and the body; an
-# issue that does not exist is opened in the milestone
+# open_or_update MARKER TITLE BODYFILE WHAT: the issue of MARKER gets the title and the body. When
+# the issue does not exist, the script opens it in the milestone
 open_or_update() {
   local marker=$1 title=$2 body=$3 what=$4 number
   if [ -n "$dry" ]; then
@@ -175,9 +175,9 @@ open_or_update() {
 # ---- the unknown values ------------------------------------------------------------------------
 values_page="https://github.com/${repo:-OWNER/REPO}/blob/main/docs/src/development/facts.md#what-to-do-with-a-new-value"
 
-# values_issues ID ENTRY: for each closed set of the fact ID that holds a value which neither the
-# fact nor the stand-in names, open or update one issue. For each set that holds no such value now,
-# close its open issue, when the run checked the fact. $unknown counts each value.
+# values_issues ID ENTRY: open or update one issue for each closed set of the fact ID. The set must
+# hold a value that neither the fact nor the stand-in names. For each set that holds no such value
+# now, close its open issue, when the run checked the fact. $unknown counts each value.
 values_issues() {
   local id=$1 entry=$2 outcome prefix set_entry field number
   local -a current=()

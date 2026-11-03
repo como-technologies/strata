@@ -243,8 +243,8 @@ pub(crate) const SOURCES: &[Source] = &[
     },
 ];
 
-/// True when the source for the route `route` serves the request `template`: the path of the
-/// request is the route, or goes on from it by whole segments.
+/// True when the source for the route `route` serves the request `template`. The path of the
+/// request is the route, or it continues from the route by whole segments.
 fn serves(route: &str, template: &str) -> bool {
     let path = template.split('?').next().unwrap_or(template);
     path == route
@@ -302,10 +302,11 @@ pub(crate) fn check(facts: &[Fact]) -> Vec<String> {
     ambiguous(SOURCES, facts)
 }
 
-/// The placeholders of the requests of `facts` that a source of `table` reads in a wrong way: more
-/// than one source reads the placeholder, or a source stops before a placeholder that the path of
-/// the request holds. The second is a source for a prefix, and not for the request. It serves each
-/// request that goes on from the prefix, and `{uid}` can mean another object in each of them.
+/// The placeholders of the requests of `facts` that a source of `table` reads in a wrong way.
+/// There are two cases: more than one source reads the placeholder, or a source stops before a
+/// placeholder in the path of the request. The second is a source for a prefix, and not for the
+/// request. It serves each request that continues from the prefix, and `{uid}` can mean another
+/// object in each of them.
 fn ambiguous(table: &[Source], facts: &[Fact]) -> Vec<String> {
     let mut bad = Vec::new();
     for (id, template) in requests(facts) {
@@ -333,9 +334,9 @@ fn ambiguous(table: &[Source], facts: &[Fact]) -> Vec<String> {
     bad
 }
 
-/// The table of the sources against the list of the repository: a source that serves no request
-/// of the list, and a source that reads a fact which is no GET request. The route of a request
-/// changes, and the source then goes stale.
+/// The table of the sources against the list of the repository. A fault is a source that serves no
+/// request of the list, or a source that reads a fact which is no GET request. The route of a
+/// request changes, and the source then goes stale.
 pub(crate) fn check_table(facts: &[Fact]) -> Vec<String> {
     stale(SOURCES, facts)
 }
@@ -370,8 +371,8 @@ fn stale(table: &[Source], facts: &[Fact]) -> Vec<String> {
 /// region, which takes the account.
 pub(crate) const DEPTH: usize = 3;
 
-/// True when the request `template` takes a value from a cluster of the tenant: a source reads the
-/// listing of the clusters, or reads a fact that needs one in turn.
+/// True when the request `template` takes a value from a cluster of the tenant. A source reads the
+/// listing of the clusters, or it reads a fact that needs one in turn.
 fn needs_cluster(facts: &[Fact], template: &str, depth: usize) -> bool {
     names(template)
         .into_iter()
@@ -387,10 +388,10 @@ fn needs_cluster(facts: &[Fact], template: &str, depth: usize) -> bool {
         })
 }
 
-/// The ids of the facts that the run must check in a window with a cluster: a GET request that
-/// reads a document, that the stand-in serves, and that takes its subject from a cluster of the
-/// tenant. A fact that names the codes of an object that can be absent is out. A cluster can lack
-/// such an object, and the run then skips the fact with a reason.
+/// The ids of the facts that the run must check in a window with a cluster. Each fact is a GET
+/// request that reads a document, that the stand-in serves, and that takes its subject from a
+/// cluster of the tenant. A fact that names the codes of an object that can be absent is out. A
+/// cluster can lack such an object, and the run then skips the fact with a reason.
 pub(crate) fn floor(facts: &[Fact]) -> BTreeSet<&str> {
     facts
         .iter()

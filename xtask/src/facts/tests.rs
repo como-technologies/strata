@@ -909,8 +909,8 @@ fn profile_type_read() -> SetRead {
     }
 }
 
-/// The world of [`world`] with the read of [`profile_type_read`], its list in the fact, and the one
-/// call of `opt_set` in the code that the table names. A comment or a test is no call.
+/// The world of [`world`] with the read of [`profile_type_read`] and its list in the fact. The code
+/// that the table names holds the one call of `opt_set`. A comment or a test is no call.
 fn world_with_a_set_read() -> Sources {
     let mut sources = world();
     sources.set_reads = vec![profile_type_read()];

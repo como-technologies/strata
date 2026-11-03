@@ -154,8 +154,8 @@ thread_local! {
 }
 
 /// Tell the watch of this thread, when there is one, that a read of a document gave the text
-/// `value` for the set `T`, and that `T` does not name it. `route` is the template of the route
-/// that gave the document, such as `/v1/clusterprofiles/{uid}`.
+/// `value` for the set `T`. `T` does not name that text. `route` is the template of the route that
+/// gave the document, such as `/v1/clusterprofiles/{uid}`.
 pub(crate) fn seen<T: ClosedSet>(value: &str, route: &'static str) {
     WATCH.with(|slot| {
         if let Some(watch) = slot.borrow_mut().as_mut() {

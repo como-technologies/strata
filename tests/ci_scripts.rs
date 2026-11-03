@@ -232,9 +232,9 @@ fn the_ci_drop_ins_name_the_version_this_repository_is_at() {
 }
 
 /// The release workflow installs what it published and runs each script the installer installed.
-/// The two lists are written in two files, so they can disagree: the check named
-/// `install-strata.sh`, which the installer never installs, and the first release to run the check
-/// failed on it. This holds them together.
+/// The two lists are written in two files, so they can disagree. The check named
+/// `install-strata.sh`, which the installer never installs, shows this: the first release to run
+/// the check failed on it. This test holds the two lists together.
 #[test]
 fn the_release_check_runs_the_scripts_the_installer_installs() {
     let installer = repo_file("scripts/ci/install-strata.sh");
@@ -695,8 +695,8 @@ const PREFLIGHT: [Reach; 17] = [
     reach("--every", "every", "STRATA_PREFLIGHT_EVERY"),
     reach("--limit", "limit", "STRATA_PREFLIGHT_LIMIT"),
     reach("--out", "out", "STRATA_PREFLIGHT_OUT"),
-    // set by the script: the markdown goes to standard output and to the directory of --out, and
-    // a run with no key reads nothing from Palette
+    // set by the script: the markdown goes to standard output and to the directory of --out.
+    // A run with no key reads nothing from Palette
     reach("--format", "", ""),
     reach("--quiet", "", ""),
     reach("--offline", "", ""),
@@ -812,8 +812,8 @@ fn each_script_passes_the_options_of_its_command_or_omits_them_on_purpose() {
     }
 }
 
-/// The reusable workflow and the GitLab job build no option of `strata preflight`: they give each
-/// input to `preflight.sh` as a variable, and the script builds the list in one place.
+/// The reusable workflow and the GitLab job build no option of `strata preflight`. They give each
+/// input to `preflight.sh` as a variable. The script builds the list in one place.
 #[test]
 fn the_preflight_workflow_and_the_gitlab_job_give_each_input_to_the_script_as_a_variable() {
     let script = code_of("scripts/ci/preflight.sh");
@@ -1032,8 +1032,8 @@ fn the_gitlab_job_of_the_upstream_report_keeps_an_artifact_only_when_it_saves_a_
 
 // ---- pr-comment.sh ---------------------------------------------------------------------------
 
-/// A `gh` that records every invocation, saves any comment body it is handed, and answers the
-/// two listings the script reads from files the test controls.
+/// A `gh` that records every invocation and saves any comment body it is handed. It answers the
+/// two listings that the script reads from files that the test controls.
 const FAKE_GH: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 args="$*"
@@ -1055,8 +1055,8 @@ case "$args" in
 esac
 "#;
 
-/// A `strata` that logs every call and answers `snapshot <ref> -o <file>` with a canned snapshot,
-/// so a live ref needs no Palette; everything else goes to the real binary.
+/// A `strata` that logs every call and answers `snapshot <ref> -o <file>` with a canned snapshot.
+/// A live ref needs no Palette. Everything else goes to the real binary.
 ///
 /// `compare --repave` is the one question that needs Palette. The real binary decides which pair
 /// the question applies to, and it does so before any request. The stand-in asks it with a Palette
@@ -2769,8 +2769,8 @@ impl Gate {
             .env_remove("PALETTE_API_KEY")
             .env_remove("SPECTROCLOUD_APIKEY")
             // The script reads its target branch and its remote from the CI of the caller. A pull
-            // request run of this repository sets GITHUB_BASE_REF, so without these lines a test
-            // gets the base of that run and not the one it gives.
+            // request run of this repository sets GITHUB_BASE_REF. Without these lines, a test
+            // gets the base of that run and not the base that it gives.
             .env_remove("GITHUB_BASE_REF")
             .env_remove("CI_MERGE_REQUEST_TARGET_BRANCH_NAME")
             .env_remove("STRATA_REMOTE");
@@ -2965,7 +2965,7 @@ fn merge_gate_passes_a_rollback_that_a_commit_declares() {
 
 /// A declaration the gate must find however long the branch log is. `git log | grep -q` answers
 /// 141 under `set -o pipefail` when grep leaves at the first match and git log still has more to
-/// write, so a long log turned a declared rollback into BEHIND. The long message here fills the
+/// write. A long log then turned a declared rollback into BEHIND. The long message here fills the
 /// pipe, which makes that race certain instead of occasional.
 #[test]
 fn merge_gate_finds_a_declaration_behind_a_log_too_long_for_one_pipe() {
@@ -3160,8 +3160,8 @@ fn merge_gate_says_when_it_does_not_verify_and_finds_the_key_where_strata_does()
     );
 }
 
-/// A `strata` for the gate: `verify` answers as for a record with a pack that has no upstream
-/// digest, unless `--allow-no-digest` accepts it; every other command is the real strata. Each
+/// A `strata` for the gate. `verify` answers as for a record with a pack that has no upstream
+/// digest, unless `--allow-no-digest` accepts it. Every other command is the real strata. Each
 /// call of verify is logged.
 const FAKE_UNVERIFIED_STRATA: &str = r#"#!/usr/bin/env bash
 if [ "$1" != verify ]; then exec "$REAL_STRATA" "$@"; fi
@@ -3708,8 +3708,8 @@ fn verify_report_touches_no_issue_when_verify_checks_nothing() {
     }
 }
 
-/// The stand-in `jq`s that a run of a script uses: the `jq` of the machine, and the `jq` of
-/// `ubuntu-latest`, which stops on a null in `rtrimstr`.
+/// The stand-in `jq`s that a run of a script uses. They are the `jq` of the machine and the `jq`
+/// of `ubuntu-latest`, which stops on a null in `rtrimstr`.
 fn jq_stand_ins() -> [(&'static str, Option<&'static str>); 2] {
     [
         ("the jq of the machine", None),

@@ -616,7 +616,7 @@ rules:
         Path::new("p.yaml"),
     )
     .unwrap();
-    // the limit is zero, so a watch that does not end at the first reading ends at the limit
+    // the limit is zero. A watch that does not end at the first reading ends at the limit
     // with an error for the rule that passed
     for (is_deleted, verdict, state) in [
         (true, Verdict::Passed, "Deleting"),

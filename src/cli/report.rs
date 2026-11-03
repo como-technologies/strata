@@ -1,5 +1,5 @@
 //! `strata report`: print the values that Palette gave and this release does not know, as a report
-//! or as a link that opens a new issue.
+//! or a link that opens a new issue.
 
 use std::process::ExitCode;
 

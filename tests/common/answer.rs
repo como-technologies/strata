@@ -37,8 +37,8 @@ impl Refusal for strata::Error {
 
 /// What makes `error` no answer, or `None` when it is one.
 ///
-/// An error is an answer when it has a kind, a JSON form with that kind, and the exit code `2` when
-/// it has a code: the person can read it. A panic is not an answer.
+/// An error is an answer when the person can read it. It has a kind, and a JSON form with that
+/// kind. It has the exit code `2` when it has a code. A panic is not an answer.
 pub fn answer_fault<E: Refusal>(error: &E) -> Option<String> {
     if error.kind().is_empty() {
         return Some(format!("an error has a kind: {error}"));
@@ -61,8 +61,8 @@ pub fn answer_fault<E: Refusal>(error: &E) -> Option<String> {
 ///
 /// # Errors
 ///
-/// The sentence that names the text, when the ref prints as nothing for a text that is not empty,
-/// or prints as the text of another ref.
+/// The sentence that names the text. It reports a ref that prints as nothing for a text that is
+/// not empty, or as the text of another ref.
 pub fn ref_fault(text: &str) -> Result<Ref, String> {
     let r = Ref::parse_with(text, |_| false);
     let said = r.to_string();

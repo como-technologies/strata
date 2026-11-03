@@ -12,10 +12,11 @@
 # live script in the result.
 #
 # For each fact of the kind cloud, the run also sends a read-only call of the tool of a cloud (aws,
-# gcloud) in the lab account, and compares the answer with the answers that the fixtures of the rules
-# hold. It checks that the answer lists each value of a table that a rule holds. STRATA_CONTRACT_NAME
-# gives the value of {name} in a call, such as the project. A tool that is not on the PATH, or a value
-# that the lab lacks, skips the call. --no-cloud sends no call of a cloud.
+# gcloud). The call runs in the lab account. The run compares the answer with the answers that the
+# fixtures of the rules hold. It checks that the answer lists each value of a table that a rule
+# holds. STRATA_CONTRACT_NAME gives the value of {name} in a call, such as the project. A tool that
+# is not on the PATH, or a value that the lab lacks, skips the call. --no-cloud sends no call of a
+# cloud.
 #
 # With --state FILE, the run also reads the latest release of the Palette SDK and of the Terraform
 # provider from GitHub. It notes a tag that the last run did not see. FILE keeps the tags.
@@ -24,9 +25,9 @@
 #
 # The tenant is the one that PALETTE_API, PALETTE_API_KEY, and ~/.palette.env name. The result is
 # the document strata-contract/1 in contract.json under runs/<UTC time>/contract/, or OUT.
-# Exit 0 when each fact the run checked is the same and no value is unknown, 1 when a fact differs
-# or a value is unknown, and 2 when the run could not check a fact, or checked none.
-# contract-report.sh writes the result as issues.
+# The exit code is 0 when each fact that the run checked is the same and no value is unknown. It is
+# 1 when a fact differs or a value is unknown, and 2 when the run could not check a fact, or
+# checked none. contract-report.sh writes the result as issues.
 set -uo pipefail
 
 live=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -53,7 +54,7 @@ code=0
 cat "$run/contract.log" >&2
 
 # what the person reads first: each fact that differs, each unknown value, each fact that the run
-# could not check, and each release that is new
+# could not check, and each new release
 if command -v jq > /dev/null && [ -s "$run/contract.json" ]; then
   jq -r '
     (.facts[] | select(.outcome == "differs") | (if .kind == "cloud" then ["the fixtures have", "the cloud has"] else ["the stand-in has", "the tenant has"] end) as $who

@@ -1,5 +1,6 @@
-//! The tests of the contract run: the shape of a document, the subject of a request, each outcome
-//! of a fact, the exit code, and the run against a served stand-in.
+//! The tests of the contract run. They cover the shape of a document, the subject of a request,
+//! and each outcome of a fact. They also cover the exit code and the run against a served
+//! stand-in.
 
 use std::collections::BTreeSet;
 use std::net::TcpListener;
@@ -19,8 +20,8 @@ use crate::facts::{Fact, Kind, Scope, expand, fill};
 use crate::palette::{TENANT_ROUTES, serve_on};
 use crate::tenant::{TENANT, Tenant};
 
-/// The facts of a small list: the cluster listing, the document of a cluster, its cloud config, a
-/// search that sends a body, and a host that the run cannot find.
+/// The facts of a small list: the cluster listing, the document of a cluster, and its cloud
+/// config. The list also has a search that sends a body and a host that the run cannot find.
 const FACTS: &str = r#"
 - id: cluster-listing
   kind: request
@@ -166,8 +167,8 @@ fn served(docs: &[(&str, Value)]) -> (tempfile::TempDir, HttpApi) {
     (dir, HttpApi::new(Config::new(url, "a-key")))
 }
 
-/// Two clients of the stand-in server on a tenant that holds `docs`: one that names the project
-/// `p1`, as the environment of a run does, and one that names no project.
+/// Two clients of the stand-in server on a tenant that holds `docs`. One names the project `p1`,
+/// as the environment of a run does. The other names no project.
 fn served_with_project(docs: &[(&str, Value)]) -> (tempfile::TempDir, HttpApi, HttpApi) {
     let (dir, url) = serving(docs);
     let config = Config::new(url, "a-key").with_project("p1");
@@ -315,8 +316,8 @@ fn with_cluster(cluster: Value) -> Vec<(&'static str, Value)> {
 
 #[test]
 fn the_cloud_type_of_a_cluster_is_read_as_strata_reads_it() {
-    // the kind of the cloud config comes first, then the cloud type of the spec, as the route of
-    // the cloud config of strata reads them
+    // the kind of the cloud config comes first, then the cloud type of the spec. The route of
+    // the cloud config of strata reads them in that order
     let cases = [
         (
             "the kind only",
@@ -443,7 +444,7 @@ fn each_get_request_of_the_list_has_a_subject_or_is_named_here_as_having_none() 
             continue;
         };
         // a request with alternatives is checked when one of its choices has a source for each
-        // placeholder: the choices of the other clouds skip with their reason
+        // placeholder. The choices of the other clouds skip with their reason
         let sourced = expand(template)
             .iter()
             .any(|(_, text)| unsourced(text).is_empty());
@@ -561,8 +562,8 @@ fn a_placeholder_in_the_query_gets_its_value_from_the_listing_of_the_tenant() {
 
 #[test]
 fn a_placeholder_value_with_a_character_of_a_query_is_escaped_as_the_library_escapes_it() {
-    // a value that a path or a query cannot hold as it is gets the escape of `query_value`, and
-    // the run still asks, where it skipped the fact before
+    // a value that a path or a query cannot hold as it is gets the escape of `query_value`. The
+    // run still asks, where it skipped the fact before
     let api = MemoryApi::new().with(
         "/v1/cloudaccounts/aws",
         json!({"items": [{"metadata": {"uid": "a+b&c d"}}]}),
@@ -637,7 +638,7 @@ fn the_run_asks_the_saved_tag_filters_with_no_project() {
 #[test]
 fn the_run_that_asks_the_saved_tag_filters_with_the_project_gets_the_refusal_of_palette() {
     // the fault of the first contract run against a real tenant: the same facts with the scope of
-    // the client are sent with the project, and the stand-in answers HTTP 403
+    // the client are sent with the project. The stand-in answers HTTP 403
     let docs = query_documents();
     let (_root, stand_in) = stand_in(&docs);
     let (_dir, client, tenant) = served_with_project(&docs);
@@ -1128,8 +1129,8 @@ fn audit_page(kinds: &[&str]) -> Vec<(&'static str, Value)> {
     )]
 }
 
-/// The run of the fact `audit-log` against a stand-in that holds the kinds that strata acts on
-/// and a tenant whose page holds the kinds `kinds`.
+/// The run of the fact `audit-log` against a stand-in and a tenant. The stand-in holds the kinds
+/// that strata acts on. The page of the tenant holds the kinds `kinds`.
 fn audit_run(kinds: &[&str]) -> Contract {
     let acts_on = [
         "clusterprofile",
@@ -1204,7 +1205,7 @@ fn a_kind_of_the_audit_log_that_is_not_text_is_still_a_difference() {
 // ---- the list routes of AWS ----------------------------------------------------------------
 
 /// The documents that answer the routes behind `validate-security-groups`, with the file names of
-/// the stand-in: the account, its regions, the VPCs of a region, and the groups of a VPC.
+/// the stand-in. They are the account, its regions, the VPCs of a region, and the groups of a VPC.
 fn aws_list_documents() -> Vec<(&'static str, Value)> {
     vec![
         (
@@ -1314,7 +1315,7 @@ fn the_key_pairs_are_asked_with_the_account_of_the_tenant() {
     let (_dir, api) = served(&docs);
     let contract = contract_of(&real_facts(), &stand_in, &api);
     // the stand-in answers the route only with `cloudAccountUid`, as Palette answers HTTP 422 with
-    // no query, so the outcome `same` shows that the run sent it
+    // no query. So the outcome `same` shows that the run sent it
     let entry = contract
         .facts
         .iter()
@@ -1785,7 +1786,7 @@ fn the_fact_of_the_repave_record_names_the_code_for_an_object_that_is_absent() {
 
 #[test]
 fn a_cluster_that_had_no_repave_does_not_make_the_fact_of_the_repave_record_differ() {
-    // the tenant serves the listing and the document of the cluster, and no repave record: the
+    // the tenant serves the listing and the document of the cluster, and no repave record. The
     // memory tenant answers HTTP 404 with the code `ResourceNotFound` for it, as Palette does
     let mut docs = documents("Running");
     docs.push((
@@ -1915,8 +1916,8 @@ fn held_types(stand_in: &StandIn, facts: &[Fact], id: &str, field: &str) -> Vec<
     types.into_iter().collect()
 }
 
-/// The eight fields that a tenant gave as a string and that the stand-in never served (#530), and
-/// the registry whose sync recovered with no message.
+/// The test covers the eight fields that a tenant gave as a string and that the stand-in never
+/// served (#530). It also covers the registry whose sync recovered with no message.
 #[test]
 fn the_stand_in_of_the_book_serves_the_eight_fields_with_a_string_and_a_registry_with_no_message() {
     let Some(stand_in) = harvested() else {
@@ -2032,8 +2033,8 @@ fn an_option_that_the_command_does_not_have_and_an_option_with_no_value_are_refu
 
 // ---- the values of a profile --------------------------------------------------------------
 
-/// The documents of a tenant with one profile: its listing, and the profile with the type `kind`
-/// and one pack from a registry with the provider `provider`.
+/// The documents of a tenant with one profile: its listing, and the profile. The profile has the
+/// type `kind` and one pack from a registry with the provider `provider`.
 fn profile_documents(kind: &str, provider: &str) -> Vec<(&'static str, Value)> {
     vec![
         (
@@ -2296,7 +2297,7 @@ fn the_instance_types_are_asked_for_the_clouds_of_the_lab_and_the_other_clouds_s
         .iter()
         .find(|e| e.id == "validate-instance-types")
         .unwrap();
-    // the stand-in serves the route only with the query of the rule for AWS, so `same` shows that
+    // the stand-in serves the route only with the query of the rule for AWS. So `same` shows that
     // the request of the choice `aws` went out without the subscription
     assert_eq!(entry.outcome, Outcome::Same, "{entry:?}");
     let reason = entry.reason.as_deref().unwrap_or_default();

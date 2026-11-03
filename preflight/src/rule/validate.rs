@@ -99,10 +99,10 @@ fn check_tier_and_programs(rule: &Rule, check: &Check) -> std::result::Result<()
     Ok(())
 }
 
-/// Refuse a `refusal_codes` list with an empty code, or with a code that the library of strata
-/// does not list as a refusal at a 5xx. The library sends no request again after a 5xx with a
-/// listed code. A code that it does not list makes the check read the refusal only after the
-/// retries.
+/// Refuse a `refusal_codes` list that has an empty code. Refuse it also when the library of
+/// strata does not list a code as a refusal at a 5xx. The library sends no request again after a
+/// 5xx with a listed code. A code that it does not list makes the check read the refusal only
+/// after the retries.
 fn check_refusal_codes(refusal_codes: &[String]) -> std::result::Result<(), String> {
     if refusal_codes.iter().any(|code| code.trim().is_empty()) {
         return Err("`refusal_codes` has an empty code; drop it, or give the code".into());

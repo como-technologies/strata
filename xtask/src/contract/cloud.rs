@@ -5,8 +5,8 @@
 //! sends it in the lab account and compares the shape of the answer with the answers that the
 //! fixtures of the rules hold. The fixtures are the stand-in of a cloud: the tests of the catalog
 //! assume them. A fact with a table also checks that the answer lists each value that a rule holds.
-//! A table of values that each account sees for itself lacks a value that this account does not
-//! have: the account cannot check that value, and it is no difference.
+//! A table of values that each account sees for itself can hold a value that this account does not
+//! have. The account cannot check that value. The lack of that value is no difference.
 //!
 //! The call names the values of the lab as `{name}`. The environment gives them, so no value of the
 //! lab is in the repository. The run sends no call that changes anything: each call lists or
@@ -194,9 +194,9 @@ fn check(fact: &Fact, expected: &[&Value], backend: &dyn Backend, lab: &Lab) -> 
 
 /// The outcome, the reason, and the differences of a call that answered with `found`.
 ///
-/// A table of values that each account sees for itself, such as the zone ids, is no difference
-/// when the answer lacks a value: the account cannot check that value. When the account lists
-/// none of the values, it cannot check the fact, and the outcome is `skipped`.
+/// When the answer lacks a value of a table that each account sees for itself, such as the zone
+/// ids, it is no difference. The account cannot check that value. When the account lists none of
+/// the values, it cannot check the fact, and the outcome is `skipped`.
 fn judged(
     fact: &Fact,
     expected: &[&Value],

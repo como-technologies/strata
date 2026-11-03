@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# The test plan of #91 for one engine, in two parts: each rule that the lab can make fails when it
-# must, and a clean entity passes. Each part runs `strata preflight` with the static and the live
-# tiers, and the cloud tier with the tools of this machine. No cluster is built; the profiles of
-# the live example are enough (just live-profiles, with the cloud of the engine). Each result goes
-# to the ledger of the runs, preflight/evidence/runs.yaml, which the confidence of each rule is
-# counted from.
+# The test plan of #91 for one engine, in two parts. In the first part, each rule that the lab can
+# make fails when it must. In the second part, a clean entity passes. Each part runs
+# `strata preflight` with the static and the live tiers, and the cloud tier with the tools of this
+# machine. No cluster is built; the profiles of the live example are enough (just live-profiles,
+# with the cloud of the engine). Each result goes to the ledger of the runs,
+# preflight/evidence/runs.yaml, which the confidence of each rule is counted from.
 #
 #   examples/live/preflight-plan.sh ENGINE [--build [--down]]
 #
@@ -31,12 +31,12 @@
 #      the inventory of the cloud. The inventory must be 0 on every line. Without --down the
 #      cluster stays: run just live-down after
 #
-# Needs live-profiles with cloud = ENGINE in terraform.tfvars (or -var cloud=ENGINE; a switch of
-# the cloud needs `just live-down` first, or the apply is refused with ClusterProfileAlreadyExists),
-# the strata and strata-preflight binaries, jq, the key as verify.sh needs it, and the tool of the
-# cloud (aws, gcloud). PALETTE_RELEASE names the Palette release for the ledger, when known; a tenant key
-# cannot read it. Results go under runs/<UTC time>/preflight-plan/, or OUT. Exit 0 only when no
-# check fails.
+# Needs live-profiles with cloud = ENGINE in terraform.tfvars, or -var cloud=ENGINE. A switch of the
+# cloud needs `just live-down` first, or the apply is refused with ClusterProfileAlreadyExists. It
+# also needs the strata and strata-preflight binaries, jq, the key as verify.sh needs it, and the
+# tool of the cloud (aws, gcloud). PALETTE_RELEASE names the Palette release for the ledger, when
+# known; a tenant key cannot read it. Results go under runs/<UTC time>/preflight-plan/, or OUT.
+# Exit 0 only when no check fails.
 set -uo pipefail
 script=preflight-plan
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
@@ -128,15 +128,16 @@ fault() {
   check "fault-$id" 0 "$id fails on its fault, in $(jq -r --arg id "$id" '.checks[] | select(.id == $id) | .elapsedMs' "fault-$id.report.json" 2> /dev/null) ms: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | (.messages // [])[]] | join("; ") | .[:160]' "fault-$id.report.json" 2> /dev/null)" -- \
     test "$label" = caught
 }
-# resize: set the size, the minimum, and the maximum of a pool together; Palette refuses a size
+# resize: set the size, the minimum, and the maximum of a pool together. Palette refuses a size
 # under the minimum with ShouldBeEqOrGreaterThanParamValues, which is not the fault of the row
 resize='def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n;'
-# offering_edit: print the jq edit of the clean entity that puts the first pool in a zone that the
-# instance type route marks as not offering the type of the pool. The route is read for the region
-# and the account of the entity, with the account_kind that create_body set, and with the query that
-# the rules send (it lifts the default filter of Palette: see instancetypes-default-filter). Its
-# answer is kept in instancetypes.json. The edit takes the first type that has a zone in
-# nonSupportedZones. Exit 1, with the reason, when the route lists none.
+# offering_edit: print the jq edit of the clean entity. The edit puts the first pool in a zone that
+# does not offer the type of the pool, according to the instance type route. The script reads the
+# route for the region and the account of the entity, with the account_kind that create_body set.
+# The query is the one that the rules send. It lifts the default filter of Palette: see
+# instancetypes-default-filter. The script keeps the answer in instancetypes.json. The edit takes
+# the first type that has a zone in nonSupportedZones. Exit 1, with the reason, when the route
+# lists none.
 offering_edit() {
   local pair
   "$live/api.sh" get "/v1/clouds/$account_kind/regions/$region/instancetypes?cloudAccountUid=$A&cpuGtEq=0&memoryGtEq=0" > instancetypes.json || { echo "api.sh get failed: $(tail -n 1 instancetypes.json)" >&2; return 1; }
@@ -164,7 +165,7 @@ case "$engine" in
     fault api-endpoint-reach '.spec.cloudConfig.endpointAccess = {public: false, private: true, publicCIDRs: [], privateCIDRs: []}'
     fault account-missing '.spec.cloudAccountUid = "000000000000000000000000"'
     # not worker-cpu-floor: the EKS validate route reports no CPU floor for a managed node group
-    # (runs 20260929T042910Z and 20260929T044751Z), so the rule does not name eks
+    # (runs 20260929T042910Z and 20260929T044751Z). So the rule does not name eks
     ;;
   aws)
     fault worker-cpu-floor "$worker_pools(1)"
@@ -192,13 +193,13 @@ else
   echo "instance-offering: $(cat offering-edit.err)" | tee -a steps.log
 fi
 # The quota rules count the vCPUs of a pool from the field cpu of the same route (#393). A type
-# under 2 vCPUs or 4 GiB is in the list, because the query lifts the default filter of Palette, and
-# it has a cpu too
+# under 2 vCPUs or 4 GiB is in the list, because the query lifts the default filter of Palette.
+# That type has a cpu too
 check instancetypes-cpu 0 "the instance type route lists each pool type of the entity with cpu as a number above 0, the vCPUs that aws-quotas, gcp-quotas, and azure-vcpu-quota count, and it lists a type under 2 vCPUs or 4 GiB with cpu above 0" -- \
   jq -e --slurpfile e clean.json 'def small: select((.memory | type == "number" and . < 4) or (.cpu | type == "number" and . < 2)); [$e[0].spec.machinepoolconfig[].cloudConfig.instanceType] as $want | .instanceTypes as $t | all($want[]; . as $w | ([$t[] | select(.type == $w) | .cpu] | first | (type == "number" and . > 0))) and ([$t[] | small] | length) > 0 and all($t[] | small; (.cpu | type == "number" and . > 0))' instancetypes.json
 # With no query, the route lists only the types with 2 vCPUs or more and 4 GiB or more. The same
-# request without the query shows the filter: the answer lists no small type, and the answer with
-# the query lists one and is longer
+# request without the query shows the filter: the answer lists no small type. The answer with the
+# query lists one and is longer
 "$live/api.sh" get "/v1/clouds/$account_kind/regions/$region/instancetypes?cloudAccountUid=$A" > instancetypes-default.json 2> instancetypes-default.err
 check instancetypes-default-filter 0 "the instance type route with no query for the filter lists no type under 2 vCPUs or 4 GiB, and the query cpuGtEq=0&memoryGtEq=0 lists more types, with a small type among them" -- \
   jq -e --slurpfile all instancetypes.json 'def small: select((.memory | type == "number" and . < 4) or (.cpu | type == "number" and . < 2)); (.instanceTypes | length) > 0 and ([.instanceTypes[] | small] | length) == 0 and ([$all[0].instanceTypes[] | small] | length) > 0 and ($all[0].instanceTypes | length) > (.instanceTypes | length)' instancetypes-default.json
@@ -260,8 +261,8 @@ check clean-scorecard 0 "the section scorecard of the clean entity" -- \
   jq -r '.sections[] | "\(.title)\t rows \(.rows) ran \(.ran) passed \(.passed) failed \(.failed) not-checked \(.notChecked) readiness \(.readiness // "-")"' clean.report.json
 
 # ---- 4. the build, watched, with --build ------------------------------------------------------------------
-# The apply runs in the background, and the watch starts as soon as Palette lists the cluster: the
-# provider returns at its own end, and the watch is about the build itself.
+# The apply runs in the background, and the watch starts as soon as Palette lists the cluster. This
+# is because the provider returns at its own end, and the watch is about the build itself.
 if [ -n "$build" ]; then
   echo "== 4. the build of cluster A on $engine, watched" | tee -a steps.log
   cluster_name=$(var cluster_name); cluster_name=${cluster_name:-fred}
@@ -280,8 +281,8 @@ if [ -n "$build" ]; then
     die "Palette lists no cluster named $cluster_name after 20 minutes; see $PWD/apply.txt"
   fi
   echo "Palette lists cluster $C; the watch starts while the apply runs" | tee -a steps.log
-  # the watch streams to the terminal, one line for each rule at each reading, and to watch.err;
-  # the tee is a pipe, so the color is asked for when the terminal is there
+  # the watch streams to the terminal, one line for each rule at each reading, and to watch.err.
+  # The tee is a pipe, so the color is asked for when the terminal is there
   plan_color=never; [ -t 2 ] && plan_color=always
   "$strata" preflight "cluster:$C" --cloud "$engine" "${release_arg[@]}" --json --verbose --color "$plan_color" \
     --watch --every 30 --limit 5400 --out out-watch > watch.report.json 2> >(tee watch.err >&2)
@@ -300,8 +301,8 @@ if [ -n "$build" ]; then
     esac
   done < <(jq -r '.checks[] | select(.severity == "fail" and (.verdict == "passed" or .verdict == "failed")) | "\(.id)\t\(.verdict)"' watch.report.json)
 
-  # The provider can end its apply with exit 0 while the cluster still provisions (the row
-  # provider-timeout-success, and the eks run 20260929T142534Z after a pivot webhook timeout): the
+  # The provider can end its apply with exit 0 while the cluster still provisions. See the row
+  # provider-timeout-success, and the eks run 20260929T142534Z after a pivot webhook timeout. The
   # checks of the cluster, and above all the delete, wait for Running. A delete of a cluster that
   # provisions stays in Deleting (delete-while-provisioning), which that run showed.
   echo "wait for cluster $C to be Running" | tee -a steps.log
@@ -320,8 +321,8 @@ if [ -n "$build" ]; then
       failed) record "$id" false-fail "the cluster as Palette holds it: $(jq -r --arg id "$id" '[.checks[] | select(.id == $id) | (.messages // [])[]] | join("; ") | .[:160]' cluster.report.json)" ;;
     esac
   done < <(jq -r '.checks[] | select(.severity == "fail" and (.verdict == "passed" or .verdict == "failed")) | "\(.id)\t\(.verdict)"' cluster.report.json)
-  # the change: another instance type for the worker pool, which replaces the pool on each
-  # engine, orphans a node group on EKS (#89), and deletes the node pool on GKE (#90)
+  # the change: another instance type for the worker pool. It replaces the pool on each engine,
+  # orphans a node group on EKS (#89), and deletes the node pool on GKE (#90)
   case "$engine" in
     gke) new_type=e2-standard-8; change_rules="gke-type-change pool-replace-fields" ;;
     eks) new_type=m5.xlarge; change_rules="eks-type-change-orphan pool-replace-fields" ;;

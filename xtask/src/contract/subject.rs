@@ -203,9 +203,9 @@ fn bind<A: PaletteApi>(
         bindings.insert((*param).to_string(), candidate);
         match bind(probe, facts, template, rest, bindings, depth) {
             Ok(()) => return Ok(()),
-            // the next value can still serve: a region with no VPC is no end of the search, and
-            // neither is a region that Palette refuses for this key, such as a region that the
-            // account has not turned on
+            // the next value can still serve: a region with no VPC is no end of the search.
+            // Neither is a region that Palette refuses for this key, such as a region that the
+            // account has not enabled
             Err(subject) if next_value_can_serve(&subject) => {
                 first_failure.get_or_insert(subject);
                 bindings.remove(*param);
@@ -224,9 +224,9 @@ fn bind<A: PaletteApi>(
 }
 
 /// True when the next value of a placeholder can still give a subject, after `subject` stopped the
-/// first: the tenant has no object, or Palette refuses the request for this key with a 4xx that
-/// the run reads as an answer. A 401, a 429, a status of 5xx, or a failure of the network says
-/// nothing about the value, so it ends the search.
+/// first. This is the case when the tenant has no object. It is also the case when Palette refuses
+/// the request for this key with a 4xx that the run reads as an answer. A 401, a 429, a status of
+/// 5xx, or a failure of the network says nothing about the value, so it ends the search.
 fn next_value_can_serve(subject: &Subject) -> bool {
     match subject {
         Subject::Missing(_) => true,

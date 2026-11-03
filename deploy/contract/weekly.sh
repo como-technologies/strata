@@ -36,9 +36,9 @@ git pull --ff-only > "$run/git.log" 2>&1 || note "git pull failed; the run uses 
 just examples stand-in > "$run/build.log" 2>&1 || { note "just examples stand-in failed; see $run/build.log"; exit 2; }
 
 # The run writes the new tags of the releases to a copy of state.json. The job keeps the copy when
-# the report is done: a report that fails leaves the old tags, so the next run notes the new tag
-# again, and the report opens the issue then. A person can close the issue after the report is
-# done, so the job must keep the tags then too.
+# the report is done. A report that fails leaves the old tags, so the next run notes the new tag
+# again. The report opens the issue then. A person can close the issue after the report is done, so
+# the job must keep the tags then too.
 state=$run/state.json
 if [ -f "$data/state.json" ]; then
   cp "$data/state.json" "$state" || { note "could not copy $data/state.json"; exit 2; }
@@ -53,8 +53,8 @@ before=$(jq -r '.summary.same // empty' "$data/last.json" 2> /dev/null || true)
 if [ -s "$run/contract.json" ]; then
   examples/live/contract-report.sh "$run/contract.json" || report=$?
   cp "$run/contract.json" "$data/last.json"
-  # the report exits 0, 1, or 3 when it handled the issues (3 when a fact could not be checked),
-  # and 2 when it did not
+  # the report exits 0, 1, or 3 when it handled the issues, and 2 when it did not. Exit 3 means
+  # that a fact could not be checked
   case "$report" in
     0|1|3)
       if [ -f "$state" ]; then

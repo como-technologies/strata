@@ -1,6 +1,6 @@
 //! The checks of a closed set that the root package and `strata-preflight` share. The tests of
-//! `tests/closed_set.rs` and of `preflight/tests/closed_set.rs` list their sets, and call these
-//! checks, so that one reader of the schema and one rule for each check exist.
+//! `tests/closed_set.rs` and of `preflight/tests/closed_set.rs` list their sets and call these
+//! checks. Then one reader of the schema and one rule for each check exist.
 
 use std::path::PathBuf;
 
@@ -17,8 +17,8 @@ pub struct Set {
     names: Vec<String>,
     /// The text of each value of `ClosedSet::ALL`.
     pub all: Vec<&'static str>,
-    /// For the text of each value in `names`: the text that serde writes, the text of `as_str`,
-    /// and the text of the value that `parse` reads.
+    /// For each entry of `names`: the text that serde writes, the text of `as_str`, and the text
+    /// of the value that `parse` reads.
     texts: Vec<(Value, &'static str, Option<&'static str>)>,
 }
 

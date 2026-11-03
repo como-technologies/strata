@@ -17,16 +17,16 @@
 //! some validate routes.
 //!
 //! When the file `<name>.<status>.json` exists in place of `<name>.json`, for a status of
-//! [`REFUSALS`], the answer is that status with that file as the body: Palette refuses the
-//! request.
+//! [`REFUSALS`], Palette refuses the request. The answer is that status with that file as the
+//! body.
 //!
 //! The validate route of a create, `POST /v1/spectroclusters/{cloudType}/validate`, reads the body
 //! first. When a profile of the body is of another cloud type, the answer is HTTP 500 with the
-//! code `ClusterProfilesNotSupported`, as Palette gives it: see `profile_cloud_refusal`.
+//! code `ClusterProfilesNotSupported`, as Palette gives it. See `profile_cloud_refusal`.
 //!
 //! A route of the tenant, such as the saved tag filters under `/v1/filters`, refuses each request
-//! that names a project: HTTP 403 with the code `ProjectUidIsNotEmpty`, whatever the query, as
-//! Palette gives it: see `project_refusal`.
+//! that names a project. The answer is HTTP 403 with the code `ProjectUidIsNotEmpty`, whatever
+//! the query, as Palette gives it: see `project_refusal`.
 //!
 //! The export route of a profile, `GET /v1/clusterprofiles/{uid}/export`, reads the `Accept`
 //! header. To `Accept: application/json` the answer is `{"Reader":{}}`, as Palette gives it: see
@@ -36,8 +36,8 @@
 //! report, so that a page can show the send of strata: see `REPORT_ENDPOINT`.
 //!
 //! When the file does not exist, the answer is HTTP 404 with the body that Palette gives. The
-//! server reads each file at each request, so the runner can change the tenant between two
-//! commands, and a page can show what Palette does after an edit in place.
+//! server reads each file at each request. So the runner can change the tenant between two
+//! commands. A page can show what Palette does after an edit in place.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -208,9 +208,9 @@ fn export_reader(root: &Path, request: &Request) -> Option<Vec<u8>> {
 }
 
 /// The refusal of the validate route of a create for a body with a profile of another cloud type,
-/// as Palette gives it: HTTP 500, the code `ClusterProfilesNotSupported`, and the names of those
-/// profiles. A profile of the cloud type `all` fits each cloud. `None` when `request` is not that
-/// route, or when each profile of its body fits the cloud of the route.
+/// as Palette gives it. It has HTTP 500, the code `ClusterProfilesNotSupported`, and the names of
+/// those profiles. A profile of the cloud type `all` fits each cloud. `None` when `request` is
+/// not that route, or when each profile of its body fits the cloud of the route.
 ///
 /// A live run shows the message for one profile. The stand-in joins the names of several with a
 /// comma, which no run shows.
@@ -438,7 +438,7 @@ fn file_for(root: &Path, project: Option<&str>, target: &str) -> Option<PathBuf>
     Some(root.join(scope).join(name + ".json"))
 }
 
-/// The route that the file `relative` answers, the inverse of [`file_for`]: `relative` is the path
+/// The route that the file `relative` answers, the inverse of [`file_for`]. The path `relative` is
 /// under the tenant directory, so its first part is the project or `tenant`. The route has no
 /// project, no query, and no status of a refusal. `None` for a file that no request reads.
 pub fn route_of(relative: &str) -> Option<String> {
@@ -448,7 +448,7 @@ pub fn route_of(relative: &str) -> Option<String> {
     Some(path.to_string())
 }
 
-/// True when the file `relative` holds the refusal of a request and not a document: its name ends
+/// True when the file `relative` holds the refusal of a request and not a document. Its name ends
 /// with the status of a refusal, as in `v1/spectroclusters/c1/config/rbacs.403.json`.
 pub fn is_refusal(relative: &str) -> bool {
     relative
@@ -642,7 +642,7 @@ mod tests {
     }
 
     /// The validate route of a create refuses a body with a profile of another cloud type with
-    /// HTTP 500 and `ClusterProfilesNotSupported`, as a live run shows (#415). A profile of the
+    /// HTTP 500 and `ClusterProfilesNotSupported`. A live run shows this (#415). A profile of the
     /// cloud type `all` fits each cloud.
     #[test]
     fn the_validate_route_of_a_create_refuses_a_profile_of_another_cloud_type() {

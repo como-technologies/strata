@@ -34,16 +34,16 @@ impl Error {
             Error::Api { status, .. } if *status == 429 || (500..600).contains(status) => {
                 FailureClass::Transient
             }
-            // A 2xx that is not JSON can be a gateway page or a real fault, and a file or a
-            // serializer that fails says nothing about the next try. A send of the report can fail
-            // for the network of the user or for the endpoint, and the error does not tell which.
+            // A 2xx that is not JSON can be a gateway page or a real fault. A file or a serializer
+            // that fails says nothing about the next try. A send of the report can fail for the
+            // network of the user or for the endpoint, and the error does not tell which.
             Error::NotJson { .. }
             | Error::NoUid
             | Error::Io { .. }
             | Error::Serialize(_)
             | Error::ReportSend { .. } => FailureClass::Unknown,
-            // Every other failure stays while the inputs stay: another HTTP status, a thing that
-            // is not there, a file or a setting that is not valid.
+            // Every other failure stays while the inputs stay. They are another HTTP status, a
+            // thing that is not there, and a file or a setting that is not valid.
             _ => FailureClass::Terminal,
         }
     }
@@ -51,9 +51,9 @@ impl Error {
 
 /// True when the body of a Palette error is JSON with a `code` of a refusal by design.
 ///
-/// [`is_refusal_code`] says which codes these are: the refusals of the other routes, the errors of
-/// the import validate route that match no pack to a registry, and the checks of each validate
-/// route.
+/// [`is_refusal_code`] says which codes these are. They are the refusals of the other routes. They
+/// are also the errors of the import validate route that match no pack to a registry, and the
+/// checks of each validate route.
 fn is_refusal(body: &str) -> bool {
     PaletteRefusal::from_error_body(body).is_some_and(|r| is_refusal_code(&r.code))
 }

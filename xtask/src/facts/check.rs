@@ -121,8 +121,8 @@ fn fields(facts: &[Fact]) -> Vec<String> {
 }
 
 /// The fields that a fact needs to be proved: a live check, or a reason why none proves it. A
-/// fact of the kind `cloud` is proved by a call that the contract run sends, so it needs a call or
-/// a reason, and it names no live check.
+/// fact of the kind `cloud` is proved by a call that the contract run sends. It needs a call or a
+/// reason, and it names no live check.
 fn proof(fact: &Fact) -> Vec<String> {
     let id = &fact.id;
     let cloud = fact.kind == Kind::Cloud;
@@ -274,7 +274,7 @@ fn by_request(facts: &[Fact]) -> BTreeMap<String, Vec<&Fact>> {
 }
 
 /// Each request of `reference/palette-api.md` and each request of a rule of strata-preflight is
-/// the request of a fact, and no request is the request of two facts.
+/// the request of a fact. No request is the request of two facts.
 fn requests_listed(sources: &Sources) -> Vec<String> {
     let known = by_request(&sources.facts);
     let mut bad = Vec::new();

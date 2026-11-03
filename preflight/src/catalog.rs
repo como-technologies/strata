@@ -141,7 +141,7 @@ mod tests {
     }
 
     /// Nothing sets `PALETTE_HOST`, so a line that reads it asks `curl` for `/v1/...` with no host.
-    /// Each line that calls Palette sends the two headers and reads the address, with the names
+    /// Each line that calls Palette sends the two headers. It reads the address, with the names
     /// and the default that strata reads, as `curl_get` of the report does.
     #[test]
     fn each_reproduce_line_that_calls_palette_has_one_form() {

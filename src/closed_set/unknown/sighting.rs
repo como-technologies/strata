@@ -80,16 +80,16 @@ impl Sighting {
         (&self.set, &self.value, &self.route)
             .cmp(&(&other.set, &other.value, &other.route))
             .then_with(|| version::compare(&self.strata, &other.strata))
-            // two texts can have one version order, such as `1.0.1+2` and `1.0.1`: the text decides
+            // two texts can have one version order, such as `1.0.1+2` and `1.0.1`. The text decides
             // that tie only, so that equal sightings stay next to each other
             .then_with(|| self.strata.cmp(&other.strata))
     }
 }
 
 /// True for a character that a value can hold: printable ASCII with no space, from `!` to `~`. So a
-/// value holds no control character, no format character such as U+200B or U+202E, no letter that
-/// looks like another, and no space that a code span of markdown drops at its ends. Two issues of
-/// two values cannot look equal.
+/// value holds no control character and no format character, such as U+200B or U+202E. It holds no
+/// letter that looks like another. It holds no space that a code span of markdown drops at its
+/// ends. Two issues of two values cannot look equal.
 fn is_value_char(c: char) -> bool {
     c.is_ascii_graphic()
 }

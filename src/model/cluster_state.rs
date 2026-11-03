@@ -50,8 +50,8 @@ impl ClusterState {
     }
 
     /// True when `doc`, the document of a cluster or of another object of a record, is the document
-    /// of an object that Palette deleted: its state is `Deleted`, or `metadata.isDeleted` is true.
-    /// Palette keeps the document of such an object, with its spec.
+    /// of an object that Palette deleted. The state of the object is `Deleted`, or
+    /// `metadata.isDeleted` is true. Palette keeps the document of such an object, with its spec.
     pub fn is_gone(doc: &Value) -> bool {
         ClusterState::Deleted.is(str_at(doc, "/status/state")) || flag(doc, "/metadata/isDeleted")
     }

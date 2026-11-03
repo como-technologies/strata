@@ -128,8 +128,8 @@ impl Tenant {
             .collect()
     }
 
-    /// Copy each document of the tenant into the directory `dest`, with the layout of the tenant:
-    /// a directory for each project and one for the tenant scope.
+    /// Copy each document of the tenant into the directory `dest`, with the layout of the tenant.
+    /// The layout has a directory for each project and one for the tenant scope.
     pub fn copy_to(&self, dest: &Path) {
         listings::copy_dir(&self.root, dest);
     }

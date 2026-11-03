@@ -261,8 +261,8 @@ pub enum Error {
         /// The uids of the app profiles with that name and version, in order.
         uids: Vec<String>,
     },
-    /// A command that works on a profile was given a cluster, an edge host, a cluster group, an
-    /// app profile, a pack, or a record of one.
+    /// A command that works on a profile was given something else. It was given a cluster, an
+    /// edge host, a cluster group, an app profile, a pack, or a record of one.
     #[error(
         "'{reference}' is not a profile version; this command takes a profile uid, <name>@<version>, or a profile record"
     )]
@@ -515,7 +515,7 @@ pub enum Error {
 }
 
 /// The hint of a 401 or a 403: the key is almost always the cause, so the message names where a
-/// key comes from. A 403 with the code [`PROJECT_SCOPE_CODE`] is the exception: the key is right,
+/// key comes from. A 403 with the code [`PROJECT_SCOPE_CODE`] is the exception. The key is right,
 /// and the message says that the route is of the tenant scope and that the request named a
 /// project. Empty for each other status.
 fn status_hint(status: u16, body: &str) -> String {
@@ -611,7 +611,7 @@ fn list_or_none(items: &[String]) -> String {
 }
 
 /// What to try after a profile name matched nothing. At tenant scope the listing advice is a dead
-/// end for a profile of a project: tenant scope holds only the profiles of the tenant, so the
+/// end for a profile of a project. Tenant scope holds only the profiles of the tenant, so the
 /// reader needs a project first.
 fn profile_not_found_hint(name: &str, tenant_scope: bool) -> String {
     if tenant_scope {
@@ -659,9 +659,9 @@ fn with_tag(tag: Option<&str>) -> String {
 pub const UNSYNCED_LISTS: &str =
     "lists a pack of such a registry only while a profile pins the pack";
 
-/// Why the registries of `registries` have no pack of a name, for the message of an error:
-/// `; Palette does not sync the registry 'charts-auth', and lists a pack of such a registry only
-/// while a profile pins the pack`. Nothing when there is no such registry.
+/// Why the registries of `registries` have no pack of a name, for the message of an error.
+/// For example: `; Palette does not sync the registry 'charts-auth', and lists a pack of such a
+/// registry only while a profile pins the pack`. Nothing when there is no such registry.
 fn unsynced_sentence(registries: &[String]) -> String {
     let quoted: Vec<String> = registries.iter().map(|r| format!("'{r}'")).collect();
     if quoted.is_empty() {

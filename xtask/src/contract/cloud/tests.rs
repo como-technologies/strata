@@ -1,5 +1,6 @@
-//! The tests of the calls of the clouds: the values of the lab, each outcome of a call, the table
-//! of a fact, and the run of the list of the repository against the fixtures of the rules.
+//! The tests of the calls of the clouds. They cover the values of the lab, each outcome of a call,
+//! and the table of a fact. They also cover the run of the list of the repository against the
+//! fixtures of the rules.
 
 use std::collections::BTreeMap;
 
@@ -600,8 +601,8 @@ fn readings(facts: &[Fact]) -> Vec<&Fact> {
         .collect()
 }
 
-/// A backend that answers the call of each reading with the first answer of the fixtures of its
-/// rules, after `change` has changed it, for the lab of [`full_lab`].
+/// A backend for the lab of [`full_lab`]. It answers the call of each reading with the first
+/// answer of the fixtures of its rules, after `change` has changed that answer.
 fn fixtures_backend(
     facts: &[Fact],
     rules: &BTreeMap<String, CloudRule>,
@@ -723,7 +724,7 @@ fn the_default_quota_of_the_managed_policies_for_a_role_is_20_and_the_run_finds_
 }
 
 /// `gcloud` omits the key `secondaryIpRanges` for a subnet that has no secondary range (#550).
-/// The fixtures of the rule show a subnet with the key and a subnet without it, so an answer that
+/// The fixtures of the rule show a subnet with the key and a subnet without it. So an answer that
 /// lacks the key is no difference.
 #[test]
 fn a_subnet_with_no_secondary_range_is_no_difference_when_gcloud_omits_the_key() {

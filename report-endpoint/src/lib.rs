@@ -1,5 +1,5 @@
 //! The endpoint of the report: a small service that takes the report of the values that strata
-//! does not know, and merges the reports into one issue for each set and value.
+//! does not know. It merges the reports into one issue for each set and value.
 //!
 //! A user of strata chooses the send, and strata posts the document `strata-report/1` here: see
 //! `strata::closed_set::unknown::send`. The endpoint does these things for each request, in this
@@ -9,7 +9,7 @@
 //!    its fixed list of fields, and refuses each other field.
 //! 2. It limits the rate of the sender, with [`limit::Limiter`]. It keeps no address, and it counts
 //!    an IPv6 address by its /64 network.
-//! 3. It leaves out a report that it took in the last day, with [`digest::Counted`], so a second
+//! 3. It omits a report that it took in the last day, with [`digest::Counted`], so a second
 //!    try of a send does not count twice.
 //! 4. It reads the issues of the tracker, and limits the new issues and the writes, so that a flood
 //!    of made-up values opens few issues. The values that the limits hold back wait.

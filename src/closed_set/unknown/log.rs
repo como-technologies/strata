@@ -56,7 +56,7 @@ impl Line {
     }
 
     /// Append the line to the file `file`. The call makes the folder and the file when they are
-    /// missing, and writes the line with one write, so two runs do not mix their lines.
+    /// missing. It writes the line with one write, so two runs do not mix their lines.
     ///
     /// # Errors
     ///
@@ -68,9 +68,9 @@ impl Line {
     }
 
     /// What is wrong with a line that has the right fields, or `None`. The type refuses a field
-    /// that is not in [`FIELDS`]. This check refuses a value that no closed set has, and a route
-    /// that is not a template of a route, such as the path of a real request. Strata never writes
-    /// such a line.
+    /// that is not in [`FIELDS`]. This check refuses a value that no closed set has. It also
+    /// refuses a route that is not a template of a route, such as the path of a real request.
+    /// Strata never writes such a line.
     fn fault(&self) -> Option<String> {
         if self.schema != SCHEMA {
             return Some(format!("the schema is not {SCHEMA}"));
@@ -89,9 +89,9 @@ pub fn path() -> Option<PathBuf> {
 ///
 /// # Errors
 ///
-/// `LogInvalid`, with the number of the first line that is not a line of [`SCHEMA`]: a field that
-/// [`FIELDS`] does not list, a field of the wrong type, or a value that strata does not write. The
-/// message names the fault. `Io` when strata cannot read the file.
+/// `LogInvalid`, with the number of the first line that is not a line of [`SCHEMA`]. The cause is a
+/// field that [`FIELDS`] does not list, a field of the wrong type, or a value that strata does not
+/// write. The message names the fault. `Io` when strata cannot read the file.
 pub(crate) fn read(file: &Path) -> Result<Vec<Line>> {
     let text = match read_file(file) {
         Ok(text) => text,

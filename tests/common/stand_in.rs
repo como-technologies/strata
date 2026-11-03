@@ -116,8 +116,8 @@ pub fn log_in(home: &Path) -> PathBuf {
     state_in(home).join(FILE)
 }
 
-/// A line of the log, as strata writes it: the value `value` of the set `set`, which the route
-/// `route` gave to this release of strata.
+/// A line of the log, as strata writes it. It holds the value `value` of the set `set`, which the
+/// route `route` gave to this release of strata.
 pub fn log_line(set: &str, value: &str, route: &str) -> String {
     serde_json::to_string(&Line {
         schema: SCHEMA.to_string(),
