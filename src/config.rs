@@ -117,9 +117,9 @@ impl Config {
         Self::from_lookup(|key| {
             // An empty project variable is a choice, not an absence: it says tenant scope, as
             // `--project ''` does, and it must beat `~/.palette.env`. Without this, a reader who
-            // keeps a project in that file cannot reach tenant scope from the environment at all:
-            // `unset` and an empty value both fall through to the file. For every other variable
-            // an empty value stays the same as an unset one.
+            // keeps a project in that file cannot reach tenant scope from the environment. Both
+            // `unset` and an empty value go to the file. For every other variable an empty value
+            // stays the same as an unset one.
             if (PROJECT_VARS.contains(&key) || key == PROJECT_NAME_VAR)
                 && let Ok(value) = std::env::var(key)
             {

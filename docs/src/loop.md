@@ -30,8 +30,8 @@ the page of each job.
 | You delete an old version | When a cluster or a template still uses it, the gate stays closed. | the retire gate, on demand |
 | A job writes a note about a value that strata does not know | The value, the route that gave it, and a link that opens an issue of strata. Strata sends nothing unless you choose the send. | a person at a terminal, on the machine of the job |
 
-The chart shows the steps of one change. An arrow goes from a step to the step that
-it leads to. An issue of the night leads to a pull request.
+The chart shows the steps of one change. An arrow goes from a step to the step
+that it leads to. An issue of the night leads to a pull request.
 
 ```mermaid
 flowchart TB

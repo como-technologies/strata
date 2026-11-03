@@ -83,8 +83,8 @@ and
 with `type: required` and a least version
 ([Pack constraints](https://docs.spectrocloud.com/registries-and-packs/pack-constraints/)).
 In the example's own OCI pack registry, `strata-live-pack` 1.1.0 requires
-`strata-live-dep` 1.0.0 or newer. Palette refuses the create of a profile that holds the requiring pack and
-not the required one. The code is
+`strata-live-dep` 1.0.0 or newer. Palette refuses the create of a profile that
+holds the requiring pack and not the required one. The code is
 `ClusterProfileCreationValidationFailure`. The message is "Pack
 'strata-live-dep' is required with minimum compatible version '1.0.0'". A
 profile that holds both is accepted, and its record lists the two packs in the
@@ -212,10 +212,10 @@ the same version, with other bytes, and a sync after it, change nothing.
 Palette keeps the digest it listed first, and a record of the chart from before
 the push verifies.
 
-A sync does read a new version. When a person pushes `1.0.1` beside `1.0.0`, Palette
-lists it, newest first. So for a chart in an OCI Helm registry, `verify` on a
-record of the chart says what Palette lists. It does not say what the registry
-serves now. A pack in an OCI pack registry follows each push.
+A sync does read a new version. When a person pushes `1.0.1` beside `1.0.0`,
+Palette lists it, newest first. So for a chart in an OCI Helm registry, `verify`
+on a record of the chart says what Palette lists. It does not say what the
+registry serves now. A pack in an OCI pack registry follows each push.
 
 ## A tag that a registry deletes
 

@@ -10,8 +10,9 @@ profile. Nobody types a version number: the chain does.
 
 This is the same problem as [A team pins each environment](./fan-out.md), one
 level up. Many pull requests are open at once, and a job opened most of them.
-A job wrote each one against the level below, and that level changes often. GitLab calls
-a pull request a merge request; this page says pull request for both.
+A job wrote each one against the level below, and that level changes often.
+GitLab calls a pull request a merge request; this page says pull request for
+both.
 
 **Who runs this.** Jobs at every level. A person merges, and a job publishes,
 records, and opens the next pull request. The recipes are

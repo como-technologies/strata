@@ -995,6 +995,17 @@ field, a value, an input, or an option is in the sections above.
 - **The legend text of the status `registry-move` of `same-release` changes.** `legend.status`
   says "moved to another registry" in place of "pinned to another registry". The text is for a
   reader, and no script needs a change.
+- **Some descriptions in `strata schema` and in `strata-preflight --schema` have new words.** The
+  doc comments of public items feed them. No key, type, or id changes, and no script needs a
+  change.
+  - `strata schema behind`: the description of `newer` in a pin.
+  - `strata schema consumers`: the description of the definition `ClustersRead`.
+  - `strata schema diff` and `strata schema verify-summary`: the description of `tagRenamed` in
+    a pack.
+  - `strata-preflight --schema report`: the descriptions of the verdicts `not-run` and
+    `skipped`.
+  - `strata-preflight --schema rules`: the descriptions of the checks `palette`, `exec`, and
+    `watch`, and of `check` and `when` in a rule.
 
 ### For a user of the library of strata
 

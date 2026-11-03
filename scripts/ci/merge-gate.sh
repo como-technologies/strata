@@ -35,7 +35,7 @@
 # Exit 0 when the merge result is clear, 1 when the gate is red, and 2 when the script could not
 # run at all. A record that strata could not check is red, not 2: the gate fails closed.
 # A strata that is older than this script gives 2 too. It writes no versionMove, so no pin
-# would read as backward.
+# reads as backward.
 # Needs strata (or STRATA_BIN), git, and jq. The target branch is --base, or the
 # CI variable of the merge request: CI_MERGE_REQUEST_TARGET_BRANCH_NAME on GitLab, GITHUB_BASE_REF
 # on GitHub.
@@ -76,7 +76,7 @@ command -v "$strata" > /dev/null || die "no strata on the PATH: install it, or s
 schema=$("$strata" schema diff 2> /dev/null) || schema=""
 case $schema in
   *'"versionMove"'*) ;;
-  *) die "strata is older than this script: it writes no versionMove, so no backward pin would show" ;;
+  *) die "strata is older than this script: it writes no versionMove, so no backward pin shows" ;;
 esac
 # the key where strata looks for it: the environment, then ~/.palette.env
 has_key() {

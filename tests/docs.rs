@@ -816,12 +816,18 @@ fn comment_blocks(text: &str, mark: &str) -> Vec<String> {
     blocks
 }
 
-/// The comment of a Rust file that holds `anchor`.
-fn comment(text: &str, anchor: &str) -> String {
-    comment_blocks(text, "//")
+/// The comment blocks of a file of the repository: `//` in a Rust file, and `#` in any other.
+fn comments_of(file: &str) -> Vec<String> {
+    let mark = if file.ends_with(".rs") { "//" } else { "#" };
+    comment_blocks(&repo_file(file), mark)
+}
+
+/// The comment of a file of the repository that holds `anchor`.
+fn comment(file: &str, anchor: &str) -> String {
+    comments_of(file)
         .into_iter()
         .find(|block| block.contains(anchor))
-        .unwrap_or_else(|| panic!("no comment line holds {anchor:?}"))
+        .unwrap_or_else(|| panic!("{file}: no comment holds {anchor:?}"))
 }
 
 /// The style review of Wave 11 found comments in the Rust files with a sentence over the limit of
@@ -889,10 +895,13 @@ fn the_rust_comments_that_the_style_review_of_wave_11_named_keep_to_25_words() {
         ),
         ("tests/docs.rs", "The block of `text` that holds"),
         ("tests/docs.rs", "The sentences of `block`."),
-        ("tests/docs.rs", "The comment of a Rust file that holds"),
+        (
+            "tests/docs.rs",
+            "The comment of a file of the repository that holds",
+        ),
     ];
     for (file, anchor) in comments {
-        for sentence in sentences(&comment(&repo_file(file), anchor)) {
+        for sentence in sentences(&comment(file, anchor)) {
             assert!(
                 words(&sentence) <= 25,
                 "{file}: {} words in a comment sentence of 25 at most: {sentence}",
@@ -1026,7 +1035,7 @@ fn the_rust_comments_that_the_style_review_of_wave_8_named_keep_to_25_words() {
         ),
     ];
     for (file, anchor) in comments {
-        for sentence in sentences(&comment(&repo_file(file), anchor)) {
+        for sentence in sentences(&comment(file, anchor)) {
             assert!(
                 words(&sentence) <= 25,
                 "{file}: {} words in a comment sentence of 25 at most: {sentence}",
@@ -1540,11 +1549,7 @@ fn the_comments_of_the_ci_drop_ins_that_the_review_named_keep_to_25_words() {
         ("examples/ci/gitlab/strata.yml", "needed to read Palette"),
     ];
     for (file, anchor) in comments {
-        let block = comment_blocks(&repo_file(file), "#")
-            .into_iter()
-            .find(|block| block.contains(anchor))
-            .unwrap_or_else(|| panic!("{file}: no comment holds {anchor:?}"));
-        for sentence in sentences(&block) {
+        for sentence in sentences(&comment(file, anchor)) {
             assert!(
                 words(&sentence) <= 25,
                 "{file}: {} words in a comment sentence of 25 at most: {sentence}",
@@ -1684,7 +1689,7 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_12_named_keeps_to_25_wo
         ),
     ];
     for (file, anchor) in comments {
-        let text = comment(&repo_file(file), anchor);
+        let text = comment(file, anchor);
         for sentence in sentences(&text) {
             assert!(
                 words(&sentence) <= 25,
@@ -2749,7 +2754,7 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_13_named_keeps_to_25_wo
         ),
     ];
     for (file, anchor) in comments {
-        let text = comment(&repo_file(file), anchor);
+        let text = comment(file, anchor);
         for sentence in sentences(&text) {
             assert!(
                 words(&sentence) <= 25,
@@ -2872,6 +2877,18 @@ fn loop_sh_has_the_check_report_log_and_the_book_has_its_row() {
 }
 
 // ---- the cleanup of Wave 12, in Wave 14 ---------------------------------------------------------
+
+/// One part of the section of release 0.28.0 in compatibility.md, as one line. The part starts at
+/// the heading `heading` and ends at the next heading of its level.
+fn release_0_28_0_part(heading: &str) -> String {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let release = section(
+        &page,
+        "## Release 0.28.0: changes that need action",
+        Some("\n## "),
+    );
+    one_line(section(release, heading, Some("\n### ")))
+}
 
 /// The section of release 0.28.0 sits above the one of release 0.27.0. It gives the action for
 /// each change of the cleanup that can break a script, a document reader, or a program that uses a
@@ -3175,16 +3192,7 @@ fn compatibility_names_each_hash_that_the_canonical_text_moves_and_what_same_rel
     ] {
         assert!(general.contains(needle), "the paragraph lacks {needle:?}");
     }
-    let release = section(
-        &page,
-        "## Release 0.28.0: changes that need action",
-        Some("\n## "),
-    );
-    let command_line = one_line(section(
-        release,
-        "### For a user of the command line or of a document\n",
-        Some("\n### "),
-    ));
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document\n");
     for needle in [
         "**The root item of release 0.26.0 names four hashes. Four more hashes change with it.**",
         "They are `contentDigest`, `hash.authored` and `hash.node` of a pack, and the `hash` of a tier.",
@@ -3250,12 +3258,6 @@ fn each_comment_sentence_in_the_fuzz_package_has_25_words_at_most() {
     );
 }
 
-/// The comment blocks of a file of the repository: `//` in a Rust file, and `#` in any other.
-fn comments_of(file: &str) -> Vec<String> {
-    let mark = if file.ends_with(".rs") { "//" } else { "#" };
-    comment_blocks(&repo_file(file), mark)
-}
-
 /// The review at the end of Wave 12 named comments of internal code with a sentence over
 /// 25 words. Each sentence of each comment has 25 words at most now.
 #[test]
@@ -3286,11 +3288,7 @@ fn the_internal_comments_that_the_review_at_the_end_of_wave_12_named_keep_to_25_
         ),
         ("Cargo.toml", "It is the profile that the tool"),
     ] {
-        let block = comments_of(file)
-            .into_iter()
-            .find(|block| block.contains(anchor))
-            .unwrap_or_else(|| panic!("{file}: no comment holds {anchor:?}"));
-        for sentence in sentences(&block) {
+        for sentence in sentences(&comment(file, anchor)) {
             assert!(
                 words(&sentence) <= 25,
                 "{file}: {} words in a comment sentence of 25 at most: {sentence}",
@@ -3310,6 +3308,7 @@ fn the_modal_and_phrasal_verbs_that_the_review_at_the_end_of_wave_12_named_are_g
         ("preflight/tests/cli.rs", "where the directory should be"),
         ("tests/common/process.rs", "a file that it will run"),
         ("src/reference/mod.rs", "falls through"),
+        ("src/config.rs", "fall through"),
         ("preflight/src/main.rs", "goes out one time"),
         ("tests/ci_scripts.rs", "steps aside"),
         (
@@ -3328,6 +3327,21 @@ fn the_modal_and_phrasal_verbs_that_the_review_at_the_end_of_wave_12_named_are_g
     );
 }
 
+/// The gate prints some of its text to a user, as the message of `die`. So its comments and its
+/// messages keep to the rule of the style: no modal verb.
+#[test]
+fn the_merge_gate_script_holds_no_modal_verb() {
+    let script = repo_file("scripts/ci/merge-gate.sh");
+    for modal in ["may", "might", "should", "would"] {
+        assert!(
+            !script
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|word| word.eq_ignore_ascii_case(modal)),
+            "scripts/ci/merge-gate.sh holds {modal:?}"
+        );
+    }
+}
+
 /// The gate stops with exit 2 for a strata that is older than the script, and the legend of the
 /// status `registry-move` has new words. The page of the gate and the section of release 0.28.0
 /// say both.
@@ -3340,16 +3354,7 @@ fn the_book_says_that_the_gate_stops_for_an_older_strata_and_the_legend_of_regis
         ),
         "the page of the gate does not say it"
     );
-    let page = read(&docs().join("reference/compatibility.md"));
-    let command_line = one_line(section(
-        section(
-            &page,
-            "## Release 0.28.0: changes that need action",
-            Some("\n## "),
-        ),
-        "### For a user of the command line or of a document\n",
-        Some("\n### "),
-    ));
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document\n");
     for needle in [
         "**`merge-gate.sh` stops with exit `2` when strata is older than the script.**",
         "A local run or a custom job must use the strata of the same release.",
@@ -3367,4 +3372,59 @@ fn the_book_says_that_the_gate_stops_for_an_older_strata_and_the_legend_of_regis
         "{}",
         legend["registry-move"]
     );
+}
+
+/// The doc comments of public items feed the `description` of `strata schema` and of
+/// `strata-preflight --schema`. The split of long sentences gave some of them new words. The
+/// section of release 0.28.0 names each one, and the schema holds the new words. The test of
+/// `preflight/tests/cli.rs` holds the words of `strata-preflight`.
+#[test]
+fn the_section_of_release_0_28_0_names_each_schema_description_that_has_new_words() {
+    for (kind, pointer, new_words) in [
+        (
+            "behind",
+            "/$defs/Pin/properties/newer/description",
+            "A version for none of the clouds of the pinned version is not one to move to either.",
+        ),
+        (
+            "consumers",
+            "/$defs/ClustersRead/description",
+            "It gives an empty list on an error too.",
+        ),
+        (
+            "diff",
+            "/$defs/PackDiff/properties/tagRenamed/description",
+            "because the tag name differs. The same name, layer, type, version,",
+        ),
+        (
+            "verify-summary",
+            "/$defs/PackDiff/properties/tagRenamed/description",
+            "because the tag name differs. The same name, layer, type, version,",
+        ),
+    ] {
+        let document = schema(kind);
+        let description = document
+            .pointer(pointer)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_else(|| panic!("{kind} has no description at {pointer}"));
+        assert!(
+            one_line(description).contains(new_words),
+            "{kind} {pointer}: {description}"
+        );
+    }
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document\n");
+    for needle in [
+        "**Some descriptions in `strata schema` and in `strata-preflight --schema` have new words.**",
+        "No key, type, or id changes, and no script needs a change.",
+        "`strata schema behind`: the description of `newer` in a pin.",
+        "`strata schema consumers`: the description of the definition `ClustersRead`.",
+        "`strata schema diff` and `strata schema verify-summary`: the description of `tagRenamed` in a pack.",
+        "`strata-preflight --schema report`: the descriptions of the verdicts `not-run` and `skipped`.",
+        "`strata-preflight --schema rules`: the descriptions of the checks `palette`, `exec`, and `watch`, and of `check` and `when` in a rule.",
+    ] {
+        assert!(
+            command_line.contains(needle),
+            "the section of release 0.28.0 lacks {needle:?}"
+        );
+    }
 }
