@@ -71,8 +71,8 @@ impl StandIn {
         }
     }
 
-    /// The documents of each route that matches one of the `patterns`, which are the `stand_in`
-    /// of a fact: paths with `{name}` for a segment that varies.
+    /// The documents of each route that matches one of the `patterns`. The `patterns` are the
+    /// `stand_in` of a fact: paths with `{name}` for a segment that varies.
     pub fn documents(&self, patterns: &[String]) -> Vec<&Value> {
         self.documents
             .iter()

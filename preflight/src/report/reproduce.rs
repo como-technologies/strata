@@ -7,13 +7,13 @@ use super::Subject;
 use crate::probe::{Invocation, Outcome, Ran};
 use crate::rule::{Check, ExecCheck, PaletteCheck, Rule};
 
-/// The jq object that a program reads as `.response`, built from the `curl` of a request: the status
-/// code in `$code` and the body in `$body`.
+/// The jq object that a program reads as `.response`, built from the `curl` of a request. The
+/// status code is in `$code` and the body is in `$body`.
 const RESPONSE_OF_CURL: &str =
     "{ok: (($code | tonumber) < 300), status: ($code | tonumber), body: ($body[0] // null)}";
 
-/// The line a person runs to see the same thing the check saw: the `jq` over the world file, the
-/// `curl` to Palette, or the command.
+/// The line that a person runs to see the same thing that the check saw. It is the `jq` over the
+/// world file, the `curl` to Palette, or the command.
 pub(super) fn auto_reproduce(
     rule: &Rule,
     outcome: &Outcome,
@@ -83,9 +83,10 @@ pub(super) fn auto_reproduce(
     lines
 }
 
-/// The lines of a command check: the `curl` of its read of Palette when it has one, the command
-/// and the second command when it has one, and the `jq` over the world with the answers. The
-/// program reads `.exec`, `.also` after a second command, and `.response` after a read.
+/// The lines of a command check: the `curl` of its read of Palette when it has one, then the
+/// command. The second command follows when it has one. The `jq` over the world with the answers
+/// is the last line. The program reads `.exec`, `.also` after a second command, and `.response`
+/// after a read.
 fn exec_lines(expr: &str, outcome: &Outcome, dir: &str, lines: &mut Vec<String>) {
     let Ran::Exec {
         first,

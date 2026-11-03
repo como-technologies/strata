@@ -287,7 +287,7 @@ fn a_report_document_with_another_field_does_not_parse() {
     assert!(error.contains("unknown field `uid`"), "{error}");
     let top = r#"{"schema":"strata-report/1","unknown":[],"host":"h"}"#;
     assert!(serde_json::from_str::<Report>(top).is_err());
-    // a report that strata writes parses back to the same document
+    // a report that strata writes parses to the same document
     let report = report_of(&[line("a")]);
     let text = serde_json::to_string(&report).unwrap();
     assert_eq!(serde_json::from_str::<Report>(&text).unwrap(), report);

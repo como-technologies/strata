@@ -42,7 +42,7 @@ pub fn write_file(path: &Path, text: &str) -> Result<()> {
 /// Add `text` to the end of the file at `path`. The call makes the file and the directory that
 /// `path` names when they do not exist.
 ///
-/// A log goes through here. The call writes `text` with one write, so two runs that add a line
+/// A log uses this function. The call writes `text` with one write, so two runs that add a line
 /// do not mix their lines.
 ///
 /// # Errors

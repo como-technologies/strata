@@ -410,8 +410,9 @@ fn log_failure(error: &TrackerError) {
     eprintln!("strata-report-endpoint: {error}");
 }
 
-/// The address of the sender of `request`: with `trust_forwarded`, the last entry of
-/// `X-Forwarded-For`, which the front end of Cloud Run adds, or else the address of the connection.
+/// The address of the sender of `request`. With `trust_forwarded`, it is the last entry of
+/// `X-Forwarded-For`, which the front end of Cloud Run adds. Otherwise it is the address of the
+/// connection.
 ///
 /// A client can send `X-Forwarded-For` to a service that no proxy fronts, and then each request
 /// has a sender of its own. So a service reads the header only when its settings say that a proxy

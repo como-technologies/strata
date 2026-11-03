@@ -617,13 +617,15 @@ rules:
       IAM limits the managed policies of a role. The default quota is 20, and AWS raises it for an
       account on request. The CAPA stack attaches its own policies to the nodes role, and Palette
       attaches each policy ARN of the cloud account on top. One over the quota fails the attach, and
-      `global-policy-attach-silent` says what Palette does then. The check counts the policies on the
-      nodes role plus the policy ARNs of the account that are not on it yet. It reads the quota of
-      the account from Service Quotas in `us-east-1`. When it cannot read the quota, it uses the
-      default 20, and the message says so. Before the first build, the role does not exist, and the
-      check passes.
-      `POST /v1/clouds/aws/policyArns/validate` tells whether each policy ARN of the account exists. This
-      check counts the policies of the nodes role, so it stays at the cloud tier.
+      `global-policy-attach-silent` says what Palette does then.
+
+      The check counts the policies on the nodes role plus the policy ARNs of the account that are
+      not on it yet. It reads the quota of the account from Service Quotas in `us-east-1`. When it
+      cannot read the quota, it uses the default 20, and the message says so. Before the first
+      build, the role does not exist, and the check passes.
+
+      `POST /v1/clouds/aws/policyArns/validate` tells whether each policy ARN of the account
+      exists. This check counts the policies of the nodes role, so it stays at the cloud tier.
     check:
       kind: exec
       needs: [aws]
@@ -813,11 +815,14 @@ rules:
       refuses it for an AWS infrastructure cluster with `FeatureNotSupported`. The route checks the
       account before the key pair. It also refuses an SSH key pair that the account does not hold
       in the region, with `AwsKeyPairNotFound`. Palette gives both refusals the type of a server
-      fault, so each answer is HTTP 500. A live run shows the answer for the key pair (#430). No
-      live run shows the answer for the account yet. The check names both codes in
-      `refusal_codes`, so the program reads each 500 as the answer of the route. The console calls
-      the route; the create path of the API does not. The world shows the same fact about the
-      account in `.account.spec.credentialType`.
+      fault, so each answer is HTTP 500.
+
+      A live run shows the answer for the key pair (#430). No live run shows the answer for the
+      account yet. The check names both codes in `refusal_codes`, so the program reads each 500 as
+      the answer of the route.
+
+      The console calls the route; the create path of the API does not. The world shows the same
+      fact about the account in `.account.spec.credentialType`.
     check:
       kind: palette
       method: POST

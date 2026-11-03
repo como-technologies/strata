@@ -78,10 +78,10 @@ impl Report {
 
     /// What is wrong with a report that arrives from outside, or `None`.
     ///
-    /// The type refuses a field that the entry does not have. This check refuses the rest: another
-    /// schema, no entry or more than [`MOST_ENTRIES`], and an entry with a field that is not a
-    /// short word or with a count above [`MOST_COUNT`]. A report that strata makes from its own
-    /// log passes.
+    /// The type refuses a field that the entry does not have. This check refuses the rest. It
+    /// refuses another schema, and no entry or more than [`MOST_ENTRIES`]. It also refuses an entry
+    /// with a field that is not a short word or with a count above [`MOST_COUNT`]. A report that
+    /// strata makes from its own log passes.
     pub fn fault(&self) -> Option<String> {
         if self.schema != SCHEMA {
             return Some(format!("the schema is not {SCHEMA}"));

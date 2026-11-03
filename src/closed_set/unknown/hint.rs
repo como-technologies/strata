@@ -47,18 +47,18 @@ impl Hint {
     /// The words of the hint when it is time to show it, or `None`. A call that returns the words
     /// has recorded the time, so the next call returns `None` for a day.
     ///
-    /// The hint stays back when strata cannot record the time. Else it would show on every run.
+    /// Strata shows no hint when it cannot record the time. Else the hint shows on each run.
     pub(super) fn show(&self) -> Option<&'static str> {
         if !self.terminal || !self.due() {
             return None;
         }
-        // a time that cannot be recorded would show the hint on every run, so the hint stays back
+        // strata shows no hint when it cannot record the time, because the hint then shows on each run
         write_file(&self.file, &format!("{}\n", self.now.to_rfc3339())).ok()?;
         Some(TEXT)
     }
 
-    /// True when the file holds no time, holds a time that is not valid, holds a time in the
-    /// future, or holds a time that is a day old or older.
+    /// True when the file holds no time, holds a time that is not valid, or holds a time in the
+    /// future. Also true when the file holds a time that is a day old or older.
     fn due(&self) -> bool {
         // a file that cannot be read has no time that counts: the hint shows, and the file
         // is written again

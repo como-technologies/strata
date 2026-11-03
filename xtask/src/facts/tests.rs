@@ -588,11 +588,11 @@ fn a_file_with_a_field_that_the_schema_lacks_is_an_error_that_names_the_file() {
     write(
         dir,
         "a.yaml",
-        "schema: strata-facts/1\nfacts:\n  - id: x\n    kind: behavior\n    colour: red\n",
+        "schema: strata-facts/1\nfacts:\n  - id: x\n    kind: behavior\n    color: red\n",
     );
     let (_, bad) = load(dir);
     assert!(bad[0].starts_with("a.yaml: "), "{bad:?}");
-    assert!(bad[0].contains("colour"), "{bad:?}");
+    assert!(bad[0].contains("color"), "{bad:?}");
 }
 
 #[test]
@@ -909,8 +909,8 @@ fn profile_type_read() -> SetRead {
     }
 }
 
-/// The world of [`world`] with the read of [`profile_type_read`], its list in the fact, and the one
-/// call of `opt_set` in the code that the table names. A comment or a test is no call.
+/// The world of [`world`] with the read of [`profile_type_read`] and its list in the fact. The code
+/// that the table names holds the one call of `opt_set`. A comment or a test is no call.
 fn world_with_a_set_read() -> Sources {
     let mut sources = world();
     sources.set_reads = vec![profile_type_read()];

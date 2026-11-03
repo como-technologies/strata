@@ -18,9 +18,9 @@ use crate::model::validation::PaletteRefusal;
 /// The codes of the refusals that Palette answers with HTTP 500 on a route that [`ValidateRoute`]
 /// does not name.
 ///
-/// The routes are the delete of an object, an operation on an object, the update of a profile, a
-/// listing, and the property route of AWS. Palette gives these errors the response type of a
-/// server fault, so a refusal by design arrives as a 5xx. A retry gets the same refusal.
+/// The routes are the delete of an object, an operation on an object, and the update of a profile.
+/// Two more are a listing and the property route of AWS. Palette gives these errors the response
+/// type of a server fault, so a refusal by design arrives as a 5xx. A retry gets the same refusal.
 ///
 /// The property route of AWS refuses a Pod Identity account with `FeatureNotSupported`, and a key
 /// pair that the region lacks with `AwsKeyPairNotFound`. A live run shows the second answer. No
@@ -329,11 +329,11 @@ impl ValidateRoute {
 /// Whether `code` is the code of a refusal that Palette answers with HTTP 500, and that a retry
 /// does not change.
 ///
-/// The codes are the ones of the refusals of the other routes, the errors of the import validate
-/// route that match no pack to a registry, and the checks of each [`ValidateRoute`].
-/// [`Error::class`](crate::Error::class) gives the class `Terminal` to a 5xx with such a code. A
-/// rule of `strata-preflight` that names a code in `refusal_codes` must name one of them, so that
-/// the check and the retry read one list.
+/// The codes are of three kinds. The first kind holds the refusals of the other routes. The second
+/// kind holds the errors of the import validate route that match no pack to a registry. The third
+/// kind holds the checks of each [`ValidateRoute`]. [`Error::class`](crate::Error::class) gives the
+/// class `Terminal` to a 5xx with such a code. A rule of `strata-preflight` that names a code in
+/// `refusal_codes` must name one of them, so that the check and the retry read one list.
 pub fn is_refusal_code(code: &str) -> bool {
     REFUSAL_CODES.contains(&code)
         || PROFILE_IMPORT_MATCH_CODES.contains(&code)
@@ -474,8 +474,9 @@ mod tests {
             assert_eq!(api(500, code).class(), FailureClass::Terminal, "{code}");
             assert_eq!(api(503, code).class(), FailureClass::Terminal, "{code}");
         }
-        // a code that a route gives with another status, an error of a pack in a 200 answer, a
-        // rule of the create, and a fault of the server are no refusal at a 5xx
+        // a code that a route gives with another status is no refusal at a 5xx. An error of a pack
+        // in a 200 answer is no refusal at a 5xx. A rule of the create and a fault of the server
+        // are no refusal at a 5xx
         let other = [
             PROFILE_EXISTS_CODE,
             PACK_MACRO_UNDEFINED_CODE,

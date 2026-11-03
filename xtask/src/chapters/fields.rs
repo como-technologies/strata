@@ -7,8 +7,8 @@
 //! holds each such field. The chapter runs no command and writes no output.
 //!
 //! A document holds only the fields that a fact reads. The type of each field is the type that the
-//! API definition of Palette gives, such as a list for `spec.archType` of the cluster listing, and
-//! each value is one that Palette can give.
+//! API definition of Palette gives, such as a list for `spec.archType` of the cluster listing.
+//! Each value is one that Palette can give.
 
 use serde_json::json;
 use strata::closed_set::ClosedSet;
@@ -105,8 +105,8 @@ fn app_profile(r: &mut Runner) {
     );
 }
 
-/// A profile of a project, whose manifest pack has a manifest with a uid in the published template
-/// and in the draft, and the variable of that profile with every property that Palette gives.
+/// A profile of a project. Its manifest pack has a manifest with a uid in the published template
+/// and in the draft. Its variable has every property that Palette gives.
 fn profile(r: &mut Runner) {
     let manifests = json!([{"name": "namespace-policy", "uid": format!("{PROFILE}m")}]);
     let pack = json!({"name": "namespace-policy", "layer": "addon", "type": "manifest",

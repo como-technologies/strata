@@ -1,9 +1,10 @@
 schema: strata-facts/1
 facts:
-  # The calls of the tool of a cloud that the rules of the cloud tier of strata-preflight depend on,
-  # and the tables of cloud facts that the rules hold. The fixtures of the rules are the stand-in of
-  # a cloud. The contract run sends each call in the lab account, and `{name}` is a value of the lab:
-  # see "The facts of the clouds" in development/facts.md. The lab has accounts of AWS and GCP only.
+  # These facts are the calls of the tool of a cloud that the rules of the cloud tier of
+  # strata-preflight depend on. They are also the tables of cloud facts that the rules hold. The
+  # fixtures of the rules are the stand-in of a cloud. The contract run sends each call in the lab
+  # account. A `{name}` is a value of the lab: see "The facts of the clouds" in
+  # development/facts.md. The lab has accounts of AWS and GCP only.
 
   # ---- the calls on AWS ---------------------------------------------------------------------------
 

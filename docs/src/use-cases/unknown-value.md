@@ -108,5 +108,5 @@ strata, or writes why the set stays as it is. See
 [What to do with a new value](../development/facts.md#what-to-do-with-a-new-value). Until a
 release of strata names the value, your release keeps the text and writes the note.
 
-A job in CI has no terminal, so it prints no hint. Run `strata report` on the machine of the job,
-or copy the log from its state folder.
+A job in CI has no terminal, so it prints no hint. The log is in the state folder of the runner, so
+save the folder when the runner does not stay.

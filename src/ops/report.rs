@@ -3,8 +3,8 @@
 //!
 //! `strata report` sends nothing. The report is text for the user to read, and the link is an
 //! address that the user opens in a browser. [`send_unknown_report`] is the one function that
-//! posts the report, and the end of a run calls it only when the user chose the send: see
-//! [`crate::closed_set::unknown::send`]. See [`crate::closed_set::unknown`] for the log.
+//! posts the report. The end of a run calls it only when the user chose the send. For the send,
+//! see [`crate::closed_set::unknown::send`]. See [`crate::closed_set::unknown`] for the log.
 
 use std::path::{Path, PathBuf};
 

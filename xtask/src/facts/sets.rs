@@ -106,9 +106,9 @@ fn calls(text: &str) -> usize {
     CALL.find_iter(text).count()
 }
 
-/// Each list of values that names its set is the set: the type has no value that the list lacks,
-/// except a word of strata, and the list has no value that the type lacks. A name that is no type
-/// of [`closed_sets`], or a name at a field that has no list, is a fault too.
+/// Each list of values that names its set is the set. The type has no value that the list lacks,
+/// except a word of strata. The list has no value that the type lacks. A name that is no type of
+/// [`closed_sets`], or a name at a field that has no list, is a fault too.
 fn named(sources: &Sources) -> Vec<String> {
     let mut bad = Vec::new();
     for fact in &sources.facts {
@@ -157,8 +157,8 @@ fn agree(id: &str, field: &str, list: &[String], set: &Set) -> Vec<String> {
     extra.chain(lacking).collect()
 }
 
-/// Each read of strata that notes an unknown value has a list of values in a GET fact, the list
-/// names only values that strata knows, and the code holds no read that the table lacks.
+/// Each read of strata that notes an unknown value has a list of values in a GET fact. The list
+/// names only values that strata knows. The code holds no read that the table lacks.
 pub fn check(sources: &Sources) -> Vec<String> {
     let mut bad = Vec::new();
     let sites: usize = sources.cloud.code.values().map(|text| calls(text)).sum();

@@ -1,8 +1,8 @@
 //! The four clippy lints that keep the rules of "Comments" in `docs/src/development/code.md`.
 //!
 //! `just lint` runs clippy with `-D warnings`, so a lint that is on fails the run on a comment
-//! that breaks it. These tests make sure that the lints stay on for each package, and that no
-//! file turns one off.
+//! that breaks it. These tests make sure that the lints stay active for each package, and that no
+//! file disables one.
 
 use std::path::Path;
 

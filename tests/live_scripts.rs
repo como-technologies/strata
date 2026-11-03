@@ -2037,9 +2037,9 @@ fn aws_cleanup_takes_yes_in_any_position_and_keeps_the_name_and_the_region() {
     );
 }
 
-/// `record` of preflight-plan.sh keeps a result the ledger does not know out of the entry: the
-/// ledger schema has caught, missed, passed, and false-fail, and an entry with another word makes
-/// the whole file unreadable.
+/// `record` of preflight-plan.sh keeps a result the ledger does not know out of the entry. The
+/// ledger schema has caught, missed, passed, and false-fail. An entry with another word makes the
+/// whole file unreadable.
 #[test]
 fn preflight_plan_keeps_a_result_the_ledger_does_not_know_out_of_the_entry() {
     let script = std::fs::read_to_string(live_script("preflight-plan.sh")).unwrap();
@@ -2101,8 +2101,9 @@ fn offering_edit(engine: &str, account_kind: &str, region: &str, answer: &str) -
 }
 
 /// The fault of `instance-offering` in the plan of the lab (#143) comes from the instance type
-/// route: the first type that has a zone in `nonSupportedZones`, for the region and the account of
-/// the entity, on the route of the cloud of the engine. A type with `null` has no such zone (#411).
+/// route. It is the first type that has a zone in `nonSupportedZones`, for the region and the
+/// account of the entity. The type comes from the route of the cloud of the engine. A type with
+/// `null` has no such zone (#411).
 #[test]
 fn preflight_plan_makes_the_fault_of_instance_offering_from_the_instance_type_route() {
     let answer = r#"{"instanceTypes":[
@@ -2144,7 +2145,7 @@ fn preflight_plan_makes_the_fault_of_instance_offering_from_the_instance_type_ro
 }
 
 /// The check `instance-types-shape` of the plan tests the field `type`, as Palette names the type
-/// of an entry (#404), and takes `nonSupportedZones` as an array or `null` (#411). The answer of
+/// of an entry (#404). It takes `nonSupportedZones` as an array or `null` (#411). The answer of
 /// the live run passes it. An entry with `name` and no `type` fails it, and so does a field of
 /// another type.
 #[test]
@@ -2328,9 +2329,9 @@ fn preflight_plan_reads_the_exact_keys_of_the_security_group_route() {
 }
 
 /// The check `instancetypes-cpu` needs each pool type of the entity in the list, with `cpu` as a
-/// number above 0, and a type under 2 vCPUs or 4 GiB with `cpu` above 0. A type that the list
-/// lacks, a type with no `cpu`, and a list with no small type fail it: the query of the rules lifts
-/// the default filter of Palette, so the list holds the small types.
+/// number above 0. It also needs a type under 2 vCPUs or 4 GiB with `cpu` above 0. A type that the
+/// list lacks, a type with no `cpu`, and a list with no small type fail it. The query of the rules
+/// lifts the default filter of Palette, so the list holds the small types.
 #[test]
 fn preflight_plan_needs_the_cpu_of_each_pool_type_in_the_instance_type_route() {
     let filter = plan_filter("instancetypes-cpu");
@@ -2396,9 +2397,10 @@ fn preflight_plan_needs_the_cpu_of_each_pool_type_in_the_instance_type_route() {
     }
 }
 
-/// The check `instancetypes-default-filter` expects the answer of the route with no query to hold no
-/// type under 2 vCPUs or 4 GiB, and the answer with the query `cpuGtEq=0&memoryGtEq=0` to hold one,
-/// and to be longer. A route that ignores the filter, and a query that lifts nothing, fail it.
+/// The check `instancetypes-default-filter` expects the answer of the route with no query to hold
+/// no type under 2 vCPUs or 4 GiB. It expects the answer with the query `cpuGtEq=0&memoryGtEq=0`
+/// to hold one, and to be longer. A route that ignores the filter, and a query that lifts nothing,
+/// fail it.
 #[test]
 fn preflight_plan_shows_the_default_filter_of_the_instance_type_route() {
     let filter = plan_filter("instancetypes-default-filter");
@@ -2685,8 +2687,8 @@ fn tofu_output_json(outputs: &serde_json::Value) -> String {
     serde_json::Value::Object(outputs).to_string()
 }
 
-/// One run of a stage of a live script against the stand-ins: the OpenTofu outputs, the answers
-/// of strata, and the routes of Palette that a test gives.
+/// One run of a stage of a live script against the stand-ins. A test gives the OpenTofu outputs,
+/// the answers of strata, and the routes of Palette.
 struct Stage {
     root: tempfile::TempDir,
     answers: usize,
@@ -2847,8 +2849,8 @@ fi
     }
 
     /// Each body of `METHOD path` that the script sent, in order. The list is empty when the
-    /// script sent none to that route, but only after the script sent a request to some route:
-    /// the stand-in makes the directory `routes/sent` at its first request.
+    /// script sent none to that route. This holds only after the script sent a request to some
+    /// route. The stand-in makes the directory `routes/sent` at its first request.
     fn sent(&self, method: &str, path: &str) -> Vec<serde_json::Value> {
         let key = Self::route_key(path);
         let dir = self.path("routes/sent");
@@ -3578,8 +3580,8 @@ exit 0
 "#;
 
 /// A stage of `registry.sh`: the outputs of the example's own registry and pack, and `more`. Each
-/// sync ends at once, the wait for the clear of the flag ends at once, and the profile that pins
-/// the pack under a floating tag moves at once.
+/// sync ends at once. The wait for the clear of the flag ends at once. The profile that pins the
+/// pack under a floating tag moves at once.
 fn registry_stage(more: serde_json::Value) -> Stage {
     let mut outputs = serde_json::json!({
         "project_uid": "p-1", "cluster_uid": "c-a", "region": "us-east-2",
@@ -3889,8 +3891,8 @@ fn packs_sh_checks_that_the_newest_version_of_a_pack_is_the_version_that_palette
     failed(&steps, &["packs-palette-latest"]);
 }
 
-/// A run of packs.sh whose Helm summary listing gives the Bitnami registry the sync `sync`, and
-/// whose `strata behind` on the record of the newest nginx of Bitnami prints `line` and `json`.
+/// A run of packs.sh whose Helm summary listing gives the Bitnami registry the sync `sync`. Its
+/// `strata behind` on the record of the newest nginx of Bitnami prints `line` and `json`.
 /// Gives steps.log.
 fn packs_stale(sync: &str, line: &str, json: &str) -> String {
     let mut stage = Stage::new(serde_json::json!({
@@ -4147,7 +4149,7 @@ fn repave_sh_stage_8_asks_palette_about_a_variable_in_a_repave_key_with_and_with
 }
 
 /// A `strata` for pending.sh. An update waits for cluster A while the log of the stand-in curl
-/// holds an odd number of PUTs of a profile: an edit in place opens an update, and the edit that
+/// holds an odd number of PUTs of a profile. An edit in place opens an update. The edit that
 /// undoes it closes the update. A call it does not answer goes to the answers of the stage.
 const FAKE_STRATA_PENDING: &str = r#"#!/usr/bin/env bash
 if [ "$*" = "snapshot cluster:c-a -o settle.json" ]; then
@@ -4508,7 +4510,8 @@ impl TfBlock {
 }
 
 /// The `resource` and `data` blocks of one file. A block starts at a line such as
-/// `resource "type" "name" {` and ends at the next line that is a `}` alone, as `tofu fmt` writes it.
+/// `resource "type" "name" {`. It ends at the next line that is a `}` alone, as `tofu fmt` writes
+/// it.
 fn tf_blocks(file: &str, text: &str) -> Vec<TfBlock> {
     let mut blocks = Vec::new();
     let mut open: Option<TfBlock> = None;
@@ -4599,8 +4602,8 @@ fn registry_blocks(files: &[(String, String)]) -> Vec<TfBlock> {
         .collect()
 }
 
-/// The addresses of the blocks that make an AWS object or a Palette registry, and the faults: a
-/// block that does not count by the switch `own_registries`.
+/// The addresses of the blocks that make an AWS object or a Palette registry, and the faults. A
+/// fault is a block that does not count by the switch `own_registries`.
 fn registry_blocks_by_the_switch(files: &[(String, String)]) -> (Vec<String>, Vec<String>) {
     let blocks = registry_blocks(files);
     let faults = blocks
@@ -4736,7 +4739,7 @@ fn the_switch_own_registries_defaults_to_true_and_no_recipe_of_the_live_example_
     );
 
     // A recipe sets a variable with -var, in the justfile or in a script. Only the script of the
-    // standing set turns the switch off.
+    // standing set sets the switch to `false`.
     assert!(
         !repo_file("justfile").contains("own_registries"),
         "the justfile sets no switch: the script does"
@@ -4924,8 +4927,8 @@ fn contract_profiles_sh_refuses_an_argument_that_is_not_up_down_or_status() {
     assert!(set.calls().is_empty());
 }
 
-/// The statements of the live scripts that list the profiles of the project: a call of
-/// `strata list` for profiles, and a request of the listing route of Palette. A statement ends at
+/// The statements of the live scripts that list the profiles of the project. They are a call of
+/// `strata list` for profiles and a request of the listing route of Palette. A statement ends at
 /// the first line that does not end with a backslash.
 fn listings_of_profiles() -> Vec<(String, String)> {
     let mut listings = Vec::new();
@@ -4962,9 +4965,10 @@ fn listings_of_profiles() -> Vec<(String, String)> {
 
 #[test]
 fn each_live_script_that_lists_the_profiles_of_the_project_matches_them_by_name_or_uid() {
-    // The listing is saved, or checked with an exit code, and the next command reads it by uid or
-    // by name: baseline.sh selects by each name of the profile_names output, loop.sh by the uid
-    // of the release, and template.sh by the uid of the linked version.
+    // The listing is saved, or checked with an exit code. The next command reads it by uid or by
+    // name. In baseline.sh, it selects by each name of the profile_names output. In loop.sh, it
+    // selects by the uid of the release. In template.sh, it selects by the uid of the linked
+    // version.
     let matched_later = [
         ("baseline.sh", "list profiles --json >"),
         ("loop.sh", "list --pack \"$pack\" --json"),
@@ -5343,7 +5347,7 @@ fn scope_sh_fails_the_annotation_check_when_the_document_of_the_copy_says_projec
 }
 
 /// Stage 7 of `packs.sh` against a listing of `loki` whose 2.10.2 names `amd64,arm64` and whose
-/// 3.6.7 names `amd64`, with `behind` of the record of 2.10.2 answering `line` and `json`.
+/// 3.6.7 names `amd64`. The `behind` of the record of 2.10.2 answers `line` and `json`.
 fn packs_arch_stage(line: &str, json: &str) -> String {
     let mut stage = Stage::new(serde_json::json!({
         "csi_pack_name": "csi-aws-ebs", "csi_previous_version": "1.63.1",
@@ -5598,8 +5602,8 @@ fn validate_packs_sh_stage_3_asks_for_a_candidate_with_the_name_and_the_version_
     assert_eq!(exists["version"], "1.0.0");
 }
 
-/// The report of `strata behind --json` for a record that pins kubernetes 1.35.3, with the newest
-/// version `newest`, and the answer `validation` of Palette for the bump.
+/// The report of `strata behind --json` for a record that pins kubernetes 1.35.3. The newest
+/// version is `newest`. The answer of Palette for the bump is `validation`.
 fn kubernetes_bump_report(newest: &str, validation: &serde_json::Value) -> String {
     serde_json::json!({"pins": [
         {"name": "cni", "version": "1.0.0", "behind": false},
@@ -5727,8 +5731,8 @@ fn validate_packs_sh_stage_6_sends_the_route_of_the_cluster_a_tag_that_no_regist
             "cluster-route-tag-says",
         ],
     );
-    // the profile with kubernetes has its packs as the cluster runs them, with the tag 9.99.9;
-    // the other profile of the cluster has its uid alone
+    // the profile with kubernetes has its packs as the cluster runs them, with the tag 9.99.9.
+    // The other profile of the cluster has its uid alone
     let sent = stage.sent(
         "POST",
         &format!("/v1/spectroclusters/{FRED_UID}/validate/packs"),
@@ -5745,8 +5749,8 @@ fn validate_packs_sh_stage_6_sends_the_route_of_the_cluster_a_tag_that_no_regist
 
 #[test]
 fn validate_packs_sh_stage_6_sends_the_route_of_the_cluster_a_body_longer_than_one_argument() {
-    // One argument of Linux holds 128 KiB at most: the values of the packs of a real cluster
-    // are longer, and a body passed as an argument fails the check with exit 126 (#466)
+    // One argument of Linux holds 128 KiB at most. The values of the packs of a real cluster
+    // are longer. A body passed as an argument fails the check with exit 126 (#466)
     const LIMIT: usize = 128 * 1024;
     let report = kubernetes_bump_report("1.37.0", &upgrade_refused());
     let values = "v: 1\n".repeat(LIMIT / 4);
@@ -6022,7 +6026,7 @@ const VSPHERE_BODY: &str = r#"{"spec": {
   }]
 }}"#;
 
-/// A stage for validate-route.sh with the clean bodies of vSphere and EKS in `bodies/`, and the
+/// A stage for validate-route.sh. It has the clean bodies of vSphere and EKS in `bodies/`, and the
 /// answers of the route to the faults that it makes. `answers` replaces the answer for a case with
 /// a verdict and a message: a fault that the route takes, or a refusal for another reason.
 fn validate_route_stage(answers: &[(&str, &str, &str)]) -> Stage {
@@ -6212,8 +6216,8 @@ fn validate_route_sh_runs_each_case_whose_body_is_an_aws_body() {
     for body in std::iter::once("aws-clean").chain(AWS_CASES.iter().map(|case| case.id)) {
         std::fs::write(stage.path(&format!("bodies/{body}.json")), "{}").unwrap();
     }
-    // each case goes to the route of AWS: the glob names the cloud, so a case on another engine
-    // finds no answer, and passes as a body that the route takes
+    // each case goes to the route of AWS. The glob names the cloud, so a case on another engine
+    // finds no answer. Such a case passes as a body that the route takes
     answer_aws_cases(&mut stage, &[]);
     let bodies = stage.path("bodies");
     let (o, steps) = stage.run("validate-route.sh", &[bodies.to_str().unwrap()]);
@@ -6280,10 +6284,10 @@ fn validate_route_sh_expects_the_route_to_take_a_pack_version_that_does_not_list
 
 // ---- route-bodies.sh -------------------------------------------------------------------------------
 
-/// The pack listing of the lab. It holds the packs that route-bodies.sh pins, and the packs that
-/// its search for `pack-cloud-support` passes over: one of another registry, one that lists aws,
-/// one that lists `all`, one with no cloud type, and one of another layer. `gcp-dns`, which lists
-/// gcp alone, is in the listing when `without_aws` is true.
+/// The pack listing of the lab. It holds the packs that route-bodies.sh pins. It also holds the
+/// packs that its search for `pack-cloud-support` passes over. These are one of another registry,
+/// one that lists aws, one that lists `all`, one with no cloud type, and one of another layer.
+/// `gcp-dns`, which lists gcp alone, is in the listing when `without_aws` is true.
 fn route_packs(without_aws: bool) -> String {
     let pack =
         |name: &str, version: &str, registry: &str, layer: &str, clouds: serde_json::Value| {
@@ -6350,11 +6354,11 @@ fi
 exec "$(dirname "$0")/fake-strata-rules" "$@"
 "#;
 
-/// A stage of route-bodies.sh in a lab on AWS: the account `lab-aws`, the release profile `r-1`
-/// on AWS, the registry `Public Repo`, and the packs `packs`. Palette makes a profile for each
-/// `POST /v1/clusterprofiles` with the uid `uid-<name>`, and publishes and deletes it. The
-/// validate route refuses the fault of each case, except `pack-cloud-support` and the cases in
-/// `takes`, which it takes.
+/// A stage of route-bodies.sh in a lab on AWS. The lab has the account `lab-aws`, the release
+/// profile `r-1` on AWS, the registry `Public Repo`, and the packs `packs`. Palette makes a
+/// profile for each `POST /v1/clusterprofiles` with the uid `uid-<name>`, and publishes and
+/// deletes it. The validate route refuses the fault of each case, except `pack-cloud-support` and
+/// the cases in `takes`, which it takes.
 fn route_bodies_stage(packs: &str, takes: &[&str]) -> Stage {
     let mut stage = Stage::new(serde_json::json!({
         "project_uid": "p-1", "release_profile_uid": "r-1",
@@ -6795,7 +6799,7 @@ fn route_bodies_sh_prints_its_usage_and_needs_a_directory() {
 // ---- loop.sh ---------------------------------------------------------------------------------------
 
 /// A stage in a lab on AWS with the cloud account `lab-aws`, and a run that holds a repository of
-/// the team: an empty one on `main`, where `loop.sh` resumes.
+/// the team. The repository is an empty one on `main`, where `loop.sh` resumes.
 fn lab_stage() -> Stage {
     let mut stage = Stage::new(serde_json::json!({
         "project_uid": "p-1", "cluster_uid": "c-a", "release_profile_uid": "r-1",
@@ -7092,8 +7096,8 @@ fn loop_sh_stages_3_and_4_ask_palette_about_the_move_and_run_preflight_on_the_bo
 
 // ---- report-send.sh ----------------------------------------------------------------------------
 
-/// An `xtask` that makes the chapter `unknown-value` and "serves" it: it writes a port and waits for
-/// the end of its standard input, as the real server does.
+/// An `xtask` that makes the chapter `unknown-value` and "serves" it. It writes a port and waits
+/// for the end of its standard input, as the real server does.
 const FAKE_XTASK_SERVE: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_SEND/xtask.log"
 case "$1" in
@@ -7102,8 +7106,8 @@ case "$1" in
 esac
 "#;
 
-/// A `strata` that stands in for the send: a run appends a line to the log, and "posts" to the
-/// endpoint by changing the issue file, which a `gh` lists. It writes down the settings it got.
+/// A stand-in `strata` for the send. A run appends a line to the log. It "posts" to the endpoint
+/// when it changes the issue file, which a `gh` lists. It records the settings that it got.
 /// The schema id of its log line is `FAKE_SCHEMA`, which the test sets from the `const` of the crate.
 const FAKE_STRATA_SEND: &str = r#"#!/usr/bin/env bash
 [ "$1" != "--version" ] || { echo "strata 0.26.0"; exit 0; }
@@ -7122,8 +7126,8 @@ fi
 echo '{"profiles":[{"name":"aws-stack"}]}'
 "#;
 
-/// A `curl` that stands in for the endpoint: the first post changes the issue file and gets 202, and a
-/// second post gets 200 and `duplicate`. It writes down the arguments it got.
+/// A stand-in `curl` for the endpoint. The first post changes the issue file and gets 202.
+/// A second post gets 200 and `duplicate`. It records the arguments it got.
 const FAKE_CURL_SEND: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_SEND/curl.log"
 out=""
@@ -7143,9 +7147,9 @@ fi
 "#;
 
 /// A `gh` that lists the issues of `$FAKE_SEND/issues.json`. It finds its login as the real `gh`
-/// does: the variable `GH_TOKEN`, or the file `hosts.yml` in the folder `GH_CONFIG_DIR`, or else
-/// `gh` in `XDG_CONFIG_HOME`, or else `.config/gh` in the home. With no login it fails with exit 4,
-/// as the real `gh` does. It writes down the folder that it looked in.
+/// does. The login is the variable `GH_TOKEN`, or the file `hosts.yml` in the folder
+/// `GH_CONFIG_DIR`, or else `gh` in `XDG_CONFIG_HOME`, or else `.config/gh` in the home. With no
+/// login it fails with exit 4, as the real `gh` does. It records the folder that it looked in.
 const FAKE_GH_SEND: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_SEND/gh.log"
 folder=${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}

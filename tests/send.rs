@@ -48,7 +48,7 @@ fn trap() -> Endpoint {
     Endpoint::answering(Answer::Status(403))
 }
 
-/// A run of `strata list profiles --packs` that the guard of the tests does not cover: the run
+/// A run of `strata list profiles --packs` that the guard of the tests does not cover. The run
 /// has neither `STRATA_REPORT` nor `STRATA_REPORT_URL` from the environment. It reads the file
 /// `.palette.env` of `home`, and else it has the address that the release names. The proxy `trap`
 /// takes each request that leaves the machine, so no request reaches an address.

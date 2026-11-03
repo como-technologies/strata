@@ -1,11 +1,12 @@
-//! The facts of the clouds: the read-only calls of the tool of a cloud that the cloud-tier rules of
-//! strata-preflight depend on, and the tables of cloud facts that the rules hold as text.
+//! The facts of the clouds: the read-only calls of the tool of a cloud, and the tables of cloud
+//! facts. The cloud-tier rules of strata-preflight depend on the calls and hold the tables as text.
 //!
 //! A rule of the cloud tier runs `aws`, `gcloud`, or `az` and reads the answer. The list names each
-//! such call as a fact of the kind `cloud`. The contract run sends the call in the lab account and
-//! compares the shape of the answer with the answers that the fixtures of the rules hold. A table
-//! of cloud facts in a rule, such as the zone ids that EKS refuses, is a fact too: the answer of
-//! its call must list each value. A cloud fact needs no live script.
+//! such call as a fact of the kind `cloud`. The contract run sends the call in the lab account. It
+//! compares the shape of the answer with the answers that the fixtures of the rules hold.
+//!
+//! A table of cloud facts in a rule, such as the zone ids that EKS refuses, is a fact too. The
+//! answer of its call must list each value. A cloud fact needs no live script.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -152,8 +153,8 @@ pub fn documents<'a>(fact: &Fact, rules: &'a BTreeMap<String, CloudRule>) -> Vec
         .collect()
 }
 
-/// The rules of the cloud tier in `catalog`, the text of the programs of every rule, and a message
-/// for each fixture that cannot be read.
+/// The rules of the cloud tier in `catalog` and the text of the programs of every rule. The second
+/// value holds a message for each fixture that cannot be read.
 pub fn read_rules(catalog: &Catalog) -> (CloudSources, Vec<String>) {
     let mut sources = CloudSources::default();
     let mut bad = Vec::new();
@@ -224,10 +225,10 @@ fn answers_of(world: Value) -> Vec<Answer> {
         .collect()
 }
 
-/// The code of strata under `repo` that is no test: each file of the directories of [`CODE`],
-/// without the lines of a comment and the items for the unit tests. A file named `tests.rs`, and a
-/// file under a directory `tests`, is a test. The second value holds a message for each file that
-/// cannot be read or parsed.
+/// The code of strata under `repo` that is no test. It holds each file of the directories of
+/// [`CODE`], without the lines of a comment and the items for the unit tests. A file named
+/// `tests.rs`, and a file under a directory `tests`, is a test. The second value holds a message
+/// for each file that cannot be read or parsed.
 pub fn read_code(repo: &Path) -> (BTreeMap<String, String>, Vec<String>) {
     let mut code = BTreeMap::new();
     let mut bad = Vec::new();
@@ -272,12 +273,13 @@ fn clouds(sources: &Sources) -> impl Iterator<Item = &Fact> {
     sources.facts.iter().filter(|f| f.kind == Kind::Cloud)
 }
 
-/// Each rule of the cloud tier is the rule of a fact of the kind `cloud`, and each rule of a fact
-/// with no table is a rule of the cloud tier. A table can name a rule of any tier.
+/// Each rule of the cloud tier is the rule of a fact of the kind `cloud`. Each rule of a fact with
+/// no table is a rule of the cloud tier. A table can name a rule of any tier.
 ///
-/// A fact with no call and no table cannot name a rule that runs a command on a cloud of the lab:
-/// the contract run sends nothing for that rule. The rule of a row, with no command, the rule of
-/// a cloud that the lab lacks, and the rule that checks the lab itself are not such rules.
+/// A fact with no call and no table cannot name a rule that runs a command on a cloud of the lab.
+/// The contract run sends nothing for that rule. Three kinds of rule are not such rules. The first
+/// is the rule of a row, with no command. The second is the rule of a cloud that the lab lacks.
+/// The third is the rule that checks the lab itself.
 fn rules_named(sources: &Sources) -> Vec<String> {
     let named: BTreeSet<&String> = clouds(sources).flat_map(|f| &f.rules).collect();
     let mut bad: Vec<String> = sources
@@ -401,9 +403,9 @@ fn calls_read_only(sources: &Sources) -> Vec<String> {
         .collect()
 }
 
-/// A table has a call that lists its values, unless each rule of the fact is for a cloud that the
-/// lab has no account of. Each value of the table is in a program of its rules. A number is there as
-/// a whole word, so a rule that holds another default than the table fails the check.
+/// A table has a call that lists its values. It has none when each rule of the fact is for a cloud
+/// that the lab has no account of. Each value of the table is in a program of its rules. A number
+/// is there as a whole word, so a rule that holds another default than the table fails the check.
 fn tables_proven(sources: &Sources) -> Vec<String> {
     let mut bad = Vec::new();
     for fact in clouds(sources) {
@@ -497,8 +499,8 @@ fn routes_beside(sources: &Sources) -> Vec<String> {
 }
 
 /// The faults of the route of the fact `id`. A route names a fact of the kind `request` with a GET
-/// request, or it is a route with a method that no fact states: a request fact states its route and
-/// its query one time, and a cloud fact does not write them again.
+/// request, or it is a route with a method that no fact states. A request fact states its route
+/// and its query one time. A cloud fact does not write them again.
 fn route_named(sources: &Sources, id: &str, palette: &PaletteRoute) -> Vec<String> {
     match (&palette.fact, &palette.route) {
         (Some(name), None) => {

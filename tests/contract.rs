@@ -62,8 +62,8 @@ fn document(facts: Vec<Value>, releases: Vec<Value>) -> Value {
 
 // ---- contract-report.sh ------------------------------------------------------------------------
 
-/// The files that a copy of the repository needs to run contract-report.sh: the script, the host
-/// layer that it reads from verify-report.sh, and the file that it sources.
+/// The files that a copy of the repository needs to run contract-report.sh. They are the script,
+/// the host layer that it reads from verify-report.sh, and the file that it sources.
 const REPORT_FILES: [&str; 3] = [
     "examples/live/contract-report.sh",
     "scripts/ci/verify-report.sh",
@@ -1062,8 +1062,8 @@ fn contract_report_exits_3_for_a_release_that_could_not_be_read_after_it_handled
 #[test]
 fn contract_report_exits_3_and_not_2_for_a_fact_that_could_not_be_checked_when_the_issues_are_done()
 {
-    // the weekly run reads 2 as "the issues are not handled": a fact with the outcome `error` must not
-    // look like a failed host call, and it wins over a difference that the report handled
+    // the weekly run reads 2 as "the issues are not handled". A fact with the outcome `error` must
+    // not look like a failed host call. It wins over a difference that the report handled
     let r = Report::new();
     let o = r.report(
         &document(
@@ -1129,7 +1129,7 @@ fn contract_report_reads_the_host_layer_of_verify_report_and_stops_when_it_is_no
 #[test]
 fn contract_report_defines_no_function_of_the_host_layer_again() {
     // a function that the script defines after it reads the layer replaces the function of the
-    // layer, so a change to the layer would not reach the script
+    // layer. Then a change to the layer cannot reach the script
     let layer = repo_file("scripts/ci/verify-report.sh");
     let layer: Vec<&str> = layer
         .lines()
@@ -1907,8 +1907,8 @@ fn the_weekly_run_keeps_the_new_tags_when_the_report_is_done_and_a_fact_could_no
 
 #[test]
 fn a_release_issue_that_a_person_closed_stays_closed_when_a_fact_could_not_be_checked_each_week() {
-    // the real weekly.sh and contract-report.sh: one fact has the outcome `error` in each run, and
-    // the host lists no open issue because a person closed the release issue after each week
+    // the real weekly.sh and contract-report.sh: one fact has the outcome `error` in each run.
+    // The host lists no open issue, because a person closed the release issue after each week
     let w = Weekly::new();
     w.with_the_real_report();
     std::fs::create_dir_all(w.data()).unwrap();

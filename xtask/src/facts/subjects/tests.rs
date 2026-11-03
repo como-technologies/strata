@@ -1,5 +1,5 @@
-//! The tests of the table of the sources: which request a source serves, the placeholder that two
-//! sources read, and the facts that need a cluster.
+//! The tests of the table of the sources. They cover which request a source serves, the
+//! placeholder that two sources read, and the facts that need a cluster.
 
 use super::{Origin, Read, SOURCES, Source, ambiguous, floor, serves, source, stale, unsourced};
 use crate::facts::{Fact, from_text, load};

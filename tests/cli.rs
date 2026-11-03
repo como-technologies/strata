@@ -153,7 +153,7 @@ fn a_command_name_that_is_not_first_says_so_instead_of_failing_as_a_compare() {
     assert_eq!(r.code, 0, "{}{}", r.out, r.err);
 }
 
-/// `strata report` is a command, so a file named `report` is the command when it comes first, and
+/// `strata report` is a command, so a file named `report` is the command when it comes first.
 /// `compare` reads it as a file (compatibility.md, release 0.27.0).
 #[test]
 fn a_file_named_report_names_the_command_after_another_argument_and_compare_reads_it_as_a_file() {
@@ -1553,7 +1553,7 @@ fn the_variables_of_an_older_release_keep_their_root_and_their_hash() {
 
 #[test]
 fn schema_subcommand_prints_json_schema() {
-    // The ids are pinned on purpose: `strata schema` names each kind with the id that a consumer
+    // The ids are pinned on purpose. `strata schema` names each kind with the id that a consumer
     // reads, so a change of an id must change this table too
     for (kind, id) in [
         ("snapshot", "strata-snapshot/1"),
@@ -1578,7 +1578,7 @@ fn schema_subcommand_prints_json_schema() {
             continue;
         }
         // The id is a `const` in the JSON Schema, so a validator rejects a document of another
-        // version, and the id it holds is the one the writer puts in the document.
+        // version. The id it holds is the one the writer puts in the document.
         assert_eq!(v["properties"]["schema"]["const"], id, "{kind}");
         if kind == "snapshot" {
             let cluster = &v["$defs"]["ClusterSource"]["properties"];

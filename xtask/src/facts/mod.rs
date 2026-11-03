@@ -1,10 +1,11 @@
 //! The list of the facts of Palette that strata depends on, and the checks that keep it true.
 //!
 //! A fact is a request of Palette, a behavior of Palette, or a gap that strata fills. Each fact
-//! names its request, what strata reads, the route of the stand-in that imitates it, the live
-//! check that proves it, the page of the book that states it, and the code or the rule of
-//! preflight that uses it. [The list of the facts](../../../docs/src/development/facts.md)
-//! says how to read it and how to add a fact.
+//! names its request and what strata reads. It names the route of the stand-in that imitates it
+//! and the live check that proves it. It names the page of the book that states it and the code
+//! or the rule of preflight that uses it.
+//! [The list of the facts](../../../docs/src/development/facts.md) says how to read it and how to
+//! add a fact.
 //!
 //! The files of the list are in `xtask/facts/`. [`check()`] compares them with the book, the live
 //! scripts, the rules of strata-preflight, and the stand-in. [`print()`] gives them as JSON for a

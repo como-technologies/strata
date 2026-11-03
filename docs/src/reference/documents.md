@@ -35,6 +35,8 @@ schema states the shape of each open field: see
 | `strata-preflight-promotion/1` | `preflight --promotion --json` | `preflight --schema promotion` |
 | `strata-unknown/1` | the log of the unknown values, one line for each value | none |
 
+`strata schema report` and `strata preflight --schema report` print two different schemas.
+
 ## strata-snapshot/1
 
 A record of one profile version, cluster, edge host, cluster group, app
@@ -754,7 +756,7 @@ and the fixtures.
 The report of `strata preflight --promotion`: the level of each rule against the
 runs of the ledger. See [Confidence and promotion](../commands/preflight/promotion.md).
 
-- `release`, when `--release` is given: the release whose runs count. With no
+- `release`, when the run names `--release`: the release whose runs count. With no
   `release`, each run counts.
 - `rules[]`: one entry for each rule with a check. With a `release`, a rule that
   does not apply to it has no entry.

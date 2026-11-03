@@ -861,8 +861,8 @@ fn the_answer_of_an_exec_check_with_a_second_command_holds_the_exit_code_of_each
         }
     );
     assert_eq!(out.ran.answer().as_deref(), Some("exit 0; exit 254"));
-    // the second command exits 254, and a shell gives the exit code of the last command of `a; b`
-    // alone: the answer shows both, so a failed read of the quota does not show as `exit 0`
+    // the second command exits 254. A shell gives the exit code of the last command of `a; b`
+    // alone. The answer shows both, so a failed read of the quota does not show as `exit 0`
     assert_eq!(
         out.ran.text().as_deref(),
         Some("aws iam list-attached-role-policies; aws service-quotas us-east-2")
@@ -923,7 +923,7 @@ fn an_exec_check_with_a_read_and_no_key_is_not_run_and_runs_no_command() {
 #[test]
 fn an_exec_check_with_a_read_and_no_tool_asks_palette_nothing() {
     let jq = Jq::new();
-    // the fixture has no answer for the request: a request that goes out is an error
+    // the fixture has no answer for the request: a request that the check sends is an error
     let (b, w) = fixture(json!({"region": "us-east-2", "_tools": []}));
     let out = run_check(&exec_with_a_read(), &w, &b, &jq);
     assert_eq!(out.verdict, Verdict::NotChecked);

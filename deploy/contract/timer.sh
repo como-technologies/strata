@@ -10,7 +10,7 @@
 # nothing else uses: the run updates it with git pull. The run keeps its results in
 # ~/.local/share/strata-contract/, or in STRATA_CONTRACT_DIR. remove keeps them.
 #
-# A user timer runs when no one is logged in only if the user has linger: loginctl enable-linger.
+# A user timer runs when the user has no session only if the user has linger: loginctl enable-linger.
 # install tells when it is off. No secret goes into a unit: the run reads ~/.palette.env.
 set -euo pipefail
 
@@ -34,7 +34,7 @@ case "${1:-}" in
     systemctl --user enable --now strata-contract.timer
     echo "$script: the timer runs deploy/contract/weekly.sh of $repo once a week"
     if [ "$(loginctl show-user "$(id -un)" --property=Linger --value 2> /dev/null)" != yes ]; then
-      echo "$script: the user has no linger, so the timer runs only while the user is logged in: loginctl enable-linger $(id -un)" >&2
+      echo "$script: the user has no linger, so the timer runs only while the user has a session: loginctl enable-linger $(id -un)" >&2
     fi
     ;;
   remove)

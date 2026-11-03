@@ -873,7 +873,7 @@ fn the_report_schema_gives_a_request_a_method_and_a_path() {
     assert!(call["properties"].get("ran").is_none());
 }
 
-/// The ledger of a company: the runs of the lab have no release, so a run on 4.10 proves the one
+/// The ledger of a company. The runs of the lab have no release, so a run on 4.10 proves the one
 /// preflight check of the catalog on 4.10.
 const RUNS_OF_4_10: &str = r#"
 schema: strata-preflight-ledger/1

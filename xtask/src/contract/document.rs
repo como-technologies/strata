@@ -214,10 +214,10 @@ impl Contract {
         self.summary = Summary::of(&self.facts);
     }
 
-    /// The exit code of the run: 0 when each fact the run checked is the same and no value is
-    /// unknown, 1 when a fact differs or a value is unknown, and 2 when the run could not check a
-    /// fact or a release, or checked no fact. A run that checked no fact has found no difference
-    /// because it looked at nothing.
+    /// The exit code of the run. It is 0 when each fact the run checked is the same and no value
+    /// is unknown. It is 1 when a fact differs or a value is unknown. It is 2 when the run could
+    /// not check a fact or a release, or checked no fact. A run that checked no fact has found no
+    /// difference because it looked at nothing.
     pub fn exit_code(&self) -> u8 {
         let checked = self.summary.same + self.summary.differs;
         if checked == 0 || self.summary.error > 0 || self.releases.iter().any(|r| r.error.is_some())

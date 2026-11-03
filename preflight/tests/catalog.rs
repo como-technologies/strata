@@ -240,8 +240,8 @@ fn has_commit_id(text: &str) -> bool {
     })
 }
 
-/// True when `text` has a call of a Go function with no selector, such as `CheckPool(`: a name
-/// that starts with a capital letter, and `(` right after it.
+/// True when `text` has a call of a Go function with no selector, such as `CheckPool(`. The call
+/// is a name that starts with a capital letter, and `(` right after it.
 fn has_go_call(text: &str) -> bool {
     text.match_indices('(').any(|(at, _)| {
         let reversed: String = text[..at]
@@ -439,8 +439,8 @@ fn every_fixture_belongs_to_a_rule_and_every_named_fixture_exists() {
 
 #[test]
 fn the_ids_of_the_catalog_of_the_issue_are_all_here_or_listed_as_pending() {
-    // the 149 rows of #91, by id. A row that is not a rule yet is in PENDING below, and the count
-    // there goes down as the catalog grows; it never goes up.
+    // the 149 rows of #91, by id. A row that is not a rule yet is in PENDING below. The count
+    // there goes down as the catalog grows. It never goes up.
     let catalog = catalog::builtin().unwrap();
     let have: BTreeSet<&str> = catalog.rules().map(|r| r.id.as_str()).collect();
     let issue: BTreeSet<&str> = ISSUE_IDS.iter().copied().collect();
@@ -648,8 +648,8 @@ fn a_check_that_the_validate_route_answers_is_not_a_rule_of_the_catalog() {
     assert!(back.is_empty(), "a copy of the route is back: {back:?}");
 }
 
-/// A rule that no validate route answers stays in the catalog as a gap that preflight fills, and
-/// its note names the route that takes the fault (#415).
+/// A rule that no validate route answers stays in the catalog as a gap that preflight fills. Its
+/// note names the route that takes the fault (#415).
 #[test]
 fn a_rule_that_the_cluster_validate_route_does_not_answer_says_so_in_its_note() {
     let catalog = catalog::builtin().unwrap();
@@ -658,9 +658,10 @@ fn a_rule_that_the_cluster_validate_route_does_not_answer_says_so_in_its_note() 
     assert!(rule.what.contains("palette-validate"), "{}", rule.what);
 }
 
-/// The fault is in the second item, not the first (#144): a profile that comes second, a host of
-/// the second pool, a second pool with a host resource group, and a second compute cluster. Each
-/// check reads every item, and each message names the item that holds the fault and no other.
+/// The fault is in the second item, not the first (#144). The cases are a profile that comes
+/// second and a host of the second pool. The other cases are a second pool with a host resource
+/// group and a second compute cluster. Each check reads every item, and each message names the
+/// item that holds the fault and no other.
 #[test]
 fn a_rule_with_each_finds_the_fault_of_a_later_item_and_names_only_that_item() {
     let catalog = catalog::builtin().unwrap();
@@ -924,7 +925,7 @@ fn instance_offering_checks_a_pool_with_no_zone_against_the_list_of_the_region()
 }
 
 /// The check of `instance-offering` fails, and says so, when Palette gives no list, or refuses the
-/// request with a 4xx that is an answer: a wrong answer is never a pass. A 403 is the key, so it
+/// request with a 4xx that is an answer. A wrong answer is never a pass. A 403 is the key, so it
 /// is an `ERROR` on a live run, and the fixture backend gives the same verdict.
 #[test]
 fn instance_offering_fails_when_palette_refuses_or_gives_no_list_of_types() {
@@ -956,8 +957,8 @@ fn instance_offering_fails_when_palette_refuses_or_gives_no_list_of_types() {
 }
 
 /// The three quota rules count the vCPUs of a pool from the field `cpu` of the instance type route
-/// (#393), and not from the name of the type. Each sends one request beside its command. The quota
-/// still comes from the tool of the cloud.
+/// (#393). They do not count from the name of the type. Each sends one request beside its
+/// command. The quota still comes from the tool of the cloud.
 #[test]
 fn the_quota_rules_count_the_vcpus_of_a_pool_from_the_cpu_that_palette_lists() {
     let catalog = catalog::builtin().unwrap();
@@ -996,10 +997,10 @@ fn the_quota_rules_count_the_vcpus_of_a_pool_from_the_cpu_that_palette_lists() {
 }
 
 /// Palette drops each type with fewer than 2 vCPUs or less than 4 GiB of memory from the instance
-/// type route when the query says nothing. The three quota rules send `cpuGtEq=0&memoryGtEq=0`, so a
-/// pool of a small type adds its vCPUs: the pools of the fixtures ask for more than the quota gives,
-/// and the rule says so. With no query, the route lists no small type, and the rule counts 0 vCPUs
-/// for that pool.
+/// type route. It does so when the query says nothing. The three quota rules send
+/// `cpuGtEq=0&memoryGtEq=0`, so a pool of a small type adds its vCPUs. The pools of the fixtures
+/// ask for more than the quota gives, and the rule says so. With no query, the route lists no
+/// small type, and the rule counts 0 vCPUs for that pool.
 #[test]
 fn the_quota_rules_ask_for_the_small_types_that_palette_drops_by_default_and_count_them() {
     let catalog = catalog::builtin().unwrap();
@@ -1020,7 +1021,7 @@ fn the_quota_rules_ask_for_the_small_types_that_palette_drops_by_default_and_cou
             "azure-vcpu-quota",
             "fixtures/azure/vcpu-quota-small-size.json",
             AZURE_TYPES,
-            "the pools ask for 8 vCPUs in eastus, and the regional quota has 2 free of 10 (8 in use): Azure refuses the machines with OperationNotAllowed; the family quota of each type can be lower still",
+            "the pools ask for 8 vCPUs in eastus, and the regional quota has 2 free of 10 (8 in use). Azure refuses the machines with OperationNotAllowed. The family quota of each type can be lower.",
         ),
     ] {
         let rule = catalog.rule(id).unwrap();
@@ -1041,9 +1042,9 @@ fn the_quota_rules_ask_for_the_small_types_that_palette_drops_by_default_and_cou
     assert_eq!(out.verdict, Verdict::Passed, "{:?}", out.messages);
 }
 
-/// A type that the route still does not list, such as an old family, does not add 0 vCPUs: the rule
-/// fails closed for that pool, and names the pool and the type. A listed entry with no number in
-/// `cpu` is the same. The message of a short quota counts the listed pools alone.
+/// A type that the route still does not list, such as an old family, does not add 0 vCPUs. The
+/// rule fails closed for that pool, and names the pool and the type. A listed entry with no number
+/// in `cpu` is the same. The message of a short quota counts the listed pools alone.
 #[test]
 fn a_quota_rule_fails_for_a_pool_whose_type_the_route_does_not_list() {
     let catalog = catalog::builtin().unwrap();
@@ -1051,17 +1052,17 @@ fn a_quota_rule_fails_for_a_pool_whose_type_the_route_does_not_list() {
         (
             "aws-quotas",
             "fixtures/aws/vcpu-quota-type-not-listed.json",
-            "pool worker-pool: the instance type route of Palette lists no cpu for the type m3.large in region us-east-2, so the check cannot count the vCPUs of the pool",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the type m3.large in region us-east-2. The check cannot count the vCPUs of the pool.",
         ),
         (
             "gcp-quotas",
             "fixtures/gke/cpu-quota-type-not-listed.json",
-            "pool worker-pool: the instance type route of Palette lists no cpu for the type n1-standard-1 in region us-east1, so the check cannot count the CPUs of the pool",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the type n1-standard-1 in region us-east1. The check cannot count the CPUs of the pool.",
         ),
         (
             "azure-vcpu-quota",
             "fixtures/azure/vcpu-quota-size-not-listed.json",
-            "pool worker-pool: the instance type route of Palette lists no cpu for the size Standard_A1 in region eastus, so the check cannot count the vCPUs of the pool",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the size Standard_A1 in region eastus. The check cannot count the vCPUs of the pool.",
         ),
     ] {
         let rule = catalog.rule(id).unwrap();
@@ -1080,7 +1081,7 @@ fn a_quota_rule_fails_for_a_pool_whose_type_the_route_does_not_list() {
         out.messages,
         [
             "the on-demand vCPU quota L-1216C47A in us-east-2 is 2.0, and the pools ask for 4 vCPUs: 1 x t3.xlarge",
-            "pool worker-pool: the instance type route of Palette lists no cpu for the type m3.large in region us-east-2, so the check cannot count the vCPUs of the pool",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the type m3.large in region us-east-2. The check cannot count the vCPUs of the pool.",
         ]
     );
     let mut no_number = fixture::load(&path).unwrap();
@@ -1099,7 +1100,7 @@ fn a_quota_rule_fails_for_a_pool_whose_type_the_route_does_not_list() {
 }
 
 /// A list that Palette refuses with a 4xx that is an answer, or gives no `instanceTypes`, is a
-/// failure that says so: a quota rule cannot count the vCPUs of any pool then. A 403 is the key,
+/// failure that says so. A quota rule cannot count the vCPUs of any pool then. A 403 is the key,
 /// so it is an `ERROR`, as on a live run.
 #[test]
 fn a_quota_rule_fails_when_palette_refuses_the_list_of_instance_types() {
@@ -1182,7 +1183,7 @@ fn ssh_key_pair_leaves_aws_to_the_properties_route_that_iaas_pod_identity_calls(
     );
 }
 
-/// The property route of AWS answers HTTP 500 for a key pair that the region lacks, and the live
+/// The property route of AWS answers HTTP 500 for a key pair that the region lacks. The live
 /// backend reads a 5xx as an error unless the check names its code. A run on AWS found that
 /// `iaas-pod-identity` was an `error` and never `failed` (#546). The rule names `AwsKeyPairNotFound`
 /// in `refusal_codes`, so the live backend and the fixture both read the 500 as the answer.
@@ -1478,7 +1479,7 @@ fn policy_quota_messages(name: &str) -> (Verdict, Vec<String>) {
 }
 
 /// AWS gives 20 managed policies for a role by default, and raises the quota of an account on
-/// request. The rule reads the quota of the account, so a role with 11 to 20 policies passes, and a
+/// request. The rule reads the quota of the account, so a role with 11 to 20 policies passes. A
 /// role over the quota of the account fails with the number of the account (#540).
 #[test]
 fn the_rule_of_the_managed_policies_of_a_role_reads_the_quota_of_the_account() {
@@ -1596,7 +1597,7 @@ fn four_rules_read_the_instance_type_route_and_a_fifth_moves_the_lookup_to_share
     );
 }
 
-/// The 13 clean results of the rule `iam-ten-policies` hold for the rule `iam-role-policy-quota`: a
+/// The 13 clean results of the rule `iam-ten-policies` hold for the rule `iam-role-policy-quota`. A
 /// clean build that passes the quota of 10 passes the quota of 20. 9 are on `aws`, and 4 are on
 /// `eks`. A later run adds to these counts, so the test names a floor (#575).
 #[test]
@@ -1720,5 +1721,74 @@ fn the_rules_that_read_a_version_read_a_pre_release_a_v_and_build_data_as_strata
     assert_eq!(agent("v4.7.0-rc.1"), Verdict::Failed);
     for current in ["v4.10.0-rc.1", "4.10.16+build.2", "4.11"] {
         assert_eq!(agent(current), Verdict::Passed, "{current}");
+    }
+}
+
+/// The ledger holds the run of the plan of the live window of Wave 14, the newest run. It is an
+/// AWS run with no release. The plan made six faults and the checks caught each one. The clean
+/// entity passed 22 checks.
+#[test]
+fn the_ledger_ends_with_the_run_of_the_plan_of_the_live_window_of_wave_14() {
+    use strata_preflight::confidence::RunResult;
+    let ledger = catalog::builtin_ledger().unwrap();
+    let run = ledger.runs.last().unwrap();
+    assert_eq!(run.run, "20261103T015608Z");
+    assert_eq!(run.engine, "aws");
+    assert_eq!(run.release, "");
+    let count = |result: RunResult| run.results.iter().filter(|r| r.result == result).count();
+    assert_eq!(count(RunResult::Caught), 6);
+    assert_eq!(count(RunResult::Passed), 22);
+    assert_eq!(run.results.len(), 28, "no check was missed or false");
+    let caught: Vec<&str> = run
+        .results
+        .iter()
+        .filter(|r| r.result == RunResult::Caught)
+        .map(|r| r.rule.as_str())
+        .collect();
+    assert_eq!(
+        caught,
+        [
+            "worker-cpu-floor",
+            "palette-validate",
+            "api-endpoint-reach",
+            "account-missing",
+            "instance-offering",
+            "iaas-pod-identity"
+        ]
+    );
+    let times: BTreeSet<&str> = ledger.runs.iter().map(|r| r.run.as_str()).collect();
+    assert_eq!(times.len(), ledger.runs.len(), "each run has its own id");
+}
+
+/// A user reads the message of a failed quota rule in the report. Each sentence of it has 25 words
+/// at most. The review at the end of Wave 13 found five messages of 28 to 37 words in one sentence.
+#[test]
+fn each_sentence_in_a_message_of_the_quota_rules_has_25_words_at_most() {
+    let catalog = catalog::builtin().unwrap();
+    for (id, fixture) in [
+        ("aws-quotas", "fixtures/aws/vcpu-quota-low.json"),
+        ("aws-quotas", "fixtures/aws/vcpu-quota-type-not-listed.json"),
+        ("gcp-quotas", "fixtures/gke/cpu-quota-low.json"),
+        ("gcp-quotas", "fixtures/gke/cpu-quota-type-not-listed.json"),
+        ("azure-vcpu-quota", "fixtures/azure/vcpu-quota-low.json"),
+        (
+            "azure-vcpu-quota",
+            "fixtures/azure/vcpu-quota-small-size.json",
+        ),
+        (
+            "azure-vcpu-quota",
+            "fixtures/azure/vcpu-quota-size-not-listed.json",
+        ),
+    ] {
+        let rule = catalog.rule(id).unwrap();
+        let path = catalog::rules_dir().join(fixture);
+        let out = outcome_of(rule, fixture::load(&path).unwrap(), &Jq::new());
+        assert_eq!(out.verdict, Verdict::Failed, "{id}: {:?}", out.messages);
+        for message in &out.messages {
+            for sentence in message.split(". ") {
+                let words = sentence.split_whitespace().count();
+                assert!(words <= 25, "{id}: {words} words in: {sentence}");
+            }
+        }
     }
 }

@@ -17,7 +17,7 @@ Palette release. A report tells them that a release of strata is out of date in 
 A report states that strata is out of date: a value or a shape that strata does not know. It is
 never a report of a fault of Palette, or of how a team uses Palette.
 
-## How a report is made
+## How strata makes a report
 
 1. A run reads a document of Palette, and the document holds a value that the release does not
    know. Strata writes the note on standard error, and it appends one line to the log. See
@@ -44,7 +44,8 @@ A report is the document `strata-report/1`. It has the fields `schema` and `unkn
 
 These are the fields of [`strata-unknown/1`](./documents.md#strata-unknown1), the line of the log,
 and the field `count`. The report has no time and no `tool` block, because the log has none.
-[`strata-report/1`](./documents.md#strata-report1) gives the JSON.
+[`strata-report/1`](./documents.md#strata-report1) gives the JSON. `strata schema report` prints its
+JSON Schema.
 
 ## What strata never reports
 
@@ -130,10 +131,13 @@ informed. It names the page of the book that says what the send holds. It ends w
 
 The default answer is no. Strata keeps your answer in the file `strata-unknown.answer` of the
 [state folder](#the-files), and it never asks again. The setting `STRATA_REPORT` has priority over
-the answer. Delete the file to be asked again.
+the answer. To get the question again, delete the file.
 
-Strata asks nothing in three cases. The variable `CI` has a value. Standard input or standard error
-is not a terminal. Or the run has `--quiet` or `STRATA_QUIET`.
+Strata asks nothing in three cases:
+
+- The variable `CI` has a value.
+- Standard input or standard error is not a terminal.
+- The run has `--quiet` or `STRATA_QUIET`.
 
 ### What a run sends
 
@@ -201,8 +205,8 @@ variable is not set. See [Settings](./settings.md).
 | `strata-unknown.hint` | The time of the last hint, as a time in RFC 3339. |
 | `strata-unknown.answer` | Your answer to the question of the send: `1` for yes, and `0` for no. |
 
-Delete a file to start again. A mark that is past the end of the log counts for nothing, so a new
-log is reported whole.
+Delete a file to start again. A mark that is past the end of the log counts for nothing, so the
+report of a new log holds each line.
 
 ## The hint
 

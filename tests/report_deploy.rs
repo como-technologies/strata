@@ -1,5 +1,5 @@
 //! The deploy of the endpoint of the report: `deploy/report/`. No network and no Google project:
-//! a `gcloud` on the `PATH` stands in, and writes down each call that it gets.
+//! a stand-in `gcloud` on the `PATH` records each call that it gets.
 
 use std::path::Path;
 use std::process::Command;
@@ -7,7 +7,7 @@ use std::process::Command;
 use crate::common::{Run, fake_bin, one_line, path_with, recipe, repo_file};
 
 /// A `gcloud` that logs each call to `$FAKE_GCLOUD/calls`, and answers as the file `$FAKE_GCLOUD/*`
-/// says: `no-secret` makes `secrets describe` fail, `no-registry` makes the registry missing, and
+/// says. `no-secret` makes `secrets describe` fail, `no-registry` makes the registry missing, and
 /// `no-service-account` or `no-build-account` makes that account missing.
 const FAKE_GCLOUD: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_GCLOUD/calls"

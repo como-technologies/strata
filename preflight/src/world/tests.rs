@@ -569,8 +569,8 @@ fn a_world_with_no_cluster_sends_a_metadata_that_is_not_an_object_as_it_is() {
     );
 }
 
-/// The document of the pack `uid`, as `GET /v1/packs/{uid}` gives it: its cloud types, and its
-/// `system_state` in the entry of `packValues` that holds its uid.
+/// The document of the pack `uid`, as `GET /v1/packs/{uid}` gives it. It has the cloud types of
+/// the pack, and its `system_state` in the entry of `packValues` that holds its uid.
 fn pack_document(uid: &str, cloud_types: Value, state: Option<&str>) -> Value {
     let annotations = state.map_or(json!({}), |s| json!({"system_state": s}));
     json!({

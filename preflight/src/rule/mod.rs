@@ -476,8 +476,8 @@ pub struct Rule {
 }
 
 impl Rule {
-    /// The 95% lower bound that the runs of this rule must reach for a promotion: the bar of its
-    /// promotion, or the default bar of a promotion.
+    /// The 95% lower bound that the runs of this rule must reach for a promotion. It is the bar of
+    /// its promotion, or the default bar of a promotion.
     pub fn bar(&self) -> f64 {
         self.promotion.as_ref().map_or(DEFAULT_BAR, |p| p.bar)
     }

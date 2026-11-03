@@ -668,3 +668,35 @@ runs:
       - {rule: palette-validate, result: passed, note: "the clean entity"}
       - {rule: leftovers-before-build, result: passed, note: "the clean entity"}
       - {rule: lab-region, result: passed, note: "the clean entity"}
+  - run: 20261103T015608Z
+    engine: aws
+    release: ""
+    results:
+      - {rule: worker-cpu-floor, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; (.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not)) |= resize(1)"}
+      - {rule: palette-validate, result: caught, note: "the fault was made: def resize($n): .poolConfig.size = $n | .poolConfig.minSize = $n | .poolConfig.maxSize = $n; (.spec.machinepoolconfig[] | select((.poolConfig.isControlPlane // false) | not)) |= resize(1)"}
+      - {rule: api-endpoint-reach, result: caught, note: "the fault was made: .spec.cloudConfig.controlPlaneLoadBalancer = \"internal\""}
+      - {rule: account-missing, result: caught, note: "the fault was made: .spec.cloudAccountUid = \"000000000000000000000000\""}
+      - {rule: instance-offering, result: caught, note: "the fault was made: .spec.machinepoolconfig[0].cloudConfig.instanceType = \"p2.8xlarge\" | .spec.machinepoolconfig[0].cloudConfig.azs = [\"us-east-2a\"]"}
+      - {rule: iaas-pod-identity, result: caught, note: "the fault was made: .spec.cloudConfig.sshKeyName = \"strata-no-such-key\""}
+      - {rule: sts-account-not-assumable, result: passed, note: "the clean entity"}
+      - {rule: account-missing, result: passed, note: "the clean entity"}
+      - {rule: capa-bootstrap-stack, result: passed, note: "the clean entity"}
+      - {rule: iam-role-policy-quota, result: passed, note: "the clean entity"}
+      - {rule: ebs-csi-node-policy, result: passed, note: "the clean entity"}
+      - {rule: iaas-pod-identity, result: passed, note: "the clean entity"}
+      - {rule: aws-region-not-enabled, result: passed, note: "the clean entity"}
+      - {rule: aws-quotas, result: passed, note: "the clean entity"}
+      - {rule: worker-cpu-floor, result: passed, note: "the clean entity"}
+      - {rule: aws-dynamic-cidr-overlap, result: passed, note: "the clean entity"}
+      - {rule: aws-local-zone-letter, result: passed, note: "the clean entity"}
+      - {rule: api-endpoint-reach, result: passed, note: "the clean entity"}
+      - {rule: proxy-no-proxy, result: passed, note: "the clean entity"}
+      - {rule: instance-offering, result: passed, note: "the clean entity"}
+      - {rule: aws-ami, result: passed, note: "the clean entity"}
+      - {rule: pack-cloud-support, result: passed, note: "the clean entity"}
+      - {rule: pack-state, result: passed, note: "the clean entity"}
+      - {rule: pack-dependency, result: passed, note: "the clean entity"}
+      - {rule: template-outside, result: passed, note: "the clean entity"}
+      - {rule: palette-validate, result: passed, note: "the clean entity"}
+      - {rule: leftovers-before-build, result: passed, note: "the clean entity"}
+      - {rule: lab-region, result: passed, note: "the clean entity"}

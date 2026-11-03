@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The send of the report (#397): strata posts the report of one unknown value to the endpoint that
-# runs on Cloud Run, and the endpoint merges the reports into one issue of the label unknown-value.
+# runs on Cloud Run. The endpoint merges the reports into one issue of the label unknown-value.
 #
 #   just live-report-send URL [--repo OWNER/REPO]
 #
@@ -10,7 +10,7 @@
 # STRATA_REPORT=1 and STRATA_REPORT_URL=URL, in a state folder of its own. So the send is real, and
 # the value is the made-up value of the book. The check opens or changes the issue of that value in
 # OWNER/REPO through the endpoint. The default repository is the one that report-endpoint/Cargo.toml
-# names, which is the one that the endpoint writes to. It needs gh logged in to read the issue, jq,
+# names, which is the one that the endpoint writes to. It needs a gh login to read the issue, jq,
 # curl, the strata release binary, and the xtask binary: just build and just stand-in.
 # The run changes HOME, so the script keeps the login of gh: it sets GH_CONFIG_DIR to the folder of
 # the login before the change. A GH_TOKEN in the environment works too. When gh cannot read the
@@ -31,7 +31,7 @@ script=report-send
 . "$live/github.sh"
 
 url=""
-# the label of the issues of the endpoint, and the repository of its manifest: the endpoint has the
+# the label of the issues of the endpoint, and the repository of its manifest. The endpoint has the
 # same two texts as its defaults, and a test of the endpoint makes sure that they agree
 label=unknown-value
 repo=$(sed -n 's|^repository = "https://github.com/\(.*\)"$|\1|p' "$live/../../report-endpoint/Cargo.toml")

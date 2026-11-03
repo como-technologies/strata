@@ -2,7 +2,7 @@
 # Set the version of this repository: scripts/dev/set-version.sh <version>
 #
 # The version is in Cargo.toml, and it is also in the README badge, the install commands, the CI
-# drop-ins, and the pages that show them. One command moves all of them and commits the move, so a
+# drop-ins, and the pages that show them. One command moves all of them and commits the move. So a
 # release is a version and a tag, not an edit of a dozen files:
 #
 #   just version 1.2.3     # rewrites and commits
@@ -17,11 +17,11 @@
 # It refuses when a file it must rewrite already has uncommitted changes, so the commit it writes
 # is the version and nothing else.
 #
-# It rewrites the version only where the version is meant to follow this repository: the manifest,
-# the badge, an install command, a pinned workflow ref, and the variables the drop-ins set. Prose
-# that names a version names it for a reason -- "use v0.5.2 or later: it is the first release with
-# all four scripts" is a fact about v0.5.2, not about the version now -- so free text is never
-# rewritten, whatever version it holds.
+# It rewrites the version only where the version is meant to follow this repository. These places
+# are the manifest, the badge, an install command, a pinned workflow ref, and the variables the
+# drop-ins set. Prose that names a version names it for a reason. The sentence "use v0.5.2 or
+# later: it is the first release with all four scripts" is a fact about v0.5.2. It is not a fact
+# about the version now. So free text is never rewritten, whatever version it holds.
 #
 # Recorded evidence is never touched, because it says which build produced a result:
 #   examples/live/runs/                   the raw output of each live run
@@ -31,7 +31,7 @@
 # `just test` checks the result: the CI drop-ins and the README badge must name the version in
 # Cargo.toml.
 #
-# Write an example of this command with a version this repository will never be at, or a run
+# Write an example of this command with a version that this repository never has. Otherwise a run
 # rewrites the example too: `just version 1.2.3`, not `just version <the version now>`.
 set -euo pipefail
 
@@ -58,7 +58,7 @@ if [ "$old" = "$new" ]; then
 fi
 
 # every tracked file that names the old version, less the recorded runs, the built book, and the
-# outputs of the book, which a build of the new version writes below
+# outputs of the book. A build of the new version writes the outputs below
 mapfile -t files < <(git grep -l -F "$old" -- \
   ':!examples/live/runs' \
   ':!docs/src/development/live-runs.md' \

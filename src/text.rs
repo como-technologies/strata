@@ -150,7 +150,7 @@ pub fn code_span(text: &str) -> String {
 }
 
 /// `text` as a value in a query string: each byte that is not a letter, a digit, or one of
-/// `-._~:` becomes `%XX`, so a time with `+00:00` keeps its `+`.
+/// `-._~:` becomes `%XX`. So a time with `+00:00` keeps its `+`.
 ///
 /// A route of Palette and the link to a new issue of strata build their queries here. The endpoint
 /// of the report writes the marker of an issue with it, so that a value cannot end the comment.

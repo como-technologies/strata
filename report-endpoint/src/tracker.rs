@@ -200,7 +200,7 @@ impl Tracker for GitHub {
                 return Ok(found);
             }
         }
-        // the last page was full: an issue of a value can be beyond it, and a merge that does not
+        // the last page was full. An issue of a value can be beyond it, and a merge that does not
         // find it opens a second issue
         Err(TrackerError {
             message: format!(

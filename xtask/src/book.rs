@@ -37,7 +37,7 @@ pub enum Mode {
         /// Which of its states: `CHAPTER-2` serves the state after its second change.
         seed: u32,
     },
-    /// Build the tenant of every chapter, run no command, and keep the documents of each tenant at
+    /// Build the tenant of every chapter and run no command. Keep the documents of each tenant at
     /// the end of its chapter, in a directory for each chapter under `into`. The contract run reads
     /// them as the stand-in.
     Harvest {
@@ -136,8 +136,8 @@ impl Runner {
 
         let port_file = work.join("port");
         // The server gets a pipe for standard input and no share of this process's output. It
-        // stops when the pipe closes, so it cannot outlive this run, and it cannot hold open a
-        // pipe that this run's output was written into.
+        // stops when the pipe closes, so it cannot outlive this run. It cannot hold open a pipe
+        // that this run's output was written into.
         let mut server = Command::new(xtask)
             .args(["serve"])
             .arg(&tenant_dir)
@@ -269,8 +269,8 @@ impl Runner {
     /// Publish a copy of an example profile.
     ///
     /// Each `<name>@<version>` under one uid must be seeded from one content, in every chapter.
-    /// The tag-name chapter once gave uid `...d4` version 1.1.2 the tag change, and the compare
-    /// chapter gave the same uid and version a changed value, so two pages printed two roots for
+    /// The tag-name chapter once gave uid `...d4` version 1.1.2 the tag change. The compare
+    /// chapter gave the same uid and version a changed value. So two pages printed two roots for
     /// one identity. A chapter that needs its own content says so with `profile_own_copy`.
     pub fn profile(
         &mut self,
@@ -500,8 +500,8 @@ impl Runner {
     }
 
     /// The lines of `from` that a page teaches, written as `name`. The command line is kept, and
-    /// each gap becomes `...`. Nothing matching is an error: when the line a page is built on
-    /// stops being printed, this build fails instead of the page going quietly wrong.
+    /// each gap becomes `...`. Nothing matching is an error. When the line a page is built on
+    /// stops being printed, this build fails and the page does not go quietly wrong.
     pub fn excerpt(&mut self, name: &str, from: &str, pattern: &str) {
         if !self.runs_commands() {
             return;

@@ -164,8 +164,8 @@ fn report_markdown_writes_a_value_with_a_backtick_or_a_bar_in_a_code_span_that_i
 
 #[test]
 fn report_stops_on_a_log_with_a_value_that_is_not_one_word_of_printable_ascii() {
-    // U+200B is a zero width space: the issue of `pending` and the issue of `pending` and U+200B
-    // look equal, and U+202E sets the direction of the text from there on. Markdown drops one
+    // U+200B is a zero width space, so the issue of `pending` and the issue of `pending` and U+200B
+    // look equal. U+202E sets the direction of the text from there on. Markdown drops one
     // space at each end of a code span, so ` pending ` and `pending` look equal too
     for value in [
         "pending\u{200b}",
@@ -437,7 +437,7 @@ fn link_does_not_take_a_format() {
 fn sent_marks_the_lines_so_that_the_next_report_holds_only_the_new_lines() {
     let home = tempfile::tempdir().unwrap();
     write_log(home.path(), &two_values());
-    // a report alone marks nothing: the user decides when the lines went out
+    // a report alone marks nothing: the user decides when the user sent the lines
     assert_eq!(report(home.path(), &[]).code, 0);
     assert!(report(home.path(), &[]).out.contains(LATER_TYPE));
     assert!(!log_in(home.path()).with_file_name(SENT_FILE).exists());

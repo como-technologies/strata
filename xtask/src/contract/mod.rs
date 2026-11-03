@@ -2,7 +2,7 @@
 //! answer with the stand-in.
 //!
 //! The list of the facts states what strata depends on. The stand-in imitates it, and the book
-//! tells it. This module finds out whether Palette still agrees with the stand-in.
+//! tells it. This module tells whether Palette still agrees with the stand-in.
 //!
 //! For each fact of the kind `request` that a read-only request can show, the run finds an object in
 //! the tenant and sends the request. It compares the answer with the documents that the stand-in
@@ -186,9 +186,9 @@ fn check_request<A: PaletteApi>(
     }
 }
 
-/// How much an outcome counts when the requests of one fact disagree: a difference, then an error
-/// that stops the check, then a request that is the same. A skipped request counts least, because
-/// the other requests still show the fact.
+/// How much an outcome counts when the requests of one fact disagree. A difference counts most,
+/// then an error that stops the check, then a request that is the same. A skipped request counts
+/// least, because the other requests still show the fact.
 fn rank(outcome: Outcome) -> u8 {
     match outcome {
         Outcome::Differs => 3,
@@ -202,8 +202,8 @@ fn rank(outcome: Outcome) -> u8 {
 /// alternatives. None when there is no request.
 ///
 /// The outcome is that of the request that counts most: see [`rank`]. A fact with one request has
-/// that entry as it is. With more, a difference names its choice, and the reason lists the reason
-/// of each request that is not the same, so a skipped GCP request shows beside a same AWS request.
+/// that entry as it is. With more, a difference names its choice. The reason lists the reason of
+/// each request that is not the same. So a skipped GCP request shows beside a same AWS request.
 fn merge(parts: Vec<(String, Entry)>) -> Option<Entry> {
     if let [(_, only)] = parts.as_slice() {
         return Some(only.clone());
@@ -282,8 +282,8 @@ fn missing_names(fact: &Fact, found: &Value) -> Vec<Difference> {
     differences
 }
 
-/// Each closed set of `fact` for which the answer `found` of the tenant holds a value that neither
-/// the fact nor the documents `expected` of the stand-in name.
+/// The closed sets of `fact` with an unknown value in the answer `found` of the tenant. Neither
+/// the fact nor the documents `expected` of the stand-in name that value.
 ///
 /// The fact names the values that strata tells apart, and the stand-in can hold more. A value that
 /// neither names is a value that Palette added: strata does not know it. The answer is not a

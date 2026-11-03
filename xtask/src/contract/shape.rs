@@ -31,8 +31,8 @@ pub enum JsonType {
 impl JsonType {
     /// The name of the type, as the document writes it.
     pub fn name(self) -> String {
-        // serde writes a unit variant as its name, so the one table of the names is the derive; a
-        // unit variant always serializes, so the empty text is never the answer
+        // serde writes a unit variant as its name, so the one table of the names is the derive.
+        // A unit variant always serializes, so the empty text is never the answer
         serde_json::to_value(self)
             .ok()
             .and_then(|v| v.as_str().map(str::to_string))

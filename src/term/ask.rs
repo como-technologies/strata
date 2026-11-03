@@ -7,7 +7,7 @@ use std::io::{BufRead, Write};
 /// `y` and `yes` in any case are yes. Any other text is no. An empty line, the end of the input,
 /// and a stream that strata cannot read or write are also no: the default answer is no.
 pub fn yes_or_no(question: &str, input: &mut impl BufRead, out: &mut impl Write) -> bool {
-    // a question that cannot be shown or an answer that cannot be read is a no: the caller
+    // a question that cannot be shown or an answer that cannot be read is a no. The caller
     // never acts on a yes that the person did not give
     if write!(out, "{question}")
         .and_then(|()| out.flush())

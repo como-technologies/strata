@@ -28,9 +28,9 @@ pub enum Kind {
     /// A check that strata makes because no route of Palette answers it: the fact names the
     /// error code that Palette gives at the create.
     Gap,
-    /// A call of the tool of a cloud that a cloud-tier rule of strata-preflight depends on, or a
-    /// table of cloud facts that such a rule holds. The contract run sends the call in the lab
-    /// account.
+    /// A call of the tool of a cloud, or a table of cloud facts. A cloud-tier rule of
+    /// strata-preflight depends on the call or holds the table. The contract run sends the call in
+    /// the lab account.
     Cloud,
 }
 
@@ -42,9 +42,9 @@ pub enum Scope {
     /// routes take it.
     #[default]
     Client,
-    /// The tenant. The route is not an operation of the project scope, so Palette refuses a
-    /// request that names a project with HTTP 403 and the code `ProjectUidIsNotEmpty`. The run
-    /// sends such a request with no project, as strata does.
+    /// The tenant. The route is not an operation of the project scope. Palette refuses a request
+    /// that names a project with HTTP 403 and the code `ProjectUidIsNotEmpty`. The run sends such
+    /// a request with no project, as strata does.
     Tenant,
 }
 
@@ -97,14 +97,14 @@ pub struct Fact {
     #[serde(default)]
     pub rules: Vec<String>,
     /// The read-only call of a fact of the kind `cloud`, as the words of the command, with
-    /// `{name}` for a value of the lab account: `[aws, ec2, describe-subnets, --region, "{region}"]`.
-    /// The contract run sends it.
+    /// `{name}` for a value of the lab account. An example is
+    /// `[aws, ec2, describe-subnets, --region, "{region}"]`. The contract run sends it.
     #[serde(default)]
     pub call: Vec<String>,
     /// The table of cloud facts that a rule holds as text, when the fact proves one.
     pub table: Option<Table>,
-    /// The route of Palette that answers a part of the call of a fact of the kind `cloud`, and the
-    /// fields of the call that the route lacks.
+    /// The route of Palette that answers a part of the call of a fact of the kind `cloud`. It names
+    /// the fields of the call that the route lacks.
     pub palette: Option<PaletteRoute>,
 }
 
@@ -174,7 +174,7 @@ fn is_name(name: &str) -> bool {
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-/// The parts of `text`, in order. This is the one reader of the placeholders of the list: the run
+/// The parts of `text`, in order. This is the one reader of the placeholders of the list. The run
 /// of a request, the call of a cloud, and the check of the list all read through it.
 pub fn pieces(text: &str) -> Vec<Piece<'_>> {
     let mut pieces = Vec::new();
@@ -308,15 +308,14 @@ impl Fact {
     }
 }
 
-/// What strata reads from the answer of Palette, or depends on: the fields, the error codes, the
-/// values of a closed set, and the names that strata needs. A fact states at least one of the
-/// four.
+/// What strata reads from the answer of Palette, or depends on. There are four kinds: the fields,
+/// the error codes, the values of a closed set, and the names that strata needs. A fact states at
+/// least one of the four.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Reads {
-    /// A field of the answer, as the path from the root of the document, with `[]` for an array
-    /// and `*` for the values of an object:
-    /// `spec.clusterProfileTemplates[].packs`.
+    /// A field of the answer, as the path from the root of the document. The path has `[]` for an
+    /// array and `*` for the values of an object: `spec.clusterProfileTemplates[].packs`.
     #[serde(default)]
     pub fields: Vec<String>,
     /// An error code that Palette gives, such as `ClusterProfilePackNotAllowed`. The code is on a
@@ -333,8 +332,8 @@ pub struct Reads {
     #[serde(default)]
     pub sets: BTreeMap<String, String>,
     /// The names that strata needs from a set that Palette can extend, by the field that holds
-    /// them: `schema.properties[].name` and the properties that strata sends in a search. Each
-    /// name must be in the answer. Another name is no fault.
+    /// them. An example is `schema.properties[].name` and the properties that strata sends in a
+    /// search. Each name must be in the answer. Another name is no fault.
     #[serde(default)]
     pub names: BTreeMap<String, Vec<String>>,
 }
@@ -360,9 +359,9 @@ struct Part {
     facts: Vec<Fact>,
 }
 
-/// Each fact of the files in `dir`, in the order of the file names and then of the file, and a
-/// message for each file that cannot be read. The facts of the other files stay, so one fault in
-/// one file does not hide the faults of the others.
+/// Each fact of the files in `dir`, in the order of the file names and then of the file. The second
+/// value holds a message for each file that cannot be read. The facts of the other files stay, so
+/// one fault in one file does not hide the faults of the others.
 pub fn load(dir: &Path) -> (Vec<Fact>, Vec<String>) {
     let mut facts = Vec::new();
     let mut bad = Vec::new();

@@ -1,4 +1,4 @@
-//! The endpoint end to end: the send of strata posts to the real service, and the service writes
+//! The endpoint end to end. The send of strata posts to the real service, and the service writes
 //! to a stand-in of GitHub on this machine. The stand-in keeps the issues and records each call.
 
 use std::sync::{Arc, Condvar, Mutex};

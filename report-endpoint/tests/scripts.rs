@@ -1,5 +1,5 @@
 //! The scripts and the settings of the service keep one text for each label, repository, and
-//! milestone that they share. A script is shell, so it holds its own copy of the text, and these
+//! milestone that they share. A script is shell, so it holds its own copy of the text. These
 //! tests make sure that the copy is the one that the service reads.
 
 use strata_report_endpoint::settings::{DEFAULT_LABEL, DEFAULT_MILESTONE, Settings};
