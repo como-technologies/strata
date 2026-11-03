@@ -548,7 +548,7 @@ that does not.
 just live-contract                     # the tenant that ~/.palette.env names; needs just examples
 just live-contract --state state.json  # and the latest releases, compared with state.json
 just live-contract --no-cloud          # the requests of Palette alone, with no call of a cloud
-just live-contract --with-cluster      # a window with a cluster: a skipped fact of a cluster is an error
+just live-contract --with-cluster      # a window with a cluster: a skipped fact of the floor is an error
 just contract-report --dry-run runs/contract.json
 ```
 

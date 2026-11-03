@@ -295,6 +295,23 @@ empty text. The schema now gives the field the pack types. A record of a
 cluster omits a label whose value is not text, where 0.21.0 kept it with
 empty text. The labels are outside the root, so no root changes.
 
+Four values change after 0.27.0 with no new id. A new id breaks each reader of the document
+for a case that is rare. [Release 0.28.0](#release-0280-changes-that-need-action) gives the
+action for each one.
+
+- In `strata-packs/1`, `latest` marks the version that `pack:<name>@latest` records. Before, it
+  marked the highest version. The two differ only for a pre-release above the release, for
+  `--cloud`, and for a version with no tag. The field stays a flag, and `paletteLatest` keeps
+  the mark of Palette.
+- In `strata-preflight/1`, `answer` of the check `iam-role-policy-quota` has the exit code of
+  each command, such as `exit 0; exit 254`. It was `exit 0`. Only this rule has a second
+  command, and `summary.exitCode` is the field that a script must read.
+- In `strata-snapshot/1`, `valuesHash` of a cluster group with a password in values of no
+  canonical form covers the masked text. Other values keep their hash. The tier is not part of
+  the root, so no root changes.
+- In `strata-unknown/1` and `strata-report/1`, the fields `palette`, `status`, and `errorCode`
+  are gone. No release wrote them, so no reader of a document of a command sees the change.
+
 After 0.26.0, three documents have new fields, and each keeps its id.
 `confidence` of a check in `strata-preflight/1` has `olderRuns`, the number of runs
 of older releases that the counts omit. `strata-preflight-promotion/1` has
@@ -932,8 +949,16 @@ field, a value, an input, or an option is in the sections above.
 
 - **`strata packs`: `latest` marks the version that `<name>@latest` records.** Before,
   it marked the highest version, also when that version was a pre-release.
-  - The two differ when the highest version is a pre-release and the registry has another
-    version. An example is `1.31.0-rc.1` above `1.29.0`. `latest` marks `1.29.0` now.
+  - The two differ when the highest version is a pre-release and the registry has a version that
+    is not a pre-release. An example is `1.31.0-rc.1` above `1.29.0`. `latest` marks `1.29.0` now.
+  - `latest` marks one of the versions that the listing keeps. In two cases, that is not the
+    version that the ref records, because the ref picks from each version of the registry.
+    - With `--cloud`, the listing keeps the versions that support that cloud. An example is `2.0.0`
+      for `aws` and `1.0.0` for `gcp`. `strata packs <name> --cloud gcp` marks `1.0.0`, and
+      `pack:<name>@latest` records `2.0.0`.
+    - The listing omits a version that has no tag in the answer of Palette, unless Spectro Cloud
+      retired it. If `1.30.0` has no tag and `1.29.0` has one, `latest` marks `1.29.0`, and the
+      ref records `1.30.0`. Release 0.27.0 had this difference too.
   - `paletteLatest` stays on the version that Palette marks. `--latest` keeps that version
     too, and the terminal output marks it `latest in Palette`.
   - A script that reads the highest version must read the first entry of `versions[]`. The
@@ -945,18 +970,23 @@ field, a value, an input, or an option is in the sections above.
 - **`stale-record`: `cluster` holds the uid of the cluster.** It held the name, while the
   other errors of a cluster held the uid. The new key `name` holds the name. A script that read
   the name from `error.cluster` must read `error.name`. The message stays.
-- **The policy `valuesHash` of a group with values of no canonical form changes.** A key of such
-  values is a map or a list.
-  - An example is a template with no quotes. See
+- **The policy `valuesHash` of a group with a password in values of no canonical form changes.**
+  - A key of such values is a map or a list. An example is a template with no quotes. See
     [The config that a cluster group gives](../commands/snapshot/other-objects.md#the-config-that-a-cluster-group-gives).
   - The hash covered the text with each password in clear. It covers the text with `********`
     now. A new password changes no hash, and the record of a saved directory has the hash of
     the record of the fetch.
-  - A record of 0.27.0 or before differs in the `policy` tier from a new record of the same
-    group. `compare` and `verify` show that difference. The root does not change. Take the
-    record again.
-  - A snapshot of such a group gives the error `serialize`, and writes no record, when strata
-    cannot mask a password in the values. `save_dir` gave that error before.
+  - Other values keep their hash. That includes values of no canonical form that hold no
+    password. A record of 0.27.0 of a group with such values has the same `policy` tier as a
+    new record.
+  - A record of 0.27.0 or before of a group with a password differs in the `policy` tier from a
+    new record of the same group. `compare` and `verify` show that difference. The root does not
+    change. Take the record again.
+  - A snapshot, `verify`, and `compare` of such a group give the error `serialize` and exit `2`
+    when strata cannot mask a password in the values. A snapshot writes no record. `save_dir`
+    gave that error before. In 0.27.0, `verify` and `compare` gave exit `0` for such a group.
+  - Taking the record again gives the same error. Quote the template, or change the block scalar
+    in the values of the group.
 - **`verify-report.sh` and `upstream-report.sh` run when an open issue has no text in its
   body.** GitHub gives `null` as the body of such an issue.
   - `upstream-report.sh` stopped with a jq error on each version of jq. `verify-report.sh`
@@ -1076,8 +1106,10 @@ field, a value, an input, or an option is in the sections above.
   cannot mask. `Snapshot::from_cluster` gives the same error.
 - `error::Error::StaleRecord` has the new field `name: String`. A literal must set it, and a
   pattern with no `..` must name it. The field `cluster` holds the uid.
-- `ops::PackBuild::latest` is true for the version that `pack:<name>@latest` records. It was
-  true for the highest version. See the first item of the previous list.
+- `ops::PackBuild::latest` is true for the version that `pack:<name>@latest` records, of the
+  versions that the listing keeps. It was true for the highest version. With `--cloud`, and for
+  a version with no tag, the ref can record another version. See the first item of the previous
+  list.
 - `timestamp` and `render::Format::ALL` are new: see [The Rust library](#the-rust-library).
 - `closed_set::unknown::log::Line` and `closed_set::unknown::report::Entry` hold one
   `closed_set::unknown::sighting::Sighting`. It has the fields `strata`, `set`, `value`, and

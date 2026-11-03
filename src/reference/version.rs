@@ -75,8 +75,8 @@ pub fn is_pre_release(v: &str) -> bool {
 /// [`compare`] when `wanted` is [`LATEST`].
 ///
 /// `version_of` gives the version of an item. For [`LATEST`], a pre-release is the highest only
-/// when no item has another version. None when no item has the version, and when `items` is
-/// empty.
+/// when no item has a version that is not a pre-release. None when no item has the version, and
+/// when `items` is empty.
 pub fn pick<T>(
     items: impl IntoIterator<Item = T>,
     version_of: impl Fn(&T) -> &str,

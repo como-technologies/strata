@@ -150,6 +150,8 @@ fn the_facts_that_need_a_cluster_are_the_get_requests_that_take_their_subject_fr
     }
     for (id, why) in [
         ("cluster-listing", "an empty listing is a result"),
+        ("cluster-summary", "the stand-in serves no document for it"),
+        ("cluster-events", "the stand-in serves no document for it"),
         (
             "cluster-repave-status",
             "a cluster can lack the record: Palette answers with a code",

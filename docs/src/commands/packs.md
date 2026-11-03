@@ -20,18 +20,30 @@ then the floating tags above it: `1.65.0`, then `1.65.x`, then `1.x`.
 
 `--latest` keeps one line for each registry that has the pack. That line is the
 version that `pack:<name>@latest` records: the highest version that is not a
-pre-release. This is the question a bump asks: the pin is current when it names
-that version.
+pre-release, of the versions that the listing keeps. This is the question a bump
+asks: the pin is current when it names that version.
 
-A pre-release is below its version. A registry that holds pre-releases alone
-gives its highest pre-release. `strata behind` does not name a pre-release as a
-newer version of a pin that is not a pre-release: see
+A pre-release is below its version. A registry that has no version that is not a
+pre-release gives its highest pre-release. `strata behind` does not name a
+pre-release as a newer version of a pin that is not a pre-release: see
 [A pre-release](./behind.md#a-pre-release).
+
+The ref picks from each version of the registry, and the listing keeps fewer
+versions in two cases. The mark and the ref then give two versions:
+
+- With `--cloud`, the listing keeps the versions of that cloud. If `aws` has
+  `2.0.0` and `gcp` has `1.0.0`, `--cloud gcp` marks `1.0.0`, and the ref
+  records `2.0.0`.
+- The listing omits a version that has no tag in the answer of Palette, unless
+  Spectro Cloud retired it. Palette does not serve such a version. If `1.30.0`
+  has no tag and `1.29.0` has one, the mark is on `1.29.0`, and the ref records
+  `1.30.0`.
 
 Palette marks one version of each pack in each registry as the latest. Palette
 orders by semantic version, and strata does too: a pre-release or a rebuild such
-as `1.21.1-rev1` is below `1.21.1`. So the version that strata marks is the
-version that Palette marks:
+as `1.21.1-rev1` is below `1.21.1`. So the highest version is the version that
+Palette marks. Strata marks the same version, unless that version is a
+pre-release:
 
 ```text
 {{#include ../output/packs-palette-latest.txt}}
@@ -64,7 +76,7 @@ numbers.
 | Option | Function |
 | --- | --- |
 | `--registry NAME` | Only this registry, by its name or its uid. |
-| `--cloud TYPE` | Keep the versions that support this cloud, such as `aws`. |
+| `--cloud TYPE` | Keep the versions that support this cloud, such as `aws`. `latest` marks the highest of them. |
 | `--latest` | Only the version that `@latest` names in each registry, and the version that Palette calls the latest when it is a different one. |
 
 A version supports a cloud by the rule of Palette for a pack in a profile: see

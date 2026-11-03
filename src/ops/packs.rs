@@ -91,9 +91,12 @@ pub struct PackBuild {
     pub cloud_types: Vec<String>,
     /// Every tag that points at this version, the exact tag first.
     pub tags: Vec<String>,
-    /// True for the version that `pack:<name>@latest` records. That is the highest version that is
-    /// not a pre-release, or the highest pre-release when the registry's copy has no other version.
-    /// See [`version::pick`].
+    /// True for the version that `pack:<name>@latest` records, of the versions that the listing
+    /// keeps. That is the highest version that is not a pre-release, or the highest pre-release
+    /// when the registry's copy has no version that is not a pre-release. See [`version::pick`].
+    /// The ref picks from each version of the registry. So it can record another version when
+    /// `--cloud` cuts the list, and when the highest version has no tag, because the listing omits
+    /// that version.
     pub latest: bool,
     /// True for the version that Palette calls the latest of the registry's copy. Palette marks the
     /// highest version by the order of semantic versions, also when it is a pre-release. So it can
