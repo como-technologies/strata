@@ -38,22 +38,17 @@ use std::path::PathBuf;
 
 use super::ClosedSet;
 use crate::term::progress::Progress;
-use crate::text::cut;
+use hint::Hint;
+use log::Line;
+use sighting::shown;
 
 pub mod hint;
 pub mod log;
 pub mod report;
 pub mod send;
+pub mod sighting;
 #[cfg(test)]
 mod tests;
-
-pub use hint::Hint;
-pub use log::Line;
-pub use report::Report;
-
-/// The most characters of a value that the note and the log show. A value of a closed set is a
-/// short word, so a longer text is not a value of a set.
-const LONGEST_VALUE: usize = 64;
 
 /// What strata does with each unknown value of a run: the note, and the line of the log.
 #[derive(Debug)]
@@ -61,7 +56,6 @@ pub struct Watch {
     progress: Progress,
     log: Option<PathBuf>,
     hint: Option<Hint>,
-    release: Option<String>,
     /// How many lines this watch wrote to the log.
     written: usize,
     /// The set and the value of each note so far, so that a run notes a value one time.
@@ -75,7 +69,6 @@ impl Watch {
             progress,
             log: None,
             hint: None,
-            release: None,
             written: 0,
             told: BTreeSet::new(),
         }
@@ -96,13 +89,6 @@ impl Watch {
         self
     }
 
-    /// Name the Palette `release` in each line, when the caller knows it.
-    #[must_use]
-    pub fn palette_release(mut self, release: &str) -> Watch {
-        self.release = Some(release.to_string());
-        self
-    }
-
     /// Put the watch on the current thread, in place of the watch that is there. The watch ends
     /// when the guard drops.
     #[must_use = "the watch ends when the guard drops"]
@@ -120,7 +106,7 @@ impl Watch {
         }
         self.progress.note(&note(set, &value));
         let Some(file) = &self.log else { return };
-        let line = Line::new(set, &value, route, self.release.as_deref());
+        let line = Line::new(set, &value, route);
         if let Err(e) = line.append(file) {
             self.progress
                 .warn(&format!("could not write {}: {e}", file.display()));
@@ -176,15 +162,6 @@ pub(crate) fn seen<T: ClosedSet>(value: &str, route: &'static str) {
             watch.see(&T::schema_name(), value, route);
         }
     });
-}
-
-/// `value` cut to [`LONGEST_VALUE`] characters, with a `?` in place of each control character. So
-/// a value cannot make the terminal do more than show text.
-fn shown(value: &str) -> String {
-    cut(value, LONGEST_VALUE)
-        .chars()
-        .map(|c| if c.is_control() { '?' } else { c })
-        .collect()
 }
 
 /// The note for the value `value` of the set `set`, without the name of the tool.

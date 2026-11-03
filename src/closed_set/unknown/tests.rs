@@ -6,9 +6,11 @@ use std::path::Path;
 use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::{Value, json};
 
-use super::hint::{FILE as HINT_FILE, TEXT};
+use super::hint::{FILE as HINT_FILE, Hint, TEXT};
 use super::log::{FIELDS, FILE, Line, SCHEMA, SENT_FILE, mark_sent, read, sent_count, sent_path};
-use super::{Hint, Report, Watch, note, seen, shown};
+use super::report::{Entry, Report};
+use super::sighting::shown;
+use super::{Watch, note, seen};
 use crate::api::registry::Registries;
 use crate::api::{CLUSTER_TEMPLATE, MemoryApi, OCI_SUMMARY_TEMPLATE, PROFILE_TEMPLATE, Palette};
 use crate::json::opt_set;
@@ -51,18 +53,10 @@ fn a_value_that_a_read_gives_and_the_set_does_not_name_is_one_line_of_the_log() 
     assert_eq!(lines.len(), 1, "{lines:?}");
     let line = &lines[0];
     assert_eq!(line.schema, SCHEMA);
-    assert_eq!(line.strata, crate::TOOL_VERSION);
-    assert_eq!(line.set, "OciProvider");
-    assert_eq!(line.value, "oras");
-    assert_eq!(line.route, OCI_SUMMARY_TEMPLATE);
-    assert_eq!(
-        (
-            line.palette.as_deref(),
-            line.status,
-            line.error_code.as_deref()
-        ),
-        (None, None, None)
-    );
+    assert_eq!(line.sighting.strata, crate::TOOL_VERSION);
+    assert_eq!(line.sighting.set, "OciProvider");
+    assert_eq!(line.sighting.value, "oras");
+    assert_eq!(line.sighting.route, OCI_SUMMARY_TEMPLATE);
 }
 
 #[test]
@@ -90,7 +84,7 @@ fn a_run_notes_a_value_one_time_for_each_set_and_each_value() {
     seen::<PackState>("oras", "/v1/a");
     let told: BTreeSet<(String, String)> = lines_of(&file)
         .into_iter()
-        .map(|l| (l.set, l.value))
+        .map(|l| (l.sighting.set, l.sighting.value))
         .collect();
     let expected: BTreeSet<(String, String)> = [
         ("OciProvider", "oras"),
@@ -136,17 +130,6 @@ fn a_new_watch_notes_the_values_again() {
 }
 
 #[test]
-fn the_release_is_in_the_line_only_when_the_caller_gives_it() {
-    let dir = tempfile::tempdir().unwrap();
-    let _watching = logging(dir.path()).palette_release("4.10").start();
-    seen::<OciProvider>("oras", "/v1/a");
-    assert_eq!(
-        lines_of(&dir.path().join(FILE))[0].palette.as_deref(),
-        Some("4.10")
-    );
-}
-
-#[test]
 fn a_log_that_cannot_be_written_gives_no_error_and_the_read_goes_on() {
     let dir = tempfile::tempdir().unwrap();
     // a file where the folder of the log must be
@@ -161,22 +144,47 @@ fn a_log_that_cannot_be_written_gives_no_error_and_the_read_goes_on() {
 }
 
 #[test]
-fn a_value_shows_at_most_64_characters_and_no_control_character() {
+fn a_value_shows_at_most_64_characters_and_only_printable_ascii() {
     assert_eq!(shown("quarantined"), "quarantined");
-    assert_eq!(shown(&"a".repeat(100)), format!("{}…", "a".repeat(63)));
+    assert_eq!(shown(&"a".repeat(64)), "a".repeat(64), "64 characters fit");
+    assert_eq!(shown(&"a".repeat(100)), format!("{}...", "a".repeat(61)));
     assert_eq!(shown("a\u{1b}[31mb\n"), "a?[31mb?");
-    // the cut falls on a character and not on a byte
-    assert_eq!(shown(&"é".repeat(70)).chars().count(), 64);
+    // a character of two bytes is one character, and no cut stops in it
+    assert_eq!(shown(&"é".repeat(70)), format!("{}...", "?".repeat(61)));
+}
+
+#[test]
+fn a_format_character_and_a_letter_outside_ascii_show_as_a_mark() {
+    // U+200B is a zero width space, and U+202E sets the direction of the text from there on
+    assert_eq!(shown("pending\u{200b}"), "pending?");
+    assert_eq!(shown("later\u{202e}gnp.exe"), "later?gnp.exe");
+    assert_eq!(
+        shown("p\u{0435}nding"),
+        "p?nding",
+        "a Cyrillic letter that looks like e"
+    );
+    assert_ne!(shown("pending\u{200b}"), shown("pending"));
+}
+
+#[test]
+fn a_space_shows_as_a_mark_so_that_no_value_that_strata_writes_has_a_space() {
+    // markdown drops one space at each end of a code span: ` pending ` and `pending` look equal
+    assert_eq!(shown(" pending "), "?pending?");
+    assert_eq!(shown("two words"), "two?words");
+    for value in [" pending ", "two words", "\u{a0}", "a b\tc"] {
+        assert_eq!(
+            super::sighting::value_fault(&shown(value)),
+            None,
+            "{value:?}"
+        );
+    }
 }
 
 // ---- the line ------------------------------------------------------------------------------
 
-/// A line with each field set.
+/// A line of the log.
 fn full_line() -> Line {
-    let mut line = Line::new("OciProvider", "oras", OCI_SUMMARY_TEMPLATE, Some("4.10"));
-    line.status = Some(200);
-    line.error_code = Some("Code".to_string());
-    line
+    Line::new("OciProvider", "oras", OCI_SUMMARY_TEMPLATE)
 }
 
 #[test]
@@ -206,19 +214,43 @@ fn a_line_with_another_field_is_refused() {
 }
 
 #[test]
-fn a_field_that_has_no_value_is_not_written() {
-    let line = Line::new("OciProvider", "oras", "/v1/test", None);
-    let written = serde_json::to_value(&line).unwrap();
-    let names: BTreeSet<&str> = written
-        .as_object()
-        .unwrap()
-        .keys()
-        .map(String::as_str)
-        .collect();
-    assert_eq!(
-        names,
-        BTreeSet::from(["schema", "strata", "set", "value", "route"])
-    );
+fn a_line_and_an_entry_flatten_one_sighting_and_still_refuse_each_field_outside_the_list() {
+    let line = serde_json::to_value(full_line()).unwrap();
+    let entry = serde_json::to_value(&Report::of(&[full_line()]).unknown[0]).unwrap();
+    // `status`, `errorCode`, and `palette` were fields of release 0.27.0 that no code wrote
+    for extra in [
+        "uid",
+        "name",
+        "host",
+        "message",
+        "values",
+        "status",
+        "errorCode",
+        "palette",
+    ] {
+        let mut line = line.clone();
+        line[extra] = json!("x");
+        let error = serde_json::from_value::<Line>(line)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(&format!("unknown field `{extra}`")),
+            "{error}"
+        );
+        let mut entry = entry.clone();
+        entry[extra] = json!("x");
+        let error = serde_json::from_value::<Entry>(entry)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains(&format!("unknown field `{extra}`")),
+            "{error}"
+        );
+    }
+    // the fields of the sighting are the same in the line and in the entry
+    for field in ["strata", "set", "value", "route"] {
+        assert_eq!(line[field], entry[field], "{field}");
+    }
 }
 
 #[test]
@@ -226,13 +258,13 @@ fn the_log_adds_a_line_to_the_lines_it_has_and_makes_the_folder() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("state").join("strata").join(FILE);
     full_line().append(&file).unwrap();
-    Line::new("PackState", "quarantined", "/v1/packs", None)
+    Line::new("PackState", "quarantined", "/v1/packs")
         .append(&file)
         .unwrap();
     let text = std::fs::read_to_string(&file).unwrap();
     assert_eq!(text.lines().count(), 2, "{text}");
     assert!(text.ends_with('\n'));
-    assert_eq!(lines_of(&file)[1].set, "PackState");
+    assert_eq!(lines_of(&file)[1].sighting.set, "PackState");
 }
 
 // ---- no name and no uid ----------------------------------------------------------------------
@@ -262,8 +294,8 @@ fn a_document_with_a_uid_and_a_name_writes_neither_to_the_log() {
         assert!(!text.contains(secret), "the log holds `{secret}`: {text}");
     }
     let line = &lines_of(&file)[0];
-    assert_eq!(line.route, "/v1/clusterprofiles/{uid}");
-    assert_eq!(line.value, "later-type");
+    assert_eq!(line.sighting.route, "/v1/clusterprofiles/{uid}");
+    assert_eq!(line.sighting.value, "later-type");
 }
 
 // ---- the reads that give a value of a closed set ---------------------------------------------
@@ -278,7 +310,10 @@ fn a_pack_state_that_the_listing_gives_and_the_set_does_not_name_names_the_pack_
     let lines = lines_of(&dir.path().join(FILE));
     assert_eq!(lines.len(), 1, "{lines:?}");
     assert_eq!(
-        (lines[0].set.as_str(), lines[0].route.as_str()),
+        (
+            lines[0].sighting.set.as_str(),
+            lines[0].sighting.route.as_str()
+        ),
         ("PackState", "/v1/packs")
     );
 }
@@ -297,7 +332,10 @@ fn a_provider_type_that_the_oci_summary_gives_names_the_oci_summary() {
     let lines = lines_of(&dir.path().join(FILE));
     assert_eq!(lines.len(), 1, "{lines:?}");
     assert_eq!(
-        (lines[0].set.as_str(), lines[0].route.as_str()),
+        (
+            lines[0].sighting.set.as_str(),
+            lines[0].sighting.route.as_str()
+        ),
         ("OciProvider", OCI_SUMMARY_TEMPLATE)
     );
 }
@@ -311,7 +349,7 @@ fn a_provider_type_on_the_pack_ref_of_a_cluster_names_the_cluster_route() {
     assert_eq!(pack.registry_provider_type.unwrap().as_str(), "oras");
     let lines = lines_of(&dir.path().join(FILE));
     assert_eq!(lines.len(), 1, "{lines:?}");
-    assert_eq!(lines[0].route, "/v1/spectroclusters/{uid}");
+    assert_eq!(lines[0].sighting.route, "/v1/spectroclusters/{uid}");
 }
 
 // ---- the read of the log ---------------------------------------------------------------------
@@ -323,7 +361,7 @@ fn log_of(lines: &[&str]) -> String {
 
 /// A line of the log as strata writes it, with the value `value`.
 fn written(value: &str) -> String {
-    serde_json::to_string(&Line::new("PackState", value, "/v1/packs", None)).unwrap()
+    serde_json::to_string(&Line::new("PackState", value, "/v1/packs")).unwrap()
 }
 
 #[test]
@@ -349,7 +387,7 @@ fn the_read_gives_the_lines_that_strata_wrote_in_order_and_skips_a_blank_line() 
     let lines = read(&file).unwrap();
     assert_eq!(lines.len(), 2);
     assert_eq!(lines[0], full_line());
-    assert_eq!(lines[1].value, "retired");
+    assert_eq!(lines[1].sighting.value, "retired");
 }
 
 #[test]
@@ -396,7 +434,7 @@ fn a_line_that_is_not_json_or_has_a_field_of_the_wrong_type_fails_the_read() {
         assert_eq!(error.kind(), "log-invalid", "{bad}");
     }
     let mut wrong = serde_json::to_value(full_line()).unwrap();
-    wrong["status"] = json!("404");
+    wrong["value"] = json!(404);
     std::fs::write(&file, log_of(&[&wrong.to_string()])).unwrap();
     assert_eq!(read(&file).unwrap_err().kind(), "log-invalid");
 }
@@ -480,7 +518,17 @@ fn a_route_with_a_character_outside_the_closed_set_of_a_template_fails_the_read(
 fn a_value_that_is_empty_long_or_not_text_fails_the_read() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
-    for value in [String::new(), "a".repeat(65), "a\u{1b}b".to_string()] {
+    for value in [
+        String::new(),
+        "a".repeat(65),
+        "a\u{1b}b".to_string(),
+        "pending\u{200b}".to_string(),
+        "later\u{202e}gnp.exe".to_string(),
+        "p\u{0435}nding".to_string(),
+        " pending ".to_string(),
+        "pending ".to_string(),
+        "two words".to_string(),
+    ] {
         let mut line = serde_json::to_value(full_line()).unwrap();
         line["value"] = json!(value);
         std::fs::write(&file, log_of(&[&line.to_string()])).unwrap();
@@ -497,7 +545,7 @@ fn a_value_that_is_empty_long_or_not_text_fails_the_read() {
 fn every_line_that_a_watch_writes_passes_the_read() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
-    let _watching = logging(dir.path()).palette_release("4.10").start();
+    let _watching = logging(dir.path()).start();
     seen::<OciProvider>("oras", OCI_SUMMARY_TEMPLATE);
     seen::<PackState>(&"é".repeat(100), PROFILE_TEMPLATE);
     seen::<PackState>("a\nb", CLUSTER_TEMPLATE);
@@ -525,8 +573,8 @@ fn the_mark_is_a_file_beside_the_log_and_a_missing_or_damaged_mark_counts_none()
 
 /// A line with the set `set`, the value `value`, and the version `strata` of strata.
 fn line_of(set: &str, value: &str, strata: &str) -> Line {
-    let mut line = Line::new(set, value, "/v1/packs", None);
-    line.strata = strata.to_string();
+    let mut line = Line::new(set, value, "/v1/packs");
+    line.sighting.strata = strata.to_string();
     line
 }
 
@@ -544,7 +592,10 @@ fn the_report_holds_each_different_line_once_with_its_count() {
     let found: Vec<(&str, &str, &str, usize)> = report
         .unknown
         .iter()
-        .map(|e| (e.set.as_str(), e.value.as_str(), e.strata.as_str(), e.count))
+        .map(|e| {
+            let s = &e.sighting;
+            (s.set.as_str(), s.value.as_str(), s.strata.as_str(), e.count)
+        })
         .collect();
     assert_eq!(
         found,
@@ -573,7 +624,10 @@ fn the_report_orders_the_entries_by_set_value_route_and_then_by_version_not_by_t
     let order: Vec<(&str, &str, &str)> = report
         .unknown
         .iter()
-        .map(|e| (e.set.as_str(), e.value.as_str(), e.strata.as_str()))
+        .map(|e| {
+            let s = &e.sighting;
+            (s.set.as_str(), s.value.as_str(), s.strata.as_str())
+        })
         .collect();
     assert_eq!(
         order,
@@ -600,16 +654,13 @@ fn two_lines_with_one_version_order_and_two_texts_are_two_entries_and_the_equal_
 }
 
 #[test]
-fn lines_that_differ_in_the_release_the_status_or_the_error_code_are_separate_entries() {
+fn lines_that_differ_in_the_route_are_separate_entries() {
     let base = line_of("A", "x", "0.26.0");
-    let mut release = base.clone();
-    release.palette = Some("4.10".to_string());
-    let mut status = base.clone();
-    status.status = Some(404);
-    let mut code = base.clone();
-    code.error_code = Some("Gone".to_string());
-    let report = Report::of(&[base, release, status, code]);
-    assert_eq!(report.unknown.len(), 4);
+    let mut other = base.clone();
+    other.sighting.route = "/v1/clusterprofiles/{uid}".to_string();
+    let report = Report::of(&[base.clone(), other, base]);
+    assert_eq!(report.unknown.len(), 2);
+    assert_eq!(report.unknown.iter().map(|e| e.count).sum::<usize>(), 3);
 }
 
 #[test]
@@ -733,4 +784,24 @@ fn a_watch_shows_the_hint_one_time_in_a_run_and_never_when_quiet() {
 fn a_watch_with_no_hint_shows_none() {
     let mut watch = Watch::new(Progress::new(false));
     assert_eq!(watch.hint_text(), None);
+}
+
+#[test]
+fn the_schema_of_the_report_refuses_a_field_outside_the_list_in_the_report_and_in_an_entry() {
+    // the entry flattens the sighting, and the schema still lists the fields of both
+    let schema = schemars::schema_for!(Report);
+    let value = schema.as_value();
+    assert_eq!(value["additionalProperties"], false);
+    let entry = &value["$defs"]["Entry"];
+    assert_eq!(entry["additionalProperties"], false);
+    let names: BTreeSet<&str> = entry["properties"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(
+        names,
+        BTreeSet::from(["strata", "set", "value", "route", "count"])
+    );
 }

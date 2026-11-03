@@ -6,7 +6,8 @@ use std::io::IsTerminal;
 use std::process::ExitCode;
 
 use strata::api::{self, HttpApi, Palette, Retry};
-use strata::closed_set::unknown::{self, Hint, Watch, Watching, send};
+use strata::closed_set::unknown::hint::Hint;
+use strata::closed_set::unknown::{self, Watch, Watching, send};
 use strata::config::{self, Config};
 use strata::error::Result;
 use strata::ops;
@@ -69,9 +70,10 @@ pub(crate) fn send_unknown(watching: &Watching, progress: Progress) {
         progress.warn(&complaint);
     }
     let go = match send::step(&facts) {
-        send::Step::Nothing => false,
         send::Step::Send => true,
         send::Step::Ask => ask_to_send(progress),
+        // `Nothing`, and a step that a later release adds and this one does not know
+        _ => false,
     };
     if let (true, Some(endpoint), Some(log)) = (go, &facts.endpoint, unknown::log::path()) {
         match ops::send_unknown_report(&log, endpoint) {

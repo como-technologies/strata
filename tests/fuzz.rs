@@ -19,8 +19,8 @@ use strata::term::progress::Progress;
 
 use common::{
     CLUSTER_LISTING, PROFILE_LISTING, PROJECT_LISTING, REGISTRY_LISTING, Run, UID_B,
-    against_closed_port, cluster_manifests_route, cluster_ref, cluster_route,
-    cluster_variables_route, listing, manifests_route, profile_route, snapshot_of_ref,
+    against_closed_port, answer_fault, cluster_manifests_route, cluster_ref, cluster_route,
+    cluster_variables_route, listing, manifests_route, profile_route, ref_fault, snapshot_of_ref,
     strata_command, variables_route,
 };
 
@@ -196,15 +196,9 @@ fn junk_json(rng: &mut Rng, depth: usize) -> Value {
     Value::Object(o)
 }
 
-/// An error is an answer: it carries a kind and exits 2. A panic is not.
+/// An error is an answer: see [`answer_fault`]. A panic is not.
 fn is_answer<T>(r: &strata::Result<T>) -> bool {
-    match r {
-        Ok(_) => true,
-        Err(e) => {
-            let json = e.to_json();
-            !e.kind().is_empty() && e.exit_code() == 2 && json.get("kind").is_some()
-        }
-    }
+    r.as_ref().err().is_none_or(|e| answer_fault(e).is_none())
 }
 
 #[test]
@@ -212,15 +206,10 @@ fn ref_parse_answers_for_any_string() {
     let mut rng = Rng::new(seed());
     for case in 0..20_000 {
         let text = junk_string(&mut rng);
-        // parse_with decides the file question itself, so no case touches the filesystem
-        let r = Ref::parse_with(&text, |_| false);
-        // whatever it decided, saying it again must not lose the ref
-        let said = r.to_string();
-        assert!(
-            !said.is_empty() || text.is_empty(),
-            "seed {} case {case}: {text:?} printed as nothing",
-            seed()
-        );
+        // the check decides the file question itself, so no case touches the filesystem
+        if let Err(fault) = ref_fault(&text) {
+            panic!("seed {} case {case}: {fault}", seed());
+        }
     }
 }
 

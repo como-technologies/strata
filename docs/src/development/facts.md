@@ -636,6 +636,12 @@ steps for each new value:
 A person who sees the note on standard error has the same choice. The note names the type of the
 set, such as `PackState`, and the log has the route. The fact for that route names the field.
 
+An issue "A user of strata reports the" value comes from the endpoint of the report, with the label
+`unknown-value`: see [The issue of a value](./report-endpoint.md#the-issue-of-a-value). Do the same
+steps. The weekly run can have opened its own issue for the same value, so close both together.
+When a release of strata names the value, remove the label `unknown-value` from the issue and close
+it. A closed issue with the label still counts toward the limit of the endpoint.
+
 ## The facts of the clouds
 
 A rule of the cloud tier of strata-preflight runs the tool of a cloud, such as `aws` or `gcloud`,

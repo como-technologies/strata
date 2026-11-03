@@ -25,9 +25,12 @@ The service checks each request in this order. A request that fails a check chan
 
 Check 3 is the type `Report` of the library. The send of strata and the endpoint use the same type,
 so the list of fields has one definition. A report has 1 to 100 entries. The check refuses a
-route that is not a template of a route and a value of more than 64 characters. It also refuses a
-count of more than 1,000,000. Check 4 comes after checks 2 and 3, so a request that fails them spends no request of
-the sender.
+count of more than 1,000,000.
+
+The check also refuses a route that is not a template of a route. It refuses a value of more than
+64 characters, and a value with a space or with a character other than printable ASCII. Check 4
+comes after
+checks 2 and 3, so a request that fails them spends no request of the sender.
 
 A request that passes check 7 gets the answer 202, and the service writes the report after the
 answer. The answer is JSON: `{"ok":true,"opens":1,"updates":0}`, or `{"error":"..."}`. The message of
@@ -61,8 +64,11 @@ Three limits protect the tracker. They hold for all senders together, except the
 | Writes: new issues and changes | 200 in an hour | The step waits. |
 
 A sender is an address. An IPv6 address counts by its /64 network, because one machine can send from
-all the addresses of its network. The table holds 10,000 senders. When more senders come, the oldest sender leaves the table. So a
-flood of addresses cannot lock out a new sender.
+all the addresses of its network. The table holds 10,000 senders. When more senders come, the oldest
+sender leaves the table. So a flood of addresses cannot lock out a new sender.
+
+The service also drops each sender whose hour is over. It does this when a request comes, one time
+in a minute at most.
 
 A step is one set and one value of the report. The service keeps the steps that the new-issue limit
 and the write limit take, in the order of the set and the value. For each step it does not keep, the
@@ -74,9 +80,13 @@ the limits keep no step, the answer is 429 with `Retry-After`, and the service w
 The merge is not atomic. When the tracker fails in the middle of a report, the issues written so
 far stay. The sender has its answer by then, so the rest of the report is lost.
 
-The service reads at most 1000 issues of the label. When the label has more, the service answers
-502 and logs the cause. It does not open a second issue for a value that it cannot find. Close the
-issues of values that a release of strata names, or remove the label from them.
+The service reads at most 1000 issues of its label, open and closed. A closed issue counts, because
+the service must find the issue of a value to give it the new count. When the label has more, the
+service answers 502 and logs the cause. It does not open a second issue for a value that it cannot
+find. Remove the label from the issues of values that a release of strata names.
+
+The label belongs to the service. The weekly contract run has its own label, `palette-drift`, so its
+issues do not count toward the 1000.
 
 ## The locks and the threads
 
@@ -106,16 +116,29 @@ A set and a value have one issue. Its first line is a marker:
 
 The service writes the set and the value in the marker with the escape of an address, so a value
 cannot end the comment. The second line holds the state of the issue, in hex. The table in the
-body shows the same state: the lines, the reports, the releases of strata and of Palette, the routes,
-and the refusals. Each list holds 20 items at most.
+body shows the same state: the lines, the reports, the releases of strata, and the routes. Each
+list holds 20 items at most. The state of an older service can hold the lists `palette` and
+`refusals`. The service reads such a state and ignores those lists.
 
 - A later report of the value changes the body of the issue. It writes no comment, so it sends no
   notification.
 - A closed issue gets the new count too, and stays closed. Users of an older release send the
   value until they update.
-- The issue has the label `palette-drift` and the milestone `Backlog`. The weekly contract run uses
-  both. The marker differs from the markers of that run, so the two never touch each other's issues.
+- The issue has the label `unknown-value` and the milestone `Backlog`. The weekly contract run has
+  the label `palette-drift` and the same milestone. A test makes sure that the milestone is the
+  same text in the service and in the script of the run.
 - A person writes notes in a comment. The next report writes the body again.
+
+The lab and the users can both see a new value. Then the weekly contract run opens its issue, and
+the service opens another. This is by design, because the two issues answer two questions: what
+the lab sees, and what users see.
+
+- The run writes one issue for a fact and a set, with all the new values of the set. It closes the
+  issue when the values are gone.
+- The service writes one issue for a value, with the counts of the reports of users.
+
+The two writers share no label and no marker. So the issues of the one never count toward the limit
+of the other.
 
 A maintainer proves the value in the lab, then follows
 [What to do with a new value](./facts.md#what-to-do-with-a-new-value).
@@ -126,6 +149,8 @@ The service keeps no address and no report. Its memory holds these things, each 
 the process makes when it starts:
 
 - A hash of the address of each sender, for one hour. An IPv6 address counts by its /64 network.
+  The service drops an old hash when a request comes, one time in a minute at most. So a hash
+  can stay a minute after its hour, and longer when no request comes.
 - A hash of the key and the content of each report that it took, for one day.
 
 It writes the hashes nowhere, and a restart of the service forgets them. The tracker keeps the
@@ -142,9 +167,9 @@ Cloud Run sets the variables of the service. Only the token is required.
 | Variable | Default | What it sets |
 | --- | --- | --- |
 | `GITHUB_TOKEN` | none, required | The token that writes issues: see [The token](#the-token). |
-| `GITHUB_REPOSITORY` | `como-technologies/strata` | The repository that gets the issues. |
+| `GITHUB_REPOSITORY` | the repository of `report-endpoint/Cargo.toml` | The repository that gets the issues. The deploy sets no value. |
 | `GITHUB_API` | `https://api.github.com` | The address of the API. A test points it at a stand-in. |
-| `REPORT_LABEL` | `palette-drift` | The label of each issue. |
+| `REPORT_LABEL` | `unknown-value` | The label of each issue, and the only label that the service lists. |
 | `REPORT_MILESTONE` | `Backlog` | The milestone of a new issue, when the repository has it open. An empty value is no milestone. |
 | `TRUST_FORWARDED_FOR` | not set | `1` reads the sender from the last entry of `X-Forwarded-For`. The deploy sets it, because the front end of Cloud Run adds that entry. |
 | `PORT` | `8080` | The port. Cloud Run sets it. |
@@ -186,7 +211,9 @@ not deploy it, because a session has no account of Google.
 2. Make the two accounts, with the commands of [Make the two accounts](#make-the-two-accounts). A
    person who owns the project does this one time.
 3. Run `just report-deploy --dry-run`, and read the commands.
-4. Run `just report-deploy`. The script builds the image on Cloud Build as `strata-report-build`.
+4. Move the issues of an older service to the label of this one, one time: see
+   [Move the issues to the label of the service](#move-the-issues-to-the-label-of-the-service).
+   Run `just report-deploy`. The script builds the image on Cloud Build as `strata-report-build`.
    Then it deploys the service `strata-report` as `strata-report`, with one instance, 512 MiB of
    memory, and the CPU on after the answer. Then it prints the address. When an account is missing,
    the script stops with a message that names it.
@@ -218,6 +245,34 @@ fails when the memory is less than 512 MiB with `--no-cpu-throttling`.
 The deploy script reads no secret and grants no role. `just report-deploy --project ID --region NAME`
 replaces the project and the region. To remove the service, run
 `gcloud run services delete strata-report --project ID --region NAME`.
+
+### Move the issues to the label of the service
+
+An older service wrote its issues with the label `palette-drift`, which the weekly contract run
+uses too. The service lists the label `unknown-value` now. Move the issues of the older service
+before the first deploy. If you do not, the new service does not find them, and it opens a second
+issue for each value.
+
+1. Make the label. When the label is missing, GitHub makes it with the first issue and gives it no
+   description:
+
+   ```bash
+   gh label create unknown-value --repo como-technologies/strata \
+     --description "strata: a user reports a value that strata does not know"
+   ```
+
+2. Move each issue whose first line is the marker of the service. The issues of the contract run
+   have another marker, so they stay:
+
+   ```bash
+   gh issue list --repo como-technologies/strata --label palette-drift --state all --limit 1000 \
+     --json number,body \
+     | jq -r '.[] | select((.body // "") | startswith("<!-- strata-report: values ")) | .number' \
+     | xargs -n 1 gh issue edit --repo como-technologies/strata \
+         --add-label unknown-value --remove-label palette-drift
+   ```
+
+The state of an issue keeps its count, so the next report of the value adds to it.
 
 ### Make the two accounts
 

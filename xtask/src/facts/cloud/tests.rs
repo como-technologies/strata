@@ -720,7 +720,7 @@ fn the_scan_reads_the_code_after_the_line_mod_tests_of_the_files_of_strata() {
     assert_eq!(unread, Vec::<String>::new());
     // each of these files declares its module of tests above its code
     for (file, item) in [
-        ("src/closed_set/unknown.rs", "const LONGEST_VALUE"),
+        ("src/closed_set/unknown.rs", "pub struct Watch"),
         ("src/closed_set/unknown/send.rs", "pub const SETTING"),
     ] {
         assert!(

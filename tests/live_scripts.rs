@@ -7309,7 +7309,7 @@ fn report_send_sh_sends_twice_to_the_endpoint_and_checks_that_one_issue_holds_bo
     }
     let gh = std::fs::read_to_string(dir.path().join("gh.log")).unwrap();
     assert!(
-        gh.contains("issue list --repo o/r --label palette-drift --state all"),
+        gh.contains("issue list --repo o/r --label unknown-value --state all"),
         "{gh}"
     );
     // the script changed HOME, and gh still looked in the folder of the login

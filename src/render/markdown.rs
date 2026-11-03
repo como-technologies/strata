@@ -26,7 +26,7 @@ use super::verify::{
 };
 use super::{Renderer, capitalized, count_of, entry_error, short};
 use crate::closed_set::ClosedSet;
-use crate::closed_set::unknown::Report;
+use crate::closed_set::unknown::report::Report;
 use crate::diff::{Diff, Leaf, Op, PackDiff, Status};
 use crate::error::Result;
 use crate::model::profile_type::ProfileType;

@@ -8,18 +8,28 @@ use std::fmt;
 /// The variable that holds the token of GitHub. It is required.
 pub const TOKEN_VAR: &str = "GITHUB_TOKEN";
 
-/// The repository that gets the issues, when `GITHUB_REPOSITORY` is not set.
-const DEFAULT_REPOSITORY: &str = "como-technologies/strata";
+/// The repository that gets the issues, when `GITHUB_REPOSITORY` is not set: the repository that the
+/// manifest of this crate names, as `owner/name`. So the address of the repository has one text.
+fn default_repository() -> String {
+    let url = env!("CARGO_PKG_REPOSITORY");
+    url.strip_prefix("https://github.com/")
+        .unwrap_or(url)
+        .to_string()
+}
 
 /// The address of the API of GitHub, when `GITHUB_API` is not set.
 const DEFAULT_API: &str = "https://api.github.com";
 
-/// The label of each issue. It is the label that the weekly contract run uses.
-const DEFAULT_LABEL: &str = "palette-drift";
+/// The label of each issue, and the only label that the service lists.
+///
+/// The service reads the issues of this label, open and closed, up to a limit. No other writer uses
+/// the label, so the issues of the weekly contract run, which has the label `palette-drift`, do not
+/// spend that limit.
+pub const DEFAULT_LABEL: &str = "unknown-value";
 
 /// The milestone of a new issue, when the repository has it open. It is the milestone that the
-/// weekly contract run uses.
-const DEFAULT_MILESTONE: &str = "Backlog";
+/// weekly contract run uses, and a test makes sure that the two agree.
+pub const DEFAULT_MILESTONE: &str = "Backlog";
 
 /// The port that Cloud Run gives to the service.
 const DEFAULT_PORT: u16 = 8080;
@@ -83,7 +93,7 @@ impl Settings {
         Ok(Settings {
             port,
             token,
-            repository: get("GITHUB_REPOSITORY").unwrap_or_else(|| DEFAULT_REPOSITORY.into()),
+            repository: get("GITHUB_REPOSITORY").unwrap_or_else(default_repository),
             api: get("GITHUB_API").unwrap_or_else(|| DEFAULT_API.into()),
             label: get("REPORT_LABEL").unwrap_or_else(|| DEFAULT_LABEL.into()),
             milestone,
@@ -120,8 +130,8 @@ mod tests {
         assert_eq!(settings.port, 8080);
         assert_eq!(settings.repository, "como-technologies/strata");
         assert_eq!(settings.api, "https://api.github.com");
-        assert_eq!(settings.label, "palette-drift");
-        assert_eq!(settings.milestone.as_deref(), Some("Backlog"));
+        assert_eq!(settings.label, DEFAULT_LABEL);
+        assert_eq!(settings.milestone.as_deref(), Some(DEFAULT_MILESTONE));
         assert!(
             !settings.trust_forwarded,
             "the header is not trusted by default"

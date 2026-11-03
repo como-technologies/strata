@@ -1,8 +1,9 @@
 //! The routes of Palette, and the documents that a test or a benchmark serves from them.
 //!
 //! The crate names each route in a const of its own that is not public. So this file names the
-//! route again, in one place. `tests/common/mod.rs` re-exports it for the tests, and the library
-//! of `benches/` includes it for the benchmarks, so that no second list of the routes exists.
+//! route again, in one place. `tests/common/mod.rs` re-exports it for the tests, and the libraries
+//! of `benches/` and `fuzz/` include it with `#[path]`, so that no second list of the routes
+//! exists.
 //!
 //! The route helpers write the route that Palette serves, on purpose. They do not call
 //! `strata::api::subject_path` or another function of `strata::api` that builds a route. A test
@@ -10,6 +11,10 @@
 //! shipped script or of a stand-in server needs the same route text as the script.
 
 use serde_json::{Value, json};
+
+/// The uid of the fixture a, `lab-profile@1.2.0`, and of each fixture made from a. The fuzz
+/// targets give it to their profile too, so that one text names the uid of a profile document.
+pub const UID_A: &str = "64f0000000000000000000a1";
 
 /// The profile listing, `GET /v1/dashboard/clusterprofiles/metadata`.
 pub const PROFILE_LISTING: &str = "/v1/dashboard/clusterprofiles/metadata";
@@ -344,9 +349,15 @@ pub fn serve_profile(
         .with(variables_route(uid), variables)
 }
 
+/// The answer of `packs/manifests` for a version with these `packs`, such as
+/// [`PackFixture::pack_manifests`] builds them.
+pub fn manifests_answer(packs: Vec<Value>) -> Value {
+    json!({"spec": {"packs": packs}})
+}
+
 /// The answer of `packs/manifests` for a version whose packs have no manifest.
 pub fn no_manifests() -> Value {
-    json!({"spec": {"packs": []}})
+    manifests_answer(Vec::new())
 }
 
 /// The answer of `variables` for a version with no variable.

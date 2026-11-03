@@ -1,8 +1,7 @@
 //! The tests of the merge, with the issues in memory.
 
 use serde_json::json;
-use strata::closed_set::unknown::Report;
-use strata::closed_set::unknown::report::SCHEMA;
+use strata::closed_set::unknown::report::{Report, SCHEMA};
 
 use super::memory::Memory;
 use super::*;
@@ -12,7 +11,7 @@ fn report(entries: &[serde_json::Value]) -> Report {
 }
 
 fn entry(set: &str, value: &str, strata: &str, count: u64) -> serde_json::Value {
-    json!({"strata": strata, "palette": "4.7.1", "set": set, "value": value,
+    json!({"strata": strata, "set": set, "value": value,
         "route": "/v1/clusterprofiles/{uid}", "count": count})
 }
 
@@ -56,12 +55,16 @@ fn two_reports_of_one_value_are_one_issue_with_the_sum_of_their_lines() {
         text.contains("| Releases of strata | `0.26.0`, `0.27.0` |"),
         "{text}"
     );
-    assert!(text.contains("| Releases of Palette | `4.7.1` |"), "{text}");
     assert!(
         text.contains("| Routes | `/v1/clusterprofiles/{uid}` |"),
         "{text}"
     );
-    assert!(text.contains("| Refusals | none |"), "{text}");
+    for row in ["Releases of Palette", "Refusals"] {
+        assert!(
+            !text.contains(row),
+            "no release of strata writes this: {text}"
+        );
+    }
 }
 
 #[test]
@@ -116,12 +119,13 @@ fn entries_of_one_value_in_one_report_count_one_report_and_add_their_lines() {
 }
 
 #[test]
-fn the_marker_is_the_first_line_and_the_state_is_the_second_and_a_refusal_is_listed() {
+fn the_marker_is_the_first_line_and_the_state_is_the_second() {
     let mut tracker = Memory::default();
-    let mut refused = entry("PackState", "gone", "0.26.0", 1);
-    refused["status"] = json!(409);
-    refused["errorCode"] = json!("PackGone");
-    merge(&mut tracker, &report(&[refused])).unwrap();
+    merge(
+        &mut tracker,
+        &report(&[entry("PackState", "gone", "0.26.0", 1)]),
+    )
+    .unwrap();
     let text = &tracker.issues[0].1;
     let mut lines = text.lines();
     assert_eq!(
@@ -134,7 +138,6 @@ fn the_marker_is_the_first_line_and_the_state_is_the_second_and_a_refusal_is_lis
             .unwrap()
             .starts_with("<!-- strata-report-state: ")
     );
-    assert!(text.contains("| Refusals | `409 PackGone` |"), "{text}");
 }
 
 #[test]
@@ -235,8 +238,6 @@ fn a_line_break_in_a_field_cannot_end_the_row_of_the_table() {
     let mut tracker = Memory::default();
     let mut bad = entry("ProfileType", "later", "0.26.0", 1);
     bad["route"] = json!("/v1/x\n\n@someone [a](http://example.invalid)");
-    bad["errorCode"] = json!("Gone\n\n@someone");
-    bad["status"] = json!(409);
     merge(&mut tracker, &report(&[bad])).unwrap();
     let (_, text, _) = &tracker.issues[0];
     for line in text.lines() {
@@ -244,10 +245,6 @@ fn a_line_break_in_a_field_cannot_end_the_row_of_the_table() {
     }
     assert!(
         text.contains("| Routes | `/v1/x  @someone [a](http://example.invalid)` |"),
-        "{text}"
-    );
-    assert!(
-        text.contains("| Refusals | `409 Gone  @someone` |"),
         "{text}"
     );
 }
@@ -322,4 +319,40 @@ fn versions_are_listed_in_the_order_of_versions_and_not_of_text() {
         text.contains("| Releases of strata | `0.2.0`, `0.9.0`, `0.10.0` |"),
         "{text}"
     );
+}
+
+#[test]
+fn a_state_that_an_older_service_wrote_with_the_palette_and_the_refusals_still_reads() {
+    // release 0.27.0 wrote the lists `palette` and `refusals`, and no release writes them now
+    let old = json!({"lines": 4, "reports": 2, "strata": ["0.26.0"], "palette": ["4.7.1"],
+        "routes": ["/v1/packs"], "refusals": ["409 Gone"]});
+    let text = format!(
+        "<!-- strata-report: values S v -->\n{STATE}{} -->\nbody",
+        hex::encode(old.to_string())
+    );
+    let state = read_state(&text);
+    assert_eq!((state.lines, state.reports), (4, 2));
+    let mut tracker = Memory::default();
+    tracker.issues.push(("t".into(), text, true));
+    merge(&mut tracker, &report(&[entry("S", "v", "0.27.0", 1)])).unwrap();
+    let body = &tracker.issues[0].1;
+    assert!(body.contains("| Lines | 5 |"), "the count goes on: {body}");
+    assert!(body.contains("| Reports | 3 |"), "{body}");
+    assert!(!body.contains("4.7.1") && !body.contains("409"), "{body}");
+}
+
+#[test]
+fn the_endpoint_writes_a_value_in_a_code_span_as_the_library_does() {
+    let value = "late`r";
+    let mut tracker = Memory::default();
+    merge(
+        &mut tracker,
+        &report(&[entry("ProfileType", value, "0.26.0", 1)]),
+    )
+    .unwrap();
+    let (title, text, _) = &tracker.issues[0];
+    let span = strata::text::code_span(value);
+    assert_eq!(span, "``late`r``");
+    assert!(title.contains(&span), "{title}");
+    assert!(text.contains(&span), "{text}");
 }

@@ -5,12 +5,14 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use strata::closed_set::unknown::Report;
 use strata::closed_set::unknown::log::SCHEMA as LOG_SCHEMA;
-use strata::closed_set::unknown::report::SCHEMA as REPORT_SCHEMA;
+use strata::closed_set::unknown::report::{Report, SCHEMA as REPORT_SCHEMA};
 use strata::closed_set::unknown::send::post;
 use strata_report_endpoint::server::{MOST_AT_ONCE, Service, serve};
+use strata_report_endpoint::settings::{DEFAULT_LABEL, DEFAULT_MILESTONE};
 use strata_report_endpoint::tracker::GitHub;
+
+mod common;
 
 const TOKEN: &str = "ghp_test_token_0123456789";
 
@@ -130,14 +132,20 @@ fn github_answer(state: &mut GitHubState, method: &str, url: &str, body: &Value)
             json!([{"title": "Wave", "number": 8}, {"title": "Backlog", "number": 7}]),
         ),
         ("GET", "/issues") => {
-            let page: usize = query
-                .split('&')
-                .find_map(|p| p.strip_prefix("page="))
-                .and_then(|n| n.parse().ok())
-                .unwrap_or(1);
+            let param = |name: &str| {
+                query
+                    .split('&')
+                    .find_map(|p| p.strip_prefix(&format!("{name}=")))
+            };
+            let page: usize = param("page").and_then(|n| n.parse().ok()).unwrap_or(1);
+            // GitHub lists the issues of one label, and the open ones unless `state` says another
+            let label = param("labels");
+            let wanted = param("state").unwrap_or("open");
             let items: Vec<Value> = state
                 .issues
                 .iter()
+                .filter(|i| label.is_none_or(|l| i.labels.iter().any(|x| x == l)))
+                .filter(|i| wanted == "all" || i.state == wanted)
                 .skip((page - 1) * 100)
                 .take(100)
                 .map(|i| {
@@ -204,7 +212,7 @@ fn start_service_behind(github: &str, proxy: bool) -> Running {
 
 /// Start the real service, where at most `most_at_once` requests run at the same time.
 fn start_service_with(github: &str, proxy: bool, most_at_once: usize) -> Running {
-    let tracker = GitHub::new(github, "o/r", TOKEN, "palette-drift", Some("Backlog"));
+    let tracker = GitHub::new(github, "o/r", TOKEN, DEFAULT_LABEL, Some(DEFAULT_MILESTONE));
     let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").unwrap());
     let address = format!("http://{}/", server.server_addr().to_ip().unwrap());
     let service = Arc::new(Service::new(tracker));
@@ -218,7 +226,7 @@ fn report(entries: &[Value]) -> Report {
 }
 
 fn entry(value: &str, count: u64) -> Value {
-    json!({"strata": "0.26.0", "palette": "4.7.1", "set": "ProfileType", "value": value,
+    json!({"strata": "0.26.0", "set": "ProfileType", "value": value,
         "route": "/v1/clusterprofiles/{uid}", "count": count})
 }
 
@@ -264,7 +272,7 @@ fn two_sends_of_strata_for_one_value_are_one_issue_with_a_count_of_both() {
     let state = state.lock().unwrap();
     assert_eq!(state.issues.len(), 1, "{:?}", state.issues);
     let issue = &state.issues[0];
-    assert_eq!(issue.labels, ["palette-drift"]);
+    assert_eq!(issue.labels, [DEFAULT_LABEL]);
     assert_eq!(issue.milestone, Some(7), "the milestone Backlog");
     assert_eq!(issue.state, "open");
     assert!(
@@ -458,7 +466,7 @@ fn an_issue_on_the_second_page_is_found_and_a_pull_request_with_a_marker_is_not(
                 number,
                 title: format!("issue {number}"),
                 body: format!("<!-- strata-contract: {number} -->"),
-                labels: vec!["palette-drift".into()],
+                labels: vec![DEFAULT_LABEL.into()],
                 milestone: None,
                 state: "open",
                 pull_request: false,
@@ -518,12 +526,11 @@ fn the_report_of_the_send_of_strata_passes_the_check_of_the_endpoint_for_each_se
     // the entries that strata makes from its own log pass: the client and the endpoint share one check
     let (github, _) = stand_in_github();
     let running = start_service(&github);
-    let lines: Vec<strata::closed_set::unknown::Line> = serde_json::from_value(json!([
+    let lines: Vec<strata::closed_set::unknown::log::Line> = serde_json::from_value(json!([
         {"schema": LOG_SCHEMA, "strata": "0.26.0", "set": "PackState", "value": "retired",
             "route": "/v1/packs"},
-        {"schema": LOG_SCHEMA, "strata": "0.26.0", "palette": "4.7.1", "set": "ProfileType",
-            "value": "later", "route": "/v1/clusterprofiles/{uid}", "status": 409,
-            "errorCode": "Gone"},
+        {"schema": LOG_SCHEMA, "strata": "0.26.0", "set": "ProfileType", "value": "later",
+            "route": "/v1/clusterprofiles/{uid}"},
     ]))
     .unwrap();
     post(&running.address, &Report::of(&lines), 0).unwrap();
@@ -604,7 +611,7 @@ fn more_issues_than_the_service_reads_give_502_and_no_second_issue_for_the_value
                 number,
                 title: format!("issue {number}"),
                 body: format!("<!-- strata-contract: {number} -->"),
-                labels: vec!["palette-drift".into()],
+                labels: vec![DEFAULT_LABEL.into()],
                 milestone: None,
                 state: "open",
                 pull_request: false,
@@ -624,6 +631,72 @@ fn more_issues_than_the_service_reads_give_502_and_no_second_issue_for_the_value
         "the service opened no issue it could not find again"
     );
     assert_eq!(state.lock().unwrap().issues.len(), 1000);
+}
+
+#[test]
+fn closed_issues_of_the_contract_run_do_not_count_toward_the_limit_of_the_service() {
+    // the weekly contract run writes its issues with a label of its own, and it closes them
+    let contract = common::contract_label();
+    let (github, state) = stand_in_github();
+    {
+        let mut state = state.lock().unwrap();
+        for number in 1..=1000 {
+            state.issues.push(Stored {
+                number,
+                title: format!("issue {number}"),
+                body: format!("<!-- strata-contract: values fact {number} -->"),
+                labels: vec![contract.clone()],
+                milestone: None,
+                state: "closed",
+                pull_request: false,
+            });
+        }
+    }
+    let running = start_service(&github);
+    let (status, _) = raw_post(
+        &running.address,
+        "application/json",
+        &report_text(&[entry("later", 1)]),
+    );
+    assert_eq!(status, 202);
+    running.settle();
+    let state = state.lock().unwrap();
+    assert_eq!(state.issues.len(), 1001, "the service opened the issue");
+    assert_eq!(state.issues[1000].labels, [DEFAULT_LABEL]);
+    let lists = state
+        .calls
+        .iter()
+        .filter(|c| c.method == "GET" && c.path.contains("/issues?"))
+        .count();
+    assert_eq!(lists, 1, "one page: the service reads its own label only");
+}
+
+#[test]
+fn a_closed_issue_of_the_label_of_the_service_still_counts_toward_its_limit() {
+    // the service lists closed issues too, so that a closed issue of a value gets the new count
+    let (github, state) = stand_in_github();
+    {
+        let mut state = state.lock().unwrap();
+        for number in 1..=1000 {
+            state.issues.push(Stored {
+                number,
+                title: format!("issue {number}"),
+                body: format!("<!-- strata-report: values ProfileType closed-{number} -->"),
+                labels: vec![DEFAULT_LABEL.into()],
+                milestone: None,
+                state: "closed",
+                pull_request: false,
+            });
+        }
+    }
+    let running = start_service(&github);
+    let (status, _) = raw_post(
+        &running.address,
+        "application/json",
+        &report_text(&[entry("later", 1)]),
+    );
+    assert_eq!(status, 502);
+    assert_eq!(writes(&state), 0);
 }
 
 /// `count` entries, each a value of its own.

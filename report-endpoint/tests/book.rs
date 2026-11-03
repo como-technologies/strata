@@ -1,15 +1,14 @@
 //! The page of the book about the endpoint states what the code does: the settings that the
 //! service reads, and the limits that it keeps.
 
-use std::path::Path;
-
 use strata_report_endpoint::server::{
     MOST_AT_ONCE, NEW_ISSUES_PER_HOUR, REQUESTS_PER_HOUR, WRITES_PER_HOUR,
 };
+use strata_report_endpoint::settings::DEFAULT_LABEL;
 
-fn read(path: &str) -> String {
-    std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(path)).unwrap()
-}
+mod common;
+
+use common::read;
 
 fn page() -> String {
     read("../docs/src/development/report-endpoint.md")
@@ -26,7 +25,8 @@ fn section<'a>(page: &'a str, heading: &str) -> &'a str {
 }
 
 /// The names of the variables that `settings.rs` reads: each quoted word of capital letters and
-/// underscores before the tests.
+/// underscores before the tests. A `CARGO_` variable is read when the crate builds, so it is not a
+/// setting of the service.
 fn variables_of_the_code() -> Vec<String> {
     let source = read("src/settings.rs");
     let code = source.split("#[cfg(test)]").next().unwrap();
@@ -34,6 +34,7 @@ fn variables_of_the_code() -> Vec<String> {
         .skip(1)
         .step_by(2)
         .filter(|word| word.len() > 2 && word.chars().all(|c| c.is_ascii_uppercase() || c == '_'))
+        .filter(|word| !word.starts_with("CARGO_"))
         .map(str::to_string)
         .collect()
 }
@@ -108,4 +109,21 @@ fn the_page_states_the_limits_and_the_most_requests_at_once_of_the_code() {
         )),
         "{request}"
     );
+}
+
+#[test]
+fn the_page_names_the_label_of_the_service_and_says_that_a_closed_issue_counts_toward_the_limit() {
+    let page = page();
+    let settings = section(&page, "The settings of the service");
+    assert!(
+        settings.contains(&format!("| `REPORT_LABEL` | `{DEFAULT_LABEL}` |")),
+        "the table does not give the default label"
+    );
+    let limits = section(&page, "The limits");
+    assert!(
+        limits.contains("reads at most 1000 issues of its label, open and closed"),
+        "{limits}"
+    );
+    // closing an issue does not lower the count, so the page must not say that it does
+    assert!(!page.contains("Close the issues of values"), "{page}");
 }

@@ -4,8 +4,8 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 
 use super::{ANSWER_FILE, Choice, Facts, Step, keep_answer, post, question, read_answer, step};
-use crate::closed_set::unknown::Report;
 use crate::closed_set::unknown::log::Line;
+use crate::closed_set::unknown::report::Report;
 use crate::error::Error;
 
 /// The facts of a run in a terminal that wrote a line, has an address, and has no setting and no
@@ -203,12 +203,7 @@ fn report_of(lines: &[Line]) -> Report {
 type Change = fn(&mut Line);
 
 fn line(value: &str) -> Line {
-    Line::new(
-        "ProfileType",
-        value,
-        "/v1/clusterprofiles/{uid}",
-        Some("4.7.1"),
-    )
+    Line::new("ProfileType", value, "/v1/clusterprofiles/{uid}")
 }
 
 #[test]
@@ -238,24 +233,22 @@ fn a_report_with_another_schema_no_entry_or_too_many_entries_is_refused() {
 
 #[test]
 fn an_entry_with_a_field_that_is_not_a_short_word_is_refused_and_the_message_names_the_field() {
-    let cases: [(&str, Change); 11] = [
-        ("the value", |l| l.value = "x".repeat(65)),
-        ("the value", |l| l.value = "a\nb".into()),
+    let cases: [(&str, Change); 9] = [
+        ("the value", |l| l.sighting.value = "x".repeat(65)),
+        ("the value", |l| l.sighting.value = "a\nb".into()),
+        ("the value", |l| l.sighting.value = "pending\u{200b}".into()),
         ("the route", |l| {
-            l.route = "/v1/clusterprofiles/64f0a1b2c3d4e5f6a7b8c9d0".into();
+            l.sighting.route = "/v1/clusterprofiles/64f0a1b2c3d4e5f6a7b8c9d0".into();
         }),
         ("the route has more than 200", |l| {
-            l.route = format!("/v1/{}", "z/".repeat(100));
+            l.sighting.route = format!("/v1/{}", "z/".repeat(100));
         }),
         ("the route is not a template", |l| {
-            l.route = "/v1/packs\n\n@someone".into();
+            l.sighting.route = "/v1/packs\n\n@someone".into();
         }),
-        ("the set", |l| l.set = "Profile Type".into()),
-        ("the set", |l| l.set = String::new()),
-        ("the strata", |l| l.strata = "0.26.0 <b>".into()),
-        ("the palette", |l| l.palette = Some("x".repeat(65))),
-        ("the status", |l| l.status = Some(99)),
-        ("the error code", |l| l.error_code = Some("a\tb".into())),
+        ("the set", |l| l.sighting.set = "Profile Type".into()),
+        ("the set", |l| l.sighting.set = String::new()),
+        ("the strata", |l| l.sighting.strata = "0.26.0 <b>".into()),
     ];
     for (what, change) in cases {
         let mut broken = line("a");
@@ -411,7 +404,7 @@ fn the_post_follows_no_redirect() {
 #[test]
 fn the_post_refuses_a_report_that_is_not_valid_before_it_calls_the_endpoint() {
     let mut report = report_of(&[line("a")]);
-    report.unknown[0].value = "x".repeat(65);
+    report.unknown[0].sighting.value = "x".repeat(65);
     // nothing listens here: the error must come from the check, not from the connection
     let error = post("http://127.0.0.1:9/", &report, 0)
         .unwrap_err()

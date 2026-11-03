@@ -32,6 +32,6 @@ Options:
       --json
           With --dir: the same as --format json
   -q, --quiet
-          No progress messages
+          No progress messages, no note of an unknown value, and no warning of the send
   -h, --help
           Print help

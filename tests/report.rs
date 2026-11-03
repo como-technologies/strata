@@ -124,18 +124,74 @@ fn report_markdown_is_a_table_that_serves_as_the_body_of_an_issue() {
         run.out
     );
     assert!(
-        run.out
-            .contains("| set | value | route | count | strata | Palette | status | error code |"),
+        run.out.contains("| set | value | route | count | strata |"),
         "{}",
         run.out
     );
     assert!(
         run.out.contains(&format!(
-            "| `ProfileType` | `{LATER_TYPE}` | `/v1/clusterprofiles/{{uid}}` | 2 | {TOOL_VERSION} | - | - | - |"
+            "| `ProfileType` | `{LATER_TYPE}` | `/v1/clusterprofiles/{{uid}}` | 2 | {TOOL_VERSION} |"
         )),
         "{}",
         run.out
     );
+}
+
+#[test]
+fn report_markdown_writes_a_value_with_a_backtick_or_a_bar_in_a_code_span_that_it_cannot_end() {
+    // the endpoint writes the value of its issue with the same function: see `code_span`
+    let home = tempfile::tempdir().unwrap();
+    write_log(
+        home.path(),
+        &[log_line(
+            "ProfileType",
+            "late`r|x",
+            "/v1/clusterprofiles/{uid}",
+        )],
+    );
+    let run = report(home.path(), &["--format", "markdown"]);
+    assert_eq!(run.code, 0, "{}", run.err);
+    let span = strata::text::code_span("late`r|x");
+    assert_eq!(span, "``late`r\\|x``");
+    assert!(
+        run.out.contains(&format!(
+            "| `ProfileType` | {span} | `/v1/clusterprofiles/{{uid}}` | 1 |"
+        )),
+        "{}",
+        run.out
+    );
+}
+
+#[test]
+fn report_stops_on_a_log_with_a_value_that_is_not_one_word_of_printable_ascii() {
+    // U+200B is a zero width space: the issue of `pending` and the issue of `pending` and U+200B
+    // look equal, and U+202E sets the direction of the text from there on. Markdown drops one
+    // space at each end of a code span, so ` pending ` and `pending` look equal too
+    for value in [
+        "pending\u{200b}",
+        "later\u{202e}gnp.exe",
+        "p\u{0435}nding",
+        " pending ",
+        "pending ",
+        "two words",
+    ] {
+        let home = tempfile::tempdir().unwrap();
+        write_log(
+            home.path(),
+            &[log_line("ProfileType", value, "/v1/clusterprofiles/{uid}")],
+        );
+        let run = report(home.path(), &["--json"]);
+        assert_eq!(run.code, 2, "{value:?}: {}", run.out);
+        let error: Value = serde_json::from_str(&run.err).unwrap();
+        assert_eq!(error["error"]["kind"], "log-invalid", "{value:?}");
+        assert!(
+            error["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("printable ASCII"),
+            "{error}"
+        );
+    }
 }
 
 #[test]
@@ -476,15 +532,15 @@ fn the_operations_read_a_log_by_its_path_and_mark_only_when_asked() {
 
 #[test]
 fn a_link_of_an_empty_report_is_none_and_a_long_one_is_a_usage_error() {
-    let empty = strata::closed_set::unknown::Report::of(&[]);
+    let empty = strata::closed_set::unknown::report::Report::of(&[]);
     assert_eq!(report_link(&empty, "").unwrap(), None);
-    let lines: Vec<strata::closed_set::unknown::Line> = (0..2)
+    let lines: Vec<strata::closed_set::unknown::log::Line> = (0..2)
         .map(|n| {
             serde_json::from_str(&log_line("PackState", &format!("value-{n}"), "/v1/packs"))
                 .unwrap()
         })
         .collect();
-    let report = strata::closed_set::unknown::Report::of(&lines);
+    let report = strata::closed_set::unknown::report::Report::of(&lines);
     let link = report_link(&report, "short body").unwrap().unwrap();
     assert!(link.ends_with("&body=short%20body"), "{link}");
     let error = report_link(&report, &"x".repeat(7000)).unwrap_err();

@@ -6,7 +6,7 @@ use strata::ops::{self, RecordStatus, VerifyOptions};
 use strata::reference::Ref;
 use strata::term::progress::Progress;
 
-use crate::fleet::{VerifyFleet, consumer_fleet};
+use crate::fleet::{VerifyFleet, all_running, consumer_fleet};
 use crate::profile::{Change, PROFILE_UID, Shape, raw_profile, snapshot};
 use crate::{GENERATED_AT, PALETTE_LIMIT, candidate, real};
 
@@ -136,12 +136,7 @@ fn a_consumer_fleet_lists_each_cluster_with_its_state_and_no_error() {
     )
     .expect("a report");
     assert_eq!(report.count, 4);
-    assert!(
-        report
-            .consumers
-            .iter()
-            .all(|c| c.error.is_none() && c.state == "Running")
-    );
+    assert!(all_running(&report));
 }
 
 #[test]

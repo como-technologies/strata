@@ -2450,15 +2450,17 @@ fn the_rows_that_the_review_named_have_their_results_or_say_what_they_wait_for()
             assert!(none(row), "{row}");
         }
     };
-    for check in [
-        "`send-1`",
-        "`issue`",
-        "`send-2`",
-        "`repeat-1`",
-        "`repeat-2`",
-    ] {
+    for check in ["`send-1`", "`send-2`", "`repeat-1`", "`repeat-2`"] {
         has_result("## report-send.sh", &format!("| {check}"));
     }
+    // #574 gave the endpoint a label of its own, so the check `issue` waits for a live run with it
+    let send = section(&page, "## report-send.sh", Some("\n## "));
+    let issue = send
+        .lines()
+        .find(|l| l.starts_with("| `issue`"))
+        .expect("report-send.sh has no row for issue");
+    assert!(!none(issue), "{issue}");
+    assert!(issue.contains("`unknown-value`"), "{issue}");
     has_result("## fleet.sh", "| `filters-project`");
     has_result("## loop.sh", "| `report-log`");
     assert!(
@@ -2749,10 +2751,6 @@ fn the_public_rustdoc_that_the_review_at_the_end_of_wave_13_named_keeps_to_25_wo
             "A watch with no log shows no hint",
         ),
         ("src/closed_set/unknown/hint.rs", "When and where the hint"),
-        (
-            "src/closed_set/unknown/log.rs",
-            "comes from an answer of status 2xx",
-        ),
         ("src/ops/report.rs", "This function only reads."),
         ("src/ops/report.rs", "The address of a new issue of strata."),
         ("src/snapshot/pack.rs", "Build one pack from its ref"),
@@ -2957,6 +2955,57 @@ fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup
         assert!(
             library.contains(needle),
             "the library part lacks {needle:?}"
+        );
+    }
+}
+
+/// Review of Wave 13, A12: the rule of the ids says that a new field keeps the id, and the two
+/// documents of the unknown values are the exception. The page of the versions says so.
+#[test]
+fn the_page_of_the_versions_says_that_the_two_documents_of_the_unknown_values_refuse_a_new_field() {
+    let page = one_line(&read(&docs().join("reference/compatibility.md")));
+    for needle in [
+        "`strata-unknown/1` and `strata-report/1` refuse each field that they do not list",
+        "A new field of either takes a new id.",
+    ] {
+        assert!(page.contains(needle), "the page lacks {needle:?}");
+    }
+    let documents = one_line(&read(&docs().join("reference/documents.md")));
+    assert!(
+        documents.contains(
+            "A new field takes a new id: see [The documents](./compatibility.md#the-documents)."
+        ),
+        "documents.md does not send the reader to the rule"
+    );
+}
+
+/// Review of Wave 13, A13: a `match` outside the library breaks on each public type of the send
+/// that is `#[non_exhaustive]`. The section of release 0.28.0 names every one of them.
+#[test]
+fn the_section_of_release_0_28_0_names_each_non_exhaustive_type_of_the_send() {
+    let source =
+        read(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src/closed_set/unknown/send.rs"));
+    let marked: Vec<&str> = source
+        .lines()
+        .zip(source.lines().skip(1))
+        .filter(|(attribute, _)| attribute.trim() == "#[non_exhaustive]")
+        .filter_map(|(_, item)| item.strip_prefix("pub enum ")?.split_whitespace().next())
+        .collect();
+    assert!(marked.len() >= 2, "the send has marked types: {marked:?}");
+    let page = read(&docs().join("reference/compatibility.md"));
+    let library = one_line(section(
+        section(
+            &page,
+            "## Release 0.28.0: changes that need action",
+            Some("\n## "),
+        ),
+        "### For a user of the library of strata\n",
+        Some("\n### "),
+    ));
+    for name in marked {
+        assert!(
+            library.contains(&format!("`closed_set::unknown::send::{name}`")),
+            "the section of release 0.28.0 does not name {name}"
         );
     }
 }

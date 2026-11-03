@@ -15,13 +15,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use strata::BOOK_URL;
-use strata::closed_set::unknown::Report;
+use strata::closed_set::unknown::report::Report;
 use strata::reference::version;
-use strata::text::{markdown_cell, query_value};
+use strata::text::{code_span, query_value};
 
 use crate::tracker::{Issue, Tracker, TrackerError};
 
-/// The most releases, routes, and refusals that one issue lists. More are dropped, so that a sender
+/// The most releases and routes that one issue lists. More are dropped, so that a sender
 /// cannot make the body of an issue grow.
 pub const MOST_LISTED: usize = 20;
 
@@ -52,39 +52,27 @@ struct Group {
 
 /// The state of an issue: what the reports said, summed.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 struct State {
     lines: u64,
     reports: u64,
     strata: BTreeSet<String>,
-    palette: BTreeSet<String>,
     routes: BTreeSet<String>,
-    refusals: BTreeSet<String>,
 }
 
 impl State {
-    /// Add `other` to the state. A list holds [`MOST_LISTED`] items at most: a list of releases
-    /// keeps the newest, and a list of routes or refusals keeps the first.
+    /// Add `other` to the state. A list holds [`MOST_LISTED`] items at most: the list of releases
+    /// keeps the newest, and the list of routes keeps the first.
     fn add(&mut self, other: &State) {
         self.lines = self.lines.saturating_add(other.lines);
         self.reports = self.reports.saturating_add(other.reports);
-        for (mine, theirs) in [
-            (&mut self.routes, &other.routes),
-            (&mut self.refusals, &other.refusals),
-        ] {
-            for item in theirs {
-                if mine.len() < MOST_LISTED {
-                    mine.insert(item.clone());
-                }
+        for item in &other.routes {
+            if self.routes.len() < MOST_LISTED {
+                self.routes.insert(item.clone());
             }
         }
-        for (mine, theirs) in [
-            (&mut self.strata, &other.strata),
-            (&mut self.palette, &other.palette),
-        ] {
-            for item in theirs {
-                add_release(mine, item);
-            }
+        for item in &other.strata {
+            add_release(&mut self.strata, item);
         }
     }
 }
@@ -115,10 +103,10 @@ fn groups(report: &Report) -> Vec<Group> {
     let mut found: BTreeMap<(&str, &str), Group> = BTreeMap::new();
     for (at, entry) in report.unknown.iter().enumerate() {
         let group = found
-            .entry((&entry.set, &entry.value))
+            .entry((&entry.sighting.set, &entry.sighting.value))
             .or_insert_with(|| Group {
-                set: entry.set.clone(),
-                value: entry.value.clone(),
+                set: entry.sighting.set.clone(),
+                value: entry.sighting.value.clone(),
                 state: State {
                     reports: 1,
                     ..State::default()
@@ -130,43 +118,16 @@ fn groups(report: &Report) -> Vec<Group> {
             lines: entry.count as u64,
             ..State::default()
         };
-        one.strata.insert(entry.strata.clone());
-        one.palette.extend(entry.palette.clone());
-        one.routes.insert(entry.route.clone());
-        one.refusals
-            .extend(refusal(entry.status, entry.error_code.as_deref()));
+        one.strata.insert(entry.sighting.strata.clone());
+        one.routes.insert(entry.sighting.route.clone());
         group.state.add(&one);
     }
     found.into_values().collect()
 }
 
-/// The refusal of Palette that an entry names, as `409 Code`, or `None` when it names none.
-fn refusal(status: Option<u16>, code: Option<&str>) -> Option<String> {
-    match (status, code) {
-        (Some(status), Some(code)) => Some(format!("{status} {code}")),
-        (Some(status), None) => Some(status.to_string()),
-        (None, Some(code)) => Some(code.to_string()),
-        (None, None) => None,
-    }
-}
-
 /// The marker of the issue for the set `set` and the value `value`.
 fn marker(set: &str, value: &str) -> String {
     format!("{MARKER}{} {} -->", query_value(set), query_value(value))
-}
-
-/// `text` as a code span: the fence is longer than each run of backticks in the text, so a value
-/// cannot end the span. [`markdown_cell`] writes the text, so a value cannot end a cell or a row of
-/// a table. This is a second guard: the check of the report refuses a line break first.
-fn code_span(text: &str) -> String {
-    let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
-    let fence = "`".repeat(longest + 1);
-    let pad = if text.starts_with('`') || text.ends_with('`') {
-        " "
-    } else {
-        ""
-    };
-    format!("{fence}{pad}{}{pad}{fence}", markdown_cell(text))
 }
 
 /// The items of `items` as code spans, in version order, or `none` when there is no item.
@@ -209,9 +170,7 @@ fn body(set: &str, value: &str, state: &State) -> String {
          | Lines | {lines} |\n\
          | Reports | {reports_count} |\n\
          | Releases of strata | {strata} |\n\
-         | Releases of Palette | {palette} |\n\
          | Routes | {routes} |\n\
-         | Refusals | {refusals} |\n\
          \n\
          A report states that strata is out of date. It is never a report of a fault of Palette. \
          A report holds no name, no uid, and no host.\n\
@@ -232,9 +191,7 @@ fn body(set: &str, value: &str, state: &State) -> String {
         lines = state.lines,
         reports_count = state.reports,
         strata = cell(&state.strata, true),
-        palette = cell(&state.palette, true),
         routes = cell(&state.routes, false),
-        refusals = cell(&state.refusals, false),
     )
 }
 

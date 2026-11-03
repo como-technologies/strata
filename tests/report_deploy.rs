@@ -164,7 +164,7 @@ fn a_dry_run_prints_each_gcloud_command_and_runs_none() {
         "gcloud run deploy strata-report --project como-strata-test --region us-central1",
         "--set-secrets GITHUB_TOKEN=strata-report-token:latest",
         "--max-instances 1",
-        "--set-env-vars GITHUB_REPOSITORY=como-technologies/strata,TRUST_FORWARDED_FOR=1",
+        "--set-env-vars TRUST_FORWARDED_FOR=1",
         "--allow-unauthenticated",
     ] {
         assert!(run.err.contains(part), "{part}:\n{}", run.err);
