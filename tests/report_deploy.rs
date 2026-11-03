@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use crate::common::{Run, fake_bin, one_line, path_with, recipe, repo_file};
+use crate::common::{Run, code_lines, fake_bin, one_line, path_with, recipe, repo_file};
 
 /// A `gcloud` that logs each call to `$FAKE_GCLOUD/calls`, and answers as the file `$FAKE_GCLOUD/*`
 /// says. `no-secret` makes `secrets describe` fail, `no-registry` makes the registry missing, and
@@ -362,8 +362,7 @@ fn the_script_makes_no_account_and_grants_no_role() {
         assert!(!call.contains("service-accounts create"), "{call}");
     }
     // the commands in the header are comments, and no line of code holds one
-    let script = repo_file("deploy/report/deploy.sh");
-    for line in script.lines().filter(|l| !l.trim_start().starts_with('#')) {
+    for line in code_lines(&repo_file("deploy/report/deploy.sh")) {
         assert!(!line.contains("add-iam-policy-binding"), "{line}");
         assert!(!line.contains("service-accounts create"), "{line}");
     }

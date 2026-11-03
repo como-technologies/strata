@@ -15,9 +15,10 @@
 set -euo pipefail
 
 script=timer
-die() { echo "$script: $*" >&2; exit 2; }
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo=$(cd "$here/../.." && pwd)
+# shellcheck source=examples/live/common.sh
+. "$repo/examples/live/common.sh"
 units=${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user
 # shellcheck source=deploy/contract/folder.sh
 . "$here/folder.sh"

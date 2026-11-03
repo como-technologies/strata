@@ -1093,7 +1093,8 @@ fn common_sh_defines_die_and_usage_and_nothing_else_and_it_prints_nothing_when_a
 
 #[test]
 fn die_and_usage_are_defined_in_common_sh_alone_and_the_scripts_that_have_them_source_it() {
-    // the same two lines were in lib.sh, contract.sh, and contract-profiles.sh
+    // the same two lines were in lib.sh, contract.sh, and contract-profiles.sh, and then in the
+    // scripts that run no strata
     let common = repo_file("examples/live/common.sh");
     let die = r#"die() { echo "$script: $*" >&2; exit 2; }"#;
     assert!(common.lines().any(|l| l == die), "common.sh has die");
@@ -1103,25 +1104,45 @@ fn die_and_usage_are_defined_in_common_sh_alone_and_the_scripts_that_have_them_s
             .any(|l| l.starts_with("usage() { sed -n '2,/^set -uo/p'")),
         "common.sh has usage"
     );
-    for entry in std::fs::read_dir(live_script("")).unwrap() {
-        let path = entry.unwrap().path();
-        if path.extension().is_none_or(|e| e != "sh") || path.ends_with("common.sh") {
-            continue;
+    // any head of the two functions is a copy, also one with another text or an indent
+    for dir in ["examples/live", "deploy"] {
+        for path in walk(&Path::new(env!("CARGO_MANIFEST_DIR")).join(dir)) {
+            if path.extension().is_none_or(|e| e != "sh")
+                || path.ends_with("examples/live/common.sh")
+            {
+                continue;
+            }
+            let script = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                !script.lines().any(|l| {
+                    let l = l.trim_start();
+                    l.starts_with("die()") || l.starts_with("usage()")
+                }),
+                "{} defines die or usage again: source common.sh",
+                path.display()
+            );
         }
-        let script = std::fs::read_to_string(&path).unwrap();
-        assert!(
-            !script
-                .lines()
-                .any(|l| l == die || l.starts_with("usage() ")),
-            "{} defines die or usage again: source common.sh",
-            path.display()
-        );
     }
-    for name in ["lib.sh", "contract.sh", "contract-profiles.sh"] {
-        assert!(
-            repo_file(&format!("examples/live/{name}")).contains(". \"$live/common.sh\"\n"),
-            "{name} sources common.sh"
-        );
+    for (file, source) in [
+        ("examples/live/lib.sh", ". \"$live/common.sh\"\n"),
+        ("examples/live/contract.sh", ". \"$live/common.sh\"\n"),
+        (
+            "examples/live/contract-profiles.sh",
+            ". \"$live/common.sh\"\n",
+        ),
+        ("examples/live/api.sh", ". \"$live/common.sh\"\n"),
+        ("examples/live/tenant.sh", ". \"$live/common.sh\"\n"),
+        ("examples/live/tofu-install.sh", ". \"$live/common.sh\"\n"),
+        (
+            "deploy/contract/timer.sh",
+            ". \"$repo/examples/live/common.sh\"\n",
+        ),
+        (
+            "deploy/report/deploy.sh",
+            ". \"$repo/examples/live/common.sh\"\n",
+        ),
+    ] {
+        assert!(repo_file(file).contains(source), "{file} sources common.sh");
     }
 }
 
@@ -4939,7 +4960,7 @@ fn listings_of_profiles() -> Vec<(String, String)> {
         }
         let file = path.file_name().unwrap().to_string_lossy().into_owned();
         let source = std::fs::read_to_string(&path).unwrap();
-        let mut lines = source.lines().filter(|l| !l.trim_start().starts_with('#'));
+        let mut lines = code_lines(&source);
         while let Some(line) = lines.next() {
             let strata_list =
                 line.contains("$strata\" list ") || line.contains("$strata\\\" list ");

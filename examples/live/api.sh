@@ -162,7 +162,9 @@
 # PALETTE_API (default https://api.spectrocloud.com). PALETTE_PROJECT_UID scopes the requests.
 set -uo pipefail
 
-die() { echo "api.sh: $*" >&2; exit 2; }
+live=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+script=api.sh
+. "$live/common.sh"
 from_env_file() {
   [ -f "$HOME/.palette.env" ] || return 0
   (set -a; . "$HOME/.palette.env" >/dev/null 2>&1; printf %s "${!1:-}")
@@ -874,6 +876,5 @@ case "${1:-}" in
   put) shift; put "$@" ;;
   post) shift; post "$@" ;;
   post-status) shift; post_status "$@" ;;
-  # The same text as `usage` of lib.sh. This script does not source lib.sh: lib.sh runs this script.
-  *) sed -n '2,/^set -uo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 2 ;;
+  *) usage; exit 2 ;;
 esac

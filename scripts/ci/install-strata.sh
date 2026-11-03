@@ -30,7 +30,7 @@
 set -euo pipefail
 
 die() { echo "install-strata: $*" >&2; exit 2; }
-note() { [ -n "${STRATA_QUIET:-}" ] || echo "install-strata: $*" >&2; }
+note() { echo "install-strata: $*" >&2; }
 
 version="${STRATA_VERSION:-latest}"
 dir=".strata"

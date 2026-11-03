@@ -17,7 +17,7 @@ line.
 | `PALETTE_PROJECT` | tenant scope | The project, by name, when `PALETTE_PROJECT_UID` is not set. An empty value is tenant scope, also when `~/.palette.env` sets a name. An unknown name is the error `project-not-found`, which lists the projects that the key can see. |
 | `STRATA_RETRIES` | `3` | The number of retries after HTTP 5xx, HTTP 429, or a transport error. Strata sends no other request again, and no 5xx that is a [refusal of Palette](./errors.md#refusals-that-strata-does-not-send-again). |
 | `STRATA_MAX_RETRY_AFTER` | `300` | The longest `Retry-After` wait, in seconds. A longer one is the error `retry-after-too-long`, while a retry remains. On the last attempt, the error is `api`. |
-| `STRATA_QUIET` | not set | Any value stops the progress messages, as `--quiet` does. Environment only. |
+| `STRATA_QUIET` | not set | Any value stops the progress messages of strata, as `--quiet` does. The scripts in `scripts/ci/` ignore it: the notes of a script state its result. Environment only. |
 | `STRATA_REPORT` | not set | `1` sends the [report of the unknown values](./report.md#send-the-report-by-itself) at the end of a run that wrote a line to the log. `0` sends nothing and asks nothing. Any other value sends nothing, and strata prints a warning. With no value, a run in a terminal asks one time. |
 | `STRATA_REPORT_URL` | the endpoint of the maintainers, which the release names | The address that receives the report. Set it to send to another endpoint. |
 | `CI` | not set | A value stops the question of the send. Pipelines set this variable. |

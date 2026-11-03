@@ -759,6 +759,22 @@ pub fn repo_file(path: &str) -> String {
         .unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
+/// The lines of `text` that are not comments. A line is a comment when `#` is its first character
+/// after the indent.
+pub fn code_lines(text: &str) -> impl Iterator<Item = &str> {
+    text.lines().filter(|l| !l.trim_start().starts_with('#'))
+}
+
+/// `text` without its comment lines, one line after the other.
+pub fn without_comments(text: &str) -> String {
+    code_lines(text).collect::<Vec<_>>().join("\n")
+}
+
+/// The text of a file of the repository, by its path from the root, without its comment lines.
+pub fn code_of(path: &str) -> String {
+    without_comments(&repo_file(path))
+}
+
 /// `text` with each run of white space as one space, as a line break can fall inside a sentence.
 pub fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")

@@ -61,7 +61,9 @@
 set -Eeuo pipefail
 
 script=deploy
-die() { echo "$script: $*" >&2; exit 2; }
+repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+# shellcheck source=examples/live/common.sh
+. "$repo/examples/live/common.sh"
 
 project="${STRATA_REPORT_PROJECT:-como-strata-test}"
 region="${STRATA_REPORT_REGION:-us-central1}"

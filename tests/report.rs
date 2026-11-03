@@ -14,7 +14,9 @@ use strata::closed_set::unknown::log::{FILE, SCHEMA as LOG_SCHEMA, SENT_FILE};
 use strata::closed_set::unknown::report::SCHEMA as REPORT_SCHEMA;
 use strata::ops::{ReportOptions, mark_reported, report_link, unknown_report};
 
-use crate::common::{LATER_TYPE, Run, log_in, log_line, report_command, write_lines, write_log};
+use crate::common::{
+    LATER_TYPE, Run, log_in, log_line, log_line_of, report_command, write_lines, write_log,
+};
 
 /// The lines of a log with a value that two runs gave, and a value that one run gave.
 fn two_values() -> Vec<String> {
@@ -135,6 +137,41 @@ fn report_markdown_is_a_table_that_serves_as_the_body_of_an_issue() {
         "{}",
         run.out
     );
+}
+
+#[test]
+fn report_shows_the_version_that_a_line_holds_and_not_the_running_version() {
+    // a log holds lines of older releases, so the version of a line differs from `TOOL_VERSION`
+    const OLDER: &str = "0.1.0";
+    assert_ne!(OLDER, TOOL_VERSION);
+    let home = tempfile::tempdir().unwrap();
+    write_log(
+        home.path(),
+        &[log_line_of(OLDER, "PackState", "retired", "/v1/packs")],
+    );
+
+    let terminal = report(home.path(), &[]);
+    assert_eq!(terminal.code, 0, "{}", terminal.err);
+    let row = terminal.out.lines().find(|l| l.starts_with("  PackState"));
+    assert!(
+        row.is_some_and(|r| r.contains(&format!("strata {OLDER}"))),
+        "{}",
+        terminal.out
+    );
+
+    let markdown = report(home.path(), &["--format", "markdown"]);
+    assert_eq!(markdown.code, 0, "{}", markdown.err);
+    assert!(
+        markdown.out.contains(&format!(
+            "| `PackState` | `retired` | `/v1/packs` | 1 | {OLDER} |"
+        )),
+        "{}",
+        markdown.out
+    );
+
+    let json = report(home.path(), &["--json"]);
+    let document: Value = serde_json::from_str(&json.out).unwrap();
+    assert_eq!(document["unknown"][0]["strata"], OLDER, "{}", json.out);
 }
 
 #[test]

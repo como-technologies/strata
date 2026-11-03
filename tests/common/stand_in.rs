@@ -119,10 +119,16 @@ pub fn log_in(home: &Path) -> PathBuf {
 /// A line of the log, as strata writes it. It holds the value `value` of the set `set`, which the
 /// route `route` gave to this release of strata.
 pub fn log_line(set: &str, value: &str, route: &str) -> String {
+    log_line_of(TOOL_VERSION, set, value, route)
+}
+
+/// A line of the log like [`log_line`], but of the release `strata`. A log holds lines of older
+/// releases, so a test of a version needs a version that is not `TOOL_VERSION`.
+pub fn log_line_of(strata: &str, set: &str, value: &str, route: &str) -> String {
     serde_json::to_string(&Line {
         schema: SCHEMA.to_string(),
         sighting: Sighting {
-            strata: TOOL_VERSION.to_string(),
+            strata: strata.to_string(),
             set: set.to_string(),
             value: value.to_string(),
             route: route.to_string(),

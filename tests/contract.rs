@@ -2198,11 +2198,7 @@ fn the_timer_shows_the_last_result_and_refuses_a_command_it_does_not_have() {
 fn the_units_hold_no_secret_and_name_only_files_that_exist() {
     for unit in ["strata-contract.service", "strata-contract.timer"] {
         // the comments say that the units hold none; the lines of the unit hold none
-        let text: String = repo_file(&format!("deploy/contract/{unit}"))
-            .lines()
-            .filter(|line| !line.starts_with('#'))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let text = code_of(&format!("deploy/contract/{unit}"));
         for secret in ["API_KEY", "APIKEY", "TOKEN", "PASSWORD", "SECRET"] {
             assert!(
                 !text.to_uppercase().contains(secret),
@@ -2325,11 +2321,7 @@ fn the_weekly_job_and_the_timer_read_the_folder_of_the_results_from_one_file() {
         let text = repo_file(&format!("deploy/contract/{script}"));
         assert!(text.contains(". \"$here/folder.sh\""), "{script}");
         // the comments name the folder; no line of code does
-        let code: String = text
-            .lines()
-            .filter(|line| !line.trim_start().starts_with('#'))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let code = without_comments(&text);
         assert!(
             !code.contains("share/strata-contract"),
             "{script} writes the folder again"
