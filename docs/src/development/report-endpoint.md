@@ -41,7 +41,7 @@ sender gets a short sentence.
 ## The key of a send
 
 The send of strata puts a key in the header `Idempotency-Key`. The key is 64 characters of hex: the
-digest of the report and of the number of lines before it in the log. A second try of the same
+digest of the report and of the number of valid lines before it in the log. A second try of the same
 lines has the same key. A request without a key is never a repeat.
 
 - Check 5 hashes the key and the content of the report together, and it keeps the hash for one
@@ -78,13 +78,24 @@ answer lists the numbers of the entries of the report, from 1, in `waiting`:
 makes a report of 20 values or fewer, so an hour that no other sender used takes a whole report. When
 the limits keep no step, the answer is 429 with `Retry-After`, and the service writes nothing.
 
+Strata reads `waiting`. It marks the lines before the first line of a value that waits, and it
+stops. So a value that waits comes back with the next send. The lines after that line come back
+too, and the service counts a line that it took one more time. See
+[What a run sends](../reference/report.md#what-a-run-sends).
+
 The merge is not atomic. When the tracker fails in the middle of a report, the issues written so
 far stay. The sender has its answer by then, so the rest of the report is lost.
 
 The service reads at most 1000 issues of its label, open and closed. A closed issue counts, because
 the service must find the issue of a value to give it the new count. When the label has more, the
 service answers 502 and logs the cause. It does not open a second issue for a value that it cannot
-find. Remove the label from the issues of values that a release of strata names.
+find.
+
+To make room, remove the label from the issue of a value only when no user runs a release that does
+not know the value. The service lists its label alone, so it does not find an issue with no label.
+The next report of that value opens a second issue, and the maintainers read a value that they
+closed. Users of an older release send the value until they update. So a set and a value have one
+issue only while the issue has the label.
 
 The label belongs to the service. The weekly contract run has its own label, `palette-drift`, so its
 issues do not count toward the 1000.
@@ -170,7 +181,7 @@ Cloud Run sets the variables of the service. Only the token is required.
 | Variable | Default | What it sets |
 | --- | --- | --- |
 | `GITHUB_TOKEN` | none, required | The token that writes issues: see [The token](#the-token). |
-| `GITHUB_REPOSITORY` | the repository of `report-endpoint/Cargo.toml` | The repository that gets the issues. The deploy sets no value. |
+| `GITHUB_REPOSITORY` | the repository of the root `Cargo.toml` | The repository that gets the issues. The deploy sets no value. |
 | `GITHUB_API` | `https://api.github.com` | The address of the API. A test points it at a stand-in. |
 | `REPORT_LABEL` | `unknown-value` | The label of each issue, and the only label that the service lists. |
 | `REPORT_MILESTONE` | `Backlog` | The milestone of a new issue, when the repository has it open. An empty value is no milestone. |
@@ -276,6 +287,12 @@ issue for each value.
    ```
 
 The state of an issue keeps its count, so the next report of the value adds to it.
+
+An issue of a value that this release writes in another form stays as it is. Release 0.27.0 sent a
+value with a space, a value with a character that is not printable ASCII, and a long value that
+ends with `…`. This release sends a `?` for each such character, and it ends a long value with
+`...`. So its marker is another marker. The next report of such a value opens a new issue, and the
+first issue gets no more counts. Close it after you read it.
 
 ### Make the two accounts
 

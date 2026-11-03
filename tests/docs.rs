@@ -4314,7 +4314,8 @@ fn the_pages_of_the_log_list_each_fault_of_a_line_and_count_none() {
 }
 
 /// A5: the item of the value says what a report of a client of 0.27.0 gets. It also says what the
-/// send of a run does after the update. The page of the report states the rule of the endpoint.
+/// send of a run does after the update: it skips the line, and `strata report` still stops. The page
+/// of the report states the rule of the endpoint.
 #[test]
 fn compatibility_says_what_a_client_of_0_27_0_gets_for_a_value_that_is_not_one_word() {
     let command_line = release_0_28_0_part("### For a user of the command line or of a document");
@@ -4323,9 +4324,10 @@ fn compatibility_says_what_a_client_of_0_27_0_gets_for_a_value_that_is_not_one_w
          for the whole report.",
         "A client of 0.27.0 then marks no line, so it sends the same report at each run.",
         "No other value of that log reaches the endpoint.",
-        "After the update, the send of a run reads the same log and stops with `log-invalid`.",
+        "After the update, the send of a run skips such a line. It sends the other lines of the log.",
+        "The run writes a warning that gives the count of the skipped lines and the number of the first one.",
         "`--quiet` hides the warning, and the exit code stays `0`.",
-        "So a job with `STRATA_REPORT=1` and `--quiet` sends no value from then on, and shows no sign.",
+        "`strata report` still stops with the error `log-invalid` on such a line.",
     ] {
         assert!(
             command_line.contains(needle),
@@ -4391,4 +4393,152 @@ fn the_pages_of_the_endpoint_say_that_the_sweep_drops_both_hashes_also_for_a_ref
         reference.contains("The service drops it soon after the day."),
         "report.md lacks the end of the hash of a report"
     );
+}
+
+// ---- the review of Wave 14: the send, the endpoint, and report-send.sh keep one text (#593) ------
+
+/// A5: the send skips a line that is not valid, and `strata report` still stops on it. The tests of
+/// `tests/send.rs` show the code.
+#[test]
+fn the_pages_of_the_report_say_that_the_send_skips_a_line_that_is_not_valid() {
+    let reference = one_line(&read(&docs().join("reference/report.md")));
+    for needle in [
+        "The send of a run does not stop on such a line: see [What a run sends](#what-a-run-sends).",
+        "A line of the log that is not valid does not stop the send. Strata skips the line and sends \
+         the valid lines. The mark counts the valid lines only.",
+        "`strata report` still stops on such a line. Delete the line to stop the warning. `--quiet` \
+         hides the warning.",
+    ] {
+        assert!(reference.contains(needle), "report.md lacks {needle:?}");
+    }
+    let command = one_line(&read(&docs().join("commands/report.md")));
+    assert!(
+        command.contains(
+            "The send of a run skips such a line: see \
+             [What a run sends](../reference/report.md#what-a-run-sends)."
+        ),
+        "the command page lacks the skip of the send"
+    );
+    let compatibility = release_0_28_0_part("### For a user of the command line or of a document");
+    for old in [
+        "reads the same log and stops with `log-invalid`",
+        "sends no value from then on, and shows no sign",
+    ] {
+        assert!(
+            !compatibility.contains(old),
+            "compatibility.md still holds {old:?}"
+        );
+    }
+}
+
+/// D5: the pages state that the endpoint can hold back some values, and what strata marks.
+#[test]
+fn the_pages_say_what_the_send_marks_when_the_endpoint_holds_back_a_value() {
+    let reference = one_line(&read(&docs().join("reference/report.md")));
+    for needle in [
+        "When the hour has no room for any value of a report, the endpoint answers 429 with the time \
+         to wait.",
+        "When the hour has room for some values, the endpoint answers 202 and lists the entries that \
+         wait. Strata marks the lines before the first line of a value that waits, and it stops.",
+        "So a value that the endpoint took after that line counts one more time.",
+    ] {
+        assert!(reference.contains(needle), "report.md lacks {needle:?}");
+    }
+    let service = one_line(&read(&docs().join("development/report-endpoint.md")));
+    for needle in [
+        "Strata reads `waiting`. It marks the lines before the first line of a value that waits, and \
+         it stops. So a value that waits comes back with the next send.",
+        "the service counts a line that it took one more time.",
+    ] {
+        assert!(
+            service.contains(needle),
+            "report-endpoint.md lacks {needle:?}"
+        );
+    }
+    let library = release_0_28_0_part("### For a user of the library of strata");
+    for needle in [
+        "`closed_set::unknown::send::post` gives `Result<Vec<usize>>`.",
+        "`ops::send_unknown_report` gives `Result<ops::Sent>`.",
+        "The new type has the fields `marked`, `waiting`, and `skipped`.",
+        "it never gives `Error::LogInvalid`.",
+        "the function marks the lines before the first line of such a value, and stops.",
+    ] {
+        assert!(
+            library.contains(needle),
+            "the library part lacks {needle:?}"
+        );
+    }
+}
+
+/// D8: `code_span` writes no escape, and `code_cell` writes the span for a cell.
+#[test]
+fn compatibility_names_code_cell_beside_code_span() {
+    let library = release_0_28_0_part("### For a user of the library of strata");
+    assert!(
+        library.contains("`text::code_span` and `text::code_cell` are new."),
+        "the library part lacks code_cell"
+    );
+    assert!(
+        library.contains("It escapes nothing, for a title and a sentence."),
+        "the library part lacks the rule of code_span"
+    );
+}
+
+/// D9: the page of the endpoint states what the way under the limit of 1000 issues costs.
+#[test]
+fn the_page_of_the_endpoint_states_that_removing_the_label_opens_a_second_issue() {
+    let service = one_line(&read(&docs().join("development/report-endpoint.md")));
+    for needle in [
+        "To make room, remove the label from the issue of a value only when no user runs a release \
+         that does not know the value.",
+        "The service lists its label alone, so it does not find an issue with no label. The next \
+         report of that value opens a second issue",
+        "So a set and a value have one issue only while the issue has the label.",
+    ] {
+        assert!(
+            service.contains(needle),
+            "report-endpoint.md lacks {needle:?}"
+        );
+    }
+    assert!(
+        !service
+            .contains("Remove the label from the issues of values that a release of strata names."),
+        "report-endpoint.md still advises the removal with no condition"
+    );
+}
+
+/// A12: the page of the move names the values that get a new issue after the update.
+#[test]
+fn the_page_of_the_move_says_that_a_value_in_another_form_gets_a_new_issue() {
+    let service = one_line(&read(&docs().join("development/report-endpoint.md")));
+    for needle in [
+        "An issue of a value that this release writes in another form stays as it is.",
+        "This release sends a `?` for each such character, and it ends a long value with `...`.",
+        "The next report of such a value opens a new issue, and the first issue gets no more counts.",
+    ] {
+        assert!(
+            service.contains(needle),
+            "report-endpoint.md lacks {needle:?}"
+        );
+    }
+    let section = service
+        .split("### Move the issues to the label of the service")
+        .nth(1)
+        .and_then(|rest| rest.split("### Make the two accounts").next())
+        .expect("the page has the section of the move");
+    assert!(
+        section.contains("An issue of a value that this release writes in another form"),
+        "the note is not in the section of the move"
+    );
+}
+
+/// C5: the page names the manifest that holds the repository.
+#[test]
+fn the_page_of_the_endpoint_names_the_root_manifest_for_the_repository() {
+    let service = one_line(&read(&docs().join("development/report-endpoint.md")));
+    assert!(
+        service.contains("| `GITHUB_REPOSITORY` | the repository of the root `Cargo.toml` |"),
+        "report-endpoint.md names another manifest"
+    );
+    assert!(!service.contains("report-endpoint/Cargo.toml"));
 }

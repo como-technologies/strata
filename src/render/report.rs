@@ -2,7 +2,7 @@
 
 use super::count_of;
 use crate::closed_set::unknown::report::{Report, SCHEMA};
-use crate::text::{code_span, dash, markdown_cell};
+use crate::text::{code_cell, dash, markdown_cell};
 
 /// For example, the heading is `Palette gave 2 values that this release of strata does not know`.
 /// For an empty report, it is `Palette gave no values that this release of strata does not know`.
@@ -29,9 +29,9 @@ pub(super) fn markdown_report(r: &Report) -> String {
         let s = &e.sighting;
         o.push_str(&format!(
             "| {} | {} | {} | {} | {} |\n",
-            code_span(&s.set),
-            code_span(&s.value),
-            code_span(&s.route),
+            code_cell(&s.set),
+            code_cell(&s.value),
+            code_cell(&s.route),
             e.count,
             markdown_cell(dash(&s.strata)),
         ));

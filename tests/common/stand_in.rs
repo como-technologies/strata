@@ -160,6 +160,9 @@ impl Request {
     }
 }
 
+/// The body of an answer that holds no list `waiting`: the endpoint took the whole report.
+const TAKEN: &str = r#"{"ok":true}"#;
+
 /// How the stand-in endpoint answers.
 #[derive(Debug, Clone, Copy)]
 pub enum Answer {
@@ -168,6 +171,8 @@ pub enum Answer {
     /// The first request gets the first status, the second request the second, and so on. The
     /// last status stays for each later request.
     Statuses(&'static [u16]),
+    /// With this status and this JSON body, for each request.
+    Body(u16, &'static str),
     /// It reads the request and never answers, so the sender waits until its timeout.
     Silence,
 }
@@ -198,14 +203,14 @@ impl Endpoint {
                     seen.push(request);
                     seen.len() - 1
                 };
-                let status = match answer {
-                    Answer::Status(status) => Some(status),
-                    Answer::Statuses(list) => list.get(number).or(list.last()).copied(),
-                    Answer::Silence => None,
+                let (status, body) = match answer {
+                    Answer::Status(status) => (Some(status), TAKEN),
+                    Answer::Statuses(list) => (list.get(number).or(list.last()).copied(), TAKEN),
+                    Answer::Body(status, body) => (Some(status), body),
+                    Answer::Silence => (None, TAKEN),
                 };
                 match status {
                     Some(status) => {
-                        let body = r#"{"ok":true}"#;
                         let _ = write!(
                             stream,
                             "HTTP/1.1 {status} Stand-in\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",

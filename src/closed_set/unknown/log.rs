@@ -84,6 +84,36 @@ pub fn path() -> Option<PathBuf> {
     Some(state_dir()?.join(FILE))
 }
 
+/// One line of the log that is not blank: its number from 1, and the line or its fault.
+type Scanned = (usize, std::result::Result<Line, String>);
+
+/// The lines of the log `file` that are not blank, each with its number and its fault, if it has
+/// one. A file that is not there is an empty log.
+fn scan(file: &Path) -> Result<Vec<Scanned>> {
+    let text = match read_file(file) {
+        Ok(text) => text,
+        Err(Error::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(Vec::new());
+        }
+        Err(e) => return Err(e),
+    };
+    Ok(text
+        .lines()
+        .enumerate()
+        .filter(|(_, text)| !text.trim().is_empty())
+        .map(|(index, text)| (index + 1, parse(text)))
+        .collect())
+}
+
+/// The line that `text` holds, or what is wrong with it.
+fn parse(text: &str) -> std::result::Result<Line, String> {
+    let line: Line = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    match line.fault() {
+        Some(fault) => Err(fault),
+        None => Ok(line),
+    }
+}
+
 /// The lines of the log `file`, in order. A file that is not there is an empty log. A blank line
 /// is no line.
 ///
@@ -93,31 +123,46 @@ pub fn path() -> Option<PathBuf> {
 /// field that [`FIELDS`] does not list, a field of the wrong type, or a value that strata does not
 /// write. The message names the fault. `Io` when strata cannot read the file.
 pub(crate) fn read(file: &Path) -> Result<Vec<Line>> {
-    let text = match read_file(file) {
-        Ok(text) => text,
-        Err(Error::Io { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(Vec::new());
+    scan(file)?
+        .into_iter()
+        .map(|(number, line)| {
+            line.map_err(|message| Error::LogInvalid {
+                path: file.to_path_buf(),
+                line: number,
+                message,
+            })
+        })
+        .collect()
+}
+
+/// The lines of a log that are valid, and the numbers of the lines that are not.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct Valid {
+    /// The lines that are valid, in order.
+    pub(crate) lines: Vec<Line>,
+    /// The numbers of the lines that are not valid, from 1, in order.
+    pub(crate) invalid: Vec<usize>,
+}
+
+/// The lines of the log `file` that are valid, and the numbers of the other lines. A file that is
+/// not there is an empty log. A blank line is no line.
+///
+/// The send of a run reads the log here, so a line that is not valid does not stop it. The mark of
+/// the lines that are sent counts the valid lines only. [`read`] stops at the first line that is
+/// not valid.
+///
+/// # Errors
+///
+/// `Io` when strata cannot read the file.
+pub(crate) fn read_valid(file: &Path) -> Result<Valid> {
+    let mut valid = Valid::default();
+    for (number, line) in scan(file)? {
+        match line {
+            Ok(line) => valid.lines.push(line),
+            Err(_) => valid.invalid.push(number),
         }
-        Err(e) => return Err(e),
-    };
-    let invalid = |number: usize, message: String| Error::LogInvalid {
-        path: file.to_path_buf(),
-        line: number,
-        message,
-    };
-    let mut lines = Vec::new();
-    for (index, text) in text.lines().enumerate() {
-        if text.trim().is_empty() {
-            continue;
-        }
-        let line: Line =
-            serde_json::from_str(text).map_err(|e| invalid(index + 1, e.to_string()))?;
-        if let Some(fault) = line.fault() {
-            return Err(invalid(index + 1, fault));
-        }
-        lines.push(line);
     }
-    Ok(lines)
+    Ok(valid)
 }
 
 /// The file that counts the lines of the log that the user marked as sent: [`SENT_FILE`], beside

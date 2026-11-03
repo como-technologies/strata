@@ -609,6 +609,12 @@ read the issues, the script stops with exit `2` before the first send.
 | `repeat-1` | 0 | #552: the endpoint takes a report with a key and answers 202 before it writes the issue. The service keeps the CPU after the answer, so the issue changes. The check passes: the endpoint answers 202 before it writes. |
 | `repeat-2`, `repeat-count` | 0 | #552: the same report with the same key gets 200 and `duplicate`, and the issue counts the report one time. Each check passes: the same report with the same key counts one time. |
 
+The script reads the repository from the `Cargo.toml` of the root. It reads the start of the row
+`Lines` from one variable, `lines_row`. A test of the endpoint makes sure that the service writes
+this row and the marker of the issue. The checks `issue`, `issue-new`, `issue-2`, and
+`repeat-count` use these reads (#593). No result yet: the lead runs `just live-report-send` after the
+deploy.
+
 ## pending.sh
 
 Read-write. It needs the example at its baseline with cluster A. Each stage

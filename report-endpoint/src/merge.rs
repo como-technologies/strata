@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use strata::BOOK_URL;
 use strata::closed_set::unknown::report::Report;
 use strata::reference::version;
-use strata::text::{code_span, query_value};
+use strata::text::{code_cell, code_span, query_value};
 
 use crate::tracker::{Issue, Tracker, TrackerError};
 
@@ -141,7 +141,7 @@ fn cell(items: &BTreeSet<String>, by_version: bool) -> String {
     }
     sorted
         .iter()
-        .map(|item| code_span(item))
+        .map(|item| code_cell(item))
         .collect::<Vec<_>>()
         .join(", ")
 }

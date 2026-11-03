@@ -6,7 +6,7 @@ edition = "2024"
 rust-version.workspace = true
 description = "The fuzz targets and the property tests of strata, strata-preflight, and strata-report-endpoint, on bolero"
 license = "Apache-2.0"
-repository = "https://github.com/como-technologies/strata"
+repository.workspace = true
 publish = false
 
 # A target is a test. On stable Rust, `cargo test -p strata-fuzz` runs each one on its corpus and on

@@ -1024,10 +1024,11 @@ field, a value, an input, or an option is in the sections above.
   - The endpoint of 0.27.0 took a report with such a value. The endpoint of 0.28.0 answers 422 for
     the whole report. A client of 0.27.0 then marks no line, so it sends the same report at each
     run. No other value of that log reaches the endpoint.
-  - After the update, the send of a run reads the same log and stops with `log-invalid`. It sends
-    nothing, and the run writes a warning. `--quiet` hides the warning, and the exit code stays `0`.
-    So a job with `STRATA_REPORT=1` and `--quiet` sends no value from then on, and shows no sign.
-    Delete the line to send again.
+  - After the update, the send of a run skips such a line. It sends the other lines of the log.
+    The run writes a warning that gives the count of the skipped lines and the number of the
+    first one. `--quiet` hides the warning, and the exit code stays `0`.
+  - `strata report` still stops with the error `log-invalid` on such a line. Delete the line to
+    stop the warning.
 - **`strata-preflight`: `answer` of a check with a second command has the exit code of each command.**
   Only `iam-role-policy-quota` has a second command.
   - `answer` was `exit 0`, the exit code of the first command alone. A failed read of the quota
@@ -1124,8 +1125,20 @@ field, a value, an input, or an option is in the sections above.
   A `match` on either needs a `_` arm.
 - `config::state_dir` is not public. The functions `closed_set::unknown::log::path`,
   `closed_set::unknown::hint::path`, and `closed_set::unknown::send::answer_path` give the files.
-- `text::code_span` is new. It writes a text as a code span of markdown, with a fence that the text
-  cannot end.
+- `text::code_span` and `text::code_cell` are new. `code_span` writes a text as a code span of
+  markdown, with a fence that the text cannot end. It escapes nothing, for a title and a sentence.
+  `code_cell` writes the span for a cell of a table, and it also escapes a `|` and a line break.
+- `closed_set::unknown::send::post` gives `Result<Vec<usize>>`. The list holds the numbers of the
+  entries, from 1, that the endpoint holds back for the hour: the list `waiting` of its answer.
+  The list is empty when the endpoint took the whole report. The function gave `Result<()>`.
+- `ops::send_unknown_report` gives `Result<ops::Sent>`. It gave `Result<()>`. The new type has the
+  fields `marked`, `waiting`, and `skipped`.
+  - A line of the log that is not valid does not stop the send now. The function skips it, and it
+    never gives `Error::LogInvalid`. The field `skipped` holds the numbers of such lines.
+  - The mark of the sent lines counts the valid lines only.
+  - When the endpoint holds back some values, the function marks the lines before the first line
+    of such a value, and stops. It does not mark the other lines. The field `waiting` counts the
+    lines that it left.
 - **A correction to the section of release 0.27.0.** The module `closed_set::unknown` is new in
   0.27.0, and so are `ops::unknown_report`, `ops::ReportOptions`, and `term::ask`. Release 0.26.0
   has none of them.

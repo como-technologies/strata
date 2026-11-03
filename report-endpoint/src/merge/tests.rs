@@ -209,7 +209,7 @@ fn a_state_that_does_not_read_starts_the_count_again() {
 }
 
 #[test]
-fn a_value_cannot_end_the_marker_a_code_span_or_a_cell() {
+fn a_value_cannot_end_the_marker_or_a_code_span() {
     let mut tracker = Memory::default();
     let value = "--> `x` | @user #1";
     merge(
@@ -221,8 +221,8 @@ fn a_value_cannot_end_the_marker_a_code_span_or_a_cell() {
     let first = text.lines().next().unwrap();
     assert_eq!(first.matches("-->").count(), 1, "{first}");
     assert!(first.ends_with(" -->"), "{first}");
-    assert!(title.contains("``--> `x` \\| @user #1``"), "{title}");
-    assert!(text.contains("``--> `x` \\| @user #1``"), "{text}");
+    assert!(title.contains("``--> `x` | @user #1``"), "{title}");
+    assert!(text.contains("``--> `x` | @user #1``"), "{text}");
     // the second report finds the same issue
     merge(
         &mut tracker,
@@ -230,6 +230,39 @@ fn a_value_cannot_end_the_marker_a_code_span_or_a_cell() {
     )
     .unwrap();
     assert_eq!(tracker.issues.len(), 1);
+}
+
+#[test]
+fn the_title_and_the_sentence_of_a_value_with_a_bar_hold_the_value_without_an_escape() {
+    let mut tracker = Memory::default();
+    merge(
+        &mut tracker,
+        &report(&[entry("ProfileType", "a|b", "0.26.0", 1)]),
+    )
+    .unwrap();
+    let (title, text, _) = &tracker.issues[0];
+    assert_eq!(
+        title,
+        "A user of strata reports the `ProfileType` value `a|b` that strata does not know"
+    );
+    assert!(
+        text.contains(
+            "Users of strata sent 1 report that Palette gave the `ProfileType` value `a|b`."
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("\\|"), "{text}");
+}
+
+#[test]
+fn a_bar_in_a_cell_of_the_table_of_the_issue_is_escaped() {
+    // the check of the report refuses a bar in a version or a route: this is the second guard
+    let mut tracker = Memory::default();
+    let mut bad = entry("ProfileType", "later", "0.26.0", 1);
+    bad["route"] = json!("/v1/a|b");
+    merge(&mut tracker, &report(&[bad])).unwrap();
+    let (_, text, _) = &tracker.issues[0];
+    assert!(text.contains("| Routes | `/v1/a\\|b` |"), "{text}");
 }
 
 #[test]

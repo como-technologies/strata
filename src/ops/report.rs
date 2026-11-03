@@ -6,6 +6,7 @@
 //! posts the report. The end of a run calls it only when the user chose the send. For the send,
 //! see [`crate::closed_set::unknown::send`]. See [`crate::closed_set::unknown`] for the log.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use crate::REPOSITORY;
@@ -88,13 +89,30 @@ pub fn mark_reported(log: &Path, lines: usize) -> Result<()> {
 /// for nothing.
 fn read_unsent(log: &Path, all: bool) -> Result<(Vec<log::Line>, usize)> {
     let lines = log::read(log)?;
-    let marked = log::sent_count(&log::sent_path(log));
-    let skip = if all || marked > lines.len() {
-        0
-    } else {
-        marked
-    };
+    let skip = marked_lines(log, lines.len(), all);
     Ok((lines, skip))
+}
+
+/// How many of the `lines` lines of the log at `log` the user marked as sent. `all` counts none. A
+/// mark past the end of the log belongs to a log that the user removed, so it counts for nothing.
+fn marked_lines(log: &Path, lines: usize, all: bool) -> usize {
+    let marked = log::sent_count(&log::sent_path(log));
+    if all || marked > lines { 0 } else { marked }
+}
+
+/// How many of `lines` come before the first line of a value that waits. `waiting` holds the
+/// numbers of the entries of `report` that the endpoint held back, from 1. All of `lines` when
+/// none waits.
+fn lines_before_waiting(lines: &[log::Line], report: &Report, waiting: &[usize]) -> usize {
+    let held: BTreeSet<(&str, &str)> = waiting
+        .iter()
+        .filter_map(|number| report.unknown.get(number.checked_sub(1)?))
+        .map(|entry| (entry.sighting.set.as_str(), entry.sighting.value.as_str()))
+        .collect();
+    lines
+        .iter()
+        .position(|line| held.contains(&(line.sighting.set.as_str(), line.sighting.value.as_str())))
+        .unwrap_or(lines.len())
 }
 
 /// How many of the first `lines` make a report of [`MOST_ENTRIES`] entries or fewer, with
@@ -113,6 +131,18 @@ fn first_chunk(lines: &[log::Line]) -> usize {
     fits
 }
 
+/// What [`send_unknown_report`] did.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Sent {
+    /// How many lines the send marked as sent: the lines of the reports that the endpoint took.
+    pub marked: usize,
+    /// How many lines the endpoint holds back for now, with the lines after them. The hour has no
+    /// room for the values of these lines. The next send holds them again.
+    pub waiting: usize,
+    /// The numbers of the lines of the log that are not valid, from 1. The send skipped them.
+    pub skipped: Vec<usize>,
+}
+
 /// Post the report of the lines that the user did not mark as sent to the endpoint `endpoint`.
 /// After each report that the endpoint took, mark its lines as sent. A log with no such line posts
 /// nothing.
@@ -122,20 +152,40 @@ fn first_chunk(lines: &[log::Line]) -> usize {
 /// fewer, so a long log goes in more than one report. A report that fails marks nothing, and the
 /// next send holds its lines again.
 ///
+/// A line that is not valid is no line of the report, and it stops nothing. The mark counts the
+/// valid lines only, and the field `skipped` of the result names the others. When the endpoint
+/// holds back the values of some entries, the send marks the lines before the first line of such a
+/// value, and stops. The next send holds that line and the lines after it. So a line after it that
+/// the endpoint took counts again.
+///
 /// # Errors
 ///
-/// `LogInvalid` or `Io` as [`unknown_report`], and `Io` when strata cannot write the mark.
-/// `ReportSend` when the endpoint did not take a report: see [`send::post`].
-pub fn send_unknown_report(log: &Path, endpoint: &str) -> Result<()> {
-    let (lines, mut done) = read_unsent(log, false)?;
+/// `Io` as [`unknown_report`], and `Io` when strata cannot write the mark. `ReportSend` when the
+/// endpoint did not take a report: see [`send::post`].
+pub fn send_unknown_report(log: &Path, endpoint: &str) -> Result<Sent> {
+    let log::Valid { lines, invalid } = log::read_valid(log)?;
+    let mut done = marked_lines(log, lines.len(), false);
+    let mut sent = Sent {
+        skipped: invalid,
+        ..Sent::default()
+    };
     while done < lines.len() {
         let rest = &lines[done..];
         let take = first_chunk(rest);
-        send::post(endpoint, &Report::of(&rest[..take]), done)?;
-        done += take;
-        log::mark_sent(&log::sent_path(log), done)?;
+        let report = Report::of(&rest[..take]);
+        let waiting = send::post(endpoint, &report, done)?;
+        let taken = lines_before_waiting(&rest[..take], &report, &waiting);
+        if taken > 0 {
+            done += taken;
+            sent.marked += taken;
+            log::mark_sent(&log::sent_path(log), done)?;
+        }
+        if taken < take {
+            sent.waiting = lines.len() - done;
+            break;
+        }
     }
-    Ok(())
+    Ok(sent)
 }
 
 /// The address of a new issue of strata. The address holds the title and the text `body`.

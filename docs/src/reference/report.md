@@ -71,7 +71,8 @@ these cases:
   or a character other than printable ASCII.
 
 The command then stops with the error `log-invalid`, prints nothing, and marks nothing. See
-[Errors](./errors.md).
+[Errors](./errors.md). The send of a run does not stop on such a line: see
+[What a run sends](#what-a-run-sends).
 
 ## Send a report
 
@@ -149,7 +150,7 @@ nothing else. The post has one try and a timeout of 3 seconds. The run prints it
 a slow endpoint delays no output.
 
 The post also holds a key in the header `Idempotency-Key`: a hash of the report and of the number
-of lines before it. A second try of the same lines has the same key, so the endpoint counts them
+of valid lines before it. A second try of the same lines has the same key, so the endpoint counts them
 one time. The key holds no name, no uid, and no host.
 
 ```text
@@ -165,13 +166,27 @@ after:
 {{#include ../output/unknown-value-send-marked.txt}}
 ```
 
+A line of the log that is not valid does not stop the send. Strata skips the line and sends the
+valid lines. The mark counts the valid lines only. Strata writes a warning that gives the count of
+the skipped lines and the number of the first one.
+
+`strata report` still stops on such a line. Delete the line to stop the warning. `--quiet` hides
+the warning.
+
 A send never changes the output or the exit code of a run. When a report fails, strata marks no
 line of it. Strata writes a warning, such as
 `strata: warning: could not send the report to <address>: <reason>`. `--quiet` hides the warning.
 The next send holds those lines again.
 
-The endpoint opens 20 new issues in an hour for all senders. When the hour has no room, the
-endpoint answers 429 with the time to wait, and the next send after that time works.
+The endpoint opens 20 new issues in an hour for all senders. When the hour has no room for any
+value of a report, the endpoint answers 429 with the time to wait. The next send after that time
+works.
+
+When the hour has room for some values, the endpoint answers 202 and lists the entries that wait.
+Strata marks the lines before the first line of a value that waits, and it stops. It writes a
+warning that gives the count of the lines that wait. The next send holds that line and each line
+after it. So a value that the endpoint took after that line counts one more time. `--quiet` hides
+the warning.
 
 ## What the endpoint keeps
 

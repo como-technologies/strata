@@ -7,7 +7,10 @@ use chrono::{DateTime, TimeDelta, Utc};
 use serde_json::{Value, json};
 
 use super::hint::{FILE as HINT_FILE, Hint, TEXT};
-use super::log::{FIELDS, FILE, Line, SCHEMA, SENT_FILE, mark_sent, read, sent_count, sent_path};
+use super::log::{
+    FIELDS, FILE, Line, SCHEMA, SENT_FILE, Valid, mark_sent, read, read_valid, sent_count,
+    sent_path,
+};
 use super::report::{Entry, Report};
 use super::sighting::shown;
 use super::{Watch, note, seen};
@@ -368,6 +371,47 @@ fn written(value: &str) -> String {
 fn a_log_that_is_not_there_is_an_empty_log() {
     let dir = tempfile::tempdir().unwrap();
     assert!(read(&dir.path().join(FILE)).unwrap().is_empty());
+}
+
+#[test]
+fn a_read_for_the_send_keeps_the_valid_lines_and_names_the_numbers_of_the_others() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    let mut with_uid = serde_json::to_value(full_line()).unwrap();
+    with_uid["uid"] = json!("64f0000000000000000000a1");
+    std::fs::write(
+        &file,
+        format!(
+            "{}\n\n{}\nnot json\n{}\n  \n{}\n",
+            written("a"),
+            with_uid,
+            written("b"),
+            written("two words")
+        ),
+    )
+    .unwrap();
+    let valid = read_valid(&file).unwrap();
+    // a blank line has a number but is no line, and the numbers count the rows of the file
+    assert_eq!(valid.invalid, [3, 4, 7]);
+    let values: Vec<&str> = valid
+        .lines
+        .iter()
+        .map(|l| l.sighting.value.as_str())
+        .collect();
+    assert_eq!(values, ["a", "b"]);
+    // `read` stops at the first line that is not valid, and names its number
+    assert!(read(&file).unwrap_err().to_string().contains("line 3"));
+}
+
+#[test]
+fn a_read_for_the_send_of_a_log_that_is_not_there_or_that_is_valid_names_no_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join(FILE);
+    assert_eq!(read_valid(&file).unwrap(), Valid::default());
+    std::fs::write(&file, log_of(&[&written("a")])).unwrap();
+    let valid = read_valid(&file).unwrap();
+    assert_eq!(valid.lines, read(&file).unwrap());
+    assert!(valid.invalid.is_empty());
 }
 
 #[test]

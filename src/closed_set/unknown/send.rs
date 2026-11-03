@@ -11,11 +11,14 @@
 //!   sends nothing and asks nothing.
 //!
 //! A send posts the report of the lines that the user did not mark as sent: see [`post`]. It has
-//! one attempt and a short timeout. The caller marks the lines as sent after an answer of 2xx, and
-//! it never fails a run for the error of a send.
+//! one attempt and a short timeout. The caller marks the lines as sent after an answer of 2xx, except
+//! the lines of a value that the answer lists in `waiting`. It never fails a run for the error of a
+//! send.
 
 use std::path::PathBuf;
 use std::time::Duration;
+
+use serde_json::Value;
 
 use super::report::Report;
 use crate::BOOK_URL;
@@ -24,6 +27,7 @@ use crate::config::{in_ci, setting, state_dir};
 use crate::content::canon::sha256_hex;
 use crate::error::{Error, Result};
 use crate::file::{read_file, write_file};
+use crate::json::arr;
 use crate::text::cut;
 
 #[cfg(test)]
@@ -207,12 +211,16 @@ pub fn keep_answer(file: &std::path::Path, choice: Choice) -> Result<()> {
 /// came after, or a log that was marked since, give another key. The key holds no name, no uid, and
 /// no host.
 ///
+/// Gives the numbers of the entries of `report` that the endpoint holds back, from 1: the list
+/// `waiting` of its answer. The hour has no room for the values of these entries. The list is empty
+/// when the endpoint took the whole report.
+///
 /// # Errors
 ///
 /// `ReportSend` when strata cannot reach the endpoint, when the answer is not a status of 2xx, or
 /// when the report is not valid: see [`Report::fault`]. A report that strata made from its own log
 /// is valid.
-pub fn post(endpoint: &str, report: &Report, position: usize) -> Result<()> {
+pub fn post(endpoint: &str, report: &Report, position: usize) -> Result<Vec<usize>> {
     let failed = |message: String| Error::ReportSend {
         endpoint: endpoint.to_string(),
         message,
@@ -237,7 +245,7 @@ pub fn post(endpoint: &str, report: &Report, position: usize) -> Result<()> {
         .map_err(|e| failed(e.to_string()))?;
     let status = answer.status().as_u16();
     if (200..300).contains(&status) {
-        return Ok(());
+        return Ok(waiting_in(&mut answer));
     }
     // the first part of the answer tells why the endpoint refused; a body that cannot be read
     // adds nothing to the status
@@ -246,4 +254,16 @@ pub fn post(endpoint: &str, report: &Report, position: usize) -> Result<()> {
     Err(failed(format!(
         "the endpoint answered HTTP {status}: {body}"
     )))
+}
+
+/// The numbers in the list `waiting` of an answer of 2xx, or none when the answer has no list.
+fn waiting_in(answer: &mut ureq::http::Response<ureq::Body>) -> Vec<usize> {
+    // an endpoint that lists no entry took the whole report. A body that is not JSON, or that
+    // cannot be read, adds nothing to the status
+    let text = answer.body_mut().read_to_string().unwrap_or_default();
+    let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
+    arr(&value, "/waiting")
+        .iter()
+        .filter_map(|number| usize::try_from(number.as_u64()?).ok())
+        .collect()
 }

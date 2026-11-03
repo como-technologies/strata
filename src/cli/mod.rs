@@ -11,7 +11,9 @@ use strata::closed_set::unknown::{self, Watch, Watching, send};
 use strata::config::{self, Config};
 use strata::error::Result;
 use strata::ops;
+use strata::render::count_of;
 use strata::term::progress::Progress;
+use strata::text::plural;
 use strata::timestamp::now_utc;
 
 use args::ProjectArgs;
@@ -77,9 +79,31 @@ pub(crate) fn send_unknown(watching: &Watching, progress: Progress) {
     };
     if let (true, Some(endpoint), Some(log)) = (go, &facts.endpoint, unknown::log::path()) {
         match ops::send_unknown_report(&log, endpoint) {
-            Ok(()) => progress.note("sent the report of the unknown values"),
+            Ok(sent) => say_sent(progress, &sent),
             Err(e) => progress.warn(&e.to_string()),
         }
+    }
+}
+
+/// Say what a send that the endpoint answered did. `--quiet` hides each line, as it hides the
+/// warning of a send that failed.
+fn say_sent(progress: Progress, sent: &ops::Sent) {
+    if sent.waiting == 0 || sent.marked > 0 {
+        progress.note("sent the report of the unknown values");
+    }
+    if sent.waiting > 0 {
+        progress.warn(&format!(
+            "the endpoint holds back {} for now, because its hour has no room: the next send holds them again",
+            count_of(sent.waiting, "line")
+        ));
+    }
+    if let Some(first) = sent.skipped.first() {
+        let count = sent.skipped.len();
+        progress.warn(&format!(
+            "skipped {} of the log that {} not valid, the first at line {first}: run `strata report` to see the fault",
+            count_of(count, "line"),
+            plural(count, "is", "are"),
+        ));
     }
 }
 

@@ -135,9 +135,9 @@ pub fn markdown_cell(s: &str) -> String {
 /// `text` as a code span of markdown. The fence is longer than each run of backticks in the text,
 /// so a value cannot end the span.
 ///
-/// [`markdown_cell`] writes the text, so a value cannot end a cell or a row of a table either.
-/// Each issue and each report that shows a value of an unknown set writes the value here, so the
-/// value has one form in both.
+/// The span writes the text as it is. A title and a sentence need no escape for a `|`. A span in a
+/// table cell needs one: see [`code_cell`]. Each issue and each report that shows a value of an
+/// unknown set writes the value here, so the value has one form in both.
 pub fn code_span(text: &str) -> String {
     let longest = text.split(|c| c != '`').map(str::len).max().unwrap_or(0);
     let fence = "`".repeat(longest + 1);
@@ -146,7 +146,13 @@ pub fn code_span(text: &str) -> String {
     } else {
         ""
     };
-    format!("{fence}{pad}{}{pad}{fence}", markdown_cell(text))
+    format!("{fence}{pad}{text}{pad}{fence}")
+}
+
+/// `text` as a code span in one cell of a markdown table: [`code_span`], and then
+/// [`markdown_cell`] on the span. So a value cannot end a cell or a row of the table.
+pub fn code_cell(text: &str) -> String {
+    markdown_cell(&code_span(text))
 }
 
 /// `text` as a value in a query string: each byte that is not a letter, a digit, or one of
@@ -273,9 +279,17 @@ mod tests {
     }
 
     #[test]
-    fn a_code_span_holds_no_bar_and_no_line_break() {
-        assert_eq!(code_span("a|b"), "`a\\|b`");
-        assert_eq!(code_span("first\nsecond"), "`first second`");
+    fn a_code_span_writes_the_text_as_it_is_for_a_title_and_a_sentence() {
+        assert_eq!(code_span("a|b"), "`a|b`");
+        assert_eq!(code_span("first\nsecond"), "`first\nsecond`");
+    }
+
+    #[test]
+    fn a_code_span_in_a_table_cell_holds_no_bar_and_no_line_break() {
+        assert_eq!(code_cell("a|b"), "`a\\|b`");
+        assert_eq!(code_cell("first\nsecond"), "`first second`");
+        assert_eq!(code_cell("late`r|x"), "``late`r\\|x``");
+        assert_eq!(code_cell("plain"), code_span("plain"));
     }
 
     #[test]
