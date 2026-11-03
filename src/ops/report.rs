@@ -9,8 +9,9 @@
 use std::path::{Path, PathBuf};
 
 use crate::REPOSITORY;
+use crate::closed_set::unknown::report::Report;
 use crate::closed_set::unknown::report::{MOST_ENTRIES, MOST_VALUES};
-use crate::closed_set::unknown::{Report, log, send};
+use crate::closed_set::unknown::{log, send};
 use crate::error::{Error, Result};
 use crate::text::query_value;
 

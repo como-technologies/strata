@@ -3,7 +3,7 @@
 use serde::Serialize;
 
 use super::Renderer;
-use crate::closed_set::unknown::Report;
+use crate::closed_set::unknown::report::Report;
 use crate::diff::Diff;
 use crate::error::Result;
 use crate::ops::{Chain, ConsumersReport, Listing, PackListing, VerifySummary};

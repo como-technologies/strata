@@ -366,7 +366,7 @@ contract-timer-status:
 report-deploy *args:
     deploy/report/deploy.sh {{args}}
 
-# Send one report to the deployed endpoint of the report, twice, and check that one issue of the label palette-drift holds both (#397). It serves the stand-in tenant of the book, and reads and writes no Palette tenant. Needs a `gh` login, and the address that report-deploy printed.
+# Send one report to the deployed endpoint of the report, twice, and check that one issue of the label unknown-value holds both (#397). It serves the stand-in tenant of the book, and reads and writes no Palette tenant. Needs a `gh` login, and the address that report-deploy printed.
 live-report-send *args: examples stand-in
     examples/live/report-send.sh {{args}}
 

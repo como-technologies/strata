@@ -18,8 +18,7 @@ not know. Two runs of `strata list profiles --packs` noted the type.
 
 Exit `0`. Strata merges the equal lines of the log. A line of the report gives the set, the
 value, and the route that gave the value. It also gives how many times the log holds the line, and
-where the line comes from. A refusal of Palette also shows the status and the error code. A log
-with no line gives a report with no value.
+the version of strata that read the value. A log with no line gives a report with no value.
 
 ## The report as markdown and as JSON
 
@@ -73,11 +72,15 @@ by itself. See [Send the report by itself](../reference/report.md#send-the-repor
 
 ## A line that is not valid
 
-A log that you edited can hold a line that strata did not write. A line with a field outside the
-list of [`strata-unknown/1`](../reference/documents.md#strata-unknown1) is one case. Another case
-is a route that is not a template of a route, such as the path of a real request. `strata report` then stops with the error
-`log-invalid`, prints nothing, and marks nothing. The message gives the number of the line. See
-[Errors](../reference/errors.md).
+A log that you edited can hold a line that strata did not write. Three faults make a line not
+valid:
+
+- A field outside the list of [`strata-unknown/1`](../reference/documents.md#strata-unknown1).
+- A route that is not a template of a route, such as the path of a real request.
+- A value with a space, or with a character other than printable ASCII.
+
+`strata report` then stops with the error `log-invalid`, prints nothing, and marks nothing. The
+message gives the number of the line. See [Errors](../reference/errors.md).
 
 ## What to expect
 

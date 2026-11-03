@@ -691,16 +691,16 @@ not know. See [strata report](../commands/report.md) and
 - `unknown[]`: one entry for each different line of the log, in the order of `set`, `value`, and
   `route`. An entry has the fields of [`strata-unknown/1`](#strata-unknown1) except `schema`, and
   the field `count`.
-  - `strata`, `palette`, `set`, `value`, `route`, `status`, and `errorCode`: as in the line of the
-    log. `palette`, `status`, and `errorCode` are absent when the line has none.
+  - `strata`, `set`, `value`, and `route`: as in the line of the log.
   - `count`: how many lines of the log are this entry. The endpoint refuses a count above 1,000,000.
 
 The report has no `tool` block and no time, because the log has none. A log with no line gives
 `unknown: []`. An entry holds no name, no uid, no host, no free text, and no value of a pack.
 
 The send of the report posts this document to the endpoint, and the endpoint takes this document
-alone. It refuses a field that is not in the list. See
-[Send the report by itself](./report.md#send-the-report-by-itself).
+alone. It refuses a field that is not in the list, as `strata report` does for the log. A new field
+takes a new id: see [The documents](./compatibility.md#the-documents). The page
+[Send the report by itself](./report.md#send-the-report-by-itself) says more on the send.
 
 
 ## strata-preflight/1
@@ -776,16 +776,12 @@ A line is one JSON object with only these fields:
 
 - `schema`: `strata-unknown/1`.
 - `strata`: the version of strata that read the value.
-- `palette`: the Palette release, when strata knows it. A key cannot read the release, so a line of
-  the command line has none.
 - `set`: the name of the closed set, as `strata schema` names its definition. Examples are
   `PackState`, `OciProvider`, and `ProfileType`.
-- `value`: the text of the value. Strata cuts a value of more than 64 characters to 63 characters
-  and `…`. Each control character becomes `?`.
+- `value`: the text of the value. It is one word of printable ASCII, from `!` to `~`, with no space.
+  Each space and each other character becomes `?`. Strata cuts a value of more than 64 characters to 61 characters and `...`.
 - `route`: the template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It
   never holds the uid of a real request.
-- `status` and `errorCode`: the status and the error code of a refusal of Palette. A line for a
-  value of a document has neither.
 
 A line holds no name, no uid, no host, no free text, and no value of a pack. A test fails on each
 other field.

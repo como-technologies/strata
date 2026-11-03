@@ -12,6 +12,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 use strata::TOOL_VERSION;
 use strata::closed_set::unknown::log::{FILE, Line, SCHEMA};
+use strata::closed_set::unknown::sighting::Sighting;
 
 use super::{
     PROFILE_LISTING, UID_A, UID_B, isolate_palette, profile_document, profile_route,
@@ -120,13 +121,12 @@ pub fn log_in(home: &Path) -> PathBuf {
 pub fn log_line(set: &str, value: &str, route: &str) -> String {
     serde_json::to_string(&Line {
         schema: SCHEMA.to_string(),
-        strata: TOOL_VERSION.to_string(),
-        palette: None,
-        set: set.to_string(),
-        value: value.to_string(),
-        route: route.to_string(),
-        status: None,
-        error_code: None,
+        sighting: Sighting {
+            strata: TOOL_VERSION.to_string(),
+            set: set.to_string(),
+            value: value.to_string(),
+            route: route.to_string(),
+        },
     })
     .unwrap()
 }

@@ -16,8 +16,8 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
-use strata::closed_set::unknown::Report;
 use strata::closed_set::unknown::report::MOST_VALUES;
+use strata::closed_set::unknown::report::Report;
 use strata::closed_set::unknown::send::KEY_HEADER;
 
 use crate::accept::{self, MOST_BYTES, Refusal};

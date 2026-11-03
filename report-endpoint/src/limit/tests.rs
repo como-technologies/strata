@@ -165,3 +165,49 @@ fn one_ipv6_network_is_one_sender_whatever_the_host_part_of_the_address_is() {
             .is_err()
     );
 }
+
+#[test]
+fn a_sender_that_does_not_come_again_leaves_the_table_at_the_next_request_after_its_span() {
+    let mut limiter = Limiter::new(1, HOUR);
+    let start = Instant::now();
+    limiter.allow("a", 1, start).unwrap();
+    limiter.allow("b", 1, start + 2 * HOUR).unwrap();
+    assert_eq!(limiter.senders(), 1, "only the sender of the last request");
+}
+
+#[test]
+fn a_sender_stays_in_the_table_until_its_span_ends() {
+    let mut limiter = Limiter::new(1, HOUR);
+    let start = Instant::now();
+    limiter.allow("a", 1, start).unwrap();
+    limiter
+        .allow("b", 1, start + HOUR - Duration::from_secs(1))
+        .unwrap();
+    assert_eq!(limiter.senders(), 2, "the hash of a lives for the hour");
+    // the sweep ran 1 second ago, so it waits for its next turn, a sixtieth of the span later
+    limiter
+        .allow("c", 1, start + HOUR + Duration::from_secs(60))
+        .unwrap();
+    assert_eq!(limiter.senders(), 2, "a is gone, and b and c stay");
+}
+
+#[test]
+fn the_sweep_runs_at_most_one_time_in_a_sixtieth_of_the_span() {
+    let span = Duration::from_secs(600);
+    let mut limiter = Limiter::new(2, span);
+    let start = Instant::now();
+    limiter.allow("a", 1, start).unwrap();
+    limiter
+        .allow("b", 1, start + span - Duration::from_secs(1))
+        .unwrap();
+    // `a` ended its span 1 second ago, and the last sweep was 2 seconds ago: no sweep yet
+    limiter
+        .allow("c", 1, start + span + Duration::from_secs(1))
+        .unwrap();
+    assert_eq!(limiter.senders(), 3);
+    // the next sweep is due 10 seconds after the last one, and it drops `a`
+    limiter
+        .allow("b", 1, start + span + Duration::from_secs(10))
+        .unwrap();
+    assert_eq!(limiter.senders(), 2, "b and c");
+}

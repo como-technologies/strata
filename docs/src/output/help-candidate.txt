@@ -9,5 +9,5 @@ Arguments:
 Options:
   -o, --output <OUTPUT>        Write to this file, not to standard output
       --files-dir <FILES_DIR>  Write the values and the manifests to files in this directory
-  -q, --quiet                  No progress messages
+  -q, --quiet                  No progress messages, no note of an unknown value, and no warning of the send
   -h, --help                   Print help

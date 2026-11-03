@@ -11,16 +11,12 @@
 //! of [`FIELDS`]. The set is a closed set, so its values are short words and hold no secret. A
 //! line holds no name, no uid, no host, no free text, and no value of a pack. The route is a
 //! template, such as `/v1/clusterprofiles/{uid}`, and never the path of a real request.
-//!
-//! `status` and `errorCode` state a refusal of Palette. A value of a document that Palette served
-//! comes from an answer of status 2xx with no error code. So a line of such a value has neither.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::LONGEST_VALUE;
-use crate::TOOL_VERSION;
+use super::sighting::Sighting;
 use crate::config::state_dir;
 use crate::error::{Error, Result};
 use crate::file::{append_file, read_file, write_file};
@@ -35,56 +31,27 @@ pub const FILE: &str = "strata-unknown.jsonl";
 pub const SENT_FILE: &str = "strata-unknown.sent";
 
 /// The fields of a line, as the JSON names them. A reader refuses a line with another field.
-pub const FIELDS: [&str; 8] = [
-    "schema",
-    "strata",
-    "palette",
-    "set",
-    "value",
-    "route",
-    "status",
-    "errorCode",
-];
+pub const FIELDS: [&str; 5] = ["schema", "strata", "set", "value", "route"];
 
 /// One line of the log: a value of a closed set that Palette gave and this release does not know.
+///
+/// The fields of the [`Sighting`] are in the object of the line, beside `schema`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Line {
     /// Always [`SCHEMA`].
     pub schema: String,
-    /// The version of strata that read the value.
-    pub strata: String,
-    /// The Palette release, when strata knows it. A key cannot read the release, so a line of the
-    /// command line has none.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub palette: Option<String>,
-    /// The name of the closed set, as `strata schema` names its definition.
-    pub set: String,
-    /// The text of the value.
-    pub value: String,
-    /// The template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`.
-    pub route: String,
-    /// The status of a refusal of Palette. A value of a document has none.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub status: Option<u16>,
-    /// The error code of a refusal of Palette. A value of a document has none.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error_code: Option<String>,
+    /// The value, and the version of strata and the route that read it.
+    #[serde(flatten)]
+    pub sighting: Sighting,
 }
 
 impl Line {
-    /// The line for the value `value` of the set `set`, which the route `route` gave. `palette` is
-    /// the Palette release, when strata knows it.
-    pub(crate) fn new(set: &str, value: &str, route: &str, palette: Option<&str>) -> Line {
+    /// The line for the value `value` of the set `set`, which the route `route` gave.
+    pub(crate) fn new(set: &str, value: &str, route: &str) -> Line {
         Line {
             schema: SCHEMA.to_string(),
-            strata: TOOL_VERSION.to_string(),
-            palette: palette.map(str::to_string),
-            set: set.to_string(),
-            value: value.to_string(),
-            route: route.to_string(),
-            status: None,
-            error_code: None,
+            sighting: Sighting::new(set, value, route),
         }
     }
 
@@ -108,53 +75,8 @@ impl Line {
         if self.schema != SCHEMA {
             return Some(format!("the schema is not {SCHEMA}"));
         }
-        value_fault(&self.value).or_else(|| route_fault(&self.route))
+        self.sighting.fault()
     }
-}
-
-/// What is wrong with `value` as the value of a closed set, or `None`. A value is a short word:
-/// it has [`LONGEST_VALUE`] characters or fewer, and no control character.
-pub(super) fn value_fault(value: &str) -> Option<String> {
-    if value.is_empty()
-        || value.chars().count() > LONGEST_VALUE
-        || value.chars().any(char::is_control)
-    {
-        return Some(format!(
-            "the value is not a short word of {LONGEST_VALUE} characters or fewer"
-        ));
-    }
-    None
-}
-
-/// What is wrong with `route` as the template of a route, or `None`. A template starts with
-/// [`ROUTE_PREFIX`], holds only the characters of [`is_route_char`], and none of its words is a uid.
-pub(super) fn route_fault(route: &str) -> Option<String> {
-    if !route.starts_with(ROUTE_PREFIX)
-        || !route.chars().all(is_route_char)
-        || route.split('/').any(looks_like_uid)
-    {
-        return Some("the route is not a template of a route".to_string());
-    }
-    None
-}
-
-/// The start of each route that strata reads.
-const ROUTE_PREFIX: &str = "/v1/";
-
-/// True for a character of a route template: a letter or a digit of ASCII, or one of `/`, `_`, `-`,
-/// `.`, `{`, and `}`. So a template holds no space, no quote, no mark of markdown, and no line
-/// break.
-fn is_route_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '.' | '{' | '}')
-}
-
-/// The fewest characters of a uid. A uid of Palette has 24 hexadecimal digits, and a UUID has more.
-const UID_LENGTH: usize = 24;
-
-/// True when `segment` is as long as a uid and holds only hexadecimal digits and hyphens. A word
-/// of a route holds other letters, and a placeholder such as `{uid}` holds braces.
-fn looks_like_uid(segment: &str) -> bool {
-    segment.len() >= UID_LENGTH && segment.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 
 /// The log of the user: [`FILE`] in the state folder. `None` when strata knows no state folder.

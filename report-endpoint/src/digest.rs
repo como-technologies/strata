@@ -10,7 +10,7 @@ use std::collections::hash_map::RandomState;
 use std::hash::BuildHasher;
 use std::time::{Duration, Instant};
 
-use strata::closed_set::unknown::Report;
+use strata::closed_set::unknown::report::Report;
 
 /// The most hashes that [`Counted`] holds. When the table is full, the oldest hash leaves.
 const MOST_KEPT: usize = 10_000;

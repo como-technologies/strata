@@ -13,7 +13,7 @@ use super::notes::{
     DiffNote, TierLine, diff_notes, invalid_pack_sentences, pack_order_note, tier_line,
     variables_comparable,
 };
-use super::report::{entry_origin, report_heading};
+use super::report::report_heading;
 use super::same_release::{
     chain_verdict, diff_word, pair_detail, pair_notes, pair_word, record_word,
 };
@@ -22,7 +22,7 @@ use super::verify::{
 };
 use super::{Renderer, count_of, entry_error, key_line, palette_line, short};
 use crate::closed_set::ClosedSet;
-use crate::closed_set::unknown::Report;
+use crate::closed_set::unknown::report::Report;
 use crate::diff::Diff;
 use crate::error::Result;
 use crate::model::cluster_state::ClusterState;
@@ -316,11 +316,11 @@ impl Renderer for TerminalRenderer {
             .iter()
             .map(|e| {
                 vec![
-                    e.set.clone(),
-                    e.value.clone(),
-                    e.route.clone(),
+                    e.sighting.set.clone(),
+                    e.sighting.value.clone(),
+                    e.sighting.route.clone(),
                     count_of(e.count, "time"),
-                    entry_origin(e),
+                    format!("strata {}", e.sighting.strata),
                 ]
             })
             .collect();

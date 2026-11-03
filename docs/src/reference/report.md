@@ -37,12 +37,9 @@ A report is the document `strata-report/1`. It has the fields `schema` and `unkn
 | Field | What it holds |
 | --- | --- |
 | `strata` | The version of strata that read the value. |
-| `palette` | The Palette release, when strata knows it. A key cannot read the release, so an entry of the command line has none. |
 | `set` | The name of the closed set, as `strata schema` names its definition, such as `ProfileType`. |
-| `value` | The text of the value. Strata cuts a value of more than 64 characters. |
+| `value` | The text of the value. It is one word of printable ASCII, from `!` to `~`, with no space. Strata writes a `?` for each space and for each other character, such as a control character or a zero width space. Strata cuts a value of more than 64 characters, and ends it with `...`. |
 | `route` | The template of the route that gave the value, such as `/v1/clusterprofiles/{uid}`. It is never the path of a real request. It starts with `/v1/`, and holds only letters, digits, and the characters `/`, `_`, `-`, `.`, `{`, and `}`. |
-| `status` | The status of a refusal of Palette. An entry for a value of a document has none. |
-| `errorCode` | The error code of a refusal of Palette. An entry for a value of a document has none. |
 | `count` | How many lines of the log are this entry. |
 
 These are the fields of [`strata-unknown/1`](./documents.md#strata-unknown1), the line of the log,
@@ -61,12 +58,14 @@ A report never holds one of these:
 - A time, or the name of the person who ran strata.
 
 Two rules keep this true. A line of the log has a fixed list of fields, and a test fails on each
-other field. `strata report` also refuses the whole log when one line is not valid. A line is not
-valid in three cases:
+other field. The report and the endpoint refuse a field outside the list in the same way.
+`strata report` also refuses the whole log when one line is not valid. A line is not valid in
+three cases:
 
 - It has a field outside the list.
 - Its route is not a template of a route. The `route` field in the table above gives the rule.
-- Its value is not a short word.
+- Its value is not a short word. It is empty, or it has more than 64 characters. Or it has a space,
+  or a character other than printable ASCII.
 
 The command then stops with the error `log-invalid`, prints nothing, and marks nothing. See
 [Errors](./errors.md).
@@ -176,13 +175,14 @@ refuses a body of more than 64 KiB. See [The endpoint of the report](../developm
 
 The endpoint keeps these things, and no other:
 
-- **One issue of strata for each set and value.** The issue has the label `palette-drift`. It holds
-  the count of the lines and the count of the reports. It lists the releases of strata and of
-  Palette, the routes, and the refusals that the reports named. It holds no report. A later report of the same
-  value changes the issue, and opens no new one.
+- **One issue of strata for each set and value.** The issue has the label `unknown-value`. It holds
+  the count of the lines and the count of the reports. It lists the releases of strata and the
+  routes that the reports named. It holds no report. A later report of the same value changes the
+  issue, and opens no new one.
 - **A hash of the address of the sender, in memory, for one hour.** It limits the rate. An IPv6
   address counts by its /64 network. The process makes the salt of the hash when it starts, and
-  writes the hash nowhere. A restart of the service forgets it.
+  writes the hash nowhere. The service drops an old hash soon after the hour, and a restart
+  forgets it.
 - **A hash of the key and the report, in memory, for one day.** A second try of the same lines
   counts one time. The hash holds no text of the report.
 

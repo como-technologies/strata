@@ -14,6 +14,7 @@ use serde_json::Value;
 use strata::api::PaletteApi;
 use strata::error::Error;
 use strata::model::validation::PaletteRefusal;
+use strata::text::query_value;
 use strata_preflight::world::unreadable;
 
 use crate::facts::subjects::{DEPTH, Origin, request_of, source, unsourced};
@@ -284,19 +285,9 @@ fn candidates<A: PaletteApi>(
             read.lacks()
         )));
     }
-    let usable: Vec<Option<String>> = found
+    // the library escapes a value of a route as this call does, so the run sends what strata sends
+    Ok(found
         .into_iter()
-        .filter(|value| {
-            value
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || "-._~:".contains(c))
-        })
-        .map(|value| Some(value.to_string()))
-        .collect();
-    if usable.is_empty() {
-        return Err(missing(format!(
-            "the value for `{{{param}}}` has a character that a path cannot hold"
-        )));
-    }
-    Ok(usable)
+        .map(|value| Some(query_value(value)))
+        .collect())
 }

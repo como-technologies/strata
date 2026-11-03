@@ -150,7 +150,7 @@ pub(crate) struct CompactArgs {
 /// `--quiet`, for each command.
 #[derive(Args)]
 pub(crate) struct QuietArgs {
-    /// No progress messages
+    /// No progress messages, no note of an unknown value, and no warning of the send
     #[arg(short, long)]
     pub(crate) quiet: bool,
 }
@@ -527,6 +527,22 @@ mod tests {
                 .map(|arg| arg.get_help().map(ToString::to_string))
                 .collect();
             assert_eq!(texts.len(), 1, "--{flag} has {texts:?}");
+        }
+    }
+
+    #[test]
+    fn the_help_of_quiet_names_each_message_that_it_hides() {
+        // `--quiet` also hides the note of an unknown value, the hint, and the warnings of the send
+        let command = Cli::command();
+        let help: Vec<String> = command
+            .get_subcommands()
+            .filter_map(|sub| sub.get_arguments().find(|a| a.get_id() == "quiet"))
+            .map(|arg| arg.get_help().map(ToString::to_string).unwrap_or_default())
+            .collect();
+        assert!(!help.is_empty());
+        for text in help {
+            assert!(text.contains("no note of an unknown value"), "{text}");
+            assert!(text.contains("no warning of the send"), "{text}");
         }
     }
 }
