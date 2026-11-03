@@ -5,6 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::confidence::Ledger;
 use crate::error::Result;
 use crate::rule::{Catalog, Section};
 
@@ -29,7 +30,10 @@ pub const SECTIONS: &[(&str, &str)] = &[
 ];
 
 /// The ledger of the runs of the lab, which the binary carries with the rules.
-pub const LEDGER: &str = include_str!("../evidence/runs.yaml");
+const LEDGER: &str = include_str!("../evidence/runs.yaml");
+
+/// The path of the ledger in the source tree. An error of the ledger of the binary names it.
+const LEDGER_PATH: &str = "evidence/runs.yaml";
 
 /// The directory of the rule files in the source tree, for the fixtures of the tests.
 pub fn rules_dir() -> PathBuf {
@@ -63,6 +67,16 @@ pub fn builtin() -> Result<Catalog> {
     Ok(catalog)
 }
 
+/// The ledger of the binary: the runs of the lab, which prove the level of each rule.
+///
+/// # Errors
+///
+/// [`Error::Ledger`](crate::error::Error::Ledger) when the ledger of the binary does not parse. A
+/// binary that passes its tests gives no error.
+pub fn builtin_ledger() -> Result<Ledger> {
+    Ledger::parse(LEDGER, Path::new(LEDGER_PATH))
+}
+
 /// The catalog of the binary, with each probes file after it.
 ///
 /// # Errors
@@ -81,6 +95,8 @@ pub fn with_probes(probes: &[PathBuf]) -> Result<Catalog> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use strata::api::{API_KEY_HEADER, PROJECT_UID_HEADER};
+    use strata::config::{DEFAULT_BASE_URL, KEY_VARS, PROJECT_VARS, URL_VARS};
 
     #[test]
     fn the_builtin_catalog_parses_and_each_id_is_unique() {
@@ -104,13 +120,20 @@ mod tests {
         }
     }
 
+    /// The start of the variable that a `curl` line reads for the address of Palette. The default
+    /// follows. The report writes it in `curl_get`, from the same consts.
+    fn url_opening() -> String {
+        format!("${{{}:-", URL_VARS[0])
+    }
+
     #[test]
     fn each_reproduce_line_names_the_default_url_that_strata_connects_to() {
+        let opening = url_opening();
         let mut found = 0;
         for (section, text) in SECTIONS {
-            for part in text.split("${PALETTE_API:-").skip(1) {
+            for part in text.split(opening.as_str()).skip(1) {
                 let url = part.split('}').next().unwrap_or_default();
-                assert_eq!(url, strata::config::DEFAULT_BASE_URL, "{section}");
+                assert_eq!(url, DEFAULT_BASE_URL, "{section}");
                 found += 1;
             }
         }
@@ -118,22 +141,24 @@ mod tests {
     }
 
     /// Nothing sets `PALETTE_HOST`, so a line that reads it asks `curl` for `/v1/...` with no host.
-    /// Each line that calls Palette reads `PALETTE_API` and sends the header `ProjectUid`, as
-    /// `curl_get` of the report does.
+    /// Each line that calls Palette sends the two headers and reads the address, with the names
+    /// and the default that strata reads, as `curl_get` of the report does.
     #[test]
     fn each_reproduce_line_that_calls_palette_has_one_form() {
+        let parts = [
+            format!("{API_KEY_HEADER}: ${}", KEY_VARS[0]),
+            format!("{PROJECT_UID_HEADER}: ${}", PROJECT_VARS[0]),
+            format!("{}{DEFAULT_BASE_URL}}}", url_opening()),
+        ];
         let mut wrong = Vec::new();
         let mut calls = 0;
         for (section, text) in SECTIONS {
             for (n, line) in text.lines().enumerate() {
-                if !(line.contains("PALETTE_API_KEY") || line.contains("PALETTE_HOST")) {
+                if !(line.contains(KEY_VARS[0]) || line.contains("PALETTE_HOST")) {
                     continue;
                 }
                 calls += 1;
-                if line.contains("PALETTE_HOST")
-                    || !line.contains("${PALETTE_API:-")
-                    || !line.contains("ProjectUid: $PALETTE_PROJECT_UID")
-                {
+                if line.contains("PALETTE_HOST") || !parts.iter().all(|part| line.contains(part)) {
                     wrong.push(format!("{section}.yaml:{}: {}", n + 1, line.trim()));
                 }
             }
@@ -144,6 +169,6 @@ mod tests {
 
     #[test]
     fn the_ledger_of_the_binary_parses() {
-        crate::confidence::Ledger::parse(LEDGER, Path::new("evidence/runs.yaml")).unwrap();
+        builtin_ledger().unwrap();
     }
 }

@@ -918,13 +918,28 @@ fn the_promotion_text_names_the_runs_of_older_releases_for_each_rule() {
 
 /// How many runs of the ledger in the binary answer `gke-no-release-channel`: they have no release.
 fn lab_runs_of_the_rule() -> usize {
-    let ledger = strata_preflight::confidence::Ledger::parse(
-        strata_preflight::catalog::LEDGER,
-        std::path::Path::new("evidence/runs.yaml"),
-    )
-    .unwrap();
+    let ledger = strata_preflight::catalog::builtin_ledger().unwrap();
     ledger
         .counts_for("gke-no-release-channel", "gke", None)
         .runs
         .len()
+}
+
+#[test]
+fn the_text_of_the_promotion_agrees_the_noun_and_the_verb_with_the_count_of_levels() {
+    let dir = tempfile::tempdir().unwrap();
+    // no release: each run counts, and the level agrees with the lab ledger
+    let (code, out, err) = run(&["--promotion"], dir.path());
+    assert_eq!(code, 0, "{err}");
+    assert!(
+        out.contains(" rules with a check; no levels disagree with the ledger\n"),
+        "{out}"
+    );
+    // 4.10: the runs of the lab have no release, so one level disagrees with the ledger
+    let (code, out, err) = run(&["--promotion", "--release", "4.10"], dir.path());
+    assert_eq!(code, 1, "{err}");
+    assert!(
+        out.contains(" rules with a check; 1 level disagrees with the ledger\n"),
+        "{out}"
+    );
 }

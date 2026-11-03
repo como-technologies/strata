@@ -249,11 +249,42 @@ impl_closed_set!(Status {
     Proposed => "proposed",
 });
 
+/// Who fixes a fault for good.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum Owner {
+    /// Palette: a release of Palette fixes it.
+    Palette,
+    /// The provider of the cloud or of the tool.
+    Provider,
+    /// The lab that makes the runs.
+    Lab,
+    /// strata, or strata-preflight.
+    Strata,
+    /// The operator of the cluster: a change of the entity or of the account.
+    Operator,
+    /// Nobody: the fault has no fix, or no fix is needed.
+    #[serde(rename = "none")]
+    Nobody,
+}
+
+impl_closed_set!(Owner {
+    Palette => "palette",
+    Provider => "provider",
+    Lab => "lab",
+    Strata => "strata",
+    Operator => "operator",
+    Nobody => "none",
+});
+
 /// Who fixes the fault for good, and how.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Fix {
-    /// `palette`, `provider`, `lab`, `strata`, `operator`, or `none`.
-    pub owner: String,
+    /// The owner of the fix. A rule file writes it as `palette`, `provider`, `lab`, `strata`,
+    /// `operator`, or `none`.
+    pub owner: Owner,
     /// The change.
     #[serde(default)]
     pub text: String,
@@ -262,7 +293,7 @@ pub struct Fix {
 impl Fix {
     /// The fix as a report shows it: the change, then the owner in brackets.
     pub fn line(&self) -> String {
-        format!("{} ({})", self.text, self.owner)
+        format!("{} ({})", self.text, self.owner.as_str())
     }
 }
 
@@ -365,8 +396,11 @@ pub struct Promotion {
     pub runs: Vec<String>,
 }
 
+/// The 95% lower bound that a rule must reach for a promotion when it names no bar of its own.
+pub(crate) const DEFAULT_BAR: f64 = 0.8;
+
 fn default_bar() -> f64 {
-    0.8
+    DEFAULT_BAR
 }
 
 /// A pair of fixtures: one that holds the fault, and one that is clean.
@@ -442,6 +476,12 @@ pub struct Rule {
 }
 
 impl Rule {
+    /// The 95% lower bound that the runs of this rule must reach for a promotion: the bar of its
+    /// promotion, or the default bar of a promotion.
+    pub fn bar(&self) -> f64 {
+        self.promotion.as_ref().map_or(DEFAULT_BAR, |p| p.bar)
+    }
+
     /// True when the rule applies to `engine`.
     pub fn applies_to(&self, engine: &str) -> bool {
         self.engines

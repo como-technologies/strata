@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 use strata::closed_set::ClosedSet;
+use strata::closed_set::legend::Described;
 use strata::json::text;
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
@@ -27,7 +28,9 @@ mod watch;
 use verbose::verbose_lines;
 
 pub use rules::{list_rules, rules_document, rules_text};
-pub use watch::{WatchInputs, WatchOptions, reading, watch};
+pub use watch::{
+    DEFAULT_EVERY_SECS, DEFAULT_LIMIT_SECS, WatchInputs, WatchOptions, reading, watch,
+};
 
 /// What a run keeps of the catalog.
 #[derive(Debug, Clone)]
@@ -118,26 +121,19 @@ pub fn applicable<'a>(
             } else if r.check.is_none() {
                 match r.tier {
                     // a row with no check: the report says what to run by hand
-                    Tier::Cloud | Tier::Static | Tier::Palette | Tier::Watch => Some(Outcome::not_run(
-                        Verdict::NotChecked,
-                        "no check in strata-preflight; the reproduce lines say what to run by hand",
-                    )),
+                    Tier::Cloud | Tier::Static | Tier::Palette | Tier::Watch => {
+                        Some(Outcome::unchecked())
+                    }
                     Tier::Race => Some(Outcome::not_run(
                         Verdict::NotChecked,
-                        "a race: no check before the build finds it; the watch finds its effect",
+                        format!("a race: {}", r.tier.describe()),
                     )),
-                    Tier::Tool => Some(Outcome::not_run(
-                        Verdict::Skipped,
-                        "a rule of the tool that makes the entity, out of scope here",
-                    )),
+                    Tier::Tool => Some(Outcome::not_run(Verdict::Skipped, r.tier.describe())),
                 }
             } else if !selection.tiers.contains(&r.effective_tier()) {
                 if r.effective_tier() == Tier::Watch {
                     // a watch rule is of the build, not of this run: it does not apply here
-                    Some(Outcome::not_run(
-                        Verdict::Skipped,
-                        "a watch rule runs with --watch cluster:UID, during the build",
-                    ))
+                    Some(Outcome::outside_watch())
                 } else {
                     // the check applies and did not run: it counts against the readiness
                     Some(Outcome::not_run(
@@ -262,7 +258,7 @@ fn confidence_of(
             continue;
         }
         let counts = ledger.counts_for(&rule.id, &world.cloud, world.release.as_deref());
-        let bar = rule.promotion.as_ref().map_or(0.8, |p| p.bar);
+        let bar = rule.bar();
         let release = world.release.as_deref().unwrap_or("");
         let confidence = Confidence::of(&world.cloud, release, &counts, bar);
         // a rule with no run on this release still shows the runs of older releases

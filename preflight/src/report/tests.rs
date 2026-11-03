@@ -389,9 +389,8 @@ rules:
     let rule = c.rule("webhook-call-failed").unwrap();
     let lines = auto_reproduce(rule, &outcome, &subject, None);
     assert_eq!(lines.len(), 1);
-    let route = strata::api::cluster_events_path("c 1");
+    let route = "/v1/events/components/spectrocluster/c%201?limit=50";
     assert!(lines[0].ends_with(&format!("}}{route}\"")), "{}", lines[0]);
-    assert!(route.ends_with("c%201?limit=50"), "{route}");
     subject.cluster_uid = None;
     assert!(auto_reproduce(rule, &outcome, &subject, None).is_empty());
 }
@@ -518,6 +517,85 @@ fn the_exit_code_follows_the_counted_failures_then_the_errors() {
 }
 
 #[test]
+fn the_verdict_and_the_summary_agree_each_noun_with_its_count() {
+    let failed = |n: usize| -> Vec<CheckResult> {
+        (0..n)
+            .map(|i| {
+                check(
+                    &format!("f{i}"),
+                    Verdict::Failed,
+                    Level::Preflight,
+                    Severity::Fail,
+                    true,
+                )
+            })
+            .collect()
+    };
+    for (n, words) in [(1, "1 check failed: f0"), (2, "2 checks failed: f0, f1")] {
+        let checks = failed(n);
+        let s = summarize(&checks, &sections(&checks), &options());
+        assert_eq!(s.verdict, format!("FAIL: {words}"));
+    }
+    let errors = |n: usize| -> Vec<CheckResult> {
+        (0..n)
+            .map(|i| {
+                check(
+                    &format!("e{i}"),
+                    Verdict::Error,
+                    Level::Probe,
+                    Severity::Fail,
+                    false,
+                )
+            })
+            .collect()
+    };
+    for (n, words) in [
+        (1, "1 check could not answer: e0"),
+        (2, "2 checks could not answer: e0, e1"),
+    ] {
+        let checks = errors(n);
+        let s = summarize(&checks, &sections(&checks), &options());
+        assert_eq!(s.verdict, format!("ERROR: {words}"));
+    }
+    let probes = |n: usize| -> Summary {
+        let checks: Vec<CheckResult> = (0..n)
+            .map(|i| {
+                check(
+                    &format!("p{i}"),
+                    Verdict::Failed,
+                    Level::Probe,
+                    Severity::Fail,
+                    false,
+                )
+            })
+            .collect();
+        summarize(&checks, &sections(&checks), &options())
+    };
+    assert_eq!(
+        probes(1).verdict,
+        "OK: each counted check passed; 1 probe failed, not counted"
+    );
+    assert_eq!(
+        probes(2).verdict,
+        "OK: each counted check passed; 2 probes failed, not counted"
+    );
+}
+
+#[test]
+fn the_checks_that_apply_are_the_checks_that_ran_and_the_checks_that_did_not_run() {
+    let checks = vec![
+        check("a", Verdict::Passed, Level::Probe, Severity::Fail, false),
+        check("b", Verdict::Failed, Level::Probe, Severity::Fail, false),
+        check("c", Verdict::NotRun, Level::Probe, Severity::Fail, false),
+        check("d", Verdict::Skipped, Level::Probe, Severity::Fail, false),
+    ];
+    let sections = sections(&checks);
+    let s = summarize(&checks, &sections, &options());
+    assert_eq!((s.ran, s.not_run, s.applies()), (2, 1, 3));
+    assert_eq!(s.readiness, Some(1.0 / 3.0));
+}
+
+#[test]
 fn the_terminal_and_the_markdown_carry_each_result() {
     let outcome = |v: Verdict| Outcome {
         verdict: v,
@@ -593,12 +671,22 @@ rules:
     assert!(text.contains("pool worker has size 4"), "{text}");
     assert!(text.contains("NOT CHECKED   gke-no-gpu"), "{text}");
     assert!(text.contains("Section scorecard"), "{text}");
+    assert!(
+        text.contains("1 probe failed, no warnings, no notes"),
+        "{text}"
+    );
+    assert!(
+        text.contains("no errors; readiness 0%: 0 of 1 checks passed"),
+        "{text}"
+    );
     let md = markdown(&report);
     assert!(
         md.contains("| PROBE FAIL | `gke-pool-multiple-3` | S |"),
         "{md}"
     );
     assert!(md.contains("Reproduce by hand"), "{md}");
+    assert!(md.contains("1 probe failed; "), "{md}");
+    assert!(md.contains("(0 of 1 checks passed)"), "{md}");
     let json: Value =
         serde_json::from_str(&render(&report, Format::Json, true, &Paint::off())).unwrap();
     assert_eq!(json["schema"], REPORT_SCHEMA);

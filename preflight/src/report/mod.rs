@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 
+use clap::ValueEnum;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -106,6 +107,9 @@ pub struct Options {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub out_dir: Option<String>,
 }
+
+/// The readiness that the page of a run marks on each bar when the run gave no `--ready`.
+pub(crate) const DEFAULT_GATE: f64 = 0.8;
 
 impl Options {
     /// The tiers that ran, as each form of the report writes them after `tiers`: `static,
@@ -302,6 +306,14 @@ pub struct Summary {
     pub verdict: String,
 }
 
+impl Summary {
+    /// The checks that apply here: the ones that ran and the ones that did not run. The readiness
+    /// counts them.
+    pub fn applies(&self) -> u32 {
+        scorecard::applies(self.ran, self.not_run)
+    }
+}
+
 /// What the words of the document mean, for a reader of the JSON.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Legend {
@@ -487,8 +499,8 @@ pub fn assemble(a: Assembly<'_>, jq: &Jq) -> Report {
     }
 }
 
-/// The report formats.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The report formats. The command line reads the name of a format in lower case.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Format {
     /// Text for a terminal.
     Terminal,

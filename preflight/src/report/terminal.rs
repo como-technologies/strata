@@ -6,6 +6,7 @@ use strata::text::cut;
 use super::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
 use super::{CheckResult, Report, pct};
 use crate::probe::Verdict;
+use strata::render::count_of;
 
 /// The terminal form. `paint` gives the color, or none.
 pub fn terminal(r: &Report, paint: &Paint) -> String {
@@ -88,9 +89,13 @@ fn scorecard_lines(r: &Report, paint: &Paint) -> String {
 fn summary_lines(r: &Report, paint: &Paint) -> String {
     let mut out = String::new();
     let s = &r.summary;
+    let probes = count_of(s.probe_failed as usize, "probe");
+    let warnings = count_of(s.warned as usize, "warning");
+    let notes = count_of(s.noted as usize, "note");
+    let errors = count_of(s.errors as usize, "error");
     out.push_str(&format!(
-        "\n{} rules apply; {} ran: {} passed, {} failed, {} probe(s) failed, {} warning(s), {} note(s); {} did not run, {} not checked, {} do not apply, {} error(s); readiness {}: {} of {} checks passed\n",
-        s.rules, s.ran, s.passed, s.failed, s.probe_failed, s.warned, s.noted, s.not_run, s.not_checked, s.skipped, s.errors, pct(s.readiness), s.passed, s.ran + s.not_run
+        "\n{} rules apply; {} ran: {} passed, {} failed, {probes} failed, {warnings}, {notes}; {} did not run, {} not checked, {} do not apply, {errors}; readiness {}: {} of {} checks passed\n",
+        s.rules, s.ran, s.passed, s.failed, s.not_run, s.not_checked, s.skipped, pct(s.readiness), s.passed, s.applies()
     ));
     if s.not_run > 0 {
         out.push_str(&format!(

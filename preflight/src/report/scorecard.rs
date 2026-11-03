@@ -4,9 +4,10 @@
 use std::collections::BTreeMap;
 
 use super::{CheckResult, Options, SectionScore, Summary, percent};
-use crate::confidence::{Confidence, NO_RUNS};
+use crate::confidence::{Confidence, NO_RUNS, runs_to_reach};
 use crate::probe::Verdict;
-use crate::rule::{Catalog, Level, Severity, Status};
+use crate::rule::{Catalog, DEFAULT_BAR, Level, Severity, Status};
+use strata::render::count_of;
 use strata::text::plural;
 
 /// The scorecard: one line for each section that has a row for this engine.
@@ -63,14 +64,21 @@ pub fn scorecard(catalog: &Catalog, checks: &[CheckResult]) -> Vec<SectionScore>
                 .iter()
                 .filter(|c| c.verdict == Verdict::NotChecked)
                 .count() as u32,
-            readiness: readiness_of(passed, ran.len() as u32 + not_run),
+            readiness: readiness_of(passed, ran.len() as u32, not_run),
         });
     }
     out
 }
 
+/// The checks that apply here: the ones that ran and the ones that did not run. The readiness
+/// counts them, and so does the summary line of each form of the report.
+pub(super) fn applies(ran: u32, not_run: u32) -> u32 {
+    ran + not_run
+}
+
 /// The readiness: the checks that passed over the checks that apply, or none when none applies.
-pub(super) fn readiness_of(passed: u32, apply: u32) -> Option<f64> {
+pub(super) fn readiness_of(passed: u32, ran: u32, not_run: u32) -> Option<f64> {
+    let apply = applies(ran, not_run);
     (apply > 0).then(|| f64::from(passed) / f64::from(apply))
 }
 
@@ -93,7 +101,7 @@ pub(crate) fn bound_text(bound: Option<f64>) -> String {
     bound.map_or_else(|| NO_RUNS.to_string(), percent)
 }
 
-/// `N check(s) did not run: reason (count); reason (count)`.
+/// `N checks did not run: reason (count); reason (count)`.
 pub(crate) fn not_run_text(reasons: &BTreeMap<String, u32>) -> String {
     let n: u32 = reasons.values().sum();
     let why: Vec<String> = reasons.iter().map(|(r, c)| format!("{r} ({c})")).collect();
@@ -135,7 +143,6 @@ pub(super) fn summarize(
     let not_run_reasons = not_run_reasons(checks.iter());
     let skipped = count(&|c| c.verdict == Verdict::Skipped);
     let errors = count(&|c| c.verdict == Verdict::Error);
-    let readiness = readiness_of(passed, ran + not_run);
     let counted = Summary {
         rules: checks.len() as u32,
         ran,
@@ -149,7 +156,7 @@ pub(super) fn summarize(
         not_checked,
         skipped,
         errors,
-        readiness,
+        readiness: readiness_of(passed, ran, not_run),
         exit_code: 0,
         verdict: String::new(),
     };
@@ -185,7 +192,11 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
             .collect();
         (
             1,
-            format!("FAIL: {failed} check(s) failed: {}", ids.join(", ")),
+            format!(
+                "FAIL: {} failed: {}",
+                count_of(failed as usize, "check"),
+                ids.join(", ")
+            ),
         )
     } else if under_ready {
         (
@@ -205,7 +216,8 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
         (
             2,
             format!(
-                "ERROR: {errors} check(s) could not answer: {}",
+                "ERROR: {} could not answer: {}",
+                count_of(errors as usize, "check"),
                 ids.join(", ")
             ),
         )
@@ -213,7 +225,10 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
         (0, "OK: no check ran".to_string())
     } else {
         let probes = if probe_failed > 0 {
-            format!("; {probe_failed} probe(s) failed, not counted")
+            format!(
+                "; {} failed, not counted",
+                count_of(probe_failed as usize, "probe")
+            )
         } else {
             String::new()
         };
@@ -225,7 +240,8 @@ fn exit_and_verdict(checks: &[CheckResult], summary: &Summary, ready: Option<f64
 pub(crate) fn scorecard_legend(sections: &[SectionScore]) -> String {
     let promoted: u32 = sections.iter().map(|s| s.preflight).sum();
     let checks: u32 = sections.iter().map(|s| s.with_check).sum();
+    let (bar, runs) = (percent(DEFAULT_BAR), runs_to_reach(DEFAULT_BAR));
     format!(
-        "runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: {promoted} of {checks} checks."
+        "runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of {bar}, which is {runs} correct runs of {runs} on the engine; every other rule is a probe. Promoted here: {promoted} of {checks} checks."
     )
 }

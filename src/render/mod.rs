@@ -16,12 +16,16 @@ mod verify;
 use clap::ValueEnum;
 use serde_json::Value;
 
+use crate::closed_set::ClosedSet;
 use crate::closed_set::impl_texts;
 use crate::closed_set::unknown::report::Report;
 use crate::diff::Diff;
 use crate::error::{MESSAGE_AT, Result};
 use crate::json::opt_str;
-use crate::ops::{Chain, ConsumersReport, Listing, PackListing, SetReport, VerifySummary};
+use crate::model::cluster_state::ClusterState;
+use crate::ops::{
+    Chain, ConsumersReport, Listing, PackListing, SetReport, UNKNOWN_STATE, VerifySummary,
+};
 use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
 use crate::text::{cut, plural};
@@ -132,7 +136,7 @@ fn joined_note<const N: usize>(parts: [Option<&str>; N]) -> Option<String> {
 /// `2 profiles`, `1 profile`, or `no profiles`.
 ///
 /// Each count and its noun in a report comes from here, so zero reads in one way.
-pub(crate) fn count_of(n: usize, singular: &str) -> String {
+pub fn count_of(n: usize, singular: &str) -> String {
     let ending = plural(n, "", "s");
     match n {
         0 => format!("no {singular}{ending}"),
@@ -169,6 +173,25 @@ pub(crate) fn key_line(key: &str, text: impl std::fmt::Display) -> String {
 /// One line of the answer of Palette, as a report prints it: `palette    accepts`.
 pub fn palette_line(line: &str) -> String {
     key_line("palette", line)
+}
+
+/// `state` in the color of a cluster state.
+///
+/// Green is a cluster that runs. Yellow is a cluster that Palette builds, or a state that strata
+/// could not read. Red is a cluster in error or one that goes. A state that strata does not know
+/// has no color.
+pub fn paint_state(paint: &Paint, state: &str) -> String {
+    match ClusterState::parse(state) {
+        Some(ClusterState::Running) => paint.green(state),
+        Some(ClusterState::Provisioning | ClusterState::Pending | ClusterState::Importing) => {
+            paint.yellow(state)
+        }
+        Some(ClusterState::Error | ClusterState::Deleting | ClusterState::Deleted) => {
+            paint.red(state)
+        }
+        None if state == UNKNOWN_STATE => paint.yellow(state),
+        None => state.to_string(),
+    }
 }
 
 /// The renderer for a format.
@@ -267,6 +290,27 @@ fn registry_sync_suffix(sync: Option<&crate::diff::RegistrySync>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_cluster_state_has_one_color_in_every_report() {
+        use crate::term::color::{ColorMode, Stream};
+        let on = Paint::resolve(ColorMode::Always, Stream::Stdout);
+        for (state, painted) in [
+            ("Running", on.green("Running")),
+            ("Provisioning", on.yellow("Provisioning")),
+            ("Pending", on.yellow("Pending")),
+            ("Importing", on.yellow("Importing")),
+            ("Error", on.red("Error")),
+            ("Deleting", on.red("Deleting")),
+            ("Deleted", on.red("Deleted")),
+            (UNKNOWN_STATE, on.yellow(UNKNOWN_STATE)),
+            ("Upgrading", "Upgrading".to_string()),
+            ("-", "-".to_string()),
+        ] {
+            assert_eq!(paint_state(&on, state), painted, "{state}");
+            assert_eq!(paint_state(&Paint::off(), state), state, "{state}");
+        }
+    }
 
     #[test]
     fn each_format_has_the_name_that_the_command_line_gives_it() {

@@ -1,156 +1,75 @@
 //! The text of each value of each closed set of the rule format and of the report. A rule file and
 //! a report name these values by text. A release that renames or removes a value breaks the files
 //! of the users. These tests hold the values of each set. They make sure that serde, the JSON
-//! Schema, and `ClosedSet::as_str` give one text for each value.
+//! Schema, and `ClosedSet::as_str` give one text for each value. The checks are the ones of
+//! `tests/closed_set.rs` of the root package, in `tests/common/closed_set.rs`.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde_json::Value;
 use strata::closed_set::ClosedSet;
 use strata::closed_set::legend::{Described, legend};
+use strata_preflight::confidence::RunResult;
 use strata_preflight::probe::Verdict;
-use strata_preflight::rule::{Check, CheckKind, EvidenceKind, Level, Severity, Status, Tier};
+use strata_preflight::rule::{
+    Check, CheckKind, EvidenceKind, Level, Owner, Severity, Status, Tier,
+};
+use strata_preflight::world::cloud_list;
 
-/// The values of one set: its name as `impl_closed_set!` writes it, the texts that a release
-/// wrote, and the texts of `ClosedSet::ALL`.
-struct Set {
-    name: &'static str,
-    released: &'static [&'static str],
-    names: Vec<String>,
-    all: Vec<&'static str>,
-    /// For each text in `names`: the text serde writes, and the text of the value that
-    /// `ClosedSet::parse` reads.
-    texts: Vec<(Value, Option<&'static str>)>,
-}
+#[path = "../../tests/common/closed_set.rs"]
+mod closed_set;
+#[path = "../../tests/common/walk.rs"]
+mod walk;
 
-fn set<T: ClosedSet>(name: &'static str, released: &'static [&'static str]) -> Set {
-    let schema = schemars::schema_for!(T);
-    // schemars writes each unit variant that has a doc comment as a `const` of `oneOf`
-    let names: Vec<String> = schema.as_value()["oneOf"]
-        .as_array()
-        .expect("the schema of a closed set is a oneOf")
-        .iter()
-        .map(|v| {
-            v["const"]
-                .as_str()
-                .expect("each variant is a const")
-                .to_string()
-        })
-        .collect();
-    let texts = names
-        .iter()
-        .map(|name| {
-            let value: T = serde_json::from_value(Value::from(name.as_str()))
-                .unwrap_or_else(|e| panic!("{name}: {e}"));
-            (
-                serde_json::to_value(value).unwrap(),
-                T::parse(name).map(T::as_str),
-            )
-        })
-        .collect();
-    Set {
-        name,
-        released,
-        names,
-        all: T::ALL.iter().map(|v| v.as_str()).collect(),
-        texts,
-    }
-}
+use closed_set::{
+    Set, check_all_in_order, check_listed, check_one_text_for_each_value, check_released, set,
+};
 
 /// Each closed set of the crate, with the text of each value that a release wrote.
 ///
 /// This list is a copy of the text on purpose. When a release adds a value to a set, add its text
 /// here. A release must not rename or remove a value, because a file of an earlier release then
 /// stops loading.
-fn sets() -> Vec<Set> {
-    vec![
-        set::<Tier>(
-            "Tier",
-            &["static", "palette", "cloud", "watch", "race", "tool"],
-        ),
-        set::<Level>("Level", &["probe", "preflight"]),
-        set::<Severity>("Severity", &["fail", "warn", "note"]),
-        set::<Status>("Status", &["seen", "source", "inferred", "proposed"]),
-        set::<EvidenceKind>("EvidenceKind", &["run", "source", "doc", "report"]),
-        set::<CheckKind>("CheckKind", &["static", "palette", "exec", "watch"]),
-        set::<Verdict>(
-            "Verdict",
-            &[
-                "passed",
-                "failed",
-                "not-checked",
-                "not-run",
-                "skipped",
-                "error",
-            ],
-        ),
+fn sets() -> [Set; 9] {
+    [
+        set::<Tier>(&["static", "palette", "cloud", "watch", "race", "tool"]),
+        set::<Level>(&["probe", "preflight"]),
+        set::<Severity>(&["fail", "warn", "note"]),
+        set::<Status>(&["seen", "source", "inferred", "proposed"]),
+        set::<EvidenceKind>(&["run", "source", "doc", "report"]),
+        set::<CheckKind>(&["static", "palette", "exec", "watch"]),
+        set::<Owner>(&["palette", "provider", "lab", "strata", "operator", "none"]),
+        set::<RunResult>(&["caught", "missed", "passed", "false-fail"]),
+        set::<Verdict>(&[
+            "passed",
+            "failed",
+            "not-checked",
+            "not-run",
+            "skipped",
+            "error",
+        ]),
     ]
 }
 
 #[test]
 fn serde_the_schema_and_as_str_give_one_text_for_each_value_of_a_closed_set() {
-    for set in sets() {
-        for (name, (serde, parsed)) in set.names.iter().zip(&set.texts) {
-            assert_eq!(serde, &Value::from(name.as_str()), "{}: serde", set.name);
-            assert_eq!(*parsed, Some(name.as_str()), "{}: parse", set.name);
-        }
-    }
+    check_one_text_for_each_value(&sets());
 }
 
 #[test]
 fn the_list_of_a_closed_set_holds_each_value_of_its_schema_in_order() {
-    for set in sets() {
-        assert_eq!(set.all, set.names, "{}: ALL", set.name);
-    }
+    check_all_in_order(&sets());
 }
 
 #[test]
 fn a_closed_set_holds_each_value_that_a_release_wrote_and_no_other() {
-    for set in sets() {
-        let mut names = set.names.clone();
-        names.sort();
-        let mut released = set.released.to_vec();
-        released.sort();
-        assert_eq!(
-            names, released,
-            "{}: a release must not rename or remove a value. Add a new value to `sets`.",
-            set.name
-        );
-    }
-}
-
-fn walk(dir: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    for entry in std::fs::read_dir(dir).unwrap().flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            out.extend(walk(&path));
-        } else {
-            out.push(path);
-        }
-    }
-    out
+    check_released(&sets());
 }
 
 #[test]
 fn the_list_of_closed_sets_names_each_closed_set_of_the_crate() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut in_code = Vec::new();
-    for file in walk(&src) {
-        if file.extension().is_none_or(|e| e != "rs") {
-            continue;
-        }
-        let text = std::fs::read_to_string(&file).unwrap();
-        for line in text.lines() {
-            if let Some(name) = line.strip_prefix("impl_closed_set!(") {
-                in_code.push(name.trim_end_matches(" {").to_string());
-            }
-        }
-    }
-    in_code.sort();
-    let mut listed: Vec<&str> = sets().iter().map(|s| s.name).collect();
-    listed.sort();
-    assert_eq!(in_code, listed, "add each closed set to `sets`");
+    check_listed(&sets(), &walk::walk(&src));
 }
 
 /// The legend of `T` has one line for each value, by the text of the value in the report.
@@ -192,4 +111,33 @@ fn the_kind_of_a_check_is_the_tag_that_the_rule_files_write() {
         assert_eq!(tag, Value::from(check.kind().as_str()), "{text}");
         assert_eq!(check.tier(), check.kind().tier(), "{text}");
     }
+}
+
+#[test]
+fn the_live_script_of_the_plan_accepts_the_results_that_the_ledger_knows() {
+    let script = include_str!("../../examples/live/preflight-plan.sh");
+    let results: Vec<&str> = script
+        .lines()
+        .map(str::trim)
+        .find_map(|line| line.strip_suffix(r#") results+=("$1|$2|$3") ;;"#))
+        .expect("the script has a case for the results that the ledger knows")
+        .split('|')
+        .collect();
+    let known: Vec<&str> = RunResult::ALL.iter().map(|r| r.as_str()).collect();
+    assert_eq!(results, known);
+}
+
+#[test]
+fn the_workflow_lists_the_engines_of_the_world_in_order() {
+    let workflow: serde_yaml::Value =
+        serde_yaml::from_str(include_str!("../../.github/workflows/preflight.yml")).unwrap();
+    let description = workflow["on"]["workflow_call"]["inputs"]["cloud"]["description"]
+        .as_str()
+        .expect("the input `cloud` has a description");
+    let list = description
+        .strip_prefix("The engine of a file: ")
+        .and_then(|rest| rest.split_once(". "))
+        .map(|(list, _)| list.replace(", or ", ", "))
+        .expect("the description starts with the list of the engines");
+    assert_eq!(list, cloud_list());
 }

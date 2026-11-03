@@ -12,6 +12,11 @@ use strata_preflight::jq::Jq;
 use strata_preflight::probe::{self, Call, FixtureBackend, LiveBackend, Outcome, Verdict};
 use strata_preflight::rule::{Check, Evidence, EvidenceKind, ExecCheck, PaletteCheck, Rule};
 
+#[path = "../../tests/common/walk.rs"]
+mod walk;
+
+use walk::walk;
+
 /// The request of the instance type route for the fixtures of the AWS, GCP, and Azure rules, as the
 /// rules send it. Its query lifts the default filter of Palette, which drops each type with fewer
 /// than 2 vCPUs or less than 4 GiB of memory (#393).
@@ -430,19 +435,6 @@ fn every_fixture_belongs_to_a_rule_and_every_named_fixture_exists() {
         "fixtures no rule names: {}",
         orphans.join(", ")
     );
-}
-
-fn walk(dir: &Path) -> Vec<PathBuf> {
-    let mut out = Vec::new();
-    for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
-        let p = e.path();
-        if p.is_dir() {
-            out.extend(walk(&p));
-        } else {
-            out.push(p);
-        }
-    }
-    out
 }
 
 #[test]

@@ -11,16 +11,19 @@ use strata::closed_set::ClosedSet;
 use strata::config;
 use strata::ops;
 use strata::reference::Ref;
+use strata::render::count_of;
 use strata::term::color::{ColorMode, Paint, Stream};
 use strata::term::progress::Progress;
-use strata::text::dash;
+use strata::text::{dash, plural};
 use strata::timestamp::now_utc;
 use strata_preflight::confidence::{self, Ledger};
 use strata_preflight::error::{Error, Result};
 use strata_preflight::probe::LiveBackend;
 use strata_preflight::report::{self, Format, Report};
 use strata_preflight::rule::{self, Catalog, Tier};
-use strata_preflight::run::{self, Selection, WatchOptions};
+use strata_preflight::run::{
+    self, DEFAULT_EVERY_SECS, DEFAULT_LIMIT_SECS, Selection, WatchOptions,
+};
 use strata_preflight::world::World;
 use strata_preflight::{TOOL_NAME, catalog};
 
@@ -72,10 +75,10 @@ struct Cli {
     #[arg(long)]
     watch: bool,
     /// With --watch: seconds between two readings
-    #[arg(long, value_name = "SECONDS", default_value = "30")]
+    #[arg(long, value_name = "SECONDS", default_value_t = DEFAULT_EVERY_SECS)]
     every: u64,
     /// With --watch: the longest watch, in seconds
-    #[arg(long, value_name = "SECONDS", default_value = "3600")]
+    #[arg(long, value_name = "SECONDS", default_value_t = DEFAULT_LIMIT_SECS)]
     limit: u64,
     /// List the rules, with the level and the tier of each, and run nothing
     #[arg(long)]
@@ -99,7 +102,7 @@ struct Cli {
         default_value = "terminal",
         hide_possible_values = true
     )]
-    format: FormatArg,
+    format: Format,
     /// The same as --format json
     #[arg(long, conflicts_with = "format")]
     json: bool,
@@ -124,14 +127,6 @@ struct Cli {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum FormatArg {
-    Terminal,
-    Markdown,
-    Json,
-    Html,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum SchemaKind {
     /// The report of a run
     Report,
@@ -145,7 +140,7 @@ enum SchemaKind {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let json = cli.json || cli.format == FormatArg::Json;
+    let json = format_of(&cli) == Format::Json;
     match run_cli(cli) {
         Ok(code) => code,
         Err(e) => {
@@ -160,15 +155,7 @@ fn main() -> ExitCode {
 }
 
 fn format_of(cli: &Cli) -> Format {
-    if cli.json {
-        return Format::Json;
-    }
-    match cli.format {
-        FormatArg::Terminal => Format::Terminal,
-        FormatArg::Markdown => Format::Markdown,
-        FormatArg::Json => Format::Json,
-        FormatArg::Html => Format::Html,
-    }
+    if cli.json { Format::Json } else { cli.format }
 }
 
 /// The color of one stream, by the rule of `strata`: `--color always` colors a pipe too (a `tee`
@@ -198,7 +185,7 @@ fn tiers_of(cli: &Cli) -> Result<Vec<Tier>> {
 }
 
 fn ledger_of(cli: &Cli) -> Result<Ledger> {
-    let mut ledger = Ledger::parse(catalog::LEDGER, std::path::Path::new("evidence/runs.yaml"))?;
+    let mut ledger = catalog::builtin_ledger()?;
     for path in &cli.ledger {
         ledger.extend(Ledger::load(path)?);
     }
@@ -510,10 +497,12 @@ fn promotion_text(report: &confidence::PromotionReport) -> String {
             }
         ));
     }
+    let n = report.disagreements as usize;
     out.push_str(&format!(
-        "\n{} rules with a check; {} level(s) disagree with the ledger\n",
+        "\n{} rules with a check; {} {} the ledger\n",
         report.rules.len(),
-        report.disagreements
+        count_of(n, "level"),
+        plural(n, "disagrees with", "disagree with")
     ));
     out
 }

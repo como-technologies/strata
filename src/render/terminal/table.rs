@@ -38,6 +38,13 @@ pub(super) fn matched(p: &Paint, cell: &str, text: Option<&str>) -> String {
     }
 }
 
+/// A padded cell with `paint` applied to its text. The padding stays outside the paint, so the
+/// text reads as the value that the report holds.
+pub(super) fn painted_text(cell: &str, paint: impl Fn(&str) -> String) -> String {
+    let text = cell.trim_end();
+    format!("{}{}", paint(text), &cell[text.len()..])
+}
+
 /// One table line: cells padded to their column and two spaces apart, the last cell unpadded so
 /// no line ends in spaces. `style` colors a padded cell by its column.
 pub(super) fn table_line(

@@ -69,7 +69,8 @@ where each module goes.
   Do not write a list of the values or a `match` of their texts by hand. The test
   `tests/closed_set.rs` makes sure that each text is the one that serde writes.
   `preflight/` uses the same macro, `strata::impl_closed_set`.
-  `preflight/tests/closed_set.rs` makes the same check there.
+  `preflight/tests/closed_set.rs` makes the same check there, with the same checks from
+  `tests/common/closed_set.rs`.
 - An enum that no document holds, such as a segment of a route or a layer, has no serde. Give
   it `ALL`, `as_str`, and `from_text` with `impl_texts!`, from one table. Do not write a
   `match` of its texts by hand, once to read them and once to write them.
@@ -203,6 +204,12 @@ ASD-STE100.
 - Put a helper that two test files use in `tests/common/mod.rs`. Compare
   against the `const` of the crate, not against a copy of its text. A test that
   pins the text of a schema id on purpose can stay, with a comment that says so.
+- A test of another package uses a helper of `tests/common/` with `#[path]`. It does not copy the
+  helper. `palette.rs`, `closed_set.rs`, and `walk.rs` have such users. A file that uses some of
+  the helpers allows `dead_code` on the include.
+- A test serves the route that Palette serves, from a helper of `tests/common/palette.rs`. It
+  does not build the route with a function of `strata::api`. `tests/routes.rs` makes sure that
+  the two give the same route.
 - A test that runs a script in a tree of its own copies the script with
   `copy_scripts`. It copies each file that the script sources too, such as
   `examples/live/common.sh`.

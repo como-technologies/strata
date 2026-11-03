@@ -8,7 +8,7 @@ use strata::closed_set::ClosedSet;
 
 use crate::probe::Verdict;
 use crate::report::scorecard::{bound_text, not_run_text, scorecard_legend, written_text};
-use crate::report::{CheckResult, Report, SectionScore, Summary, pct, percent};
+use crate::report::{CheckResult, DEFAULT_GATE, Report, SectionScore, Summary, pct, percent};
 
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -127,7 +127,7 @@ fn scorecard_section(r: &Report) -> String {
     let mut h = String::from(
         "<h2>Section scorecard</h2><table><thead><tr><th>section</th><th>readiness</th><th class=\"num\">ran</th><th class=\"num\">passed</th><th class=\"num\">failed</th><th class=\"num\">did not run</th><th class=\"num\">not checked</th><th class=\"num hide-sm\">rows</th><th class=\"num hide-sm\">seen</th><th class=\"num hide-sm\">with a check</th><th class=\"num hide-sm\">preflight</th><th class=\"num hide-sm\">with runs</th><th class=\"hide-sm\">weakest bound</th></tr></thead><tbody>",
     );
-    let gate = r.options.ready.unwrap_or(0.8);
+    let gate = r.options.ready.unwrap_or(DEFAULT_GATE);
     for sc in &r.sections {
         let (width, class) = match sc.readiness {
             Some(x) => (x * 100.0, if x < gate { "low" } else { "" }),
@@ -238,7 +238,7 @@ mod tests {
     use crate::confidence::{Confidence, Counts, NO_RUNS};
     use crate::probe::Call;
     use crate::report::*;
-    use crate::rule::{Fix, Level, Severity, Status, Tier};
+    use crate::rule::{Fix, Level, Owner, Severity, Status, Tier};
     use std::collections::BTreeMap;
 
     /// The report of one probe that failed, with no request.
@@ -406,7 +406,7 @@ mod tests {
         let mut report = report();
         let mut failed = report.checks[0].clone();
         failed.fix = Some(Fix {
-            owner: "palette".into(),
+            owner: Owner::Palette,
             text: "Check the zones.".into(),
         });
         failed.confidence = Some(Confidence::of("gke", "4.10", &counts, 0.7));

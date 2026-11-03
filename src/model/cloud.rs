@@ -128,7 +128,7 @@ impl Cloud {
 /// pack supports the cloud `all`. Each other pack supports the clouds of its cloud types. It
 /// supports each cloud when one of them is `all`, and each custom cloud when one of them is
 /// `custom`.
-pub(crate) fn supports(cloud_types: &[String], cloud: &str) -> bool {
+pub fn supports(cloud_types: &[String], cloud: &str) -> bool {
     let custom = Cloud::of(cloud).is_custom();
     cloud == CLOUD_ALL
         || cloud_types.is_empty()

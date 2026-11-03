@@ -6,21 +6,28 @@ use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
 use strata::api::{Palette, PaletteApi};
-use strata::json::{set_at, text_or};
+use strata::json::{set_at, text_or, value_at};
 use strata::model::cluster_state::ClusterState;
+use strata::render::{count_of, paint_state};
 use strata::snapshot::SubjectKind;
 use strata::term::color::Paint;
 use strata::term::progress::Progress;
 
-use super::verbose::{Seen, UNKNOWN, paint_state, program_lines, reading_lines, watch_line};
+use super::verbose::{Seen, UNKNOWN, program_lines, reading_lines, watch_line};
 use super::{Selection, confidence_of, holds, subject_of};
 use crate::confidence::Ledger;
 use crate::error::{Error, Result};
 use crate::jq::Jq;
-use crate::probe::{self, Outcome, Verdict};
+use crate::probe::{self, Outcome, Reader, Verdict, is_answer};
 use crate::report::{self, Assembly, Options, Report};
 use crate::rule::{Catalog, Check, Rule, Tier};
-use crate::world::{World, unreadable};
+use crate::world::World;
+
+/// The seconds between two readings of a watch, when the run gives none.
+pub const DEFAULT_EVERY_SECS: u64 = 30;
+
+/// The longest watch in seconds, when the run gives none.
+pub const DEFAULT_LIMIT_SECS: u64 = 3600;
 
 /// The settings of a watch.
 #[derive(Debug, Clone)]
@@ -36,8 +43,8 @@ pub struct WatchOptions {
 impl Default for WatchOptions {
     fn default() -> Self {
         WatchOptions {
-            every: Duration::from_secs(30),
-            limit: Duration::from_secs(3600),
+            every: Duration::from_secs(DEFAULT_EVERY_SECS),
+            limit: Duration::from_secs(DEFAULT_LIMIT_SECS),
             stop_at_first: true,
         }
     }
@@ -56,12 +63,14 @@ pub fn reading<A: PaletteApi>(palette: &Palette<A>, uid: &str, elapsed: Duration
     let cluster = palette.subject_document(SubjectKind::Cluster, uid)?;
     let summary = match palette.fetch_cluster_summary(uid) {
         Ok(s) => s,
-        Err(strata::Error::Api { status, .. }) if unreadable(status) => Value::Null,
+        Err(strata::Error::Api { status, .. }) if is_answer(status, Reader::World) => Value::Null,
         Err(e) => return Err(e.into()),
     };
     let events = match palette.cluster_events(uid) {
         Ok(e) => Value::Array(e),
-        Err(strata::Error::Api { status, .. }) if unreadable(status) => Value::Array(vec![]),
+        Err(strata::Error::Api { status, .. }) if is_answer(status, Reader::World) => {
+            Value::Array(vec![])
+        }
         Err(e) => return Err(e.into()),
     };
     Ok(json!({
@@ -158,11 +167,11 @@ pub fn watch<A: PaletteApi>(inputs: WatchInputs<'_, A>) -> Result<(Report, Value
     let confidence = confidence_of(inputs.catalog, inputs.ledger, inputs.world, &outcomes);
     let mut subject = subject_of(inputs.world);
     subject.source = format!(
-        "{} ({} after {}s, {} reading(s))",
+        "{} ({} after {}s, {})",
         subject.source,
         ended.state,
         started.elapsed().as_secs(),
-        ended.readings
+        count_of(ended.readings as usize, "reading")
     );
     let report = report::assemble(
         Assembly {
@@ -242,7 +251,7 @@ fn read_until_ended<A: PaletteApi>(
         // a cluster that runs ends the watch: a failure it read on past is in the report
         let ends = (failed && options.stop_at_first)
             || ClusterState::Running.is(&state)
-            || ClusterState::Deleted.is(&state)
+            || ClusterState::is_gone(value_at(&read, "/cluster"))
             || ClusterState::Error.is(&state);
         let at_limit = !ends && elapsed >= options.limit;
         if at_limit {

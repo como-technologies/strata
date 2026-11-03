@@ -23,7 +23,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 use strata::api::{Method, PaletteApi};
-use strata_preflight::world::unreadable;
+use strata_preflight::probe::{Reader, is_answer};
 
 use crate::facts::{Fact, Kind, expand};
 
@@ -166,7 +166,10 @@ fn check_request<A: PaletteApi>(
                 );
                 return entry(Outcome::Skipped, Some(reason), Vec::new());
             }
-            match failure.status.filter(|status| unreadable(*status)) {
+            match failure
+                .status
+                .filter(|status| is_answer(*status, Reader::World))
+            {
                 Some(status) => entry(
                     Outcome::Differs,
                     None,

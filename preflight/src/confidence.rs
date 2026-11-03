@@ -19,6 +19,7 @@ use std::path::Path;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use strata::closed_set::impl_closed_set;
 use strata::model::cloud::CLOUD_ALL;
 use strata::reference::version;
 
@@ -47,6 +48,13 @@ pub enum RunResult {
     /// A clean build, and the check failed. A wrong result.
     FalseFail,
 }
+
+impl_closed_set!(RunResult {
+    Caught => "caught",
+    Missed => "missed",
+    Passed => "passed",
+    FalseFail => "false-fail",
+});
 
 /// One rule in one run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -256,7 +264,7 @@ impl Rate {
             correct,
             total,
             rate: (total > 0).then(|| f64::from(correct) / f64::from(total)),
-            lower_bound: lower_bound(correct, total, 0.95),
+            lower_bound: lower_bound(correct, total, CONFIDENCE),
         }
     }
 
@@ -340,6 +348,17 @@ impl Confidence {
     pub fn has_runs(&self) -> bool {
         self.catch.total + self.clean.total > 0
     }
+}
+
+/// The confidence of every lower bound of this crate: one side, 95%.
+const CONFIDENCE: f64 = 0.95;
+
+/// The fewest runs, all correct, whose lower bound reaches `bar`. The legend of the scorecard
+/// states it for the default bar.
+pub(crate) fn runs_to_reach(bar: f64) -> u32 {
+    (1..)
+        .find(|n| lower_bound(*n, *n, CONFIDENCE).is_some_and(|bound| bound >= bar))
+        .unwrap_or(u32::MAX)
 }
 
 /// The one-sided Clopper-Pearson lower bound of a rate at `confidence`.
@@ -516,7 +535,7 @@ pub fn promotion(catalog: &Catalog, ledger: &Ledger, release: Option<&str>) -> P
         .rules()
         .filter(|r| r.check.is_some() && r.applies_to_release(release));
     for rule in checks {
-        let bar = rule.promotion.as_ref().map_or(0.8, |p| p.bar);
+        let bar = rule.bar();
         let confidence = rule_confidence(ledger, &rule.id, release, bar);
         let engines = named_engines(rule, &confidence);
         let earned = earned_level(rule, ledger, &engines, release, bar);

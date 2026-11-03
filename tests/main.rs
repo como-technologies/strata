@@ -24,6 +24,7 @@ mod masked;
 mod presets;
 mod report;
 mod report_deploy;
+mod routes;
 mod send;
 mod spawn;
 mod unknown;

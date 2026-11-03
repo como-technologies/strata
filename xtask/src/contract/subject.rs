@@ -15,7 +15,7 @@ use strata::api::PaletteApi;
 use strata::error::Error;
 use strata::model::validation::PaletteRefusal;
 use strata::text::query_value;
-use strata_preflight::world::unreadable;
+use strata_preflight::probe::{Reader, is_answer};
 
 use crate::facts::subjects::{DEPTH, Origin, request_of, source, unsourced};
 use crate::facts::{Fact, Scope, fill, names};
@@ -230,7 +230,9 @@ fn bind<A: PaletteApi>(
 fn next_value_can_serve(subject: &Subject) -> bool {
     match subject {
         Subject::Missing(_) => true,
-        Subject::Failed(failure) => failure.status.is_some_and(unreadable),
+        Subject::Failed(failure) => failure
+            .status
+            .is_some_and(|status| is_answer(status, Reader::World)),
         Subject::Path(_) => false,
     }
 }

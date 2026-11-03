@@ -9,7 +9,6 @@ use strata::term::color::Paint;
 use strata::term::progress::Progress;
 use strata_benches::GENERATED_AT;
 use strata_preflight::catalog;
-use strata_preflight::confidence::Ledger;
 use strata_preflight::probe::{LiveBackend, Verdict};
 use strata_preflight::run::{self, RunInputs, Selection};
 use strata_preflight::world::World;
@@ -18,8 +17,7 @@ fn preflight(c: &mut Criterion) {
     let fixture =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../preflight/rules/fixtures/aws/clean.json");
     let catalog = catalog::builtin().expect("the catalog");
-    let ledger =
-        Ledger::parse(catalog::LEDGER, Path::new("evidence/runs.yaml")).expect("the ledger");
+    let ledger = catalog::builtin_ledger().expect("the ledger");
     let world = World::from_file(&fixture, Some("aws")).expect("an entity");
     let selection = Selection::default();
     // There is no Palette client and no command, so a rule of another tier is not run. The jq

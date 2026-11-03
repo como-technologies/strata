@@ -75,10 +75,29 @@ pub trait Backend {
     }
 }
 
-/// A 4xx that is the answer of a check: the route read the request and refused what it says. A
-/// 401 or a 403 is the key, and a 429 is the rate: the check did not run, and the error names it.
-pub fn is_answer(status: u16) -> bool {
-    (400..500).contains(&status) && !matches!(status, 401 | 403 | 429)
+/// Who reads a 4xx of a route, and so which 4xx is an answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Reader {
+    /// A check of a rule. A 403 is the key: the check did not run, and the error names it.
+    Check,
+    /// The world of a run, the watch, or the contract run. A 404 is one case. The 403 of a project
+    /// key on an object of the tenant is another, so the object is not there for this key. The
+    /// world holds `null`, and a rule says so.
+    World,
+}
+
+/// True when the 4xx `status` is the answer of a route for `reader`: the route read the request
+/// and refused what it says.
+///
+/// A 401 is the key and a 429 is the rate for each reader. The run stops with the error that names
+/// it, because the status says nothing about the object. A 403 depends on the reader. Another 4xx
+/// is the answer of Palette to the request.
+pub fn is_answer(status: u16, reader: Reader) -> bool {
+    let key_or_rate = match reader {
+        Reader::Check => matches!(status, 401 | 403 | 429),
+        Reader::World => matches!(status, 401 | 429),
+    };
+    (400..500).contains(&status) && !key_or_rate
 }
 
 /// True when a 5xx is the answer of a check: the `code` of its body is one that the check names in
@@ -99,7 +118,7 @@ fn reads_error(
     error: Option<&Value>,
     refusal_codes: &[String],
 ) -> bool {
-    is_answer(status)
+    is_answer(status, Reader::Check)
         || error.is_some_and(|error| {
             ValidateRoute::refuses_request(method, path, status, error)
                 || is_named_refusal(status, error, refusal_codes)

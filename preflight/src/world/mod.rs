@@ -14,14 +14,16 @@
 //!   "accountKind": "aws",              the kind of cloud account of the engine: eks has aws
 //!   "routeCloud": "edge-native",       the cloud type of the engine in a route: edge has edge-native
 //!   "edgeHosts": [ {pool, host} ],     each edge host of each pool, with the poolConfig of its pool
+//!   "packFacts": { "<packUid>": {...} } supportsCloud, state, and retired for each pack
 //!   "validateBody": { metadata, spec } the body that the checks send to the validate route
 //! }
 //! ```
 //!
 //! `accountKind` and `routeCloud` come from the engine, by [`account_kind`] and [`route_cloud`], so
-//! that no rule writes that mapping again. `edgeHosts` and `validateBody` come from the entity.
-//! The rules that read each host share one program, and so do the rules that ask the validate
-//! route.
+//! that no rule writes that mapping again. `packFacts` comes from `packs` and `routeCloud`, by the
+//! rules of strata for a pack that a profile pins. `edgeHosts` and `validateBody` come from the
+//! entity. The rules that read each host share one program, and so do the rules that ask the
+//! validate route.
 //!
 //! A check adds `response` (Palette), `exec` (a command), or `cluster`, `summary`, `events`,
 //! and `elapsed` (the watch). A fixture of a test is a world with the answers written in, under
@@ -43,6 +45,11 @@ use strata::snapshot::{AppliedProfile, Snapshot, SubjectKind};
 use strata::term::progress::Progress;
 
 use crate::error::{Error, Result};
+use crate::probe::{Reader, is_answer};
+
+mod packs;
+
+use packs::pack_facts;
 
 /// An engine: the kind of cluster that a run checks.
 ///
@@ -388,7 +395,7 @@ impl World {
                         self.packs.insert(pack.pack_uid.clone(), doc);
                     }
                     // a pack the key cannot read is not a pack; a rule that needs it says so
-                    Err(strata::Error::Api { status, .. }) if unreadable(status) => {}
+                    Err(strata::Error::Api { status, .. }) if is_answer(status, Reader::World) => {}
                     Err(e) => return Err(e.into()),
                 }
             }
@@ -402,22 +409,12 @@ impl World {
                 }
                 // an account that is not there, or that the key cannot read, is what a rule
                 // reports; the world says null
-                Err(strata::Error::Api { status, .. }) if unreadable(status) => {}
+                Err(strata::Error::Api { status, .. }) if is_answer(status, Reader::World) => {}
                 Err(e) => return Err(e.into()),
             }
         }
         Ok(self)
     }
-}
-
-/// True for each 4xx on a read of the world but 401 and 429: the object is not there for this key.
-///
-/// A 404 is one case, and the 403 of a project key on an object of the tenant is another. The
-/// world holds `null`, and a rule says so. A 401 is the key itself, and a 429 the rate: the run
-/// stops with the error that names it. The contract run of xtask uses the same test. A 401, a 429,
-/// or a 5xx says nothing about a fact, and another 4xx is the answer of Palette to the request.
-pub fn unreadable(status: u16) -> bool {
-    (400..500).contains(&status) && !matches!(status, 401 | 429)
 }
 
 /// The cloud account kind of an engine: a managed engine uses the account of its cloud. Text that
@@ -451,6 +448,8 @@ pub(crate) fn add_derived_fields(world: &mut Value) -> Result<()> {
         set_at(world, &["accountKind"], json!(account_kind(&cloud)));
         set_at(world, &["routeCloud"], json!(route_cloud(&cloud)));
     }
+    let facts = pack_facts(world);
+    set_at(world, &["packFacts"], facts);
     let hosts = edge_hosts(value_at(world, "/entity"));
     set_at(world, &["edgeHosts"], hosts);
     let body = validate_body(world)?;

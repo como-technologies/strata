@@ -43,7 +43,7 @@ impl PackState {
     }
 
     /// True for `disabled` and `deleted`: a profile cannot pin a version in such a state.
-    pub(crate) fn is_retired(self) -> bool {
+    pub fn is_retired(self) -> bool {
         matches!(self, Self::Disabled | Self::Deleted)
     }
 }

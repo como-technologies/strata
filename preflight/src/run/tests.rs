@@ -1,12 +1,12 @@
 use super::*;
 use crate::probe::FixtureBackend;
 use crate::report::Tool;
+use crate::routes::{cluster_events_route, cluster_route, cluster_summary_route};
 use crate::run::rules::RULES_SCHEMA;
 use serde_json::json;
 use std::path::Path;
 use std::time::Duration;
-use strata::api::{Palette, cluster_events_path, cluster_summary_path, subject_path};
-use strata::snapshot::SubjectKind;
+use strata::api::Palette;
 
 const SECTION: &str = r#"
 section: compute
@@ -130,6 +130,91 @@ fn a_run_keeps_the_rules_of_the_engine_and_says_why_the_others_do_not_run() {
     );
     assert_eq!(report.summary.probe_failed, 1);
     assert_eq!(report.subject.name, "fred");
+}
+
+#[test]
+fn a_row_that_does_not_run_says_why_with_the_words_of_its_tier_and_one_reason_for_each_case() {
+    let section = r#"
+section: lifecycle
+title: Lifecycle
+rules:
+  - id: by-hand
+    title: A check that is done by hand
+    engines: [all]
+    tier: static
+    status: seen
+    what: w
+  - id: a-race
+    title: A race
+    engines: [all]
+    tier: race
+    status: seen
+    what: w
+  - id: of-the-tool
+    title: A rule of the tool
+    engines: [all]
+    tier: tool
+    status: seen
+    what: w
+  - id: of-the-build
+    title: A rule of the build
+    engines: [all]
+    tier: watch
+    status: seen
+    what: w
+    check: {kind: watch, expr: "true"}
+"#;
+    let mut c = Catalog::default();
+    c.push(
+        Catalog::parse_section(section, Path::new("c.yaml")).unwrap(),
+        Path::new("c.yaml"),
+    )
+    .unwrap();
+    let (backend, _) = FixtureBackend::split(json!({}));
+    let report = run(RunInputs {
+        catalog: &c,
+        world: &world(4),
+        backend: &backend,
+        ledger: &Ledger::default(),
+        selection: &Selection::default(),
+        now: "2026-09-30T00:00:00Z",
+        out_dir: None,
+        progress: &Progress::silent(),
+        verbose: false,
+        paint: Paint::off(),
+    })
+    .unwrap();
+    let row = |id: &str| {
+        let check = report.checks.iter().find(|c| c.id == id).unwrap();
+        (check.verdict, check.messages.clone())
+    };
+    let reason = |outcome: Outcome| (outcome.verdict, outcome.messages);
+    assert_eq!(row("by-hand"), reason(Outcome::unchecked()));
+    assert_eq!(
+        row("a-race"),
+        (
+            Verdict::NotChecked,
+            vec![format!("a race: {}", Tier::Race.describe())]
+        )
+    );
+    assert_eq!(
+        row("of-the-tool"),
+        (Verdict::Skipped, vec![Tier::Tool.describe().to_string()])
+    );
+    assert_eq!(row("of-the-build"), reason(Outcome::outside_watch()));
+    // the check of a watch rule says the same, when a caller runs it outside a watch
+    let rule = c.rule("of-the-build").unwrap();
+    let outside = probe::run_check(rule, &json!({}), &backend, &Jq::new());
+    assert_eq!(
+        (outside.verdict, outside.messages),
+        reason(Outcome::outside_watch())
+    );
+    let rule = c.rule("by-hand").unwrap();
+    let unchecked = probe::run_check(rule, &json!({}), &backend, &Jq::new());
+    assert_eq!(
+        (unchecked.verdict, unchecked.messages),
+        reason(Outcome::unchecked())
+    );
 }
 
 #[test]
@@ -317,8 +402,8 @@ rules:
     )
     .unwrap();
     let api = strata::api::MemoryApi::new()
-            .with(subject_path(SubjectKind::Cluster, "c1"), json!({"metadata": {"uid": "c1"}, "spec": {"cloudType": "gke"}, "status": {"state": "Provisioning"}}))
-            .with(cluster_events_path("c1"), json!({"items": [{"reason": "GCPManagedControlPlaneReconcile", "message": "InvalidArgument: no release channel"}]}));
+            .with(cluster_route("c1"), json!({"metadata": {"uid": "c1"}, "spec": {"cloudType": "gke"}, "status": {"state": "Provisioning"}}))
+            .with(cluster_events_route("c1"), json!({"items": [{"reason": "GCPManagedControlPlaneReconcile", "message": "InvalidArgument: no release channel"}]}));
     let mut w = world(3);
     w.cluster_uid = Some("c1".into());
     let slept = std::cell::Cell::new(0);
@@ -375,17 +460,17 @@ fn the_rules_document_names_this_tool_as_the_report_does_and_has_its_own_schema_
 #[test]
 fn a_reading_has_no_summary_for_a_404_and_stops_at_a_401_or_a_429() {
     let cluster = json!({"metadata": {"uid": "c1"}, "status": {"state": "Provisioning"}});
-    let summary = cluster_summary_path("c1");
-    let events = cluster_events_path("c1");
+    let summary = cluster_summary_route("c1");
+    let events = cluster_events_route("c1");
     let gone = strata::api::MemoryApi::new()
-        .with(subject_path(SubjectKind::Cluster, "c1"), cluster.clone())
+        .with(cluster_route("c1"), cluster.clone())
         .failing(events, 403, "{}");
     let read = reading(&Palette::new(&gone), "c1", Duration::from_secs(1)).unwrap();
     assert_eq!(read["summary"], Value::Null);
     assert_eq!(read["events"], json!([]));
     for status in [401, 429] {
         let refused = strata::api::MemoryApi::new()
-            .with(subject_path(SubjectKind::Cluster, "c1"), cluster.clone())
+            .with(cluster_route("c1"), cluster.clone())
             .failing(&summary, status, "{}");
         let err = reading(&Palette::new(&refused), "c1", Duration::from_secs(1)).unwrap_err();
         assert!(err.to_string().contains(&format!("HTTP {status}")), "{err}");
@@ -397,8 +482,8 @@ fn a_reading_of_a_cluster_with_no_event_has_an_empty_list_of_events() {
     let cluster = json!({"metadata": {"uid": "c1"}, "status": {"state": "Provisioning"}});
     // Palette gives `items: null` when the cluster has no event
     let api = strata::api::MemoryApi::new()
-        .with(subject_path(SubjectKind::Cluster, "c1"), cluster)
-        .with(cluster_events_path("c1"), json!({"items": null}));
+        .with(cluster_route("c1"), cluster)
+        .with(cluster_events_route("c1"), json!({"items": null}));
     let read = reading(&Palette::new(&api), "c1", Duration::from_secs(1)).unwrap();
     assert_eq!(read["events"], json!([]));
 }
@@ -424,7 +509,7 @@ rules:
     )
     .unwrap();
     let api = strata::api::MemoryApi::new().with(
-        subject_path(SubjectKind::Cluster, "c1"),
+        cluster_route("c1"),
         json!({"metadata": {"uid": "c1"}, "status": {"state": "Running"}}),
     );
     let mut w = world(3);
@@ -469,7 +554,7 @@ rules:
     )
     .unwrap();
     let api = strata::api::MemoryApi::new().with(
-        subject_path(SubjectKind::Cluster, "c1"),
+        cluster_route("c1"),
         json!({"metadata": {"uid": "c1"}, "status": {"state": "Running"}}),
     );
     let mut w = world(3);
@@ -504,6 +589,69 @@ rules:
         0,
         "the first reading saw Running, and the watch ended there"
     );
+    assert!(
+        report.subject.source.ends_with("after 0s, 1 reading)"),
+        "{}",
+        report.subject.source
+    );
+}
+
+#[test]
+fn a_cluster_that_palette_marks_deleted_ends_the_watch_whatever_its_state_is() {
+    let section = r#"
+section: platform
+title: P
+rules:
+  - id: agent-egress
+    title: t
+    engines: [all]
+    tier: watch
+    status: source
+    what: w
+    check: {kind: watch, expr: "true"}
+"#;
+    let mut c = Catalog::default();
+    c.push(
+        Catalog::parse_section(section, Path::new("p.yaml")).unwrap(),
+        Path::new("p.yaml"),
+    )
+    .unwrap();
+    // the limit is zero, so a watch that does not end at the first reading ends at the limit
+    // with an error for the rule that passed
+    for (is_deleted, verdict, state) in [
+        (true, Verdict::Passed, "Deleting"),
+        (false, Verdict::Error, "Deleting"),
+    ] {
+        let api = strata::api::MemoryApi::new().with(
+            cluster_route("c1"),
+            json!({"metadata": {"uid": "c1", "isDeleted": is_deleted}, "status": {"state": state}}),
+        );
+        let mut w = world(3);
+        w.cluster_uid = Some("c1".into());
+        let (report, _) = watch(WatchInputs {
+            catalog: &c,
+            world: &w,
+            palette: &Palette::new(&api),
+            ledger: &Ledger::default(),
+            selection: &Selection::default(),
+            options: &WatchOptions {
+                limit: Duration::ZERO,
+                ..WatchOptions::default()
+            },
+            now: "t",
+            progress: &Progress::silent(),
+            verbose: false,
+            paint: Paint::off(),
+            sleep: &|_| {},
+            out_dir: None,
+        })
+        .unwrap();
+        assert_eq!(
+            report.checks[0].verdict, verdict,
+            "isDeleted {is_deleted}: {:?}",
+            report.checks[0].messages
+        );
+    }
 }
 
 #[test]
@@ -529,11 +677,11 @@ rules:
     .unwrap();
     let api = strata::api::MemoryApi::new()
             .with(
-                subject_path(SubjectKind::Cluster, "c1"),
+                cluster_route("c1"),
                 json!({"metadata": {"uid": "c1"}, "status": {"state": "Running"}}),
             )
             .with(
-                cluster_events_path("c1"),
+                cluster_events_route("c1"),
                 json!({"items": [{"reason": "Log", "message": "failed calling webhook \"vspectrocluster.kb.io\": connection refused", "metadata": {"creationTimestamp": "2026-09-29T17:59:22.272Z"}}]}),
             );
     let mut w = world(3);

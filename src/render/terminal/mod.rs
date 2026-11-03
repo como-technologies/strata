@@ -20,12 +20,11 @@ use super::same_release::{
 use super::verify::{
     counts_line, record_detail, record_label, verdict_parts, who_entry, who_heading,
 };
-use super::{Renderer, count_of, entry_error, key_line, palette_line, short};
+use super::{Renderer, count_of, entry_error, key_line, paint_state, palette_line, short};
 use crate::closed_set::ClosedSet;
 use crate::closed_set::unknown::report::Report;
 use crate::diff::Diff;
 use crate::error::Result;
-use crate::model::cluster_state::ClusterState;
 use crate::ops::{
     Chain, ConsumerKind, ConsumersReport, ListedCluster, ListedProfile, ListedProject, Listing,
     PackListing, PairStatus, RecordStatus, SavedFilter, VerifySummary,
@@ -34,7 +33,7 @@ use crate::snapshot::Snapshot;
 use crate::term::color::Paint;
 use crate::text::dash;
 use lines::{op_line, packdetail, packline, variable_line};
-use table::{column_widths, matched, table_line};
+use table::{column_widths, matched, painted_text, table_line};
 
 mod lines;
 mod table;
@@ -243,13 +242,7 @@ impl Renderer for TerminalRenderer {
             .max()
             .unwrap_or(0);
         for c in &r.consumers {
-            let state = if ClusterState::Running.is(&c.state) {
-                p.green(&c.state)
-            } else if c.state == crate::ops::UNKNOWN_STATE {
-                p.yellow(&c.state)
-            } else {
-                c.state.clone()
-            };
+            let state = paint_state(p, &c.state);
             out.push_str(&format!(
                 "  {}  {}  project {}",
                 p.bold(&format!("{:<width$}", dash(&c.name))),
@@ -536,7 +529,7 @@ fn list_clusters(out: &mut String, p: &Paint, l: &Listing, clusters: &[ListedClu
         out.push_str(&table_line("  ", row, &widths, |i, cell| match i {
             0 => p.bold(cell),
             1 => matched(p, cell, l.cluster.as_deref()),
-            2 if ClusterState::Running.is(&c.state) => p.green(cell),
+            2 => painted_text(cell, |state| paint_state(p, state)),
             _ => cell.to_string(),
         }));
         let applied = applied_rows(c);
@@ -676,6 +669,58 @@ mod tests {
         // text that is not ASCII is left alone, because lowercasing can change its length
         assert_eq!(matched(&on, "pack-ß", Some("ß")), "pack-ß");
         assert_eq!(matched(&on, "cilium", Some("CILIUM")), on.byellow("cilium"));
+    }
+
+    #[test]
+    fn the_table_of_clusters_paints_the_state_of_each_row_and_not_its_padding() {
+        let on = Paint::resolve(ColorMode::Always, Stream::Stdout);
+        let listing = Listing {
+            schema: crate::ops::LIST_SCHEMA.to_string(),
+            tool: crate::snapshot::Tool::current(),
+            generated_at: "2026-11-02T00:00:00Z".to_string(),
+            project_uid: String::new(),
+            project_name: String::new(),
+            pack: None,
+            cluster: None,
+            profiles: None,
+            clusters: None,
+            includes_virtual: None,
+            projects: None,
+            query: None,
+            resolved: None,
+            query_filter: None,
+            filters: None,
+        };
+        let clusters: Vec<ListedCluster> = ["Running", "Provisioning", "Error"]
+            .into_iter()
+            .map(|state| {
+                serde_json::from_value(serde_json::json!({
+                    "ref": format!("cluster:{state}"),
+                    "name": state,
+                    "uid": state,
+                    "state": state,
+                    "cloudType": "aws",
+                    "projectUid": "",
+                }))
+                .unwrap()
+            })
+            .collect();
+        let mut out = String::new();
+        list_clusters(&mut out, &on, &listing, &clusters);
+        for (state, painted) in [
+            ("Running", on.green("Running")),
+            ("Provisioning", on.yellow("Provisioning")),
+            ("Error", on.red("Error")),
+        ] {
+            // the state is painted whatever the width of its column, and its padding is not
+            let padding = " ".repeat("Provisioning".len() - state.len());
+            let cell = format!("{painted}{padding}  aws");
+            assert!(out.contains(&cell), "{state}: {out:?}");
+        }
+        let mut plain = String::new();
+        list_clusters(&mut plain, &Paint::off(), &listing, &clusters);
+        assert!(!plain.contains('\x1b'), "{plain:?}");
+        assert!(plain.contains("Running       aws"), "{plain:?}");
     }
 
     #[test]

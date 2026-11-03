@@ -1,4 +1,4 @@
 $ strata preflight cluster.json --cloud aws --no-exec --strict --quiet | tail -n 3
 10 checks did not run: --no-exec: the command did not run (10)
 No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).
-FAIL: 2 check(s) failed: worker-cpu-floor, palette-validate
+FAIL: 2 checks failed: worker-cpu-floor, palette-validate

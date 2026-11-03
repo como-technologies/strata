@@ -145,7 +145,7 @@ Section scorecard
   Teardown and leftovers          6    6     3         0    1     72%    1    1    0       2           3   33%
 runs: the rules of the section with a run in the ledger on this engine; weakest: the lowest 95% lower bound among them, and no runs when none has one; preflight: the rules promoted to preflight checks, whose failure is exit 1. A rule is promoted at a bound of 80%, which is 14 correct runs of 14 on the engine; every other rule is a probe. Promoted here: 0 of 73 checks.
 
-104 rules apply; 4 ran: 4 passed, 0 failed, 0 probe(s) failed, 0 warning(s), 1 note(s); 16 did not run, 24 not checked, 55 do not apply, 0 error(s); readiness 20%: 4 of 20 checks passed
+104 rules apply; 4 ran: 4 passed, 0 failed, no probes failed, no warnings, 1 note; 16 did not run, 24 not checked, 55 do not apply, no errors; readiness 20%: 4 of 20 checks passed
 16 checks did not run: tier cloud was not asked for (8); tier palette was not asked for (8)
 No file written; --out DIR writes report.html, report.md, report.json, world.json, and entity.json, and the reproduce lines read world.json and entity.json there ($OUT).
 OK: each counted check passed

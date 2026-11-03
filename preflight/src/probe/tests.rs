@@ -1,6 +1,7 @@
 use super::exec::run_command;
 use super::*;
 use crate::error::Result;
+use crate::routes::{edge_host_route, profile_route};
 use crate::rule::{ExecCheck, Level, PaletteCheck, PaletteRead, Severity, Status};
 use serde_json::json;
 use std::time::Duration;
@@ -138,8 +139,8 @@ fn a_palette_check_with_each_asks_once_for_each_item_and_reads_the_responses_in_
     let ok = |name: &str| json!({"ok": true, "status": 200, "body": {"metadata": {"name": name}}});
     let (b, w) = fixture(
         json!({"entity": {"spec": {"profiles": [{"uid": "p1"}, {"uid": "p2"}]}},
-            "_responses": {"GET /v1/clusterprofiles/p1": ok("base"),
-                "GET /v1/clusterprofiles/p2": {"ok": false, "status": 404, "body": {"code": "ResourceNotFound"}}}}),
+            "_responses": {format!("GET {}", profile_route("p1")): ok("base"),
+                format!("GET {}", profile_route("p2")): {"ok": false, "status": 404, "body": {"code": "ResourceNotFound"}}}}),
     );
     let r = each_check(
         ".entity.spec.profiles",
@@ -152,8 +153,8 @@ fn a_palette_check_with_each_asks_once_for_each_item_and_reads_the_responses_in_
     assert_eq!(
         out.ran,
         Ran::Requests(vec![
-            Call::get("/v1/clusterprofiles/p1", Some("HTTP 200")),
-            Call::get("/v1/clusterprofiles/p2", Some("HTTP 404")),
+            Call::get(&profile_route("p1"), Some("HTTP 200")),
+            Call::get(&profile_route("p2"), Some("HTTP 404")),
         ])
     );
     assert_eq!(out.ran.text(), None);
@@ -234,7 +235,7 @@ fn a_check_with_each_over_no_item_asks_nothing_and_passes_the_empty_list() {
 fn a_check_with_each_is_an_error_when_each_gives_no_list_or_a_request_fails() {
     let jq = Jq::new();
     let (b, w) = fixture(json!({"hosts": "h1", "list": ["h1", "h2"],
-            "_responses": {"GET /v1/edgehosts/h1": {"ok": true, "status": 200, "body": {}}}}));
+            "_responses": {format!("GET {}", edge_host_route("h1")): {"ok": true, "status": 200, "body": {}}}}));
     let out = run_check(
         &each_check(".hosts", "/v1/edgehosts/{{ $item }}", "true"),
         &w,
@@ -260,15 +261,15 @@ fn a_check_with_each_is_an_error_when_each_gives_no_list_or_a_request_fails() {
     );
     assert_eq!(out.verdict, Verdict::Error);
     assert!(
-        out.messages[0].contains("GET /v1/edgehosts/h2"),
+        out.messages[0].contains(&format!("GET {}", edge_host_route("h2"))),
         "{:?}",
         out.messages
     );
     assert_eq!(
         out.ran,
         Ran::Requests(vec![
-            Call::get("/v1/edgehosts/h1", Some("HTTP 200")),
-            Call::get("/v1/edgehosts/h2", None),
+            Call::get(&edge_host_route("h1"), Some("HTTP 200")),
+            Call::get(&edge_host_route("h2"), None),
         ])
     );
 }
@@ -293,23 +294,45 @@ fn a_401_a_403_and_a_429_are_errors_of_the_check_and_a_404_is_its_answer() {
 }
 
 #[test]
+fn a_check_reads_a_403_as_the_key_and_the_world_reads_it_as_an_object_that_is_not_there() {
+    for (status, check, world) in [
+        (400u16, true, true),
+        (401, false, false),
+        (403, false, true),
+        (404, true, true),
+        (422, true, true),
+        (429, false, false),
+        (499, true, true),
+        (399, false, false),
+        (500, false, false),
+    ] {
+        assert_eq!(is_answer(status, Reader::Check), check, "{status}: check");
+        assert_eq!(is_answer(status, Reader::World), world, "{status}: world");
+    }
+}
+
+#[test]
 fn the_backend_sends_a_request_one_time_and_gives_the_same_answer_to_the_rule_that_asks_again() {
     let api = strata::api::MemoryApi::new()
-        .with("/v1/edgehosts/h1", json!({"metadata": {"uid": "h1"}}))
-        .failing("/v1/edgehosts/h2", 404, r#"{"code": "NotFound"}"#);
+        .with(edge_host_route("h1"), json!({"metadata": {"uid": "h1"}}))
+        .failing(edge_host_route("h2"), 404, r#"{"code": "NotFound"}"#);
     let b = LiveBackend::new(Some(&api), false);
     for _ in 0..6 {
         let found = b
-            .palette(Method::Get, "/v1/edgehosts/h1", None, &[])
+            .palette(Method::Get, &edge_host_route("h1"), None, &[])
             .unwrap();
         assert_eq!((found.ok, found.status), (true, 200));
         let gone = b
-            .palette(Method::Get, "/v1/edgehosts/h2", None, &[])
+            .palette(Method::Get, &edge_host_route("h2"), None, &[])
             .unwrap();
         assert_eq!((gone.ok, gone.status), (false, 404));
     }
-    assert_eq!(api.calls("/v1/edgehosts/h1"), 1, "an answer");
-    assert_eq!(api.calls("/v1/edgehosts/h2"), 1, "a 4xx is an answer too");
+    assert_eq!(api.calls(&edge_host_route("h1")), 1, "an answer");
+    assert_eq!(
+        api.calls(&edge_host_route("h2")),
+        1,
+        "a 4xx is an answer too"
+    );
 }
 
 #[test]
@@ -340,20 +363,20 @@ fn the_backend_does_not_keep_an_error_that_no_check_can_read() {
 
 #[test]
 fn the_world_and_the_checks_share_the_answers_of_the_backend() {
-    let api = strata::api::MemoryApi::new()
-        .with("/v1/clusterprofiles/p1", json!({"metadata": {"uid": "p1"}}));
+    let api =
+        strata::api::MemoryApi::new().with(profile_route("p1"), json!({"metadata": {"uid": "p1"}}));
     let b = LiveBackend::new(Some(&api), false);
     // the world reads through the backend as a client of the library
     let read = strata::api::Palette::new(&b);
     assert_eq!(
-        read.api().get_json("/v1/clusterprofiles/p1").unwrap()["metadata"]["uid"],
+        read.api().get_json(&profile_route("p1")).unwrap()["metadata"]["uid"],
         "p1"
     );
     let again = b
-        .palette(Method::Get, "/v1/clusterprofiles/p1", None, &[])
+        .palette(Method::Get, &profile_route("p1"), None, &[])
         .unwrap();
     assert!(again.ok);
-    assert_eq!(api.calls("/v1/clusterprofiles/p1"), 1);
+    assert_eq!(api.calls(&profile_route("p1")), 1);
     // an answer that is an HTTP error is the error that Palette gave, with its body as it was
     let api = strata::api::MemoryApi::new().failing("/v1/gone", 404, "not json");
     let b = LiveBackend::new(Some(&api), false);

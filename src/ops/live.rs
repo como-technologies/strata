@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::api::{Palette, PaletteApi};
 use crate::error::{Error, Result, found};
-use crate::json::{flag, opt_flag, opt_text, str_at};
+use crate::json::{opt_flag, opt_text};
 use crate::model::cluster_state::ClusterState;
 use crate::snapshot::{ClusterSource, Snapshot, SubjectKind, Tier};
 use crate::term::progress::Progress;
@@ -21,12 +21,6 @@ fn subject_state(kind: SubjectKind, doc: &Value) -> Option<String> {
             .map(|a| if a { ACTIVE_STATE } else { INACTIVE_STATE }.to_string()),
         _ => opt_text(doc, "/status/state"),
     }
-}
-
-/// True when Palette keeps the document of a deleted object: the state `Deleted`, or
-/// `metadata.isDeleted`. Palette deletes a cluster so, and keeps its spec.
-fn is_deleted(doc: &Value) -> bool {
-    ClusterState::Deleted.is(str_at(doc, "/status/state")) || flag(doc, "/metadata/isDeleted")
 }
 
 /// The live snapshot of the holder of a cluster record, from its document `doc`. It holds the
@@ -170,7 +164,7 @@ fn live_holder_object<A: PaletteApi>(
     let doc = found(palette.subject_document(kind, uid))?.unwrap_or(Value::Null);
     let state = subject_state(kind, &doc);
     let last_modified = opt_text(&doc, "/metadata/lastModifiedTimestamp");
-    if doc.is_null() || is_deleted(&doc) {
+    if doc.is_null() || ClusterState::is_gone(&doc) {
         return Ok(LiveObject {
             deleted_at: opt_text(&doc, "/metadata/deletionTimestamp"),
             state,

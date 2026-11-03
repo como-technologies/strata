@@ -35,14 +35,18 @@ use std::process::{Command, Output};
 use serde_json::{Value, json};
 
 mod answer;
+pub mod closed_set;
 mod palette;
 mod process;
 mod stand_in;
+mod walk;
 
 pub use answer::*;
+pub use closed_set::schema_values;
 pub use palette::*;
 pub use process::*;
 pub use stand_in::*;
+pub use walk::walk;
 
 // comment-only values, as the real ubuntu-aws pack ships: canonical form must be null
 const OS_VALUES: &str = "\n# Spectro Golden images include most of the hardening standards recommended by CIS benchmarking\n\n# Uncomment below section to\n# 1. Include custom files to be copied over to the nodes and/or\n# 2. Execute list of commands before or after kubeadm init/join is executed\n#\n# kubeadmconfig:\n#   preKubeadmCommands:\n#   - echo \"Executing pre kube admin config commands\"\n#   - update-ca-certificates";
@@ -695,41 +699,6 @@ done
 printf '%s' "${FAKE_OUT-}"
 exit "${FAKE_EXIT:-0}"
 "#;
-
-/// Each file under a directory, at any depth.
-pub fn walk(dir: &Path) -> Vec<std::path::PathBuf> {
-    let mut out = Vec::new();
-    let Ok(entries) = fs::read_dir(dir) else {
-        return out;
-    };
-    for e in entries.flatten() {
-        let p = e.path();
-        if p.is_dir() {
-            out.extend(walk(&p));
-        } else {
-            out.push(p);
-        }
-    }
-    out
-}
-
-/// The text of each value of a closed set, from its node in a JSON Schema.
-///
-/// The node is a `oneOf` of one `const` for each value, in the order of the enum. The root of the
-/// schema of a type is such a node, and so is a definition under `$defs`.
-pub fn schema_values(node: &Value) -> Vec<String> {
-    node["oneOf"]
-        .as_array()
-        .unwrap_or_else(|| panic!("the schema of a closed set is a oneOf: {node}"))
-        .iter()
-        .map(|v| {
-            v["const"]
-                .as_str()
-                .unwrap_or_else(|| panic!("each value is a const: {v}"))
-                .to_string()
-        })
-        .collect()
-}
 
 /// The version of a manifest, from the root of the repository: `Cargo.toml` or
 /// `preflight/Cargo.toml`.

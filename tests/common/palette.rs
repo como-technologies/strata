@@ -77,6 +77,26 @@ pub fn cluster_route(uid: &str) -> String {
     format!("/v1/spectroclusters/{uid}")
 }
 
+/// The summary of the cluster `uid`, `GET /v1/dashboard/spectroclusters/{uid}`.
+pub fn cluster_summary_route(uid: &str) -> String {
+    format!("/v1/dashboard/spectroclusters/{uid}")
+}
+
+/// The events of the cluster `uid`, as strata reads the first page of them.
+pub fn cluster_events_route(uid: &str) -> String {
+    format!("/v1/events/components/spectrocluster/{uid}?limit=50")
+}
+
+/// The cloud config `uid` of the cloud type `kind`, `GET /v1/cloudconfigs/{kind}/{uid}`.
+pub fn cloud_config_route(kind: &str, uid: &str) -> String {
+    format!("/v1/cloudconfigs/{kind}/{uid}")
+}
+
+/// The cloud account `uid` of the cloud type `kind`, `GET /v1/cloudaccounts/{kind}/{uid}`.
+pub fn cloud_account_route(kind: &str, uid: &str) -> String {
+    format!("/v1/cloudaccounts/{kind}/{uid}")
+}
+
 /// The document of the pack `uid`, `GET /v1/packs/{uid}`: its values and the schema of its values.
 pub fn pack_route(uid: &str) -> String {
     format!("/v1/packs/{uid}")
