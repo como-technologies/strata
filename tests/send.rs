@@ -12,11 +12,12 @@ use serde_json::{Value, json};
 use strata::closed_set::unknown::log::{FILE, SENT_FILE};
 use strata::closed_set::unknown::report::{MOST_VALUES, SCHEMA as REPORT_SCHEMA};
 use strata::closed_set::unknown::send::{ADDRESS_SETTING, ANSWER_FILE, ENDPOINT, SETTING};
+use strata::ops::Sent;
 
 use crate::common::{
     Answer, Endpoint, LATER_TYPE, REFUSED, Run, fake_bin, give_strata, isolate_palette,
-    later_type_tenant, list_command, log_in, log_line, path_with, serve_routes, state_in,
-    strata_command, through_proxy, walk, write_log,
+    later_type_tenant, list_command, log_in, log_line, path_with, report_command, serve_routes,
+    state_in, strata_command, through_proxy, walk, write_log,
 };
 
 /// The report that one run of `list` sends: one value, seen once.
@@ -267,7 +268,7 @@ fn an_error_of_the_send_does_not_change_the_exit_code_or_the_output_and_marks_no
 }
 
 #[test]
-fn a_log_with_a_value_of_release_0_27_0_that_is_not_one_word_stops_the_send_and_quiet_hides_it() {
+fn a_log_with_a_value_of_release_0_27_0_that_is_not_one_word_does_not_stop_the_send() {
     let api = serve_routes(later_type_tenant());
     let endpoint = Endpoint::answering(Answer::Status(200));
     let home = tempfile::tempdir().unwrap();
@@ -286,20 +287,73 @@ fn a_log_with_a_value_of_release_0_27_0_that_is_not_one_word_stops_the_send_and_
     ];
     let run = list_with(&api, home.path(), &env, &[]);
     assert_eq!(run.code, 0, "{}", run.err);
-    assert!(run.err.contains("strata: warning: "), "{}", run.err);
+    // the send skips the line, and sends the value of this run
+    assert_eq!(endpoint.requests().len(), 1, "{:?}", endpoint.requests());
+    assert_eq!(endpoint.requests()[0].json(), one_run_report());
     assert!(
         run.err
-            .contains("line 1 is not a line of strata-unknown/1: the value is not a short word"),
+            .contains("strata: sent the report of the unknown values\n"),
         "{}",
         run.err
     );
-    // the send reads the whole log, so the value of this run does not reach the endpoint either
-    assert!(endpoint.requests().is_empty(), "{:?}", endpoint.requests());
-    assert!(!state_in(home.path()).join(SENT_FILE).exists());
+    assert!(
+        run.err.contains(
+            "strata: warning: skipped 1 line of the log that is not valid, the first at line 1: \
+             run `strata report` to see the fault\n"
+        ),
+        "{}",
+        run.err
+    );
+    // the mark counts the valid lines: the log has two lines, and one is valid
+    let sent = std::fs::read_to_string(state_in(home.path()).join(SENT_FILE)).unwrap();
+    assert_eq!(sent.trim(), "1");
+    // `strata report` still stops on the line
+    let mut command = report_command(home.path(), &["--json"]);
+    let report = Run::of(&mut command);
+    assert_eq!(report.code, 2, "{}", report.err);
+    assert!(
+        report.err.contains("\"kind\":\"log-invalid\""),
+        "{}",
+        report.err
+    );
+}
+
+#[test]
+fn quiet_hides_the_line_about_a_skipped_line_as_it_hides_the_note_of_the_send() {
+    let api = serve_routes(later_type_tenant());
+    let endpoint = Endpoint::answering(Answer::Status(200));
+    let home = tempfile::tempdir().unwrap();
+    write_log(
+        home.path(),
+        &[log_line("ProfileType", "two words", "/v1/packs")],
+    );
+    let env = [
+        ("STRATA_REPORT", "1"),
+        ("STRATA_REPORT_URL", endpoint.url.as_str()),
+    ];
     let quiet = list_with(&api, home.path(), &env, &["--quiet"]);
     assert_eq!(quiet.code, 0);
-    assert_eq!(quiet.err, "", "--quiet hides the warning");
-    assert!(endpoint.requests().is_empty(), "{:?}", endpoint.requests());
+    assert_eq!(quiet.err, "", "--quiet hides the line");
+    assert_eq!(endpoint.requests().len(), 1, "the send sent the other line");
+}
+
+#[test]
+fn a_send_that_fails_says_the_error_and_not_the_skipped_lines() {
+    let api = serve_routes(later_type_tenant());
+    let refusing = Endpoint::answering(Answer::Status(500));
+    let home = tempfile::tempdir().unwrap();
+    write_log(
+        home.path(),
+        &[log_line("ProfileType", "two words", "/v1/packs")],
+    );
+    let env = [
+        ("STRATA_REPORT", "1"),
+        ("STRATA_REPORT_URL", refusing.url.as_str()),
+    ];
+    let run = list_with(&api, home.path(), &env, &[]);
+    assert_eq!(run.code, 0, "{}", run.err);
+    assert!(run.err.contains("could not send the report"), "{}", run.err);
+    assert!(!run.err.contains("skipped"), "{}", run.err);
     assert!(!state_in(home.path()).join(SENT_FILE).exists());
 }
 
@@ -548,6 +602,146 @@ fn a_report_that_fails_in_the_middle_leaves_the_mark_after_the_reports_that_were
     assert_eq!(entries_of(&taking), expected);
 }
 
+/// The answer of an endpoint that takes the report and holds back the entries `waiting`.
+fn holding_back(waiting: &'static str) -> Answer {
+    Answer::Body(202, waiting)
+}
+
+/// The number in the file of the mark in the state folder of `home`, or `None` when there is none.
+fn mark_in(home: &Path) -> Option<String> {
+    std::fs::read_to_string(state_in(home).join(SENT_FILE))
+        .ok()
+        .map(|text| text.trim().to_string())
+}
+
+#[test]
+fn a_value_that_the_endpoint_holds_back_is_not_marked_as_sent() {
+    // the hour has room for 3 of the 5 new issues: the endpoint takes the report and lists the rest
+    let endpoint = Endpoint::answering(holding_back(
+        r#"{"ok":true,"opens":3,"updates":0,"waiting":[4,5]}"#,
+    ));
+    let home = tempfile::tempdir().unwrap();
+    let log = long_log(home.path(), 5);
+    let sent = strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
+    assert_eq!(
+        sent,
+        Sent {
+            marked: 3,
+            waiting: 2,
+            skipped: Vec::new()
+        }
+    );
+    assert_eq!(entries_of(&endpoint), [5], "the send stops at the report");
+    assert_eq!(mark_in(home.path()).as_deref(), Some("3"));
+}
+
+#[test]
+fn the_next_send_after_a_value_waited_holds_that_value_and_the_lines_after_it() {
+    let holding = Endpoint::answering(holding_back(r#"{"ok":true,"waiting":[4,5]}"#));
+    let home = tempfile::tempdir().unwrap();
+    let log = long_log(home.path(), 5);
+    strata::ops::send_unknown_report(&log, &holding.url).unwrap();
+    let taking = Endpoint::answering(Answer::Status(202));
+    let sent = strata::ops::send_unknown_report(&log, &taking.url).unwrap();
+    assert_eq!(sent.marked, 2);
+    assert_eq!(sent.waiting, 0);
+    let report = taking.requests()[0].json();
+    let values: Vec<&str> = report["unknown"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|entry| entry["value"].as_str().unwrap())
+        .collect();
+    assert_eq!(values, ["later-003", "later-004"]);
+    assert_eq!(mark_in(home.path()).as_deref(), Some("5"));
+}
+
+#[test]
+fn a_send_whose_first_value_waits_marks_nothing_and_posts_no_second_report() {
+    // 250 values are 13 reports. The endpoint holds back the first value of the first report.
+    let endpoint = Endpoint::answering(holding_back(r#"{"ok":true,"waiting":[1]}"#));
+    let home = tempfile::tempdir().unwrap();
+    let log = long_log(home.path(), 250);
+    let sent = strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
+    assert_eq!(
+        sent,
+        Sent {
+            marked: 0,
+            waiting: 250,
+            skipped: Vec::new()
+        }
+    );
+    assert_eq!(endpoint.requests().len(), 1);
+    assert_eq!(
+        mark_in(home.path()),
+        None,
+        "a send that marked nothing writes no mark"
+    );
+}
+
+#[test]
+fn a_value_that_waits_is_found_by_its_set_and_value_and_not_by_the_order_of_the_log() {
+    // the report sorts its entries: later-000 is entry 1, later-001 entry 2, and later-004 entry 3
+    let endpoint = Endpoint::answering(holding_back(r#"{"ok":true,"waiting":[3]}"#));
+    let home = tempfile::tempdir().unwrap();
+    let lines: Vec<String> = ["later-004", "later-000", "later-001"]
+        .iter()
+        .map(|value| log_line("ProfileType", value, "/v1/packs"))
+        .collect();
+    let log = write_log(home.path(), &lines);
+    let sent = strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
+    assert_eq!(
+        (sent.marked, sent.waiting),
+        (0, 3),
+        "the first line of the log is the value that waits"
+    );
+    assert_eq!(mark_in(home.path()), None);
+}
+
+#[test]
+fn a_number_of_waiting_that_names_no_entry_holds_back_nothing() {
+    for waiting in [
+        r#"{"waiting":[0]}"#,
+        r#"{"waiting":[9]}"#,
+        r#"{"waiting":[]}"#,
+    ] {
+        let endpoint = Endpoint::answering(holding_back(waiting));
+        let home = tempfile::tempdir().unwrap();
+        let log = long_log(home.path(), 2);
+        let sent = strata::ops::send_unknown_report(&log, &endpoint.url).unwrap();
+        assert_eq!((sent.marked, sent.waiting), (2, 0), "{waiting}");
+        assert_eq!(mark_in(home.path()).as_deref(), Some("2"), "{waiting}");
+    }
+}
+
+#[test]
+fn a_run_says_that_the_endpoint_holds_back_lines_and_quiet_hides_the_line() {
+    let api = serve_routes(later_type_tenant());
+    let endpoint = Endpoint::answering(holding_back(r#"{"ok":true,"waiting":[1]}"#));
+    let home = tempfile::tempdir().unwrap();
+    let env = [
+        ("STRATA_REPORT", "1"),
+        ("STRATA_REPORT_URL", endpoint.url.as_str()),
+    ];
+    let run = list_with(&api, home.path(), &env, &[]);
+    assert_eq!(run.code, 0, "{}", run.err);
+    assert!(
+        run.err.contains(
+            "strata: warning: the endpoint holds back 1 line for now, because its hour has no \
+             room: the next send holds them again\n"
+        ),
+        "{}",
+        run.err
+    );
+    assert!(
+        !run.err.contains("sent the report"),
+        "the endpoint took no line, so the run does not say that it sent the report: {}",
+        run.err
+    );
+    assert_eq!(mark_in(home.path()), None);
+    let quiet = list_with(&api, home.path(), &env, &["--quiet"]);
+    assert_eq!(quiet.err, "", "--quiet hides the line");
+}
 #[test]
 fn a_later_release_can_add_a_step_or_a_choice_so_a_match_outside_the_library_needs_a_wildcard() {
     use strata::closed_set::unknown::send::{Choice, Facts, Step, step};

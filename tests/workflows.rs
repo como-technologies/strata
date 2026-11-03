@@ -685,6 +685,18 @@ fn the_benchmarks_job_runs_the_short_recipe_and_the_tests_do_not_run_the_benchma
     }
 }
 
+/// The members of the workspace, as the root `Cargo.toml` lists them: paths from the root.
+fn workspace_members() -> Vec<String> {
+    let root = repo_file("Cargo.toml");
+    root.lines()
+        .find_map(|l| l.strip_prefix("members = ["))
+        .expect("the workspace lists its members")
+        .trim_end_matches(']')
+        .split(',')
+        .map(|member| member.trim().trim_matches('"').to_string())
+        .collect()
+}
+
 /// The floor of the Rust version is one line of the root `Cargo.toml`, and the job `the lowest
 /// Rust version` reads it. Each member of the workspace takes it with `rust-version.workspace =
 /// true`. A member with a floor of its own would name a number that the job does not build with.
@@ -696,14 +708,7 @@ fn each_member_of_the_workspace_takes_the_rust_version_that_the_msrv_job_reads()
         .filter(|l| l.starts_with("rust-version = "))
         .collect();
     assert_eq!(floors.len(), 1, "the msrv job reads one line: {floors:?}");
-    let members: Vec<&str> = root
-        .lines()
-        .find_map(|l| l.strip_prefix("members = ["))
-        .expect("the workspace lists its members")
-        .trim_end_matches(']')
-        .split(',')
-        .map(|member| member.trim().trim_matches('"'))
-        .collect();
+    let members = workspace_members();
     assert!(members.len() >= 6, "{members:?}");
     for member in members {
         let manifest = repo_file(&format!("{member}/Cargo.toml"));
@@ -723,4 +728,41 @@ fn each_member_of_the_workspace_takes_the_rust_version_that_the_msrv_job_reads()
         msrv.iter().any(|r| r.contains("^rust-version = ")),
         "the msrv job does not read the line of the root: {msrv:?}"
     );
+}
+
+/// The address of the repository is one line of the root `Cargo.toml`. `strata report --link` opens
+/// an issue there, and the endpoint of the report writes its issues there. A member with an address
+/// of its own could send the two kinds of report to two repositories.
+#[test]
+fn each_member_of_the_workspace_takes_the_repository_that_the_link_and_the_endpoint_use() {
+    let root = repo_file("Cargo.toml");
+    let addresses: Vec<&str> = root
+        .lines()
+        .filter_map(|l| l.strip_prefix("repository = "))
+        .collect();
+    assert_eq!(
+        addresses.len(),
+        1,
+        "the workspace names one address: {addresses:?}"
+    );
+    assert_eq!(
+        addresses[0].trim_matches('"'),
+        env!("CARGO_PKG_REPOSITORY"),
+        "the link of `strata report` opens an issue at another address"
+    );
+    for member in workspace_members() {
+        let manifest = repo_file(&format!("{member}/Cargo.toml"));
+        assert!(
+            member == "." || !manifest.lines().any(|l| l.starts_with("repository = ")),
+            "{member} names an address of its own"
+        );
+    }
+    // the manifests that named the address before it was one line
+    for member in [".", "preflight", "fuzz", "report-endpoint"] {
+        let manifest = repo_file(&format!("{member}/Cargo.toml"));
+        assert!(
+            manifest.lines().any(|l| l == "repository.workspace = true"),
+            "{member} does not take the address of the workspace"
+        );
+    }
 }

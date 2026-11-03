@@ -83,7 +83,8 @@ valid:
   than printable ASCII.
 
 `strata report` then stops with the error `log-invalid`, prints nothing, and marks nothing. The
-message gives the number of the line. See [Errors](../reference/errors.md).
+message gives the number of the line. See [Errors](../reference/errors.md). The send of a run
+skips such a line: see [What a run sends](../reference/report.md#what-a-run-sends).
 
 ## What to expect
 

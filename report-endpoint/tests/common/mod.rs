@@ -19,7 +19,7 @@ pub fn assigned(file: &str, name: &str) -> String {
                 .or_else(|| line.strip_prefix(&format!("{name} = ")))
         })
         .unwrap_or_else(|| panic!("the file has no line {name}=..."))
-        .trim_matches('"')
+        .trim_matches(['"', '\''])
         .to_string()
 }
 

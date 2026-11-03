@@ -16,8 +16,13 @@ default-members = ["."]
 # became stable. Each member takes this number with `rust-version.workspace = true`, so one line
 # names the floor of the workspace. The msrv job of .github/workflows/checks.yml builds with the
 # version named here, so this number stays true.
+#
+# The address of the repository is one line too. `strata report --link` opens an issue there, and
+# the endpoint of the report writes its issues there. `examples/live/report-send.sh` reads this line.
+# A member that names a repository takes it with `repository.workspace = true`.
 [workspace.package]
 rust-version = "1.88"
+repository = "https://github.com/como-technologies/strata"
 
 [package]
 name = "strata"
@@ -26,7 +31,7 @@ edition = "2024"
 rust-version.workspace = true
 description = "Record, compare, and check Spectro Cloud Palette profile versions, the clusters and other objects that run them, and pack versions"
 license = "Apache-2.0"
-repository = "https://github.com/como-technologies/strata"
+repository.workspace = true
 readme = "README.md"
 keywords = ["kubernetes", "spectrocloud", "palette", "drift", "diff"]
 categories = ["command-line-utilities", "development-tools"]

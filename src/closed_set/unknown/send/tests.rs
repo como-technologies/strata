@@ -421,3 +421,39 @@ fn the_post_to_an_address_that_refuses_the_connection_is_an_error_of_the_send() 
     assert!(matches!(error, Error::ReportSend { .. }), "{error}");
     assert_eq!(error.kind(), "report-send");
 }
+
+#[test]
+fn the_post_gives_the_numbers_in_the_list_waiting_of_the_answer() {
+    let (url, got) = answering(
+        202,
+        r#"{"ok":true,"opens":1,"updates":0,"waiting":[2,3,4,5]}"#,
+    );
+    let waiting = post(&url, &report_of(&[line("a")]), 0).unwrap();
+    got.join().unwrap();
+    assert_eq!(waiting, [2, 3, 4, 5]);
+}
+
+#[test]
+fn the_post_gives_no_number_for_an_answer_with_no_list_waiting_or_with_a_body_that_is_not_json() {
+    for (status, body) in [
+        (202, r#"{"ok":true,"opens":1,"updates":0}"#),
+        (200, r#"{"ok":true,"duplicate":true}"#),
+        (200, "{}"),
+        (200, "taken"),
+        (200, ""),
+        (202, r#"{"waiting":"all"}"#),
+    ] {
+        let (url, got) = answering(status, body);
+        let waiting = post(&url, &report_of(&[line("a")]), 0).unwrap();
+        got.join().unwrap();
+        assert!(waiting.is_empty(), "{body}: {waiting:?}");
+    }
+}
+
+#[test]
+fn the_post_reads_only_the_numbers_of_the_list_waiting() {
+    let (url, got) = answering(202, r#"{"ok":true,"waiting":[3,"x",-1,1.5,null,1]}"#);
+    let waiting = post(&url, &report_of(&[line("a")]), 0).unwrap();
+    got.join().unwrap();
+    assert_eq!(waiting, [3, 1]);
+}

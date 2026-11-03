@@ -9,7 +9,8 @@ use std::fmt;
 pub const TOKEN_VAR: &str = "GITHUB_TOKEN";
 
 /// The repository that gets the issues, when `GITHUB_REPOSITORY` is not set: the repository that the
-/// manifest of this crate names, as `owner/name`. So the address of the repository has one text.
+/// workspace names in the root `Cargo.toml`, as `owner/name`. This crate takes it with
+/// `repository.workspace = true`, so `strata report --link` and the endpoint use one address.
 fn default_repository() -> String {
     let url = env!("CARGO_PKG_REPOSITORY");
     url.strip_prefix("https://github.com/")

@@ -139,7 +139,7 @@ fn report_markdown_is_a_table_that_serves_as_the_body_of_an_issue() {
 
 #[test]
 fn report_markdown_writes_a_value_with_a_backtick_or_a_bar_in_a_code_span_that_it_cannot_end() {
-    // the endpoint writes the value of its issue with the same function: see `code_span`
+    // the endpoint writes the value of its issue with `code_span`, and a table adds the escape of a bar
     let home = tempfile::tempdir().unwrap();
     write_log(
         home.path(),
@@ -151,7 +151,7 @@ fn report_markdown_writes_a_value_with_a_backtick_or_a_bar_in_a_code_span_that_i
     );
     let run = report(home.path(), &["--format", "markdown"]);
     assert_eq!(run.code, 0, "{}", run.err);
-    let span = strata::text::code_span("late`r|x");
+    let span = strata::text::code_cell("late`r|x");
     assert_eq!(span, "``late`r\\|x``");
     assert!(
         run.out.contains(&format!(

@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use strata::closed_set::unknown::log::SCHEMA as LOG_SCHEMA;
 use strata::closed_set::unknown::report::{Report, SCHEMA as REPORT_SCHEMA};
 use strata::closed_set::unknown::send::post;
-use strata_report_endpoint::server::{MOST_AT_ONCE, Service, serve};
+use strata_report_endpoint::server::{Limits, MOST_AT_ONCE, Service, serve};
 use strata_report_endpoint::settings::{DEFAULT_LABEL, DEFAULT_MILESTONE};
 use strata_report_endpoint::tracker::GitHub;
 
@@ -212,10 +212,20 @@ fn start_service_behind(github: &str, proxy: bool) -> Running {
 
 /// Start the real service, where at most `most_at_once` requests run at the same time.
 fn start_service_with(github: &str, proxy: bool, most_at_once: usize) -> Running {
+    start_service_limited(github, proxy, most_at_once, Limits::default())
+}
+
+/// Start the real service with the limits `limits`, as when other senders spent part of the hour.
+fn start_service_limited(
+    github: &str,
+    proxy: bool,
+    most_at_once: usize,
+    limits: Limits,
+) -> Running {
     let tracker = GitHub::new(github, "o/r", TOKEN, DEFAULT_LABEL, Some(DEFAULT_MILESTONE));
     let server = Arc::new(tiny_http::Server::http("127.0.0.1:0").unwrap());
     let address = format!("http://{}/", server.server_addr().to_ip().unwrap());
-    let service = Arc::new(Service::new(tracker));
+    let service = Arc::new(Service::with_limits(tracker, limits));
     let serving = Arc::clone(&service);
     std::thread::spawn(move || serve(&server, &serving, proxy, most_at_once));
     Running { address, service }
@@ -854,4 +864,76 @@ fn a_log_of_21_values_sends_20_and_marks_them_and_the_21st_waits_for_the_hour() 
     for issue in &state.issues {
         assert!(issue.body.contains("| Lines | 1 |"), "{}", issue.body);
     }
+}
+
+#[test]
+fn a_log_of_5_values_where_the_hour_has_room_for_3_marks_3_and_the_next_hour_sends_the_rest() {
+    use strata::closed_set::unknown::log::SENT_FILE;
+    use strata::ops::Sent;
+    let (github, state) = stand_in_github();
+    // other senders spent all but 3 of the 20 new issues of the hour
+    let limits = Limits {
+        new_issues: 3,
+        ..Limits::default()
+    };
+    let running = start_service_limited(&github, false, MOST_AT_ONCE, limits);
+    let dir = tempfile::tempdir().unwrap();
+    let log = write_log(dir.path(), 5);
+    let sent = strata::ops::send_unknown_report(&log, &running.address).unwrap();
+    running.settle();
+    assert_eq!(
+        sent,
+        Sent {
+            marked: 3,
+            waiting: 2,
+            skipped: Vec::new()
+        }
+    );
+    let mark = std::fs::read_to_string(dir.path().join(SENT_FILE)).unwrap();
+    assert_eq!(mark.trim(), "3", "the 2 values that wait are not marked");
+    assert_eq!(state.lock().unwrap().issues.len(), 3);
+    // the next hour: the second service has its own limits, and it takes the 2 lines that are left
+    let next = start_service(&github);
+    let sent = strata::ops::send_unknown_report(&log, &next.address).unwrap();
+    next.settle();
+    assert_eq!((sent.marked, sent.waiting), (2, 0));
+    let state = state.lock().unwrap();
+    assert_eq!(state.issues.len(), 5, "one issue for each value");
+    for issue in &state.issues {
+        assert!(issue.body.contains("| Lines | 1 |"), "{}", issue.body);
+    }
+}
+
+#[test]
+fn an_issue_with_the_label_removed_gets_a_second_issue_when_a_user_sends_the_value_again() {
+    // a maintainer removed the label of the issue of a value to stay under the limit of 1000 issues.
+    // The service lists only its label, so it does not find that issue.
+    let (github, state) = stand_in_github();
+    state.lock().unwrap().issues.push(Stored {
+        number: 1,
+        title: "A user of strata reports the `ProfileType` value `later` that strata does not know"
+            .into(),
+        body: "<!-- strata-report: values ProfileType later -->\n".into(),
+        labels: Vec::new(),
+        milestone: None,
+        state: "closed",
+        pull_request: false,
+    });
+    let running = start_service(&github);
+    let (status, _) = raw_post(
+        &running.address,
+        "application/json",
+        &report_text(&[entry("later", 1)]),
+    );
+    assert_eq!(status, 202);
+    running.settle();
+    let state = state.lock().unwrap();
+    assert_eq!(state.issues.len(), 2, "the value has a second issue");
+    assert_eq!(state.issues[1].labels, [DEFAULT_LABEL]);
+    assert!(
+        state.issues[1]
+            .body
+            .contains("<!-- strata-report: values ProfileType later -->")
+    );
+    assert_eq!(state.issues[0].state, "closed");
 }

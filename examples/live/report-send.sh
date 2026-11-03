@@ -9,7 +9,7 @@
 # with a profile type that strata does not know. It runs strata against that tenant with
 # STRATA_REPORT=1 and STRATA_REPORT_URL=URL, in a state folder of its own. So the send is real, and
 # the value is the made-up value of the book. The check opens or changes the issue of that value in
-# OWNER/REPO through the endpoint. The default repository is the one that report-endpoint/Cargo.toml
+# OWNER/REPO through the endpoint. The default repository is the one that the Cargo.toml of the root
 # names, which is the one that the endpoint writes to. It needs a gh login to read the issue, jq,
 # curl, the strata release binary, and the xtask binary: just build and just stand-in.
 # The run changes HOME, so the script keeps the login of gh: it sets GH_CONFIG_DIR to the folder of
@@ -31,11 +31,11 @@ script=report-send
 . "$live/github.sh"
 
 url=""
-# the label of the issues of the endpoint, and the repository of its manifest. The endpoint has the
+# the label of the issues of the endpoint, and the repository of the workspace. The endpoint has the
 # same two texts as its defaults, and a test of the endpoint makes sure that they agree
 label=unknown-value
-repo=$(sed -n 's|^repository = "https://github.com/\(.*\)"$|\1|p' "$live/../../report-endpoint/Cargo.toml")
-[ -n "$repo" ] || die "report-endpoint/Cargo.toml names no repository"
+repo=$(sed -n 's|^repository = "https://github.com/\(.*\)"$|\1|p' "$live/../../Cargo.toml")
+[ -n "$repo" ] || die "Cargo.toml of the root names no repository"
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) [ $# -ge 2 ] || die "--repo needs a value"; repo=$2; shift 2 ;;
@@ -81,7 +81,10 @@ export STRATA_REPORT=1 STRATA_REPORT_URL="$url"
 gh issue list --repo "$repo" --label "$label" --limit 1 > /dev/null 2> gh.err \
   || die "gh cannot read the issues of $repo; log in with gh auth login, or set GH_TOKEN; see $PWD/gh.err"
 
+# the first line of the issue of the value, and the start of its row of lines, as the endpoint writes
+# them. A test of the endpoint makes sure that the service writes these two texts
 marker='<!-- strata-report: values ProfileType later-type -->'
+lines_row='| Lines | '
 # issues_of_value: the issues of the label of the endpoint whose first line is the marker, as JSON
 issues_of_value() {
   gh issue list --repo "$repo" --label "$label" --state all --limit 500 --json number,state,body \
@@ -89,7 +92,7 @@ issues_of_value() {
 }
 # lines_of_issue: the number in the row "Lines" of the one issue of the value
 lines_of_issue() {
-  issues_of_value | jq -r '.[0].body | split("\n")[] | select(startswith("| Lines | ")) | split(" ")[3]'
+  issues_of_value | jq -r --arg row "$lines_row" '.[0].body | split("\n")[] | select(startswith($row)) | split(" ")[3]'
 }
 
 # wait_for COMMAND WANT: wait until COMMAND prints WANT. The endpoint writes after its answer.
@@ -118,10 +121,10 @@ wait_for lines_of_issue $((before_lines + 1)) || true
 
 heading "2: the issue"
 check issue 0 '#397: one issue holds the marker of the value, it has the label unknown-value, and it has the row Lines' -- \
-  bash -c "$(declare -f issues_of_value); marker='$marker'; repo='$repo'; label='$label'; issues_of_value | jq -e 'length == 1 and (.[0].body | contains(\"| Lines | \"))'"
+  bash -c "$(declare -f issues_of_value); marker='$marker'; lines_row='$lines_row'; repo='$repo'; label='$label'; issues_of_value | jq -e --arg row \"\$lines_row\" 'length == 1 and (.[0].body | contains(\$row))'"
 if [ "$before" -eq 0 ]; then
   check issue-new 0 '#397: the first send opened the issue, and its count is 1' -- \
-    bash -c "$(declare -f issues_of_value lines_of_issue); marker='$marker'; repo='$repo'; label='$label'; [ \"\$(lines_of_issue)\" = 1 ]"
+    bash -c "$(declare -f issues_of_value lines_of_issue); marker='$marker'; lines_row='$lines_row'; repo='$repo'; label='$label'; [ \"\$(lines_of_issue)\" = 1 ]"
 fi
 number=$(issues_of_value | jq -r '.[0].number // empty')
 echo "the issue is $repo#$number" | tee -a steps.log
@@ -132,7 +135,7 @@ check send-2 0 '#397: a second run posts the report again' -- \
   bash -c "set -o pipefail; \"$strata\" list profiles --packs --json | jq -e '.profiles[] | select(.name == \"aws-stack\")'"
 wait_for lines_of_issue $((after_first + 1)) || true
 check issue-2 0 '#397: still one issue for the value, and its count grew by the line of the second run' -- \
-  bash -c "$(declare -f issues_of_value lines_of_issue); marker='$marker'; repo='$repo'; label='$label'; \
+  bash -c "$(declare -f issues_of_value lines_of_issue); marker='$marker'; lines_row='$lines_row'; repo='$repo'; label='$label'; \
     [ \$(issues_of_value | jq length) -eq 1 ] && [ \"\$(lines_of_issue)\" -eq $((after_first + 1)) ]"
 echo "lines before the check: $before_lines; after the first send: $after_first" | tee -a steps.log
 
@@ -153,7 +156,7 @@ check repeat-2 0 'The same report with the same key gets 200 and duplicate, beca
   bash -c "$(declare -f post_report); key='$key'; repeat_body='$repeat_body'; url='$url'; \
     [ \"\$(post_report repeat-2)\" = 200 ] && jq -e '.duplicate == true' repeat-2.json"
 check repeat-count 0 'The issue counted the report one time: its lines grew by one and not by two' -- \
-  bash -c "$(declare -f issues_of_value lines_of_issue); marker='$marker'; repo='$repo'; label='$label'; [ \"\$(lines_of_issue)\" -eq $((after_second + 1)) ]"
+  bash -c "$(declare -f issues_of_value lines_of_issue); marker='$marker'; lines_row='$lines_row'; repo='$repo'; label='$label'; [ \"\$(lines_of_issue)\" -eq $((after_second + 1)) ]"
 
 [ "$failures" -eq 0 ] || exit 1
 exit 0

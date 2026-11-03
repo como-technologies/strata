@@ -1,8 +1,12 @@
-//! The scripts and the settings of the service keep one text for each label, repository, and
+//! The scripts and the settings of the service keep one text for each label, repository, marker, and
 //! milestone that they share. A script is shell, so it holds its own copy of the text. These
-//! tests make sure that the copy is the one that the service reads.
+//! tests make sure that the copy is the one that the service reads or writes.
 
+use serde_json::json;
+use strata::closed_set::unknown::report::{Report, SCHEMA};
+use strata_report_endpoint::merge::merge;
 use strata_report_endpoint::settings::{DEFAULT_LABEL, DEFAULT_MILESTONE, Settings};
+use strata_report_endpoint::tracker::{Issue, Tracker, TrackerError};
 
 mod common;
 
@@ -35,8 +39,8 @@ fn the_contract_run_has_a_label_of_its_own_and_the_milestone_of_the_service() {
 }
 
 #[test]
-fn the_repository_has_one_text_in_the_manifest_and_the_deploy_and_the_live_send_do_not_copy_it() {
-    let manifest = read("Cargo.toml");
+fn the_repository_has_one_text_in_the_workspace_and_the_deploy_and_the_live_send_do_not_copy_it() {
+    let manifest = read("../Cargo.toml");
     let url = assigned(&manifest, "repository");
     let name = url.strip_prefix("https://github.com/").unwrap();
     let settings = Settings::from_lookup(|var| (var == "GITHUB_TOKEN").then(|| "t".to_string()));
@@ -49,5 +53,48 @@ fn the_repository_has_one_text_in_the_manifest_and_the_deploy_and_the_live_send_
     );
     let send = code(&read("../examples/live/report-send.sh"));
     assert!(!send.contains(name), "report-send.sh names the repository");
-    assert!(send.contains("report-endpoint/Cargo.toml"));
+    assert!(
+        send.contains("\"$live/../../Cargo.toml\""),
+        "report-send.sh reads the manifest of the workspace"
+    );
+}
+
+/// A tracker with no issue, which keeps the body of each issue that the merge opens.
+#[derive(Default)]
+struct Opened(Vec<String>);
+
+impl Tracker for Opened {
+    fn issues(&mut self) -> Result<Vec<Issue>, TrackerError> {
+        Ok(Vec::new())
+    }
+
+    fn open(&mut self, _title: &str, body: &str) -> Result<u64, TrackerError> {
+        self.0.push(body.to_string());
+        Ok(self.0.len() as u64)
+    }
+
+    fn update(&mut self, _number: u64, _body: &str) -> Result<(), TrackerError> {
+        Ok(())
+    }
+}
+
+#[test]
+fn the_live_send_reads_the_first_line_and_the_row_of_lines_that_the_service_writes() {
+    let script = read("../examples/live/report-send.sh");
+    let (marker, row) = (assigned(&script, "marker"), assigned(&script, "lines_row"));
+    // the made-up value of the chapter unknown-value of the book, which the script sends
+    let report: Report = serde_json::from_value(json!({"schema": SCHEMA, "unknown": [
+        {"strata": "0.27.0", "set": "ProfileType", "value": "later-type",
+         "route": "/v1/clusterprofiles/{uid}", "count": 1}]}))
+    .unwrap();
+    let mut tracker = Opened::default();
+    merge(&mut tracker, &report).unwrap();
+    let body = &tracker.0[0];
+    assert_eq!(body.lines().next(), Some(marker.as_str()));
+    // the script reads the count as the fourth field of the row, split at the spaces
+    let count = body
+        .lines()
+        .find(|line| line.starts_with(&row))
+        .and_then(|line| line.split(' ').nth(3));
+    assert_eq!(count, Some("1"), "{body}");
 }
