@@ -14,7 +14,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
-use strata::api::codes::{PROFILE_IMPORT_MATCH_CODES, ValidateRoute};
+use strata::api::codes::{
+    PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE,
+    PROFILE_IMPORT_MATCH_CODES, PROJECT_SCOPE_CODE, ValidateRoute,
+};
 use strata::api::{RawCluster, RawProfile};
 use strata::ops;
 use strata::snapshot::Snapshot;
@@ -519,60 +522,66 @@ fn answers() -> Vec<Vec<u8>> {
 
 // ---- the errors of Palette ------------------------------------------------------------------
 
+/// The body of an error of Palette with `code` and `message`.
+fn coded(code: &str, message: &str) -> String {
+    format!(r#"{{"code":"{code}","message":"{message}"}}"#)
+}
+
 /// An error of Palette as a validate route or another route gives it: the status, and the body.
-const ERROR_CASES: [(u16, &str); 14] = [
-    (
-        403,
-        r#"{"code":"PackValuesOverrideForbidden","message":"the values of a pack are forbidden"}"#,
-    ),
-    (
-        403,
-        r#"{"code":"ProjectUidIsNotEmpty","message":"the operation is not allowed in the project scope"}"#,
-    ),
-    (
-        409,
-        r#"{"code":"ClusterProfileAlreadyExists","message":"lab-profile 1.0.0 exists"}"#,
-    ),
-    (
-        404,
-        r#"{"code":"PackMacroUndefined","message":"macro spectro.var.x is not defined"}"#,
-    ),
-    (422, r#"{"code":422,"message":"list items must be unique"}"#),
-    (500, r#"{"code":"InternalError","message":"try again"}"#),
-    (
-        500,
-        r#"{"code":"ClusterProfilePacksInConflict","message":"prod-1 and prod-10 run the pack"}"#,
-    ),
-    (
-        500,
-        r#"{"code":["PackYaml"],"message":"the code is a list"}"#,
-    ),
-    (500, r#"{"code":"PackYaml","message":"é 日本語 🙂"}"#),
-    (502, "<html><body>Bad Gateway</body></html>"),
-    (429, ""),
-    (401, r#"{"code":"Unauthorized"}"#),
-    (200, r#"{"code":"NotAnError"}"#),
-    (0, "not json"),
-];
+/// A code that `strata::api::codes` names comes from there.
+fn error_cases() -> Vec<(u16, String)> {
+    vec![
+        (
+            403,
+            coded(PACK_FORBIDDEN_CODE, "the values of a pack are forbidden"),
+        ),
+        (
+            403,
+            coded(
+                PROJECT_SCOPE_CODE,
+                "the operation is not allowed in the project scope",
+            ),
+        ),
+        (409, coded(PROFILE_EXISTS_CODE, "lab-profile 1.0.0 exists")),
+        (
+            404,
+            coded(
+                PACK_MACRO_UNDEFINED_CODE,
+                "macro spectro.var.x is not defined",
+            ),
+        ),
+        (
+            422,
+            r#"{"code":422,"message":"list items must be unique"}"#.into(),
+        ),
+        (500, coded("InternalError", "try again")),
+        (
+            500,
+            r#"{"code":["PackYaml"],"message":"the code is a list"}"#.into(),
+        ),
+        (500, coded("PackYaml", "é 日本語 🙂")),
+        (502, "<html><body>Bad Gateway</body></html>".into()),
+        (429, String::new()),
+        (401, r#"{"code":"Unauthorized"}"#.into()),
+        (200, r#"{"code":"NotAnError"}"#.into()),
+        (0, "not json".into()),
+    ]
+}
 
 /// The seeds of the error of Palette: the cases above, and each code of each validate route with
 /// the status 500.
 fn palette_errors() -> Vec<Vec<u8>> {
-    let mut cases: Vec<(u16, String)> = ERROR_CASES
-        .iter()
-        .map(|(status, body)| (*status, body.to_string()))
-        .collect();
+    let mut cases = error_cases();
     let codes: BTreeSet<&str> = ValidateRoute::ALL
         .into_iter()
         .flat_map(ValidateRoute::refusal_codes)
         .chain(PROFILE_IMPORT_MATCH_CODES)
         .collect();
-    cases.extend(codes.into_iter().map(|code| {
-        (
-            500,
-            format!(r#"{{"code":"{code}","message":"{code} on the pack"}}"#),
-        )
-    }));
+    cases.extend(
+        codes
+            .into_iter()
+            .map(|code| (500, coded(code, &format!("{code} on the pack")))),
+    );
     cases
         .iter()
         .map(|(status, body)| [&status.to_be_bytes()[..], body.as_bytes()].concat())
