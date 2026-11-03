@@ -14,11 +14,14 @@ use strata::closed_set::unknown::log::{FILE, SCHEMA as LOG_SCHEMA, SENT_FILE};
 use strata::closed_set::unknown::report::SCHEMA as REPORT_SCHEMA;
 use strata::ops::{ReportOptions, mark_reported, report_link, unknown_report};
 
-use crate::common::{LATER_TYPE, Run, log_in, log_line, report_command, write_lines, write_log};
+use crate::common::{
+    LATER_TYPE, OCI_REGISTRY_SUMMARY, PROFILE_TEMPLATE, Run, log_in, log_line, log_line_of,
+    report_command, write_lines, write_log,
+};
 
 /// The lines of a log with a value that two runs gave, and a value that one run gave.
 fn two_values() -> Vec<String> {
-    let type_line = log_line("ProfileType", LATER_TYPE, "/v1/clusterprofiles/{uid}");
+    let type_line = log_line("ProfileType", LATER_TYPE, PROFILE_TEMPLATE);
     vec![
         type_line.clone(),
         log_line("PackState", "retired", "/v1/packs"),
@@ -98,7 +101,7 @@ fn report_json_is_the_document_with_the_fields_of_the_log_and_a_count() {
                 {"strata": TOOL_VERSION, "set": "PackState", "value": "retired",
                     "route": "/v1/packs", "count": 1},
                 {"strata": TOOL_VERSION, "set": "ProfileType", "value": LATER_TYPE,
-                    "route": "/v1/clusterprofiles/{uid}", "count": 2},
+                    "route": PROFILE_TEMPLATE, "count": 2},
             ],
         })
     );
@@ -130,11 +133,46 @@ fn report_markdown_is_a_table_that_serves_as_the_body_of_an_issue() {
     );
     assert!(
         run.out.contains(&format!(
-            "| `ProfileType` | `{LATER_TYPE}` | `/v1/clusterprofiles/{{uid}}` | 2 | {TOOL_VERSION} |"
+            "| `ProfileType` | `{LATER_TYPE}` | `{PROFILE_TEMPLATE}` | 2 | {TOOL_VERSION} |"
         )),
         "{}",
         run.out
     );
+}
+
+#[test]
+fn report_shows_the_version_that_a_line_holds_and_not_the_running_version() {
+    // a log holds lines of older releases, so the version of a line differs from `TOOL_VERSION`
+    const OLDER: &str = "0.1.0";
+    assert_ne!(OLDER, TOOL_VERSION);
+    let home = tempfile::tempdir().unwrap();
+    write_log(
+        home.path(),
+        &[log_line_of(OLDER, "PackState", "retired", "/v1/packs")],
+    );
+
+    let terminal = report(home.path(), &[]);
+    assert_eq!(terminal.code, 0, "{}", terminal.err);
+    let row = terminal.out.lines().find(|l| l.starts_with("  PackState"));
+    assert!(
+        row.is_some_and(|r| r.contains(&format!("strata {OLDER}"))),
+        "{}",
+        terminal.out
+    );
+
+    let markdown = report(home.path(), &["--format", "markdown"]);
+    assert_eq!(markdown.code, 0, "{}", markdown.err);
+    assert!(
+        markdown.out.contains(&format!(
+            "| `PackState` | `retired` | `/v1/packs` | 1 | {OLDER} |"
+        )),
+        "{}",
+        markdown.out
+    );
+
+    let json = report(home.path(), &["--json"]);
+    let document: Value = serde_json::from_str(&json.out).unwrap();
+    assert_eq!(document["unknown"][0]["strata"], OLDER, "{}", json.out);
 }
 
 #[test]
@@ -143,11 +181,7 @@ fn report_markdown_writes_a_value_with_a_backtick_or_a_bar_in_a_code_span_that_i
     let home = tempfile::tempdir().unwrap();
     write_log(
         home.path(),
-        &[log_line(
-            "ProfileType",
-            "late`r|x",
-            "/v1/clusterprofiles/{uid}",
-        )],
+        &[log_line("ProfileType", "late`r|x", PROFILE_TEMPLATE)],
     );
     let run = report(home.path(), &["--format", "markdown"]);
     assert_eq!(run.code, 0, "{}", run.err);
@@ -155,7 +189,7 @@ fn report_markdown_writes_a_value_with_a_backtick_or_a_bar_in_a_code_span_that_i
     assert_eq!(span, "``late`r\\|x``");
     assert!(
         run.out.contains(&format!(
-            "| `ProfileType` | {span} | `/v1/clusterprofiles/{{uid}}` | 1 |"
+            "| `ProfileType` | {span} | `{PROFILE_TEMPLATE}` | 1 |"
         )),
         "{}",
         run.out
@@ -178,7 +212,7 @@ fn report_stops_on_a_log_with_a_value_that_is_not_one_word_of_printable_ascii() 
         let home = tempfile::tempdir().unwrap();
         write_log(
             home.path(),
-            &[log_line("ProfileType", value, "/v1/clusterprofiles/{uid}")],
+            &[log_line("ProfileType", value, PROFILE_TEMPLATE)],
         );
         let run = report(home.path(), &["--json"]);
         assert_eq!(run.code, 2, "{value:?}: {}", run.out);
@@ -204,6 +238,7 @@ fn report_stops_on_a_line_with_a_field_that_is_missing_or_wrong_or_a_word_that_i
         change(&mut line);
         line.to_string()
     };
+    let another_schema = format!("the schema is not {LOG_SCHEMA}");
     let cases = [
         (
             "no route",
@@ -230,7 +265,7 @@ fn report_stops_on_a_line_with_a_field_that_is_missing_or_wrong_or_a_word_that_i
         (
             "another schema",
             line(&|l| l["schema"] = json!("strata-unknown/2")),
-            "the schema is not strata-unknown/1",
+            another_schema.as_str(),
         ),
         (
             "a route of more than 200 characters",
@@ -415,13 +450,7 @@ fn link_of_an_empty_report_prints_the_sentence_and_no_address() {
 fn link_of_a_report_that_is_too_long_for_an_address_says_to_paste_the_markdown() {
     let home = tempfile::tempdir().unwrap();
     let lines: Vec<String> = (0..60)
-        .map(|n| {
-            log_line(
-                "ProfileType",
-                &format!("value-{n}"),
-                "/v1/clusterprofiles/{uid}",
-            )
-        })
+        .map(|n| log_line("ProfileType", &format!("value-{n}"), PROFILE_TEMPLATE))
         .collect();
     write_log(home.path(), &lines);
     let run = report(home.path(), &["--link"]);
@@ -451,13 +480,7 @@ fn link_of_a_report_that_is_too_long_for_an_address_says_to_paste_the_markdown()
 fn a_link_that_is_too_long_marks_nothing_with_sent_so_the_markdown_still_holds_the_lines() {
     let home = tempfile::tempdir().unwrap();
     let lines: Vec<String> = (0..60)
-        .map(|n| {
-            log_line(
-                "ProfileType",
-                &format!("value-{n}"),
-                "/v1/clusterprofiles/{uid}",
-            )
-        })
+        .map(|n| log_line("ProfileType", &format!("value-{n}"), PROFILE_TEMPLATE))
         .collect();
     write_log(home.path(), &lines);
     let run = report(home.path(), &["--link", "--sent"]);
@@ -523,11 +546,7 @@ fn sent_marks_the_lines_so_that_the_next_report_holds_only_the_new_lines() {
     );
     // a new line is the only line of the next report; --all holds each line again
     let mut lines = two_values();
-    lines.push(log_line(
-        "OciProvider",
-        "oras",
-        "/v1/registries/oci/summary",
-    ));
+    lines.push(log_line("OciProvider", "oras", OCI_REGISTRY_SUMMARY));
     write_log(home.path(), &lines);
     let third = report(home.path(), &[]);
     assert!(

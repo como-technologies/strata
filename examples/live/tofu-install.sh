@@ -14,7 +14,9 @@ bin=${BIN_DIR:-$HOME/.local/bin}
 cache=${CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/strata/tofu}
 dest=$bin/tofu
 
-die() { echo "tofu-install: $*" >&2; exit 2; }
+live=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+script=tofu-install
+. "$live/common.sh"
 note() { echo "tofu-install: $*" >&2; }
 
 # installed: the version of the binary at $dest, or nothing. `tofu version` prints

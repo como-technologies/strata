@@ -15,6 +15,7 @@ use strata_preflight::report;
 use strata_preflight::rule::{
     Catalog, Check, Evidence, EvidenceKind, ExecCheck, PaletteCheck, Rule,
 };
+use strata_preflight::world;
 
 #[path = "../../tests/common/walk.rs"]
 mod walk;
@@ -1171,9 +1172,10 @@ fn ssh_key_pair_leaves_aws_to_the_properties_route_that_iaas_pod_identity_calls(
     let catalog = catalog::builtin().unwrap();
     let key_pair = catalog.rule("ssh-key-pair").unwrap();
     assert!(key_pair.applies_to("eks"));
-    for engine in [
-        "aws", "gcp", "gke", "azure", "aks", "maas", "edge", "vsphere",
-    ] {
+    // each engine but EKS, so that a new engine gets the check too
+    let others: Vec<&str> = world::clouds().filter(|engine| *engine != "eks").collect();
+    assert!(others.contains(&"aws"), "{others:?}");
+    for engine in others {
         assert!(!key_pair.applies_to(engine), "{engine}");
     }
     let pod = catalog.rule("iaas-pod-identity").unwrap();

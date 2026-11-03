@@ -42,6 +42,12 @@ set -euo pipefail
 die() { echo "pr-comment: $*" >&2; exit 2; }
 note() { echo "pr-comment: $*" >&2; }
 
+# quietly COMMAND...: run a host call and keep what it prints to itself, unless it fails
+quietly() {
+  local out
+  out=$("$@" 2>&1) || { printf '%s\n' "$out" >&2; return 1; }
+}
+
 # ---- the hosts ---------------------------------------------------------------------------------
 # One function for each thing the script needs from a code host. `host <name> [args]` calls the
 # set of the chosen host.
@@ -50,7 +56,7 @@ github_repo() { gh repo view --json nameWithOwner | jq -r .nameWithOwner; }
 github_pr_number() { gh pr view --json number | jq -r .number; }
 github_find_comment() {
   gh api "repos/$repo/issues/$pr/comments" --paginate \
-    | jq -r --arg m "$marker" '.[] | select(.body | startswith($m)) | .id' | sed -n 1p
+    | jq -r --arg m "$marker" '.[] | select((.body // "") | startswith($m)) | .id' | sed -n 1p
 }
 github_post_comment() { gh pr comment "$pr" --repo "$repo" --body-file "$1"; }
 github_update_comment() { gh api -X PATCH "repos/$repo/issues/comments/$1" -F "body=@$2" >/dev/null; }
@@ -58,8 +64,8 @@ github_labels() { gh pr view "$pr" --repo "$repo" --json labels | jq -r '.labels
 github_repo_labels() { gh label list --repo "$repo" --limit 1000 --json name | jq -r '.[].name'; }
 # gh adds labels by name and fails on a name the repository does not have yet
 github_create_label() {
-  gh label create "$1" --repo "$repo" --color d93f0b \
-    --description "strata: the maximum impact reached the threshold" >/dev/null
+  quietly gh label create "$1" --repo "$repo" --color d93f0b \
+    --description "strata: the maximum impact reached the threshold"
 }
 github_add_label() { gh pr edit "$pr" --repo "$repo" --add-label "$1"; }
 github_remove_label() { gh pr edit "$pr" --repo "$repo" --remove-label "$1"; }
@@ -81,7 +87,7 @@ gitlab_repo() { printf '%s' "${CI_PROJECT_PATH:-$project}"; }
 gitlab_pr_number() { printf '%s' "${CI_MERGE_REQUEST_IID:-}"; }
 gitlab_find_comment() {
   gitlab_api GET "/merge_requests/$pr/notes?per_page=100&sort=asc" \
-    | jq -r --arg m "$marker" '.[] | select(.body | startswith($m)) | .id' | sed -n 1p
+    | jq -r --arg m "$marker" '.[] | select((.body // "") | startswith($m)) | .id' | sed -n 1p
 }
 gitlab_post_comment() {
   gitlab_api POST "/merge_requests/$pr/notes" --data-urlencode "body@$1" >/dev/null
@@ -92,8 +98,8 @@ gitlab_update_comment() {
 gitlab_labels() { gitlab_api GET "/merge_requests/$pr" | jq -r '.labels[]'; }
 gitlab_repo_labels() { gitlab_api GET "/labels?per_page=100" | jq -r '.[].name'; }
 gitlab_create_label() {
-  gitlab_api POST "/labels" --data-urlencode "name=$1" --data-urlencode "color=#d93f0b" \
-    --data-urlencode "description=strata: the maximum impact reached the threshold" >/dev/null
+  quietly gitlab_api POST "/labels" --data-urlencode "name=$1" --data-urlencode "color=#d93f0b" \
+    --data-urlencode "description=strata: the maximum impact reached the threshold"
 }
 gitlab_add_label() {
   gitlab_api PUT "/merge_requests/$pr" --data-urlencode "add_labels=$1" >/dev/null

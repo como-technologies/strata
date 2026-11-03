@@ -4,8 +4,9 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 
 use super::{ANSWER_FILE, Choice, Facts, Step, keep_answer, post, question, read_answer, step};
+use crate::api::PROFILE_TEMPLATE;
 use crate::closed_set::unknown::log::Line;
-use crate::closed_set::unknown::report::Report;
+use crate::closed_set::unknown::report::{Report, SCHEMA};
 use crate::error::Error;
 
 /// The facts of a run in a terminal that wrote a line, has an address, and has no setting and no
@@ -203,7 +204,7 @@ fn report_of(lines: &[Line]) -> Report {
 type Change = fn(&mut Line);
 
 fn line(value: &str) -> Line {
-    Line::new("ProfileType", value, "/v1/clusterprofiles/{uid}")
+    Line::new("ProfileType", value, PROFILE_TEMPLATE)
 }
 
 #[test]
@@ -219,7 +220,10 @@ fn a_report_with_another_schema_no_entry_or_too_many_entries_is_refused() {
         schema: "strata-report/2".into(),
         ..good.clone()
     };
-    assert_eq!(other.fault().unwrap(), "the schema is not strata-report/1");
+    assert_eq!(
+        other.fault().unwrap(),
+        format!("the schema is not {SCHEMA}")
+    );
     let empty = Report {
         unknown: Vec::new(),
         ..good.clone()
@@ -280,13 +284,15 @@ fn an_entry_with_a_count_above_the_most_is_refused_and_the_most_itself_passes() 
 
 #[test]
 fn a_report_document_with_another_field_does_not_parse() {
-    let text = r#"{"schema":"strata-report/1","unknown":[{"strata":"0.26.0","set":"S","value":"v","route":"/v1/packs","count":1,"uid":"x"}]}"#;
-    let error = serde_json::from_str::<Report>(text)
+    let text = format!(
+        r#"{{"schema":"{SCHEMA}","unknown":[{{"strata":"0.26.0","set":"S","value":"v","route":"/v1/packs","count":1,"uid":"x"}}]}}"#
+    );
+    let error = serde_json::from_str::<Report>(&text)
         .unwrap_err()
         .to_string();
     assert!(error.contains("unknown field `uid`"), "{error}");
-    let top = r#"{"schema":"strata-report/1","unknown":[],"host":"h"}"#;
-    assert!(serde_json::from_str::<Report>(top).is_err());
+    let top = format!(r#"{{"schema":"{SCHEMA}","unknown":[],"host":"h"}}"#);
+    assert!(serde_json::from_str::<Report>(&top).is_err());
     // a report that strata writes parses to the same document
     let report = report_of(&[line("a")]);
     let text = serde_json::to_string(&report).unwrap();
@@ -332,7 +338,7 @@ fn the_post_sends_the_report_as_json_with_the_user_agent_of_strata() {
         "{request}"
     );
     assert!(
-        request.contains(r#""schema":"strata-report/1""#),
+        request.contains(&format!(r#""schema":"{SCHEMA}""#)),
         "{request}"
     );
 }

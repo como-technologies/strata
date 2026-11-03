@@ -4,7 +4,9 @@ use crate::common;
 
 use std::path::{Path, PathBuf};
 
-use strata::snapshot::Tier;
+use strata::diff::DIFF_SCHEMA;
+use strata::ops::{CHAIN_SCHEMA, VERIFY_SUMMARY_SCHEMA};
+use strata::snapshot::{SNAPSHOT_SCHEMA, Tier};
 
 use common::{
     PROFILE_LISTING, PROJECT_LISTING, Run, UID_A, UID_B, against_closed_port, read_json, schema,
@@ -76,7 +78,7 @@ fn has_line(text: &str, re: &str) -> bool {
 fn snapshot_shape_and_upstream_sources() {
     let fx = fixtures();
     let a = read_json(Path::new(&fx.a));
-    assert_eq!(a["schema"], "strata-snapshot/1");
+    assert_eq!(a["schema"], SNAPSHOT_SCHEMA);
     assert_eq!(a["tool"]["impl"], "rust");
     assert_eq!(a["packs"].as_array().unwrap().len(), 7);
     let pack = |n: &str| {
@@ -374,7 +376,7 @@ fn json_document_is_self_describing() {
     assert_eq!(r.code, 1);
     assert!(!r.out.contains(ESC));
     let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
-    assert_eq!(d["schema"], "strata-diff/1");
+    assert_eq!(d["schema"], DIFF_SCHEMA);
     assert_eq!(d["same"], false);
     assert!(d["legend"]["impact"]["repave"].is_string());
     assert!(d["legend"]["upstream"].is_string());
@@ -697,7 +699,7 @@ fn verify_over_many_records_prints_one_line_each_and_a_summary_document() {
     );
     assert_eq!(r.code, 2);
     let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
-    assert_eq!(d["schema"], "strata-verify-summary/1");
+    assert_eq!(d["schema"], VERIFY_SUMMARY_SCHEMA);
     assert_eq!(d["summary"]["records"], 2);
     assert_eq!(d["summary"]["errors"], 2);
     assert_eq!(d["summary"]["status"], "error");
@@ -722,7 +724,7 @@ fn verify_over_many_records_prints_one_line_each_and_a_summary_document() {
     let r = run_in(&["verify", "--summary", "--json", &fx.a], &no_creds, &clear);
     assert_eq!(r.code, 2, "{}", r.err);
     let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
-    assert_eq!(d["schema"], "strata-verify-summary/1");
+    assert_eq!(d["schema"], VERIFY_SUMMARY_SCHEMA);
     assert_eq!(d["summary"]["records"], 1);
     assert_eq!(d["records"][0]["path"], fx.a.as_str());
     assert_eq!(d["records"][0]["error"]["kind"], "missing-credential");
@@ -799,7 +801,7 @@ fn same_release_checks_consecutive_records_with_an_optional_registry_move_policy
     ]);
     assert_eq!(r.code, 1);
     let d: serde_json::Value = serde_json::from_str(&r.out).unwrap();
-    assert_eq!(d["schema"], "strata-chain/1");
+    assert_eq!(d["schema"], CHAIN_SCHEMA);
     assert_eq!(d["policy"], "registry-move");
     assert_eq!(d["same"], false);
     assert_eq!(d["pairs"][0]["status"], "registry-move");

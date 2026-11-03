@@ -1000,6 +1000,17 @@ field, a value, an input, or an option is in the sections above.
     stopped on the jq of `ubuntu-latest`.
   - Both scripts read the first line of such a body as an empty line now. They skip the issue
     and do their usual work. No script of yours needs a change.
+- **`pr-comment.sh` skips a comment with no text.** The jq filter stopped with an error on a
+  body that is `null`.
+  - The script skips such a comment and continues. This is the rule of `verify-report.sh`. No
+    script of yours needs a change.
+  - The call that creates the label of the impact is quiet now, as in the report scripts. It
+    prints what the host says only when the call fails.
+- **`install-strata.sh` prints its notes when `STRATA_QUIET` is set.** Release 0.27.0 hid them.
+  That included the note that says that the signature is not checked.
+  - `STRATA_QUIET` stops the progress messages of the `strata` binary. No script in `scripts/ci/`
+    reads it. See [Settings](./settings.md).
+  - The notes go to standard error. The path of the binary on standard output does not change.
 - **`strata-preflight`: seven rules read a version as `strata` does.** The rules are
   `capa-stack-release-behind`, `ccm-version`, `edge-agent-version`, `gke-version-not-offered`,
   `eks-version-not-offered`, `eks-addon-version`, and `maas-os-image`.

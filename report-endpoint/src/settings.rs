@@ -129,8 +129,10 @@ mod tests {
         assert!(Settings::from_lookup(lookup(&[("GITHUB_TOKEN", "")])).is_err());
         let settings = Settings::from_lookup(lookup(&[("GITHUB_TOKEN", "t")])).unwrap();
         assert_eq!(settings.port, 8080);
+        // pinned on purpose: the default is the repository that the workspace names, and the link of
+        // `strata report` uses it too
         assert_eq!(settings.repository, "como-technologies/strata");
-        assert_eq!(settings.api, "https://api.github.com");
+        assert_eq!(settings.api, DEFAULT_API);
         assert_eq!(settings.label, DEFAULT_LABEL);
         assert_eq!(settings.milestone.as_deref(), Some(DEFAULT_MILESTONE));
         assert!(

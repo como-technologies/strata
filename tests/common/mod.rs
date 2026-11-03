@@ -33,6 +33,7 @@ use std::path::Path;
 use std::process::{Command, Output};
 
 use serde_json::{Value, json};
+use strata::closed_set::unknown::send::{ADDRESS_SETTING, SETTING};
 
 mod answer;
 pub mod closed_set;
@@ -759,6 +760,22 @@ pub fn repo_file(path: &str) -> String {
         .unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
+/// The lines of `text` that are not comments. A line is a comment when `#` is its first character
+/// after the indent.
+pub fn code_lines(text: &str) -> impl Iterator<Item = &str> {
+    text.lines().filter(|l| !l.trim_start().starts_with('#'))
+}
+
+/// `text` without its comment lines, one line after the other.
+pub fn without_comments(text: &str) -> String {
+    code_lines(text).collect::<Vec<_>>().join("\n")
+}
+
+/// The text of a file of the repository, by its path from the root, without its comment lines.
+pub fn code_of(path: &str) -> String {
+    without_comments(&repo_file(path))
+}
+
 /// `text` with each run of white space as one space, as a line break can fall inside a sentence.
 pub fn one_line(text: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -1057,9 +1074,7 @@ pub const REFUSED: &str = "http://127.0.0.1:9";
 /// sends sets `STRATA_REPORT=1` and `STRATA_REPORT_URL` after this call, with the address of its
 /// stand-in.
 pub fn without_report(command: &mut Command) -> &mut Command {
-    command
-        .env("STRATA_REPORT", "0")
-        .env("STRATA_REPORT_URL", REFUSED)
+    command.env(SETTING, "0").env(ADDRESS_SETTING, REFUSED)
 }
 
 /// The strata binary as a command that can send no report: see [`without_report`].

@@ -130,14 +130,9 @@ fn the_marker_is_the_first_line_and_the_state_is_the_second() {
     let mut lines = text.lines();
     assert_eq!(
         lines.next(),
-        Some("<!-- strata-report: values PackState gone -->")
+        Some(format!("{MARKER}PackState gone -->").as_str())
     );
-    assert!(
-        lines
-            .next()
-            .unwrap()
-            .starts_with("<!-- strata-report-state: ")
-    );
+    assert!(lines.next().unwrap().starts_with(STATE));
 }
 
 #[test]
@@ -197,7 +192,7 @@ fn an_issue_of_another_marker_or_with_no_marker_is_left_alone() {
 fn a_state_that_does_not_read_starts_the_count_again() {
     let mut tracker = Memory::default();
     let mut edited = body("ProfileType", "later", &State::default());
-    edited = edited.replace(STATE, "<!-- strata-report-state: zz");
+    edited = edited.replace(STATE, &format!("{STATE}zz"));
     tracker.issues.push(("t".into(), edited, true));
     merge(
         &mut tracker,
@@ -360,7 +355,7 @@ fn a_state_that_an_older_service_wrote_with_the_palette_and_the_refusals_still_r
     let old = json!({"lines": 4, "reports": 2, "strata": ["0.26.0"], "palette": ["4.7.1"],
         "routes": ["/v1/packs"], "refusals": ["409 Gone"]});
     let text = format!(
-        "<!-- strata-report: values S v -->\n{STATE}{} -->\nbody",
+        "{MARKER}S v -->\n{STATE}{} -->\nbody",
         hex::encode(old.to_string())
     );
     let state = read_state(&text);

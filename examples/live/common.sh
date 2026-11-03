@@ -1,7 +1,7 @@
-# The two functions that lib.sh, contract.sh, and contract-profiles.sh share: `die` and `usage`.
+# The two functions that the scripts of examples/live/ and deploy/ share: `die` and `usage`.
 # Source it after you set `script` to the name of the script. It runs nothing and checks nothing, so
 # a script that does not run strata can source it alone. lib.sh adds a check for a stale binary, which
-# such a script does not need.
+# such a script does not need. The scripts of scripts/ci/ stand alone, so they do not source it.
 
 # die MESSAGE: print the message with the name of the script, and stop with exit code 2
 die() { echo "$script: $*" >&2; exit 2; }

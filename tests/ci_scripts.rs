@@ -167,10 +167,7 @@ fn the_ci_drop_ins_pass_only_options_the_scripts_have() {
         // a flag the file carries another way: quoted in an environment value, such as
         // '--no-verify', or assigned to a shell variable, such as rollback=--allow-rollback.
         // Line by line, and never a comment, because prose holds apostrophes.
-        for line in body.lines() {
-            if line.trim_start().starts_with('#') {
-                continue;
-            }
+        for line in code_lines(&body) {
             let mut carried: Vec<&str> = line
                 .split('\'')
                 .skip(1)
@@ -529,7 +526,7 @@ fn unaccounted(options: &BTreeSet<String>, reaches: &[Reach], left: &[Left]) -> 
 fn executed_by(workflow: &serde_yaml::Value) -> String {
     let mut text = String::new();
     let mut keep = |value: &str| {
-        for line in value.lines().filter(|l| !l.trim_start().starts_with('#')) {
+        for line in code_lines(value) {
             text.push_str(line);
             text.push('\n');
         }
@@ -550,14 +547,13 @@ fn executed_by(workflow: &serde_yaml::Value) -> String {
 /// The lines of one job of the GitLab drop-in, without the comments.
 fn gitlab_job_text(gitlab: &str, job: &str) -> String {
     let head = format!("{job}:");
-    gitlab
+    let job_lines: Vec<&str> = gitlab
         .lines()
         .skip_while(|l| *l != head)
         .skip(1)
         .take_while(|l| l.is_empty() || l.starts_with(' '))
-        .filter(|l| !l.trim_start().starts_with('#'))
-        .collect::<Vec<_>>()
-        .join("\n")
+        .collect();
+    without_comments(&job_lines.join("\n"))
 }
 
 /// Whether `text` reads the variable, as `$NAME` or `${NAME`, and not a longer name.
@@ -776,15 +772,6 @@ const PASSES: [Passes; 4] = [
         ],
     },
 ];
-
-/// The lines of a file of the repository that are not comments.
-fn code_of(path: &str) -> String {
-    repo_file(path)
-        .lines()
-        .filter(|l| !l.trim_start().starts_with('#'))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
 
 /// Each option of `strata verify`, `strata behind`, and `strata preflight` reaches the script that
 /// wraps it, or the script omits it with a reason.
@@ -1353,6 +1340,25 @@ fn pr_comment_updates_the_existing_marked_comment_instead_of_adding_one() {
 }
 
 #[test]
+fn pr_comment_reads_a_comment_with_no_text_as_one_that_is_not_its_own() {
+    let h = host();
+    std::fs::write(
+        &h.comments,
+        r#"[{"id": 9, "body": null}, {"id": 123, "body": "<!-- strata -->\nold report"}]"#,
+    )
+    .unwrap();
+    let o = h.run(&[&h.a, &h.b, "--pr", "7", "--repo", "o/r"]);
+    assert!(o.status.success(), "{}", text(&o.stderr));
+    assert!(
+        h.calls()
+            .iter()
+            .any(|c| c.starts_with("api -X PATCH repos/o/r/issues/comments/123 -F body=@")),
+        "{:?}",
+        h.calls()
+    );
+}
+
+#[test]
 fn pr_comment_removes_the_label_below_the_threshold_and_touches_nothing_when_already_right() {
     let h = host();
     std::fs::write(
@@ -1875,6 +1881,24 @@ fn pr_comment_updates_the_marked_note_on_gitlab_and_leaves_a_label_it_has() {
 }
 
 #[test]
+fn pr_comment_reads_a_note_with_no_text_on_gitlab_as_one_that_is_not_its_own() {
+    let h = host();
+    h.put_gl(
+        "gl-notes.json",
+        r#"[{"id": 11, "body": null}, {"id": 55, "body": "<!-- strata -->\nan older report"}]"#,
+    );
+    let o = h.run_gitlab(&[&h.a, &h.b], &[]);
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    assert!(
+        h.gl_calls()
+            .iter()
+            .any(|c| c.starts_with("PUT /projects/42/merge_requests/7/notes/55 body@")),
+        "{:?}",
+        h.gl_calls()
+    );
+}
+
+#[test]
 fn pr_comment_stops_on_what_gitlab_answers_and_asks_for_a_token_that_can_write() {
     let h = host();
     let o = h.run_gitlab(&[&h.a, &h.b], &[("FAKE_GL_STATUS", "403")]);
@@ -2217,8 +2241,13 @@ fn release() -> tempfile::TempDir {
 }
 
 fn install(d: &Path, args: &[&str]) -> Output {
-    Command::new("bash")
-        .arg(script("ci/install-strata.sh"))
+    install_with(d, args, &[])
+}
+
+/// The installer with the variables `envs` set after the others of the test.
+fn install_with(d: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
+    let mut c = Command::new("bash");
+    c.arg(script("ci/install-strata.sh"))
         .args(args)
         .current_dir(d)
         .env(
@@ -2228,11 +2257,14 @@ fn install(d: &Path, args: &[&str]) -> Output {
         .env("FAKE_REL", d)
         .env("STRATA_API", "https://host.example/api")
         .env("STRATA_REPO", "o/r")
+        .env_remove("STRATA_QUIET")
         .env_remove("STRATA_TOKEN")
         .env_remove("GITHUB_TOKEN")
-        .env_remove("GH_TOKEN")
-        .output_locked()
-        .unwrap()
+        .env_remove("GH_TOKEN");
+    for (k, v) in envs {
+        c.env(k, v);
+    }
+    c.output_locked().unwrap()
 }
 
 #[test]
@@ -2289,6 +2321,44 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
         "{}",
         text(&o.stderr)
     );
+}
+
+/// `STRATA_QUIET` stops the progress messages of the binary of strata. The notes of a script state
+/// its result, and one of them tells that the signature is not checked. So no script reads the
+/// variable.
+#[test]
+fn install_strata_prints_its_notes_when_strata_quiet_is_set() {
+    let r = release();
+    let d = r.path();
+    let o = install_with(
+        d,
+        &[
+            "--version",
+            "v9.9.9",
+            "--dir",
+            "here",
+            "--target",
+            "x86_64-unknown-linux-musl",
+        ],
+        &[("STRATA_QUIET", "1")],
+    );
+    assert!(o.status.success(), "{}{}", text(&o.stdout), text(&o.stderr));
+    let notes = text(&o.stderr);
+    assert!(notes.contains("signature not verified"), "{notes}");
+    assert!(
+        notes.contains("v9.9.9 installed in here, checksums verified"),
+        "{notes}"
+    );
+}
+
+#[test]
+fn no_script_that_ships_reads_strata_quiet_in_its_code() {
+    for name in SHIPPED {
+        assert!(
+            !code_of(&format!("scripts/ci/{name}")).contains("STRATA_QUIET"),
+            "{name} reads STRATA_QUIET: the notes of a script state its result"
+        );
+    }
 }
 
 /// `--bin-only` is how a person installs onto their PATH. The binary arrives, and nothing beside
@@ -3339,7 +3409,7 @@ impl Report {
             .collect();
         self.put(
             "summary.json",
-            &serde_json::json!({"schema": "strata-verify-summary/1", "records": records})
+            &serde_json::json!({"schema": strata::ops::VERIFY_SUMMARY_SCHEMA, "records": records})
                 .to_string(),
         );
         self.put("summary.exit", &exit.to_string());
@@ -4134,7 +4204,7 @@ impl Report {
         });
         self.put(
             "report.json",
-            &serde_json::json!({"schema": "strata-behind/1", "tool": {"name": "strata", "version": "0.11.0"},
+            &serde_json::json!({"schema": strata::ops::BEHIND_SCHEMA, "tool": {"name": "strata", "version": "0.11.0"},
                 "generatedAt": "2026-09-26T06:00:00Z", "records": ["releases/dev.json"],
                 "pins": [csi, k8s], "summary": {"pins": 2, "behind": 1, "floating": 0, "errors": 0, "arrived": 0}})
             .to_string(),
@@ -4208,7 +4278,7 @@ fn upstream_report_opens_one_issue_per_pack_behind_names_what_arrived_and_closes
     let strata_call = &u.log("strata.log")[0];
     assert!(strata_call.contains("--since "), "{strata_call}");
     let previous = read_json(&u.dir.path().join("since-used.json"));
-    assert_eq!(previous["schema"], "strata-behind/1");
+    assert_eq!(previous["schema"], strata::ops::BEHIND_SCHEMA);
     assert_eq!(previous["generatedAt"], "2026-09-26T06:00:00Z");
     assert_eq!(previous["pins"][0]["newer"][0]["version"], "1.65.0");
     let calls = u.log("gh.log");
@@ -4462,7 +4532,7 @@ fn the_host_layer_of_the_two_report_scripts_differs_only_in_the_lines_of_their_o
 /// The GitLab functions and the host block of `pr-comment.sh` are those of `verify-report.sh`, line
 /// for line. Like the two report scripts, `pr-comment.sh` is one download with no other file. So
 /// the copy is on purpose, and a change to one copy must reach the others. Only the name of the
-/// script in a message, and the object that the token writes, differ.
+/// script in a message, the object that the token writes, and the description of the label differ.
 #[test]
 fn the_gitlab_layer_of_pr_comment_is_the_gitlab_layer_of_the_report_scripts() {
     /// Where a part of a script ends.
@@ -4477,7 +4547,11 @@ fn the_gitlab_layer_of_pr_comment_is_the_gitlab_layer_of_the_report_scripts() {
     let part = |name: &str, from: &str, end: &End| -> Vec<String> {
         let text = repo_file(&format!("scripts/ci/{name}"))
             .replace("pr-comment:", "$script:")
-            .replace("cannot write notes", "cannot write issues");
+            .replace("cannot write notes", "cannot write issues")
+            .replace(
+                "strata: the maximum impact reached the threshold",
+                "$label_description",
+            );
         let lines: Vec<&str> = text.lines().skip_while(|l| !l.starts_with(from)).collect();
         let length = match end {
             End::SameLine => 1,
@@ -4487,8 +4561,19 @@ fn the_gitlab_layer_of_pr_comment_is_the_gitlab_layer_of_the_report_scripts() {
         lines[..length].iter().map(|l| l.to_string()).collect()
     };
     let parts = [
+        ("the quiet call", "quietly() {", End::Line("}")),
         ("the call of the API", "gitlab_api() {", End::Line("}")),
         ("the repo", "gitlab_repo() {", End::SameLine),
+        (
+            "the labels of the repo",
+            "gitlab_repo_labels() {",
+            End::SameLine,
+        ),
+        (
+            "the create of a label",
+            "gitlab_create_label() {",
+            End::Line("}"),
+        ),
         ("the dispatch", "host() {", End::SameLine),
         (
             "the host block",
@@ -4523,7 +4608,7 @@ fn upstream_report_keeps_the_report_of_the_run_in_the_file_that_save_names() {
     let kept: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&saved).expect("the report is kept"))
             .unwrap();
-    assert_eq!(kept["schema"], "strata-behind/1");
+    assert_eq!(kept["schema"], strata::ops::BEHIND_SCHEMA);
     assert_eq!(kept["summary"]["behind"], 1);
 }
 
