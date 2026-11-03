@@ -284,7 +284,7 @@ fn read_json(path: &Path) -> Value {
 /// The newest csi-aws-ebs version, copied into the OCI registry with its own uid and digest.
 ///
 /// The newest is the one that `name@latest` picks. 1.9.0 is older than 1.10.0. A pre-release is
-/// newest only when no item has another version.
+/// newest only when no item has a version that is not a pre-release.
 fn add_csi_to_oci(listing: &mut Value) {
     let items = listing["items"].as_array().cloned().unwrap_or_default();
     let with_values = items.iter().filter(|i| !i["spec"]["values"].is_null());

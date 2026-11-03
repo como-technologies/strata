@@ -2414,6 +2414,40 @@ fn the_floor_changes_nothing_when_the_run_checked_each_fact_of_the_cluster() {
     assert_eq!(outcome(&contract, "cluster-document"), Outcome::Same);
 }
 
+/// Review of Wave 14, S2. The help said that each skipped fact of a cluster is an error. The run
+/// gives `error` to a skipped fact of the floor alone. A fact that names `absent_codes`, and a fact
+/// with no document of the stand-in, stay skipped.
+#[test]
+fn the_help_of_with_cluster_makes_an_error_of_a_skipped_fact_of_the_floor_and_of_no_other() {
+    use super::command::USAGE;
+    let usage = USAGE.split_whitespace().collect::<Vec<_>>().join(" ");
+    for needle in [
+        "--with-cluster the tenant holds a cluster: a skipped fact of the floor is an error, and the exit code is 2.",
+        "See The floor of a window with a cluster in the book.",
+    ] {
+        assert!(usage.contains(needle), "the help lacks {needle:?}");
+    }
+    assert!(
+        !usage.contains("takes its subject from a cluster"),
+        "the help makes an error of each skipped fact of a cluster"
+    );
+
+    let page = std::fs::read_to_string(crate::repository().join("docs/src/development/facts.md"))
+        .expect("the page of the facts");
+    assert!(
+        page.contains("\n### The floor of a window with a cluster\n"),
+        "the help names a heading that the page lacks"
+    );
+    assert!(
+        page.contains("# a window with a cluster: a skipped fact of the floor is an error"),
+        "the comment of the recipe does not name the floor"
+    );
+    assert!(
+        !page.contains("a skipped fact of a cluster is an error"),
+        "the page makes an error of each skipped fact of a cluster"
+    );
+}
+
 #[test]
 fn the_option_with_cluster_takes_no_value() {
     use super::command::Options;

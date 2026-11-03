@@ -208,6 +208,111 @@ fn latest_marks_the_version_that_a_pack_ref_records_and_not_a_pre_release_above_
     assert_eq!(latest, ["1.0.0-rc.2"]);
 }
 
+/// Review of Wave 14, D4. `--cloud` cuts the list before the mark, and `pack:<name>@latest` picks
+/// from each version of the registry. So with `--cloud`, the mark and the ref can name two
+/// versions. The book says so.
+#[test]
+fn latest_with_cloud_marks_the_highest_version_of_that_cloud_and_the_ref_records_another() {
+    let versions = || {
+        vec![
+            version("pk-2", "2.0.0", &["aws"]),
+            version("pk-1", "1.0.0", &["gcp"]),
+        ]
+    };
+    let options = PackOptions {
+        cloud: Some("gcp".to_string()),
+        latest: true,
+        ..Default::default()
+    };
+    let kept = packs_with(&options, versions());
+    let marks: Vec<(&str, bool)> = kept.registries[0]
+        .versions
+        .iter()
+        .map(|v| (v.version.as_str(), v.latest))
+        .collect();
+    assert_eq!(marks, [("1.0.0", true)]);
+    // the ref has no cloud: it picks from each version of the registry
+    assert_eq!(
+        version::pick(["2.0.0", "1.0.0"], |v| *v, LATEST),
+        Some("2.0.0")
+    );
+
+    // with no `--cloud`, the mark is on the version that the ref records
+    let all = packs_with(&PackOptions::default(), versions());
+    let marked: Vec<&str> = all.registries[0]
+        .versions
+        .iter()
+        .filter(|v| v.latest)
+        .map(|v| v.version.as_str())
+        .collect();
+    assert_eq!(marked, ["2.0.0"]);
+}
+
+/// Review of Wave 14, A7. `packs` omits a version with no tag, and `pack:<name>@latest` picks from
+/// the whole listing. So when the highest version has no tag, the mark and the ref name two
+/// versions. The book says so.
+#[test]
+fn latest_marks_the_highest_version_that_has_a_tag_and_the_ref_records_a_version_with_no_tag() {
+    let api = nginx_api(
+        vec![nginx("pk-30", "1.30.0", ""), nginx("pk-29", "1.29.0", "")],
+        &[tag("pk-29", "1.29.0", "1.29.0")],
+        &[],
+    );
+    let registry = nginx_packs(&api);
+    let marks: Vec<(&str, bool)> = registry
+        .versions
+        .iter()
+        .map(|v| (v.version.as_str(), v.latest))
+        .collect();
+    assert_eq!(marks, [("1.29.0", true)]);
+
+    // the ref picks from the listing, which holds the version with no tag
+    let listed = crate::candidate::pack::versions_of(&Palette::new(&api), "nginx").unwrap();
+    let recorded = version::pick(
+        listed.iter(),
+        |e| e["spec"]["version"].as_str().unwrap(),
+        LATEST,
+    );
+    assert_eq!(
+        recorded.map(|e| text(e, "/spec/version")).as_deref(),
+        Some("1.30.0")
+    );
+}
+
+/// Review of Wave 14, A7. The words said that the marks differ when the registry has another
+/// version. With two pre-releases the registry has another version, and the marks are on one
+/// version. They differ when the registry has a version that is not a pre-release.
+#[test]
+fn the_marks_agree_for_two_pre_releases_and_differ_for_a_release_below_a_pre_release() {
+    let marks = |versions: Vec<Value>| -> Vec<(String, bool, bool)> {
+        packs_with(&PackOptions::default(), versions).registries[0]
+            .versions
+            .iter()
+            .map(|v| (v.version.clone(), v.latest, v.palette_latest))
+            .collect()
+    };
+    assert_eq!(
+        marks(vec![
+            marked("pk-1", "1.0.0-rc.1", false),
+            marked("pk-2", "1.0.0-rc.2", true),
+        ]),
+        [
+            ("1.0.0-rc.2".to_string(), true, true),
+            ("1.0.0-rc.1".to_string(), false, false),
+        ]
+    );
+    assert_eq!(
+        marks(vec![
+            marked("pk-1", "1.0.0", false),
+            marked("pk-2", "1.1.0-rc.1", true),
+        ]),
+        [
+            ("1.1.0-rc.1".to_string(), false, true),
+            ("1.0.0".to_string(), true, false),
+        ]
+    );
+}
+
 #[test]
 fn latest_keeps_the_version_of_palette_when_it_is_not_the_newest_and_names_it() {
     // a version with four numbers does not parse as a semantic version: strata puts it above

@@ -657,6 +657,26 @@ mod tests {
         assert_ne!(group_fields(&other).unwrap(), fields);
     }
 
+    /// Review of Wave 14, D3. Strata 0.27.0 took the hash of the trimmed text for values with no
+    /// canonical form. Such values with no password keep that hash, so the book names a change for
+    /// a group with a password only.
+    #[test]
+    fn values_with_no_canonical_form_and_no_password_keep_the_hash_of_the_trimmed_text() {
+        let text = "host: {{ .spectro.var.host }}\nreplicas: 1\n";
+        let fields =
+            group_fields(&json!({"endpointType": "LoadBalancer", "values": text})).unwrap();
+        assert_eq!(fields["values"], Value::Null);
+        assert!(fields.get("valuesParseError").is_some());
+        assert_eq!(fields["valuesHash"], Value::String(sha256_hex(text.trim())));
+        // the hash that the parser gives for the text is the hash of 0.27.0
+        assert_eq!(fields["valuesHash"], json!(canon_yaml_hashed(text).1));
+
+        // a password in the same values moves the hash
+        let with = format!("password: s3cr3t\n{text}");
+        let masked = group_fields(&json!({"values": with})).unwrap();
+        assert_ne!(masked["valuesHash"], json!(canon_yaml_hashed(&with).1));
+    }
+
     #[test]
     fn values_with_a_password_that_strata_cannot_mask_give_no_hash_and_an_error() {
         // a block scalar has no line to change, and a key that is a map cannot be written again

@@ -30,7 +30,7 @@ it needs.**
   registry. It is not the sha256 of the chart archive. A push again does not
   move it: see [A pack version pushed again](#a-pack-version-pushed-again).
 - Palette takes the digest from its own copy of the registry, which a sync
-  refreshes. `@latest` is the newest version of that copy.
+  refreshes. `@latest` is the highest version of that copy that is not a pre-release.
 - Palette gives the last sync of each registry: see
   [The sync of a registry](#the-sync-of-a-registry).
 

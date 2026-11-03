@@ -17,7 +17,7 @@ use crate::facts::subjects::floor;
 use crate::{facts, fail, repository};
 
 /// The usage line, and what the options do.
-const USAGE: &str =
+pub(super) const USAGE: &str =
     "usage: xtask contract [--stand-in DIR] [--out FILE] [--state FILE] [--github URL] [--no-cloud] [--with-cluster]
 
   --stand-in DIR  read the documents of the stand-in from DIR, one directory for each chapter;
@@ -28,8 +28,8 @@ const USAGE: &str =
   --github URL    the address of the GitHub API (default https://api.github.com)
   --no-cloud      send no call of the tool of a cloud (aws, gcloud, az); without it, the run sends the
                   read-only calls of the facts of the kind cloud in the lab account
-  --with-cluster  the tenant holds a cluster: a fact that takes its subject from a cluster and that the
-                  run skips is an error, and the exit code is 2
+  --with-cluster  the tenant holds a cluster: a skipped fact of the floor is an error, and the exit
+                  code is 2. See The floor of a window with a cluster in the book.
 
 The tenant is the one that PALETTE_API, PALETTE_API_KEY, and ~/.palette.env name. The run sends a fact
 of the tenant scope with no project, as strata does. The lab account of a cloud is the one that the

@@ -12753,6 +12753,44 @@ fn a_cluster_group_with_values_that_have_no_canonical_form_records_the_mask_and_
     );
 }
 
+/// Review of Wave 14, A8. `verify` and the snapshot that `compare` reads read the group live. When
+/// strata cannot mask a password in the values, both give `serialize`, and a record taken again
+/// gives the same error. Quote the template, or change the block scalar, and both work.
+#[test]
+fn verify_and_a_snapshot_of_a_group_with_a_password_that_strata_cannot_mask_give_serialize() {
+    let dir = tempfile::tempdir().unwrap();
+    common::make_fixtures(dir.path());
+    let serve = |values: &str| {
+        let mut doc = group_doc(dir.path());
+        doc["spec"]["clustersConfig"] = clusters_config(6000, values);
+        serve_cluster_group(MemoryApi::new(), dir.path()).with(group_route("g1"), doc)
+    };
+    // a block scalar has no line to change, and the unquoted template is a map in a key
+    let unmaskable = "adminPassword: |\n  s3cr3t\nhost: {{ .spectro.var.host }}\n";
+    let quoted = "adminPassword: |\n  s3cr3t\nhost: \"{{ .spectro.var.host }}\"\n";
+    let plain = "adminPassword: s3cr3t\nhost: {{ .spectro.var.host }}\n";
+
+    let recorded = common::snapshot_of(&serve(quoted), "clustergroup:g1").unwrap();
+    let verify =
+        |api: MemoryApi| ops::verify(&recorded, &Palette::new(api), "t1", &Progress::silent());
+    assert!(matches!(
+        verify(serve(unmaskable)),
+        Err(Error::Serialize(_))
+    ));
+    // the snapshot is the read that `compare` of a record with the live group makes
+    assert!(matches!(
+        common::snapshot_of(&serve(unmaskable), "clustergroup:g1"),
+        Err(Error::Serialize(_))
+    ));
+
+    // the quoted template, and a password on one line, both work
+    assert_eq!(
+        verify(serve(quoted)).unwrap().status,
+        VerifyStatus::Unchanged
+    );
+    assert!(common::snapshot_of(&serve(plain), "clustergroup:g1").is_ok());
+}
+
 // ---- app profiles -----------------------------------------------------------------------------
 
 /// An app profile `shop@1.0.0`, `ap1`, with a helm tier and a manifest tier, the tier with the

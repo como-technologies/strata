@@ -2984,8 +2984,8 @@ fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup
         "The error document has the new key `field`",
         "**`stale-record`: `cluster` holds the uid of the cluster.**",
         "A script that read the name from `error.cluster` must read `error.name`.",
-        "**The policy `valuesHash` of a group with values of no canonical form changes.**",
-        "A record of 0.27.0 or before differs in the `policy` tier from a new record of the same group.",
+        "**The policy `valuesHash` of a group with a password in values of no canonical form changes.**",
+        "A record of 0.27.0 or before of a group with a password differs in the `policy` tier from a new record of the same group.",
         "**`strata-preflight`: three rules read a version as `strata` does.**",
     ] {
         assert!(
@@ -2997,7 +2997,7 @@ fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup
     for needle in [
         "`snapshot::cluster_tiers` gives a `Result`.",
         "`error::Error::StaleRecord` has the new field `name: String`.",
-        "`ops::PackBuild::latest` is true for the version that `pack:<name>@latest` records.",
+        "`ops::PackBuild::latest` is true for the version that `pack:<name>@latest` records, of the versions that the listing keeps.",
     ] {
         assert!(strata.contains(needle), "the library part lacks {needle:?}");
     }
@@ -3026,6 +3026,138 @@ fn the_section_of_release_0_28_0_gives_the_action_for_each_change_of_the_cleanup
             "the library part lacks {needle:?}"
         );
     }
+}
+
+/// Review of Wave 14, D4, C2, and A7. `latest` of `strata packs` is the version that
+/// `pack:<name>@latest` records, of the versions that the listing keeps. The ref picks from each
+/// version of the registry, so `--cloud` and a highest version with no tag give two versions. The
+/// mark of Palette is on the highest version, and strata marks the same one unless it is a
+/// pre-release.
+#[test]
+fn the_book_states_the_cases_where_latest_is_not_the_version_that_the_ref_records() {
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document\n");
+    for needle in [
+        "The two differ when the highest version is a pre-release and the registry has a version that is not a pre-release.",
+        "`latest` marks one of the versions that the listing keeps.",
+        "With `--cloud`, the listing keeps the versions that support that cloud.",
+        "`strata packs <name> --cloud gcp` marks `1.0.0`, and `pack:<name>@latest` records `2.0.0`.",
+        "The listing omits a version that has no tag in the answer of Palette, unless Spectro Cloud retired it.",
+        "If `1.30.0` has no tag and `1.29.0` has one, `latest` marks `1.29.0`, and the ref records `1.30.0`.",
+    ] {
+        assert!(
+            command_line.contains(needle),
+            "the section of release 0.28.0 lacks {needle:?}"
+        );
+    }
+    assert!(
+        !command_line.contains("the registry has another version"),
+        "two pre-releases are another version, and the marks are on one version"
+    );
+    let library = release_0_28_0_part("### For a user of the library of strata\n");
+    assert!(
+        library.contains("`ops::PackBuild::latest` is true for the version that `pack:<name>@latest` records, of the versions that the listing keeps."),
+        "the library item lacks the versions that the listing keeps"
+    );
+
+    let packs = one_line(&read(&docs().join("commands/packs.md")));
+    for needle in [
+        "the highest version that is not a pre-release, of the versions that the listing keeps.",
+        "A registry that has no version that is not a pre-release gives its highest pre-release.",
+        "With `--cloud`, the listing keeps the versions of that cloud.",
+        "If `aws` has `2.0.0` and `gcp` has `1.0.0`, `--cloud gcp` marks `1.0.0`, and the ref records `2.0.0`.",
+        "The listing omits a version that has no tag in the answer of Palette, unless Spectro Cloud retired it.",
+        "So the highest version is the version that Palette marks. Strata marks the same version, unless that version is a pre-release:",
+    ] {
+        assert!(packs.contains(needle), "packs.md lacks {needle:?}");
+    }
+    assert!(
+        !packs.contains("So the version that strata marks is the version that Palette marks"),
+        "packs.md says that the two marks are one version"
+    );
+    let palette = one_line(&read(&docs().join("internals/palette/packs.md")));
+    assert!(
+        palette
+            .contains("`@latest` is the highest version of that copy that is not a pre-release."),
+        "internals/palette/packs.md lacks the rule of `@latest`"
+    );
+    assert!(
+        !palette.contains("`@latest` is the newest version of that copy"),
+        "internals/palette/packs.md says that `@latest` is the newest version"
+    );
+
+    let description = schema("packs")
+        .pointer("/$defs/PackBuild/properties/latest/description")
+        .and_then(serde_json::Value::as_str)
+        .map(one_line)
+        .expect("the schema of packs describes latest");
+    for needle in [
+        "of the versions that the listing keeps.",
+        "when the registry's copy has no version that is not a pre-release.",
+        "when `--cloud` cuts the list, and when the highest version has no tag",
+    ] {
+        assert!(
+            description.contains(needle),
+            "the description of latest lacks {needle:?}: {description}"
+        );
+    }
+}
+
+/// Review of Wave 14, D3 and A8. Only a group with a password in values of no canonical form gets
+/// a new `valuesHash`. A snapshot, `verify`, and `compare` of such a group give `serialize` when
+/// strata cannot mask the password. Taking the record again gives the same error.
+#[test]
+fn the_book_states_which_groups_get_a_new_values_hash_and_what_a_password_that_strata_cannot_mask_does()
+ {
+    let command_line = release_0_28_0_part("### For a user of the command line or of a document\n");
+    for needle in [
+        "Other values keep their hash. That includes values of no canonical form that hold no password.",
+        "A record of 0.27.0 of a group with such values has the same `policy` tier as a new record.",
+        "A snapshot, `verify`, and `compare` of such a group give the error `serialize` and exit `2` when strata cannot mask a password in the values.",
+        "In 0.27.0, `verify` and `compare` gave exit `0` for such a group.",
+        "Taking the record again gives the same error. Quote the template, or change the block scalar in the values of the group.",
+    ] {
+        assert!(
+            command_line.contains(needle),
+            "the section of release 0.28.0 lacks {needle:?}"
+        );
+    }
+    let page = one_line(&read(&docs().join("commands/snapshot/other-objects.md")));
+    for needle in [
+        "Such values with no password keep the hash that strata 0.27.0 gave.",
+        "If strata cannot mask a password in such values, a snapshot, `verify`, and `compare` give the error `serialize` and exit `2`.",
+        "A record taken again gives the same error. Quote the template, or change the block scalar in the values of the group.",
+        "A record of strata 0.27.0 or before of a group with a password has the hash of the text with each password in clear",
+    ] {
+        assert!(page.contains(needle), "other-objects.md lacks {needle:?}");
+    }
+}
+
+/// Review of Wave 14, A10. Four changes keep their old id. "The documents" says so, and gives the
+/// reason, as it does for the changes of earlier releases.
+#[test]
+fn the_page_of_the_versions_names_the_four_values_that_change_after_0_27_0_with_no_new_id() {
+    let page = read(&docs().join("reference/compatibility.md"));
+    let documents = one_line(section(&page, "## The documents", Some("\n## ")));
+    for needle in [
+        "Four values change after 0.27.0 with no new id.",
+        "[Release 0.28.0](#release-0280-changes-that-need-action) gives the action for each one.",
+        "In `strata-packs/1`, `latest` marks the version that `pack:<name>@latest` records.",
+        "In `strata-preflight/1`, `answer` of the check `iam-role-policy-quota` has the exit code of each command",
+        "In `strata-snapshot/1`, `valuesHash` of a cluster group with a password in values of no canonical form covers the masked text.",
+        "In `strata-unknown/1` and `strata-report/1`, the fields `palette`, `status`, and `errorCode` are gone.",
+    ] {
+        assert!(documents.contains(needle), "the rules lack {needle:?}");
+    }
+    // the paragraph stands before the three new fields of release 0.26.0
+    let four = documents.find("Four values change after 0.27.0").unwrap();
+    let after = documents
+        .find("After 0.26.0, three documents have new fields")
+        .unwrap();
+    assert!(four < after);
+    assert!(
+        page.contains("\n## Release 0.28.0: changes that need action\n"),
+        "the link of the paragraph has no section"
+    );
 }
 
 /// Review of Wave 13, A12. The rule of the ids says that a new field keeps the id. The two
@@ -3468,7 +3600,7 @@ fn the_section_of_release_0_28_0_names_each_schema_description_that_has_new_word
         (
             "packs",
             "/$defs/PackBuild/properties/latest/description",
-            "True for the version that `pack:<name>@latest` records.",
+            "True for the version that `pack:<name>@latest` records, of the versions that the listing keeps.",
         ),
         (
             "packs",

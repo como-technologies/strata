@@ -580,9 +580,12 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
     with the exact tag first, and `latest`.
     - `latest` is true for the version that `pack:<name>@latest` records, of the
       versions the command listed. That is the highest version that is not a
-      pre-release, by the order of Semantic Versioning. A registry that holds
-      pre-releases alone gives its highest pre-release. With `--cloud`, `latest`
-      is true for that version among the versions for that cloud.
+      pre-release, by the order of Semantic Versioning. A registry that has no
+      version that is not a pre-release gives its highest pre-release. With
+      `--cloud`, `latest` is true for that version among the versions for that
+      cloud. With `--cloud`, and when the highest version has no tag, the ref
+      can record another version: see
+      [Which version is the newest](../commands/packs.md#which-version-is-the-newest).
     - `type` is `spectro`, `helm`, or `oci`. A version that the listing gives
       no type is `spectro`, as its record says.
     - `state` is `deprecated`, `disabled`, or `deleted` from `system_state` of
