@@ -14,14 +14,19 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
+use strata::api::codes::{
+    PACK_FORBIDDEN_CODE, PACK_MACRO_UNDEFINED_CODE, PROFILE_EXISTS_CODE,
+    PROFILE_IMPORT_MATCH_CODES, PROJECT_SCOPE_CODE, ValidateRoute,
+};
 use strata::api::{RawCluster, RawProfile};
 use strata::ops;
 use strata::snapshot::Snapshot;
 
 use crate::support::{AT, cluster_files, fingerprint, profile_files, raw_profile, scratch, utf8};
-use crate::{candidate, canon, mask, palette, preflight, record, reference, report};
+use crate::{candidate, canon, config, mask, palette, preflight, record, reference, report};
 
 mod catalog;
+mod regressions;
 
 /// The most bytes of a seed that a file gives. A longer file is a poor start for a fuzzer: each
 /// input of it costs more, and libFuzzer keeps its inputs short.
@@ -38,7 +43,7 @@ struct Target {
 }
 
 /// Each target that reads bytes. The property tests of `properties.rs` build their input.
-const TARGETS: [Target; 15] = [
+const TARGETS: [Target; 17] = [
     Target {
         test: "candidate::a_candidate_file_loads_as_the_candidate_it_writes_or_is_refused_with_a_kind",
         run: candidate::file,
@@ -95,6 +100,16 @@ const TARGETS: [Target; 15] = [
         seeds: answers,
     },
     Target {
+        test: "palette::an_error_of_palette_is_read_as_a_refusal_or_gives_an_error_with_a_kind",
+        run: palette::errors,
+        seeds: palette_errors,
+    },
+    Target {
+        test: "config::a_lookup_of_settings_gives_a_config_that_hides_its_key_or_is_refused_with_a_kind",
+        run: config::lookup,
+        seeds: settings,
+    },
+    Target {
         test: "report::a_request_body_is_refused_with_a_status_or_is_a_report_that_writes_as_itself",
         run: report::body,
         seeds: report_bodies,
@@ -115,70 +130,6 @@ const TARGETS: [Target; 15] = [
         seeds: catalog::world_files,
     },
 ];
-
-/// A crash that a fuzzer found, or a bug that a review found, kept as a regression case: the
-/// target, the name of the file in `crashes/`, and the input. Each case is a bug that has a fix
-/// and a unit test in `src/` or in `preflight/src/`.
-fn regressions() -> Vec<(&'static str, &'static str, Vec<u8>)> {
-    let draft = "mask::a_draft_pack_keeps_no_secret_in_clear_and_nothing_else_changes";
-    let palette =
-        "palette::an_answer_of_palette_of_any_shape_gives_a_record_or_an_error_with_a_kind";
-    let a_ref = "reference::the_text_of_a_ref_parses_as_a_ref_that_prints_the_same_text";
-    let jq = "preflight::a_jq_program_compiles_and_runs_or_is_refused_with_a_kind";
-    let world = "preflight::a_world_file_gives_the_document_of_a_run_or_is_refused_with_a_kind";
-    // a program of 3000 levels: jaq reads each level with a call, and the stack ends first
-    let deep = format!("{}1{}", "(".repeat(3000), ")".repeat(3000));
-    // the same, with a keyword or a comment for each level, and no bracket that the guard counts
-    let levels = |open: &str, middle: &str, close: &str| {
-        format!("{}{middle}{}", open.repeat(3000), close.repeat(3000)).into_bytes()
-    };
-    vec![
-        // The mask of a draft cut the values of a user at a byte that is not a `char` boundary,
-        // for text that has a multi-byte letter where a variable of the profile has a dot.
-        (
-            draft,
-            "wave-3-mask-slices-a-char",
-            "adminPassword: \"{{ .spectroévar.x }}\"\nsync:\n  password: \"{{ .spectroévar.y }}\"\n"
-                .into(),
-        ),
-        // The write of a field into a document of Palette panicked for a `spec` that is a number.
-        (palette, "a-document-that-is-a-number", b"5".to_vec()),
-        (
-            palette,
-            "a-spec-that-is-a-number",
-            br#"{"metadata": {"uid": "c1"}, "spec": 5, "packs": [{"metadata": {"name": "pack"}, "spec": 5}]}"#
-                .to_vec(),
-        ),
-        // A listing named its next page by the token of the page itself, and the walk never ended.
-        (
-            palette,
-            "a-listing-that-names-its-own-page-as-the-next",
-            br#"{"items": [{"metadata": {"name": "a", "uid": "u"}}], "listmeta": {"continue": "x"}}"#
-                .to_vec(),
-        ),
-        // A ref that prints as the text of another ref: no registry, and a `/` in the name.
-        (a_ref, "pack-ref-with-no-registry-and-a-slash", b"pack://x@1".to_vec()),
-        (a_ref, "pack-ref-with-a-slash-in-the-name", b"pack:/xergroup:a/b@1".to_vec()),
-        // A cluster ref with a slash after `@pending` was the uid `c1@pending`, and it printed as the
-        // text of the update that waits for `c1`.
-        (a_ref, "cluster-ref-with-a-slash-after-pending", b"cluster:c1@pending/".to_vec()),
-        // A tag ref with no label was a set of clusters, and it printed as `tag:`, which is a uid.
-        (a_ref, "tag-ref-with-no-label", b"tag:+".to_vec()),
-        (jq, "a-program-of-3000-levels", deep.into_bytes()),
-        (jq, "a-program-of-3000-tries", levels("try ", "[]", "")),
-        (jq, "a-program-of-3000-ands", levels("true and ", "true", "")),
-        (jq, "a-program-of-3000-ifs", levels("if . then ", "1", " else 2 end")),
-        (jq, "a-program-of-3000-defs", levels("def f: ", ".", "; f")),
-        (jq, "a-program-of-3000-comments", levels("(# )\n", "1", ")")),
-        // The validate body of an existing cluster wrote its name into a `metadata` that is a number,
-        // and the index of `serde_json` panicked.
-        (
-            world,
-            "a-cluster-uid-and-a-metadata-that-is-a-number",
-            br#"{"clusterUid": "c1", "entity": {"metadata": 5, "spec": {}}}"#.to_vec(),
-        ),
-    ]
-}
 
 // ---- the files of the repository ------------------------------------------------------------
 
@@ -417,12 +368,16 @@ fn trim(value: &mut Value) {
     }
 }
 
-/// The JSON file `name` of a raw directory of `examples/`, trimmed.
-fn trimmed(directory: &str, name: &str) -> Value {
-    let mut value: Value = serde_json::from_slice(&file(&format!("{directory}/{name}")))
-        .unwrap_or_else(|e| panic!("{directory}/{name} is JSON: {e}"));
-    trim(&mut value);
-    value
+/// Read the raw directory of a profile or of a cluster of `examples/` with `load`, and trim each
+/// document of it.
+fn trimmed<T>(
+    relative: &str,
+    load: fn(&Path) -> strata::Result<T>,
+    documents: fn(&mut T) -> [&mut Value; 3],
+) -> T {
+    let mut raw = load(&repo(relative)).unwrap_or_else(|e| panic!("{relative}: {e}"));
+    documents(&mut raw).into_iter().for_each(trim);
+    raw
 }
 
 /// The raw directories of the profile versions of `examples/`, trimmed.
@@ -430,39 +385,22 @@ fn real_profiles() -> Vec<RawProfile> {
     ["aws-stack@1.0.0", "aws-stack@1.1.0", "aws-stack@1.1.1"]
         .iter()
         .map(|version| {
-            let dir = format!("examples/profiles/raw/{version}");
-            RawProfile {
-                profile: trimmed(&dir, "profile.json"),
-                manifests: trimmed(&dir, "manifests.json"),
-                variables: trimmed(&dir, "variables.json"),
-                variables_unavailable: false,
-                project_uid: None,
-                fetched_at: None,
-                manifest_entities: None,
-                resolved_values: None,
-            }
+            trimmed(
+                &format!("examples/profiles/raw/{version}"),
+                RawProfile::load_dir,
+                |raw| [&mut raw.profile, &mut raw.manifests, &mut raw.variables],
+            )
         })
         .collect()
 }
 
 /// The raw directory of the cluster of `examples/`, trimmed.
 fn real_cluster() -> RawCluster {
-    let dir = "examples/clusters/raw/workload-a";
-    RawCluster {
-        cluster: trimmed(dir, "cluster.json"),
-        manifests: trimmed(dir, "manifests.json"),
-        variables: trimmed(dir, "variables.json"),
-        variables_unavailable: false,
-        project_uid: None,
-        fetched_at: None,
-        notifications: None,
-        repave: None,
-        resolved_values: None,
-        cloud_config: None,
-        rbacs: None,
-        namespaces: None,
-        errors: strata::api::ReadErrors::default(),
-    }
+    trimmed(
+        "examples/clusters/raw/workload-a",
+        RawCluster::load_dir,
+        |raw| [&mut raw.cluster, &mut raw.manifests, &mut raw.variables],
+    )
 }
 
 /// The records that the seeds build: one for each short YAML text as the values of one pack, and
@@ -582,6 +520,99 @@ fn answers() -> Vec<Vec<u8>> {
         .collect()
 }
 
+// ---- the errors of Palette ------------------------------------------------------------------
+
+/// The body of an error of Palette with `code` and `message`.
+fn coded(code: &str, message: &str) -> String {
+    format!(r#"{{"code":"{code}","message":"{message}"}}"#)
+}
+
+/// An error of Palette as a validate route or another route gives it: the status, and the body.
+/// A code that `strata::api::codes` names comes from there.
+fn error_cases() -> Vec<(u16, String)> {
+    vec![
+        (
+            403,
+            coded(PACK_FORBIDDEN_CODE, "the values of a pack are forbidden"),
+        ),
+        (
+            403,
+            coded(
+                PROJECT_SCOPE_CODE,
+                "the operation is not allowed in the project scope",
+            ),
+        ),
+        (409, coded(PROFILE_EXISTS_CODE, "lab-profile 1.0.0 exists")),
+        (
+            404,
+            coded(
+                PACK_MACRO_UNDEFINED_CODE,
+                "macro spectro.var.x is not defined",
+            ),
+        ),
+        (
+            422,
+            r#"{"code":422,"message":"list items must be unique"}"#.into(),
+        ),
+        (500, coded("InternalError", "try again")),
+        (
+            500,
+            r#"{"code":["PackYaml"],"message":"the code is a list"}"#.into(),
+        ),
+        (500, coded("PackYaml", "é 日本語 🙂")),
+        (502, "<html><body>Bad Gateway</body></html>".into()),
+        (429, String::new()),
+        (401, r#"{"code":"Unauthorized"}"#.into()),
+        (200, r#"{"code":"NotAnError"}"#.into()),
+        (0, "not json".into()),
+    ]
+}
+
+/// The seeds of the error of Palette: the cases above, and each code of each validate route with
+/// the status 500.
+fn palette_errors() -> Vec<Vec<u8>> {
+    let mut cases = error_cases();
+    let codes: BTreeSet<&str> = ValidateRoute::ALL
+        .into_iter()
+        .flat_map(ValidateRoute::refusal_codes)
+        .chain(PROFILE_IMPORT_MATCH_CODES)
+        .collect();
+    cases.extend(
+        codes
+            .into_iter()
+            .map(|code| (500, coded(code, &format!("{code} on the pack")))),
+    );
+    cases
+        .iter()
+        .map(|(status, body)| [&status.to_be_bytes()[..], body.as_bytes()].concat())
+        .collect()
+}
+
+// ---- the settings of a connection -----------------------------------------------------------
+
+/// The lines of a file `~/.palette.env`, or of an environment, that give a connection or refuse it.
+const SETTINGS_CASES: [&str; 11] = [
+    "PALETTE_API_KEY=key\n",
+    "PALETTE_API_KEY=key\nPALETTE_API=api.example.com/\nPALETTE_PROJECT_UID=64f0000000000000000000c3\n",
+    "SPECTROCLOUD_APIKEY=key\nSPECTROCLOUD_HOST=http://localhost:8080//\n",
+    "PALETTE_API_KEY=first\nSPECTROCLOUD_APIKEY=second\n",
+    "PALETTE_API_KEY=key\nPALETTE_PROJECT_UID=\nPALETTE_PROJECT=dev\n",
+    "PALETTE_API_KEY=key\nPALETTE_PROJECT_UID=64f0000000000000000000c3\nPALETTE_PROJECT=dev\n",
+    "PALETTE_API_KEY=key\nSTRATA_RETRIES=5\nSTRATA_MAX_RETRY_AFTER=60\n",
+    "PALETTE_API_KEY=key\nSTRATA_RETRIES=many\n",
+    "PALETTE_API_KEY=key\nSTRATA_MAX_RETRY_AFTER=-1\n",
+    "PALETTE_API=api.example.com\n",
+    "",
+];
+
+/// The seeds of the settings: the cases above.
+fn settings() -> Vec<Vec<u8>> {
+    SETTINGS_CASES
+        .iter()
+        .map(|t| t.as_bytes().to_vec())
+        .collect()
+}
+
 // ---- the report ------------------------------------------------------------------------------
 
 /// A report as `strata report --json` writes it, and the bodies that the endpoint refuses. The
@@ -653,7 +684,7 @@ fn write_the_seed_corpus() {
             }
         }
     }
-    for (test, name, input) in regressions() {
+    for (test, name, input) in regressions::cases() {
         put(&directory(test, "crashes"), name, &input);
     }
 }
@@ -673,7 +704,7 @@ fn each_target_names_a_test_of_its_module() {
             "{module}.rs has no test {test}"
         );
     }
-    for (test, _, _) in regressions() {
+    for (test, _, _) in regressions::cases() {
         assert!(
             TARGETS.iter().any(|t| t.test == test),
             "{test} is no target"

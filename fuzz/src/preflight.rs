@@ -114,6 +114,9 @@ fn run_documents(mut world: World) {
         let name = document["validateBody"]["metadata"]["name"]
             .as_str()
             .expect("the name of the validate body is text");
+        // The suffix is the text of the const of strata-preflight, on purpose: the check states the
+        // rule of the validate route on its own. The package does not make the const public for a
+        // target.
         assert!(name.ends_with("-preflight"), "{name:?}");
     }
 }

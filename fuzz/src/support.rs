@@ -1,73 +1,31 @@
 //! The parts that the targets share: the check of an answer, the documents of a profile, a
-//! Palette that answers each request with one document, and the files of one input.
+//! Palette that answers each request with one document or one error, and the files of one input.
 
 use std::cell::{Cell, RefCell};
-use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use strata::Result;
-use strata::api::{PaletteApi, RawCluster, RawProfile, ReadErrors};
+use strata::api::{Method, PaletteApi, RawCluster, RawProfile, ReadErrors};
+use strata::{Error, Result};
 use tempfile::TempDir;
 
+use crate::answer::{Refusal, answer_fault};
+use crate::routes::{
+    PackFixture, UID_A, manifest, manifests_answer, no_variables, profile_document, template,
+};
+
 /// The uid of the profile that the targets build.
-pub(crate) const UID: &str = "64f0000000000000000000a1";
+pub(crate) const UID: &str = UID_A;
 
 /// The time that the targets stamp on a record.
 pub(crate) const AT: &str = "2026-09-17T09:30:00Z";
 
-/// The route of the document of a profile version.
-pub(crate) fn profile_route() -> String {
-    format!("/v1/clusterprofiles/{UID}")
-}
-
-/// The route of the pack manifests of a profile version.
-pub(crate) fn manifests_route() -> String {
-    format!("/v1/clusterprofiles/{UID}/packs/manifests")
-}
-
-/// The route of the variables of a profile version.
-pub(crate) fn variables_route() -> String {
-    format!("/v1/clusterprofiles/{UID}/variables")
-}
-
-/// The route of the document of a pack.
-pub(crate) fn pack_route(pack_uid: &str) -> String {
-    format!("/v1/packs/{pack_uid}")
-}
-
 /// The text of `bytes`. A target that reads text leaves an input that is not UTF-8.
 pub(crate) fn utf8(bytes: &[u8]) -> Option<&str> {
     std::str::from_utf8(bytes).ok()
-}
-
-/// An error that a target checks, of strata or of strata-preflight.
-pub(crate) trait Refusal: Display {
-    /// The kind of the error.
-    fn kind(&self) -> &'static str;
-
-    /// The JSON form of the error.
-    fn to_json(&self) -> Value;
-
-    /// The exit code of the error, or `None` when the program gives no code for it.
-    fn exit_code(&self) -> Option<u8>;
-}
-
-impl Refusal for strata::Error {
-    fn kind(&self) -> &'static str {
-        strata::Error::kind(self)
-    }
-
-    fn to_json(&self) -> Value {
-        strata::Error::to_json(self)
-    }
-
-    fn exit_code(&self) -> Option<u8> {
-        Some(strata::Error::exit_code(self))
-    }
 }
 
 impl Refusal for strata_preflight::Error {
@@ -84,44 +42,31 @@ impl Refusal for strata_preflight::Error {
     }
 }
 
-/// The value of an answer. An error is an answer when it has a kind, a JSON form with that kind,
-/// and the exit code `2` when it has a code: the person can read it. A panic is not an answer.
+/// The value of an answer. An error is an answer when [`answer_fault`] finds no fault in it: the
+/// person can read it. A panic is not an answer.
 #[track_caller]
 pub(crate) fn answer<T, E: Refusal>(result: std::result::Result<T, E>) -> Option<T> {
     match result {
         Ok(value) => Some(value),
         Err(e) => {
-            assert!(!e.kind().is_empty(), "an error has a kind: {e}");
-            if let Some(code) = e.exit_code() {
-                assert_eq!(code, 2, "an error exits with 2: {e}");
+            if let Some(fault) = answer_fault(&e) {
+                panic!("{fault}");
             }
-            assert_eq!(
-                e.to_json()["kind"],
-                e.kind(),
-                "the JSON form names the kind: {e}"
-            );
             None
         }
     }
 }
 
 /// The raw responses of a profile with one published pack. `values` is the values of the pack,
-/// and `manifest` the content of its one manifest.
-pub(crate) fn raw_profile(values: &str, manifest: &str) -> RawProfile {
+/// and `manifest_content` the content of its one manifest.
+pub(crate) fn raw_profile(values: &str, manifest_content: &str) -> RawProfile {
+    let pack = PackFixture::new("pack", "addon", "1.0.0", "p1", "r1", "sha256:0123", values);
+    let manifests = vec![manifest("m", "m1", "d", manifest_content)];
+    let published = template("aws", "add-on", json!([pack.pack_ref(&manifests)]));
     RawProfile {
-        profile: json!({
-            "metadata": {"uid": UID, "name": "demo"},
-            "spec": {"version": "1.0.0", "published": {"cloudType": "aws", "type": "add-on", "packs": [{
-                "name": "pack", "layer": "addon", "type": "spectro", "tag": "1.0.0",
-                "version": "1.0.0", "packUid": "p1", "registryUid": "r1",
-                "digest": "sha256:0123", "values": values,
-            }]}},
-        }),
-        manifests: json!({"spec": {"packs": [{
-            "metadata": {"name": "pack", "uid": "p1"},
-            "spec": {"manifests": [{"name": "m", "uid": "m1", "digest": "d", "content": manifest}]},
-        }]}}),
-        variables: json!({"variables": []}),
+        profile: profile_document(UID, "demo", "1.0.0", published, None),
+        manifests: manifests_answer(vec![pack.pack_manifests(manifests)]),
+        variables: no_variables(),
         variables_unavailable: false,
         project_uid: None,
         fetched_at: None,
@@ -136,40 +81,70 @@ pub(crate) fn raw_profile(values: &str, manifest: &str) -> RawProfile {
 /// that never ends.
 const REQUEST_LIMIT: usize = 200_000;
 
-/// A Palette that answers each request, a GET or a POST, with one document. A target gives it a
-/// document of any shape, and strata must read it as an answer or refuse it with a kind.
+/// A Palette that answers each request, a GET or a POST, with one document, or with one HTTP
+/// error. A target gives it a document of any shape, or a status and a body of any text, and
+/// strata must read the answer or refuse it with a kind.
 pub(crate) struct Everywhere {
-    document: Value,
+    reply: Reply,
     asked: Cell<usize>,
+}
+
+/// What [`Everywhere`] answers to each request.
+enum Reply {
+    /// The document, with the status `200`.
+    Document(Value),
+    /// An HTTP error with this status and this body.
+    Error { status: u16, body: String },
 }
 
 impl Everywhere {
     /// A Palette that answers with `document`.
     pub(crate) fn new(document: Value) -> Everywhere {
+        Everywhere::replying(Reply::Document(document))
+    }
+
+    /// A Palette that answers with the HTTP error `status` and `body`.
+    pub(crate) fn failing(status: u16, body: &str) -> Everywhere {
+        Everywhere::replying(Reply::Error {
+            status,
+            body: body.to_string(),
+        })
+    }
+
+    fn replying(reply: Reply) -> Everywhere {
         Everywhere {
-            document,
+            reply,
             asked: Cell::new(0),
         }
     }
 
     /// The answer to one request.
-    fn respond(&self) -> Result<Value> {
+    fn respond(&self, method: Method, path: &str) -> Result<Value> {
         self.asked.set(self.asked.get() + 1);
         assert!(
             self.asked.get() <= REQUEST_LIMIT,
             "strata sent more than {REQUEST_LIMIT} requests for one document"
         );
-        Ok(self.document.clone())
+        match &self.reply {
+            Reply::Document(document) => Ok(document.clone()),
+            Reply::Error { status, body } => Err(Error::Api {
+                method,
+                path: path.to_string(),
+                status: *status,
+                body: body.clone(),
+                retry_after: None,
+            }),
+        }
     }
 }
 
 impl PaletteApi for Everywhere {
-    fn get_json(&self, _path: &str) -> Result<Value> {
-        self.respond()
+    fn get_json(&self, path: &str) -> Result<Value> {
+        self.respond(Method::Get, path)
     }
 
-    fn post_json(&self, _path: &str, _body: &Value) -> Result<Value> {
-        self.respond()
+    fn post_json(&self, path: &str, _body: &Value) -> Result<Value> {
+        self.respond(Method::Post, path)
     }
 }
 
