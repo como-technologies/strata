@@ -8,9 +8,9 @@ use crate::support::{answer, scratch, write};
 /// check.
 ///
 /// A file that passes is a candidate that strata writes the same way: the YAML of the candidate
-/// loads as the same candidate. The file names no values file or manifest file that exists, so a
-/// layer with a `valuesFile` is an error of the read, and the target checks the layers that hold
-/// their content.
+/// loads as the same candidate. The file names no values file or manifest file that exists. So a
+/// layer with a `valuesFile` is an error of the read. The target checks the layers that hold their
+/// content.
 pub(crate) fn file(bytes: &[u8]) -> bool {
     let dir = scratch();
     write(&dir, "candidate.yaml", bytes);

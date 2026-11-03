@@ -87,7 +87,7 @@ impl Described for PairStatus {
                 "The roots differ only by the packUid that Palette mints, or by the tag name of a pack for the same build. Palette mints the packUid of a manifest pack and of a pack from a registry that it does not sync. The content is the same, so the release is the same under either policy."
             }
             Self::RegistryMove => {
-                "The roots differ only because a pack is pinned to another registry, with the same tag, version, values, and manifests. The registry-move policy accepts this."
+                "The roots differ only because a pack moved to another registry, with the same tag, version, values, and manifests. The registry-move policy accepts this."
             }
             Self::Different => {
                 "This is not the same release. The field reasons lists each difference."

@@ -83,11 +83,11 @@ fn the_lint_and_test_job_runs_the_tests_of_xtask() {
     );
 }
 
-/// The build of the public items does not read the comment of a private item, and a code span that
-/// breaks over a line in such a comment failed `cargo doc --document-private-items` with no check
-/// of CI to see it. So `just lint` builds the rustdoc of each package a second time with all items.
-/// It keeps the build of the public items too: only that build warns when a public item links to a
-/// private item.
+/// The build of the public items does not read the comment of a private item. A code span that
+/// breaks over a line in such a comment failed `cargo doc --document-private-items`, and no check
+/// of CI saw it. So `just lint` builds the rustdoc of each package a second time with all items.
+/// It keeps the build of the public items too, because only that build warns when a public item
+/// links to a private item.
 #[test]
 fn just_lint_builds_the_rustdoc_of_each_package_with_the_public_items_and_with_all_items() {
     let lint = recipe("lint");
@@ -566,9 +566,9 @@ fn the_test_recipe_runs_the_fuzz_targets_and_the_property_tests() {
 }
 
 /// The run of the targets under libFuzzer needs a nightly toolchain and ten minutes for each
-/// target, so no pull request and no push starts it: a schedule does, and a person. The list of
-/// targets comes from the recipe, so a new target needs no change of the workflow. A crash fails
-/// the job of its target, and the artifact keeps the files that the run added.
+/// target. So no pull request and no push starts it. A schedule starts it, and so does a person.
+/// The list of targets comes from the recipe, so a new target needs no change of the workflow. A
+/// crash fails the job of its target, and the artifact keeps the files that the run added.
 #[test]
 fn the_fuzz_workflow_runs_each_target_on_nightly_on_a_schedule_and_keeps_the_new_files() {
     let doc = workflow("fuzz.yml");

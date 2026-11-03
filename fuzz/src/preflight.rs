@@ -12,7 +12,7 @@ use crate::support::{answer, parts, scratch, utf8, write};
 
 /// Read the text of `bytes` as a rule file. Return true when the file is a section of rules.
 ///
-/// A file that loads is a section whose rules write as YAML that loads as the same section: the
+/// A file that loads is a section whose rules write as YAML that loads as the same section. The
 /// catalog of a team and the catalog of the binary share one format.
 pub(crate) fn rule_file(bytes: &[u8]) -> bool {
     let Some(text) = utf8(bytes) else {
@@ -46,14 +46,14 @@ fn a_rule_file_loads_as_the_section_it_writes_or_is_refused_with_a_kind() {
 }
 
 /// The words of jq that start a program that can run for ever, or for more memory than a check
-/// has: jq has no step limit. A rule that reads such a program is a program that loops, not a
-/// fault of the engine, so the target compiles it and does not run it.
+/// has. There is no step limit in jq. A rule that reads such a program is a program that loops,
+/// and not a fault of the engine. So the target compiles it and does not run it.
 const LOOPS: [&str; 10] = [
     "range", "repeat", "recurse", "while", "until", "def", "limit", "..", "input", "env",
 ];
 
-/// Compile the program of the first part of `bytes` with and without `$item`, read it as a
-/// template, and run it on the JSON of the second part. Return true when the program compiles.
+/// Compile the program of the first part of `bytes` with and without `$item`. Read it as a
+/// template. Run it on the JSON of the second part. Return true when the program compiles.
 pub(crate) fn jq_program(bytes: &[u8]) -> bool {
     let mut inputs = parts(bytes).map(|p| utf8(p).unwrap_or_default());
     let program = inputs.next().unwrap_or_default();
@@ -94,8 +94,8 @@ fn holds_keys(value: &Value) -> bool {
 /// [`CLUSTER_UID`].
 ///
 /// A new cluster sends its entity to the validate route as it is. An existing cluster sends it with
-/// a name of its own, and its world is an error when the entity, or its `metadata`, is a value that
-/// is not an object: the name has no place there, and it must not replace the value.
+/// a name of its own. Its world is an error when the entity, or its `metadata`, is a value that is
+/// not an object. The name has no place there, and it must not replace the value.
 fn run_documents(mut world: World) {
     let new = answer(world.to_value()).expect("a world with no cluster gives its document");
     assert_eq!(

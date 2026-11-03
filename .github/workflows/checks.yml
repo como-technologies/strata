@@ -60,7 +60,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: extractions/setup-just@v4
-      # A benchmark that does not build or that panics fails the job. No step fails on a time: the
+      # A benchmark that does not build or that panics fails the job. No step fails on a time. The
       # runner is a shared machine, so a time is a number to read in the log and not a limit.
       - run: just bench-short
 

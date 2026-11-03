@@ -77,8 +77,8 @@ impl fmt::Display for Template {
 /// The version of the content digest encoding.
 ///
 /// It is in the input of the digest, so a change to what the digest covers is a change of this
-/// tag, and a digest of one version is never equal to a digest of another. A tool that pins a
-/// version by content digest depends on this tag.
+/// tag. A digest of one version is never equal to a digest of another. A tool that pins a version
+/// by content digest depends on this tag.
 pub const CONTENT_DIGEST: &str = "content/1";
 
 /// The annotation of a pack ref that names the machine image of an OS pack, such as an AMI. A

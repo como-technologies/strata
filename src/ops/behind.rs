@@ -134,10 +134,11 @@ pub struct Pin {
     /// Each record that pins it.
     pub pinned_by: Vec<PinnedBy>,
     /// The newer versions that the registry offers, newest first. A version that the registry
-    /// has disabled or deleted is not one to move to, and a version for none of the clouds of the
-    /// pinned version is not either. A pre-release is not one to move to from a version that is
-    /// not a pre-release, unless [`BehindOptions::pre_release`] asks for it. A version that
-    /// supports fewer architectures than the pinned version is one, and it names what it drops.
+    /// has disabled or deleted is not one to move to. A version for none of the clouds of the
+    /// pinned version is not one to move to either. A pre-release is not one to move to from a
+    /// version that is not a pre-release, unless [`BehindOptions::pre_release`] asks for it. A
+    /// version that supports fewer architectures than the pinned version is one, and it names
+    /// what it drops.
     pub newer: Vec<Newer>,
     /// True when `newer` is not empty.
     pub behind: bool,

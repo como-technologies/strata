@@ -1,7 +1,7 @@
 //! The rules the binary carries: one file for each section under `preflight/rules/`.
 //!
-//! The sections are in the order of the report. The files are data, and the binary embeds them, so
-//! a run needs no file beside it and a pipeline reads the same list with `--rules --json`.
+//! The sections are in the order of the report. The files are data, and the binary embeds them. A
+//! run needs no file beside it, and a pipeline reads the same list with `--rules --json`.
 
 use std::path::{Path, PathBuf};
 

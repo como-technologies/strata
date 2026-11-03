@@ -1,9 +1,9 @@
 //! The rule format.
 //!
-//! A rule is data: one thing that can stop or break a cluster build, where a check can find it,
-//! how much to trust the check, and the check itself as a jq program. The catalog that the binary
-//! carries and a file of custom probes (`--probes FILE`) are the same format, so a company reads
-//! and writes rules the way strata does.
+//! A rule is data: one thing that can stop or break a cluster build, and where a check can find
+//! it. A rule also holds how much to trust the check, and the check itself as a jq program. The
+//! catalog that the binary carries and a file of custom probes (`--probes FILE`) are the same
+//! format. So a company reads and writes rules the way strata does.
 //!
 //! One file holds one section:
 //!
@@ -39,9 +39,9 @@
 //!         clean: fixtures/eks/clean.json
 //! ```
 //!
-//! A check outputs one of three shapes, and the engine reads each the same way: `true` or
-//! `false`; a list of messages, where an empty list passes and each message is one failure; or an
-//! object `{pass, message}`.
+//! A check outputs one of three shapes, and the engine reads each the same way. The first shape
+//! is `true` or `false`. The second is a list of messages: an empty list passes, and each message
+//! is one failure. The third is an object `{pass, message}`.
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -445,13 +445,13 @@ pub struct Rule {
     pub releases: Option<String>,
     /// What goes wrong, and what Palette shows.
     pub what: String,
-    /// A jq program over the world that says when the rule applies: `.before != null` for a rule
-    /// on a change, `.clusterUid != null` for a rule on an existing cluster, `.account != null`
-    /// for a rule on the cloud account. No value means always. A rule that does not apply is
-    /// `SKIP`, with the program as the reason.
+    /// A jq program over the world that says when the rule applies. Use `.before != null` for a
+    /// rule on a change. Use `.clusterUid != null` for a rule on an existing cluster. Use
+    /// `.account != null` for a rule on the cloud account. No value means always. A rule that does
+    /// not apply is `SKIP`, with the program as the reason.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub when: Option<String>,
-    /// The check, when strata-preflight has one. A rule with none is a row of the catalog: the
+    /// The check, when strata-preflight has one. A rule with none is a row of the catalog. The
     /// report prints it as `NOT CHECKED` with `reproduce`, or as out of scope for a tool rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check: Option<Check>,

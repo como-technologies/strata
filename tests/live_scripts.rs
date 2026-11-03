@@ -248,8 +248,8 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
     assert_eq!(o.status.code(), Some(2));
 }
 
-/// A `curl` that answers by path: the body of `<api path with / as _>` under `$FAKE_ROUTES`, with
-/// status 200, or 404 when there is no such file.
+/// A `curl` that answers by path. It gives the body of `<api path with / as _>` under
+/// `$FAKE_ROUTES`, with status 200, or 404 when there is no such file.
 ///
 /// A `<key>.status` file overrides the status. A `<key>.keyed.status` file overrides it again for
 /// a request with an `ApiKey` header. A `<key>.as-<ApiKey>.status` file overrides it for a request
@@ -1125,8 +1125,8 @@ fn die_and_usage_are_defined_in_common_sh_alone_and_the_scripts_that_have_them_s
     }
 }
 
-/// The route that gives the release, as Palette answers it: the release to a call with no key,
-/// and HTTP 500 to a call with an `ApiKey` header.
+/// The route that gives the release, as Palette answers it. It gives the release to a call with no
+/// key, and HTTP 500 to a call with an `ApiKey` header.
 fn release_route(routes: &Path) {
     std::fs::create_dir_all(routes).unwrap();
     std::fs::write(
@@ -1465,8 +1465,8 @@ fn diagnose_sh_saves_diagnostics_for_every_cluster_in_the_tofu_state() {
     assert!(barney.contains("barney c-1: Provisioning"), "{barney}");
 }
 
-/// A `tofu` for baseline.sh: outputs for cluster A `c-a` and four profile versions, a plan
-/// that exits `$FAKE_PLAN_EXIT`, and a state that manages r-1, r-2, g-1, and ad-1.
+/// A `tofu` for baseline.sh. It gives outputs for cluster A `c-a` and four profile versions. Its
+/// plan exits `$FAKE_PLAN_EXIT`. Its state manages r-1, r-2, g-1, and ad-1.
 const FAKE_TOFU_BASELINE: &str = r#"#!/usr/bin/env bash
 case "$*" in
   *"output -json"*) cat <<'JSON'
@@ -2656,10 +2656,10 @@ esac
 "#;
 
 /// A `strata` for a stage. It logs its arguments to `$FAKE_STRATA/calls` and `XDG_STATE_HOME` to
-/// `$FAKE_STRATA/state`, and answers from
-/// `$FAKE_STRATA/rules`: the first line `GLOB<TAB>EXIT<TAB>FILE` whose GLOB matches the arguments
-/// prints FILE, or writes it to the file of `-o`, and exits EXIT. A fourth field `err` prints FILE
-/// to standard error and writes no file. With no match it exits 0.
+/// `$FAKE_STRATA/state`. It answers from `$FAKE_STRATA/rules`. In that file, the first line
+/// `GLOB<TAB>EXIT<TAB>FILE` whose GLOB matches the arguments prints FILE, or writes it to the file
+/// of `-o`, and exits EXIT. A fourth field `err` prints FILE to standard error and writes no file.
+/// With no match it exits 0.
 const FAKE_STRATA_STAGE: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_STRATA/calls"
 echo "${XDG_STATE_HOME-}" >> "$FAKE_STRATA/state"

@@ -158,10 +158,10 @@ fn format_of(cli: &Cli) -> Format {
     if cli.json { Format::Json } else { cli.format }
 }
 
-/// The color of one stream, by the rule of `strata`: `--color always` colors a pipe too (a `tee`
-/// to a log and a terminal), `never` and `--no-color` never do, and `auto` colors a terminal
-/// unless the environment says otherwise. The report goes to standard output, and the progress
-/// lines go to standard error.
+/// The color of one stream, by the rule of `strata`. `--color always` colors a pipe too (a `tee`
+/// to a log and a terminal). `never` and `--no-color` never color a stream. `auto` colors a
+/// terminal unless the environment says otherwise. The report goes to standard output, and the
+/// progress lines go to standard error.
 fn paint_of(cli: &Cli, stream: Stream) -> Paint {
     Paint::resolve(cli.color.unless(cli.no_color), stream)
 }
@@ -288,7 +288,7 @@ fn check_cluster(
         Some(api::connect_from_env(progress)?)
     };
     // the world and the checks read through one backend, which keeps each answer for the run. So
-    // a request that the world made, and that a rule makes again, goes out one time
+    // when the world made a request and a rule makes it again, the backend sends it one time
     let backend = LiveBackend::new(palette.as_ref().map(Palette::api), cli.no_exec);
     let reads = palette.as_ref().map(|_| Palette::new(&backend));
     let world = world_of(cli, &source, reference, reads.as_ref(), &now, &progress)?;

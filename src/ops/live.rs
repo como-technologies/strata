@@ -13,8 +13,8 @@ use crate::term::progress::Progress;
 use super::consumers::{ACTIVE_STATE, INACTIVE_STATE};
 use super::{HolderReads, holder_snapshot};
 
-/// The state of a cluster, an edge host, or a cluster group, from its document: `status.state`,
-/// or, for a cluster group, `active` or `inactive` from `status.isActive`.
+/// The state of a cluster, an edge host, or a cluster group, from its document. It is
+/// `status.state`, or, for a cluster group, `active` or `inactive` from `status.isActive`.
 fn subject_state(kind: SubjectKind, doc: &Value) -> Option<String> {
     match kind {
         SubjectKind::ClusterGroup => opt_flag(doc, "/status/isActive")

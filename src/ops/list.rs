@@ -485,9 +485,9 @@ where
     Ok(section)
 }
 
-/// The name of the project `project_uid`, which is the scope of the listing: from the project
-/// listing `projects` when `list` read it, else from the scope itself, where Palette lists that
-/// one project. Empty at tenant scope.
+/// The name of the project `project_uid`, which is the scope of the listing. It comes from the
+/// project listing `projects` when `list` read it. Otherwise it comes from the scope itself, where
+/// Palette lists that one project. Empty at tenant scope.
 fn scope_name<A: PaletteApi>(
     project_uid: &str,
     projects: Option<&[ListedProject]>,

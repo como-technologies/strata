@@ -423,9 +423,9 @@ impl RawCluster {
     pub(crate) const REPAVE: &'static str = "repave.json";
 
     /// Write the three files, each other document that strata read, and `scope.json` under
-    /// `dir`, and make `dir` if it is not there. Strata masks the values of
-    /// each pack in the saved notifications and in the saved repave, and each password in the
-    /// values of a cluster group. `fetched_at` is the time of the read, in RFC 3339.
+    /// `dir`, and make `dir` if it is not there. Strata masks the values of each pack in the saved
+    /// notifications and in the saved repave. It also masks each password in the values of a
+    /// cluster group. `fetched_at` is the time of the read, in RFC 3339.
     ///
     /// # Errors
     ///
@@ -488,9 +488,10 @@ impl RawCluster {
     }
 
     /// One applied template as the three documents of a profile, so a cluster's profile is hashed
-    /// exactly as the profile itself: the template's packs as the published packs, the cluster's
-    /// manifests entry for that profile, and that profile's variable definitions. Variable values
-    /// are omitted; they are run-time input, not part of the release.
+    /// exactly as the profile itself. The three documents are the template's packs as the
+    /// published packs, the cluster's manifests entry for that profile, and that profile's
+    /// variable definitions. Variable values are omitted. They are run-time input, not part of the
+    /// release.
     pub fn template_raw(&self, template: &Value) -> RawProfile {
         let field = |ptr: &str| value_or_null(template, ptr);
         let uid = str_at(template, "/uid");

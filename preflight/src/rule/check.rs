@@ -92,12 +92,12 @@ pub enum Check {
     /// `{ok, status, body}`. A 4xx is an answer, with `ok: false` and its `V1Error` body. So is a
     /// 5xx with a code in `refusal_codes`. A 204 is `ok: true` with a `null` body.
     ///
-    /// With `each`, the request runs one time for each item of a list, and the program runs one
-    /// time over the world with `.responses` added instead of `.response`.
+    /// With `each`, the request runs one time for each item of a list. The program runs one time
+    /// over the world with `.responses` added instead of `.response`.
     Palette(PaletteCheck),
     /// One command on this machine, such as the tool of the cloud, then a jq program over the
     /// world with `.exec` added: `{exit, stdout, stderr}`. `stdout` is JSON when it parses, and
-    /// the text otherwise. The command runs when each tool of `needs` is on the PATH; when one is
+    /// the text otherwise. The command runs when each tool of `needs` is on the PATH. When one is
     /// not, the result is `NOT CHECKED` with the command to run by hand.
     ///
     /// With `palette`, the check reads Palette first, and the program also reads `.response`, as
@@ -105,7 +105,7 @@ pub enum Check {
     ///
     /// With `also`, a second command runs after the first, and the program also reads `.also`.
     Exec(ExecCheck),
-    /// During a build: every `every` seconds, read the cluster, its summary, and its events, and
+    /// During a build, every `every` seconds: read the cluster, its summary, and its events. Then
     /// run the program over the world with `.cluster`, `.summary`, `.events`, and `.elapsed`
     /// (seconds) added. A failure stops the watch with its evidence.
     Watch {

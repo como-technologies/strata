@@ -19,12 +19,13 @@ pub enum Verdict {
     /// The rule has no check strata-preflight can run here: a cloud rule with no tool, a race, or
     /// a row with no check. The reproduce lines say what to run by hand.
     NotChecked,
-    /// The rule has a check that applies here, and the check did not run: the tier was not asked
-    /// for (`--tier`, `--offline`), there was no key, or `--no-exec`. It counts against the
-    /// readiness, because nothing shows that it passes.
+    /// The rule has a check that applies here, and the check did not run. The tier was not asked
+    /// for (`--tier`, `--offline`), there was no key, or the run has `--no-exec`. It counts
+    /// against the readiness, because nothing shows that it passes.
     NotRun,
-    /// The rule does not apply to this run: another release, a `when` that is not true, a rule of
-    /// the tool that makes the entity, or a watch rule outside a watch.
+    /// The rule does not apply to this run. The cause is another release or a `when` that is not
+    /// true. The cause can also be a rule of the tool that makes the entity, or a watch rule
+    /// outside a watch.
     Skipped,
     /// The check could not answer: Palette did not answer, the command did not start, or the
     /// program failed. The exit code is `2`.

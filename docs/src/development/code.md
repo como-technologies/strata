@@ -129,8 +129,8 @@ where each module goes.
   correct only when the empty value is the correct answer. A comment says why.
   An error must never become an empty value that strata records or hashes.
 - A wrong use of the flags or the refs is `Error::Usage`. When the refs and the
-  flags show it, `ops/` refuses it before the first request. A record file is
-  read first, because a read of a file is no request.
+  flags show it, `ops/` refuses it before the first request. Strata reads
+  a record file first, because a read of a file is no request.
 - A fault that only an answer shows is `Usage` too, when the person must change
   the command. Two refs that name two clusters are such a fault.
 - A refusal that a record or an answer of Palette causes, and not the command,

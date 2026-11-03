@@ -192,8 +192,9 @@ fn is_group_secret(key: &str, value: &impl ScalarText) -> bool {
     key.to_ascii_lowercase().ends_with("password") && holds_secret(value)
 }
 
-/// A document that the mask of a cluster group walks: the canonical values of a record
-/// (`serde_json::Value`), or the parsed values of a saved document (`serde_yaml::Value`).
+/// A document that the mask of a cluster group walks. The two types are `serde_json::Value` for
+/// the canonical values of a record, and `serde_yaml::Value` for the parsed values of a saved
+/// document.
 pub(crate) trait Tree: ScalarText + Sized {
     /// Call `visit` with the key and the value of each entry of a map, and with no key and each
     /// item of a list. A key that is not text gives no key.
@@ -257,13 +258,14 @@ fn masked_copy<T: Tree + Clone + PartialEq>(values: &T) -> Option<T> {
 /// as a record keeps them.
 ///
 /// The rule of a password is the rule of [`mask_password_keys`]. When strata masks a value, it
-/// writes the values again with no comments: from their canonical form, so that a record of the
-/// saved document is the record of the fetch. Values with no password stay as they are. Values
-/// that are not YAML also stay as they are, as for a pack: strata cannot find a key in them.
+/// writes the values again with no comments, from their canonical form. It does this so that a
+/// record of the saved document is the record of the fetch. Values with no password stay as they
+/// are. Values that are not YAML also stay as they are, as for a pack: strata cannot find a key
+/// in them.
 ///
-/// Some YAML has no canonical form: a key that is a map or a list, such as an explicit `? key`
-/// or a template with no quotes, `{{ .spectro.var.x }}`. Such values keep their keys as they are,
-/// and strata writes them again from the parsed YAML.
+/// Some YAML has no canonical form: it has a key that is a map or a list. Two examples are an
+/// explicit `? key` and a template with no quotes, `{{ .spectro.var.x }}`. Such values keep their
+/// keys as they are, and strata writes them again from the parsed YAML.
 pub(crate) fn mask_group_values(values: &str) -> Result<String> {
     let masked = match canon_yaml(values) {
         Canon::Parsed(parsed) => masked_copy(&parsed)
@@ -402,10 +404,10 @@ fn split_key(body: &str) -> Option<(&str, &str)> {
     (rest.is_empty() || rest.starts_with([' ', '\r'])).then_some((key, rest))
 }
 
-/// `text` with `'********'` in place of the value on each line `key: value` whose key names a
-/// password and whose value is a scalar that the mask covers. A line can be an item of a list,
-/// `- key: value`. The text can hold a line that is no key, such as a line of a block scalar: the
-/// caller reads the result again to make sure of it.
+/// `text` with `'********'` in place of the value on each line `key: value`. The change applies
+/// to a line whose key names a password and whose value is a scalar that the mask covers. A line
+/// can be an item of a list, `- key: value`. The text can hold a line that is no key, such as a
+/// line of a block scalar. The caller reads the result again to check it.
 fn mask_password_lines(text: &str) -> String {
     text.split('\n')
         .map(|line| masked_password_line(line).unwrap_or_else(|| line.to_string()))

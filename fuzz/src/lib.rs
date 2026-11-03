@@ -2,10 +2,11 @@
 //! strata-report-endpoint.
 //!
 //! Each target is a test that calls `bolero::check!`. Under `cargo test`, on stable Rust, a target
-//! runs on each input of its `crashes` and `corpus` directories, and then on random bytes for one
-//! second. Under `cargo bolero`, on nightly Rust, the same test runs under libFuzzer, which grows
-//! the corpus from the coverage of the code. `just fuzz-list` names the targets, and `just fuzz`
-//! runs one: see the section "The fuzzing" of the book, in `docs/src/development/build-test.md`.
+//! runs on each input of its `crashes` and `corpus` directories. Then it runs on random bytes for
+//! one second. Under `cargo bolero`, on nightly Rust, the same test runs under libFuzzer, which
+//! grows the corpus from the coverage of the code. `just fuzz-list` names the targets, and
+//! `just fuzz` runs one: see the section "The fuzzing" of the book, in
+//! `docs/src/development/build-test.md`.
 //!
 //! A target calls the public API of the packages, as a program that uses them does. The
 //! directory of each target is `src/__fuzz__/<module>__<test>/`, which is where bolero looks.

@@ -434,7 +434,7 @@ fn a_pack_of_a_template_keeps_its_manifests_and_gives_empty_text_for_a_missing_f
     );
 }
 
-/// A cluster of two profiles, and the answer of its variables route: the first profile
+/// A cluster of two profiles, and the answer of its variables route. The first profile
 /// declares two variables, one of them sensitive, and the second declares none.
 fn cluster_api(variables: serde_json::Value) -> strata::api::MemoryApi {
     strata::api::MemoryApi::new()

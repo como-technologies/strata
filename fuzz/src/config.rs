@@ -3,7 +3,7 @@
 //! A person gives the settings in the environment and in `~/.palette.env`, as lines of
 //! `NAME=value`. `Config::from_lookup` is public, and it reads them through a lookup. The target
 //! builds the lookup from the lines of its input. The reader of the file `~/.palette.env` is not
-//! public, so the target reaches it only as a lookup: the lines of the input are the lines of the
+//! public. So the target reaches it only as a lookup. The lines of the input are the lines of the
 //! file.
 
 use std::collections::BTreeMap;

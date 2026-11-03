@@ -14,7 +14,7 @@ use std::path::Path;
 use std::process::{Child, Command, Output, Stdio};
 use std::sync::RwLock;
 
-/// A test takes this lock for writing while it writes a file that it will run, and for reading
+/// A test takes this lock for writing while it writes a file that it runs next, and for reading
 /// while it starts a process.
 ///
 /// A new process keeps a copy of each file that is open in its parent until it runs its program.

@@ -10,8 +10,8 @@ const REFUSALS: [u16; 4] = [400, 413, 415, 422];
 
 /// Check `bytes` as the body of a request to the endpoint. Return true when the body is a report.
 ///
-/// A body that the check takes is a report that passes the check of the library, and it writes as
-/// a body that the check takes again and reads as the same report. A body that the check refuses
+/// A body that the check takes is a report that passes the check of the library. It writes as a
+/// body that the check takes again and reads as the same report. A body that the check refuses
 /// gets one of the four statuses of a refusal.
 pub(crate) fn body(bytes: &[u8]) -> bool {
     let report = match parse(JSON, bytes) {

@@ -1,6 +1,6 @@
 //! The size limits of `docs/src/development/code.md` for the Rust files of strata, xtask,
-//! strata-preflight, strata-fuzz, strata-report-endpoint, and strata-benches: a module file has at
-//! most 800 lines, and a function has at most 80 lines.
+//! strata-preflight, strata-fuzz, strata-report-endpoint, and strata-benches. A module file has at
+//! most 800 lines. A function has at most 80 lines.
 
 use std::path::{Path, PathBuf};
 

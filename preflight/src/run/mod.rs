@@ -1,8 +1,8 @@
 //! The run: which rules apply, how each one runs, and what the report holds.
 //!
-//! A run reads the catalog once, keeps the rules of the engine, the release, and the tiers asked
-//! for, runs each check, and assembles the report with the confidence of each rule from the
-//! ledger.
+//! A run reads the catalog once, and keeps the rules of the engine, the release, and the tiers
+//! asked for. It runs each check, and assembles the report with the confidence of each rule from
+//! the ledger.
 
 use std::collections::BTreeMap;
 
@@ -88,7 +88,7 @@ impl Selection {
 }
 
 /// The rules of the catalog that apply to `world` under `selection`, in the order of the
-/// catalog, each with why it does not run when it does not. `jq` runs the `when` of each rule
+/// catalog. Each rule that does not run comes with the reason. `jq` runs the `when` of each rule
 /// over `world_value`.
 pub fn applicable<'a>(
     catalog: &'a Catalog,

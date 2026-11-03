@@ -346,7 +346,7 @@ shows. It then asks Palette to read the registry again after each push.
 | `chart-push-3`, `chart-sync-3`, `chart-packs-two`, `chart-packs-two-versions` | 0 | #66: 1.0.1 is pushed, and the sync reads it: `packs` lists 1.0.1 first, then 1.0.0. A sync reads new versions, and keeps the digest of a known one |
 | `dep-push`, `dep-push-requiring`, `dep-sync`, `dep-packs` | 0 | `strata-live-dep` 1.0.0 is pushed, then `strata-live-pack` 1.1.0, whose `pack.json` requires `strata-live-dep` 1.0.0 or newer; Palette reads both |
 | `dep-packs-cloud`, `dep-packs-cloud-version` | 0 | #118: `packs strata-live-dep --registry strata-live-registry --cloud aws` lists `1.0.0`. Its `pack.json` gives the cloud type `all` alone, and the listing gives it `all` and each cloud of Palette. See [A pack that supports a cloud](../internals/palette/packs.md#a-pack-that-supports-a-cloud). |
-| `dep-profile-alone`, `dep-profile-alone-says` | 1, 0 | #66: a profile with the requiring pack and not the required one is refused at creation, and the refusal names the required pack |
+| `dep-profile-alone`, `dep-profile-alone-says` | 1, 0 | #66: Palette refuses the create of a profile with the requiring pack and not the required one, and the refusal names the required pack |
 | `dep-profile-both` | 0 | #66: a profile with both packs is accepted |
 | `dep-record`, `dep-record-packs` | 0 | a record of that profile lists the two packs, the requiring one first, as authored |
 
@@ -566,7 +566,8 @@ give the run profiles to read, and `just live-up` to give it a cluster.
 |---|---|
 | `contract.json` | #390, #391, #530: for each fact of the kind `request`, the status and the type of each field against the stand-in. The run asks with the query that strata sends. It checks the names that strata needs, and lists each value of a closed set that the fact and the stand-in do not name. On the real tenant, no fact of this kind differs, and no value is unknown. |
 | `contract.json` | #393: for each fact of the kind `cloud`, the shape of the answer, and the values of its table, against the fixtures of the rules. Each call of AWS that the lab sends is `same`. The six calls of GCP cannot be checked, because `gcloud` needs a login on the machine. The calls for a GKE cluster and for an image are skipped, because the lab values name none. |
-| `contract.json` | #539: the fact `tag-filter-listing` is `same`, because the run sends it with no project. The fact `tag-filter` is skipped, because the tenant holds no saved filter. The fact `audit-log` is `same` for a page that lacks a kind that strata acts on and for a kind that strata ignores. The facts `validate-aws-regions` and `validate-security-groups` are `same`, because the run sends the account, the region, and the VPC of the tenant. A zone id that the lab account lacks gives no difference. The facts `eks-refused-zone-id-us-west-1` and `eks-refused-zone-id-ca-central-1` are skipped. The entry says that the account cannot check the value. |
+| `contract.json` | #539: the fact `tag-filter-listing` is `same`, because the run sends it with no project. The fact `tag-filter` is skipped, because the tenant holds no saved filter. The fact `audit-log` is `same` for a page that lacks a kind that strata acts on and for a kind that strata ignores. |
+| `contract.json` | #539: the facts `validate-aws-regions` and `validate-security-groups` are `same`, because the run sends the account, the region, and the VPC of the tenant. A zone id that the lab account lacks gives no difference. The facts `eks-refused-zone-id-us-west-1` and `eks-refused-zone-id-ca-central-1` are skipped. The entry says that the account cannot check the value. |
 | `contract.json` | #543: the fact `validate-key-pairs` is `same`, because the run sends the account of the tenant in the query `cloudAccountUid`. |
 | `contract.json` | #554: with a cluster up, the fact `profile-document` is `same` for the first profile of the listing. The run has 0 unknown values, also for the type of the profile and for the provider of a pack ref. A type or a provider that the fact does not name is an unknown value. The fact `cloud-config` reads the cloud type of a cluster as strata does. A cluster that names its cloud type in the kind of its cloud config only still gives a subject. |
 | `contract.json` | #540: the fact `aws-policies-per-role-limit` is `same`: the default quota of managed policies for a role is 20. The fact `aws-policies-per-role-quota` is `same`: the lab account gives the quota in `us-east-1` with the shape that the fixtures of `iam-role-policy-quota` hold. |
@@ -716,7 +717,7 @@ expects the refusal. It stopped at `undo-accept`, so
 
 The teardown after this run showed that the repave also holds a delete. `tofu
 destroy` asked Palette to delete cluster A at 04:05:45. The cluster stayed
-in `Deleting` with its EC2 instances running for 37 minutes, until
+in `Deleting`, and its EC2 instances ran for 37 minutes, until
 `PATCH /v1/spectroclusters/<uid>/repave/approve` at 04:42:43. The agent deleted
 the machines 45 seconds later, and no instance was left at 04:46:42. The audit
 log holds no entry for the approval.
@@ -1714,8 +1715,8 @@ one more step, which a second plain delete did not end.
 One hour of the recovery went to a fault of the operator. `tofu output -raw`
 printed a warning beside the project uid, and a shell exported both as
 `PALETTE_PROJECT_UID`. Every request with that header answered a plain-text
-`400 Bad Request`. This read as Palette refusing the cluster, but it was not a
-refusal. With the uid alone, the API answered as it does.
+`400 Bad Request`. This looked like a refusal from Palette, but it was not
+one. With the uid alone, the API answered as it does.
 
 `lib.sh` reads the outputs as JSON, with the warnings dropped, so the scripts of
 the lab do not meet this fault. A shell that copies a value by hand can.

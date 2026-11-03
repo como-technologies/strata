@@ -6,8 +6,8 @@ use std::path::PathBuf;
 
 use strata_preflight::catalog;
 
-/// The seeds of the rule file: the first and the last three rules of each file of the catalog,
-/// each as a section of its own.
+/// The seeds of the rule file. They are the first and the last three rules of each file of the
+/// catalog, each as a section of its own.
 pub(super) fn rule_files() -> Vec<Vec<u8>> {
     let mut seeds = Vec::new();
     for entry in fs::read_dir(catalog::rules_dir())
@@ -32,8 +32,8 @@ pub(super) fn rule_files() -> Vec<Vec<u8>> {
     seeds
 }
 
-/// The seeds of the jq engine: the program of the check of each rule of the catalog, with the
-/// fixture of its test when it is short.
+/// The seeds of the jq engine. They are the program of the check of each rule of the catalog, with
+/// the fixture of its test when it is short.
 pub(super) fn jq_programs() -> Vec<Vec<u8>> {
     let catalog = catalog::builtin().expect("the catalog loads");
     let mut seeds = Vec::new();
@@ -60,8 +60,8 @@ pub(super) fn jq_programs() -> Vec<Vec<u8>> {
     seeds
 }
 
-/// The worlds that a seed needs and no fixture of the catalog has: the envelope of a body, a body in
-/// YAML, a fixture that names its base, and the worlds of an existing cluster.
+/// The worlds that a seed needs and no fixture of the catalog has. They are the envelope of a
+/// body, a body in YAML, a fixture that names its base, and the worlds of an existing cluster.
 const WORLD_CASES: [&str; 7] = [
     r#"{"cloudType": "eks", "entity": {"metadata": {"name": "demo"}, "spec": {"cloudConfig": {"region": "us-east-1"}}}}"#,
     "metadata:\n  name: demo\nspec:\n  cloudConfig:\n    region: us-east-1\n    vpcId: vpc-1\n",
@@ -72,8 +72,8 @@ const WORLD_CASES: [&str; 7] = [
     r#"{"clusterUid": "c1", "entity": {"metadata": 5, "spec": {}}}"#,
 ];
 
-/// The seeds of the world file: the clean world of each engine, the first small fixtures of each
-/// engine, which name that world as their base, and the cases.
+/// The seeds of the world file. They are the clean world of each engine, the first small fixtures
+/// of each engine, which name that world as their base, and the cases.
 pub(super) fn world_files() -> Vec<Vec<u8>> {
     let mut seeds: Vec<Vec<u8>> = WORLD_CASES.iter().map(|t| t.as_bytes().to_vec()).collect();
     let fixtures = catalog::rules_dir().join("fixtures");

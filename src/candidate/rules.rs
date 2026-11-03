@@ -162,7 +162,7 @@ fn layer_registry(
                     ))
                 })?,
         )),
-        // Palette makes the pack of a manifest layer from its own manifest pack: no registry
+        // Palette makes the pack of a manifest layer from its own manifest pack. No registry
         // holds it, and the top-level registry does not apply to it
         Some(LayerKind::Manifest) => {
             if l.registry.is_some() || l.registry_uid.is_some() {
@@ -177,7 +177,7 @@ fn layer_registry(
                 )));
             }
             // Palette takes the layer from its own manifest pack, and drops the layer of the
-            // request, so another layer gives a record that the published version never has
+            // request. So another layer gives a record that the published version never has
             if let Some(layer) = l.layer.as_deref().filter(|&x| x != MINTED_LAYER.as_str()) {
                 return Err(invalid(format!(
                     "{whom} is a manifest layer with layer {layer}; Palette gives each manifest \

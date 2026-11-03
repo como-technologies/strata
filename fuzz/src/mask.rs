@@ -3,8 +3,8 @@
 //!
 //! The mask is not public. The draft target reaches it as a program does: through the read of a
 //! profile that has a draft. The raw directory target reaches it through the save of a cluster.
-//! Each target checks the answer against a second way to say the same rule, in a few lines: no
-//! secret stays in clear, and nothing else changes.
+//! Each target checks the answer against a second way to say the same rule, in a few lines. The
+//! rule is that no secret stays in clear, and nothing else changes.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -31,12 +31,12 @@ const MASKED: &str = "********";
 /// The format that marks a field of a pack schema as a secret.
 const PASSWORD_FORMAT: &str = "${password}";
 
-/// The fields that no document holds, in the forms that a schema can write: a path that is not
-/// there, an empty path, and a path with an escape.
+/// The fields that no document holds, in the forms that a schema can write. The forms are a path
+/// that is not there, an empty path, and a path with an escape.
 const ODD_FIELDS: [&str; 4] = ["no.such.field", "", ".", "a\\.b"];
 
-/// A Palette that serves a profile with one draft pack, which holds `values`, and the schema of
-/// that pack, which marks each of `fields` as a secret.
+/// A Palette that serves a profile with one draft pack, which holds `values`. It also serves the
+/// schema of that pack, which marks each of `fields` as a secret.
 fn draft_api(values: &str, fields: &[String]) -> MemoryApi {
     let schema: Vec<Value> = fields
         .iter()
@@ -168,8 +168,8 @@ fn check_draft(values: &str, fields: &[String], masked: &str) {
     }
 }
 
-/// The fields that `values` gives a schema: the path of about two values in three, each value
-/// whose key names a password, and the fields that no document holds.
+/// The fields that `values` gives a schema. They are the path of about two values in three, each
+/// value whose key names a password, and the fields that no document holds.
 pub(crate) fn fields_of(values: &str) -> Vec<String> {
     let mut fields: Vec<String> = ODD_FIELDS.iter().map(|f| f.to_string()).collect();
     if let Ok(doc) = serde_yaml::from_str::<Yaml>(values) {
@@ -249,9 +249,9 @@ fn saved_values(dir: &std::path::Path) -> String {
         .to_string()
 }
 
-/// The path of each secret that stays in clear in `doc`: a key that ends with `password`, in
-/// capitals or not, with a scalar that has text and no `{{`. The walk goes into a value under a
-/// key that is not text too.
+/// The path of each secret that stays in clear in `doc`. It is a key that ends with `password`,
+/// in capitals or not, with a scalar that has text and no `{{`. The walk goes into a value under
+/// a key that is not text too.
 fn clear_passwords(doc: &Yaml, path: &str, out: &mut Vec<String>) {
     match doc {
         Yaml::Mapping(map) => {
@@ -278,8 +278,8 @@ fn clear_passwords(doc: &Yaml, path: &str, out: &mut Vec<String>) {
 }
 
 /// Make sure that `saved` keeps no password of `values` in clear, when the parser reads `values`.
-/// The check holds for each key, also for a key that is not text: a map or a list, such as a
-/// template with no quotes. Values that are not YAML stay as they are.
+/// The check holds for each key, also for a key that is not text. Such a key is a map or a list,
+/// such as a template with no quotes. Values that are not YAML stay as they are.
 #[track_caller]
 fn check_group(values: &str, saved: &str) {
     let docs: Option<Vec<Yaml>> = serde_yaml::Deserializer::from_str(saved)
@@ -330,9 +330,9 @@ fn a_saved_cluster_keeps_no_password_of_its_group_values_in_clear() {
     });
 }
 
-/// The panic of Wave 3: the mask sliced the values of a user at a byte that was not a `char`
-/// boundary, for a value that holds the text `.spectroévar` where a variable of a profile has
-/// `.spectro.var`. The file in `crashes/` of the target holds the same values.
+/// The panic of Wave 3. The mask sliced the values of a user at a byte that was not a `char`
+/// boundary. This happened for a value that holds the text `.spectroévar` where a variable of a
+/// profile has `.spectro.var`. The file in `crashes/` of the target holds the same values.
 #[test]
 fn a_draft_value_with_a_non_ascii_variable_name_is_masked_and_does_not_panic() {
     let values = "adminPassword: \"{{ .spectroévar.x }}\"\nsync:\n  password: s3cr3t\n";

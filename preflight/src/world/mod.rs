@@ -478,7 +478,7 @@ fn edge_hosts(entity: &Value) -> Value {
 ///
 /// A world with no `clusterUid` sends its entity as it is, and Palette answers for a body that it
 /// cannot read. A world with one must put the new name in `metadata`. When the entity or its
-/// `metadata` is a value that is not an object, it has no place for the name, and the world is an
+/// `metadata` is a value that is not an object, it has no place for the name. The world is an
 /// error: the name must not replace that value.
 fn validate_body(world: &Value) -> Result<Value> {
     let mut body = value_or_null(world, "/entity");

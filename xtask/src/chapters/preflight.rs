@@ -97,9 +97,9 @@ fn security_groups_answer() -> serde_json::Value {
 }
 
 /// Write the answers that the live tier of `strata preflight` reads for `preflight_entity` in
-/// `project`. They are the cloud account, the property route, the regions, the instance types of
-/// the region, the VPCs of the region, the security groups of the VPC, and the key pairs of the
-/// account. The validate route refuses the worker pool for its CPU.
+/// `project`. They are the cloud account, the property route, the regions, and the instance types
+/// of the region. They are also the VPCs of the region, the security groups of the VPC, and the key
+/// pairs of the account. The validate route refuses the worker pool for its CPU.
 pub(super) fn preflight_routes(r: &mut Runner, project: &str) {
     r.answer(
         project,

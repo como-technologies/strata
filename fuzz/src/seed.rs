@@ -1,13 +1,14 @@
 //! The seed corpus of each byte target, and the checks that keep it useful.
 //!
 //! `just fuzz-seed` writes the seeds into `src/__fuzz__/<module>__<test>/corpus/`, where bolero
-//! reads them. Each seed is a real input of the target: a file of `examples/`, a file of the
-//! catalog of strata-preflight, a file or an output of the book, or a document that the library
-//! builds from them. A file has the name `fingerprint` gives its bytes, so a second run changes no file.
+//! reads them. Each seed is a real input of the target. It is a file of `examples/`, a file of the
+//! catalog of strata-preflight, or a file or an output of the book. A seed can also be a document
+//! that the library builds from them. A file has the name `fingerprint` gives its bytes, so a
+//! second run changes no file.
 //!
 //! A seed makes a fuzzer start in the code, and not at the first byte that a parser refuses. The
-//! check at the end of this file fails when the seeds of a target stop reaching its code, for
-//! example after a change of a schema id.
+//! check at the end of this file fails when the seeds of a target no longer reach its code. A
+//! change of a schema id is one example.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -295,8 +296,9 @@ fn refs() -> Vec<Vec<u8>> {
     REF_CASES.iter().map(|t| t.as_bytes().to_vec()).collect()
 }
 
-/// Versions that the order must place, in the forms that Palette gives: a number, a number with a
-/// suffix, a pre-release, build data, a name with a number, a date, and a version with no digit.
+/// Versions that the order must place, in the forms that Palette gives. The forms are a number, a
+/// number with a suffix, a pre-release, and build data. They also include a name with a number, a
+/// date, and a version with no digit.
 const VERSION_CASES: [&str; 24] = [
     "1.0.0",
     "1.0.0",
@@ -350,8 +352,8 @@ fn versions() -> Vec<Vec<u8>> {
 /// The longest text that a string of a real document keeps in a seed.
 const TRIM: usize = 700;
 
-/// Cut each long string of `value` at the end of a line, so that a document of a real profile is
-/// a short seed that still has the shape of the document.
+/// Cut each long string of `value` at the end of a line. So a document of a real profile is a
+/// short seed that still has the shape of the document.
 fn trim(value: &mut Value) {
     match value {
         Value::String(s) if s.len() > TRIM => {
@@ -403,8 +405,8 @@ fn real_cluster() -> RawCluster {
     )
 }
 
-/// The records that the seeds build: one for each short YAML text as the values of one pack, and
-/// the profile versions and the cluster of `examples/`.
+/// The records that the seeds build. They are one for each short YAML text as the values of one
+/// pack, and the profile versions and the cluster of `examples/`.
 fn built_records() -> Vec<Snapshot> {
     let mut records: Vec<Snapshot> = yaml_texts()
         .iter()
@@ -445,7 +447,7 @@ fn comparisons() -> Vec<Vec<u8>> {
 }
 
 /// The parts of a raw directory that `save` wrote, in the order of `names`, with a NUL byte
-/// between them: the input of the target of that directory.
+/// between them. This is the input of the target of that directory.
 fn directory_input(names: &[String], save: impl FnOnce(&Path)) -> Vec<u8> {
     let dir = scratch().join("seed");
     save(&dir);
@@ -489,8 +491,8 @@ fn cluster_dirs() -> Vec<Vec<u8>> {
 
 // ---- the answers of Palette -----------------------------------------------------------------
 
-/// The seeds of the answers of Palette: the documents of a profile version and of a cluster, a
-/// document that holds the fields of both, and the listings.
+/// The seeds of the answers of Palette. They are the documents of a profile version and of a
+/// cluster, a document that holds the fields of both, and the listings.
 fn answers() -> Vec<Vec<u8>> {
     let profile = real_profiles().remove(2);
     let cluster = real_cluster();
@@ -645,8 +647,8 @@ fn report_bodies() -> Vec<Vec<u8>> {
 
 // ---- the files of the corpus ----------------------------------------------------------------
 
-/// The directory that bolero reads for the target `test` and the kind of input `kind`: `corpus`
-/// for the inputs that a fuzzer grows from, and `crashes` for a regression case.
+/// The directory that bolero reads for the target `test` and the kind of input `kind`. The kind is
+/// `corpus` for the inputs that a fuzzer grows from, and `crashes` for a regression case.
 fn directory(test: &str, kind: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("src/__fuzz__")

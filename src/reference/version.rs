@@ -144,8 +144,8 @@ impl<'a> Semver<'a> {
 
     /// The precedence of Semantic Versioning 2.0.0, item 11: the numbers, then the pre-release.
     /// A version is above its pre-releases. Of two pre-releases, the first identifier that
-    /// differs decides: a number is below a text, numbers compare as numbers, texts compare as
-    /// bytes, and the longer list is higher when the shorter one is its prefix.
+    /// differs decides. A number is below a text, numbers compare as numbers, and texts compare
+    /// as bytes. The longer list is higher when the shorter one is its prefix.
     fn precedence(&self, other: &Self) -> Ordering {
         self.numbers.cmp(&other.numbers).then_with(|| {
             match (self.pre.is_empty(), other.pre.is_empty()) {

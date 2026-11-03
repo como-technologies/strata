@@ -943,8 +943,9 @@ fn a_variable_in_a_path_is_found_with_or_without_braces() {
 
 /// A path of `artifacts` that a variable names is empty when the variable is empty. A GitLab
 /// runner then gets an empty path on each run, and it is not sure that this is safe. So a job
-/// with such a path has one of two things: the drop-in gives the variable a value that is not
-/// empty, or each rule of the job selects the job only when the variable is set.
+/// with such a path has one of two things. In the first, the drop-in gives the variable a value
+/// that is not empty. In the second, each rule of the job selects the job only when the variable
+/// is set.
 #[test]
 fn no_gitlab_job_keeps_an_artifact_at_the_path_that_an_empty_variable_names() {
     let gitlab = gitlab_drop_in();
@@ -1011,7 +1012,7 @@ fn the_gitlab_job_of_the_upstream_report_keeps_an_artifact_only_when_it_saves_a_
         "the job that saves has the script of the other job, and no copy of it"
     );
 
-    // the job that saves nothing steps aside when the variable has a value, and not otherwise
+    // the job that saves nothing does not run when the variable has a value, and runs otherwise
     let first = &plain["rules"][0];
     assert_eq!(first["if"].as_str(), Some("$STRATA_SAVE"));
     assert_eq!(first["when"].as_str(), Some("never"));
@@ -1090,10 +1091,10 @@ fi
 exec "$REAL_STRATA" "$@"
 "#;
 
-/// A `curl` for the GitLab REST API: logs each call as "METHOD /path field field", keeps each
-/// body file it is handed as body-<n>.md in call order, answers a GET from a gl-*.json file under
-/// `FAKE_GL` when the test wrote one, numbers a new issue from 41 up, and prints the status code
-/// `FAKE_GL_STATUS` (200 by default) the way `-w '%{http_code}'` does.
+/// A `curl` for the GitLab REST API. It logs each call as "METHOD /path field field". It keeps
+/// each body file that it receives as body-<n>.md, in call order. It answers a GET from a
+/// gl-*.json file under `FAKE_GL` when the test wrote one. It numbers a new issue from 41 up. It
+/// prints the status code `FAKE_GL_STATUS` (200 by default) the way `-w '%{http_code}'` does.
 const FAKE_GL_CURL: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 out=/dev/null; method=GET; url=""; data=()
@@ -3173,6 +3174,46 @@ esac
 exit 1
 "#;
 
+/// A `strata` of release 0.25.0 for the gate. It writes no `versionMove`: its schema of the
+/// comparison lacks the field, and a comparison in JSON carries none. Every other answer is the
+/// real strata.
+const FAKE_OLD_STRATA: &str = r#"#!/usr/bin/env bash
+case "$1" in
+  schema) "$REAL_STRATA" "$@" | jq 'del(.. | .versionMove?)' ;;
+  compare)
+    case " $* " in
+      *" json "*) "$REAL_STRATA" "$@" | jq 'del(.versionMove) | del(.packs[]?.versionMove)' ;;
+      *) exec "$REAL_STRATA" "$@" ;;
+    esac ;;
+  *) exec "$REAL_STRATA" "$@" ;;
+esac
+"#;
+
+#[test]
+fn merge_gate_stops_with_exit_2_when_strata_is_older_than_the_script() {
+    // a pin that moves back from 1.31.0 to 1.30.2: with the strata of 0.25.0 no move is backward,
+    // so the gate was green
+    let records = gate_records_at(&["1.31.0", "1.30.2"]);
+    let g = Gate::new(&records[0], &records[1], &records[0]);
+    let bin = tempfile::tempdir().unwrap();
+    let old = bin.path().join("strata");
+    executable(&old, FAKE_OLD_STRATA);
+    let args = ["releases/*.json", "--base", "main", "--no-verify"];
+    let o = g.run_env(&args, &[("STRATA_BIN", old.as_path())]);
+    let err = text(&o.stderr);
+    assert_eq!(o.status.code(), Some(2), "{err}{}", text(&o.stdout));
+    assert!(
+        err.contains("merge-gate: strata is older than this script"),
+        "{err}"
+    );
+    assert!(!text(&o.stdout).contains("BEHIND"), "{}", text(&o.stdout));
+
+    // the strata of this release finds the backward pin
+    let o = g.run(&args);
+    assert_eq!(o.status.code(), Some(1), "{}", text(&o.stdout));
+    assert!(text(&o.stdout).contains("BEHIND"), "{}", text(&o.stdout));
+}
+
 #[test]
 fn merge_gate_names_an_unverified_record_and_passes_allow_no_digest_on() {
     let (base, branch, _) = gate_records();
@@ -3223,9 +3264,9 @@ fn merge_gate_names_an_unverified_record_and_passes_allow_no_digest_on() {
 
 // ---- verify-report.sh ------------------------------------------------------------------------
 
-/// A `strata` for verify-report.sh: `verify --summary ...` answers from summary.json and
-/// summary.exit, and `verify <path> --format markdown` from <basename>.md, .err, and .exit, all
-/// under `FAKE_VERIFY`; every call is logged.
+/// A `strata` for verify-report.sh. The call `verify --summary ...` answers from summary.json and
+/// summary.exit. The call `verify <path> --format markdown` answers from <basename>.md, .err, and
+/// .exit. All these files are under `FAKE_VERIFY`. This `strata` logs every call.
 const FAKE_VERIFY_STRATA: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_VERIFY/strata.log"
 [ "$1" = verify ] || exit 9
@@ -4048,9 +4089,9 @@ fn live_applies_take_the_script_flag_and_the_baseline_restore_turns_it_off() {
 
 // ---- upstream-report.sh ----------------------------------------------------------------------
 
-/// A `strata` for upstream-report.sh: `behind ...` prints report.json and exits with report.exit,
-/// both under `FAKE_VERIFY`, and keeps the file that `--since` names as since-used.json; every call
-/// is logged.
+/// A `strata` for upstream-report.sh. The call `behind ...` prints report.json and exits with
+/// report.exit. Both files are under `FAKE_VERIFY`. The call also keeps the file that `--since`
+/// names as since-used.json. This `strata` logs every call.
 const FAKE_BEHIND_STRATA: &str = r#"#!/usr/bin/env bash
 echo "$*" >> "$FAKE_VERIFY/strata.log"
 [ "$1" = behind ] || exit 9
@@ -4376,10 +4417,10 @@ fn a_dry_run_on_gitlab_needs_no_token_in_each_script_that_has_a_host() {
     assert!(text(&o.stderr).contains("set GITLAB_TOKEN"));
 }
 
-/// The host layer of `verify-report.sh` is the host layer of `upstream-report.sh`, line for line:
-/// each script stays one download that stands alone, so the copy is on purpose, and a change to
-/// one copy must reach the other. Only the label, its description, the variables of the options,
-/// the options, and the line of usage differ.
+/// The host layer of `verify-report.sh` is the host layer of `upstream-report.sh`, line for line.
+/// Each script stays one download that stands alone, so the copy is on purpose. A change to one
+/// copy must reach the other. Only the label, its description, the variables of the options, the
+/// options, and the line of usage differ.
 #[test]
 fn the_host_layer_of_the_two_report_scripts_differs_only_in_the_lines_of_their_options() {
     const OWN: [&str; 11] = [

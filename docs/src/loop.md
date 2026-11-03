@@ -13,31 +13,32 @@ each change after the approval.
 
 ## A day of work
 
-Each row is one step of a day. [The jobs and their commands](#the-jobs-and-their-commands)
-gives the command and the page of each job.
+Each row is one thing that you do, and what strata tells you then.
+[The jobs and their commands](#the-jobs-and-their-commands) gives the command and
+the page of each job.
 
 | You do this | Strata tells you | Where it runs |
 | --- | --- | --- |
-| You open a pull request that changes a profile | What changes in each pack, and if the change replaces the nodes. Palette says if it accepts the packs. | the job of the pull request |
+| You open a pull request that changes a profile | What changes in each pack, and its impact level, such as a repave. Palette says if it accepts the packs. | the job of the pull request |
 | You merge | When Palette changed after the review, or the merge moves a pin back, the gate fails, and the merge stops. | the merge gate |
-| The pipeline makes the version in Palette | When Palette holds other content than the content that you reviewed, the job fails. | the job after the merge |
+| The pipeline publishes the version | When Palette holds other content than the content that you reviewed, the job fails. | the job after the merge |
 | You move a cluster to the version | Palette says if the move replaces the nodes, before the move. | the pull request of the move |
 | You copy the release to `prod` | When `prod` holds other content than `dev`, the job fails. | the promotion gate, on demand |
 | You write a new cluster | When Palette cannot build it, the pull request says why, before the build. | the job of the pull request, and the pipeline before the build |
-| Nobody works | An issue opens when somebody changes a version or a cluster outside a review, or when a pack that you pin has a newer version. | the jobs of the night |
+| Each night, with no person at work | An issue opens when somebody changes a version or a cluster outside a review, or when a pack that you pin has a newer version. | the jobs of the night |
 | A pack has a security fault | Each profile and each cluster that carries the pack, what changed, and who changed it. | a person at a terminal |
 | You delete an old version | When a cluster or a template still uses it, the gate stays closed. | the retire gate, on demand |
 | A job writes a note about a value that strata does not know | The value, the route that gave it, and a link that opens an issue of strata. Strata sends nothing unless you choose the send. | a person at a terminal, on the machine of the job |
 
-The chart puts each step in its lane. An arrow goes from a step to the step that
+The chart shows the steps of one change. An arrow goes from a step to the step that
 it leads to. An issue of the night leads to a pull request.
 
 ```mermaid
 flowchart TB
   subgraph you["You, in a pull request"]
     pr["Change a profile:<br/>a comment shows what changes"]
-    move["Move a cluster:<br/>Palette says if the nodes change"]
-    newc["Write a new cluster:<br/>can Palette build it?"]
+    move["Move a cluster:<br/>Palette says if the move replaces the nodes"]
+    newc["Write a new cluster on the release:<br/>can Palette build it?"]
   end
   subgraph pipe["Your pipeline"]
     merge["The merge:<br/>Palette is the same as in the pull request"]

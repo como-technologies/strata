@@ -464,7 +464,7 @@ fn file_names(clusters: &[ListedCluster]) -> Vec<String> {
 
 /// Write a record of each cluster that `query` selects into `dir`, each read in its own project.
 ///
-/// With `prune`, remove each cluster record of `dir` that is not one of them: the set is the
+/// With `prune`, remove each cluster record of `dir` that is not one of them. The set is the
 /// query, and a cluster that no longer meets it leaves the directory. A file that is not a
 /// cluster record stays. `connect` gives a client for a project uid, with `None` for the configured
 /// scope. `fetched_at` is the time of the read, in RFC 3339.

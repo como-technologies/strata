@@ -398,8 +398,8 @@ fn tag(uid: &str, version: &str, tag: &str) -> Value {
 }
 
 /// An API with the `versions` of `nginx` in its listing, and the two tags answers of the
-/// Public Repo: `plain` with no query, and `retired` with the states query. An empty answer
-/// is a 404.
+/// Public Repo. These are `plain` with no query, and `retired` with the states query. An empty
+/// answer is a 404.
 fn nginx_api(versions: Vec<Value>, plain: &[Value], retired: &[Value]) -> MemoryApi {
     let mut api = MemoryApi::new()
         .with(

@@ -1,5 +1,5 @@
-//! The commands of an exec check: the arguments filled from the world, the tools the command
-//! needs, the word list a person types, and the run with a time limit.
+//! The commands of an exec check: the arguments filled from the world and the tools the command
+//! needs. It also holds the word list a person types and the run with a time limit.
 
 use std::process::Command;
 use std::time::{Duration, Instant};

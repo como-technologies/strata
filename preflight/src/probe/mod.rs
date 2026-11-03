@@ -2,7 +2,7 @@
 //! answer to a copy of it, runs the program of the rule, and gives an [`Outcome`].
 //!
 //! The answers of Palette and of a command come through a [`Backend`], so a test runs the same
-//! code on a fixture: [`FixtureBackend`] reads the answers from the world document itself, and
+//! code on a fixture. [`FixtureBackend`] reads the answers from the world document itself, and
 //! [`LiveBackend`] asks Palette and runs the command.
 
 use std::time::Instant;
@@ -113,8 +113,8 @@ fn judge(rule: &Rule, expr: &str, world: &Value, jq: &Jq, started: Instant) -> O
     }
 }
 
-/// A message on one line: the report prints each message under its rule, and a line break inside
-/// one, such as the output of a tool, would leave the column.
+/// A message on one line. The report prints each message under its rule, and a line break inside
+/// one, such as the output of a tool, leaves the column.
 pub(crate) fn one_line(s: String) -> String {
     if s.contains(['\n', '\r']) {
         s.split(['\n', '\r'])

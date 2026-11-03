@@ -317,7 +317,7 @@ fn the_color_follows_the_order_of_strata_for_each_stream() {
 fn out_names_the_path_in_the_error_when_it_cannot_write_and_makes_the_directory_when_it_can() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("cluster.json"), ENTITY).unwrap();
-    // a file where the directory should be
+    // a file in the place of the directory
     std::fs::write(dir.path().join("taken"), "x").unwrap();
     let (code, _, err) = run(
         &[

@@ -5,19 +5,20 @@
 #   examples/live/loop.sh [FROM_STAGE]
 #
 #   1  main records the release version and cluster A that runs it
-#   2  a change: the next version as a candidate on a branch, Palette asked if it accepts the
-#      packs of the candidate, the comment of the pull request, and the merge gate
-#   3  the publish: the published next version is the candidate that the reviewer read, and
-#      Palette is asked if the move of cluster A to it repaves, and if it accepts the packs.
-#      pr-comment.sh --repave puts the answer in the comment of the pull request of the move
+#   2  a change: the next version as a candidate on a branch, and the question to Palette if it
+#      accepts the packs of the candidate. Then the comment of the pull request, and the merge gate
+#   3  the publish: the published next version is the candidate that the reviewer read. The stage
+#      asks Palette if the move of cluster A to the next version repaves, and if Palette accepts
+#      the packs. pr-comment.sh --repave puts the answer in the comment of the pull request of the
+#      move
 #   4  before a build: strata preflight runs the static tier and the tier of Palette on the body
 #      of a create on the release. The comment of the pull request holds the static report. The
 #      stage creates nothing
-#   5  the nightly jobs: every record verifies, the fleet of a label is recorded, and the
-#      registry has newer versions of what the records pin, and whether Palette accepts the move
-#      to each of them
+#   5  the nightly jobs: every record verifies, and the fleet of a label is recorded. The registry
+#      has newer versions of what the records pin. The stage asks Palette whether it accepts the
+#      move to each of them
 #   6  behind is not different: a value that a person overrides on cluster A opens no
-#      notification, and the record of the cluster reports the drift; the override is undone
+#      notification. The record of the cluster reports the drift. The stage undoes the override
 #   7  an edit of a published version in place: the nightly job opens an issue. --who names the
 #      writer in the command and in the issue of the nightly job. Cluster A keeps its copy while
 #      an update waits for it. The stage undoes the edit

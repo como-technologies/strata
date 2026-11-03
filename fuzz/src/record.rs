@@ -9,13 +9,13 @@ use strata::term::color::Paint;
 
 use crate::support::{AT, answer, cluster_files, parts, profile_files, scratch, write};
 
-/// Make sure that `a` and `b`, two records of one profile, compare as one: the roots are equal,
-/// no pack is added, removed, or changed, the order of the packs and the variables are the same,
-/// and no macro or image differs. The comparison reads the packs, the summary, the order, and the
-/// variables, and not only the root. Each renderer shows the comparison.
+/// Make sure that `a` and `b`, two records of one profile, compare as one. The roots are equal,
+/// and no pack is added, removed, or changed. The order of the packs and the variables are the
+/// same, and no macro or image differs. The comparison reads the packs, the summary, the order,
+/// and the variables, and not only the root. Each renderer shows the comparison.
 ///
 /// `a` and `b` must be two values. A record that is compared with itself has the same root, the
-/// same packs, and the same variables for any reader, so the comparison shows nothing.
+/// same packs, and the same variables for any reader. So the comparison shows nothing.
 #[track_caller]
 pub(crate) fn compares_equal(a: &Snapshot, b: &Snapshot) {
     let diff = ops::compare(a, b, AT);
@@ -68,8 +68,8 @@ fn assert_nothing_differs(diff: &Diff) {
     assert_eq!(summary.max_impact, ImpactLevel::None);
 }
 
-/// Make sure that `record`, written and read again, is the record: its JSON loads as a record with
-/// the same root and the same content digest, and the JSON of that record is the same JSON again.
+/// Make sure that `record`, written and read again, is the record. Its JSON loads as a record with
+/// the same root and the same content digest. The JSON of that record is the same JSON again.
 /// Return the record that the JSON loaded.
 #[track_caller]
 pub(crate) fn writes_and_reads_again(record: &Snapshot) -> Snapshot {
@@ -94,8 +94,8 @@ pub(crate) fn writes_and_reads_again(record: &Snapshot) -> Snapshot {
     back
 }
 
-/// Make sure that `record` holds what each record holds, whatever it describes: it writes and
-/// reads again, and it compares equal to the record that it was read as.
+/// Make sure that `record` holds what each record holds, whatever it describes. It writes and
+/// reads again. It compares equal to the record that it was read as.
 #[track_caller]
 pub(crate) fn check_record(record: &Snapshot) {
     let back = writes_and_reads_again(record);
@@ -145,7 +145,7 @@ fn a_comparison_writes_the_document_it_reads() {
 }
 
 /// Write the parts of `bytes` as the files `names` of a directory, and give the directory. An
-/// empty part is a file that the directory does not have: a raw directory of an older build has
+/// empty part is a file that the directory does not have. A raw directory of an older build has
 /// no file for a document that a newer build adds.
 fn raw_dir(bytes: &[u8], names: &[String]) -> std::path::PathBuf {
     let dir = scratch();

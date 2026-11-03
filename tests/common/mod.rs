@@ -191,8 +191,9 @@ pub fn text_matches_schema(schema: &Value, value: &str) -> bool {
 }
 
 /// Assemble a cluster that runs the profile fixtures `profiles`, in order, the way Palette returns
-/// it: applied templates on the cluster, per-profile pack manifests, and per-profile variables
-/// with values: `values` by name, else the default, and `SECRET_VALUE` for a sensitive variable.
+/// it. The cluster has applied templates, per-profile pack manifests, and per-profile variables
+/// with values. A variable gets its value from `values` by name, else its default. A sensitive
+/// variable gets `SECRET_VALUE`.
 fn write_cluster(root: &Path, dir: &str, profiles: &[&str], values: &[(&str, &str)]) {
     let out = root.join(dir);
     fs::create_dir_all(&out).unwrap();

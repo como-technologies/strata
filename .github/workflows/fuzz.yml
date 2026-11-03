@@ -2,13 +2,14 @@ name: fuzz
 
 # Runs each fuzz target of fuzz/ under libFuzzer for a fixed time, once a week and on demand. The
 # targets need a nightly toolchain, so they are not part of the checks that each pull request
-# runs: `just test` runs the same tests on stable Rust, on the corpus alone. See "The fuzzing" in
+# runs. `just test` runs the same tests on stable Rust, on the corpus alone. See "The fuzzing" in
 # docs/src/development/build-test.md.
 #
 # The list of the targets comes from `just fuzz-list`, so a new target runs with no change here.
-# Each target is a job of its own. A crash fails that job, prints the input, and uploads the
-# files that it added to the directories of the target as the artifact `new-files-<n>`: the crash,
-# and the inputs that reached new code, which a maintainer minimizes and commits.
+# Each target is a job of its own. A crash fails that job and prints the input. The job uploads
+# the files that it added to the directories of the target as the artifact `new-files-<n>`. These
+# files are the crash and the inputs that reached new code. A maintainer minimizes these files
+# and commits them.
 on:
   schedule:
     - cron: "17 3 * * 1"
@@ -82,7 +83,7 @@ jobs:
             echo "::error::$TARGET crashed on ${file#new/crashes/}"
             {
               echo "### $TARGET"
-              echo "Put the file in the \`crashes\` directory of the target, and run \`cargo test -p strata-fuzz\`."
+              echo "Put the file in the \`crashes\` directory of the target. Run \`cargo test -p strata-fuzz\`."
               echo '```'
               base64 "$file"
               echo '```'

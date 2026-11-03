@@ -112,9 +112,9 @@ fn searched_consumers<A: PaletteApi>(
 /// list cannot show a cluster that it omits. The steps:
 ///
 /// 1. Ask the cluster search for the clusters that run a version of the profile `name`. The search
-///    goes to the scope of the profile: its project `project`, where each cluster that can run it
-///    is, or `wide` for a tenant profile. It goes to `home` when that scope cannot answer. When
-///    the search takes no profile, read the cluster listing instead, through `wide` and then
+///    goes to the scope of the profile. This is its project `project`, where each cluster that can
+///    run it is, or `wide` for a tenant profile. It goes to `home` when that scope cannot answer.
+///    When the search takes no profile, read the cluster listing instead, through `wide` and then
 ///    `home`.
 /// 2. Add the virtual clusters of each cluster group that pins the version.
 /// 3. Read the document of each cluster that the consumer list did not name.

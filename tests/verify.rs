@@ -2917,7 +2917,7 @@ fn search_of(groups: Vec<Value>) -> Value {
     })
 }
 
-/// The body of the search of the virtual clusters that `groups` select: the condition
+/// The body of the search of the virtual clusters that `groups` select. It has the condition
 /// `environment eq nested` as one more group, since the search omits each virtual cluster
 /// unless a condition asks for it.
 fn virtual_search(mut groups: Vec<Value>) -> Value {
@@ -4649,7 +4649,7 @@ fn clusters_listing(api: &MemoryApi, query: ops::ClusterQuery) -> ops::Listing {
 
 #[test]
 fn list_clusters_names_a_virtual_cluster_with_its_cluster_group_from_the_search() {
-    // The listing omits each virtual cluster, so strata asks the search for them, with the
+    // The listing omits each virtual cluster. So strata asks the search for them, with the
     // one condition environment eq nested, in the scope of the listing (#116).
     let api = two_clusters_with_search(&["clusterName", "tags", "environment"]).with_post(
         CLUSTER_SEARCH,
@@ -6505,7 +6505,7 @@ fn compare_says_when_both_sides_are_one_profile_version_with_different_content()
 
 use strata::diff::ImpactLevel;
 
-/// A pack key is `<layer>/<name>`, so a profile that exchanges one pack for a pack of another name
+/// A pack key is `<layer>/<name>`. So a profile that exchanges one pack for a pack of another name
 /// gives one removed pack and one added pack. The impact must still name the repave (#53).
 #[test]
 fn a_pack_that_only_one_side_has_carries_the_impact_of_its_layer() {
@@ -10075,8 +10075,8 @@ fn the_repave_request_for_the_update_that_waits_gives_the_pending_values_to_each
     );
     assert!(moved.posted().is_empty(), "no POST goes out for the record");
 
-    // a cluster in a template: the route of the template takes no pack values. So an update that
-    // changes a profile is refused before the POST, and an update that changes nothing asks the
+    // a cluster in a template: the route of the template takes no pack values. So strata refuses
+    // an update that changes a profile before the POST. An update that changes nothing asks the
     // route of the template by profile uid
     let mut doc = read_json(&dir.path().join("cluster-merged").join("cluster.json"));
     doc["spec"]["clusterTemplate"] = serde_json::json!({"uid": "tmpl-1", "projectUid": "p1"});
@@ -15032,7 +15032,7 @@ fn list_clusters_with_a_tag_searches_palette_and_names_the_project_of_each() {
 
 #[test]
 fn list_clusters_with_a_tag_names_a_virtual_cluster_that_carries_the_label() {
-    // The search omits each virtual cluster unless a condition asks for it, so a query
+    // The search omits each virtual cluster unless a condition asks for it. So a query
     // searches a second time with environment eq nested added to its groups (#116).
     let payments = fleet_row(
         "c-pay",
@@ -16637,7 +16637,7 @@ fn verify_refuses_a_record_that_it_cannot_check_before_it_needs_a_key() {
     let valid_path = dir.path().join("valid.json");
     write_record(&valid_path, &serde_json::to_value(&snap).unwrap());
 
-    // the run has no key, so a request would give missing-credential
+    // the run has no key, so a request gives missing-credential
     let home = tempfile::tempdir().unwrap();
     let run = |args: &[&Path]| {
         let mut c = strata_command();

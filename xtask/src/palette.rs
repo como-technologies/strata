@@ -291,11 +291,11 @@ struct Request {
 
 /// The clusters of the search file that the body of a search selects, as Palette reads it: each
 /// group of conditions holds. A condition on `tags` holds when a value `key:value` names a label
-/// of the cluster, or a value `key` names a label key; on `clusterProfiles` when a value is the
-/// name of a profile of the cluster, since Palette changes each name into the uids of the profiles
-/// with that name and a uid matches no name (#181); on `environment` when a value is its cloud
-/// type. The search
-/// omits each virtual cluster, of the cloud type `nested`, unless a condition asks for it.
+/// of the cluster, or a value `key` names a label key. A condition on `clusterProfiles` holds when
+/// a value is the name of a profile of the cluster. This is because Palette changes each name into
+/// the uids of the profiles with that name, and a uid matches no name (#181). A condition on
+/// `environment` holds when a value is the cloud type of the cluster. The search omits each virtual
+/// cluster, of the cloud type `nested`, unless a condition asks for it.
 fn searched(file: &[u8], body: &[u8]) -> Vec<u8> {
     let Ok(mut doc) = serde_json::from_slice::<serde_json::Value>(file) else {
         return file.to_vec();
@@ -691,9 +691,9 @@ mod tests {
         );
     }
 
-    /// The export route gives the file to a request that accepts a file, and `{"Reader":{}}` to a
-    /// request that accepts JSON, as a live run shows (#156). The answer for JSON needs the profile,
-    /// and not the file, and it does not depend on the query.
+    /// The export route gives the file to a request that accepts a file. It gives `{"Reader":{}}`
+    /// to a request that accepts JSON, as a live run shows (#156). The answer for JSON needs the
+    /// profile, and not the file, and it does not depend on the query.
     #[test]
     fn the_export_route_answers_a_request_that_accepts_json_with_a_reader_and_not_the_file() {
         let temp = tempfile::tempdir().unwrap();

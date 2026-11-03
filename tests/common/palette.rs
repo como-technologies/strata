@@ -1,9 +1,8 @@
 //! The routes of Palette, and the documents that a test or a benchmark serves from them.
 //!
 //! The crate names each route in a const of its own that is not public. So this file names the
-//! route again, in one place. `tests/common/mod.rs` re-exports it for the tests, and the libraries
-//! of `benches/` and `fuzz/` include it with `#[path]`, so that no second list of the routes
-//! exists.
+//! route again, in one place. `tests/common/mod.rs` re-exports it for the tests. The libraries
+//! of `benches/` and `fuzz/` include it with `#[path]`. So no second list of the routes exists.
 //!
 //! The route helpers write the route that Palette serves, on purpose. They do not call
 //! `strata::api::subject_path` or another function of `strata::api` that builds a route. A test
@@ -158,7 +157,7 @@ pub fn serve_pack_listing(
 }
 
 /// The registry endpoints strata reads for one pack, as the examples cached them from a live
-/// tenant: the version listing filtered by name, and the pack entity with its tags.
+/// tenant. They are the version listing filtered by name, and the pack entity with its tags.
 pub fn serve_registry_pack(
     api: strata::api::MemoryApi,
     name: &str,

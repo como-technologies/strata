@@ -134,16 +134,16 @@ fn an_answer_of_palette_of_any_shape_gives_a_record_or_an_error_with_a_kind() {
     });
 }
 
-/// The status and the body of the error that `bytes` hold: the first two bytes are the status, in
-/// big-endian order, and the rest is the text of the body. `None` when the bytes are shorter, or
-/// the body is not UTF-8.
+/// The status and the body of the error that `bytes` hold. The first two bytes are the status, in
+/// big-endian order. The rest is the text of the body. `None` when the bytes are shorter, or the
+/// body is not UTF-8.
 fn error_of(bytes: &[u8]) -> Option<(u16, &str)> {
     let (status, body) = bytes.split_first_chunk::<2>()?;
     Some((u16::from_be_bytes(*status), utf8(body)?))
 }
 
 /// Make sure that each validate route reads the body of an error the same way as the reader of
-/// refusals: a route that refuses the body finds a code in it, and with HTTP 500 a route refuses
+/// refusals. A route that refuses the body finds a code in it. With HTTP 500, a route refuses
 /// exactly the codes of its checks.
 #[track_caller]
 fn check_routes(status: u16, body: &str, refusal: Option<&PaletteRefusal>) {
@@ -161,8 +161,8 @@ fn check_routes(status: u16, body: &str, refusal: Option<&PaletteRefusal>) {
     }
 }
 
-/// Make sure that the class of the error `status` `body` follows the rule of the retry: a 5xx with
-/// the code of a refusal by design stays, another 5xx or a 429 passes, and each other status stays.
+/// Make sure that the class of the error `status` `body` follows the rule of the retry. A 5xx with
+/// the code of a refusal by design stays. Another 5xx or a 429 passes. Each other status stays.
 #[track_caller]
 fn check_class(error: &Error, status: u16, refusal: Option<&PaletteRefusal>) {
     let server = (500..600).contains(&status);
@@ -177,9 +177,9 @@ fn check_class(error: &Error, status: u16, refusal: Option<&PaletteRefusal>) {
     assert_eq!(error.class(), expected, "the class of {error}");
 }
 
-/// Ask Palette about a profile version that has a uid, and about a candidate that has none, and
-/// make sure that a Palette that refuses each request never accepts. The record of the candidate
-/// goes to the three routes that check a create, and the record of a version to the route of its
+/// Ask Palette about a profile version that has a uid, and about a candidate that has none. Make
+/// sure that a Palette that refuses each request never accepts. The record of the candidate goes
+/// to the three routes that check a create. The record of a version goes to the route of its
 /// packs.
 fn validate(api: &Everywhere) {
     let palette = Palette::new(api);
