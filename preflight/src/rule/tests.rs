@@ -396,3 +396,11 @@ fn an_exec_check_takes_a_second_command_and_the_loader_checks_its_templates() {
     .unwrap_err();
     assert!(err.to_string().contains("`also`"), "{err}");
 }
+
+#[test]
+fn a_release_with_one_number_is_the_line_of_a_bound_with_two() {
+    assert!(release_in_range("4", ">=4.0"));
+    assert!(release_in_range("4", "=4.0"));
+    assert!(!release_in_range("4", ">4.0"));
+    assert!(!release_in_range("4", ">=4.1"));
+}

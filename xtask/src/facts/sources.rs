@@ -12,8 +12,8 @@ use strata_preflight::catalog::builtin;
 use strata_preflight::rule::{Catalog, Check, ExecCheck, Rule};
 
 use super::cloud::{CloudSources, read_code, read_rules};
-use super::model::{DIRECTORY, Fact, load};
-use super::sets::{SetRead, reads};
+use super::model::{DIRECTORY, Fact, load, split_request};
+use super::sets::{Set, SetRead, closed_sets, reads};
 use crate::checks::anchors;
 use crate::files::{book, files_with_ext, pages};
 
@@ -68,6 +68,8 @@ pub struct Sources {
     pub cloud: CloudSources,
     /// The reads of strata that note a value of a closed set that this release does not know.
     pub set_reads: Vec<SetRead>,
+    /// The closed sets of strata that a fact can name in `reads.sets`.
+    pub closed_sets: Vec<Set>,
 }
 
 impl Sources {
@@ -116,6 +118,7 @@ impl Sources {
             Err(e) => bad.push(format!("the rules of strata-preflight: {e}")),
         }
         sources.set_reads = reads();
+        sources.closed_sets = closed_sets();
         let (code, unread) = read_code(repo);
         sources.cloud.code = code;
         bad.extend(unread);
@@ -143,7 +146,7 @@ fn flatten(request: &str) -> String {
 /// query.
 pub fn shape(request: &str) -> String {
     let flat = flatten(request);
-    let (method, path) = flat.split_once(' ').unwrap_or(("", flat.as_str()));
+    let (method, path) = split_request(&flat).map_or(("", flat.as_str()), |(m, p)| (m.as_str(), p));
     let path = path.split('?').next().unwrap_or(path);
     format!("{method} {path}")
 }

@@ -5,27 +5,16 @@
 use std::path::{Path, PathBuf};
 
 use syn::visit::{self, Visit};
-use syn::{Attribute, Block, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemTrait, Signature};
+use syn::{Block, ImplItemFn, ItemFn, ItemImpl, ItemMod, ItemTrait, Signature};
 use syn::{TraitItemFn, parse_file};
 
-use crate::files::files_under;
+use crate::files::{files_under, is_test_code};
 
 /// The most lines that a module file has.
 const MODULE_LINES: usize = 800;
 
 /// The most lines that a function has, from its `fn` line to its closing brace.
 const FUNCTION_LINES: usize = 80;
-
-/// True when `attrs` mark the item as test code: `#[test]` or `#[cfg(test)]`.
-fn is_test_code(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|attr| {
-        attr.path().is_ident("test")
-            || (attr.path().is_ident("cfg")
-                && attr
-                    .parse_args::<syn::Path>()
-                    .is_ok_and(|path| path.is_ident("test")))
-    })
-}
 
 /// The functions that a file holds with a body, each with its length in lines. The items that are
 /// test code are out of the list, and the items after them are in it.
@@ -141,32 +130,32 @@ fn long_functions(src: &Path) -> Vec<String> {
 
 /// The directory of the source files of strata.
 fn strata_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../src")
+    crate::repository().join("src")
 }
 
 /// The directory of the source files of xtask.
 fn xtask_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("src")
+    crate::repository().join("xtask/src")
 }
 
 /// The directory of the source files of strata-preflight.
 fn preflight_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../preflight/src")
+    crate::repository().join("preflight/src")
 }
 
 /// The directory of the source files of strata-fuzz.
 fn fuzz_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../fuzz/src")
+    crate::repository().join("fuzz/src")
 }
 
 /// The directory of the source files of strata-report-endpoint.
 fn endpoint_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../report-endpoint/src")
+    crate::repository().join("report-endpoint/src")
 }
 
 /// The directory of the source files of strata-benches.
 fn benches_src() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../benches/src")
+    crate::repository().join("benches/src")
 }
 
 #[test]

@@ -13,11 +13,12 @@ use super::releases::{self, GITHUB};
 use super::run;
 use super::stand_in::{StandIn, harvest};
 use crate::book::built_examples;
+use crate::facts::subjects::floor;
 use crate::{facts, fail, repository};
 
 /// The usage line, and what the options do.
 const USAGE: &str =
-    "usage: xtask contract [--stand-in DIR] [--out FILE] [--state FILE] [--github URL] [--no-cloud]
+    "usage: xtask contract [--stand-in DIR] [--out FILE] [--state FILE] [--github URL] [--no-cloud] [--with-cluster]
 
   --stand-in DIR  read the documents of the stand-in from DIR, one directory for each chapter;
                   without it, build the tenant of every chapter of the book (needs: just examples)
@@ -27,6 +28,8 @@ const USAGE: &str =
   --github URL    the address of the GitHub API (default https://api.github.com)
   --no-cloud      send no call of the tool of a cloud (aws, gcloud, az); without it, the run sends the
                   read-only calls of the facts of the kind cloud in the lab account
+  --with-cluster  the tenant holds a cluster: a fact that takes its subject from a cluster and that the
+                  run skips is an error, and the exit code is 2
 
 The tenant is the one that PALETTE_API, PALETTE_API_KEY, and ~/.palette.env name. The run sends a fact
 of the tenant scope with no project, as strata does. The lab account of a cloud is the one that the
@@ -41,6 +44,7 @@ pub(super) struct Options {
     pub(super) state: Option<PathBuf>,
     pub(super) github: String,
     pub(super) no_cloud: bool,
+    pub(super) with_cluster: bool,
 }
 
 impl Options {
@@ -51,6 +55,7 @@ impl Options {
             state: None,
             github: GITHUB.to_string(),
             no_cloud: false,
+            with_cluster: false,
         };
         let mut args = args.iter();
         while let Some(flag) = args.next() {
@@ -65,6 +70,7 @@ impl Options {
                 "--state" => options.state = Some(PathBuf::from(value()?)),
                 "--github" => options.github = value()?.trim_end_matches('/').to_string(),
                 "--no-cloud" => options.no_cloud = true,
+                "--with-cluster" => options.with_cluster = true,
                 other => return Err(format!("unknown option {other}")),
             }
         }
@@ -113,6 +119,9 @@ pub(super) fn contract(options: &Options) -> Result<u8, String> {
         let backend = LiveBackend::new(Some(palette.api()), false);
         document.add(run_clouds(&facts, &rules, &backend, &Lab::from_env()));
     }
+    if options.with_cluster {
+        document.hold_floor(&floor(&facts));
+    }
     let mut state_error = None;
     if let Some(state) = &options.state {
         match releases::read(&options.github, state) {
@@ -127,16 +136,7 @@ pub(super) fn contract(options: &Options) -> Result<u8, String> {
         }
         None => println!("{text}"),
     }
-    let s = document.summary;
-    eprintln!(
-        "contract: {} facts: {} same, {} differ, {} skipped, {} could not be checked, {} unknown values",
-        document.facts.len(),
-        s.same,
-        s.differs,
-        s.skipped,
-        s.error,
-        s.unknown_values
-    );
+    eprintln!("contract: {}", document.summary.line());
     for release in document.releases.iter().filter(|r| r.new) {
         eprintln!(
             "contract: {} has a new release: {}",

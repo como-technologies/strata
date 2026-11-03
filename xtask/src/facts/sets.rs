@@ -1,21 +1,67 @@
-//! The reads of strata that note a value of a closed set that this release does not know.
+//! The closed sets of strata, and the lists of their values in the facts.
 //!
-//! Strata notes such a value at each read with `opt_set`. The contract run counts the same value
-//! when a GET fact lists the set in `reads.values`. [`reads`] names each read of strata, so that
-//! [`check`] makes sure that each one has its list in a fact, and that no list names a value that
-//! strata does not know. Without this tie, a new value shows in the note of a user, and the
-//! contract run finds none.
+//! A fact lists the values of a closed set in `reads.values`, and names the type of the set in
+//! `reads.sets`. [`check`] compares the list with the values of the type, so a value that one has
+//! and the other lacks is a fault. The type is the one copy of the values.
+//!
+//! Strata notes a value of a closed set that this release does not know at each read with
+//! `opt_set`. The contract run counts the same value when a GET fact lists the set. [`reads`]
+//! names each read of strata, so that [`check`] makes sure that each one has its list in a fact.
+//! Without this tie, a new value shows in the note of a user, and the contract run finds none.
 
 use std::sync::LazyLock;
 
 use regex::Regex;
 use strata::closed_set::ClosedSet;
+use strata::model::cluster_state::ClusterState;
 use strata::model::oci_provider::OciProvider;
 use strata::model::pack_state::PackState;
+use strata::model::pack_type::PackType;
 use strata::model::profile_type::ProfileType;
+use strata::model::scope::ProfileScope;
 
-use super::model::Fact;
 use super::sources::Sources;
+
+/// The values of a closed set that Palette never gives: a word of strata. A fact lists the set
+/// without them, each as the set and the value. A listing of packs never gives the state `absent`:
+/// `behind` gives it to a version that the registry no longer lists. A cluster profile never has the
+/// type `app` or `pack`: a record of an app profile and a record of a pack version have them.
+const STRATA_ONLY: &[(&str, &str)] = &[
+    ("PackState", "absent"),
+    ("ProfileType", "app"),
+    ("ProfileType", "pack"),
+];
+
+/// A closed set of strata: the name of its type and each value, as the documents name it.
+#[derive(Clone, Debug)]
+pub struct Set {
+    /// The name of the type, such as `ProfileType`.
+    pub name: String,
+    /// Each value of the set.
+    pub values: Vec<String>,
+}
+
+impl Set {
+    fn of<T: ClosedSet>() -> Set {
+        let path = std::any::type_name::<T>();
+        Set {
+            name: path.rsplit("::").next().unwrap_or(path).to_string(),
+            values: T::ALL.iter().map(|v| v.as_str().to_string()).collect(),
+        }
+    }
+}
+
+/// The closed sets that a fact can name in `reads.sets`.
+pub fn closed_sets() -> Vec<Set> {
+    vec![
+        Set::of::<ClusterState>(),
+        Set::of::<PackState>(),
+        Set::of::<PackType>(),
+        Set::of::<OciProvider>(),
+        Set::of::<ProfileScope>(),
+        Set::of::<ProfileType>(),
+    ]
+}
 
 /// One read of strata that notes an unknown value, and the field of the fact that lists its set.
 #[derive(Clone, Debug)]
@@ -26,18 +72,14 @@ pub struct SetRead {
     pub fact: &'static str,
     /// The field of the fact that holds the value, as the key of `reads.values`.
     pub field: &'static str,
-    /// Each value of the set, as the documents name it.
-    pub values: Vec<String>,
 }
 
 impl SetRead {
     fn of<T: ClosedSet>(fact: &'static str, field: &'static str) -> SetRead {
-        let path = std::any::type_name::<T>();
         SetRead {
-            set: path.rsplit("::").next().unwrap_or(path).to_string(),
+            set: Set::of::<T>().name,
             fact,
             field,
-            values: T::ALL.iter().map(|v| v.as_str().to_string()).collect(),
         }
     }
 }
@@ -64,6 +106,57 @@ fn calls(text: &str) -> usize {
     CALL.find_iter(text).count()
 }
 
+/// Each list of values that names its set is the set: the type has no value that the list lacks,
+/// except a word of strata, and the list has no value that the type lacks. A name that is no type
+/// of [`closed_sets`], or a name at a field that has no list, is a fault too.
+fn named(sources: &Sources) -> Vec<String> {
+    let mut bad = Vec::new();
+    for fact in &sources.facts {
+        for (field, name) in &fact.reads.sets {
+            let id = &fact.id;
+            let Some(list) = fact.reads.values.get(field) else {
+                bad.push(format!(
+                    "fact `{id}`: `reads.sets` names {name} at `{field}`, and `reads.values` has no list there"
+                ));
+                continue;
+            };
+            let Some(set) = sources.closed_sets.iter().find(|s| &s.name == name) else {
+                bad.push(format!(
+                    "fact `{id}`: `reads.sets` names {name} at `{field}`, and it is no closed set that `closed_sets()` of `xtask/src/facts/sets.rs` holds"
+                ));
+                continue;
+            };
+            bad.extend(agree(id, field, list, set));
+        }
+    }
+    bad
+}
+
+/// One message for each value that the `list` of the fact `id` at `field` and the `set` do not
+/// share. A word of strata is the set alone: [`STRATA_ONLY`].
+fn agree(id: &str, field: &str, list: &[String], set: &Set) -> Vec<String> {
+    let name = &set.name;
+    let strata_only = |value: &str| STRATA_ONLY.contains(&(name.as_str(), value));
+    let extra = list
+        .iter()
+        .filter(|value| !set.values.contains(value))
+        .map(|value| {
+            format!(
+                "fact `{id}`: it lists `{value}` at `{field}`, and the set {name} has no such value: add it to the type, or take it from the list"
+            )
+        });
+    let lacking = set
+        .values
+        .iter()
+        .filter(|value| !list.contains(value) && !strata_only(value))
+        .map(|value| {
+            format!(
+                "fact `{id}`: the set {name} has `{value}`, and the list at `{field}` lacks it: add it to the list, or name it in `STRATA_ONLY` when only strata gives it"
+            )
+        });
+    extra.chain(lacking).collect()
+}
+
 /// Each read of strata that notes an unknown value has a list of values in a GET fact, the list
 /// names only values that strata knows, and the code holds no read that the table lacks.
 pub fn check(sources: &Sources) -> Vec<String> {
@@ -78,6 +171,7 @@ pub fn check(sources: &Sources) -> Vec<String> {
     for read in &sources.set_reads {
         bad.extend(listed(sources, read));
     }
+    bad.extend(named(sources));
     bad
 }
 
@@ -92,24 +186,16 @@ fn listed(sources: &Sources, read: &SetRead) -> Vec<String> {
             "fact `{fact}`: it lists {set} at `{field}`, so it must be a GET request that the contract run sends"
         )];
     }
-    let Some(values) = found.reads.values.get(field) else {
+    if !found.reads.values.contains_key(field) {
         return vec![format!(
             "fact `{fact}`: strata notes a value of {set} at `{field}`, so `reads.values` must list it, or the contract run counts no new value"
         )];
-    };
-    unknown_to_strata(found, read, values)
-}
-
-/// One message for each value of `values` that the set of `read` does not name.
-fn unknown_to_strata(fact: &Fact, read: &SetRead, values: &[String]) -> Vec<String> {
-    values
-        .iter()
-        .filter(|value| !read.values.contains(value))
-        .map(|value| {
-            format!(
-                "fact `{}`: it lists `{value}` at `{}`, and the set {} of strata has no such value, so strata notes it and the contract run does not",
-                fact.id, read.field, read.set
-            )
-        })
-        .collect()
+    }
+    // `named` compares the list with the set, once the fact names it
+    if found.reads.sets.get(field) != Some(set) {
+        return vec![format!(
+            "fact `{fact}`: strata notes a value of {set} at `{field}`, so `reads.sets` must name {set} there"
+        )];
+    }
+    Vec::new()
 }

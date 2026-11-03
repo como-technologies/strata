@@ -376,7 +376,6 @@ mod tests {
     use serde_json::json;
 
     const METADATA: &str = "/v1/registries/metadata";
-    const OCI_SUMMARY: &str = "/v1/registries/oci/summary";
 
     /// A summary listing of registries that holds the one registry `uid` with the sync `sync`.
     fn summary(uid: &str, sync: Value) -> Value {
@@ -396,7 +395,7 @@ mod tests {
                 ]}),
             )
             .with(
-                OCI_SUMMARY,
+                OCI_SUMMARY_TEMPLATE,
                 json!({"items": [{"metadata": {"uid": "reg-zarf"},
                     "spec": {"providerType": "zarf"},
                     "status": {"sync": {"isSyncSupported": false}}}]}),
@@ -446,7 +445,11 @@ mod tests {
             vec!["charts-auth", "zarf"]
         );
         assert_eq!(api.calls(METADATA), 1, "one read of the metadata");
-        assert_eq!(api.calls(OCI_SUMMARY), 1, "one read of the OCI summary");
+        assert_eq!(
+            api.calls(OCI_SUMMARY_TEMPLATE),
+            1,
+            "one read of the OCI summary"
+        );
     }
 
     #[test]
@@ -484,14 +487,19 @@ mod tests {
         // the OCI summary is not registered: a 404
         assert!(registries.summary(RegistryKind::Oci).unwrap().is_none());
         assert!(registries.summary(RegistryKind::Oci).unwrap().is_none());
-        assert_eq!(api.calls(OCI_SUMMARY), 1, "a 404 is read one time too");
+        assert_eq!(
+            api.calls(OCI_SUMMARY_TEMPLATE),
+            1,
+            "a 404 is read one time too"
+        );
         assert!(registries.summary(RegistryKind::Helm).unwrap().is_none());
         let err = registries.summary(RegistryKind::Pack).unwrap_err();
         assert!(matches!(err, Error::Api { status: 500, .. }), "{err}");
         // the key or the rate is no listing with no entry: the provider type of an OCI pack is
         // in its record
         for status in [401, 403, 429] {
-            let refused = Palette::new(MemoryApi::new().failing(OCI_SUMMARY, status, "{}"));
+            let refused =
+                Palette::new(MemoryApi::new().failing(OCI_SUMMARY_TEMPLATE, status, "{}"));
             let err = Registries::new(&refused)
                 .oci_provider_type("reg-zarf")
                 .unwrap_err();
@@ -520,7 +528,7 @@ mod tests {
                 "/v1/registries/helm/summary",
                 summary("reg-helm", completed.clone()),
             )
-            .with(OCI_SUMMARY, summary("reg-oci", completed))
+            .with(OCI_SUMMARY_TEMPLATE, summary("reg-oci", completed))
             // the route of one registry is not read
             .failing("/v1/registries/oci/reg-oci/basic/sync/status", 500, "{}");
         let palette = Palette::new(api);
