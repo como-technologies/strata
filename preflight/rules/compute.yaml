@@ -206,7 +206,7 @@ rules:
                | ([ (.Associations // [])[] | .SubnetId // empty ]) as $subnets
                | (.Routes // [])[]
                | select((.GatewayId // "") | startswith("igw-"))
-               | "subnet(s) \($subnets | join(", ")) route \(.DestinationCidrBlock // "?") to \(.GatewayId): a Fargate profile needs private subnets" ]
+               | "the route table of \($subnets | length | count_of("subnet")) (\($subnets | join(", "))) sends \(.DestinationCidrBlock // "?") to \(.GatewayId): a Fargate profile needs private subnets" ]
              | unique
         end
     reproduce:
@@ -396,7 +396,7 @@ rules:
         [ .responses[] | .item as $p | .response as $r
           | if ($r.ok | not) then "Palette cannot check the capacity of \($p.cloudConfig.hostResourceGroupArn): \($r.body.code // $r.status): \($r.body.message // "")"
             elif (($r.body.isValid // false) | not)
-            then "pool \($p.poolConfig.name): the group \($p.cloudConfig.hostResourceGroupArn) has \($r.body.availableCapacity // 0) free \($p.cloudConfig.instanceType) slot(s), and the pool asks for \($p.poolConfig.size): \($r.body.message // "")"
+            then "pool \($p.poolConfig.name): the group \($p.cloudConfig.hostResourceGroupArn) has \($r.body.availableCapacity // 0 | count_of("free \($p.cloudConfig.instanceType) slot")), and the pool asks for \($p.poolConfig.size): \($r.body.message // "")"
             else empty end ]
     reproduce:
       - "for g in {{ [ .entity.spec.machinepoolconfig[] | .cloudConfig.hostResourceGroupArn // empty | select(. != \"\") ] | unique | join(\" \") }}; do aws resource-groups list-group-resources --region {{ .entity.spec.cloudConfig.region }} --group $g --query 'Resources[].Identifier.ResourceArn' --output text; done"
@@ -527,7 +527,7 @@ rules:
         | (if ($sys | length) == 0 then ["no pool has managedPoolConfig.isSystemNodePool true: the create fails with AksMissingSystemPool after the validate route passed; the converter reads managedPoolConfig, not cloudConfig.isSystemNodePool"] else [] end)
           + [ $sys[] | .poolConfig.name as $p
               | ( if ((.managedPoolConfig.osType // "Linux") != "Linux") or ((.managedPoolConfig.osSku // "") | test("windows"; "i")) then "system pool \($p) is \(.managedPoolConfig.osSku // .managedPoolConfig.osType): a system pool is Linux (AksInvalidSystemPoolOsType)" else empty end ),
-                ( if ((.poolConfig.taints // []) | length) > 0 then "system pool \($p) carries \(.poolConfig.taints | length) taint(s): AKS takes none on a system pool (AksSystemPoolTaintsNotSupported)" else empty end ),
+                ( if ((.poolConfig.taints // []) | length) > 0 then "system pool \($p) carries \(.poolConfig.taints | length | count_of("taint")): AKS takes none on a system pool (AksSystemPoolTaintsNotSupported)" else empty end ),
                 ( if (.poolConfig.size // 0) < 1 then "system pool \($p) has size \(.poolConfig.size // 0): a system pool needs one node or more" else empty end ) ]
     fix:
       owner: palette
@@ -701,12 +701,12 @@ rules:
         | ([ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | select((.poolConfig.isControlPlane // false) | not) | (.cloudConfig.edgeHosts // [])[] | select((.twoNodeCandidatePriority // "") != "") | $p ] | unique) as $worker_prio
         | ([ $cp[] | .twoNodeCandidatePriority // "" | select(. != "") ]) as $prio
         | if $two then
-            [ ( if ($cp | length) != 2 then "isTwoNodeCluster with \($cp | length) control plane host(s): Palette refuses it with \"Two-node cluster can only support two control-plane edge hosts\"" else empty end ),
+            [ ( if ($cp | length) != 2 then "isTwoNodeCluster with \($cp | length | count_of("control plane host")): Palette refuses it with \"Two-node cluster can only support two control-plane edge hosts\"" else empty end ),
               ( if (($prio | index("primary")) == null) or (($prio | index("secondary")) == null) then "the two-node candidate priorities are \($prio | join(", ") | if . == "" then "not set" else . end): Palette needs one primary and one secondary (InvalidTwoNodeCandidatesPriority)" else empty end ),
               ( if ((.profiles // []) | length) > 0 and ((k8s_names | length) == 0 or (k8s_names | all(.[]; test("k3s")) | not)) then "the Kubernetes pack is \(k8s_names | join(", ")): Palette refuses a two-node cluster without the k3s engine (TwoNodeClusterPackMissing); the docs also list Palette Optimized Canonical, and Palette takes K3s alone" else empty end ),
               ( $worker_prio[] | "worker pool \(.) sets twoNodeCandidatePriority: candidates are control plane hosts alone (InvalidTwoNodeCandidates)" ) ]
           else
-            [ ( if ($prio | length) > 0 then "twoNodeCandidatePriority is set on \($prio | length) host(s) and isTwoNodeCluster is off: Palette refuses it with TwoNodeClusterNotEnabled" else empty end ) ]
+            [ ( if ($prio | length) > 0 then "twoNodeCandidatePriority is set on \($prio | length | count_of("host")) and isTwoNodeCluster is off: Palette refuses it with TwoNodeClusterNotEnabled" else empty end ) ]
           end
     fix:
       owner: palette
@@ -747,7 +747,7 @@ rules:
         [ .responses[] | .item.host.hostUid as $u | .response as $r
           | if ($r.ok | not) then "edge host \($u) is not registered in this project: \($r.body.code // $r.status): \($r.body.message // ""); the create fails"
             else ($r.body.status // {}) as $s | ([ ($s.inUseClusters // [])[] | .name // .uid ]) as $used
-              | if ($used | length) > 0 then "edge host \($u) (\($r.body.metadata.name // "")) is \($s.state // "?") and part of cluster(s) \($used | join(", ")): Palette refuses it with EdgeHostDeviceAlreadyInUse" else empty end
+              | if ($used | length) > 0 then "edge host \($u) (\($r.body.metadata.name // "")) is \($s.state // "?") and part of \($used | length | count_of("cluster")) (\($used | join(", "))): Palette refuses it with EdgeHostDeviceAlreadyInUse" else empty end
             end ]
     reproduce:
       - "for h in {{ [ .edgeHosts[].host.hostUid ] | join(\" \") }}; do curl -s -H \"ApiKey: $PALETTE_API_KEY\" -H \"ProjectUid: $PALETTE_PROJECT_UID\" \"${PALETTE_API:-https://api.spectrocloud.com}/v1/edgehosts/$h\" | jq -c '{uid: .metadata.uid, name: .metadata.name, state: .status.state, health: .status.health.state, inUse: [.status.inUseClusters[]?.name]}'; done"
@@ -862,7 +862,7 @@ rules:
         [ .responses[] | .item.host.hostUid as $u | .response as $r
           | if ($r.ok | not) then "Palette cannot read edge host \($u): \($r.body.code // $r.status): \($r.body.message // "")"
             else ($r.body.spec.device // {}) as $d | ($d.cpu.cores // 0) as $cores | ($d.memory.sizeInMB // 0) as $mem | ([ ($d.disks // [])[] | .size // 0 ] | sort | .[-1] // 0) as $disk
-              | ( if $cores < 2 then "edge host \($u) has \($cores) core(s); the docs need 2" else empty end ),
+              | ( if $cores < 2 then "edge host \($u) has \($cores | count_of("core")); the docs need 2" else empty end ),
                 ( if $mem < 8192 then "edge host \($u) has \($mem) MB of memory; the docs need 8 GB" else empty end ),
                 ( if $disk < 150 then "edge host \($u) has a \($disk) GB main disk; the hardware page needs 150 GB on an SSD, and the architecture page says 100 GB" else empty end )
             end ]
@@ -900,7 +900,7 @@ rules:
       kind: static
       expr: |
         ([ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | (.cloudConfig.edgeHosts // [])[] | { uid: .hostUid, name: (.hostName // ""), pool: $p } ]) as $hosts
-        | ([ $hosts | group_by(.uid)[] | select(length > 1) | "host \(.[0].uid) is in pool(s) \([ .[] | .pool ] | join(", ")): Palette refuses a host in two pools or two times in one (EdgeHostDuplicateWithinEdgeNativeCluster)" ])
+        | ([ $hosts | group_by(.uid)[] | select(length > 1) | "host \(.[0].uid) is in the pools \([ .[] | .pool ] | join(", ")): Palette refuses a host in two pools or two times in one (EdgeHostDuplicateWithinEdgeNativeCluster)" ])
           + ([ $hosts | map(select(.name != "")) | group_by(.name)[] | select(length > 1) | "host name \(.[0].name) is used by \(length) hosts: Palette refuses it with DuplicateHostName" ])
     fix:
       owner: palette
@@ -1055,7 +1055,7 @@ rules:
       expr: |
         [ .entity.spec.machinepoolconfig[] | .poolConfig.name as $p | (.cloudConfig.instanceType // null) as $i
           | if $i == null then "pool \($p) has no instanceType: the converter dereferences it, and the create fails"
-            else ( if ($i.numCPUs // 0) < 1 then "pool \($p) has \($i.numCPUs // 0) CPU(s); the converter needs 1 or more, and the tutorials use 4" else empty end ),
+            else ( if ($i.numCPUs // 0) < 1 then "pool \($p) has \($i.numCPUs // 0 | count_of("CPU")); the converter needs 1 or more, and the tutorials use 4" else empty end ),
                  ( if ($i.memoryMiB // 0) < 1024 then "pool \($p) has \($i.memoryMiB // 0) MiB; the converter needs 1024 or more, and the tutorials use 8192" else empty end ),
                  ( if ($i.diskGiB // 0) < 20 then "pool \($p) has a \($i.diskGiB // 0) GiB disk; the converter needs 20 or more, and the tutorials use 60" else empty end ) end ]
     fix:

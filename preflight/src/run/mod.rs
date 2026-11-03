@@ -229,6 +229,7 @@ pub fn run(inputs: RunInputs<'_>) -> Result<Report> {
                 ready: inputs.selection.ready,
                 out_dir: inputs.out_dir.map(str::to_string),
             },
+            cluster_gone: false,
             generated_at: inputs.now.to_string(),
         },
         &jq,

@@ -147,9 +147,9 @@ rules:
         | if .exec.exit != 0 then ["gcloud container node-pools list failed for cluster \($n) in \($loc): \(.exec.stderr | tostring | .[:200])"]
           else (.exec.stdout // []) as $np
             | [ if ($np | length) < ($pools | length)
-                then "GKE holds \($np | length) node pool(s) for cluster \($n), and the entity has \($pools | length) worker pool(s) (\($pools | join(", "))): a pool change deleted a node pool and made no new one, so the cluster keeps no node"
+                then "GKE holds \($np | length | count_of("node pool")) for cluster \($n), and the entity has \($pools | length | count_of("worker pool")) (\($pools | join(", "))): a pool change deleted a node pool and made no new one, so the cluster keeps no node"
                 elif ($np | length) > ($pools | length)
-                then "GKE holds \($np | length) node pool(s) for cluster \($n) (\([ $np[] | .name ] | join(", "))), and the entity has \($pools | length) worker pool(s): an old node pool is still there"
+                then "GKE holds \($np | length | count_of("node pool")) for cluster \($n) (\([ $np[] | .name ] | join(", "))), and the entity has \($pools | length | count_of("worker pool")): an old node pool is still there"
                 else empty end ]
               + [ $np[] | select((.status // "") | test("^(STOPPING|ERROR)$"))
                   | "node pool \(.name) (\(.config.machineType // "?")) is \(.status)\(if (.statusMessage // "") != "" then ": \(.statusMessage | .[:160])" else "" end)" ]
@@ -381,13 +381,14 @@ rules:
       kind: static
       expr: |
         def macro: test("\\{\\{\\s*\\.spectro\\.macro\\.");
-        def names: [ match("\\.spectro\\.macro\\.[A-Za-z0-9_.-]+"; "g") | .string | ltrimstr(".spectro.macro.") ] | unique | join(", ");
+        def names: [ match("\\.spectro\\.macro\\.[A-Za-z0-9_.-]+"; "g") | .string | ltrimstr(".spectro.macro.") ] | unique;
+        def reads: names | "\(length | count_of("macro")) (\(join(", ")))";
         [ .profiles[]? | .packs[]? | . as $p | ($p | tostring) as $t
           | select($t | macro)
-          | "pack \($p.name)@\($p.version) reads the macro(s) \($t | names): a new value reaches the cluster in 11 to 13 minutes, with no notification and no audit entry" ]
+          | "pack \($p.name)@\($p.version) reads \($t | reads): a new value reaches the cluster in 11 to 13 minutes, with no notification and no audit entry" ]
         + [ .entity.spec.profiles[]? | .packValues[]? | . as $v | ($v | tostring) as $t
             | select($t | macro)
-            | "pack \($v.name) of the entity reads the macro(s) \($t | names): a new value reaches the cluster in 11 to 13 minutes, with no notification and no audit entry" ]
+            | "pack \($v.name) of the entity reads \($t | reads): a new value reaches the cluster in 11 to 13 minutes, with no notification and no audit entry" ]
     fix:
       owner: palette
       text: Audit each macro write, and open a notification for each cluster the value reaches.

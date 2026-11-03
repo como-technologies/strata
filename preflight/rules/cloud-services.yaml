@@ -154,7 +154,7 @@ rules:
         | if (.response.ok | not) then ["Palette cannot list the regions of account \(.entity.spec.cloudAccountUid): \(.response.body.code // .response.status)"]
           else ([ (.response.body.regions // [])[] | .name ]) as $on
           | if ($on | index($r)) == null
-            then ["region \($r) is not enabled for the account; Palette lists \($on | length) enabled region(s): \($on | join(", "))"]
+            then ["region \($r) is not enabled for the account; Palette lists \($on | length | count_of("enabled region")): \($on | join(", "))"]
             else [] end
           end
     reproduce:

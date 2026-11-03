@@ -260,7 +260,8 @@ call them, so the three write a time in one way.
 
 After 0.27.0, `render::Format` has `ALL`, `as_str`, and `from_text`, from one table. In
 `strata-preflight`, the jq programs of a rule can call the new filter `semver_numbers`. It reads
-a text as a version, as `reference::version::numbers` does.
+a text as a version, as `reference::version::numbers` does. They can call `count_of` too: it
+writes a count with its noun, as `render::count_of` does.
 
 After 0.27.0, two items are new, and both only add to the API. `reference::version::line` gives the
 release line of a version: its first numbers, joined by dots, such as `4.10` for `4.10.3-rc.1`.
@@ -859,11 +860,11 @@ reported such a type as not in the list of the region.
 After 0.26.0, the message of `api` for a 403 with the code `ProjectUidIsNotEmpty` says that the
 route is of the tenant scope. The kind `api` and the exit code `2` stay.
 
-After 0.27.0, the counts of the summary of `strata-preflight` agree each noun with the count. The
-message of a rule is outside this change: it can still write `2 key pair(s)`. The report said
+After 0.27.0, the text of `strata-preflight` agrees each noun with its count. The report said
 `1 probe(s) failed`, and now it says `1 probe failed`, `2 probes failed`, or `no probes failed`. The
-same holds for the warnings, the notes, the errors, the rules, the checks, the readings of a
-watch, and the events of `--verbose`. A run of one rule says `1 rule applies` and
+same holds for the warnings, the notes, the errors, the rules, the checks, and the readings of a
+watch. It holds for the events of `--verbose` and for the message of each rule too. A message that
+wrote `2 key pair(s)` now writes `2 key pairs`. A run of one rule says `1 rule applies` and
 `0 of 1 check passed`.
 
 `summary.verdict` in the JSON changes in the same way, for example `FAIL: 2 checks failed: a, b`.
@@ -874,7 +875,8 @@ A script must read `summary.exitCode`, and not the text. These words change no e
 After 0.27.0, a watch of `strata-preflight` ends when the document of the cluster has
 `metadata.isDeleted`, also when `status.state` is not `Deleted`. Before, it read until the limit,
 and each rule that passed became an error with exit `2`. Now the exit code is `0` when no counted
-rule failed, as it is for the state `Deleted`.
+rule failed, as it is for the state `Deleted`. The verdict says that the cluster is gone: see
+[the watch](../commands/preflight/watch.md).
 The terminal form of `strata consumers` and `strata list` colors a cluster state as
 `strata-preflight --verbose` does. Green is `Running`, yellow is a build, and red is `Error`,
 `Deleting`, or `Deleted`.
@@ -993,15 +995,25 @@ field, a value, an input, or an option is in the sections above.
     stopped on the jq of `ubuntu-latest`.
   - Both scripts read the first line of such a body as an empty line now. They skip the issue
     and do their usual work. No script of yours needs a change.
-- **`strata-preflight`: three rules read a version as `strata` does.** The rules are
-  `capa-stack-release-behind`, `ccm-version`, and `edge-agent-version`.
+- **`strata-preflight`: seven rules read a version as `strata` does.** The rules are
+  `capa-stack-release-behind`, `ccm-version`, `edge-agent-version`, `gke-version-not-offered`,
+  `eks-version-not-offered`, `eks-addon-version`, and `maas-os-image`.
   - `capa-stack-release-behind` stopped with an error for `--release 4.11.0-rc.1`. It compares
     the numbers of the release now. A `--release` or a tag that is no version is still an
     error, and the message names it.
   - `ccm-version` and `edge-agent-version` read a `v` before a version, and build data after
     it. A version with one of them can give another result than before.
+  - The last four rules cut the version of a pack at the dots. The text `v1.32.1` gave the line
+    `v1.32`, and `1.32+build.5` gave `1.32+build`. No cloud offers such a line, so the rule
+    failed. The four rules read the numbers now. Both texts give the line `1.32`, as `1.32.1` did.
+  - `gke-version-not-offered` matches an exact version when the pack writes three numbers. It
+    matches `1.34.11` now for `v1.34.11`, `1.34.11-rc.1`, and `1.34.11+build.5`. Before, it
+    matched the whole text, so these texts failed.
+  - `maas-os-image` reads the numbers 22 and 4 as Ubuntu 22.04, so the text `22.4` passes now.
+    Before, only the text `22.04` passed. Its message names the version as the pack writes it.
+    It named the first two parts of the text.
   - A text that is no version reads as it did in 0.27.0. Examples are `1.26.x`, `1.26.15.1`, and
-    `4.10.x`. The two rules read the first two parts between the dots.
+    `4.10.x`. The six rules that cut a text read the first two parts between the dots.
 - **`strata-unknown/1` and `strata-report/1` lose the fields `palette`, `status`, and `errorCode`.**
   No release of strata wrote them. A log or a report of a command of 0.27.0 never held them.
   - A line or an entry with one of these fields is not valid now. `strata report` stops with the
@@ -1091,12 +1103,36 @@ field, a value, an input, or an option is in the sections above.
   - The watch ends at the first reading now. The exit code is `0` when no counted rule failed,
     as it was for the state `Deleted`.
   - A pipeline that gated on exit `2` for such a cluster passes now.
-- **`strata-preflight`: the words of a count and of four messages change.** A script must read
-  `summary.exitCode`, and not the text.
+  - The verdict of a watch that ended at a cluster that is gone says so. It was
+    `OK: each counted check passed`, and it is `OK: the cluster is gone; no counted check failed`
+    now. A watch with no check that ran says `OK: the cluster is gone; no check ran`.
+  - The new words are in `summary.verdict` of the JSON, and in each form of the report. A script
+    must read `summary.exitCode`. The exit code stays `0`.
+  - A watch of a cluster that is not gone keeps its words. A failed or an error verdict keeps its
+    words too, also for a cluster that is gone.
+- **`strata-preflight`: the words of a count and of the messages of the rules change.** A script
+  must read `summary.exitCode`, and not the text.
   - `summary.verdict`, `subject.source` of a watch, and the last line of `--promotion` agree each
     noun with its count. An example is `4 readings` in place of `4 reading(s)`.
   - The terminal form and the markdown of a report change in the same way. The summary says
     `1 rule applies` and `0 of 1 check passed`.
+  - The messages of 17 rules wrote `(s)` after a noun. Each one agrees the noun with its count
+    now: `1 key pair`, `2 key pairs`, or `no key pairs`. A count of zero reads `no`, as the
+    summary does. A test of the catalog refuses `(s)` in a rule.
+  - The rules are `aws-region-not-enabled`, `eks-fargate-private`, `dedicated-hosts`,
+    `aks-system-pool`, `edge-two-node`, `edge-host-in-use`, `edge-host-resources`,
+    `edge-host-duplicate`, `vsphere-instance-floor`, `ssh-key-pair`, `gke-pool-roll`,
+    `macro-silent`, `eks-one-zone`, `variables-in-use`, `pvc-lb-leftover`,
+    `leftovers-before-build`, and the `reproduce` line of `eks-quotas`.
+  - Six messages have more than new nouns:
+    - `eks-fargate-private` says `the route table of 2 subnets (a, b) sends 0.0.0.0/0 to igw-1`.
+      It said `subnet(s) a, b route 0.0.0.0/0 to igw-1`.
+    - `edge-host-in-use` says `part of 1 cluster (other-cluster)`, and `macro-silent` says
+      `reads 1 macro (region)`. Each one puts the names in brackets after the count.
+    - `edge-host-duplicate` says `is in the pools a, b`.
+    - `pvc-lb-leftover` says `1 EBS volume ... is available` or `2 EBS volumes ... are available`.
+      `leftovers-before-build` says `1 instance ... is still in` and `left it`, or
+      `2 instances ... are still in` and `left them`.
   - The messages of `aws-quotas`, `gcp-quotas`, and `azure-vcpu-quota` have new words. A long
     sentence of each is now two short sentences or more.
 
@@ -1157,6 +1193,12 @@ field, a value, an input, or an option is in the sections above.
   with `--probes` can use it. It runs in `strata-preflight` only, and not in the `jq` tool.
   - The report writes a `reproduce` line for such a program with a definition of the filter in
     front. So the line runs in the `jq` tool.
+- A program in a rule can call the new jq filter `count_of` too. `2 | count_of("key pair")` gives
+  `2 key pairs`, `1` gives `1 key pair`, and `0` gives `no key pairs`. It gives the words of
+  `render::count_of`. The `reproduce` line of such a program holds a definition of it.
+- `report::Assembly` has the new field `cluster_gone: bool`. A literal must set it. `false` gives
+  the verdicts of 0.27.0. `true` is for a watch that ended at a cluster that is gone: a verdict
+  of `OK` then says so.
 - `probe::is_answer` has a second argument. Change `is_answer(status)` to
   `is_answer(status, Reader::Check)`.
 - `world::unreadable` is gone. Change `unreadable(status)` to `is_answer(status, Reader::World)`.

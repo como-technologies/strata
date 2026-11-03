@@ -1158,7 +1158,7 @@ fn ssh_key_pair_names_the_key_pair_and_the_region_for_eks() {
     assert_eq!(
         out.messages,
         [
-            "sshKeyName iris-on-palette is not a key pair of the account in region us-east-2; Palette lists 1 key pair(s)"
+            "sshKeyName iris-on-palette is not a key pair of the account in region us-east-2; Palette lists 1 key pair"
         ]
     );
 }
@@ -1839,6 +1839,7 @@ fn reproduce_lines(
                 ready: None,
                 out_dir: Some(out.display().to_string()),
             },
+            cluster_gone: false,
             generated_at: "2026-01-01T00:00:00Z".into(),
         },
         jq,
@@ -1888,38 +1889,49 @@ fn each_jq_line_of_reproduce_in_the_catalog_compiles_in_the_jq_tool() {
     }
 }
 
-/// The definition in front of a program that names `semver_numbers` gives the answer of the
-/// filter of the engine. The line is the one that a report prints for a static rule.
-#[test]
-fn the_definition_of_semver_numbers_in_a_reproduce_line_gives_the_answer_of_the_engine() {
-    let section = r#"
-section: kubernetes
-title: K
-rules:
-  - id: numbers-only
-    title: t
-    engines: [aws]
-    tier: static
-    status: seen
-    what: w
-    check: {kind: static, expr: "semver_numbers"}
-"#;
+/// Run the program `expr` in the engine and in the `jq` tool, over each input. The tool runs the
+/// line that a report prints for a static rule: the definitions of the filters in front, then the
+/// program. The line starts with `start`. The two give the same answer, or both fail.
+fn assert_the_tool_gives_the_answer_of_the_engine(
+    expr: &str,
+    start: &str,
+    inputs: impl IntoIterator<Item = serde_json::Value>,
+) {
+    let section = format!(
+        "section: kubernetes\ntitle: K\nrules:\n  - id: one-program\n    title: t\n    engines: [aws]\n    tier: static\n    status: seen\n    what: w\n    check:\n      kind: static\n      expr: |\n        {expr}\n"
+    );
     let mut catalog = Catalog::default();
     let file = Path::new("k.yaml");
     catalog
-        .push(Catalog::parse_section(section, file).unwrap(), file)
+        .push(Catalog::parse_section(&section, file).unwrap(), file)
         .unwrap();
-    let rule = catalog.rule("numbers-only").unwrap();
+    let rule = catalog.rule("one-program").unwrap();
     let jq = Jq::new();
     let dir = folder_for_reproduce();
     let lines = reproduce_lines(&catalog, rule, serde_json::json!({}), dir.path(), &jq);
     assert_eq!(lines.len(), 1, "{lines:?}");
-    assert!(
-        lines[0].starts_with("jq 'def semver_numbers: "),
-        "{}",
-        lines[0]
-    );
+    assert!(lines[0].starts_with(start), "{}", lines[0]);
 
+    for input in inputs {
+        std::fs::write(dir.path().join("world.json"), input.to_string()).unwrap();
+        let tool = run_reproduce_line(&lines[0], dir.path());
+        let engine = jq.first("t", expr, &input, None);
+        if tool.status.success() {
+            let answer: serde_json::Value = serde_json::from_slice(&tool.stdout).unwrap();
+            assert_eq!(answer, engine.unwrap(), "{input}");
+        } else {
+            assert!(
+                engine.is_err(),
+                "{input}: the tool failed, the engine gave {engine:?}"
+            );
+        }
+    }
+}
+
+/// The definition in front of a program that names `semver_numbers` gives the answer of the
+/// filter of the engine. The line is the one that a report prints for a static rule.
+#[test]
+fn the_definition_of_semver_numbers_in_a_reproduce_line_gives_the_answer_of_the_engine() {
     let texts = [
         "4.10.3-rc.1",
         "v4.10",
@@ -1959,20 +1971,24 @@ rules:
         .iter()
         .map(|t| serde_json::json!(t))
         .chain([serde_json::json!(4), serde_json::Value::Null]);
-    for input in inputs {
-        std::fs::write(dir.path().join("world.json"), input.to_string()).unwrap();
-        let tool = run_reproduce_line(&lines[0], dir.path());
-        let engine = jq.first("t", "semver_numbers", &input, None);
-        if tool.status.success() {
-            let answer: serde_json::Value = serde_json::from_slice(&tool.stdout).unwrap();
-            assert_eq!(answer, engine.unwrap(), "{input}");
-        } else {
-            assert!(
-                engine.is_err(),
-                "{input}: the tool failed, the engine gave {engine:?}"
-            );
-        }
-    }
+    assert_the_tool_gives_the_answer_of_the_engine(
+        "semver_numbers",
+        "jq 'def semver_numbers: ",
+        inputs,
+    );
+}
+
+/// The definition in front of a program that names `count_of` gives the words of the filter of the
+/// engine. The engine refuses a count that is not a whole number of zero or more. The table has
+/// none, because the definition of the tool does not refuse it.
+#[test]
+fn the_definition_of_count_of_in_a_reproduce_line_gives_the_answer_of_the_engine() {
+    let counts = [0, 1, 2, 3, 10, 11, 100, 12345, 1_000_000].map(|n| serde_json::json!(n));
+    assert_the_tool_gives_the_answer_of_the_engine(
+        r#"count_of("key pair")"#,
+        "jq 'def count_of($noun): ",
+        counts,
+    );
 }
 
 /// The ledger holds the run of the plan of the live window of Wave 14, the newest run. It is an
@@ -2042,4 +2058,486 @@ fn each_sentence_in_a_message_of_the_quota_rules_has_25_words_at_most() {
             }
         }
     }
+}
+
+/// The verdict and the messages of the rule `id` on `fixture`, after `version` replaces the text
+/// at `pointer` in the document of the fixture.
+fn verdict_with_version(
+    (catalog, jq): (&Catalog, &Jq),
+    id: &str,
+    fixture: &str,
+    (pointer, version): (&str, &str),
+) -> (Verdict, Vec<String>) {
+    let rule = catalog.rule(id).unwrap();
+    let mut doc = fixture::load(&catalog::rules_dir().join(fixture)).unwrap();
+    *doc.pointer_mut(pointer)
+        .unwrap_or_else(|| panic!("{id}: {fixture} has no {pointer}")) = serde_json::json!(version);
+    let outcome = outcome_of(rule, doc, jq);
+    (outcome.verdict, outcome.messages)
+}
+
+/// The rules that read the version of a pack: the rule, its clean fixture, and the place of the
+/// version in that fixture.
+const VERSION_RULES: [(&str, &str, &str); 4] = [
+    (
+        "eks-version-not-offered",
+        "fixtures/eks/eks-version-not-offered-clean.json",
+        "/profiles/0/packs/1/version",
+    ),
+    (
+        "gke-version-not-offered",
+        "fixtures/gke/gke-version-not-offered-clean.json",
+        "/profiles/0/packs/1/version",
+    ),
+    (
+        "eks-addon-version",
+        "fixtures/eks/eks-addon-version-clean.json",
+        "/profiles/0/packs/1/version",
+    ),
+    (
+        "maas-os-image",
+        "fixtures/maas/clean.json",
+        "/profiles/0/packs/0/version",
+    ),
+];
+
+/// One version text is one version for each rule that reads it. `semver_numbers` reads `1.32.1`,
+/// `v1.32.1`, and `1.32+build.5` as the numbers 1 and 32. The four rules once cut the text at the
+/// dots, so `v1.32.1` and `1.32+build.5` gave a release line that no cloud offers (#594).
+#[test]
+fn the_rules_that_read_the_release_line_of_a_pack_read_a_v_a_pre_release_and_build_data() {
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    let passes = |id: &str, versions: &[&str]| {
+        let (_, fixture, pointer) = VERSION_RULES.iter().find(|r| r.0 == id).unwrap();
+        for version in versions {
+            let (verdict, messages) =
+                verdict_with_version((&catalog, &jq), id, fixture, (pointer, version));
+            assert_eq!(verdict, Verdict::Passed, "{id}, {version}: {messages:?}");
+        }
+    };
+    // EKS offers 1.32 to 1.36
+    passes(
+        "eks-version-not-offered",
+        &["1.32.1", "v1.32.1", "1.32.1-rc.1", "1.32+build.5", "v1.36"],
+    );
+    // the clean entity asks EKS for the addon versions of 1.32: the command line holds `1.32`
+    passes(
+        "eks-addon-version",
+        &["1.32.1", "v1.32.1", "1.32.1-rc.1", "1.32+build.5"],
+    );
+    // GKE offers 1.34.11 in the channel REGULAR. A version with three numbers is an exact version
+    passes(
+        "gke-version-not-offered",
+        &[
+            "1.34",
+            "v1.34",
+            "1.34+build.5",
+            "1.34.11",
+            "v1.34.11",
+            "1.34.11-rc.1",
+            "1.34.11+build.5",
+        ],
+    );
+    // Palette maps 18.04, 20.04, 22.04, and 24.04. The numbers 22 and 4 are 22.04
+    passes(
+        "maas-os-image",
+        &[
+            "22.04",
+            "v22.04",
+            "22.04.3",
+            "22.04-rc.1",
+            "22.04+build.5",
+            "22.4",
+            "18.04",
+            "20.04",
+            "24.04.1",
+        ],
+    );
+    // a version outside the offer still fails, and the message names the line that was read
+    let fails = |id: &str, version: &str| {
+        let (_, fixture, pointer) = VERSION_RULES.iter().find(|r| r.0 == id).unwrap();
+        let (verdict, messages) =
+            verdict_with_version((&catalog, &jq), id, fixture, (pointer, version));
+        assert_eq!(verdict, Verdict::Failed, "{id}, {version}: {messages:?}");
+        messages.join("\n")
+    };
+    assert!(fails("eks-version-not-offered", "v1.31.2").contains("offers no Kubernetes 1.31:"));
+    assert!(
+        fails("gke-version-not-offered", "v1.34.99").contains("offers no Kubernetes 1.34.99 in")
+    );
+    assert!(fails("maas-os-image", "v16.04.1").contains("refuses v16.04.1 with"));
+}
+
+/// A text that is no version reads in the four rules as it did in release 0.27.0. The rule keeps
+/// the first two parts between the dots. The verdicts below are those of release 0.27.0. A smart
+/// tag such as `1.32.x` is such a text. Only a text that parses reads another way.
+#[test]
+fn a_version_that_does_not_parse_reads_in_the_four_rules_as_in_release_0_27_0() {
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    // the rule, the version, the verdict, and a part of the message
+    let table = [
+        ("eks-version-not-offered", "1.32.x", Verdict::Passed, ""),
+        ("eks-version-not-offered", "1.34.x", Verdict::Passed, ""),
+        ("eks-version-not-offered", "1.32.1.1", Verdict::Passed, ""),
+        (
+            "eks-version-not-offered",
+            "1.31.x",
+            Verdict::Failed,
+            "offers no Kubernetes 1.31:",
+        ),
+        (
+            "eks-version-not-offered",
+            "1.x",
+            Verdict::Failed,
+            "offers no Kubernetes 1.x:",
+        ),
+        (
+            "eks-version-not-offered",
+            "LTS__1.32",
+            Verdict::Failed,
+            "offers no Kubernetes LTS__1.32:",
+        ),
+        // GKE takes a text with three parts between the dots as an exact version
+        ("gke-version-not-offered", "1", Verdict::Passed, ""),
+        (
+            "gke-version-not-offered",
+            "1.34.x",
+            Verdict::Failed,
+            "offers no Kubernetes 1.34.x in",
+        ),
+        (
+            "gke-version-not-offered",
+            "1.34.11.1",
+            Verdict::Failed,
+            "offers no Kubernetes 1.34.11.1 in",
+        ),
+        (
+            "gke-version-not-offered",
+            "1.x",
+            Verdict::Failed,
+            "offers no Kubernetes 1.x in",
+        ),
+        // the command line of the rule holds the first two parts of the text
+        ("eks-addon-version", "1.32.x", Verdict::Passed, ""),
+        ("eks-addon-version", "1.32.1.1", Verdict::Passed, ""),
+        (
+            "eks-addon-version",
+            "1.34.x",
+            Verdict::Error,
+            "--kubernetes-version 1.34 --addon-name",
+        ),
+        ("maas-os-image", "22.04.x", Verdict::Passed, ""),
+        ("maas-os-image", "20.04.x", Verdict::Passed, ""),
+        ("maas-os-image", "22.04.1.5", Verdict::Passed, ""),
+        (
+            "maas-os-image",
+            "22.x",
+            Verdict::Failed,
+            "refuses 22.x with",
+        ),
+        (
+            "maas-os-image",
+            "LTS__22.04",
+            Verdict::Failed,
+            "refuses LTS__22.04 with",
+        ),
+    ];
+    for (id, version, expected, part) in table {
+        let (_, fixture, pointer) = VERSION_RULES.iter().find(|r| r.0 == id).unwrap();
+        let (verdict, messages) =
+            verdict_with_version((&catalog, &jq), id, fixture, (pointer, version));
+        assert_eq!(verdict, expected, "{id}, {version}: {messages:?}");
+        assert!(
+            messages.iter().all(|m| m.contains(part)),
+            "{id}, {version}: {messages:?}"
+        );
+    }
+}
+
+/// The text of each rule in a file of the catalog, with its id. A rule starts at a line
+/// `  - id: <id>` and ends where the next rule starts.
+fn rule_texts(text: &str) -> Vec<(&str, &str)> {
+    let starts: Vec<usize> = text
+        .match_indices("\n  - id: ")
+        .map(|(at, _)| at + 1)
+        .collect();
+    starts
+        .iter()
+        .enumerate()
+        .map(|(i, &from)| {
+            let block = &text[from..starts.get(i + 1).map_or(text.len(), |&next| next)];
+            let id = block["  - id: ".len()..].lines().next().unwrap_or("");
+            (id.trim(), block)
+        })
+        .collect()
+}
+
+/// True when `rule` reads a version field and cuts a text at the dots with no `semver_numbers`
+/// before the cut. `semver_numbers // split(".")` is the one correct form. A text that is no
+/// version, such as the smart tag `1.32.x`, keeps the reading of release 0.27.0. The IP programs
+/// of `networking.yaml` cut at the dots too, and they read no version field.
+fn splits_a_version_at_the_dots(rule: &str) -> bool {
+    if !(names_a_word(rule, ".version") || names_a_word(rule, ".tag")) {
+        return false;
+    }
+    [r#"split(".")"#, r#"split(\".\")"#].iter().any(|call| {
+        rule.match_indices(call).any(|(at, _)| {
+            let before = rule[..at].trim_end();
+            !(before.ends_with("semver_numbers //") || before.ends_with("semver_numbers // ("))
+        })
+    })
+}
+
+/// True when `line` writes a plural in brackets, such as `2 key pair(s)`. `http(s)://` is the
+/// notation of a URL scheme, and it is no plural.
+fn writes_a_plural_in_brackets(line: &str) -> bool {
+    ["(s)", "(es)", "(ies)"].iter().any(|mark| {
+        line.match_indices(mark)
+            .any(|(at, _)| !line[..at].ends_with("http"))
+    })
+}
+
+/// The review at the end of Wave 14 found 22 places that wrote `2 key pair(s)`. A message agrees
+/// each noun with its count: `count_of` writes `1 key pair`, `2 key pairs`, and `no key pairs`.
+#[test]
+fn no_rule_writes_a_plural_in_brackets() {
+    let mut found = Vec::new();
+    for (name, text) in catalog::SECTIONS {
+        for (n, line) in text.lines().enumerate() {
+            if writes_a_plural_in_brackets(line) {
+                found.push(format!("{name}.yaml:{}: {}", n + 1, line.trim()));
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "texts that write a plural in brackets, use `count_of`:\n{}",
+        found.join("\n")
+    );
+}
+
+#[test]
+fn the_plural_test_refuses_each_bracket_form_and_passes_a_url_scheme() {
+    for bad in [
+        "Palette lists 2 key pair(s)",
+        "reads the macro(s) a, b",
+        "has 3 box(es)",
+        "has 3 entr(ies)",
+        r#""\($n) host(s)""#,
+    ] {
+        assert!(writes_a_plural_in_brackets(bad), "{bad}");
+    }
+    for good in [
+        "apiEndpoint is not http(s)://host:port/MAAS",
+        "Palette lists \\($n | count_of(\"key pair\"))",
+        "has 2 key pairs",
+        "a (simple) text",
+    ] {
+        assert!(!writes_a_plural_in_brackets(good), "{good}");
+    }
+}
+
+/// The review at the end of Wave 14 found four rules that cut the version of a pack at the dots.
+/// Three other rules read it with `semver_numbers`. Two readings of one text give two answers
+/// (#594). A rule that reads `.version` or `.tag` reads the numbers first.
+#[test]
+fn no_rule_cuts_a_version_at_the_dots_before_it_reads_the_numbers() {
+    let mut found = Vec::new();
+    for (name, text) in catalog::SECTIONS {
+        for (id, rule) in rule_texts(text) {
+            if splits_a_version_at_the_dots(rule) {
+                found.push(format!("{name}.yaml: {id}"));
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "rules that cut a version at the dots, read it with `semver_numbers` first:\n{}",
+        found.join("\n")
+    );
+}
+
+#[test]
+fn the_split_test_refuses_a_cut_of_a_version_and_passes_the_numbers_and_an_address() {
+    let rules = rule_texts(
+        "section: s\nrules:\n  - id: a\n    expr: '.version | split(\".\") | .[:2]'\n  - id: b\n    expr: '.tag | split(\".\")'\n  - id: c\n    expr: |\n      .version | semver_numbers // split(\".\") | .[:2]\n  - id: d\n    expr: '.version | semver_numbers // (split(\".\") | .[:2])'\n  - id: e\n    expr: '.cidr | split(\".\") | map(tonumber)'\n  - id: f\n    argv: '{{ .packs[0].version | split(\\\".\\\") }}'\n  - id: g\n    expr: '.versions | split(\".\")'\n",
+    );
+    let found: Vec<&str> = rules
+        .iter()
+        .filter(|(_, rule)| splits_a_version_at_the_dots(rule))
+        .map(|(id, _)| *id)
+        .collect();
+    assert_eq!(found, ["a", "b", "f"]);
+}
+
+/// The messages of `rule` on each fault fixture that it names.
+fn fault_messages(catalog: &Catalog, jq: &Jq, id: &str) -> Vec<String> {
+    let rule = catalog.rule(id).unwrap();
+    rule.tests
+        .iter()
+        .filter_map(|t| t.fault.as_ref())
+        .flat_map(|fault| verdict(rule, fault, jq).1)
+        .collect()
+}
+
+/// A message agrees each noun with its count (#594). Some fault fixtures hold one thing, and
+/// others hold many. So the table shows `1 taint`, `3 enabled regions`, and `no free t3.xlarge
+/// slots`.
+#[test]
+fn the_messages_of_the_rules_agree_each_noun_with_its_count_on_their_fault_fixtures() {
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    for (id, words) in [
+        ("aws-region-not-enabled", "Palette lists 3 enabled regions:"),
+        ("eks-fargate-private", "the route table of 2 subnets ("),
+        ("dedicated-hosts", "has no free t3.xlarge slots, and"),
+        ("aks-system-pool", "carries 1 taint:"),
+        (
+            "edge-two-node",
+            "isTwoNodeCluster with 3 control plane hosts:",
+        ),
+        ("edge-host-in-use", "part of 1 cluster (other-cluster):"),
+        ("edge-host-resources", "has 1 core;"),
+        ("ssh-key-pair", "Palette lists 1 key pair"),
+        ("gke-pool-roll", "GKE holds no node pools for cluster fred"),
+        (
+            "gke-pool-roll",
+            "the entity has 1 worker pool (worker-pool):",
+        ),
+        ("macro-silent", "reads 1 macro (strata_probe):"),
+        ("eks-one-zone", "names 1 zone (us-east-2a);"),
+        ("variables-in-use", "is in use by 1 cluster (payments):"),
+        ("pvc-lb-leftover", "2 EBS volumes with the tag"),
+        (
+            "leftovers-before-build",
+            "2 instances of a cluster named fred",
+        ),
+        (
+            "edge-host-duplicate",
+            "is in the pools control-plane-pool, worker-pool:",
+        ),
+    ] {
+        let messages = fault_messages(&catalog, &jq, id);
+        assert!(
+            messages.iter().any(|m| m.contains(words)),
+            "{id}: no message has `{words}`: {messages:?}"
+        );
+    }
+}
+
+/// A verb or a pronoun agrees with a count of one and of many: `1 EBS volume ... is available`
+/// and `2 instances ... are still`. A count of zero reads `no key pairs`.
+#[test]
+fn a_message_agrees_its_verb_and_its_pronoun_with_a_count_of_one_and_of_many_and_zero() {
+    let catalog = catalog::builtin().unwrap();
+    let jq = Jq::new();
+    let messages = |id: &str, fixture: &str, change: &dyn Fn(&mut serde_json::Value)| {
+        let rule = catalog.rule(id).unwrap();
+        let mut doc = fixture::load(&catalog::rules_dir().join(fixture)).unwrap();
+        change(&mut doc);
+        outcome_of(rule, doc, &jq).messages
+    };
+
+    // the fixture holds three volumes, and two are available
+    let volumes = |keep: usize| {
+        messages(
+            "pvc-lb-leftover",
+            "fixtures/aws/volumes-leftover.json",
+            &|doc| {
+                let command = doc["_exec"]
+                    .as_object_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|(line, _)| line.starts_with("aws ec2 describe-volumes"))
+                    .unwrap()
+                    .1;
+                let all = command["stdout"]["Volumes"].as_array().unwrap().clone();
+                let free: Vec<_> = all
+                    .into_iter()
+                    .filter(|v| v["State"] == "available")
+                    .collect();
+                command["stdout"]["Volumes"] = free.into_iter().take(keep).collect();
+            },
+        )
+    };
+    assert!(
+        volumes(1)[0].starts_with("1 EBS volume with the tag"),
+        "{:?}",
+        volumes(1)
+    );
+    assert!(
+        volumes(1)[0].contains("fred is available and attached"),
+        "{:?}",
+        volumes(1)
+    );
+    assert!(
+        volumes(2)[0].starts_with("2 EBS volumes with the tag"),
+        "{:?}",
+        volumes(2)
+    );
+    assert!(
+        volumes(2)[0].contains("fred are available and attached"),
+        "{:?}",
+        volumes(2)
+    );
+
+    // the fixture holds two instances
+    let instances = |keep: usize| {
+        messages(
+            "leftovers-before-build",
+            "fixtures/eks/instances-left.json",
+            &|doc| {
+                let command = doc["_exec"]
+                    .as_object_mut()
+                    .unwrap()
+                    .values_mut()
+                    .next()
+                    .unwrap();
+                let reservations = command["stdout"]["Reservations"].as_array_mut().unwrap();
+                let mut left = keep;
+                for reservation in reservations.iter_mut() {
+                    let list = reservation["Instances"].as_array_mut().unwrap();
+                    list.truncate(left);
+                    left -= list.len();
+                }
+            },
+        )
+    };
+    let one = &instances(1)[0];
+    assert!(
+        one.starts_with("1 instance of a cluster named fred is still in us-east-2:"),
+        "{one}"
+    );
+    assert!(one.contains("; a run before left it, and"), "{one}");
+    let two = &instances(2)[0];
+    assert!(
+        two.starts_with("2 instances of a cluster named fred are still in us-east-2:"),
+        "{two}"
+    );
+    assert!(two.contains("; a run before left them, and"), "{two}");
+
+    // the zero and the many of a count that the message of the key pair shows
+    let keys = |names: &[&str]| {
+        messages(
+            "ssh-key-pair",
+            "fixtures/eks/ssh-key-missing.json",
+            &|doc| {
+                let route =
+                    "GET /v1/clouds/aws/regions/us-east-2/keypairs?cloudAccountUid=acc-eks-1";
+                doc["_responses"][route]["body"]["keyNames"] = serde_json::json!(names);
+            },
+        )
+    };
+    assert!(
+        keys(&[])[0].ends_with("Palette lists no key pairs"),
+        "{:?}",
+        keys(&[])
+    );
+    assert!(
+        keys(&["a", "b"])[0].ends_with("Palette lists 2 key pairs"),
+        "{:?}",
+        keys(&["a", "b"])
+    );
 }

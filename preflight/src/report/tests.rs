@@ -119,7 +119,7 @@ fn a_check_that_did_not_run_lowers_the_readiness_and_a_rule_that_does_not_apply_
             false,
         ),
     ];
-    let s = summarize(&checks, &sections(&checks), &options());
+    let s = summarize(&checks, &sections(&checks), &options(), false);
     assert_eq!((s.ran, s.not_run, s.skipped, s.not_checked), (1, 1, 1, 1));
     assert_eq!(
         s.readiness,
@@ -138,7 +138,7 @@ fn a_check_that_did_not_run_lowers_the_readiness_and_a_rule_that_does_not_apply_
         false,
     )];
     assert_eq!(
-        summarize(&none, &sections(&none), &options()).readiness,
+        summarize(&none, &sections(&none), &options(), false).readiness,
         None
     );
 }
@@ -151,7 +151,7 @@ fn a_note_that_did_not_run_is_outside_the_readiness_as_a_note_that_ran_is() {
         check("a", Verdict::Passed, Level::Probe, Severity::Fail, false),
         note,
     ];
-    let s = summarize(&checks, &sections(&checks), &options());
+    let s = summarize(&checks, &sections(&checks), &options(), false);
     assert_eq!((s.ran, s.not_run), (1, 0));
     assert_eq!(s.readiness, Some(1.0), "the note does not count against it");
     assert!(s.not_run_reasons.is_empty());
@@ -413,6 +413,7 @@ rules:
                 cluster_uid: None,
             },
             options: options(),
+            cluster_gone: false,
             generated_at: "2026-09-30T00:00:00Z".into(),
         },
         &Jq::new(),
@@ -544,7 +545,7 @@ fn the_exit_code_follows_the_counted_failures_then_the_errors() {
         ),
         check("b", Verdict::Failed, Level::Probe, Severity::Fail, false),
     ];
-    let s = summarize(&probe_fail, &sections(&probe_fail), &options());
+    let s = summarize(&probe_fail, &sections(&probe_fail), &options(), false);
     assert_eq!((s.exit_code, s.probe_failed, s.failed), (0, 1, 0));
     assert!(s.verdict.starts_with("OK"), "{}", s.verdict);
 
@@ -555,7 +556,7 @@ fn the_exit_code_follows_the_counted_failures_then_the_errors() {
         Severity::Fail,
         true,
     )];
-    let s = summarize(&counted, &sections(&counted), &options());
+    let s = summarize(&counted, &sections(&counted), &options(), false);
     assert_eq!(s.exit_code, 1);
     assert!(s.verdict.contains("b"), "{}", s.verdict);
 
@@ -567,7 +568,7 @@ fn the_exit_code_follows_the_counted_failures_then_the_errors() {
         false,
     )];
     assert_eq!(
-        summarize(&error, &sections(&error), &options()).exit_code,
+        summarize(&error, &sections(&error), &options(), false).exit_code,
         2
     );
 
@@ -577,7 +578,7 @@ fn the_exit_code_follows_the_counted_failures_then_the_errors() {
         check("a", Verdict::Passed, Level::Probe, Severity::Fail, false),
         check("b", Verdict::Failed, Level::Probe, Severity::Fail, false),
     ];
-    let s = summarize(&half, &sections(&half), &ready);
+    let s = summarize(&half, &sections(&half), &ready, false);
     assert_eq!(s.exit_code, 1);
     assert!(
         s.verdict.starts_with("NOT READY: readiness 50%"),
@@ -603,7 +604,7 @@ fn the_verdict_and_the_summary_agree_each_noun_with_its_count() {
     };
     for (n, words) in [(1, "1 check failed: f0"), (2, "2 checks failed: f0, f1")] {
         let checks = failed(n);
-        let s = summarize(&checks, &sections(&checks), &options());
+        let s = summarize(&checks, &sections(&checks), &options(), false);
         assert_eq!(s.verdict, format!("FAIL: {words}"));
     }
     let errors = |n: usize| -> Vec<CheckResult> {
@@ -624,7 +625,7 @@ fn the_verdict_and_the_summary_agree_each_noun_with_its_count() {
         (2, "2 checks could not answer: e0, e1"),
     ] {
         let checks = errors(n);
-        let s = summarize(&checks, &sections(&checks), &options());
+        let s = summarize(&checks, &sections(&checks), &options(), false);
         assert_eq!(s.verdict, format!("ERROR: {words}"));
     }
     let probes = |n: usize| -> Summary {
@@ -639,7 +640,7 @@ fn the_verdict_and_the_summary_agree_each_noun_with_its_count() {
                 )
             })
             .collect();
-        summarize(&checks, &sections(&checks), &options())
+        summarize(&checks, &sections(&checks), &options(), false)
     };
     assert_eq!(
         probes(1).verdict,
@@ -652,6 +653,74 @@ fn the_verdict_and_the_summary_agree_each_noun_with_its_count() {
 }
 
 #[test]
+fn the_verdict_of_a_run_that_passed_says_that_the_cluster_is_gone_when_a_watch_ended_so() {
+    let verdict = |checks: &[CheckResult], gone: bool| {
+        let s = summarize(checks, &sections(checks), &options(), gone);
+        (s.exit_code, s.verdict)
+    };
+    let passed = vec![check(
+        "a",
+        Verdict::Passed,
+        Level::Probe,
+        Severity::Fail,
+        false,
+    )];
+    assert_eq!(
+        verdict(&passed, false),
+        (0, "OK: each counted check passed".to_string())
+    );
+    assert_eq!(
+        verdict(&passed, true),
+        (
+            0,
+            "OK: the cluster is gone; no counted check failed".to_string()
+        )
+    );
+    let probe = vec![
+        check(
+            "a",
+            Verdict::Passed,
+            Level::Preflight,
+            Severity::Fail,
+            false,
+        ),
+        check("b", Verdict::Failed, Level::Probe, Severity::Fail, false),
+    ];
+    assert_eq!(
+        verdict(&probe, true),
+        (
+            0,
+            "OK: the cluster is gone; no counted check failed; 1 probe failed, not counted"
+                .to_string()
+        )
+    );
+    assert_eq!(verdict(&[], false), (0, "OK: no check ran".to_string()));
+    assert_eq!(
+        verdict(&[], true),
+        (0, "OK: the cluster is gone; no check ran".to_string())
+    );
+    // a failure, an error, and a readiness under the bar keep their words
+    let counted = vec![check(
+        "b",
+        Verdict::Failed,
+        Level::Preflight,
+        Severity::Fail,
+        true,
+    )];
+    assert_eq!(verdict(&counted, true), verdict(&counted, false));
+    assert_eq!(verdict(&counted, true).1, "FAIL: 1 check failed: b");
+    let error = vec![check(
+        "c",
+        Verdict::Error,
+        Level::Probe,
+        Severity::Fail,
+        false,
+    )];
+    assert_eq!(verdict(&error, true), verdict(&error, false));
+    assert_eq!(verdict(&error, true).0, 2);
+}
+
+#[test]
 fn the_checks_that_apply_are_the_checks_that_ran_and_the_checks_that_did_not_run() {
     let checks = vec![
         check("a", Verdict::Passed, Level::Probe, Severity::Fail, false),
@@ -660,7 +729,7 @@ fn the_checks_that_apply_are_the_checks_that_ran_and_the_checks_that_did_not_run
         check("d", Verdict::Skipped, Level::Probe, Severity::Fail, false),
     ];
     let sections = sections(&checks);
-    let s = summarize(&checks, &sections, &options());
+    let s = summarize(&checks, &sections, &options(), false);
     assert_eq!((s.ran, s.not_run, s.applies()), (2, 1, 3));
     assert_eq!(s.readiness, Some(1.0 / 3.0));
 }
@@ -721,6 +790,7 @@ rules:
                 out_dir: Some("runs/x".into()),
                 ..options()
             },
+            cluster_gone: false,
             generated_at: "2026-09-30T00:00:00Z".into(),
         },
         &Jq::new(),
@@ -805,6 +875,7 @@ rules:
                 cluster_uid: None,
             },
             options: options(),
+            cluster_gone: false,
             generated_at: "2026-09-30T00:00:00Z".into(),
         },
         &Jq::new(),

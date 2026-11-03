@@ -21,7 +21,7 @@ rules:
         [ .entity.spec.machinepoolconfig[]
           | select((.cloudConfig.azs // []) != [] or (.cloudConfig.subnets // []) != [])
           | select((zones | length) < 2)
-          | "pool \(.poolConfig.name) names \(zones | length) zone(s) (\(zones | join(", "))); EKS needs 2 or more" ]
+          | "pool \(.poolConfig.name) names \(zones | length | count_of("zone")) (\(zones | join(", "))); EKS needs 2 or more" ]
     fix:
       owner: palette
       text: Check the count of distinct zones in the EKS validate route.

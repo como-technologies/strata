@@ -196,10 +196,18 @@ mod tests {
     }
 
     #[test]
-    fn a_program_that_names_semver_numbers_starts_with_its_definition_and_another_does_not() {
+    fn a_program_that_names_a_filter_of_the_engine_starts_with_its_definition_and_another_does_not()
+    {
         let line = tool_program(".x = 1 | ", "semver_numbers");
         assert!(line.starts_with("def semver_numbers: "), "{line}");
         assert!(line.ends_with("; .x = 1 | semver_numbers"), "{line}");
+        let line = tool_program("", r#".n | count_of("host")"#);
+        assert!(line.starts_with("def count_of($noun): "), "{line}");
+        assert!(line.ends_with(r#"; .n | count_of("host")"#), "{line}");
+        assert!(!line.contains("semver_numbers"), "{line}");
+        let line = tool_program("", r#"(.v | semver_numbers) | count_of("host")"#);
+        assert!(line.starts_with("def semver_numbers: "), "{line}");
+        assert!(line.contains("def count_of($noun): "), "{line}");
         assert_eq!(tool_program("", ".a | length"), ".a | length");
     }
 
