@@ -1109,6 +1109,7 @@ fn no_file_of_the_tree_uses_the_phrasal_verb_leave_out() {
         "examples",
         "fuzz",
         "preflight",
+        "report-endpoint",
         "scripts",
         "src",
         "tests",
@@ -2023,13 +2024,26 @@ fn rule_7_says_to_read_the_code_of_palette_first_and_still_bars_a_citation() {
 
 // ---- the report of the unknown values ---------------------------------------------------------
 
-/// The pages that describe `strata report`, and the page of the endpoint that takes the report.
-const REPORT_PAGES: [&str; 4] = [
+/// The pages that describe `strata report`, the page of the endpoint that takes the report, and the
+/// page of the facts, which holds the contract report.
+const REPORT_PAGES: [&str; 5] = [
     "reference/report.md",
     "commands/report.md",
     "use-cases/unknown-value.md",
     "development/report-endpoint.md",
+    "development/facts.md",
 ];
+
+/// True when `text` holds `phrase` as whole words. A letter or a digit before or after the phrase
+/// makes it part of another word, such as "input back" for "put back".
+fn has_phrase(text: &str, phrase: &str) -> bool {
+    let text = one_line(text);
+    text.match_indices(phrase).any(|(at, found)| {
+        let before = text[..at].chars().next_back();
+        let after = text[at + found.len()..].chars().next();
+        !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
+    })
+}
 
 /// `text` without the code spans: the text between two backticks.
 fn without_code(text: &str) -> String {
@@ -2078,6 +2092,14 @@ fn the_pages_of_the_report_keep_to_the_style_rules() {
         "stays out",
         "stay out",
         "read back",
+        "filled in",
+        "use up",
+        "logged in",
+        "goes out",
+        "goes through",
+        "stay off",
+        "put back",
+        "write down",
     ];
     let mut faults = Vec::new();
     for page in REPORT_PAGES {
@@ -2100,7 +2122,7 @@ fn the_pages_of_the_report_keep_to_the_style_rules() {
                 }
             }
             for phrase in phrasal {
-                if one_line(&prose).contains(phrase) {
+                if has_phrase(&prose, phrase) {
                     faults.push(format!("{page}: the phrase {phrase:?} in: {block}"));
                 }
             }

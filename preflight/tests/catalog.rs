@@ -1020,7 +1020,7 @@ fn the_quota_rules_ask_for_the_small_types_that_palette_drops_by_default_and_cou
             "azure-vcpu-quota",
             "fixtures/azure/vcpu-quota-small-size.json",
             AZURE_TYPES,
-            "the pools ask for 8 vCPUs in eastus, and the regional quota has 2 free of 10 (8 in use): Azure refuses the machines with OperationNotAllowed; the family quota of each type can be lower still",
+            "the pools ask for 8 vCPUs in eastus, and the regional quota has 2 free of 10 (8 in use). Azure refuses the machines with OperationNotAllowed. The family quota of each type can be lower.",
         ),
     ] {
         let rule = catalog.rule(id).unwrap();
@@ -1051,17 +1051,17 @@ fn a_quota_rule_fails_for_a_pool_whose_type_the_route_does_not_list() {
         (
             "aws-quotas",
             "fixtures/aws/vcpu-quota-type-not-listed.json",
-            "pool worker-pool: the instance type route of Palette lists no cpu for the type m3.large in region us-east-2, so the check cannot count the vCPUs of the pool",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the type m3.large in region us-east-2. The check cannot count the vCPUs of the pool.",
         ),
         (
             "gcp-quotas",
             "fixtures/gke/cpu-quota-type-not-listed.json",
-            "pool worker-pool: the instance type route of Palette lists no cpu for the type n1-standard-1 in region us-east1, so the check cannot count the CPUs of the pool",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the type n1-standard-1 in region us-east1. The check cannot count the CPUs of the pool.",
         ),
         (
             "azure-vcpu-quota",
             "fixtures/azure/vcpu-quota-size-not-listed.json",
-            "pool worker-pool: the instance type route of Palette lists no cpu for the size Standard_A1 in region eastus, so the check cannot count the vCPUs of the pool",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the size Standard_A1 in region eastus. The check cannot count the vCPUs of the pool.",
         ),
     ] {
         let rule = catalog.rule(id).unwrap();
@@ -1080,7 +1080,7 @@ fn a_quota_rule_fails_for_a_pool_whose_type_the_route_does_not_list() {
         out.messages,
         [
             "the on-demand vCPU quota L-1216C47A in us-east-2 is 2.0, and the pools ask for 4 vCPUs: 1 x t3.xlarge",
-            "pool worker-pool: the instance type route of Palette lists no cpu for the type m3.large in region us-east-2, so the check cannot count the vCPUs of the pool",
+            "pool worker-pool: the instance type route of Palette lists no cpu for the type m3.large in region us-east-2. The check cannot count the vCPUs of the pool.",
         ]
     );
     let mut no_number = fixture::load(&path).unwrap();

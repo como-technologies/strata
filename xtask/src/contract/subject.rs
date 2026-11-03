@@ -129,7 +129,7 @@ fn fill_template<A: PaletteApi>(
     bound: &Bindings,
     depth: usize,
 ) -> Subject {
-    // no request goes out for a path that has a placeholder with no source
+    // the run sends no request for a path that has a placeholder with no source
     if let Some(param) = unsourced(template).first() {
         return Subject::Missing(no_source(param));
     }

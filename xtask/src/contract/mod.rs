@@ -2,7 +2,7 @@
 //! answer with the stand-in.
 //!
 //! The list of the facts states what strata depends on. The stand-in imitates it, and the book
-//! tells it. This module finds out whether Palette still agrees with the stand-in.
+//! tells it. This module tells whether Palette still agrees with the stand-in.
 //!
 //! For each fact of the kind `request` that a read-only request can show, the run finds an object in
 //! the tenant and sends the request. It compares the answer with the documents that the stand-in

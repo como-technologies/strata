@@ -46,7 +46,7 @@
 # The project of a checkout and the first line of a body come from github.sh, which upstream.sh
 # reads too.
 #
-# Needs jq, and gh logged in to the repository.
+# Needs jq, and a gh login for the repository.
 set -Eeuo pipefail
 # a command that fails, such as a host call, ends the script with 2, never with the 1 of a difference
 trap 'exit 2' ERR

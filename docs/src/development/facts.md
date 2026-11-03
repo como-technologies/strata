@@ -14,8 +14,8 @@ Each fact is in three places:
 - The book, which tells the user. See [What Palette does](../internals/palette.md) and
   [Palette API requests](../reference/palette-api.md).
 
-Palette changes, and the three places can stop agreeing with each other, or with Palette. The list of
-the facts links them. A check fails when a link is missing or wrong.
+Palette changes, and the three places can then disagree with each other, or with Palette. The
+list of the facts links them. A check fails when a link is missing or wrong.
 
 ## The list
 
@@ -113,11 +113,11 @@ the fact.
 | --- | --- |
 | A route that the stand-in serves is in no `stand_in`. | The stand-in imitates a route that no fact states. |
 | A `stand_in` matches no route that the stand-in serves. | The fact names a route that the stand-in lost. |
-| A fact has no `live` and no `unchecked`, or both. | No one knows how the fact is proved. |
+| A fact has no `live` and no `unchecked`, or both. | No one knows how to prove the fact. |
 | A live check names a script that does not exist, or a check that the script does not call. | The proof is not there. |
 | A live check has no row in the book. | The book does not tell what the check establishes. |
 | A page or an anchor of a fact is not in the book. | The book does not state the fact. |
-| An error code of `reads.codes` or `absent_codes` is on none of the pages of the fact. | The code has a typing fault, or the page lost it. |
+| An error code of `reads.codes` or `absent_codes` is on none of the pages of the fact. | The fact spells the code wrong, or the page lost it. |
 | A fact without a GET request has `absent_codes`. | The run sends GET requests only, so the key does nothing. |
 | A table of `reference/palette-api.md` lists a request that no fact has. | The book lists a request that the list does not hold. |
 | A rule of strata-preflight sends a request that no fact has, or a fact names the wrong rules. The read of Palette that a command check makes first is such a request. | The rules and the list disagree. |
@@ -125,7 +125,7 @@ the fact.
 | A `##` heading of `internals/palette/` is on no fact. | The book states a fact that the list does not hold. |
 | A GET fact reads a field that no document of the stand-in holds. | The contract run has no type to compare, and reports a difference for each tenant that gives the field. |
 | A file of strata that a fact names does not exist. | The fact points at nothing. |
-| An id is used twice, or two facts have one request. | The list holds a copy. |
+| Two facts have one id, or one request. | The list holds a copy. |
 | A rule of the cloud tier is in no fact of the kind `cloud`. | The call of a cloud is not in the list. |
 | The call of a fact is the command of none of its rules, or no fixture of the rules answers it. | The fact, the rule, and the stand-in disagree. |
 | The second command of a rule of the lab is the call of no fact that names the rule. | The contract run sends the calls of the list only, so nothing proves that command. |
@@ -168,15 +168,16 @@ For each fact of the kind `request`, the run does these steps:
 
 1. It reads the documents that the stand-in serves for the routes of `stand_in`. Each chapter of
    the book builds a tenant, and the run reads the documents of every chapter.
-2. It finds an object in the tenant. The first entry of a listing is the object. The `{uid}` of
-   a cluster comes from the cluster listing. The `{configUid}` and the `{cloudType}` of a cloud
-   config come from the document of that cluster. The run reads the cloud type with the rule of
-   strata: the kind of `spec.cloudConfigRef`, and else `spec.cloudType`. A value of the query
-   comes from a listing too: the `{cloudAccountUid}`
-   of the regions route comes from `GET /v1/cloudaccounts/aws`. The security groups take the first
-   account, the first region that holds a VPC, and the first VPC of that region. See
-   [The placeholders of a request](#the-placeholders-of-a-request).
+2. It finds an object in the tenant. The first entry of a listing is the object.
 3. It sends the request with its query, and compares the answer with the documents of the stand-in.
+
+Step 2 takes each value from a listing, as
+[The placeholders of a request](#the-placeholders-of-a-request) says. The `{uid}` of a cluster
+comes from the cluster listing. The `{configUid}` and the `{cloudType}` of a cloud config come from
+the document of that cluster. The run reads the cloud type with the rule of strata: the kind of
+`spec.cloudConfigRef`, and else `spec.cloudType`. A value of the query comes from a listing too:
+the `{cloudAccountUid}` of the regions route comes from `GET /v1/cloudaccounts/aws`. The security
+groups take the first account, the first region that holds a VPC, and the first VPC of that region.
 
 The request has the query that strata sends, or that the stand-in serves the route with. Some routes
 need it. See [The query of a request](#the-query-of-a-request). The run sends the request in the
@@ -270,7 +271,7 @@ serves, through the placeholder. So the `{uid}` of `/v1/packs/{name}/registries/
 and the `{uid}` of `/v1/packs/{uid}` is a pack. The pack has no source, and the run skips that
 request. The table of the sources is `xtask/src/facts/subjects.rs`.
 
-A name can have more than one value. The regions are such a name. The run takes the first region
+A name can have more than one value, such as the regions. The run takes the first region
 that lets the rest of the request find its values. The security groups need a VPC, so the run asks
 the VPCs of each region in order, until one region lists a VPC. The skip reason then names the number
 of regions that the run tried. A region that Palette refuses for the key, with a 4xx, is no end of
@@ -284,9 +285,9 @@ joins the results in one entry:
 - The reason lists the reason of each request that is not the same, with the choice in front.
 - A difference names its choice in front of the field.
 
-A choice needs a source for each of its names. The lab holds an AWS account, so the choice `aws` of
-`validate-instance-types` goes out. The route of AWS takes no subscription, so the source of
-`{subscriptionId}` omits that pair from the query. The choices `gcp` and `azure` have no source
+A choice needs a source for each of its names. The lab holds an AWS account, so the run sends the
+choice `aws` of `validate-instance-types`. The route of AWS takes no subscription, so the source
+of `{subscriptionId}` omits that pair from the query. The choices `gcp` and `azure` have no source
 yet, and the reason says so.
 
 ### The scope of a request
@@ -397,9 +398,8 @@ user names. A new read of strata needs a line in that table and a list in a fact
 A list that is a whole closed set of strata names its type: `sets` maps the field to the name, such
 as `status.state` to `ClusterState`. The check compares the list with the values of the type.
 A value that one has and the other lacks is a fault, so a new state in the type shows in the check.
-A word that only strata gives is in the type and not in the list. `STRATA_ONLY` in
-`xtask/src/facts/sets.rs` names it. The pack state `absent` is such a word. A list that is a part of a
-set names no type.
+A word that only strata gives is in the type and not in the list, such as the pack state `absent`.
+`STRATA_ONLY` in `xtask/src/facts/sets.rs` names it. A list that is a part of a set names no type.
 
 The run reads one object for each fact, such as the first profile of the listing. It finds a new
 value when that object holds it.
@@ -464,8 +464,8 @@ Each entry of `releases[]` has these fields:
 them in this way:
 
 - A fact that differs has one open issue with the label `palette-drift`, in the milestone
-  `Backlog`. The label is created when the repository has none. The first line of the body is the
-  marker `<!-- strata-contract: <fact id> -->`, and the script finds the issue by it.
+  `Backlog`. The script creates the label when the repository has none. The first line of the
+  body is the marker `<!-- strata-contract: <fact id> -->`, and the script finds the issue by it.
 - The script updates the issue while the fact differs. It closes the issue with a comment when the
   fact is the same again.
 - A fact with an unknown value has one open issue for each closed set that holds one. The issue has
@@ -483,7 +483,7 @@ follows `summary`.
 
 The script exits with 0 when no fact differs, no value is unknown, and no release is new. It exits
 with 1 when it handled a fact that differs, an unknown value, or a new release. It exits with 3
-when a fact or a release could not be checked: it handled the issues first, and the code says so.
+when the run could not check a fact or a release: it handled the issues first, and the code says so.
 It exits with 2 when a call to GitHub failed, or the document is not a `strata-contract/1`
 document.
 
@@ -493,10 +493,10 @@ repository from `--repo` or from the `origin` remote of the checkout. When it fi
 and the links name `OWNER/REPO`.
 
 The script reads the host layer of `scripts/ci/verify-report.sh`, so it holds no second copy of the
-functions that call GitHub. The contract script is not shipped, so it can read a file of the
+functions that call GitHub. No release ships the contract script, so it can read a file of the
 repository. The shipped report scripts stay copies on purpose. The script also reads
 `examples/live/github.sh`. That file holds the project of a checkout and the first line of the body
-of an issue, so `upstream.sh` and the other live scripts read the remote in the same way.
+of an issue. So `upstream.sh` and the other live scripts read the remote in the same way.
 
 ### The profiles of the run
 
@@ -585,9 +585,10 @@ The job keeps its results in `~/.local/share/strata-contract/`, or in `STRATA_CO
 The run writes the new tags to a copy, `runs/<UTC time>/state.json`. The job moves the copy onto
 `state.json` when the report handled the issues: the report exits with 0, 1, or 3. When the
 report fails with 2, the old tags stay. The next run then notes the new tag again, and the report
-opens the issue of the release. A report that fails never loses the issue of a release. A report
-that exits with 3 handled the issues, so the tags stay new. A person can close the issue of a
-release, and the next week does not open it again.
+opens the issue of the release. A report that fails never loses the issue of a release.
+
+A report that exits with 3 handled the issues, so the tags stay new. A person can close the issue
+of a release, and the next week does not open it again.
 
 The job exits with 2, and the service shows a failure, when the run could not check a fact or a
 release. It also exits with 2 when the report could not write an issue. A fact that differs, or a
@@ -637,9 +638,9 @@ steps for each new value:
 A person who sees the note on standard error has the same choice. The note names the type of the
 set, such as `PackState`, and the log has the route. The fact for that route names the field.
 
-An issue "A user of strata reports the" value comes from the endpoint of the report, with the label
-`unknown-value`: see [The issue of a value](./report-endpoint.md#the-issue-of-a-value). Do the same
-steps. The weekly run can have opened its own issue for the same value, so close both together.
+A user of strata can report a value too. The endpoint of the report then opens an issue with the
+label `unknown-value`: see [The issue of a value](./report-endpoint.md#the-issue-of-a-value). Do the
+same steps. The weekly run can have opened its own issue for the same value, so close both together.
 When a release of strata names the value, remove the label `unknown-value` from the issue and close
 it. A closed issue with the label still counts toward the limit of the endpoint.
 
@@ -665,10 +666,10 @@ A cloud fact has these fields beside the common fields:
 - `rules` are the rules of the cloud tier that read the answer. Each rule of the cloud tier must be in
   a fact.
 - `palette` names a route of Palette that lists a part of the answer. `fact` is the id of the request
-  fact that states the route and its query. A route that no request fact states has `route`: the
-  method and the path. A fact has one of the two. `lacks` lists the fields of `reads.fields` that the route does not list. Each one is the reason
-  why the rule stays in the cloud tier. A route that lacks no field answers the rule, and the rule moves to
-  the palette tier.
+  fact that states the route and its query. A route that no request fact states has `route`
+  instead: the method and the path. `lacks` lists the fields of `reads.fields` that the route does
+  not list. Each one is the reason why the rule stays in the cloud tier. A route that lacks no
+  field answers the rule, and the rule moves to the palette tier.
 - `unchecked` gives the reason when the run cannot send the call: the lab has no account of the
   cloud, or the rule has no command.
 

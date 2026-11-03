@@ -10,7 +10,7 @@
 # STRATA_REPORT=1 and STRATA_REPORT_URL=URL, in a state folder of its own. So the send is real, and
 # the value is the made-up value of the book. The check opens or changes the issue of that value in
 # OWNER/REPO through the endpoint. The default repository is the one that report-endpoint/Cargo.toml
-# names, which is the one that the endpoint writes to. It needs gh logged in to read the issue, jq,
+# names, which is the one that the endpoint writes to. It needs a gh login to read the issue, jq,
 # curl, the strata release binary, and the xtask binary: just build and just stand-in.
 # The run changes HOME, so the script keeps the login of gh: it sets GH_CONFIG_DIR to the folder of
 # the login before the change. A GH_TOKEN in the environment works too. When gh cannot read the

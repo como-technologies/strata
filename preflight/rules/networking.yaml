@@ -48,6 +48,7 @@ rules:
       `UnsupportedAvailabilityZoneException`. The zone id behind a name such as us-east-1e differs
       for each account, so the check asks EC2 for the ids of the zones the pools name. Palette does
       not check the zone.
+
       The zone route of Palette (`GET /v1/clouds/aws/regions/{region}/availabilityzones`) lists each
       zone of the account with `name`, `state`, and `zoneId`. It lists no zone type, and the test for a
       Local Zone or a Wavelength Zone reads the zone type. So the check stays at the cloud tier.
@@ -301,9 +302,12 @@ rules:
       Each node takes one address, and the VPC CNI takes one more for each pod, with a warm pool of
       one ENI (up to 15 addresses on a t3.xlarge). EKS itself needs 6 free addresses in each cluster
       subnet, and asks for 16. A subnet that runs out fails the node group with
-      `InsufficientFreeAddresses`. The check sums the nodes (maxSize) of the pools that use a
-      subnet. It asks 16 for each node with the VPC CNI (1 with another CNI), plus 16 for the
-      cluster. That is a floor, not the real need: the count of pods on each node decides it.
+      `InsufficientFreeAddresses`.
+
+      The check sums the nodes (maxSize) of the pools that use a subnet. It asks 16 for each node
+      with the VPC CNI (1 with another CNI), plus 16 for the cluster. That is a floor, not the real
+      need: the count of pods on each node decides it.
+
       The VPC route of Palette (`GET /v1/clouds/aws/regions/{region}/vpcs`) lists no count of free
       addresses for a subnet. So the check stays at the cloud tier.
     when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
@@ -361,11 +365,14 @@ rules:
       A node needs a 0.0.0.0/0 route to a NAT gateway, an internet gateway, a transit gateway, or a
       NAT instance. Without one it cannot reach Palette, EKS, or the registries: the nodes do not
       join, and the images do not pull. On AWS the row reports instances that delete every 30
-      minutes with no end. The private test of Palette reads the internet gateway route alone and
-      checks no NAT route. The VPC route of Palette lists `isPrivate` for a subnet, from that test, and
-      it lists no route. So the check stays at the cloud tier. The check runs for a static VPC on aws
-      and eks. For GCP and GKE the router with NAT needs `gcloud compute routers list` (see
-      reproduce), and the watch sees the nodes that never join.
+      minutes with no end.
+
+      The private test of Palette reads the internet gateway route alone and checks no NAT route.
+      The VPC route of Palette lists `isPrivate` for a subnet, from that test, and it lists no
+      route. So the check stays at the cloud tier.
+
+      The check runs for a static VPC on aws and eks. For GCP and GKE the router with NAT needs
+      `gcloud compute routers list` (see reproduce), and the watch sees the nodes that never join.
     when: (.cloud == "aws" or .cloud == "eks") and (.entity.spec.cloudConfig.vpcId // "") != "" and ([ .entity.spec.machinepoolconfig[]? | (.cloudConfig.subnets // [])[] | .id // empty ] | length) > 0
     check:
       kind: exec
@@ -425,6 +432,7 @@ rules:
       A pool subnet that does not exist, is in another VPC, or is in another zone than the pool
       says fails during the build. Palette lists the subnets of the VPC and tests the public ones
       for MapPublicIpOnLaunch. A subnet id that is not in the VPC is never seen, and passes.
+
       The VPC route of Palette lists each VPC of the account in the region with its subnets: `az`,
       `isPrivate`, `mapPublicIpOnLaunch`, `name`, and `subnetId`. A subnet is in the VPC that lists
       it. The check reads that list with the key alone, and needs no tool of the cloud. It fails a

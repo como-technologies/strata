@@ -724,7 +724,7 @@ fn the_hint_does_not_show_when_standard_error_is_not_a_terminal_and_records_noth
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(HINT_FILE);
     assert_eq!(Hint::new(file.clone(), at(9), false).show(), None);
-    assert!(!file.exists(), "a run in a pipe must not use up the day");
+    assert!(!file.exists(), "a run in a pipe must not record the time");
 }
 
 #[test]
@@ -770,7 +770,7 @@ fn a_watch_shows_the_hint_one_time_in_a_run_and_never_when_quiet() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(HINT_FILE);
     let hint = || Hint::new(file.clone(), at(9), true);
-    // --quiet hides the note, so it hides the hint, and it does not use up the day
+    // --quiet hides the note, so it hides the hint, and it does not record the time
     let mut quiet = Watch::new(Progress::new(true)).hinting(hint());
     assert_eq!(quiet.hint_text(), None);
     assert!(!file.exists());

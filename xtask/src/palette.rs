@@ -32,7 +32,7 @@
 //! header. To `Accept: application/json` the answer is `{"Reader":{}}`, as Palette gives it: see
 //! `export_reader`. Any other `Accept`, or none, gets the file.
 //!
-//! The route `POST /strata-report` is no route of Palette. It stands in for the endpoint of the
+//! The route `POST /strata-report` is no route of Palette. It is a stand-in for the endpoint of the
 //! report, so that a page can show the send of strata: see `REPORT_ENDPOINT`.
 //!
 //! When the file does not exist, the answer is HTTP 404 with the body that Palette gives. The

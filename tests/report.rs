@@ -437,7 +437,7 @@ fn link_does_not_take_a_format() {
 fn sent_marks_the_lines_so_that_the_next_report_holds_only_the_new_lines() {
     let home = tempfile::tempdir().unwrap();
     write_log(home.path(), &two_values());
-    // a report alone marks nothing: the user decides when the lines went out
+    // a report alone marks nothing: the user decides when the user sent the lines
     assert_eq!(report(home.path(), &[]).code, 0);
     assert!(report(home.path(), &[]).out.contains(LATER_TYPE));
     assert!(!log_in(home.path()).with_file_name(SENT_FILE).exists());

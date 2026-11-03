@@ -28,8 +28,8 @@ the version of strata that read the value. A log with no line gives a report wit
 {{#include ../output/unknown-value-report-markdown.txt}}
 ```
 
-`--json` prints [`strata-report/1`](../reference/documents.md#strata-report1). Each entry has the
-fields of the log and a `count`:
+`--json` prints [`strata-report/1`](../reference/documents.md#strata-report1). `strata schema report`
+prints its JSON Schema. Each entry has the fields of the log and a `count`:
 
 ```text
 {{#include ../output/unknown-value-report-json.txt}}

@@ -207,7 +207,7 @@ fn read_state(body: &str) -> State {
         .unwrap_or_default()
 }
 
-/// What a merge will do, found with the reads alone. The caller can refuse the merge before it
+/// What a merge does, found with the reads alone. The caller can refuse the merge before it
 /// writes anything.
 #[derive(Debug)]
 pub struct Plan {
@@ -215,7 +215,7 @@ pub struct Plan {
 }
 
 impl Plan {
-    /// How many issues the merge will open.
+    /// How many issues the merge opens.
     pub fn new_issues(&self) -> usize {
         self.steps
             .iter()

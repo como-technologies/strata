@@ -1945,7 +1945,7 @@ fn the_stand_in_of_the_book_serves_the_eight_fields_with_a_string_and_a_registry
 }
 
 /// The fields that the API definition of Palette gives as a list, an object, or a boolean. A string
-/// there would make the next contract run report a false `type` difference.
+/// there makes the next contract run report a false `type` difference.
 #[test]
 fn the_stand_in_of_the_book_serves_a_list_an_object_or_a_boolean_where_palette_does() {
     let Some(stand_in) = harvested() else {

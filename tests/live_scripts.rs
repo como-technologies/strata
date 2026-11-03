@@ -4736,7 +4736,7 @@ fn the_switch_own_registries_defaults_to_true_and_no_recipe_of_the_live_example_
     );
 
     // A recipe sets a variable with -var, in the justfile or in a script. Only the script of the
-    // standing set turns the switch off.
+    // standing set sets the switch to `false`.
     assert!(
         !repo_file("justfile").contains("own_registries"),
         "the justfile sets no switch: the script does"
@@ -7102,8 +7102,8 @@ case "$1" in
 esac
 "#;
 
-/// A `strata` that stands in for the send: a run appends a line to the log, and "posts" to the
-/// endpoint by changing the issue file, which a `gh` lists. It writes down the settings it got.
+/// A stand-in `strata` for the send. A run appends a line to the log. It "posts" to the endpoint
+/// when it changes the issue file, which a `gh` lists. It records the settings that it got.
 /// The schema id of its log line is `FAKE_SCHEMA`, which the test sets from the `const` of the crate.
 const FAKE_STRATA_SEND: &str = r#"#!/usr/bin/env bash
 [ "$1" != "--version" ] || { echo "strata 0.26.0"; exit 0; }

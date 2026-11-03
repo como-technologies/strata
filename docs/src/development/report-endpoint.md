@@ -197,7 +197,7 @@ cargo test --test integration report_deploy   # the deploy script, against a sta
 ```
 
 The tests of the service start the real service and a stand-in of GitHub on this machine. They post
-with the same function that strata uses, so the send and the endpoint are tested together. No test
+with the same function that strata uses, so one test covers the send and the endpoint. No test
 calls GitHub or Google. No test posts to the endpoint that the release names: see
 [The tests send no report](./build-test.md#the-tests-send-no-report).
 

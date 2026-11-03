@@ -7,8 +7,8 @@
 #
 # up applies the module of examples/live/terraform with the name prefix strata-contract, the cloud
 # aws, no cluster, and own_registries off. So it makes cluster profiles only: no AWS resource, no
-# access key, no registry, no cluster. The cluster group, the cluster template, and the registry
-# kinds stay off, as their defaults say. Like live-profiles, it needs the terraform.tfvars of the
+# access key, no registry, no cluster. It makes no cluster group, no cluster template, and no
+# registry kind, as their defaults say. Like live-profiles, it needs the terraform.tfvars of the
 # example for the names in the tenant.
 #
 # The state is the file terraform/contract.tfstate. The recipes live-up and live-down read

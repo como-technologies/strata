@@ -1,5 +1,5 @@
 //! The deploy of the endpoint of the report: `deploy/report/`. No network and no Google project:
-//! a `gcloud` on the `PATH` stands in, and writes down each call that it gets.
+//! a stand-in `gcloud` on the `PATH` records each call that it gets.
 
 use std::path::Path;
 use std::process::Command;

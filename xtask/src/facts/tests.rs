@@ -588,11 +588,11 @@ fn a_file_with_a_field_that_the_schema_lacks_is_an_error_that_names_the_file() {
     write(
         dir,
         "a.yaml",
-        "schema: strata-facts/1\nfacts:\n  - id: x\n    kind: behavior\n    colour: red\n",
+        "schema: strata-facts/1\nfacts:\n  - id: x\n    kind: behavior\n    color: red\n",
     );
     let (_, bad) = load(dir);
     assert!(bad[0].starts_with("a.yaml: "), "{bad:?}");
-    assert!(bad[0].contains("colour"), "{bad:?}");
+    assert!(bad[0].contains("color"), "{bad:?}");
 }
 
 #[test]
