@@ -254,11 +254,13 @@ fn tenant_sh_reports_cluster_state_and_never_reads_a_gateway_404_as_deleted() {
 /// A `<key>.status` file overrides the status. A `<key>.keyed.status` file overrides it again for
 /// a request with an `ApiKey` header. A `<key>.as-<ApiKey>.status` file overrides it for a request
 /// whose `ApiKey` header holds that value, and the file `<key>.as-<ApiKey>` is the body of that
-/// answer. When an executable `$FAKE_ROUTES/<route key>.sh`
-/// exists, its output is the body of each answer. It logs each request as `METHOD path` to
-/// `$FAKE_LOG`. It keeps each request body as `$FAKE_ROUTES/sent/<METHOD>_<route key>`. It adds the
-/// body to `$FAKE_ROUTES/sent/<METHOD>_<route key>.all`, in the order of the requests. It keeps
-/// the query and the headers as `$FAKE_ROUTES/sent/<METHOD>_<route key>.request`. The line of the
+/// answer. When an executable `$FAKE_ROUTES/<route key>.sh` exists, its output is the body of each
+/// answer.
+///
+/// It logs each request as `METHOD path` to `$FAKE_LOG`. It keeps each request body as
+/// `$FAKE_ROUTES/sent/<METHOD>_<route key>`. It adds the body to
+/// `$FAKE_ROUTES/sent/<METHOD>_<route key>.all`, in the order of the requests. It keeps the query
+/// and the headers as `$FAKE_ROUTES/sent/<METHOD>_<route key>.request`. The line of the
 /// `ApiKey` header holds `(hidden)` in place of the key.
 const FAKE_API_CURL: &str = r#"#!/usr/bin/env bash
 out=""; write=""; url=""; method=GET; sent=""; headers=""
@@ -2256,7 +2258,7 @@ fn preflight_plan_reads_the_exact_keys_of_the_vpc_route() {
             ),
             Some(0),
         ),
-        // a public subnet has no isPrivate, and an empty name is omitted
+        // a public subnet has no isPrivate, and the answer omits an empty name
         (
             r#"{"vpcs":[{"vpcId":"vpc-1","subnets":[{"subnetId":"subnet-1","az":"us-east-2a","mapPublicIpOnLaunch":true}]}]}"#.to_string(),
             Some(0),
@@ -2794,13 +2796,13 @@ fi
         self.route(&format!("/v1/clusterprofiles/{uid}/publish"), "{}");
     }
 
-    /// `body` stands in for the command `name`, in place of the one that the stage has.
+    /// `body` is the stand-in for the command `name`, in place of the one that the stage has.
     fn command(&self, name: &str, body: &str) {
         executable(&self.path("bin").join(name), body);
     }
 
-    /// `wrapper` stands in for strata. A call that it does not answer goes to the answers that
-    /// `strata` gave.
+    /// `wrapper` is the stand-in for strata. A call that it does not answer goes to the answers
+    /// that `strata` gave.
     fn wrap_strata(&self, wrapper: &str) {
         let bin = self.path("bin");
         std::fs::rename(bin.join("fake-strata"), bin.join("fake-strata-rules")).unwrap();
@@ -4986,10 +4988,10 @@ fn listings_of_profiles() -> Vec<(String, String)> {
 
 #[test]
 fn each_live_script_that_lists_the_profiles_of_the_project_matches_them_by_name_or_uid() {
-    // The listing is saved, or checked with an exit code. The next command reads it by uid or by
-    // name. In baseline.sh, it selects by each name of the profile_names output. In loop.sh, it
-    // selects by the uid of the release. In template.sh, it selects by the uid of the linked
-    // version.
+    // The script saves the listing, or checks it with an exit code. The next command reads it by
+    // uid or by name. In baseline.sh, it selects by each name of the profile_names output. In
+    // loop.sh, it selects by the uid of the release. In template.sh, it selects by the uid of the
+    // linked version.
     let matched_later = [
         ("baseline.sh", "list profiles --json >"),
         ("loop.sh", "list --pack \"$pack\" --json"),
@@ -6306,7 +6308,7 @@ fn validate_route_sh_expects_the_route_to_take_a_pack_version_that_does_not_list
 // ---- route-bodies.sh -------------------------------------------------------------------------------
 
 /// The pack listing of the lab. It holds the packs that route-bodies.sh pins. It also holds the
-/// packs that its search for `pack-cloud-support` passes over. These are one of another registry,
+/// packs that its search for `pack-cloud-support` skips. These are one of another registry,
 /// one that lists aws, one that lists `all`, one with no cloud type, and one of another layer.
 /// `gcp-dns`, which lists gcp alone, is in the listing when `without_aws` is true.
 fn route_packs(without_aws: bool) -> String {

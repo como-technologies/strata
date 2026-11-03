@@ -1,0 +1,7 @@
+$ PATH="$PWD/tools:$PATH" strata preflight cluster.json --cloud aws --tier cloud --rule iam-role-policy-quota --quiet | sed -n '4,9p'
+  PROBE FAIL    iam-role-policy-quota        The nodes role stays under the IAM quota of managed policies     1 ms  catch no runs, clean 12/12 (78%)
+                the nodes role has 21 managed policies, and the cloud account adds 0 more: 21 is over the IAM quota of 20 for a role. The check could not read the quota of the account (An error occurred (AccessDeniedException) when calling the GetServiceQuota operation), so it used the default quota
+                ran: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json; aws service-quotas get-service-quota --service-code iam --quota-code L-0DA4ABF3 --region us-east-1 --output json -> exit 0; exit 254
+                reproduce: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --query 'length(AttachedPolicies)'
+                reproduce: aws service-quotas get-service-quota --service-code iam --quota-code L-0DA4ABF3 --region us-east-1 --query Quota.Value
+                reproduce: aws iam list-attached-role-policies --role-name nodes.cluster-api-provider-aws.sigs.k8s.io --output json

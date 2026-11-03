@@ -14,7 +14,7 @@
 //! - It appends one line to the log: see [`log`]. `--quiet` does not stop the log.
 //!
 //! After the first note of a day, in a terminal, the watch adds a hint: see [`hint`]. The hint says
-//! that `strata report` shows what the user can send. The report is made from the log: see
+//! that `strata report` shows what the user can send. The report comes from the log: see
 //! [`report`]. A user who chose the send gets the report posted at the end of the run: see
 //! [`send`].
 //!
@@ -97,8 +97,8 @@ impl Watch {
         Watching(())
     }
 
-    /// Tell about the value `value` of the set `set`, which the route `route` gave. A value that
-    /// the watch told about before is not told again.
+    /// Tell about the value `value` of the set `set`, which the route `route` gave. The watch does
+    /// not tell again about a value that it told about before.
     fn see(&mut self, set: &str, value: &str, route: &str) {
         let value = shown(value);
         if !self.told.insert((set.to_string(), value.clone())) {

@@ -53,7 +53,7 @@ pub(crate) fn without_comments(program: &str) -> String {
     out
 }
 
-/// Read a comment: the `#` is read. jaq ends a comment at the end of the first line that does not end
+/// Read a comment after its `#`. jaq ends a comment at the end of the first line that does not end
 /// with an odd number of backslashes. It does not count a `\r` before the `\n`.
 pub(super) fn skip_comment(chars: &mut impl Iterator<Item = (usize, char)>) {
     // the backslashes that end the text so far, and those before a `\r` that ends it

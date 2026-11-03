@@ -484,9 +484,9 @@ fn held_snapshot<A: PaletteApi>(
 ///
 /// One side can be a cluster group, and the other side a cluster ref that selects no profile. The
 /// cluster side then holds only the profiles that the group pins. The question is whether the
-/// member runs the pin, and not what else it runs. So the other side is taken first. `connect`
-/// gives the [`Palette`] for each side that a request answers, and `fetched_at` is the time of the
-/// read, in RFC 3339.
+/// member runs the pin, and not what else it runs. So the function takes the other side first.
+/// `connect` gives the [`Palette`] for each side that a request answers, and `fetched_at` is the
+/// time of the read, in RFC 3339.
 ///
 /// # Errors
 ///

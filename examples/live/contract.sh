@@ -14,7 +14,9 @@
 # For each fact of the kind cloud, the run also sends a read-only call of the tool of a cloud (aws,
 # gcloud). The call runs in the lab account. The run compares the answer with the answers that the
 # fixtures of the rules hold. It checks that the answer lists each value of a table that a rule
-# holds. STRATA_CONTRACT_NAME gives the value of {name} in a call, such as the project. A tool that
+# holds.
+#
+# STRATA_CONTRACT_NAME gives the value of {name} in a call, such as the project. A tool that
 # is not on the PATH, or a value that the lab lacks, skips the call. --no-cloud sends no call of a
 # cloud.
 #

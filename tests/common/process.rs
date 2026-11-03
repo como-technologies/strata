@@ -25,7 +25,7 @@ static OPEN_FOR_WRITE: RwLock<()> = RwLock::new(());
 /// Write a file and make it executable, for a stand-in command on a test's PATH.
 pub fn executable(path: &Path, body: &str) {
     let made = {
-        // no code panics while it holds the lock, so the lock is never poisoned
+        // no code panics while it holds the lock, so a panic never poisons the lock
         let _no_start = OPEN_FOR_WRITE.write().unwrap();
         std::fs::write(path, body).and_then(|()| make_executable(path))
     };

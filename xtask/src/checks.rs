@@ -54,7 +54,7 @@ pub fn check(
 /// field that no document holds has no type to compare, and the run then reports a difference
 /// for each tenant that gives the field.
 fn fields_held(repo: &Path, stand_in: &StandIn) -> Vec<String> {
-    // a list that cannot be read is reported by the check of the facts
+    // the check of the facts reports a list that strata cannot read
     crate::facts::load(repo)
         .map(|facts| stand_in.unheld_fields(&facts))
         .unwrap_or_default()

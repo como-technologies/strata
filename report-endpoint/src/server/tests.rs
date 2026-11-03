@@ -124,7 +124,7 @@ fn a_sender_that_makes_too_many_requests_gets_429_with_the_time_to_wait() {
     let refused = service.handle(&post("a", &report), now + Duration::from_secs(60));
     assert_eq!(refused.status, 429);
     assert_eq!(refused.retry_after, Some(3540));
-    // another sender is not held, and the sender is free after the hour
+    // the service holds no other sender, and the sender is free after the hour
     assert_eq!(service.handle(&post("b", &report), now).status, 202);
     assert_eq!(
         service
@@ -170,7 +170,7 @@ fn the_new_issues_that_fit_the_limit_open_and_the_entries_of_the_others_wait() {
     let now = Instant::now();
     let two = body(&[entry("a"), entry("b")]);
     assert_eq!(service.handle(&post("a", &two), now).status, 202);
-    // two more new values: one issue is left, so one opens and the other waits
+    // two more new values: one issue remains, so one opens and the other waits
     let more = body(&[entry("c"), entry("d")]);
     let partly = service.handle(&post("b", &more), now);
     assert_eq!(partly.status, 202);
@@ -520,7 +520,8 @@ fn a_request_that_a_check_refuses_does_not_wait_for_a_merge_that_is_going_on() {
     let service = Service::new(Logged::default());
     let report = body(&[entry("later")]);
     let now = Instant::now();
-    // the first report is answered, and its write has not run: it holds the lock of the tracker
+    // the service answered the first report, and its write has not run: it holds the lock of the
+    // tracker
     let slow = service.admit(&post("a", &report), now);
     assert_eq!(slow.answer.status, 202);
     let (sender, received) = mpsc::channel();

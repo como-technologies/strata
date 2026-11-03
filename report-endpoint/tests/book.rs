@@ -25,8 +25,8 @@ fn section<'a>(page: &'a str, heading: &str) -> &'a str {
 }
 
 /// The names of the variables that `settings.rs` reads: each quoted word of capital letters and
-/// underscores before the tests. A `CARGO_` variable is read when the crate builds, so it is not a
-/// setting of the service.
+/// underscores before the tests. Cargo reads a `CARGO_` variable when the crate builds, so it is
+/// not a setting of the service.
 fn variables_of_the_code() -> Vec<String> {
     let source = read("src/settings.rs");
     let code = source.split("#[cfg(test)]").next().unwrap();
@@ -124,6 +124,6 @@ fn the_page_names_the_label_of_the_service_and_says_that_a_closed_issue_counts_t
         limits.contains("reads at most 1000 issues of its label, open and closed"),
         "{limits}"
     );
-    // closing an issue does not lower the count, so the page must not say that it does
+    // a closed issue does not lower the count, so the page must not say that it does
     assert!(!page.contains("Close the issues of values"), "{page}");
 }

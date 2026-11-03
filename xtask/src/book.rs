@@ -54,7 +54,7 @@ const FIRST_EXAMPLE: &str = "examples/profiles/raw/aws-stack@1.1.1/profile.json"
 ///
 /// # Errors
 ///
-/// The message to show when the examples are not built.
+/// The message to show when the user did not build the examples.
 pub(crate) fn built_examples(repo: &Path) -> Result<(), String> {
     if repo.join(FIRST_EXAMPLE).is_file() {
         Ok(())
@@ -137,7 +137,7 @@ impl Runner {
         let port_file = work.join("port");
         // The server gets a pipe for standard input and no share of this process's output. It
         // stops when the pipe closes, so it cannot outlive this run. It cannot hold open a pipe
-        // that this run's output was written into.
+        // that this run's output goes into.
         let mut server = Command::new(xtask)
             .args(["serve"])
             .arg(&tenant_dir)
@@ -428,7 +428,8 @@ impl Runner {
         let text = self
             .commit
             .replace_all(&text, " in 8c1d4f2")
-            .replace("\r\n", "\n");
+            .replace("\r\n", "\n")
+            .replace(&self.work.join("home").display().to_string(), "~");
         let file = self.out.join(format!("{name}.txt"));
         let mut existing = std::fs::read_to_string(&file).unwrap_or_default();
         existing.push_str(&text);
@@ -448,11 +449,11 @@ impl Runner {
         }
     }
 
-    /// Run one command with bash, and give back its exit code, what the book keeps, and what to
+    /// Run one command with bash, and return its exit code, what the book keeps, and what to
     /// print when the exit code is wrong.
     ///
     /// `join` is `show2`: standard output and standard error go to one file, so the block holds
-    /// them interleaved as a terminal shows them. Two pipes read separately would put every
+    /// them interleaved as a terminal shows them. Two pipes read separately put every
     /// progress note after the result, which is not what the reader sees.
     fn run(&self, command: &str, join: bool) -> (i32, String, String) {
         let out_file = self.work.join("step.out");
@@ -500,8 +501,9 @@ impl Runner {
     }
 
     /// The lines of `from` that a page teaches, written as `name`. The command line is kept, and
-    /// each gap becomes `...`. Nothing matching is an error. When the line a page is built on
-    /// stops being printed, this build fails and the page does not go quietly wrong.
+    /// each gap becomes `...`. A pattern that matches no line is an error. When strata no longer
+    /// prints the line that a page shows, this build fails. So the page cannot become wrong with no
+    /// notice.
     pub fn excerpt(&mut self, name: &str, from: &str, pattern: &str) {
         if !self.runs_commands() {
             return;
@@ -662,7 +664,7 @@ impl Runner {
             .collect();
         let scope = if project.is_empty() {
             // An empty value, not `unset`: strata reads ~/.palette.env when a variable is unset,
-            // so `unset` would leave a real project in place. An empty one says tenant scope.
+            // so `unset` leaves a real project in place. An empty one says tenant scope.
             "export PALETTE_PROJECT_UID=                  # this chapter is tenant scope\n\
              export PALETTE_PROJECT=                    # an empty value beats a ~/.palette.env"
                 .to_string()

@@ -30,7 +30,7 @@ pub struct ReportOptions {
     pub all: bool,
 }
 
-/// The report of the log, and the mark that the user can ask for after the report went out.
+/// The report of the log, and the mark that the user can ask for after strata sent the report.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UnsentReport {
     /// The report of the lines that the user did not mark as sent.
@@ -61,8 +61,8 @@ pub fn unknown_log() -> Result<PathBuf> {
 ///
 /// # Errors
 ///
-/// `LogInvalid` when a line of the log is not a line of `strata-unknown/1`: nothing is reported.
-/// `Io` when strata cannot read the log.
+/// `LogInvalid` when a line of the log is not a line of `strata-unknown/1`: the function reports
+/// nothing. `Io` when strata cannot read the log.
 pub fn unknown_report(log: &Path, options: ReportOptions) -> Result<UnsentReport> {
     let (lines, skip) = read_unsent(log, options.all)?;
     Ok(UnsentReport {
@@ -73,7 +73,7 @@ pub fn unknown_report(log: &Path, options: ReportOptions) -> Result<UnsentReport
 
 /// Mark the first `lines` lines of the log at `log` as sent. A later report omits them.
 ///
-/// Call it after the report went out, so that a report that fails marks nothing. `lines` is the
+/// Call it after strata sent the report, so that a report that fails marks nothing. `lines` is the
 /// field of the [`UnsentReport`] that the report came from: a line that a run wrote after the read
 /// stays unmarked.
 ///
@@ -101,7 +101,7 @@ fn marked_lines(log: &Path, lines: usize, all: bool) -> usize {
 }
 
 /// How many of `lines` come before the first line of a value that waits. `waiting` holds the
-/// numbers of the entries of `report` that the endpoint held back, from 1. All of `lines` when
+/// numbers of the entries of `report` that wait at the endpoint, from 1. All of `lines` when
 /// none waits.
 fn lines_before_waiting(lines: &[log::Line], report: &Report, waiting: &[usize]) -> usize {
     let held: BTreeSet<(&str, &str)> = waiting
@@ -136,7 +136,7 @@ fn first_chunk(lines: &[log::Line]) -> usize {
 pub struct Sent {
     /// How many lines the send marked as sent: the lines of the reports that the endpoint took.
     pub marked: usize,
-    /// How many lines the endpoint holds back for now, with the lines after them. The hour has no
+    /// How many lines wait at the endpoint for now, with the lines after them. The hour has no
     /// room for the values of these lines. The next send holds them again.
     pub waiting: usize,
     /// The numbers of the lines of the log that are not valid, from 1. The send skipped them.
@@ -148,13 +148,13 @@ pub struct Sent {
 /// nothing.
 ///
 /// This is the one place where strata marks a line by itself: the endpoint took the report, so
-/// the lines are sent. A report has [`MOST_ENTRIES`] entries or fewer and [`MOST_VALUES`] values or
-/// fewer, so a long log goes in more than one report. A report that fails marks nothing, and the
-/// next send holds its lines again.
+/// the run sent the lines. A report has [`MOST_ENTRIES`] entries or fewer and [`MOST_VALUES`]
+/// values or fewer, so a long log goes in more than one report. A report that fails marks nothing,
+/// and the next send holds its lines again.
 ///
 /// A line that is not valid is no line of the report, and it stops nothing. The mark counts the
-/// valid lines only, and the field `skipped` of the result names the others. When the endpoint
-/// holds back the values of some entries, the send marks the lines before the first line of such a
+/// valid lines only, and the field `skipped` of the result names the others. When the values of
+/// some entries wait at the endpoint, the send marks the lines before the first line of such a
 /// value, and stops. The next send holds that line and the lines after it. So a line after it that
 /// the endpoint took counts again.
 ///

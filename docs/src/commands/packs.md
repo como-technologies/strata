@@ -58,10 +58,21 @@ omits the field on each other version:
 
 `--latest` keeps one line for each registry. It keeps a second line, with the
 mark `latest in Palette`, only when Palette marks another version. This can
-happen in two cases. The highest version is a pre-release, such as `1.31.0-rc.1`
-above `1.29.0`: `@latest` skips it, and Palette marks the highest version. Or a
+happen in two cases. The highest version is a pre-release, such as `1.22.0-rc.1`
+above `1.21.1`: `@latest` skips it, and Palette marks the highest version. Or a
 version does not parse as a semantic version, such as a version with four
-numbers.
+numbers. Here is the first case:
+
+```text
+{{#include ../output/packs-pre-release.txt}}
+```
+
+The JSON gives `latest` on the version that strata picks, and `paletteLatest` on
+the version that Palette marks. They are two versions:
+
+```text
+{{#include ../output/packs-pre-release-json.txt}}
+```
 
 `strata behind` names the version of Palette on its bump line: see
 [The pins that are behind](./behind.md#the-pins-that-are-behind). See

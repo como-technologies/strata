@@ -112,7 +112,8 @@ pub struct Fact {
 /// the call. The rest of the call stays in the cloud tier, because the route lacks it.
 ///
 /// A fact of the kind `request` states a route and its query one time, so the route names that
-/// fact. A route that no request fact states is written out. A route has exactly one of the two.
+/// fact. A route that no request fact states has its method and path in the field `route`. A route
+/// has exactly one of `fact` and `route`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PaletteRoute {
@@ -361,8 +362,8 @@ struct Part {
 }
 
 /// Each fact of the files in `dir`, in the order of the file names and then of the file. The second
-/// value holds a message for each file that cannot be read. The facts of the other files stay, so
-/// one fault in one file does not hide the faults of the others.
+/// value holds a message for each file that the function cannot read. The facts of the other files
+/// stay, so one fault in one file does not hide the faults of the others.
 pub fn load(dir: &Path) -> (Vec<Fact>, Vec<String>) {
     let mut facts = Vec::new();
     let mut bad = Vec::new();

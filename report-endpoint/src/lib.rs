@@ -12,7 +12,7 @@
 //! 3. It omits a report that it took in the last day, with [`digest::Counted`], so a second
 //!    try of a send does not count twice.
 //! 4. It reads the issues of the tracker, and limits the new issues and the writes, so that a flood
-//!    of made-up values opens few issues. The values that the limits hold back wait.
+//!    of made-up values opens few issues. The limits make some values wait.
 //! 5. It answers 202, and then merges the report into the issues of the tracker, with
 //!    [`merge::apply`]. A set and a value have one issue. The issue holds a count, and no request
 //!    opens an issue for itself.

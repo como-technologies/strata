@@ -693,11 +693,12 @@ fn the_rules_of_the_cloud_tier_are_read_with_their_command_their_cloud_and_their
     // a rule of Azure only is not for the lab, and a rule with no check has no command
     assert!(!rules["azure-vcpu-quota"].lab);
     assert!(rules["gcp-org-policies"].argv.is_empty());
-    // a rule that checks the lab itself is marked, and a rule of a cloud is not
+    // a rule that checks the lab itself has the mark, and a rule of a cloud has none
     assert!(rules["tools-present"].of_the_lab);
     assert!(rules["ecr-token"].of_the_lab);
     assert!(!rules["aws-quotas"].of_the_lab);
-    // a rule of a static or a palette check is not of the cloud tier, and its programs are read
+    // a rule of a static or a palette check is not of the cloud tier, and the function reads its
+    // programs
     assert!(!rules.contains_key("eks-one-zone"));
     assert!(!rules.contains_key("instance-offering"));
     assert!(read.programs.contains_key("eks-one-zone"));
@@ -1007,7 +1008,7 @@ fn a_route_of_palette_beside_a_call_names_the_fields_that_it_lacks() {
     ));
     sources.facts.push(instance_types_request());
     assert_eq!(routes_beside(&sources), Vec::<String>::new());
-    // a route that no fact states is written out
+    // a route that no fact states uses the field `route`
     sources.facts[0].palette = Some(route_of(
         None,
         Some("GET /v1/clouds/aws/regions/{region}/availabilityzones"),

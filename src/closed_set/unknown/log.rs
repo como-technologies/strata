@@ -148,8 +148,8 @@ pub(crate) struct Valid {
 /// not there is an empty log. A blank line is no line.
 ///
 /// The send of a run reads the log here, so a line that is not valid does not stop it. The mark of
-/// the lines that are sent counts the valid lines only. [`read`] stops at the first line that is
-/// not valid.
+/// the lines that the run sends counts the valid lines only. [`read`] stops at the first line that
+/// is not valid.
 ///
 /// # Errors
 ///

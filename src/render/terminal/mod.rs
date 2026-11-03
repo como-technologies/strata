@@ -712,7 +712,7 @@ mod tests {
             ("Provisioning", on.yellow("Provisioning")),
             ("Error", on.red("Error")),
         ] {
-            // the state is painted whatever the width of its column, and its padding is not
+            // the renderer paints the state whatever the width of its column, and not its padding
             let padding = " ".repeat("Provisioning".len() - state.len());
             let cell = format!("{painted}{padding}  aws");
             assert!(out.contains(&cell), "{state}: {out:?}");

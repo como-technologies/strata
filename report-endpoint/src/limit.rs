@@ -1,8 +1,8 @@
 //! The limit of the rate for each sender, and for the whole service.
 //!
 //! The endpoint keeps no address. A [`Limiter`] holds a hash of the address, with a salt that the
-//! process makes by itself when it starts. The hash is in memory only: it is never written or
-//! logged, and a new process cannot read the hashes of the old one. So the limiter can tell that
+//! process makes by itself when it starts. The hash is in memory only: the service never writes or
+//! logs it, and a new process cannot read the hashes of the old one. So the limiter can tell that
 //! one sender comes again, and nobody can read who the sender is.
 
 use std::collections::hash_map::RandomState;

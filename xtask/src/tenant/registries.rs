@@ -1,5 +1,6 @@
 //! The pack registries of the tenant, the charts of a private registry, and the versions of a pack.
 
+use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
@@ -211,8 +212,12 @@ impl Tenant {
     /// Publish a copy of one version of a pack in the Public Repo as the version `copy`. The copy
     /// is a rebuild when its version is `<version>-rev1`, as Spectro Cloud publishes `1.19.3-rev1`
     /// of cert-manager, or a pre-release such as `1.66.0-rc.1`. Palette orders the versions by
-    /// semantic version, so a pre-release sorts below its version. The mark `latestVersion` and
-    /// the floating tags stay on the base, and the copy gets only its exact tag.
+    /// semantic version, so a rebuild sorts below its base. The mark `latestVersion` and the
+    /// floating tags stay on the base, and the copy gets only its exact tag.
+    ///
+    /// A copy above its base is a pre-release of the next version, such as `1.66.0-rc.1` of
+    /// `1.65.0`. Palette marks the highest version of a pack, so the copy takes the mark from the
+    /// base. The floating tags still stay on the base.
     pub fn copy_pack_version(&self, project: &str, name: &str, version: &str, copy_version: &str) {
         let path = pack_listing(name);
         let mut listing = self.read(project, &path);
@@ -230,8 +235,17 @@ impl Tenant {
         let base = copy["metadata"]["uid"].as_str().unwrap_or_default();
         let uid = format!("{}f", &base[..base.len().saturating_sub(1)]);
         copy["metadata"]["uid"] = json!(uid);
-        copy["metadata"]["annotations"]["latestVersion"] = json!("false");
+        let above = version::compare(copy_version, version) == Ordering::Greater;
+        copy["metadata"]["annotations"]["latestVersion"] = json!(above.to_string());
         copy["spec"]["version"] = json!(copy_version);
+        if above {
+            for item in items.iter_mut() {
+                if item["spec"]["version"] == version && item["spec"]["registryUid"] == PUBLIC_REPO
+                {
+                    item["metadata"]["annotations"]["latestVersion"] = json!("false");
+                }
+            }
+        }
         items.push(copy);
         let count = items.len();
         listing["listmeta"]["count"] = json!(count);
@@ -432,6 +446,35 @@ mod tests {
             "a second copy of the sync answer: {copies:?}. Call `registry_sync`, and add a note \
              to the result"
         );
+    }
+
+    /// The versions of `name` in the Public Repo that carry the mark `latestVersion`.
+    fn marked_versions(tenant: &Tenant, name: &str) -> Vec<String> {
+        let listing = tenant.read("dev", &pack_listing(name));
+        listing["items"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|i| i["spec"]["registryUid"] == PUBLIC_REPO)
+            .filter(|i| i["metadata"]["annotations"]["latestVersion"] == "true")
+            .filter_map(|i| i["spec"]["version"].as_str().map(str::to_string))
+            .collect()
+    }
+
+    #[test]
+    fn the_mark_of_the_latest_version_follows_the_highest_version_of_the_pack() {
+        let dir = tempfile::tempdir().unwrap();
+        let tenant = Tenant::new(dir.path(), &crate::repository());
+        tenant.registries("dev");
+        assert_eq!(marked_versions(&tenant, "cert-manager"), ["1.21.1"]);
+
+        // a rebuild is below its base, so the base keeps the mark
+        tenant.copy_pack_version("dev", "cert-manager", "1.21.1", "1.21.1-rev1");
+        assert_eq!(marked_versions(&tenant, "cert-manager"), ["1.21.1"]);
+
+        // a pre-release of the next version is above the base, and Palette marks the highest
+        tenant.copy_pack_version("dev", "cert-manager", "1.21.1", "1.22.0-rc.1");
+        assert_eq!(marked_versions(&tenant, "cert-manager"), ["1.22.0-rc.1"]);
     }
 
     #[test]

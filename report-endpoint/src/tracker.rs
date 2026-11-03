@@ -151,7 +151,7 @@ impl GitHub {
     }
 
     /// The number of the milestone `title` among the open milestones, when there is one. The
-    /// answer is kept, so a service asks one time.
+    /// tracker keeps the answer, so a service asks one time.
     fn milestone_number(&mut self) -> Result<Option<u64>, TrackerError> {
         if let Some(known) = self.milestone_number {
             return Ok(known);

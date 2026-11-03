@@ -154,7 +154,7 @@ pub fn documents<'a>(fact: &Fact, rules: &'a BTreeMap<String, CloudRule>) -> Vec
 }
 
 /// The rules of the cloud tier in `catalog` and the text of the programs of every rule. The second
-/// value holds a message for each fixture that cannot be read.
+/// value holds a message for each fixture that the function cannot read.
 pub fn read_rules(catalog: &Catalog) -> (CloudSources, Vec<String>) {
     let mut sources = CloudSources::default();
     let mut bad = Vec::new();
@@ -228,7 +228,7 @@ fn answers_of(world: Value) -> Vec<Answer> {
 /// The code of strata under `repo` that is no test. It holds each file of the directories of
 /// [`CODE`], without the lines of a comment and the items for the unit tests. A file named
 /// `tests.rs`, and a file under a directory `tests`, is a test. The second value holds a message
-/// for each file that cannot be read or parsed.
+/// for each file that the function cannot read or parse.
 pub fn read_code(repo: &Path) -> (BTreeMap<String, String>, Vec<String>) {
     let mut code = BTreeMap::new();
     let mut bad = Vec::new();

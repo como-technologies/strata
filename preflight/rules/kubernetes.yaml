@@ -272,10 +272,11 @@ rules:
       A pack version that does not list the cloud type, such as `cni-cilium-oss` before 1.19.3 on
       GCP, is refused at create. The cluster validate route takes a body with such a pack, and
       `palette-validate` passes. So no route answers this check, and this rule is a gap that
-      preflight fills. Palette owns the rule. A pack that lists no cloud type supports each cloud.
-      The cloud type of an edge cluster is `edge-native`, so the check reads `routeCloud` and not
-      `cloud`. The world derives `packFacts` from the cloud types of each pack, by the rule of
-      Palette.
+      preflight fills. Palette owns the rule.
+
+      A pack that lists no cloud type supports each cloud. The cloud type of an edge cluster is
+      `edge-native`, so the check reads `routeCloud` and not `cloud`. The world derives `packFacts`
+      from the cloud types of each pack, by the rule of Palette.
     check:
       kind: static
       expr: |

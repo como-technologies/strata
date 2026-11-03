@@ -1,0 +1,2 @@
+$ jq -c '.source.cluster.tiers.policy.fields | {values, valuesHash}' runs/dev-group-template.json
+{"values":null,"valuesHash":"3847c66486f22efd01b4ad6dca5fc3af0df24f74513a3f3bef466f591f485f64"}

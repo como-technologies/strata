@@ -25,13 +25,13 @@ pub struct StandIn {
 
 impl StandIn {
     /// Read the tenants under `root`: one directory for each chapter, with the layout of a tenant.
-    /// A file that is no JSON, and the file of a refusal, are omitted.
+    /// The function omits a file that is no JSON, and the file of a refusal.
     ///
     /// # Errors
     ///
-    /// The text of the error of the read when `root` or an entry of it cannot be read. A text that
-    /// says the stand-in holds no document when the tenants hold none. A run with no document
-    /// checks no fact, so it must not read as a run that found no difference.
+    /// The text of the error of the read when the function cannot read `root` or an entry of it. A
+    /// text that says the stand-in holds no document when the tenants hold none. A run with no
+    /// document checks no fact, so it must not read as a run that found no difference.
     pub fn read(root: &Path) -> Result<StandIn, String> {
         let unreadable = |e: std::io::Error| format!("{}: {e}", root.display());
         let mut stand_in = StandIn::default();
@@ -59,7 +59,8 @@ impl StandIn {
             if is_refusal(relative) {
                 continue;
             }
-            // a file that no request reads, or that cannot be read, is no document of the stand-in
+            // a file that no request reads, or that strata cannot read, is no document of the
+            // stand-in
             let (Some(route), Ok(text)) = (route_of(relative), std::fs::read_to_string(&file))
             else {
                 continue;
@@ -113,8 +114,8 @@ impl StandIn {
 }
 
 /// Build the tenant of every chapter of the book, and keep the documents of each one in a
-/// directory of `into`. It runs no command of the book. The examples must be built: `just
-/// examples`. `xtask` is the binary that serves a tenant.
+/// directory of `into`. It runs no command of the book, so run `just examples` first. `xtask` is
+/// the binary that serves a tenant.
 ///
 /// # Errors
 ///

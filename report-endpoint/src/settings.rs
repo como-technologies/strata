@@ -5,7 +5,7 @@
 
 use std::fmt;
 
-/// The variable that holds the token of GitHub. It is required.
+/// The variable that holds the token of GitHub. The service needs it.
 pub const TOKEN_VAR: &str = "GITHUB_TOKEN";
 
 /// The repository that gets the issues, when `GITHUB_REPOSITORY` is not set: the repository that the

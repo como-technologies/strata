@@ -7,14 +7,16 @@
 # The timer strata-contract.timer starts it (deploy/contract/timer.sh installs it). The tenant is
 # the one that ~/.palette.env names. The job keeps its files in ~/.local/share/strata-contract/, or
 # in STRATA_CONTRACT_DIR. The result of each run is in runs/<UTC time>/. The newest result is in
-# last.json. state.json holds the tags of the releases that the last run saw. The run writes the
+# last.json.
+#
+# state.json holds the tags of the releases that the last run saw. The run writes the
 # new tags to runs/<UTC time>/state.json. The script moves that copy onto state.json when the
 # report handled the issues, also when the run could not check a fact. A report that fails leaves
 # the old tags. The script keeps the 12 newest runs.
 #
-# Exit 0 when the run and the issues are done, also when a fact differs or a value is unknown: the
-# issue is the report.
-# Exit 2 when the run could not check a fact or a release, or an issue could not be written.
+# Exit 0 when the run finishes and the script writes the issues. This holds also when a fact
+# differs or a value is unknown: the issue is the report.
+# Exit 2 when the run could not check a fact or a release, or the script could not write an issue.
 # The service shows that as a failure.
 set -uo pipefail
 
@@ -36,9 +38,9 @@ git pull --ff-only > "$run/git.log" 2>&1 || note "git pull failed; the run uses 
 just examples stand-in > "$run/build.log" 2>&1 || { note "just examples stand-in failed; see $run/build.log"; exit 2; }
 
 # The run writes the new tags of the releases to a copy of state.json. The job keeps the copy when
-# the report is done. A report that fails leaves the old tags, so the next run notes the new tag
-# again. The report opens the issue then. A person can close the issue after the report is done, so
-# the job must keep the tags then too.
+# the report ends well. A report that fails leaves the old tags, so the next run notes the new tag
+# again. The report opens the issue then. A person can close the issue after the report ends well,
+# so the job must keep the tags then too.
 state=$run/state.json
 if [ -f "$data/state.json" ]; then
   cp "$data/state.json" "$state" || { note "could not copy $data/state.json"; exit 2; }
@@ -54,7 +56,7 @@ if [ -s "$run/contract.json" ]; then
   examples/live/contract-report.sh "$run/contract.json" || report=$?
   cp "$run/contract.json" "$data/last.json"
   # the report exits 0, 1, or 3 when it handled the issues, and 2 when it did not. Exit 3 means
-  # that a fact could not be checked
+  # that the run could not check a fact
   case "$report" in
     0|1|3)
       if [ -f "$state" ]; then

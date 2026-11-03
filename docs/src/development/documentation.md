@@ -135,7 +135,8 @@ Palette does.
    `\{{#include ../output/file.txt:1:20}}` includes lines 1 to 20.
 
 A step with another exit code stops the runner. The runner replaces each time
-stamp with `2026-09-17T09:30:00Z`, so a file changes only when strata changes.
+stamp with `2026-09-17T09:30:00Z`, and the home folder of the run with `~`. So a
+file changes only when strata changes.
 The time that a step takes changes with the load of the machine. So no output
 shows a duration: the runner writes `1 ms` for each count of milliseconds, and
 `after 0s` for each count of seconds. When a new output prints a duration in a

@@ -1,0 +1,2 @@
+$ strata report
+strata: ~/.local/state/strata/strata-unknown.jsonl: line 1 is not a line of strata-unknown/1: the value is not a short word of 64 printable ASCII characters or fewer, with no space

@@ -68,12 +68,26 @@ for values with no canonical form too, such as a template with no quotes. The
 record then holds `values` as `null`, and `valuesHash` is the hash of the
 masked text. Such values with no password keep the hash that strata 0.27.0 gave.
 
+Here the values of a group hold a template with no quotes and a password:
+
+```text
+{{#include ../../output/group-template-values.txt}}
+```
+
+A person gives the group a new password. The record still verifies:
+
+```text
+{{#include ../../output/group-template-verify.txt}}
+```
+
 If strata cannot mask a password in such values, a snapshot, `verify`, and
 `compare` give the error `serialize` and exit `2`. A record taken again gives the
 same error. Quote the template, or change the block scalar in the values of the
-group. A record of strata 0.27.0 or before of a group with a password has the
-hash of the text with each password in clear, so its tier differs from a new
-record. Take the record again when strata can mask the password.
+group.
+
+A record of strata 0.27.0 or before of a group with a password has the hash of
+the text with each password in clear. So its tier differs from a new record.
+Take the record again when strata can mask the password.
 
 A record of strata 0.19 or before holds each password in clear. `compare` and `verify`
 write the mask over its values before they compare, so the record still

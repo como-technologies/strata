@@ -24,7 +24,7 @@ pub struct RawProfile {
     pub manifests: Value,
     /// `GET /v1/clusterprofiles/{uid}/variables`, or `{"variables": []}` when unavailable
     pub variables: Value,
-    /// True when the variables endpoint was unavailable, so `variables` stands in for it
+    /// True when the variables endpoint was unavailable, so `variables` is the stand-in for it
     pub variables_unavailable: bool,
     /// The project the responses came from; `None` at tenant scope, or for a directory saved
     /// without `scope.json`
@@ -125,10 +125,10 @@ impl SavedScope {
 
 /// The scope file's document: the project uid, empty at tenant scope, the time the responses were
 /// read, and whether the variables endpoint was unavailable. Without the time, a snapshot rebuilt
-/// from the directory would stamp the rebuild as the fetch, and `verify` would report a version as
-/// unchanged since a moment nothing was read. Without the flag, a rebuild would read the stand-in
-/// `{"variables": []}` as a real empty list, and its root would claim to cover variables that
-/// nothing read.
+/// from the directory stamps the rebuild as the fetch, and `verify` reports a version as unchanged
+/// since a moment when nothing read it. Without the flag, a rebuild reads the stand-in
+/// `{"variables": []}` as a real empty list, and its root claims to cover variables that nothing
+/// read.
 fn scope_document(
     project_uid: &Option<String>,
     fetched_at: &str,
@@ -304,7 +304,7 @@ pub struct RawCluster {
     /// `GET /v1/spectroclusters/{uid}/variables`: one entry per applied profile, or `[]` when
     /// unavailable
     pub variables: Value,
-    /// True when the variables endpoint was unavailable, so `variables` stands in for it
+    /// True when the variables endpoint was unavailable, so `variables` is the stand-in for it
     pub variables_unavailable: bool,
     /// The project the responses came from; `None` at tenant scope, or for a directory saved
     /// without `scope.json`
@@ -490,8 +490,8 @@ impl RawCluster {
     /// One applied template as the three documents of a profile, so a cluster's profile is hashed
     /// exactly as the profile itself. The three documents are the template's packs as the
     /// published packs, the cluster's manifests entry for that profile, and that profile's
-    /// variable definitions. Variable values are omitted. They are run-time input, not part of the
-    /// release.
+    /// variable definitions. The result omits variable values. They are run-time input, not part of
+    /// the release.
     pub fn template_raw(&self, template: &Value) -> RawProfile {
         let field = |ptr: &str| value_or_null(template, ptr);
         let uid = str_at(template, "/uid");

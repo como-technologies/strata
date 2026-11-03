@@ -95,7 +95,7 @@ run() {
 }
 
 # ask COMMAND...: print a command that reads, and run it unless this is a dry run. The error text of
-# the command is hidden, and a dry run gives no output and the status 0.
+# the recipe hides the command, and a dry run gives no output and the status 0.
 ask() {
   echo "+ $*" >&2
   [ -n "$dry" ] || "$@" 2> /dev/null
@@ -128,8 +128,8 @@ run gcloud run deploy "$service" --project "$project" --region "$region" --image
   --set-secrets "GITHUB_TOKEN=$secret:latest" --set-env-vars "TRUST_FORWARDED_FOR=1"
 
 # The request log of Cloud Run holds the address of each sender. The endpoint keeps no address, so
-# the log is not kept either: an exclusion of the default sink drops it. The exclusion names the
-# service, and no other log.
+# the service keeps no log either: an exclusion of the default sink drops it. The exclusion names
+# the service, and no other log.
 exclusion=strata-report-requests
 if ! ask gcloud logging sinks describe _Default --project "$project" | grep -q "name: $exclusion"; then
   run gcloud logging sinks update _Default --project "$project" --add-exclusion \

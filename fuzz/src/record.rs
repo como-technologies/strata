@@ -10,12 +10,12 @@ use strata::term::color::Paint;
 use crate::support::{AT, answer, cluster_files, parts, profile_files, scratch, write};
 
 /// Make sure that `a` and `b`, two records of one profile, compare as one. The roots are equal,
-/// and no pack is added, removed, or changed. The order of the packs and the variables are the
+/// and both records hold the same packs. The order of the packs and the variables are the
 /// same, and no macro or image differs. The comparison reads the packs, the summary, the order,
 /// and the variables, and not only the root. Each renderer shows the comparison.
 ///
-/// `a` and `b` must be two values. A record that is compared with itself has the same root, the
-/// same packs, and the same variables for any reader. So the comparison shows nothing.
+/// `a` and `b` must be two values. A record that strata compares with itself has the same root,
+/// the same packs, and the same variables for any reader. So the comparison shows nothing.
 #[track_caller]
 pub(crate) fn compares_equal(a: &Snapshot, b: &Snapshot) {
     let diff = ops::compare(a, b, AT);
@@ -95,7 +95,7 @@ pub(crate) fn writes_and_reads_again(record: &Snapshot) -> Snapshot {
 }
 
 /// Make sure that `record` holds what each record holds, whatever it describes. It writes and
-/// reads again. It compares equal to the record that it was read as.
+/// reads again. It compares equal to the record that the read gives.
 #[track_caller]
 pub(crate) fn check_record(record: &Snapshot) {
     let back = writes_and_reads_again(record);

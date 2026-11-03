@@ -1067,7 +1067,7 @@ pub const REFUSED: &str = "http://127.0.0.1:9";
 /// Give `command` the guard of the send of the report: `STRATA_REPORT=0`, and a
 /// `STRATA_REPORT_URL` that refuses a connection.
 ///
-/// The release names the address of the real endpoint, so a run that sends would post there. The
+/// The release names the address of the real endpoint, so a run that sends posts there. The
 /// setting `0` makes the run send nothing, whatever `~/.palette.env` or a saved answer say, because
 /// the environment has priority. The address is the second guard. A test that enables the send and
 /// gives no address of its own posts to [`REFUSED`], and never to the real endpoint. A test that
@@ -1165,7 +1165,7 @@ jq "$@" < "$input"
 "#;
 
 /// A `jq` that acts as the jq of `ubuntu-latest`: `rtrimstr` stops with the error `endswith()
-/// requires string inputs` when its input is not a string. jq 1.7.1 gives the input back, so a
+/// requires string inputs` when its input is not a string. jq 1.7.1 returns the input, so a
 /// filter that passes a null to `rtrimstr` runs there and stops on the runner. GitHub gives `null`
 /// as the body of an issue that a person opens with no text.
 ///
@@ -1309,8 +1309,9 @@ pub fn handed_in(dir: &Path, kind: &str, call: usize) -> String {
         .unwrap_or_else(|_| panic!("no {kind} from call {call}"))
 }
 
-/// A `gh` for issues. It logs each call, and keeps each body file it is handed as `body-<n>.md` in
-/// call order. It lists the open issues from issues.json. It numbers a new issue from 41 up.
+/// A `gh` for issues. It logs each call, and keeps each body file that the script gives it as
+/// `body-<n>.md` in call order. It lists the open issues from issues.json. It numbers a new issue
+/// from 41 up.
 pub const FAKE_ISSUES_GH: &str = r#"#!/usr/bin/env bash
 set -euo pipefail
 echo "$*" >> "$FAKE_VERIFY/gh.log"

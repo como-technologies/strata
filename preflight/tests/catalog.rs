@@ -451,7 +451,7 @@ fn every_fixture_belongs_to_a_rule_and_every_named_fixture_exists() {
 #[test]
 fn the_ids_of_the_catalog_of_the_issue_are_all_here_or_listed_as_pending() {
     // the 149 rows of #91, by id. A row that is not a rule yet is in PENDING below. The count
-    // there goes down as the catalog grows. It never goes up.
+    // there falls as the catalog grows. It never rises.
     let catalog = catalog::builtin().unwrap();
     let have: BTreeSet<&str> = catalog.rules().map(|r| r.id.as_str()).collect();
     let issue: BTreeSet<&str> = ISSUE_IDS.iter().copied().collect();
@@ -1288,8 +1288,8 @@ fn iaas_pod_identity_fails_on_the_http_500_that_the_property_route_gives_for_a_p
     }
 }
 
-/// A refusal at a 5xx is read one time. The library sends a request again after a 5xx, and the
-/// codes of a refusal are the exception. Preflight connects through `Retry`. A code that the
+/// The check reads a refusal at a 5xx one time. The library sends a request again after a 5xx, and
+/// the codes of a refusal are the exception. Preflight connects through `Retry`. A code that the
 /// rule names and the library does not list gets four requests and a wait of seven seconds (#553).
 /// The two codes of the property route of AWS get one request.
 #[test]
@@ -1603,8 +1603,8 @@ fn four_rules_read_the_instance_type_route_and_a_fifth_moves_the_lookup_to_share
     assert_eq!(
         readers,
         BTreeSet::from(INSTANCE_TYPE_READERS),
-        "a rule reads the instance type route that INSTANCE_TYPE_READERS lacks, or one of the four \
-         does not: with a fifth copy, move the two refusal messages and the read of `cpu` to one \
+        "A rule reads the instance type route that INSTANCE_TYPE_READERS lacks, or one of the four \
+         does not. With a fifth copy, move the two refusal messages and the read of `cpu` to one \
          section of jq definitions in the catalog"
     );
 }
@@ -1779,7 +1779,7 @@ fn a_version_that_does_not_parse_reads_in_ccm_version_and_edge_agent_version_as_
         ("4.10.4.1", Verdict::Passed),
         ("4.9.x", Verdict::Failed),
         ("4.7.4.1", Verdict::Failed),
-        // a `v` is part of the version now, and the numbers read as they are written
+        // a `v` is part of the version now, and the numbers read as the version writes them
         ("v4.10.4", Verdict::Passed),
     ] {
         assert_eq!(agent(version), expected, "edge-agent-version, {version}");
@@ -2156,7 +2156,7 @@ fn the_rules_that_read_the_release_line_of_a_pack_read_a_v_a_pre_release_and_bui
             "24.04.1",
         ],
     );
-    // a version outside the offer still fails, and the message names the line that was read
+    // a version outside the offer still fails, and the message names the line that the check read
     let fails = |id: &str, version: &str| {
         let (_, fixture, pointer) = VERSION_RULES.iter().find(|r| r.0 == id).unwrap();
         let (verdict, messages) =

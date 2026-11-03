@@ -120,8 +120,8 @@ fn fields(facts: &[Fact]) -> Vec<String> {
     bad
 }
 
-/// The fields that a fact needs to be proved: a live check, or a reason why none proves it. A
-/// fact of the kind `cloud` is proved by a call that the contract run sends. It needs a call or a
+/// The fields that a fact needs for a proof: a live check, or a reason why none proves it. A fact
+/// of the kind `cloud` has its proof in a call that the contract run sends. It needs a call or a
 /// reason, and it names no live check.
 fn proof(fact: &Fact) -> Vec<String> {
     let id = &fact.id;

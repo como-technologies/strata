@@ -183,8 +183,8 @@ pub enum Answer {
     Silence,
 }
 
-/// A stand-in endpoint of the report on this machine. It records each request, and answers as it
-/// was told.
+/// A stand-in endpoint of the report on this machine. It records each request, and answers as the
+/// test tells it.
 pub struct Endpoint {
     /// The address for `STRATA_REPORT_URL`.
     pub url: String,

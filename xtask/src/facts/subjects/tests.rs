@@ -56,7 +56,7 @@ fn a_source_serves_a_request_that_goes_on_from_its_route_by_whole_segments() {
         "/v1/clouds/aws/regions",
         "/v1/clouds/aws/regions/{region}/vpcs?cloudAccountUid={cloudAccountUid}"
     ));
-    // a text that goes on in the middle of a segment is another route
+    // a path that extends the route inside a segment is another route
     assert!(!serves("/v1/packs/{name}", "/v1/packs/{name}x"));
     // `{uid}` names a pack here and a registry there
     assert!(!serves(

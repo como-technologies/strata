@@ -1,6 +1,6 @@
 //! The scripts around the contract run: contract.sh, contract-report.sh, and the weekly timer of
 //! deploy/contract/. No network and no tenant: the commands outside this repository are
-//! recording stand-ins. The comparison itself is tested in `xtask/src/contract/`.
+//! recording stand-ins. The tests of `xtask/src/contract/` cover the comparison itself.
 //!
 //! The document `strata-contract/1` belongs to `xtask`, which the tests of this package cannot
 //! import. So these tests pin its id on purpose.
@@ -149,7 +149,7 @@ impl Report {
             .unwrap_or_else(|| panic!("no call `{start}` in {:?}", self.calls()))
     }
 
-    /// The body that the call with this 1-based number was handed.
+    /// The body that the script gave the call with this 1-based number.
     fn body(&self, number: usize) -> String {
         handed_in(self.dir.path(), "body", number)
     }
@@ -1291,7 +1291,7 @@ fn contract_report_opens_an_issue_with_the_label_cloud_drift_for_a_call_of_a_clo
         !body.contains("live checks"),
         "a cloud fact has no live script: {body}"
     );
-    // each label is created when the repository has none, one time
+    // the script creates each label when the repository has none, one time
     let labels: Vec<&String> = calls
         .iter()
         .filter(|c| c.starts_with("label create"))
@@ -1363,7 +1363,7 @@ fn contract_report_lists_the_issues_of_the_label_of_the_clouds_only_for_a_call_o
     let calls = r.calls();
     let lists = calls.iter().filter(|c| c.starts_with("issue list")).count();
     assert_eq!(lists, 1, "{calls:?}");
-    // a call of a cloud that was skipped has no issue to find
+    // a call of a cloud that the run skipped has no issue to find
     let r = Report::new();
     r.report(
         &document(
@@ -1876,7 +1876,7 @@ fn state_read(w: &Weekly) -> Vec<String> {
 
 #[test]
 fn the_weekly_run_keeps_the_new_tags_of_the_releases_when_the_report_is_done() {
-    // the report exits 1 when it opened an issue: its work is done, and the tag must not come again
+    // the report exits 1 when it opened an issue: it did its work, and the tag must not come again
     for report in ["0", "1"] {
         let w = Weekly::new();
         std::fs::create_dir_all(w.data()).unwrap();
@@ -1896,7 +1896,7 @@ fn the_weekly_run_keeps_the_new_tags_of_the_releases_when_the_report_is_done() {
 
 #[test]
 fn the_weekly_run_keeps_the_new_tags_when_the_report_is_done_and_a_fact_could_not_be_checked() {
-    // the report exits 3 then: the issues are done, and the service still shows the failure
+    // the report exits 3 then: it handled the issues, and the service still shows the failure
     let w = Weekly::new();
     std::fs::create_dir_all(w.data()).unwrap();
     std::fs::write(w.data().join("state.json"), "v1\n").unwrap();
@@ -2007,7 +2007,7 @@ fn the_weekly_run_fails_when_the_run_could_not_check_or_the_report_could_not_be_
         let w = Weekly::new();
         let o = w.run(&[(name, value)]);
         assert_eq!(o.status.code(), Some(2), "{name}: {}", text(&o.stderr));
-        // the issues are written for what the run did check, and the result is kept
+        // the report writes the issues for what the run did check, and the job keeps the result
         assert!(
             w.calls()
                 .iter()

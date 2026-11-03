@@ -138,8 +138,8 @@ the fact.
 | A `palette` route has no method, lacks no field, or lacks a field that the fact does not read. | The fact names a route that answers nothing, or the whole call. |
 | A `palette` route names a fact that is no GET request of the kind `request`, or writes a route that a request fact states. | The route and its query must live in one place, the request fact. |
 | A group in braces of a request or of a call is no `{name}` that the run reads, or a call lists alternatives. | No reader fills the group, so it reaches the tenant or the tool as text. |
-| A list in `reads.values` differs from the type that `reads.sets` names. | A copy of the values of a closed set went stale. |
-| A source of a subject serves no request of the list, or reads a fact that is no GET request. | The route of a request changed, and the source went stale. |
+| A list in `reads.values` differs from the type that `reads.sets` names. | A copy of the values of a closed set is out of date. |
+| A source of a subject serves no request of the list, or reads a fact that is no GET request. | The route of a request changed, and the source did not. |
 | Two sources read one placeholder, or a source stops before a placeholder that the path holds. | The source serves a prefix, and `{uid}` can name another object in each request under it. |
 | The stand-in serves a request of the scope `tenant` with a project, or refuses a project on another route. | The scope of the fact and the stand-in disagree. `cargo test -p xtask` makes this rule. |
 

@@ -21,7 +21,7 @@
 #      strata makes of the answer (#276). It writes nothing. `tiers.sh 6` runs it alone, and no
 #      other FROM_STAGE runs it. With no variable set, it says "could not check" and exits 2
 #   7  an override on a machine pool of cluster A, through the API (the item of #515): both
-#      overrides, overrideClusterAPIConfig and overrideHealthCheckConfiguration, go on the worker
+#      overrides, overrideClusterAPIConfig and overrideHealthCheckConfiguration, apply to the worker
 #      pool, as a YAML comment that sets no value. Palette holds them in the pool of the cloud
 #      config; a new record keeps them in the shape tier; compare of a record from before names
 #      them, with exit 0. Then the pool as before. `tiers.sh 7` runs it alone, and no other
@@ -212,7 +212,7 @@ put_pool() { "$live/api.sh" put "$pool_cc/machinePools/worker-pool" "$(cat "$1")
 # The text of both overrides: a YAML comment. It sets no value, so no machine of the pool changes.
 pool_override=$'# strata tiers.sh stage 7: this text sets no value\n'
 
-# stage 7 runs only when its number is given: it writes a machine pool of cluster A
+# stage 7 runs only when the user gives its number: it writes a machine pool of cluster A
 if [ "$from" = 7 ] && stage 7 "an override on a machine pool of cluster A"; then
   require_baseline
   check pool-route 0 "the route of the cloud config of cluster A" -- pool_route
@@ -223,7 +223,7 @@ if [ "$from" = 7 ] && stage 7 "an override on a machine pool of cluster A"; then
     jq -e '.source.cluster.tiers.shape.fields.pools[] | select(.name == "worker-pool")
       | (has("overrideClusterAPIConfig") or has("overrideHealthCheckConfiguration")) | not' pool-before.json
   # the entity of the pool in the form of the create body: strata-preflight splits the pool of the
-  # cloud config into poolConfig and cloudConfig. Its exit follows the rules, so it is not judged.
+  # cloud config into poolConfig and cloudConfig. Its exit follows the rules, so no check judges it.
   check pool-world ? "the create body of cluster A, from strata-preflight with the static tier" -- \
     "$strata" preflight "cluster:$C" --tier static --quiet --no-color --out pool-world
   check pool-entity 0 "the entity of the worker pool: poolConfig and cloudConfig" -- \

@@ -63,6 +63,13 @@ the kind.
 
 A record that is empty or is not JSON is `not-snapshot`.
 
+The error `snapshot-schema` names the field that does not match. Here a person
+edited a record, and the version of a profile in the cluster is `null`:
+
+```text
+{{#include ../output/tiers-edited-verify.txt}}
+```
+
 ## The usage errors
 
 A `usage` error comes before any request in these cases:

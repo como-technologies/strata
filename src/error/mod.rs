@@ -50,7 +50,7 @@ pub enum Error {
         /// The `Retry-After` header in whole seconds, when Palette sent one.
         retry_after: Option<u64>,
     },
-    /// Palette asked strata to wait longer than it will before retrying.
+    /// Palette asked strata to wait longer than strata waits before retrying.
     #[error(
         "{method} {path} failed with HTTP {status} and Retry-After {retry_after}s, longer than the {limit}s strata waits ({}); try again later",
         MAX_RETRY_AFTER_VAR
@@ -82,7 +82,7 @@ pub enum Error {
         variable: &'static str,
         /// The value as given.
         value: String,
-        /// What would have been accepted.
+        /// What strata accepts.
         expected: &'static str,
     },
     /// The request did not complete.
@@ -261,8 +261,8 @@ pub enum Error {
         /// The uids of the app profiles with that name and version, in order.
         uids: Vec<String>,
     },
-    /// A command that works on a profile was given something else. It was given a cluster, an
-    /// edge host, a cluster group, an app profile, a pack, or a record of one.
+    /// A command that works on a profile got something else. It got a cluster, an edge host, a
+    /// cluster group, an app profile, a pack, or a record of one.
     #[error(
         "'{reference}' is not a profile version; this command takes a profile uid, <name>@<version>, or a profile record"
     )]
@@ -395,7 +395,7 @@ pub enum Error {
         state: PackState,
     },
     /// `packs <name>` found the name in no visible registry. It asked for every version, so no
-    /// version and no registry was ever in play, and `PackNotFound` would state both as blanks.
+    /// version and no registry was ever in play, and `PackNotFound` states both as blanks.
     #[error(
         "no registry that this key can see offers a pack named '{name}'{}. `strata list --pack {name}` finds the profiles that carry one",
         unsynced_sentence(unsynced)

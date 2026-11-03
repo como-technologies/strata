@@ -1556,8 +1556,8 @@ fn the_variables_of_an_older_release_keep_their_root_and_their_hash() {
 
 #[test]
 fn schema_subcommand_prints_json_schema() {
-    // The ids are pinned on purpose. `strata schema` names each kind with the id that a consumer
-    // reads, so a change of an id must change this table too
+    // This table pins the ids on purpose. `strata schema` names each kind with the id that a
+    // consumer reads, so a change of an id must change this table too
     for (kind, id) in [
         ("snapshot", "strata-snapshot/1"),
         ("diff", "strata-diff/1"),
@@ -1818,7 +1818,7 @@ fn first_request_loud(args: &[&str], envs: &[(&str, &str)]) -> Run {
 }
 
 /// A uid and a name both reach strata and the uid decides, so the name decided nothing. Strata
-/// resolves the name to find out whether the two name one project, and that listing is the first
+/// resolves the name to learn whether the two name one project, and that listing is the first
 /// request it makes. Before this check a person read an answer about the uid's project while
 /// they had asked for the name's, and nothing said so.
 #[test]
@@ -1855,7 +1855,7 @@ fn a_name_in_the_file_under_a_uid_in_the_environment_starts_no_lookup() {
     );
 }
 
-/// A quiet run writes no warning, so it also skips the listing that would find one. With `--json`
+/// A quiet run writes no warning, so it also skips the listing that finds one. With `--json`
 /// a quiet run writes one JSON object to standard error and nothing else, which a caller reads.
 #[test]
 fn a_quiet_run_skips_the_scope_conflict_lookup() {

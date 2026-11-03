@@ -120,8 +120,9 @@ pub struct Facts {
 }
 
 impl Facts {
-    /// The facts of this run. The settings and the file of the answer are read now. `wrote` is true
-    /// when the run wrote a line to the log, and `terminal` is true when a person can answer.
+    /// The facts of this run. The function reads the settings and the file of the answer now.
+    /// `wrote` is true when the run wrote a line to the log, and `terminal` is true when a person
+    /// can answer.
     pub fn of_run(wrote: bool, terminal: bool) -> Facts {
         Facts {
             setting: setting(SETTING).map(|text| text.trim().to_string()),
@@ -185,7 +186,7 @@ pub fn answer_path() -> Option<PathBuf> {
 /// The answer in the file `file`. A file that is not there, or that holds another text, is no
 /// answer, so strata asks again.
 pub fn read_answer(file: &std::path::Path) -> Option<Choice> {
-    // a file that cannot be read is no answer: the user is asked again, and never sent for
+    // a file that strata cannot read is no answer: strata asks the user again, and sends nothing
     read_file(file)
         .ok()
         .and_then(|text| Choice::from_text(text.trim()))
@@ -208,10 +209,10 @@ pub fn keep_answer(file: &std::path::Path, choice: Choice) -> Result<()> {
 /// `position` is the number of lines of the log before the first line of the report. The header
 /// [`KEY_HEADER`] holds the key: the hex of the SHA-256 digest of the position and the report. A
 /// second try of the same lines has the same key, so the endpoint counts them one time. Lines that
-/// came after, or a log that was marked since, give another key. The key holds no name, no uid, and
-/// no host.
+/// came after, or a log that the run marked since, give another key. The key holds no name, no uid,
+/// and no host.
 ///
-/// Gives the numbers of the entries of `report` that the endpoint holds back, from 1: the list
+/// Gives the numbers of the entries of `report` that wait at the endpoint, from 1: the list
 /// `waiting` of its answer. The hour has no room for the values of these entries. The list is empty
 /// when the endpoint took the whole report.
 ///
@@ -247,7 +248,7 @@ pub fn post(endpoint: &str, report: &Report, position: usize) -> Result<Vec<usiz
     if (200..300).contains(&status) {
         return Ok(waiting_in(&mut answer));
     }
-    // the first part of the answer tells why the endpoint refused; a body that cannot be read
+    // the first part of the answer tells why the endpoint refused; a body that strata cannot read
     // adds nothing to the status
     let body = answer.body_mut().read_to_string().unwrap_or_default();
     let body = cut(&body.replace(['\n', '\r'], " "), LONGEST_ANSWER);
@@ -259,7 +260,7 @@ pub fn post(endpoint: &str, report: &Report, position: usize) -> Result<Vec<usiz
 /// The numbers in the list `waiting` of an answer of 2xx, or none when the answer has no list.
 fn waiting_in(answer: &mut ureq::http::Response<ureq::Body>) -> Vec<usize> {
     // an endpoint that lists no entry took the whole report. A body that is not JSON, or that
-    // cannot be read, adds nothing to the status
+    // strata cannot read, adds nothing to the status
     let text = answer.body_mut().read_to_string().unwrap_or_default();
     let value: Value = serde_json::from_str(&text).unwrap_or(Value::Null);
     arr(&value, "/waiting")

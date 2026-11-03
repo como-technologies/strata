@@ -1,6 +1,6 @@
 //! Every workflow file under .github/workflows parses as YAML, and has the two keys a workflow
 //! needs. GitHub reads each file on each push and records a failed run, with no job, for a file
-//! it cannot parse; the reusable workflows never run here, so nothing else would show it. A
+//! it cannot parse; the reusable workflows never run here, so nothing else shows it. A
 //! colon and a space inside an unquoted description is the fault this found.
 
 use std::process::Command;
@@ -699,7 +699,7 @@ fn workspace_members() -> Vec<String> {
 
 /// The floor of the Rust version is one line of the root `Cargo.toml`, and the job `the lowest
 /// Rust version` reads it. Each member of the workspace takes it with `rust-version.workspace =
-/// true`. A member with a floor of its own would name a number that the job does not build with.
+/// true`. A member with a floor of its own names a number that the job does not build with.
 #[test]
 fn each_member_of_the_workspace_takes_the_rust_version_that_the_msrv_job_reads() {
     let root = repo_file("Cargo.toml");

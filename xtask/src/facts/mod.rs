@@ -30,7 +30,7 @@ use sources::Sources;
 /// Every fault of the list in the repository at `repo`, as messages.
 ///
 /// `served` holds the routes that the stand-in serves for the book. A caller with no run of the
-/// book gives `None`, and the check of the stand-in is not made.
+/// book gives `None`, and the function makes no check of the stand-in.
 pub fn check(repo: &Path, served: Option<&BTreeSet<String>>) -> Vec<String> {
     let (sources, mut bad) = Sources::read(repo, served.cloned());
     bad.extend(check::check(&sources));
@@ -39,7 +39,7 @@ pub fn check(repo: &Path, served: Option<&BTreeSet<String>>) -> Vec<String> {
 }
 
 /// The facts of the list in the repository at `repo`. An error is the messages about the files of
-/// the list that cannot be read.
+/// the list that the function cannot read.
 pub fn load(repo: &Path) -> Result<Vec<Fact>, Vec<String>> {
     let (facts, bad) = model::load(&repo.join(model::DIRECTORY));
     if bad.is_empty() { Ok(facts) } else { Err(bad) }

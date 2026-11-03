@@ -21,7 +21,7 @@ pub(super) fn auto_reproduce(
     subject: &Subject,
     out_dir: Option<&str>,
 ) -> Vec<String> {
-    // with no --out, the two files are not on disk: $OUT names where --out would put them
+    // with no --out, the two files are not on disk: $OUT names where --out puts them
     let dir = out_dir.unwrap_or("$OUT");
     let mut lines = Vec::new();
     match &rule.check {

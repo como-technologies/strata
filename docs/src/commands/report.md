@@ -86,6 +86,12 @@ valid:
 message gives the number of the line. See [Errors](../reference/errors.md). The send of a run
 skips such a line: see [What a run sends](../reference/report.md#what-a-run-sends).
 
+Here a person changed the value `later-type` to `later type` in each line of the log:
+
+```text
+{{#include ../output/unknown-value-report-invalid.txt}}
+```
+
 ## What to expect
 
 | Exit | Meaning |
