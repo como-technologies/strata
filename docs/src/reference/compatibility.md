@@ -1015,8 +1015,11 @@ field, a value, an input, or an option is in the sections above.
   `capa-stack-release-behind`, `ccm-version`, `edge-agent-version`, `gke-version-not-offered`,
   `eks-version-not-offered`, `eks-addon-version`, and `maas-os-image`.
   - `capa-stack-release-behind` stopped with an error for `--release 4.11.0-rc.1`. It compares
-    the numbers of the release now. A `--release` or a tag that is no version is still an
-    error, and the message names it.
+    the numbers of the release now. A `--release` that is no version is still an error, and the
+    message names it.
+  - `capa-stack-release-behind` compared a tag with four numbers, such as `1.26.15.1`. It stops
+    with an error now, and the message names the tag. A tag such as `1.26.x` was an error before
+    too.
   - `ccm-version` and `edge-agent-version` read a `v` before a version, and build data after
     it. A version with one of them can give another result than before.
   - The last four rules cut the version of a pack at the dots. The text `v1.32.1` gave the line
@@ -1028,8 +1031,10 @@ field, a value, an input, or an option is in the sections above.
   - `maas-os-image` reads the numbers 22 and 4 as Ubuntu 22.04, so the text `22.4` passes now.
     Before, only the text `22.04` passed. Its message names the version as the pack writes it.
     It named the first two parts of the text.
-  - A text that is no version reads as it did in 0.27.0. Examples are `1.26.x`, `1.26.15.1`, and
-    `4.10.x`. The six rules that cut a text read the first two parts between the dots.
+  - A text that is no version reads as it did in 0.27.0 in the five rules that cut it. Examples
+    are `1.26.x` and `4.10.x`. These rules read the first two parts between the dots.
+  - `maas-os-image` reads the first two parts of such a text as numbers. So `22.4.x` and
+    `22.4.1.1` pass now, and they failed before.
 - **`strata-unknown/1` and `strata-report/1` lose the fields `palette`, `status`, and `errorCode`.**
   No release of strata wrote them. A log or a report of a command of 0.27.0 never held them.
   - A line or an entry with one of these fields is not valid now. `strata report` stops with the
@@ -1057,6 +1062,11 @@ field, a value, an input, or an option is in the sections above.
     first one. `--quiet` hides the warning, and the exit code stays `0`.
   - `strata report` still stops with the error `log-invalid` on such a line. Delete the line to
     stop the warning.
+  - The mark counts each line of the log that is not blank, valid or not. This is the meaning in
+    0.27.0, so a mark of 0.27.0 and a mark of this release mean the same. The update moves no mark.
+  - A line that you delete before the mark moves the mark. The next line moves up under it, and the
+    send skips that line. For each line that you delete before the mark, lower the number in the
+    file `strata-unknown.sent` by 1.
 - **`strata-preflight`: `answer` of a check with a second command has the exit code of each command.**
   Only `iam-role-policy-quota` has a second command.
   - `answer` was `exit 0`, the exit code of the first command alone. A failed read of the quota
@@ -1186,7 +1196,8 @@ field, a value, an input, or an option is in the sections above.
   fields `marked`, `waiting`, and `skipped`.
   - A line of the log that is not valid does not stop the send now. The function skips it, and it
     never gives `Error::LogInvalid`. The field `skipped` holds the numbers of such lines.
-  - The mark of the sent lines counts the valid lines only.
+  - The mark of the sent lines counts each line that is not blank, valid or not, as in 0.27.0.
+    The send skips a line that is not valid, and the mark still counts it.
   - When the endpoint holds back some values, the function marks the lines before the first line
     of such a value, and stops. It does not mark the other lines. The field `waiting` counts the
     lines that it left.
@@ -1211,6 +1222,12 @@ field, a value, an input, or an option is in the sections above.
 - A program in a rule can call the new jq filter `count_of` too. `2 | count_of("key pair")` gives
   `2 key pairs`, `1` gives `1 key pair`, and `0` gives `no key pairs`. It gives the words of
   `render::count_of`. The `reproduce` line of such a program holds a definition of it.
+  - A number that is not a whole number of zero or more gives the number and the plural noun.
+    `-1 | count_of("CPU")` gives `-1 CPUs`, and `0.5` gives `0.5 CPUs`. A value that is no number
+    is an error of the program.
+  - So a rule can name a count that Palette gives and that is under 0. The message of
+    `vsphere-instance-floor` for `numCPUs` of `-1` is
+    `pool cp-pool has -1 CPUs`. The rule gives that message, and no error.
 - `report::Assembly` has the new field `cluster_gone: bool`. A literal must set it. `false` gives
   the verdicts of 0.27.0. `true` is for a watch that ended at a cluster that is gone: a verdict
   of `OK` then says so.

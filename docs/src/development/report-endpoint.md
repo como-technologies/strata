@@ -41,7 +41,7 @@ sender gets a short sentence.
 ## The key of a send
 
 The send of strata puts a key in the header `Idempotency-Key`. The key is 64 characters of hex: the
-digest of the report and of the number of valid lines before it in the log. A second try of the same
+digest of the report and of the number of lines of the log before it. A second try of the same
 lines has the same key. A request without a key is never a repeat.
 
 - Check 5 hashes the key and the content of the report together, and it keeps the hash for one
@@ -52,6 +52,10 @@ lines has the same key. A request without a key is never a repeat.
   count one time. The counts show how often a value comes, and they are not exact.
 - When the tracker fails after the answer, the service forgets the hash. A second try of the
   report then counts.
+- The service keeps the hash only when it took the whole report. When the answer has `waiting`, the
+  service keeps no hash. The next send of that report has the same key, and it gets a new plan and
+  a new list `waiting`. Strata reads the answer `duplicate` as "the service took all". So a report
+  with a value that waits must not get it.
 
 ## The limits
 

@@ -135,34 +135,33 @@ pub(crate) fn read(file: &Path) -> Result<Vec<Line>> {
         .collect()
 }
 
-/// The lines of a log that are valid, and the numbers of the lines that are not.
-#[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) struct Valid {
-    /// The lines that are valid, in order.
-    pub(crate) lines: Vec<Line>,
-    /// The numbers of the lines that are not valid, from 1, in order.
-    pub(crate) invalid: Vec<usize>,
+/// A line of the log that is not blank, as the send of a run reads it.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Row {
+    /// A line of the schema.
+    Valid(Line),
+    /// A line that is not valid. `number` is its place in the file, from 1.
+    Invalid { number: usize },
 }
 
-/// The lines of the log `file` that are valid, and the numbers of the other lines. A file that is
-/// not there is an empty log. A blank line is no line.
+/// Each line of the log `file` that is not blank, valid or not, in order. A file that is not
+/// there is an empty log. A blank line is no line.
 ///
-/// The send of a run reads the log here, so a line that is not valid does not stop it. The mark of
-/// the lines that the run sends counts the valid lines only. [`read`] stops at the first line that
-/// is not valid.
+/// The send of a run reads the log here, so a line that is not valid does not stop it. The mark
+/// counts each line that is not blank, valid or not, as the mark of release 0.27.0 did. [`read`]
+/// stops at the first line that is not valid.
 ///
 /// # Errors
 ///
 /// `Io` when strata cannot read the file.
-pub(crate) fn read_valid(file: &Path) -> Result<Valid> {
-    let mut valid = Valid::default();
-    for (number, line) in scan(file)? {
-        match line {
-            Ok(line) => valid.lines.push(line),
-            Err(_) => valid.invalid.push(number),
-        }
-    }
-    Ok(valid)
+pub(crate) fn read_rows(file: &Path) -> Result<Vec<Row>> {
+    Ok(scan(file)?
+        .into_iter()
+        .map(|(number, line)| match line {
+            Ok(line) => Row::Valid(line),
+            Err(_) => Row::Invalid { number },
+        })
+        .collect())
 }
 
 /// The file that counts the lines of the log that the user marked as sent: [`SENT_FILE`], beside

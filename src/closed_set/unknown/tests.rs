@@ -8,8 +8,7 @@ use serde_json::{Value, json};
 
 use super::hint::{FILE as HINT_FILE, Hint, TEXT};
 use super::log::{
-    FIELDS, FILE, Line, SCHEMA, SENT_FILE, Valid, mark_sent, read, read_valid, sent_count,
-    sent_path,
+    FIELDS, FILE, Line, Row, SCHEMA, SENT_FILE, mark_sent, read, read_rows, sent_count, sent_path,
 };
 use super::report::{Entry, Report, SCHEMA as REPORT_SCHEMA};
 use super::sighting::shown;
@@ -374,7 +373,8 @@ fn a_log_that_is_not_there_is_an_empty_log() {
 }
 
 #[test]
-fn a_read_for_the_send_keeps_the_valid_lines_and_names_the_numbers_of_the_others() {
+fn a_read_for_the_send_gives_each_line_that_is_not_blank_and_names_the_numbers_of_the_invalid_ones()
+{
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
     let mut with_uid = serde_json::to_value(full_line()).unwrap();
@@ -390,15 +390,16 @@ fn a_read_for_the_send_keeps_the_valid_lines_and_names_the_numbers_of_the_others
         ),
     )
     .unwrap();
-    let valid = read_valid(&file).unwrap();
-    // a blank line has a number but is no line, and the numbers count the rows of the file
-    assert_eq!(valid.invalid, [3, 4, 7]);
-    let values: Vec<&str> = valid
-        .lines
+    // a blank line is no row, and the number of an invalid row is its place in the file
+    let shown: Vec<String> = read_rows(&file)
+        .unwrap()
         .iter()
-        .map(|l| l.sighting.value.as_str())
+        .map(|row| match row {
+            Row::Valid(line) => line.sighting.value.clone(),
+            Row::Invalid { number } => format!("line {number}"),
+        })
         .collect();
-    assert_eq!(values, ["a", "b"]);
+    assert_eq!(shown, ["a", "line 3", "line 4", "b", "line 7"]);
     // `read` stops at the first line that is not valid, and names its number
     assert!(read(&file).unwrap_err().to_string().contains("line 3"));
 }
@@ -407,11 +408,17 @@ fn a_read_for_the_send_keeps_the_valid_lines_and_names_the_numbers_of_the_others
 fn a_read_for_the_send_of_a_log_that_is_not_there_or_that_is_valid_names_no_line() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join(FILE);
-    assert_eq!(read_valid(&file).unwrap(), Valid::default());
+    assert!(read_rows(&file).unwrap().is_empty());
     std::fs::write(&file, log_of(&[&written("a")])).unwrap();
-    let valid = read_valid(&file).unwrap();
-    assert_eq!(valid.lines, read(&file).unwrap());
-    assert!(valid.invalid.is_empty());
+    let rows = read_rows(&file).unwrap();
+    let lines: Vec<Line> = rows
+        .into_iter()
+        .map(|row| match row {
+            Row::Valid(line) => line,
+            Row::Invalid { number } => panic!("line {number} is not valid"),
+        })
+        .collect();
+    assert_eq!(lines, read(&file).unwrap());
 }
 
 #[test]

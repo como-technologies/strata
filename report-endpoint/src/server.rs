@@ -320,7 +320,11 @@ impl<T: Tracker> Service<T> {
             Ok(waiting) => waiting,
             Err(answer) => return Admitted::answered(answer),
         };
-        if let Some(digest) = checked.digest {
+        // A report with a value that waits is not noted. The next send of it has the same key.
+        // It must get a new plan, not the answer for a report that the service took whole.
+        if let Some(digest) = checked.digest
+            && waiting.is_empty()
+        {
             self.rules().counted.note(digest, now);
         }
         Admitted {

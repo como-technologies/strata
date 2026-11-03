@@ -135,8 +135,9 @@ that reached `Running` after 43 readings, with a warning of `webhook-call-failed
 along the way; a build on eks that the watch stopped at a failed webhook call;
 and a build on gcp that the watch warned on and that went on to `Running`:
 [Live runs](../development/live-runs.md#watchsh). `--out DIR` keeps the report
-and the last reading. If Palette deletes the cluster, the watch ends at once with exit `0`. The last
-line says that the cluster is gone: see [The watch](../commands/preflight/watch.md).
+and the last reading. If Palette deletes the cluster, the watch ends at once. The exit code is `0`
+when no counted rule failed, and the last line then says that the cluster is gone: see
+[The watch](../commands/preflight/watch.md).
 
 ## 4. Once it runs
 

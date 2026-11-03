@@ -1070,3 +1070,4 @@ rules:
     tests:
       - fault: fixtures/vsphere/small-instance.json
         clean: fixtures/vsphere/clean.json
+      - fault: fixtures/vsphere/cpu-negative.json
