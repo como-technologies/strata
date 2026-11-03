@@ -1,8 +1,8 @@
 //! Library-level tests for the operations, with an in-memory Palette API.
 //!
 //! A test of the document that an operation writes compares its schema id with the `const` of the
-//! crate. A test of a refusal pins the id on purpose: it writes the text of a document of a later
-//! version, such as `strata-snapshot/2`, and reads the message that names both ids.
+//! crate. A test of a refusal pins the id on purpose. It writes the text of a document of a later
+//! version, such as `strata-snapshot/2`. Then it reads the message that names both ids.
 
 use crate::common;
 

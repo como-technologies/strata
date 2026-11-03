@@ -2325,7 +2325,7 @@ fn install_strata_takes_the_binary_and_the_scripts_of_one_release_and_checks_the
 
 /// `STRATA_QUIET` stops the progress messages of the binary of strata. The notes of a script state
 /// its result, and one of them tells that the signature is not checked. So no script reads the
-/// variable. The note of the installer did.
+/// variable.
 #[test]
 fn install_strata_prints_its_notes_when_strata_quiet_is_set() {
     let r = release();
