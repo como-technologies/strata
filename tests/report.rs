@@ -195,6 +195,69 @@ fn report_stops_on_a_log_with_a_value_that_is_not_one_word_of_printable_ascii() 
 }
 
 #[test]
+fn report_stops_on_a_line_with_a_field_that_is_missing_or_wrong_or_a_word_that_is_not_a_word() {
+    // the book lists each one of these faults in the pages "A line that is not valid" and "What
+    // strata never reports"
+    let line = |change: &dyn Fn(&mut Value)| {
+        let mut line: Value =
+            serde_json::from_str(&log_line("PackState", "retired", "/v1/packs")).unwrap();
+        change(&mut line);
+        line.to_string()
+    };
+    let cases = [
+        (
+            "no route",
+            line(&|l| {
+                l.as_object_mut().unwrap().remove("route");
+            }),
+            "missing field `route`",
+        ),
+        (
+            "a value of the wrong type",
+            line(&|l| l["value"] = json!(7)),
+            "invalid type: integer `7`, expected a string",
+        ),
+        (
+            "a set that is not a word",
+            line(&|l| l["set"] = json!("Profile Type")),
+            "the set is not a short word",
+        ),
+        (
+            "a version of strata that is not a word",
+            line(&|l| l["strata"] = json!("0.27.0 beta")),
+            "the strata is not a short word",
+        ),
+        (
+            "another schema",
+            line(&|l| l["schema"] = json!("strata-unknown/2")),
+            "the schema is not strata-unknown/1",
+        ),
+        (
+            "a route of more than 200 characters",
+            line(&|l| l["route"] = json!(format!("/v1/{}", "z".repeat(200)))),
+            "the route has more than 200 characters",
+        ),
+        (
+            // `Watch::palette_release` of release 0.27.0 wrote this field
+            "the field palette",
+            line(&|l| l["palette"] = json!("4.10")),
+            "unknown field `palette`",
+        ),
+    ];
+    for (name, text, fault) in cases {
+        let home = tempfile::tempdir().unwrap();
+        write_log(home.path(), &[text]);
+        let run = report(home.path(), &["--json"]);
+        assert_eq!(run.code, 2, "{name}: {}", run.out);
+        let error: Value = serde_json::from_str(&run.err).unwrap();
+        assert_eq!(error["error"]["kind"], "log-invalid", "{name}");
+        assert_eq!(error["error"]["line"], 1, "{name}");
+        let message = error["error"]["message"].as_str().unwrap();
+        assert!(message.contains(fault), "{name}: {message}");
+    }
+}
+
+#[test]
 fn report_of_a_log_that_is_not_there_says_that_palette_gave_no_value_and_exits_0() {
     let home = tempfile::tempdir().unwrap();
     let run = report(home.path(), &[]);

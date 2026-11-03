@@ -389,6 +389,72 @@ fn a_report_taken_a_day_ago_counts_again() {
     assert_eq!(answer.status, 202, "{}", answer.body);
 }
 
+/// The status of a request with the method `GET` at the time `at`. A check refuses it with 405.
+fn refused_at(service: &Service<Memory>, at: Instant) -> u16 {
+    let mut get = post("c", b"");
+    get.method = "GET";
+    service.handle(&get, at).status
+}
+
+#[test]
+fn a_request_that_a_check_refuses_drops_the_hash_of_a_report_after_its_day() {
+    let service = Service::new(Memory::default());
+    let now = Instant::now();
+    let report = body(&[entry("later")]);
+    assert_eq!(
+        service.handle(&keyed("a", &key(1), &report), now).status,
+        202
+    );
+    assert_eq!(service.rules().counted.held(), 1);
+    // no request reads the hash again, and the only later requests fail a check
+    assert_eq!(
+        refused_at(&service, now + DAY - Duration::from_secs(1)),
+        405
+    );
+    assert_eq!(service.rules().counted.held(), 1, "the day is not over");
+    assert_eq!(refused_at(&service, now + DAY + SWEEP_EVERY), 405);
+    assert_eq!(service.rules().counted.held(), 0, "the day is over");
+}
+
+#[test]
+fn a_request_that_the_limit_refuses_drops_the_sender_whose_hour_is_over() {
+    let limits = Limits {
+        per_sender: 1,
+        ..wide()
+    };
+    let service = Service::with_limits(Memory::default(), limits);
+    let now = Instant::now();
+    let report = body(&[entry("later")]);
+    assert_eq!(service.handle(&post("a", &report), now).status, 202);
+    assert_eq!(
+        service.handle(&post("b", &report), now + HOUR / 2).status,
+        202
+    );
+    assert_eq!(service.rules().senders.senders(), 2);
+    // the hour of `a` ended 2 minutes ago, and the limit refuses `b`, so the request never spends
+    let late = now + HOUR + 2 * SWEEP_EVERY;
+    assert_eq!(service.handle(&post("b", &report), late).status, 429);
+    assert_eq!(service.rules().senders.senders(), 1, "only b is left");
+}
+
+#[test]
+fn the_sweep_of_the_hashes_runs_one_time_in_a_minute_at_most() {
+    let service = Service::new(Memory::default());
+    let now = Instant::now();
+    let report = body(&[entry("later")]);
+    assert_eq!(
+        service.handle(&keyed("a", &key(1), &report), now).status,
+        202
+    );
+    let swept = now + DAY - Duration::from_secs(1);
+    assert_eq!(refused_at(&service, swept), 405);
+    // the hash is old now, but the last sweep was 20 seconds ago
+    assert_eq!(refused_at(&service, swept + Duration::from_secs(20)), 405);
+    assert_eq!(service.rules().counted.held(), 1);
+    assert_eq!(refused_at(&service, swept + SWEEP_EVERY), 405);
+    assert_eq!(service.rules().counted.held(), 0);
+}
+
 #[test]
 fn a_key_of_another_form_is_refused_with_400_and_costs_the_sender_nothing() {
     let service = Service::new(Memory::default());

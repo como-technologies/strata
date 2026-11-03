@@ -51,6 +51,10 @@ const HOUR: Duration = Duration::from_secs(3600);
 /// The time that the service remembers a report: see [`Counted`].
 const DAY: Duration = Duration::from_secs(24 * 3600);
 
+/// The time between two sweeps of the expired hashes. A hash stays one minute after its span at most,
+/// while requests come: the first request after the sweep is due drops it.
+const SWEEP_EVERY: Duration = Duration::from_secs(60);
+
 /// The seconds that a sender waits after a 503.
 const BUSY_WAIT: u64 = 60;
 
@@ -147,6 +151,25 @@ struct Rules {
     new_issues: Limiter,
     writes: Limiter,
     counted: Counted,
+    /// The time of the last sweep of the expired hashes.
+    swept: Option<Instant>,
+}
+
+impl Rules {
+    /// Drop each hash of a sender and of a report whose span is over, at most one time in each
+    /// [`SWEEP_EVERY`]. So a hash that no request reads leaves the table, and a request does not
+    /// read the whole table.
+    fn sweep(&mut self, now: Instant) {
+        if self
+            .swept
+            .is_some_and(|at| now.saturating_duration_since(at) < SWEEP_EVERY)
+        {
+            return;
+        }
+        self.senders.forget_expired(now);
+        self.counted.forget_expired(now);
+        self.swept = Some(now);
+    }
 }
 
 /// The limits of a service, in requests or writes for each hour.
@@ -248,6 +271,7 @@ impl<T: Tracker> Service<T> {
                 new_issues: Limiter::new(limits.new_issues, HOUR),
                 writes: Limiter::new(limits.writes, HOUR),
                 counted: Counted::new(DAY),
+                swept: None,
             }),
             tracker: Mutex::new(tracker),
         }
@@ -329,7 +353,11 @@ impl<T: Tracker> Service<T> {
 
     /// The checks that need no tracker: the path, the method, the key, the body, and the limit of
     /// the sender. They run under the `rules` lock alone, and for a short time.
+    ///
+    /// The sweep of the expired hashes runs first, so a request that a check refuses also drops
+    /// them.
     fn check(&self, request: &Request, now: Instant) -> Result<Checked, Answer> {
+        self.rules().sweep(now);
         if request.path != "/" {
             return Err(Answer::error(404, "the endpoint takes a report at /"));
         }

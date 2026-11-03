@@ -267,6 +267,43 @@ fn an_error_of_the_send_does_not_change_the_exit_code_or_the_output_and_marks_no
 }
 
 #[test]
+fn a_log_with_a_value_of_release_0_27_0_that_is_not_one_word_stops_the_send_and_quiet_hides_it() {
+    let api = serve_routes(later_type_tenant());
+    let endpoint = Endpoint::answering(Answer::Status(200));
+    let home = tempfile::tempdir().unwrap();
+    // release 0.27.0 wrote a value with a space, and its endpoint took it
+    write_log(
+        home.path(),
+        &[log_line(
+            "ProfileType",
+            "two words",
+            "/v1/clusterprofiles/{uid}",
+        )],
+    );
+    let env = [
+        ("STRATA_REPORT", "1"),
+        ("STRATA_REPORT_URL", endpoint.url.as_str()),
+    ];
+    let run = list_with(&api, home.path(), &env, &[]);
+    assert_eq!(run.code, 0, "{}", run.err);
+    assert!(run.err.contains("strata: warning: "), "{}", run.err);
+    assert!(
+        run.err
+            .contains("line 1 is not a line of strata-unknown/1: the value is not a short word"),
+        "{}",
+        run.err
+    );
+    // the send reads the whole log, so the value of this run does not reach the endpoint either
+    assert!(endpoint.requests().is_empty(), "{:?}", endpoint.requests());
+    assert!(!state_in(home.path()).join(SENT_FILE).exists());
+    let quiet = list_with(&api, home.path(), &env, &["--quiet"]);
+    assert_eq!(quiet.code, 0);
+    assert_eq!(quiet.err, "", "--quiet hides the warning");
+    assert!(endpoint.requests().is_empty(), "{:?}", endpoint.requests());
+    assert!(!state_in(home.path()).join(SENT_FILE).exists());
+}
+
+#[test]
 fn the_next_send_holds_the_lines_that_a_failed_send_left() {
     let api = serve_routes(later_type_tenant());
     let refusing = Endpoint::answering(Answer::Status(500));
