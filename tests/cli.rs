@@ -232,11 +232,12 @@ fn a_field_inside_the_cluster_of_a_record_gives_its_own_path_in_snapshot_schema(
             serde_json::json!("env=dev"),
             "source.cluster.labels: invalid type: string \"env=dev\", expected a map",
         ),
-        // a read error of strata 0.24 and before moves into `errors`, so the entry has the path
+        // a read error of strata 0.24 and before moves into `errors`, but the error names the
+        // key that the file holds
         (
             &["pendingRepaveError"],
             serde_json::json!(7),
-            "source.cluster.errors.pendingRepave: invalid type: integer `7`, expected a string",
+            "source.cluster.pendingRepaveError: invalid type: integer `7`, expected a string",
         ),
     ];
     for (n, (keys, wrong, message)) in cases.into_iter().enumerate() {

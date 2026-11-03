@@ -109,7 +109,9 @@ profile, or pack version.
       and `pendingRepave`. A key of a later release loads too. The tiers have
       `errors` in the same shape. A record of strata 0.24 and before holds
       `updatesPendingError` and `pendingRepaveError` in place of these two
-      entries. Strata reads them into `errors`.
+      entries. Strata reads them into `errors`, and a value that is not text gives
+      `snapshot-schema` with the older key in `field`, such as
+      `source.cluster.pendingRepaveError`.
     - `macroValues`, only with `snapshot --macros`: each user macro that the
       content uses, with a digest. The digest is the `sha256:` of the value
       that Palette gives the macro for this cluster or cluster group. It is
@@ -583,8 +585,7 @@ and a named item is an object `{"name": ...}`. The schema gives each segment an
       pre-release, by the order of Semantic Versioning. A registry that has no
       version that is not a pre-release gives its highest pre-release. With
       `--cloud`, `latest` is true for that version among the versions for that
-      cloud. With `--cloud`, and when the highest version has no tag, the ref
-      can record another version: see
+      cloud. With `--cloud`, the ref can record another version: see
       [Which version is the newest](../commands/packs.md#which-version-is-the-newest).
     - `type` is `spectro`, `helm`, or `oci`. A version that the listing gives
       no type is `spectro`, as its record says.

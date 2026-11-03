@@ -3,12 +3,13 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::path::Path;
 
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json};
 
-use super::{SubjectKind, macro_placeholder};
+use super::{CLUSTER_FIELD, SNAPSHOT_SCHEMA, SubjectKind, macro_placeholder, parse_document};
 use crate::api::{RawCluster, profile_variables};
 use crate::closed_set::{ClosedSet, Open, impl_closed_set};
 use crate::content::canon::{canonical_json, sha256_hex};
@@ -140,7 +141,7 @@ const OLDER_ERRORS: [(&str, ClusterRead); 2] = [
 ///
 /// An entry that `errors` holds already stays. An older field that holds null is no error. An
 /// older field that is not text moves too, so the read of [`ClusterSource`] refuses it and names
-/// the entry.
+/// the entry. [`take_record`] refuses it first, and names the older field.
 ///
 /// The move works on the JSON and not on a struct with `#[serde(flatten)]`. Serde loses the path
 /// of a field inside a flatten, so the error would name the parent.
@@ -166,14 +167,32 @@ pub(super) fn move_older_errors(cluster: &mut Value) {
 ///
 /// [`Snapshot::load`](super::Snapshot::load) reads the cluster apart from the rest of the record.
 /// So an error names the field inside the cluster, as `source.cluster.profiles[0].version`.
-pub(super) fn take_record(document: &mut Value) -> Option<Value> {
-    let mut cluster = document
-        .get_mut("source")?
-        .get_mut("cluster")
+///
+/// # Errors
+///
+/// [`Error::SnapshotSchema`](crate::error::Error::SnapshotSchema) when an older read error is not
+/// text. The move renames the field, so this function checks it first. The error names the key
+/// that the file holds, as `source.cluster.pendingRepaveError`.
+pub(super) fn take_record(
+    path: &Path,
+    document: &mut Value,
+) -> crate::error::Result<Option<Value>> {
+    let Some(mut cluster) = document
+        .get_mut("source")
+        .and_then(|source| source.get_mut("cluster"))
         .map(Value::take)
-        .filter(|cluster| !cluster.is_null())?;
+        .filter(|cluster| !cluster.is_null())
+    else {
+        return Ok(None);
+    };
+    for (older, _) in OLDER_ERRORS {
+        if let Some(why) = cluster.get(older).filter(|why| !why.is_null()) {
+            let field = format!("{CLUSTER_FIELD}.{older}");
+            parse_document::<String>(path, SNAPSHOT_SCHEMA, why.clone(), &field)?;
+        }
+    }
     move_older_errors(&mut cluster);
-    Some(cluster)
+    Ok(Some(cluster))
 }
 
 /// Read the field `cluster` of [`Source`](super::Source) from a record of any release.

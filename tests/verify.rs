@@ -13765,6 +13765,45 @@ fn a_pack_at_latest_is_the_highest_version_that_is_not_a_pre_release() {
     assert_eq!(rc.source.version, "1.66.0-rc.1");
 }
 
+/// Review of Wave 14, A7. A version in the listing with no tag in the answer of the registry is a
+/// version that Palette does not serve, for example in a FIPS tenant. `packs` omits it, and
+/// `pack:<name>@latest` skips it, so the two name the same version. Another registry that serves
+/// only such a version does not hold the pack for `@latest`.
+#[test]
+fn a_pack_at_latest_is_the_version_that_packs_marks_when_the_highest_version_has_no_tag() {
+    let mut mirror = pack_summary("pk-66", "1.66.0", "reg-mirror", "sha256:ccc", CSI_65);
+    mirror["spec"]["type"] = serde_json::json!("oci");
+    let api = serve_registry(
+        vec![
+            pack_summary("pk-66", "1.66.0", "reg-public", "sha256:ccc", CSI_65),
+            mirror,
+        ],
+        &[
+            ("reg-public", public_entity()),
+            (
+                "reg-mirror",
+                serde_json::json!({"layer": "csi", "tags": []}),
+            ),
+        ],
+    );
+    let listing = packs_of(&api, "csi-aws-ebs", ops::PackOptions::default()).unwrap();
+    let marked: Vec<(&str, &str)> = listing
+        .registries
+        .iter()
+        .flat_map(|r| {
+            r.versions
+                .iter()
+                .filter(|v| v.latest)
+                .map(|v| (r.registry.as_str(), v.version.as_str()))
+        })
+        .collect();
+    assert_eq!(marked, [("Public Repo", "1.65.0")]);
+
+    let latest = snapshot_of(&api, "pack:csi-aws-ebs@latest").unwrap();
+    assert_eq!(latest.source.version, "1.65.0");
+    assert_eq!(latest.source.reference, "pack:csi-aws-ebs@latest");
+}
+
 #[test]
 fn behind_names_no_pre_release_as_newer_than_a_pin_that_is_not_one() {
     assert_eq!(newer_than("1.63.1", false), ["1.65.0"]);

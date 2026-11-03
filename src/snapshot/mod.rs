@@ -42,6 +42,9 @@ pub use variable::{Variable, VariableOption};
 /// Schema id written into every snapshot.
 pub const SNAPSHOT_SCHEMA: &str = "strata-snapshot/1";
 
+/// The field of a record that holds the cluster, as an error names it.
+const CLUSTER_FIELD: &str = "source.cluster";
+
 /// The template of a profile that a record reads, as `source.template` names it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -566,10 +569,10 @@ impl Snapshot {
             Error::NotSnapshot(path.to_path_buf())
         })?;
         // the cluster is read apart, so that an error names the field inside it
-        let cluster = cluster::take_record(&mut document);
+        let cluster = cluster::take_record(path, &mut document)?;
         let mut snap: Snapshot = parse_document(path, SNAPSHOT_SCHEMA, document, "")?;
         snap.source.cluster = cluster
-            .map(|cluster| parse_document(path, SNAPSHOT_SCHEMA, cluster, "source.cluster"))
+            .map(|cluster| parse_document(path, SNAPSHOT_SCHEMA, cluster, CLUSTER_FIELD))
             .transpose()?;
         snap.fill_content();
         Ok(snap)

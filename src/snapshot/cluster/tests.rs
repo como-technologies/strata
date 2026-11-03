@@ -177,3 +177,57 @@ fn the_errors_of_a_record_keep_a_part_that_a_later_release_names() {
         json!({"network": "HTTP 500: later", "pendingRepave": "HTTP 403: forbidden"})
     );
 }
+
+/// `take_record` on a record whose cluster holds `more`, with a path for the file.
+fn take_with(more: Value) -> crate::error::Result<Option<Value>> {
+    let mut document = json!({"source": {"cluster": cluster_object(more)}});
+    take_record(Path::new("older.json"), &mut document)
+}
+
+/// Review of Wave 14, A11. The move renames an older field, so the error of a value that is not
+/// text named an entry that the file does not hold.
+#[test]
+fn an_older_field_that_is_not_text_gives_an_error_that_names_the_key_of_the_file() {
+    for older in ["updatesPendingError", "pendingRepaveError"] {
+        for wrong in [json!(7), json!(true), json!({"code": 403}), json!(["x"])] {
+            let err = take_with(json!({ older: wrong })).unwrap_err();
+            let crate::error::Error::SnapshotSchema { field, .. } = &err else {
+                panic!("{err}");
+            };
+            assert_eq!(field, &format!("source.cluster.{older}"));
+            let message = err.to_string();
+            assert!(
+                message.contains(&format!("source.cluster.{older}: invalid type: ")),
+                "{message}"
+            );
+            assert!(message.ends_with("Take the record again."), "{message}");
+        }
+    }
+    // the older field is wrong also when `errors` holds the entry that the move would keep
+    let both = json!({
+        "pendingRepaveError": 7,
+        "errors": {"pendingRepave": "HTTP 403: newer"},
+    });
+    assert!(take_with(both).is_err());
+}
+
+#[test]
+fn an_older_field_that_is_text_or_null_moves_into_errors_when_the_record_is_taken() {
+    let taken = take_with(json!({
+        "updatesPendingError": null,
+        "pendingRepaveError": "HTTP 403: forbidden",
+    }))
+    .unwrap()
+    .unwrap();
+    assert_eq!(
+        taken["errors"],
+        json!({"pendingRepave": "HTTP 403: forbidden"})
+    );
+    assert!(taken.get("pendingRepaveError").is_none());
+    let mut no_cluster = json!({"source": {"cluster": null}});
+    assert!(
+        take_record(Path::new("none.json"), &mut no_cluster)
+            .unwrap()
+            .is_none()
+    );
+}

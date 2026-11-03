@@ -17,6 +17,10 @@ use crate::snapshot::{PackSource, Snapshot, Template};
 use crate::term::progress::Progress;
 use crate::text::name_or_uid;
 
+mod served;
+
+pub(crate) use served::Served;
+
 /// Read `/v1/packs?filters=spec.name=<name>` and give each entry to `each`. Palette serves this
 /// listing 100 entries at a time, so one pack name can take several requests. `each` returns false
 /// to stop the walk.
@@ -98,20 +102,21 @@ pub(crate) fn pack_snapshot_in<A: PaletteApi>(
     // the registry listing gives the names, and the reason of an error that finds no pack
     let visible = registries.names()?;
     let entries = versions_of(palette, name)?;
-    let registry_uid = match registry {
-        Some(r) => registries.by_ref(r)?.1,
-        None => holding_registry(registries, &visible, &entries, name, version)?,
+    let (registry_uid, resolved) = match registry {
+        Some(r) => {
+            let uid = registries.by_ref(r)?.1;
+            let resolved = picked_in(palette, &entries, name, &uid, version)?;
+            (uid, resolved)
+        }
+        None => {
+            let (uid, resolved) = holding_registry(registries, &visible, &entries, name, version)?;
+            (uid, Some(resolved))
+        }
     };
     // a registry that the listing does not name has no name: each message gives its uid
     let registry_name = registries.name_of(&registry_uid)?.unwrap_or_default();
     let named = |uid: &str| name_or_uid(&registry_name, uid).to_string();
 
-    let here: Vec<String> = entries
-        .iter()
-        .filter(|e| str_at(e, "/spec/registryUid") == registry_uid)
-        .map(|e| text(e, "/spec/version"))
-        .collect();
-    let resolved = crate::reference::version::pick(here.iter(), |v| v.as_str(), version).cloned();
     let Some(resolved) = resolved else {
         let asked = visible.iter().filter(|(_, u)| *u == registry_uid);
         return Err(pack_not_found(
@@ -159,8 +164,39 @@ fn pack_not_found(name: &str, version: &str, registry: String, unsynced: Vec<Str
     }
 }
 
-/// The uid of the one visible registry that has the pack `name` at `version`, from the listing
-/// `entries` of the pack. `version` can be [`LATEST`].
+/// The version of the pack `name` that `version` names in the registry `uid`, from the listing
+/// `entries` of the pack. `version` can be [`LATEST`]. None when the registry has no such version.
+///
+/// An exact version is looked up in each entry of the listing. Palette refuses a profile that pins
+/// a version that it does not serve, and `snapshot --validate` asks it. [`LATEST`] is picked from
+/// [`Served`], the list that `packs` marks. So the two name the same version, also when the
+/// highest version of the listing has no tag.
+///
+/// # Errors
+///
+/// Each error of a request for [`LATEST`], except HTTP 404.
+fn picked_in<A: PaletteApi>(
+    palette: &Palette<A>,
+    entries: &[Value],
+    name: &str,
+    uid: &str,
+    version: &str,
+) -> Result<Option<String>> {
+    let mine: Vec<&Value> = entries
+        .iter()
+        .filter(|e| str_at(e, "/spec/registryUid") == uid)
+        .collect();
+    let offered = if version == LATEST && !mine.is_empty() {
+        Served::read(palette, name, uid, mine)?.entries
+    } else {
+        mine
+    };
+    let versions: Vec<String> = offered.iter().map(|e| text(e, "/spec/version")).collect();
+    Ok(crate::reference::version::pick(versions.iter(), |v| v.as_str(), version).cloned())
+}
+
+/// The uid of the one visible registry that has the pack `name` at `version`, and the version that
+/// it has: see [`picked_in`]. `version` can be [`LATEST`].
 ///
 /// # Errors
 ///
@@ -172,19 +208,17 @@ fn holding_registry<A: PaletteApi>(
     entries: &[Value],
     name: &str,
     version: &str,
-) -> Result<String> {
+) -> Result<(String, String)> {
+    let palette = registries.palette();
     // the registries that have it, in the order Palette lists them
-    let holders: Vec<&(String, String)> = visible
-        .iter()
-        .filter(|(_, uid)| {
-            entries.iter().any(|e| {
-                str_at(e, "/spec/registryUid") == uid
-                    && (version == LATEST || str_at(e, "/spec/version") == version)
-            })
-        })
-        .collect();
+    let mut holders = Vec::new();
+    for (registry, uid) in visible {
+        if let Some(found) = picked_in(palette, entries, name, uid, version)? {
+            holders.push((registry, uid, found));
+        }
+    }
     match holders.as_slice() {
-        [(_, uid)] => Ok(uid.clone()),
+        [(_, uid, found)] => Ok(((*uid).clone(), found.clone())),
         [] => Err(pack_not_found(
             name,
             version,
@@ -194,7 +228,7 @@ fn holding_registry<A: PaletteApi>(
         several => {
             // by name, so the message reads the same on every run. Palette lists the
             // registries in the order it likes, and a live run saw both orders
-            let mut registries: Vec<String> = several.iter().map(|(n, _)| n.clone()).collect();
+            let mut registries: Vec<String> = several.iter().map(|(n, ..)| (*n).clone()).collect();
             registries.sort();
             Err(Error::PackInSeveralRegistries {
                 name: name.to_string(),
@@ -266,3 +300,6 @@ pub(super) fn find_version<A: PaletteApi>(
     })?;
     Ok(found)
 }
+
+#[cfg(test)]
+mod tests;
